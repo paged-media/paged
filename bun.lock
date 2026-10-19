@@ -227,6 +227,9 @@
     "modules/data/packages/data-bundle": {
       "name": "@paged-media/data",
       "version": "0.1.0-canary.17",
+      "dependencies": {
+        "@paged-media/wasm-boot": "workspace:*",
+      },
       "devDependencies": {
         "@happy-dom/global-registrator": "catalog:",
         "@paged-media/canvas-wasm": "workspace:*",
@@ -274,6 +277,9 @@
     "modules/doc/packages/doc-bundle": {
       "name": "@paged-media/doc",
       "version": "0.1.0-canary.4",
+      "dependencies": {
+        "@paged-media/wasm-boot": "workspace:*",
+      },
       "devDependencies": {
         "@happy-dom/global-registrator": "catalog:",
         "@paged-media/canvas-wasm": "workspace:*",
@@ -319,6 +325,9 @@
     "modules/draw/packages/draw-bundle": {
       "name": "@paged-media/draw",
       "version": "0.1.0-canary.20",
+      "dependencies": {
+        "@paged-media/wasm-boot": "workspace:*",
+      },
       "devDependencies": {
         "@happy-dom/global-registrator": "catalog:",
         "@paged-media/canvas-wasm": "workspace:*",
@@ -379,6 +388,9 @@
     "modules/image/glue": {
       "name": "@paged-media/image",
       "version": "0.1.0-canary.21",
+      "dependencies": {
+        "@paged-media/wasm-boot": "workspace:*",
+      },
       "devDependencies": {
         "@happy-dom/global-registrator": "catalog:",
         "@paged-media/canvas-wasm": "workspace:*",
@@ -411,6 +423,7 @@
       "name": "@paged-media/pdf",
       "version": "0.2.6-canary.0",
       "dependencies": {
+        "@paged-media/wasm-boot": "workspace:*",
         "jszip": "^3.10.2",
       },
       "devDependencies": {
@@ -454,6 +467,9 @@
     "modules/sheet/packages/sheet-bundle": {
       "name": "@paged-media/sheet",
       "version": "0.1.0-canary.24",
+      "dependencies": {
+        "@paged-media/wasm-boot": "workspace:*",
+      },
       "devDependencies": {
         "@happy-dom/global-registrator": "catalog:",
         "@paged-media/canvas-wasm": "workspace:*",
@@ -501,6 +517,9 @@
     "modules/slide/packages/slide-bundle": {
       "name": "@paged-media/slide",
       "version": "0.1.0-canary.1",
+      "dependencies": {
+        "@paged-media/wasm-boot": "workspace:*",
+      },
       "devDependencies": {
         "@happy-dom/global-registrator": "catalog:",
         "@paged-media/canvas-wasm": "workspace:*",
@@ -534,6 +553,9 @@
     "modules/web/packages/web-bundle": {
       "name": "@paged-media/web",
       "version": "0.1.0-canary.18",
+      "dependencies": {
+        "@paged-media/wasm-boot": "workspace:*",
+      },
       "devDependencies": {
         "@happy-dom/global-registrator": "catalog:",
         "@paged-media/canvas-wasm": "workspace:*",
@@ -636,7 +658,7 @@
     },
     "platform/extensions/packages/plugin-api": {
       "name": "@paged-media/plugin-api",
-      "version": "0.2.78-canary.0",
+      "version": "0.2.79-canary.0",
       "dependencies": {
         "@types/react": "catalog:",
       },
@@ -646,7 +668,7 @@
     },
     "platform/extensions/packages/plugin-sdk": {
       "name": "@paged-media/plugin-sdk",
-      "version": "0.2.78-canary.0",
+      "version": "0.2.79-canary.0",
       "bin": {
         "paged-plugin": "./bin/paged-plugin.mjs",
       },
@@ -679,6 +701,14 @@
       "devDependencies": {
         "@types/bun": "catalog:",
         "fast-check": "^4.10.2",
+        "typescript": "catalog:",
+      },
+    },
+    "platform/shared/wasm-boot": {
+      "name": "@paged-media/wasm-boot",
+      "version": "0.0.0",
+      "devDependencies": {
+        "@types/bun": "catalog:",
         "typescript": "catalog:",
       },
     },
@@ -861,6 +891,8 @@
     "@paged-media/tools": ["@paged-media/tools@workspace:apps/editor/packages/tools"],
 
     "@paged-media/ui": ["@paged-media/ui@workspace:apps/editor/packages/ui"],
+
+    "@paged-media/wasm-boot": ["@paged-media/wasm-boot@workspace:platform/shared/wasm-boot"],
 
     "@paged-media/web": ["@paged-media/web@workspace:modules/web/packages/web-bundle"],
 
