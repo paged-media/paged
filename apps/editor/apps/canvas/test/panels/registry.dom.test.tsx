@@ -98,9 +98,6 @@ const NOT_YET_TESTED: readonly string[] = [
   "paged.pathfinder",
   "paged.outline",
   "paged.tree",
-  "paged.inspector",
-  "paged.character",
-  "paged.paragraph",
   "paged.paragraph-styles",
   "paged.character-styles",
   "paged.object-styles",
@@ -117,9 +114,7 @@ const NOT_YET_TESTED: readonly string[] = [
   "paged.effects",
   "paged.layers",
   "paged.attributes",
-  "paged.properties",
   "paged.ai-assistant",
-  "paged.control",
   "paged.repl",
   "paged.script-editor",
   "paged.actions",
@@ -221,22 +216,8 @@ const A11Y_KNOWN: ReadonlyArray<{ id: string; signature: string }> = [
     id: "PN-15",
     signature: "no accessible name: <input role=spinbutton .w-[52px].text-xs>",
   },
-  // One-off inputs: the Inspector's filter, the Attributes key field, the
-  // REPL line, the script editor, the Actions name field, the bullet
-  // character, the alt-text box.
-  {
-    id: "PN-16",
-    signature:
-      "no accessible name: <input role=textbox .flex-1.bg-transparent>",
-  },
-  {
-    id: "PN-16",
-    signature: "no accessible name: <input role=textbox .h-[26px].flex-1>",
-  },
-  {
-    id: "PN-16",
-    signature: "no accessible name: <input role=textbox .flex-1.px-2>",
-  },
+  // One-off fields with no label and no placeholder: the script editor's
+  // source, the Actions name field, the bullet character.
   {
     id: "PN-16",
     signature: "no accessible name: <textarea role=textbox .font-mono.text-xs>",
@@ -246,10 +227,6 @@ const A11Y_KNOWN: ReadonlyArray<{ id: string; signature: string }> = [
     id: "PN-16",
     signature: "no accessible name: <input role=textbox .w-full.min-w-0>",
   },
-  {
-    id: "PN-16",
-    signature: "no accessible name: <textarea role=textbox .w-full.h-[64px]>",
-  },
 ];
 
 /** Which of those each panel shows today (the rich scene, a rectangle
@@ -258,7 +235,6 @@ const A11Y_KNOWN: ReadonlyArray<{ id: string; signature: string }> = [
 const A11Y_FINDINGS: Record<string, readonly string[]> = {
   "paged.actions": ["PN-16"],
   "paged.align": ["PN-6", "PN-8"],
-  "paged.attributes": ["PN-16"],
   "paged.bullets-numbering": ["PN-6", "PN-16"],
   "paged.cell-styles": ["PN-9"],
   "paged.character": ["PN-5", "PN-6"],
@@ -268,7 +244,6 @@ const A11Y_FINDINGS: Record<string, readonly string[]> = {
   "paged.color-wheel": ["PN-13"],
   "paged.conditions": ["PN-6"],
   "paged.control": ["PN-5", "PN-6"],
-  "paged.document-map": ["PN-13"],
   "paged.document-setup": ["PN-5", "PN-6", "PN-7"],
   "paged.effects": ["PN-6", "PN-8"],
   "paged.export-tagging": ["PN-6", "PN-8"],
@@ -277,11 +252,11 @@ const A11Y_FINDINGS: Record<string, readonly string[]> = {
   "paged.gradient-options": ["PN-5", "PN-6", "PN-7", "PN-10"],
   "paged.gradients": ["PN-5", "PN-6", "PN-15"],
   "paged.guides": ["PN-5", "PN-10"],
-  "paged.inspector": ["PN-5", "PN-6", "PN-7", "PN-16"],
+  "paged.inspector": ["PN-5", "PN-6", "PN-7"],
   "paged.layers": ["PN-11"],
   "paged.margins-columns": ["PN-5", "PN-6", "PN-10"],
   "paged.master-options": ["PN-7", "PN-10"],
-  "paged.object-export": ["PN-6", "PN-16"],
+  "paged.object-export": ["PN-6"],
   "paged.object-options": ["PN-5", "PN-6", "PN-7"],
   "paged.object-styles": ["PN-9"],
   "paged.object-transform": ["PN-12"],
@@ -289,7 +264,6 @@ const A11Y_FINDINGS: Record<string, readonly string[]> = {
   "paged.paragraph-styles": ["PN-9"],
   "paged.pathfinder": ["PN-6"],
   "paged.properties": ["PN-5", "PN-6"],
-  "paged.repl": ["PN-16"],
   "paged.schema-tree-demo": ["PN-11"],
   "paged.script-editor": ["PN-16"],
   "paged.section-options": ["PN-5", "PN-6", "PN-7", "PN-10"],
