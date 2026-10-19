@@ -183,8 +183,8 @@ pub struct RadialGradient {
 /// coordinates — the fill's `transform` maps it into page space, so
 /// the same gradient reused on N paths places correctly on each, like
 /// [`LinearGradient`] / [`RadialGradient`]. This is the third gradient
-/// pool; the rasterizers map it to `tiny_skia::SweepGradient` (CPU,
-/// degrees) and `peniko::Gradient::new_sweep` (GPU, radians).
+/// pool; both rasterizers map it to `peniko::Gradient::new_sweep`
+/// (radians, one full turn from `start_angle`).
 #[derive(Debug, Clone)]
 pub struct SweepGradient {
     pub center: (f32, f32),
@@ -891,8 +891,8 @@ impl LayerEffect {
 /// alpha composite) keeps the existing fast path; everything else
 /// requires the rasterizer to render the fill into an offscreen
 /// pixmap and composite onto the page with the named blend mode.
-/// Names match Adobe / Skia conventions; map straight to
-/// `tiny_skia::BlendMode` in the rasterizer.
+/// Names match Adobe / W3C conventions; map straight to
+/// `peniko::Mix` in the rasterizer.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum BlendMode {
     #[default]
@@ -988,8 +988,8 @@ pub enum DisplayCommand {
     /// coordinates, exactly like `FillPath::transform`. The
     /// rasterizer multiplies in its page-to-pixel scale on top.
     ///
-    /// Both back ends enforce clips: the CPU rasterizer intersects a
-    /// `tiny_skia::Mask` per push, and Vello encodes each push as a
+    /// Both back ends enforce clips: the CPU rasterizer pushes the path
+    /// as a `vello_cpu` clip path, and Vello encodes each push as a
     /// `push_layer` clip layer. (This doc used to claim Vello no-ops
     /// clips; that stopped being true when the Vello clip layers
     /// landed and the comment was not updated — corrected with C-28,
@@ -1260,9 +1260,8 @@ pub enum DisplayCommand {
 
 /// C-28 — how a soft mask's artwork resolves to per-pixel coverage.
 ///
-/// Named after PDF's `/S` soft-mask subtypes (and matching
-/// `tiny_skia::MaskType`), because both back ends resolve it that
-/// way: `Luminosity` reads the artwork's *colour* (a white shape
+/// Named after PDF's `/S` soft-mask subtypes, because both back ends
+/// resolve it that way: `Luminosity` reads the artwork's *colour* (a white shape
 /// shows the content, black hides it — Illustrator's default, and
 /// what a black→white gradient swatch means to a designer),
 /// `Alpha` reads the artwork's *opacity* and ignores its colour.

@@ -54,7 +54,7 @@ pub struct ProviderTile {
 - The renderer's image emit path checks the map first: claimed id → tile
   assembly at the level matching the current scale (mip pick =
   `floor(log2(1/scale))` clamped), else the existing `DecodedImage` lane.
-  tiny-skia + Vello both consume the assembled tiles as ordinary
+  both rasterizers consume the assembled tiles as ordinary
   `DisplayCommand::Image` entries — **no Vello fork** in v44; the zero-copy
   GPU tile path is Stage B's follow-on, same provider contract.
 
@@ -104,4 +104,4 @@ callback (paged.image points it at image-graph's evaluated tiles).
 Headless: claim → compose emits `ResourceTilesNeeded` → submit → re-compose
 consumes tiles at the right level → release restores the fallback lane.
 Editor: a 50 MP fixture pans/zooms with tile sharpening, memory stays under
-the budget, tiny-skia/Vello parity on the assembled output.
+the budget, CPU/GPU parity on the assembled output.

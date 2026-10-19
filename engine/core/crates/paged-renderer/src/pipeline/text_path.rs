@@ -26,8 +26,8 @@ use super::*;
 /// Each consecutive pair becomes a cubic with the leading point's
 /// `right` and the trailing point's `left` as control points. When
 /// `right == anchor` and `left == anchor` (the IDML serialisation
-/// for straight-line corners), the cubic degenerates and tiny-skia
-/// reduces it to a line internally.
+/// for straight-line corners), the cubic degenerates and the
+/// rasterizer flattens it to a line.
 ///
 /// `subpath_starts` carries one entry per `<GeometryPathType>` in
 /// the source IDML so compound paths (square-with-hole etc.) emit

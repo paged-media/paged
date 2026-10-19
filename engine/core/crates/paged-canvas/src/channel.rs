@@ -234,7 +234,7 @@ export type WorkerToMain = WorkerToMainKind & {
 ///     pixels plus a destination rect in frame-content coords. The renderer
 ///     interns the pixels into the display-list image pool and lowers to same
 ///     `DisplayCommand::Image` lane placed assets use (rasterises through
-///     tiny-skia/Vello), inside the content-box clip. Additive to the
+///     Vello on either lane), inside the content-box clip. Additive to the
 ///     `SubmitSceneLayer` payload's `SceneLayer` — no new messages. This
 ///     is what lets paged.image composite in-frame (image M4); the
 ///     shared-`GPUDevice` zero-copy stage (Stage B) is a follow-on.
@@ -411,13 +411,12 @@ export type WorkerToMain = WorkerToMainKind & {
 // `releaseOpacityMask { targetId }`. The engine gains a REAL soft
 // mask: a new `DisplayCommand` bracket (`BeginSoftMask` /
 // `BeginMaskedContent` / `EndSoftMask`) carrying per-pixel coverage,
-// not the hard binary `PushClip`. The CPU rasterizer resolves the
-// artwork to a `tiny_skia::Mask` (luminance or alpha, optionally
-// inverted) and multiplies it into the clip stack; the PDF exporter
-// lowers it onto the existing `PendingFormGroup::LuminosityGray`
-// soft-mask path (plus a new `AlphaGroup` for `/S /Alpha`); Vello
-// skips the artwork and renders the content unmasked (documented gap
-// — it has no coverage-buffer layer API).
+// not the hard binary `PushClip`. Both rasterizers resolve the
+// artwork to a coverage mask — PDF's luminosity (the luma of the
+// premultiplied colour) or alpha, optionally inverted, unpainted
+// artwork hiding — that multiplies what the content draws; the PDF
+// exporter lowers it onto the `PendingFormGroup::LuminosityGray`
+// soft-mask path (plus an `AlphaGroup` for `/S /Alpha`).
 //
 // C-29 — `attachTextToPath { elementId, storyId, pathTypeAlignment?,
 // flipPathEffect?, startBracket?, endBracket? }` /

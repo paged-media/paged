@@ -708,7 +708,7 @@ fn polygon_stroke_alignment_center_keeps_outline() {
 // ----------------------------------------------------------------------
 // Punch-list (rides v35) — `frameStrokeMiterLimit` on closed polygons,
 // not just rectangles. The renderer's stroke-join code already bevels a
-// miter past the limit (tiny-skia / Vello stroker); the wire just had to
+// miter past the limit (kurbo's stroker, both lanes); the wire just had to
 // thread the polygon's `MiterLimit` attribute through to the display-list
 // `Stroke`. The first test asserts that wire; the second proves the limit
 // changes the rendered acute apex (high limit → mitered spike, low limit

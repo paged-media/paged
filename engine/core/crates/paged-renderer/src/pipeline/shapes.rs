@@ -1922,57 +1922,27 @@ pub(crate) fn push_corner_segments(
             });
         }
         CornerOption::Fancy => {
-            // InDesign's Fancy corner is an ornamental scallop:
-            // three small arcs running p_in → q1 → q2 → p_out.
-            // The two outer arcs are convex quarter-bumps (pulled
-            // toward the sharp vertex `c`); the middle arc is a
-            // concave notch (pulled toward the inner centre `m`).
-            // That concave-between-two-convex rhythm is the
-            // decorative three-arc pattern InDesign draws (an
-            // honest approximation of the precise ornament, whose
-            // exact radii Adobe never published — the segment
-            // count, endpoints, and convex/concave rhythm match).
-            //
-            // q1 / q2 split the corner span into thirds along the
-            // straight chord from p_in to p_out; each arc's
-            // control points pull a third of the way toward `c`
-            // (convex) or `m` (concave).
-            let lerp = |a: (f32, f32), b: (f32, f32), f: f32| {
-                (a.0 + (b.0 - a.0) * f, a.1 + (b.1 - a.1) * f)
+            // InDesign's Fancy corner, as its own PDF export draws it
+            // (`corners` page 5, a rectangle and a triangle): straight
+            // segments on a three-by-three grid across the corner. A
+            // grid point `(a, b)` lies `a` thirds of the way from the
+            // vertex `c` toward `p_out` and `b` thirds toward `p_in`,
+            // at any corner angle; the corner runs (0,3) = `p_in` →
+            // (2,3) → (2,1) → (1,1) → (1,2) → (3,2) → (3,0) = `p_out`,
+            // crossing itself once to close the small square at the
+            // vertex. All straight, so on a frame along the axes the
+            // whole stroke is one a rasterizer can pixel-align.
+            let grid = |a: f32, b: f32| {
+                (
+                    c.0 + (p_out.0 - c.0) * a / 3.0 + (p_in.0 - c.0) * b / 3.0,
+                    c.1 + (p_out.1 - c.1) * a / 3.0 + (p_in.1 - c.1) * b / 3.0,
+                )
             };
-            let q1 = lerp(p_in, p_out, 1.0 / 3.0);
-            let q2 = lerp(p_in, p_out, 2.0 / 3.0);
-            // Arc 1: p_in → q1, convex bump toward the vertex.
-            let a1 = ctl(p_in, c, 0.5);
-            let a2 = ctl(q1, c, 0.5);
-            segs.push(CubicTo {
-                cx1: a1.0,
-                cy1: a1.1,
-                cx2: a2.0,
-                cy2: a2.1,
-                x: q1.0,
-                y: q1.1,
-            });
-            // Arc 2: q1 → q2, concave notch toward the inner
-            // centre (the ornament's central dip).
-            let b1 = ctl(q1, m, 0.5);
-            let b2 = ctl(q2, m, 0.5);
-            segs.push(CubicTo {
-                cx1: b1.0,
-                cy1: b1.1,
-                cx2: b2.0,
-                cy2: b2.1,
-                x: q2.0,
-                y: q2.1,
-            });
-            // Arc 3: q2 → p_out, convex bump toward the vertex.
-            let d1 = ctl(q2, c, 0.5);
-            let d2 = ctl(p_out, c, 0.5);
-            segs.push(CubicTo {
-                cx1: d1.0,
-                cy1: d1.1,
-                cx2: d2.0,
-                cy2: d2.1,
+            for (a, b) in [(2.0, 3.0), (2.0, 1.0), (1.0, 1.0), (1.0, 2.0), (3.0, 2.0)] {
+                let (x, y) = grid(a, b);
+                segs.push(LineTo { x, y });
+            }
+            segs.push(LineTo {
                 x: p_out.0,
                 y: p_out.1,
             });
@@ -1990,8 +1960,8 @@ pub(crate) fn push_corner_segments(
 /// * `Inverse` (inverse-rounded) — concave quarter-circle cut inward.
 /// * `Bevel` — a straight 45° chamfer (the chord).
 /// * `Inset` — a square notch stepping inward to the rounding centre.
-/// * `Fancy` — an ogee (concave-then-convex double curve); an
-///   approximation pending reference-PDF calibration.
+/// * `Fancy` — InDesign's knot of straight segments on a three-by-three
+///   grid across the corner (see `push_corner_segments`).
 ///
 /// The shape is emitted as backend-agnostic `PathData`, so the CPU and
 /// Vello rasterizers both honour it with no per-backend work.

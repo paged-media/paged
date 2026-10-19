@@ -401,8 +401,38 @@ impl Printer<'_> {
     fn binary(&self, op: BinOp, a: &Expr, b: &Expr, out: &mut String) {
         let prec = binop_prec(op);
         self.expr(a, out, prec, Side::Left);
+        // `x:x` is the column band X:X (the lexer reads `word:word` as one
+        // token, as Excel does), so a range whose left operand ends in a bare
+        // word — a LET local or a name such as `x` — keeps a space before
+        // its `:`: the range of the local x with itself is `x :x`.
+        if op == BinOp::Range && self.ends_in_word(a) {
+            out.push(' ');
+        }
         out.push_str(binop_text(op));
         self.expr(b, out, prec, Side::Right);
+    }
+
+    /// Whether `e`, printed as the left operand of `:`, ends in a word that
+    /// is also a column name (`x`, `LE`, …), so it could start a column
+    /// band with what follows.
+    fn ends_in_word(&self, e: &Expr) -> bool {
+        let word = |s: &str| {
+            !s.is_empty()
+                && s.bytes().all(|b| b.is_ascii_alphabetic())
+                && sheet_core::a1_to_col(s).is_some()
+        };
+        match e {
+            // The storage dialect prefixes locals with `_xlpm.`.
+            Expr::Local(name) => !self.ooxml && word(name),
+            Expr::Name(nid) => self.sheets.defined_name(*nid).is_some_and(word),
+            // A range on the left prints without parentheses, so it ends
+            // where its right operand ends (an atom; anything else is
+            // parenthesised there).
+            Expr::Binary(BinOp::Range, _, r) => {
+                matches!(**r, Expr::Local(_) | Expr::Name(_)) && self.ends_in_word(r)
+            }
+            _ => false,
+        }
     }
 
     fn func(&self, fid: sheet_core::ast::FuncId, args: &[Expr], out: &mut String) {

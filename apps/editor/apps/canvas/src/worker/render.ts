@@ -23,7 +23,7 @@
 // tile cache, and the setTimeout-driven render loop (workers have no
 // requestAnimationFrame; spec §3.1 accepts this).
 //
-// Sub-phase A: every tile is the existing 256-px tiny-skia snapshot
+// The CPU path: every tile is a 256-px `vello_cpu` snapshot
 // (via `renderTilePng`). Composition is `ctx.drawImage` over the
 // OffscreenCanvasRenderingContext2D. Per spec AC-V-7 no rendering
 // happens on the main thread; the main thread only writes the camera

@@ -60,13 +60,12 @@
 //! deterministic, and backend-agnostic (no CPU-vs-GPU drift). Use it for
 //! structural / regression checks.
 //!
-//! `render` produces a PNG via the **CPU/tiny-skia** backend — the only
-//! headless rasterizer in core (it also backs the fidelity gate). It is a
-//! *vision aid* for the agent, NOT a pixel-exact match for the WebGPU
-//! output users see. GPU-faithful headless pixels are a tracked follow-up
-//! (core's native `vello-backend` is a stub today; `paged-sdk`'s Vello
-//! readback is the wasm/WebGPU viewer path that loads from IDML, not a
-//! live mutated `CanvasModel`).
+//! `render` produces a PNG via the **CPU** backend, `vello_cpu` — core's
+//! headless rasterizer (it also backs the fidelity gate). It draws the
+//! rendering model the editor's WebGPU lane draws (Vello on both lanes,
+//! one mapping from the display list), held to it page by page by the
+//! parity gate, so it agrees with what users see to within that gate's
+//! budget; it is not the GPU's own pixels.
 //!
 //! The asset fields and the two `register-*` commands are ADDITIVE: a
 //! host that never sends them sees the protocol it always saw. They
@@ -470,15 +469,16 @@ fn handle(live: &mut Live, req: Request) -> Result<Value> {
             out,
             backend,
         } => {
-            // Refuse rather than downgrade. Core's native vello-backend
-            // is a stub, so answering a `"vello"` request with tiny-skia
-            // pixels would report a GPU parity that was never measured.
+            // Refuse rather than downgrade: answering a `"vello"` (GPU)
+            // request with CPU pixels would report a GPU render that never
+            // happened. `"tiny-skia"` is the CPU lane's former name, still
+            // accepted.
             if let Some(b) = backend.as_deref() {
-                if !matches!(b, "cpu" | "tiny-skia") {
+                if !matches!(b, "cpu" | "vello_cpu" | "tiny-skia") {
                     return Err(anyhow!(
-                        "backend '{b}' is not available headlessly: core's only \
-                         headless rasterizer is the CPU/tiny-skia one (it also backs \
-                         the fidelity gate). Omit `backend`, or pass \"cpu\"."
+                        "backend '{b}' is not available headlessly: core's \
+                         headless rasterizer is the CPU one, vello_cpu (it also \
+                         backs the fidelity gate). Omit `backend`, or pass \"cpu\"."
                     ));
                 }
             }
