@@ -12,7 +12,10 @@
 //      those fields point at src/*.ts (the workspace consumes source); the
 //      published package points at dist/.
 //   2. The lifecycle scripts that only mean something before publishing
-//      (prepublishOnly, prepack, ...) are left out of the packed manifest.
+//      (prepublishOnly, prepack, ...) are left out of the packed manifest,
+//      and so are `devDependencies`: a consumer never installs them, and in
+//      this workspace they name private packages (plugin-sdk's plugin-api
+//      and canvas-wasm) at versions npm never had.
 //   3. A package with no LICENSE file of its own gets the ones of its module
 //      (the nearest directory above it that has any: modules/draw for
 //      modules/draw/packages/draw-bundle), as pnpm copied them from its
@@ -85,6 +88,7 @@ for (const key of PUBLISH_CONFIG_FIELDS) {
     delete publishConfig[key];
   }
 }
+delete manifest.devDependencies;
 if (manifest.scripts) {
   const scripts = manifest.scripts;
   for (const s of PREPUBLISH_SCRIPTS) delete scripts[s];

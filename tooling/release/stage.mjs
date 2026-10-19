@@ -1,18 +1,19 @@
 #!/usr/bin/env node
-// The publish tarballs of the four public npm packages at one release version
-// (PM-0008):
+// The publish tarballs of the three public npm packages at one release version
+// (PM-0008, amendment 3):
 //
 //   bun tooling/release/stage.mjs <version> <destination dir> [--keep]
 //
 // 1. The version must be MAJOR.MINOR.PATCH[-prerelease] and carry the engine's
 //    protocol as its minor: 0.<protocol>.<patch>, the protocol read from
-//    canvas-wasm's committed 0.<protocol>.0-dev (which
+//    @paged-media/paged's committed 0.<protocol>.0-dev (which
 //    engine/core/scripts/check-wasm-package-versions.mjs holds to
-//    PROTOCOL_VERSION). The editor reads the protocol from that minor.
+//    PROTOCOL_VERSION, with canvas-wasm's and the viewer's). The editor reads
+//    the protocol from that minor.
 // 2. Each package.json gets the release version, and `bun install` records it
-//    in bun.lock: `bun pm pack` rewrites a `workspace:` specifier to the
-//    version the LOCKFILE records, so without this plugin-sdk would depend on
-//    plugin-api's in-tree counter (0.2.N-canary.0), a version npm never had.
+//    in bun.lock (`bun pm pack` takes a `workspace:` specifier's version from
+//    the lockfile; none of the three depends on another today, but the
+//    lockfile and the manifests stay one story).
 // 3. tooling/js/pack.mjs packs each package (workspace: and catalog: resolved,
 //    publishConfig applied) into the destination.
 // 4. tooling/release/verify-tarballs.mjs checks the tarballs.
@@ -31,14 +32,10 @@ import { fileURLToPath } from "node:url";
 
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
-/** The public packages, in publish order (a dependency before its dependents). */
+/** The public packages, in publish order (none depends on another). */
 export const PUBLIC_PACKAGES = [
-  { name: "@paged-media/canvas-wasm", dir: "engine/core/packages/canvas-wasm" },
+  { name: "@paged-media/paged", dir: "packages/paged" },
   { name: "@paged-media/viewer", dir: "engine/core/web/idml-viewer" },
-  {
-    name: "@paged-media/plugin-api",
-    dir: "platform/extensions/packages/plugin-api",
-  },
   {
     name: "@paged-media/plugin-sdk",
     dir: "platform/extensions/packages/plugin-sdk",
@@ -47,7 +44,7 @@ export const PUBLIC_PACKAGES = [
 
 export const VERSION_RE = /^(\d+)\.(\d+)\.(\d+)(-[0-9A-Za-z.-]+)?$/;
 
-/** The engine protocol of the tree: the minor of canvas-wasm's dev version. */
+/** The engine protocol of the tree: the minor of @paged-media/paged's dev version. */
 export function treeProtocol() {
   const v = JSON.parse(
     readFileSync(join(REPO, PUBLIC_PACKAGES[0].dir, "package.json"), "utf8"),
@@ -55,7 +52,7 @@ export function treeProtocol() {
   const m = /^0\.(\d+)\.0-dev$/.exec(v);
   if (!m)
     throw new Error(
-      `canvas-wasm's committed version ${v} is not 0.<protocol>.0-dev`,
+      `@paged-media/paged's committed version ${v} is not 0.<protocol>.0-dev`,
     );
   return Number(m[1]);
 }
@@ -66,7 +63,7 @@ export function versionProblem(version) {
   if (!m) return `${version} is not MAJOR.MINOR.PATCH[-prerelease]`;
   const protocol = treeProtocol();
   if (m[1] !== "0" || Number(m[2]) !== protocol) {
-    return `${version} does not carry the engine's protocol: tag v0.${protocol}.<patch> (canvas-wasm is 0.${protocol}.0-dev)`;
+    return `${version} does not carry the engine's protocol: tag v0.${protocol}.<patch> (@paged-media/paged is 0.${protocol}.0-dev)`;
   }
   return null;
 }
