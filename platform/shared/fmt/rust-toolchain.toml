@@ -1,0 +1,7 @@
+# The stable toolchain every Cargo workspace in this repository pins. The
+# crate is compiled into module and engine wasm, hence the wasm32 target.
+[toolchain]
+channel = "1.99.1"
+targets = ["wasm32-unknown-unknown"]
+components = ["rustfmt", "clippy"]
+profile = "minimal"

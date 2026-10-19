@@ -12,6 +12,8 @@ workspace = true
 
 [dependencies]
 data-core = { path = "../data-core" }
+# Digit grouping and the weekday (platform/shared/fmt).
+paged-fmt = { path = "../../../platform/shared/fmt" }
 smallvec.workspace = true
 compact_str.workspace = true
 thiserror.workspace = true

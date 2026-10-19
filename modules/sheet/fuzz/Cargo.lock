@@ -67,17 +67,16 @@ checksum = "f079e83a288787bcd14a6aea84cee5c87a67c5a3e660c30f557a3d24761b3527"
 
 [[package]]
 name = "compact_str"
-version = "0.8.2"
+version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7fd622ebbb56a5b2ccb651b32b911cdeb2a9b4b11776b2473bf26a26a286244e"
+checksum = "79fcda08c33bb58b97008b2cdada6622500e949e060f5913361763121abd2416"
 dependencies = [
  "castaway",
  "cfg-if",
  "itoa",
- "rustversion",
- "ryu",
  "serde",
  "static_assertions",
+ "zmij",
 ]
 
 [[package]]
@@ -259,6 +258,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9f7c3e4beb33f85d45ae3e3a1792185706c8e16d043238c593331cc7cd313b50"
 
 [[package]]
+name = "paged-fmt"
+version = "0.0.0"
+
+[[package]]
 name = "pin-project-lite"
 version = "0.2.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -426,6 +429,7 @@ name = "sheet-fn"
 version = "0.0.0"
 dependencies = [
  "compact_str",
+ "paged-fmt",
  "serde",
  "serde_norway",
  "sheet-core",
@@ -437,6 +441,7 @@ name = "sheet-format"
 version = "0.0.0"
 dependencies = [
  "compact_str",
+ "paged-fmt",
  "rustc-hash",
  "ryu",
  "sheet-core",
@@ -469,6 +474,7 @@ name = "sheet-js"
 version = "0.0.0"
 dependencies = [
  "console_error_panic_hook",
+ "paged-fmt",
  "serde",
  "serde-wasm-bindgen",
  "sheet-calc",
@@ -666,3 +672,9 @@ dependencies = [
  "nix",
  "typed-path",
 ]
+
+[[package]]
+name = "zmij"
+version = "1.0.23"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "29666d0abbfad1e3dc4dcf6144730dd3a3ab225bbbdac83319345b1b44ccfc1b"

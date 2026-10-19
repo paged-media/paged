@@ -68,6 +68,8 @@
 
 pub use sheet_core::Locale;
 
+use paged_fmt::locale::{self as shared, CalendarNames, LocaleFacts};
+
 /// The resolved data for one [`Locale`]: separators, calendar names, AM/PM,
 /// and the default short-date pattern. Returned by [`locale_data`] as a
 /// `'static` borrow into the const tables below — no allocation.
@@ -104,231 +106,52 @@ pub struct LocaleData {
     pub short_date: &'static str,
 }
 
-// ---- en-US (the default; every M0 golden renders through this). ----
+/// A row of Excel's, from the shared locale table (platform/shared/fmt):
+/// its separators and the language's calendar names, plus what only Excel
+/// has, the list separator and the default short-date code. AM/PM is the en
+/// markers in every locale (the ruling above).
+const fn excel(
+    facts: &'static LocaleFacts,
+    names: &'static CalendarNames,
+    list: &'static str,
+    short_date: &'static str,
+) -> LocaleData {
+    LocaleData {
+        decimal: facts.decimal,
+        group: facts.group,
+        list,
+        months_full: &names.months_full,
+        months_abbr: &names.months_abbr,
+        days_full: &names.days_full,
+        days_abbr: &names.days_abbr,
+        am: "AM",
+        pm: "PM",
+        am_short: "A",
+        pm_short: "P",
+        short_date,
+    }
+}
 
-const EN_MONTHS_FULL: [&str; 12] = [
-    "January",
-    "February",
-    "March",
-    "April",
-    "May",
-    "June",
-    "July",
-    "August",
-    "September",
-    "October",
-    "November",
-    "December",
-];
-const EN_MONTHS_ABBR: [&str; 12] = [
-    "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
-];
-const EN_DAYS_FULL: [&str; 7] = [
-    "Sunday",
-    "Monday",
-    "Tuesday",
-    "Wednesday",
-    "Thursday",
-    "Friday",
-    "Saturday",
-];
-const EN_DAYS_ABBR: [&str; 7] = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+// en-US: the default; every M0 golden renders through it.
+const EN_US: LocaleData = excel(&shared::EN, &shared::EN_NAMES, ",", "m/d/yyyy");
 
-const EN_US: LocaleData = LocaleData {
-    decimal: ".",
-    group: ",",
-    list: ",",
-    months_full: &EN_MONTHS_FULL,
-    months_abbr: &EN_MONTHS_ABBR,
-    days_full: &EN_DAYS_FULL,
-    days_abbr: &EN_DAYS_ABBR,
-    am: "AM",
-    pm: "PM",
-    am_short: "A",
-    pm_short: "P",
-    short_date: "m/d/yyyy",
-};
+// de-DE. Excel abbreviates March as `Mrz` (the shared names).
+const DE_DE: LocaleData = excel(&shared::DE, &shared::DE_NAMES, ";", "dd.mm.yyyy");
 
-// ---- de-DE (Phase A data-fill; the rendering branches read this table). ----
-
-const DE_MONTHS_FULL: [&str; 12] = [
-    "Januar",
-    "Februar",
-    "März",
-    "April",
-    "Mai",
-    "Juni",
-    "Juli",
-    "August",
-    "September",
-    "Oktober",
-    "November",
-    "Dezember",
-];
-// German abbreviations: three-letter forms with a trailing period in
-// Excel's de-DE locale; März abbreviates to "Mrz", the rest "Jan".. .
-const DE_MONTHS_ABBR: [&str; 12] = [
-    "Jan", "Feb", "Mrz", "Apr", "Mai", "Jun", "Jul", "Aug", "Sep", "Okt", "Nov", "Dez",
-];
-const DE_DAYS_FULL: [&str; 7] = [
-    "Sonntag",
-    "Montag",
-    "Dienstag",
-    "Mittwoch",
-    "Donnerstag",
-    "Freitag",
-    "Samstag",
-];
-const DE_DAYS_ABBR: [&str; 7] = ["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"];
-
-const DE_DE: LocaleData = LocaleData {
-    decimal: ",",
-    group: ".",
-    list: ";",
-    months_full: &DE_MONTHS_FULL,
-    months_abbr: &DE_MONTHS_ABBR,
-    days_full: &DE_DAYS_FULL,
-    days_abbr: &DE_DAYS_ABBR,
-    am: "AM",
-    pm: "PM",
-    am_short: "A",
-    pm_short: "P",
-    short_date: "dd.mm.yyyy",
-};
-
-// ---- fr-FR (Western-European Latin tier; data-fill, table-read only). ----
-
-const FR_MONTHS_FULL: [&str; 12] = [
-    "janvier",
-    "février",
-    "mars",
-    "avril",
-    "mai",
-    "juin",
-    "juillet",
-    "août",
-    "septembre",
-    "octobre",
-    "novembre",
-    "décembre",
-];
-// French abbreviations (Excel fr-FR / CLDR): three-letter lowercase forms.
-const FR_MONTHS_ABBR: [&str; 12] = [
-    "janv.", "févr.", "mars", "avr.", "mai", "juin", "juil.", "août", "sept.", "oct.", "nov.",
-    "déc.",
-];
-const FR_DAYS_FULL: [&str; 7] = [
-    "dimanche", "lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi",
-];
-const FR_DAYS_ABBR: [&str; 7] = ["dim.", "lun.", "mar.", "mer.", "jeu.", "ven.", "sam."];
-
+// fr-FR. Excel groups with a regular space (`1 234 567`), where CLDR's
+// French row has U+202F: Excel's separator overrides the shared one.
 const FR_FR: LocaleData = LocaleData {
-    decimal: ",",
-    // Excel fr-FR groups with a (regular) space, e.g. `1 234 567`.
     group: " ",
-    list: ";",
-    months_full: &FR_MONTHS_FULL,
-    months_abbr: &FR_MONTHS_ABBR,
-    days_full: &FR_DAYS_FULL,
-    days_abbr: &FR_DAYS_ABBR,
-    // Shares the de-DE ruling: an explicit AM/PM token renders the literal en
-    // markers (the 24-hour convention lives in the authoring, not the engine).
-    am: "AM",
-    pm: "PM",
-    am_short: "A",
-    pm_short: "P",
-    short_date: "dd/mm/yyyy",
+    ..excel(&shared::FR, &shared::FR_NAMES, ";", "dd/mm/yyyy")
 };
 
-// ---- es-ES (Western-European Latin tier; data-fill, table-read only). ----
+// es-ES. Excel groups from four digits (`1.234`), so the CLDR minimum of
+// the shared Spanish row (`1234`) does not apply: sheet-format groups every
+// locale from four digits.
+const ES_ES: LocaleData = excel(&shared::ES, &shared::ES_NAMES, ";", "dd/mm/yyyy");
 
-const ES_MONTHS_FULL: [&str; 12] = [
-    "enero",
-    "febrero",
-    "marzo",
-    "abril",
-    "mayo",
-    "junio",
-    "julio",
-    "agosto",
-    "septiembre",
-    "octubre",
-    "noviembre",
-    "diciembre",
-];
-const ES_MONTHS_ABBR: [&str; 12] = [
-    "ene.", "feb.", "mar.", "abr.", "may.", "jun.", "jul.", "ago.", "sep.", "oct.", "nov.", "dic.",
-];
-const ES_DAYS_FULL: [&str; 7] = [
-    "domingo",
-    "lunes",
-    "martes",
-    "miércoles",
-    "jueves",
-    "viernes",
-    "sábado",
-];
-const ES_DAYS_ABBR: [&str; 7] = ["dom.", "lun.", "mar.", "mié.", "jue.", "vie.", "sáb."];
-
-const ES_ES: LocaleData = LocaleData {
-    decimal: ",",
-    group: ".",
-    list: ";",
-    months_full: &ES_MONTHS_FULL,
-    months_abbr: &ES_MONTHS_ABBR,
-    days_full: &ES_DAYS_FULL,
-    days_abbr: &ES_DAYS_ABBR,
-    am: "AM",
-    pm: "PM",
-    am_short: "A",
-    pm_short: "P",
-    short_date: "dd/mm/yyyy",
-};
-
-// ---- it-IT (Western-European Latin tier; data-fill, table-read only). ----
-
-const IT_MONTHS_FULL: [&str; 12] = [
-    "gennaio",
-    "febbraio",
-    "marzo",
-    "aprile",
-    "maggio",
-    "giugno",
-    "luglio",
-    "agosto",
-    "settembre",
-    "ottobre",
-    "novembre",
-    "dicembre",
-];
-const IT_MONTHS_ABBR: [&str; 12] = [
-    "gen", "feb", "mar", "apr", "mag", "giu", "lug", "ago", "set", "ott", "nov", "dic",
-];
-const IT_DAYS_FULL: [&str; 7] = [
-    "domenica",
-    "lunedì",
-    "martedì",
-    "mercoledì",
-    "giovedì",
-    "venerdì",
-    "sabato",
-];
-const IT_DAYS_ABBR: [&str; 7] = ["dom", "lun", "mar", "mer", "gio", "ven", "sab"];
-
-const IT_IT: LocaleData = LocaleData {
-    decimal: ",",
-    group: ".",
-    list: ";",
-    months_full: &IT_MONTHS_FULL,
-    months_abbr: &IT_MONTHS_ABBR,
-    days_full: &IT_DAYS_FULL,
-    days_abbr: &IT_DAYS_ABBR,
-    am: "AM",
-    pm: "PM",
-    am_short: "A",
-    pm_short: "P",
-    short_date: "dd/mm/yyyy",
-};
+// it-IT.
+const IT_IT: LocaleData = excel(&shared::IT, &shared::IT_NAMES, ";", "dd/mm/yyyy");
 
 /// Resolve the [`LocaleData`] table for a [`Locale`]. `'static` — a const
 /// table lookup, no allocation. en-US is the default and the only entry

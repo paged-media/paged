@@ -519,7 +519,7 @@ pub fn locale_catalog() -> Vec<LocaleInfo> {
             let ev = |src: &str| data_expr::eval_str(src, &ec).as_display();
             LocaleInfo {
                 tag: l.tag().to_string(),
-                name: l.def().name.to_string(),
+                name: l.name().to_string(),
                 number: ev("NUMBER(n, 2)"),
                 currency: ev("CURRENCY(n)"),
                 date: ev("DATEFMT(d)"),
