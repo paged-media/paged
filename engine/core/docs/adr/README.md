@@ -28,7 +28,7 @@ is not written yet.
 | [026](026-auto-growing-region-chains.md) | Auto-growing region chains: pages grow in core, at composition time | Accepted (amended 2026-10-02) |
 | [027](027-incremental-flow-invalidation.md) | Incremental flow invalidation: a complete key, an early stop, and a digest that proves it | Accepted 2026-10-02 (amended 2026-10-02); implemented in part |
 | [028](028-pagination-rules-are-engine-owned.md) | Pagination rules are engine-owned and shared by every format | Accepted (amended 2026-10-02) |
-| [100](100-two-rasterisers-one-trait.md) | Two rasterisers behind one trait: Vello/WebGPU is the forward surface, tiny-skia the path of record | Accepted, recorded retroactively 2026-10-02 |
+| [100](100-two-rasterisers-one-trait.md) | Two rasterisers behind one trait: Vello/WebGPU is the forward surface, tiny-skia the path of record | Accepted, recorded retroactively 2026-10-02; CPU lane superseded by 189 |
 | [101](101-display-list-single-intermediate.md) | The display list is the single intermediate; a digest proves two builds produce the same scene | Accepted, recorded retroactively 2026-10-02 |
 | [102](102-text-stack.md) | The text stack: harfrust shaping, total-fit line breaking, composers measured against InDesign | Accepted, recorded retroactively 2026-10-02 |
 | [103](103-hyphenation-sources.md) | Hyphenation sources and their precedence | Accepted, recorded retroactively 2026-10-02 |
@@ -117,6 +117,7 @@ is not written yet.
 | [186](186-a-mutation-names-the-pages-it-created.md) | A mutation names the pages it created | Accepted 2026-10-18 |
 | [187](187-the-wire-describes-itself-as-json-schema.md) | The wire describes itself as JSON Schema | Accepted 2026-10-18 |
 | [188](188-snapshots-draw-on-the-worker-gpu.md) | Snapshots draw on the worker's GPU, and a lost device is replaced | Accepted 2026-10-19 |
+| [189](189-one-rendering-model.md) | One rendering model: Vello on the GPU, vello_cpu on the CPU | Accepted 2026-10-19 on the `vello-cpu` branch, not on main |
 
 Decisions made in other repositories that this engine's code rests on are listed in
 [`../README.md`](../README.md).

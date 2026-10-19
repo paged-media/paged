@@ -2,8 +2,8 @@
 
 **Pixel-faithful Adobe IDML rendering, in Rust.** `paged` parses IDML
 packages, lays out text with an InDesign-calibrated Knuth–Plass composer,
-emits a versioned display list, and rasterises it through tiny-skia (CPU,
-default) or Vello (wgpu/GPU). Public APIs target both native and WASM.
+emits a versioned display list, and rasterises it through Vello: `vello_cpu`
+on the CPU (default) or Vello on wgpu (GPU). Public APIs target both native and WASM.
 
 This repository is the **open engine** — the rendering pipeline, including
 the fidelity-critical pieces (calibrated line-breaking, ICC colour, the
@@ -43,7 +43,7 @@ idml bytes
          └─ paged-text     rustybuzz shaping + Knuth–Plass compose + layout
              └─ paged-compose  display list (FillPath / StrokePath / Image /
                                gradients), glyph + path interning
-                 └─ paged-gpu     tiny-skia (CPU, default) | Vello (wgpu/GPU)
+                 └─ paged-gpu     vello_cpu (CPU, default) | Vello (wgpu/GPU)
                      └─ RgbaImage / PNG
                          └─ paged-fidelity   ΔE2000 + SSIM diff vs reference
 ```
@@ -69,7 +69,7 @@ named; the published artifact is the SDK.
 | `paged-text`                                 | shaping (rustybuzz), Knuth–Plass compose, multi-font layout, hyphenation, tabs                                                                        |
 | `paged-color`                                | ICC transforms (lcms2 native; naive fallback on wasm32)                                                                                               |
 | `paged-compose`                              | display list, transforms, glyph cache, gradient/image pools                                                                                           |
-| `paged-gpu`                                  | `PathRasterizer` trait; CPU (tiny-skia) + Vello backends                                                                                              |
+| `paged-gpu`                                  | `PathRasterizer` trait; CPU (`vello_cpu`) + Vello backends, one mapping                                                                               |
 | `paged-renderer`                             | top-level `pipeline::build` / `render`; the `paged-inspect` CLI                                                                                       |
 | `paged-fidelity`                             | ΔE2000 + SSIM diff library; the `paged-diff` CLI                                                                                                      |
 | `paged-mutate`                               | document mutation operations (undoable)                                                                                                               |
@@ -203,8 +203,8 @@ cargo check --target wasm32-unknown-unknown -p paged-sdk
 ./corpus/generated/diff.sh        # needs pdftoppm (poppler-utils)
 ```
 
-CPU (tiny-skia) is the default and is what headless CI uses; Vello needs a
-GPU. Don't run `cargo fmt --all` workspace-wide (it drifts unrelated files).
+CPU (`vello_cpu`) is the default and is what headless CI uses; Vello on wgpu
+needs a GPU. Don't run `cargo fmt --all` workspace-wide (it drifts unrelated files).
 
 ## Corpus
 
