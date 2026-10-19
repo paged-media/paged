@@ -31,7 +31,9 @@ corpus, no secrets. CI runs it in the `checks` job of `editor-tests.yml`.
 | Documents    | Built in code (`fixtures.ts`): a blank page minted by the engine, then the engine's own mutations. `richScene` has text with two paragraphs, a rectangle, an oval, a group, a locked and a hidden frame, a table, swatches, a gradient, a colour group, one style of each family, a layer, a hyperlink, a bookmark, a guide, a second page in a section. |
 | Vite shims   | `test/vite-shim.ts` gives app source `import.meta.glob`; Bun answers `?url` itself.                                                                                                                                                                                                                                                                      |
 
-`mountPanel(component | contribution, { id, document, scene })` returns `h`:
+`mountPanel(component | contribution, { id, document, scene, registries })` returns `h`.
+`registries` runs before the panel first renders, for a panel that reads the command,
+keybinding or panel registries once (as the app's are full before a user opens a panel).
 
 | Door                                                                                      | What it does                                                                                                  |
 | ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
@@ -47,6 +49,21 @@ corpus, no secrets. CI runs it in the `checks` job of `editor-tests.yml`.
 | `h.mutate(m)`                                                                             | Setup through the engine (not under test).                                                                    |
 | `h.spyCommand(id)`, `h.invoked(id)`                                                       | Register a command id the panel invokes and read its payloads; every invocation the registry saw.             |
 | `h.settle()`, `h.act(fn)`                                                                 | Wait until no request is in flight and React has rendered.                                                    |
+
+Shared helpers for families of panels sit in `test/panels/support/`: `structure.ts` (an IDML
+built in code with what no mutation creates: conditions, a condition set, an article, a
+cross-reference, index topics, a missing link), `styles.ts` and the two style-list suites,
+`options.ts`, `frames.ts` (a placed image) and `cockpit.ts` (missing-link and ink-limit
+documents). `settleTimers(h, ms)` in `styles.ts` waits for a panel's own debounce, which
+`settle()` does not (it waits for the engine, not for timers).
+
+### State that outlives a mount
+
+Each mount has its own engine, client and providers, but some editor state is module scope and
+is shared by the tests of one file (and of the files one worker runs): the problems store, the
+journal buffer, the assistant session, the preflight findings, schema panels' local bindings and
+`localStorage`. A test that depends on it resets it (`resetProblems()`, `journal.take()`,
+`dismissAssistantRun()`, `localStorage.clear()`) or does not assume it starts empty.
 
 ## What every panel gets
 
@@ -108,3 +125,11 @@ day the bug is fixed (which fails the run until the `.failing` is removed). The 
    `apps/editor`.
 
 A new panel added to `BUILT_IN_PANELS` fails `registry.dom.test.tsx` until it has its file.
+
+## Counts
+
+All 89 built-in panels have their own file: 76 files in `test/panels`, 1,069 tests, of which
+130 are expected failures (88 written per finding, 42 from the reach table), naming 99 findings
+between `PN-1` and `PN-357`. Panels that register commands while mounted (Layers, the
+schema demos) and panels that run typed core commands (style lists, options panels) assert
+those commands too, under `command:` ids.
