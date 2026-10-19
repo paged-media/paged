@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="240" height="160" viewBox="0 0 120 80">
+  <!-- A viewBox at half size: every filter length doubles in device pixels. -->
+  <filter id="user" filterUnits="userSpaceOnUse" x="0" y="0" width="60" height="80">
+    <feGaussianBlur stdDeviation="1.5"/>
+  </filter>
+  <filter id="sub" x="-20%" y="-20%" width="140%" height="140%">
+    <feFlood flood-color="#ffd040" x="65" y="5" width="25" height="30" result="patch"/>
+    <feGaussianBlur in="SourceGraphic" stdDeviation="1" result="soft"/>
+    <feMerge><feMergeNode in="patch"/><feMergeNode in="soft"/></feMerge>
+  </filter>
+  <filter id="obb" primitiveUnits="objectBoundingBox" x="-25%" y="-25%" width="150%" height="150%">
+    <feOffset dx="0.1" dy="0.15" result="o"/><feGaussianBlur in="o" stdDeviation="0.03" result="b"/>
+    <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+  </filter>
+  <g filter="url(#user)"><rect x="5" y="5" width="40" height="30" fill="#2060a0"/><rect x="40" y="10" width="40" height="20" fill="#a02060"/></g>
+  <g transform="rotate(12 85 25)" filter="url(#sub)"><rect x="70" y="10" width="35" height="25" fill="#20a060"/></g>
+  <g transform="translate(20 45) scale(1.5)" filter="url(#obb)"><circle cx="10" cy="10" r="9" fill="#7040c0"/></g>
+  <g transform="translate(70 45) skewX(15)" filter="url(#obb)"><rect width="30" height="20" fill="#c06020"/></g>
+</svg>
