@@ -94,7 +94,14 @@ export async function placeEmbedded(
     s.pageWidthPt - s.marginRightPt,
   ];
 
-  const placed = await placeInOneBatch(host, ir, source, pageId, bounds, fileName);
+  const placed = await placeInOneBatch(
+    host,
+    ir,
+    source,
+    pageId,
+    bounds,
+    fileName,
+  );
   if (placed) return placed;
 
   // The sequential lane, for an engine that refuses the one batch (no batch

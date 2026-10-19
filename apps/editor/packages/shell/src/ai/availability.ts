@@ -65,7 +65,10 @@ export function resetAiAvailability(): void {
 export function probeAiService(): Promise<AiAvailability> {
   probe ??= (async (): Promise<AiAvailability> => {
     try {
-      const url = new URL(`${AI_PROXY_PATH}/v1/messages`, window.location.origin);
+      const url = new URL(
+        `${AI_PROXY_PATH}/v1/messages`,
+        window.location.origin,
+      );
       const res = await fetch(url.href, {
         method: "GET",
         cache: "no-store",
