@@ -1,0 +1,6 @@
+$ paged new --size huge -o x.paged
+--- exit: 1
+--- stdout
+(empty)
+--- stderr
+Error: --size wants a name (letter, legal, tabloid, a3, a4, a5) or WxH in points, got "huge"

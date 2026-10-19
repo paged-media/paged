@@ -1,0 +1,11 @@
+$ paged parts list
+--- exit: 2
+--- stdout
+(empty)
+--- stderr
+error: the following required arguments were not provided:
+  <DOC>
+
+Usage: paged parts list <DOC> [PREFIX]
+
+For more information, try '--help'.

@@ -1,0 +1,7 @@
+$ paged ops
+--- exit: 0
+--- stdout
+<one catalog op per line>
+bindCreated  (not invoked on its own: legal only as a child of a batch: it names the element the previous creating child minted, so there is nothing for it to name on its own; invoke a `batch` whose ops carry it)
+--- stderr
+(empty)

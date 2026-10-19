@@ -1,0 +1,6 @@
+$ paged parts delete w.paged paged/tool/data.json --caller tool --save d.paged
+--- exit: 0
+--- stdout
+(empty)
+--- stderr
+paged/tool/data.json: saved container (<N> bytes) → d.paged

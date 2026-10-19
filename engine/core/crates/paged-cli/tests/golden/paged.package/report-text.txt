@@ -1,0 +1,13 @@
+$ paged package doc.paged -o pkg
+--- exit: 0
+--- stdout
+Package report — doc
+
+Fonts: 0 used
+
+Links: 1
+  u5.png                           written
+
+Spot inks: 0
+--- stderr
+(empty)

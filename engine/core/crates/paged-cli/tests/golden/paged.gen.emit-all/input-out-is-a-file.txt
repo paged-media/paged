@@ -1,0 +1,9 @@
+$ paged gen emit-all --out taken
+--- exit: 1
+--- stdout
+(empty)
+--- stderr
+Error: mkdir taken
+
+Caused by:
+    File exists (os error <N>)

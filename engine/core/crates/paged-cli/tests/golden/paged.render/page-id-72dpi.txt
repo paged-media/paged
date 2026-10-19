@@ -1,0 +1,6 @@
+$ paged render doc.paged --page usp --dpi 72 -o id.png
+--- exit: 0
+--- stdout
+id.png — page 1 at 72 dpi, 612×792 px
+--- stderr
+(empty)

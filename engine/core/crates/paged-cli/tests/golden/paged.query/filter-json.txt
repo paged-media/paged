@@ -1,0 +1,14 @@
+$ paged query doc.paged 'swatch[name=Vermilion]' --json
+--- exit: 0
+--- stdout
+{
+  "kind": "queryResult",
+  "payload": {
+    "addresses": [
+      "swatch:Color/u1"
+    ],
+    "error": null
+  }
+}
+--- stderr
+(empty)

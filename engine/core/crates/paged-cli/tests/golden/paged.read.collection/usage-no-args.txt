@@ -1,0 +1,12 @@
+$ paged read collection
+--- exit: 2
+--- stdout
+(empty)
+--- stderr
+error: the following required arguments were not provided:
+  <DOC>
+  <NAME>
+
+Usage: paged read collection <DOC> <NAME>
+
+For more information, try '--help'.

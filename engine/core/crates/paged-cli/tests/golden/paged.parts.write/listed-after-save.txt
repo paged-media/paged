@@ -1,0 +1,7 @@
+$ paged parts list w.paged
+--- exit: 0
+--- stdout
+paged/core/model/document.pgm
+paged/tool/data.json
+--- stderr
+(empty)

@@ -1,0 +1,14 @@
+$ paged session --help
+--- exit: 0
+--- stdout
+Speak the headless NDJSON engine protocol on stdin/stdout.
+
+Byte-for-byte the `paged-run` protocol, from the same code: a greeting line, then one JSON response per JSON request, in order. Hosts that already spawn `paged-run` need not change.
+
+Usage: paged session
+
+Options:
+  -h, --help
+          Print help (see a summary with '-h')
+--- stderr
+(empty)

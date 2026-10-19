@@ -1,0 +1,8 @@
+$ paged query inline.paged oval
+--- exit: 0
+--- stdout
+oval:u2
+oval:u3
+oval:u6
+--- stderr
+(empty)

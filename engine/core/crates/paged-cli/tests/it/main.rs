@@ -6,6 +6,10 @@
 mod authoring_chain;
 mod cli_surface;
 mod engine_serve;
+mod golden;
+mod golden_document;
+mod golden_hosts;
+mod golden_read;
 mod invoke_surface;
 mod mcp_stdio;
 mod object_surface;

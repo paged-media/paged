@@ -38,6 +38,12 @@
 //     dispatch that throws answers that request's seq with a
 //     `dispatchError` warning instead of stranding it.
 //
+// Where it deliberately differs: a load whose dispatch throws is answered
+// with `loadFailed` (the worker answers a `dispatchError` with no seq, so
+// the client's load never settles), and after a trap (a Rust panic) every
+// request is refused at once (`poisoned`): a test fails with the panic's
+// message instead of hanging on a reply that never comes.
+//
 // What it does NOT do, by design: paint. `attachCanvas` / `resizeCanvas`
 // are accepted and ignored, `renderPageVelloPng` answers `null`, and the
 // worker's own journal ring is empty. The camera SAB is kept but never read.
@@ -89,6 +95,16 @@ export interface EngineWorker {
   readonly posted: readonly PostedMessage[];
   /** Whether `terminate()` ran (the engine is freed then). */
   readonly terminated: boolean;
+  /**
+   * The first trap (a Rust panic: `unreachable`, or the borrow a panic left
+   * held) the engine raised, or null. A trapped wasm instance is unusable:
+   * from then on every request is answered with a refusal at once, so a
+   * test fails with this message instead of waiting for a reply that never
+   * comes.
+   */
+  readonly poisoned: string | null;
+  /** Errors the Tier-3 resolver threw (the worker logs and drops them). */
+  readonly resolverErrors: readonly string[];
 }
 
 type Incoming = { kind: string; [key: string]: unknown };
@@ -107,6 +123,12 @@ export function createEngineWorker(
   let pumping = false;
   let terminated = false;
   let resolutionPending = false;
+  let poisoned: string | null = null;
+  const resolverErrors: string[] = [];
+  const isTrap = (err: unknown) =>
+    (typeof WebAssembly !== "undefined" &&
+      err instanceof WebAssembly.RuntimeError) ||
+    /unreachable|recursive use of an object/.test(String(err));
   let gesture: { drainLatest(): GestureRecord | null } | null = null;
   const wantResolution = options.resolution ?? true;
 
@@ -127,7 +149,14 @@ export function createEngineWorker(
   const postResolution = () => {
     resolutionPending = false;
     if (!wantResolution) return;
-    const json = engine.runResolveJson();
+    let json: string | undefined;
+    try {
+      json = engine.runResolveJson();
+    } catch (err) {
+      resolverErrors.push(String(err));
+      if (isTrap(err)) poisoned ??= `runResolveJson: ${String(err)}`;
+      return;
+    }
     if (!json) return;
     try {
       postBack({
@@ -410,6 +439,29 @@ export function createEngineWorker(
     return null;
   };
 
+  /** Answer a request at once with a refusal (a poisoned engine, or a
+   *  load whose dispatch threw: the worker would strand that caller, a test
+   *  must not hang on it). */
+  const refuse = (m: Incoming, details: string) => {
+    if (m.kind === "loadDocumentBinary") {
+      const seq = m["seq"] as number;
+      postBack({
+        kind: "loadDocumentBinaryReply",
+        seq,
+        replyJson: JSON.stringify({
+          seq,
+          protocol,
+          kind: "loadFailed",
+          payload: { error: { kind: "parse", message: details } },
+        }),
+      });
+      return;
+    }
+    if (m.kind === "journalDrain" || m.kind === "renderPageVelloPng")
+      return dispatch(m);
+    warning(seqOf(m), "dispatchError", details);
+  };
+
   const pump = () => {
     if (pumping) return;
     pumping = true;
@@ -417,10 +469,15 @@ export function createEngineWorker(
       try {
         while (queue.length > 0 && !terminated) {
           const m = queue.shift()!;
+          if (poisoned) {
+            refuse(m, `${m.kind}: the engine trapped earlier (${poisoned})`);
+            continue;
+          }
           try {
             dispatch(m);
           } catch (err) {
-            warning(seqOf(m), "dispatchError", `${m.kind}: ${String(err)}`);
+            if (isTrap(err)) poisoned ??= `${m.kind}: ${String(err)}`;
+            refuse(m, `${m.kind}: ${String(err)}`);
           }
         }
         if (resolutionPending && !terminated) postResolution();
@@ -438,6 +495,10 @@ export function createEngineWorker(
     get terminated() {
       return terminated;
     },
+    get poisoned() {
+      return poisoned;
+    },
+    resolverErrors,
     postMessage(data) {
       if (terminated) return;
       const m = data as Incoming;

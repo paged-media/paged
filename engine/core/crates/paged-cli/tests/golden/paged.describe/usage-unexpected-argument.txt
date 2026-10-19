@@ -1,0 +1,10 @@
+$ paged describe doc.paged
+--- exit: 2
+--- stdout
+(empty)
+--- stderr
+error: unexpected argument 'doc.paged' found
+
+Usage: paged describe [OPTIONS]
+
+For more information, try '--help'.

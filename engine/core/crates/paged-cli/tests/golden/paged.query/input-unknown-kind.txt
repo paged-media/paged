@@ -1,0 +1,8 @@
+$ paged query doc.paged nope
+--- exit: 1
+--- stdout
+(empty)
+--- stderr
+Error: selector does not parse: "nope" is not a kind
+  nope
+  ^

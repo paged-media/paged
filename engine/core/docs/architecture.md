@@ -274,5 +274,10 @@ publishes both at the tag's version, with `@paged-media/plugin-api` and `@paged-
   the committed InDesign PDF with `pdftoppm`, and compares mean ΔE2000, p99 ΔE2000 and SSIM
   with the fixture's thresholds in `corpus/generated/fidelity-thresholds.json` (58 fixtures)
   ([ADR 105](adr/105-fidelity-gate.md), [ADR 120](adr/120-indesign-is-the-oracle.md)).
+- The command lines and the scripting bridge have conformance tests of their own: golden
+  transcripts of every `paged` command (`crates/paged-cli/tests/it/golden*.rs`, goldens in
+  `crates/paged-cli/tests/golden/`, `PAGED_UPDATE_GOLDEN=1` rewrites them) and one test per
+  catalog host function (`crates/paged-script/tests/it/host_functions/`); see
+  [`docs/development/testing-cli-and-scripting.md`](../../../docs/development/testing-cli-and-scripting.md).
 - `gpu.yml` runs the Vello tests of `paged-gpu` on software Vulkan; `licenses.yml` runs
   `cargo deny`. No gate needs a private repository ([ADR 121](adr/121-public-repo-builds-alone.md)).

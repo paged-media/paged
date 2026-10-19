@@ -1,0 +1,10 @@
+$ paged read text-outlines doc.paged textFrame:u1
+--- exit: 0
+--- stdout
+kind: "textOutlines"
+id: {"id":"u1","kind":"textFrame"}
+pageId: "usp"
+runs: <some>, each with keys ["anchors", "cmyk", "glyphs", "rgb", "subpathStarts"]
+first run rgb: [0.0,0.0,0.0]
+--- stderr
+(empty)

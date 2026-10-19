@@ -1,0 +1,6 @@
+$ paged parts write doc.paged paged/tool/x.json missing.json --caller tool
+--- exit: 1
+--- stdout
+(empty)
+--- stderr
+Error: No such file or directory (os error <N>)

@@ -1,0 +1,6 @@
+$ paged render doc.paged --page 2 -o p.png
+--- exit: 1
+--- stdout
+(empty)
+--- stderr
+Error: page 2 of 1

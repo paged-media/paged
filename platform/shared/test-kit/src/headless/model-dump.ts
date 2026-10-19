@@ -28,9 +28,18 @@
 //                undo back to the saved state flips the one, a click the
 //                other, and neither is the document)
 //   tree         the scene tree, as the engine answers it
-//   elements     every tree element's properties, keyed `kind:id`
+//   elements     every element's properties, keyed `kind:id`: the tree's,
+//                and the ones the tree does not show (an anchored frame
+//                inside a story) found through the address list
+//   anchors      every element's path anchors (`requestPathAnchors`), so a
+//                path edit is visible even where the properties are not
 //   collections  the document's collections (swatches, styles, pages, …)
 //   stories      every story's content (text, runs, paragraphs)
+//   addresses    every object address the engine's query `*` lists (text
+//                variables, guides, tables, sections, … that no
+//                collection carries)
+//   objects      optionally, every listed address's object-model
+//                properties (`requestGet`, the paths `objectPaths` names)
 //
 // Keys are sorted at every level, so the JSON is byte-stable for equal
 // models. Nothing is normalised beyond that: an id the engine mints is part
@@ -83,14 +92,20 @@ export interface ModelDumpOptions {
   ignoreMeta?: readonly string[];
   /** Read every story's content (default true). */
   stories?: boolean;
+  /** The object-model paths to read for an address (the catalog's
+   *  `propertySchemas` for its kind); omitted: no `objects` section. */
+  objectPaths?: (address: string) => readonly string[];
 }
 
 export interface ModelDump {
   meta: Record<string, unknown>;
   tree: unknown[];
   elements: Record<string, unknown>;
+  anchors: Record<string, unknown>;
   collections: Record<string, unknown>;
   stories: Record<string, unknown>;
+  addresses: string[];
+  objects?: Record<string, Record<string, unknown>>;
 }
 
 interface TreeNode {
@@ -178,7 +193,112 @@ export async function modelDump(
           : { unavailable: reply.kind };
     }
   }
-  return { meta, tree, elements, collections, stories };
+  const listed = await send({
+    kind: "requestQuery",
+    payload: { selector: "*" },
+  } as never);
+  const addresses =
+    listed.kind === "queryResult"
+      ? ((listed.payload as { addresses?: string[] }).addresses ?? [])
+      : [`unavailable: ${listed.kind}`];
+  // Elements the tree does not hold (anchored in a story) are in the
+  // address list; a master's items (`master:<id> > …`) are the master's.
+  for (const address of addresses) {
+    const m =
+      /^(textFrame|rectangle|oval|polygon|graphicLine|group):(.+)$/.exec(
+        address,
+      );
+    if (!m || elements[address] !== undefined) continue;
+    const id = { kind: m[1], id: m[2] };
+    const p = await ask(
+      { kind: "requestElementProperties", payload: { id } },
+      "elementProperties",
+    );
+    elements[elementKey(id)] = p["result"] ?? null;
+    ids.push(id);
+  }
+  const anchors: Record<string, unknown> = {};
+  for (const id of ids) {
+    const reply = await send({
+      kind: "requestPathAnchors",
+      payload: { id },
+    } as never);
+    anchors[elementKey(id)] =
+      reply.kind === "pathAnchors"
+        ? ((reply.payload as { result?: unknown }).result ?? null)
+        : { unavailable: reply.kind };
+  }
+  const dump: ModelDump = {
+    meta,
+    tree,
+    elements,
+    anchors,
+    collections,
+    stories,
+    addresses,
+  };
+  if (options.objectPaths) {
+    const objects: Record<string, Record<string, unknown>> = {};
+    const get = async (address: string, path: string) => {
+      const reply = await send({
+        kind: "requestGet",
+        payload: { address, path },
+      } as never);
+      return (reply.payload ?? {}) as {
+        value?: unknown;
+        code?: string | null;
+        mixed?: boolean;
+      };
+    };
+    // A path the object does not carry is not part of it.
+    const absent = (code: string | null | undefined) =>
+      code === "noSuchPath" || code === "unknownPath" || code === "notFound";
+    const read = async (address: string, values: Record<string, unknown>) => {
+      for (const path of options.objectPaths!(address)) {
+        if (path.includes("[key]")) continue;
+        if (path.includes("[i]")) {
+          // An indexed path (`rows[i].height`): every index the object has.
+          for (let i = 0; i < 256; i++) {
+            const at = path.replace("[i]", `[${i}]`);
+            const p = await get(address, at);
+            if (absent(p.code)) break;
+            values[at] = p.code ? { refused: p.code } : (p.value ?? null);
+          }
+          continue;
+        }
+        const p = await get(address, path);
+        if (absent(p.code)) continue;
+        values[path] = p.code
+          ? { refused: p.code }
+          : p.mixed
+            ? { mixed: true }
+            : (p.value ?? null);
+      }
+    };
+    for (const address of addresses) {
+      const values: Record<string, unknown> = {};
+      await read(address, values);
+      objects[address] = values;
+      // A table's cells are not listed; they follow from its rows and
+      // columns.
+      if (address.startsWith("table:")) {
+        const count = (prefix: string) =>
+          Object.keys(values).filter((k) => k.startsWith(prefix)).length;
+        const rows = count("rows[");
+        const cols = count("columns[");
+        for (let r = 0; r < rows; r++) {
+          for (let c = 0; c < cols; c++) {
+            const cell = `cell:${address.slice("table:".length)}/${r},${c}`;
+            const cv: Record<string, unknown> = {};
+            await read(cell, cv);
+            objects[cell] = cv;
+          }
+        }
+      }
+    }
+    dump.objects = objects;
+  }
+  return dump;
 }
 
 /** JSON with sorted keys at every level: equal values, equal strings. */

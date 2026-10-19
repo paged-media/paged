@@ -1,0 +1,13 @@
+$ paged read measure-text doc.paged Inter Hello --fonts <ENGINE>/corpus/fonts/Inter.ttf
+--- exit: 0
+--- stdout
+{
+  "kind": "measureTextResult",
+  "payload": {
+    "advance": 28.922,
+    "ascender": 11.625,
+    "descender": -2.895
+  }
+}
+--- stderr
+(empty)

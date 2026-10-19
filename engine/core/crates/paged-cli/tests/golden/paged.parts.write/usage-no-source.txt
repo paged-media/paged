@@ -1,0 +1,11 @@
+$ paged parts write doc.paged paged/tool/data.json
+--- exit: 2
+--- stdout
+(empty)
+--- stderr
+error: the following required arguments were not provided:
+  <FROM>
+
+Usage: paged parts write <DOC> <PATH> <FROM>
+
+For more information, try '--help'.

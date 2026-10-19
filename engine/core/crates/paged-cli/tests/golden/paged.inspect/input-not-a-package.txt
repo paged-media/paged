@@ -1,0 +1,6 @@
+$ paged inspect junk.idml
+--- exit: 1
+--- stdout
+(empty)
+--- stderr
+Error: load junk.idml: idml parse error: zip: invalid Zip archive: Could not find EOCD

@@ -1,0 +1,6 @@
+$ paged diff doc.png doc.png
+--- exit: 0
+--- stdout
+PASS  mean ΔE=0.000  p99 ΔE=0.000  max ΔE=0.000  SSIM=1.0000  (306×396)
+--- stderr
+(empty)
