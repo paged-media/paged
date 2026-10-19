@@ -14,8 +14,13 @@ workspace = true
 docx-core.workspace = true
 docx-lower.workspace = true
 zip.workspace = true
+paged-model.workspace = true
+paged-scene.workspace = true
+paged-store.workspace = true
 
 [dev-dependencies]
 docx-conformance = { path = "../docx-conformance" }
 docx-import.workspace = true
-quick-xml.workspace = true
+idml-import.workspace = true
+serde_json.workspace = true
+paged-test-resources.workspace = true

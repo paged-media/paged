@@ -18,10 +18,10 @@
 
 // Standalone open (thoughts ADR 029): a Word document becomes the WHOLE
 // document, not content in a frame. The engine's skeleton (docx-skeleton, a
-// minimal IDML package it writes itself — no core contact) gives each Word
-// section a page of its size, its margin box as the frame, and an empty
-// story. IDML cannot carry a grow rule, so after opening, each story gets
-// one on the wire (`setFlowGrowRule`, protocol 64): the engine then adds
+// native `.paged` document built with the engine's model crates, ADR 606)
+// gives each Word section a page of its size, its margin box as the frame,
+// and an empty story. After opening, each story gets a grow rule on the
+// wire (`setFlowGrowRule`, protocol 64): the engine then adds
 // pages while the story oversets, matching Word's own pagination (measured
 // against Word's PDF export of docx_conformance::pagination_docx()). This
 // file opens that skeleton, sets the rules, and pours each section's blocks
@@ -141,8 +141,8 @@ export async function openStandalone(
   name: string,
 ): Promise<Opened | null> {
   if (!canOpenStandalone(host)) return null;
-  const open = (idml: Uint8Array) => host.nativeDocument.open(idml);
-  await open(engine.skeletonIdml(name));
+  const open = (paged: Uint8Array) => host.nativeDocument.open(paged);
+  await open(engine.skeletonPaged(name));
   return finishStandalone(host, engine, ir, source, name, open);
 }
 
@@ -150,7 +150,7 @@ export async function openStandalone(
  * Everything after the skeleton is open: styles (re-opening the skeleton
  * lowered without span/split columns when the engine refuses them), grow
  * rules, the pour, and the persisted state — the source part plus the label
- * on the section frame. `open` loads an IDML package as the document (the
+ * on the section frame. `open` loads a `.paged` package as the document (the
  * host's native open; a headless host's direct load), used only for that
  * column fallback.
  */
@@ -160,7 +160,7 @@ export async function finishStandalone(
   ir: LoweredDoc,
   source: Uint8Array,
   name: string,
-  open: (idml: Uint8Array) => Promise<unknown>,
+  open: (paged: Uint8Array) => Promise<unknown>,
 ): Promise<Opened> {
   let storyIds = engine.skeletonStories();
   let midPageColumns = engine.usesMidPageColumns();
@@ -170,7 +170,7 @@ export async function finishStandalone(
     midPageColumns = false;
     ir = engine.lowered();
     storyIds = engine.skeletonStories();
-    await open(engine.skeletonIdml(name));
+    await open(engine.skeletonPaged(name));
     await applyStyleOpsReporting(host, buildStyleMutations(ir));
     host.diagnostics.set(COLUMNS_DIAGNOSTICS_KEY, [
       {
