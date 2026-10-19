@@ -63,6 +63,11 @@ import type {
 } from "@paged-media/plugin-api";
 import { PX_PER_PT } from "@paged-media/helpers";
 import {
+  About as KitAbout,
+  Disclosure,
+  useDebouncedValue,
+} from "@paged-media/panel-kit";
+import {
   asFrameTarget,
   boundNamesIn,
   composeFontFaces,
@@ -119,7 +124,6 @@ import {
   type DraftStore,
 } from "./draft-store";
 
-import { createDebouncer } from "./debounce";
 import {
   FallbackCodeEditor,
   resolveEditorLane,
@@ -178,6 +182,14 @@ const optionRow: CSSProperties = {
   margin: "0 0 var(--space-1, 4px)",
 };
 
+/** The summary of a collapsed group of the panel: the kicker look. */
+const disclosureKicker: CSSProperties = {
+  font: "700 10px var(--font-sans, sans-serif)",
+  letterSpacing: "var(--tracking-wide, 0.14em)",
+  textTransform: "uppercase",
+  color: "var(--pg-muted-fg)",
+};
+
 const mutedNote: CSSProperties = {
   font: "10px var(--font-sans, sans-serif)",
   color: "var(--pg-muted-fg)",
@@ -198,22 +210,19 @@ const primaryButton: CSSProperties = {
   cursor: "pointer",
 };
 
-/** A collapsed "About" disclosure for detail a one-line note leaves out. */
+/** A collapsed "About" for detail a one-line note leaves out: the kit's,
+ *  on a line of its own in a wrapping option row. */
 function About({ children }: { children: ReactNode }): ReactElement {
   return (
-    <details
-      data-web-about
-      style={{
-        ...mutedNote,
-        flexBasis: "100%",
-        margin: "var(--space-1, 4px) 0 0",
-      }}
-    >
-      <summary style={{ cursor: "pointer" }}>About</summary>
-      <div style={{ margin: "var(--space-1, 4px) 0 0" }}>{children}</div>
-    </details>
+    <KitAbout attr="data-web-about" style={aboutLine}>
+      {children}
+    </KitAbout>
   );
 }
+const aboutLine: CSSProperties = {
+  flexBasis: "100%",
+  margin: "var(--space-1, 4px) 0 0",
+};
 
 const DOT: Record<WebDiagnostic["severity"], string> = {
   error: "var(--status-error)",
@@ -348,20 +357,6 @@ export async function persistDraft(
 }
 
 // ---------------------------------------------------------------- hooks
-
-/** The debounced shadow of a value: re-emits `value` `ms` after the
- *  LAST change (trailing edge, via `createDebouncer` — the unit the
- *  fake-timer spec covers). The first render emits immediately. */
-function useDebouncedValue<T>(value: T, ms: number): T {
-  const [debounced, setDebounced] = useState(value);
-  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
-  const debouncer = useMemo(() => createDebouncer(ms), [ms]);
-  useEffect(() => {
-    debouncer.schedule(() => setDebounced(value));
-  }, [value, debouncer]);
-  useEffect(() => () => debouncer.cancel(), [debouncer]);
-  return debounced;
-}
 
 // -------------------------------------------------------------- flow picker
 
@@ -1375,18 +1370,12 @@ function SourceEditor({
           outlines the element's painted box on the canvas; a press on the
           canvas inside the frame marks its tag here. */}
       {outline.length > 0 && (
-        <details data-web-outline style={{ margin: "var(--space-1, 4px) 0 0" }}>
-          <summary
-            style={{
-              font: "700 10px var(--font-sans, sans-serif)",
-              letterSpacing: "var(--tracking-wide, 0.14em)",
-              textTransform: "uppercase",
-              color: "var(--pg-muted-fg)",
-              cursor: "pointer",
-            }}
-          >
-            {lane.native ? "Tags" : "Find in source"} ({outline.length})
-          </summary>
+        <Disclosure
+          summary={`${lane.native ? "Tags" : "Find in source"} (${outline.length})`}
+          data-web-outline
+          style={{ margin: "var(--space-1, 4px) 0 0" }}
+          summaryStyle={disclosureKicker}
+        >
           <ul
             style={{
               listStyle: "none",
@@ -1447,7 +1436,7 @@ function SourceEditor({
               {highlightNote}
             </p>
           )}
-        </details>
+        </Disclosure>
       )}
       <div style={kicker}>CSS</div>
       <div data-web-css>
@@ -1462,23 +1451,14 @@ function SourceEditor({
       {/* Replace the draft's HTML/CSS with a vetted starter (keeps the
           current frame options). A draft edit — the explicit save still
           commits it. */}
-      <details
+      <Disclosure
+        summary="Replace with template"
         data-web-template-replace
         style={{ margin: "var(--space-1, 4px) 0 0" }}
+        summaryStyle={disclosureKicker}
       >
-        <summary
-          style={{
-            font: "700 10px var(--font-sans, sans-serif)",
-            letterSpacing: "var(--tracking-wide, 0.14em)",
-            textTransform: "uppercase",
-            color: "var(--pg-muted-fg)",
-            cursor: "pointer",
-          }}
-        >
-          Replace with template
-        </summary>
         <TemplatePicker onSeed={seedTemplate} />
-      </details>
+      </Disclosure>
       <div style={kicker}>Options</div>
       <label style={optionRow}>
         Media

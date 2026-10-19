@@ -46,7 +46,7 @@ import type {
 import { propertyRows, publishObjectList } from "@paged-media/plugin-sdk";
 
 import { DRAW_ID } from "../object-model/shared";
-import { humanize } from "./panel-kit";
+import { humanize } from "@paged-media/panel-kit";
 
 export const DRAW_PROPERTIES_PANEL_ID = "media.paged.draw.panel.properties";
 
