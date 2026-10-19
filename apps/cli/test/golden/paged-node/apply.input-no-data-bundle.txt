@@ -3,7 +3,7 @@ $ paged-node apply <TMP>/fixture.paged --data <TMP>/records.csv --bindings <TMP>
 # stdout
 {
   "error": {
-    "message": "this verb needs the paged.data bundle — install @paged-media/data (and @duckdb/duckdb-wasm@1.29.0) beside the CLI",
+    "message": "this verb needs the paged.data bundle (media.paged.data), and none is loaded. The published @paged-media/paged does not include it: paged.data is built into the editor and runs on DuckDB-WASM (34 MiB). In a checkout of the repository, build its wasm (`moon run data:wasm`)",
     "exit": 2
   }
 }
