@@ -61,6 +61,11 @@ export interface RendererWasm {
     ty: number,
     dpr: number,
   ) => boolean;
+  /**
+   * GPU mode: whether the device has been lost. Read on idle ticks — a
+   * GPU-process crash blanks the canvas without any present failing.
+   */
+  gpuLost?: () => boolean;
 }
 
 interface PageGeometry {
@@ -93,6 +98,12 @@ interface RendererOptions {
    * `wasm.presentFrame` instead of the blit path.
    */
   gpuActive?: boolean;
+  /**
+   * Called when `presentFrame` returns false in GPU mode — a skipped
+   * frame or a lost device. The worker tells the two apart
+   * (`gpuLostReason`) and recovers; the renderer only reports.
+   */
+  onPresentFailed?: () => void;
 }
 
 const DEFAULT_SNAPSHOT_WIDTH_PX = 256;
@@ -112,6 +123,7 @@ export class WorkerRenderer {
   private readonly snapshotWidthPx: number;
   private readonly background: string;
   private readonly gpuActive: boolean;
+  private readonly onPresentFailed: (() => void) | undefined;
 
   /** Tiles in cache; key = `${pageId}:${widthPx}`. */
   private readonly tiles = new Map<string, CachedTile>();
@@ -139,6 +151,7 @@ export class WorkerRenderer {
   ) {
     this.canvas = canvas;
     this.gpuActive = opts.gpuActive ?? false;
+    this.onPresentFailed = opts.onPresentFailed;
     if (!this.gpuActive) {
       const ctx = canvas.getContext("2d");
       // A failed GPU init can still leave the OffscreenCanvas with a
@@ -244,6 +257,10 @@ export class WorkerRenderer {
     this.loopHandle = setTimeout(this.tick, 16);
     const generation = this.cameraBuffer.generation();
     if (!this.dirty && generation === this.lastCameraGeneration) {
+      // Nothing to draw, but a lost device has already blanked what is on
+      // screen: one flag read per idle tick lets the worker recover now
+      // rather than at the next pan or edit.
+      if (this.gpuActive && this.wasm.gpuLost?.()) this.onPresentFailed?.();
       return;
     }
     this.lastCameraGeneration = generation;
@@ -261,7 +278,18 @@ export class WorkerRenderer {
       // is an `aggregate` code, so this emits ONE rollup per second, never
       // per frame.
       const t0 = performance.now();
-      this.wasm.presentFrame(camera.scale, camera.tx, camera.ty, this.dpr);
+      const presented = this.wasm.presentFrame(
+        camera.scale,
+        camera.tx,
+        camera.ty,
+        this.dpr,
+      );
+      if (!presented) {
+        // Nothing reached the screen: draw again next tick, and let the
+        // worker find out why (a lost device stays lost until recovered).
+        this.dirty = true;
+        this.onPresentFailed?.();
+      }
       workerJournal.record({
         code: "worker.frame",
         durMs: performance.now() - t0,
