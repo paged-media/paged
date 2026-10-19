@@ -1,14 +1,14 @@
 # paged.doc — Cargo workspace.
 #
 # Crates live at REPO TOP LEVEL (mirrors plugin-sheets §4 layout), not under
-# crates/. `paged-ooxml` is the shared OOXML foundation; every crate, it
-# included, is AGPL-3.0-only OR PMEL (the workspace default below).
+# crates/. Every crate is AGPL-3.0-only OR PMEL (the workspace default below).
+# The OOXML foundation, `paged-ooxml`, is platform/shared/ooxml, shared with
+# slide and sheet (modules ADR 607).
 [workspace]
 resolver = "2"
 # DOC-02 wasm go/no-go spike PASSED 2026-07-23 (ooxmlsdk 0.12 builds for wasm32);
 # full member set restored.
 members = [
-    "paged-ooxml",
     "docx-core",
     "docx-import",
     "docx-lower",
@@ -26,18 +26,19 @@ license = "AGPL-3.0-only OR LicenseRef-PMEL"
 publish = false
 
 [workspace.dependencies]
-# OOXML typed part DOM (DOC-02: committed as the semantic-parse foundation).
-# Held at 0.12: 0.13 makes docx_js 0.8 MB (12 %) larger, which the app-wide
-# wasm budget has no room for (docs/migration/rust-majors.md).
-ooxmlsdk = { version = "0.12", features = ["mce"] }
-# OPC container + preservation carry-through (proven wasm in sheet-xlsx).
+# The shared OOXML foundation: OPC container (with its memory budget) +
+# preservation carry-through, and the ooxmlsdk typed part DOM (`dom`; DOC-02:
+# committed as the semantic-parse foundation). ooxmlsdk is held at 0.12 there:
+# 0.13 makes docx_js 0.8 MB (12 %) larger, which the app-wide wasm budget has
+# no room for (docs/migration/rust-majors.md). `deflate` keeps the zip
+# backend this workspace always had (zlib-rs).
+paged-ooxml = { path = "../../platform/shared/ooxml", features = ["dom", "deflate"] }
 zip = { version = "9", default-features = false, features = ["deflate"] }
 quick-xml = "0.41"
 # Shared data plumbing.
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
-compact_str = { version = "0.10", features = ["serde"] }
 base64 = "0.23"
 # wasm boundary (docx-js only).
 wasm-bindgen = "0.2"
@@ -46,7 +47,6 @@ serde-wasm-bindgen = "0.6"
 console_error_panic_hook = "0.1"
 
 # Intra-workspace crates.
-paged-ooxml = { path = "paged-ooxml" }
 docx-core = { path = "docx-core" }
 docx-import = { path = "docx-import" }
 docx-lower = { path = "docx-lower" }
@@ -55,6 +55,12 @@ docx-js = { path = "docx-js" }
 # Optional test resources (docs/development/testing.md): dev-dependency only.
 paged-test-resources = { path = "../../platform/shared/test-resources" }
 docx-skeleton = { path = "docx-skeleton" }
+# The engine's model crates, path-depended from the engine workspace at the
+# same commit (ADR 606): the standalone-open skeleton is built as a
+# native `paged_scene::Document` and packaged by core's one `.paged` writer.
+paged-model = { path = "../../engine/core/crates/paged-model" }
+paged-scene = { path = "../../engine/core/crates/paged-scene" }
+paged-store = { path = "../../engine/core/crates/paged-store" }
 
 
 [workspace.lints.clippy]
@@ -75,4 +81,16 @@ codegen-units = 1
 inherits = "release"
 
 [profile.wasm-release.package.ooxmlsdk]
+opt-level = "z"
+
+# The native skeleton's model serializer (ADR 606): size-first codegen for
+# the engine's model crates, which the skeleton only builds and writes once
+# per open.
+[profile.wasm-release.package.paged-model]
+opt-level = "z"
+
+[profile.wasm-release.package.paged-scene]
+opt-level = "z"
+
+[profile.wasm-release.package.paged-store]
 opt-level = "z"

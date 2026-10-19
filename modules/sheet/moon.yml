@@ -12,13 +12,16 @@ project:
   description: "Spreadsheet module: calc engine, formats, XLSX, charts."
 
 # validate:manifest runs the in-tree paged-plugin bin (plugin-sdk).
-# sheet-format, sheet-fn and sheet-js take platform/shared/fmt by path.
+# sheet-format, sheet-fn and sheet-js take platform/shared/fmt by path,
+# sheet-xlsx platform/shared/ooxml.
 dependsOn:
   - id: "extensions"
     scope: "development"
   - id: "test-kit"
     scope: "development"
   - id: "fmt"
+    scope: "production"
+  - id: "ooxml"
     scope: "production"
 
 fileGroups:
@@ -30,6 +33,8 @@ fileGroups:
     - "/.cargo/*.toml"
     - "/platform/shared/fmt/src/**/*.rs"
     - "/platform/shared/fmt/Cargo.toml"
+    - "/platform/shared/ooxml/src/**/*.rs"
+    - "/platform/shared/ooxml/Cargo.toml"
     - "!fuzz/**"
   rust-tests:
     - "**/*"
@@ -37,6 +42,8 @@ fileGroups:
     - "!**/*.md"
     - "!fuzz/**"
     - "/.cargo/*.toml"
+    - "/platform/shared/ooxml/src/**/*.rs"
+    - "/platform/shared/ooxml/Cargo.toml"
 
 tasks:
   js-test:

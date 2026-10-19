@@ -17,7 +17,6 @@
  */
 
 // Test names end in `__feat__<cockpit id>` (the cockpit linking convention).
-// Test names end in `__feat__<cockpit id>` (the cockpit linking convention).
 #![allow(non_snake_case)]
 
 //! The ZIP reader's memory budget. An entry's local header may CLAIM any
@@ -27,28 +26,10 @@
 //! request while each reproducer is opened: it must stay far below the claim,
 //! and the open must end in `Ok` or a typed error (never an abort).
 
-use std::alloc::{GlobalAlloc, Layout, System};
-use std::sync::atomic::{AtomicUsize, Ordering};
-
-struct Peak;
-static LARGEST: AtomicUsize = AtomicUsize::new(0);
-
-unsafe impl GlobalAlloc for Peak {
-    unsafe fn alloc(&self, l: Layout) -> *mut u8 {
-        LARGEST.fetch_max(l.size(), Ordering::Relaxed);
-        unsafe { System.alloc(l) }
-    }
-    unsafe fn dealloc(&self, p: *mut u8, l: Layout) {
-        unsafe { System.dealloc(p, l) }
-    }
-    unsafe fn realloc(&self, p: *mut u8, l: Layout, n: usize) -> *mut u8 {
-        LARGEST.fetch_max(n, Ordering::Relaxed);
-        unsafe { System.realloc(p, l, n) }
-    }
-}
+use paged_ooxml::testing::PeakAlloc;
 
 #[global_allocator]
-static A: Peak = Peak;
+static A: PeakAlloc = PeakAlloc;
 
 /// 64 MiB: no single allocation for a 10 KB input may come near this.
 const CEILING: usize = 64 << 20;
@@ -67,12 +48,12 @@ fn zip_entry_claiming_a_huge_size_does_not_allocate_it__feat__sheet_xlsx_roundtr
         "xlsx_load_recalc-oom-2650-bytes-asks-3.4GB.bin",
     ] {
         let bytes = regression(name);
-        LARGEST.store(0, Ordering::Relaxed);
+        PeakAlloc::reset();
         if let Ok(doc) = sheet_xlsx::XlsxDocument::open(&bytes) {
             let _ = doc.save();
         }
         let _ = sheet_js::core::SheetSession::load_xlsx(&bytes);
-        let peak = LARGEST.load(Ordering::Relaxed);
+        let peak = PeakAlloc::largest();
         assert!(
             peak < CEILING,
             "{name} ({} bytes) made a single {peak}-byte allocation",
@@ -102,7 +83,7 @@ fn zip_total_uncompressed_budget_is_enforced__feat__sheet_xlsx_roundtrip() {
     assert!(bytes.len() < 64 << 10, "the bomb is small: {}", bytes.len());
     // The production budget is MAX_UNCOMPRESSED_BYTES; the same code path
     // runs here with a 1 MiB budget so the test does not inflate a GiB.
-    LARGEST.store(0, Ordering::Relaxed);
+    PeakAlloc::reset();
     let err = sheet_xlsx::opc::OpcContainer::read_with_budget(&bytes, 1 << 20)
         .expect_err("an over-budget package must be refused");
     assert!(
@@ -110,7 +91,7 @@ fn zip_total_uncompressed_budget_is_enforced__feat__sheet_xlsx_roundtrip() {
         "typed budget error, got {err}"
     );
     assert!(
-        LARGEST.load(Ordering::Relaxed) < 2 << 20,
+        PeakAlloc::largest() < 2 << 20,
         "the over-budget entry was read past the budget"
     );
     const { assert!(sheet_xlsx::MAX_UNCOMPRESSED_BYTES >= 256 << 20) };

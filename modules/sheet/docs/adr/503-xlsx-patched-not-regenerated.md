@@ -113,3 +113,13 @@ Consequences are still dropped. Evidence: `sheet-xlsx/src/parts/metadata.rs`,
 `sheet-js/src/core.rs` (`spill_areas`, `live_dynamic_arrays`, `read_unmarked_spill_caches`),
 `sheet-conformance/tests/it/spill_roundtrip.rs` and the Excel-saved
 `corpus/xlsx-dynamic/dynamic-arrays.excel.xlsx`.
+
+## Amendment 2026-10-19
+
+The zip read, its uncompressed-size budget, the container sniff, the content-type table, the
+relationship parser, the byte splicer and the XML helpers moved to the shared `paged-ooxml`
+crate (`platform/shared/ooxml`, modules/doc ADR 607), which doc and slide read packages with
+too. `OpcContainer`, its part kinds and the writer stay here, and the decision stands: the
+reads keep their behaviour (`Relationships::try_parse` is this crate's strict parse), and the
+save writes the same bytes. The line numbers above refer to the code before the move.
+

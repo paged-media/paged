@@ -5,7 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 publish.workspace = true
-description = "paged.sheet XLSX I/O (spec §10): OPC zip + SpreadsheetML parse, the preservation invariant, writer. Zero-edit round-trip is byte-identical (modulo the calcChain ruling)."
+description = "paged.sheet XLSX I/O (spec §10): SpreadsheetML parse over the shared OPC container (paged-ooxml), the preservation invariant, writer. Zero-edit round-trip is byte-identical (modulo the calcChain ruling)."
 
 [lints]
 workspace = true
@@ -43,6 +43,12 @@ sheet-format = { path = "../sheet-format" }
 # single source of the A1 token grammar). `sheet-parser` is a PURE leaf crate
 # (deps = core); no cycle (xlsx -> parser -> core).
 sheet-parser = { path = "../sheet-parser" }
+# The shared OOXML foundation (platform/shared/ooxml, modules ADR 607): the
+# package read with its uncompressed-size budget, content types, rels, byte
+# splicing, the XML helpers and DrawingML colour, shared with doc and slide.
+# Without `dom` (no ooxmlsdk); `deflate-flate2` is the zip backend this
+# workspace always had (flate2's rust_backend, root Cargo.toml).
+paged-ooxml = { path = "../../../platform/shared/ooxml", features = ["deflate-flate2"] }
 zip.workspace = true
 # Not called directly: it selects zip's deflate backend (miniz_oxide), so a
 # save writes the same compressed bytes in every build (see the root

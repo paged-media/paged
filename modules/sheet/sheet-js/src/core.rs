@@ -2727,44 +2727,34 @@ fn parse_range(range: &str) -> Result<CellRange, SessionError> {
 
 /// The embedded minimal one-sheet ("Sheet1") XLSX package for [`SheetSession::new`].
 fn empty_workbook_bytes() -> Vec<u8> {
-    use std::io::Write as _;
-    let mut buf = Vec::new();
-    {
-        let cursor = std::io::Cursor::new(&mut buf);
-        let mut zip = zip::ZipWriter::new(cursor);
-        let opts = sheet_xlsx::write::part_options();
-        let mut add = |name: &str, body: &str| {
-            zip.start_file(name, opts).unwrap();
-            zip.write_all(body.as_bytes()).unwrap();
-        };
-        add(
+    let parts: [(&str, &str); 5] = [
+        (
             "[Content_Types].xml",
             r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>"#,
-        );
-        add(
+        ),
+        (
             "_rels/.rels",
             r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
-        );
-        add(
+        ),
+        (
             "xl/workbook.xml",
             r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Sheet1" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
-        );
-        add(
+        ),
+        (
             "xl/_rels/workbook.xml.rels",
             r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#,
-        );
-        add(
+        ),
+        (
             "xl/worksheets/sheet1.xml",
             r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData/></worksheet>"#,
-        );
-        zip.finish().unwrap();
-    }
-    buf
+        ),
+    ];
+    sheet_xlsx::write::write_package(parts.iter().map(|(n, b)| (*n, b.as_bytes())))
 }
 
 /// A [`ParseCtx`] over a [`SheetModel`]: resolves sheet names + defined names,

@@ -72,8 +72,6 @@ ignored_paths:
   - "modules/image/glue/wasm/**"
   - "modules/image/manifest/wasm/**"
   - "modules/data/vendor/**"
-  # A stamped copy of modules/doc/paged-ooxml (scripts/sync-ooxml.sh).
-  - "modules/slide/vendor/**"
   - "engine/core/corpus/generated/**"
 
 read_only: false

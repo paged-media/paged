@@ -262,6 +262,15 @@ name = "paged-fmt"
 version = "0.0.0"
 
 [[package]]
+name = "paged-ooxml"
+version = "0.0.0"
+dependencies = [
+ "quick-xml",
+ "thiserror",
+ "zip",
+]
+
+[[package]]
 name = "pin-project-lite"
 version = "0.2.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -487,7 +496,6 @@ dependencies = [
  "sheet-parser",
  "sheet-xlsx",
  "wasm-bindgen",
- "zip",
 ]
 
 [[package]]
@@ -515,6 +523,7 @@ version = "0.0.0"
 dependencies = [
  "compact_str",
  "flate2",
+ "paged-ooxml",
  "quick-xml",
  "sheet-chart",
  "sheet-core",

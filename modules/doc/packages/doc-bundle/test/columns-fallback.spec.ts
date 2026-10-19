@@ -93,7 +93,7 @@ function fakeEngine() {
     },
     lowered: () => doc(mid, mid ? 1 : 2),
     skeletonStories: () => (mid ? ["docx_s0"] : ["docx_s0", "docx_s1"]),
-    skeletonIdml: (name: string) =>
+    skeletonPaged: (name: string) =>
       new TextEncoder().encode(`${name}:${mid ? "split" : "pages"}`),
   };
   return { engine, calls };

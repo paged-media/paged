@@ -64,14 +64,14 @@ pub enum XlsxError {
     /// that and parsed "successfully" as OOXML.
     ///
     /// A .xls that appears to work is worse than one that fails: the
-    /// caller gets a workbook that is not the one they opened. Identical
-    /// to `paged-ooxml`'s `LegacyBinaryDoc`, found the same way.
+    /// caller gets a workbook that is not the one they opened. The sniff
+    /// is `paged-ooxml`'s (`LegacyContainer::Cfb`), as for a `.doc`.
     #[error("legacy binary Excel workbook (.xls, CFB/OLE) — only OOXML .xlsx/.xlsm is supported; re-save as .xlsx")]
     LegacyBinaryXls,
 
     /// The package inflates past the reader's memory budget
-    /// ([`crate::MAX_UNCOMPRESSED_BYTES`]) — a decompression bomb, or a
-    /// workbook too large to hold.
+    /// ([`crate::MAX_UNCOMPRESSED_BYTES`], `paged-ooxml`'s) — a
+    /// decompression bomb, or a workbook too large to hold.
     #[error("xlsx exceeds the reader's memory budget: {0}")]
     Budget(String),
 }
@@ -79,6 +79,29 @@ pub enum XlsxError {
 impl From<quick_xml::events::attributes::AttrError> for XlsxError {
     fn from(e: quick_xml::events::attributes::AttrError) -> Self {
         XlsxError::Xml(quick_xml::Error::InvalidAttr(e))
+    }
+}
+
+/// The shared XML helpers report quick-xml's own errors; each keeps the
+/// variant (and so the message) it had when the helpers lived here.
+impl From<paged_ooxml::XmlError> for XlsxError {
+    fn from(e: paged_ooxml::XmlError) -> Self {
+        match e {
+            paged_ooxml::XmlError::Syntax(e) => XlsxError::Xml(e),
+            paged_ooxml::XmlError::Encoding(e) => XlsxError::Encoding(e),
+            paged_ooxml::XmlError::Escape(e) => XlsxError::Escape(e),
+        }
+    }
+}
+
+/// The shared package reader's failures, as this crate always reported them.
+impl From<paged_ooxml::ZipReadError> for XlsxError {
+    fn from(e: paged_ooxml::ZipReadError) -> Self {
+        match e {
+            paged_ooxml::ZipReadError::Zip(e) => XlsxError::Zip(e),
+            paged_ooxml::ZipReadError::Io(e) => XlsxError::Zip(zip::result::ZipError::Io(e)),
+            paged_ooxml::ZipReadError::Budget(detail) => XlsxError::Budget(detail),
+        }
     }
 }
 

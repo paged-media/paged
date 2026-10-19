@@ -29,6 +29,8 @@ use quick_xml::events::{BytesStart, Event};
 use quick_xml::name::ResolveResult;
 use quick_xml::NsReader;
 
+use paged_ooxml::xml::escape_attr as escape;
+
 /// The namespaces the reader distinguishes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Ns {
@@ -174,13 +176,6 @@ impl El {
         out.push_str(&self.qname);
         out.push('>');
     }
-}
-
-fn escape(s: &str) -> String {
-    s.replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
-        .replace('"', "&quot;")
 }
 
 /// Parse a part into its root element.

@@ -16,9 +16,9 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// ADR 029 — the skeleton is IDML, which cannot carry a grow rule, so standalone
-// open sets each section story's rule on the wire (protocol 64). An engine
-// without the op keeps the document open and the bundle reports it.
+// ADR 029 — standalone open sets each section story's grow rule on the wire
+// after opening the skeleton (protocol 64). An engine without the op keeps
+// the document open and the bundle reports it.
 import { describe, expect, it } from "bun:test";
 
 import { growRuleOp, OPEN_DIAGNOSTICS_KEY, setGrowRules } from "../src/open.js";
