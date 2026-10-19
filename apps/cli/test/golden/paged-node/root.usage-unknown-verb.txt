@@ -3,7 +3,7 @@ $ paged-node nope
 # stdout
 {
   "error": {
-    "message": "unknown verb \"nope\" — one of: get, set, create, delete, query, schema, batch, commands, invoke, run, ai, export, apply, merge, plugins, describe",
+    "message": "unknown verb \"nope\" — one of: get, set, create, delete, query, schema, batch, commands, invoke, run, ai, export, apply, merge, plugins, describe, mcp",
     "exit": 2
   }
 }

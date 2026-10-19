@@ -1,0 +1,21 @@
+{
+  "indesign": "20.0.1.32",
+  "turned 0deg, flip V":"flip=1986359924 rotation=0 hscale=100 vscale=-100 shear=0 matrix=[1 0 0 -1 5 -165.94]",
+  "turned 0deg, flip V then V":"flip=1852796517 rotation=0 hscale=100 vscale=100 shear=0 matrix=[1 0 0 1 5 -415.94]",
+  "turned 0deg, flip H":"flip=1752134266 rotation=180 hscale=100 vscale=-100 shear=0 matrix=[-1 0 0 1 355 -415.94]",
+  "turned 0deg, flip H then V":"flip=1852796517 rotation=180 hscale=100 vscale=100 shear=0 matrix=[-1 0 0 -1 355 -165.94]",
+  "turned 0deg, flip HV":"flip=1852796517 rotation=180 hscale=100 vscale=100 shear=0 matrix=[-1 0 0 -1 355 -165.94]",
+  "turned 0deg, flip HV then V":"flip=1752134266 rotation=180 hscale=100 vscale=-100 shear=0 matrix=[-1 0 0 1 355 -415.94]",
+  "turned 30deg, flip V":"flip=1986359924 rotation=-30 hscale=100 vscale=-100 shear=0 matrix=[0.87 0.5 0.5 -0.87 -34.05 -270.19]",
+  "turned 30deg, flip V then V":"flip=1852796517 rotation=30 hscale=100 vscale=100 shear=0 matrix=[0.87 -0.5 0.5 0.87 -34.05 -311.7]",
+  "turned 30deg, flip H":"flip=1752134266 rotation=150 hscale=100 vscale=-100 shear=0 matrix=[-0.87 -0.5 -0.5 0.87 394.05 -311.7]",
+  "turned 30deg, flip H then V":"flip=1852796517 rotation=-150 hscale=100 vscale=100 shear=0 matrix=[-0.87 0.5 -0.5 -0.87 394.05 -270.19]",
+  "turned 30deg, flip HV":"flip=1852796517 rotation=-150 hscale=100 vscale=100 shear=0 matrix=[-0.87 0.5 -0.5 -0.87 394.05 -270.19]",
+  "turned 30deg, flip HV then V":"flip=1752134266 rotation=150 hscale=100 vscale=-100 shear=0 matrix=[-0.87 -0.5 -0.5 0.87 394.05 -311.7]",
+  "turned 120deg, flip V":"flip=1752134266 rotation=-120 hscale=100 vscale=-100 shear=0 matrix=[-0.5 0.87 0.87 0.5 159.25 -505]",
+  "turned 120deg, flip V then V":"flip=1852796517 rotation=120 hscale=100 vscale=100 shear=0 matrix=[-0.5 -0.87 0.87 -0.5 159.25 -76.89]",
+  "turned 120deg, flip H":"flip=1986359924 rotation=60 hscale=100 vscale=-100 shear=0 matrix=[0.5 -0.87 -0.87 -0.5 200.75 -76.89]",
+  "turned 120deg, flip H then V":"flip=1852796517 rotation=-60 hscale=100 vscale=100 shear=0 matrix=[0.5 0.87 -0.87 0.5 200.75 -505]",
+  "turned 120deg, flip HV":"flip=1852796517 rotation=-60 hscale=100 vscale=100 shear=0 matrix=[0.5 0.87 -0.87 0.5 200.75 -505]",
+  "turned 120deg, flip HV then V":"flip=1986359924 rotation=60 hscale=100 vscale=-100 shear=0 matrix=[0.5 -0.87 -0.87 -0.5 200.75 -76.89]"
+}

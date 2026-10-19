@@ -1,0 +1,11 @@
+$ paged-node mcp extra
+# exit 2
+# stdout
+{
+  "error": {
+    "message": "usage: paged-node mcp ",
+    "exit": 2
+  }
+}
+# stderr
+(empty)

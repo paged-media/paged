@@ -1123,6 +1123,163 @@ fn corner_entries(corners: &[paged_model::CornerSpec; 4]) -> Vec<crate::channel:
     out
 }
 
+// R1 — the read halves every page-item kind shares with the text frame's
+// and the rectangle's descriptor, in the same shapes, for the kinds that
+// had their write arms and not these rows (an oval, a polygon, a line, a
+// group). Each builder spells its rows exactly as the text frame arm does.
+
+/// The text-wrap rows: mode, offsets, contour type and inside edges, and
+/// Invert.
+fn text_wrap_entries(tw: Option<paged_model::TextWrap>) -> Vec<crate::channel::PropertyEntry> {
+    use crate::channel::PropertyEntry;
+    use paged_mutate::{PropertyPath, Value};
+    vec![
+        PropertyEntry {
+            path: PropertyPath::FrameTextWrapMode,
+            value: Some(Value::Text(
+                tw.map(|t| t.mode.as_idml().to_string()).unwrap_or_default(),
+            )),
+        },
+        PropertyEntry {
+            path: PropertyPath::FrameTextWrapOffsets,
+            value: Some(Value::Bounds(tw.map(|t| t.offsets).unwrap_or([0.0; 4]))),
+        },
+        PropertyEntry {
+            path: PropertyPath::FrameTextWrapContourType,
+            value: Some(Value::Text(
+                tw.and_then(|t| t.contour_type)
+                    .map(|c| c.as_idml().to_string())
+                    .unwrap_or_default(),
+            )),
+        },
+        PropertyEntry {
+            path: PropertyPath::FrameTextWrapContourIncludeInside,
+            value: Some(Value::Bool(
+                tw.and_then(|t| t.include_inside_edges).unwrap_or(false),
+            )),
+        },
+        PropertyEntry {
+            path: PropertyPath::TextWrapInvert,
+            value: Some(Value::Bool(tw.and_then(|t| t.invert).unwrap_or(false))),
+        },
+    ]
+}
+
+/// The whole-object drop shadow rows (the on/off switch and its six
+/// settings), read off the item's `drop_shadow`.
+fn drop_shadow_entries(
+    ds: Option<&paged_model::DropShadowSetting>,
+) -> Vec<crate::channel::PropertyEntry> {
+    use crate::channel::PropertyEntry;
+    use paged_mutate::{PropertyPath, Value};
+    vec![
+        PropertyEntry {
+            path: PropertyPath::FrameDropShadow,
+            value: Some(Value::Bool(ds.is_some())),
+        },
+        PropertyEntry {
+            path: PropertyPath::FrameDropShadowMode,
+            value: Some(Value::Text(
+                ds.map(|s| s.mode.clone())
+                    .unwrap_or_else(|| "Drop".to_string()),
+            )),
+        },
+        PropertyEntry {
+            path: PropertyPath::FrameDropShadowXOffset,
+            value: Some(Value::Length(ds.map(|s| s.x_offset))),
+        },
+        PropertyEntry {
+            path: PropertyPath::FrameDropShadowYOffset,
+            value: Some(Value::Length(ds.map(|s| s.y_offset))),
+        },
+        PropertyEntry {
+            path: PropertyPath::FrameDropShadowSize,
+            value: Some(Value::Length(ds.map(|s| s.size))),
+        },
+        PropertyEntry {
+            path: PropertyPath::FrameDropShadowOpacity,
+            value: Some(Value::Length(ds.map(|s| s.opacity_pct))),
+        },
+        PropertyEntry {
+            path: PropertyPath::FrameDropShadowColor,
+            value: Some(Value::ColorRef(ds.and_then(|s| s.effect_color.clone()))),
+        },
+    ]
+}
+
+/// The decomposed transform rows (rotation, scale, both flips) of the
+/// matrix the `FrameRotationAngle` … `FrameFlipV` writes recompose.
+fn transform_decompose_entries(m: Option<[f32; 6]>) -> Vec<crate::channel::PropertyEntry> {
+    use crate::channel::PropertyEntry;
+    use paged_mutate::{PropertyPath, Value};
+    vec![
+        PropertyEntry {
+            path: PropertyPath::FrameRotationAngle,
+            value: Some(Value::Length(Some(decompose_angle(m)))),
+        },
+        PropertyEntry {
+            path: PropertyPath::FrameScaleX,
+            value: Some(Value::Length(Some(decompose_scale_x(m)))),
+        },
+        PropertyEntry {
+            path: PropertyPath::FrameScaleY,
+            value: Some(Value::Length(Some(decompose_scale_y(m)))),
+        },
+        PropertyEntry {
+            path: PropertyPath::FrameFlipH,
+            value: Some(Value::Bool(decompose_flip_h(m))),
+        },
+        PropertyEntry {
+            path: PropertyPath::FrameFlipV,
+            value: Some(Value::Bool(decompose_flip_v(m))),
+        },
+    ]
+}
+
+/// The element-level `Visible` / `Locked` rows.
+fn visible_locked_entries(visible: bool, locked: bool) -> Vec<crate::channel::PropertyEntry> {
+    use crate::channel::PropertyEntry;
+    use paged_mutate::{PropertyPath, Value};
+    vec![
+        PropertyEntry {
+            path: PropertyPath::ElementVisible,
+            value: Some(Value::Bool(visible)),
+        },
+        PropertyEntry {
+            path: PropertyPath::ElementLocked,
+            value: Some(Value::Bool(locked)),
+        },
+    ]
+}
+
+/// The whole-path row (`FramePath`), in the shape its setter takes: the
+/// anchors and the subpath starts. A box-drawn item has no anchors.
+fn frame_path_entry(
+    anchors: &[paged_model::PathAnchor],
+    subpath_starts: &[usize],
+) -> crate::channel::PropertyEntry {
+    crate::channel::PropertyEntry {
+        path: paged_mutate::PropertyPath::FramePath,
+        value: Some(paged_mutate::Value::FramePath {
+            anchors: anchors
+                .iter()
+                .map(paged_mutate::operation::PathAnchorSpec::from_parse)
+                .collect(),
+            subpath_starts: subpath_starts.to_vec(),
+        }),
+    }
+}
+
+/// The item's `Name` (`Spread::item_names`; "" when it has none).
+fn item_name_entry(spread: &paged_model::Spread, raw: &str) -> crate::channel::PropertyEntry {
+    crate::channel::PropertyEntry {
+        path: paged_mutate::PropertyPath::ItemName,
+        value: Some(paged_mutate::Value::Text(
+            spread.item_names.get(raw).cloned().unwrap_or_default(),
+        )),
+    }
+}
+
 fn decompose_angle(m: Option<[f32; 6]>) -> f32 {
     paged_mutate::operation::decompose_transform(m).angle_deg
 }
@@ -6584,8 +6741,17 @@ impl CanvasModel {
         }
 
         let raw = id.raw_id();
-        for parsed in &self.scene.spreads {
-            let spread = &parsed.spread;
+        // R1 (PAR-4) — a master's items are read like a page's: the
+        // query lists them (`master:<id> > <kind>:<id>`), `OnMaster`
+        // writes them, and ids are document-unique, so the masters are
+        // walked after the page spreads.
+        let spreads = self
+            .scene
+            .spreads
+            .iter()
+            .map(|p| &p.spread)
+            .chain(self.scene.master_spreads.values().map(|m| &m.spread));
+        for spread in spreads {
             let entries: Option<Vec<PropertyEntry>> = match id {
                 ElementId::TextFrame(_) => spread
                     .text_frames
@@ -6937,6 +7103,9 @@ impl CanvasModel {
                         // outline a rectangle paints), so these bind to a
                         // live effect, not just a stored value.
                         entries.extend(corner_entries(&f.corners));
+                        // R1 — written, and read now too.
+                        entries.push(frame_path_entry(&f.anchors, &f.subpath_starts));
+                        entries.push(item_name_entry(spread, raw));
                         entries
                     }),
                 ElementId::Rectangle(_) => spread
@@ -7253,14 +7422,25 @@ impl CanvasModel {
                         // no inner image to grab); `None` ⇒ the legacy
                         // "stretch to bounds" frame with no parsed inner
                         // matrix.
-                        if f.has_image_element {
-                            entries.push(PropertyEntry {
-                                path: PropertyPath::ImageContentTransform,
-                                value: Some(Value::Transform(
-                                    f.image_item_transform,
-                                )),
-                            });
-                        }
+                        //
+                        // R1 — read on every rectangle, as it is written on
+                        // every one: a graphic frame with no image yet reads
+                        // `None` (no inner transform), the value the setter
+                        // takes to clear one.
+                        entries.push(PropertyEntry {
+                            path: PropertyPath::ImageContentTransform,
+                            value: Some(Value::Transform(f.image_item_transform)),
+                        });
+                        // PN-254 — Invert, written on a rectangle since
+                        // W0.3 and read only on a text frame.
+                        entries.push(PropertyEntry {
+                            path: PropertyPath::TextWrapInvert,
+                            value: Some(Value::Bool(
+                                f.text_wrap.and_then(|t| t.invert).unwrap_or(false),
+                            )),
+                        });
+                        entries.push(frame_path_entry(&f.anchors, &f.subpath_starts));
+                        entries.push(item_name_entry(spread, raw));
                         // W0.4 — transparency effects (gap 18).
                         entries.extend(effect_property_entries(
                             f.effects.as_ref(),
@@ -7343,6 +7523,11 @@ impl CanvasModel {
                         // no outline of its own. See
                         // `paged_model::Group::corner_radius`.
                         entries.extend(corner_entries(&g.corners));
+                        // R1 — the decomposed rows of the group's own
+                        // stored transform, which their setters
+                        // recompose, and its name.
+                        entries.extend(transform_decompose_entries(g.item_transform));
+                        entries.push(item_name_entry(spread, raw));
                         entries
                     }),
                 // Punch-list (rides v35) — Polygon / GraphicLine surface
@@ -7508,13 +7693,24 @@ impl CanvasModel {
                         // `paged_model::Polygon::corners`.
                         // v66 — the image-content transform is writable on
                         // ovals and polygons too; image-bearing ones read it.
-                        if p.has_image_element {
-                            entries.push(PropertyEntry {
-                                path: PropertyPath::ImageContentTransform,
-                                value: Some(Value::Transform(p.image_item_transform)),
-                            });
-                        }
+                        // R1 — read on every polygon, as written.
+                        entries.push(PropertyEntry {
+                            path: PropertyPath::ImageContentTransform,
+                            value: Some(Value::Transform(p.image_item_transform)),
+                        });
                         entries.extend(corner_entries(&p.corners));
+                        // R1 — the rows a polygon's write arms had and its
+                        // descriptor did not.
+                        entries.push(PropertyEntry {
+                            path: PropertyPath::FrameNonprinting,
+                            value: Some(Value::Bool(p.nonprinting)),
+                        });
+                        entries.extend(text_wrap_entries(p.text_wrap));
+                        entries.extend(drop_shadow_entries(p.drop_shadow.as_ref()));
+                        entries.extend(transform_decompose_entries(p.item_transform));
+                        entries.extend(visible_locked_entries(p.visible, p.locked));
+                        entries.push(frame_path_entry(&p.anchors, &p.subpath_starts));
+                        entries.push(item_name_entry(spread, raw));
                         entries
                     }),
                 ElementId::GraphicLine(_) => spread
@@ -7634,6 +7830,18 @@ impl CanvasModel {
                             None,
                             l.drop_shadow.as_ref(),
                         ));
+                        // R1 — the rows a line's write arms had and its
+                        // descriptor did not.
+                        entries.push(PropertyEntry {
+                            path: PropertyPath::FrameNonprinting,
+                            value: Some(Value::Bool(l.nonprinting)),
+                        });
+                        entries.extend(text_wrap_entries(l.text_wrap));
+                        entries.extend(drop_shadow_entries(l.drop_shadow.as_ref()));
+                        entries.extend(transform_decompose_entries(l.item_transform));
+                        entries.extend(visible_locked_entries(l.visible, l.locked));
+                        entries.push(frame_path_entry(&l.anchors, &l.subpath_starts));
+                        entries.push(item_name_entry(spread, raw));
                         entries
                     }),
                 // C-18 / E-1 — an `<Oval>` had NO descriptor arm at all
@@ -7651,14 +7859,11 @@ impl CanvasModel {
                     .iter()
                     .find(|o| o.self_id.as_deref() == Some(raw))
                     .map(|o| {
-                        // NOTE: `FrameBounds` is deliberately ABSENT.
-                        // `set_property` has a `FrameBounds` arm for
-                        // TextFrame / Rectangle / Polygon / GraphicLine
-                        // but NOT for Oval, so reading it here would be
-                        // exactly the C-17 mistake — a row a panel can
-                        // show and not write. The missing apply arm is a
-                        // reported gap, not something to paper over from
-                        // the read side.
+                        // R1 (PN-261, PAR-5) — `FrameBounds` is read now:
+                        // `set_property` has written an oval's bounds
+                        // since the oval bounds arm (`oval_bounds.rs`),
+                        // and Align, the Transform panel and every script
+                        // read an item's place through this row.
                         // C-25 — the paint set. Every row below has an
                         // `NodeId::Oval` write arm in `set_property`
                         // (verified arm by arm, including the
@@ -7675,6 +7880,15 @@ impl CanvasModel {
                         // ellipse outline has been offset by it since
                         // W1.5, and the write arm now reaches the kind.
                         let mut entries = vec![
+                            PropertyEntry {
+                                path: PropertyPath::FrameBounds,
+                                value: Some(Value::Bounds([
+                                    o.bounds.top,
+                                    o.bounds.left,
+                                    o.bounds.bottom,
+                                    o.bounds.right,
+                                ])),
+                            },
                             PropertyEntry {
                                 path: PropertyPath::FrameTransform,
                                 value: Some(Value::Transform(o.item_transform)),
@@ -7791,13 +8005,25 @@ impl CanvasModel {
                         // `paged_model::Oval::corner_radius`.
                         // v66 — the image-content transform is writable on
                         // ovals and polygons too; image-bearing ones read it.
-                        if o.has_image_element {
-                            entries.push(PropertyEntry {
-                                path: PropertyPath::ImageContentTransform,
-                                value: Some(Value::Transform(o.image_item_transform)),
-                            });
-                        }
+                        // R1 — read on every oval, as written.
+                        entries.push(PropertyEntry {
+                            path: PropertyPath::ImageContentTransform,
+                            value: Some(Value::Transform(o.image_item_transform)),
+                        });
                         entries.extend(corner_entries(&o.corners));
+                        // R1 — the rows an oval's write arms had and its
+                        // descriptor did not: Nonprinting (PN-259), the
+                        // text wrap (PN-255), the drop shadow, the
+                        // decomposed transform, Visible / Locked, Name.
+                        entries.push(PropertyEntry {
+                            path: PropertyPath::FrameNonprinting,
+                            value: Some(Value::Bool(o.nonprinting)),
+                        });
+                        entries.extend(text_wrap_entries(o.text_wrap));
+                        entries.extend(drop_shadow_entries(o.drop_shadow.as_ref()));
+                        entries.extend(transform_decompose_entries(o.item_transform));
+                        entries.extend(visible_locked_entries(o.visible, o.locked));
+                        entries.push(item_name_entry(spread, raw));
                         entries
                     }),
                 _ => None,
@@ -7911,6 +8137,11 @@ impl CanvasModel {
         let mut drop_cap_characters: Vec<u32> = Vec::new();
         let mut drop_cap_lines: Vec<u32> = Vec::new();
         let mut hyphenations: Vec<Option<bool>> = Vec::new();
+        // R1 — written and never read before: the zone, the applied
+        // numbering list (paragraph) and the applied conditions (run).
+        let mut hyphenation_zones: Vec<Option<f32>> = Vec::new();
+        let mut applied_numbering_lists: Vec<Option<String>> = Vec::new();
+        let mut applied_conditions: Vec<String> = Vec::new();
         let mut keep_lines_together: Vec<Option<bool>> = Vec::new();
         let mut keep_with_next: Vec<Option<u32>> = Vec::new();
         let mut keep_all_lines_together: Vec<Option<bool>> = Vec::new();
@@ -7991,6 +8222,8 @@ impl CanvasModel {
                 drop_cap_characters.push(para.drop_cap_characters);
                 drop_cap_lines.push(para.drop_cap_lines);
                 hyphenations.push(para.hyphenation);
+                hyphenation_zones.push(para.hyphenation_zone);
+                applied_numbering_lists.push(para.applied_numbering_list.clone());
                 keep_lines_together.push(para.keep_lines_together);
                 keep_with_next.push(para.keep_with_next);
                 keep_all_lines_together.push(para.keep_all_lines_together);
@@ -8045,6 +8278,7 @@ impl CanvasModel {
                 strikethrus.push(run.strikethru);
                 no_breaks.push(run.no_break);
                 ligatures.push(run.ligatures_on);
+                applied_conditions.push(run.applied_conditions.join(" "));
             }
         }
 
@@ -8198,6 +8432,23 @@ impl CanvasModel {
             PropertyEntry {
                 path: PropertyPath::ParagraphHyphenation,
                 value: collapse_uniform(&hyphenations).map(|o| Value::Bool(o.unwrap_or(true))),
+            },
+            PropertyEntry {
+                path: PropertyPath::ParagraphHyphenationZone,
+                value: collapse_uniform(&hyphenation_zones).map(Value::Length),
+            },
+            // The list ref the setter stores ("" ⇒ the style's).
+            PropertyEntry {
+                path: PropertyPath::ParagraphAppliedNumberingList,
+                value: collapse_uniform(&applied_numbering_lists)
+                    .map(|o| Value::Text(o.unwrap_or_default())),
+            },
+            // PN-100 — the conditions applied to the range, in the
+            // setter's spelling: `<Condition>` ids separated by spaces,
+            // "" for none; runs that disagree read mixed.
+            PropertyEntry {
+                path: PropertyPath::AppliedConditions,
+                value: collapse_uniform(&applied_conditions).map(Value::Text),
             },
             PropertyEntry {
                 path: PropertyPath::ParagraphKeepLinesTogether,

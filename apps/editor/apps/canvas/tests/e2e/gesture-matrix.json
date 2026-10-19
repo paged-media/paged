@@ -339,9 +339,7 @@
           "target": "group",
           "expect": {
             "rotates": "target"
-          },
-          "known": "GM-1",
-          "note": "the engine turns a group about the mean of its members and a phantom point at the origin, not about its centre"
+          }
         },
         {
           "mods": "none",
@@ -369,9 +367,7 @@
           "expect": {
             "rotates": "target",
             "snap": 15
-          },
-          "known": "GM-1",
-          "note": "the engine turns a group about the mean of its members and a phantom point at the origin, not about its centre"
+          }
         },
         {
           "mods": "shift",
@@ -442,9 +438,7 @@
           "target": "group",
           "expect": {
             "scales": "target"
-          },
-          "known": "GM-1",
-          "note": "the engine turns a group about the mean of its members and a phantom point at the origin, not about its centre"
+          }
         },
         {
           "mods": "none",
@@ -472,9 +466,7 @@
           "expect": {
             "scales": "target",
             "uniform": true
-          },
-          "known": "GM-1",
-          "note": "the engine turns a group about the mean of its members and a phantom point at the origin, not about its centre"
+          }
         },
         {
           "mods": "shift",

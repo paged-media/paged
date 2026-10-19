@@ -70,7 +70,7 @@ const frame = async (h: H, id: H["scene"]["rect"]) =>
 
 // rect [400, 72, 500, 200]; groupA [550, 72, 600, 150] and groupB
 // [550, 200, 600, 280] (members of the group, selected on their own).
-// Rectangles: the engine reads no frameBounds for an oval (PN-261).
+// An oval reads its frameBounds like every page item (PN-261, fixed).
 
 describe("Align panel: states", () => {
   test("nothing or one selected: every button disabled, the hint says why", async () => {
@@ -219,21 +219,18 @@ describe("Align panel: every button moves the frames", () => {
 });
 
 describe("Align panel: findings", () => {
-  // The engine's oval carries no frameBounds (requestGet answers
-  // noSuchPath; its element properties have none), so runAlign cannot
-  // read where an oval is and leaves it out: aligning a rectangle and an
-  // oval to the left moves nothing.
-  test.failing(
-    "PN-261: aligning a rectangle and an oval moves the oval",
-    async () => {
-      covers("panel:paged.align", "command:paged.align.objects");
-      const h = await mount();
-      await h.select([h.scene.rect, h.scene.oval]);
-      const from = h.mark();
-      await h.click(button(h, "left"));
-      expect(h.mutations(from)).toHaveLength(1);
-    },
-  );
+  // PN-261 (fixed, R1): the engine's oval carried no frameBounds
+  // (requestGet answered noSuchPath), so runAlign could not read where
+  // an oval is and left it out: aligning a rectangle and an oval to the
+  // left moved nothing.
+  test("PN-261: aligning a rectangle and an oval moves the oval", async () => {
+    covers("panel:paged.align", "command:paged.align.objects");
+    const h = await mount();
+    await h.select([h.scene.rect, h.scene.oval]);
+    const from = h.mark();
+    await h.click(button(h, "left"));
+    expect(h.mutations(from)).toHaveLength(1);
+  });
 
   // UX audit F-39: the spacing reads "— mm" while every other length in
   // the editor (the control bar, Properties, this document) is in points.

@@ -253,13 +253,10 @@ fn frame_flip_v_entry_present_and_round_trips_through_apply() {
     let flip_v = entry(&props, PropertyPath::FrameFlipV);
     assert_eq!(flip_v.value, Some(Value::Bool(false)), "no flip at load");
 
-    // The W0.3 FrameFlipV arm applies cleanly with the entry present;
-    // re-reading still yields the entry. NOTE: a vertical mirror is not
-    // recoverable as `flip_v` from the matrix alone (`decompose_transform`
-    // folds any single reflection into `flip_h` + a 180° rotation, so
-    // `flip_v` reads `false`); the read entry exists for the editor's
-    // toggle, and the H half flips to reflect the negative-determinant
-    // matrix.
+    // The W0.3 FrameFlipV arm applies cleanly with the entry present,
+    // and (PN-202, ADR 192) the vertical mirror it writes reads back as
+    // the vertical flip it is, unturned — not as a horizontal flip
+    // turned 180°, which left the editor's Flip V switch snapping off.
     m.apply_mutation(&Mutation::SetElementProperty {
         element_id: id.clone(),
         path: PropertyPath::FrameFlipV,
@@ -268,17 +265,37 @@ fn frame_flip_v_entry_present_and_round_trips_through_apply() {
     .expect("flip applies");
 
     let props = m.element_properties(&id).expect("props after flip");
-    assert!(
-        props
-            .entries
-            .iter()
-            .any(|e| e.path == PropertyPath::FrameFlipV),
-        "FrameFlipV entry still present after the apply",
+    assert_eq!(
+        entry(&props, PropertyPath::FrameFlipV).value,
+        Some(Value::Bool(true)),
+        "the y-mirror reads as flip V",
     );
     assert_eq!(
         entry(&props, PropertyPath::FrameFlipH).value,
-        Some(Value::Bool(true)),
-        "the y-mirror surfaces as flip_h (matrix is reflection-lossy on V)",
+        Some(Value::Bool(false)),
+        "and not as flip H",
+    );
+    assert_eq!(
+        entry(&props, PropertyPath::FrameRotationAngle).value,
+        Some(Value::Length(Some(0.0))),
+        "unturned",
+    );
+
+    // Turning it off puts the frame back.
+    m.apply_mutation(&Mutation::SetElementProperty {
+        element_id: id.clone(),
+        path: PropertyPath::FrameFlipV,
+        value: Value::Bool(false),
+    })
+    .expect("unflip applies");
+    let props = m.element_properties(&id).expect("props after unflip");
+    assert_eq!(
+        entry(&props, PropertyPath::FrameFlipV).value,
+        Some(Value::Bool(false)),
+    );
+    assert_eq!(
+        entry(&props, PropertyPath::FrameTransform).value,
+        Some(Value::Transform(Some([1.0, 0.0, 0.0, 1.0, 0.0, 0.0]))),
     );
 }
 
@@ -298,16 +315,17 @@ fn image_content_transform_entry_present_for_image_rect() {
         "imageContentTransform mirrors the parsed <Image> ItemTransform",
     );
 
-    // Plain colour-swatch rectangle does NOT (nothing to grab).
+    // A plain colour-swatch rectangle has no inner image to grab, and
+    // reads so: `None`, the value that clears one. The setter takes the
+    // path on every rectangle, so the read is there on every one too (R1:
+    // no write arm without its read arm).
     let plain = m
         .element_properties(&ElementId::Rectangle("plainR".into()))
         .expect("props for plain rect");
-    assert!(
-        !plain
-            .entries
-            .iter()
-            .any(|e| e.path == PropertyPath::ImageContentTransform),
-        "plain swatch rect should not carry imageContentTransform",
+    assert_eq!(
+        entry(&plain, PropertyPath::ImageContentTransform).value,
+        Some(Value::Transform(None)),
+        "plain swatch rect reads no content transform",
     );
 }
 

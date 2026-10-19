@@ -257,25 +257,21 @@ describe("addresses", () => {
     for (const a of items)
       expect(`${a}: ${await readable(a)}`).toBe(`${a}: null`);
   });
-  test.failing(
-    "PAR-5: an oval's frameBounds reads (get answers noSuchPath, inspect has no frameBounds entry)",
-    async () => {
-      covers("script:paged.get", "script:paged.inspect");
-      const ovals = (await listed()).filter((a) => a.startsWith("oval:"));
-      expect(ovals).toEqual(["oval:ugB"]);
-      expect(`oval:ugB: ${await readable("oval:ugB")}`).toBe("oval:ugB: null");
-    },
-  );
-  test.failing(
-    "PAR-4: a master's item the query lists, get reads (it answers notFound)",
-    async () => {
-      covers("script:paged.query", "script:paged.get");
-      const items = (await listed()).filter((a) => a.includes(" > "));
-      expect(items).toEqual(["master:um > rectangle:umast"]);
-      for (const a of items)
-        expect(`${a}: ${await readable(a)}`).toBe(`${a}: null`);
-    },
-  );
+  // PAR-5 (fixed, R1): get answered noSuchPath, inspect had no frameBounds.
+  test("PAR-5: an oval's frameBounds reads", async () => {
+    covers("script:paged.get", "script:paged.inspect");
+    const ovals = (await listed()).filter((a) => a.startsWith("oval:"));
+    expect(ovals).toEqual(["oval:ugB"]);
+    expect(`oval:ugB: ${await readable("oval:ugB")}`).toBe("oval:ugB: null");
+  });
+  // PAR-4 (fixed, R1): get answered notFound for a master's items.
+  test("PAR-4: a master's item the query lists, get reads", async () => {
+    covers("script:paged.query", "script:paged.get");
+    const items = (await listed()).filter((a) => a.includes(" > "));
+    expect(items).toEqual(["master:um > rectangle:umast"]);
+    for (const a of items)
+      expect(`${a}: ${await readable(a)}`).toBe(`${a}: null`);
+  });
 });
 
 // ------------------------------------------------------------------ reads

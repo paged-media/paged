@@ -154,6 +154,21 @@ packages become three, and the engine package carries the command line.
   `paged-plugin` bin of plugin-sdk. The commands, and the unpublishing of the retired packages
   where npm allows it, are in [the runbook](../migration/npm-release-runbook.md).
 
-The release workflow stages, verifies, installs in a clean room and publishes the three, at the
-tag's version; the minor still carries the protocol, read from `canvas-wasm`'s committed
-`0.<protocol>.0-dev`.
+- **Retired without a replacement**, the seven module bundles and eleven internal packages:
+  unpublished where npm's policy allows it (no dependents, fewer than 300 downloads a week, one
+  owner; dependents first), deprecated otherwise. The six with a replacement are only ever
+  deprecated. `tooling/release/retire-precheck.mjs` reads what the policy looks at, read-only.
+- **The first release publishes with a token.** npm registers a Trusted Publisher for an
+  existing package only, so the first publish of `paged` and `viewer` goes through `NPM_TOKEN`;
+  the owner then registers the three entries and deletes the secret. The auth gate already
+  accepts a token when trusted publishing is not ready for every package.
+
+The release workflow assembles `packages/paged`, stages, verifies, installs in a clean room
+(`npm` and Bun, TypeScript 7 and 5.9, `nodenext` and `bundler`, both bins, `paged mcp`'s
+initialize and tools/list, `paged-plugin init` and the scaffold's own test) and publishes the
+three, at the tag's version; the minor carries the protocol, read from `packages/paged`'s
+committed `0.<protocol>.0-dev` (held to `PROTOCOL_VERSION` with canvas-wasm's and the viewer's).
+At a test version on 2026-10-19 the tarballs were 15.8 MB (`paged`, 45.6 MB unpacked: the canvas
+wasm 28.8 MB, the introspection 13.8 MB, the bundled CLI 1.5 MB), 4.6 MB (`viewer`, 11.7 MB) and
+0.3 MB (`plugin-sdk`, 1.3 MB). paged.data is not in `paged`: its own wasm is 1.4 MiB, but it runs
+on DuckDB-WASM (34 MiB), and it is built into the editor; `paged apply` and `merge` say so.

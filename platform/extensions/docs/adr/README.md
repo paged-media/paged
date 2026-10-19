@@ -44,7 +44,7 @@ and each one names the plugins that follow it and those that do not.
 | [321](321-host-colour-picker-widget.md) | The host lends its colour picker as a widget; it never writes the document | Accepted 2026-10-04 |
 | [322](322-plugin-hooks-save-entry-tool-settings-undo-labels.md) | Four host hooks for stateful content plugins: will-save, context entry, tool settings, undo labels | Accepted 2026-10-04 |
 | [323](323-page-navigation-and-page-images.md) | Page navigation and page images: go to a page, the active page, a page as a PNG | Accepted 2026-10-06 |
-| [324](324-node-cli-over-the-headless-host.md) | A Node CLI, `@paged-media/cli`, over the headless host | Accepted, recorded retroactively 2026-10-15; moved to `apps/cli` by 331 |
+| [324](324-node-cli-over-the-headless-host.md) | A Node CLI, `@paged-media/cli`, over the headless host | Accepted, recorded retroactively 2026-10-15; moved to `apps/cli` by 331; on npm as the `paged` bin of `@paged-media/paged` (2026-10-19) |
 | [325](325-claude-agent-package.md) | Claude for paged is one package: prompt, tools, loop and proxy | Accepted 2026-10-11; moved to `platform/shared/ai` by 331 |
 | [326](326-wasm-resolved-through-the-host.md) | A bundle resolves its wasm through the host, with integrity | Accepted 2026-10-11 |
 | [327](327-every-committed-change-is-reported.md) | Every committed change to the document is reported: gestures and script runs too | Accepted 2026-10-14 |

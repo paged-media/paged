@@ -18,7 +18,7 @@
 
 // The CLI is a HOST (ADR 324 §1): the third injector of `host.objects`,
 // after the editor and the harness. It reuses `createHeadlessHost` — the
-// published canvas-wasm booted in Node, the shared object / data-provider
+// engine wasm booted in Node, the shared object / data-provider
 // registries — and adds what a command line needs: open a file, discover and
 // activate the installed bundles, save or export the result.
 
@@ -63,7 +63,7 @@ export interface SessionOptions {
   plugins?: readonly string[];
   /** A TTF/OTF every load lays text out with (the editor's default font). */
   font?: string;
-  /** Where to resolve `@paged-media/canvas-wasm` from (else this package). */
+  /** Where to resolve the engine from (else this package). */
   engineFrom?: string;
   log?: {
     debug(...a: unknown[]): void;
@@ -138,29 +138,43 @@ export async function engineProtocolOnDisk(
   if (protocol === null)
     throw new CliError(
       EXIT.usage,
-      `@paged-media/canvas-wasm@${version}: not a 0.<protocol>.<patch> version`,
+      `the engine ${version}: not a 0.<protocol>.<patch> version`,
     );
   if (protocol < MIN_ENGINE_PROTOCOL) {
     throw new CliError(
       EXIT.usage,
-      `@paged-media/canvas-wasm@${version} speaks protocol ${protocol}; the CLI needs >= ${MIN_ENGINE_PROTOCOL}`,
+      `the engine ${version} speaks protocol ${protocol}; the CLI needs >= ${MIN_ENGINE_PROTOCOL}`,
     );
   }
   return { version, protocol };
 }
 
-/** The directory of this package (the anchor canvas-wasm resolves from). */
+/** The packages this program ships in: the workspace's `@paged-media/cli`,
+ *  and `@paged-media/paged`, the engine package on npm whose `paged` bin is
+ *  this CLI, bundled (PM-0008, amendment 3). */
+export const CLI_PACKAGES: readonly string[] = [
+  "@paged-media/cli",
+  "@paged-media/paged",
+];
+
+/** The packages the engine is found in: `@paged-media/paged` (which, when
+ *  the CLI runs from it, is the CLI's own package), else the workspace's
+ *  `@paged-media/canvas-wasm`. */
+export const ENGINE_PACKAGES: readonly string[] = [
+  "@paged-media/paged",
+  "@paged-media/canvas-wasm",
+];
+
+/** The directory of this package (the anchor the engine resolves from). */
 export function packageRoot(): string {
   let dir = dirname(fileURLToPath(import.meta.url));
   for (let i = 0; i < 6; i++) {
     const pj = join(dir, "package.json");
     if (existsSync(pj)) {
       try {
-        if (
-          (JSON.parse(readFileSync(pj, "utf8")) as { name?: string }).name ===
-          "@paged-media/cli"
-        )
-          return dir;
+        const name = (JSON.parse(readFileSync(pj, "utf8")) as { name?: string })
+          .name;
+        if (name !== undefined && CLI_PACKAGES.includes(name)) return dir;
       } catch {
         /* keep walking */
       }
@@ -412,21 +426,20 @@ export async function openSession(
   return session;
 }
 
-/** The installed canvas-wasm version, for `--version` (no boot). */
+/** The installed engine's version, for `--version` (no boot). */
 export function engineVersionOnDisk(from = packageRoot()): string | null {
-  try {
-    const req = createRequire(join(from, "package.json"));
-    return (
-      JSON.parse(
-        readFileSync(
-          req.resolve("@paged-media/canvas-wasm/package.json"),
-          "utf8",
-        ),
-      ) as { version: string }
-    ).version;
-  } catch {
-    return null;
+  const req = createRequire(join(from, "package.json"));
+  for (const name of ENGINE_PACKAGES) {
+    try {
+      const pj = req.resolve(`${name}/package.json`);
+      if (!existsSync(join(dirname(pj), "paged_canvas_wasm_bg.wasm"))) continue;
+      return (JSON.parse(readFileSync(pj, "utf8")) as { version: string })
+        .version;
+    } catch {
+      /* the next package */
+    }
   }
+  return null;
 }
 
 export const baseName = (path: string): string => basename(path, extname(path));
