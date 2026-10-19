@@ -1,21 +1,7 @@
 {
+  "extends": "../../../../tsconfig.base.json",
   "compilerOptions": {
-    "types": ["bun"],
-    "target": "ES2022",
-    "lib": ["ES2022", "DOM", "DOM.Iterable"],
-    "module": "ESNext",
-    "skipLibCheck": true,
-    "moduleResolution": "bundler",
-    "allowImportingTsExtensions": true,
-    "resolveJsonModule": true,
-    "isolatedModules": true,
-    "noEmit": true,
-    "jsx": "react-jsx",
-    "strict": true,
-    "noUnusedLocals": true,
-    "noUnusedParameters": true,
-    "noFallthroughCasesInSwitch": true,
-    "useDefineForClassFields": true
+    "types": ["bun"]
   },
   "include": ["src", "test", "../../../../tooling/js/bun-test-matchers.d.ts"]
 }
