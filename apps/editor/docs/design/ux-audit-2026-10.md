@@ -618,6 +618,8 @@ With the Selection tool, pressing on an unselected frame (filled or unfilled) an
 
 **Screenshots:** `F-26-pressdrag-marquee.png`, `F-26-unfilled-pressdrag-marquee.png`
 
+**Fixed (2026-10-19, `8cf6d4f0b`).** As recommended (ADR 235): a press on an item selects it and starts the move; the marquee starts only on empty space (or with Cmd).
+
 <a id="f-27"></a>
 
 #### F-27 · No context menus
@@ -697,6 +699,8 @@ Double-clicking a placed image opens paged.draw's "Vector graphic" context: the 
 
 **Screenshots:** `F-29-dblclick-image-vector-context.png`, `F-29-dblclick-group-vector-context.png`, `F-29-direct-select-selects-group.png`
 
+**Fixed (2026-10-19, `8cf6d4f0b`).** As recommended (ADR 235): Direct Selection selects the leaf; a double-click on a grouped shape selects that shape (entering the group), and a frame holding a placed image is claimed only by the plugin that owns it, never by the vector-graphic context. Not done: Esc climbing the selection one level at a time, and a raster context for placed photos paged.image does not see.
+
 <a id="f-30"></a>
 
 #### F-30 · No rotate zone outside the corners
@@ -717,6 +721,8 @@ With the Selection tool, a pointer 5–8 pt outside a corner still shows `nesw-r
 **Recommendation:** Add a rotate band outside each corner handle.
 
 **Screenshots:** `F-30-no-corner-rotate.png`
+
+**Fixed (2026-10-19, `8cf6d4f0b`).** As recommended (ADR 235): a rotate band with a rotate cursor lies outside each corner handle.
 
 <a id="f-31"></a>
 
