@@ -24,6 +24,11 @@
 
 import { afterEach, describe, expect, test } from "bun:test";
 import { covers } from "@paged-media/test-kit";
+import {
+  documentUnit,
+  resetDocumentUnit,
+  setDocumentUnit,
+} from "@paged-media/ui";
 
 import {
   DocumentSetupPanel,
@@ -418,20 +423,62 @@ describe("Margins and Columns", () => {
     },
   );
 
-  // UX audit F-39: one unit (points) everywhere, and a typed unit is not
-  // converted: "10mm" is read as 10 and written as 10 pt.
-  test.failing(
-    "PN-204 (UX F-39): a margin typed as 10mm is set as 28.35 pt",
-    async () => {
-      covers("panel:paged.margins-columns");
-      const h = await mount();
-      const from = h.mark();
-      await h.typeInto("pageMarginTop", "10mm");
-      const sent = h.mutations(from) as unknown as Array<{
-        args: { value: { value: number } };
-      }>;
-      expect(sent).toHaveLength(1);
-      expect(sent[0].args.value.value).toBeCloseTo(28.35, 1);
-    },
-  );
+  // UX audit F-39 (fixed, ADR 245): a typed unit was not converted, "10mm"
+  // was written as 10 pt.
+  test("PN-204 (UX F-39): a margin typed as 10mm is set as 28.35 pt", async () => {
+    covers("panel:paged.margins-columns");
+    const h = await mount();
+    const from = h.mark();
+    await h.typeInto("pageMarginTop", "10mm");
+    const sent = h.mutations(from) as unknown as Array<{
+      args: { value: { value: number } };
+    }>;
+    expect(sent).toHaveLength(1);
+    expect(sent[0].args.value.value).toBeCloseTo(28.35, 1);
+  });
+});
+
+// Editor ADR 245: one document unit for every geometry length.
+describe("document units", () => {
+  afterEach(() => {
+    localStorage.clear();
+    resetDocumentUnit();
+  });
+  const margins = () =>
+    mountPanel(MarginsColumnsPanel, {
+      id: "paged.margins-columns",
+      scene: richScene,
+    });
+
+  test("Document Setup's Units row picks the unit the margins read in", async () => {
+    covers("panel:paged.document-setup");
+    covers("setting:paged.units");
+    const setup = await mountPanel(DocumentSetupPanel, {
+      id: "paged.document-setup",
+      scene: richScene,
+    });
+    const units = setup.root.querySelector<HTMLSelectElement>(
+      "[data-units-select]",
+    )!;
+    expect(units.value).toBe("pt");
+    await setup.choose(units, "mm");
+    expect(documentUnit()).toBe("mm");
+    expect(setup.mutations()).toEqual([]);
+    const h = await margins();
+    await h.typeInto("pageMarginTop", "36pt");
+    expect(shown(h, "pageMarginTop")).toBe("12.7 mm");
+  });
+
+  test("in a millimetre document a bare number is millimetres", async () => {
+    covers("panel:paged.margins-columns");
+    setDocumentUnit("mm");
+    const h = await margins();
+    const from = h.mark();
+    await h.typeInto("pageMarginTop", "10");
+    const sent = h.mutations(from) as unknown as Array<{
+      args: { value: { value: number } };
+    }>;
+    expect(sent).toHaveLength(1);
+    expect(sent[0].args.value.value).toBeCloseTo(28.35, 1);
+  });
 });

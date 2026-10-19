@@ -31,7 +31,8 @@
 //                     open menu's arrow keys walk the menu, not the caret
 //   SH-12             fixed (ADR 234): Enter that chooses a menu item only
 //                     chooses it; the selected frame stays out of path edit
-//   SH-201 (UX F-28)  no Cut, Copy, Paste or Duplicate for page items
+//   SH-201 (UX F-28)  no Cut, Copy, Paste or Duplicate for page items —
+//                     FIXED (ADR 231)
 
 import { expect, test, type Page } from "@playwright/test";
 
@@ -437,7 +438,7 @@ test.describe("SH-201 (UX F-28) — Cut, Copy, Paste, Duplicate", () => {
   test("SH-201: Copy then Paste on a selected frame adds a frame", async ({
     page,
   }) => {
-    test.fail();
+    covers("command:paged.edit.copy", "command:paged.edit.paste");
     await openShell(page, { doc: true });
     await select(page, [SHELL.frame]);
     await blurAll(page);
@@ -452,12 +453,24 @@ test.describe("SH-201 (UX F-28) — Cut, Copy, Paste, Duplicate", () => {
   test("SH-201: the Edit menu offers Cut, Copy, Paste and Duplicate", async ({
     page,
   }) => {
-    test.fail();
+    covers(
+      "menu:Edit/Cut",
+      "menu:Edit/Copy",
+      "menu:Edit/Paste",
+      "menu:Edit/Paste in place",
+      "menu:Edit/Duplicate",
+    );
     await openShell(page, { doc: true });
     await page.locator('[data-menu-trigger="Edit"]').click();
-    for (const name of ["Cut", "Copy", "Paste", "Duplicate"]) {
+    for (const name of [
+      "Cut",
+      "Copy",
+      "Paste",
+      "Paste in place",
+      "Duplicate",
+    ]) {
       await expect(
-        page.getByRole("menuitem", { name: new RegExp(`^${name}`) }),
+        page.getByRole("menuitem", { name: new RegExp(`^${name}( [^a-z]|$)`) }),
       ).toBeVisible({ timeout: 2_000 });
     }
   });

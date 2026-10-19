@@ -2128,6 +2128,17 @@ fn frame_cases(c: &mut Vec<Case>) {
             offset: (40.0, 40.0),
         }
     }));
+    // ADR 193 — a paste paints its copy: the path copied and pasted,
+    // centred elsewhere on the page.
+    c.push(paints("PasteElements", "geometry", |m| {
+        let id = add_quad(m, 120.0, 120.0, 160.0, 120.0);
+        let (snippet, _, _) = m.export_elements(&[ElementId::Polygon(id)]).expect("copy");
+        Mutation::PasteElements {
+            snippet,
+            page_id: PageId(m.pages()[0].self_id.clone()),
+            center: Some((400.0, 500.0)),
+        }
+    }));
     c.push(when_used(
         "CreateGroup",
         "geometry",

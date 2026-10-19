@@ -38,7 +38,7 @@
 //! per-update rebuild perf hits a wall.
 
 use paged_model::Bounds;
-use paged_mutate::{NodeId, NodeSpec, Operation, PropertyPath, Value};
+use paged_mutate::{NodeId, Operation, PropertyPath, Value};
 use paged_renderer::PageId;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -879,9 +879,9 @@ impl CanvasModel {
         self.restore_from_snapshots(&session.snapshots)
             .map_err(|e| GestureError::Mutate(e.to_string()))?;
         // Step 2: build the canonical op (Batch when N>1).
-        // Phase H — Alt+Translate commits as a Batch of InsertNode
-        // (CloneTranslate) ops; the original frames stay put. For all
-        // other gesture types, emit per-snapshot SetProperty ops.
+        // Phase H — Alt+Translate commits as ONE paste of a copy of the
+        // dragged items (`InsertSnippet`, ADR 193); the originals stay put.
+        // For all other gesture types, emit per-snapshot SetProperty ops.
         let ops: Vec<Operation> = if session.modifiers.alt
             && matches!(session.gesture, GestureType::Translate)
             && !session.snapshots.is_empty()
@@ -902,7 +902,8 @@ impl CanvasModel {
             if dest_spread_id.is_some() {
                 web_sys::console::log_1(&"[K-debug] dest spread origin = (resolved)".into());
             }
-            build_alt_duplicate_ops(&session.snapshots, delta, dest_spread_id)
+            self.alt_duplicate_ops(&session.snapshots, delta, dest_spread_id)
+                .map_err(GestureError::Mutate)?
         } else {
             session
                 .snapshots
@@ -1325,6 +1326,130 @@ impl CanvasModel {
             }
             return;
         }
+    }
+
+    /// Phase H / ADR 193 — the op an Alt+Translate commits: a copy of the
+    /// dragged items pasted at the dragged position, on top of the
+    /// destination spread's z-order (as InDesign's Alt-drag stacks it). A
+    /// copy is WHOLE (`paged_mutate::extract_snippet`): a group with its
+    /// members, a frame with its story. It replaced one `CloneTranslate`
+    /// per snapshot, which reached a text frame or a rectangle only — a
+    /// group failed at commit (GF-2) — and named its clones `<id>_dup_…`
+    /// outside the document's id line, so they could collide (GF-3).
+    ///
+    /// The snapshots are the selection with every group's members added
+    /// (Track L); the copy is of the ROOTS, the items no snapshot group
+    /// holds. Track K — `destination_spread_id` is the spread under the
+    /// pointer at commit; the offset then carries the two spreads' origin
+    /// difference, so the copy lands where the pointer is.
+    fn alt_duplicate_ops(
+        &self,
+        snapshots: &[NodeSnapshot],
+        delta: (f32, f32),
+        destination_spread_id: Option<String>,
+    ) -> Result<Vec<Operation>, String> {
+        let mut inner = std::collections::HashSet::new();
+        for snap in snapshots {
+            if let ElementId::Group(raw) = &snap.id {
+                let mut members = Vec::new();
+                let mut visited = std::collections::HashSet::new();
+                self.collect_group_members(raw, &mut members, &mut visited);
+                inner.extend(members.iter().map(|m| m.raw_id().to_string()));
+            }
+        }
+        let sources: Vec<NodeId> = snapshots
+            .iter()
+            .filter(|s| !inner.contains(s.id.raw_id()))
+            .map(|s| s.node_id.clone())
+            .collect();
+        let snippet = match paged_mutate::extract_snippet(&self.scene, &sources) {
+            Ok(s) => s,
+            // A copy the snippet refuses (a threaded text frame: a copy of
+            // one frame's part of a story is not defined) keeps the old
+            // drag-a-copy of a lone text frame or rectangle, which shares
+            // the story, rather than failing the gesture. Its ids come off
+            // the document's id line all the same.
+            Err(e)
+                if sources
+                    .iter()
+                    .all(|n| matches!(n, NodeId::TextFrame(_) | NodeId::Rectangle(_))) =>
+            {
+                let _ = e;
+                let mut offset = 0;
+                return Ok(sources
+                    .iter()
+                    .map(|source| Operation::InsertNode {
+                        parent: NodeId::Spread(String::new()),
+                        position: usize::MAX,
+                        node: paged_mutate::NodeSpec::CloneTranslate {
+                            self_id: self.mint_page_item_id_with_offset(&mut offset),
+                            source: source.clone(),
+                            dx: delta.0,
+                            dy: delta.1,
+                            destination_spread_id: destination_spread_id.clone(),
+                        },
+                        z_slot: None,
+                    })
+                    .collect());
+            }
+            Err(e) => return Err(e.to_string()),
+        };
+        let first = snapshots
+            .iter()
+            .find(|s| !inner.contains(s.id.raw_id()))
+            .map(|s| s.id.raw_id().to_string())
+            .unwrap_or_default();
+        let source_spread = self
+            .scene
+            .spreads
+            .iter()
+            .find(|s| {
+                spread_contains_frame(&s.spread, &first)
+                    || s.spread
+                        .groups
+                        .iter()
+                        .any(|g| g.self_id.as_deref() == Some(first.as_str()))
+            })
+            .ok_or_else(|| format!("no spread holds {first}"))?;
+        let spread_id_of = |p: &paged_scene::ParsedSpread| {
+            p.spread.self_id.clone().unwrap_or_else(|| p.src.clone())
+        };
+        let origin = |p: &paged_scene::ParsedSpread| match &p.spread.item_transform {
+            Some(m) => (m[4], m[5]),
+            None => (0.0, 0.0),
+        };
+        let (spread, dx, dy) = match destination_spread_id.as_deref().and_then(|id| {
+            self.scene
+                .spreads
+                .iter()
+                .find(|p| p.spread.self_id.as_deref() == Some(id))
+        }) {
+            Some(dest) if !std::ptr::eq(dest, source_spread) => {
+                let (so, d) = (origin(source_spread), origin(dest));
+                (
+                    spread_id_of(dest),
+                    delta.0 + so.0 - d.0,
+                    delta.1 + so.1 - d.1,
+                )
+            }
+            _ => (spread_id_of(source_spread), delta.0, delta.1),
+        };
+        let demand = paged_mutate::snippet_demand(&snippet);
+        let mut offset = 0;
+        let ids = (0..demand.items)
+            .map(|_| self.mint_page_item_id_with_offset(&mut offset))
+            .collect();
+        let story_ids = self.mint_story_ids(demand.stories, 0);
+        let json = serde_json::to_string(&snippet).map_err(|e| e.to_string())?;
+        Ok(vec![Operation::InsertSnippet {
+            snippet: json,
+            spread,
+            dx,
+            dy,
+            ids,
+            story_ids,
+            added: Vec::new(),
+        }])
     }
 
     fn restore_from_snapshots(
@@ -2440,73 +2565,6 @@ pub(crate) fn compute_new_bounds(
         NodeMutation::Transform(_)
         | NodeMutation::ImageTransform(_)
         | NodeMutation::PathPoint { .. } => snapshot,
-    }
-}
-
-/// Phase H — Alt+Translate emits one `InsertNode(CloneTranslate)` per
-/// member, so the originals stay put and a new copy lands at the
-/// dragged position. The new self_ids derive from the source id +
-/// the time-based suffix below so successive duplicates don't
-/// collide. Note: this is the gesture-level path; scripted clones
-/// pick their own self_ids when calling `paged_mutate::apply`.
-///
-/// Track K — `destination_spread_id` carries the spread the
-/// pointer is currently over at commit time. When `Some` and
-/// different from the source's spread, the apply layer routes
-/// the clone there with a corrected delta accounting for the
-/// spread-origin offset. `None` preserves the Phase H behaviour
-/// (clone into the source's spread).
-fn build_alt_duplicate_ops(
-    snapshots: &[NodeSnapshot],
-    delta: (f32, f32),
-    destination_spread_id: Option<String>,
-) -> Vec<Operation> {
-    let suffix = duplicate_suffix();
-    snapshots
-        .iter()
-        .enumerate()
-        .map(|(i, snap)| {
-            let source_raw = snap.id.raw_id();
-            let new_self_id = format!("{source_raw}_dup_{suffix}_{i}");
-            Operation::InsertNode {
-                parent: NodeId::Spread(String::new()), // placeholder; the apply path uses the source's spread implicitly via find/replace, but the channel needs SOME parent.
-                position: usize::MAX,                  // appended; apply.rs will clamp.
-                node: NodeSpec::CloneTranslate {
-                    self_id: new_self_id,
-                    source: snap.node_id.clone(),
-                    dx: delta.0,
-                    dy: delta.1,
-                    destination_spread_id: destination_spread_id.clone(),
-                },
-                z_slot: None, // duplicates stack on top
-            }
-        })
-        .collect()
-}
-
-/// Phase H — produce a short, monotone-ish suffix for cloned node
-/// self_ids. Uses millisecond timestamp on native, a sequence
-/// counter on wasm32 (no wall clock).
-fn duplicate_suffix() -> String {
-    #[cfg(target_arch = "wasm32")]
-    {
-        // wasm-bindgen js_sys provides Date::now() in the canvas
-        // wasm binding, but paged-canvas is pure Rust and doesn't
-        // link js-sys. Use a thread-local atomic counter — good
-        // enough for uniqueness within a session.
-        use core::sync::atomic::{AtomicU64, Ordering};
-        static COUNTER: AtomicU64 = AtomicU64::new(0);
-        let v = COUNTER.fetch_add(1, Ordering::Relaxed);
-        format!("{v}")
-    }
-    #[cfg(not(target_arch = "wasm32"))]
-    {
-        use std::time::{SystemTime, UNIX_EPOCH};
-        let ms = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map(|d| d.as_millis() as u64)
-            .unwrap_or(0);
-        format!("{ms}")
     }
 }
 

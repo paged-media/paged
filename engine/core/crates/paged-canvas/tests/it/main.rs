@@ -86,6 +86,7 @@ mod paragraph_composer_path;
 mod paragraph_keep_start_paths;
 mod paragraph_list_marker_paths;
 mod paragraph_span_columns_paths;
+mod paste_wire;
 mod path_edit_gesture;
 mod place_image_wire;
 mod placeholder_wire;

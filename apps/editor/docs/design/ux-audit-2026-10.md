@@ -639,6 +639,12 @@ Right-click on a frame, in text, on the page or on the pasteboard opens no edito
 
 **Screenshots:** `F-27-no-context-menu.png`
 
+**Fixed (2026-10-19, `fd16e431d`).** A right-click on the canvas opens the editor's menu
+(ADR 232): Cut, Copy, Paste, Paste in place, Duplicate, Arrange, Group, Ungroup, Delete, Select
+all, fed by the command registry and greyed by each command's `when`; it selects the item under
+the pointer first. Shift+F10 and the context-menu key open it from the keyboard. Not yet: Lock
+(F-41), Fitting and Effects rows, a text-specific menu, panel row menus.
+
 <a id="f-28"></a>
 
 #### F-28 · No Cut, Copy, Paste or Duplicate for page items
@@ -660,6 +666,12 @@ The Edit menu has Undo, Redo, Select all, Select same and Run command. It has no
 **Recommendation:** Add an internal clipboard of serialised page items: same-document first, then cross-document through the system clipboard with a custom MIME type.
 
 **Screenshots:** `F-28-edit-menu-no-copy-paste.png`, `F-28-after-paste-nothing.png`
+
+**Fixed (2026-10-19, `1f3b07f7a`).** Edit ▸ Cut, Copy, Paste, Paste in place and Duplicate
+(⌥⇧⌘D, a 1p0 step) with InDesign's chords (ADR 231). Copies are whole engine snippets (engine
+ADR 193): groups with their members, frames with their stories, the styles and swatches they
+name; they paste after a Cut and into the next document opened. Text from other applications
+pastes as a new text frame. Clear is not added (Delete is Object ▸ Delete).
 
 <a id="f-29"></a>
 
@@ -1335,6 +1347,8 @@ Everything shows in points (the control bar, Properties, rulers, "612 × 792 pt"
 **Recommendation:** Add View ▸ Units (or a preference) and route every length field through one formatter.
 
 **Screenshots:** `F-39-align-panel-mm.png`, `F-39-prepress-bleed-mm.png`
+
+**Fixed (2026-10-19, `888868127`, editor ADR 245):** one document unit, chosen in Document Setup's Units row (points, picas, inches, millimetres, centimetres or pixels; points by default, persisted as `paged.units`). Every geometry field and readout shows it through one formatter, and one parser reads a typed unit ("10mm" sets 28.35 pt; a bare number is in the document unit). Type sizes, leading and stroke weights stay in points, as in InDesign. The engine still reports no unit of its own (`documentMeta().units`); the Info panel shows the chosen one.
 
 <a id="f-41"></a>
 

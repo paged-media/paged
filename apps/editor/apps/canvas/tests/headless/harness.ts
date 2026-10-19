@@ -124,6 +124,13 @@ import {
   type ObjectCommandDeps,
 } from "../../src/object-commands";
 import {
+  buildClipboardCommands,
+  CLIPBOARD_DIAGNOSTIC_SOURCE,
+  CLIPBOARD_KEYBINDINGS,
+  CLIPBOARD_MENU_ITEMS,
+  type SystemClipboard,
+} from "../../src/clipboard-commands";
+import {
   addPage,
   buildInsertCommands,
   deleteCurrentPage,
@@ -586,12 +593,22 @@ export interface HeadlessEditor {
   dispose(): Promise<void>;
 }
 
+/** An in-memory system clipboard (ADR 231). */
+export interface FakeSystemClipboard extends SystemClipboard {
+  text: string;
+  html: string;
+  denied: boolean;
+}
+
 /** See {@link HeadlessEditor.hostApp}. */
 export interface HeadlessHostApp {
   options: EditorHostOptions;
   consent: EditorConsent;
   secrets: EditorSecretStore;
   documents: ReturnType<typeof createEditorDocuments>;
+  /** The system clipboard the page-item clipboard reads and writes
+   *  (ADR 231), in memory; `denied` refuses both directions. */
+  systemClipboard: FakeSystemClipboard;
   /** The replace question every open asks (ADR 230). Headless, it is the
    *  platform `confirm` unless a case attaches a prompt surface, then
    *  answers `current()` as the shell's prompt would. */
@@ -864,6 +881,30 @@ export async function createHeadlessEditor(
     problemsSink.clear(OBJECT_DIAGNOSTIC_SOURCE);
     await run();
   };
+  // ADR 231 — the page-item clipboard over an in-memory system clipboard
+  // (`hostApp.systemClipboard`; `denied` plays a browser that refuses).
+  const systemClipboard: FakeSystemClipboard = {
+    text: "",
+    html: "",
+    denied: false,
+    async write(text, html) {
+      if (this.denied) return false;
+      this.text = text;
+      this.html = html;
+      return true;
+    },
+    async read() {
+      return this.denied ? null : { text: this.text, html: this.html };
+    },
+  };
+  const clipboardCommands = buildClipboardCommands({
+    report: (severity, message) =>
+      problemsSink.publish(CLIPBOARD_DIAGNOSTIC_SOURCE, "clipboard", [
+        { severity, message, source: "clipboard" },
+      ]),
+    system: systemClipboard,
+    deleteSelection: () => deleteSelection(objectDeps),
+  });
   const objectCommands = buildObjectCommands({
     bringToFront: fresh(() => arrangeSelection(objectDeps, "front")),
     bringForward: fresh(() => arrangeSelection(objectDeps, "forward")),
@@ -950,6 +991,7 @@ export async function createHeadlessEditor(
     ...[
       ...appCommands,
       ...aiCommands,
+      ...clipboardCommands,
       ...objectCommands,
       ...insertCommands,
       ...alignCommands,
@@ -961,6 +1003,7 @@ export async function createHeadlessEditor(
     ...[
       ...APP_MENU_ITEMS,
       SELECT_ALL_MENU_ITEM,
+      ...CLIPBOARD_MENU_ITEMS,
       ...OBJECT_MENU_ITEMS,
       ...INSERT_MENU_ITEMS,
       ...CORE_COMMAND_MENU_ITEMS,
@@ -970,6 +1013,7 @@ export async function createHeadlessEditor(
     ...[
       ...APP_KEYBINDINGS,
       ...SELECT_ALL_KEYBINDINGS,
+      ...CLIPBOARD_KEYBINDINGS,
       ...OBJECT_KEYBINDINGS,
       ...INSERT_KEYBINDINGS,
     ].map((k) => registries.keybindings.register(k)),
@@ -1068,6 +1112,7 @@ export async function createHeadlessEditor(
     consent,
     secrets,
     documents,
+    systemClipboard,
     replace: {
       attach: attachReplacePromptSurface,
       current: () => replacePrompts.current(),

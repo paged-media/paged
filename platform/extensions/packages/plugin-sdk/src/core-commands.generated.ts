@@ -76,6 +76,7 @@ export const CORE_WIRE_OPS: Readonly<Record<string, CoreWireOpRow>> = {
   "createGroup": { args: {"kind":"struct","fields":{"memberIds":{"kind":"list","of":{"kind":"ref","to":"item"}}}}, nullFill: [] },
   "dissolveGroup": { args: {"kind":"struct","fields":{"groupId":{"kind":"ref","to":"frame"}}}, nullFill: [] },
   "duplicateElements": { args: {"kind":"struct","fields":{"elementIds":{"kind":"list","of":{"kind":"ref","to":"item"}},"offset":{"kind":"point"}}}, nullFill: [] },
+  "pasteElements": { args: {"kind":"struct","fields":{"snippet":{"kind":"text"},"pageId":{"kind":"ref","to":"page"},"center":{"kind":"point","optional":true}}}, nullFill: [] },
   "setGroupTransform": { args: {"kind":"struct","fields":{"groupId":{"kind":"ref","to":"frame"},"transform":{"kind":"transform","optional":true}}}, nullFill: [] },
   "setPluginMetadata": { args: {"kind":"struct","fields":{"elementId":{"kind":"ref","to":"item"},"key":{"kind":"text"},"value":{"kind":"text","optional":true},"caller":{"kind":"text","optional":true}}}, nullFill: [] },
   "setPageMetadata": { args: {"kind":"struct","fields":{"page":{"kind":"ref","to":"page"},"key":{"kind":"text"},"value":{"kind":"text","optional":true},"caller":{"kind":"text","optional":true}}}, nullFill: [] },

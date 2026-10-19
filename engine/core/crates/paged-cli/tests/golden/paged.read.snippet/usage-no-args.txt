@@ -1,0 +1,12 @@
+$ paged read snippet
+--- exit: 2
+--- stdout
+(empty)
+--- stderr
+error: the following required arguments were not provided:
+  <DOC>
+  <IDS>...
+
+Usage: paged read snippet <DOC> <IDS>...
+
+For more information, try '--help'.

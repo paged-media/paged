@@ -696,6 +696,11 @@ export type WorkerToMain = WorkerToMainKind & {
 //   the pages a mutation created, in creation order (an insertPage, a
 //   duplicatePage's copy, each inside a batch). Optional: absent when no
 //   page was created.
+// rides v74 (added before first consumer sync; v0.74.0 was tagged, never
+//   published) — ADR 193, page-item snippets: the `exportElements` request
+//   (`ElementsExported` reply) and the `pasteElements` mutation
+//   (`Operation::InsertSnippet` / `RemoveSnippet`). Alt+Translate commits
+//   as an `InsertSnippet` (GF-2, GF-3).
 pub const PROTOCOL_VERSION: ProtocolVersion = ProtocolVersion(74);
 
 /// A per-run script budget on the wire (v63). Every field is optional
@@ -1338,6 +1343,18 @@ pub enum MainToWorkerKind {
     /// `StoryContentResult` whose `content` is `None` when the story id doesn't
     /// resolve.
     RequestStoryContent { story_id: String },
+    /// ADR 193 (rides v74, added before first consumer sync) — take a
+    /// copy of page items for the clipboard (Copy, Cut). Pure READ:
+    /// `snippet` is the JSON `Mutation::PasteElements` takes back, whole
+    /// (every property, a group's members, pasted-in children, a copy of
+    /// each story, and the swatches, styles and conditions the items
+    /// name), so a paste works after the items are gone and in another
+    /// document. Reply: `ElementsExported`; `refused` says why there is no
+    /// snippet (an element a duplicate refuses too, or elements on
+    /// different spreads).
+    ExportElements {
+        element_ids: Vec<crate::element_selection::ElementId>,
+    },
     /// v65 — read one style definition's settable properties: every path
     /// `Mutation::SetStyleProperty` accepts for that collection, with the
     /// style's OWN value in the shape the setter takes (`""` /
@@ -1971,6 +1988,20 @@ pub enum WorkerToMainKind {
     StoryContentResult {
         #[serde(default)]
         content: Option<StoryContent>,
+    },
+    /// ADR 193 — `ExportElements` reply. `snippet` is the copy's JSON, or
+    /// `None` with `refused` saying why. `text` is the copied text frames'
+    /// text, back to front, a blank line between frames (the plain-text
+    /// form of the copy); `count` the copied roots.
+    ElementsExported {
+        #[serde(default)]
+        snippet: Option<String>,
+        #[serde(default)]
+        text: String,
+        #[serde(default)]
+        count: u32,
+        #[serde(default)]
+        refused: Option<String>,
     },
     /// Phase 3 Item 7 — undo applied. `undone_seq` is the
     /// `applied_seq` of the mutation that was reversed.

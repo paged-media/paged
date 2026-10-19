@@ -363,6 +363,13 @@ fn created_element_ids(
             .filter_map(page_item_element_id)
             .collect();
     }
+    // ADR 193 — a paste mints one copy per copied root, back to front.
+    if matches!(op, paged_mutate::Operation::InsertSnippet { .. }) {
+        return paged_mutate::snippet_roots(op)
+            .iter()
+            .filter_map(page_item_element_id)
+            .collect();
+    }
     created_element_id(doc, op).into_iter().collect()
 }
 
@@ -614,6 +621,12 @@ fn created_element_id(
     // batch follows.
     if matches!(op, paged_mutate::Operation::DuplicateNodes { .. }) {
         return paged_mutate::duplicate_roots(doc, op)
+            .last()
+            .and_then(page_item_element_id);
+    }
+    // ADR 193 — and a paste's, its front-most copy.
+    if matches!(op, paged_mutate::Operation::InsertSnippet { .. }) {
+        return paged_mutate::snippet_roots(op)
             .last()
             .and_then(page_item_element_id);
     }
@@ -3080,7 +3093,9 @@ impl CanvasModel {
             // caller never needs to know which lane its batch took.
             let minted: Vec<crate::channel::MintedElement> = if matches!(
                 mutation,
-                Mutation::Batch { .. } | Mutation::DuplicateElements { .. }
+                Mutation::Batch { .. }
+                    | Mutation::DuplicateElements { .. }
+                    | Mutation::PasteElements { .. }
             ) {
                 created_element_ids(&self.scene, &outcome.applied.op)
                     .into_iter()
@@ -3202,6 +3217,20 @@ impl CanvasModel {
                     .err()
                     .map(|e| e.to_string())
                     .unwrap_or_else(|| "the duplicate could not be translated".to_string());
+                return Err(crate::channel::WorkerError::NotImplemented {
+                    what: format!("frame mutation failed: {why}"),
+                });
+            }
+            // ADR 193 — likewise a paste: the snippet or the page refused.
+            Mutation::PasteElements {
+                snippet,
+                page_id,
+                center,
+            } => {
+                let why = self
+                    .lower_paste(snippet, page_id, *center, &mut 0)
+                    .err()
+                    .unwrap_or_else(|| "the paste could not be translated".to_string());
                 return Err(crate::channel::WorkerError::NotImplemented {
                     what: format!("frame mutation failed: {why}"),
                 });
@@ -5062,6 +5091,17 @@ impl CanvasModel {
                     story_ids,
                 })
             }
+            // ADR 193 — paste. The ids are minted here, from the same
+            // number lines as the inserts (see DuplicateElements above).
+            // `None` when the snippet or the page refuses; the caller then
+            // reports why (`apply_mutation`).
+            Mutation::PasteElements {
+                snippet,
+                page_id,
+                center,
+            } => self
+                .lower_paste(snippet, page_id, *center, mint_offset)
+                .ok(),
             Mutation::SetFlowGrowRule {
                 story_id,
                 grow,
@@ -5298,7 +5338,66 @@ impl CanvasModel {
     /// already minted (`offset`, the same counter `insertTextFrame`
     /// offsets its story id by). The caller then mints at least `count`
     /// page-item ids, which moves the counter past these too.
-    fn mint_story_ids(&self, count: usize, offset: u64) -> Vec<String> {
+    /// ADR 193 — a copy of `element_ids` for the clipboard: the snippet's
+    /// JSON, its plain text and the number of copied roots, or the reason
+    /// there is none (the kernel's refusal, in its words).
+    pub fn export_elements(
+        &self,
+        element_ids: &[crate::element_selection::ElementId],
+    ) -> Result<(String, String, u32), String> {
+        let sources: Vec<paged_mutate::NodeId> =
+            element_ids.iter().map(element_to_node_id).collect();
+        let snippet =
+            paged_mutate::extract_snippet(&self.scene, &sources).map_err(|e| e.to_string())?;
+        let count = snippet.spread.frames_in_order.len() as u32;
+        let text = snippet.text.clone();
+        let json = serde_json::to_string(&snippet).map_err(|e| e.to_string())?;
+        Ok((json, text, count))
+    }
+
+    /// ADR 193 — `PasteElements` as the kernel's `InsertSnippet`: the
+    /// target spread is `page_id`'s; the offset centres the copy's box on
+    /// `center` (page space), or with no centre keeps its position relative
+    /// to the page it was copied from (Paste in Place).
+    pub(crate) fn lower_paste(
+        &self,
+        snippet: &str,
+        page_id: &PageId,
+        center: Option<(f32, f32)>,
+        mint_offset: &mut u64,
+    ) -> Result<paged_mutate::Operation, String> {
+        let parsed = paged_mutate::parse_snippet(snippet).map_err(|e| e.to_string())?;
+        let (spread, origin, _) = self
+            .page_insert_context(page_id)
+            .ok_or_else(|| format!("no page {} in the document", page_id.as_str()))?;
+        let b = parsed.bounds;
+        let (dx, dy) = match center {
+            Some((cx, cy)) => (
+                origin.0 + cx - (b[1] + b[3]) / 2.0,
+                origin.1 + cy - (b[0] + b[2]) / 2.0,
+            ),
+            None => {
+                let from = parsed.page_origin.unwrap_or([origin.0, origin.1]);
+                (origin.0 - from[0], origin.1 - from[1])
+            }
+        };
+        let demand = paged_mutate::snippet_demand(&parsed);
+        let story_ids = self.mint_story_ids(demand.stories, *mint_offset);
+        let ids = (0..demand.items)
+            .map(|_| self.mint_page_item_id_with_offset(mint_offset))
+            .collect();
+        Ok(paged_mutate::Operation::InsertSnippet {
+            snippet: snippet.to_string(),
+            spread,
+            dx,
+            dy,
+            ids,
+            story_ids,
+            added: Vec::new(),
+        })
+    }
+
+    pub(crate) fn mint_story_ids(&self, count: usize, offset: u64) -> Vec<String> {
         let mut n = self.story_id_floor() + offset as usize;
         let mut out = Vec::with_capacity(count);
         while out.len() < count {

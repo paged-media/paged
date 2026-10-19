@@ -24,12 +24,13 @@
 
 import { PT_PER_UNIT } from "@paged-media/helpers";
 
-export type LengthUnit = "pt" | "px" | "mm" | "cm" | "in";
+export type LengthUnit = "pt" | "pc" | "px" | "mm" | "cm" | "in";
 
 /** Ratio table: how many points per one unit of `key`. The shared table
  *  (`@paged-media/helpers`), except for `px`. */
 export const POINTS_PER_UNIT: Record<LengthUnit, number> = {
   pt: PT_PER_UNIT.pt,
+  pc: PT_PER_UNIT.pc,
   px: 1, // 1 CSS px ≈ 0.75 pt at the default 96 dpi; the editor
   // treats canvas pixels as points at 1:1 because the renderer
   // operates in points. Worth revisiting if a px-honest mode lands.

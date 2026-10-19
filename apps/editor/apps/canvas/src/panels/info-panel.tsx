@@ -26,6 +26,7 @@
 // surface grows (per-page size, colour profile reads).
 
 import { useCollection, useDocumentMeta } from "@paged-media/shell";
+import { DOCUMENT_UNITS, useDocumentUnit } from "@paged-media/ui";
 
 /** "Page 3", not the page's IDML id. */
 function pageLabel(
@@ -54,6 +55,9 @@ function Row({ label, value }: { label: string; value: string }) {
 export function InfoPanel() {
   const meta = useDocumentMeta();
   const pages = useCollection<{ selfId?: string }>("pages");
+  // The unit lengths are shown in (ADR 245), once there is a document.
+  const unit = useDocumentUnit();
+  const unitName = DOCUMENT_UNITS.find(([u]) => u === unit)?.[1] ?? unit;
   if (!meta) {
     return (
       <div
@@ -69,7 +73,7 @@ export function InfoPanel() {
       <Row label="Document" value={meta.documentName || "—"} />
       <Row label="Pages" value={String(meta.pageCount)} />
       <Row label="Active page" value={pageLabel(meta.activePage, pages)} />
-      <Row label="Units" value={meta.units || "—"} />
+      <Row label="Units" value={meta.pageCount > 0 ? unitName : "—"} />
       <Row label="Color mode" value={meta.colorMode || "—"} />
       <Row label="Dirty" value={meta.dirty ? "yes" : "no"} />
     </div>

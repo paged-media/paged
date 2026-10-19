@@ -21,7 +21,8 @@
 // Select all (page items on the spread in view, or the whole story with a
 // caret) and Align / Distribute (ADR 323: declared args, one batch = one
 // undo step). And finding SH-201
-// (UX audit F-28): no Cut, Copy, Paste or Duplicate for page items.
+// (UX audit F-28, fixed by ADR 231): Cut, Copy, Paste, Paste in place and
+// Duplicate for page items.
 
 import { describe, expect, test } from "bun:test";
 
@@ -40,6 +41,12 @@ import {
   APP_MENU_ITEMS,
   buildAppCommands,
 } from "../../../src/app-commands";
+import {
+  buildClipboardCommands,
+  CLIPBOARD_KEYBINDINGS,
+  CLIPBOARD_MENU_ITEMS,
+  resolvePaste,
+} from "../../../src/clipboard-commands";
 import {
   buildCoreCommandEntries,
   CORE_COMMAND_MENU_ITEMS,
@@ -361,6 +368,7 @@ describe("SH-201 (UX audit F-28): Cut, Copy, Paste and Duplicate for page items"
   const commandIds = () =>
     [
       ...buildAppCommands(new Proxy({}, { get: () => noop }) as never),
+      ...buildClipboardCommands(new Proxy({}, { get: () => noop }) as never),
       ...buildObjectCommands(new Proxy({}, { get: () => noop }) as never),
       ...buildInsertCommands(new Proxy({}, { get: () => noop }) as never),
       ...buildCoreCommandEntries(),
@@ -370,6 +378,7 @@ describe("SH-201 (UX audit F-28): Cut, Copy, Paste and Duplicate for page items"
   const keys = () =>
     [
       ...APP_KEYBINDINGS,
+      ...CLIPBOARD_KEYBINDINGS,
       ...OBJECT_KEYBINDINGS,
       ...INSERT_KEYBINDINGS,
       ...SELECT_ALL_KEYBINDINGS,
@@ -377,6 +386,7 @@ describe("SH-201 (UX audit F-28): Cut, Copy, Paste and Duplicate for page items"
   const editMenu = () =>
     [
       ...APP_MENU_ITEMS,
+      ...CLIPBOARD_MENU_ITEMS,
       ...OBJECT_MENU_ITEMS,
       ...INSERT_MENU_ITEMS,
       ...CORE_COMMAND_MENU_ITEMS,
@@ -385,40 +395,100 @@ describe("SH-201 (UX audit F-28): Cut, Copy, Paste and Duplicate for page items"
       .map((m) => m.path)
       .filter((p) => p.startsWith("Edit/"));
 
-  test("today: the host registers none of them (the finding, as it stands)", () => {
-    covers("command:paged.edit.selectAll");
-    const verbs = commandIds().filter((id) =>
-      /\b(cut|copy|paste|duplicate)\b/i.test(id.split(".").pop()!),
+  test("the host registers Cut, Copy, Paste, Paste in place and Duplicate", () => {
+    covers(
+      "keybinding:cmd+x→paged.edit.cut",
+      "keybinding:cmd+c→paged.edit.copy",
+      "keybinding:cmd+v→paged.edit.paste",
+      "keybinding:cmd+alt+shift+v→paged.edit.pasteInPlace",
+      "keybinding:cmd+alt+shift+d→paged.edit.duplicate",
+      "keybinding:ctrl+x→paged.edit.cut",
+      "keybinding:ctrl+c→paged.edit.copy",
+      "keybinding:ctrl+v→paged.edit.paste",
+      "keybinding:ctrl+alt+shift+v→paged.edit.pasteInPlace",
+      "keybinding:ctrl+alt+shift+d→paged.edit.duplicate",
     );
-    expect(verbs).toEqual([]);
-    expect(keys().filter((k) => /^(cmd|ctrl)\+[cxv]→/.test(k))).toEqual([]);
+    covers(
+      "command:paged.edit.cut",
+      "command:paged.edit.copy",
+      "command:paged.edit.paste",
+      "command:paged.edit.pasteInPlace",
+      "command:paged.edit.duplicate",
+    );
+    const verbs = commandIds().filter((id) =>
+      /\b(cut|copy|paste|pasteInPlace|duplicate)\b/i.test(id.split(".").pop()!),
+    );
+    expect(verbs).toEqual([
+      "paged.edit.cut",
+      "paged.edit.copy",
+      "paged.edit.paste",
+      "paged.edit.pasteInPlace",
+      "paged.edit.duplicate",
+    ]);
+    // InDesign's chords: Paste in Place and Duplicate on Alt+Shift.
+    expect(keys()).toEqual(
+      expect.arrayContaining([
+        "cmd+alt+shift+v→paged.edit.pasteInPlace",
+        "ctrl+alt+shift+d→paged.edit.duplicate",
+      ]),
+    );
     expect(editMenu()).toEqual([
       "Edit/Undo",
       "Edit/Redo",
+      "Edit/Cut",
+      "Edit/Copy",
+      "Edit/Paste",
+      "Edit/Paste in place",
+      "Edit/Duplicate",
       "Edit/Run command…",
       "Edit/Select all",
     ]);
   });
 
-  test.failing(
-    "SH-201: the Edit menu offers Cut, Copy, Paste and Duplicate, bound to the platform keys",
-    () => {
-      covers("command:paged.edit.selectAll");
-      const paths = editMenu();
-      for (const verb of ["Cut", "Copy", "Paste", "Duplicate"]) {
-        expect(paths.some((p) => p.startsWith(`Edit/${verb}`))).toBe(true);
-      }
-      const bound = keys();
-      for (const chord of [
-        "cmd+x",
-        "cmd+c",
-        "cmd+v",
-        "ctrl+x",
-        "ctrl+c",
-        "ctrl+v",
-      ]) {
-        expect(bound.some((k) => k.startsWith(`${chord}→`))).toBe(true);
-      }
-    },
-  );
+  test("a paste pastes the newest clipboard content: our copy while its marker is there, text from elsewhere otherwise", () => {
+    covers("command:paged.edit.paste");
+    const ours = { snippet: "{S}", text: "Hello", count: 1, token: "t1" };
+    const html = '<div data-paged-clip="t1">Hello</div>';
+    expect(resolvePaste({ text: "Hello", html }, ours)).toEqual({
+      kind: "items",
+      snippet: "{S}",
+    });
+    expect(resolvePaste({ text: "Other app", html: "" }, ours)).toEqual({
+      kind: "text",
+      text: "Other app",
+    });
+    // The browser would not let us read: our copy.
+    expect(resolvePaste(null, ours)).toEqual({ kind: "items", snippet: "{S}" });
+    expect(resolvePaste(null, null)).toEqual({ kind: "empty" });
+    // Another tab's copy carries its snippet in the HTML form.
+    const b64 = btoa("{T}");
+    expect(
+      resolvePaste(
+        {
+          text: "x",
+          html: `<div data-paged-clip="t9" data-paged-snippet="${b64}">x</div>`,
+        },
+        ours,
+      ),
+    ).toEqual({ kind: "items", snippet: "{T}" });
+  });
+
+  test("SH-201: the Edit menu offers Cut, Copy, Paste and Duplicate, bound to the platform keys", () => {
+    covers("command:paged.edit.selectAll");
+    const paths = editMenu();
+    for (const verb of ["Cut", "Copy", "Paste", "Duplicate"]) {
+      expect(paths.some((p) => p.startsWith(`Edit/${verb}`))).toBe(true);
+    }
+    const bound = keys();
+    for (const chord of [
+      "cmd+x",
+      "cmd+c",
+      "cmd+v",
+      "ctrl+x",
+      "ctrl+c",
+      "ctrl+v",
+    ]) {
+      expect(bound.some((k) => k.startsWith(`${chord}→`))).toBe(true);
+    }
+  });
 });

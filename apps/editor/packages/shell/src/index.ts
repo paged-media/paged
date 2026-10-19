@@ -333,6 +333,12 @@ export {
 } from "./state/replace-guard";
 export { ReplaceDocumentPrompt } from "./chrome/ReplaceDocumentPrompt";
 export {
+  CanvasContextMenu,
+  closeCanvasContextMenu,
+  openCanvasContextMenu,
+  type ContextMenuEntry,
+} from "./chrome/CanvasContextMenu";
+export {
   buildExportAseCommand,
   buildImportAseCommand,
   importAseBytes,

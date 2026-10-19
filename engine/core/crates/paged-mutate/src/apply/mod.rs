@@ -270,6 +270,24 @@ pub(crate) fn apply_inner(
             ids,
             story_ids,
         } => apply_remove_duplicates(doc, sources, *dx, *dy, ids, story_ids),
+        Operation::InsertSnippet {
+            snippet,
+            spread,
+            dx,
+            dy,
+            ids,
+            story_ids,
+            ..
+        } => apply_insert_snippet(doc, snippet, spread, *dx, *dy, ids, story_ids),
+        Operation::RemoveSnippet {
+            snippet,
+            spread,
+            dx,
+            dy,
+            ids,
+            story_ids,
+            added,
+        } => apply_remove_snippet(doc, snippet, spread, *dx, *dy, ids, story_ids, added),
         Operation::CreateGroup { spec } => apply_create_group(doc, spec),
         Operation::DissolveGroup {
             group_id,
@@ -1072,6 +1090,11 @@ mod character;
 mod conditions;
 mod duplicate_nodes;
 pub use duplicate_nodes::{duplicate_demand, duplicate_roots, DuplicateDemand};
+mod snippet;
+pub use snippet::{
+    extract_snippet, parse_snippet, snippet_demand, snippet_roots, ItemSnippet, SnippetResources,
+    SNIPPET_FORMAT,
+};
 mod bookmark;
 mod duplicate_page;
 mod endnote;
@@ -1135,6 +1158,7 @@ use remove_node::*;
 use reorder::*;
 use sections::*;
 use set_property::*;
+use snippet::{apply_insert_snippet, apply_remove_snippet};
 use story::*;
 use text_on_path::*;
 

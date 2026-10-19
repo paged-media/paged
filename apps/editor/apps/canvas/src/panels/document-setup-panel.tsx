@@ -44,6 +44,11 @@ import {
 import { FieldSelect } from "@paged-media/panel-kit";
 import { formatAddress } from "@paged-media/plugin-sdk";
 import type { PageSummary } from "@paged-media/client";
+import {
+  DOCUMENT_UNITS,
+  setDocumentUnit,
+  useDocumentUnit,
+} from "@paged-media/ui";
 
 import { SchemaSections, type SectionSpec } from "./schema-sections";
 
@@ -136,11 +141,37 @@ export function DocumentSetupPanel() {
   return (
     <div data-document-setup-panel="ready">
       <CockpitPanelHeader title="Document Setup" />
+      <UnitsRow />
       <SchemaSections
         targets={DOC_TARGETS}
         sections={DOCUMENT_SECTIONS}
         testId="doc"
       />
+    </div>
+  );
+}
+
+/** The unit every geometry field shows (ADR 245; InDesign's Preferences ▸
+ *  Units & Increments). An editor preference: the document model keeps
+ *  points, and a typed unit converts whatever is chosen here. */
+export function UnitsRow() {
+  const unit = useDocumentUnit();
+  return (
+    <div className="px-3.5 pb-2">
+      <CockpitRow label="Units">
+        <FieldSelect
+          data-units-select=""
+          className="h-[28px] w-full rounded-[6px] border border-input bg-background px-2 text-[12px]"
+          value={unit}
+          onChange={(e) => setDocumentUnit(e.target.value)}
+        >
+          {DOCUMENT_UNITS.map(([value, name]) => (
+            <option key={value} value={value}>
+              {name}
+            </option>
+          ))}
+        </FieldSelect>
+      </CockpitRow>
     </div>
   );
 }

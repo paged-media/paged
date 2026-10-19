@@ -232,15 +232,12 @@ describe("Align panel: findings", () => {
     expect(h.mutations(from)).toHaveLength(1);
   });
 
-  // UX audit F-39: the spacing reads "— mm" while every other length in
-  // the editor (the control bar, Properties, this document) is in points.
-  test.failing(
-    "PN-260 (UX F-39): the spacing reads in the document's unit (pt), not mm",
-    async () => {
-      covers("panel:paged.align");
-      const h = await mount();
-      await h.select([h.scene.rect, h.scene.groupB]);
-      expect(h.root.textContent).not.toContain(" mm");
-    },
-  );
+  // UX audit F-39 (fixed, ADR 245): the spacing read "— mm" while every
+  // other length was in points; it reads in the document unit.
+  test("PN-260 (UX F-39): the spacing reads in the document's unit (pt), not mm", async () => {
+    covers("panel:paged.align");
+    const h = await mount();
+    await h.select([h.scene.rect, h.scene.groupB]);
+    expect(h.root.textContent).not.toContain(" mm");
+  });
 });

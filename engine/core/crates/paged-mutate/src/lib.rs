@@ -68,6 +68,10 @@ pub mod schema;
 pub use apply::apply;
 pub use apply::is_locked;
 pub use apply::{duplicate_demand, duplicate_roots, DuplicateDemand};
+pub use apply::{
+    extract_snippet, parse_snippet, snippet_demand, snippet_roots, ItemSnippet, SnippetResources,
+    SNIPPET_FORMAT,
+};
 pub use error::OperationError;
 pub use history::{History, DEFAULT_HISTORY_CAPACITY};
 pub use notify::Notifier;
