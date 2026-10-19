@@ -36,7 +36,9 @@ export function useFps(): number {
   useEffect(() => {
     let raf = 0;
     let last = performance.now();
-    let deltas: number[] = [];
+    let frames = 0;
+    let reported = false;
+    const deltas: number[] = [];
 
     const tick = (now: number) => {
       const dt = now - last;
@@ -47,9 +49,15 @@ export function useFps(): number {
         deltas.push(dt);
         if (deltas.length > WINDOW_SAMPLES) deltas.shift();
       }
-      // Throttle React updates to ~4 Hz so the HUD doesn't
-      // re-render every frame.
-      if (deltas.length > 0 && (deltas.length % 15 === 0 || fps === 0)) {
+      // Throttle React updates to ~4 Hz (every 15th frame, and the first
+      // sample at once) so the HUD doesn't re-render every frame. The
+      // count is the effect's own: the `fps` of the first render (0) read
+      // here, or the sample count once the window is full (always a
+      // multiple of 15), set the state on every frame and re-rendered the
+      // whole shell chrome with it.
+      frames += 1;
+      if (deltas.length > 0 && (!reported || frames % 15 === 0)) {
+        reported = true;
         const avg = deltas.reduce((a, b) => a + b, 0) / deltas.length;
         setFps(Math.round(1000 / avg));
       }
@@ -57,7 +65,6 @@ export function useFps(): number {
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return fps;
