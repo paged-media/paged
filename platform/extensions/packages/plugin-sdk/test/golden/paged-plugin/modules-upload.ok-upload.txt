@@ -7,11 +7,12 @@ modules: 1 declared, all hosted
 (empty)
 # structure
 -y
-wrangler@3
+wrangler@4
 r2
 object
 put
 paged-modules/@paged-media/test-bundle/0.0.1-test.0/bin/engine.wasm
+--remote
 --file
 <TMP>/child-tmp/paged-modules-<RND>/module.wasm.br
 --content-type

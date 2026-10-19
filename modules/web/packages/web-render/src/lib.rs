@@ -197,8 +197,9 @@ pub fn take_text_advances() -> String {
     take_text_advances_json()
 }
 
-/// The hash of the sources this wasm was built from (`scripts/source-hash.mjs`,
-/// stamped by `scripts/build-wasm.sh` through `WEB_RENDER_SOURCE_HASH`). Empty
+/// The hash of the sources this wasm was built from
+/// (`tooling/js/source-hash.mjs`, stamped by `scripts/build-wasm.sh` through
+/// `WEB_RENDER_SOURCE_HASH`). Empty
 /// for a build that bypassed the script. The bundle's `wasm-fresh.spec.ts`
 /// compares it with the checkout so a stale artifact is never tested.
 #[cfg(target_arch = "wasm32")]

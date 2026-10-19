@@ -15,7 +15,9 @@
     "test": "bun test --parallel --preload ../../../../tooling/js/bun-test-setup.ts"
   },
   "dependencies": {
-    "jszip": "^3.10.1"
+    "@paged-media/helpers": "workspace:*",
+    "@paged-media/wasm-boot": "workspace:*",
+    "jszip": "^3.10.2"
   },
   "peerDependencies": {
     "@paged-media/plugin-api": "workspace:*",

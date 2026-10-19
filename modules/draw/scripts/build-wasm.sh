@@ -13,63 +13,19 @@
 # The output is BUILD OUTPUT (gitignored): `moon run draw:wasm` runs this
 # script, and CI builds it with .github/actions/module-wasm before the
 # specs and the plugin-cli size gate read it. The typecheck does not need
-# it.
-#
-# wasm-opt: CI pins binaryen (an old apt binaryen breaks wasm-bindgen
-# externref table grow — the "Table.grow failed" gotcha); locally it is
-# applied when present and skipped with a warning when absent.
+# it. The steps, the pin check and the size gate are the shared
+# tooling/rust/build-wasm.sh.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-OUT=packages/draw-bundle/wasm
-# Declared in manifest.json under capabilities.wasm[].maxBytes. Keep the
-# two in step — the check below is against THIS value and the manifest is
-# what the host enforces.
-# 100 MB — the app-wide envelope (2026-08-19); see plugin-sdk WASM_BUDGETS.
-BUDGET=$((100 * 1000 * 1000))
-
-cargo build --release --target wasm32-unknown-unknown -p trace-js
-
-# Pin check: wasm-bindgen-cli must match the Cargo.lock wasm-bindgen, or
-# the generated glue does not match the module.
-LOCKED=$(grep -A1 '^name = "wasm-bindgen"$' Cargo.lock | grep version | head -1 | cut -d'"' -f2)
-CLI=$(wasm-bindgen --version | awk '{print $2}')
-if [ "$LOCKED" != "$CLI" ]; then
-  echo "error: wasm-bindgen-cli $CLI != Cargo.lock wasm-bindgen $LOCKED" >&2
-  echo "       cargo install wasm-bindgen-cli --version $LOCKED" >&2
-  exit 1
-fi
-
-mkdir -p "$OUT"
-wasm-bindgen target/wasm32-unknown-unknown/release/trace_js.wasm \
-  --target web --out-dir "$OUT"
-
-# The feature flags are NOT optional: rustc emits bulk-memory + sign-ext
-# ops by default, and wasm-opt validates them off unless told otherwise
-# (it fails with "memory.copy operations require bulk memory operations").
-# A wasm-opt failure is a WARNING, not a build stop — the unoptimized
-# artifact is correct, only larger, and the size gate below is the real
-# check either way.
-if command -v wasm-opt >/dev/null 2>&1; then
-  if ! wasm-opt -Oz \
-      --enable-bulk-memory --enable-bulk-memory-opt \
-      --enable-sign-ext --enable-mutable-globals \
-      --enable-nontrapping-float-to-int --enable-reference-types \
-      "$OUT/trace_js_bg.wasm" -o "$OUT/trace_js_bg.wasm.opt"; then
-    echo "warning: wasm-opt failed — shipping the unoptimized artifact" >&2
-    rm -f "$OUT/trace_js_bg.wasm.opt"
-  else
-    mv "$OUT/trace_js_bg.wasm.opt" "$OUT/trace_js_bg.wasm"
-  fi
-else
-  echo "warning: wasm-opt not found — shipping unoptimized wasm (CI optimizes)" >&2
-fi
-
-SIZE=$(wc -c < "$OUT/trace_js_bg.wasm" | tr -d ' ')
-echo "trace_js_bg.wasm: $SIZE bytes (budget $BUDGET)"
-if [ "$SIZE" -gt "$BUDGET" ]; then
-  echo "error: wasm artifact exceeds the declared ${BUDGET}-byte plugin budget" >&2
-  echo "       raise capabilities.wasm[].maxBytes in packages/draw-bundle/manifest.json" >&2
-  echo "       AND this script together, or shrink the artifact" >&2
-  exit 1
-fi
+# The wasm-opt feature flags are NOT optional: rustc emits bulk-memory +
+# sign-ext ops by default, and wasm-opt validates them off unless told
+# otherwise (it fails with "memory.copy operations require bulk memory
+# operations"). A wasm-opt failure is a WARNING, not a build stop — the
+# unoptimized artifact is correct, only larger, and the size gate is the
+# real check either way.
+exec bash ../../tooling/rust/build-wasm.sh \
+  --package trace-js --artifact trace_js \
+  --out packages/draw-bundle/wasm \
+  --wasm-opt-flags "--enable-bulk-memory --enable-bulk-memory-opt --enable-sign-ext --enable-mutable-globals --enable-nontrapping-float-to-int --enable-reference-types" \
+  --wasm-opt-optional

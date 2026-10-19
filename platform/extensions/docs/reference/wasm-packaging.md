@@ -325,7 +325,7 @@ fetchWasm(host, "engine", new URL("../bin/x_bg.wasm", import.meta.url)) })`
 
 **Uploading.** `paged-plugin modules-upload <bundle-dir>` puts each
 declared artifact at `paged-modules/<package>/<version>/<path in package>`
-(R2, via `npx wrangler@3 r2 object put`), brotli quality 10, with the
+(R2, via `npx wrangler@4 r2 object put --remote`), brotli quality 10, with the
 headers above. It HEADs first and skips what is hosted; without
 `CLOUDFLARE_API_TOKEN` (and `CLOUDFLARE_ACCOUNT_ID`) it reports what is
 missing and exits 0, so a publish workflow can carry the step before the

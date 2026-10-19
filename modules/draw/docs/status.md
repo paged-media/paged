@@ -28,13 +28,13 @@ canary added is under [Releases](#releases).
   Path, Repeat, Knife, and Scissors at any point on a path.
 - **Tool options.** Pencil, Paintbrush, Blob Brush, Eraser, Width and Lasso Select publish
   their settings to the host's tool-options popover.
-- **Snapping.** Curvature asks the engine through `host.document.snapPoint` where the host
-  supports it (engine protocol 67 and later): the point snaps against every visible
-  element's anchors, centres and outlines, the page, ruler guides and the grid, with the
-  session's tolerance, as the host's own tools do. On an older engine the plugin-side
-  snapper is the fallback: the page's edges, centre lines and corners and the tool's own
-  placed anchors, within 6 screen px. Cmd turns snapping off on both paths. The fallback's
-  geometry, `snapPoint` in `draw-geometry`, is exported.
+- **Snapping.** Curvature asks the engine through `host.document.snapPoint`: the point
+  snaps against every visible element's anchors, centres and outlines, the page, ruler
+  guides and the grid, with the session's tolerance. It uses the snapper the host's Pen
+  uses (`createSnapper` in `draw-tools`), so both tools snap alike. Cmd turns snapping off.
+  An engine that does not answer leaves the point unsnapped; there is no TypeScript
+  fallback resolver (ADR 358). `snapPoint` in `draw-geometry` stays for the editor's
+  Direct Selection, which snaps a dragged anchor locally before the engine answers.
 - **Stroke and fill.** Weight, colour, cap, dashes, arrowheads, corner radii, fill colour,
   tint, gradient angle and length are core frame properties, edited in the host's Stroke,
   Object Options and Gradients panels; the bundle contributes no Stroke or Fill panel of its

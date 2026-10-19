@@ -30,7 +30,7 @@ build-from-core step.
 ## Building & testing
 
 `apps/*` + `packages/*`, members of the repository's root Bun workspace,
-React 18 + Vite + TypeScript.
+React 19 + Vite + TypeScript.
 
 ```bash
 bun install                                            # at the repository root
