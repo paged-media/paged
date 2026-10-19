@@ -47,6 +47,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -139,8 +140,11 @@ export function GuideDragProvider({ children }: PropsWithChildren) {
   // listeners (registered once per drag) read the freshest state
   // without re-subscribing on every preview tick.
   const dragRef = useRef<GuideDragState | null>(null);
-  dragRef.current = drag;
+  useLayoutEffect(() => {
+    dragRef.current = drag;
+  });
 
+  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
   const beginCreate = useCallback((orientation: GuideOrientation) => {
     const next: GuideDragState = {
       kind: "create",
@@ -155,6 +159,7 @@ export function GuideDragProvider({ children }: PropsWithChildren) {
     setDrag(next);
   }, []);
 
+  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
   const beginMove = useCallback((guide: OptimisticGuide) => {
     const next: GuideDragState = {
       kind: "move",
@@ -169,6 +174,7 @@ export function GuideDragProvider({ children }: PropsWithChildren) {
     setDrag(next);
   }, []);
 
+  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
   const updateDrag = useCallback((patch: Partial<GuideDragState>) => {
     setDrag((prev) => {
       if (!prev) return prev;
@@ -178,11 +184,13 @@ export function GuideDragProvider({ children }: PropsWithChildren) {
     });
   }, []);
 
+  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
   const clearDrag = useCallback(() => {
     dragRef.current = null;
     setDrag(null);
   }, []);
 
+  // eslint-disable-next-line no-restricted-syntax -- its type argument types the value (ADR 229)
   const value = useMemo<GuideDragContextValue>(
     () => ({
       guides,

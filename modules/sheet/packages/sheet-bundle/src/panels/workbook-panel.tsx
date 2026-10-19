@@ -35,8 +35,6 @@
 // source panel so it reads native in both themes.
 
 import {
-  useCallback,
-  useEffect,
   useMemo,
   useRef,
   useState,
@@ -44,6 +42,7 @@ import {
   type ReactElement,
   type ReactNode,
 } from "react";
+import { onDidChangeOf, useLive } from "@paged-media/react-live";
 
 import type { BundleHost } from "@paged-media/plugin-api";
 
@@ -171,36 +170,33 @@ export function makeWorkbookPanel(
   host: BundleHost,
   session: WorkbookSession,
 ): () => ReactElement {
-  return function WorkbookPanel(): ReactElement {
-    // Re-render on every session change (import, sheet/range edits).
-    const [version, force] = useState(0);
+  // A declaration, so the React Compiler sees the component (it cannot
+  // see `return function WorkbookPanel()`, editor ADR 229).
+  function WorkbookPanel(): ReactElement {
+    // Re-render on every session change (import, sheet/range edits): the
+    // session as a render value (react-live, editor ADR 229), a new view
+    // after every change, so what is read from it is read again.
+    const live = useLive(session, onDidChangeOf);
     const fileRef = useRef<HTMLInputElement | null>(null);
-    useEffect(() => {
-      const sub = session.onDidChange(() => force((n) => n + 1));
-      return () => sub.dispose();
-    }, []);
 
-    const st = session.state();
+    const st = live.state();
     const { armed, confirm } = useConfirm();
 
-    const onFile = useCallback(
-      async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
-        try {
-          const bytes = new Uint8Array(await file.arrayBuffer());
-          await importBytes(session, bytes, file.name);
-        } catch (err) {
-          host.log.error("workbook file read failed", err);
-        }
-      },
-      [],
-    );
+    const onFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      try {
+        const bytes = new Uint8Array(await file.arrayBuffer());
+        await importBytes(session, bytes, file.name);
+      } catch (err) {
+        host.log.error("workbook file read failed", err);
+      }
+    };
 
     // S-11: prefer the HOST file picker (a real modal dialog); the panel's
     // own `<input>` stays as the honest no-picker fallback.
     const pickerSupported = host.supports("shell.pickFile@1");
-    const onPick = useCallback(async () => {
+    const onPick = async () => {
       try {
         const files = await host.shell.pickFile({
           accept: [".xlsx", XLSX_MIME, ".csv", ".tsv", ...DELIMITED_MIMES],
@@ -212,7 +208,7 @@ export function makeWorkbookPanel(
       } catch (err) {
         host.log.error("workbook pick failed", err);
       }
-    }, []);
+    };
 
     // The Sheet properties panel carries number format, font, fill,
     // alignment and iterative calculation; where the host renders it, the
@@ -222,7 +218,7 @@ export function makeWorkbookPanel(
       : undefined;
 
     const [placeMsg, setPlaceMsg] = useState<string | null>(null);
-    const onPlace = useCallback(() => {
+    const onPlace = () => {
       setPlaceMsg(null);
       void session.lowerSelection().then((id) => {
         if (id === null)
@@ -230,7 +226,7 @@ export function makeWorkbookPanel(
             "The range could not be placed. Check that it is a valid range like A1:D20.",
           );
       });
-    }, []);
+    };
 
     // Wave 4 — workbook structure + pagination. Every verb answers
     // {ok} / {ok:false, message}; the message shows verbatim (the engine's
@@ -248,12 +244,12 @@ export function makeWorkbookPanel(
     ) => setSheetMsg(r.ok ? done : r.message);
     // Wave 6 — header rows repeated at the top of every threaded frame.
     const [headerRows, setHeaderRows] = useState(1);
-    const onPaginate = useCallback(async () => {
+    const onPaginate = async () => {
       const r = await session.paginateSelection({
         repeatHeaderRows: Math.max(0, Math.floor(headerRows)),
       });
       setPlaceMsg(r.ok ? "Paginated into the frame chain (live)." : r.message);
-    }, [headerRows]);
+    };
 
     // Sort-range controls (thin glue — the engine owns the sort semantics;
     // sheet.plugin.sort.command). Key column is 1-based in the UI.
@@ -261,14 +257,14 @@ export function makeWorkbookPanel(
     const [sortAsc, setSortAsc] = useState(true);
     const [sortHeader, setSortHeader] = useState(false);
     const [sortMsg, setSortMsg] = useState<string | null>(null);
-    const onSort = useCallback(() => {
+    const onSort = () => {
       const res = session.sortRange(
         Math.max(0, Math.floor(sortKey) - 1),
         sortAsc,
         sortHeader,
       );
       setSortMsg(res.ok ? "Sorted." : res.message);
-    }, [sortKey, sortAsc, sortHeader]);
+    };
 
     // New cell style from the selected cell (S-04). Thin glue over
     // session.newCellStyleFromSelection — the engine owns the lowering, the
@@ -284,7 +280,7 @@ export function makeWorkbookPanel(
     // The §16.4 transpose control: which axis of the values block is a series.
     const [chartSeriesIn, setChartSeriesIn] = useState("columns");
     const [chartMsg, setChartMsg] = useState<string | null>(null);
-    const onAuthorChart = useCallback(() => {
+    const onAuthorChart = () => {
       if (!chartValues.trim()) {
         setChartMsg("Enter a values range (for example B2:C8) first.");
         return;
@@ -301,12 +297,12 @@ export function makeWorkbookPanel(
           ? "Chart created. Place it on the page from the list below; it is not saved into the .xlsx."
           : res.message,
       );
-    }, [chartValues, chartCats, chartKind, chartTitle, chartSeriesIn]);
+    };
 
     // Function browser (editor-ui-coverage M): filter + copy-to-clipboard.
     const [fnFilter, setFnFilter] = useState("");
     const [fnMsg, setFnMsg] = useState<string | null>(null);
-    const onCopyFunction = useCallback(async (name: string) => {
+    const onCopyFunction = async (name: string) => {
       if (!host.supports("clipboard@1")) {
         setFnMsg(`Copying isn't available here; type ${name}( in a cell.`);
         return;
@@ -317,8 +313,8 @@ export function makeWorkbookPanel(
       } catch (e) {
         setFnMsg(`Couldn't copy ${name}: ${String(e)}.`);
       }
-    }, []);
-    const onNewCellStyle = useCallback(async () => {
+    };
+    const onNewCellStyle = async () => {
       const res = await session.newCellStyleFromSelection(
         styleName.trim() || "Cell style",
       );
@@ -332,15 +328,17 @@ export function makeWorkbookPanel(
           ? `${captured}; style applied to the cell.`
           : `${captured}; ${res.applyMessage ?? "style created (not applied)"}.`,
       );
-    }, [styleName]);
+    };
 
     // Memoised in the session until the next change (not per render).
-    const sheets = session.sheets();
+    const sheets = live.sheets();
     // The engine's read-only inventories, read once per session change —
     // not on every render (a keystroke in any of this panel's inputs
     // re-renders it).
+    // eslint-disable-next-line no-restricted-syntax -- a computed block, not a single expression (ADR 229)
     const inventories = useMemo(() => {
-      const eng = st.engine;
+      // Read through the view, so the memo follows each session change.
+      const eng = live.state().engine;
       if (!eng) return null;
       return {
         freezes: eng.listFreezePanes(),
@@ -348,10 +346,10 @@ export function makeWorkbookPanel(
         comments: eng.listComments(),
         charts: eng.listCharts(),
       };
-    }, [st.engine, version]);
+    }, [live]);
     // The chart-kind vocabulary comes from the ENGINE (Rust owns which kinds
     // exist), never a literal list here.
-    const chartKinds = session.chartKinds();
+    const chartKinds = live.chartKinds();
     const hasRange = !!st.selectedRange;
     const deleteLabel = (key: string, label: string) =>
       armed === key ? "Confirm delete" : label;
@@ -991,7 +989,7 @@ export function makeWorkbookPanel(
                   if (!st.engine) return null;
                   // The registry, read ONCE per session (it is build-time
                   // fixed) — a filter keystroke re-filters, never re-reads.
-                  const all = session.functionList();
+                  const all = live.functionList();
                   const q = fnFilter.trim().toUpperCase();
                   const hitsFn = q
                     ? all.filter(
@@ -1147,5 +1145,6 @@ export function makeWorkbookPanel(
         </p>
       </div>
     );
-  };
+  }
+  return WorkbookPanel;
 }

@@ -263,6 +263,7 @@ export function makePathOptionsPanel(host: BundleHost): {
       null,
     );
 
+    // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
     const setOpen = React.useCallback((section: PathOptionSection) => {
       session.open = section;
       setOpenState(section);

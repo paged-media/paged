@@ -145,6 +145,7 @@ export function useBindings(
   // Compute the canonical address for each binding's scope. Cache
   // the JSON-stringified shape so the dependency arrays don't
   // re-trigger on every render.
+  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
   const addresses = useMemo(
     () => computeAddresses(bindings, elementSelection, contentSelection),
     [bindings, elementSelection, contentSelection],
@@ -271,6 +272,7 @@ export function useBindings(
     contentSelection,
   ]);
 
+  // eslint-disable-next-line no-restricted-syntax -- not a plain binding (ADR 229)
   return useMemo(
     () =>
       buildResolved(

@@ -50,8 +50,6 @@
 // (a rectangle has no story to thread). Multi-selection skips too —
 // threading is a single-frame affordance.
 
-import { useCallback } from "react";
-
 import type { Mutation } from "@paged-media/client";
 
 import type { OverlayContribution, OverlayProps } from "../registries/overlay";
@@ -73,16 +71,13 @@ function ThreadingPortsRender(props: OverlayProps) {
   const threading = useOptionalThreading();
   const client = useCanvasClient();
 
-  const unlink = useCallback(
-    (frameId: string) => {
-      // The controller re-reads the selection's chain state off
-      // `elementProperties` on the mutationApplied push, so the port
-      // glyphs follow the unlink without a manual mirror update.
-      const m: Mutation = { op: "unlinkFrames", args: { frame: frameId } };
-      void client.mutate(m);
-    },
-    [client],
-  );
+  const unlink = (frameId: string) => {
+    // The controller re-reads the selection's chain state off
+    // `elementProperties` on the mutationApplied push, so the port
+    // glyphs follow the unlink without a manual mirror update.
+    const m: Mutation = { op: "unlinkFrames", args: { frame: frameId } };
+    void client.mutate(m);
+  };
 
   // Threading is single-frame; skip multi-select and non-text kinds.
   if (!threading) return null;

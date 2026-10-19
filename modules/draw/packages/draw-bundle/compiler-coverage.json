@@ -1,43 +1,13 @@
 {
   "$comment": "The components and hooks of this package the React Compiler leaves uncompiled: its bailouts (it could not prove the Rules of React; the reason is its own) and the functions it cannot see as components (notCompiled). Written by tooling/js/react-compiler-coverage.mjs --write; CI fails on a new one, and the lists only get shorter (apps/editor/docs/adr/229-react-compiler.md).",
   "compiler": "babel-plugin-react-compiler@1.0.0",
-  "skipped": 6,
+  "skipped": 1,
   "bailouts": [
-    {
-      "file": "src/panels/graphic-styles-panel.tsx",
-      "function": "Component",
-      "reason": "Todo",
-      "detail": "Support value blocks (conditional, logical, optional chaining, etc) within a try/catch statement"
-    },
-    {
-      "file": "src/panels/live-paint-panel.tsx",
-      "function": "Component",
-      "reason": "Todo",
-      "detail": "(BuildHIR::lowerExpression) Handle ??= operators in AssignmentExpression"
-    },
-    {
-      "file": "src/panels/panel-kit.tsx",
-      "function": "Refusal",
-      "reason": "Todo",
-      "detail": "(BuildHIR::lowerExpression) Expected Identifier, got LogicalExpression key in ObjectExpression"
-    },
-    {
-      "file": "src/panels/panel-kit.tsx",
-      "function": "useActionFeedback",
-      "reason": "Todo",
-      "detail": "(BuildHIR::lowerStatement) Handle TryStatement with a finalizer ('finally') clause"
-    },
     {
       "file": "src/panels/path-options-panel.tsx",
       "function": "Component",
       "reason": "Immutability",
       "detail": "This value cannot be modified"
-    },
-    {
-      "file": "src/panels/use-panel-reload.ts",
-      "function": "usePanelReload",
-      "reason": "Refs",
-      "detail": "Cannot access refs during render"
     }
   ],
   "notCompiled": []
