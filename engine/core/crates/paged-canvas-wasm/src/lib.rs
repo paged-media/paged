@@ -624,6 +624,11 @@ mod wasm {
             let Some(presenter) = presenter.as_mut() else {
                 return Ok(false);
             };
+            // A lost device draws nothing; say so without a warning per
+            // frame (`gpuLostReason` carries the why).
+            if presenter.lost_reason().is_some() {
+                return Ok(false);
+            }
             let Some(model) = self.core.model.as_ref() else {
                 return Ok(false);
             };
@@ -696,13 +701,73 @@ mod wasm {
             }
         }
 
-        /// Whether GPU is initialised. The worker checks this each
-        /// frame to decide which render path to take. Cheap; just a
-        /// pointer-null check.
+        /// Whether the GPU can draw: a presenter exists and its device
+        /// has not been lost. Cheap.
         #[cfg(feature = "gpu")]
         #[wasm_bindgen(js_name = gpuReady)]
         pub fn gpu_ready(&self) -> bool {
-            self.presenter.borrow().is_some()
+            self.presenter
+                .borrow()
+                .as_ref()
+                .is_some_and(|p| p.lost_reason().is_none())
+        }
+
+        /// Why the GPU device was lost (a GPU-process crash, a driver
+        /// reset), once it has been; `undefined` while it serves or when
+        /// there is no presenter. Every `presentFrame` returns `false`
+        /// after a loss — this is how the worker tells a lost device from
+        /// a skipped frame.
+        #[cfg(feature = "gpu")]
+        #[wasm_bindgen(js_name = gpuLostReason)]
+        pub fn gpu_lost_reason(&self) -> Option<String> {
+            self.presenter
+                .borrow()
+                .as_ref()
+                .and_then(|p| p.lost_reason())
+        }
+
+        /// After a loss: request a new adapter and device and rebind the
+        /// SAME canvas. Resolves `true` when the GPU draws again (cached
+        /// page scenes stay valid), `false` when the browser grants no new
+        /// device — the presenter is gone then, `gpuReady` is false, and
+        /// the canvas keeps a WebGPU context, so the worker asks the main
+        /// thread for a new canvas to draw on with the CPU.
+        // The promise owns the presenter while the browser answers and
+        // borrows nothing (see `GpuSlot`).
+        #[cfg(feature = "gpu")]
+        #[wasm_bindgen(js_name = recoverGpu, unchecked_return_type = "Promise<boolean>")]
+        pub fn recover_gpu(&self) -> js_sys::Promise {
+            let slot = self.presenter.clone();
+            wasm_bindgen_futures::future_to_promise(async move {
+                let Some(old) = slot.borrow_mut().take() else {
+                    return Ok(JsValue::FALSE);
+                };
+                match old.recover().await {
+                    Ok(p) => {
+                        *slot.borrow_mut() = Some(p);
+                        Ok(JsValue::TRUE)
+                    }
+                    Err(e) => {
+                        web_sys::console::warn_1(&format!("recoverGpu: {e}").into());
+                        Ok(JsValue::FALSE)
+                    }
+                }
+            })
+        }
+
+        /// Test hook: destroy the GPU device, as a GPU-process crash would
+        /// take it. The device's lost callback fires as it does for a real
+        /// loss. `false` without a presenter.
+        #[cfg(feature = "gpu")]
+        #[wasm_bindgen(js_name = simulateGpuLoss)]
+        pub fn simulate_gpu_loss(&self) -> bool {
+            match self.presenter.borrow().as_ref() {
+                Some(p) => {
+                    p.destroy_device();
+                    true
+                }
+                None => false,
+            }
         }
 
         /// Sub-phase D — render `page_id` to a PNG via the Vello GPU
@@ -804,6 +869,40 @@ mod wasm {
             reply
         }
 
+        /// A `RequestSnapshot`, drawn by Vello on this worker's WebGPU
+        /// device instead of the CPU rasterizer: the same page, dpi and
+        /// PNG as the `handleMessage` reply, and the same scene the
+        /// worker presents on screen, so a pixel read off it (the
+        /// eyedropper) is the pixel the user sees. `message_json` is the
+        /// whole `MainToWorker` envelope.
+        ///
+        /// Resolves to the reply envelope's JSON — `snapshotReady`, or
+        /// `snapshotFailed` for an unknown page or a bad size — and to
+        /// `undefined` when there is no GPU, no document, the page
+        /// overprints (the screen draws overprint as knockout; a snapshot
+        /// composites it per ink, on the CPU), or the message is not a
+        /// snapshot request: the worker then answers through
+        /// `handleMessage` on the CPU rasterizer.
+        // Built and submitted synchronously; the promise waits on the
+        // readback alone, holding neither the worker nor the presenter.
+        #[cfg(feature = "gpu")]
+        #[wasm_bindgen(
+            js_name = renderSnapshotGpu,
+            unchecked_return_type = "Promise<string | undefined>"
+        )]
+        pub fn render_snapshot_gpu(&self, message_json: &str) -> js_sys::Promise {
+            let job = self.submit_snapshot(message_json);
+            wasm_bindgen_futures::future_to_promise(async move {
+                let Some(job) = job else {
+                    return Ok(JsValue::UNDEFINED);
+                };
+                Ok(match finish_snapshot(job).await {
+                    Some(json) => JsValue::from_str(&json),
+                    None => JsValue::UNDEFINED,
+                })
+            })
+        }
+
         /// Apply the dispatch's GPU scene-cache effect. On a non-gpu
         /// build there is no cache, so this compiles to a no-op (the
         /// effect is computed but ignored — identical to the old shell,
@@ -819,6 +918,66 @@ mod wasm {
 
         #[cfg(not(feature = "gpu"))]
         fn apply_cache_effect(&mut self, _effect: CacheEffect) {}
+
+        /// The synchronous half of `renderSnapshotGpu`. `None` hands the
+        /// request to the CPU path.
+        #[cfg(feature = "gpu")]
+        fn submit_snapshot(&self, message_json: &str) -> Option<SnapshotJob> {
+            let msg: paged_canvas::MainToWorker = serde_json::from_str(message_json).ok()?;
+            let paged_canvas::MainToWorkerKind::RequestSnapshot {
+                page_id,
+                target_width_px,
+                dpi,
+                hide_items,
+            } = msg.kind
+            else {
+                return None;
+            };
+            let mut presenter = self.presenter.borrow_mut();
+            let presenter = presenter.as_mut()?;
+            let model = self.core.model.as_ref()?;
+            let seq = msg.seq;
+            let (page, dpi) = match paged_canvas::snapshot_page(
+                model,
+                &page_id,
+                target_width_px,
+                dpi,
+                &hide_items,
+            ) {
+                Ok(found) => found,
+                Err(error) => return Some(SnapshotJob::Failed { seq, error }),
+            };
+            // The screen draws overprint as knockout; a snapshot feeds
+            // exports and print checks, so a page that overprints is
+            // composited per ink on the CPU instead.
+            if page.list.commands.iter().any(|c| {
+                matches!(
+                    c,
+                    paged_compose::DisplayCommand::FillPathOverprint { .. }
+                        | paged_compose::DisplayCommand::StrokePathOverprint { .. }
+                )
+            }) {
+                return None;
+            }
+            let (scene, width_px, height_px) = paged_gpu::SurfacePresenter::build_snapshot_scene(
+                &page.list,
+                page.width_pt,
+                page.height_pt,
+                dpi,
+            );
+            let pending = presenter
+                .submit_readback(&scene, width_px, height_px)
+                .ok()?;
+            Some(SnapshotJob::Pending {
+                seq,
+                pending,
+                page_id,
+                width_px,
+                height_px,
+                layout_generation: page.layout_generation,
+                numbering_generation: page.numbering_generation,
+            })
+        }
 
         /// The synchronous half of `renderPageVelloPng`: build the page's
         /// scene at `dpi` and submit its readback. `None` when no GPU is
@@ -848,6 +1007,64 @@ mod wasm {
             let height_px = ((page.height_pt * dpi / 72.0).ceil() as u32).max(1);
             presenter.submit_readback(&scene, width_px, height_px).ok()
         }
+    }
+
+    /// A GPU snapshot between submit and readback.
+    #[cfg(feature = "gpu")]
+    enum SnapshotJob {
+        Pending {
+            seq: u64,
+            pending: paged_gpu::PendingReadback,
+            page_id: PageId,
+            width_px: u32,
+            height_px: u32,
+            layout_generation: u64,
+            numbering_generation: u64,
+        },
+        Failed {
+            seq: u64,
+            error: paged_canvas::SnapshotError,
+        },
+    }
+
+    /// The reply envelope's JSON for a finished `job`, or `None` when the
+    /// readback failed (the worker then falls back to the CPU path). A
+    /// free function: the job owns everything the future needs, and no
+    /// `async fn` here takes a receiver (`tests/it/no_async_exports.rs`).
+    #[cfg(feature = "gpu")]
+    async fn finish_snapshot(job: SnapshotJob) -> Option<String> {
+        let (seq, kind) = match job {
+            SnapshotJob::Failed { seq, error } => (seq, WorkerToMainKind::SnapshotFailed { error }),
+            SnapshotJob::Pending {
+                seq,
+                pending,
+                page_id,
+                width_px,
+                height_px,
+                layout_generation,
+                numbering_generation,
+            } => {
+                let rgba = pending.into_rgba().await.ok()?;
+                let snap = paged_canvas::Snapshot {
+                    page_id,
+                    width_px,
+                    height_px,
+                    layout_generation,
+                    numbering_generation,
+                    rgba,
+                };
+                match paged_canvas::encode_snapshot_png(snap) {
+                    Ok(png) => (seq, WorkerToMainKind::SnapshotReady(png)),
+                    Err(error) => (seq, WorkerToMainKind::SnapshotFailed { error }),
+                }
+            }
+        };
+        serde_json::to_string(&WorkerToMain {
+            seq: Some(seq),
+            protocol: PROTOCOL_VERSION,
+            kind,
+        })
+        .ok()
     }
 
     impl Default for CanvasWorker {
