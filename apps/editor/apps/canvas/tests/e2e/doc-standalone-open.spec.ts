@@ -31,8 +31,6 @@
 // engine grows the pages. Then save-back stitches the section stories into
 // one body again.
 import { test, expect } from "@playwright/test";
-import { readFileSync } from "node:fs";
-import { createRequire } from "node:module";
 import { inflateRawSync } from "node:zlib";
 import { dirname, resolve as pathResolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -49,23 +47,6 @@ const FIXTURE = pathResolve(
 const OPEN_COMMAND = "paged.file.openIdml";
 const IMPORTER_ID = "media.paged.doc.importer.docx";
 const EXPORTER_ID = "media.paged.doc.exporter.docx";
-
-/** Page growth (ADR 026) reached the engine after canvas-wasm 0.62.0; an
- *  older engine opens the skeleton but never grows it. A `-local` build
- *  (sync-wasm.sh) is core main. */
-function engineGrows(): boolean {
-  const require = createRequire(import.meta.url);
-  const pkg = JSON.parse(
-    readFileSync(
-      require.resolve("@paged-media/canvas-wasm/package.json"),
-      "utf8",
-    ),
-  ) as { version: string };
-  const [, minor, patch] = pkg.version.split(/[.-]/).map(Number);
-  return (
-    pkg.version.includes("-local") || minor > 63 || (minor === 63 && patch >= 1)
-  );
-}
 
 /** Word's pages: [width, height] in points. */
 const WORD_PAGES: Array<[number, number]> = [
@@ -243,10 +224,6 @@ test.describe("plugin-doc — standalone open (ADR 029)", () => {
   test("AC-DOCSO-1 — a two-section Word document opens as its own pages, paginated like Word, and saves back whole @feat:plugin-doc.file-entry @level:gesture", async ({
     page,
   }) => {
-    test.skip(
-      !engineGrows(),
-      "this engine predates page growth (canvas-wasm < 0.63.1)",
-    );
     await openCanvas(page);
     await invoke(page, "paged.file.new");
     await page.waitForFunction(

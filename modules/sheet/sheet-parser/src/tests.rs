@@ -175,6 +175,62 @@ fn lex_error_literals() {
     }
 }
 
+/// An error literal is one of Excel's error codes, matched at `#` and no
+/// further: `#N/A/1` is `#N/A` divided by 1. The lexer used to take the
+/// whole run of letters, digits, `/`, `!` and `?`, so `#N/A /1` printed as
+/// `#N/A/1`, which then lexed as one invalid literal (found by the
+/// parse_formula fuzz target; the input is
+/// `fuzz/regressions/parse_formula-error-literal-slash-print-not-reparsable.txt`).
+#[test]
+fn an_error_literal_ends_where_its_code_ends__feat__sheet_parser_dialect() {
+    for (input, canonical) in [
+        ("#N/A /1", "#N/A/1"),
+        ("#N/A/1", "#N/A/1"),
+        ("#REF!/2", "#REF!/2"),
+        ("#DIV/0!/2", "#DIV/0!/2"),
+        ("#DIV/0!/#DIV/0!", "#DIV/0!/#DIV/0!"),
+        ("#SPILL! / #SPILL!", "#SPILL!/#SPILL!"),
+        ("#NULL!/2", "#NULL!/2"),
+        ("#name?/2", "#NAME?/2"),
+        ("#num!^2", "#NUM!^2"),
+        ("SUM(#VALUE!,1)", "SUM(#VALUE!,1)"),
+    ] {
+        assert_eq!(roundtrip(input), canonical, "{input}");
+        assert_eq!(roundtrip(canonical), canonical, "{canonical}");
+    }
+    let fuzz = format!(
+        "     #SPILL!   /  #SPILL!     #SPILL! \"1o\"  #SPILL! \"0o{}\"  \n",
+        "\u{1f}".repeat(48)
+    );
+    let f = p(&fuzz);
+    assert_eq!(p(&pr(&f)).root, f.root);
+    // Excel's newer codes are recognised as error literals, and refused as
+    // ones this engine's values cannot hold (as before, but now saying so
+    // and spanning only the code); unknown codes are still errors.
+    for code in [
+        "#GETTING_DATA",
+        "#CALC!",
+        "#FIELD!",
+        "#BLOCKED!",
+        "#CONNECT!",
+        "#BUSY!",
+        "#UNKNOWN!",
+        "#EXTERNAL!",
+        "#PYTHON!",
+    ] {
+        let err = parse(&format!("{code}/2"), &Ctx::new()).expect_err(code);
+        assert!(
+            err.message.contains("not supported"),
+            "{code}: {}",
+            err.message
+        );
+        assert_eq!(err.span, 0..code.len(), "{code}");
+    }
+    for bad in ["#FOO!", "#N/", "#DIV/0", "#REF"] {
+        assert!(parse(bad, &Ctx::new()).is_err(), "{bad} should not parse");
+    }
+}
+
 // ---- References ----
 
 #[test]

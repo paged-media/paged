@@ -1186,6 +1186,140 @@ a GPU name, is removed (GPU audit L-4).
   output). They and the TS `REQUIRE_REAL_*` switches move to the convention after B7.
 - No CI lane runs the corpus lanes: the corpus is private.
 
+## T1: placement (after)
+
+Unit tests stay beside their code. The tests about how components fit together moved to the
+repository's root `tests/` ([`tests/README.md`](../../tests/README.md)), with `git mv`, in one
+commit per category. A move changes no test: every moved test keeps its title, its assertions
+and its `covers()` calls (none of the moved files carries one). The `bun test` lanes run from
+the new `tests/` package (Moon project `tests`, workflow `tests / contracts + system`); the
+Playwright lanes are new projects of the editor's configuration, which reads them from the root.
+
+| Category | Moved from | Moved to | Tests |
+| --- | --- | --- | --- |
+| contracts | `apps/editor/apps/canvas/test/contracts/{bundle-registrations,surface-enumeration}.test.ts` | `tests/contracts/` | 21 |
+| contracts | `apps/editor/apps/canvas/tests/headless/bundle-host/<x>.test.ts` (7) and `hosts.ts`, `platform.ts`, `fixtures/echo-worker.ts` | `tests/contracts/bundle-host/<x>.headless.test.ts` | 213 |
+| system | `apps/editor/apps/canvas/tests/headless/built-in-bundles.test.ts` | `tests/system/built-in-bundles.headless.test.ts` | 12 |
+| integration | `apps/editor/apps/canvas/tests/journey/plugins/{sheet-persistence,sheet-edit-persist,data-persist-reload,image-persist,web-edit-persist}.journey.spec.ts` (project `journeys`) | `tests/integration/persistence/` (project `integration`; `integration-gpu` locally, as `journeys-gpu`) | 6 |
+| fidelity | `apps/editor/apps/canvas/tests/fidelity.spec.ts` (project `chromium`) | `tests/fidelity/editor-packs.spec.ts` (project `fidelity`) | 79 (one per corpus pack) |
+
+What stayed, and why: a module's own conformance (it tests one component); the engine's
+fidelity lanes (the golden snapshot, the generated-corpus pixel gate, the text-layer gate,
+export-diff, the InDesign probes), which test the engine alone and run from its Cargo
+workspace; the editor's own headless, e2e and journey tiers; and the Rust `tests/it/` binaries
+(a Cargo workspace cannot host another workspace's tests).
+
+**Tiers.** The surface gate derives a file's tier from its path. In the root tree the directory
+names the subject, so the file name carries the tier: `*.headless.test.ts` is `headless` (the
+gate's existing rule), a `*.spec.ts` is a Playwright spec, `e2e` (one new rule,
+`scripts/surface/covers-reader.mjs`, with its cases in `surface-coverage.test.mjs`), and any
+other `*.test.ts` is `unit`. The moved files keep the tier they had. The gate before and after
+(main `2e0276889` against the branch): 1,147 / 1,149 ids asserted, 4 acknowledged, and every
+id has the same clauses, layers, asserting files and call count; the report's test-file count
+is 2,578 → 2,581 (the new helpers under `tests/` count as test files).
+
+**Fixtures.** A fixture that two components read is now read from the component that owns
+it, not copied: the test fonts from `engine/core/corpus/fonts` (draw-bundle's Lora, image
+glue's Roboto, plugin-sdk's Space Grotesk, with their licences, and `platform/shared/ai`
+read plugin-sdk's copy), and paged-node's long-record-set merge lane from paged.data's
+InDesign Data Merge lane (`modules/data/conformance/indesign-merge`; the golden transcript
+writes the path as `<REPO>/…`). `tests/fixtures/` would hold a fixture no component owns;
+there is none. Left: the editor's Playwright harness and showcase keep their copies of
+fifteen module fixtures (four sheet workbooks, the slide deck, two Word files, the data
+products files, the merge template and records, the layered PSD). About thirty Playwright,
+showcase and film files read them, and no CI lane runs those today (the corpus checkout needs
+a missing secret), so a repointed path would break unseen; they move when that lane runs.
+
+### Same tests before and after
+
+Per lane, the base is main at `6954a2908` (and `2e0276889` for the gate), the same wasm in
+both checkouts. "Same ids" compares the JUnit ids (`classname > name` and the result), with
+the moved files' paths mapped to their new ones.
+
+| Lane | Before | After | Same ids |
+| --- | --- | --- | --- |
+| editor `checks`: headless editor (`test:headless`) | 1,683 | 1,458 | yes, the rest moved |
+| editor `checks`: bundle manifests (`test:bundle-contracts`) | 21 | — (step removed) | moved |
+| `tests / contracts + system`: contracts | — | 234 (21 + 213) | yes |
+| `tests / contracts + system`: system | — | 28 (12 moved + 16 new wasm boot checks, T7) | yes |
+| editor Playwright `chromium` (listed) | 1,496 | 1,404 | −79 fidelity (moved), −13 wasm boot parity (T7, deleted) |
+| editor Playwright `journeys` (listed) | 150 | 144 | −6 (moved) |
+| editor Playwright `integration` / `fidelity` (listed) | — | 6 / 79 | yes |
+| editor Playwright, what CI selects (`PAGED_CI_LEAN=1`, chromium + journeys + integration) | 1,566 | 1,553 | −13 wasm boot parity (T7) |
+| draw bun test | 1,801 (1,767 passed, 34 skipped) | 1,799 (1,766, 33) | yes, minus the two T5 deletions |
+| draw DOM | 168 | 168 | yes |
+| plugin-sdk | 755 | 755 | yes |
+| data-bundle | 438 | 438 | yes |
+| image glue | 477 | 477 | yes |
+| ai | 31 | 31 | yes |
+| paged-node (cli) | 80 (73 passed, 7 skipped) | 80 | yes |
+
+### Test paths that changed (for the Cockpit test map)
+
+The moves above, plus:
+
+- `tests/contracts/bundle-host/<x>.headless.test.ts` was `…/tests/headless/bundle-host/<x>.test.ts`
+  for `<x>` in contribute, document, navigation, rendering, services, storage, supports.
+- JUnit: the root lanes upload `tests-junit` (vitest shape, `classname` relative to `tests/`).
+  The editor's `checks` job never uploaded a JUnit for these lanes.
+- Playwright ids change project: the five persistence journeys `journeys` → `integration`, the
+  fidelity sweep `chromium` → `fidelity`.
+- Deleted (T5, below): `modules/draw/packages/draw-bundle/test/engine-pin.spec.ts`; draw's
+  `create-outlines.spec.ts` › … › "an OLDER engine: the command refuses and the frame is left as
+  text"; `apps/editor/apps/canvas/tests/e2e/wasm-boot-parity.spec.ts` (13), superseded by
+  `tests/system/wasm-boot/wasm-boot.test.ts` (16).
+
+## T5: deletions
+
+B3b ([`seams.md`](seams.md)) had already deleted the sdk-pin specs (web, image, data, sheet),
+the seam files and their tests; wave D had reduced `assert-dist-tags.mjs` to the four public
+packages (no built-in left in it); `check-plugin-pins.mjs` was gone. `sync-ooxml --check` stays
+until wave C1 removes the vendored copy. What was still there:
+
+**Deleted tests (15).**
+
+- `modules/draw/packages/draw-bundle/test/engine-pin.spec.ts` (1): asserted that the harness
+  booted the canvas-wasm draw-bundle's `package.json` pins and that its minor is the protocol.
+  With `workspace:*` there is one canvas-wasm; `tooling/js/check-workspace-deps.mjs` asserts the
+  dependency is the workspace's, `engine/core/scripts/check-wasm-package-versions.mjs` that the
+  version's minor is `PROTOCOL_VERSION`, and the SDK's loader refuses an engine whose protocol
+  is not the vendored wire's.
+- draw `test/headless/create-outlines.spec.ts` › "an OLDER engine: the command refuses and the
+  frame is left as text" (1, skipped): it ran only when the engine did NOT answer
+  `requestTextOutlines` (protocol < 66), so against the workspace engine it could never run.
+- `apps/editor/apps/canvas/tests/e2e/wasm-boot-parity.spec.ts` (13, Playwright): the same
+  assertions as the system lane's wasm boot checks (T7), which own them, cover two more files
+  and run in CI.
+
+**Version probes removed from tests (no test count changes).** Each skipped or branched on an
+engine older than the workspace's, so with the in-tree engine (protocol 74) the condition was
+always the same:
+
+- draw: `create-outlines` (the protocol-66 probe and `PAGED_REQUIRE_V66`), `headless/page-space`
+  (the page-origin probe, 2 cases);
+- data-bundle: `fixedFrom(69|70|71, it)` → `it` (5 cases; the helper is gone),
+  `protocol71-real-core` (`v71`), `indesign-binding` (`ENGINE_PROTOCOL < 71`, the fixture era is
+  `71`), `real-core.ts` (`ENGINE_PROTOCOL >= 71`);
+- plugin-sdk: `script-bridge` (the bridge probe and `REQUIRE_REAL_BRIDGE`);
+- editor Playwright: `doc-breaks`, `doc-columns`, `doc-line-breaks`, `doc-standalone-open`
+  (`engineProtocol() < 64/65`, `engineGrows()`), `path-editing` (the v67 probe and
+  `PAGED_REQUIRE_V67`), the data journeys (`ENGINE_PROTOCOL >= 69`, `ONE_STEP_MERGE`), and
+  `transform-pivot`, which skipped unless `PAGED_REQUIRE_V66=1` was set, so it never ran; it runs
+  now.
+
+**Duplicate assertions.** Through the gate's covers() data: one id is asserted at the same tier
+by two components (`command:paged.tool.activate.*`, unit, by the canvas app over the built-in
+tool table and by the shell over its contribution builder). They test different functions, so
+both stay. The Playwright wasm boot spec above is the one duplicate deleted.
+
+**Left, with the reason.** Tests that drive a module's fallback for an older engine through a
+fake or a doctored host (draw's `path-weld` "pre-v56" Join fallback and `engineOpVocabulary`,
+the spread-space half of `test/page-space/page-space.spec.ts`, plugin-sdk's "older host"
+fallbacks, data's perf budgets per protocol era) test code that still exists. Deleting the test
+would leave the lane untested; deleting the lane is a source change (a seam, as in B3b), for its
+module's owner. plugin-sdk's are part of the public SDK, which a community host may run on an
+older engine.
+
 ## What could not be measured
 
 - **Monorepo editor Playwright:** still no run (missing `STATE_DISPATCH_TOKEN`); its numbers

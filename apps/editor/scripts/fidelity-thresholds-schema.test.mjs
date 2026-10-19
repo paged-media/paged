@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Schema sanity check for corpus/config/canvas-fidelity-thresholds.json.
 //
-// The fidelity gate (apps/canvas/tests/fidelity.spec.ts) trusts this file
+// The fidelity gate (/tests/fidelity/editor-packs.spec.ts) trusts this file
 // blind: a missing field or a junk value silently weakens or breaks the gate
 // rather than failing loudly. This cheap structural check asserts every entry
 // is well-formed BEFORE a run depends on it. Pairs with BAKE_GOVERNANCE.md.

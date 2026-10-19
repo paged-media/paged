@@ -61,14 +61,6 @@ export const ENGINE_PROTOCOL: number = (() => {
   }
 })();
 
-/** `it` from engine protocol `min` on, `it.failing` (a pinned defect) before
- *  it: a defect a released engine fixes stays pinned against the older one. */
-export function fixedFrom<T extends { failing: unknown }>(
-  min: number,
-  it: T,
-): T | T["failing"] {
-  return ENGINE_PROTOCOL >= min ? it : it.failing;
-}
 export const REQUIRE_REAL_CORE = process.env.REQUIRE_REAL_CORE === "1";
 
 /** Boot a headless host over the real engine and load the minimal fixture
@@ -134,7 +126,7 @@ export async function dataFields(host: FieldHost): Promise<DataField[]> {
       offset: p.offset,
       value: p.value,
     }));
-  if (ENGINE_PROTOCOL >= 71 && host.objects) {
+  if (host.objects) {
     // Ours by NAME: an InDesign save re-spells the Self (`paged-v_name`).
     for (const address of await host.objects.query(
       'textVariable[name^="paged:"]',

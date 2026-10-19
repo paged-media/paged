@@ -41,9 +41,12 @@
 
 import { expect, test, type Browser, type Page } from "@playwright/test";
 
-import { fitFirstPage, openPanel } from "../../fidelity/canvas-driver";
-import { zipEntryNames } from "../../e2e/harness/read-zip";
-import { Designer } from "../driver/designer";
+import {
+  fitFirstPage,
+  openPanel,
+} from "../../../apps/editor/apps/canvas/tests/fidelity/canvas-driver";
+import { zipEntryNames } from "../../../apps/editor/apps/canvas/tests/e2e/harness/read-zip";
+import { Designer } from "../../../apps/editor/apps/canvas/tests/journey/driver/designer";
 import {
   GRID_PANEL,
   MOD,
@@ -53,7 +56,7 @@ import {
   importAndLower,
   placedValues,
   type ElementRef,
-} from "./sheet-kit";
+} from "../../../apps/editor/apps/canvas/tests/journey/plugins/sheet-kit";
 
 const EDITED = [
   ["10", "Sum"],

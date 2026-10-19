@@ -169,6 +169,19 @@ describe("flakeRate", () => {
     ]);
   });
 
+  it("judges an expected failure (test.fail) by what it expects", () => {
+    const listing = report([["known bug", [], ["failed"]]]);
+    listing.suites[0].suites[0].specs[0].tests[0].expectedStatus = "failed";
+    const r = flakeRate([listing]);
+    expect(r.tests).toEqual({
+      passed: 1,
+      failed: 0,
+      flaky: 0,
+      skipped: 0,
+      ran: 1,
+    });
+  });
+
   it("counts repeats that disagree as flaky", () => {
     const r = flakeRate([
       report([["repeat", [], ["passed"]]]),

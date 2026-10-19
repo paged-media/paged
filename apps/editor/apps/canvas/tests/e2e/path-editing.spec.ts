@@ -1198,32 +1198,8 @@ test.describe("E2E path editing — snapping", () => {
   test("AC-SNAP-3 — protocol 67: a dragged anchor lands on ANOTHER path's anchor @feat:editor-tools.path.direct-edit @feat:plugin-draw.direct-selection @feat:plugin-draw.snapping @level:gesture", async ({
     page,
   }) => {
-    // The engine resolves the snap since v67; before it, the session only
-    // knows this path's own anchors, and (200, 700) is openA's. Skips on
-    // an older engine; PAGED_REQUIRE_V67=1 makes that a failure.
-    const v67 = await page.evaluate(async (pageId) => {
-      const c = (
-        globalThis as unknown as {
-          __canvas: {
-            client: { send: (m: unknown) => Promise<{ kind: string }> };
-          };
-        }
-      ).__canvas;
-      const r = await c.client
-        .send({
-          kind: "requestSnapPoint",
-          payload: { query: { pageId, point: [1, 1], cameraScale: 1 } },
-        })
-        .catch(() => ({ kind: "none" }));
-      return r.kind === "snapPoint";
-    }, FX.pageId);
-    if (!v67) {
-      if (process.env.PAGED_REQUIRE_V67 === "1")
-        throw new Error(
-          "PAGED_REQUIRE_V67=1 but the engine does not answer requestSnapPoint",
-        );
-      test.skip();
-    }
+    // The engine resolves the snap (protocol 67 on): the session alone knows
+    // only this path's own anchors, and (200, 700) is openA's.
     const before = await mustTable(page, FX.quad);
     await enterPathEdit(page, FX.quad);
     // Anchor 0 (100,100) dragged to a fraction of a point off openA's

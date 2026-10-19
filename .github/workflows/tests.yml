@@ -1,0 +1,195 @@
+# The repository's cross-component tests (tests/README.md): the lanes that
+# belong to no one component. `contracts` holds the plugin contract between
+# the editor, plugin-sdk and the nine built-ins (the two-way manifest check,
+# the gate's static enumeration against what the bundles register, the
+# BundleHost contract on the editor's, the headless and the bare adapter);
+# `system` holds product completeness (all nine built-ins live in the
+# headless editor; every wasm the editor ships verifies its integrity and
+# boots in headless Chromium, driven by the Playwright library inside bun
+# test: docs/migration/bun-webview.md).
+#
+# They boot the engine and the bundles' own wasm, so the job builds (or
+# restores from the cache) the engine's wasm packages and every module's
+# wasm, as editor-tests' `checks` job does.
+name: tests / contracts + system
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || format('{0}-{1}', github.ref, github.event_name) }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "tests/**"
+      - "apps/editor/apps/canvas/src/**"
+      - "apps/editor/apps/canvas/tests/headless/**"
+      - "apps/editor/apps/canvas/public/fonts/**"
+      - "apps/editor/apps/canvas/package.json"
+      - "apps/editor/packages/**"
+      - "apps/editor/scripts/surface/**"
+      - "modules/**"
+      - "platform/extensions/packages/**"
+      - "platform/shared/**"
+      - "engine/core/crates/**"
+      - "engine/core/Cargo.*"
+      - "engine/core/rust-toolchain.toml"
+      - "engine/core/scripts/build-wasm-packages.sh"
+      - "engine/core/packages/**"
+      - ".cargo/config.toml"
+      - "tooling/rust/build-wasm.sh"
+      - "tooling/bootstrap.sh"
+      - "tooling/js/bun-test-setup.ts"
+      - "tooling/js/bun-junit.mjs"
+      - ".github/actions/engine-wasm/**"
+      - ".github/actions/module-wasm/**"
+      - ".github/actions/wasm-tools/**"
+      - ".github/workflows/tests.yml"
+      - "tsconfig.base.json"
+      - "bun.lock"
+      - "bunfig.toml"
+      - "package.json"
+      - "!**/docs/**/*.md"
+  pull_request:
+    paths:
+      - "tests/**"
+      - "apps/editor/apps/canvas/src/**"
+      - "apps/editor/apps/canvas/tests/headless/**"
+      - "apps/editor/apps/canvas/public/fonts/**"
+      - "apps/editor/apps/canvas/package.json"
+      - "apps/editor/packages/**"
+      - "apps/editor/scripts/surface/**"
+      - "modules/**"
+      - "platform/extensions/packages/**"
+      - "platform/shared/**"
+      - "engine/core/crates/**"
+      - "engine/core/Cargo.*"
+      - "engine/core/rust-toolchain.toml"
+      - "engine/core/scripts/build-wasm-packages.sh"
+      - "engine/core/packages/**"
+      - ".cargo/config.toml"
+      - "tooling/rust/build-wasm.sh"
+      - "tooling/bootstrap.sh"
+      - "tooling/js/bun-test-setup.ts"
+      - "tooling/js/bun-junit.mjs"
+      - ".github/actions/engine-wasm/**"
+      - ".github/actions/module-wasm/**"
+      - ".github/actions/wasm-tools/**"
+      - ".github/workflows/tests.yml"
+      - "tsconfig.base.json"
+      - "bun.lock"
+      - "bunfig.toml"
+      - "package.json"
+      - "!**/docs/**/*.md"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    name: contracts + system
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: moonrepo/setup-toolchain@v0.6.4
+        with:
+          auto-install: true
+          proto-version: "0.63.1"
+      - name: cache Bun's package cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
+
+      - name: bun install (root workspace)
+        run: bun install --frozen-lockfile
+
+      - name: engine wasm packages
+        uses: ./.github/actions/engine-wasm
+        with: { artifact: "false" }
+      - name: module wasm (doc)
+        uses: ./.github/actions/module-wasm
+        with: { module: doc }
+      - name: module wasm (slide)
+        uses: ./.github/actions/module-wasm
+        with: { module: slide }
+      - name: module wasm (sheet)
+        uses: ./.github/actions/module-wasm
+        with: { module: sheet }
+      - name: module wasm (data)
+        uses: ./.github/actions/module-wasm
+        with: { module: data }
+      - name: module wasm (web)
+        uses: ./.github/actions/module-wasm
+        with: { module: web }
+      - name: module wasm (draw)
+        uses: ./.github/actions/module-wasm
+        with: { module: draw }
+      - name: module wasm (image)
+        uses: ./.github/actions/module-wasm
+        with: { module: image }
+      - name: module wasm (publish)
+        uses: ./.github/actions/module-wasm
+        with: { module: publish }
+
+      - name: typecheck
+        working-directory: tests
+        run: bun run typecheck
+
+      # The browser the wasm boot checks drive: the runner's preinstalled
+      # Chrome, as data-vitest's DuckDB browser lane takes it (no download,
+      # no apt). PAGED_REQUIRE_BROWSER below makes a missing one a failure.
+      - name: browser for the wasm boot checks
+        run: |
+          CHROME=$(command -v google-chrome || command -v google-chrome-stable || command -v chromium)
+          test -n "$CHROME"
+          echo "PAGED_CHROMIUM=$CHROME" >> "$GITHUB_ENV"
+
+      - name: contracts (tests/contracts)
+        working-directory: tests
+        run: bun run test:contracts --reporter=junit --reporter-outfile=junit.contracts.bun.xml
+
+      - name: system (tests/system)
+        working-directory: tests
+        env:
+          # No Chromium is a failure here, not `unavailable`.
+          PAGED_REQUIRE_BROWSER: "1"
+        run: bun run test:system --reporter=junit --reporter-outfile=junit.system.bun.xml
+
+      # The T7 trial, advisory: five runs of the wasm boot checks per driver
+      # (the Playwright library, the lane's, and Bun.WebView's Chrome
+      # backend), so the comparison keeps collecting CI runs
+      # (docs/migration/bun-webview.md). Never gating.
+      - name: T7 trial, Playwright library vs Bun.WebView (advisory)
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        working-directory: tests
+        run: bun system/wasm-boot/trial.ts --runs 5 --json "$RUNNER_TEMP/t7-trial.json"
+      - name: upload the trial
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: t7-trial
+          path: ${{ runner.temp }}/t7-trial.json
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: JUnit in the shape the evidence reads
+        if: always()
+        working-directory: tests
+        run: |
+          set -e
+          ls junit.*.bun.xml >/dev/null 2>&1 || exit 0
+          bun ../tooling/js/bun-junit.mjs --out junit-all.xml junit.*.bun.xml
+      - name: upload the JUnit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tests-junit
+          path: tests/junit-all.xml
+          if-no-files-found: warn
+          retention-days: 30

@@ -292,7 +292,7 @@
         "@types/react-dom": "catalog:",
         "apache-arrow": "^17.0.0",
         "happy-dom": "catalog:",
-        "playwright-core": "1.64.1",
+        "playwright-core": "catalog:",
         "react": "catalog:",
         "react-dom": "catalog:",
         "typescript": "catalog:",
@@ -777,6 +777,24 @@
         "typescript": "catalog:",
       },
     },
+    "tests": {
+      "name": "paged-tests",
+      "version": "0.0.0",
+      "devDependencies": {
+        "@happy-dom/global-registrator": "catalog:",
+        "@paged-media/canvas-wasm": "workspace:*",
+        "@paged-media/client": "workspace:*",
+        "@paged-media/plugin-api": "workspace:*",
+        "@paged-media/plugin-sdk": "workspace:*",
+        "@paged-media/test-kit": "workspace:*",
+        "@playwright/test": "^1.64.1",
+        "@types/bun": "catalog:",
+        "happy-dom": "catalog:",
+        "playwright-core": "catalog:",
+        "typescript": "catalog:",
+        "vite": "catalog:",
+      },
+    },
   },
   "overrides": {
     "tsx": {
@@ -797,6 +815,7 @@
     "@types/react-dom": "^19.3.0",
     "babel-plugin-react-compiler": "^1.0.0",
     "happy-dom": "^21.0.3",
+    "playwright-core": "1.64.1",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "typescript": "^7.0.2",
@@ -1416,6 +1435,8 @@
     "paged-media-sdk": ["paged-media-sdk@workspace:platform/extensions"],
 
     "paged-monorepo": ["paged-monorepo@workspace:apps/editor"],
+
+    "paged-tests": ["paged-tests@workspace:tests"],
 
     "pako": ["pako@1.0.11", "", {}, "sha512-4hLB8Py4zZce5s4yd9XzopqwVv/yGNhV1Bl8NTmCq1763HeK2+EwVTv+leGeL13Dnh2wfbqowVPXCIO0z4taYw=="],
 

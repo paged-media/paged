@@ -6,7 +6,7 @@
   `packages/shell/package.json`, `apps/canvas/src/plugin-api-compat.ts`; the two-way check in
   plugin-sdk (`platform/extensions/packages/plugin-sdk/src/harness.ts`,
   `checkManifestConformance`) and its run over the editor's bundles
-  (`apps/canvas/test/contracts/bundle-registrations.test.ts`).
+  (`tests/contracts/bundle-registrations.test.ts` at the repository root).
 
 ## Context
 
@@ -78,13 +78,14 @@ fell behind the contract, as `entry` and `onContentWheel` did.
    - **Allowances:** an excused gap needs a per-bundle allowance with a reason. An allowance
      that no longer matches anything fails the check.
 
-   `apps/canvas/test/contracts/` runs the check over every entry of the editor's bundle
-   table. It names each `supports()` probe a bundle gates a registration on, and drives the
-   one trigger no headless host has, slide's page doors, through a pages backend.
-   `bun run test:bundle-contracts` runs it in the editor's `checks` job. It lives in the
-   canvas app because that is the only package depending on all nine bundles, plugin-sdk and
-   the engine. The lint zones keep modules and `platform/extensions` from importing bundles,
-   and the root `tests/contracts/` has no package or CI task yet.
+   The repository's `tests/contracts/` runs the check over every entry of the editor's
+   bundle table. It names each `supports()` probe a bundle gates a registration on, and
+   drives the one trigger no headless host has, slide's page doors, through a pages backend.
+   The `tests` workflow runs it (`bun run test:contracts` in `tests/`). The lint zones keep
+   modules and `platform/extensions` from importing bundles; the root tests read the
+   editor's bundle table, the one list of all nine. (Until T1 of the monorepo plan it lived
+   in the canvas app, `apps/canvas/test/contracts/`, the only package depending on all nine
+   bundles.)
 
 ## Consequences
 

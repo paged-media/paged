@@ -197,6 +197,19 @@ describe("layers from the path", () => {
       "rust",
     ]);
   });
+  it("the root tests: the name carries the tier", () => {
+    expect(L("tests/contracts/bundle-registrations.test.ts")).toEqual(["unit"]);
+    expect(L("tests/contracts/bundle-host/document.headless.test.ts")).toEqual([
+      "headless",
+    ]);
+    expect(L("tests/system/built-in-bundles.headless.test.ts")).toEqual([
+      "headless",
+    ]);
+    expect(
+      L("tests/integration/persistence/sheet-persistence.journey.spec.ts"),
+    ).toEqual(["e2e"]);
+    expect(L("tests/fidelity/editor-packs.spec.ts")).toEqual(["e2e"]);
+  });
   it("tags: golden, script, gesture", () => {
     expect(L("engine/core/crates/paged-cli/tests/it/golden_read.rs")).toEqual([
       "golden",
