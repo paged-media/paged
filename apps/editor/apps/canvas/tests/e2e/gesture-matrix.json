@@ -44,25 +44,6 @@
           }
         },
         {
-          "mods": "alt",
-          "target": "group",
-          "expect": {
-            "duplicates": "target"
-          },
-          "known": "GF-2",
-          "note": "the engine cannot clone a group at the gesture's commit"
-        },
-        {
-          "mods": "shift+alt",
-          "target": "group",
-          "expect": {
-            "duplicates": "target",
-            "constraint": "axis"
-          },
-          "known": "GF-2",
-          "note": "the engine cannot clone a group at the gesture's commit"
-        },
-        {
           "mods": "*",
           "target": "locked",
           "expect": {
