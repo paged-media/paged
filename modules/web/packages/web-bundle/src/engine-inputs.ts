@@ -63,12 +63,12 @@ import type {
   Disposable,
   SceneLayerSubmitResult,
 } from "@paged-media/plugin-api";
+import { dataUrlBytes } from "@paged-media/helpers";
 import { ASSET_BUDGETS } from "@paged-media/plugin-sdk";
 import { familiesUsed, type WebDiagnostic } from "../../web-model/src";
 
 import {
   bytesHash,
-  dataUrlBytes,
   fontFaceRules,
   fontFormat,
   sfntFamily,

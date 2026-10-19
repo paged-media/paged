@@ -1,0 +1,13 @@
+$schema: "../../../.moon/cache/schemas/project.json"
+
+# @paged-media/helpers: the small helpers of the built-ins and the editor
+# (docs/adr/PM-0002), a private package of the root Bun workspace. js-check
+# and js-test are the inherited `bun run typecheck` and `bun run test`.
+language: "typescript"
+layer: "library"
+stack: "frontend"
+tags: ["node", "shared"]
+
+project:
+  title: "platform/shared/helpers"
+  description: "sha256Hex, base64, length units, naive colour, the x-paged label codec; never published."
