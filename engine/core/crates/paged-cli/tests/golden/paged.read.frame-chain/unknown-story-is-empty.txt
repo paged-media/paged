@@ -1,0 +1,11 @@
+$ paged read frame-chain doc.paged Story/nope
+--- exit: 0
+--- stdout
+{
+  "kind": "frameChainResult",
+  "payload": {
+    "links": []
+  }
+}
+--- stderr
+(empty)

@@ -1,0 +1,6 @@
+$ paged parts write doc.paged paged/tool/data.json data.json --caller tool
+--- exit: 0
+--- stdout
+(empty)
+--- stderr
+paged/tool/data.json: <N> bytes written to the loaded container. Nothing saved — pass --save to write the file.

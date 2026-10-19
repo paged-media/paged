@@ -1,0 +1,8 @@
+$ paged script doc.paged build.js -o built.pdf
+--- exit: 0
+--- stdout
+[log] frame textFrame:u1
+[warn] careful
+built.pdf — pdf, <N> bytes
+--- stderr
+(empty)

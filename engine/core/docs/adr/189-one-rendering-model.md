@@ -43,8 +43,8 @@ and kept right, twice.
    `bottom + (top − bottom) × coverage`, and inks the document does not define are left out of
    the separated share. Every existing ink test pins the same numbers, and ink coverage stays
    on the CPU on both editor paths ([ADR 188](188-snapshots-draw-on-the-worker-gpu.md)).
-5. **tiny-skia is no longer a dependency of the engine.** `resvg` still brings tiny-skia 0.11
-   for placed SVGs, until those are drawn as vectors.
+5. **tiny-skia is no longer a dependency of the engine.** `resvg` still brings tiny-skia
+   (0.12, since resvg 0.48) for placed SVGs, until those are drawn as vectors.
 
 ## Evidence
 

@@ -1,0 +1,6 @@
+$ paged export doc.paged -o out.pdf
+--- exit: 0
+--- stdout
+out.pdf — pdf, <N> bytes
+--- stderr
+(empty)

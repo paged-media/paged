@@ -1,0 +1,6 @@
+$ paged new --size 200x100 -o custom.paged
+--- exit: 0
+--- stdout
+custom.paged — one 200 × 100 pt page, paged, <N> bytes
+--- stderr
+(empty)

@@ -27,6 +27,7 @@
 // the root entry under Node ESM, which refuses the SDK's JSON import.
 export {
   headlessEngineModule,
+  rebootHeadlessEngine,
   type EngineCanvasWorker,
   type HeadlessEngineModule,
 } from "./engine.ts";

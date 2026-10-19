@@ -1,0 +1,9 @@
+$ paged read snap-point doc.paged usp
+--- exit: 101
+--- stdout
+(empty)
+--- stderr
+
+thread 'main' (<TID>) panicked at crates/paged-cli/src/read.rs:<LINE>:
+index out of bounds: the len is 0 but the index is 0
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace

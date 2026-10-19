@@ -1,0 +1,6 @@
+$ paged parts read w.paged paged/tool/data.json -o back.json
+--- exit: 0
+--- stdout
+(empty)
+--- stderr
+paged/tool/data.json: <N> bytes → back.json

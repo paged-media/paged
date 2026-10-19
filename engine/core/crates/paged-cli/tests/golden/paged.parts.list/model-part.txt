@@ -1,0 +1,6 @@
+$ paged parts list doc.paged
+--- exit: 0
+--- stdout
+paged/core/model/document.pgm
+--- stderr
+(empty)

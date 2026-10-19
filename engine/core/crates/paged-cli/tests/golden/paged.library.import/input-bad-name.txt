@@ -1,0 +1,6 @@
+$ paged library import brochure.paged --library lib --name Brochure
+--- exit: 1
+--- stdout
+(empty)
+--- stderr
+Error: `Brochure` is not a document name: lowercase letters, digits and '-'

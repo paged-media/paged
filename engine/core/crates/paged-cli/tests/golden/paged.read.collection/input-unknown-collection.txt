@@ -1,0 +1,6 @@
+$ paged read collection doc.paged nope
+--- exit: 1
+--- stdout
+(empty)
+--- stderr
+Error: "nope" is not a collection. See `paged read collection --help`.

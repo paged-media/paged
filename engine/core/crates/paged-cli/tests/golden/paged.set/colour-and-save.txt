@@ -1,0 +1,9 @@
+$ paged set doc.paged oval:u2 frameFillColor Color/u1 -o red.paged
+--- exit: 0
+--- stdout
+{
+  "type": "colorRef",
+  "value": "Color/u1"
+}
+--- stderr
+(empty)

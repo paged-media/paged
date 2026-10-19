@@ -1,0 +1,6 @@
+$ paged read swatch-library doc.paged -o swatches.ase
+--- exit: 0
+--- stdout
+(empty)
+--- stderr
+swatch library: <N> bytes → swatches.ase

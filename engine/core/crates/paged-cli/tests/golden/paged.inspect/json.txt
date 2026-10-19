@@ -1,0 +1,32 @@
+$ paged inspect doc.paged --json
+--- exit: 0
+--- stdout
+{
+  "cmykProfile": null,
+  "file": "doc.paged",
+  "pageCount": 1,
+  "pageDigests": [
+    "<DIGEST>"
+  ],
+  "pageIds": [
+    "usp"
+  ],
+  "pageSizesPt": [
+    [
+      612.0,
+      792.0
+    ]
+  ],
+  "protocol": "<PROTOCOL>",
+  "stats": {
+    "frames": 5,
+    "glyphs": 11,
+    "lines": 1,
+    "oversetStories": 0,
+    "paragraphs": 1,
+    "runs": 1,
+    "stories": 1
+  }
+}
+--- stderr
+(empty)
