@@ -556,17 +556,23 @@
       "name": "@paged-media/web",
       "version": "0.1.0-canary.18",
       "devDependencies": {
+        "@happy-dom/global-registrator": "catalog:",
         "@paged-media/canvas-wasm": "workspace:*",
         "@paged-media/plugin-api": "workspace:*",
         "@paged-media/plugin-sdk": "workspace:*",
         "@paged-media/test-kit": "workspace:*",
         "@paged-media/web-model": "workspace:*",
+        "@testing-library/dom": "catalog:",
+        "@testing-library/react": "catalog:",
         "@types/bun": "catalog:",
         "@types/node": "catalog:",
         "@types/react": "catalog:",
+        "@types/react-dom": "catalog:",
         "@types/react-test-renderer": "18.3.1",
         "fast-check": "4.10.2",
+        "happy-dom": "catalog:",
         "react": "catalog:",
+        "react-dom": "catalog:",
         "react-test-renderer": "18.3.1",
         "typescript": "catalog:",
       },
@@ -651,7 +657,7 @@
     },
     "platform/extensions/packages/plugin-api": {
       "name": "@paged-media/plugin-api",
-      "version": "0.2.77-canary.0",
+      "version": "0.2.78-canary.0",
       "dependencies": {
         "@types/react": "catalog:",
       },
@@ -661,7 +667,7 @@
     },
     "platform/extensions/packages/plugin-sdk": {
       "name": "@paged-media/plugin-sdk",
-      "version": "0.2.77-canary.0",
+      "version": "0.2.78-canary.0",
       "bin": {
         "paged-plugin": "./bin/paged-plugin.mjs",
       },
