@@ -18,6 +18,9 @@ bun scripts/surface-coverage.mjs --list command  # every id of a kind, with its 
 bun scripts/surface-coverage.mjs --json-out r.json --md-out r.md   # the report
 ```
 
+`--prune` and `--list` skip the secondary "mentioned" column, so they read only the files
+`git grep` finds a covers form in: use them on a slow disk.
+
 CI runs the gate in the `surface` job of `.github/workflows/editor-tests.yml`. It needs no wasm,
 no browser and no secrets. The job uploads the report as the artifact `surface-conformance` and
 writes the tables to the job summary. Moon runs it as `editor:surface-conformance`.
@@ -73,8 +76,8 @@ The gate enforces these rules:
   a call the gate cannot read must not pass as covering nothing. A table-driven test writes
   its ids out.
 - **Known kind and id.** Every id needs a known kind and must name a surface the gate
-  enumerated. An unknown id is reported. It becomes an error once the enumeration has
-  settled (`ORPHANS_FAIL`).
+  enumerated. An unknown id (a typo, a renamed command) is an error, not a quiet zero. If the
+  surface is real and the gate does not know it, the enumeration is missing an extractor.
 - **Test files only.** The call must sit in a test file: `*.test.*`, `*.spec.*`, `*.film.ts`,
   or a file under `test/`, `tests/` or `__tests__/`. For Rust, a file under `tests/` or one
   with a `#[cfg(test)]` module.
@@ -119,6 +122,11 @@ static evaluator (`scripts/surface/static-eval.mjs`). It follows tables, `.map` 
 - A registration site it cannot resolve fails the run, unless it is a family or a
   `DYNAMIC_SITES` entry with a reason.
 - The bundle count is pinned at nine.
+
+A runtime test checks the static reader. `apps/canvas/test/contracts/surface-enumeration.test.ts`,
+in the bundle-contract lane, activates every bundle against the headless engine, records what it
+registers through `contribute.menu`, `contribute.keybinding` and `contribute.tool`, and asserts
+that the gate's lists for that bundle are equal to it.
 
 ## The layers
 

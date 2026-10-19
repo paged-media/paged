@@ -133,12 +133,18 @@ jobs:
         run: |
           bun run --filter './packages/*' test \
             --reporter=junit --reporter-outfile=junit.bun.xml
+      # web-bundle's DOM task (happy-dom preloaded): the *.dom.test.tsx panel specs.
+      - name: bun test (panels in happy-dom)
+        working-directory: modules/web/packages/web-bundle
+        env:
+          REQUIRE_REAL_ENGINE: "1"
+        run: bun run test:dom --reporter=junit --reporter-outfile=junit-dom.bun.xml
       # bun's reports, rewritten into the vitest shape the evidence has always
       # had (tooling/js/bun-junit.mjs): the artifact keeps its name and test ids.
       - name: collect junit
         if: ${{ !cancelled() }}
         run: |
-          bun ../../tooling/js/bun-junit.mjs --out junit-all.xml packages/*/junit.bun.xml
+          bun ../../tooling/js/bun-junit.mjs --out junit-all.xml packages/*/junit.bun.xml packages/web-bundle/junit-dom.bun.xml
           [ -s junit-all.xml ]
       # Evidence hand-off: upload the results as an artifact for the private
       # evidence repository to PULL (a public workflow cannot call a private

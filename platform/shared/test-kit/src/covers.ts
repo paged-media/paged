@@ -22,8 +22,8 @@
 // A test that ASSERTS the behaviour of a surface id calls it inside the
 // test body, next to those assertions, with string literals:
 //
-//     covers("command:paged.undo");
-//     covers("panel:paged.layers", "setting:editor.units");
+//     covers("command:paged.editor.undo");
+//     covers("panel:paged.layers", "setting:paged.theme");
 //
 // It does nothing at run time. The gate (apps/editor/scripts/
 // surface-coverage.mjs) reads the calls statically, so the arguments must
@@ -52,7 +52,7 @@ export type SurfaceKind = (typeof SURFACE_KINDS)[number];
  * A surface id: `<kind>:<id>`. Built-in and plugin-contributed surface use
  * the same kinds, each with its own registered id:
  *
- * - `command:paged.undo`, `panel:paged.layers`, `tool:paged.tool.rectangle`
+ * - `command:paged.editor.undo`, `panel:paged.layers`, `tool:paged.tool.rectangle`
  *   (plugin: manifest commands and typed object-model commands, manifest
  *   tools, panels and schema panels, by their ids)
  * - `menu:<path>`: the item's path as registered, the menu registry's own
@@ -62,7 +62,7 @@ export type SurfaceKind = (typeof SURFACE_KINDS)[number];
  *   `keybinding:cmd+z→paged.editor.undo`; `->` is read as `→`.
  * - `setting:<configuration key>`; a tool option is `setting:<toolId>.<key>`
  * - `cli:paged export-pdf` (the binary, then the command path, one space each)
- * - `script:paged.document.pages`, `script:editor.select`
+ * - `script:paged.pages`, `script:editor.select`
  * - `importer:<id>`, `exporter:<id>`: a bundle's file importers / exporters
  */
 export type SurfaceId = `${SurfaceKind}:${string}`;
