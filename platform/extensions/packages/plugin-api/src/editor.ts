@@ -46,7 +46,7 @@ import type {
   ObjectTypeContribution,
   SceneImage,
   SceneImageTile,
-} from "./host";
+} from "./host.js";
 import type {
   CollectionName,
   ContentSelection,
@@ -62,7 +62,7 @@ import type {
   SceneLayer,
   SelectionMode,
   WorkerToMain,
-} from "./wire";
+} from "./wire.js";
 
 /** C-6 (I-06) — the editor-channel claim shape (the v44
  *  `claimImageResource` payload, named for the `PagedEditor.images`

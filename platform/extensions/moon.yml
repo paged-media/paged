@@ -1,7 +1,7 @@
 $schema: "../../.moon/cache/schemas/project.json"
 
-# The public extension contract and SDK: JS packages plugin-api, plugin-sdk,
-# plugin-cli, ai and cli.
+# The public extension contract and SDK: JS packages plugin-api, plugin-sdk
+# (with the paged-plugin bin), ai and cli.
 language: "typescript"
 layer: "library"
 stack: "frontend"
@@ -9,7 +9,7 @@ tags: ["node", "sdk"]
 
 project:
   title: "platform/extensions"
-  description: "Extension contract (plugin-api), runtime SDK, manifest CLI, ai and cli packages."
+  description: "Extension contract (plugin-api), runtime SDK with the manifest CLI (paged-plugin), ai and cli packages."
 
 # plugin-sdk's harness specs boot the engine's canvas-wasm (workspace:*);
 # scripts/sync-catalog.mjs reads engine/core's catalog.json,

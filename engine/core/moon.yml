@@ -60,54 +60,52 @@ tasks:
       -- -D warnings
 
   wasm:
-    description: "Standalone copies of the npm wasm packages in dist/, at 0.<protocol>.0-local."
+    description: "Standalone copies in dist/: the canvas-wasm package at 0.<protocol>.0-local, and the viewer session's files."
     toolchains: ["rust"]
     command: "bash scripts/build-wasm-packages.sh"
     inputs:
       - "@group(rust-sources)"
       - "crates/paged-introspect/catalog.json"
       - "scripts/build-wasm-packages.sh"
-      - "packages/*/{package.json,README.md,LICENSE,LICENSE.md}"
+      - "packages/canvas-wasm/{package.json,README.md,LICENSE,LICENSE.md}"
     outputs:
       - "dist/canvas-wasm/**/*"
-      - "dist/introspect-wasm/**/*"
-      - "dist/repo-wasm/**/*"
-      - "dist/sdk/**/*"
+      - "dist/session/**/*"
     options:
       # Needs wasm-bindgen-cli at the Cargo.lock version and binaryen;
-      # core-publish-wasm.yml builds these in CI.
+      # release.yml builds the same parts in CI.
       runInCI: "skip"
 
   wasm-pkg:
-    description: "The npm wasm packages built into their workspace packages, packages/<pkg>/ (ADR 185)."
+    description: "The engine's wasm built into the two workspace packages that ship it: packages/canvas-wasm/ (canvas, introspect/, repo/) and web/idml-viewer/wasm/ (the session), ADR 185, PM-0008."
     toolchains: ["rust"]
     command: "bash scripts/build-wasm-packages.sh --workspace"
     inputs:
       - "@group(rust-sources)"
       - "crates/paged-introspect/catalog.json"
       - "scripts/build-wasm-packages.sh"
-      - "packages/*/package.json"
+      - "packages/canvas-wasm/package.json"
     # Only the generated files: package.json, README and the licence files in
     # the same directories are committed and must never be cleaned or restored.
     outputs:
       - "packages/canvas-wasm/paged_canvas_wasm*"
-      - "packages/introspect-wasm/paged_introspect_wasm*"
-      - "packages/introspect-wasm/catalog.json"
-      - "packages/repo-wasm/paged_repo_wasm*"
-      - "packages/sdk/paged_sdk*"
+      - "packages/canvas-wasm/introspect/**/*"
+      - "packages/canvas-wasm/repo/**/*"
+      - "web/idml-viewer/wasm/**/*"
     options:
       # As `wasm`: wasm-bindgen-cli at the Cargo.lock version and binaryen.
-      # core-publish-wasm.yml runs the same build in CI.
+      # release.yml runs the same build in CI.
       runInCI: "skip"
 
   wasm-pkg-version:
-    description: "Every workspace wasm package is versioned 0.<PROTOCOL_VERSION>.0-dev (scripts/check-wasm-package-versions.mjs)."
+    description: "canvas-wasm and idml-viewer are versioned 0.<PROTOCOL_VERSION>.0-dev (scripts/check-wasm-package-versions.mjs)."
     toolchains: ["system"]
     command: "bun scripts/check-wasm-package-versions.mjs"
     inputs:
       - "scripts/check-wasm-package-versions.mjs"
       - "crates/paged-canvas/src/channel.rs"
       - "packages/*/package.json"
+      - "web/idml-viewer/package.json"
 
   wire-schema:
     description: "The wire JSON Schema (ADR 187): crates/paged-wire/schema/mutation.schema.json is current and declares what tsify declares (paged-wire --features schema; core-ci runs it)."

@@ -11,7 +11,7 @@ project:
   title: "modules/draw"
   description: "Vector drawing module: geometry, tools, image trace."
 
-# draw-rust validates the bundle manifest with the in-tree plugin-cli.
+# draw-rust validates the bundle manifest with the in-tree paged-plugin bin (plugin-sdk).
 dependsOn:
   - id: "extensions"
     scope: "development"
@@ -30,17 +30,18 @@ tasks:
     deps: ["~:wasm"]
 
   manifest:
-    description: "plugin-cli validate of the bundle manifest (measures the built wasm)."
+    description: "paged-plugin validate of the bundle manifest (measures the built wasm)."
     toolchains: ["system"]
     deps: ["~:wasm"]
-    command: "bun ../../platform/extensions/packages/plugin-cli/bin/paged-plugin.mjs validate packages/draw-bundle/manifest.json"
+    command: "bun ../../platform/extensions/packages/plugin-sdk/bin/paged-plugin.mjs validate packages/draw-bundle/manifest.json"
     inputs:
       - "packages/draw-bundle/manifest.json"
       - "packages/draw-bundle/wasm/*"
       - project: "extensions"
         filter:
           [
-            "packages/plugin-cli/**/*",
+            "packages/plugin-sdk/bin/**/*",
+            "packages/plugin-sdk/untyped-commands.baseline.json",
             "packages/plugin-api/src/manifest.schema.json",
           ]
 

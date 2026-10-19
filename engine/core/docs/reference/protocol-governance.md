@@ -69,6 +69,12 @@ plugin-sdk, `publish.yml` publishes under `--tag canary`
 `latest`; the dist-tag policy is written down in
 `plugin-sdk: scripts/assert-dist-tags.mjs`, which no workflow there runs._
 
+_Status note (2026-10-18, [PM-0008](../../../../docs/adr/PM-0008-npm-packages-and-release.md)):
+`.github/workflows/release.yml` replaces `core-publish-wasm.yml` (the monorepo's
+`publish-wasm.yml`) and the plugin-sdk canary lane. One tag publishes all four public
+packages at its version; the dist-tag rule below is its `the version is the tag` step, and
+`tooling/release/assert-dist-tags.mjs` asserts the result after the publish._
+
 - Tag `v0.<protocol>.<patch>` on the commit to publish → the
   publish-wasm workflow ships all four packages. **Tag-on-bump**: a
   protocol bump on main without a matching tag is an unpublished

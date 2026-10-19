@@ -31,38 +31,7 @@ export { advanceTimersByTimeAsync, settle, type TimerClock } from "./timers.ts";
 // are tested"). The public half lives in the plugin-sdk (the fake editor,
 // the DSL's unit backend, tapes, invariants) and is re-exported here, so
 // a suite has one import; the editor-only half is below it.
-export {
-  checkCancel,
-  checkUndoRedo,
-  commitsSince,
-  createFakeEditor,
-  createGestureDsl,
-  engineModelChannel,
-  expectNoCommit,
-  expectOneCommit,
-  expectOneUndoStep,
-  flattenMutation,
-  gestures,
-  InvariantError,
-  keyboardEventLike,
-  parseTape,
-  replayTape,
-  serializeTape,
-  stableJson,
-  unitBackend,
-  validateTape,
-  type FakeEditor,
-  type FakeEditorEvent,
-  type FakeEditorOptions,
-  type FakePage,
-  type GestureBackend,
-  type GestureDsl,
-  type GesturePoint,
-  type ModelChannel,
-  type ModifierName,
-  type PointerTape,
-  type TapeSample,
-} from "@paged-media/plugin-sdk";
+export * from "@paged-media/plugin-sdk/gesture-kit";
 export {
   createFakeShellEditor,
   type ShellEditorLike,
@@ -94,6 +63,7 @@ export {
 export {
   compareDigests,
   fuzzSequenceCount,
+  GESTURE_FUZZ_KNOWN,
   geometryDigest,
   runGestureFuzz,
   sceneElementIds,

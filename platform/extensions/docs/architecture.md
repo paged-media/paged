@@ -38,10 +38,11 @@ builds a `BundleHost` over a function that returns the editor handle
 imported at run time in one module, `src/react-optional.ts`, and the package loads without
 it ([ADR 313](adr/313-no-react-at-load.md)).
 
-**`packages/plugin-cli`** — published as `@paged-media/plugin-cli`. One file,
-`bin/paged-plugin.mjs`, no dependencies and no build step. Its commands are `validate`,
-`untyped` (prints the untyped-commands baseline), `integrity` and `modules-upload`
-([ADR 326](adr/326-wasm-resolved-through-the-host.md)).
+**The `paged-plugin` bin of `packages/plugin-sdk`** — `bin/paged-plugin.mjs` and the
+`untyped-commands.baseline.json` beside it, shipped in `@paged-media/plugin-sdk` (until
+PM-0008 the separate `@paged-media/plugin-cli` package). One file, no dependencies and no
+build step. Its commands are `validate`, `untyped` (prints the untyped-commands baseline),
+`integrity` and `modules-upload` ([ADR 326](adr/326-wasm-resolved-through-the-host.md)).
 
 **`packages/cli`** — `@paged-media/cli`, bin `paged-node`, not on npm yet. A host over
 `createHeadlessHost` that loads the installed bundles and reads and writes any object through
@@ -53,7 +54,7 @@ and the loop behind `paged-node ai` and the editor's Claude integration
 ([ADR 325](adr/325-claude-agent-package.md)).
 
 `plugin-sdk` depends on `plugin-api` and takes React as an optional peer; `plugin-api`
-depends only on `@types/react`. `plugin-cli` imports nothing from the other two: it repeats
+depends only on `@types/react`. The `paged-plugin` bin imports nothing from either: it repeats
 the manifest rules by hand, and `packages/plugin-sdk/test/capability-vocabulary.spec.ts`
 fails when its vocabularies or the TypeScript unions differ from `manifest.schema.json`. No
 package depends on the editor or the engine at run time; the harness uses the devDependency

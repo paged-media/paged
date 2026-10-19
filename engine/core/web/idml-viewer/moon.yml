@@ -12,8 +12,8 @@ project:
   title: "engine/core/web/idml-viewer"
   description: "TypeScript viewer wrapper published as @paged-media/idml-viewer."
 
-# It wraps core's paged-sdk wasm (core:wasm builds dist/sdk/, which the
-# release copies into wasm/). Its tests use a fake session and need no wasm.
+# It ships core's paged-sdk wasm as its ./session entry: core:wasm-pkg
+# builds it into wasm/ (PM-0008). Its tests use a fake session and need no wasm.
 dependsOn:
   - id: "core"
     scope: "build"

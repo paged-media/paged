@@ -131,7 +131,7 @@ jobs:
       # Red results must still publish (the matrix wants the ✗), so the run
       # does not abort the job here — the gate at the end fails the build after
       # the artifact is safely uploaded. Only plugin-sdk emits JUnit; plugin-api
-      # is type-only and plugin-cli has no suite, so a run over every package
+      # is type-only and the paged-plugin bin's specs live in plugin-sdk, so a run over every package
       # would produce nothing for them.
       # bun's report, rewritten into the vitest shape the evidence has
       # always had (tooling/js/bun-junit.mjs), so the artifact keeps its

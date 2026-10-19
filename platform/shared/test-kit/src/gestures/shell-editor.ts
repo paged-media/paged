@@ -33,7 +33,7 @@ import {
   createFakeEditor,
   type FakeEditor,
   type FakeEditorOptions,
-} from "@paged-media/plugin-sdk";
+} from "@paged-media/plugin-sdk/gesture-kit";
 import type {
   ElementId,
   GestureType,

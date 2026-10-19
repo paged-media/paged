@@ -98,31 +98,19 @@ bun install             # at the repository root; workspace deps resolve via sym
 
 ### wasm prerequisite (read this before `bun run dev`)
 
-A fresh clone has the tracked `.d.ts` but **not** the gitignored
-`.wasm`/`.js` — so the editor **cannot build or run until the engine
-wasm is present** in `packages/client/src/wasm/`. Two paths:
-
-**Today (local dev, before npm publish):** build the wasm from a
-`paged-media/core` checkout. From this repo's root (with `core`'s
-Rust workspace reachable):
+The editor consumes the engine through the workspace: `@paged-media/canvas-wasm`
+(`engine/core/packages/canvas-wasm`, with its `./repo` and `./introspect` entries) is a
+`workspace:*` dependency, and its generated files (the glue, the `.d.ts`, the wasm) are
+gitignored. A fresh clone **cannot build or run until the engine wasm is built**:
 
 ```bash
 rustup target add wasm32-unknown-unknown
-cargo install wasm-bindgen-cli --version <pinned>   # matches core's Cargo.lock; build script prints it
-# optional: brew install binaryen   (wasm-opt size pass)
-
-bun run --filter paged-canvas wasm     # runs apps/canvas/build-wasm.sh → packages/client/src/wasm/
+bash tooling/bootstrap.sh              # wasm-bindgen-cli at the Cargo.lock version, binaryen
+moon run core:wasm-pkg                 # or: bash engine/core/scripts/build-wasm-packages.sh --workspace
 ```
 
-This produces `paged_canvas_wasm.{js,d.ts}` + `paged_canvas_wasm_bg.wasm`.
-(`apps/devtools` has its own `build-wasm.sh` for `paged-introspect-wasm`.)
-
-**After core publishes (target end state, decision B):** once
-`paged-media/core` publishes `@paged-media/canvas-wasm` (and
-`@paged-media/introspect-wasm`) to npm, `packages/client` is pointed
-at the published package and the build-from-core step disappears —
-`bun install` alone is sufficient. **This is not yet wired**; until
-then, local dev requires the core-checkout wasm build above.
+This writes `paged_canvas_wasm.{js,d.ts}` + `paged_canvas_wasm_bg.wasm` and the `introspect/`
+and `repo/` entries into `engine/core/packages/canvas-wasm/` (engine/core ADR 185, PM-0008).
 
 ### Run
 
