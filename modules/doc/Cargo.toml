@@ -55,6 +55,12 @@ docx-js = { path = "docx-js" }
 # Optional test resources (docs/development/testing.md): dev-dependency only.
 paged-test-resources = { path = "../../platform/shared/test-resources" }
 docx-skeleton = { path = "docx-skeleton" }
+# The engine's model crates, path-depended from the engine workspace at the
+# same commit (ADR 606): the standalone-open skeleton is built as a
+# native `paged_scene::Document` and packaged by core's one `.paged` writer.
+paged-model = { path = "../../engine/core/crates/paged-model" }
+paged-scene = { path = "../../engine/core/crates/paged-scene" }
+paged-store = { path = "../../engine/core/crates/paged-store" }
 
 
 [workspace.lints.clippy]
@@ -75,4 +81,16 @@ codegen-units = 1
 inherits = "release"
 
 [profile.wasm-release.package.ooxmlsdk]
+opt-level = "z"
+
+# The native skeleton's model serializer (ADR 606): size-first codegen for
+# the engine's model crates, which the skeleton only builds and writes once
+# per open.
+[profile.wasm-release.package.paged-model]
+opt-level = "z"
+
+[profile.wasm-release.package.paged-scene]
+opt-level = "z"
+
+[profile.wasm-release.package.paged-store]
 opt-level = "z"

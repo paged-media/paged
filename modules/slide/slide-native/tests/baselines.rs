@@ -52,7 +52,7 @@ fn percentage_spacing_places_the_first_baseline_like_powerpoint() {
         let ItemKind::Shape { text: Some(tf), .. } = &it.kind else {
             panic!("{name}: no text frame");
         };
-        let Some(ours) = slide_idml::first_baseline(tf) else {
+        let Some(ours) = slide_native::first_baseline(tf) else {
             continue;
         };
         let size = tf.paragraphs[0].runs[0].size;

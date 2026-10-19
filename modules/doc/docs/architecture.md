@@ -17,7 +17,7 @@ after the table gives the dependency direction.
 | `docx-import`             | `.docx` bytes to `docx-core`. Finds the main document, styles, numbering, settings, footnote, endnote, header and footer parts through the relationship graph, parses them with `ooxmlsdk`, and records where each paragraph and run came from in the source XML.                                                                                                                                                                                                                          |
 | `docx-lower`              | A pure function from `docx-core` to `LoweredDoc` (`docx-lower/src/ir.rs`): swatches, a style catalogue ordered parents first, one story of blocks, the geometry of every section, diagnostics. `sections.rs` decides which Word sections share a native story; `line_height.rs` holds Word's line height per typeface.                                                                                                                                                                     |
 | `docx-export`             | Save-back: the provenance map (`bindings.rs`), the overlay of a read-back story onto the lowering (`overlay.rs`), the differ (`diff.rs`) and the byte patcher (`splice.rs`, `rpr.rs`).                                                                                                                                                                                                                                                                                                     |
-| `docx-skeleton`           | Writes a minimal IDML package for standalone open, with `zip` and string templates.                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `docx-skeleton`           | Builds the page skeleton for standalone open as a native document with the engine's model crates (`paged-model`, `paged-scene`) and packages it with core's `.paged` writer (`paged-store`), ADR 606.                                                                                                                                                                                                                                                                                      |
 | `docx-js`                 | The one `cdylib`. `DocSession` (`docx-js/src/core.rs`) is plain Rust and does the work; `DocEngine` (`docx-js/src/lib.rs`) is compiled only for `wasm32` and forwards to it.                                                                                                                                                                                                                                                                                                               |
 | `docx-conformance`        | Test-only: builders that assemble `.docx` packages in memory, the recorded answers of Microsoft Word (`fixtures/*.word.json`), and the integration tests.                                                                                                                                                                                                                                                                                                                                  |
 | `packages/doc-host-model` | `@paged-media/doc-host-model`, private. Pure TypeScript: `LoweredDoc` to host mutations (`src/mutations.ts`), and a hand-written TypeScript copy of the IR types (`src/lowered.ts`).                                                                                                                                                                                                                                                                                                       |
@@ -25,10 +25,12 @@ after the table gives the dependency direction.
 
 - `docx-import` depends on `paged-ooxml` and `docx-core`; `docx-lower` on `docx-core`;
   `docx-export` on `docx-core`, `docx-lower` and `paged-ooxml`; `docx-skeleton` on
-  `docx-core` and `docx-lower`; `docx-js` on all six. `paged-ooxml` and `docx-import` are
-  the only crates that name an `ooxmlsdk` type.
-- No crate depends on an engine crate or on another plugin, and `Cargo.toml` has no git
-  dependency. `deny.toml` denies unknown registries and git sources;
+  `docx-core`, `docx-lower` and the engine's `paged-model`, `paged-scene` and `paged-store`
+  (path dependencies on `engine/core/crates`, built from the same commit, ADR 606);
+  `docx-js` on all six. `paged-ooxml` and `docx-import` are the only crates that name an
+  `ooxmlsdk` type.
+- `docx-skeleton` is the only crate that depends on an engine crate; no crate depends on
+  another plugin, and `Cargo.toml` has no git dependency. `deny.toml` denies unknown registries and git sources;
   the contract-import lint rule (`/bunfig.toml`, PM-0003) rejects any import in the packages' non-test
   source files that is outside the contract packages `@paged-media/plugin-api` and
   `@paged-media/plugin-sdk`, the internal shared packages (`platform/shared/*`), this repo's
@@ -96,13 +98,15 @@ or a page.
 `openStandalone` (`src/open.ts`) when the host reports `document.openNative@1`; otherwise it
 places the document as above and logs that it did.
 
-1. `docx-skeleton` writes an IDML package with one spread, page, text frame and empty story
-   per native story, with the fixed ids `docx_sp{k}`, `docx_p{k}`, `docx_f{k}`, `docx_s{k}`.
-   The page has the size and margins of the story's first section; the frame is the margin
-   box with the story's columns, a `LeadingOffset` first baseline and zero insets. It writes
-   no master spread. `host.nativeDocument.open` makes this package the open document.
+1. `docx-skeleton` builds a native document with one spread, page, text frame and empty
+   story per native story, with the fixed ids `docx_sp{k}`, `docx_p{k}`, `docx_f{k}`,
+   `docx_s{k}`, and packages it as `.paged` (ADR 606). The page has the size and margins of
+   the story's first section; the frame is the margin box with the story's columns, a
+   `LeadingOffset` first baseline and zero insets. It builds no master spread.
+   `host.nativeDocument.open` makes this package the open document; the engine reads its
+   model part with no IDML parse.
 2. The style catalogue is applied. Each story then gets `setFlowGrowRule` with `grow: true`
-   and `copyFrameOptions: true`, because IDML cannot carry the rule. From then on the host
+   and `copyFrameOptions: true`. From then on the host
    engine adds pages while a story oversets; the plugin inserts no page.
 3. `sectionBlocks` cuts the block list at each story's first section, and each group is
    poured into its story.

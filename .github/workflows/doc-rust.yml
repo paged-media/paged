@@ -26,6 +26,11 @@ on:
       - "platform/shared/test-resources/**"
       # The shared OOXML foundation, a path dependency of the Cargo workspace.
       - "platform/shared/ooxml/**"
+      # docx-skeleton path-depends on the engine's model crates (ADR 606), and
+      # through them on more engine crates and engine/core's workspace
+      # settings, so an engine change can break it.
+      - "engine/core/Cargo.toml"
+      - "engine/core/crates/**"
       # Prose under docs/ builds and tests nothing (test inputs are not .md there).
       - "!modules/doc/docs/**/*.md"
   pull_request:
@@ -41,6 +46,11 @@ on:
       - "platform/shared/test-resources/**"
       # The shared OOXML foundation, a path dependency of the Cargo workspace.
       - "platform/shared/ooxml/**"
+      # docx-skeleton path-depends on the engine's model crates (ADR 606), and
+      # through them on more engine crates and engine/core's workspace
+      # settings, so an engine change can break it.
+      - "engine/core/Cargo.toml"
+      - "engine/core/crates/**"
       # Prose under docs/ builds and tests nothing (test inputs are not .md there).
       - "!modules/doc/docs/**/*.md"
   workflow_dispatch:

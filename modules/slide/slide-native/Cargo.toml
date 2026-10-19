@@ -1,11 +1,11 @@
 [package]
-name = "slide-idml"
+name = "slide-native"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 publish.workspace = true
-description = "paged.slide: write a resolved deck as a complete IDML package (masters, spreads, stories, swatches, styles, inline images)."
+description = "paged.slide: a resolved deck as a native document (the engine's model: masters, spreads, stories, swatches, styles, images), packaged as .paged."
 
 [lints]
 workspace = true
@@ -13,10 +13,12 @@ workspace = true
 [dependencies]
 slide-resolve.workspace = true
 slide-geom.workspace = true
-zip.workspace = true
-base64.workspace = true
+paged-model.workspace = true
+paged-scene.workspace = true
+paged-store.workspace = true
 serde_json.workspace = true
 
 [dev-dependencies]
 pptx-import.workspace = true
 paged-ooxml.workspace = true
+zip.workspace = true
