@@ -1,0 +1,73 @@
+$ paged read path-anchors doc.paged polygon:u4
+--- exit: 0
+--- stdout
+{
+  "kind": "pathAnchors",
+  "payload": {
+    "result": {
+      "anchors": [
+        {
+          "anchor": [
+            100.0,
+            600.0
+          ],
+          "left": [
+            100.0,
+            600.0
+          ],
+          "right": [
+            100.0,
+            600.0
+          ]
+        },
+        {
+          "anchor": [
+            200.0,
+            600.0
+          ],
+          "left": [
+            200.0,
+            600.0
+          ],
+          "right": [
+            200.0,
+            600.0
+          ]
+        },
+        {
+          "anchor": [
+            200.0,
+            660.0
+          ],
+          "left": [
+            200.0,
+            660.0
+          ],
+          "right": [
+            200.0,
+            660.0
+          ]
+        }
+      ],
+      "id": {
+        "id": "u4",
+        "kind": "polygon"
+      },
+      "itemTransform": null,
+      "pageId": "usp",
+      "pageOrigin": [
+        0.0,
+        0.0
+      ],
+      "spreadId": "us",
+      "subpathOpen": [
+        true
+      ],
+      "subpathStarts": [
+        0
+      ]
+    }
+  }
+}
+--- stderr
+(empty)

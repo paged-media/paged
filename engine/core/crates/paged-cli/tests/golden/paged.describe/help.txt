@@ -1,0 +1,12 @@
+$ paged describe --help
+--- exit: 0
+--- stdout
+Print the capability catalog — what this engine can be asked to do
+
+Usage: paged describe [OPTIONS]
+
+Options:
+      --compact  One JSON line instead of an indented block
+  -h, --help     Print help
+--- stderr
+(empty)

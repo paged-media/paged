@@ -1,0 +1,11 @@
+$ paged parts read w.paged
+--- exit: 2
+--- stdout
+(empty)
+--- stderr
+error: the following required arguments were not provided:
+  <PATH>
+
+Usage: paged parts read <DOC> <PATH>
+
+For more information, try '--help'.

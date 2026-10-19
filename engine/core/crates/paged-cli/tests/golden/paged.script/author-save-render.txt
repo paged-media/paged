@@ -1,0 +1,9 @@
+$ paged script doc.paged build.js -o built.paged --render p.png --dpi 36
+--- exit: 0
+--- stdout
+[log] frame textFrame:u1
+[warn] careful
+built.paged — paged, <N> bytes
+p.png — page 1 at 36 dpi, 306×396 px
+--- stderr
+(empty)

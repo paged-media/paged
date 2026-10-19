@@ -1,0 +1,52 @@
+$ paged read style-properties doc.paged paragraph 'ParagraphStyle/$ID/[No paragraph style]'
+--- exit: 0
+--- stdout
+kind: "styleProperties"
+result (without entries): {"basedOn":null,"collection":"paragraph","name":"$ID/[No paragraph style]","styleId":"ParagraphStyle/$ID/[No paragraph style]"}
+entries: <some rows>
+rows with a value: [
+  {
+    "path": "characterUnderline",
+    "value": {
+      "type": "bool",
+      "value": false
+    }
+  },
+  {
+    "path": "characterStrikethru",
+    "value": {
+      "type": "bool",
+      "value": false
+    }
+  },
+  {
+    "path": "characterLigatures",
+    "value": {
+      "type": "bool",
+      "value": true
+    }
+  },
+  {
+    "path": "paragraphHyphenation",
+    "value": {
+      "type": "bool",
+      "value": true
+    }
+  },
+  {
+    "path": "paragraphKeepLinesTogether",
+    "value": {
+      "type": "bool",
+      "value": false
+    }
+  },
+  {
+    "path": "paragraphKeepAllLinesTogether",
+    "value": {
+      "type": "bool",
+      "value": false
+    }
+  }
+]
+--- stderr
+(empty)

@@ -1,0 +1,6 @@
+$ paged export doc.paged --format idml -o out.idml
+--- exit: 0
+--- stdout
+out.idml — idml, <N> bytes
+--- stderr
+(empty)

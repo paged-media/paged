@@ -1,0 +1,12 @@
+$ paged ops --help
+--- exit: 0
+--- stdout
+List every wire operation and whether `paged invoke` sends it
+
+Usage: paged ops [OPTIONS]
+
+Options:
+      --json  Emit JSON (`[{op, invokable, reason?}]`) instead of one per line
+  -h, --help  Print help
+--- stderr
+(empty)

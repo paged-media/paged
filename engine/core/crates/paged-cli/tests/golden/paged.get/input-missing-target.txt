@@ -1,0 +1,6 @@
+$ paged get doc.paged oval:u99 frameFillColor
+--- exit: 1
+--- stdout
+(empty)
+--- stderr
+Error: oval:u99.frameFillColor: frame.frameFillColor: the target does not exist (notFound)

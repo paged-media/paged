@@ -1,0 +1,6 @@
+$ paged gen emit --sample nope --out g
+--- exit: 1
+--- stdout
+(empty)
+--- stderr
+Error: unknown sample "nope"; known: <paged_gen::samples::SAMPLES>

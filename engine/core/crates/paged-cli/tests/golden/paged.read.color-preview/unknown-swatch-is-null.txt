@@ -1,0 +1,11 @@
+$ paged read color-preview doc.paged Color/nope
+--- exit: 0
+--- stdout
+{
+  "kind": "colorPreviewReply",
+  "payload": {
+    "result": null
+  }
+}
+--- stderr
+(empty)

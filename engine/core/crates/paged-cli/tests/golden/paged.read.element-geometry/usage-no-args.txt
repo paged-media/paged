@@ -1,0 +1,12 @@
+$ paged read element-geometry
+--- exit: 2
+--- stdout
+(empty)
+--- stderr
+error: the following required arguments were not provided:
+  <DOC>
+  <IDS>...
+
+Usage: paged read element-geometry <DOC> <IDS>...
+
+For more information, try '--help'.

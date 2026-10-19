@@ -1,0 +1,6 @@
+$ paged parts delete w.paged paged/tool/data.json --caller other
+--- exit: 1
+--- stdout
+(empty)
+--- stderr
+Error: caller "other" may only delete in its own subtree "paged/other/", not "paged/tool/data.json"

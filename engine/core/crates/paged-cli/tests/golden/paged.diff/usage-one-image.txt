@@ -1,0 +1,11 @@
+$ paged diff doc.png
+--- exit: 2
+--- stdout
+(empty)
+--- stderr
+error: the following required arguments were not provided:
+  <CANDIDATE>
+
+Usage: paged diff <REFERENCE> <CANDIDATE>
+
+For more information, try '--help'.

@@ -1,0 +1,9 @@
+$ paged get doc.paged layer:Layer/u0 layerName
+--- exit: 0
+--- stdout
+{
+  "type": "text",
+  "value": "Art"
+}
+--- stderr
+(empty)

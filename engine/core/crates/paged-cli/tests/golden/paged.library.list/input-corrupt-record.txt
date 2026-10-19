@@ -1,0 +1,6 @@
+$ paged library list --library broken
+--- exit: 1
+--- stdout
+(empty)
+--- stderr
+Error: expected ident at line 1 column 2

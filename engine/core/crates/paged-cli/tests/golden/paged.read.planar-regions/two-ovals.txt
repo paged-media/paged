@@ -1,0 +1,11 @@
+$ paged read planar-regions doc.paged oval:u2 oval:u3
+--- exit: 0
+--- stdout
+kind: "planarRegions"
+found: true complete: true inputCount: 2
+faces:
+"0#0" signature [0] area ~6430
+"0-1#0" signature [0,1] area ~1430
+"1#0" signature [1] area ~6430
+--- stderr
+(empty)

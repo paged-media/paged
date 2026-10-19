@@ -1,0 +1,6 @@
+$ paged render two.paged --all -o not-a-dir.png
+--- exit: 1
+--- stdout
+(empty)
+--- stderr
+Error: --all writes one file per page, so -o must be a directory (not-a-dir.png is not)

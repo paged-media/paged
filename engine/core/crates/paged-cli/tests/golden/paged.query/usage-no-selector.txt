@@ -1,0 +1,11 @@
+$ paged query doc.paged
+--- exit: 2
+--- stdout
+(empty)
+--- stderr
+error: the following required arguments were not provided:
+  <SELECTOR>
+
+Usage: paged query <DOC> <SELECTOR>
+
+For more information, try '--help'.

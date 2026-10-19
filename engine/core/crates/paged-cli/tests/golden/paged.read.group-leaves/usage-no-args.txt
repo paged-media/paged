@@ -1,0 +1,12 @@
+$ paged read group-leaves
+--- exit: 2
+--- stdout
+(empty)
+--- stderr
+error: the following required arguments were not provided:
+  <DOC>
+  <GROUP_ID>
+
+Usage: paged read group-leaves <DOC> <GROUP_ID>
+
+For more information, try '--help'.

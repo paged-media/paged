@@ -1,0 +1,6 @@
+$ paged gen emit --sample geometry-groups --out g
+--- exit: 0
+--- stdout
+g/geometry-groups.idml — <N> bytes, 6 spread(s)
+--- stderr
+(empty)

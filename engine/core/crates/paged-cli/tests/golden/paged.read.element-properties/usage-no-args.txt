@@ -1,0 +1,12 @@
+$ paged read element-properties
+--- exit: 2
+--- stdout
+(empty)
+--- stderr
+error: the following required arguments were not provided:
+  <DOC>
+  <ID>
+
+Usage: paged read element-properties <DOC> <ID>
+
+For more information, try '--help'.

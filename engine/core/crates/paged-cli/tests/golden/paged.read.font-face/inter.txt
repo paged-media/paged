@@ -1,0 +1,16 @@
+$ paged read font-face doc.paged Inter -o inter.ttf --fonts <ENGINE>/corpus/fonts/Inter.ttf
+--- exit: 0
+--- stdout
+{
+  "kind": "fontFaceBytes",
+  "payload": {
+    "bytes": [],
+    "family": "Inter",
+    "format": "truetype",
+    "found": true,
+    "postscriptName": "Inter-Regular",
+    "style": null
+  }
+}
+--- stderr
+font face: <N> bytes → inter.ttf

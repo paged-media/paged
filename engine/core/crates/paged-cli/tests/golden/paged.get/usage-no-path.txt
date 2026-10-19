@@ -1,0 +1,11 @@
+$ paged get doc.paged oval:u2
+--- exit: 2
+--- stdout
+(empty)
+--- stderr
+error: the following required arguments were not provided:
+  <PATH>
+
+Usage: paged get <DOC> <TARGET> <PATH>
+
+For more information, try '--help'.

@@ -1,0 +1,6 @@
+$ paged library import junk.idml --library lib
+--- exit: 1
+--- stdout
+(empty)
+--- stderr
+Error: not a package: invalid Zip archive: Could not find EOCD

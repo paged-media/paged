@@ -1,0 +1,12 @@
+$ paged read gradient-detail
+--- exit: 2
+--- stdout
+(empty)
+--- stderr
+error: the following required arguments were not provided:
+  <DOC>
+  <GRADIENT_ID>
+
+Usage: paged read gradient-detail <DOC> <GRADIENT_ID>
+
+For more information, try '--help'.
