@@ -65,17 +65,6 @@ async function storyText(page: Page): Promise<string | null> {
   }, SHELL.storyId as string);
 }
 
-const focusedName = (page: Page) =>
-  page.evaluate(() => {
-    const el = document.activeElement;
-    return (
-      el?.getAttribute("data-menu-trigger") ??
-      el?.getAttribute("aria-label") ??
-      el?.textContent?.trim() ??
-      ""
-    );
-  });
-
 const surface = (page: Page) =>
   page.locator('textarea[data-canvas-surface="text"]');
 
