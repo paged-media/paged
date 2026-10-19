@@ -176,7 +176,9 @@ jobs:
       # key, no network). Not part of the contract; it rides this job for the
       # engine.
       - name: ai package suite
-        run: ( cd ../shared/ai && bun run test ) || echo "TESTS_FAILED=1" >> "$GITHUB_ENV"
+        run: |
+          ( cd ../shared/ai && bun run test --reporter=junit --reporter-outfile=junit.bun.xml ) \
+            || echo "TESTS_FAILED=1" >> "$GITHUB_ENV"
 
       # paged-node (apps/cli): its golden transcripts, every verb against
       # the engine built above (the model of `ai` is a local fake). The data
@@ -187,7 +189,10 @@ jobs:
       # list (mcp-parity), and the npm bundle of the CLI under Node
       # (npm-bundle, the `paged` bin of @paged-media/paged).
       - name: paged-node golden tests, paged mcp parity, the npm bundle
-        run: ( cd ../../apps/cli && bun run test test/cli-golden.spec.ts test/mcp-parity.spec.ts test/npm-bundle.spec.ts ) || echo "TESTS_FAILED=1" >> "$GITHUB_ENV"
+        run: |
+          ( cd ../../apps/cli && bun run test test/cli-golden.spec.ts test/mcp-parity.spec.ts test/npm-bundle.spec.ts \
+              --reporter=junit --reporter-outfile=junit.bun.xml ) \
+            || echo "TESTS_FAILED=1" >> "$GITHUB_ENV"
 
       # The shared test kit (platform/shared/test-kit): the gesture kit's
       # editor half, the engine's transform maths as properties, the gesture
@@ -195,7 +200,47 @@ jobs:
       # fixture), all against the real engine this job built. Its public
       # half is plugin-sdk's, so it rides this job.
       - name: shared test kit suite
-        run: ( cd ../shared/test-kit && bun run test ) || echo "TESTS_FAILED=1" >> "$GITHUB_ENV"
+        run: |
+          ( cd ../shared/test-kit && bun run test --reporter=junit --reporter-outfile=junit.bun.xml ) \
+            || echo "TESTS_FAILED=1" >> "$GITHUB_ENV"
+
+      # The three suites above as evidence, one artifact each (ai-junit,
+      # cli-junit, test-kit-junit), in the vitest shape the plugin-sdk
+      # report has (tooling/js/bun-junit.mjs). A suite that wrote no report
+      # fails the job.
+      - name: ai, cli and test-kit JUnit
+        if: ${{ !cancelled() }}
+        working-directory: .
+        run: |
+          set -uo pipefail
+          for dir in platform/shared/ai apps/cli platform/shared/test-kit; do
+            bun tooling/js/bun-junit.mjs --out "$dir/junit.xml" "$dir/junit.bun.xml" \
+              || echo "TESTS_FAILED=1" >> "$GITHUB_ENV"
+          done
+      - name: upload ai JUnit
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-junit
+          path: platform/shared/ai/junit.xml
+          if-no-files-found: error
+          retention-days: 14
+      - name: upload cli JUnit
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: cli-junit
+          path: apps/cli/junit.xml
+          if-no-files-found: error
+          retention-days: 14
+      - name: upload test-kit JUnit
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-kit-junit
+          path: platform/shared/test-kit/junit.xml
+          if-no-files-found: error
+          retention-days: 14
 
       - name: upload JUnit results artifact
         if: ${{ !cancelled() }}
