@@ -9,6 +9,15 @@ editor `1d38f05`, plugin-sdk `b78f430`, core tag `v0.35.0` (`9e78005`). Worked e
 The wire protocol number IS the package minor (`0.<protocol>.<patch>`, ADR 006). A
 release moves four npm packages in lockstep from one core tag.
 
+_Superseded 2026-10-18 by [PM-0008](../../../../docs/adr/PM-0008-npm-packages-and-release.md):
+the release is `.github/workflows/release.yml`. One root tag `v0.<protocol>.<patch>` publishes
+`@paged-media/canvas-wasm` (with `./introspect` and `./repo`), `@paged-media/idml-viewer` (with
+`./session`), `@paged-media/plugin-api` and `@paged-media/plugin-sdk` at the tag's version,
+through npm trusted publishing with provenance. Steps 5 to 7 below are gone: first-party
+consumers take the engine and the contract from the workspace. The owner's steps are in
+[the npm release runbook](../../../../docs/migration/npm-release-runbook.md). The record
+below is kept as it was._
+
 ## The seven steps
 
 _Status note (2026-10-02): the steps were checked against the workflows of this repository at

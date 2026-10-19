@@ -215,8 +215,8 @@ The manifest declares the matching capabilities: `document` (read `broad`, write
   writes `packages/web-bundle/bin/` (gitignored). It fails if the wasm exceeds the manifest's
   `maxBytes` for it.
   Without `--engine` the crate is built without the engine and has neither export.
-  The bundle has no build step of its own; `.github/workflows/web-publish.yml` stays,
-  dispatch-only, until the npm deprecation.
+  The bundle has no build step of its own; the dispatch-only `web-publish.yml` was deleted
+  with the npm deprecation (PM-0008).
 - TypeScript lane: `pnpm test` runs the import lint, then `bun test` in both packages. The
   engine tests in `web-bundle` replay a captured engine output through a stub loader and,
   when `bin/` is built, also load the real wasm in Node. With `REQUIRE_REAL_ENGINE=1`, set

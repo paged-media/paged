@@ -1,17 +1,18 @@
 name: engine wasm packages
 description: >-
-  Fills the engine's workspace packages engine/core/packages/{canvas-wasm,
-  introspect-wasm,repo-wasm,sdk} with their generated files (the
-  wasm-bindgen glue, its .d.ts, the optimised wasm and introspect-wasm's
-  catalog.json). Restores them from the cache when the engine's inputs are
+  Fills the engine's two workspace packages with their generated files (the
+  wasm-bindgen glue, its .d.ts and the optimised wasm of each part, PM-0008):
+  engine/core/packages/canvas-wasm (the canvas, plus introspect/ with
+  catalog.json and repo/) and engine/core/web/idml-viewer/wasm (the viewer
+  session). Restores them from the cache when the engine's inputs are
   unchanged, builds them otherwise, and uploads them as the
   `engine-wasm-packages` artifact.
 
-# Every JS package that depends on @paged-media/canvas-wasm, introspect-wasm,
-# repo-wasm or sdk does so through `workspace:*` (engine/core ADR 185), and a
-# fresh checkout has only the committed package.json, README and licence files
-# in those directories. A job that typechecks, tests or builds against them
-# runs this first.
+# Every JS package that depends on @paged-media/canvas-wasm (or one of its
+# ./introspect and ./repo entries) or on the idml-viewer's ./session does so
+# through `workspace:*` (engine/core ADR 185), and a fresh checkout has only
+# the committed package.json, README and licence files in those directories.
+# A job that typechecks, tests or builds against them runs this first.
 #
 # Prerequisites: the repository checked out at the workspace root, and Bun on
 # PATH (moonrepo/setup-toolchain; build-wasm-packages.sh checks the built
@@ -22,9 +23,9 @@ description: >-
 # manifests, lockfile and toolchain pin, the build script, the package
 # manifests, the repository's Cargo config, and the wasm-bindgen-cli and
 # binaryen versions tooling/bootstrap.sh pins. A hit restores the files in
-# seconds; a miss builds all four packages (the `wasm-release` profile with fat
-# LTO, then `wasm-bindgen --target web` and `wasm-opt -Oz`), as
-# core-publish-wasm.yml does for a release.
+# seconds; a miss builds all four parts (the `wasm-release` profile with fat
+# LTO, then `wasm-bindgen --target web` and `wasm-opt -Oz`). release.yml
+# builds with `cache: "false"`: a release never takes wasm from the cache.
 
 inputs:
   artifact:
@@ -32,6 +33,12 @@ inputs:
       Upload the packages as the `engine-wasm-packages` artifact. An artifact
       name is unique within a workflow run, so when several jobs of one
       workflow use this action, all but one pass "false".
+    required: false
+    default: "true"
+  cache:
+    description: >-
+      Restore the packages from the cache and save a fresh build to it.
+      "false" always builds and leaves the cache alone (release.yml).
     required: false
     default: "true"
 
@@ -60,14 +67,16 @@ runs:
 
     - name: engine wasm — restore
       id: restore
+      if: inputs.cache == 'true'
       uses: actions/cache/restore@v4
       with:
         path: |
-          engine/core/packages/*/paged_*
-          engine/core/packages/*/snippets
-          engine/core/packages/introspect-wasm/catalog.json
+          engine/core/packages/canvas-wasm/paged_*
+          engine/core/packages/canvas-wasm/introspect
+          engine/core/packages/canvas-wasm/repo
+          engine/core/web/idml-viewer/wasm
         key: >-
-          engine-wasm-v1-${{ runner.os }}-${{ runner.arch }}-wb${{ steps.pins.outputs.wasm-bindgen }}-binaryen${{ steps.pins.outputs.binaryen }}-${{
+          engine-wasm-v2-${{ runner.os }}-${{ runner.arch }}-wb${{ steps.pins.outputs.wasm-bindgen }}-binaryen${{ steps.pins.outputs.binaryen }}-${{
           hashFiles('engine/core/crates/**', 'engine/core/Cargo.toml', 'engine/core/Cargo.lock',
           'engine/core/rust-toolchain.toml', 'engine/core/scripts/build-wasm-packages.sh',
           'engine/core/packages/*/package.json', '.cargo/config.toml') }}
@@ -85,9 +94,10 @@ runs:
       uses: rui314/setup-mold@v1
 
     # One dependency cache for every job that builds the packages, so an
-    # engine change rebuilds the engine's crates, not its dependencies.
+    # engine change rebuilds the engine's crates, not its dependencies. A
+    # release (cache: "false") builds its dependencies too.
     - name: engine wasm — Rust dependency cache
-      if: steps.restore.outputs.cache-hit != 'true'
+      if: inputs.cache == 'true' && steps.restore.outputs.cache-hit != 'true'
       uses: Swatinem/rust-cache@v2
       with:
         workspaces: engine/core -> target
@@ -105,7 +115,7 @@ runs:
     # The same flags in every job: the cache entry is shared, and a
     # workflow-level RUSTFLAGS (image-ci and publish-ci set -Dwarnings)
     # would otherwise make the build depend on which job ran it.
-    - name: engine wasm — build the four packages
+    - name: engine wasm — build the four parts
       if: steps.restore.outputs.cache-hit != 'true'
       shell: bash
       working-directory: engine/core
@@ -118,33 +128,23 @@ runs:
         bash scripts/build-wasm-packages.sh --workspace
 
     - name: engine wasm — save
-      if: steps.restore.outputs.cache-hit != 'true'
+      if: inputs.cache == 'true' && steps.restore.outputs.cache-hit != 'true'
       uses: actions/cache/save@v4
       with:
         path: |
-          engine/core/packages/*/paged_*
-          engine/core/packages/*/snippets
-          engine/core/packages/introspect-wasm/catalog.json
+          engine/core/packages/canvas-wasm/paged_*
+          engine/core/packages/canvas-wasm/introspect
+          engine/core/packages/canvas-wasm/repo
+          engine/core/web/idml-viewer/wasm
         key: ${{ steps.restore.outputs.cache-primary-key }}
 
     # ---- always -------------------------------------------------------------
     # A hit restores exactly what a build writes, so the same check holds for
-    # both: every file each manifest names is present.
+    # both: every generated file each manifest ships is present.
     - name: engine wasm — every package is complete
       shell: bash
-      working-directory: engine/core/packages
-      run: |
-        set -euo pipefail
-        for PKG in canvas-wasm introspect-wasm repo-wasm sdk; do
-          bun -e '
-            const fs = require("fs");
-            const dir = process.argv[1];
-            const pkg = JSON.parse(fs.readFileSync(dir + "/package.json", "utf8"));
-            const missing = [pkg.main, pkg.types, ...pkg.files].filter((f) => !fs.existsSync(dir + "/" + f));
-            if (missing.length) { console.error("::error::" + dir + " lacks " + missing.join(", ")); process.exit(1); }
-            console.log("ok " + pkg.name + "@" + pkg.version);
-          ' "$PKG"
-        done
+      working-directory: engine/core
+      run: node scripts/check-wasm-packages-built.mjs
 
     - name: engine wasm — upload the engine-wasm-packages artifact
       if: inputs.artifact == 'true'
@@ -152,8 +152,9 @@ runs:
       with:
         name: engine-wasm-packages
         path: |
-          engine/core/packages/*/paged_*
-          engine/core/packages/*/snippets
-          engine/core/packages/introspect-wasm/catalog.json
+          engine/core/packages/canvas-wasm/paged_*
+          engine/core/packages/canvas-wasm/introspect
+          engine/core/packages/canvas-wasm/repo
+          engine/core/web/idml-viewer/wasm
         if-no-files-found: error
         retention-days: 7

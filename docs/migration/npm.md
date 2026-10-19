@@ -22,34 +22,24 @@ package owner.
 `@paged-media/repo-wasm` 0.74.0 was never published. `doc`, `slide`, `client`, `ai` and `cli`
 were never on npm, and stay private workspace packages.
 
-## For the package owner (npm account `dietz`)
+## In the repository (wave D, 2026-10-18)
 
-Run from any directory with `npm whoami` printing `dietz`. Deprecating keeps every version
-installable; it only shows the message.
+- `@paged-media/canvas-wasm` carries the canvas at its root and the `./introspect` (with
+  `./introspect/catalog.json`) and `./repo` entries; `engine/core/packages/{introspect-wasm,repo-wasm,sdk}`
+  are deleted. `@paged-media/idml-viewer` carries the session as `./session`, built into
+  `engine/core/web/idml-viewer/wasm/`.
+- `@paged-media/plugin-sdk` ships the `paged-plugin` bin; `platform/extensions/packages/plugin-cli`
+  is deleted. `plugin-api`'s relative imports name `.js`, so the contract resolves under
+  `nodenext`.
+- Every other workspace package is `private: true` with no `publishConfig`.
+- `.github/workflows/release.yml` is the only workflow that publishes; `core-publish-wasm.yml`,
+  `extensions-publish.yml`, `editor-playground.yml` (now its `deploy` job) and the eight module
+  `*-publish.yml` are deleted.
+- The four packages, packed at a test version and installed in a clean room (`tooling/release/`),
+  install, import and typecheck under Node (npm) and Bun, with `nodenext` and `bundler`.
 
-```sh
-moved="Built into the paged editor; no longer published separately. Source: https://github.com/paged-media/paged"
-for p in data draw image pdf publish sheet web \
-         data-bundle draw-bundle image-glue sheet-bundle web-bundle \
-         data-host-model draw-geometry draw-tools image-manifest sheet-host-model web-model; do
-  npm deprecate "@paged-media/$p" "$moved"
-done
-npm deprecate @paged-media/sdk "Use @paged-media/idml-viewer/session (same API). Source: https://github.com/paged-media/paged"
-npm deprecate @paged-media/introspect-wasm "Use @paged-media/canvas-wasm/introspect. Source: https://github.com/paged-media/paged"
-npm deprecate @paged-media/plugin-cli "Use the paged-plugin bin of @paged-media/plugin-sdk. Source: https://github.com/paged-media/paged"
-```
+## For the package owner
 
-After the first release from this repository:
-
-```sh
-# plugin-api and plugin-sdk still serve June's 0.2.8-canary.0 as latest.
-npm dist-tag add @paged-media/plugin-api@<released version> latest
-npm dist-tag add @paged-media/plugin-sdk@<released version> latest
-npm dist-tag rm @paged-media/plugin-api canary
-npm dist-tag rm @paged-media/plugin-sdk canary
-npm dist-tag rm @paged-media/idml-viewer canary
-```
-
-Trusted publishing: for each of the four public packages, add a trusted publisher on npmjs.com
-(package → Settings → Trusted publishing) for repository `paged-media/paged`, workflow
-`release.yml`. Once the first OIDC publish succeeds, delete the `NPM_TOKEN` secret.
+The steps, in order (trusted publishers, the first tag, the token, the dist-tags, the
+deprecations) and the changes the consumers outside this repository need are in
+[the npm release runbook](npm-release-runbook.md).

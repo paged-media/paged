@@ -1,16 +1,17 @@
 {
   "name": "@paged-media/plugin-sdk",
-  "version": "0.2.73-canary.0",
+  "version": "0.2.77-canary.0",
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./gesture-kit": "./src/gesture-kit.ts"
   },
   "scripts": {
     "typecheck": "bun check -p tsconfig.json",
     "test": "bun test --parallel --preload ../../../../tooling/js/bun-test-setup.ts",
-    "build": "rm -rf dist && bun build src/index.ts --outdir dist --format esm --target node --packages external && tsc -p tsconfig.build.json",
+    "build": "rm -rf dist && bun build src/index.ts src/gesture-kit.ts --outdir dist --format esm --target node --packages external && tsc -p tsconfig.build.json",
     "prepublishOnly": "bun run build"
   },
   "dependencies": {
@@ -33,10 +34,15 @@
     "typescript": "catalog:",
     "@types/bun": "catalog:"
   },
-  "description": "The Paged plugin runtime: loadBundle, the in-process BundleHost adapter, the gesture kit, and version negotiation.",
+  "description": "The Paged plugin runtime: loadBundle, the in-process BundleHost adapter, the gesture kit, and version negotiation; and the paged-plugin CLI (validate a manifest, stamp and host its wasm).",
   "license": "AGPL-3.0-only OR LicenseRef-PMEL",
+  "bin": {
+    "paged-plugin": "./bin/paged-plugin.mjs"
+  },
   "files": [
-    "dist"
+    "dist",
+    "bin",
+    "untyped-commands.baseline.json"
   ],
   "repository": {
     "type": "git",
@@ -52,6 +58,10 @@
       ".": {
         "types": "./dist/index.d.ts",
         "default": "./dist/index.js"
+      },
+      "./gesture-kit": {
+        "types": "./dist/gesture-kit.d.ts",
+        "default": "./dist/gesture-kit.js"
       }
     }
   }

@@ -3,7 +3,8 @@
 // sync-wire vendors the engine WIRE TYPES (.d.ts), this vendors the engine
 // CAPABILITY CATALOG (host fns + the settable property paths + id grammar +
 // constraints) — the single generated contract core publishes as
-// `catalog.json` inside @paged-media/introspect-wasm.
+// `introspect/catalog.json` inside @paged-media/canvas-wasm (the
+// `./introspect` entry, which absorbed @paged-media/introspect-wasm, PM-0008).
 //
 //   node scripts/sync-catalog.mjs              # copy from the published pkg
 //   node scripts/sync-catalog.mjs --check      # fail if the copy drifted
@@ -11,11 +12,8 @@
 //
 // SOURCE resolution (in order):
 //   1. --source <path> to a catalog.json, OR
-//   2. @paged-media/introspect-wasm resolved from the editor's node_modules
-//      (Decision B: the editor consumes introspect-wasm). NOTE: the catalog ships
-//      in introspect-wasm from the FIRST release after ADR 019 Phase 2 — until
-//      then `--check` against the published package reports the file missing;
-//      that is the cross-repo release-ordering signal, not a script bug.
+//   2. @paged-media/canvas-wasm resolved from the editor's client package
+//      (which depends on it), reading its `introspect/catalog.json`.
 // If neither resolves the script EXITS NONZERO (the vendored catalog is a
 // contract coupling; a check that can't see its source is not a passing check).
 
@@ -54,8 +52,8 @@ const CORE_CANDIDATES = [
 const CORE_CATALOG = process.env.CORE_REPO
   ? resolve(process.env.CORE_REPO, "crates/paged-introspect/catalog.json")
   : CORE_CANDIDATES.find((c) => existsSync(c));
-const PKG = "@paged-media/introspect-wasm";
-const CATALOG_FILE = "catalog.json";
+const PKG = "@paged-media/canvas-wasm";
+const CATALOG_FILE = "introspect/catalog.json";
 
 /**
  * The recorded provenance of the vendored copy.
@@ -125,7 +123,7 @@ export function resolveSource(opts = {}) {
   if (!existsSync(path)) {
     throw new Error(
       `sync-catalog: ${PKG}@${pkg.version} resolved but ${CATALOG_FILE} is missing — ` +
-        `the catalog ships from the first release after ADR 019 Phase 2. Bump ${PKG}.`,
+        `build the package's introspect entry (engine/core/scripts/build-wasm-packages.sh --workspace introspect).`,
     );
   }
   return { path, version: pkg.version ?? "unknown" };

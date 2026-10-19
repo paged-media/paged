@@ -12,7 +12,7 @@ project:
   title: "modules/slide"
   description: "PowerPoint/PPTX module: import, export, charts."
 
-# validate:manifest runs the in-tree plugin-cli. vendor/paged-ooxml is a
+# validate:manifest runs the in-tree paged-plugin bin (plugin-sdk). vendor/paged-ooxml is a
 # stamped copy of modules/doc's crate, checked against its own stamp
 # (scripts/sync-ooxml.sh --check), so it is not a build edge to doc.
 dependsOn:

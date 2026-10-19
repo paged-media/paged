@@ -19,6 +19,74 @@ This file is the id source for the gesture suites under `apps/canvas/tests/e2e/`
 
 ---
 
+## How gestures are tested (October 2026)
+
+This section describes the suites that exist; the numbered sections below are the original plan, whose ids the suites cite. The kit is documented in [`platform/shared/test-kit/README.md`](../../../../platform/shared/test-kit/README.md).
+
+### The four layers
+
+| Layer             | What it drives                                                                                                                                                      | Where                                                                                                                                                                          | Judged by                                                                                                                                                                                                                                                       |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1. Unit           | A tool's `GestureHandler`, through the gesture DSL's unit backend, against a recording fake editor (no engine, no browser)                                          | `packages/tools/test` (every built-in tool and the snapper), `modules/draw/.../test/gestures.spec.ts`, `modules/image/glue/test/gestures.spec.ts`                              | The fake's log: previews, the exact mutation, the gesture channel, selection; fast-check properties for the shared maths                                                                                                                                        |
+| 2. Engine channel | The worker gesture channel (begin / update / commit / cancel) of the real engine wasm, headless and in the browser (also over the SAB lane)                         | `platform/shared/test-kit/test/engine-gestures.test.ts`, `gesture-fuzz.test.ts`; `apps/canvas/tests/e2e/gesture-dsl.spec.ts`, `gesture-fuzz.spec.ts`                           | Model dumps (scene tree, every element's properties, meta, collections); transform maths as properties (rotations summing to 360° are the identity, rotate θ then −θ, the edge opposite the dragged handle stays, Shift keeps the aspect, Alt keeps the centre) |
+| 3. Browser        | Real pointer events in document points through the live camera, at 25 / 100 / 400 %; pen and touch through CDP; pinch as ctrl + wheel                               | `apps/canvas/tests/e2e/gesture-dsl.spec.ts`, `ux-audit-gestures.spec.ts`                                                                                                       | The model first, the editor's own state second, pixels never in these suites                                                                                                                                                                                    |
+| 4. Matrix         | Every registered tool × modifier set (none, Shift, Alt, Shift+Alt, Cmd) × zoom (25 / 100 / 400 %) × target type (empty, frame, group, rotated, locked, master item) | `apps/canvas/tests/e2e/gesture-matrix.json` (the table), `gesture-matrix.spec.ts` (runs the specified cells), `packages/tools/test/gesture-matrix.test.ts` (the registry gate) | An expected outcome per cell (`creates`, `moves`, `duplicates`, `rotates`, `scales`, `unchanged`); cells not yet specified are counted                                                                                                                          |
+
+### The DSL
+
+One API, two backends (unit, browser), in document points:
+
+```ts
+await g
+  .tool("rectangle")
+  .drag({ from: [72, 72], to: [216, 144], mods: ["shift"] })
+  .settle();
+await g
+  .click([100, 100])
+  .dblclick({ page: 1, at: [40, 40] })
+  .key("Escape")
+  .wheel({ ctrl: true, deltaY: -120 });
+```
+
+Every run is also a pointer tape (Appendix A's format, v1: document points, timestamps, coalesced sub-samples) that replays through either backend in order, never by wall time (R4). A committed tape is replayed in the browser (`tests/e2e/tapes/`).
+
+The browser backend waits for the editor to go quiet (no request in flight for three frames, then a worker round trip) and never on a timer. The worker posts no rendered-generation notification, so a pixel assertion still polls the render (the op sandwich does); the gesture suites assert the model and need none.
+
+### The invariants
+
+Checked by shared helpers at every layer: INV-1 one gesture is exactly one commit and one undo step (a failed commit commits nothing); INV-2 Escape mid-gesture commits nothing and a begun worker gesture is cancelled; INV-4 one undo restores the model dump exactly and one redo re-applies it; INV-5 the constraint is a function of the current modifiers. The fuzzer adds: no panic, no error notification, finite bounds, and the IDML save → load round trip.
+
+### Findings as expected failures
+
+A finding becomes a test that fails today, titled with its id, as an expected failure (`test.failing` in bun, `test.fail` in Playwright, a `known` marker on a matrix cell). The fix flips it, and the marker comes off in the same change.
+
+| Id                                            | Finding                                                                                                                               | Test                                                                                                                                                                                                      |
+| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| F-26, F-27, F-29 (×3), F-30, F-31, F-32, F-33 | The UX audit's canvas gestures ([ux-audit-2026-10.md](../design/ux-audit-2026-10.md))                                                 | `ux-audit-gestures.spec.ts`; F-26 also on 45 matrix cells. F-35 does not reproduce (the audit read the legacy `activeTool` key, which says `select` for every tool but Type); its test is a passing guard |
+| GF-1                                          | A group resized by a handle fails at commit (`FrameBounds is not supported on Group`)                                                 | `engine-gestures.test.ts`; the fuzzer counts its instances                                                                                                                                                |
+| GF-2                                          | Alt-dragging a group (duplicate) fails at commit (`node not found`)                                                                   | idem                                                                                                                                                                                                      |
+| GF-3                                          | Alt pressed again during the drag of a grouped item or a path fails at commit (duplicate `self_id`)                                   | idem                                                                                                                                                                                                      |
+| GF-4                                          | The IDML writer prints 4 decimals, so a turned item drifts by up to ~1e-4 × its coordinates per save → load                           | idem                                                                                                                                                                                                      |
+| GM-1                                          | A group rotated or scaled by the worker gesture turns about the mean of its members and a phantom point at the origin, not its centre | `engine-gestures.test.ts`; 12 matrix cells                                                                                                                                                                |
+| GM-2                                          | Rotate / Scale / Shear read the selection the tool was picked with                                                                    | `ux-audit-gestures.spec.ts`                                                                                                                                                                               |
+| GT-1                                          | The shape and type tools decide click-vs-drag in document pt (INV-6): at 25 % a 3 px click jitter draws a 12 pt frame                 | `packages/tools/test/shape-tools.test.ts`                                                                                                                                                                 |
+| GT-2                                          | A click with the Pencil commits a path of two coincident anchors                                                                      | `pen-pencil-type-tools.test.ts`                                                                                                                                                                           |
+| GT-3                                          | A Type-tool drag released over the pasteboard pulls out nothing (it reads the release point off the page under it)                    | idem; 6 matrix cells at 25 %                                                                                                                                                                              |
+| GT-4                                          | A Rotate / Scale / Shear drag that starts on the pasteboard does nothing                                                              | `transform-and-page-tools.test.ts`; 8 matrix cells at 25 %                                                                                                                                                |
+
+### Running them
+
+```bash
+bun run --filter @paged-media/test-kit test      # kit, engine properties, fuzzer (PAGED_GESTURE_FUZZ_N=200 for the local gate)
+cd apps/editor && bun run test:tools             # every built-in tool + the matrix registry gate
+cd apps/editor/apps/canvas && node node_modules/@playwright/test/cli.js test --project=chromium \
+  tests/e2e/gesture-dsl.spec.ts tests/e2e/gesture-fuzz.spec.ts tests/e2e/gesture-matrix.spec.ts tests/e2e/ux-audit-gestures.spec.ts
+```
+
+`PAGED_GESTURE_MATRIX_ZOOMS=1` limits the matrix to one zoom; `PAGED_GESTURE_MATRIX_VERBOSE=1` prints every cell; `PAGED_UX_AUDIT_SHOW=1` runs the expected failures as plain tests, to read why each fails today.
+
+---
+
 ## 1. Objectives & Scope
 
 ### 1.1 Objectives

@@ -33,12 +33,12 @@
 // (DESIGN.md §2.7/§11); the host option `capabilityMode: 'warn'` is the
 // migration escape hatch. See thoughts/docs/paged/plugin-trust-line.md.
 
-import type { AssetKind } from "./assets";
+import type { AssetKind } from "./assets.js";
 
 /** Reverse-DNS plugin identity, e.g. `media.paged.draw`. Doubles as
  *  the namespace prefix for every contribution id the bundle
  *  registers (`media.paged.draw.tool.pen`). */
-import type { PropertySchema, ValueType } from "./object-model";
+import type { PropertySchema, ValueType } from "./object-model.js";
 
 export type PluginId = string;
 
