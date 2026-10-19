@@ -22,3 +22,4 @@ serde_json.workspace = true
 pptx-import.workspace = true
 paged-ooxml.workspace = true
 zip.workspace = true
+flate2.workspace = true
