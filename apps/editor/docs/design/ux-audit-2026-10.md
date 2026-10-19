@@ -347,6 +347,11 @@ File ▸ Export PDF… opens with Conformance set to PDF/X-4 and a red message: 
 
 **Screenshots:** `F-11-pdf-export-default-blocked.png`
 
+**Fixed (2026-10-19, `ef8c262bd`).** As recommended (ADR 238): the print PDF is the strictest
+standard the document can meet. Export PDF… opens on PDF/X-4 when the working space has an
+output intent and on PDF 1.7 otherwise, so the default exports; X-4 stays a choice with its
+explanation. The Export Center's PDF row reads "Ready · PDF 1.7" or "Ready · X-4".
+
 <a id="f-12"></a>
 
 #### F-12 · Export PDF dialog: native OS controls and no page range
@@ -761,6 +766,9 @@ A 19-page document opens at 3.8% with every page a thin strip, and the page indi
 **Recommendation:** After load, fit page 1, which is what Home already does.
 
 **Screenshots:** `F-32-open-fit-document.png`
+
+**Fixed (2026-10-19, `ef8c262bd`).** As recommended (ADR 237): a document opens with page 1
+fitted, the view Home gives, and the indicator on 1. Fit whole document stays on Cmd+0.
 
 <a id="f-33"></a>
 
