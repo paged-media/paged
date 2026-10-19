@@ -34,7 +34,7 @@
 
 use image_kernels::KernelDef;
 
-use crate::resident::{GpuBatch, TexFormat};
+use crate::resident::{check_texels, GpuBatch, TexFormat};
 use crate::{GpuContext, GpuError};
 
 /// One stage of a chain: a kernel and its param block.
@@ -79,6 +79,21 @@ fn validate(stages: &[ChainStage<'_>], tiles: &[ChainTile<'_>]) -> Result<(), Gp
                 t.inputs.len()
             ),
         });
+    }
+    for t in tiles {
+        for (i, b) in t.inputs.iter().enumerate() {
+            check_texels(
+                first.def.id,
+                &format!("input {i}"),
+                b,
+                t.w,
+                t.h,
+                TexFormat::Rgba16Float,
+            )?;
+        }
+        if let Some(m) = t.mask {
+            check_texels(first.def.id, "mask", m, t.w, t.h, TexFormat::R16Float)?;
+        }
     }
     Ok(())
 }
