@@ -15,7 +15,7 @@
     "test": "bun test --parallel --preload ../../../../tooling/js/bun-test-setup.ts"
   },
   "dependencies": {
-    "jszip": "^3.10.1"
+    "jszip": "^3.10.2"
   },
   "peerDependencies": {
     "@paged-media/plugin-api": "workspace:*",
