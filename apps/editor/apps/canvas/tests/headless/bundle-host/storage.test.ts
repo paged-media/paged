@@ -49,7 +49,9 @@ describe.each([
   beforeAll(async () => {
     t = await make();
   });
-  afterAll(() => t.dispose());
+  afterAll(async () => {
+    await t.dispose();
+  });
 
   test("set/get round-trips a JSON value; a missing key reads undefined", () => {
     const s = t.host.storage;
@@ -104,7 +106,9 @@ describe.each([
   beforeAll(async () => {
     t = await make();
   });
-  afterAll(() => t.dispose());
+  afterAll(async () => {
+    await t.dispose();
+  });
 
   test("supports storage.blob@1", () => {
     expect(t.host.supports("storage.blob@1")).toBe(true);
@@ -173,7 +177,9 @@ describe("host.blob, no store wired — bare", () => {
   beforeAll(async () => {
     t = await bareAdapter();
   });
-  afterAll(() => t.dispose());
+  afterAll(async () => {
+    await t.dispose();
+  });
 
   test("read null, keys [], usage {0, 0}, write rejects, supports false", async () => {
     const b = t.host.blob;
@@ -190,7 +196,9 @@ describe("host.blob — the editor's OPFS backing", () => {
   beforeAll(async () => {
     t = await editorAdapter();
   });
-  afterAll(() => t.dispose());
+  afterAll(async () => {
+    await t.dispose();
+  });
 
   test("bytes land under plugin-blobs/<plugin id>/, the key encoded into one file name", async () => {
     await t.host.blob.write("a/b c", bytes(1, 2));
@@ -232,7 +240,9 @@ describe.each([
   beforeAll(async () => {
     t = await make();
   });
-  afterAll(() => t.dispose());
+  afterAll(async () => {
+    await t.dispose();
+  });
 
   test("supports clipboard@1", () => {
     expect(t.host.supports("clipboard@1")).toBe(true);
@@ -306,7 +316,9 @@ describe("host.clipboard — the editor's system-clipboard backing", () => {
   beforeAll(async () => {
     t = await editorAdapter();
   });
-  afterAll(() => t.dispose());
+  afterAll(async () => {
+    await t.dispose();
+  });
 
   test("a grid copy puts TSV text/plain AND an HTML table on the system clipboard", async () => {
     await t.host.clipboard.write({
@@ -354,7 +366,9 @@ describe("host.clipboard, no backend wired — bare", () => {
   beforeAll(async () => {
     t = await bareAdapter();
   });
-  afterAll(() => t.dispose());
+  afterAll(async () => {
+    await t.dispose();
+  });
 
   test("read null, write a no-op, supports false", async () => {
     expect(t.host.supports("clipboard@1")).toBe(false);
@@ -373,7 +387,9 @@ describe.each([
   beforeAll(async () => {
     t = await make();
   });
-  afterAll(() => t.dispose());
+  afterAll(async () => {
+    await t.dispose();
+  });
 
   /** Store `secret` under `ref`, accepting the editor's prompt as the
    *  user would (the headless store takes it without one). */
@@ -431,7 +447,9 @@ describe("host.secrets, no store wired — bare", () => {
   beforeAll(async () => {
     t = await bareAdapter();
   });
-  afterAll(() => t.dispose());
+  afterAll(async () => {
+    await t.dispose();
+  });
 
   test("set rejects, exists false, forget a no-op, supports false", async () => {
     expect(t.host.supports("secrets@1")).toBe(false);

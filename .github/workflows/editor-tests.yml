@@ -269,6 +269,8 @@ jobs:
       # the command layer, against the test kit's fake editor.
       - name: shell registries and stores (packages/shell)
         run: bun run test:shell
+      - name: shell stores and settings, DOM lane (packages/shell)
+        run: bun run test:shell-dom
       - name: built-in command handlers (apps/canvas unit)
         run: bun run test:canvas-unit
 
@@ -302,11 +304,8 @@ jobs:
           path: ${{ runner.temp }}/paged-measurements-wasm.json
           if-no-files-found: warn
           retention-days: 90
-      # Every panel / tool / keybinding / menu item the host registers, and
-      # every contribution the loaded plugin bundles inject, must be named
-      # by some spec or sit under a per-kind ceiling that only ever falls.
-      - name: editor surface coverage
-        run: bun run test:surface-coverage
+      # The surface-conformance gate runs in its own job (`surface`, below):
+      # it is static and needs none of the wasm this job builds.
       # The two-way manifest check (ADR 226): every bundle in the editor's
       # table, activated against the headless engine, registers what its
       # manifest declares — and, in 'warn' mode, nothing it does not. The
@@ -355,6 +354,51 @@ jobs:
       # comment to generate a summary from.
       - name: client SDK catalog is current
         run: bun run test:client-catalog
+
+  # THE SURFACE-CONFORMANCE GATE (apps/editor/docs/reference/
+  # surface-conformance.md): every command, panel, tool, menu item,
+  # keybinding, setting, CLI command and script function is asserted by a
+  # test under covers() in the layers its kind requires, or acknowledged
+  # with a reason; a ratchet both ways. Static (no wasm, no browser, no
+  # secrets), so it runs on its own and answers in a minute.
+  surface:
+    name: surface conformance (covers() ratchet)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: moonrepo/setup-toolchain@v0.6.4
+        with:
+          auto-install: true
+          proto-version: "0.63.1"
+      - name: cache Bun's package cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
+      - name: bun install (root workspace)
+        working-directory: .
+        run: bun install --frozen-lockfile
+      - name: the gate's own tests (readers, layers, evaluator)
+        run: bun test ./scripts/surface-coverage.test.mjs
+      # `--json-out` / `--md-out` write the report as a side effect and the
+      # exit code is still the gate's (no pipe).
+      - name: surface conformance
+        run: >-
+          bun scripts/surface-coverage.mjs --quiet --summary
+          --json-out "$RUNNER_TEMP/surface-conformance.json"
+          --md-out "$RUNNER_TEMP/surface-conformance.md"
+      - name: upload the surface-conformance report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: surface-conformance
+          path: |
+            ${{ runner.temp }}/surface-conformance.json
+            ${{ runner.temp }}/surface-conformance.md
+          if-no-files-found: warn
+          retention-days: 90
 
   playwright:
     name: playwright (shard ${{ matrix.shard }}/3)

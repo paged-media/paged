@@ -32,7 +32,7 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "bun:test";
 
-import { openHost } from "./conformance/host";
+import { openHost } from "./headless/host";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 

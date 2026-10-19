@@ -43,7 +43,7 @@ import { describe, expect, it } from "bun:test";
 
 import type { ElementId, Mutation } from "@paged-media/plugin-api";
 
-import { groupMutationFor, ungroupMutationFor } from "../../src";
+import { groupMutationFor, ungroupMutationFor } from "../src";
 
 const RECT = { kind: "rectangle", id: "u1" } as unknown as ElementId;
 const POLY = { kind: "polygon", id: "u2" } as unknown as ElementId;
