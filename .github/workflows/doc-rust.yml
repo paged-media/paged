@@ -24,6 +24,11 @@ on:
       - "tooling/rust/**"
       # The test-resources dev-dependency (the skip convention).
       - "platform/shared/test-resources/**"
+      # docx-skeleton path-depends on the engine's model crates (ADR 606), and
+      # through them on more engine crates and engine/core's workspace
+      # settings, so an engine change can break it.
+      - "engine/core/Cargo.toml"
+      - "engine/core/crates/**"
       # Prose under docs/ builds and tests nothing (test inputs are not .md there).
       - "!modules/doc/docs/**/*.md"
   pull_request:
@@ -37,6 +42,11 @@ on:
       - "tooling/rust/**"
       # The test-resources dev-dependency (the skip convention).
       - "platform/shared/test-resources/**"
+      # docx-skeleton path-depends on the engine's model crates (ADR 606), and
+      # through them on more engine crates and engine/core's workspace
+      # settings, so an engine change can break it.
+      - "engine/core/Cargo.toml"
+      - "engine/core/crates/**"
       # Prose under docs/ builds and tests nothing (test inputs are not .md there).
       - "!modules/doc/docs/**/*.md"
   workflow_dispatch:
