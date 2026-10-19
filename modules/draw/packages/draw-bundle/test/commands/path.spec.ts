@@ -68,7 +68,7 @@ describe("paged.draw commands, no engine — stroke dashes", () => {
   const dash = async (id: string, lengths: number[]) => {
     const r = rig([RECT]);
     await r.run(id);
-    expect(r.sent()).toEqual([
+    expect(r.leaves()).toEqual([
       {
         op: "setElementProperty",
         args: {
@@ -109,18 +109,21 @@ describe("paged.draw commands, no engine — gradient fills", () => {
   const gradient = async (id: string, type: string) => {
     const r = rig([RECT]);
     await r.run(id);
-    // Two stops, the gradient over them, then the fill pointing at it.
-    expect(r.sent().map((m) => m.op)).toEqual([
+    // Two stops, the gradient over them, then the fill pointing at it —
+    // in ONE batch, one undo step (DRW-1).
+    expect(r.steps()).toBe(1);
+    expect(r.sent().map((m) => m.op)).toEqual(["batch"]);
+    expect(r.leaves().map((m) => m.op)).toEqual([
       "createSwatch",
       "createSwatch",
       "createGradient",
       "setElementProperty",
     ]);
     const spec = (
-      r.sent()[2] as unknown as { args: { spec: Record<string, unknown> } }
+      r.leaves()[2] as unknown as { args: { spec: Record<string, unknown> } }
     ).args.spec;
     expect(JSON.stringify(spec)).toContain(type);
-    const fill = set(r.sent()[3]!);
+    const fill = set(r.leaves()[3]!);
     expect(fill.elementId).toEqual(RECT);
     expect(fill.path).toBe("frameFillColor");
     const none = rig([]);
@@ -129,12 +132,12 @@ describe("paged.draw commands, no engine — gradient fills", () => {
     expect(none.logs.some((l) => l.includes("no selection"))).toBe(true);
   };
 
-  it("Fill: Linear gradient creates the ramp and fills the selection with it (DRW-1: four writes)", async () => {
+  it("Fill: Linear gradient creates the ramp and fills the selection with it (DRW-1: one batch)", async () => {
     covers("command:media.paged.draw.command.fillGradientLinear");
     await gradient(`${C}.fillGradientLinear`, "Linear");
   });
 
-  it("Fill: Radial gradient creates the ramp and fills the selection with it (DRW-1: four writes)", async () => {
+  it("Fill: Radial gradient creates the ramp and fills the selection with it (DRW-1: one batch)", async () => {
     covers("command:media.paged.draw.command.fillGradientRadial");
     await gradient(`${C}.fillGradientRadial`, "Radial");
   });

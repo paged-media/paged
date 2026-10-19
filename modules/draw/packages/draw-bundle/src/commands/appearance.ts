@@ -64,9 +64,11 @@ import {
   appearanceBakeOf,
   rebakeAppearance,
   resolveAppearanceCarrier,
+  stampDrawMetadata,
 } from "./appearance-bake";
 
 import { registerCommand } from "../command-registry";
+import { oneBatchFor } from "./batch-handles";
 export const APPEARANCE_COMMAND_CATEGORY = "Appearance";
 
 export const APPEARANCE_ADD_FILL_COMMAND_ID =
@@ -271,8 +273,7 @@ export function bakeAppearanceMutations(
 /** Persist a stack onto an element.
  *
  *  UNBAKED target: write the metadata envelope AND bake the top layer to
- *  the frame (one batch when there's anything to bake; the metadata
- *  write is its own undoable step).
+ *  the frame, in ONE batch: one undo step (DRW-4).
  *
  *  BAKED target (a `data.appearanceBake` record on the envelope): the
  *  derived layers ARE what renders, so a metadata-only write would let
@@ -292,23 +293,55 @@ export async function commitAppearance(
   if (appearanceBakeOf(prev)) {
     return rebakeAppearance(host, id, stack, prev);
   }
-  const metaOutcome = await host.document.setMetadata(
-    id,
-    withAppearance(prev, stack),
-  );
-  const bake = bakeAppearanceMutations(id, stack);
-  if (bake.length > 0) {
-    const outcome = await host.document.mutate({
-      op: "batch",
-      args: { ops: bake },
-    });
-    if (!outcome.applied) {
-      host.log.warn(
-        `appearance bake rejected by engine: ${JSON.stringify(outcome.error)}`,
-      );
-    }
+  return commitAppearancePlans(host, [planAppearance(id, stack, prev)]);
+}
+
+/** The ops that persist `stack` on an UNBAKED element: the envelope (a
+ *  raw in-batch `setPluginMetadata`) and the top layer painted onto the
+ *  frame. */
+export function planAppearance(
+  id: ElementId,
+  stack: AppearanceStack,
+  prev: PluginMetadataEnvelope | null,
+): Mutation[] {
+  return [
+    stampDrawMetadata(id, withAppearance(prev, stack)),
+    ...bakeAppearanceMutations(id, stack),
+  ];
+}
+
+/** Send planned appearance writes as ONE batch (one undo step for the
+ *  whole selection). */
+async function commitAppearancePlans(
+  host: BundleHost,
+  plans: Mutation[][],
+): Promise<MutationOutcome> {
+  const ops = plans.flat();
+  const outcome = await host.document.mutate(oneBatchFor(ops));
+  if (!outcome.applied) {
+    host.log.warn(
+      `appearance edit rejected by engine: ${JSON.stringify(outcome.error)}`,
+    );
   }
-  return metaOutcome;
+  return outcome;
+}
+
+/** Commit one stack per selected carrier: every unbaked carrier in ONE
+ *  batch; a baked one re-bakes on its own (`rebakeAppearance`). */
+async function commitAppearances(
+  host: BundleHost,
+  edits: Array<{
+    id: ElementId;
+    stack: AppearanceStack;
+    prev: PluginMetadataEnvelope | null;
+  }>,
+): Promise<void> {
+  const plans: Mutation[][] = [];
+  for (const { id, stack, prev } of edits) {
+    if (appearanceBakeOf(prev)) await rebakeAppearance(host, id, stack, prev);
+    else plans.push(planAppearance(id, stack, prev));
+  }
+  if (plans.length > 0) await commitAppearancePlans(host, plans);
 }
 
 /** Read the element's current frame fill/stroke (the seed for a new
@@ -359,15 +392,16 @@ export async function applyAppearanceCommand(
     host.log.debug(`${commandId}: no selection — no-op`);
     return;
   }
+  const edits: Parameters<typeof commitAppearances>[1] = [];
   for (const selected of selection) {
     // A baked stack can be selected as its GROUP or as one of its
     // derived layers — both resolve to the carrier that owns the stack.
     const id = await resolveAppearanceCarrier(host, selected);
     const prev = await host.document.getMetadata(id).catch(() => null);
     if (kind === "clear") {
-      // Through `commitAppearance` so a BAKED object releases its
-      // derived layers instead of stranding them under an empty stack.
-      await commitAppearance(host, id, EMPTY, prev);
+      // Through the commit so a BAKED object releases its derived
+      // layers instead of stranding them under an empty stack.
+      edits.push({ id, stack: EMPTY, prev });
       continue;
     }
     const current = appearanceOf(prev);
@@ -389,8 +423,9 @@ export async function applyAppearanceCommand(
         weight: top?.weight ?? seed.weight,
       });
     }
-    await commitAppearance(host, id, current, prev);
+    edits.push({ id, stack: current, prev });
   }
+  await commitAppearances(host, edits);
 }
 
 /** Apply a pure stack transform to every selected element: read the
@@ -407,11 +442,13 @@ export async function applyAppearanceEdit(
     host.log.debug(`${commandId}: no selection — no-op`);
     return;
   }
+  const edits: Parameters<typeof commitAppearances>[1] = [];
   for (const selected of selection) {
     const id = await resolveAppearanceCarrier(host, selected);
     const prev = await host.document.getMetadata(id).catch(() => null);
-    await commitAppearance(host, id, edit(appearanceOf(prev)), prev);
+    edits.push({ id, stack: edit(appearanceOf(prev)), prev });
   }
+  await commitAppearances(host, edits);
 }
 
 const layerKind = (v: unknown): AppearanceLayerKind =>

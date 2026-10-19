@@ -70,6 +70,11 @@ const HOST_MENU = [
   "File/Save As IDML…",
   "Edit/Undo",
   "Edit/Redo",
+  "Edit/Cut",
+  "Edit/Copy",
+  "Edit/Paste",
+  "Edit/Paste in place",
+  "Edit/Duplicate",
   "View/Zoom in",
   "View/Zoom out",
   "View/Zoom to 100%",
@@ -92,6 +97,10 @@ const HOST_MENU = [
   "Object/Delete",
   "Object/Make clipping mask",
   "Object/Release clipping mask",
+  "Object/Lock",
+  "Object/Unlock all on spread",
+  "Object/Hide",
+  "Object/Show all on spread",
   "Help/Keyboard shortcuts",
   "Object/Insert text frame",
   "Object/Insert rectangle",
@@ -702,6 +711,8 @@ test.describe("the host menu bar", () => {
       "Object/Delete",
       "Object/Make clipping mask",
       "Object/Release clipping mask",
+      "Object/Lock",
+      "Object/Hide",
     ])
       expect({ p, on: on.get(p) }).toEqual({ p, on: false });
   });

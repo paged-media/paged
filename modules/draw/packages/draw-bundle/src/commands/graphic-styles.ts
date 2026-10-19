@@ -148,6 +148,7 @@ import {
 } from "../link-index";
 
 import { registerCommand } from "../command-registry";
+import { oneBatchFor } from "./batch-handles";
 import {
   readRecipeBytes,
   writeRecipeBytes,
@@ -872,17 +873,49 @@ export async function linkGraphicStyle(
   style: GraphicStyle,
   label: string,
 ): Promise<boolean> {
+  const batch = await planGraphicStyleLink(host, id, style, label);
+  return batch ? commitStyleLinks(host, [batch], label) : false;
+}
+
+/** Commit planned link batches as ONE batch: one undo step for a whole
+ *  apply, save or redefine, however many elements it links (DRW-3). */
+async function commitStyleLinks(
+  host: BundleHost,
+  batches: Mutation[],
+  label: string,
+): Promise<boolean> {
+  if (batches.length === 0) return false;
+  const outcome = await host.document.mutate(
+    batches.length === 1 ? batches[0]! : oneBatchFor(batches),
+  );
+  if (!outcome.applied) {
+    host.log.warn(
+      `${label}: rejected by engine: ${JSON.stringify(outcome.error)}`,
+    );
+    return false;
+  }
+  return true;
+}
+
+/** The batch that links `id` to `style`, or null (logged) when the
+ *  element cannot carry it. */
+async function planGraphicStyleLink(
+  host: BundleHost,
+  id: ElementId,
+  style: GraphicStyle,
+  label: string,
+): Promise<Mutation | null> {
   const read = await readGraphicAppearance(host, id);
   if (graphicStyleRefusalOf(read.envelope)) {
     host.log.warn(`${label}: ${BAKED_REFUSAL} — no-op`);
-    return false;
+    return null;
   }
   if (read.supported.length === 0) {
     host.log.warn(
       `${label}: the target exposes no property vocabulary (a group cannot ` +
         "carry an appearance or plugin metadata) — no-op",
     );
-    return false;
+    return null;
   }
   const dropped = GRAPHIC_STYLE_BASE_PATHS.filter(
     (p) => !read.supported.includes(p),
@@ -895,21 +928,27 @@ export async function linkGraphicStyle(
         "written)",
     );
   }
-  const outcome = await host.document.mutate(
-    applyGraphicStyleBatchFor({
-      elementId: id,
-      style,
-      supported: read.supported,
-      prev: read.envelope,
-    }),
-  );
-  if (!outcome.applied) {
-    host.log.warn(
-      `${label}: rejected by engine: ${JSON.stringify(outcome.error)}`,
-    );
-    return false;
+  return applyGraphicStyleBatchFor({
+    elementId: id,
+    style,
+    supported: read.supported,
+    prev: read.envelope,
+  });
+}
+
+/** Link every element of `ids` to `style` in one batch. */
+async function linkAll(
+  host: BundleHost,
+  ids: readonly ElementId[],
+  style: GraphicStyle,
+  label: string,
+): Promise<void> {
+  const batches: Mutation[] = [];
+  for (const id of ids) {
+    const batch = await planGraphicStyleLink(host, id, style, label);
+    if (batch) batches.push(batch);
   }
-  return true;
+  await commitStyleLinks(host, batches, label);
 }
 
 const selectionCarriers = async (
@@ -968,13 +1007,11 @@ export async function applySaveGraphicStyle(
   ) {
     return null;
   }
-  for (const carrier of carriers) {
-    await linkGraphicStyle(host, carrier, style, label);
-  }
+  await linkAll(host, carriers, style, label);
   return style;
 }
 
-/** APPLY — link every selected element to `styleId`. One undo step each. */
+/** APPLY — link every selected element to `styleId`, in one undo step. */
 export async function applyGraphicStyleToSelection(
   host: BundleHost,
   styleId: unknown,
@@ -989,9 +1026,7 @@ export async function applyGraphicStyleToSelection(
     host.log.warn(`${label}: no style "${styleId}" in the library — no-op`);
     return;
   }
-  for (const carrier of await selectionCarriers(host, label)) {
-    await linkGraphicStyle(host, carrier, style, label);
-  }
+  await linkAll(host, await selectionCarriers(host, label), style, label);
 }
 
 /** REDEFINE — take the FIRST selected element's live appearance as the
@@ -1039,9 +1074,12 @@ export async function applyRedefineGraphicStyle(
         "redefine overwrites (break the link to keep a deviation)",
     );
   }
-  for (const link of links) {
-    await linkGraphicStyle(host, link.id, style, label);
-  }
+  await linkAll(
+    host,
+    links.map((l) => l.id),
+    style,
+    label,
+  );
   return style;
 }
 
