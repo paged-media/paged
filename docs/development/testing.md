@@ -182,12 +182,17 @@ writes the job summary and fails the lane when fewer than `--min-executed`
 ## Not yet converted
 
 - **TypeScript tests** keep their own switches (`REQUIRE_REAL_ENGINE`,
-  `REQUIRE_REAL_DUCKDB`, `REQUIRE_REAL_WASM`, …) until the bun test migration
-  (B7) lands. Nine TS tests still pass without running when a resource is
-  missing (the T0 scan): `apps/editor/apps/canvas/tests/default-italic-face.spec.ts`
-  (1, a font), `modules/image/glue/test/retouch-tools.spec.ts` (4, the real
-  wasm), `modules/image/glue/test/type.spec.ts` (2, a font) and
-  `platform/extensions/packages/plugin-sdk/test/react-free-import.spec.ts`
-  (2, build output).
+  `REQUIRE_REAL_DUCKDB`, `REQUIRE_REAL_WASM`, …) rather than the Rust helper. The nine
+  that passed without running when a resource was missing (the T0 scan) no longer do:
+  `platform/extensions/packages/plugin-sdk/test/react-free-import.spec.ts` (2) builds the
+  bundle it asserts on (the bundling step of the package's own `build` script, into a
+  temporary directory); `modules/image/glue/test/type.spec.ts` (2) reads a committed font
+  (`test/fixtures/fonts/Roboto-Regular.ttf`, Apache-2.0, its licence beside it);
+  `modules/image/glue/test/retouch-tools.spec.ts` (4) skips with an `unavailable: build
+output` reason when the image-js wasm is not built and runs under `REQUIRE_REAL_WASM=1`,
+  which image-ci sets after building it; `apps/editor/apps/canvas/tests/default-italic-face.spec.ts`
+  (1) was not a skip (its early return was inside `page.evaluate` and asserted), and now
+  throws there instead. A plugin test that needs a module's wasm follows the same rule
+  ([`platform/extensions/docs/testing-plugins.md`](../../platform/extensions/docs/testing-plugins.md)).
 - **Corpus lanes in CI:** the corpus is private, so no CI lane runs them.
   Run them locally (above).

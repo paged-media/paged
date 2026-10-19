@@ -23,6 +23,7 @@
 // one `document.undo()` takes both back.
 
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { covers } from "@paged-media/test-kit";
 
 import type { BundleHost } from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
@@ -35,7 +36,7 @@ import {
   openDoc,
   requireDocx,
   storyTexts,
-} from "./harness";
+} from "../conformance/harness";
 
 requireDocx("doc conformance — object model");
 
@@ -179,6 +180,7 @@ describe.skipIf(!docxPresent)(
     });
 
     it("fillMergeFields (typed) fills by name in one step and names what it did not know", async () => {
+      covers("command:media.paged.doc.command.fillMergeFields");
       const out = await h.objects.invoke(
         "media.paged.doc.command.fillMergeFields",
         {
@@ -297,6 +299,7 @@ describe.skipIf(!docxPresent)(
     );
 
     it("placeDoc (typed) places a second letter embedded, and its fields are objects", async () => {
+      covers("command:media.paged.doc.command.placeDoc");
       const out = (await h.objects.invoke("media.paged.doc.command.placeDoc", {
         bytes: fixture("merge-letter.docx"),
         fileName: "second.docx",
@@ -320,6 +323,62 @@ describe.skipIf(!docxPresent)(
       // The first document is untouched.
       expect(await storyTexts(host, story)).toEqual([FIRST, "Order «OrderNo»"]);
     });
+
+    it("exportDocx (typed) answers the document as a Word package carrying a field written since", async () => {
+      covers("command:media.paged.doc.command.exportDocx");
+      expect(
+        await h.objects.set(
+          docAddress("mergeField", "docx_f0/b1/f0"),
+          "value",
+          "A-17",
+        ),
+      ).toMatchObject({ applied: true });
+      const out = (await h.objects.invoke(
+        "media.paged.doc.command.exportDocx",
+        { document: doc },
+      )) as { bytes: Uint8Array; fileName: string };
+      expect(out.fileName).toBe("merge-letter.docx");
+      expect(new TextDecoder().decode(out.bytes.subarray(0, 2))).toBe("PK");
+      const engine = await DocEngine.boot();
+      try {
+        engine.loadDocx(out.bytes);
+        const text = engine
+          .lowered()
+          .story.blocks.flatMap((b) =>
+            b.kind === "paragraph" ? b.runs.map((r) => r.text) : [],
+          )
+          .join("");
+        expect(text).toContain("A-17");
+      } finally {
+        engine.dispose();
+      }
+      // An export is not an edit: the document is as it was.
+      expect(await storyTexts(host, story)).toEqual([
+        "Dear «First Name», from «City» and «City», page 1",
+        "Order A-17",
+      ]);
+    });
+
+    // FINDING DOC-1: placing a Word document is not one undo step. The
+    // placement is some thirteen engine mutations (the frame, the styles,
+    // the pour, the label); one undo takes back only the last of them, so
+    // the frame and its text stay on the page, and the user needs as many
+    // undos as the bundle made mutations. Expected: one undo removes the
+    // placed document whole, as one batch would.
+    it.failing(
+      "DOC-1: placeDoc is one undo step: a single undo removes the placed document whole",
+      async () => {
+        covers("command:media.paged.doc.command.placeDoc");
+        const before = JSON.stringify(await host.document.tree());
+        await h.objects.invoke("media.paged.doc.command.placeDoc", {
+          bytes: fixture("merge-letter.docx"),
+          fileName: "second.docx",
+        });
+        expect(JSON.stringify(await host.document.tree())).not.toBe(before);
+        await host.document.undo();
+        expect(JSON.stringify(await host.document.tree())).toBe(before);
+      },
+    );
 
     it("a page item scope lists that frame's objects only (the panel's selection, ADR 323 §4)", async () => {
       const out = (await h.objects.invoke("media.paged.doc.command.placeDoc", {

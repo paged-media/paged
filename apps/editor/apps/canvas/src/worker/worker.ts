@@ -123,11 +123,25 @@ interface CanvasWorkerInstance {
   resizeGpu?(width: number, height: number): void;
   presentFrame?(scale: number, tx: number, ty: number, dpr: number): boolean;
   gpuReady?(): boolean;
+  /** Why the GPU device was lost, once it has been (see `recoverGpu`). */
+  gpuLostReason?(): string | undefined;
+  /** A new device on the same canvas after a loss; false when none is granted. */
+  recoverGpu?(): Promise<boolean>;
+  /** Test hook: destroy the device as a GPU-process crash would. */
+  simulateGpuLoss?(): boolean;
   /** Sub-phase D — Vello/GPU readback path for the fidelity suite. */
   renderPageVelloPng?(
     pageId: string,
     dpi: number,
   ): Promise<Uint8Array | undefined>;
+  /**
+   * A `requestSnapshot` drawn by Vello on the worker's WebGPU device: the
+   * same page, dpi and PNG as the `handleMessage` reply, and the scene the
+   * screen shows. Takes the whole envelope as JSON and resolves to the
+   * reply envelope's JSON, or `undefined` when there is no GPU (the
+   * worker then answers on the CPU rasterizer).
+   */
+  renderSnapshotGpu?(messageJson: string): Promise<string | undefined>;
   loadDocumentDirect(
     seq: number,
     bytes: Uint8Array,
@@ -397,7 +411,47 @@ type IncomingMessage =
   // ADR 025 — hand the worker's journal ring to the main thread. A TS-ONLY
   // side-channel: it never touches `channel.rs`, so the whole worker->main
   // journal path costs zero engine wire surface and no protocol bump.
-  | { kind: "journalDrain"; seq: number };
+  | { kind: "journalDrain"; seq: number }
+  // Which rasterizer answers `requestSnapshot` (eyedropper, PNG export,
+  // AI page images, the document loader's thumbnails). TS-only, like the
+  // journal drain: a host option, not engine wire.
+  | { kind: "setSnapshotBackend"; backend: SnapshotBackend }
+  // Test hook: destroy the GPU device as a GPU-process crash would.
+  | { kind: "simulateGpuLoss" }
+  | { kind: "snapshotBackendInfo"; seq: number };
+
+/**
+ * `auto` draws a snapshot with Vello on the worker's WebGPU device when
+ * it has one and with the CPU rasterizer otherwise; `gpu` and `cpu` force one
+ * (a forced `gpu` without a device still answers, on the CPU, and says
+ * so in `snapshotBackendInfo`). Both draw the same model; the GPU path
+ * is the one the screen shows.
+ */
+type SnapshotBackend = "auto" | "gpu" | "cpu";
+let snapshotBackend: SnapshotBackend = "auto";
+let lastSnapshotBackend: "gpu" | "cpu" | null = null;
+
+/**
+ * Answer a `requestSnapshot` on the GPU when the backend policy and the
+ * device allow it. `true` when it was answered here; `false` hands it to
+ * `handleMessage` (the CPU path).
+ */
+async function snapshotOnGpu(msg: MainToWorker): Promise<boolean> {
+  if (!worker || snapshotBackend === "cpu") return false;
+  if (!worker.renderSnapshotGpu || !(worker.gpuReady?.() ?? false))
+    return false;
+  let replyJson: string | undefined;
+  try {
+    replyJson = await worker.renderSnapshotGpu(JSON.stringify(msg));
+  } catch (err) {
+    console.warn("renderSnapshotGpu threw:", err);
+    return false;
+  }
+  if (!replyJson) return false;
+  lastSnapshotBackend = "gpu";
+  postBack(JSON.parse(replyJson) as WorkerToMain);
+  return true;
+}
 
 type DirectMessage =
   | {
@@ -707,6 +761,32 @@ async function dispatch(data: IncomingMessage): Promise<void> {
     startGestureDrain();
     return;
   }
+  if (data.kind === "setSnapshotBackend") {
+    snapshotBackend = data.backend;
+    return;
+  }
+  if (data.kind === "simulateGpuLoss") {
+    await initPromise;
+    worker?.simulateGpuLoss?.();
+    return;
+  }
+  if (data.kind === "snapshotBackendInfo") {
+    await initPromise;
+    (self as unknown as DedicatedWorkerGlobalScope).postMessage({
+      kind: "snapshotBackendInfoReply",
+      seq: data.seq,
+      requested: snapshotBackend,
+      gpuReady: worker?.gpuReady?.() ?? false,
+      last: lastSnapshotBackend,
+    });
+    return;
+  }
+  if (data.kind === "channel" && data.msg.kind === "requestSnapshot") {
+    await initPromise;
+    if (await snapshotOnGpu(data.msg)) return;
+    lastSnapshotBackend = "cpu";
+    // Fall through to `handleMessage`: the CPU rasterizer answers.
+  }
   if (data.kind === "journalDrain") {
     // Drain, never stream: the cost lands when somebody actually looks
     // (panel open, export), not on the render loop.
@@ -935,7 +1015,7 @@ async function attachRenderer(
   // leave the canvas with no 2D context for the CPU path. That is why
   // the adapter is asked for first (see `webgpuAdapterAvailable`).
   let gpuActive = false;
-  if (worker.initGpu && (await webgpuAdapterAvailable())) {
+  if (worker.initGpu && !gpuDisabled && (await webgpuAdapterAvailable())) {
     const w = Math.max(1, Math.round(cssWidth * dpr));
     const h = Math.max(1, Math.round(cssHeight * dpr));
     try {
@@ -958,6 +1038,10 @@ async function attachRenderer(
       gpuActive && worker.presentFrame
         ? (s, x, y, d) => worker!.presentFrame!(s, x, y, d)
         : undefined,
+    gpuLost:
+      gpuActive && worker.gpuLostReason
+        ? () => worker!.gpuLostReason!() !== undefined
+        : undefined,
   };
 
   renderer = new WorkerRenderer(
@@ -969,6 +1053,7 @@ async function attachRenderer(
     cssHeight,
     {
       gpuActive,
+      onPresentFailed: gpuActive ? () => void handleGpuLoss() : undefined,
     },
   );
   if (worker.pageCount() > 0) {
@@ -983,6 +1068,72 @@ async function attachRenderer(
     kind: "attachReady",
     payload: { gpuActive, sceneCacheBudget: 200 },
   });
+}
+
+/**
+ * Set once a lost GPU device could not be replaced: every later canvas
+ * draws on the CPU, with no second `initGpu`.
+ */
+let gpuDisabled = false;
+let recoveringGpu = false;
+
+function warn(kind: string, details: string) {
+  postBack({
+    seq: null,
+    protocol: PROTOCOL_VERSION,
+    kind: "warning",
+    payload: { kind, details },
+  });
+}
+
+/**
+ * A present failed in GPU mode. A skipped frame needs nothing; a LOST
+ * device (a GPU-process crash, a driver reset) never presents again, and
+ * the HUD would keep saying "GPU" over a blank canvas. So: ask the
+ * browser for a new device on the same canvas; if it grants one, the
+ * cached scenes draw again. If not, the canvas keeps its WebGPU context
+ * and cannot draw 2D, so the main thread is asked for a NEW canvas
+ * (`canvasNeeded`), which attaches on the CPU path, and the HUD says CPU.
+ * Snapshots fall to the CPU at once either way (`gpuReady` is false
+ * after a loss).
+ */
+async function handleGpuLoss(): Promise<void> {
+  if (!worker || recoveringGpu) return;
+  const reason = worker.gpuLostReason?.();
+  if (!reason) return; // a skipped frame, not a loss
+  recoveringGpu = true;
+  try {
+    warn(
+      "gpuLost",
+      `the GPU device was lost (${reason}); requesting a new one`,
+    );
+    const recovered = (await worker.recoverGpu?.().catch(() => false)) ?? false;
+    if (recovered) {
+      warn("gpuRecovered", "a new GPU device draws the canvas");
+      renderer?.markDirty();
+      postBack({
+        seq: null,
+        protocol: PROTOCOL_VERSION,
+        kind: "attachReady",
+        payload: { gpuActive: true, sceneCacheBudget: 200 },
+      });
+      return;
+    }
+    gpuDisabled = true;
+    renderer?.stop();
+    postBack({
+      seq: null,
+      protocol: PROTOCOL_VERSION,
+      kind: "attachReady",
+      payload: { gpuActive: false, sceneCacheBudget: 200 },
+    });
+    warn(
+      "canvasNeeded",
+      "no new GPU device was granted; the canvas draws on the CPU",
+    );
+  } finally {
+    recoveringGpu = false;
+  }
 }
 
 function postBack(msg: WorkerToMain) {
