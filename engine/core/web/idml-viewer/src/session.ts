@@ -89,6 +89,12 @@ export interface ViewerSessionLike {
     targetWidthPx: number,
   ): Promise<SessionRaster>;
   resize(width: number, height: number, devicePixelRatio: number): void;
+  /**
+   * After a present reported `gpu_lost` (the GPU process crashed, the
+   * driver reset): request a new device and rebind the same canvas.
+   * `true` when presents work again. Optional: older builds lack it.
+   */
+  recoverGpu?(): Promise<boolean>;
   /** wasm-bindgen finalizer. */
   free?(): void;
 }

@@ -19,7 +19,7 @@
 // The graphic default (`src/handlers/graphic-default.ts`) — which paint a
 // drawing tool gives its shape, and where in the batch it goes. Pure: a
 // stub host answers `document.meta` and the raw `requestStyleProperties`
-// read; the real-engine half is `conformance/tool-graphic-default.spec.ts`.
+// read; the real-engine half is `headless/tool-graphic-default.spec.ts`.
 
 import { describe, expect, it } from "bun:test";
 

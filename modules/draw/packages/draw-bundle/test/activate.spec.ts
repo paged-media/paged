@@ -367,7 +367,7 @@ describe("drawBundle.activate", () => {
     // THERE IS NO LAYERS PANEL, and its absence is the assertion: ADR
     // 023 phase D retired it behind the binding-provider seam
     // (`binding-provider/layers-provider.ts`, whose behaviour is pinned
-    // in `conformance/layers-provider.spec.ts`). A Layers panel
+    // in `headless/layers-provider.spec.ts`). A Layers panel
     // reappearing here would be the duplication coming back.
     // Vector stroke / Vector fill are not contributed any more: their
     // rows live in the host's Stroke, Object Options and Gradients panels.

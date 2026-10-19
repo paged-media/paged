@@ -173,3 +173,78 @@ tools. The viewer SDK has no CPU path by design and reports
    nightly does).
 6. When the CPU lane moves to `vello_cpu`, re-measure the parity budgets and
    drop `footnote-keeps`; fix G-3 before anything emits a blurred layer.
+
+## Follow-up, 2026-10-19
+
+[ADR 188](../../engine/core/docs/adr/188-snapshots-draw-on-the-worker-gpu.md)
+closes E-2, E-3, G-1 and G-3.
+
+- **E-2, E-3.** The adapter, the device and the Vello renderer are requested
+  before the surface. A lost device is noticed on the next failed present or
+  idle tick and replaced on the same canvas. When the browser grants no new
+  device, the viewport gets a new canvas that draws on the CPU, and the badge
+  says so. The viewer SDK reports `gpu_lost`, and `idml-viewer` recovers once
+  or emits `GPU_UNAVAILABLE`. Pinned by `gpu-device-loss.journey.spec.ts` and
+  two viewer tests.
+- **G-1.** The screen keeps drawing overprint as knockout, and a snapshot of a
+  page that overprints is drawn on the CPU. Natively, Vello sends every page
+  that overprints through its compute path, so the parity lane would now
+  measure it. On the corpus it measures nothing, because no generated fixture
+  overprints. The `strokes-fills` case writes `StrokeOverprint`, which is not an
+  InDesign attribute (InDesign's is `OverprintStroke`), so it imports as
+  nothing. The parity numbers are unchanged (largest difference 1 × 10⁻⁶).
+  Correcting the fixture means exporting its reference PDF from InDesign again.
+- **G-3.** Fixed. At 144 dpi the halo 3 pt outside a blurred rectangle read 242
+  where 72 dpi reads 181; the two now agree within 16 levels.
+- **Parity budgets.** `footnote-keeps` measures 0.177 on Metal and 0.193 on
+  lavapipe (three CI runs, identical). Its entry is gone, so it is held to the
+  0.2 default.
+
+### E-4, measured
+
+The 20-page magazine again, scrolled and zoomed as in the perf probe above,
+with timers around each scene build and image decode in `presentFrame`
+(Metal, the machine under load):
+
+| Frame (ms) | Page scenes built | Images decoded | Decode (ms) | of which `load_from_memory` | `present_scenes` (ms) |
+| ---------: | ----------------: | -------------: | ----------: | --------------------------: | --------------------: |
+|      1,370 |                 1 |   1 (14.1 Mpx) |       1,365 |                         412 |                     5 |
+|        769 |                 1 |   1 (14.1 Mpx) |         762 |                         326 |                     7 |
+|        753 |                 2 |   1 (14.1 Mpx) |         751 |                         328 |                     1 |
+|      1,618 |                 2 |   2 (28.1 Mpx) |       1,611 |                         670 |                     3 |
+|        786 |                 1 |   1 (14.1 Mpx) |         782 |                         331 |                     2 |
+|      2,372 |                 2 |   3 (42.2 Mpx) |       2,367 |                       1,000 |                     2 |
+
+The six stalled frames are 99.6 % image decoding (7,638 of 7,668 ms). Building the scene without
+it takes under 5 ms a page. Each image is a 300 ppi JPEG placed at 1,140 to
+1,604 effective ppi: at 100 % zoom on a 1× display the screen needs about 1/16 to 1/22 of its
+linear resolution, yet the wasm lazy path (`decode_image_for_render`) decodes
+it at full size with `image::load_from_memory` and converts it to RGBA, inside
+the frame. The native path decodes the same JPEG with `jpeg-decoder` at a DCT
+scale and converts CMYK through its ICC profile, so on wasm a CMYK JPEG also
+takes a different colour conversion.
+
+Proposal, in order of effect:
+
+1. **Decode at the size the screen needs.** Cap the decode by the image's
+   placed size times the zoom and device pixel ratio the scene is built for,
+   using the JPEG DCT scale (1/2, 1/4, 1/8) where it applies. For these images
+   that is a 16- to 64-fold cut in pixels.
+2. **Decode off the present path.** Present the page with its images still
+   pending (a flat placeholder), decode them between frames or in the
+   browser's own decoder (`createImageBitmap` with `resizeWidth`, which runs
+   off the wasm thread), and drop that page's cached scene when they land.
+3. **Decode ahead of the camera.** Warm the pages next to the visible ones
+   while the canvas is idle.
+
+The first is the smallest change. The second removes the stall rather than
+shortening it. Both need the scene cache to know an image's resolution, so
+they are not folded into ADR 188.
+
+### G-2, measured
+
+Unchanged: `transparency-targets` measures 0.740 on Metal and 0.855 on
+lavapipe against its 0.89 budget (96 % of it on CI). The cause is still that
+a Vello layer is always isolated and cannot read its backdrop (ADR 146).
+Closing it means drawing a knockout or non-isolated group some other way, for
+example rasterising that group on the CPU into an image layer.

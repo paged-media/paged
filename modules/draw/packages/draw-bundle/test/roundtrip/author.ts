@@ -72,7 +72,7 @@ import {
   writeGraphicStyleLibrary,
 } from "../../src";
 import { packageWithSpread } from "../fixtures/build-idml";
-import { openHost } from "../conformance/host";
+import { openHost } from "../headless/host";
 import { exportIdml } from "./package";
 
 export const PAGE = "usp";

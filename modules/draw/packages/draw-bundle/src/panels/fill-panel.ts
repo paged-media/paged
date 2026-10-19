@@ -19,7 +19,7 @@
 // The paged.draw FILL panel — the SECOND v1 declarative schema panel,
 // converted from the design prototype `panels/fill.panel.json` now that
 // gradient assignment is VERIFIED engine-side (B-03 resolved; the
-// wire-path proof is `test/conformance/gradient-fill.spec.ts`: a
+// wire-path proof is `test/headless/gradient-fill.spec.ts`: a
 // `setElementProperty{ frameFillColor, colorRef: "Gradient/…" }` is a
 // plain ref assignment — gradients share the swatch namespace).
 //

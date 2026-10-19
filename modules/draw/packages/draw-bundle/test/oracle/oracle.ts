@@ -25,7 +25,7 @@
 // and committed beside this lane as
 // `test/fixtures/oracle/<probe>.illustrator.json`. CI never drives
 // Illustrator; it replays the committed file against the real headless
-// engine (`conformance/host.ts`).
+// engine (`headless/host.ts`).
 //
 // WHY SHAPE AND NOT ANCHORS. Two correct offsets of the same rectangle
 // can start at different corners, run in opposite directions, and — for

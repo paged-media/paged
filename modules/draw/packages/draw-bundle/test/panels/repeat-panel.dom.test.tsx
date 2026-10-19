@@ -45,7 +45,7 @@ import {
   REPEAT_PANEL_ID,
   REPEAT_PANEL_NOTE,
 } from "../../src";
-import { openHost } from "../conformance/host";
+import { openHost } from "../headless/host";
 import {
   documentBurst,
   drive,
@@ -65,6 +65,7 @@ import {
   PLAIN_LEAVES,
   RECORDS,
 } from "./harness";
+import { covers } from "@paged-media/test-kit";
 
 const PANEL = "[data-draw-repeat-panel]";
 
@@ -150,6 +151,7 @@ describe("Repeat options panel — rendered against the engine", () => {
     });
 
     it("+ grid builds, through the engine, what the form holds", async () => {
+      covers("panel:media.paged.draw.panel.repeat");
       const panel = await mountPanel(h, makeRepeatPanel);
       await drive(() => h.host.selection.set([poly("s0")]), panel.work);
       panel.change("[data-draw-repeat-kind]", "grid");
@@ -191,6 +193,7 @@ describe("Repeat options panel — rendered against the engine", () => {
     });
 
     it("Update rebuilds the record with the options above it", async () => {
+      covers("panel:media.paged.draw.panel.repeat");
       const panel = await mountPanel(h, makeRepeatPanel);
       panel.change('[data-draw-repeat-field="columns"]', "3");
       await panel.click("[data-draw-repeat-update]");
@@ -224,6 +227,7 @@ describe("Repeat options panel — rendered against the engine", () => {
     });
 
     it("Release removes the instances and the record, and keeps the source", async () => {
+      covers("panel:media.paged.draw.panel.repeat");
       const panel = await mountPanel(h, makeRepeatPanel);
       await panel.click("[data-draw-repeat-release]");
 

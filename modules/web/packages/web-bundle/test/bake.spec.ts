@@ -27,7 +27,7 @@
 //   · the render command publishes the diagnostic + never crashes.
 
 import { describe, expect, it, vi } from "bun:test";
-import { stubGlobal, unstubAllGlobals } from "@paged-media/test-kit";
+import { covers, stubGlobal, unstubAllGlobals } from "@paged-media/test-kit";
 
 import type { BundleHost, ElementId } from "@paged-media/plugin-api";
 import {
@@ -414,6 +414,7 @@ describe("bakeWebFrame — the engine-LOADED submit path", () => {
 
 describe("renderSelectedWebFrame — the command handler", () => {
   it("publishes the render diagnostic and does not throw", async () => {
+    covers("command:media.paged.web.command.renderWebFrame");
     // The engine must not load here. Under Node it could not: the glue's
     // bare-relative fetch of its wasm failed. Bun's fetch reads file: URLs,
     // so the fetch is refused, as a realm without the sibling asset would.
@@ -436,6 +437,7 @@ describe("renderSelectedWebFrame — the command handler", () => {
   });
 
   it("no-ops with a guidance log when the selection isn't a single element", async () => {
+    covers("command:media.paged.web.command.renderWebFrame");
     const { host } = makeHost({ metadata: envelopeFor(DEFAULT_SOURCE) });
     (host as unknown as { selection: { get(): ElementId[] } }).selection.get =
       () => [];

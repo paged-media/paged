@@ -92,3 +92,11 @@ Several comments are stale. `crates/paged-gpu/src/lib.rs:29-30` and
 
 - [ADR 101](101-display-list-single-intermediate.md), [ADR 105](105-fidelity-gate.md) — the list both rasterisers consume; the gate that runs on the CPU lane
 - [ADR 018](018-stage-b-gpu-texture-defer-record-only.md), [ADR 112](112-viewer-sdk-is-a-sibling.md) — the deferred plugin GPU texture door; the viewer SDK's dependency boundary
+
+## Amendment 2026-10-19
+
+[ADR 188](188-snapshots-draw-on-the-worker-gpu.md): in the editor, page snapshots draw with
+Vello on the worker's WebGPU device when it has one, and on the CPU rasteriser otherwise or
+when the page overprints. Ink coverage stays on the CPU rasteriser. Natively, Vello draws every
+page that overprints through its compute path; it no longer hands pages with up to eight
+overprints to the CPU rasteriser.

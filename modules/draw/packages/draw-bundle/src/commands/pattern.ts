@@ -146,7 +146,7 @@
 // ways and requires the same document from each.
 //
 // THE ORDER INSIDE THE ONE BATCH is the only one the engine accepts, and
-// each rule is measured (`test/conformance/minted.spec.ts` pins the
+// each rule is measured (`test/headless/minted.spec.ts` pins the
 // sentences):
 //   · INSERTS FIRST. Up to core 0.71.7 a batch that DELETES and then
 //     INSERTS is REFUSED ("position N out of range for parent Spread"):

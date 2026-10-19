@@ -22,7 +22,7 @@ inside the test body, next to the assertions it vouches for:
 import { covers } from "@paged-media/test-kit";
 
 it("undo restores the frame", async () => {
-  covers("command:paged.undo");
+  covers("command:paged.editor.undo");
   // ... the assertions
 });
 ```
@@ -39,7 +39,7 @@ and their ids; plugin contributions use the same kinds with their own ids:
 | `keybinding` | `<key>→<command>`, the key as registered (lowercase combo): `keybinding:cmd+z→paged.editor.undo`; `->` is read as `→`                                                                                                                           |
 | `setting`    | the configuration key; a tool option is `<toolId>.<key>`: `setting:paged.tool.polygon.sides`                                                                                                                                                    |
 | `cli`        | the binary and the command path, one space apart: `cli:paged export-pdf`                                                                                                                                                                        |
-| `script`     | the function's full name: `script:paged.document.pages`, `script:editor.select`                                                                                                                                                                 |
+| `script`     | the function's full name: `script:paged.pages`, `script:editor.select`                                                                                                                                                                          |
 | `importer`   | a bundle's importer id (`contributes.importers`)                                                                                                                                                                                                |
 | `exporter`   | a bundle's exporter id (`contributes.exporters`)                                                                                                                                                                                                |
 
@@ -68,16 +68,21 @@ The rules the gate enforces on them:
 
 **The layer comes from the file's path**, never from the call:
 
-| Layer       | Files                                                                                                                                |
-| ----------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| `unit`      | every TypeScript test file not matched below                                                                                         |
-| `component` | `*.dom.test.ts(x)` (happy-dom)                                                                                                       |
-| `headless`  | a `headless/` directory or `*.headless.test.ts` (the headless editor)                                                                |
-| `e2e`       | Playwright: `apps/editor/apps/canvas/tests/**` (outside `headless/`) or an `e2e/` directory                                          |
-| `rust`      | a Rust test                                                                                                                          |
-| `golden`    | ALSO, in addition to the above: a path containing `golden` (`cli.golden.test.ts`, `tests/golden/…`, `tests/cli_golden.rs`)           |
-| `script`    | ALSO: a file name with the word `script`, `scripts` or `scripting` (`script-console.spec.ts`, `scripting.test.ts`, `script_host.rs`) |
-| `gesture`   | ALSO: a file that drives the gesture DSL (`gestures(…)`, `browserGestures(…)`, `createGestureDsl(…)`, `unitBackend(…)`)              |
+| Layer       | Files                                                                                                                                                |
+| ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `unit`      | every TypeScript test file not matched below                                                                                                         |
+| `component` | `*.dom.test.ts(x)` (happy-dom)                                                                                                                       |
+| `headless`  | a `headless/` directory or `*.headless.test.ts` (the headless editor)                                                                                |
+| `e2e`       | Playwright: `apps/editor/apps/canvas/tests/**` (outside `headless/`) or an `e2e/` directory                                                          |
+| `rust`      | a Rust test                                                                                                                                          |
+| `golden`    | ALSO, in addition to the above: a path containing `golden` (`cli.golden.test.ts`, `tests/golden/…`, `tests/cli_golden.rs`)                           |
+| `script`    | ALSO: a path segment with the word `script`, `scripts` or `scripting` (`script-console.spec.ts`, `crates/paged-script/tests/…`, `scripting.test.ts`) |
+| `gesture`   | ALSO: a file that drives the gesture DSL (`gestures(…)`, `browserGestures(…)`, `createGestureDsl(…)`, `unitBackend(…)`)                              |
+
+What each kind requires, the families (`command:paged.panel.show.*`, …),
+the acknowledged-gap files (`apps/editor/scripts/surface-acknowledged/`,
+`--prune`) and how to read the report:
+[`apps/editor/docs/reference/surface-conformance.md`](../../../apps/editor/docs/reference/surface-conformance.md).
 
 ## The gesture kit
 
@@ -113,9 +118,11 @@ The DSL is a thenable: `await g.drag(…)` runs the queue. An async function
 must not return it bare (the `await` of its caller would run it and get
 `undefined`); return it inside an object, as `gestureEditor` does.
 
-## The headless editor's engine half
+## The headless editor's engine half (`@paged-media/test-kit/headless`)
 
-`headlessEngineModule()` boots the editor's canvas-wasm once per process
+Its own entry point: it loads the plugin SDK's Node engine loader, which the
+root entry must not (Playwright specs import the root entry under Node ESM,
+which refuses the SDK's JSON import). `headlessEngineModule()` boots the editor's canvas-wasm once per process
 (through the plugin SDK's Node loader, which refuses a protocol skew) and
 hands out a fresh engine per editor. `createEngineWorker(engine)` is the
 render worker in process: a `Worker`-shaped object the real `CanvasClient`

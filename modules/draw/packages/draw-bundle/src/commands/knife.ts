@@ -86,7 +86,7 @@
 //
 // ONE UNDO STEP: every target's rewrite, every inserted piece and its
 // paint ride one batch (`knifeBatchFor`), measured in
-// `test/conformance/knife.spec.ts`.
+// `test/headless/knife.spec.ts`.
 
 import type {
   BundleHost,

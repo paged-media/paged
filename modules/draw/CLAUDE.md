@@ -356,7 +356,7 @@ so the two lanes cannot drift). THE TWO-BATCH LANE IS KEPT as the
 fallback for an engine that refuses the one batch, and
 `pattern.spec.ts` runs every bake through both — and through hosts that
 cannot say what a batch created — requiring the SAME document from each
-(`test/conformance/one-batch.ts` has the hosts and the comparison).
+(`test/headless/one-batch.ts` has the hosts and the comparison).
 
 THE APPEARANCE BAKE STAYS TWO BATCHES, and that is the floor the rules
 allow, not a conversion left undone: the carrier's bake record names its
@@ -435,7 +435,7 @@ batch it sent and answers handle → id, and refuses when the two disagree.
   transform as it came. The same holds for `framePath` on a path
   `insertPath` just made: `insertPath` adds the page origin, `framePath`
   does not. `test/page-space/` runs every writer against a fake engine in
-  both shapes; `test/conformance/page-space.spec.ts` does it through the
+  both shapes; `test/headless/page-space.spec.ts` does it through the
   real one on InDesign's page placement (`PAGED_ENGINE_FROM` for a local
   build of the other).
 

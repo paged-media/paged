@@ -65,7 +65,7 @@ import {
 } from "../../src";
 import { MENU_COMMAND_PREFIX, MENU_ENTRIES } from "../../src/menu";
 import { pathItem } from "../fixtures/build-idml";
-import { openHost } from "../conformance/host";
+import { openHost } from "../headless/host";
 import {
   drive,
   leafIds,
@@ -81,6 +81,7 @@ import {
   PLAIN_LEAVES,
   type MountedPanel,
 } from "./harness";
+import { covers } from "@paged-media/test-kit";
 
 const PANEL = "[data-draw-pathopts-panel]";
 
@@ -316,6 +317,7 @@ describe("Path options panel — rendered against the engine", () => {
       (await h.host.document.pathAnchors(id))!;
 
     it("OFFSET: the square grows by the DELTA typed, on every side", async () => {
+      covers("panel:media.paged.draw.panel.pathOptions");
       const panel = await mountPanel(h, makePathOptionsPanel);
       const before = await tableOf(SQ);
       expect(boxOf(before)).toEqual([60, 60, 160, 160]);
@@ -407,6 +409,7 @@ describe("Path options panel — rendered against the engine", () => {
     });
 
     it("SIMPLIFY: the TOLERANCE typed decides how many anchors survive", async () => {
+      covers("panel:media.paged.draw.panel.pathOptions");
       const panel = await mountPanel(h, makePathOptionsPanel);
       const before = await tableOf(WOB);
       expect(before.anchors).toHaveLength(7);
@@ -481,6 +484,7 @@ describe("Path options panel — rendered against the engine", () => {
     });
 
     it("INSERT ARC: the radii, angles and the closed flag typed are the arc inserted", async () => {
+      covers("panel:media.paged.draw.panel.pathOptions");
       const panel = await mountPanel(h, makePathOptionsPanel);
       const before = await leafIds(h);
       expect(before).toHaveLength(PRISTINE);
@@ -568,6 +572,7 @@ describe("Path options panel — rendered against the engine", () => {
     });
 
     it("SELECT SAME STROKE WEIGHT: the tolerance typed decides what is selected; nothing is mutated", async () => {
+      covers("panel:media.paged.draw.panel.pathOptions");
       // The seeds' weights: sq 1 pt (as authored), wob 1.4 pt, ln 2 pt.
       const weigh = async (id: ElementId, pt: number) => {
         const out = await h.host.document.mutate({

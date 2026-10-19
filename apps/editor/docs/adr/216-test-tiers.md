@@ -88,3 +88,26 @@ Two comments contradict the workflows. `playwright.config.ts:226-228` says the s
 - [ADR 214](214-operation-sandwich.md), [ADR 215](215-measured-capability-table.md), [ADR 024](024-context-sensitivity-is-a-core-concept.md) — the oracles of the behaviour tier; the principle the journey oracle tests
 - [ADR 206](206-package-layering-lint-zones.md), [ADR 207](207-honest-seams.md), [ADR 213](213-solo-mode.md) — three of the static guards
 - [ADR 105](https://github.com/paged-media/core/blob/main/docs/adr/105-fidelity-gate.md), [ADR 308](https://github.com/paged-media/plugin-sdk/blob/main/docs/adr/308-plugin-wasm.md) — the engine's own fidelity gate; the wasm budget checked in the `checks` job
+
+## Amendment 2026-10-19: surface conformance
+
+[ADR 227](227-surface-conformance.md) changes what the surface-coverage guard counts:
+
+- **What counts.** A test vouches for a command, panel, tool, menu item, keybinding,
+  setting, CLI command or script function by calling `covers("<kind>:<id>")` next to its
+  assertions. The guard reads those calls from every test file in the repository, not only
+  `apps/canvas/tests/`.
+- **Where it runs.** The guard moved from the `checks` job to its own static `surface` job.
+- **Tiers.** The guard reads a test's tier from its path:
+  - unit: `*.test.ts`;
+  - component: `*.dom.test.tsx` with happy-dom;
+  - headless: the headless editor;
+  - e2e: Playwright;
+  - rust: Rust tests.
+
+  The tags golden, script and gesture come from the path too.
+- **What each kind requires.** For example, a command needs a unit test plus a headless or
+  e2e test, and a menu item needs an e2e test.
+- **Mentioned.** The id appearing anywhere under `tests/` is now only a secondary column.
+
+Overview: [`docs/reference/surface-conformance.md`](../reference/surface-conformance.md).

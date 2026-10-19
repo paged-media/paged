@@ -50,8 +50,14 @@ node ../../platform/extensions/packages/plugin-cli/bin/paged-plugin.mjs validate
 
 ## Tests
 
+[`docs/testing.md`](docs/testing.md) has the layers and what each asserts, per
+contribution.
+
 - **Machines and geometry** — unit specs beside each package; no host.
-- **Conformance** (`packages/draw-bundle/test/conformance/`) — every spec
+- **Commands, tools, tool options** (`packages/draw-bundle/test/commands/`,
+  `test/tool-gestures.spec.ts`, `test/tool-options.spec.ts`) — the real bundle over a
+  fake document, no engine: what each sends, as how many undo steps, and what it refuses.
+- **Conformance** (`packages/draw-bundle/test/headless/`) — every spec
   boots the REAL engine wasm headlessly (`createHeadlessHost`) and drives
   the bundle's own handlers and commands against it, asserting the
   resulting document and that undo restores it. `test/engine-pin.spec.ts`

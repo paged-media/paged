@@ -166,16 +166,17 @@ impl PathRasterizer for VelloRasterizer {
         }
         let state = state_borrow.as_mut().unwrap();
 
-        // Count *Overprint commands. The three branches below trade
-        // accuracy for cost:
-        //   * 0: unchanged from pre-parity Vello — render and return.
-        //   * 1..=8 (with `cpu` feature): CPU fast-path finisher. The
-        //     existing CPU rasterizer handles overprint composition
-        //     pixel-perfectly; for small counts the readback +
-        //     re-rasterize overhead is the dominant cost anyway.
-        //   * 9+ or no `cpu` feature: GPU compute pipeline path. One
-        //     Vello scene per coalesced overprint batch, one splat
-        //     dispatch per batch, then one recomposite dispatch.
+        // Count *Overprint commands:
+        //   * 0: one Vello render.
+        //   * any: the GPU compute pipeline path — one Vello scene per
+        //     coalesced overprint batch, one splat dispatch per batch,
+        //     then one recomposite dispatch.
+        //
+        // Pages with up to eight overprints used to be handed to the CPU
+        // rasterizer here. That made the parity lane compare the CPU with
+        // itself on exactly the pages that test overprint, so the GPU's
+        // own overprint arithmetic was never measured. This lane draws
+        // every page itself now.
         let overprint_count = count_overprints(list);
         if overprint_count == 0 {
             let scene = build_scene(list, options);
@@ -186,11 +187,6 @@ impl PathRasterizer for VelloRasterizer {
                     vec![0; (px_w * px_h * 4) as usize]
                 }
             };
-        }
-
-        #[cfg(feature = "cpu")]
-        if overprint_count <= 8 && !crate::cmyk_compute::should_force_compute_path() {
-            return cpu_finisher_path(list, options);
         }
 
         match gpu_compute_overprint_path(state, list, options) {
@@ -215,7 +211,7 @@ impl PathRasterizer for VelloRasterizer {
 
 /// Walk the display list and tally `*Overprint` commands. Cheap (the
 /// list is in-memory and the match is one branch per command). Drives
-/// the policy decision in `rasterize` between unchanged / CPU-finisher /
+/// the policy decision in `rasterize` between the plain and the
 /// GPU-compute paths.
 /// Materialise an RGBA8 buffer from encoded image bytes at the
 /// dimensions the build phase recorded. Used by the wasm32 lazy
@@ -1668,10 +1664,15 @@ fn emit_blurred_layer(
                 continue;
             }
             parent.push_layer(Fill::NonZero, plus, w, page_to_px, &outer_clip);
-            // Translation is in page-pt because the captured sub-scene
-            // emitted its commands in page-pt space (the outer
-            // `page_to_px` transform applies at draw time).
-            parent.append(sub, Some(kurbo::Affine::translate((dx as f64, dy as f64))));
+            // The captured sub-scene's draws already carry `page_to_px`,
+            // so an appended transform acts in DEVICE space: the tap's
+            // offset, given in pt, goes through `page_to_px`'s linear part
+            // first. (Taken in pt as-is it was right only at 72 dpi, where
+            // a pt is a pixel — the editor's scenes, built at identity —
+            // and a blur rendered at 144 dpi spread half as far.)
+            let offset = page_to_px * kurbo::Point::new(dx as f64, dy as f64)
+                - page_to_px * kurbo::Point::ORIGIN;
+            parent.append(sub, Some(kurbo::Affine::translate(offset)));
             parent.pop_layer();
         }
     }
@@ -1810,27 +1811,7 @@ fn render_scene_to_buffer(
     Ok(out)
 }
 
-/// CPU-rasterizer fast-path for documents with 1..=8 overprint
-/// commands. The CPU backend is the project's fidelity-of-record and
-/// handles per-pixel plane state + spot-ink composition correctly;
-/// for low overprint counts the readback latency dwarfs the cost of
-/// re-running the whole scene through CPU rasterization. Delegating
-/// here keeps the rare cases of compute-pipeline edge bugs from
-/// affecting documents where the GPU path's encode overhead would
-/// dominate.
-///
-/// The plan calls for "walk the readback buffer through the existing
-/// CPU compose_cmyk_overprint_via_planes"; that's what the CPU
-/// rasterizer does internally, plus correct handling of paper-bypass,
-/// spot inks, image overprints, etc. We let it do the full job rather
-/// than partially reusing one helper.
-#[cfg(feature = "cpu")]
-fn cpu_finisher_path(list: &DisplayList, options: &RasterOptions) -> Vec<u8> {
-    let cpu = crate::CpuRasterizer;
-    cpu.rasterize(list, options)
-}
-
-/// GPU compute-pipeline path for overprint-heavy documents. Renders
+/// GPU compute-pipeline path for pages that overprint. Renders
 /// the full scene via Vello (with the existing knockout fallback for
 /// `*Overprint`), then for each coalesced overprint batch renders the
 /// batch's paths to a scratch buffer and dispatches `splat_or_overprint`
@@ -3297,18 +3278,73 @@ mod tests {
         );
     }
 
+    /// A blurred layer spreads by its σ in POINTS at any dpi. The tap
+    /// offsets went through no `page_to_px`, so at 144 dpi the halo was
+    /// half as wide as at 72 dpi; at the same page position the two
+    /// renders must now read the same darkness.
+    #[test]
+    fn blur_spread_is_in_points_at_any_dpi() {
+        use paged_compose::{
+            BlendMode as ComposeBlend, Color as DLColor, DisplayCommand, LayerEffect, Paint, Rect,
+            Transform,
+        };
+        let mut list = DisplayList::new();
+        let rect_id = unit_rect_path(&mut list);
+        list.commands.push(DisplayCommand::PushLayer {
+            bounds: Rect {
+                x: 20.0,
+                y: 20.0,
+                w: 40.0,
+                h: 40.0,
+            },
+            effect: LayerEffect::GaussianBlur { sigma_pt: 5.0 },
+            blend_mode: ComposeBlend::Normal,
+            opacity: 1.0,
+            transform: Transform::IDENTITY,
+        });
+        list.commands.push(DisplayCommand::FillPath {
+            path_id: rect_id,
+            paint: Paint::Solid(DLColor::rgba(0.0, 0.0, 0.0, 1.0)),
+            transform: Transform([40.0, 0.0, 0.0, 40.0, 20.0, 20.0]),
+        });
+        list.commands
+            .push(DisplayCommand::PopLayer(Transform::IDENTITY));
+        let v = VelloRasterizer::new();
+        let render = |dpi: f32| {
+            let mut opts = RasterOptions::new(80.0, 80.0);
+            opts.dpi = dpi;
+            opts.background = ComposeColor::rgba(1.0, 1.0, 1.0, 1.0);
+            (v.rasterize(&list, &opts), opts.pixel_size().0 as usize)
+        };
+        let (buf72, w72) = render(72.0);
+        if !gpu_or_skip(&buf72) {
+            return;
+        }
+        let (buf144, w144) = render(144.0);
+        // Page point (x, 40) on each render: 3, 6 and 9 pt into the halo.
+        for x_pt in [63usize, 66, 69] {
+            let v72 = buf72[(40 * w72 + x_pt) * 4] as i32;
+            let v144 = buf144[(80 * w144 + 2 * x_pt) * 4] as i32;
+            assert!(
+                (v72 - v144).abs() <= 16,
+                "halo at {x_pt} pt: {v72} at 72 dpi vs {v144} at 144 dpi"
+            );
+        }
+    }
+
     // ------------------------------------------------------------------
     // CMYK overprint parity tests.
     //
     // Every test follows the same skeleton:
     //   1. Build a synthetic display list with the CMYK / overprint
     //      commands the case exercises.
-    //   2. Force the GPU compute path via `FORCE_COMPUTE_PATH` so we
-    //      actually validate the compute shaders even on small scenes.
-    //   3. Run the rasterizer; if the readback buffer is all zeros
+    //   2. Run the rasterizer; if the readback buffer is all zeros
     //      (the documented GPU-unavailable fallback), early-return —
     //      the test stays a "if we have a GPU, this works" check.
-    //   4. Sample pixels at known coordinates and assert.
+    //   3. Sample pixels at known coordinates and assert.
+    //
+    // Every page that overprints goes through the compute shaders, so
+    // even these small scenes exercise them.
     //
     // The early-return policy matches the existing
     // `push_layer_gaussian_blur_softens_edges_on_gpu` pattern at line ~1820
@@ -3357,16 +3393,15 @@ mod tests {
         true
     }
 
-    /// Tests that toggle the global FORCE_COMPUTE_PATH /
-    /// FAIL_PIPELINE_CREATION flags must run serially — they share
-    /// process-wide state and `cargo test` runs tests in parallel by
-    /// default. A poison-free `Mutex` ensures only one CMYK test
-    /// holds the flag at a time.
+    /// Tests that toggle the global FAIL_PIPELINE_CREATION flag, and
+    /// the CMYK tests whose renders it would change, run serially —
+    /// they share process-wide state and `cargo test` runs tests in
+    /// parallel by default. A poison-free `Mutex` ensures only one CMYK
+    /// test holds the flag at a time.
     static CMYK_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
     /// Lock guard for the entire CMYK test. Acquire at test entry so
-    /// every render in the test sees a consistent flag state; engage
-    /// the FORCE flag later for specific render calls.
+    /// every render in the test sees a consistent flag state.
     #[allow(dead_code)] // The MutexGuard is held by its existence.
     struct CmykTestLock(std::sync::MutexGuard<'static, ()>);
     impl CmykTestLock {
@@ -3374,8 +3409,6 @@ mod tests {
             let lock = CMYK_TEST_LOCK.lock().unwrap_or_else(|p| p.into_inner());
             // Reset to a known state on entry; a poisoned lock could
             // leave the flag set from a previous panic.
-            crate::cmyk_compute::FORCE_COMPUTE_PATH
-                .store(false, std::sync::atomic::Ordering::SeqCst);
             crate::cmyk_compute::FAIL_PIPELINE_CREATION
                 .store(false, std::sync::atomic::Ordering::SeqCst);
             Self(lock)
@@ -3383,27 +3416,7 @@ mod tests {
     }
     impl Drop for CmykTestLock {
         fn drop(&mut self) {
-            crate::cmyk_compute::FORCE_COMPUTE_PATH
-                .store(false, std::sync::atomic::Ordering::SeqCst);
             crate::cmyk_compute::FAIL_PIPELINE_CREATION
-                .store(false, std::sync::atomic::Ordering::SeqCst);
-        }
-    }
-
-    /// Engage the FORCE_COMPUTE_PATH flag for a scoped region. The
-    /// caller must already hold a `CmykTestLock` to prevent races
-    /// with other CMYK tests.
-    struct ForceComputeScope;
-    impl ForceComputeScope {
-        fn engage() -> Self {
-            crate::cmyk_compute::FORCE_COMPUTE_PATH
-                .store(true, std::sync::atomic::Ordering::SeqCst);
-            Self
-        }
-    }
-    impl Drop for ForceComputeScope {
-        fn drop(&mut self) {
-            crate::cmyk_compute::FORCE_COMPUTE_PATH
                 .store(false, std::sync::atomic::Ordering::SeqCst);
         }
     }
@@ -3451,7 +3464,6 @@ mod tests {
         // blue. Without the parity work, the Vello knockout fallback
         // would paint pure cyan on top — visible R, low G, full B.
         let _lock = CmykTestLock::acquire();
-        let _force = ForceComputeScope::engage();
         let list = cmyk_overprint_cyan_on_magenta_list();
         let v = VelloRasterizer::new();
         let mut opts = RasterOptions::new(40.0, 40.0);
@@ -3485,7 +3497,6 @@ mod tests {
             Color as DLColor, DisplayCommand, LineCap, LineJoin, Paint, Stroke, Transform,
         };
         let _lock = CmykTestLock::acquire();
-        let _force = ForceComputeScope::engage();
         let mut list = paged_compose::DisplayList::new();
         let rect_id = unit_rect_path(&mut list);
         list.commands.push(DisplayCommand::FillPath {
@@ -3540,12 +3551,9 @@ mod tests {
 
     #[test]
     fn vello_no_overprint_unchanged_vs_baseline() {
-        // Document with NO overprint commands must render bit-identical
-        // to the pre-parity path. Snapshot the result first via the
-        // FORCE_COMPUTE_PATH-off rasterizer (which takes the unchanged
-        // path since count == 0), then re-run with FORCE on and assert
-        // the buffer is the same. (FORCE_COMPUTE_PATH only matters when
-        // count > 0; here it's a no-op — confirming that.)
+        // A page with NO overprint commands takes the plain Vello render,
+        // never the compute path: two rasterizers render it to the same
+        // bytes.
         let _lock = CmykTestLock::acquire();
         use paged_compose::{
             BlendMode as ComposeBlend, Color as DLColor, DisplayCommand, Paint, PathData,
@@ -3586,14 +3594,11 @@ mod tests {
             return;
         }
 
-        let _force = ForceComputeScope::engage();
         let v2 = VelloRasterizer::new();
         let buf_forced = v2.rasterize(&list, &opts);
-        // FORCE_COMPUTE_PATH is a no-op when count == 0 — both should
-        // take the unchanged path and produce bit-identical bytes.
         assert_eq!(
             buf_baseline, buf_forced,
-            "zero-overprint scene should render bit-identical regardless of force flag"
+            "a zero-overprint page renders to the same bytes every time"
         );
     }
 
@@ -3658,7 +3663,6 @@ mod tests {
         if !gpu_or_skip(&baseline_buf) {
             return;
         }
-        let _force = ForceComputeScope::engage();
         let buf = v.rasterize(&list, &opts);
 
         let at = |b: &[u8], x: usize, y: usize| -> [u8; 4] {
@@ -3690,7 +3694,6 @@ mod tests {
         // We assert by comparing to a single-draw 80% pixel.
         use paged_compose::{Color as DLColor, DisplayCommand, Paint, SpotInk, Transform};
         let _lock = CmykTestLock::acquire();
-        let _force = ForceComputeScope::engage();
         // Spot with strong cyan alternate (so any tint is visible).
         let ink = SpotInk {
             name: "Color/TestSpot".to_string(),
@@ -3767,7 +3770,6 @@ mod tests {
         // region shows a distinct visible colour matching its alt.
         use paged_compose::{Color as DLColor, DisplayCommand, Paint, SpotInk, Transform};
         let _lock = CmykTestLock::acquire();
-        let _force = ForceComputeScope::engage();
         let mut list = paged_compose::DisplayList::new();
         let rect_id = unit_rect_path(&mut list);
         // 5 spots, each with a different distinctive alternate.
@@ -3849,48 +3851,41 @@ mod tests {
     }
 
     #[test]
-    fn vello_fast_path_low_overprint_count() {
-        // Fixture with 2 overprints: the CPU finisher branch fires
-        // without `FORCE_COMPUTE_PATH`. The visible result must match
-        // what the compute path produces — both routes terminate at
-        // the same per-channel-max composite.
+    #[cfg(feature = "cpu")]
+    fn vello_overprint_matches_the_cpu_lane() {
+        // A page with two overprints is composited by the GPU's own
+        // compute path (it used to be handed to the CPU rasterizer, so
+        // this compared the CPU with itself). The visible result must
+        // match the CPU lane's per-channel-max composite.
         let _lock = CmykTestLock::acquire();
         let list = cmyk_overprint_cyan_on_magenta_list();
         let v = VelloRasterizer::new();
         let mut opts = RasterOptions::new(40.0, 40.0);
         opts.dpi = 72.0;
         opts.background = ComposeColor::rgba(1.0, 1.0, 1.0, 1.0);
-        let buf_fast = v.rasterize(&list, &opts);
-        if !gpu_or_skip(&buf_fast) {
-            // CPU finisher always "ran" so this means the CPU build
-            // didn't even pull tiny-skia — bail.
+        let gpu = v.rasterize(&list, &opts);
+        if !gpu_or_skip(&gpu) {
             return;
         }
-        let _force = ForceComputeScope::engage();
-        let buf_compute = v.rasterize(&list, &opts);
-        if !gpu_or_skip(&buf_compute) {
-            return;
-        }
-        // The interior pixel should look blue in both buffers and
-        // ΔE between them should be small (different rasterizers but
-        // the same composite intent). We use a per-channel slack of
-        // 16 — generous enough for AA / 8-bit quantisation differences.
+        let cpu = crate::CpuRasterizer.rasterize(&list, &opts);
+        // The interior pixel should look blue in both buffers; a
+        // per-channel slack of 32 absorbs 8-bit quantisation between
+        // the compute shader and the CPU's integer arithmetic.
         let at = |b: &[u8], x: usize, y: usize| -> [u8; 4] {
             let i = (y * 40 + x) * 4;
             [b[i], b[i + 1], b[i + 2], b[i + 3]]
         };
-        let a = at(&buf_fast, 20, 20);
-        let b = at(&buf_compute, 20, 20);
+        let a = at(&gpu, 20, 20);
+        let b = at(&cpu, 20, 20);
         for i in 0..3 {
             let diff = (a[i] as i32 - b[i] as i32).abs();
             assert!(
                 diff < 32,
-                "channel {i}: fast={a:?} vs compute={b:?} differ by {diff}"
+                "channel {i}: GPU={a:?} vs CPU={b:?} differ by {diff}"
             );
         }
-        // Both should look distinctly blue.
-        assert!(a[2] > 150, "fast-path interior should be blue, got {a:?}");
-        assert!(b[2] > 150, "compute interior should be blue, got {b:?}");
+        assert!(a[2] > 150, "GPU interior should be blue, got {a:?}");
+        assert!(b[2] > 150, "CPU interior should be blue, got {b:?}");
     }
 
     #[test]
@@ -3902,7 +3897,6 @@ mod tests {
         let _lock = CmykTestLock::acquire();
         use std::sync::atomic::Ordering;
         crate::cmyk_compute::FAIL_PIPELINE_CREATION.store(true, Ordering::SeqCst);
-        let _force = ForceComputeScope::engage();
         let list = cmyk_overprint_cyan_on_magenta_list();
         let v = VelloRasterizer::new();
         let mut opts = RasterOptions::new(40.0, 40.0);

@@ -43,7 +43,7 @@ import type { ElementId } from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
 
 import { drawBundle } from "../../src";
-import { openHost } from "../conformance/host";
+import { openHost } from "../headless/host";
 import { caseById, authorCase, type AuthoredCase } from "./author";
 import { bothValues, classify, defectsOf, expand, report } from "./classify";
 import {

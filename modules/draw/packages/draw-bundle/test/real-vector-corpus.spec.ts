@@ -70,7 +70,7 @@ import { describe, expect, it } from "bun:test";
 
 import { leafIdsOf } from "../src";
 import { commitSvgImport, shapesFromSvgBytes } from "../src/io/svg";
-import { openHost } from "./conformance/host";
+import { openHost } from "./headless/host";
 import { F4_OVERLAP } from "./fixtures/corpus";
 
 const GROUPS = ["idml", "docx", "psd", "html", "vector", "pptx"] as const;

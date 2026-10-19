@@ -56,7 +56,7 @@ import {
   BIND_HAS_SELECTION,
 } from "../../src/panels/stroke-panel";
 import { pathItem } from "../fixtures/build-idml";
-import { openHost } from "../conformance/host";
+import { openHost } from "../headless/host";
 import { countingHost, type WorkLog } from "../perf/counting-host";
 import {
   documentChanges,
