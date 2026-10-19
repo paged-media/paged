@@ -20,9 +20,11 @@
 //! types, packaged by core's one `.paged` writer
 //! ([`paged_store::package::wrap_document`]). Nothing is written as IDML.
 //!
-//! The document is the one the engine's IDML importer made of the IDML
-//! package this crate wrote before, field for field: the open, the pour and
-//! save-back see the same pages, frames, stories and styles.
+//! The document is, field for field, the one the engine's IDML importer
+//! made of the IDML package this crate wrote before (compared on every
+//! fixture and on the docx corpus lane when the change was made): the
+//! open, the pour and save-back see the same pages, frames, stories and
+//! styles.
 
 use std::collections::HashMap;
 
@@ -45,9 +47,8 @@ const NONE_SWATCH: &str = "Swatch/None";
 /// only to report it; it is kept so the document reads as before.
 const DOM_VERSION: &str = "20.0";
 
-/// Where story `k`'s spread and story would sit in an IDML package. The
-/// model keeps a part path per spread and story (save and export name
-/// their parts by it).
+/// The part path the model keeps for story `k`'s spread and story (save
+/// and IDML export name their parts by it).
 fn spread_src(p: &SkeletonPage) -> String {
     format!("Spreads/Spread_{}.xml", p.spread_id)
 }

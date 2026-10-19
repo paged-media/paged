@@ -61,8 +61,6 @@ docx-skeleton = { path = "docx-skeleton" }
 paged-model = { path = "../../engine/core/crates/paged-model" }
 paged-scene = { path = "../../engine/core/crates/paged-scene" }
 paged-store = { path = "../../engine/core/crates/paged-store" }
-# The IDML reader, for the skeleton's equivalence test (dev-dependency only).
-idml-import = { path = "../../engine/core/crates/idml-import" }
 
 
 [workspace.lints.clippy]
