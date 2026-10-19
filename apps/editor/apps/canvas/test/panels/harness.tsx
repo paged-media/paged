@@ -44,7 +44,9 @@
 import { act, cleanup, render, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import {
+  useEffect,
   useLayoutEffect,
+  useRef,
   useSyncExternalStore,
   type ComponentType,
   type PropsWithChildren,
@@ -83,6 +85,8 @@ import {
   ToolProvider,
   ToolSettingsProvider,
   WorkflowModeProvider,
+  useCanvasClient,
+  useCockpitState,
   useContentSelection,
   useDocument,
   usePaged,
@@ -131,6 +135,10 @@ export interface MountOptions<S> {
   /** The panel id it is registered under. Defaults to the contribution's
    *  id when a contribution is passed. */
   id?: string;
+  /** Registrations the panel should find when it FIRST renders (commands,
+   *  keybindings, other panels), the way the app's registries are full
+   *  before a user opens a panel. Runs before the panel mounts. */
+  registries?: (registries: ShellRegistries) => void;
 }
 
 interface Bridge {
@@ -141,6 +149,7 @@ interface Bridge {
   document: ReturnType<typeof useDocument>;
   table: ReturnType<typeof useTableSelection>;
   tool: ReturnType<typeof useTool>;
+  cockpit: ReturnType<typeof useCockpitState>;
 }
 
 /** A mounted panel and the doors to drive it. */
@@ -208,6 +217,16 @@ export interface PanelHarness<S = undefined> {
   /** A table cell selection. */
   enterTable(cell: TableCellSelection | null): Promise<void>;
 
+  /** Register another panel (one the panel under test opens, links to or
+   *  embeds; the cockpit ignores ids the registry does not have). */
+  registerPanel(contribution: PanelContribution): void;
+  /** The panel-rail steer (Properties' empty-selection inspector:
+   *  "text" / "image" / "page"), as the rail's buttons set it. */
+  steer(context: "text" | "image" | "page" | null): Promise<void>;
+  /** The cockpit's right dock: its tabs and the one on screen (what a
+   *  panel's "open X" link changes). */
+  dock(): { tabs: string[]; active: string | null };
+
   /** Register a command id the panel invokes; returns the payloads it
    *  was invoked with, in order. */
   spyCommand(id: string): unknown[];
@@ -228,8 +247,18 @@ function BridgeCapture({ onBridge }: { onBridge: (b: Bridge) => void }) {
   const document = useDocument();
   const table = useTableSelection();
   const tool = useTool();
+  const cockpit = useCockpitState();
   useLayoutEffect(() => {
-    onBridge({ paged, registries, selection, content, document, table, tool });
+    onBridge({
+      paged,
+      registries,
+      selection,
+      content,
+      document,
+      table,
+      tool,
+      cockpit,
+    });
     // The app sets the object model's editor from PluginBundles on every
     // render (main.tsx); the harness does the same after every render,
     // before any field's read, so PropertyField reads and writes through
@@ -243,14 +272,19 @@ function BridgeCapture({ onBridge }: { onBridge: (b: Bridge) => void }) {
  *  (PanelHost reads the registry at render and does not subscribe). */
 function Registered({
   contribution,
+  before,
   children,
-}: PropsWithChildren<{ contribution: PanelContribution }>) {
+}: PropsWithChildren<{
+  contribution: PanelContribution;
+  before?: (registries: ShellRegistries) => void;
+}>) {
   const registries = useRegistries();
   useLayoutEffect(() => {
     if (registries.panels.get(contribution.id)) return;
+    before?.(registries);
     const registration = registries.panels.register(contribution);
     return () => registration.dispose();
-  }, [registries, contribution]);
+  }, [registries, contribution, before]);
   const present = useSyncExternalStore(
     (onChange) => {
       const sub = registries.panels.onChange(onChange);
@@ -261,12 +295,77 @@ function Registered({
   return present ? <>{children}</> : null;
 }
 
-/** Puts the loaded document into the document context once mounted. */
-function SeedDocument({ handle }: { handle: DocumentHandle | null }) {
-  const { setHandle } = useDocument();
+/** Puts the loaded document, and the resolver pass its load ran, into
+ *  the document context once mounted (the chrome routes both). */
+function SeedDocument({
+  handle,
+  resolution,
+}: {
+  handle: DocumentHandle | null;
+  resolution: unknown;
+}) {
+  const { setHandle, setResolution } = useDocument();
   useLayoutEffect(() => {
     if (handle) setHandle(handle);
-  }, [handle, setHandle]);
+    if (resolution) setResolution(resolution as never);
+  }, [handle, resolution, setHandle, setResolution]);
+  return null;
+}
+
+/**
+ * What PagedShell's chrome does for the document handle (its worker-
+ * message subscriber, PagedShell.tsx): after a change that may add, remove,
+ * move or resize pages, re-read the page list and rebuild the handle when
+ * it differs; and route the resolver's passes into the document context.
+ * Panels that read `handle.pageCount` / `pageSizesPt` or the resolution
+ * (Outline, TOC readers) see what a test changes, as they do in the app.
+ */
+function FollowPages() {
+  const client = useCanvasClient();
+  const { handle, setHandle, setResolution } = useDocument();
+  const handleRef = useRef(handle);
+  useLayoutEffect(() => {
+    handleRef.current = handle;
+  });
+  useEffect(() => {
+    const reread = () => {
+      void client
+        .collection<{ selfId: string; sizePt: [number, number] }>("pages")
+        .then((pages) => {
+          const now = handleRef.current;
+          if (!now) return;
+          const same =
+            pages.length === now.pageIds.length &&
+            pages.every(
+              (p, i) =>
+                p.selfId === now.pageIds[i] &&
+                p.sizePt[0] === now.pageSizesPt?.[i]?.[0] &&
+                p.sizePt[1] === now.pageSizesPt?.[i]?.[1],
+            );
+          if (same) return;
+          setHandle({
+            ...now,
+            pageCount: pages.length,
+            pageIds: pages.map((p) => p.selfId) as typeof now.pageIds,
+            pageSizesPt: pages.map((p) => p.sizePt) as typeof now.pageSizesPt,
+          });
+        })
+        .catch(() => undefined);
+    };
+    return client.subscribe((msg) => {
+      // The resolver's passes (TOC, cross-references, outline) reach the
+      // document context as they do through the chrome.
+      if (msg.kind === "resolutionDone") setResolution(msg.payload);
+      if (
+        msg.kind === "mutationApplied" ||
+        msg.kind === "undoApplied" ||
+        msg.kind === "redoApplied" ||
+        msg.kind === "scriptResult"
+      ) {
+        reread();
+      }
+    });
+  }, [client, setHandle, setResolution]);
   return null;
 }
 
@@ -378,6 +477,18 @@ export async function mountPanel<S = undefined>(
   if (options.scene) {
     if (!handle) throw new Error("panel harness: a scene needs a document");
     scene = await options.scene({ client, handle });
+    // The scene may have added pages: hand the panel the handle the
+    // chrome would have rebuilt by now.
+    const pages = (await client.collection("pages")) as Array<{
+      selfId: string;
+      sizePt: [number, number];
+    }>;
+    handle = {
+      ...handle,
+      pageCount: pages.length,
+      pageIds: pages.map((p) => p.selfId) as typeof handle.pageIds,
+      pageSizesPt: pages.map((p) => p.sizePt) as typeof handle.pageSizesPt,
+    };
   }
   // The load's own traffic is setup; the log a test reads starts here.
   engine.sent.length = 0;
@@ -395,8 +506,9 @@ export async function mountPanel<S = undefined>(
     result = render(
       <ShellProviders client={client}>
         <BridgeCapture onBridge={(next) => (bridge.current = next)} />
-        <SeedDocument handle={handle} />
-        <Registered contribution={contribution}>
+        <SeedDocument handle={handle} resolution={engine.lastResolution} />
+        <FollowPages />
+        <Registered contribution={contribution} before={options.registries}>
           <PanelHost id={id} />
         </Registered>
       </ShellProviders>,
@@ -550,6 +662,18 @@ export async function mountPanel<S = undefined>(
         cell ? b().table.selectCell(cell) : b().table.clearCell(),
       );
     },
+    registerPanel(contribution) {
+      if (!b().registries.panels.get(contribution.id)) {
+        b().registries.panels.register(contribution);
+      }
+    },
+    async steer(context) {
+      await h.act(() => b().cockpit.setInspectorContext(context));
+    },
+    dock: () => ({
+      tabs: [...b().cockpit.rightTabs],
+      active: b().cockpit.activeTab,
+    }),
     spyCommand(commandId) {
       const calls: unknown[] = [];
       b().registries.commands.register({

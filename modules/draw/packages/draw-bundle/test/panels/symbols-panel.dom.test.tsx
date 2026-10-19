@@ -66,6 +66,7 @@ import {
   PLAIN_LEAVES,
   RECORDS,
 } from "./harness";
+import { covers } from "@paged-media/test-kit";
 
 const PANEL = "[data-draw-symbols-panel]";
 const ROW = '[data-draw-symbol-row="sym-1"]';
@@ -140,6 +141,7 @@ describe("Symbols panel — rendered against the engine", () => {
     afterEach(() => teardownPanels(h));
 
     it("+ From selection captures a definition and leaves the document alone", async () => {
+      covers("panel:media.paged.draw.panel.symbols");
       await h.host.selection.set([poly("s0")]);
       const panel = await mountPanel(h, makeSymbolsPanel);
       expect(panel.disabled("[data-draw-symbol-define]")).toBe(false);
@@ -165,6 +167,7 @@ describe("Symbols panel — rendered against the engine", () => {
     });
 
     it("Place re-emits the artwork as a LINKED instance, through the engine", async () => {
+      covers("panel:media.paged.draw.panel.symbols");
       const panel = await mountPanel(h, makeSymbolsPanel);
       panel.reset();
       await panel.click(`${ROW} [data-draw-symbol-place]`);
@@ -204,6 +207,7 @@ describe("Symbols panel — rendered against the engine", () => {
     });
 
     it("Break link keeps the artwork and drops the reference", async () => {
+      covers("panel:media.paged.draw.panel.symbols");
       const leaves = await instanceLeaves();
       await h.host.selection.set(leaves);
       const panel = await mountPanel(h, makeSymbolsPanel);

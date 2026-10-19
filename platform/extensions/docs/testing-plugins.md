@@ -146,14 +146,44 @@ Findings so far, each an expected failure in those files:
 | HOST-6 | `host.parts`                          | an absolute path is accepted (relativised)                                      | `..` and absolute paths are rejected                                   |
 | HOST-7 | `contribute.menu`                     | an entry onto a declared but unregistered command is accepted, and does nothing | the host refuses an entry onto a command the bundle has not registered |
 
+## Findings on record
+
+Every finding is an expected failure in the test named, and fails for the stated reason. The
+host findings (HOST-1 to HOST-7) are in the table above.
+
+| Id    | Surface                                                                                 | What happens                                                                           | Test                                                                          |
+| ----- | --------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| DRW-1 | draw gradient fill presets                                                              | four undo steps for one command                                                        | `modules/draw/packages/draw-bundle/test/headless/` (see `docs/testing.md`)    |
+| DRW-2 | draw live-corner presets                                                                | two undo steps (the geometry, then the marker)                                         | same                                                                          |
+| DRW-3 | draw dash presets, Outline stroke, Offset path, Simplify, Close path, style redefine    | one undo step per selected element                                                     | same                                                                          |
+| DRW-4 | draw Add fill, Add stroke, Move layer                                                   | two undo steps (the stack, then its paint)                                             | same                                                                          |
+| DRW-5 | draw bake appearance                                                                    | two undo steps                                                                         | same                                                                          |
+| DRW-6 | draw Image Trace                                                                        | two undo steps                                                                         | same                                                                          |
+| IMG-1 | image `rotateCw` / `rotateCcw`, undone                                                  | the pixels come back, the canvas size does not: a 4×2 image returns as a scrambled 2×4 | `modules/image/glue/test/commands.spec.ts`                                    |
+| IMG-2 | image marquees, lasso, quick select, patch, brush, move, gradient, red eye              | Escape (or a lost pointer capture) mid-drag still commits on release                   | `modules/image/glue/test/tool-gestures.spec.ts`                               |
+| SHT-1 | sheet typed `importXlsx`                                                                | bytes that are not a workbook resolve with a workbook address                          | `modules/sheet/packages/sheet-bundle/test/headless/commands.headless.test.ts` |
+| SHT-2 | sheet typed `findReplace`                                                               | a replace that matches nothing writes a label, so the next undo undoes nothing         | same                                                                          |
+| SHT-3 | sheet `.xlsx` importer                                                                  | after a failed import the workbook verbs are offered over an empty sheet               | `modules/sheet/packages/sheet-bundle/test/io.spec.ts`                         |
+| DAT-1 | data typed `propertyBindings`                                                           | `{ address }` without a path is refused, though both filters are optional              | `modules/data/packages/data-bundle/test/headless/commands.headless.test.ts`   |
+| DAT-2 | data `applyDataSet`                                                                     | a property and a visibility binding are written as two undo steps                      | same                                                                          |
+| DOC-1 | doc typed `placeDoc`                                                                    | one undo removes the label and leaves the placed frame and its text                    | `modules/doc/packages/doc-bundle/test/headless/object-model.spec.ts`          |
+| MNU-1 | 8 Sheet menu entries (Add sheet, Paginate, Insert/Delete rows and columns, Copy, Paste) | enabled without a workbook; the click is refused silently                              | `apps/editor/apps/canvas/tests/plugin-surface/menus-sheet.spec.ts`            |
+| MNU-2 | Draw Corners, Appearance Add fill / Add stroke, Graphic style Save from selection       | one menu action takes four undo steps (Save from selection two)                        | `apps/editor/apps/canvas/tests/plugin-surface/menus-draw.spec.ts`             |
+
 ## Per module
 
 Each module's documentation says where its tests are and what each layer asserts:
-[draw](../../../modules/draw/docs/README.md#tests),
-[image](../../../modules/image/docs/README.md#tests),
+[draw](../../../modules/draw/docs/testing.md),
+[image](../../../modules/image/docs/architecture.md#tests-of-the-editor-surface),
 [sheet](../../../modules/sheet/docs/README.md#tests),
 [data](../../../modules/data/docs/README.md#tests),
 [doc](../../../modules/doc/docs/README.md#tests),
 [slide](../../../modules/slide/docs/README.md#tests),
 [web](../../../modules/web/docs/README.md#tests),
 [publish and pdf](../../../modules/publish/docs/README.md#tests).
+The runtime menu entries of every bundle are tested in the editor, in Playwright:
+`apps/editor/apps/canvas/tests/plugin-surface/menus-<bundle>.spec.ts` over `menu-driver.ts`
+(the entry at its path, greyed without a document, enabled with one, its command run once
+with the effect checked). That lane needs the editor dev server
+(`node node_modules/vite/bin/vite.js --port <p>`, `IDML_CANVAS_TEST_PORT=<p>`, then
+`node node_modules/@playwright/test/cli.js test tests/plugin-surface`).

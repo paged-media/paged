@@ -95,6 +95,7 @@ import {
   headlessEngineModule,
   modelDump,
   type EngineWorker,
+  type HeadlessEngineModule,
   type ModelDump,
   type ModelDumpOptions,
 } from "@paged-media/test-kit/headless";
@@ -521,6 +522,9 @@ export interface HeadlessCanvasHandle extends CanvasHandleLike {
 export interface HeadlessEditor {
   readonly client: CanvasClient;
   readonly worker: EngineWorker;
+  /** The wasm instance this editor's engine lives in (shared with every
+   *  editor created before the next `rebootHeadlessEngine`). */
+  readonly engine: HeadlessEngineModule;
   readonly registries: ShellRegistries;
   /** The handle every command handler receives (the shell's PagedEditor). */
   readonly editor: PagedEditor;
@@ -1066,6 +1070,7 @@ export async function createHeadlessEditor(
   const ed: HeadlessEditor = {
     client,
     worker,
+    engine: engines,
     registries,
     editor,
     state,
