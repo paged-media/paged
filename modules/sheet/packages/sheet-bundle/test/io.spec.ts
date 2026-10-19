@@ -56,7 +56,7 @@ const workbookOpen = (env: SheetEnv) =>
   )(null);
 
 describe.skipIf(!ENGINE_BUILT)(
-  "paged.sheet importers and exporter (unavailable without the sheet wasm: bash scripts/build-wasm.sh)",
+  `paged.sheet importers and exporter${ENGINE_BUILT ? "" : " (unavailable: the sheet wasm, bash scripts/build-wasm.sh)"}`,
   () => {
     setDefaultTimeout(30_000);
     let env: SheetEnv;
