@@ -158,28 +158,25 @@ describe("Outputs nav", () => {
     expect(capture.downloads).toEqual([]);
   });
 
-  // The nav lists `exporters.list()` when it renders and does not
-  // subscribe: a bundle that registers its exporter after the panel is on
-  // screen (bundles load after boot) is not listed until something else
-  // re-renders the nav.
-  test.failing(
-    "PN-308: an exporter registered while the nav is open appears in it",
-    async () => {
-      covers("panel:paged.outputs");
-      const h = await mountPanel(OutputsPanel, { id: "paged.outputs" });
-      await h.act(() =>
-        h.registries.exporters.register({
-          id: "test.late",
-          title: "Late exporter",
-          extension: ".txt",
-          export: () => null,
-        }),
-      );
-      expect(
-        h.root.querySelector('[data-plugin-export="test.late"]'),
-      ).not.toBeNull();
-    },
-  );
+  // PN-308 (fixed): the nav reads the exporters through a view of the
+  // registry that changes with it (ADR 229), so a bundle that registers its
+  // exporter after the panel is on screen (bundles load after boot) is
+  // listed at once.
+  test("PN-308: an exporter registered while the nav is open appears in it", async () => {
+    covers("panel:paged.outputs");
+    const h = await mountPanel(OutputsPanel, { id: "paged.outputs" });
+    await h.act(() =>
+      h.registries.exporters.register({
+        id: "test.late",
+        title: "Late exporter",
+        extension: ".txt",
+        export: () => null,
+      }),
+    );
+    expect(
+      h.root.querySelector('[data-plugin-export="test.late"]'),
+    ).not.toBeNull();
+  });
 
   test.failing(
     "PN-307: an output can be chosen with the keyboard",

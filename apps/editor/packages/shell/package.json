@@ -16,7 +16,8 @@
   "scripts": {
     "typecheck": "bun check -p tsconfig.json && bun check -p test/tsconfig.json",
     "test": "bun test --parallel --timeout 30000 --preload ../../../../tooling/js/bun-test-setup.ts --path-ignore-patterns '**/*.dom.test.*'",
-    "test:dom": "bun test --parallel --timeout 30000 --preload ../../../../tooling/js/bun-test-setup.ts --preload ./test/happydom.ts .dom.test."
+    "test:dom": "bun test --parallel --timeout 30000 --preload ../../../../tooling/js/bun-test-setup.ts --preload ./test/happydom.ts .dom.test.",
+    "test:dom:compiled": "bun test --parallel --timeout 30000 --preload ../../../../tooling/js/bun-test-setup.ts --preload ./test/happydom.ts --preload ../../../../tooling/js/bun-react-compiler.ts .dom.test."
   },
   "peerDependencies": {
     "react": ">=19.3",
@@ -31,6 +32,7 @@
     "@paged-media/client": "workspace:*",
     "@paged-media/helpers": "workspace:*",
     "@paged-media/plugin-api": "workspace:*",
+    "@paged-media/react-live": "workspace:*",
     "@paged-media/repository": "workspace:*",
     "@paged-media/ui": "workspace:*",
     "@radix-ui/react-dialog": "^1.3.1",
