@@ -55,6 +55,7 @@ out, over the `visioncortex` crate. No wasm-bindgen dependency.
   entry points: the bundle, and `./geometry`, a re-export of `draw-geometry`
   (`geometry.ts`). The editor imports both: the bundle in `editor: apps/canvas/src/main.tsx`
   and the geometry in its built-in Pen and Pencil (`editor: packages/tools/src/handlers/`).
+  The Pencil is the host's alone (ADR 359): its handler is a shim over `PencilMachine`.
   `draw-tools` has no entry point of its own.
 - `@paged-media/plugin-api`, `@paged-media/plugin-sdk` and `react` are peer dependencies of the
   published package. The contract-import lint rule (`/bunfig.toml`, PM-0003) fails on any import
@@ -108,7 +109,7 @@ anchor tools (`handlers/anchors.ts`) the handler hit-tests the click, reads the 
 anchor table with `host.document.pathAnchors`, maps the point into the path's own space,
 and asks a planner in `draw-tools` for a plan. `mutationFor` turns the plan into engine
 operations (`pathPointSet`, `pathPointInsert`, `pathPointRemove`, `pathPointCurveType`),
-and the handler sends them through `host.document.mutate`. Curvature and Pencil feed
+and the handler sends them through `host.document.mutate`. Curvature feeds
 events to a machine, show its preview with `host.overlay.setToolPreview`, and commit an
 `insertPath` (`handlers/insert-path.ts`). Everything the plugin draws into the document is
 an ordinary page item: the manifest's rendering capabilities are `overlay` and `hitTest`

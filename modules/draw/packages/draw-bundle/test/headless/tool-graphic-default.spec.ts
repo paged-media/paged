@@ -16,8 +16,8 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// The graphic default on the REAL engine: a shape the Curvature or Pencil
-// tool draws wears the document's `[Normal Graphics Frame]` — InDesign's
+// The graphic default on the REAL engine: a shape the Curvature tool
+// draws wears the document's `[Normal Graphics Frame]` — InDesign's
 // (no fill, 1 pt Color/Black) when the document has no such style — unless
 // the document has defaults of its own, and the paint lands in the same
 // undo step as the shape. The LIVE gesture handlers are driven pointer by
@@ -41,7 +41,6 @@ import type { HeadlessHost } from "@paged-media/plugin-sdk";
 import {
   createCurvatureHandler,
   createPaintbrushHandler,
-  createPencilHandler,
   drawBundle,
 } from "../../src";
 import { packageWithSpread } from "../fixtures/build-idml";
@@ -165,26 +164,6 @@ const curvature = (page: string) => async (handler: GestureHandler) => {
   await settle();
 };
 
-/** A pencil stroke; `pen` makes the pressures vary (the variable-width
- *  outline lane), otherwise a mouse's constant pressure. */
-const pencil =
-  (page: string, pen: boolean) => async (handler: GestureHandler) => {
-    const points: Pt[] = [];
-    for (let x = 100; x <= 400; x += 20)
-      points.push([x, 300 + (x % 40 === 0 ? 30 : 0)]);
-    const pressure = (i: number) =>
-      pen ? 0.2 + (0.7 * i) / (points.length - 1) : 0.5;
-    handler.onPointerDown(pointer(page, points[0]!, pressure(0)));
-    for (let i = 1; i < points.length; i++) {
-      handler.onPointerMove(pointer(page, points[i]!, pressure(i), 20 * i));
-    }
-    const last = points.length - 1;
-    handler.onPointerUp(
-      pointer(page, points[last]!, pressure(last), 20 * last),
-    );
-    await settle();
-  };
-
 const paintbrush = (page: string) => async (handler: GestureHandler) => {
   handler.onPointerDown(pointer(page, [300, 500]));
   handler.onPointerMove(pointer(page, [340, 520], 0.5, 40));
@@ -211,12 +190,6 @@ describe("draw conformance — the drawing tools paint their shape with the grap
     const curve = await drawn(h, createCurvatureHandler, curvature(page!));
     expect(curve.paint).toEqual(INDESIGN);
     expect(curve.undoSteps).toBe(1);
-    const mouse = await drawn(h, createPencilHandler, pencil(page!, false));
-    expect(mouse.paint).toEqual(INDESIGN);
-    expect(mouse.undoSteps).toBe(1);
-    const pen = await drawn(h, createPencilHandler, pencil(page!, true));
-    expect(pen.paint).toEqual(INDESIGN);
-    expect(pen.undoSteps).toBe(1);
   });
 
   it("the document's own [Normal Graphics Frame] (filled, 4 pt) is what the shape wears — in the insert's undo step", async () => {
@@ -224,14 +197,6 @@ describe("draw conformance — the drawing tools paint their shape with the grap
     const curve = await drawn(h, createCurvatureHandler, curvature(page!));
     expect(curve.paint).toEqual(HEAVY);
     expect(curve.undoSteps).toBe(1);
-    const mouse = await drawn(h, createPencilHandler, pencil(page!, false));
-    expect(mouse.paint).toEqual(HEAVY);
-    expect(mouse.undoSteps).toBe(1);
-    // The pressure stroke: painted BEFORE it is outlined, and still one
-    // batch — the outline keeps the paint and the shape is the outline.
-    const pen = await drawn(h, createPencilHandler, pencil(page!, true));
-    expect(pen.paint).toEqual(HEAVY);
-    expect(pen.undoSteps).toBe(1);
   });
 
   it("defaults the user set win: the tool adds nothing, the engine paints with them", async () => {
@@ -244,9 +209,6 @@ describe("draw conformance — the drawing tools paint their shape with the grap
     const expected: Paint = { fill: null, stroke: "Color/Black", weight: 2 };
     expect(
       (await drawn(h, createCurvatureHandler, curvature(page!))).paint,
-    ).toEqual(expected);
-    expect(
-      (await drawn(h, createPencilHandler, pencil(page!, false))).paint,
     ).toEqual(expected);
   });
 
