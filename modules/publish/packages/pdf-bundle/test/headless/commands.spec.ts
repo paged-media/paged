@@ -33,25 +33,26 @@ import {
   validateValue,
   type HeadlessHost,
 } from "@paged-media/plugin-sdk";
+import { covers } from "@paged-media/test-kit";
 
-import { pdfBundle } from "../src/activate";
+import { pdfBundle } from "../../src/activate";
 import {
   IMPORT_PDF_ARGS_TYPE,
   IMPORT_PDF_COMMAND,
   IMPORT_PDF_RESULT_TYPE,
-} from "../src/commands";
-import { _resetPdfMapperCache } from "../src/engine-loader";
-import { PDF_IMPORT_DEFAULTS } from "../src/io/pdf";
+} from "../../src/commands";
+import { _resetPdfMapperCache } from "../../src/engine-loader";
+import { PDF_IMPORT_DEFAULTS } from "../../src/io/pdf";
 import { fileURLToPath } from "node:url";
 
 // The engine is this package's own @paged-media/canvas-wasm devDependency.
 // Without an anchor the headless harness resolves it from plugin-sdk's
 // install location, which in the root Bun workspace is whichever version the
 // store hoists, not the one this package pins.
-const ENGINE_ANCHOR = fileURLToPath(new URL(".", import.meta.url));
+const ENGINE_ANCHOR = fileURLToPath(new URL("..", import.meta.url));
 
 const IDML = new URL(
-  "../../../../../engine/core/crates/idml-export/tests/fixtures/indesign-20.0.1-navigation.idml",
+  "../../../../../../engine/core/crates/idml-export/tests/fixtures/indesign-20.0.1-navigation.idml",
   import.meta.url,
 );
 
@@ -110,6 +111,7 @@ describe("[plugin-pdf.typed-commands] importPdf as a typed command", () => {
   });
 
   it("opens a PDF as an editable document under Node, a page per PDF page", async () => {
+    covers("command:media.paged.pdf.importPdf");
     const out = await h.objects.invoke(
       IMPORT_PDF_COMMAND,
       args({ mode: "editable" }),
@@ -122,6 +124,7 @@ describe("[plugin-pdf.typed-commands] importPdf as a typed command", () => {
   }, 60_000);
 
   it("honours the page cap", async () => {
+    covers("command:media.paged.pdf.importPdf");
     const out = (await h.objects.invoke(
       IMPORT_PDF_COMMAND,
       args({ maxPages: 1 }),
@@ -131,6 +134,7 @@ describe("[plugin-pdf.typed-commands] importPdf as a typed command", () => {
   }, 60_000);
 
   it("refuses args outside the schema or its ranges, and opens nothing", async () => {
+    covers("command:media.paged.pdf.importPdf");
     const before = await h.objects.query("page");
     await expect(
       h.objects.invoke(IMPORT_PDF_COMMAND, args({ mode: "vector" })),
@@ -151,6 +155,7 @@ describe("[plugin-pdf.typed-commands] importPdf as a typed command", () => {
   });
 
   it("the image path needs a canvas: under Node it fails honestly and keeps the document", async () => {
+    covers("command:media.paged.pdf.importPdf");
     const before = await h.objects.query("page");
     await expect(
       h.objects.invoke(IMPORT_PDF_COMMAND, args({ mode: "image" })),
@@ -171,11 +176,13 @@ describe("[plugin-pdf.typed-commands] partial args: struct defaults and optional
   });
 
   it("opens a PDF from { bytes } alone — every page, mode auto", async () => {
+    covers("command:media.paged.pdf.importPdf");
     const out = await h.objects.invoke(IMPORT_PDF_COMMAND, { bytes: pdf });
     expect(out).toEqual({ mode: "editable", pageCount: sourcePages });
   }, 60_000);
 
   it("opens a PDF from { bytes, maxPages }", async () => {
+    covers("command:media.paged.pdf.importPdf");
     const out = (await h.objects.invoke(IMPORT_PDF_COMMAND, {
       bytes: pdf,
       maxPages: 1,

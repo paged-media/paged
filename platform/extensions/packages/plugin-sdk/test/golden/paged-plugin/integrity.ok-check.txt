@@ -1,0 +1,6 @@
+$ paged-plugin integrity <TMP>/stamped --check
+# exit 0
+# stdout
+✓ media.paged.test: 1 wasm artifact(s), integrity matches
+# stderr
+(empty)

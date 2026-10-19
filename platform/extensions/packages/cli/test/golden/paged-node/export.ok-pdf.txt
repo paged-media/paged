@@ -1,0 +1,16 @@
+$ paged-node export <TMP>/fixture.paged -o <TMP>/out.pdf --no-plugins
+# exit 0
+# stdout
+{
+  "path": "<TMP>/out.pdf",
+  "format": "pdf",
+  "bytes": <N>,
+  "diagnostics": []
+}
+# stderr
+(empty)
+# structure
+{
+  "header": "%PDF-1.7",
+  "pages": 1
+}

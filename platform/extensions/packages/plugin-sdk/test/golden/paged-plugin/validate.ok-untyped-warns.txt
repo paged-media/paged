@@ -1,0 +1,6 @@
+$ paged-plugin validate <TMP>/untyped.json
+# exit 0
+# stdout
+✓ media.paged.test@0.0.1 valid (apiVersion ^0.2)
+# stderr
+warning: 1 untyped command(s) with no typed twin (ADR 323): media.paged.test.go

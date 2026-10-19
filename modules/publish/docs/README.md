@@ -10,6 +10,19 @@ What this folder holds.
 - [`status.md`](status.md): what ships today, the limits of what ships, and what is not built.
 - [`adr/`](adr/README.md): the decision records of this repository, 022 and 650–657.
 
+## Tests
+
+Each surface the two bundles contribute has a test that asserts what it does, tagged with
+`covers()` for the surface-conformance gate (the overview is
+`platform/extensions/docs/testing-plugins.md`).
+
+| Layer    | Files                                                                                                  | What they assert                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| -------- | ------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| unit     | `packages/publish-bundle/test/commands-unit.spec.ts`, `packages/pdf-bundle/test/commands-unit.spec.ts` | The bundle on a recording fake editor, no engine: the messages each typed command sends (`exportPdfBegin` → a page per page → `exportPdfFinish`, a cancel on failure), the result it makes of the replies, the door an open goes through (native document, else documents, else a refusal), the refusals before the engine is asked, and that no command mutates the document. The importers' and the IDML exporter's error paths. |
+| headless | `packages/publish-bundle/test/headless/`, `packages/pdf-bundle/test/headless/`                         | The same commands through `host.objects.invoke` on the real engine, and File ▸ Open / File ▸ Export: an `.idml` built in code opens, exports and opens again as the same document; a PDF built in code (`packages/pdf-bundle/test/fixtures/tiny-pdf.ts`) opens as an editable document with its text in stories.                                                                                                                   |
+
+Neither bundle contributes a panel, tool or menu entry of its own.
+
 ## Decisions in other repositories that bind this one
 
 These records live in other public paged-media repositories. The code here rests on each of
