@@ -138,8 +138,8 @@ describe("AI Assistant panel", () => {
       name: "Ask Claude",
     }) as HTMLButtonElement;
     expect(ask.disabled).toBe(true);
-    expect(h.root.querySelector("[data-ai-unavailable]")?.textContent).toContain(
-      "not available",
-    );
+    expect(
+      h.root.querySelector("[data-ai-unavailable]")?.textContent,
+    ).toContain("not available");
   });
 });

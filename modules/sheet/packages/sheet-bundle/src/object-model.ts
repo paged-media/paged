@@ -1269,7 +1269,12 @@ export function contributeObjectModel(
     loadedHash = next.hash;
     bridge.afterWrite(pending.regions);
     // The same content hash is the same workbook: the write changed nothing.
-    return { ok: true, hash: next.hash, parts, changed: next.hash !== before.hash };
+    return {
+      ok: true,
+      hash: next.hash,
+      parts,
+      changed: next.hash !== before.hash,
+    };
   }
 
   /** The document envelope with `data.wb = hash`, other sub-keys kept

@@ -965,7 +965,10 @@ describe("Lock, Unlock all on spread, Hide, Show all on spread", () => {
       {
         op: "batch",
         args: {
-          ops: [set(A, "elementVisible", false), set(B, "elementVisible", false)],
+          ops: [
+            set(A, "elementVisible", false),
+            set(B, "elementVisible", false),
+          ],
         },
       },
     ]);
@@ -978,7 +981,7 @@ describe("Lock, Unlock all on spread, Hide, Show all on spread", () => {
     for (const command of ["paged.object.lock", "paged.object.hide"]) {
       const h = objects({ tree: flat(), selection: [] });
       await h.invoke(command);
-      expectNoCommit(h.fake, command);
+      expectNoCommit(h.fake, 0, command);
     }
   });
 
@@ -1034,7 +1037,7 @@ describe("Lock, Unlock all on spread, Hide, Show all on spread", () => {
       },
     });
     await none.invoke("paged.object.showAllOnSpread");
-    expectNoCommit(none.fake, "Show all on spread");
+    expectNoCommit(none.fake, 0, "Show all on spread");
   });
 });
 

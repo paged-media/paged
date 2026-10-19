@@ -211,7 +211,8 @@ export const PAGED_OBJECT_NUDGE_UP_LARGE = "paged.object.nudgeUpLarge";
 export const PAGED_OBJECT_NUDGE_DOWN_LARGE = "paged.object.nudgeDownLarge";
 export const PAGED_OBJECT_MAKE_CLIPPING_MASK = "paged.object.makeClippingMask";
 export const PAGED_OBJECT_LOCK = "paged.object.lock";
-export const PAGED_OBJECT_UNLOCK_ALL_ON_SPREAD = "paged.object.unlockAllOnSpread";
+export const PAGED_OBJECT_UNLOCK_ALL_ON_SPREAD =
+  "paged.object.unlockAllOnSpread";
 export const PAGED_OBJECT_HIDE = "paged.object.hide";
 export const PAGED_OBJECT_SHOW_ALL_ON_SPREAD = "paged.object.showAllOnSpread";
 export const PAGED_OBJECT_RELEASE_CLIPPING_MASK =
@@ -1450,12 +1451,14 @@ async function targetSpread(
   deps: ObjectCommandDeps,
   leaves: readonly PageItemId[],
 ): Promise<{ spread: string | null; geometry: Map<string, string | null> }> {
-  const items = leaves.length > 0 ? await deps.client.elementGeometry([...leaves]) : [];
+  const items =
+    leaves.length > 0 ? await deps.client.elementGeometry([...leaves]) : [];
   const geometry = new Map<string, string | null>();
   const pageSpread = new Map<string, string>();
   for (const item of items) {
     geometry.set(elementKey(item.id), item.spreadId ?? null);
-    if (item.pageId && item.spreadId) pageSpread.set(item.pageId, item.spreadId);
+    if (item.pageId && item.spreadId)
+      pageSpread.set(item.pageId, item.spreadId);
   }
   const selected = deps.getSelection();
   if (selected.length > 0) {
@@ -1481,7 +1484,8 @@ async function clearFlagOnSpread(
   const leaves = allLeaves(roots);
   const { spread, geometry } = await targetSpread(deps, leaves);
   if (!spread) return;
-  const path = verb === "Unlock all on spread" ? "elementLocked" : "elementVisible";
+  const path =
+    verb === "Unlock all on spread" ? "elementLocked" : "elementVisible";
   const flagged: PageItemId[] = [];
   for (const leaf of leaves) {
     if (geometry.get(elementKey(leaf)) !== spread) continue;
@@ -1491,7 +1495,8 @@ async function clearFlagOnSpread(
       entry && typeof entry === "object" && "value" in entry
         ? (entry as { value: unknown }).value === true
         : false;
-    if (path === "elementLocked" ? on : !on && entry != null) flagged.push(leaf);
+    if (path === "elementLocked" ? on : !on && entry != null)
+      flagged.push(leaf);
   }
   if (flagged.length === 0) return;
   const ops =

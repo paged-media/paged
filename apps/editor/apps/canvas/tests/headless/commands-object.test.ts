@@ -310,10 +310,7 @@ describe("Lock and hide (F-41)", () => {
   });
 
   test("Hide: the frame is no longer hit and leaves the selection; Show all on spread brings it back", async () => {
-    covers(
-      "command:paged.object.hide",
-      "command:paged.object.showAllOnSpread",
-    );
+    covers("command:paged.object.hide", "command:paged.object.showAllOnSpread");
     const e = await open();
     expect(await hitAt(e, T.frame.at)).toEqual(T.frame.id);
     await e.select([T.frame.id]);
