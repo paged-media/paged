@@ -127,6 +127,12 @@ TypeScript 7 semantics. Serena installs its own typescript-language-server and `
 
 ## Left for wave D
 
+_Wave D (2026-10-18) did the first, second and fourth items: the module `*-publish.yml`
+workflows, `pubcheck.*` and `package-hash.mjs` are deleted; `release.yml` publishes plugin-api
+and plugin-sdk (plugin-cli is now plugin-sdk's `paged-plugin` bin); plugin-api's relative
+imports name `.js`, and a clean-room consumer typechecks against the packed contract under
+`nodenext` ([npm-release-runbook.md](npm-release-runbook.md)). The other two are open._
+
 - The per-module `*-publish.yml` workflows (dispatch-only since the monorepo import) still run
   `bun run --filter './packages/*' build`, which now fails: no bundle has a build script. They go
   with the npm deprecations, together with paged.data's `scripts/pubcheck.*` and the

@@ -106,11 +106,7 @@ describe("style runs", () => {
 
 describe("line grouping", () => {
   it("clusters by baseline and sorts within a line by x", () => {
-    const items = [
-      pi("b", 50, 100.5),
-      pi("a", 0, 100),
-      pi("c", 0, 120),
-    ];
+    const items = [pi("b", 50, 100.5), pi("a", 0, 100), pi("c", 0, 120)];
     const lines = groupLines(items);
     expect(lines).toHaveLength(2);
     expect(lines[0].map((i) => i.text)).toEqual(["a", "b"]);

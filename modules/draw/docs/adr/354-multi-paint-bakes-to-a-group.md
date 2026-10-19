@@ -53,7 +53,7 @@ object type and no baked fallback; the bake is run by the bundle's commands.
 - `packages/draw-bundle/src/commands/appearance-bake.ts:452-487`, `:494-523`, `:566-587` — the
   paint batch (carrier cleared, envelope stamped, `createGroup`); release; carrier resolution
 - `packages/draw-bundle/src/commands/appearance.ts:211-262`, `:279-297` — the front-most-layer bake
-- `packages/draw-bundle/test/conformance/appearance-bake.spec.ts:603`, `:743`, `:764` — two undo
+- `packages/draw-bundle/test/headless/appearance-bake.spec.ts:603`, `:743`, `:764` — two undo
   steps asserted; PDF export paints every layer; the baked group survives an IDML save
 
 ## Alternatives considered

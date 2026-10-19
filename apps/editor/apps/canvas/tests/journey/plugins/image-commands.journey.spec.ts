@@ -81,8 +81,10 @@ async function editTarget(page: Page): Promise<string | null> {
 /** The Smart object section's kind readout ("pixels" | "smart"). */
 async function layerKind(page: Page): Promise<string> {
   return (
-    (await page.locator("[data-image-make-smart] + span").first().textContent()) ??
-    ""
+    (await page
+      .locator("[data-image-make-smart] + span")
+      .first()
+      .textContent()) ?? ""
   ).trim();
 }
 
@@ -125,7 +127,10 @@ test.describe("journey · paged.image commands", () => {
         .poll(() => statusText(page), { timeout: 20_000 })
         .toContain(`${label} applied`);
       await expect
-        .poll(() => undoDepth(page), { timeout: 10_000, message: `${label} is one journal step` })
+        .poll(() => undoDepth(page), {
+          timeout: 10_000,
+          message: `${label} is one journal step`,
+        })
         .toBeGreaterThan(depth);
       await designer.expectRenderChangesFrom(before, { timeout: 20_000 });
       before = await settledRender(designer, page);
@@ -163,9 +168,14 @@ test.describe("journey · paged.image commands", () => {
       // re-composite's "Composited W×H into the frame"; either names the
       // new extent.
       await expect
-        .poll(() => statusText(page), { timeout: 20_000, message: `${id} reports its result` })
+        .poll(() => statusText(page), {
+          timeout: 20_000,
+          message: `${id} reports its result`,
+        })
         .toMatch(new RegExp(`(Canvas → |Composited )${extent}`));
-      await expect.poll(() => sourceReadout(page), { timeout: 10_000 }).toBe(`${name} ${extent}`);
+      await expect
+        .poll(() => sourceReadout(page), { timeout: 10_000 })
+        .toBe(`${name} ${extent}`);
       if (before) {
         await designer.expectRenderChangesFrom(before, { timeout: 20_000 });
         before = await settledRender(designer, page);
@@ -178,7 +188,12 @@ test.describe("journey · paged.image commands", () => {
   }) => {
     test.setTimeout(4 * 60_000);
     const designer = new Designer(page);
-    const { empty } = await ingest(designer, page, "pattern-sample.png", "noise");
+    const { empty } = await ingest(
+      designer,
+      page,
+      "pattern-sample.png",
+      "noise",
+    );
 
     // ── 1. NO PATTERN YET is a stated refusal, not a silent no-op — for
     //    both consumers of the pattern. ──
@@ -195,9 +210,12 @@ test.describe("journey · paged.image commands", () => {
     //    whole image, and the panel reports the captured size. ──
     await expect(page.locator("[data-image-pattern-size]")).toHaveText("none");
     await designer.runCommand(CMD.definePattern);
-    await expect(page.locator("[data-image-pattern-size]")).toHaveText("96×96", {
-      timeout: 10_000,
-    });
+    await expect(page.locator("[data-image-pattern-size]")).toHaveText(
+      "96×96",
+      {
+        timeout: 10_000,
+      },
+    );
     expect(await statusText(page)).toContain("from the whole image");
 
     if (!(await designer.gpuActive())) {
@@ -243,11 +261,18 @@ test.describe("journey · paged.image commands", () => {
     page,
   }) => {
     const designer = new Designer(page);
-    const { empty } = await ingest(designer, page, "smart-sample.png", "gradient");
+    const { empty } = await ingest(
+      designer,
+      page,
+      "smart-sample.png",
+      "gradient",
+    );
     const gpu = await designer.gpuActive();
     const before = gpu ? await compositeBaseline(designer, page, empty) : null;
 
-    await expect.poll(() => layerKind(page), { timeout: 15_000 }).toBe("pixels");
+    await expect
+      .poll(() => layerKind(page), { timeout: 15_000 })
+      .toBe("pixels");
     await designer.runCommand(CMD.convertLayerToSmart);
     await expect.poll(() => layerKind(page), { timeout: 15_000 }).toBe("smart");
     // Converting twice is not offered: the control disables itself.
@@ -264,7 +289,12 @@ test.describe("journey · paged.image commands", () => {
     page,
   }) => {
     const designer = new Designer(page);
-    const { empty } = await ingest(designer, page, "mask-sample.png", "gradient");
+    const { empty } = await ingest(
+      designer,
+      page,
+      "mask-sample.png",
+      "gradient",
+    );
     const gpu = await designer.gpuActive();
     const before = gpu ? await compositeBaseline(designer, page, empty) : null;
 
@@ -286,7 +316,9 @@ test.describe("journey · paged.image commands", () => {
 
     // The Pixels/Mask toggle: one click back to painting the pixels.
     await page.locator("[data-image-layer-edit-target]").first().click();
-    await expect.poll(() => editTarget(page), { timeout: 10_000 }).toBe("pixels");
+    await expect
+      .poll(() => editTarget(page), { timeout: 10_000 })
+      .toBe("pixels");
     await page.locator("[data-image-layer-edit-target]").first().click();
     await expect.poll(() => editTarget(page), { timeout: 10_000 }).toBe("mask");
   });
@@ -296,7 +328,12 @@ test.describe("journey · paged.image commands", () => {
   }) => {
     test.setTimeout(4 * 60_000);
     const designer = new Designer(page);
-    const { empty } = await ingest(designer, page, "hide-sample.png", "gradient");
+    const { empty } = await ingest(
+      designer,
+      page,
+      "hide-sample.png",
+      "gradient",
+    );
     const gpu = await designer.gpuActive();
     const shown = gpu ? await compositeBaseline(designer, page, empty) : null;
 
@@ -331,7 +368,10 @@ test.describe("journey · paged.image commands", () => {
       [FRAME.x0 + 210, FRAME.y0 + 80],
     ]);
     await expect
-      .poll(() => undoDepth(page), { timeout: 20_000, message: "the mask stroke is journaled" })
+      .poll(() => undoDepth(page), {
+        timeout: 20_000,
+        message: "the mask stroke is journaled",
+      })
       .toBeGreaterThan(depth);
     await designer.expectRenderChangesFrom(hidden, { timeout: 20_000 });
     // The edit target survived the stroke.

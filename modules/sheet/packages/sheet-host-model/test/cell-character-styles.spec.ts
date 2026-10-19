@@ -26,13 +26,27 @@ import {
   cellsNeedingRestyle,
 } from "../src";
 
-const base = { italic: false, borderTop: false, borderRight: false, borderBottom: false, borderLeft: false };
+const base = {
+  italic: false,
+  borderTop: false,
+  borderRight: false,
+  borderBottom: false,
+  borderLeft: false,
+};
 function content(boldHeader: boolean, body = "3"): LoweredContent {
   return {
     cols: [{ index: 0, widthPt: 50 }],
     rows: [
-      { index: 0, heightPt: 18, cells: [{ col: 0, text: "Qty", align: "left", styleKey: 1 }] },
-      { index: 1, heightPt: 18, cells: [{ col: 0, text: body, align: "right", styleKey: 0 }] },
+      {
+        index: 0,
+        heightPt: 18,
+        cells: [{ col: 0, text: "Qty", align: "left", styleKey: 1 }],
+      },
+      {
+        index: 1,
+        heightPt: 18,
+        cells: [{ col: 0, text: body, align: "right", styleKey: 0 }],
+      },
     ],
     rules: { h: [], v: [] },
     merges: [],
@@ -59,7 +73,13 @@ describe("native-table cell text formatting [sheet.lower.page]", () => {
     expect(applies).toHaveLength(1);
     expect(applies[0]).toMatchObject({
       op: "applyStyle",
-      args: { storyId: "S", start: 0, end: 3, scope: "character", cell: { tableId: "T", row: 0, col: 0 } },
+      args: {
+        storyId: "S",
+        start: 0,
+        end: 3,
+        scope: "character",
+        cell: { tableId: "T", row: 0, col: 0 },
+      },
     });
   });
 
@@ -71,8 +91,12 @@ describe("native-table cell text formatting [sheet.lower.page]", () => {
       cells: changed,
       includeDefault: true,
     });
-    expect(ops.map((o) => (o.args as { style: string }).style)).toEqual([NO_CHARACTER_STYLE]);
+    expect(ops.map((o) => (o.args as { style: string }).style)).toEqual([
+      NO_CHARACTER_STYLE,
+    ]);
     // A plain table re-poured needs no restyle at all.
-    expect(cellsNeedingRestyle(content(false, "3"), content(false, "4")).size).toBe(0);
+    expect(
+      cellsNeedingRestyle(content(false, "3"), content(false, "4")).size,
+    ).toBe(0);
   });
 });

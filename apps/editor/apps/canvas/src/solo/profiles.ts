@@ -181,7 +181,6 @@ const DRAW_PROFILE: SoloProfile = {
   ],
 };
 
-
 /**
  * paged.image — a photo editor.
  *
@@ -355,7 +354,6 @@ const DOC_PROFILE: SoloProfile = {
   paletteSuggestions: ["media.paged.doc.command.placeDoc"],
 };
 
-
 /**
  * paged.web — HTML as a page description.
  *
@@ -442,7 +440,16 @@ const DATA_PROFILE: SoloProfile = {
   toolIds: ["paged.tool.type", "paged.tool.rectangle"],
   // `Data` stays — it is this application's own menu, and the host
   // already curates three panel-raising rows into it.
-  menuTopLevels: ["File", "Edit", "View", "Layout", "Object", "Data", "Window", "Help"],
+  menuTopLevels: [
+    "File",
+    "Edit",
+    "View",
+    "Layout",
+    "Object",
+    "Data",
+    "Window",
+    "Help",
+  ],
   slots: {
     left: "media.paged.data.panel.sources",
     tabs: [

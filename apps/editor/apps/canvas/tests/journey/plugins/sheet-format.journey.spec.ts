@@ -81,11 +81,15 @@ test.describe("journey · paged.sheet cell formatting", () => {
       `[data-schema-panel="${PROPERTIES_PANEL}"] [data-schema-section="Selected range"]`,
     );
     await expect(range).toBeVisible({ timeout: 10_000 });
-    const bold = range.locator('[data-plugin-property-field="bold"] [role="switch"]');
+    const bold = range.locator(
+      '[data-plugin-property-field="bold"] [role="switch"]',
+    );
     await expect(bold).toHaveAttribute("aria-checked", "false");
     await bold.click();
     await expect(bold).toHaveAttribute("aria-checked", "true");
-    const fill = range.locator('[data-plugin-property-field="fill"] input').first();
+    const fill = range
+      .locator('[data-plugin-property-field="fill"] input')
+      .first();
     await fill.fill("#FFFF00");
     await fill.press("Enter");
     // The workbook's own readout of the range's style agrees.
@@ -96,10 +100,13 @@ test.describe("journey · paged.sheet cell formatting", () => {
 
     // ── The placed table carries both, on exactly the selected cells. ──
     await expect
-      .poll(async () => {
-        const doc = await placedTables(page);
-        return doc.tables[0] ? cellFill(doc, doc.tables[0], 0, 0) : null;
-      }, { timeout: 10_000 })
+      .poll(
+        async () => {
+          const doc = await placedTables(page);
+          return doc.tables[0] ? cellFill(doc, doc.tables[0], 0, 0) : null;
+        },
+        { timeout: 10_000 },
+      )
       .toBe("255 255 0");
     const after = await placedTables(page);
     expect(after.tables).toHaveLength(1);

@@ -35,7 +35,10 @@ export const SCRIPT_TOOLS: Anthropic.Tool[] = [
     input_schema: {
       type: "object",
       properties: {
-        source: { type: "string", description: "The Boa (ECMAScript) source to run." },
+        source: {
+          type: "string",
+          description: "The Boa (ECMAScript) source to run.",
+        },
       },
       required: ["source"],
       additionalProperties: false,
@@ -48,7 +51,11 @@ export const SCRIPT_TOOLS: Anthropic.Tool[] = [
     input_schema: {
       type: "object",
       properties: {
-        query: { type: "string", description: "Part of a function name or property path, e.g. insertTextFrame or StrokeWeight." },
+        query: {
+          type: "string",
+          description:
+            "Part of a function name or property path, e.g. insertTextFrame or StrokeWeight.",
+        },
       },
       required: ["query"],
       additionalProperties: false,
@@ -56,7 +63,8 @@ export const SCRIPT_TOOLS: Anthropic.Tool[] = [
   },
   {
     name: RENDER_PAGE,
-    description: "Render one page of the document to an image so you can judge layout and look. Costs more than a script; use it to check visual results.",
+    description:
+      "Render one page of the document to an image so you can judge layout and look. Costs more than a script; use it to check visual results.",
     input_schema: {
       type: "object",
       properties: {
@@ -81,11 +89,17 @@ export function parseToolInput(name: string, input: unknown): ToolInput | null {
   const o = input as Record<string, unknown>;
   switch (name) {
     case RUN_SCRIPT:
-      return typeof o.source === "string" && o.source.trim() ? { name, source: o.source } : null;
+      return typeof o.source === "string" && o.source.trim()
+        ? { name, source: o.source }
+        : null;
     case LOOKUP_API:
       return typeof o.query === "string" ? { name, query: o.query } : null;
     case RENDER_PAGE:
-      return typeof o.page === "number" && Number.isInteger(o.page) && o.page >= 1 ? { name, page: o.page } : null;
+      return typeof o.page === "number" &&
+        Number.isInteger(o.page) &&
+        o.page >= 1
+        ? { name, page: o.page }
+        : null;
     default:
       return null;
   }

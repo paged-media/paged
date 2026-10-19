@@ -165,9 +165,7 @@ test.describe("Pages navigator panel", () => {
     const before = await readCamera(page);
     const rects = await pageRects(page);
     const target = rects[pageCount - 1];
-    await page
-      .locator(`button[title^="Jump to page ${pageCount} "]`)
-      .click();
+    await page.locator(`button[title^="Jump to page ${pageCount} "]`).click();
     await expect
       .poll(async () => JSON.stringify(await readCamera(page)))
       .not.toBe(JSON.stringify(before));

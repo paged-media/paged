@@ -28,7 +28,14 @@
 // up from those logs alone.
 
 import { test, expect, type Page } from "@playwright/test";
-import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  appendFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { join } from "node:path";
@@ -66,12 +73,23 @@ export type Mark =
   | { mark: "scene"; id: string; wall: number; speechAt: number }
   | { mark: "scene-end"; id: string; wall: number }
   | { mark: "cut-start" | "cut-end"; label: string; wall: number }
-  | { mark: "chip"; wall: number; text: string; icon: "key" | "file" | "save" | "done"; kbd?: string }
+  | {
+      mark: "chip";
+      wall: number;
+      text: string;
+      icon: "key" | "file" | "save" | "done";
+      kbd?: string;
+    }
   /** Page 1's origin in CSS px and CSS px per point, so a storyboard can
    *  aim its zooms in page points. */
   | { mark: "camera"; wall: number; origin: [number, number]; scale: number }
   /** Punch in on a page rectangle (points: x0, y0, x1, y1) until unfocus. */
-  | { mark: "focus"; wall: number; page: [number, number, number, number]; max?: number }
+  | {
+      mark: "focus";
+      wall: number;
+      page: [number, number, number, number];
+      max?: number;
+    }
   | { mark: "unfocus"; wall: number };
 
 export interface Kit {
@@ -95,7 +113,11 @@ export interface Kit {
   /** Press a shortcut; with a label it shows on screen as a keycap. */
   key(combo: string, label?: string, shown?: string): Promise<void>;
   /** A chip for what the picture cannot show (a file picked, a file saved). */
-  chip(text: string, icon: "file" | "save" | "done" | "key", kbd?: string): void;
+  chip(
+    text: string,
+    icon: "file" | "save" | "done" | "key",
+    kbd?: string,
+  ): void;
   /** Punch the camera in on a page rectangle, in points. */
   focus(page: [number, number, number, number], max?: number): void;
   /** Back to the whole window. */
@@ -106,20 +128,30 @@ export interface Kit {
   recamera(): Promise<void>;
 }
 
-const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, Math.max(0, ms)));
+const sleep = (ms: number) =>
+  new Promise<void>((r) => setTimeout(r, Math.max(0, ms)));
 
 function readPlan(slug: string): { plan: Plan; hash: string } {
   const file = join(ROOT!, ".build", "plans", `${slug}.json`);
   if (!existsSync(file)) {
-    throw new Error(`no plan for "${slug}": run \`pnpm --filter @paged-media/media narrate ${slug}\` first`);
+    throw new Error(
+      `no plan for "${slug}": run \`pnpm --filter @paged-media/media narrate ${slug}\` first`,
+    );
   }
   const text = readFileSync(file, "utf8");
-  return { plan: JSON.parse(text) as Plan, hash: createHash("sha1").update(text).digest("hex") };
+  return {
+    plan: JSON.parse(text) as Plan,
+    hash: createHash("sha1").update(text).digest("hex"),
+  };
 }
 
 function editorCommit(): { commit: string; dirty: boolean } {
-  const git = (...args: string[]) => execFileSync("git", args, { encoding: "utf8" }).trim();
-  return { commit: git("rev-parse", "--short", "HEAD"), dirty: git("status", "--porcelain").length > 0 };
+  const git = (...args: string[]) =>
+    execFileSync("git", args, { encoding: "utf8" }).trim();
+  return {
+    commit: git("rev-parse", "--short", "HEAD"),
+    dirty: git("status", "--porcelain").length > 0,
+  };
 }
 
 /** Declare a film. The body sets up off camera, rolls, and plays the plan's
@@ -135,17 +167,26 @@ export function film(slug: string, body: (k: Kit) => Promise<void>): void {
     mkdirSync(dir, { recursive: true });
     const marksFile = join(dir, "marks.jsonl");
     writeFileSync(marksFile, "");
-    const mark = (m: Mark) => appendFileSync(marksFile, `${JSON.stringify(m)}\n`);
+    const mark = (m: Mark) =>
+      appendFileSync(marksFile, `${JSON.stringify(m)}\n`);
 
     await dressStage(page);
     const designer = new Designer(page);
-    const pointer = new Pointer(page, join(dir, "cursor.jsonl"), { x: VIEW.width / 2, y: VIEW.height / 2 });
+    const pointer = new Pointer(page, join(dir, "cursor.jsonl"), {
+      x: VIEW.width / 2,
+      y: VIEW.height / 2,
+    });
     let capture: Capture | null = null;
     let next = 0;
     const logCamera = async () => {
       const o = await screenPoint(page, 0, 0);
       const x = await screenPoint(page, 100, 0);
-      mark({ mark: "camera", wall: Date.now(), origin: [o.x, o.y], scale: (x.x - o.x) / 100 });
+      mark({
+        mark: "camera",
+        wall: Date.now(),
+        origin: [o.x, o.y],
+        scale: (x.x - o.x) / 100,
+      });
     };
 
     const k: Kit = {
@@ -154,12 +195,17 @@ export function film(slug: string, body: (k: Kit) => Promise<void>): void {
       pointer,
       dir,
       async setup(fn) {
-        if (capture) throw new Error("setup() after roll(): the camera is already rolling");
+        if (capture)
+          throw new Error(
+            "setup() after roll(): the camera is already rolling",
+          );
         await fn();
       },
       async roll() {
         if (capture) throw new Error("roll() twice");
-        await expect.poll(() => designer.gpuActive(), { timeout: 30_000 }).toBe(true);
+        await expect
+          .poll(() => designer.gpuActive(), { timeout: 30_000 })
+          .toBe(true);
         await pointer.place(pointer.position);
         capture = await startCapture(page, {
           dir,
@@ -177,7 +223,9 @@ export function film(slug: string, body: (k: Kit) => Promise<void>): void {
         });
         mark({ mark: "clapper-on", wall: Date.now() });
         await sleep(250);
-        await page.evaluate(() => document.getElementById("film-clapper")?.remove());
+        await page.evaluate(() =>
+          document.getElementById("film-clapper")?.remove(),
+        );
         mark({ mark: "clapper-off", wall: Date.now() });
         await sleep(300);
         // Zooms are aimed through the newest camera mark; k.recamera() logs
@@ -189,7 +237,9 @@ export function film(slug: string, body: (k: Kit) => Promise<void>): void {
         if (!capture) throw new Error(`scene "${id}" before roll()`);
         const s = plan.scenes[next];
         if (!s || s.id !== id) {
-          throw new Error(`scene "${id}" is out of order: the plan expects "${s?.id ?? "(no more scenes)"}"`);
+          throw new Error(
+            `scene "${id}" is out of order: the plan expects "${s?.id ?? "(no more scenes)"}"`,
+          );
         }
         next += 1;
         const t0 = Date.now();
@@ -208,18 +258,37 @@ export function film(slug: string, body: (k: Kit) => Promise<void>): void {
       async key(combo, label, shown) {
         // A focused field would take the keystroke as input (a select jumps
         // to the option starting with it), so the shortcut goes to the page.
-        await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+        await page.evaluate(() =>
+          (document.activeElement as HTMLElement | null)?.blur(),
+        );
         if (label) {
-          mark({ mark: "chip", wall: Date.now(), text: label, icon: "key", kbd: shown ?? combo.toUpperCase() });
+          mark({
+            mark: "chip",
+            wall: Date.now(),
+            text: label,
+            icon: "key",
+            kbd: shown ?? combo.toUpperCase(),
+          });
           await sleep(180);
         }
         await page.keyboard.press(combo);
       },
       chip(text, icon, kbd) {
-        mark({ mark: "chip", wall: Date.now(), text, icon, ...(kbd ? { kbd } : {}) });
+        mark({
+          mark: "chip",
+          wall: Date.now(),
+          text,
+          icon,
+          ...(kbd ? { kbd } : {}),
+        });
       },
       focus(rect, max) {
-        mark({ mark: "focus", wall: Date.now(), page: rect, ...(max ? { max } : {}) });
+        mark({
+          mark: "focus",
+          wall: Date.now(),
+          page: rect,
+          ...(max ? { max } : {}),
+        });
       },
       unfocus() {
         mark({ mark: "unfocus", wall: Date.now() });
@@ -231,7 +300,9 @@ export function film(slug: string, body: (k: Kit) => Promise<void>): void {
 
     if (!capture) throw new Error("the film never rolled");
     if (next !== plan.scenes.length) {
-      throw new Error(`the take ended after ${next} of ${plan.scenes.length} scenes (next: "${plan.scenes[next].id}")`);
+      throw new Error(
+        `the take ended after ${next} of ${plan.scenes.length} scenes (next: "${plan.scenes[next].id}")`,
+      );
     }
     const gpuActive = await designer.gpuActive();
     mark({ mark: "wrap", wall: Date.now() });
@@ -250,7 +321,12 @@ export function film(slug: string, body: (k: Kit) => Promise<void>): void {
           dpr: DPR,
           gpuActive,
           frames,
-          ...(process.env.AI_TAPE_DIR ? { rehearsal: "AI replies came from scratch tapes (AI_TAPE_DIR): not publishable" } : {}),
+          ...(process.env.AI_TAPE_DIR
+            ? {
+                rehearsal:
+                  "AI replies came from scratch tapes (AI_TAPE_DIR): not publishable",
+              }
+            : {}),
         },
         null,
         2,

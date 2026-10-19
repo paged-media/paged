@@ -52,16 +52,23 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   const slate = await doc.swatch(SWATCH.slate);
   const layerContent = await doc.layerId(LAYER.content);
 
-  const head = await proseFrame(ctx, page, [left, 54, right, 82], [
-    { text: "Type on a path, corners and kin", style: STYLE.head1 },
-  ]);
-  const intro = await proseFrame(ctx, page, [left, 86, right, 126], [
-    {
-      text:
-        "A story freed of its frame and flowed along a curve; rectangle corners restyled live; and a selection that finds its own family by fill.",
-      style: STYLE.bodyFirst,
-    },
-  ]);
+  const head = await proseFrame(
+    ctx,
+    page,
+    [left, 54, right, 82],
+    [{ text: "Type on a path, corners and kin", style: STYLE.head1 }],
+  );
+  const intro = await proseFrame(
+    ctx,
+    page,
+    [left, 86, right, 126],
+    [
+      {
+        text: "A story freed of its frame and flowed along a curve; rectangle corners restyled live; and a selection that finds its own family by fill.",
+        style: STYLE.bodyFirst,
+      },
+    ],
+  );
   elements.push(head.frameId, intro.frameId);
 
   // ── type on a path ───────────────────────────────────────────────
@@ -115,7 +122,7 @@ export async function build(ctx: PageContext): Promise<PageReport> {
 
   // Detach, demonstrated transiently: a second curve, a second freed
   // story, attach, detach — the story outlives both.
-  const run = <T,>(fn: () => Promise<T>): Promise<T> =>
+  const run = <T>(fn: () => Promise<T>): Promise<T> =>
     ctx.doc.ledger ? ctx.doc.ledger.transient(fn) : fn();
   await run(async () => {
     const sBox: [number, number, number, number] = [300, 600, 456, 628];
@@ -140,13 +147,17 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     await doc.mutate("deleteFrame", { frameId: sCurve });
   });
 
-  const topCaption = await proseFrame(ctx, page, [left, 276, right, 322], [
-    {
-      text:
-        "The sentence above flows an ordinary story along an ordinary path - attachTextToPath took the story this page typed, styled and then freed by deleting its frame (no op mints a bare story; that workflow IS the door). A scratch pair also attached and detached: detach unlinks, it does not delete, so the words outlived both the path and the exhibit.",
-      style: STYLE.caption,
-    },
-  ]);
+  const topCaption = await proseFrame(
+    ctx,
+    page,
+    [left, 276, right, 322],
+    [
+      {
+        text: "The sentence above flows an ordinary story along an ordinary path - attachTextToPath took the story this page typed, styled and then freed by deleting its frame (no op mints a bare story; that workflow IS the door). A scratch pair also attached and detached: detach unlinks, it does not delete, so the words outlived both the path and the exhibit.",
+        style: STYLE.caption,
+      },
+    ],
+  );
   elements.push(topCaption.frameId);
 
   // ── live corners on rectangles ───────────────────────────────────
@@ -209,13 +220,17 @@ export async function build(ctx: PageContext): Promise<PageReport> {
       )
       .toBe(token);
   }
-  const cornerCaption = await proseFrame(ctx, page, [left, 422, right, 452], [
-    {
-      text:
-        "Rounded, Bevel, Fancy - three of the five live-corner presets, each an eight-write batch onto the rectangle's real frameCornerOption and frameCornerRadius properties, 12 pt radius all round.",
-      style: STYLE.caption,
-    },
-  ]);
+  const cornerCaption = await proseFrame(
+    ctx,
+    page,
+    [left, 422, right, 452],
+    [
+      {
+        text: "Rounded, Bevel, Fancy - three of the five live-corner presets, each an eight-write batch onto the rectangle's real frameCornerOption and frameCornerRadius properties, 12 pt radius all round.",
+        style: STYLE.caption,
+      },
+    ],
+  );
   elements.push(cornerCaption.frameId);
 
   // ── select same fill ─────────────────────────────────────────────
@@ -226,7 +241,12 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     const id = await path(
       ctx,
       pageId,
-      [corner(x, 486), corner(x + 36, 486), corner(x + 36, 522), corner(x, 522)],
+      [
+        corner(x, 486),
+        corner(x + 36, 486),
+        corner(x + 36, 522),
+        corner(x, 522),
+      ],
       false,
       { fill: red ? vermilion : slate },
     );
@@ -243,8 +263,11 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   const selectedCount = await ctx.page.evaluate(
     () =>
       (
-        (globalThis as unknown as { __canvas: { elementSelection?: unknown[] } })
-          .__canvas.elementSelection ?? []
+        (
+          globalThis as unknown as {
+            __canvas: { elementSelection?: unknown[] };
+          }
+        ).__canvas.elementSelection ?? []
       ).length,
   );
   expect(
@@ -252,13 +275,17 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     "select-same grew the selection to the vermilion family",
   ).toBeGreaterThanOrEqual(3);
 
-  const sameCaption = await proseFrame(ctx, page, [left, 532, right, 572], [
-    {
-      text:
-        `Eight tiles, three of them vermilion. One vermilion tile was selected by hand; Edit > Select same > Fill grew the selection to ${selectedCount} elements - not just the three tiles but every carrier of that swatch reference in the DOCUMENT, because select-same reads the fill reference, not the neighbourhood. The page looks unchanged: pure selection mutates nothing, and the count printed here is the evidence.`,
-      style: STYLE.caption,
-    },
-  ]);
+  const sameCaption = await proseFrame(
+    ctx,
+    page,
+    [left, 532, right, 572],
+    [
+      {
+        text: `Eight tiles, three of them vermilion. One vermilion tile was selected by hand; Edit > Select same > Fill grew the selection to ${selectedCount} elements - not just the three tiles but every carrier of that swatch reference in the DOCUMENT, because select-same reads the fill reference, not the neighbourhood. The page looks unchanged: pure selection mutates nothing, and the count printed here is the evidence.`,
+        style: STYLE.caption,
+      },
+    ],
+  );
   elements.push(sameCaption.frameId);
 
   elements.push(

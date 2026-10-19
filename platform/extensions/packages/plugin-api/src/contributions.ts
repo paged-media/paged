@@ -83,4 +83,4 @@ export type {
   ToolPreviewPath,
   ToolPreviewText,
   MarqueeRectPageLocal,
-} from "./editor";
+} from "./editor.js";

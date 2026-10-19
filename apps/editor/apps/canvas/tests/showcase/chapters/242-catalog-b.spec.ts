@@ -44,7 +44,6 @@ import { build as dsl } from "../pages/240-catalog/04-dsl";
 import { build as barcodes } from "../pages/240-catalog/05-barcodes";
 import { build as table } from "../pages/240-catalog/06-table";
 
-
 // Continuation of 240-catalog - split for the in-chain per-op cost;
 // the checkpoint chain absorbs splits with zero logic change.
 annualChapter({

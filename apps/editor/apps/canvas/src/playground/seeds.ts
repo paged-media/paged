@@ -69,7 +69,8 @@ export const SEEDS: Record<SeedId, Seed> = {
 
   "one-text-frame-selected": {
     title: "One text frame (selected)",
-    summary: "A single text frame with a paragraph of body text, already selected.",
+    summary:
+      "A single text frame with a paragraph of body text, already selected.",
     prelude: `
 const pid = JSON.parse(paged.pages())[0].selfId;
 paged.insertTextFrame(pid, [144, 72, 360, 540]);
@@ -82,7 +83,8 @@ if (stories.length) {
 
   "two-frames": {
     title: "Two frames",
-    summary: "A text frame and a filled graphic frame (selected) — for grouping, threading, and z-order examples.",
+    summary:
+      "A text frame and a filled graphic frame (selected) — for grouping, threading, and z-order examples.",
     prelude: `
 const pid = JSON.parse(paged.pages())[0].selfId;
 paged.insertTextFrame(pid, [72, 72, 300, 320]);
@@ -94,7 +96,8 @@ paged.set(box, "frameFillTint", 20);
 
   "styled-story": {
     title: "A styled story",
-    summary: "A multi-paragraph story with a paragraph style applied — for applyStyle/get examples.",
+    summary:
+      "A multi-paragraph story with a paragraph style applied — for applyStyle/get examples.",
     prelude: `
 const pid = JSON.parse(paged.pages())[0].selfId;
 paged.insertTextFrame(pid, [108, 72, 540, 540]);
@@ -110,7 +113,8 @@ if (ps.length) {
 
   "swatches-and-styles": {
     title: "Swatches & styles",
-    summary: "A row of swatch chips drawn from the default palette — for colour/style reference reads.",
+    summary:
+      "A row of swatch chips drawn from the default palette — for colour/style reference reads.",
     prelude: `
 const pid = JSON.parse(paged.pages())[0].selfId;
 const colors = ["Color/Black", "Color/Red", "Color/Black", "Color/Black"];
@@ -126,7 +130,8 @@ for (let i = 0; i < colors.length; i++) {
 
   "image-frame": {
     title: "An image frame",
-    summary: "An empty picture frame (selected) under a header band — ready for placeImage in a real layout.",
+    summary:
+      "An empty picture frame (selected) under a header band — ready for placeImage in a real layout.",
     prelude: `
 const pid = JSON.parse(paged.pages())[0].selfId;
 const head = paged.insertFrame(pid, [54, 96, 96, 480]);
@@ -138,7 +143,8 @@ paged.insertFrame(pid, [120, 96, 420, 480]);
 
   "a-table": {
     title: "A small table",
-    summary: "A text frame whose story holds a small table — for cell-property examples.",
+    summary:
+      "A text frame whose story holds a small table — for cell-property examples.",
     prelude: `
 const pid = JSON.parse(paged.pages())[0].selfId;
 paged.insertTextFrame(pid, [108, 72, 420, 540]);
@@ -156,7 +162,8 @@ if (typeof paged.insertTable === "function") {
 
   flyer: {
     title: "Event flyer",
-    summary: "A poster page — colour banner, headline, subhead and a picture block; the headline is selected.",
+    summary:
+      "A poster page — colour banner, headline, subhead and a picture block; the headline is selected.",
     prelude: `
 const pid = JSON.parse(paged.pages())[0].selfId;
 const addText = function (bounds, text) {
@@ -184,7 +191,8 @@ paged.setElementSelection([title]);
 
   "article-spread": {
     title: "Magazine article",
-    summary: "A headline over a two-column story, a tinted pull-quote and a picture block; the body is selected.",
+    summary:
+      "A headline over a two-column story, a tinted pull-quote and a picture block; the body is selected.",
     prelude: `
 const pid = JSON.parse(paged.pages())[0].selfId;
 const addText = function (bounds, text) {
@@ -215,7 +223,8 @@ paged.setElementSelection([body]);
 
   "report-page": {
     title: "Business report",
-    summary: "A header band, a heading and intro, and a figures table — a single content page.",
+    summary:
+      "A header band, a heading and intro, and a figures table — a single content page.",
     prelude: `
 const pid = JSON.parse(paged.pages())[0].selfId;
 const band = paged.insertFrame(pid, [48, 54, 96, 558]);
@@ -232,7 +241,8 @@ if (typeof paged.insertTable === "function") {
 
   catalog: {
     title: "Product catalog",
-    summary: "A 3x2 grid of product tiles — for grouping, selection and layout examples.",
+    summary:
+      "A 3x2 grid of product tiles — for grouping, selection and layout examples.",
     prelude: `
 const pid = JSON.parse(paged.pages())[0].selfId;
 const lefts = [54, 222, 390];
@@ -251,7 +261,8 @@ for (let r = 0; r < tops.length; r++) {
 
   "starter-page": {
     title: "Starter page",
-    summary: "Header and footer furniture with an open middle — visible context for elements a script creates. No stories, so a created frame owns the first story.",
+    summary:
+      "Header and footer furniture with an open middle — visible context for elements a script creates. No stories, so a created frame owns the first story.",
     prelude: `
 const pid = JSON.parse(paged.pages())[0].selfId;
 const head = paged.insertFrame(pid, [40, 54, 92, 558]);

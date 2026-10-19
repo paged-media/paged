@@ -131,7 +131,8 @@ export function createEditorDocuments(): EditorDocuments {
     async open(bytes, request) {
       const d = deps;
       const client = d?.getClient() ?? null;
-      if (!d || !client) throw new Error("no engine client to open the document in");
+      if (!d || !client)
+        throw new Error("no engine client to open the document in");
       if (!looksLikePackage(bytes)) {
         throw new Error("not an IDML or .paged package (no ZIP signature)");
       }

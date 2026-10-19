@@ -113,9 +113,10 @@ test.describe("journey · panel sweep", () => {
         if (!open.includes(pid)) failed.push(pid);
       }
 
-      expect(failed, `panels that failed to open: ${failed.join(", ")}`).toEqual(
-        [],
-      );
+      expect(
+        failed,
+        `panels that failed to open: ${failed.join(", ")}`,
+      ).toEqual([]);
     },
   );
 });

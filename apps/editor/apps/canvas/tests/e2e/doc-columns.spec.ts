@@ -65,7 +65,10 @@ const IMPORTER_ID = "media.paged.doc.importer.docx";
 function engineProtocol(): number {
   const require = createRequire(import.meta.url);
   const pkg = JSON.parse(
-    readFileSync(require.resolve("@paged-media/canvas-wasm/package.json"), "utf8"),
+    readFileSync(
+      require.resolve("@paged-media/canvas-wasm/package.json"),
+      "utf8",
+    ),
   ) as { version: string };
   return Number(pkg.version.split(/[.-]/)[1]);
 }
@@ -124,7 +127,10 @@ type CanvasGlobal = { __canvas: { ready: boolean; registries: Registries } };
 
 const invoke = (page: Page, id: string) =>
   page.evaluate(
-    (cmd) => (globalThis as unknown as CanvasGlobal).__canvas.registries.commands.invoke(cmd),
+    (cmd) =>
+      (
+        globalThis as unknown as CanvasGlobal
+      ).__canvas.registries.commands.invoke(cmd),
     id,
   );
 
@@ -140,7 +146,11 @@ async function placedLines(page: Page) {
           client: {
             send: (m: unknown) => Promise<{
               kind: string;
-              payload?: { content?: { paragraphs?: Array<{ runs: Array<{ text: string }> }> } };
+              payload?: {
+                content?: {
+                  paragraphs?: Array<{ runs: Array<{ text: string }> }>;
+                };
+              };
             }>;
             selectionGeometry: (s: unknown) => Promise<Rect[]>;
             executeScript: (s: string) => Promise<{ output: string[] }>;
@@ -148,22 +158,34 @@ async function placedLines(page: Page) {
         };
       }
     ).__canvas.client;
-    const pages = JSON.parse((await c.executeScript("paged.pages()")).output[0] ?? "[]") as Array<{
+    const pages = JSON.parse(
+      (await c.executeScript("paged.pages()")).output[0] ?? "[]",
+    ) as Array<{
       selfId: string;
       marginTopPt: number;
     }>;
     const stories = (
-      JSON.parse((await c.executeScript("paged.stories()")).output[0] ?? "[]") as Array<{
+      JSON.parse(
+        (await c.executeScript("paged.stories()")).output[0] ?? "[]",
+      ) as Array<{
         selfId: string;
       }>
     )
       .map((s) => s.selfId)
       .filter((id) => /^docx_s\d+$/.test(id))
       .sort((a, b) => Number(a.slice(6)) - Number(b.slice(6)));
-    const out: Array<{ label: string; page: number; left: number; top: number; marginTop: number }> =
-      [];
+    const out: Array<{
+      label: string;
+      page: number;
+      left: number;
+      top: number;
+      marginTop: number;
+    }> = [];
     for (const storyId of stories) {
-      const r = await c.send({ kind: "requestStoryContent", payload: { storyId } });
+      const r = await c.send({
+        kind: "requestStoryContent",
+        payload: { storyId },
+      });
       const paras = (r.payload?.content?.paragraphs ?? []).map((p) =>
         p.runs.map((run) => run.text).join(""),
       );
@@ -178,7 +200,9 @@ async function placedLines(page: Page) {
           end: start + text.length,
           affinity: false,
         });
-        const i = rects.length ? pages.findIndex((p) => p.selfId === rects[0].pageId) : -1;
+        const i = rects.length
+          ? pages.findIndex((p) => p.selfId === rects[0].pageId)
+          : -1;
         out.push({
           label: text.split(/\s+/)[0],
           page: i,
@@ -193,7 +217,12 @@ async function placedLines(page: Page) {
 }
 
 /** Open `fixture` through File▸Open and hold every line against `want`. */
-async function openAndCompare(page: Page, fixture: string, want: Line[][], tag: string) {
+async function openAndCompare(
+  page: Page,
+  fixture: string,
+  want: Line[][],
+  tag: string,
+) {
   await openCanvas(page);
   await invoke(page, "paged.file.new");
   await page.waitForFunction(
@@ -206,9 +235,9 @@ async function openAndCompare(page: Page, fixture: string, want: Line[][], tag: 
       () =>
         page.evaluate(
           () =>
-            (globalThis as unknown as CanvasGlobal).__canvas.registries.importers.resolve(
-              "x.docx",
-            )?.id ?? null,
+            (
+              globalThis as unknown as CanvasGlobal
+            ).__canvas.registries.importers.resolve("x.docx")?.id ?? null,
         ),
       { timeout: 15_000 },
     )
@@ -234,14 +263,19 @@ async function openAndCompare(page: Page, fixture: string, want: Line[][], tag: 
       row: Math.round((l.top - 2.4 - l.marginTop) / 12),
     });
   }
-  console.log(`[${tag}] ${JSON.stringify(got.map((p) => p.map((l) => `${l.label} ${l.x} ${l.row}`).join("|")))}`);
+  console.log(
+    `[${tag}] ${JSON.stringify(got.map((p) => p.map((l) => `${l.label} ${l.x} ${l.row}`).join("|")))}`,
+  );
   for (const [i, page] of want.entries()) {
     const key = (l: Line) => l.label;
     const ours = [...got[i]].sort((a, b) => key(a).localeCompare(key(b)));
     const theirs = [...page].sort((a, b) => key(a).localeCompare(key(b)));
     expect(ours.map(key), `page ${i + 1}: its lines`).toEqual(theirs.map(key));
     for (const [k, w] of theirs.entries()) {
-      expect(Math.abs(ours[k].x - w.x), `page ${i + 1}: ${w.label} x`).toBeLessThan(0.25);
+      expect(
+        Math.abs(ours[k].x - w.x),
+        `page ${i + 1}: ${w.label} x`,
+      ).toBeLessThan(0.25);
       expect(ours[k].row, `page ${i + 1}: ${w.label} row`).toBe(w.row);
     }
   }
@@ -253,29 +287,41 @@ test.describe("plugin-doc — Word's mid-page column changes (ADR 029)", () => {
   test("AC-DOCCOL-1 — a continuous section that changes the columns stays on Word's page, balanced like Word's @feat:plugin-doc.file-entry @level:gesture", async ({
     page,
   }) => {
-    test.skip(engineProtocol() < 64, "span/split columns need wire protocol 64");
+    test.skip(
+      engineProtocol() < 64,
+      "span/split columns need wire protocol 64",
+    );
     const want = parse(CONTINUOUS);
     // Word page 3: B1, B2 and B3 share the page; B2 is two columns of five
     // and four lines; B4's six lines all in column 1.
     const b = want[2];
-    expect(b.filter((l) => l.label.startsWith("B2") && l.x > 150)).toHaveLength(4);
-    expect(b.filter((l) => l.label.startsWith("B4") && l.x > 150)).toHaveLength(0);
+    expect(b.filter((l) => l.label.startsWith("B2") && l.x > 150)).toHaveLength(
+      4,
+    );
+    expect(b.filter((l) => l.label.startsWith("B4") && l.x > 150)).toHaveLength(
+      0,
+    );
     await openAndCompare(page, "doc-continuous.docx", want, "AC-DOCCOL-1");
   });
 
   test("AC-DOCCOL-2 — column counts into each other, other gaps, and sections running past the page @feat:plugin-doc.file-entry @level:gesture", async ({
     page,
   }) => {
-    test.skip(engineProtocol() < 64, "span/split columns need wire protocol 64");
+    test.skip(
+      engineProtocol() < 64,
+      "span/split columns need wire protocol 64",
+    );
     const want = parse(COLUMNS);
     // Word's page count (columns.word.json): no column change opens a page.
     expect(want).toHaveLength(13);
     // Word page 1: H3 (3 / 3 / 1) directly below H2 (3 / 3), H4 below it.
     const h = want[0];
-    expect(h.filter((l) => l.label.startsWith("H3")).map((l) => `${l.x} ${l.row}`)).toEqual([
-      "36 5", "36 6", "36 7", "144 5", "144 6", "144 7", "252 5",
-    ]);
-    expect(h.filter((l) => l.label.startsWith("H4")).map((l) => l.row)).toEqual([8, 9]);
+    expect(
+      h.filter((l) => l.label.startsWith("H3")).map((l) => `${l.x} ${l.row}`),
+    ).toEqual(["36 5", "36 6", "36 7", "144 5", "144 6", "144 7", "252 5"]);
+    expect(h.filter((l) => l.label.startsWith("H4")).map((l) => l.row)).toEqual(
+      [8, 9],
+    );
     await openAndCompare(page, "doc-columns.docx", want, "AC-DOCCOL-2");
   });
 });

@@ -69,7 +69,7 @@ export function InkManagerPanel() {
           spotId: ink.spotId,
           convertToProcess: patch.convertToProcess ?? ink.convertToProcess,
           aliasTo:
-            patch.aliasTo !== undefined ? patch.aliasTo : ink.aliasTo ?? null,
+            patch.aliasTo !== undefined ? patch.aliasTo : (ink.aliasTo ?? null),
         },
       })
       .catch(() => {});
@@ -105,8 +105,16 @@ export function InkManagerPanel() {
             className="flex items-center gap-2 px-1 py-0.5 border-b border-input/30 text-muted-foreground"
             data-ink-process={p.toLowerCase()}
           >
-            <span className="w-3 h-3 rounded-sm border border-input"
-              style={{ background: { Cyan: "#00b7eb", Magenta: "#ec008c", Yellow: "#ffe600", Black: "#000" }[p] }}
+            <span
+              className="w-3 h-3 rounded-sm border border-input"
+              style={{
+                background: {
+                  Cyan: "#00b7eb",
+                  Magenta: "#ec008c",
+                  Yellow: "#ffe600",
+                  Black: "#000",
+                }[p],
+              }}
             />
             <span className="flex-1">Process {p}</span>
           </li>
@@ -125,7 +133,10 @@ export function InkManagerPanel() {
             <span className="flex-1 truncate" title={ink.name}>
               {ink.name}
             </span>
-            <label className="flex items-center gap-1 text-[10px]" title="Convert to process at output">
+            <label
+              className="flex items-center gap-1 text-[10px]"
+              title="Convert to process at output"
+            >
               <input
                 type="checkbox"
                 data-action="convert-to-process"
@@ -161,8 +172,8 @@ export function InkManagerPanel() {
         )}
       </ul>
       <div className="text-[10px] text-muted-foreground">
-        Output-time settings — the swatches themselves are never
-        modified. Consumed by PDF separations at export.
+        Output-time settings — the swatches themselves are never modified.
+        Consumed by PDF separations at export.
       </div>
     </div>
   );

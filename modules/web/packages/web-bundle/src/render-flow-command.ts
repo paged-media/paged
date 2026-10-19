@@ -155,7 +155,9 @@ export async function renderSelectedWebFlow(host: BundleHost): Promise<void> {
   if (outcome.submittedCount > 0) {
     host.log.info(
       `renderWebFlow: threaded ${outcome.submittedCount} frame(s)` +
-        (outcome.overset ? " (overset — content remains past the last frame)" : ""),
+        (outcome.overset
+          ? " (overset — content remains past the last frame)"
+          : ""),
     );
   } else if (outcome.rendered) {
     host.log.info(
@@ -194,7 +196,9 @@ export async function threadSelectedIntoFlow(
   const sourceId = selection[0];
   const sourceTarget = asFrameTarget(sourceId);
   if (!sourceTarget) {
-    host.log.info("threadWebFlow: the first selection is not a page-item frame");
+    host.log.info(
+      "threadWebFlow: the first selection is not a page-item frame",
+    );
     return;
   }
 
@@ -242,7 +246,9 @@ export async function threadSelectedIntoFlow(
  * a sidebar) — without needing a flow picker (the host exposes none). For a
  * source with >2 named flows it routes to the second and logs.
  */
-export async function threadSelectedIntoNamedFlow(host: BundleHost): Promise<void> {
+export async function threadSelectedIntoNamedFlow(
+  host: BundleHost,
+): Promise<void> {
   const selection = host.selection.get();
   if (selection.length < 2) {
     host.log.info(
@@ -253,7 +259,9 @@ export async function threadSelectedIntoNamedFlow(host: BundleHost): Promise<voi
   const sourceTarget = asFrameTarget(selection[0]);
   const source = sourceTarget ? await readFlowSource(host, selection[0]) : null;
   if (!source) {
-    host.log.info("threadWebFlowNamed: the first selected frame is not a web frame");
+    host.log.info(
+      "threadWebFlowNamed: the first selected frame is not a web frame",
+    );
     return;
   }
   const flows = parseFlowInto(source.css);
@@ -289,13 +297,17 @@ export async function unthreadSelectedFromFlow(
   const sourceId = selection[0];
   const sourceTarget = asFrameTarget(sourceId);
   if (!sourceTarget) {
-    host.log.info("unthreadWebFlow: the first selection is not a page-item frame");
+    host.log.info(
+      "unthreadWebFlow: the first selection is not a page-item frame",
+    );
     return;
   }
 
   const source = await readFlowSource(host, sourceId);
   if (!source) {
-    host.log.info("unthreadWebFlow: the first selected frame is not a web frame");
+    host.log.info(
+      "unthreadWebFlow: the first selected frame is not a web frame",
+    );
     return;
   }
 
@@ -312,13 +324,20 @@ export async function unthreadSelectedFromFlow(
   }
 
   if (removed === 0) {
-    host.log.info("unthreadWebFlow: none of the selected frames were in the flow");
+    host.log.info(
+      "unthreadWebFlow: none of the selected frames were in the flow",
+    );
     return;
   }
 
   const written = await writeWebSource(host, sourceId, next);
   if (!written.applied) {
-    reportRefusal(host, asFrameTarget(sourceId), "unthreadWebFlow", written.reason);
+    reportRefusal(
+      host,
+      asFrameTarget(sourceId),
+      "unthreadWebFlow",
+      written.reason,
+    );
     return;
   }
   host.log.info(`unthreadWebFlow: removed ${removed} frame(s) from the flow`);

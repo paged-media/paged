@@ -161,7 +161,9 @@ describe("sheet_grid_scene_to_svg: geometry", () => {
       '<rect x="0" y="0" width="40" height="20" fill="#ffeeaa"/>',
     );
     // The fill precedes the text in the layer order.
-    expect(svg.indexOf("fill=\"#ffeeaa\"")).toBeLessThan(svg.indexOf(">C</text>"));
+    expect(svg.indexOf('fill="#ffeeaa"')).toBeLessThan(
+      svg.indexOf(">C</text>"),
+    );
   });
 
   it("draws cell borders from style flags", () => {
@@ -202,7 +204,7 @@ describe("sheet_grid_scene_to_svg: geometry", () => {
   it("XML-escapes formatted cell text (no raw markup leaks)", () => {
     const scene = scene2x2();
     scene.cells = [
-      { row: 0, col: 0, text: "<a & \"b\">", align: "left", styleKey: 0 },
+      { row: 0, col: 0, text: '<a & "b">', align: "left", styleKey: 0 },
     ];
     const svg = gridSceneToSvg(scene);
     expect(svg).toContain("&lt;a &amp; &quot;b&quot;&gt;");
@@ -299,7 +301,16 @@ describe("sheet_grid_scene_databars: data-bar rect rendering", () => {
     const s = scene2x2();
     // A2 (row1,col0) bar: engine-given inset rect within the cell box.
     s.databars = [
-      { row: 1, col: 0, x: 1.5, y: 21.5, w: 30, h: 17, fillFraction: 0.75, fill: "#638EC6" },
+      {
+        row: 1,
+        col: 0,
+        x: 1.5,
+        y: 21.5,
+        w: 30,
+        h: 17,
+        fillFraction: 0.75,
+        fill: "#638EC6",
+      },
     ];
     const svg = gridSceneToSvg(s);
     const o = DEFAULT_GRID_SVG_OPTIONS;
@@ -313,17 +324,46 @@ describe("sheet_grid_scene_databars: data-bar rect rendering", () => {
     const s = scene2x2();
     s.cells = [{ row: 0, col: 0, text: "V", align: "left", styleKey: 0 }];
     s.databars = [
-      { row: 0, col: 0, x: 1.5, y: 1.5, w: 20, h: 17, fillFraction: 0.5, fill: "#638EC6" },
+      {
+        row: 0,
+        col: 0,
+        x: 1.5,
+        y: 1.5,
+        w: 20,
+        h: 17,
+        fillFraction: 0.5,
+        fill: "#638EC6",
+      },
     ];
     const svg = gridSceneToSvg(s);
-    expect(svg.indexOf('fill="#638EC6"')).toBeLessThan(svg.indexOf(">V</text>"));
+    expect(svg.indexOf('fill="#638EC6"')).toBeLessThan(
+      svg.indexOf(">V</text>"),
+    );
   });
 
   it("skips a zero-width bar and an off-window bar", () => {
     const s = scene2x2();
     s.databars = [
-      { row: 0, col: 0, x: 1.5, y: 1.5, w: 0, h: 17, fillFraction: 0, fill: "#638EC6" },
-      { row: 99, col: 0, x: 1.5, y: 1.5, w: 10, h: 17, fillFraction: 0.5, fill: "#638EC6" },
+      {
+        row: 0,
+        col: 0,
+        x: 1.5,
+        y: 1.5,
+        w: 0,
+        h: 17,
+        fillFraction: 0,
+        fill: "#638EC6",
+      },
+      {
+        row: 99,
+        col: 0,
+        x: 1.5,
+        y: 1.5,
+        w: 10,
+        h: 17,
+        fillFraction: 0.5,
+        fill: "#638EC6",
+      },
     ];
     const svg = gridSceneToSvg(s);
     expect(svg).not.toContain("#638EC6");
@@ -430,7 +470,10 @@ describe("sheet_grid_scene_to_scene_layer: in-frame C-1 lowering", () => {
     expect(kinds.filter((k) => k === "text").length).toBe(2);
     // A gridline is a 2-point stroke at the rule's coordinates (h at y=20).
     const hLine = layer.items.find(
-      (i) => i.kind === "strokePath" && i.path[0].op === "moveTo" && i.path[0].y === 20,
+      (i) =>
+        i.kind === "strokePath" &&
+        i.path[0].op === "moveTo" &&
+        i.path[0].y === 20,
     );
     expect(hLine).toBeDefined();
   });
@@ -438,7 +481,9 @@ describe("sheet_grid_scene_to_scene_layer: in-frame C-1 lowering", () => {
   it("positions cell text at the cell's leading edge + baseline", () => {
     const scene = scene2x2();
     const layer = gridSceneToSceneLayer(scene);
-    const name = layer.items.find((i) => i.kind === "text" && i.text === "Name");
+    const name = layer.items.find(
+      (i) => i.kind === "text" && i.text === "Name",
+    );
     expect(name).toBeDefined();
     if (name && name.kind === "text") {
       // col0 leading edge (0) + pad; row0 top (0) + baseline.
@@ -531,11 +576,22 @@ describe("sheet_grid_scene_to_scene_layer: in-frame C-1 lowering", () => {
     const scene = scene2x2();
     scene.cells = [{ row: 0, col: 0, text: "V", align: "left", styleKey: 0 }];
     scene.databars = [
-      { row: 0, col: 0, x: 1.5, y: 1.5, w: 20, h: 17, fillFraction: 0.5, fill: "#638EC6" },
+      {
+        row: 0,
+        col: 0,
+        x: 1.5,
+        y: 1.5,
+        w: 20,
+        h: 17,
+        fillFraction: 0.5,
+        fill: "#638EC6",
+      },
     ];
     const layer = gridSceneToSceneLayer(scene);
     const barIdx = layer.items.findIndex((i) => i.kind === "fillPath");
-    const textIdx = layer.items.findIndex((i) => i.kind === "text" && i.text === "V");
+    const textIdx = layer.items.findIndex(
+      (i) => i.kind === "text" && i.text === "V",
+    );
     expect(barIdx).toBeGreaterThanOrEqual(0);
     // The bar is drawn before (under) the text.
     expect(barIdx).toBeLessThan(textIdx);
@@ -546,7 +602,10 @@ describe("sheet_grid_scene_to_scene_layer: in-frame C-1 lowering", () => {
       expect(bar.path[2]).toEqual({ op: "lineTo", x: 21.5, y: 18.5 });
       // #638EC6 → sRGB, alpha = the data-bar opacity wash.
       expect(bar.paint.r).toBeCloseTo(0x63 / 255, 3);
-      expect(bar.paint.a).toBeCloseTo(DEFAULT_GRID_SVG_OPTIONS.dataBarOpacity, 3);
+      expect(bar.paint.a).toBeCloseTo(
+        DEFAULT_GRID_SVG_OPTIONS.dataBarOpacity,
+        3,
+      );
     }
   });
 });

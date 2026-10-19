@@ -30,21 +30,61 @@ import fc from "fast-check";
 import { describe, expect, it } from "bun:test";
 
 import { sanitizeHtml } from "../src/sanitize";
-import { envelopeFor, sourceFromEnvelope, type WebFrameSource } from "../src/source";
+import {
+  envelopeFor,
+  sourceFromEnvelope,
+  type WebFrameSource,
+} from "../src/source";
 import { applyTemplate, TEMPLATE_FILTERS } from "../src/transform";
 
 const RUNS = { numRuns: 400, seed: 20261005 };
 
 const HTML_PIECES = [
-  "<script>", "</script>", "<SCRIPT src=x>", "< script >", "</ script >", "<script",
-  "<scr", "ipt>", "<p>", "</p>", "<a href=\"", "<a href='", "<img ", " src=", "\"", "'", ">", "<", "=",
-  " onclick=\"go()\"", " onload='x'", " onerror=y", " ON", "on", "click", "mouseover=",
-  "javascript:", "JavaScript:", "java\tscript:", "&#106;avascript:", " href=javascript:alert(1)",
-  " ", "\n", "x", "<!--", "-->", "<style>", "</style>",
+  "<script>",
+  "</script>",
+  "<SCRIPT src=x>",
+  "< script >",
+  "</ script >",
+  "<script",
+  "<scr",
+  "ipt>",
+  "<p>",
+  "</p>",
+  '<a href="',
+  "<a href='",
+  "<img ",
+  " src=",
+  '"',
+  "'",
+  ">",
+  "<",
+  "=",
+  ' onclick="go()"',
+  " onload='x'",
+  " onerror=y",
+  " ON",
+  "on",
+  "click",
+  "mouseover=",
+  "javascript:",
+  "JavaScript:",
+  "java\tscript:",
+  "&#106;avascript:",
+  " href=javascript:alert(1)",
+  " ",
+  "\n",
+  "x",
+  "<!--",
+  "-->",
+  "<style>",
+  "</style>",
 ];
 
 const htmlish = fc
-  .array(fc.oneof(fc.constantFrom(...HTML_PIECES), fc.string({ maxLength: 6 })), { maxLength: 24 })
+  .array(
+    fc.oneof(fc.constantFrom(...HTML_PIECES), fc.string({ maxLength: 6 })),
+    { maxLength: 24 },
+  )
   .map((parts) => parts.join(""));
 
 /** Executable surface as the sanitizer defines it. A script tag counts
@@ -52,7 +92,8 @@ const htmlish = fc
 const SCRIPT_TAG = /<\s*\/?\s*script\b[^>]*>/i;
 /** A handler with a value (an empty `onx=` is DEFECT S-03). */
 const EVENT_ATTR = /\son[a-z]+\s*=\s*(?:"|'|[^\s>])/i;
-const JS_URL = /\s[a-z][a-z0-9-]*\s*=\s*["']?\s*j\s*a\s*v\s*a\s*s\s*c\s*r\s*i\s*p\s*t\s*:/i;
+const JS_URL =
+  /\s[a-z][a-z0-9-]*\s*=\s*["']?\s*j\s*a\s*v\s*a\s*s\s*c\s*r\s*i\s*p\s*t\s*:/i;
 
 describe("sanitizeHtml properties", () => {
   it("is total: never throws, always returns a string @feat:plugin-web.source-model", () => {
@@ -99,7 +140,11 @@ describe("sanitizeHtml properties", () => {
         fc.pre(sanitizeHtml(out).html === out);
         const even = (t: string, q: string) => t.split(q).length % 2 === 1;
         fc.pre(!/<[^>]*$/.test(out));
-        fc.pre((out.match(/<[^>]*>/g) ?? []).every((t) => even(t, "'") && even(t, '"')));
+        fc.pre(
+          (out.match(/<[^>]*>/g) ?? []).every(
+            (t) => even(t, "'") && even(t, '"'),
+          ),
+        );
         expect(out).not.toMatch(SCRIPT_TAG);
         // Attributes live inside tags; text like "onclick=" is just text.
         for (const tag of out.match(/<[^>]*>/g) ?? []) {
@@ -119,23 +164,39 @@ describe("sanitizeHtml pinned defects", () => {
   // `<a ON onclick="x"A=y>` becomes `<a ONA=y>`, a new handler;
   // ` href=javascript:a() javascript:` becomes ` href= javascript:`.
   // Found by the property hunt (fast-check, 5000 unseeded runs).
-  it.failing("DEFECT S-02: a removal splices its neighbours into a new <script> tag @feat:plugin-web.source-model", () => {
-    expect(sanitizeHtml("<scr<script>ipt>alert(1)</scr<script>ipt>").html).not.toMatch(SCRIPT_TAG);
-  });
-  it.failing("DEFECT S-02: a removal splices its neighbours into a new javascript: URL @feat:plugin-web.source-model", () => {
-    const out = sanitizeHtml("<a href=javascript:alert(1) javascript:x>").html;
-    expect(out).toBe(sanitizeHtml(out).html);
-  });
-  it.failing("DEFECT S-02: a removal splices its neighbours into a new event handler @feat:plugin-web.source-model", () => {
-    const out = sanitizeHtml('<a ON onclick="go()"A=x>link</a>').html;
-    expect(out).toBe(sanitizeHtml(out).html);
-  });
+  it.failing(
+    "DEFECT S-02: a removal splices its neighbours into a new <script> tag @feat:plugin-web.source-model",
+    () => {
+      expect(
+        sanitizeHtml("<scr<script>ipt>alert(1)</scr<script>ipt>").html,
+      ).not.toMatch(SCRIPT_TAG);
+    },
+  );
+  it.failing(
+    "DEFECT S-02: a removal splices its neighbours into a new javascript: URL @feat:plugin-web.source-model",
+    () => {
+      const out = sanitizeHtml(
+        "<a href=javascript:alert(1) javascript:x>",
+      ).html;
+      expect(out).toBe(sanitizeHtml(out).html);
+    },
+  );
+  it.failing(
+    "DEFECT S-02: a removal splices its neighbours into a new event handler @feat:plugin-web.source-model",
+    () => {
+      const out = sanitizeHtml('<a ON onclick="go()"A=x>link</a>').html;
+      expect(out).toBe(sanitizeHtml(out).html);
+    },
+  );
   // DEFECT S-03: an event handler with an EMPTY unquoted value (`<img
   // onerror=>`) is kept — the pattern needs at least one value character.
   // Inert today (an empty handler runs nothing), but not removed.
-  it.failing("DEFECT S-03: an empty on…= handler is not removed @feat:plugin-web.source-model", () => {
-    expect(sanitizeHtml("<img onerror=>").html).not.toMatch(/\sonerror\s*=/i);
-  });
+  it.failing(
+    "DEFECT S-03: an empty on…= handler is not removed @feat:plugin-web.source-model",
+    () => {
+      expect(sanitizeHtml("<img onerror=>").html).not.toMatch(/\sonerror\s*=/i);
+    },
+  );
 
   // DEFECT S-01: an unterminated tag at the very end of the input keeps
   // its executable surface: a trailing `<script` and a trailing
@@ -146,18 +207,28 @@ describe("sanitizeHtml pinned defects", () => {
   // (the element is unclosed at EOF and the preview is sandbox=""), but it
   // breaks the documented "never reaches the source" property. Flip to
   // `it` when the scanner strips a trailing open `<script`.
-  it.failing("DEFECT S-01: a trailing unterminated <script survives sanitizing @feat:plugin-web.source-model", () => {
-    for (const s of ["<script", "<p>x</p><script ", "<SCRIPT src=https://example.invalid/x.js "]) {
-      expect(sanitizeHtml(s).html).not.toMatch(/<\s*script\b/i);
-    }
-  });
-  it.failing("DEFECT S-01: an unclosed javascript: attribute survives, and what follows the paste can close it @feat:plugin-web.source-model", () => {
-    // Sanitized alone the quote is open, so the pattern (which needs the
-    // closing quote) misses it; pasted ahead of existing source that
-    // contains a `'`, the link becomes a closed javascript: href.
-    const pasted = sanitizeHtml("<a href='javascript:alert(1)>Click").html;
-    expect(pasted).not.toMatch(/javascript:/i);
-  });
+  it.failing(
+    "DEFECT S-01: a trailing unterminated <script survives sanitizing @feat:plugin-web.source-model",
+    () => {
+      for (const s of [
+        "<script",
+        "<p>x</p><script ",
+        "<SCRIPT src=https://example.invalid/x.js ",
+      ]) {
+        expect(sanitizeHtml(s).html).not.toMatch(/<\s*script\b/i);
+      }
+    },
+  );
+  it.failing(
+    "DEFECT S-01: an unclosed javascript: attribute survives, and what follows the paste can close it @feat:plugin-web.source-model",
+    () => {
+      // Sanitized alone the quote is open, so the pattern (which needs the
+      // closing quote) misses it; pasted ahead of existing source that
+      // contains a `'`, the link becomes a closed javascript: href.
+      const pasted = sanitizeHtml("<a href='javascript:alert(1)>Click").html;
+      expect(pasted).not.toMatch(/javascript:/i);
+    },
+  );
 });
 
 const NAME = fc.stringMatching(/^[A-Za-z_][A-Za-z0-9_]{0,8}$/);
@@ -168,7 +239,10 @@ describe("template pass properties", () => {
   it("text without placeholders passes through with no diagnostics @feat:plugin-web.source-model", () => {
     fc.assert(
       fc.property(PLAIN, fc.dictionary(NAME, PLAIN), (text, vars) => {
-        expect(applyTemplate(text, vars)).toEqual({ output: text, diagnostics: [] });
+        expect(applyTemplate(text, vars)).toEqual({
+          output: text,
+          diagnostics: [],
+        });
       }),
       RUNS,
     );
@@ -201,10 +275,16 @@ describe("template pass properties", () => {
     expect(TEMPLATE_FILTERS).toContain("upper");
     fc.assert(
       fc.property(NAME, fc.stringMatching(/^[a-z]{0,12}$/), (name, value) => {
-        const up = applyTemplate(`{{${name} | upper}}`, { [name]: value }).output;
+        const up = applyTemplate(`{{${name} | upper}}`, {
+          [name]: value,
+        }).output;
         expect(up).toBe(value.toUpperCase());
-        expect(applyTemplate(`{{${name} | lower}}`, { [name]: up }).output).toBe(value);
-        expect(applyTemplate(`{{${name} | upper}}`, { [name]: value }).output).toBe(up);
+        expect(
+          applyTemplate(`{{${name} | lower}}`, { [name]: up }).output,
+        ).toBe(value);
+        expect(
+          applyTemplate(`{{${name} | upper}}`, { [name]: value }).output,
+        ).toBe(up);
       }),
       RUNS,
     );
@@ -216,11 +296,19 @@ const SOURCE: fc.Arbitrary<WebFrameSource> = fc
     html: fc.string({ maxLength: 40 }),
     css: fc.string({ maxLength: 40 }),
     media: fc.constantFrom("print" as const, "screen" as const),
-    viewportWidth: fc.option(fc.integer({ min: 1, max: 10000 }), { nil: undefined }),
-    vars: fc.option(fc.dictionary(NAME, fc.string({ maxLength: 12 })), { nil: undefined }),
+    viewportWidth: fc.option(fc.integer({ min: 1, max: 10000 }), {
+      nil: undefined,
+    }),
+    vars: fc.option(fc.dictionary(NAME, fc.string({ maxLength: 12 })), {
+      nil: undefined,
+    }),
   })
   .map(({ html, css, media, viewportWidth, vars }) => {
-    const s: WebFrameSource = { html, css, options: { media, overflow: "clip" } };
+    const s: WebFrameSource = {
+      html,
+      css,
+      options: { media, overflow: "clip" },
+    };
     if (viewportWidth !== undefined) s.options.viewportWidth = viewportWidth;
     if (vars !== undefined) s.vars = vars;
     return s;
@@ -231,7 +319,9 @@ describe("source envelope round-trip", () => {
     fc.assert(
       fc.property(SOURCE, (s) => {
         expect(sourceFromEnvelope(envelopeFor(s))).toEqual(s);
-        expect(sourceFromEnvelope(JSON.parse(JSON.stringify(envelopeFor(s))))).toEqual(s);
+        expect(
+          sourceFromEnvelope(JSON.parse(JSON.stringify(envelopeFor(s)))),
+        ).toEqual(s);
       }),
       RUNS,
     );

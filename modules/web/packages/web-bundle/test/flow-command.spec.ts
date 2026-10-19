@@ -76,7 +76,10 @@ describe("resolveFlowChain — the persisted chain wins", () => {
         ],
       },
     };
-    const { host } = makeHost({ selection: [S], metadata: envelopeFor(threaded) });
+    const { host } = makeHost({
+      selection: [S],
+      metadata: envelopeFor(threaded),
+    });
     expect(await resolveFlowChain(host, [S])).toEqual([
       { kind: "rectangle", id: "uS" },
       { kind: "rectangle", id: "uB" },
@@ -219,14 +222,23 @@ describe("unthreadSelectedFromFlow — remove frames from the chain", () => {
       ...DEFAULT_SOURCE,
       flow: { recipients: [{ kind: "rectangle", id: "uB" }] },
     };
-    const { host, writes } = makeHost({ selection: [S, B], metadata: envelopeFor(single) });
+    const { host, writes } = makeHost({
+      selection: [S, B],
+      metadata: envelopeFor(single),
+    });
     await unthreadSelectedFromFlow(host);
     expect(writes).toHaveLength(1);
     expect(writes[0].envelope.data.flow).toBeUndefined();
   });
 
   it("is a no-op (no persist) when the target is not in the flow", async () => {
-    const { host, writes } = makeHost({ selection: [S, C], metadata: envelopeFor({ ...DEFAULT_SOURCE, flow: { recipients: [{ kind: "rectangle", id: "uB" }] } }) });
+    const { host, writes } = makeHost({
+      selection: [S, C],
+      metadata: envelopeFor({
+        ...DEFAULT_SOURCE,
+        flow: { recipients: [{ kind: "rectangle", id: "uB" }] },
+      }),
+    });
     await unthreadSelectedFromFlow(host);
     expect(writes).toHaveLength(0);
   });
@@ -238,7 +250,10 @@ describe("threadSelectedIntoNamedFlow — route into the secondary CSS flow", ()
       ...DEFAULT_SOURCE,
       css: "#story{flow-into:main} #notes{flow-into:side}",
     };
-    const { host, writes } = makeHost({ selection: [S, B], metadata: envelopeFor(twoFlow) });
+    const { host, writes } = makeHost({
+      selection: [S, B],
+      metadata: envelopeFor(twoFlow),
+    });
     await threadSelectedIntoNamedFlow(host);
     expect(writes).toHaveLength(1);
     expect(writes[0].envelope.data.flow?.recipients).toEqual([
@@ -249,7 +264,10 @@ describe("threadSelectedIntoNamedFlow — route into the secondary CSS flow", ()
   it("is a no-op when the source declares no secondary named flow", async () => {
     const { host, writes } = makeHost({
       selection: [S, B],
-      metadata: envelopeFor({ ...DEFAULT_SOURCE, css: "#story{flow-into:main}" }),
+      metadata: envelopeFor({
+        ...DEFAULT_SOURCE,
+        css: "#story{flow-into:main}",
+      }),
     });
     await threadSelectedIntoNamedFlow(host);
     expect(writes).toHaveLength(0);

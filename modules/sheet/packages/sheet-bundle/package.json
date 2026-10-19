@@ -12,7 +12,8 @@
   },
   "scripts": {
     "typecheck": "bun check -p tsconfig.json",
-    "test": "bun test --parallel --preload ../../../../tooling/js/bun-test-setup.ts"
+    "test": "bun test --parallel --preload ../../../../tooling/js/bun-test-setup.ts --path-ignore-patterns '**/*.dom.test.*'",
+    "test:dom": "bun test --parallel --preload ../../../../tooling/js/bun-test-setup.ts --preload ./test/happydom.ts .dom.test."
   },
   "peerDependencies": {
     "@paged-media/plugin-api": "workspace:*",
@@ -31,7 +32,13 @@
     "react-test-renderer": "18.3.1",
     "typescript": "catalog:",
     "@paged-media/test-kit": "workspace:*",
-    "@types/bun": "catalog:"
+    "@types/bun": "catalog:",
+    "@happy-dom/global-registrator": "catalog:",
+    "happy-dom": "catalog:",
+    "@testing-library/dom": "catalog:",
+    "@testing-library/react": "catalog:",
+    "react-dom": "catalog:",
+    "@types/react-dom": "catalog:"
   },
   "files": [
     "dist",

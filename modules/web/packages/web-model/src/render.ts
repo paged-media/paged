@@ -131,9 +131,28 @@ export interface SceneGradientStop {
 
 /** A gradient in frame-content points — the C-1 `SceneGradient`. */
 export type SceneGradient =
-  | { type: "linear"; x0: number; y0: number; x1: number; y1: number; stops: SceneGradientStop[] }
-  | { type: "radial"; cx: number; cy: number; radius: number; stops: SceneGradientStop[] }
-  | { type: "sweep"; cx: number; cy: number; start_angle: number; stops: SceneGradientStop[] };
+  | {
+      type: "linear";
+      x0: number;
+      y0: number;
+      x1: number;
+      y1: number;
+      stops: SceneGradientStop[];
+    }
+  | {
+      type: "radial";
+      cx: number;
+      cy: number;
+      radius: number;
+      stops: SceneGradientStop[];
+    }
+  | {
+      type: "sweep";
+      cx: number;
+      cy: number;
+      start_angle: number;
+      stops: SceneGradientStop[];
+    };
 
 /** A gradient-filled path — the C-1 `fillPathGradient` item. */
 export interface SceneGradientItem {
@@ -312,7 +331,9 @@ export interface WebRenderFlowResult {
  * not-loaded diagnostic is attached. Pure + total: same request → same
  * result, never throws, frames returned in chain order.
  */
-export function renderWebFlow(request: WebRenderFlowRequest): WebRenderFlowResult {
+export function renderWebFlow(
+  request: WebRenderFlowRequest,
+): WebRenderFlowResult {
   return {
     flowId: request.flowId,
     frames: [...request.frames]
@@ -342,10 +363,25 @@ export { ENGINE_PIN, type EnginePin };
  *  gradient-stop offsets, blend modes and an image's PIXEL size are not
  *  geometry and are never in this set. */
 const GEOMETRY_KEYS = new Set([
-  "x", "y", "w", "h",
-  "cx1", "cy1", "cx2", "cy2",
-  "x0", "y0", "x1", "y1", "cx", "cy", "radius",
-  "size", "offset_x", "offset_y", "blur_radius",
+  "x",
+  "y",
+  "w",
+  "h",
+  "cx1",
+  "cy1",
+  "cx2",
+  "cy2",
+  "x0",
+  "y0",
+  "x1",
+  "y1",
+  "cx",
+  "cy",
+  "radius",
+  "size",
+  "offset_x",
+  "offset_y",
+  "blur_radius",
 ]);
 
 /** Item kinds whose `width` is a stroke width (an `image`'s `width` is its
@@ -360,7 +396,10 @@ function scaleNode(node: unknown, s: number): unknown {
   const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(obj)) {
     if (k === "rgba") out[k] = v;
-    else if (typeof v === "number" && (GEOMETRY_KEYS.has(k) || (k === "width" && isStroke))) {
+    else if (
+      typeof v === "number" &&
+      (GEOMETRY_KEYS.has(k) || (k === "width" && isStroke))
+    ) {
       out[k] = v * s;
     } else out[k] = scaleNode(v, s);
   }

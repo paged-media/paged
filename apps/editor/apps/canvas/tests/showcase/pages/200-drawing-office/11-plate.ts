@@ -39,7 +39,14 @@ import { fileURLToPath } from "node:url";
 
 import { withActivePage } from "../../active-page";
 import { marginNote, plate, proseFrame, specLabel } from "../../annual-support";
-import { LAYER, STYLE, SWATCH, TRIM_W_PT, TRIM_H_PT, p } from "../../names-annual";
+import {
+  LAYER,
+  STYLE,
+  SWATCH,
+  TRIM_W_PT,
+  TRIM_H_PT,
+  p,
+} from "../../names-annual";
 import { newRefs, settle, type Ref } from "../../plugin-support";
 import type { PageContext, PageReport } from "../../types";
 import {
@@ -157,7 +164,7 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   await doc.mutate("deleteFrame", { frameId: frame });
 
   // ── opacity mask, demonstrated and cleared ───────────────────────
-  const run = <T,>(fn: () => Promise<T>): Promise<T> =>
+  const run = <T>(fn: () => Promise<T>): Promise<T> =>
     ctx.doc.ledger ? ctx.doc.ledger.transient(fn) : fn();
   let maskWorked = false;
   await run(async () => {
@@ -213,25 +220,37 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     .map((path) => path.slice(DRAW_PARTS_PREFIX.length))
     .sort();
 
-  const capTitle = await proseFrame(ctx, page, [54, 500, 486, 534], [
-    { text: "Plate: the machine trace", style: STYLE.head2 },
-  ]);
-  const caption = await proseFrame(ctx, page, [54, 540, 486, 612], [
-    {
-      text:
-        `The band above is not a photograph. pexels-1103970 (a study in sand curves) went into the document as inline bytes, and paged.draw's imageTrace ran in-editor through the wasm tracer - colour clustering, boundary walking, spline fitting - minting ${regions.length} filled native polygons whose holes are re-wound for the engine's non-zero fill. The source image was then deleted; what prints, exports and re-edits is vector.`,
-      style: STYLE.body,
-    },
-  ]);
-  const inventory = await proseFrame(ctx, page, [54, 616, 486, 664], [
-    {
-      text:
-        drawParts.length > 0
-          ? `Chapter holdings, read from the container itself (listPagedParts): under paged/media.paged.draw/ this document now carries ${drawParts.join(", ")} - ${drawParts.length} recipe part(s), the drawing office's ledger of styles, symbols, fields, rings, blends, dots and painted faces.`
-          : "Chapter holdings: the container reports no paged/media.paged.draw/ parts - every recipe this chapter minted was released before the close, and the inventory records that honestly.",
-      style: STYLE.bodySmall,
-    },
-  ]);
+  const capTitle = await proseFrame(
+    ctx,
+    page,
+    [54, 500, 486, 534],
+    [{ text: "Plate: the machine trace", style: STYLE.head2 }],
+  );
+  const caption = await proseFrame(
+    ctx,
+    page,
+    [54, 540, 486, 612],
+    [
+      {
+        text: `The band above is not a photograph. pexels-1103970 (a study in sand curves) went into the document as inline bytes, and paged.draw's imageTrace ran in-editor through the wasm tracer - colour clustering, boundary walking, spline fitting - minting ${regions.length} filled native polygons whose holes are re-wound for the engine's non-zero fill. The source image was then deleted; what prints, exports and re-edits is vector.`,
+        style: STYLE.body,
+      },
+    ],
+  );
+  const inventory = await proseFrame(
+    ctx,
+    page,
+    [54, 616, 486, 664],
+    [
+      {
+        text:
+          drawParts.length > 0
+            ? `Chapter holdings, read from the container itself (listPagedParts): under paged/media.paged.draw/ this document now carries ${drawParts.join(", ")} - ${drawParts.length} recipe part(s), the drawing office's ledger of styles, symbols, fields, rings, blends, dots and painted faces.`
+            : "Chapter holdings: the container reports no paged/media.paged.draw/ parts - every recipe this chapter minted was released before the close, and the inventory records that honestly.",
+        style: STYLE.bodySmall,
+      },
+    ],
+  );
   elements.push(capTitle.frameId, caption.frameId, inventory.frameId);
 
   elements.push(

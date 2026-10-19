@@ -77,9 +77,9 @@ describe("measureAnchorRun", () => {
     expect(m.length).toBeGreaterThan(150);
     expect(m.length).toBeLessThan(160);
     expect(m.stations.length).toBe(25); // 1 + samplesPerSegment
-    expect(measureAnchorRun(curve, { samplesPerSegment: 4 }).stations).toHaveLength(
-      5,
-    );
+    expect(
+      measureAnchorRun(curve, { samplesPerSegment: 4 }).stations,
+    ).toHaveLength(5);
   });
 
   it("degrades honestly on an empty run (one station, zero length — never a throw)", () => {
@@ -102,7 +102,11 @@ describe("pointAtLength / pointAtFraction", () => {
   it("walks the arc length, not the anchor index", () => {
     // An L: 100 across, then 300 down. The HALFWAY point by length is
     // 100 down the second leg, not the corner.
-    const l = measureAnchorRun([corner(0, 0), corner(100, 0), corner(100, 300)]);
+    const l = measureAnchorRun([
+      corner(0, 0),
+      corner(100, 0),
+      corner(100, 300),
+    ]);
     expect(l.length).toBe(400);
     const mid = pointAtFraction(l, 0.5);
     expect(mid.point[0]).toBeCloseTo(100, 9);
@@ -161,7 +165,11 @@ describe("distributeAlongPath — count", () => {
 
   it("INCLUSIVE on a CLOSED path divides by count — a slot on both ends would be two objects in one place", () => {
     const ring = measureAnchorRun(SQUARE, { close: true });
-    const slots = distributeAlongPath({ metric: ring, mode: "count", count: 4 });
+    const slots = distributeAlongPath({
+      metric: ring,
+      mode: "count",
+      count: 4,
+    });
     expect(slots.map((s) => s.s)).toEqual([0, 100, 200, 300]);
     // …and the four corners, in order.
     expect(slots.map((s) => s.point)).toEqual([
@@ -211,9 +219,9 @@ describe("distributeAlongPath — count", () => {
 
   it("clamps a hostile count rather than producing nothing", () => {
     const m = measureSegment([0, 0], [400, 0]);
-    expect(distributeAlongPath({ metric: m, mode: "count", count: 0 })).toHaveLength(
-      1,
-    );
+    expect(
+      distributeAlongPath({ metric: m, mode: "count", count: 0 }),
+    ).toHaveLength(1);
     expect(
       distributeAlongPath({ metric: m, mode: "count", count: -3 }),
     ).toHaveLength(1);
@@ -273,7 +281,11 @@ describe("distributeAlongPath — spacing", () => {
 
   it("a DEGENERATE path places exactly one SPACING slot — there are no gaps to walk", () => {
     const m = measureSegment([7, 9], [7, 9]);
-    const slots = distributeAlongPath({ metric: m, mode: "spacing", spacingPt: 10 });
+    const slots = distributeAlongPath({
+      metric: m,
+      mode: "spacing",
+      spacingPt: 10,
+    });
     expect(slots).toHaveLength(1);
     expect(slots[0].point).toEqual([7, 9]);
   });

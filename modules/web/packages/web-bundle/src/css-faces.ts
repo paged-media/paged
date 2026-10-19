@@ -59,7 +59,11 @@ function declarations(block: string): Map<string, string> {
   const take = (end: number) => {
     const decl = block.slice(start, end);
     const colon = decl.indexOf(":");
-    if (colon > 0) out.set(decl.slice(0, colon).trim().toLowerCase(), decl.slice(colon + 1).trim());
+    if (colon > 0)
+      out.set(
+        decl.slice(0, colon).trim().toLowerCase(),
+        decl.slice(colon + 1).trim(),
+      );
     start = end + 1;
   };
   for (let i = 0; i < block.length; i += 1) {
@@ -81,13 +85,18 @@ function unquote(v: string): string {
 }
 
 /** The face name of a weight and slope, as the asset store names styles. */
-export function faceStyle(weight: string | null, slope: string | null): string | undefined {
+export function faceStyle(
+  weight: string | null,
+  slope: string | null,
+): string | undefined {
   const w = (weight ?? "normal").trim().toLowerCase();
   const italic = /^(italic|oblique)\b/i.test((slope ?? "").trim());
   // A range (`100 900`, a variable face) covers every weight: no style.
   if (/^\d+(\.\d+)?\s+\d/.test(w)) return italic ? "Italic" : undefined;
   const n = w === "bold" ? 700 : w === "normal" ? 400 : Number.parseFloat(w);
-  const rounded = Number.isFinite(n) ? Math.min(900, Math.max(100, Math.round(n / 100) * 100)) : 400;
+  const rounded = Number.isFinite(n)
+    ? Math.min(900, Math.max(100, Math.round(n / 100) * 100))
+    : 400;
   const name = WEIGHT_NAMES[rounded];
   if (name && italic) return `${name} Italic`;
   return name ?? (italic ? "Italic" : undefined);
@@ -115,7 +124,10 @@ export function fontFaceRules(text: string, base = ""): CssFace[] {
     out.push({
       family,
       srcs,
-      style: faceStyle(decls.get("font-weight") ?? null, decls.get("font-style") ?? null),
+      style: faceStyle(
+        decls.get("font-weight") ?? null,
+        decls.get("font-style") ?? null,
+      ),
       base,
     });
   }
@@ -123,19 +135,28 @@ export function fontFaceRules(text: string, base = ""): CssFace[] {
 }
 
 /** A face's container format by its magic bytes. */
-export function fontFormat(bytes: Uint8Array): "sfnt" | "woff" | "woff2" | null {
+export function fontFormat(
+  bytes: Uint8Array,
+): "sfnt" | "woff" | "woff2" | null {
   if (bytes.byteLength < 4) return null;
   const tag = String.fromCharCode(bytes[0], bytes[1], bytes[2], bytes[3]);
   if (tag === "wOFF") return "woff";
   if (tag === "wOF2") return "woff2";
-  if (tag === "OTTO" || tag === "true" || tag === "ttcf" || tag === "\u0000\u0001\u0000\u0000") return "sfnt";
+  if (
+    tag === "OTTO" ||
+    tag === "true" ||
+    tag === "ttcf" ||
+    tag === "\u0000\u0001\u0000\u0000"
+  )
+    return "sfnt";
   return null;
 }
 
 function decodeName(bytes: Uint8Array, platform: number): string {
   if (platform === 1) return String.fromCharCode(...bytes);
   let s = "";
-  for (let i = 0; i + 1 < bytes.length; i += 2) s += String.fromCharCode((bytes[i] << 8) | bytes[i + 1]);
+  for (let i = 0; i + 1 < bytes.length; i += 2)
+    s += String.fromCharCode((bytes[i] << 8) | bytes[i + 1]);
   return s;
 }
 
@@ -168,9 +189,14 @@ export function sfntFamily(bytes: Uint8Array): string | null {
       if (platform !== 0 && platform !== 1 && platform !== 3) continue;
       const length = view.getUint16(rec + 8);
       const offset = strings + view.getUint16(rec + 10);
-      const text = decodeName(bytes.subarray(offset, offset + length), platform).trim();
+      const text = decodeName(
+        bytes.subarray(offset, offset + length),
+        platform,
+      ).trim();
       if (!text) continue;
-      const english = (platform === 3 && language === 0x409) || (platform === 1 && language === 0);
+      const english =
+        (platform === 3 && language === 0x409) ||
+        (platform === 1 && language === 0);
       const rank = (id === 16 ? 0 : 2) + (english ? 0 : 1);
       if (!best || rank < best.rank) best = { id, rank, text };
     }
@@ -214,5 +240,7 @@ export function bytesHash(bytes: Uint8Array): string {
     h ^= bytes[i];
     h = Math.imul(h, 0x01000193);
   }
-  return (h >>> 0).toString(16).padStart(8, "0") + bytes.byteLength.toString(16);
+  return (
+    (h >>> 0).toString(16).padStart(8, "0") + bytes.byteLength.toString(16)
+  );
 }

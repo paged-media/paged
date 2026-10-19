@@ -33,13 +33,17 @@ interface CanvasGlobal {
   __canvas: {
     elementSelection: Ref[];
     client: {
-      executeScript: (s: string) => Promise<{ output: string[]; error: string | null }>;
+      executeScript: (
+        s: string,
+      ) => Promise<{ output: string[]; error: string | null }>;
     };
   };
 }
 
 const selection = (page: Page) =>
-  page.evaluate(() => (globalThis as unknown as CanvasGlobal).__canvas.elementSelection);
+  page.evaluate(
+    () => (globalThis as unknown as CanvasGlobal).__canvas.elementSelection,
+  );
 
 async function select(page: Page, refs: Ref[]): Promise<void> {
   await page.evaluate(
@@ -50,25 +54,48 @@ async function select(page: Page, refs: Ref[]): Promise<void> {
     refs.map((r) => `${r.kind}:${r.id}`),
   );
   await expect
-    .poll(async () => (await selection(page)).map((r) => `${r.kind}:${r.id}`).sort())
+    .poll(async () =>
+      (await selection(page)).map((r) => `${r.kind}:${r.id}`).sort(),
+    )
     .toEqual(refs.map((r) => `${r.kind}:${r.id}`).sort());
 }
 
 const panel = (page: Page) => page.locator('[data-properties-panel="ready"]');
 
-async function expectNamed(page: Page, title: string, label: string): Promise<void> {
+async function expectNamed(
+  page: Page,
+  title: string,
+  label: string,
+): Promise<void> {
   await expect(panel(page).locator("[data-selection-label]")).toHaveText(label);
   await expect(panel(page).getByText(title, { exact: true })).toBeVisible();
 }
 
 /** Three rectangles; the first two grouped. */
-async function groupAndFrame(page: Page): Promise<{ group: Ref; frame: Ref; leaves: Ref[] }> {
+async function groupAndFrame(
+  page: Page,
+): Promise<{ group: Ref; frame: Ref; leaves: Ref[] }> {
   const designer = new Designer(page);
   await designer.open();
   await designer.newDocument();
-  const a = await designer.drawRectangle({ x0: 100, y0: 100, x1: 200, y1: 180 });
-  const b = await designer.drawRectangle({ x0: 240, y0: 100, x1: 340, y1: 180 });
-  const c = await designer.drawRectangle({ x0: 100, y0: 300, x1: 200, y1: 380 });
+  const a = await designer.drawRectangle({
+    x0: 100,
+    y0: 100,
+    x1: 200,
+    y1: 180,
+  });
+  const b = await designer.drawRectangle({
+    x0: 240,
+    y0: 100,
+    x1: 340,
+    y1: 180,
+  });
+  const c = await designer.drawRectangle({
+    x0: 100,
+    y0: 300,
+    x1: 200,
+    y1: 380,
+  });
   const leaves = [
     { kind: "rectangle", id: a },
     { kind: "rectangle", id: b },
@@ -77,8 +104,14 @@ async function groupAndFrame(page: Page): Promise<{ group: Ref; frame: Ref; leav
   await expectNamed(page, "Frame", "Frame · 2 frames");
   // Object ▸ Group selects the group it made.
   await designer.runCommand("paged.object.group");
-  await expect.poll(async () => (await selection(page)).map((r) => r.kind)).toEqual(["group"]);
-  return { group: (await selection(page))[0], frame: { kind: "rectangle", id: c }, leaves };
+  await expect
+    .poll(async () => (await selection(page)).map((r) => r.kind))
+    .toEqual(["group"]);
+  return {
+    group: (await selection(page))[0],
+    frame: { kind: "rectangle", id: c },
+    leaves,
+  };
 }
 
 test.describe("the Properties panel names the selection", () => {

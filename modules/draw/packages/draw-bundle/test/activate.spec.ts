@@ -367,7 +367,7 @@ describe("drawBundle.activate", () => {
     // THERE IS NO LAYERS PANEL, and its absence is the assertion: ADR
     // 023 phase D retired it behind the binding-provider seam
     // (`binding-provider/layers-provider.ts`, whose behaviour is pinned
-    // in `conformance/layers-provider.spec.ts`). A Layers panel
+    // in `headless/layers-provider.spec.ts`). A Layers panel
     // reappearing here would be the duplication coming back.
     // Vector stroke / Vector fill are not contributed any more: their
     // rows live in the host's Stroke, Object Options and Gradients panels.
@@ -427,9 +427,9 @@ describe("drawBundle.activate", () => {
     // The host stamped the own-namespace metadata key.
     expect(ec.metadataKey).toBe("x-paged:media.paged.draw");
     // Kind-claimed: a polygon matches, an oval (no path) does not.
-    expect(ec.matches?.({ kind: "polygon", groupChain: [], metadata: null })).toBe(
-      true,
-    );
+    expect(
+      ec.matches?.({ kind: "polygon", groupChain: [], metadata: null }),
+    ).toBe(true);
     expect(ec.matches?.({ kind: "oval", groupChain: [], metadata: null })).toBe(
       false,
     );

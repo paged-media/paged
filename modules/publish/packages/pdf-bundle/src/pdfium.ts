@@ -85,11 +85,14 @@ async function pdfiumWasmBytes(): Promise<Uint8Array> {
   if (typeof process !== "undefined" && process.versions?.node != null) {
     const { readFile } = await import("node:fs/promises");
     const { fileURLToPath } = await import("node:url");
-    const b = await readFile(fileURLToPath(new URL("../bin/pdfium.esm.wasm", import.meta.url)));
+    const b = await readFile(
+      fileURLToPath(new URL("../bin/pdfium.esm.wasm", import.meta.url)),
+    );
     return new Uint8Array(b.buffer, b.byteOffset, b.byteLength);
   }
   // @ts-ignore — `?url` asset the bundler serves.
-  const wasmUrl = (await import("../bin/pdfium.esm.wasm?url")).default as string;
+  const wasmUrl = (await import("../bin/pdfium.esm.wasm?url"))
+    .default as string;
   return new Uint8Array(await (await fetch(wasmUrl)).arrayBuffer());
 }
 
@@ -104,13 +107,18 @@ export async function loadPdfium(): Promise<Fpdf | null> {
       const wasmBinary = await pdfiumWasmBytes();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const M = (await factory({ wasmBinary })) as any;
-      const cw = (n: string, ret: string | null, args: string[]) => M.cwrap(n, ret, args);
+      const cw = (n: string, ret: string | null, args: string[]) =>
+        M.cwrap(n, ret, args);
       const f: Fpdf = {
         M,
         malloc: (n: number) => M.wasmExports.malloc(n),
         free: (p: number) => M.wasmExports.free(p),
         InitLibrary: cw("FPDF_InitLibrary", null, []),
-        LoadMemDocument: cw("FPDF_LoadMemDocument", "number", ["number", "number", "number"]),
+        LoadMemDocument: cw("FPDF_LoadMemDocument", "number", [
+          "number",
+          "number",
+          "number",
+        ]),
         LoadPage: cw("FPDF_LoadPage", "number", ["number", "number"]),
         ClosePage: cw("FPDF_ClosePage", null, ["number"]),
         CloseDoc: cw("FPDF_CloseDocument", null, ["number"]),
@@ -142,10 +150,17 @@ export async function loadPdfium(): Promise<Fpdf | null> {
           "number",
           "number",
         ]),
-        GetStrokeWidth: cw("FPDFPageObj_GetStrokeWidth", "number", ["number", "number"]),
+        GetStrokeWidth: cw("FPDFPageObj_GetStrokeWidth", "number", [
+          "number",
+          "number",
+        ]),
         PathCount: cw("FPDFPath_CountSegments", "number", ["number"]),
         PathSeg: cw("FPDFPath_GetPathSegment", "number", ["number", "number"]),
-        SegPoint: cw("FPDFPathSegment_GetPoint", "number", ["number", "number", "number"]),
+        SegPoint: cw("FPDFPathSegment_GetPoint", "number", [
+          "number",
+          "number",
+          "number",
+        ]),
         SegType: cw("FPDFPathSegment_GetType", "number", ["number"]),
         SegClose: cw("FPDFPathSegment_GetClose", "number", ["number"]),
         TextLoadPage: cw("FPDFText_LoadPage", "number", ["number"]),
@@ -162,7 +177,10 @@ export async function loadPdfium(): Promise<Fpdf | null> {
           "number",
           "number",
         ]),
-        TextCharSize: cw("FPDFText_GetFontSize", "number", ["number", "number"]),
+        TextCharSize: cw("FPDFText_GetFontSize", "number", [
+          "number",
+          "number",
+        ]),
         TextCharFill: cw("FPDFText_GetFillColor", "number", [
           "number",
           "number",
@@ -171,8 +189,14 @@ export async function loadPdfium(): Promise<Fpdf | null> {
           "number",
           "number",
         ]),
-        ImgDataRaw: cw("FPDFImageObj_GetImageDataRaw", "number", ["number", "number", "number"]),
-        ImgFilterCount: cw("FPDFImageObj_GetImageFilterCount", "number", ["number"]),
+        ImgDataRaw: cw("FPDFImageObj_GetImageDataRaw", "number", [
+          "number",
+          "number",
+          "number",
+        ]),
+        ImgFilterCount: cw("FPDFImageObj_GetImageFilterCount", "number", [
+          "number",
+        ]),
         ImgFilter: cw("FPDFImageObj_GetImageFilter", "number", [
           "number",
           "number",
@@ -180,7 +204,11 @@ export async function loadPdfium(): Promise<Fpdf | null> {
           "number",
         ]),
         // Page → bitmap raster (the fallback path; replaces pdf.js render).
-        BitmapCreate: cw("FPDFBitmap_Create", "number", ["number", "number", "number"]),
+        BitmapCreate: cw("FPDFBitmap_Create", "number", [
+          "number",
+          "number",
+          "number",
+        ]),
         BitmapFillRect: cw("FPDFBitmap_FillRect", "number", [
           "number",
           "number",
@@ -435,7 +463,12 @@ export async function extractPdf(
       // positioned lines via the shared heuristics, then drawn on top.
       const items = extractTextItems(f, textPage, p, heightPt);
       frames.push(
-        ...(itemsToPositionedFrames(items, widthPt, heightPt, DEFAULT_OPTIONS) as TextFrameIr[]),
+        ...(itemsToPositionedFrames(
+          items,
+          widthPt,
+          heightPt,
+          DEFAULT_OPTIONS,
+        ) as TextFrameIr[]),
       );
 
       f.TextClosePage(textPage);
@@ -550,7 +583,10 @@ function extractTextItems(
     const top = h64[dbl + 3];
     const size = raw.FPDFText_GetFontSize(textPage, i);
     let colorRgb: [number, number, number] | undefined;
-    if (raw.FPDFText_GetFillColor(textPage, i, p.a, p.b, p.c, p.d) && hu[p.d >> 2] !== 0) {
+    if (
+      raw.FPDFText_GetFillColor(textPage, i, p.a, p.b, p.c, p.d) &&
+      hu[p.d >> 2] !== 0
+    ) {
       colorRgb = [hu[p.a >> 2] / 255, hu[p.b >> 2] / 255, hu[p.c >> 2] / 255];
     }
     items.push({
@@ -628,7 +664,10 @@ async function extractImage(
  *  PNG. Formats per FPDFBitmap_GetFormat: 1=Gray, 2=BGR, 3=BGRx, 4=BGRA
  *  (the same swizzle the page-raster fallback uses). Returns null when
  *  PDFium can't produce a bitmap (the honest skip — never a fake frame). */
-async function imageBitmapToPng(f: Fpdf, obj: number): Promise<Uint8Array | null> {
+async function imageBitmapToPng(
+  f: Fpdf,
+  obj: number,
+): Promise<Uint8Array | null> {
   const bitmap = f.ImgGetBitmap(obj);
   if (!bitmap) return null;
   try {
@@ -689,9 +728,9 @@ function isJpeg(f: Fpdf, obj: number): boolean {
   return name === "DCTDecode";
 }
 
-
 function toBase64(bytes: Uint8Array): string {
-  if (typeof Buffer !== "undefined") return Buffer.from(bytes).toString("base64");
+  if (typeof Buffer !== "undefined")
+    return Buffer.from(bytes).toString("base64");
   let binary = "";
   const chunk = 0x8000;
   for (let i = 0; i < bytes.length; i += chunk) {

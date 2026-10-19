@@ -104,7 +104,9 @@ test.describe("Concept 3 — PDF export wire (protocol 26)", () => {
     expect(result.size).toBeGreaterThan(500);
   });
 
-  test("high-level exportPdf reports progress per page @feat:editor-shell.panels.preflight @feat:the-renderer.pdf-export @level:happy", async ({ page }) => {
+  test("high-level exportPdf reports progress per page @feat:editor-shell.panels.preflight @feat:the-renderer.pdf-export @level:happy", async ({
+    page,
+  }) => {
     const result = await page.evaluate(async () => {
       const c = (globalThis as unknown as { __canvas: { client: unknown } })
         .__canvas.client as {
@@ -197,7 +199,9 @@ test.describe("Concept 3 — PDF export wire (protocol 26)", () => {
     expect(result.name).toBe("AbortError");
   });
 
-  test("X-4 without any profile fails at begin @feat:editor-shell.panels.preflight @feat:the-renderer.pdf-export @level:happy", async ({ page }) => {
+  test("X-4 without any profile fails at begin @feat:editor-shell.panels.preflight @feat:the-renderer.pdf-export @level:happy", async ({
+    page,
+  }) => {
     const message = await page.evaluate(async () => {
       const c = (globalThis as unknown as { __canvas: { client: unknown } })
         .__canvas.client as {
@@ -230,7 +234,9 @@ test.describe("Concept 3 — Export PDF dialog", () => {
     await expect(page.locator("[data-export-dialog]")).toBeVisible();
   }
 
-  test("File ▸ Export PDF… opens the dialog @feat:editor-shell.panels.preflight @feat:the-renderer.pdf-export @level:happy", async ({ page }) => {
+  test("File ▸ Export PDF… opens the dialog @feat:editor-shell.panels.preflight @feat:the-renderer.pdf-export @level:happy", async ({
+    page,
+  }) => {
     await openDialog(page);
     await expect(page.locator("[data-export-status]")).toHaveAttribute(
       "data-export-status",

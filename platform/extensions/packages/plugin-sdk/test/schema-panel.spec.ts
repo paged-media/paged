@@ -220,10 +220,12 @@ describe("resolveGate — host-side LOOKUP, not an expression language", () => {
   });
 
   it("negate inverts — the ONE transform (a NOT, not a DSL)", () => {
-    expect(resolveGate({ bind: "dashControlsVisible", negate: true }, lookup)).toBe(
-      true,
+    expect(
+      resolveGate({ bind: "dashControlsVisible", negate: true }, lookup),
+    ).toBe(true);
+    expect(resolveGate({ bind: "hasSelection", negate: true }, lookup)).toBe(
+      false,
     );
-    expect(resolveGate({ bind: "hasSelection", negate: true }, lookup)).toBe(false);
   });
 
   it("a gate reacts when the published binding flips", () => {

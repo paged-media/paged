@@ -1,0 +1,18 @@
+$ paged-node run <TMP>/fixture.paged <TMP>/script.mjs --no-plugins
+# exit 0
+# stdout
+{
+  "result": [
+    0,
+    0,
+    0,
+    100
+  ],
+  "logs": [
+    "swatches [\"swatch:Color/Black\",\"swatch:Swatch/None\"]"
+  ],
+  "writes": 0,
+  "saved": null
+}
+# stderr
+(empty)

@@ -47,37 +47,55 @@ const KINDS = new Set<string>(VALUE_TYPE_KINDS);
 export function checkValueType(t: unknown, at = "type"): string | null {
   if (typeof t !== "object" || t === null) return `${at} must be an object`;
   const k = (t as { kind?: unknown }).kind;
-  if (typeof k !== "string" || !KINDS.has(k)) return `${at}.kind "${String(k)}" is not a ValueType`;
+  if (typeof k !== "string" || !KINDS.has(k))
+    return `${at}.kind "${String(k)}" is not a ValueType`;
   const v = t as Record<string, unknown>;
   switch (k) {
     case "enum":
-      if (!Array.isArray(v["members"]) || v["members"].length === 0 || !v["members"].every((m) => typeof m === "string")) {
+      if (
+        !Array.isArray(v["members"]) ||
+        v["members"].length === 0 ||
+        !v["members"].every((m) => typeof m === "string")
+      ) {
         return `${at}: an enum needs a non-empty members[]`;
       }
       return null;
     case "number": {
       const kw = v["keywords"];
-      if (kw !== undefined && (!Array.isArray(kw) || !kw.every((m) => typeof m === "string"))) {
+      if (
+        kw !== undefined &&
+        (!Array.isArray(kw) || !kw.every((m) => typeof m === "string"))
+      ) {
         return `${at}: a number's keywords must be strings`;
       }
       return null;
     }
     case "ref":
-      return typeof v["to"] === "string" && v["to"].length > 0 ? null : `${at}: a ref needs "to"`;
+      return typeof v["to"] === "string" && v["to"].length > 0
+        ? null
+        : `${at}: a ref needs "to"`;
     case "list":
     case "map":
       return checkValueType(v["of"], `${at}.of`);
     case "struct": {
       const f = v["fields"];
-      if (typeof f !== "object" || f === null) return `${at}: a struct needs fields`;
+      if (typeof f !== "object" || f === null)
+        return `${at}: a struct needs fields`;
       for (const [name, ft] of Object.entries(f)) {
         const e = checkValueType(ft, `${at}.fields.${name}`);
         if (e) return e;
         const field = ft as { optional?: unknown; default?: unknown };
-        if (field.optional !== undefined && field.optional !== true) return `${at}.fields.${name}: optional must be true when present`;
+        if (field.optional !== undefined && field.optional !== true)
+          return `${at}.fields.${name}: optional must be true when present`;
         if (field.default !== undefined) {
-          const why = validateValue(ft as ValueType, field.default, undefined, `${at}.fields.${name}.default`);
-          if (why) return `${at}.fields.${name}: the default does not fit its type (${why})`;
+          const why = validateValue(
+            ft as ValueType,
+            field.default,
+            undefined,
+            `${at}.fields.${name}.default`,
+          );
+          if (why)
+            return `${at}.fields.${name}: the default does not fit its type (${why})`;
         }
       }
       return null;
@@ -95,7 +113,8 @@ export function checkValueType(t: unknown, at = "type"): string | null {
  * index. A concrete index (`colorize[0]`) is an ordinary row and wins
  * over the indexed one.
  */
-export const ROW_PATH = /^[A-Za-z_][A-Za-z0-9_-]*(\[[^\][]*\])*(\.[A-Za-z_][A-Za-z0-9_-]*(\[[^\][]*\])*)*$/;
+export const ROW_PATH =
+  /^[A-Za-z_][A-Za-z0-9_-]*(\[[^\][]*\])*(\.[A-Za-z_][A-Za-z0-9_-]*(\[[^\][]*\])*)*$/;
 
 /** The row path a concrete path resolves to: every `[<index>]` becomes
  *  `[]` (`points[3].anchor` → `points[].anchor`). Bracket contents may be
@@ -105,8 +124,14 @@ export function rowPathOf(path: string): string {
 }
 
 /** Find the row for a concrete path: exact first, then its indexed form. */
-export function findRow<R extends { path: string }>(rows: ReadonlyMap<string, R>, path: string): R | null {
-  return rows.get(path) ?? (path.includes("[") ? (rows.get(rowPathOf(path)) ?? null) : null);
+export function findRow<R extends { path: string }>(
+  rows: ReadonlyMap<string, R>,
+  path: string,
+): R | null {
+  return (
+    rows.get(path) ??
+    (path.includes("[") ? (rows.get(rowPathOf(path)) ?? null) : null)
+  );
 }
 
 /** Why a schema row list is unusable (empty, malformed, duplicate path). */
@@ -114,20 +139,28 @@ export function checkSchemaRows(rows: unknown): string | null {
   if (!Array.isArray(rows) || rows.length === 0) return "schema has no rows";
   const seen = new Set<string>();
   for (const [i, row] of rows.entries()) {
-    if (typeof row !== "object" || row === null) return `schema[${i}] is not an object`;
+    if (typeof row !== "object" || row === null)
+      return `schema[${i}] is not an object`;
     const path = (row as { path?: unknown }).path;
-    if (typeof path !== "string" || path.length === 0) return `schema[${i}] has no path`;
-    if (!ROW_PATH.test(path)) return `schema path "${path}" is not a row path (dotted names, an indexed segment written \`name[]\`)`;
+    if (typeof path !== "string" || path.length === 0)
+      return `schema[${i}] has no path`;
+    if (!ROW_PATH.test(path))
+      return `schema path "${path}" is not a row path (dotted names, an indexed segment written \`name[]\`)`;
     if (seen.has(path)) return `schema path "${path}" is repeated`;
     seen.add(path);
-    const e = checkValueType((row as { type?: unknown }).type, `schema[${path}].type`);
+    const e = checkValueType(
+      (row as { type?: unknown }).type,
+      `schema[${path}].type`,
+    );
     if (e) return e;
   }
   return null;
 }
 
-const isNum = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
-const nums = (v: unknown, n: number) => Array.isArray(v) && v.length === n && v.every(isNum);
+const isNum = (v: unknown): v is number =>
+  typeof v === "number" && Number.isFinite(v);
+const nums = (v: unknown, n: number) =>
+  Array.isArray(v) && v.length === n && v.every(isNum);
 
 /** Why `value` does not satisfy `type` (and the row's range / nullable), or
  *  null when it does. */
@@ -140,28 +173,36 @@ export function validateValue(
   if (value === null) return row?.nullable ? null : `${at} may not be null`;
   const range = (n: number): string | null => {
     const r = row?.range;
-    if (r?.min !== undefined && n < r.min) return `${at} ${n} is below ${r.min}`;
-    if (r?.max !== undefined && n > r.max) return `${at} ${n} is above ${r.max}`;
+    if (r?.min !== undefined && n < r.min)
+      return `${at} ${n} is below ${r.min}`;
+    if (r?.max !== undefined && n > r.max)
+      return `${at} ${n} is above ${r.max}`;
     return null;
   };
   switch (type.kind) {
     case "bool":
       return typeof value === "boolean" ? null : `${at} must be a boolean`;
     case "number":
-      if (typeof value === "string" && type.keywords?.includes(value)) return null;
+      if (typeof value === "string" && type.keywords?.includes(value))
+        return null;
       if (!isNum(value)) {
         return type.keywords?.length
           ? `${at} must be a number or one of ${type.keywords.join(" | ")}`
           : `${at} must be a number`;
       }
-      if (type.integer && !Number.isInteger(value)) return `${at} must be an integer`;
+      if (type.integer && !Number.isInteger(value))
+        return `${at} must be an integer`;
       return range(value);
     case "length":
       return isNum(value) ? range(value) : `${at} must be a length in pt`;
     case "color":
     case "text":
       if (typeof value !== "string") return `${at} must be a string`;
-      if (type.kind === "text" && type.maxLength !== undefined && value.length > type.maxLength) {
+      if (
+        type.kind === "text" &&
+        type.maxLength !== undefined &&
+        value.length > type.maxLength
+      ) {
         return `${at} is longer than ${type.maxLength}`;
       }
       return null;
@@ -172,7 +213,9 @@ export function validateValue(
         ? null
         : `${at} must be one of ${type.members.join(" | ")}`;
     case "ref":
-      return typeof value === "string" && value.length > 0 ? null : `${at} must be a ${type.to} reference`;
+      return typeof value === "string" && value.length > 0
+        ? null
+        : `${at} must be a ${type.to} reference`;
     case "bounds":
       return nums(value, 4) ? null : `${at} must be [top, left, bottom, right]`;
     case "transform":
@@ -183,7 +226,8 @@ export function validateValue(
       return value instanceof Uint8Array ? null : `${at} must be bytes`;
     case "list": {
       if (!Array.isArray(value)) return `${at} must be a list`;
-      if (type.maxItems !== undefined && value.length > type.maxItems) return `${at} has more than ${type.maxItems} items`;
+      if (type.maxItems !== undefined && value.length > type.maxItems)
+        return `${at} has more than ${type.maxItems} items`;
       for (const [i, item] of value.entries()) {
         const e = validateValue(type.of, item, undefined, `${at}[${i}]`);
         if (e) return e;
@@ -191,16 +235,19 @@ export function validateValue(
       return null;
     }
     case "map": {
-      if (typeof value !== "object" || Array.isArray(value)) return `${at} must be a map`;
+      if (typeof value !== "object" || Array.isArray(value))
+        return `${at} must be a map`;
       for (const [k, item] of Object.entries(value as object)) {
-        if (type.keyPattern && !new RegExp(type.keyPattern).test(k)) return `${at} key "${k}" is not allowed`;
+        if (type.keyPattern && !new RegExp(type.keyPattern).test(k))
+          return `${at} key "${k}" is not allowed`;
         const e = validateValue(type.of, item, undefined, `${at}[${k}]`);
         if (e) return e;
       }
       return null;
     }
     case "struct": {
-      if (typeof value !== "object" || Array.isArray(value)) return `${at} must be a record`;
+      if (typeof value !== "object" || Array.isArray(value))
+        return `${at} must be a record`;
       const rec = value as Record<string, unknown>;
       if (!type.open) {
         for (const k of Object.keys(rec)) {
@@ -228,19 +275,26 @@ const BASE64 = /^[A-Za-z0-9+/]+={0,2}$/;
  *  which `applyDefaults` encodes. Empty content is refused: `null` clears. */
 function assetProblem(value: unknown, at: string): string | null {
   if (value instanceof Uint8Array || value instanceof ArrayBuffer) {
-    return value.byteLength > 0 ? null : `${at} has no bytes (clear the content with null)`;
+    return value.byteLength > 0
+      ? null
+      : `${at} has no bytes (clear the content with null)`;
   }
-  if (typeof value !== "string") return `${at} must be a data: URI, base64 text or bytes`;
+  if (typeof value !== "string")
+    return `${at} must be a data: URI, base64 text or bytes`;
   let payload = value;
   if (value.startsWith("data:")) {
     const comma = value.indexOf(",");
     if (comma < 0) return `${at}: a data: URI needs a comma before its payload`;
-    if (!value.slice(5, comma).endsWith(";base64")) return `${at}: a data: URI must carry its bytes as base64 (\`;base64,\`)`;
+    if (!value.slice(5, comma).endsWith(";base64"))
+      return `${at}: a data: URI must carry its bytes as base64 (\`;base64,\`)`;
     payload = value.slice(comma + 1);
   }
   payload = payload.trim();
-  if (payload.length === 0) return `${at} has no bytes (clear the content with null)`;
-  return BASE64.test(payload) && payload.length % 4 === 0 ? null : `${at} is not base64`;
+  if (payload.length === 0)
+    return `${at} has no bytes (clear the content with null)`;
+  return BASE64.test(payload) && payload.length % 4 === 0
+    ? null
+    : `${at} is not base64`;
 }
 
 /** Bytes → the `data:` URI core reads an asset back as (the MIME typed by
@@ -263,7 +317,8 @@ export function assetFromBytes(bytes: Uint8Array | ArrayBuffer): string {
               ? "image/bmp"
               : "application/octet-stream";
   let bin = "";
-  for (let i = 0; i < b.length; i += 0x8000) bin += String.fromCharCode(...b.subarray(i, i + 0x8000));
+  for (let i = 0; i < b.length; i += 0x8000)
+    bin += String.fromCharCode(...b.subarray(i, i + 0x8000));
   return `data:${mime};base64,${btoa(bin)}`;
 }
 
@@ -280,7 +335,9 @@ export function applyDefaults(type: ValueType, value: unknown): unknown {
     // Bytes become the text form core takes (a lossless re-encoding, not
     // a coercion: the content is the same).
     case "asset":
-      return value instanceof Uint8Array || value instanceof ArrayBuffer ? assetFromBytes(value) : value;
+      return value instanceof Uint8Array || value instanceof ArrayBuffer
+        ? assetFromBytes(value)
+        : value;
     case "struct": {
       if (typeof value !== "object" || Array.isArray(value)) return value;
       const rec = value as Record<string, unknown>;
@@ -296,10 +353,22 @@ export function applyDefaults(type: ValueType, value: unknown): unknown {
       return out;
     }
     case "list":
-      return Array.isArray(value) ? value.map((v) => applyDefaults(type.of, v)) : value;
+      return Array.isArray(value)
+        ? value.map((v) => applyDefaults(type.of, v))
+        : value;
     case "map":
-      if (typeof value !== "object" || Array.isArray(value) || value instanceof Uint8Array) return value;
-      return Object.fromEntries(Object.entries(value as object).map(([k, v]) => [k, applyDefaults(type.of, v)]));
+      if (
+        typeof value !== "object" ||
+        Array.isArray(value) ||
+        value instanceof Uint8Array
+      )
+        return value;
+      return Object.fromEntries(
+        Object.entries(value as object).map(([k, v]) => [
+          k,
+          applyDefaults(type.of, v),
+        ]),
+      );
     default:
       return value;
   }
@@ -345,11 +414,15 @@ export function coerceValue(
     case "number": {
       if (type.keywords?.includes(text)) return ok(text);
       const n = Number(text.replace(/%$/, ""));
-      return text !== "" && Number.isFinite(n) ? ok(n) : { ok: false, reason: `"${input}" is not a number` };
+      return text !== "" && Number.isFinite(n)
+        ? ok(n)
+        : { ok: false, reason: `"${input}" is not a number` };
     }
     case "length": {
       const n = parseLength(text);
-      return n !== null ? ok(n) : { ok: false, reason: `"${input}" is not a length` };
+      return n !== null
+        ? ok(n)
+        : { ok: false, reason: `"${input}" is not a length` };
     }
     case "bounds":
     case "transform":

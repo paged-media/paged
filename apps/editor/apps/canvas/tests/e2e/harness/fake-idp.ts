@@ -17,7 +17,6 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-
 // A fake OpenID provider for the server specs: it signs in "alice" at once and
 // checks its client secret and PKCE on the token call. Listens on 127.0.0.1:8792,
 // the issuer the local paged.server's .dev.vars names.
@@ -47,7 +46,10 @@ export function fakeIdp(): Server {
     }
     if (url.pathname === "/authorize") {
       const code = `idp-${codes.size}`;
-      codes.set(code, { nonce: url.searchParams.get("nonce")!, challenge: url.searchParams.get("code_challenge")! });
+      codes.set(code, {
+        nonce: url.searchParams.get("nonce")!,
+        challenge: url.searchParams.get("code_challenge")!,
+      });
       res.writeHead(302, {
         location: `${url.searchParams.get("redirect_uri")}?code=${code}&state=${url.searchParams.get("state")}`,
       });
@@ -59,17 +61,32 @@ export function fakeIdp(): Server {
       req.on("end", () => {
         const f = new URLSearchParams(body);
         const entry = codes.get(f.get("code") ?? "");
-        const pkce = entry && b64url(createHash("sha256").update(f.get("code_verifier") ?? "").digest()) === entry.challenge;
-        if (!entry || !pkce || f.get("client_secret") !== "fake-idp-secret") return json({ error: "invalid_grant" }, 400);
-        const claims = { iss: `http://${IDP}`, aud: f.get("client_id"), sub: "alice", exp: 4_000_000_000, nonce: entry.nonce };
-        json({ id_token: `e30.${b64url(JSON.stringify(claims))}.unsigned`, token_type: "Bearer" });
+        const pkce =
+          entry &&
+          b64url(
+            createHash("sha256")
+              .update(f.get("code_verifier") ?? "")
+              .digest(),
+          ) === entry.challenge;
+        if (!entry || !pkce || f.get("client_secret") !== "fake-idp-secret")
+          return json({ error: "invalid_grant" }, 400);
+        const claims = {
+          iss: `http://${IDP}`,
+          aud: f.get("client_id"),
+          sub: "alice",
+          exp: 4_000_000_000,
+          nonce: entry.nonce,
+        };
+        json({
+          id_token: `e30.${b64url(JSON.stringify(claims))}.unsigned`,
+          token_type: "Bearer",
+        });
       });
       return;
     }
     res.writeHead(404).end();
   });
 }
-
 
 export async function startFakeIdp(): Promise<Server> {
   const s = fakeIdp();

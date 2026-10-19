@@ -72,12 +72,16 @@ export async function resolveWasm(
     integrity: declaredIntegrity(host, name),
     source: "bundle",
   };
-  if (!host.supports("modules@1") || typeof host.modules?.resolve !== "function") {
+  if (
+    !host.supports("modules@1") ||
+    typeof host.modules?.resolve !== "function"
+  ) {
     return fallback;
   }
   try {
     const hosted = await host.modules.resolve(name);
-    if (hosted) return { url: hosted.url, integrity: hosted.integrity, source: "host" };
+    if (hosted)
+      return { url: hosted.url, integrity: hosted.integrity, source: "host" };
   } catch {
     // an undeclared name in 'enforce', or a host failure: load our own copy
   }

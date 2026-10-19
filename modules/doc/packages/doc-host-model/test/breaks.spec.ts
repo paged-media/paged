@@ -15,7 +15,11 @@ const split: LoweredParagraph = {
   sourceIndex: 20,
   segments: [{ at: 11, paraStyleId: "ParagraphStyle/docx-auto-p1" }],
 };
-const plain: LoweredParagraph = { paraStyleId: "ParagraphStyle/p", runs: [{ text: "A22" }], sourceIndex: 21 };
+const plain: LoweredParagraph = {
+  paraStyleId: "ParagraphStyle/p",
+  runs: [{ text: "A22" }],
+  sourceIndex: 21,
+};
 
 describe("a paragraph split by a break", () => {
   const { mutations, length } = buildTextPour([split, plain], "docx_s0", 0);
@@ -27,14 +31,18 @@ describe("a paragraph split by a break", () => {
   });
 
   it("styles each part with its own paragraph style, offsets contiguous", () => {
-    const para = ops.filter((o) => o.op === "applyStyle" && o.args.scope === "paragraph").map((o) => o.args);
+    const para = ops
+      .filter((o) => o.op === "applyStyle" && o.args.scope === "paragraph")
+      .map((o) => o.args);
     expect(para.map((a) => [a.start, a.end, a.style])).toEqual([
       [0, 11, "ParagraphStyle/docx-auto-p2"],
       [11, 21, "ParagraphStyle/docx-auto-p1"],
       [21, 24, "ParagraphStyle/p"],
     ]);
     // The run's character style spans both parts, contiguously.
-    const chr = ops.filter((o) => o.op === "applyStyle" && o.args.scope === "character").map((o) => o.args);
+    const chr = ops
+      .filter((o) => o.op === "applyStyle" && o.args.scope === "character")
+      .map((o) => o.args);
     expect(chr.map((a) => [a.start, a.end])).toEqual([[0, 21]]);
     expect(length).toBe(24);
   });

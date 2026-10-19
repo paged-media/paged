@@ -184,8 +184,11 @@ async function select(page: Page, refs: ElementRef[]): Promise<void> {
 async function selection(page: Page): Promise<ElementRef[]> {
   return page.evaluate(
     () =>
-      (globalThis as unknown as { __canvas: { elementSelection: ElementRef[] } })
-        .__canvas.elementSelection,
+      (
+        globalThis as unknown as {
+          __canvas: { elementSelection: ElementRef[] };
+        }
+      ).__canvas.elementSelection,
   );
 }
 
@@ -205,7 +208,9 @@ async function forceSelection(page: Page, refs: ElementRef[]): Promise<void> {
 async function undo(page: Page): Promise<void> {
   await page.evaluate(async () => {
     await (
-      globalThis as unknown as { __canvas: { client: { undo: () => Promise<unknown> } } }
+      globalThis as unknown as {
+        __canvas: { client: { undo: () => Promise<unknown> } };
+      }
     ).__canvas.client.undo();
   });
 }
@@ -387,7 +392,10 @@ async function property(
           __canvas: {
             client: {
               elementProperties: (id: unknown) => Promise<{
-                entries: Array<{ path: string; value?: { value: unknown } | null }>;
+                entries: Array<{
+                  path: string;
+                  value?: { value: unknown } | null;
+                }>;
               } | null>;
             };
           };
@@ -526,10 +534,16 @@ test.describe("E2E paged.object — the structural command layer", () => {
           __canvas: {
             registries: {
               commands: {
-                list: () => Array<{ id: string; title: string; category?: string }>;
+                list: () => Array<{
+                  id: string;
+                  title: string;
+                  category?: string;
+                }>;
               };
               menus: { list: () => Array<{ path: string; command: string }> };
-              keybindings: { list: () => Array<{ key: string; command: string }> };
+              keybindings: {
+                list: () => Array<{ key: string; command: string }>;
+              };
             };
           };
         }
@@ -680,15 +694,17 @@ test.describe("E2E paged.object — the structural command layer", () => {
     await select(page, [a, b]);
     await invokeCommand(page, GROUP);
     await expect
-      .poll(async () =>
-        (await paintOrder(page)).filter((k) => k.startsWith("group:")).length,
+      .poll(
+        async () =>
+          (await paintOrder(page)).filter((k) => k.startsWith("group:")).length,
       )
       .toBe(groupsBefore + 1);
 
     await invokeCommand(page, UNGROUP);
     await expect
-      .poll(async () =>
-        (await paintOrder(page)).filter((k) => k.startsWith("group:")).length,
+      .poll(
+        async () =>
+          (await paintOrder(page)).filter((k) => k.startsWith("group:")).length,
       )
       .toBe(groupsBefore);
     // The members come back as the selection.
@@ -700,14 +716,16 @@ test.describe("E2E paged.object — the structural command layer", () => {
     // pristine. Each command is exactly one undo step.
     await undo(page);
     await expect
-      .poll(async () =>
-        (await paintOrder(page)).filter((k) => k.startsWith("group:")).length,
+      .poll(
+        async () =>
+          (await paintOrder(page)).filter((k) => k.startsWith("group:")).length,
       )
       .toBe(groupsBefore + 1);
     await undo(page);
     await expect
-      .poll(async () =>
-        (await paintOrder(page)).filter((k) => k.startsWith("group:")).length,
+      .poll(
+        async () =>
+          (await paintOrder(page)).filter((k) => k.startsWith("group:")).length,
       )
       .toBe(groupsBefore);
   });
@@ -864,9 +882,11 @@ test.describe("E2E paged.object — the structural command layer", () => {
     // frame, and both members are still INSIDE it (the tree nests them
     // after the group node, contiguously).
     expect(after.indexOf(groupKey)).toBe(before.indexOf(groupKey));
-    expect(after.slice(after.indexOf(groupKey) + 1, after.indexOf(groupKey) + 3).sort()).toEqual(
-      [keys[0], keys[1]].sort(),
-    );
+    expect(
+      after
+        .slice(after.indexOf(groupKey) + 1, after.indexOf(groupKey) + 3)
+        .sort(),
+    ).toEqual([keys[0], keys[1]].sort());
   });
 
   test("AC-OBJ-11 — the real keyboard chords fire, brackets included @feat:layers.z-ordering @feat:editor-shell.keyboard-shortcuts @feat:frames-paths.groups @level:gesture", async ({
@@ -905,14 +925,16 @@ test.describe("E2E paged.object — the structural command layer", () => {
     await select(page, [refs[0], refs[1]]);
     await page.keyboard.press("ControlOrMeta+g");
     await expect
-      .poll(async () =>
-        (await paintOrder(page)).filter((k) => k.startsWith("group:")).length,
+      .poll(
+        async () =>
+          (await paintOrder(page)).filter((k) => k.startsWith("group:")).length,
       )
       .toBe(1);
     await page.keyboard.press("ControlOrMeta+Shift+g");
     await expect
-      .poll(async () =>
-        (await paintOrder(page)).filter((k) => k.startsWith("group:")).length,
+      .poll(
+        async () =>
+          (await paintOrder(page)).filter((k) => k.startsWith("group:")).length,
       )
       .toBe(0);
   });
@@ -1146,7 +1168,11 @@ test.describe("E2E paged.object.delete — against the real engine", () => {
     const oneGone = `${key(groupRef)}[${key(a)},${key(c)}],${key(free)}`;
     await expect.poll(() => structure(page)).toBe(oneGone);
     expect(await geometry(page, [b])).toEqual([]);
-    expect(await geometry(page, [a, c, free])).toEqual([before[0], before[2], before[3]]);
+    expect(await geometry(page, [a, c, free])).toEqual([
+      before[0],
+      before[2],
+      before[3],
+    ]);
     await expect(objectProblem(page)).toHaveCount(0);
 
     await undo(page);
@@ -1297,7 +1323,11 @@ const SUBJECTS: Array<{
     make: async (page) => {
       const reply = await mutate(page, {
         op: "insertLine",
-        args: { pageId: await firstPageId(page), start: [60, 80], end: [180, 130] },
+        args: {
+          pageId: await firstPageId(page),
+          start: [60, 80],
+          end: [180, 130],
+        },
       });
       expect(reply.kind).toBe("mutationApplied");
       const line = reply.payload.createdId!;
@@ -1391,7 +1421,9 @@ test.describe("E2E paged.object.nudge — against the real engine", () => {
         );
       }
       // The four undos took nothing else with them.
-      expect(await geometry(page, made.leaves)).toHaveLength(made.leaves.length);
+      expect(await geometry(page, made.leaves)).toHaveLength(
+        made.leaves.length,
+      );
     });
   }
 
@@ -1403,7 +1435,11 @@ test.describe("E2E paged.object.nudge — against the real engine", () => {
     await invokeCommand(page, GROUP);
     const groupRef = (await selection(page))[0];
 
-    const boxBefore = (await property(page, groupRef, "frameBounds")) as number[];
+    const boxBefore = (await property(
+      page,
+      groupRef,
+      "frameBounds",
+    )) as number[];
     expect(await property(page, groupRef, "frameTransform")).toBeNull();
 
     await invokeCommand(page, NUDGE_RIGHT_LARGE);
@@ -1415,7 +1451,11 @@ test.describe("E2E paged.object.nudge — against the real engine", () => {
     expect(await property(page, groupRef, "frameTransform")).toEqual([
       1, 0, 0, 1, 10, 1,
     ]);
-    const boxAfter = (await property(page, groupRef, "frameBounds")) as number[];
+    const boxAfter = (await property(
+      page,
+      groupRef,
+      "frameBounds",
+    )) as number[];
     expect(boxAfter[0]).toBeCloseTo(boxBefore[0] + 1, 3);
     expect(boxAfter[1]).toBeCloseTo(boxBefore[1] + 10, 3);
     expect(boxAfter[2]).toBeCloseTo(boxBefore[2] + 1, 3);
@@ -1700,7 +1740,10 @@ test.describe("E2E paged.object — delete and nudge land on the canvas", () => 
       const ref = await inked.make(page);
       const base = await shot(page);
       const before = inkRows(base);
-      expect(before.some((n) => n > 0), "there is ink on the page").toBe(true);
+      expect(
+        before.some((n) => n > 0),
+        "there is ink on the page",
+      ).toBe(true);
 
       await select(page, [ref]);
       await invokeCommand(page, NUDGE_DOWN_LARGE);
@@ -1875,7 +1918,9 @@ test.describe("E2E paged.object — the keys belong to whoever is being edited",
     await setCaret(page, { storyId, start: 0, end: 0 });
     await page.locator('[data-menu-trigger="Object"]').click();
     await expect(menu).toBeVisible();
-    await expect(menu.getByRole("menuitem", { name: /^Delete/ })).toBeDisabled();
+    await expect(
+      menu.getByRole("menuitem", { name: /^Delete/ }),
+    ).toBeDisabled();
     await expect(
       menu.getByRole("menuitem", { name: /^Nudge left/ }),
     ).toBeDisabled();
@@ -1955,13 +2000,21 @@ test.describe("E2E paged.object — clipping masks against the real engine", () 
   }
 
   /** What is painted at page point (x, y): ink, grey tint, or paper. */
-  function paintAt(png: Buffer, x: number, y: number): "ink" | "tint" | "paper" {
+  function paintAt(
+    png: Buffer,
+    x: number,
+    y: number,
+  ): "ink" | "tint" | "paper" {
     const img = PNG.sync.read(png);
     const v = img.data[(y * img.width + x) * 4];
     return v < 80 ? "ink" : v > 230 ? "paper" : "tint";
   }
 
-  async function fill(page: Page, ref: ElementRef, tint?: number): Promise<void> {
+  async function fill(
+    page: Page,
+    ref: ElementRef,
+    tint?: number,
+  ): Promise<void> {
     const reply = await mutate(page, {
       op: "setElementProperty",
       args: {
@@ -2033,8 +2086,18 @@ test.describe("E2E paged.object — clipping masks against the real engine", () 
     return out;
   }
 
-  const UNCLIPPED = { aOutside: "ink", aInside: "ink", overlap: "tint", bOutside: "tint" };
-  const CLIPPED = { aOutside: "paper", aInside: "ink", overlap: "tint", bOutside: "paper" };
+  const UNCLIPPED = {
+    aOutside: "ink",
+    aInside: "ink",
+    overlap: "tint",
+    bOutside: "tint",
+  };
+  const CLIPPED = {
+    aOutside: "paper",
+    aInside: "ink",
+    overlap: "tint",
+    bOutside: "paper",
+  };
 
   test("AC-OBJ-32 — Make clipping mask, from the Object menu, really clips; ONE undo restores the page @feat:frames-paths.nested-content @feat:frames-paths.path-clipping @feat:editor-shell.menus @feat:round-tripping.undo-redo @level:happy", async ({
     page,
@@ -2118,7 +2181,9 @@ test.describe("E2E paged.object — clipping masks against the real engine", () 
     // Every one of the three moved by exactly 10 pt — the content too,
     // although the scene tree does not list it.
     await expect
-      .poll(async () => (await geometry(page, [a, b, k])).map((g) => g.transform))
+      .poll(async () =>
+        (await geometry(page, [a, b, k])).map((g) => g.transform),
+      )
       .toEqual(start.map((g) => translatedBy(g.transform, 10, 0)));
     const moved = await pageShot(page);
     // The same picture, ten pixels along: column profiles shift.
@@ -2179,7 +2244,9 @@ test.describe("E2E paged.object — clipping masks against the real engine", () 
     const expectProblem = async (text: string) => {
       await expect(problem).toHaveCount(1);
       await expect(problem).toHaveAttribute("data-problem-severity", "error");
-      await expect(problem.locator("[data-problem-message]")).toContainText(text);
+      await expect(problem.locator("[data-problem-message]")).toContainText(
+        text,
+      );
     };
 
     // A line on top cannot clip.
@@ -2193,7 +2260,9 @@ test.describe("E2E paged.object — clipping masks against the real engine", () 
     const shape = await structure(page);
     await select(page, [r1, line]);
     await invokeCommand(page, MAKE_CLIP);
-    await expectProblem(`the topmost object, line ${line.id}, cannot be a clipping path`);
+    await expectProblem(
+      `the topmost object, line ${line.id}, cannot be a clipping path`,
+    );
     expect(await structure(page)).toBe(shape);
 
     // One object is not a mask.
@@ -2279,11 +2348,12 @@ test.describe("E2E engine anchors — what paged.object.* works around", () => {
         op: "setElementProperty",
         args: { elementId: frame, path, value },
       });
-    expect((await set("frameOpacity", { type: "length", value: 40 })).kind).toBe(
-      "mutationApplied",
-    );
     expect(
-      (await set("frameCornerRadiusTopLeft", { type: "length", value: 12 })).kind,
+      (await set("frameOpacity", { type: "length", value: 40 })).kind,
+    ).toBe("mutationApplied");
+    expect(
+      (await set("frameCornerRadiusTopLeft", { type: "length", value: 12 }))
+        .kind,
     ).toBe("mutationApplied");
     expect(await property(page, frame, "frameOpacity")).toBe(40);
 
@@ -2321,8 +2391,16 @@ test.describe("E2E engine anchors — what paged.object.* works around", () => {
         globalThis as unknown as {
           __canvas: {
             client: {
-              beginGesture: (n: unknown[], g: unknown, a: null) => Promise<number>;
-              updateGesture: (h: number, d: number[], m: unknown) => Promise<unknown>;
+              beginGesture: (
+                n: unknown[],
+                g: unknown,
+                a: null,
+              ) => Promise<number>;
+              updateGesture: (
+                h: number,
+                d: number[],
+                m: unknown,
+              ) => Promise<unknown>;
               commitGesture: (h: number) => Promise<unknown>;
             };
           };
@@ -2340,7 +2418,8 @@ test.describe("E2E engine anchors — what paged.object.* works around", () => {
     // Nudge still writes the transform (fact 7 in object-commands.ts):
     // that write is rigid for a rotated item too.
     expect(
-      diffPngPixels(base, await pagePng(page, pageId, widthPt, widthPt)).changed,
+      diffPngPixels(base, await pagePng(page, pageId, widthPt, widthPt))
+        .changed,
     ).toBeGreaterThan(0);
   });
 
@@ -2411,7 +2490,11 @@ test.describe("E2E engine anchors — what paged.object.* works around", () => {
                 spec: unknown,
                 anchor: unknown,
               ) => Promise<number>;
-              updateGesture: (h: number, d: [number, number], m: unknown) => Promise<unknown>;
+              updateGesture: (
+                h: number,
+                d: [number, number],
+                m: unknown,
+              ) => Promise<unknown>;
               commitGesture: (h: number) => Promise<unknown>;
             };
           };

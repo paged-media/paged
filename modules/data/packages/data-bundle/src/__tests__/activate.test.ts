@@ -48,7 +48,11 @@ function fakeHost() {
     manifest: dataBundle.manifest,
     log: { debug() {}, info() {}, warn() {}, error() {} },
     // The document doors every host has; nothing here fires them.
-    document: { onWillSave: () => ({ dispose() {} }), onDidChange: () => ({ dispose() {} }), onDidOpen: () => ({ dispose() {} }) },
+    document: {
+      onWillSave: () => ({ dispose() {} }),
+      onDidChange: () => ({ dispose() {} }),
+      onDidOpen: () => ({ dispose() {} }),
+    },
     // ADR 024 — this fake had NO `supports`, which is why adding the
     // first `host.supports(...)` call to `activate` broke six tests at
     // once. That is the fake telling the truth about its own coverage:
@@ -165,7 +169,9 @@ describe("data_plugin_bundle_activate", () => {
     // drive N outputs without this bundle knowing the recorder exists.
     const fake = fakeHost();
     dataBundle.activate(fake.host);
-    const apply = fake.commands.find((c) => c.id === "media.paged.data.command.applyDataSet")!;
+    const apply = fake.commands.find(
+      (c) => c.id === "media.paged.data.command.applyDataSet",
+    )!;
     // A missing name is a warned no-op, never a guess at which set was meant —
     // and it short-circuits synchronously, without touching the session.
     expect(apply.handler(null, {})).toEqual({ applied: 0, skipped: {} });
@@ -174,7 +180,9 @@ describe("data_plugin_bundle_activate", () => {
     expect(fake.openedPanels).toEqual(["media.paged.data.panel.dataset"]);
     // A named one runs (the engine wasm is absent here, so it degrades to 0
     // applied — the point is that the payload reached the session).
-    await expect(apply.handler(null, { name: "Beta" })).resolves.toMatchObject({ applied: 0 });
+    await expect(apply.handler(null, { name: "Beta" })).resolves.toMatchObject({
+      applied: 0,
+    });
   });
 
   it("registered ids match the manifest's contributes declaration", () => {
@@ -183,16 +191,22 @@ describe("data_plugin_bundle_activate", () => {
     // The "Data objects" schema panel needs the object-model + schema-panel
     // doors this fake does not offer (test/objects-panel.spec.ts covers it).
     expect(fake.panels.map((p) => p.id)).toEqual(
-      dataBundle.manifest.contributes?.panels?.filter((id) => id !== "media.paged.data.panel.objects"),
+      dataBundle.manifest.contributes?.panels?.filter(
+        (id) => id !== "media.paged.data.panel.objects",
+      ),
     );
-    expect(fake.commands.map((c) => c.id)).toEqual(dataBundle.manifest.contributes?.commands);
+    expect(fake.commands.map((c) => c.id)).toEqual(
+      dataBundle.manifest.contributes?.commands,
+    );
   });
 
   it("importData / defineBinding open their panels", () => {
     const fake = fakeHost();
     dataBundle.activate(fake.host);
     fake.commands.find((c) => c.id.endsWith("importData"))?.handler(undefined);
-    fake.commands.find((c) => c.id.endsWith("defineBinding"))?.handler(undefined);
+    fake.commands
+      .find((c) => c.id.endsWith("defineBinding"))
+      ?.handler(undefined);
     fake.commands.find((c) => c.id.endsWith("openDataset"))?.handler(undefined);
     expect(fake.openedPanels).toEqual([
       "media.paged.data.panel.sources",
@@ -212,7 +226,8 @@ describe("data_plugin_bundle_activate", () => {
   it("command titles name the panels they open", () => {
     const fake = fakeHost();
     dataBundle.activate(fake.host);
-    const title = (suffix: string) => fake.commands.find((c) => c.id.endsWith(suffix))?.title;
+    const title = (suffix: string) =>
+      fake.commands.find((c) => c.id.endsWith(suffix))?.title;
     expect(title("importData")).toBe("Data sources…");
     expect(title("defineBinding")).toBe("Bindings…");
     expect(title("openDataset")).toBe("Dataset preview…");

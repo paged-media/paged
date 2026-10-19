@@ -45,7 +45,12 @@ import type { HeadlessHost } from "@paged-media/plugin-sdk";
 
 import { DRAW_METADATA_KEY } from "../../src";
 import { pathsOfTable, type OraclePath } from "../oracle/oracle";
-import { isUnreadable, type InDesignItem, type InDesignRecording, type InDesignSwatch } from "./indesign";
+import {
+  isUnreadable,
+  type InDesignItem,
+  type InDesignRecording,
+  type InDesignSwatch,
+} from "./indesign";
 
 /** Geometry agrees within 0.01 pt per coordinate. IDML carries the
  *  anchors as decimal text and InDesign hands them back as doubles; the
@@ -140,27 +145,43 @@ const CORNERS = [
   ["bottomLeft", "BottomLeft"],
 ] as const;
 
-const lowerFirst = (s: string): string => s.charAt(0).toLowerCase() + s.slice(1);
+const lowerFirst = (s: string): string =>
+  s.charAt(0).toLowerCase() + s.slice(1);
 
 // ---------------------------------------------------------------------------
 // OUR side: the model, read back through the engine
 // ---------------------------------------------------------------------------
 
 interface RawClient {
-  send(m: { kind: string; payload: unknown }): Promise<{ kind: string; payload: Record<string, unknown> }>;
+  send(m: {
+    kind: string;
+    payload: unknown;
+  }): Promise<{ kind: string; payload: Record<string, unknown> }>;
 }
 
 type PropValue = { type: string; value: unknown } | null | undefined;
 
-const apply = (t: readonly number[] | null | undefined, p: [number, number]): [number, number] =>
-  t ? [t[0] * p[0] + t[2] * p[1] + t[4], t[1] * p[0] + t[3] * p[1] + t[5]] : [p[0], p[1]];
+const apply = (
+  t: readonly number[] | null | undefined,
+  p: [number, number],
+): [number, number] =>
+  t
+    ? [t[0] * p[0] + t[2] * p[1] + t[4], t[1] * p[0] + t[3] * p[1] + t[5]]
+    : [p[0], p[1]];
 
 /** Read our model as a `ViewNode` tree (the page's children, back to
  *  front). `defaults` collects every unset value compared as a default. */
-export async function engineView(h: HeadlessHost, defaults: DefaultsUsed = new Set()): Promise<ViewNode[]> {
+export async function engineView(
+  h: HeadlessHost,
+  defaults: DefaultsUsed = new Set(),
+): Promise<ViewNode[]> {
   const doc = h.host.document;
-  const swatches = await doc.collection<{ selfId: string; name: string }>("swatches");
-  const gradients = await doc.collection<{ selfId: string; name: string }>("gradients");
+  const swatches = await doc.collection<{ selfId: string; name: string }>(
+    "swatches",
+  );
+  const gradients = await doc.collection<{ selfId: string; name: string }>(
+    "gradients",
+  );
   const nameOf = (ref: string | null | undefined): string => {
     if (!ref || ref === "Swatch/None") return "None";
     const g = gradients.find((x) => x.selfId === ref);
@@ -173,13 +194,15 @@ export async function engineView(h: HeadlessHost, defaults: DefaultsUsed = new S
     // gives that swatch.
     return ref.slice(ref.indexOf("/") + 1);
   };
-  const client = (h.host as unknown as { editor: { client: RawClient } }).editor.client;
+  const client = (h.host as unknown as { editor: { client: RawClient } }).editor
+    .client;
 
   async function leaf(node: SceneTreeNode): Promise<ViewNode> {
     const id = node.id as ElementId;
     const kind = lowerFirst(node.kind);
     const props = await doc.elementProperties(id);
-    const entry = (path: string): PropValue => props?.entries.find((e) => e.path === path)?.value as PropValue;
+    const entry = (path: string): PropValue =>
+      props?.entries.find((e) => e.path === path)?.value as PropValue;
     const has = (path: string): boolean => entry(path) !== undefined;
     const raw = (path: string): unknown => entry(path)?.value ?? null;
     const text = (path: string): string => {
@@ -190,7 +213,10 @@ export async function engineView(h: HeadlessHost, defaults: DefaultsUsed = new S
       const v = raw(path);
       return typeof v === "number" ? v : null;
     };
-    const orDefault = <K extends DefaultKey>(key: K, v: (typeof INDESIGN_DEFAULTS)[K] | string | number | null) => {
+    const orDefault = <K extends DefaultKey>(
+      key: K,
+      v: (typeof INDESIGN_DEFAULTS)[K] | string | number | null,
+    ) => {
       if (v === null || v === "") {
         defaults.add(key);
         return INDESIGN_DEFAULTS[key];
@@ -221,9 +247,20 @@ export async function engineView(h: HeadlessHost, defaults: DefaultsUsed = new S
       }));
     } else {
       const b = raw("frameBounds") as number[] | null;
-      const corner = (x: number, y: number) => ({ anchor: [x, y], left: [x, y], right: [x, y] }) as never;
+      const corner = (x: number, y: number) =>
+        ({ anchor: [x, y], left: [x, y], right: [x, y] }) as never;
       out.paths = b
-        ? [{ closed: true, anchors: [corner(b[1], b[0]), corner(b[1], b[2]), corner(b[3], b[2]), corner(b[3], b[0])] }]
+        ? [
+            {
+              closed: true,
+              anchors: [
+                corner(b[1], b[0]),
+                corner(b[1], b[2]),
+                corner(b[3], b[2]),
+                corner(b[3], b[0]),
+              ],
+            },
+          ]
         : null;
     }
 
@@ -231,14 +268,21 @@ export async function engineView(h: HeadlessHost, defaults: DefaultsUsed = new S
     out.fill = nameOf(fillRef);
     out.fillTint = Number(orDefault("fillTint", num("frameFillTint")));
     if (fillRef && fillRef.startsWith("Gradient/")) {
-      const reply = await client.send({ kind: "requestGradientDetail", payload: { gradientId: fillRef } });
-      const detail = reply.payload.result as
-        | { kind: string; stops: { stopColorRef: string; locationPct: number }[] }
-        | null;
+      const reply = await client.send({
+        kind: "requestGradientDetail",
+        payload: { gradientId: fillRef },
+      });
+      const detail = reply.payload.result as {
+        kind: string;
+        stops: { stopColorRef: string; locationPct: number }[];
+      } | null;
       out.gradient = detail
         ? {
             type: enumName(detail.kind),
-            stops: detail.stops.map((s) => ({ color: nameOf(s.stopColorRef), location: s.locationPct })),
+            stops: detail.stops.map((s) => ({
+              color: nameOf(s.stopColorRef),
+              location: s.locationPct,
+            })),
           }
         : null;
       // The gradient AXIS: a kind whose property list does not carry
@@ -249,7 +293,9 @@ export async function engineView(h: HeadlessHost, defaults: DefaultsUsed = new S
       out.gradientAngle = has("frameGradientFillAngle")
         ? Number(orDefault("gradientAngle", num("frameGradientFillAngle")))
         : NO_READ_DOOR;
-      out.gradientLength = has("frameGradientFillLength") ? num("frameGradientFillLength") : NO_READ_DOOR;
+      out.gradientLength = has("frameGradientFillLength")
+        ? num("frameGradientFillLength")
+        : NO_READ_DOOR;
     }
     out.stroke = nameOf(raw("frameStrokeColor") as string | null);
     // The model has no stroke-tint property on a page item.
@@ -257,10 +303,14 @@ export async function engineView(h: HeadlessHost, defaults: DefaultsUsed = new S
     out.strokeWeight = num("frameStrokeWeight");
     out.endCap = token("frameStrokeEndCap", "endCap");
     out.endJoin = token("frameStrokeJoin", "endJoin");
-    out.miterLimit = Number(orDefault("miterLimit", num("frameStrokeMiterLimit")));
+    out.miterLimit = Number(
+      orDefault("miterLimit", num("frameStrokeMiterLimit")),
+    );
     out.strokeAlignment = token("frameStrokeAlignment", "strokeAlignment");
     const strokeType = text("frameStrokeType").replace(/^StrokeStyle\//, "");
-    out.strokeType = String(orDefault("strokeType", strokeType === "" ? null : strokeType));
+    out.strokeType = String(
+      orDefault("strokeType", strokeType === "" ? null : strokeType),
+    );
     out.dash = ((raw("frameStrokeDashArray") as number[] | null) ?? []).slice();
     out.lineEnds = {
       left: token("frameStrokeStartArrowhead", "lineEnd"),
@@ -270,22 +320,31 @@ export async function engineView(h: HeadlessHost, defaults: DefaultsUsed = new S
       const corners: Record<string, Corner> = {};
       for (const [key, suffix] of CORNERS) {
         const option = token(`frameCornerOption${suffix}`, "cornerOption");
-        corners[key] = { option, radius: option === "NONE" ? null : num(`frameCornerRadius${suffix}`) };
+        corners[key] = {
+          option,
+          radius: option === "NONE" ? null : num(`frameCornerRadius${suffix}`),
+        };
       }
       out.corners = corners;
     } else {
-      out.corners = Object.fromEntries(CORNERS.map(([key]) => [key, { option: "NONE", radius: null }]));
+      out.corners = Object.fromEntries(
+        CORNERS.map(([key]) => [key, { option: "NONE", radius: null }]),
+      );
     }
     out.opacity = Number(orDefault("opacity", num("frameOpacity")));
     out.blendMode = token("frameBlendMode", "blendMode");
 
     const envelope = await doc.getMetadata(id);
     out.metadata = envelope ?? null;
-    const tp = (envelope?.data as { textOnPath?: { story?: string } } | undefined)?.textOnPath;
+    const tp = (
+      envelope?.data as { textOnPath?: { story?: string } } | undefined
+    )?.textOnPath;
     if (tp?.story) {
       const content = await doc.storyContent(tp.story);
       out.textPath = content
-        ? content.paragraphs.map((p) => p.runs.map((r) => r.text).join("")).join("\n")
+        ? content.paragraphs
+            .map((p) => p.runs.map((r) => r.text).join(""))
+            .join("\n")
         : null;
     } else {
       out.textPath = null;
@@ -325,19 +384,27 @@ function swatchName(s: InDesignSwatch | undefined): string {
   return s.name;
 }
 
-function indesignNode(item: InDesignItem, all: readonly InDesignItem[]): ViewNode {
+function indesignNode(
+  item: InDesignItem,
+  all: readonly InDesignItem[],
+): ViewNode {
   const ref = `${item.kind}#${item.id}`;
   if (item.kind === "Group") {
     return { kind: "group", ref, children: childrenOf(ref, all) };
   }
   const out: ViewNode = { kind: lowerFirst(item.kind), ref };
-  out.paths = item.paths ? item.paths.map((p) => ({ closed: p.closed, anchors: p.anchors })) : null;
+  out.paths = item.paths
+    ? item.paths.map((p) => ({ closed: p.closed, anchors: p.anchors }))
+    : null;
   out.fill = swatchName(item.fill);
   out.fillTint = item.fillTint;
   if (item.fill?.type === "Gradient") {
     out.gradient = {
       type: item.fill.gradientType ?? "?",
-      stops: (item.fill.stops ?? []).map((s) => ({ color: s.color.name, location: s.location })),
+      stops: (item.fill.stops ?? []).map((s) => ({
+        color: s.color.name,
+        location: s.location,
+      })),
     };
     out.gradientAngle = item.gradientFillAngle ?? null;
     out.gradientLength = item.gradientFillLength ?? null;
@@ -351,18 +418,29 @@ function indesignNode(item: InDesignItem, all: readonly InDesignItem[]): ViewNod
   out.strokeAlignment = item.strokeAlignment;
   out.strokeType = item.strokeType?.key ?? item.strokeType?.name;
   // "Not applicable in the current state" = not a dashed stroke = no dash.
-  out.dash = isUnreadable(item.strokeDashAndGap) ? [] : (item.strokeDashAndGap ?? []).slice();
-  out.lineEnds = { left: item.leftLineEnd ?? "NONE", right: item.rightLineEnd ?? "NONE" };
+  out.dash = isUnreadable(item.strokeDashAndGap)
+    ? []
+    : (item.strokeDashAndGap ?? []).slice();
+  out.lineEnds = {
+    left: item.leftLineEnd ?? "NONE",
+    right: item.rightLineEnd ?? "NONE",
+  };
   out.corners = Object.fromEntries(
     CORNERS.map(([key]) => {
       const c = item.corners?.[key];
       const option = c?.option ?? "NONE";
-      return [key, { option, radius: option === "NONE" ? null : (c?.radius ?? null) }];
+      return [
+        key,
+        { option, radius: option === "NONE" ? null : (c?.radius ?? null) },
+      ];
     }),
   );
   out.opacity = item.transparency?.opacity;
   out.blendMode = item.transparency?.blendMode;
-  out.textPath = item.textPaths && item.textPaths.length > 0 ? item.textPaths[0].contents : null;
+  out.textPath =
+    item.textPaths && item.textPaths.length > 0
+      ? item.textPaths[0].contents
+      : null;
   const label = item.labels?.[DRAW_METADATA_KEY];
   out.metadata = label === undefined ? null : JSON.parse(label);
   return out;
@@ -399,21 +477,34 @@ export interface Difference {
 export const stable = (v: unknown): string =>
   JSON.stringify(v, (_k, x) =>
     x && typeof x === "object" && !Array.isArray(x)
-      ? Object.fromEntries(Object.keys(x).sort().map((k) => [k, (x as Record<string, unknown>)[k]]))
+      ? Object.fromEntries(
+          Object.keys(x)
+            .sort()
+            .map((k) => [k, (x as Record<string, unknown>)[k]]),
+        )
       : x,
   );
 
 const numbersClose = (a: unknown, b: unknown, tol: number): boolean => {
-  if (typeof a === "number" && typeof b === "number") return Math.abs(a - b) <= tol;
+  if (typeof a === "number" && typeof b === "number")
+    return Math.abs(a - b) <= tol;
   if (Array.isArray(a) && Array.isArray(b)) {
-    return a.length === b.length && a.every((x, i) => numbersClose(x, b[i], tol));
+    return (
+      a.length === b.length && a.every((x, i) => numbersClose(x, b[i], tol))
+    );
   }
   if (a && b && typeof a === "object" && typeof b === "object") {
     const ka = Object.keys(a).sort();
     const kb = Object.keys(b).sort();
     return (
       stable(ka) === stable(kb) &&
-      ka.every((k) => numbersClose((a as Record<string, unknown>)[k], (b as Record<string, unknown>)[k], tol))
+      ka.every((k) =>
+        numbersClose(
+          (a as Record<string, unknown>)[k],
+          (b as Record<string, unknown>)[k],
+          tol,
+        ),
+      )
     );
   }
   return a === b;
@@ -422,11 +513,18 @@ const numbersClose = (a: unknown, b: unknown, tol: number): boolean => {
 /** The largest coordinate deviation between two path lists of the same
  *  shape, or null when their STRUCTURE differs (count, open/closed,
  *  anchors per path). */
-export function geometryDeviation(a: readonly OraclePath[], b: readonly OraclePath[]): number | null {
+export function geometryDeviation(
+  a: readonly OraclePath[],
+  b: readonly OraclePath[],
+): number | null {
   if (a.length !== b.length) return null;
   let worst = 0;
   for (let i = 0; i < a.length; i++) {
-    if (a[i].closed !== b[i].closed || a[i].anchors.length !== b[i].anchors.length) return null;
+    if (
+      a[i].closed !== b[i].closed ||
+      a[i].anchors.length !== b[i].anchors.length
+    )
+      return null;
     for (let j = 0; j < a[i].anchors.length; j++) {
       for (const k of ["anchor", "left", "right"] as const) {
         const p = a[i].anchors[j][k];
@@ -439,7 +537,9 @@ export function geometryDeviation(a: readonly OraclePath[], b: readonly OraclePa
 }
 
 const shapeOf = (paths: readonly OraclePath[] | null | undefined) =>
-  paths ? paths.map((p) => `${p.closed ? "closed" : "open"}:${p.anchors.length}`) : null;
+  paths
+    ? paths.map((p) => `${p.closed ? "closed" : "open"}:${p.anchors.length}`)
+    : null;
 
 const FIELDS = [
   "fill",
@@ -468,7 +568,11 @@ const FIELDS = [
  *  position, back to front; a count mismatch is ONE difference
  *  (`children`, with both kind lists) and the common prefix is still
  *  compared. */
-export function compareViews(ours: readonly ViewNode[], theirs: readonly ViewNode[], at = ""): Difference[] {
+export function compareViews(
+  ours: readonly ViewNode[],
+  theirs: readonly ViewNode[],
+  at = "",
+): Difference[] {
   const out: Difference[] = [];
   const here = (i: number) => (at === "" ? String(i) : `${at}/${i}`);
   if (ours.length !== theirs.length) {
@@ -477,14 +581,18 @@ export function compareViews(ours: readonly ViewNode[], theirs: readonly ViewNod
       field: "children",
       ours: ours.map((n) => n.kind),
       theirs: theirs.map((n) => n.kind),
-      refs: [ours.map((n) => n.ref).join(","), theirs.map((n) => n.ref).join(",")],
+      refs: [
+        ours.map((n) => n.ref).join(","),
+        theirs.map((n) => n.ref).join(","),
+      ],
     });
   }
   for (let i = 0; i < Math.min(ours.length, theirs.length); i++) {
     const a = ours[i];
     const b = theirs[i];
     const refs: [string, string] = [a.ref, b.ref];
-    const push = (field: string, x: unknown, y: unknown) => out.push({ at: here(i), field, ours: x, theirs: y, refs });
+    const push = (field: string, x: unknown, y: unknown) =>
+      out.push({ at: here(i), field, ours: x, theirs: y, refs });
     if (a.kind !== b.kind) push("kind", a.kind, b.kind);
     if (a.kind === "group" || b.kind === "group") {
       out.push(...compareViews(a.children ?? [], b.children ?? [], here(i)));
@@ -494,7 +602,12 @@ export function compareViews(ours: readonly ViewNode[], theirs: readonly ViewNod
     if (a.paths && b.paths) {
       const dev = geometryDeviation(a.paths, b.paths);
       if (dev === null) push("paths", shapeOf(a.paths), shapeOf(b.paths));
-      else if (dev > GEOMETRY_TOL) push("geometry", `max deviation ${dev.toFixed(4)} pt`, `tolerance ${GEOMETRY_TOL} pt`);
+      else if (dev > GEOMETRY_TOL)
+        push(
+          "geometry",
+          `max deviation ${dev.toFixed(4)} pt`,
+          `tolerance ${GEOMETRY_TOL} pt`,
+        );
     } else if (Boolean(a.paths) !== Boolean(b.paths)) {
       push("paths", shapeOf(a.paths), shapeOf(b.paths));
     }
@@ -503,7 +616,8 @@ export function compareViews(ours: readonly ViewNode[], theirs: readonly ViewNod
       const y = b[f];
       if (x === undefined && y === undefined) continue;
       if (f === "metadata") {
-        if (stable(x ?? null) !== stable(y ?? null)) push(f, x ?? null, y ?? null);
+        if (stable(x ?? null) !== stable(y ?? null))
+          push(f, x ?? null, y ?? null);
       } else if (!numbersClose(x ?? null, y ?? null, NUMBER_TOL)) {
         push(f, x ?? null, y ?? null);
       }

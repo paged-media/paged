@@ -12,18 +12,18 @@ is unchanged.
 
 ## The three versioning axes (and what owns what)
 
-*Status note (2026-10-02): the editor no longer keeps a mirrored constant.
+_Status note (2026-10-02): the editor no longer keeps a mirrored constant.
 `editor: packages/client/src/protocol.ts` reads `PROTOCOL_VERSION` from the
 version of the installed `@paged-media/canvas-wasm` package, and
 `check-protocol-version.sh` is retired
 (`editor: .github/workflows/protocol-version.yml`). The runtime handshake
-remains.*
+remains._
 
-| axis | constant | moves when | consumers |
-|---|---|---|---|
-| **Engine wire protocol** | `crates/paged-canvas/src/channel.rs PROTOCOL_VERSION` (mirrored as `protocol.ts PROTOCOL_VERSION` in the editor) | a NEW message kind or Operation/Mutation variant ships, or any wire shape changes incompatibly | editor worker handshake; package minors |
-| **npm package version** | `0.<protocol>.<patch>` on canvas-wasm / introspect-wasm / sdk / idml-viewer (tag-derived: `v0.<p>.<n>`) | every publish; **minor IS the protocol** | editor pins; `check-protocol-version.sh` asserts minor == protocol.ts |
-| **Plugin API** | `@paged-media/plugin-api` semver + `apiVersion` manifest negotiation (`^0.2`) | the CONTRACT changes (types, host surface) — independent of engine protocol; the engine wire reaches plugins via the VENDORED `wire.d.ts` (sync-wire.mjs, synced from the published canvas-wasm package, `--check` hard-fails on drift) | bundles (draw/web/template) |
+| axis                     | constant                                                                                                         | moves when                                                                                                                                                                                                                              | consumers                                                             |
+| ------------------------ | ---------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| **Engine wire protocol** | `crates/paged-canvas/src/channel.rs PROTOCOL_VERSION` (mirrored as `protocol.ts PROTOCOL_VERSION` in the editor) | a NEW message kind or Operation/Mutation variant ships, or any wire shape changes incompatibly                                                                                                                                          | editor worker handshake; package minors                               |
+| **npm package version**  | `0.<protocol>.<patch>` on canvas-wasm / introspect-wasm / sdk / idml-viewer (tag-derived: `v0.<p>.<n>`)          | every publish; **minor IS the protocol**                                                                                                                                                                                                | editor pins; `check-protocol-version.sh` asserts minor == protocol.ts |
+| **Plugin API**           | `@paged-media/plugin-api` semver + `apiVersion` manifest negotiation (`^0.2`)                                    | the CONTRACT changes (types, host surface) — independent of engine protocol; the engine wire reaches plugins via the VENDORED `wire.d.ts` (sync-wire.mjs, synced from the published canvas-wasm package, `--check` hard-fails on drift) | bundles (draw/web/template)                                           |
 
 A protocol bump does NOT imply a plugin-api bump (wire types flow via
 the vendored re-sync); a plugin-api bump does NOT imply a protocol
@@ -54,11 +54,11 @@ bump. The editor pins both independently.
 
 ## Release coupling
 
-*Workflow comments in this repository cite this section as
+_Workflow comments in this repository cite this section as
 "protocol-governance §4" (`.github/workflows/ci.yml:242`,
-`.github/workflows/publish-wasm.yml:172`).*
+`.github/workflows/publish-wasm.yml:172`)._
 
-*Status note (2026-10-02): the tag-on-bump warning is the job `tag-on-bump` in
+_Status note (2026-10-02): the tag-on-bump warning is the job `tag-on-bump` in
 `.github/workflows/ci.yml:247`; `publish-wasm.yml` carries no such check. Since
 2026-08 the same file also carries the hard gate `protocol-tag-guard`
 (`.github/workflows/ci.yml:283`; see the breach record below). The dist-tag
@@ -67,7 +67,13 @@ side a bump is now the pin move alone (see the note under the axes table). In
 plugin-sdk, `publish.yml` publishes under `--tag canary`
 (`plugin-sdk: .github/workflows/publish.yml:90`) and has no step that guards
 `latest`; the dist-tag policy is written down in
-`plugin-sdk: scripts/assert-dist-tags.mjs`, which no workflow there runs.*
+`plugin-sdk: scripts/assert-dist-tags.mjs`, which no workflow there runs._
+
+_Status note (2026-10-18, [PM-0008](../../../../docs/adr/PM-0008-npm-packages-and-release.md)):
+`.github/workflows/release.yml` replaces `core-publish-wasm.yml` (the monorepo's
+`publish-wasm.yml`) and the plugin-sdk canary lane. One tag publishes all four public
+packages at its version; the dist-tag rule below is its `the version is the tag` step, and
+`tooling/release/assert-dist-tags.mjs` asserts the result after the publish._
 
 - Tag `v0.<protocol>.<patch>` on the commit to publish → the
   publish-wasm workflow ships all four packages. **Tag-on-bump**: a

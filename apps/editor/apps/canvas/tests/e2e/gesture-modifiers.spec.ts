@@ -91,7 +91,10 @@ test.describe("Gesture modifier semantics", () => {
       { delta: [8, 60], mods: SHIFT },
     ]);
     const after = (await elementPageRectPt(page, ref))!;
-    expect(after.left - start.left, "x suppressed after flip").toBeCloseTo(0, 1);
+    expect(after.left - start.left, "x suppressed after flip").toBeCloseTo(
+      0,
+      1,
+    );
     expect(after.top - start.top, "y carried after flip").toBeCloseTo(60, 1);
     await undo(page);
   });
@@ -131,7 +134,10 @@ test.describe("Gesture modifier semantics", () => {
     const h1 = after[2] - after[0];
     expect((after[1] + after[3]) / 2, "centre x invariant").toBeCloseTo(cx0, 2);
     expect((after[0] + after[2]) / 2, "centre y invariant").toBeCloseTo(cy0, 2);
-    expect(w1 / h1, "aspect locked to the begin bounds").toBeCloseTo(w0 / h0, 3);
+    expect(w1 / h1, "aspect locked to the begin bounds").toBeCloseTo(
+      w0 / h0,
+      3,
+    );
     expect(w1, "the drag actually grew the frame").toBeGreaterThan(w0);
     await undo(page);
   });

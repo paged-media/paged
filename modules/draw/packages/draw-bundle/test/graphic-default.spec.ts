@@ -19,7 +19,7 @@
 // The graphic default (`src/handlers/graphic-default.ts`) — which paint a
 // drawing tool gives its shape, and where in the batch it goes. Pure: a
 // stub host answers `document.meta` and the raw `requestStyleProperties`
-// read; the real-engine half is `conformance/tool-graphic-default.spec.ts`.
+// read; the real-engine half is `headless/tool-graphic-default.spec.ts`.
 
 import { describe, expect, it } from "bun:test";
 
@@ -51,11 +51,18 @@ type Defaults = {
  *  request it was sent. */
 function stubHost(
   defaults: Defaults,
-  style: { fill: string | null; stroke: string | null; weight: number | null } | null,
+  style: {
+    fill: string | null;
+    stroke: string | null;
+    weight: number | null;
+  } | null,
   opts: { hatch?: boolean } = {},
 ): { host: BundleHost; sent: unknown[] } {
   const sent: unknown[] = [];
-  const send = async (req: { kind: string; payload?: { styleId?: string } }) => {
+  const send = async (req: {
+    kind: string;
+    payload?: { styleId?: string };
+  }) => {
     sent.push(req);
     if (req.kind !== "requestStyleProperties") return { kind: "error" };
     const result =
@@ -64,10 +71,19 @@ function stubHost(
             collection: "object",
             styleId: NORMAL_GRAPHICS_FRAME_STYLE,
             entries: [
-              { path: "frameFillColor", value: { type: "colorRef", value: style.fill } },
+              {
+                path: "frameFillColor",
+                value: { type: "colorRef", value: style.fill },
+              },
               { path: "frameFillTint", value: { type: "length", value: null } },
-              { path: "frameStrokeColor", value: { type: "colorRef", value: style.stroke } },
-              { path: "frameStrokeWeight", value: { type: "length", value: style.weight } },
+              {
+                path: "frameStrokeColor",
+                value: { type: "colorRef", value: style.stroke },
+              },
+              {
+                path: "frameStrokeWeight",
+                value: { type: "length", value: style.weight },
+              },
             ],
           }
         : null;
@@ -89,8 +105,16 @@ function stubHost(
 
 const PAGE = "usp";
 const ANCHORS = [
-  { anchor: [0, 0] as [number, number], left: [0, 0] as [number, number], right: [0, 0] as [number, number] },
-  { anchor: [10, 10] as [number, number], left: [10, 10] as [number, number], right: [10, 10] as [number, number] },
+  {
+    anchor: [0, 0] as [number, number],
+    left: [0, 0] as [number, number],
+    right: [0, 0] as [number, number],
+  },
+  {
+    anchor: [10, 10] as [number, number],
+    left: [10, 10] as [number, number],
+    right: [10, 10] as [number, number],
+  },
 ];
 const INSERT = insertPathMutationFor(PAGE, ANCHORS, true);
 
@@ -109,13 +133,20 @@ describe("graphicPaintFor — which paint a tool-made shape wears", () => {
       { defaultStrokeColor: "Color/Black" },
       { defaultStrokeWeight: 2 },
     ]) {
-      const { host } = stubHost(defaults, { fill: "Color/Black", stroke: "Color/Black", weight: 4 });
+      const { host } = stubHost(defaults, {
+        fill: "Color/Black",
+        stroke: "Color/Black",
+        weight: 4,
+      });
       expect(await graphicPaintFor(host)).toBeNull();
     }
   });
 
   it("no defaults, the document's [Normal Graphics Frame] present: its values", async () => {
-    const { host, sent } = stubHost({}, { fill: "Color/Paper", stroke: "Color/Black", weight: 4 });
+    const { host, sent } = stubHost(
+      {},
+      { fill: "Color/Paper", stroke: "Color/Black", weight: 4 },
+    );
     expect(await graphicPaintFor(host)).toEqual({
       fill: "Color/Paper",
       stroke: "Color/Black",
@@ -131,19 +162,27 @@ describe("graphicPaintFor — which paint a tool-made shape wears", () => {
 
   it("a style whose swatch is None reads as null", async () => {
     const { host } = stubHost({}, { fill: null, stroke: null, weight: 3 });
-    expect(await graphicPaintFor(host)).toEqual({ fill: null, stroke: null, strokeWeight: 3 });
+    expect(await graphicPaintFor(host)).toEqual({
+      fill: null,
+      stroke: null,
+      strokeWeight: 3,
+    });
   });
 
   it("no such style (File ▸ New): InDesign's values — no fill, 1 pt Color/Black", async () => {
     const { host } = stubHost({}, null);
     expect(await graphicPaintFor(host)).toEqual(INDESIGN_GRAPHIC_PAINT);
-    expect(INDESIGN_GRAPHIC_PAINT).toEqual({ fill: null, stroke: "Color/Black", strokeWeight: 1 });
+    expect(INDESIGN_GRAPHIC_PAINT).toEqual({
+      fill: null,
+      stroke: "Color/Black",
+      strokeWeight: 1,
+    });
   });
 
   it("a host with no raw wire, or a read that fails, degrades to InDesign's values", async () => {
-    expect(await graphicPaintFor(stubHost({}, null, { hatch: false }).host)).toEqual(
-      INDESIGN_GRAPHIC_PAINT,
-    );
+    expect(
+      await graphicPaintFor(stubHost({}, null, { hatch: false }).host),
+    ).toEqual(INDESIGN_GRAPHIC_PAINT);
     const { host } = stubHost({}, null);
     (host.document as unknown as { meta: () => Promise<never> }).meta = () =>
       Promise.reject(new Error("gone"));
@@ -152,7 +191,11 @@ describe("graphicPaintFor — which paint a tool-made shape wears", () => {
 });
 
 describe("withGraphicPaint — where the paint goes", () => {
-  const STYLE: GraphicPaint = { fill: "Color/Paper", stroke: "Color/Black", strokeWeight: 4 };
+  const STYLE: GraphicPaint = {
+    fill: "Color/Paper",
+    stroke: "Color/Black",
+    strokeWeight: 4,
+  };
 
   it("no paint (the document has defaults): the mutation is unchanged", () => {
     expect(withGraphicPaint(INSERT, null)).toBe(INSERT);
@@ -183,17 +226,38 @@ describe("withGraphicPaint — where the paint goes", () => {
   });
 
   it("a weight is written only with a stroke; nothing to paint leaves the mutation alone", () => {
-    expect(withGraphicPaint(INSERT, { fill: null, stroke: null, strokeWeight: 3 })).toBe(INSERT);
-    expect(withGraphicPaint(INSERT, { fill: null, stroke: "Color/Black", strokeWeight: null })).toEqual({
+    expect(
+      withGraphicPaint(INSERT, { fill: null, stroke: null, strokeWeight: 3 }),
+    ).toBe(INSERT);
+    expect(
+      withGraphicPaint(INSERT, {
+        fill: null,
+        stroke: "Color/Black",
+        strokeWeight: null,
+      }),
+    ).toEqual({
       op: "batch",
-      args: { ops: [INSERT, set("polygon", "frameStrokeColor", colorRef("Color/Black"))] },
+      args: {
+        ops: [
+          INSERT,
+          set("polygon", "frameStrokeColor", colorRef("Color/Black")),
+        ],
+      },
     });
   });
 
   it("the pencil's pressure batch: the paint rides right after the insert, BEFORE the bind and the outline", () => {
     const bind = bindCreatedMutationFor("stroke");
-    const outline = outlineStrokeVariableMutationFor(handleElementId("stroke"), [1, 2, 3]);
-    expect(withGraphicPaint(batchMutationFor([INSERT, bind, outline]), INDESIGN_GRAPHIC_PAINT)).toEqual({
+    const outline = outlineStrokeVariableMutationFor(
+      handleElementId("stroke"),
+      [1, 2, 3],
+    );
+    expect(
+      withGraphicPaint(
+        batchMutationFor([INSERT, bind, outline]),
+        INDESIGN_GRAPHIC_PAINT,
+      ),
+    ).toEqual({
       op: "batch",
       args: {
         ops: [
@@ -209,7 +273,10 @@ describe("withGraphicPaint — where the paint goes", () => {
 
   it("every insert in a batch gets its own paint, right after it", () => {
     const second = insertPathMutationFor(PAGE, ANCHORS, false);
-    const painted = withGraphicPaint(batchMutationFor([INSERT, second]), INDESIGN_GRAPHIC_PAINT);
+    const painted = withGraphicPaint(
+      batchMutationFor([INSERT, second]),
+      INDESIGN_GRAPHIC_PAINT,
+    );
     expect(painted).toEqual({
       op: "batch",
       args: {
@@ -240,8 +307,14 @@ describe("withGraphicPaint — where the paint goes", () => {
         ],
       },
     });
-    const frame = { op: "insertFrame", args: { pageId: PAGE, bounds: [0, 0, 10, 10] } } as MutationInput;
-    const oval = { op: "insertOval", args: { pageId: PAGE, bounds: [0, 0, 10, 10] } } as MutationInput;
+    const frame = {
+      op: "insertFrame",
+      args: { pageId: PAGE, bounds: [0, 0, 10, 10] },
+    } as MutationInput;
+    const oval = {
+      op: "insertOval",
+      args: { pageId: PAGE, bounds: [0, 0, 10, 10] },
+    } as MutationInput;
     for (const [insert, kind] of [
       [frame, "rectangle"],
       [oval, "oval"],
@@ -261,9 +334,15 @@ describe("withGraphicPaint — where the paint goes", () => {
   });
 
   it("a mutation that inserts no shape is left alone", () => {
-    const outline = outlineStrokeVariableMutationFor(handleElementId("stroke"), [1, 2]);
+    const outline = outlineStrokeVariableMutationFor(
+      handleElementId("stroke"),
+      [1, 2],
+    );
     expect(withGraphicPaint(outline, STYLE)).toBe(outline);
-    const textFrame = { op: "insertTextFrame", args: { pageId: PAGE, bounds: [0, 0, 10, 10] } } as MutationInput;
+    const textFrame = {
+      op: "insertTextFrame",
+      args: { pageId: PAGE, bounds: [0, 0, 10, 10] },
+    } as MutationInput;
     expect(withGraphicPaint(textFrame, STYLE)).toBe(textFrame);
   });
 });

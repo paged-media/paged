@@ -28,7 +28,11 @@
 // tool-preview slot (`overlay.setToolPreviews`) — there the two still
 // share one slot, the behaviour before layers existed.
 
-import type { BundleHost, OverlayLayer, ToolPreviewShape } from "@paged-media/plugin-api";
+import type {
+  BundleHost,
+  OverlayLayer,
+  ToolPreviewShape,
+} from "@paged-media/plugin-api";
 
 /** The channels, bottom-most first. */
 const CHANNELS = ["outline", "caret"] as const;
@@ -53,7 +57,10 @@ function layersOf(host: BundleHost): Map<string, OverlayLayer> | null {
 
 /** A setter for channel `id` of `host`. Never throws: without an overlay
  *  grant the shapes are dropped and the caller works without them. */
-export function overlayChannel(host: BundleHost, id: OverlayChannelId): (shapes: OverlayShapes) => void {
+export function overlayChannel(
+  host: BundleHost,
+  id: OverlayChannelId,
+): (shapes: OverlayShapes) => void {
   return (shapes) => {
     const drawn = shapes && shapes.length > 0 ? shapes : null;
     try {

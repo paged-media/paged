@@ -44,7 +44,7 @@ import type {
   SelectionMode,
   SnapPointQuery,
   SnapPointResult,
-} from "./wire";
+} from "./wire.js";
 import type {
   CommandContribution,
   ExporterContribution,
@@ -55,24 +55,24 @@ import type {
   PanelContribution,
   ToolContribution,
   ToolPreviewShape,
-} from "./editor";
-import type { SceneLayer } from "./wire";
+} from "./editor.js";
+import type { SceneLayer } from "./wire.js";
 
-import type { AssetSurface } from "./assets";
+import type { AssetSurface } from "./assets.js";
 import type {
   BindingProvider,
   BindingProviderHandle,
-} from "./binding-provider";
-import type { ClipboardSurface } from "./clipboard";
-import type { MutationInput } from "./mutations";
-import type { PluginManifest, WasmArtifact } from "./manifest";
-import type { SchemaPanelContribution } from "./panel-schema";
-import type { WidgetSurface } from "./widgets";
+} from "./binding-provider.js";
+import type { ClipboardSurface } from "./clipboard.js";
+import type { MutationInput } from "./mutations.js";
+import type { PluginManifest, WasmArtifact } from "./manifest.js";
+import type { SchemaPanelContribution } from "./panel-schema.js";
+import type { WidgetSurface } from "./widgets.js";
 import type {
   ObjectModelContribution,
   ObjectModelHandle,
   ObjectsSurface,
-} from "./object-model";
+} from "./object-model.js";
 
 // ---------------------------------------------------------------- core
 
@@ -1442,7 +1442,10 @@ export interface ViewportSurface {
   /** v70 — bring a page into view, fitted to the viewport (a slide
    *  sorter's click, a link to a page). `false` when the page is unknown
    *  or the host can't navigate: probe `supports("viewport.pages@1")`. */
-  goToPage(pageId: PageId, options?: { fit?: "page" | "width" }): Promise<boolean>;
+  goToPage(
+    pageId: PageId,
+    options?: { fit?: "page" | "width" },
+  ): Promise<boolean>;
   /** v70 — the page the user is on: the one the viewport's centre is
    *  over, else the nearest (the same page `host.document.meta()`
    *  reports as `activePage`). `null` with no document or no host
@@ -1460,7 +1463,10 @@ export interface ViewportSurface {
    *  `start <= end`; an empty range places the caret. `false` when the
    *  story is unknown, the range is not laid out (overset) or the host
    *  can't navigate: probe `supports("viewport.revealText@1")`. */
-  revealText(range: TextRange, options?: { select?: boolean }): Promise<boolean>;
+  revealText(
+    range: TextRange,
+    options?: { select?: boolean },
+  ): Promise<boolean>;
 }
 
 /** A range of a story's text, by story id and story-relative offsets. */
@@ -1506,7 +1512,10 @@ export interface RenderedPage {
 export interface RenderSurface {
   /** The page as a PNG, or `null` when the page is unknown or the
    *  engine refused (an invalid width). */
-  snapshot(pageId: PageId, options: RenderSnapshotOptions): Promise<RenderedPage | null>;
+  snapshot(
+    pageId: PageId,
+    options: RenderSnapshotOptions,
+  ): Promise<RenderedPage | null>;
 }
 
 // ----------------------------------------------------------------- text
@@ -1902,8 +1911,7 @@ export interface OpenDocumentOptions {
  *  kept the active document (it had unsaved edits and they chose not to
  *  discard them); nothing changed. */
 export type OpenDocumentResult =
-  | { opened: true; pageIds: string[] }
-  | { opened: false; reason: "declined" };
+  { opened: true; pageIds: string[] } | { opened: false; reason: "declined" };
 
 export interface DocumentsSurface {
   /** Serialize the ACTIVE document to `.paged` bytes (the same container
@@ -1921,7 +1929,10 @@ export interface DocumentsSurface {
    *  and NO unsaved edits: mutations the caller makes next are what mark
    *  it edited. Gated on `capabilities.documents.open`. Rejects when the
    *  bytes do not load or the host wired no backend. */
-  open(bytes: Uint8Array, options?: OpenDocumentOptions): Promise<OpenDocumentResult>;
+  open(
+    bytes: Uint8Array,
+    options?: OpenDocumentOptions,
+  ): Promise<OpenDocumentResult>;
 }
 
 // -------------------------------------------------------------- network
@@ -1954,7 +1965,10 @@ export interface NetworkSurface {
    *  resolves the per-origin decision. NOTHING fetches before this resolves.
    *  Origins outside the declared `capabilities.network` allow-list are denied.
    *  Requires `capabilities.network` to be declared (else a capability error). */
-  requestConsent(origins: readonly string[], purpose: string): Promise<ConsentResult>;
+  requestConsent(
+    origins: readonly string[],
+    purpose: string,
+  ): Promise<ConsentResult>;
   /** The currently-granted origins (session grants + remembered) — a bundle
    *  gates its own reach on this. */
   consentedOrigins(): readonly string[];

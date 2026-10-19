@@ -28,7 +28,12 @@
 // `data-web-editor-lane` says which lane is live (honest seams — the
 // fallback never pretends to be the widget).
 
-import { forwardRef, type ComponentType, type ReactElement, type Ref } from "react";
+import {
+  forwardRef,
+  type ComponentType,
+  type ReactElement,
+  type Ref,
+} from "react";
 
 import type { CodeEditorProps } from "@paged-media/plugin-api";
 

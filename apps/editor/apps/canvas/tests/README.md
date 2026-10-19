@@ -29,9 +29,9 @@ BACKEND=gpu npm run test:fidelity
 Output lands in `/tmp/paged-canvas-fidelity/<pack>/`:
 
 - `cand-NNN.png` — canvas snapshot for page N
-- `ref-NNN.png`  — `pdftoppm`-rasterised reference PDF page N
+- `ref-NNN.png` — `pdftoppm`-rasterised reference PDF page N
 - `heat-NNN.png` — ΔE heatmap (peak red ≈ ΔE 5)
-- `pack.json`    — per-page mean ΔE / p99 ΔE / SSIM + worst-of-pack
+- `pack.json` — per-page mean ΔE / p99 ΔE / SSIM + worst-of-pack
 
 `/tmp/paged-canvas-fidelity/results.json` rolls every pack into one
 file for downstream analysis. `corpus/config/canvas-fidelity-thresholds.json`
@@ -39,13 +39,13 @@ is the gate spec — captured by `npm run test:fidelity:capture`.
 
 ## Environment
 
-| Var                 | Default                          | Meaning                                                                       |
-| ------------------- | -------------------------------- | ----------------------------------------------------------------------------- |
-| `FIDELITY_DPI`      | `144`                            | Resolution. Mirrors `corpus/harness/test.sh`'s `IDML_ENVATO_DPI`.              |
-| `FIDELITY_OUT`      | `/tmp/paged-canvas-fidelity`      | Output root.                                                                  |
-| `FIDELITY_PACKS`    | (all non-skip)                   | Comma- or space-separated pack-name subset.                                   |
-| `FIDELITY_MODE`     | `gate`                           | `gate` fails gated packs on threshold violation; `capture` writes baseline JSON; `advisory` logs only. |
-| `BACKEND`           | `cpu`                            | `gpu` routes per-page renders through the Vello WebGPU readback path. Forces headed Chromium + `--enable-unsafe-webgpu --use-vulkan` flags. Falls back to CPU if the adapter request fails. |
+| Var              | Default                      | Meaning                                                                                                                                                                                     |
+| ---------------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `FIDELITY_DPI`   | `144`                        | Resolution. Mirrors `corpus/harness/test.sh`'s `IDML_ENVATO_DPI`.                                                                                                                           |
+| `FIDELITY_OUT`   | `/tmp/paged-canvas-fidelity` | Output root.                                                                                                                                                                                |
+| `FIDELITY_PACKS` | (all non-skip)               | Comma- or space-separated pack-name subset.                                                                                                                                                 |
+| `FIDELITY_MODE`  | `gate`                       | `gate` fails gated packs on threshold violation; `capture` writes baseline JSON; `advisory` logs only.                                                                                      |
+| `BACKEND`        | `cpu`                        | `gpu` routes per-page renders through the Vello WebGPU readback path. Forces headed Chromium + `--enable-unsafe-webgpu --use-vulkan` flags. Falls back to CPU if the adapter request fails. |
 
 ## Architecture
 
@@ -102,3 +102,46 @@ CLI) against the same PDFs. The canvas suite exercises the
 `apps/canvas` worker + wasm path. They share the corpus, the
 overrides, and the diff binary but not the renderer driver, so each
 catches regressions the other can miss.
+
+## The headless editor (`tests/headless/`)
+
+Not Playwright: `bun run test:headless` (from `apps/canvas`, or from
+`apps/editor`) runs `tests/headless/**/*.test.ts` under `bun test`, with no
+browser. `tests/headless/harness.ts` builds the editor on the real engine:
+
+```ts
+import {
+  gestureFixture,
+  GESTURE_TARGETS as T,
+  covers,
+} from "@paged-media/test-kit";
+import { createHeadlessEditor } from "./harness";
+
+const ed = await createHeadlessEditor({ idml: gestureFixture("targets") });
+await ed.select([T.frame.id]);
+await ed.invoke("paged.object.delete"); // the real command registry
+covers("command:paged.object.delete");
+expect(ed.problems()).toEqual([]);
+const dump = await ed.dump(); // canonical model JSON (test-kit modelDump)
+await ed.dispose();
+```
+
+Real: the canvas-wasm engine (one module per process, a fresh engine per
+editor), `CanvasClient` over an in-process render worker
+(`@paged-media/test-kit` `createEngineWorker`, which mirrors
+`src/worker/worker.ts` message for message; painting is off), the shell
+registries (`createShellRegistries`), the app's command, menu and keybinding
+sets with their real runners (registered as `main.tsx` registers them: keep
+the two in step), the app's object registry, Boa `paged.*` scripts
+(`ed.script`), `editor.*` / `demo.*` automation (`ed.automation`,
+`ed.runDemo`, and `globalThis.__canvas` while the editor is live), plugin
+hosts (`ed.host()`, `ed.loadBundle(bundle)`), keyboard dispatch
+(`ed.press("cmd+z")`), and the editor's default font. Stand-ins: the
+shell's React state (document, selection, camera, tool, content selection,
+tool settings, screen mode, overlay signals, edit context) is `ed.state`,
+plain objects with the same members; set `ed.state.editContext` to run a
+command inside a plugin content type. Off: rendering, panels and dialogs
+(`ed.opened` records what a command asked to open). Not registered
+headlessly: the `paged.panel.show.*` pairs (they derive from mounted
+panels) and the shell-internal chrome commands. The surface-parity suite and
+its matrix are described in `docs/development/surface-parity.md`.

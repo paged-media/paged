@@ -35,7 +35,7 @@ import type { HeadlessHost } from "@paged-media/plugin-sdk";
 
 import { drawBundle } from "../../src";
 import { F1_MULTI_SHAPE } from "../fixtures/corpus";
-import { openHost } from "../conformance/host";
+import { openHost } from "../headless/host";
 
 const D = "media.paged.draw";
 const A = (kind: string, id: string) => `plugin:${D}/${kind}/${id}`;
@@ -43,12 +43,16 @@ const A = (kind: string, id: string) => `plugin:${D}/${kind}/${id}`;
 type Client = Record<string, unknown>;
 
 /** Count every call to the engine client, by method (and `send` kind). */
-function countClient(client: Client): { counts: Record<string, number>; reset(): void } {
+function countClient(client: Client): {
+  counts: Record<string, number>;
+  reset(): void;
+} {
   const counts: Record<string, number> = {};
   for (const [name, fn] of Object.entries(client)) {
     if (typeof fn !== "function") continue;
     client[name] = (...args: unknown[]) => {
-      const key = name === "send" ? `send:${(args[0] as { kind?: string })?.kind}` : name;
+      const key =
+        name === "send" ? `send:${(args[0] as { kind?: string })?.kind}` : name;
       counts[key] = (counts[key] ?? 0) + 1;
       return (fn as (...a: unknown[]) => unknown).apply(client, args);
     };
@@ -69,29 +73,78 @@ describe("perf budget — a 10-op object-model batch", () => {
     h = await openHost();
     await h.load(F1_MULTI_SHAPE.bytes());
     h.loadBundle(drawBundle);
-    counter = countClient((h.host as unknown as { editor: { client: Client } }).editor.client);
+    counter = countClient(
+      (h.host as unknown as { editor: { client: Client } }).editor.client,
+    );
   });
   afterAll(() => h?.dispose());
 
   it("ONE engine mutation, ONE undo step, and a pinned read count", async () => {
-    const weightBefore = await h.objects.get("rectangle:urect", "frameStrokeWeight");
-    const points = (await h.objects.get(A("path", "polygon:upoly"), "points")) as { value: unknown[] };
+    const weightBefore = await h.objects.get(
+      "rectangle:urect",
+      "frameStrokeWeight",
+    );
+    const points = (await h.objects.get(
+      A("path", "polygon:upoly"),
+      "points",
+    )) as { value: unknown[] };
     const ops: ObjectOp[] = [
-      { op: "set", address: "rectangle:urect", path: "frameStrokeWeight", value: 2 },
-      { op: "set", address: "rectangle:urect", path: "frameOpacity", value: 80 },
-      { op: "set", address: "polygon:upoly", path: "frameStrokeWeight", value: 3 },
+      {
+        op: "set",
+        address: "rectangle:urect",
+        path: "frameStrokeWeight",
+        value: 2,
+      },
+      {
+        op: "set",
+        address: "rectangle:urect",
+        path: "frameOpacity",
+        value: 80,
+      },
+      {
+        op: "set",
+        address: "polygon:upoly",
+        path: "frameStrokeWeight",
+        value: 3,
+      },
       { op: "set", address: "polygon:upoly", path: "frameOpacity", value: 70 },
-      { op: "set", address: "graphicLine:uline", path: "frameStrokeWeight", value: 4 },
-      { op: "set", address: "rectangle:urect", path: "frameFillTint", value: 50 },
+      {
+        op: "set",
+        address: "graphicLine:uline",
+        path: "frameStrokeWeight",
+        value: 4,
+      },
+      {
+        op: "set",
+        address: "rectangle:urect",
+        path: "frameFillTint",
+        value: 50,
+      },
       {
         op: "set",
         address: A("appearance", "rectangle:urect"),
         path: "fills",
-        value: [{ color: "Color/Black", tint: 40, opacity: 100, blendMode: "Normal" }],
+        value: [
+          { color: "Color/Black", tint: 40, opacity: 100, blendMode: "Normal" },
+        ],
       },
-      { op: "set", address: A("path", "polygon:upoly"), path: "points", value: points.value },
-      { op: "set", address: A("path", "polygon:upoly"), path: "subpathStarts", value: [] },
-      { op: "create", kind: `plugin:${D}/graphicStyle`, props: { name: "Budget" } },
+      {
+        op: "set",
+        address: A("path", "polygon:upoly"),
+        path: "points",
+        value: points.value,
+      },
+      {
+        op: "set",
+        address: A("path", "polygon:upoly"),
+        path: "subpathStarts",
+        value: [],
+      },
+      {
+        op: "create",
+        kind: `plugin:${D}/graphicStyle`,
+        props: { name: "Budget" },
+      },
     ];
     counter.reset();
     const out = await h.objects.batch(ops);
@@ -133,8 +186,9 @@ describe("perf budget — a 10-op object-model batch", () => {
 
     // ONE undo restores all ten.
     await h.host.document.undo();
-    expect(await h.objects.get("rectangle:urect", "frameStrokeWeight")).toEqual(weightBefore);
+    expect(await h.objects.get("rectangle:urect", "frameStrokeWeight")).toEqual(
+      weightBefore,
+    );
     expect(await h.objects.query(`plugin:${D}/graphicStyle`)).toEqual([]);
   });
 });
-

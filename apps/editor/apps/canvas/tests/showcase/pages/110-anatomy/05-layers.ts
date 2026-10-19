@@ -48,30 +48,43 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   const right = x1;
   const top = y0;
 
-  const layersNamed = async (): Promise<Array<{ selfId: string; name?: string }>> =>
+  const layersNamed = async (): Promise<
+    Array<{ selfId: string; name?: string }>
+  > =>
     (await doc.designer.layers()) as Array<{ selfId: string; name?: string }>;
 
   // ── prose ───────────────────────────────────────────────────────
-  const head = await proseFrame(ctx, p(17), [left, top, right, top + 30], [
-    { text: "The layer plan, exercised", style: STYLE.head1 },
-  ]);
+  const head = await proseFrame(
+    ctx,
+    p(17),
+    [left, top, right, top + 30],
+    [{ text: "The layer plan, exercised", style: STYLE.head1 }],
+  );
   elements.push(head.frameId);
 
-  const prose = await proseFrame(ctx, p(17), [left, top + 38, right, top + 230], [
-    {
-      text: "A layer is a band of stacking order with three switches: visible, locked, printable. This book keeps five, drawn as bands below, bottom first — the grid under everything, the plates over it, the prose over those, and the apparatus on top. While this page was set, a sixth existed: born as Scratch, renamed to Scratch Bench, handed the blue exhibit below, switched invisible and back (the render changed both ways), moved to the bottom of the stack, and removed.",
-      style: STYLE.bodyFirst,
-    },
-    {
-      text: "The removal is worth reading twice. The engine does not refuse to remove an occupied layer: the layer record goes, and the item keeps a reference to a layer that no longer exists until someone re-homes it — which this page did, to Content, where the exhibit now lives. The overlapping pair beside it demonstrates the other half of stacking: Arrange, front and back, with no geometry change at all.",
-      style: STYLE.body,
-    },
-  ]);
+  const prose = await proseFrame(
+    ctx,
+    p(17),
+    [left, top + 38, right, top + 230],
+    [
+      {
+        text: "A layer is a band of stacking order with three switches: visible, locked, printable. This book keeps five, drawn as bands below, bottom first — the grid under everything, the plates over it, the prose over those, and the apparatus on top. While this page was set, a sixth existed: born as Scratch, renamed to Scratch Bench, handed the blue exhibit below, switched invisible and back (the render changed both ways), moved to the bottom of the stack, and removed.",
+        style: STYLE.bodyFirst,
+      },
+      {
+        text: "The removal is worth reading twice. The engine does not refuse to remove an occupied layer: the layer record goes, and the item keeps a reference to a layer that no longer exists until someone re-homes it — which this page did, to Content, where the exhibit now lives. The overlapping pair beside it demonstrates the other half of stacking: Arrange, front and back, with no geometry change at all.",
+        style: STYLE.body,
+      },
+    ],
+  );
   elements.push(prose.frameId);
 
   // ── the scratch-layer lifecycle ─────────────────────────────────
   const before = await layersNamed();
-  await doc.mutate("layerInsert", { position: before.length, name: SCRATCH_BORN });
+  await doc.mutate("layerInsert", {
+    position: before.length,
+    name: SCRATCH_BORN,
+  });
   let all = await layersNamed();
   const scratch = all.find((l) => l.name === SCRATCH_BORN);
   if (!scratch) {
@@ -81,7 +94,10 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     );
   }
 
-  await doc.mutate("layerSetName", { layerId: scratch.selfId, name: SCRATCH_RENAMED });
+  await doc.mutate("layerSetName", {
+    layerId: scratch.selfId,
+    name: SCRATCH_RENAMED,
+  });
   all = await layersNamed();
   if (!all.some((l) => l.name === SCRATCH_RENAMED)) {
     throw new Error("layerSetName did not land in the layers read");
@@ -103,17 +119,32 @@ export async function build(ctx: PageContext): Promise<PageReport> {
 
   // Visibility, pixel-proved in both directions.
   const withExhibit = await doc.renderPage(p(17));
-  await doc.mutate("layerSetVisible", { layerId: scratch.selfId, visible: false });
+  await doc.mutate("layerSetVisible", {
+    layerId: scratch.selfId,
+    visible: false,
+  });
   await doc.expectRenderChanged(p(17), withExhibit);
   const hidden = await doc.renderPage(p(17));
-  await doc.mutate("layerSetVisible", { layerId: scratch.selfId, visible: true });
+  await doc.mutate("layerSetVisible", {
+    layerId: scratch.selfId,
+    visible: true,
+  });
   await doc.expectRenderChanged(p(17), hidden);
 
   // Lock, printable, move — exercised and restored / left harmless.
   await doc.mutate("layerSetLocked", { layerId: scratch.selfId, locked: true });
-  await doc.mutate("layerSetLocked", { layerId: scratch.selfId, locked: false });
-  await doc.mutate("layerSetPrintable", { layerId: scratch.selfId, printable: false });
-  await doc.mutate("layerSetPrintable", { layerId: scratch.selfId, printable: true });
+  await doc.mutate("layerSetLocked", {
+    layerId: scratch.selfId,
+    locked: false,
+  });
+  await doc.mutate("layerSetPrintable", {
+    layerId: scratch.selfId,
+    printable: false,
+  });
+  await doc.mutate("layerSetPrintable", {
+    layerId: scratch.selfId,
+    printable: true,
+  });
   await doc.mutate("layerMove", { layerId: scratch.selfId, newIndex: 0 });
 
   // Remove WHILE OCCUPIED — the engine allows it; record that, then
@@ -189,9 +220,12 @@ export async function build(ctx: PageContext): Promise<PageReport> {
         LAYER.background,
       ),
     );
-    const label = await proseFrame(ctx, p(17), [left + 162, y, right, y + 20], [
-      { text: layer.name ?? layer.selfId, style: STYLE.caption },
-    ]);
+    const label = await proseFrame(
+      ctx,
+      p(17),
+      [left + 162, y, right, y + 20],
+      [{ text: layer.name ?? layer.selfId, style: STYLE.caption }],
+    );
     elements.push(label.frameId);
   }
 

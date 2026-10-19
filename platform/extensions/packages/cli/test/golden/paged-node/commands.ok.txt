@@ -1,0 +1,28 @@
+$ paged-node commands --owner paged.ai --no-plugins
+# exit 0
+# stdout
+{
+  "commands": [
+    {
+      "id": "paged.ai.complete",
+      "title": "Ask Claude for text",
+      "owner": "paged.ai",
+      "args": {
+        "kind": "struct",
+        "fields": {
+          "prompt": {
+            "kind": "text",
+            "multiline": true,
+            "maxLength": 20000
+          }
+        }
+      },
+      "result": {
+        "kind": "text",
+        "multiline": true
+      }
+    }
+  ]
+}
+# stderr
+(empty)

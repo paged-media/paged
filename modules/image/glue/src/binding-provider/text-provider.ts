@@ -257,7 +257,10 @@ export function makeTextBindingProvider(
           // choose would be inventing the value this provider exists to
           // avoid inventing.
           return t.style === null
-            ? { kind: "absent", reason: "no style set — the family's default face" }
+            ? {
+                kind: "absent",
+                reason: "no style set — the family's default face",
+              }
             : { kind: "value", value: t.style as unknown as Value };
         case "characterHorizontalScale":
           return { kind: "value", value: t.hScalePct as unknown as Value };
@@ -410,7 +413,10 @@ export function makeTextBindingProvider(
           // Zero or negative would rasterize nothing, which reads as a
           // broken renderer rather than a rejected input.
           if (!Number.isFinite(pct) || pct <= 0) {
-            return { kind: "decline", reason: "scale must be a positive percent" };
+            return {
+              kind: "decline",
+              reason: "scale must be a positive percent",
+            };
           }
           session.setType(
             request.path === "characterHorizontalScale"
@@ -425,7 +431,10 @@ export function makeTextBindingProvider(
             // At ±90° the shear is infinite and the run degenerates to
             // a line; refusing names the limit instead of rendering
             // nothing.
-            return { kind: "decline", reason: "slant must be between -90 and 90" };
+            return {
+              kind: "decline",
+              reason: "slant must be between -90 and 90",
+            };
           }
           session.setType({ skewDeg: deg });
           return ok();
@@ -486,7 +495,10 @@ export function makeTextBindingProvider(
             };
           }
           if (!Number.isFinite(pt)) {
-            return { kind: "decline", reason: "baseline shift must be a number" };
+            return {
+              kind: "decline",
+              reason: "baseline shift must be a number",
+            };
           }
           // NOT clamped to positive: a negative shift is a subscript.
           session.setType({ baselineShiftPx: Math.round(pt / ptPerPx) });
@@ -516,7 +528,11 @@ export function makeTextBindingProvider(
             return ok();
           }
           if (v === "normal" || v === "none") {
-            session.setType({ baselineShiftPx: 0, hScalePct: 100, vScalePct: 100 });
+            session.setType({
+              baselineShiftPx: 0,
+              hScalePct: 100,
+              vScalePct: 100,
+            });
             return ok();
           }
           return { kind: "decline", reason: `unknown position "${v}"` };

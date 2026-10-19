@@ -37,7 +37,9 @@ export function RenderPane(props: Props) {
       // wasm-bindgen returns a Uint8Array backed by `ArrayBufferLike`;
       // TS strict can't prove it isn't a SharedArrayBuffer. Cast via
       // BlobPart — the runtime value is always a plain ArrayBuffer.
-      const blob = new Blob([png as unknown as BlobPart], { type: "image/png" });
+      const blob = new Blob([png as unknown as BlobPart], {
+        type: "image/png",
+      });
       const next = URL.createObjectURL(blob);
       setUrl((previous) => {
         if (previous) URL.revokeObjectURL(previous);

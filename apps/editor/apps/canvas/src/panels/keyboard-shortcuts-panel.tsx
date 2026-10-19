@@ -64,20 +64,56 @@ export const KEYBOARD_SHORTCUTS_PANEL_ID = "paged.keyboard-shortcuts";
 const AD_HOC: { key: string; what: string; where: string }[] = [
   { key: prettyKey("cmd+z"), what: "Undo", where: "useTextEditing" },
   { key: prettyKey("cmd+shift+z"), what: "Redo", where: "useTextEditing" },
-  { key: prettyKey("cmd+0"), what: "Fit document", where: "useKeyboardShortcuts" },
-  { key: prettyKey("cmd+1"), what: "Zoom to 100%", where: "useKeyboardShortcuts" },
+  {
+    key: prettyKey("cmd+0"),
+    what: "Fit document",
+    where: "useKeyboardShortcuts",
+  },
+  {
+    key: prettyKey("cmd+1"),
+    what: "Zoom to 100%",
+    where: "useKeyboardShortcuts",
+  },
   { key: "Home", what: "First page", where: "useKeyboardShortcuts" },
   { key: "End", what: "Last page", where: "useKeyboardShortcuts" },
   { key: "PageUp", what: "Previous page", where: "useKeyboardShortcuts" },
   { key: "PageDown", what: "Next page", where: "useKeyboardShortcuts" },
-  { key: "Space (hold)", what: "Pan — spring-loaded Hand", where: "use-spring-loaded-tools" },
-  { key: `${prettyKey("cmd+space")} (hold)`, what: "Zoom — spring-loaded", where: "use-spring-loaded-tools" },
-  { key: `${prettyKey("cmd+x").startsWith("⌘") ? "⌘" : "Ctrl"} (hold)`, what: "Direct Selection — spring-loaded", where: "use-spring-loaded-tools" },
+  {
+    key: "Space (hold)",
+    what: "Pan — spring-loaded Hand",
+    where: "use-spring-loaded-tools",
+  },
+  {
+    key: `${prettyKey("cmd+space")} (hold)`,
+    what: "Zoom — spring-loaded",
+    where: "use-spring-loaded-tools",
+  },
+  {
+    key: `${prettyKey("cmd+x").startsWith("⌘") ? "⌘" : "Ctrl"} (hold)`,
+    what: "Direct Selection — spring-loaded",
+    where: "use-spring-loaded-tools",
+  },
   { key: "Enter", what: "Enter path-edit mode", where: "usePathEditMode" },
-  { key: "← → ↑ ↓", what: "Nudge the selected anchors, in path-edit mode (⇧ ×10)", where: "usePathEditMode" },
-  { key: "⌫ / Delete", what: "Remove the selected anchors, in path-edit mode", where: "usePathEditMode" },
-  { key: "Esc", what: "Leave an edit context, or cancel a gesture", where: "edit-context-controller" },
-  { key: "← → ↑ ↓", what: "Move the caret (with ⇧ to extend)", where: "useTextEditing" },
+  {
+    key: "← → ↑ ↓",
+    what: "Nudge the selected anchors, in path-edit mode (⇧ ×10)",
+    where: "usePathEditMode",
+  },
+  {
+    key: "⌫ / Delete",
+    what: "Remove the selected anchors, in path-edit mode",
+    where: "usePathEditMode",
+  },
+  {
+    key: "Esc",
+    what: "Leave an edit context, or cancel a gesture",
+    where: "edit-context-controller",
+  },
+  {
+    key: "← → ↑ ↓",
+    what: "Move the caret (with ⇧ to extend)",
+    where: "useTextEditing",
+  },
 ];
 
 export function KeyboardShortcutsPanel(_props: PanelProps) {
@@ -97,12 +133,18 @@ export function KeyboardShortcutsPanel(_props: PanelProps) {
       entry.raw.push(b.key);
       byCommand.set(b.command, entry);
     }
-    const twin = (k: string) => k.toLowerCase().replace(/\b(cmd|meta|ctrl|control)\b/g, "mod");
+    const twin = (k: string) =>
+      k.toLowerCase().replace(/\b(cmd|meta|ctrl|control)\b/g, "mod");
     return [...byCommand.entries()]
       .map(([id, v]) => {
         const chords = new Map<string, string[]>();
-        for (const k of v.raw) chords.set(twin(k), [...(chords.get(twin(k)) ?? []), k]);
-        const keys = [...new Set([...chords.values()].map((ks) => prettyKey(nativeKey(ks))))];
+        for (const k of v.raw)
+          chords.set(twin(k), [...(chords.get(twin(k)) ?? []), k]);
+        const keys = [
+          ...new Set(
+            [...chords.values()].map((ks) => prettyKey(nativeKey(ks))),
+          ),
+        ];
         return { id, title: v.title, keys };
       })
       .sort((a, b) => a.title.localeCompare(b.title));
@@ -140,8 +182,8 @@ export function KeyboardShortcutsPanel(_props: PanelProps) {
           data-shortcut-adhoc-note
         >
           These are bound with their own listeners rather than through the
-          keybinding registry, so they are listed from a maintained table.
-          Undo and page navigation live here.
+          keybinding registry, so they are listed from a maintained table. Undo
+          and page navigation live here.
         </div>
         {AD_HOC.map((r) => (
           <div

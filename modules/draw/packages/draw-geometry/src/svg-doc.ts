@@ -203,7 +203,8 @@ function parseTag(raw: string): XmlNode | null {
         // Unquoted value (lenient).
         const vStart = j;
         while (j < m && !/\s/.test(raw[j])) j++;
-        if (name) attrs[name.toLowerCase()] = decodeEntities(raw.slice(vStart, j));
+        if (name)
+          attrs[name.toLowerCase()] = decodeEntities(raw.slice(vStart, j));
       }
     } else if (name) {
       attrs[name.toLowerCase()] = "";
@@ -297,10 +298,14 @@ function transformFn(fn: string, a: number[]): Affine | null {
         // rotate(angle, cx, cy) = T(c)·R·T(−c)
         const cx = a[1];
         const cy = a[2];
-        return composeAffine(
-          composeAffine([1, 0, 0, 1, cx, cy], rot),
-          [1, 0, 0, 1, -cx, -cy],
-        );
+        return composeAffine(composeAffine([1, 0, 0, 1, cx, cy], rot), [
+          1,
+          0,
+          0,
+          1,
+          -cx,
+          -cy,
+        ]);
       }
       return rot;
     }
@@ -397,10 +402,7 @@ function resolveStyle(
 
 // ----------------------------------------------------- shape readers
 
-function shapeFromElement(
-  node: XmlNode,
-  style: SvgStyle,
-): AnchorTable | null {
+function shapeFromElement(node: XmlNode, style: SvgStyle): AnchorTable | null {
   const a = node.attrs;
   switch (localName(node.tag)) {
     case "path": {
@@ -477,8 +479,7 @@ export function parseSvgDocument(src: string): SvgDocument | null {
     const own = node.attrs.transform
       ? parseTransform(node.attrs.transform)
       : IDENTITY_AFFINE;
-    const m =
-      own === IDENTITY_AFFINE ? parentM : composeAffine(parentM, own);
+    const m = own === IDENTITY_AFFINE ? parentM : composeAffine(parentM, own);
     const style = resolveStyle(node.attrs, inherited);
     const name = localName(node.tag);
 
@@ -533,8 +534,7 @@ function styleAttrs(style: SvgStyle): string {
     parts.push(`stroke="${esc(style.stroke)}"`);
   if (style.strokeWidth !== undefined)
     parts.push(`stroke-width="${style.strokeWidth}"`);
-  if (style.fillRule !== undefined)
-    parts.push(`fill-rule="${style.fillRule}"`);
+  if (style.fillRule !== undefined) parts.push(`fill-rule="${style.fillRule}"`);
   return parts.length ? " " + parts.join(" ") : "";
 }
 

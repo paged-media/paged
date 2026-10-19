@@ -28,7 +28,12 @@ import { expect, test } from "@playwright/test";
 
 import { elementPageRectPt } from "../../e2e/harness/fixtures";
 import { runGesture } from "../../e2e/harness/gesture";
-import { activateTool, screenPoint, treeCount, treeIds } from "../../e2e/harness/viewport";
+import {
+  activateTool,
+  screenPoint,
+  treeCount,
+  treeIds,
+} from "../../e2e/harness/viewport";
 import { Designer } from "../driver/designer";
 
 type Cam = { scale: number; tx: number; ty: number };
@@ -53,13 +58,12 @@ test.describe("journey · tools", () => {
       await activate("paged.tool.select").catch(() => {});
     };
     const readCam = (): Promise<Cam> =>
-      page.evaluate(
-        () =>
-          (
-            globalThis as unknown as {
-              __canvas: { client: { camera: { read: () => Cam } } };
-            }
-          ).__canvas.client.camera.read(),
+      page.evaluate(() =>
+        (
+          globalThis as unknown as {
+            __canvas: { client: { camera: { read: () => Cam } } };
+          }
+        ).__canvas.client.camera.read(),
       );
     const activate = (toolId: string): Promise<unknown> =>
       page.evaluate(
@@ -78,8 +82,11 @@ test.describe("journey · tools", () => {
     const activeGroup = (): Promise<string | null> =>
       page.evaluate(
         () =>
-          (globalThis as unknown as { __canvas: { activeGroup: string | null } })
-            .__canvas.activeGroup ?? null,
+          (
+            globalThis as unknown as {
+              __canvas: { activeGroup: string | null };
+            }
+          ).__canvas.activeGroup ?? null,
       );
     const setActiveGroup = (g: string | null): Promise<void> =>
       page.evaluate(
@@ -94,7 +101,12 @@ test.describe("journey · tools", () => {
 
     // OVERLAYS — selecting a frame renders the selection chrome (handles).
     await step("overlays", async () => {
-      const id = await designer.drawRectangle({ x0: 80, y0: 90, x1: 220, y1: 200 });
+      const id = await designer.drawRectangle({
+        x0: 80,
+        y0: 90,
+        x1: 220,
+        y1: 200,
+      });
       await designer.selectElement("rectangle", id);
       await expect
         .poll(() => page.locator("[data-selection-handle]").count(), {
@@ -126,13 +138,20 @@ test.describe("journey · tools", () => {
       await page.mouse.up();
       await page.waitForTimeout(150);
       const after = await readCam();
-      return Math.abs(after.tx - before.tx) + Math.abs(after.ty - before.ty) > 1;
+      return (
+        Math.abs(after.tx - before.tx) + Math.abs(after.ty - before.ty) > 1
+      );
     });
 
     // CONTENT-TRANSFORM — translate an image WITHIN its frame; the frame's
     // own page rect must stay put (proof it moved content, not the frame).
     await step("content-transform", async () => {
-      const fid = await designer.drawRectangle({ x0: 300, y0: 90, x1: 460, y1: 230 });
+      const fid = await designer.drawRectangle({
+        x0: 300,
+        y0: 90,
+        x1: 460,
+        y1: 230,
+      });
       await designer.placeImageLink(fid);
       const ref = { kind: "rectangle", id: fid };
       const before = await elementPageRectPt(page, ref);
@@ -152,8 +171,18 @@ test.describe("journey · tools", () => {
     // scene hit-testing, unavailable in the headless CPU-fallback harness;
     // group-transform AC-L-4 covers the descent the same way).
     await step("group-descent", async () => {
-      const r1 = await designer.drawRectangle({ x0: 90, y0: 320, x1: 180, y1: 400 });
-      const r2 = await designer.drawRectangle({ x0: 200, y0: 320, x1: 290, y1: 400 });
+      const r1 = await designer.drawRectangle({
+        x0: 90,
+        y0: 320,
+        x1: 180,
+        y1: 400,
+      });
+      const r2 = await designer.drawRectangle({
+        x0: 200,
+        y0: 320,
+        x1: 290,
+        y1: 400,
+      });
       const ok = await designer.createGroup([
         { kind: "rectangle", id: r1 },
         { kind: "rectangle", id: r2 },
@@ -174,7 +203,12 @@ test.describe("journey · tools", () => {
     // MOVE.DUPLICATE-DRAG — Alt-drag a selected frame clones it.
     await step("duplicate-drag", async () => {
       const base = await treeCount(page, "rectangle");
-      const id = await designer.drawRectangle({ x0: 360, y0: 320, x1: 450, y1: 400 });
+      const id = await designer.drawRectangle({
+        x0: 360,
+        y0: 320,
+        x1: 450,
+        y1: 400,
+      });
       await designer.selectElement("rectangle", id);
       const p = await screenPoint(page, 405, 360);
       await page.keyboard.down("Alt");
@@ -214,8 +248,9 @@ test.describe("journey · tools", () => {
       return after >= base + 4; // a grid of ≥4 cells
     });
 
-    expect(fail, `tool aspects that did not verify: ${fail.join(" | ")}`).toEqual(
-      [],
-    );
+    expect(
+      fail,
+      `tool aspects that did not verify: ${fail.join(" | ")}`,
+    ).toEqual([]);
   });
 });

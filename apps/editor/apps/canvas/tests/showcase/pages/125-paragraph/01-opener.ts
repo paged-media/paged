@@ -35,11 +35,16 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     "weighs the whole paragraph at once. This chapter watches it do so: " +
     "the breaks, the keeps, the caps, and the parameters that steer them.";
 
-  const title = await proseFrame(ctx, p(23), [48, 140, 440, 470], [
-    { text: "3", style: STYLE.chapterNumber },
-    { text: "The Paragraph", style: STYLE.chapterTitle },
-    { text: deck, style: STYLE.deck },
-  ]);
+  const title = await proseFrame(
+    ctx,
+    p(23),
+    [48, 140, 440, 470],
+    [
+      { text: "3", style: STYLE.chapterNumber },
+      { text: "The Paragraph", style: STYLE.chapterTitle },
+      { text: deck, style: STYLE.deck },
+    ],
+  );
   elements.push(title.frameId);
 
   elements.push(

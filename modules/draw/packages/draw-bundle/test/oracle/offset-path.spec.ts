@@ -81,7 +81,7 @@ import type { HeadlessHost } from "@paged-media/plugin-sdk";
 
 import { drawBundle, offsetPathMutationFor } from "../../src";
 import { F1_MULTI_SHAPE } from "../fixtures/corpus";
-import { openHost } from "../conformance/host";
+import { openHost } from "../headless/host";
 import {
   AREA_REL_TOL,
   BOUNDS_ABS_TOL,
@@ -224,7 +224,10 @@ const BY_DEFINITION: Record<
 /** CONVENTION (engine 0.65.0) — anchor count where the engine and
  *  Illustrator spend a different number of points on the same shape:
  *  [engine, Illustrator]. See the header. */
-const ENGINE_ANCHOR_CONVENTION: Record<string, [engine: number, illustrator: number]> = {
+const ENGINE_ANCHOR_CONVENTION: Record<
+  string,
+  [engine: number, illustrator: number]
+> = {
   "rect-miter-out": [12, 4],
   "rectccw-miter-out": [12, 4],
   "tri-miter-out": [9, 3],
@@ -236,11 +239,15 @@ const ENGINE_ANCHOR_CONVENTION: Record<string, [engine: number, illustrator: num
 
 const FIXTURE = loadOracle<OffsetParameters>("offset-path");
 const RECORDED = new Map(FIXTURE.cases.map((c) => [c.id, c]));
-const theirs = (id: string): ShapeSummary => summarize(RECORDED.get(id)!.measured.paths);
+const theirs = (id: string): ShapeSummary =>
+  summarize(RECORDED.get(id)!.measured.paths);
 
 describe("oracle — offset path", () => {
   let h: HeadlessHost;
-  const engineResults = new Map<string, { paths: OraclePath[]; shape: ShapeSummary }>();
+  const engineResults = new Map<
+    string,
+    { paths: OraclePath[]; shape: ShapeSummary }
+  >();
 
   beforeAll(async () => {
     h = await openHost();
@@ -289,7 +296,9 @@ describe("oracle — offset path", () => {
       expect(FIXTURE.produced_by.script).toBe(
         "scripts/illustrator/probes/offset-path.jsx",
       );
-      expect(Number.isNaN(Date.parse(FIXTURE.produced_by.recorded_at))).toBe(false);
+      expect(Number.isNaN(Date.parse(FIXTURE.produced_by.recorded_at))).toBe(
+        false,
+      );
     });
 
     it("has exactly this spec's cases (probe and spec have not drifted), each with a definition", () => {
@@ -300,7 +309,9 @@ describe("oracle — offset path", () => {
           parameters: c.parameters,
         })),
       ).toEqual(OFFSET_PATH_CASES);
-      expect(Object.keys(BY_DEFINITION)).toEqual(OFFSET_PATH_CASES.map((c) => c.id));
+      expect(Object.keys(BY_DEFINITION)).toEqual(
+        OFFSET_PATH_CASES.map((c) => c.id),
+      );
       for (const id of Object.keys(ENGINE_ANCHOR_CONVENTION)) {
         expect(Object.keys(BY_DEFINITION)).toContain(id);
       }
@@ -311,10 +322,14 @@ describe("oracle — offset path", () => {
         expect(c.measured.paths, c.id).toHaveLength(1);
         for (const p of c.measured.paths) {
           const signed = signedArea(p);
-          expect(relDiff(Math.abs(signed), p.area), `${c.id} area`).toBeLessThan(AREA_REL_TOL);
-          expect(boundsDiff(pathBounds(p), p.bounds), `${c.id} bounds`).toBeLessThan(
-            BOUNDS_ABS_TOL,
-          );
+          expect(
+            relDiff(Math.abs(signed), p.area),
+            `${c.id} area`,
+          ).toBeLessThan(AREA_REL_TOL);
+          expect(
+            boundsDiff(pathBounds(p), p.bounds),
+            `${c.id} bounds`,
+          ).toBeLessThan(BOUNDS_ABS_TOL);
           expect(windingOf(signed), `${c.id} winding`).toBe(p.winding);
         }
       }
@@ -329,10 +344,13 @@ describe("oracle — offset path", () => {
       for (const c of FIXTURE.cases) {
         const got = theirs(c.id);
         const want = BY_DEFINITION[c.id];
-        expect(relDiff(got.netArea, want.area), `${c.id} area`).toBeLessThan(AREA_REL_TOL);
-        expect(boundsDiff(got.bounds, want.bounds), `${c.id} bounds`).toBeLessThan(
-          BOUNDS_ABS_TOL,
+        expect(relDiff(got.netArea, want.area), `${c.id} area`).toBeLessThan(
+          AREA_REL_TOL,
         );
+        expect(
+          boundsDiff(got.bounds, want.bounds),
+          `${c.id} bounds`,
+        ).toBeLessThan(BOUNDS_ABS_TOL);
       }
     });
 
@@ -365,7 +383,9 @@ describe("oracle — offset path", () => {
       expect(rect.anchors).toBe(8);
       expect(rect.curvedSegments).toBe(4);
       expect(rect.area).toBeCloseTo(9514.249, 3);
-      expect(rect.area - BY_DEFINITION["rect-round-out"].area).toBeGreaterThan(0.08);
+      expect(rect.area - BY_DEFINITION["rect-round-out"].area).toBeGreaterThan(
+        0.08,
+      );
       // The triangle: 90° is one cubic, 126.87° and 143.13° are two each —
       // 5 arcs, 8 anchors. Illustrator returns 9 anchors and 6 curved
       // segments: the path starts at its lowest point, (99.9985, 200),
@@ -393,7 +413,9 @@ describe("oracle — offset path", () => {
         expect(ours.paths).toBe(1);
         expect(ours.allClosed).toBe(true);
         expect(relDiff(ours.area, want.area)).toBeLessThan(AREA_REL_TOL);
-        expect(boundsDiff(ours.bounds, want.bounds)).toBeLessThan(BOUNDS_ABS_TOL);
+        expect(boundsDiff(ours.bounds, want.bounds)).toBeLessThan(
+          BOUNDS_ABS_TOL,
+        );
       });
     }
 
@@ -401,7 +423,8 @@ describe("oracle — offset path", () => {
       // On 0.64.0 all three joins, and every miter limit, gave ONE shape
       // (a bevel). Sequential on purpose: each measurement inserts,
       // offsets and undoes twice, and the undo stack is shared.
-      const of = (id: string) => engine(OFFSET_PATH_CASES.find((c) => c.id === id)!);
+      const of = (id: string) =>
+        engine(OFFSET_PATH_CASES.find((c) => c.id === id)!);
       for (const shape of ["rect", "tri"]) {
         const miter = await of(`${shape}-miter-out`);
         const round = await of(`${shape}-round-out`);
@@ -428,7 +451,9 @@ describe("oracle — offset path", () => {
         expect(ours.paths).toBe(want.paths);
         expect(ours.allClosed).toBe(want.allClosed);
         expect(relDiff(ours.netArea, want.netArea)).toBeLessThan(AREA_REL_TOL);
-        expect(boundsDiff(ours.bounds, want.bounds)).toBeLessThan(BOUNDS_ABS_TOL);
+        expect(boundsDiff(ours.bounds, want.bounds)).toBeLessThan(
+          BOUNDS_ABS_TOL,
+        );
         if (convention) {
           expect(want.anchors).toBe(convention[1]);
           expect(ours.anchors).toBe(convention[0]);

@@ -46,11 +46,22 @@ async function fonts(page: Page): Promise<FontSummary[]> {
 
 /** A text frame with one run of text in Inter at 36 pt; returns a setter
  *  for the run's font style. */
-async function interRun(designer: Designer, page: Page): Promise<(style: string) => Promise<void>> {
-  const { storyId } = await designer.addTextFrame({ x0: 60, y0: 80, x1: 560, y1: 300 });
+async function interRun(
+  designer: Designer,
+  page: Page,
+): Promise<(style: string) => Promise<void>> {
+  const { storyId } = await designer.addTextFrame({
+    x0: 60,
+    y0: 80,
+    x1: 560,
+    y1: 300,
+  });
   const text = "Hamburgefonstiv quick brown fox";
   await mutate(page, { op: "insertText", args: { storyId, offset: 0, text } });
-  const range = { kind: "storyRange", id: { story_id: storyId, start: 0, end: text.length } };
+  const range = {
+    kind: "storyRange",
+    id: { story_id: storyId, start: 0, end: text.length },
+  };
   const set = async (path: string, value: unknown) => {
     const r = (await mutate(page, {
       op: "setElementProperty",
@@ -76,12 +87,16 @@ test.describe("The default family's italic", () => {
     const roman = await designer.renderBytes();
     await style("Italic");
     // A different face, not the roman again: the run's glyphs move.
-    const slanted = await designer.expectRenderChangesFrom(roman, { minPixels: 500 });
+    const slanted = await designer.expectRenderChangesFrom(roman, {
+      minPixels: 500,
+    });
     // eslint-disable-next-line no-console
     console.log(`[inter-italic] italic vs roman: ${slanted}px`);
     const inter = (await fonts(page)).find((f) => f.family === "Inter");
     expect(inter, "the document names Inter").toBeDefined();
-    expect(inter!.isMissing, "Inter Italic is not reported missing").toBe(false);
+    expect(inter!.isMissing, "Inter Italic is not reported missing").toBe(
+      false,
+    );
 
     // The roman is still the roman: registering the italic did not take
     // Inter Regular over.
@@ -102,8 +117,10 @@ test.describe("The default family's italic", () => {
     const italic = await designer.renderBytes();
 
     // Save it and open it again through the file importer: a fresh load,
-    // whose only fonts are the ones the load registers.
-    const reopened = await page.evaluate(async () => {
+    // whose only fonts are the ones the load registers. No importer for
+    // `.idml` is a failure of this test (the evaluate throws), never an
+    // early way out of it.
+    await page.evaluate(async () => {
       const c = (
         globalThis as unknown as {
           __canvas: {
@@ -111,7 +128,10 @@ test.describe("The default family's italic", () => {
             registries: {
               importers: {
                 resolve(name: string): {
-                  import(f: { name: string; bytes: Uint8Array }): Promise<void> | void;
+                  import(f: {
+                    name: string;
+                    bytes: Uint8Array;
+                  }): Promise<void> | void;
                 } | null;
               };
             };
@@ -120,16 +140,20 @@ test.describe("The default family's italic", () => {
       ).__canvas;
       const bytes = await c.client.exportIdml();
       const imp = c.registries.importers.resolve("italic.idml");
-      if (!imp) return "no importer claims .idml";
+      if (!imp) throw new Error("no importer claims .idml");
       await imp.import({ name: "italic.idml", bytes });
-      return "";
     });
-    expect(reopened).toBe("");
     await expect
-      .poll(async () => designer.renderDiffPixels(italic, await designer.renderBytes()), {
-        timeout: 15_000,
-      })
+      .poll(
+        async () =>
+          designer.renderDiffPixels(italic, await designer.renderBytes()),
+        {
+          timeout: 15_000,
+        },
+      )
       .toBeLessThanOrEqual(16);
-    expect(await designer.renderDiffPixels(roman, await designer.renderBytes())).toBeGreaterThan(500);
+    expect(
+      await designer.renderDiffPixels(roman, await designer.renderBytes()),
+    ).toBeGreaterThan(500);
   });
 });

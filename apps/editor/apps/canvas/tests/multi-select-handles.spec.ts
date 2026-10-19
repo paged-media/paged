@@ -61,7 +61,9 @@ interface CanvasGlobal {
       d: [number, number],
       mods: { shift: boolean; alt: boolean },
     ) => Promise<{ pageIds: string[]; snapLines: unknown[] }>;
-    commitGesture: (h: number) => Promise<{ appliedSeq: number; pageIds: string[] }>;
+    commitGesture: (
+      h: number,
+    ) => Promise<{ appliedSeq: number; pageIds: string[] }>;
     undo: () => Promise<unknown>;
   };
 }
@@ -97,7 +99,8 @@ async function findTwoUnrotatedFrames(
         const tr = reply.payload.itemTransform;
         if (!el) continue;
         if (tr) {
-          if (Math.abs(tr[0] - 1) > 1e-3 || Math.abs(tr[3] - 1) > 1e-3) continue;
+          if (Math.abs(tr[0] - 1) > 1e-3 || Math.abs(tr[3] - 1) > 1e-3)
+            continue;
           if (Math.abs(tr[1]) > 1e-3 || Math.abs(tr[2]) > 1e-3) continue;
         }
         const key = `${el.kind}:${el.id}`;
@@ -133,7 +136,8 @@ test.describe("Phase G — multi-select union handles", () => {
   }) => {
     const result = await page.evaluate(
       async ({ ids, pageId, w, h }) => {
-        const c = (globalThis as unknown as { __canvas: CanvasGlobal }).__canvas;
+        const c = (globalThis as unknown as { __canvas: CanvasGlobal })
+          .__canvas;
         // Anchor at a near-corner of the union AABB; drag outward.
         // For the purpose of this spec we just pick a point inside
         // the page that's well off-centre.
@@ -144,7 +148,10 @@ test.describe("Phase G — multi-select union handles", () => {
           alt: false,
         });
         const commit = await c.client.commitGesture(h2);
-        return { appliedSeq: commit.appliedSeq, snapLineCount: upd.snapLines.length };
+        return {
+          appliedSeq: commit.appliedSeq,
+          snapLineCount: upd.snapLines.length,
+        };
       },
       { ids, pageId, w: pageW, h: pageH },
     );
@@ -156,7 +163,8 @@ test.describe("Phase G — multi-select union handles", () => {
   }) => {
     const result = await page.evaluate(
       async ({ ids, pageId, w, h }) => {
-        const c = (globalThis as unknown as { __canvas: CanvasGlobal }).__canvas;
+        const c = (globalThis as unknown as { __canvas: CanvasGlobal })
+          .__canvas;
         const anchor = { pageId, pointInPage: [w * 0.5, h * 0.2] };
         const h2 = await c.client.beginGesture(ids, { kind: "rotate" }, anchor);
         await c.client.updateGesture(h2, [-30, 30], {

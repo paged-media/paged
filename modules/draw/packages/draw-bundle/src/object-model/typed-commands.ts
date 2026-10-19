@@ -50,7 +50,11 @@ import type {
   TypedCommandContribution,
   ValueType,
 } from "@paged-media/plugin-api";
-import { fromElementId, parseAddress, toElementId } from "@paged-media/plugin-sdk";
+import {
+  fromElementId,
+  parseAddress,
+  toElementId,
+} from "@paged-media/plugin-sdk";
 
 import { commandHandler } from "../command-registry";
 import type {
@@ -60,9 +64,24 @@ import type {
   SpiralParams,
 } from "../commands/insert-shapes";
 import { SYMBOL_REGISTRATIONS } from "../commands/symbols";
-import { FLIP_PATH_EFFECTS, PATH_TYPE_ALIGNMENTS } from "../commands/text-on-path";
+import {
+  FLIP_PATH_EFFECTS,
+  PATH_TYPE_ALIGNMENTS,
+} from "../commands/text-on-path";
 import type { TraceOptions } from "../trace-engine";
-import { BOOL, COLOR, DEG, INT, LEN, NUM, REFS, TEXT, addressOf, bareIdOf, enumOf } from "./shared";
+import {
+  BOOL,
+  COLOR,
+  DEG,
+  INT,
+  LEN,
+  NUM,
+  REFS,
+  TEXT,
+  addressOf,
+  bareIdOf,
+  enumOf,
+} from "./shared";
 
 const C = "media.paged.draw.command";
 
@@ -81,7 +100,10 @@ export interface TwinSpec {
   ids?: Record<string, string>;
   result?: ValueType;
   /** Run through `host.objects` instead of the untyped handler. */
-  via?: (objects: ObjectsSurface, args: Record<string, unknown>) => Promise<unknown>;
+  via?: (
+    objects: ObjectsSurface,
+    args: Record<string, unknown>,
+  ) => Promise<unknown>;
 }
 
 const T: Fields = { targets: REFS };
@@ -95,16 +117,36 @@ const titleOf = (id: string): string => {
 
 /** Every field of a params interface, typed (exhaustive by construction). */
 const ARC: Record<keyof ArcParams, ValueType> = {
-  cx: LEN, cy: LEN, rx: LEN, ry: LEN, startAngleDeg: DEG, sweepDeg: DEG, closed: BOOL,
+  cx: LEN,
+  cy: LEN,
+  rx: LEN,
+  ry: LEN,
+  startAngleDeg: DEG,
+  sweepDeg: DEG,
+  closed: BOOL,
 };
 const SPIRAL: Record<keyof SpiralParams, ValueType> = {
-  cx: LEN, cy: LEN, r0: LEN, decay: NUM, turns: NUM, segmentsPerTurn: INT,
+  cx: LEN,
+  cy: LEN,
+  r0: LEN,
+  decay: NUM,
+  turns: NUM,
+  segmentsPerTurn: INT,
 };
 const RECT_GRID: Record<keyof RectGridParams, ValueType> = {
-  x: LEN, y: LEN, width: LEN, height: LEN, rows: INT, cols: INT,
+  x: LEN,
+  y: LEN,
+  width: LEN,
+  height: LEN,
+  rows: INT,
+  cols: INT,
 };
 const POLAR_GRID: Record<keyof PolarGridParams, ValueType> = {
-  cx: LEN, cy: LEN, r: LEN, rings: INT, radials: INT,
+  cx: LEN,
+  cy: LEN,
+  r: LEN,
+  rings: INT,
+  radials: INT,
 };
 const TRACE: Record<keyof TraceOptions, ValueType> = {
   mode: enumOf(["color", "bw"]),
@@ -126,8 +168,16 @@ const CAP = enumOf(["butt", "round", "square"]);
 const JOIN = enumOf(["miter", "round", "bevel"]);
 
 /** A selection-driven twin with no parameters. */
-const sel = (name: string): TwinSpec => ({ id: `${C}.${name}`, title: titleOf(`${C}.${name}`), fields: T });
-const twin = (name: string, fields: Fields, extra: Partial<TwinSpec> = {}): TwinSpec => ({
+const sel = (name: string): TwinSpec => ({
+  id: `${C}.${name}`,
+  title: titleOf(`${C}.${name}`),
+  fields: T,
+});
+const twin = (
+  name: string,
+  fields: Fields,
+  extra: Partial<TwinSpec> = {},
+): TwinSpec => ({
   id: `${C}.${name}`,
   title: titleOf(`${C}.${name}`),
   fields,
@@ -135,75 +185,207 @@ const twin = (name: string, fields: Fields, extra: Partial<TwinSpec> = {}): Twin
 });
 
 /** Recipe verbs: `{ <field>: id }` → `{ <payloadKey>: id }`. */
-const recipeVerb = (name: string, field: string, kind: string, key: string, more: Fields = {}, extra: Partial<TwinSpec> = {}) =>
-  twin(name, { [field]: TEXT, ...more }, { ids: { [field]: kind }, rename: { [field]: key }, ...extra });
+const recipeVerb = (
+  name: string,
+  field: string,
+  kind: string,
+  key: string,
+  more: Fields = {},
+  extra: Partial<TwinSpec> = {},
+) =>
+  twin(
+    name,
+    { [field]: TEXT, ...more },
+    { ids: { [field]: kind }, rename: { [field]: key }, ...extra },
+  );
 
 export const TWINS: readonly TwinSpec[] = [
   // Stroke dashes / gradient fills / live corners — presets on the selection.
-  ...["strokeDashSolid", "strokeDashDashed", "strokeDashDotted", "strokeDashDashDot"].map(sel),
+  ...[
+    "strokeDashSolid",
+    "strokeDashDashed",
+    "strokeDashDotted",
+    "strokeDashDashDot",
+  ].map(sel),
   ...["fillGradientLinear", "fillGradientRadial"].map(sel),
-  ...["cornersRounded", "cornersInverseRounded", "cornersBevel", "cornersFancy", "cornersNone"].map(sel),
+  ...[
+    "cornersRounded",
+    "cornersInverseRounded",
+    "cornersBevel",
+    "cornersFancy",
+    "cornersNone",
+  ].map(sel),
   // Path ops (the v30 kernels) — full parameters.
-  twin("outlineStroke", { ...T, width: LEN, cap: CAP, join: JOIN, miterLimit: NUM }),
+  twin("outlineStroke", {
+    ...T,
+    width: LEN,
+    cap: CAP,
+    join: JOIN,
+    miterLimit: NUM,
+  }),
   twin("offsetPath", { ...T, delta: LEN, join: JOIN, miterLimit: NUM }),
   twin("simplifyPath", { ...T, tolerance: LEN }),
   // Endpoints / direction / outlines / transform.
-  ...["joinEndpoints", "closePath", "averageEndpoints", "reversePathDirection", "createOutlines", "transformAgain"].map(sel),
+  ...[
+    "joinEndpoints",
+    "closePath",
+    "averageEndpoints",
+    "reversePathDirection",
+    "createOutlines",
+    "transformAgain",
+  ].map(sel),
   twin("reflectHorizontal", { ...T, copy: BOOL }),
   twin("reflectVertical", { ...T, copy: BOOL }),
   // Pathfinder (boolean + region) and compound paths.
   ...[
-    "pathfinderUnite", "pathfinderSubtract", "pathfinderIntersect", "pathfinderExclude",
-    "pathfinderDivide", "pathfinderTrim", "pathfinderMerge", "pathfinderCrop",
-    "pathfinderOutline", "pathfinderMinusBack", "makeCompoundPath", "releaseCompoundPath",
+    "pathfinderUnite",
+    "pathfinderSubtract",
+    "pathfinderIntersect",
+    "pathfinderExclude",
+    "pathfinderDivide",
+    "pathfinderTrim",
+    "pathfinderMerge",
+    "pathfinderCrop",
+    "pathfinderOutline",
+    "pathfinderMinusBack",
+    "makeCompoundPath",
+    "releaseCompoundPath",
   ].map(sel),
   // Appearance.
-  ...["appearanceAddFill", "appearanceAddStroke", "appearanceClear", "bakeAppearance", "releaseAppearance"].map(sel),
-  twin("appearanceRemoveLayer", { ...T, kind: enumOf(["fill", "stroke"]), index: INT }),
-  twin("appearanceMoveLayer", { ...T, kind: enumOf(["fill", "stroke"]), index: INT, delta: INT }),
+  ...[
+    "appearanceAddFill",
+    "appearanceAddStroke",
+    "appearanceClear",
+    "bakeAppearance",
+    "releaseAppearance",
+  ].map(sel),
+  twin("appearanceRemoveLayer", {
+    ...T,
+    kind: enumOf(["fill", "stroke"]),
+    index: INT,
+  }),
+  twin("appearanceMoveLayer", {
+    ...T,
+    kind: enumOf(["fill", "stroke"]),
+    index: INT,
+    delta: INT,
+  }),
   // Graphic styles.
   twin("saveGraphicStyle", { ...T, name: TEXT }),
   recipeVerb("applyGraphicStyle", "style", "graphicStyle", "styleId", T),
   recipeVerb("redefineGraphicStyle", "style", "graphicStyle", "styleId", T),
   sel("breakGraphicStyleLink"),
-  twin("renameGraphicStyle", { style: TEXT, name: TEXT }, {
-    via: (o, a) => o.set(addressOf("graphicStyle", bareIdOf(String(a.style), "graphicStyle")), "name", a.name),
-  }),
-  twin("deleteGraphicStyle", { style: TEXT }, {
-    via: (o, a) => o.batch([{ op: "delete", address: addressOf("graphicStyle", bareIdOf(String(a.style), "graphicStyle")) }]),
-  }),
+  twin(
+    "renameGraphicStyle",
+    { style: TEXT, name: TEXT },
+    {
+      via: (o, a) =>
+        o.set(
+          addressOf("graphicStyle", bareIdOf(String(a.style), "graphicStyle")),
+          "name",
+          a.name,
+        ),
+    },
+  ),
+  twin(
+    "deleteGraphicStyle",
+    { style: TEXT },
+    {
+      via: (o, a) =>
+        o.batch([
+          {
+            op: "delete",
+            address: addressOf(
+              "graphicStyle",
+              bareIdOf(String(a.style), "graphicStyle"),
+            ),
+          },
+        ]),
+    },
+  ),
   // Symbols.
-  twin("defineSymbol", { ...T, name: TEXT, registration: enumOf(SYMBOL_REGISTRATIONS) }),
-  recipeVerb("placeSymbolInstance", "symbol", "symbol", "symbolId", { x: LEN, y: LEN }),
+  twin("defineSymbol", {
+    ...T,
+    name: TEXT,
+    registration: enumOf(SYMBOL_REGISTRATIONS),
+  }),
+  recipeVerb("placeSymbolInstance", "symbol", "symbol", "symbolId", {
+    x: LEN,
+    y: LEN,
+  }),
   recipeVerb("redefineSymbol", "symbol", "symbol", "symbolId", T),
   sel("breakSymbolLink"),
   sel("resetSymbolTransform"),
-  twin("renameSymbol", { symbol: TEXT, name: TEXT }, {
-    via: (o, a) => o.set(addressOf("symbol", bareIdOf(String(a.symbol), "symbol")), "name", a.name),
-  }),
-  twin("deleteSymbol", { symbol: TEXT }, {
-    via: (o, a) => o.batch([{ op: "delete", address: addressOf("symbol", bareIdOf(String(a.symbol), "symbol")) }]),
-  }),
+  twin(
+    "renameSymbol",
+    { symbol: TEXT, name: TEXT },
+    {
+      via: (o, a) =>
+        o.set(
+          addressOf("symbol", bareIdOf(String(a.symbol), "symbol")),
+          "name",
+          a.name,
+        ),
+    },
+  ),
+  twin(
+    "deleteSymbol",
+    { symbol: TEXT },
+    {
+      via: (o, a) =>
+        o.batch([
+          {
+            op: "delete",
+            address: addressOf("symbol", bareIdOf(String(a.symbol), "symbol")),
+          },
+        ]),
+    },
+  ),
   // Live paint.
   twin("makeLivePaintGroup", { ...T, name: TEXT }),
-  recipeVerb("fillLivePaintFace", "group", "livePaint", "groupId", { faces: { kind: "list", of: TEXT }, fill: COLOR }),
+  recipeVerb("fillLivePaintFace", "group", "livePaint", "groupId", {
+    faces: { kind: "list", of: TEXT },
+    fill: COLOR,
+  }),
   recipeVerb("regenerateLivePaint", "group", "livePaint", "groupId"),
-  recipeVerb("selectLivePaintFaces", "group", "livePaint", "groupId", { faces: { kind: "list", of: TEXT } }, { result: SELECTION_RESULT }),
-  recipeVerb("deleteLivePaintFace", "group", "livePaint", "groupId", { faces: { kind: "list", of: TEXT } }),
+  recipeVerb(
+    "selectLivePaintFaces",
+    "group",
+    "livePaint",
+    "groupId",
+    { faces: { kind: "list", of: TEXT } },
+    { result: SELECTION_RESULT },
+  ),
+  recipeVerb("deleteLivePaintFace", "group", "livePaint", "groupId", {
+    faces: { kind: "list", of: TEXT },
+  }),
   recipeVerb("releaseLivePaint", "group", "livePaint", "groupId"),
   // Opacity masks and type on a path (protocol 58).
-  twin("makeOpacityMask", { ...T, maskType: enumOf(["luminosity", "alpha"]), invert: BOOL }),
+  twin("makeOpacityMask", {
+    ...T,
+    maskType: enumOf(["luminosity", "alpha"]),
+    invert: BOOL,
+  }),
   sel("releaseOpacityMask"),
   twin(
     "attachTextToPath",
-    { ...T, story: TEXT, pathTypeAlignment: enumOf(PATH_TYPE_ALIGNMENTS), flipPathEffect: enumOf(FLIP_PATH_EFFECTS) },
+    {
+      ...T,
+      story: TEXT,
+      pathTypeAlignment: enumOf(PATH_TYPE_ALIGNMENTS),
+      flipPathEffect: enumOf(FLIP_PATH_EFFECTS),
+    },
     { rename: { story: "storyId" }, ids: { story: "" } },
   ),
   sel("detachTextFromPath"),
   // Select same.
   { ...sel("selectSameFill"), result: SELECTION_RESULT },
   { ...sel("selectSameStroke"), result: SELECTION_RESULT },
-  twin("selectSameStrokeWeight", { ...T, tolerance: LEN }, { result: SELECTION_RESULT }),
+  twin(
+    "selectSameStrokeWeight",
+    { ...T, tolerance: LEN },
+    { result: SELECTION_RESULT },
+  ),
   // Insert shapes — the generators' full parameters.
   twin("insertArc", ARC),
   twin("insertSpiral", SPIRAL),
@@ -212,7 +394,14 @@ export const TWINS: readonly TwinSpec[] = [
   // Pattern fields.
   twin("makePatternFromSelection", { ...T, name: TEXT }),
   recipeVerb("editPatternField", "pattern", "pattern", "patternId"),
-  recipeVerb("selectPatternTiles", "pattern", "pattern", "patternId", { includeSources: BOOL }, { result: SELECTION_RESULT }),
+  recipeVerb(
+    "selectPatternTiles",
+    "pattern",
+    "pattern",
+    "patternId",
+    { includeSources: BOOL },
+    { result: SELECTION_RESULT },
+  ),
   recipeVerb("deletePatternTiles", "pattern", "pattern", "patternId"),
   recipeVerb("releasePatternField", "pattern", "pattern", "patternId"),
   // Repeats.
@@ -220,7 +409,14 @@ export const TWINS: readonly TwinSpec[] = [
   twin("makeGridRepeat", { ...T, name: TEXT }),
   twin("makeMirrorRepeat", { ...T, name: TEXT }),
   recipeVerb("updateRepeat", "repeat", "repeat", "repeatId"),
-  recipeVerb("selectRepeatInstances", "repeat", "repeat", "repeatId", { includeSources: BOOL }, { result: SELECTION_RESULT }),
+  recipeVerb(
+    "selectRepeatInstances",
+    "repeat",
+    "repeat",
+    "repeatId",
+    { includeSources: BOOL },
+    { result: SELECTION_RESULT },
+  ),
   recipeVerb("expandRepeat", "repeat", "repeat", "repeatId"),
   recipeVerb("releaseRepeat", "repeat", "repeat", "repeatId"),
   // Blends.
@@ -229,13 +425,27 @@ export const TWINS: readonly TwinSpec[] = [
   recipeVerb("replaceBlendSpine", "blend", "blend", "blendId", T),
   recipeVerb("reverseBlendSpine", "blend", "blend", "blendId"),
   recipeVerb("reverseBlendFrontToBack", "blend", "blend", "blendId"),
-  recipeVerb("selectBlendObjects", "blend", "blend", "blendId", { which: enumOf(["keys", "steps", "spine", "all"]) }, { result: SELECTION_RESULT }),
+  recipeVerb(
+    "selectBlendObjects",
+    "blend",
+    "blend",
+    "blendId",
+    { which: enumOf(["keys", "steps", "spine", "all"]) },
+    { result: SELECTION_RESULT },
+  ),
   recipeVerb("expandBlend", "blend", "blend", "blendId"),
   recipeVerb("releaseBlend", "blend", "blend", "blendId"),
   // Objects on a path.
   twin("makeObjectsOnPath", { ...T, name: TEXT }),
   recipeVerb("updateObjectsOnPath", "onPath", "objectsOnPath", "onPathId"),
-  recipeVerb("selectObjectsOnPath", "onPath", "objectsOnPath", "onPathId", { which: enumOf(["objects", "path", "all"]) }, { result: SELECTION_RESULT }),
+  recipeVerb(
+    "selectObjectsOnPath",
+    "onPath",
+    "objectsOnPath",
+    "onPathId",
+    { which: enumOf(["objects", "path", "all"]) },
+    { result: SELECTION_RESULT },
+  ),
   recipeVerb("expandObjectsOnPath", "onPath", "objectsOnPath", "onPathId"),
   recipeVerb("releaseObjectsOnPath", "onPath", "objectsOnPath", "onPathId"),
   // Image trace — the full option set.
@@ -243,10 +453,16 @@ export const TWINS: readonly TwinSpec[] = [
 ];
 
 /** The args schema of a twin. */
-export const argsOf = (t: TwinSpec): ValueType => ({ kind: "struct", fields: t.fields });
+export const argsOf = (t: TwinSpec): ValueType => ({
+  kind: "struct",
+  fields: t.fields,
+});
 
 /** The untyped payload a twin's args lower to (pure). */
-export function payloadFor(t: TwinSpec, args: Record<string, unknown>): unknown {
+export function payloadFor(
+  t: TwinSpec,
+  args: Record<string, unknown>,
+): unknown {
   if (t.payload) return t.payload(args);
   const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(args)) {
@@ -266,7 +482,8 @@ function elementIdsOf(targets: readonly string[]): ElementId[] {
   return targets.map((a) => {
     const p = parseAddress(a);
     const id = p ? toElementId(p) : null;
-    if (!id || id.kind === "storyRange") throw new Error(`invalidValue: ${a} is not a page item`);
+    if (!id || id.kind === "storyRange")
+      throw new Error(`invalidValue: ${a} is not a page item`);
     return id;
   });
 }
@@ -281,16 +498,24 @@ export function typedCommands(host: BundleHost): TypedCommandContribution[] {
     async handler(ctx, raw) {
       const args = raw as Record<string, unknown>;
       if (t.via) {
-        const out = (await t.via(ctx.objects, args)) as { applied?: boolean; reason?: string } | undefined;
-        if (out && out.applied === false) throw new Error(`failed: ${out.reason ?? t.id}`);
+        const out = (await t.via(ctx.objects, args)) as
+          { applied?: boolean; reason?: string } | undefined;
+        if (out && out.applied === false)
+          throw new Error(`failed: ${out.reason ?? t.id}`);
         return null;
       }
       const handler = commandHandler(host, t.id);
-      if (!handler) throw new Error(`unknownCommand: ${t.id} is not registered on this host`);
-      const targets = Array.isArray(args.targets) ? (args.targets as string[]) : [];
+      if (!handler)
+        throw new Error(
+          `unknownCommand: ${t.id} is not registered on this host`,
+        );
+      const targets = Array.isArray(args.targets)
+        ? (args.targets as string[])
+        : [];
       if (targets.length > 0) await host.selection.set(elementIdsOf(targets));
       const result = await handler(undefined, payloadFor(t, args));
-      if (t.result === SELECTION_RESULT) return host.selection.get().map(fromElementId);
+      if (t.result === SELECTION_RESULT)
+        return host.selection.get().map(fromElementId);
       return result ?? null;
     },
   }));

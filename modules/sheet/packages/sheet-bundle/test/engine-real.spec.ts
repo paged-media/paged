@@ -47,7 +47,13 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const BIN = join(HERE, "..", "bin");
 const WASM = join(BIN, "sheet_js_bg.wasm");
 const built = existsSync(WASM);
-const CHART_XLSX = join(HERE, "..", "..", "..", "corpus/xlsx-corpus/09-chart.xlsx");
+const CHART_XLSX = join(
+  HERE,
+  "..",
+  "..",
+  "..",
+  "corpus/xlsx-corpus/09-chart.xlsx",
+);
 /** ADR 023 — the TEXT-STYLES fixture: A/B columns carry two genuinely
  *  different per-cell fonts, C carries none. The editor's
  *  `text-retarget.spec.ts` pins the SAME numbers, so the two ends of the
@@ -88,16 +94,17 @@ describe.skipIf(!built)("real engine boot (wasm artifact)", () => {
 
     // Editing a precedent recalculates the dependent chain.
     const r = e.set_cell(0, 0, 0, "1000");
-    const changed = r.changed.map((c: { row: number; display: string }) => [c.row, c.display]);
+    const changed = r.changed.map((c: { row: number; display: string }) => [
+      c.row,
+      c.display,
+    ]);
     expect(changed).toContainEqual([2, "237.595"]);
 
     // Lowered IR carries the formatted text (the §8.3 contract).
     const low = e.get_range_lowered(0, "A1:A3", { includeGridRules: true });
-    expect(low.rows.map((row: { cells: { text: string }[] }) => row.cells[0].text)).toEqual([
-      "1000",
-      "250.5",
-      "237.595",
-    ]);
+    expect(
+      low.rows.map((row: { cells: { text: string }[] }) => row.cells[0].text),
+    ).toEqual(["1000", "250.5", "237.595"]);
     expect(low.rules.h.length).toBeGreaterThan(0);
 
     // Save -> reload: formulas and values survive.
@@ -154,7 +161,9 @@ describe.skipIf(!built)("real engine boot (wasm artifact)", () => {
 
     // The full-sheet range A1:XFD1048576 (~1.7e10 cells) throws, it does not
     // crash the module.
-    expect(() => e.get_range_lowered(0, "A1:XFD1048576", {})).toThrow(/T0 lowering cap/);
+    expect(() => e.get_range_lowered(0, "A1:XFD1048576", {})).toThrow(
+      /T0 lowering cap/,
+    );
 
     // The session is NOT poisoned: a following &mut call still works.
     e.set_cell(0, 0, 0, "42");
@@ -204,7 +213,11 @@ describe.skipIf(!built)("real engine boot (wasm artifact)", () => {
     const charts = e.list_charts() as Array<{ index: number }>;
     expect(charts.length).toBeGreaterThan(0);
 
-    const geom = e.get_chart_geometry(charts[0].index, 300, 200) as ChartGeometry;
+    const geom = e.get_chart_geometry(
+      charts[0].index,
+      300,
+      200,
+    ) as ChartGeometry;
     // The geometry carries colour-bearing primitives (the bug was that these
     // colours never reached the host mutations).
     const colourBearing = geom.prims.filter(
@@ -221,8 +234,11 @@ describe.skipIf(!built)("real engine boot (wasm artifact)", () => {
       { pageId: "Page/u1", bounds: [0, 0, 200, 300] },
       makeBinding("Sheet1", "A1:B5", 1),
     );
-    const ops = (batch as { args: { ops: Array<{ op: string; args: Record<string, unknown> }> } })
-      .args.ops;
+    const ops = (
+      batch as {
+        args: { ops: Array<{ op: string; args: Record<string, unknown> }> };
+      }
+    ).args.ops;
 
     // At least one createSwatch (the palette becomes real document swatches).
     const swatches = ops.filter((o) => o.op === "createSwatch");
@@ -299,7 +315,9 @@ describe.skipIf(!built)("real engine boot (wasm artifact)", () => {
       makeBinding("Sheet1", "A1:B5", 1),
     );
     const ops = (
-      batch as { args: { ops: Array<{ op: string; args: Record<string, unknown> }> } }
+      batch as {
+        args: { ops: Array<{ op: string; args: Record<string, unknown> }> };
+      }
     ).args.ops;
     const mintedIds = ops
       .filter((o) => o.op === "createSwatch")
@@ -344,7 +362,14 @@ describe.skipIf(!built)("real engine boot (wasm artifact)", () => {
     // translator knows how to lower.
     const FROZEN = new Set(["rect", "line", "polygon", "wedge", "text"]);
     for (const kind of kinds) {
-      const idx = e.add_chart(0, "B2:C4", "A2:A4", kind, "", "columns") as number;
+      const idx = e.add_chart(
+        0,
+        "B2:C4",
+        "A2:A4",
+        kind,
+        "",
+        "columns",
+      ) as number;
       const geom = e.get_chart_geometry(idx, 320, 240) as ChartGeometry;
       expect(geom.prims.length, `${kind} draws primitives`).toBeGreaterThan(0);
       for (const p of geom.prims) {
@@ -357,9 +382,7 @@ describe.skipIf(!built)("real engine boot (wasm artifact)", () => {
         { pageId: "Page/u1", bounds: [0, 0, 240, 320] },
         makeBinding("Sheet1", `chart:${idx}`, 0),
       );
-      const ops = (
-        batch as { args: { ops: Array<{ op: string }> } }
-      ).args.ops;
+      const ops = (batch as { args: { ops: Array<{ op: string }> } }).args.ops;
       expect(ops.length, `${kind} lowers to host ops`).toBeGreaterThan(0);
       // Every op is one the existing translator already emitted — no new
       // core door was needed for any new kind.
@@ -370,14 +393,32 @@ describe.skipIf(!built)("real engine boot (wasm artifact)", () => {
         "setElementProperty",
         "setPluginMetadata",
       ]);
-      for (const o of ops) expect(allowed.has(o.op), `${kind}: ${o.op}`).toBe(true);
+      for (const o of ops)
+        expect(allowed.has(o.op), `${kind}: ${o.op}`).toBe(true);
     }
 
     // TRANSPOSE ROWS/COLUMNS: the same B2:C4 block is 2 column-series or 3
     // row-series. Re-read, never rewritten.
-    const byCol = e.add_chart(0, "B2:C4", "A2:A4", "column", "", "columns") as number;
-    const byRow = e.add_chart(0, "B2:C4", "A2:A4", "column", "", "rows") as number;
-    const list = e.list_charts() as Array<{ index: number; seriesCount: number }>;
+    const byCol = e.add_chart(
+      0,
+      "B2:C4",
+      "A2:A4",
+      "column",
+      "",
+      "columns",
+    ) as number;
+    const byRow = e.add_chart(
+      0,
+      "B2:C4",
+      "A2:A4",
+      "column",
+      "",
+      "rows",
+    ) as number;
+    const list = e.list_charts() as Array<{
+      index: number;
+      seriesCount: number;
+    }>;
     expect(list[byCol].seriesCount).toBe(2);
     expect(list[byRow].seriesCount).toBe(3);
     // A bad orientation is a boundary error, not a silent default.

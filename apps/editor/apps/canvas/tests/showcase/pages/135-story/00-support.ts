@@ -164,7 +164,13 @@ export async function caption(
   bounds: Bounds,
   text: string,
 ): Promise<string> {
-  const { frameId } = await pourOne(ctx, pageIndex, bounds, text, STYLE.caption);
+  const { frameId } = await pourOne(
+    ctx,
+    pageIndex,
+    bounds,
+    text,
+    STYLE.caption,
+  );
   return frameId;
 }
 

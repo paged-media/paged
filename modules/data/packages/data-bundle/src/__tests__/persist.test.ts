@@ -33,16 +33,22 @@ describe("the session part schema [data.plugin.persistence]", () => {
   });
 
   it("refuses a newer version and names it", () => {
-    const r = decodeSession(new TextEncoder().encode(JSON.stringify({ ...sample, v: 2 })));
+    const r = decodeSession(
+      new TextEncoder().encode(JSON.stringify({ ...sample, v: 2 })),
+    );
     expect("error" in r && r.error).toMatch(/version 2/);
   });
 
   it("refuses text that is not JSON", () => {
-    expect("error" in decodeSession(new TextEncoder().encode("{nope"))).toBe(true);
+    expect("error" in decodeSession(new TextEncoder().encode("{nope"))).toBe(
+      true,
+    );
   });
 
   it("fills what an older writer left out", () => {
-    const r = decodeSession(new TextEncoder().encode(JSON.stringify({ v: 1, engine: {} })));
+    const r = decodeSession(
+      new TextEncoder().encode(JSON.stringify({ v: 1, engine: {} })),
+    );
     expect(r).toMatchObject({ locale: "en", sync: [], data: [], remote: [] });
   });
 
@@ -77,7 +83,10 @@ describe("a host without container parts [data.plugin.persistence]", () => {
         },
         read: async () => null,
       },
-      document: { onWillSave: () => ({ dispose() {} }), onDidChange: () => ({ dispose() {} }) },
+      document: {
+        onWillSave: () => ({ dispose() {} }),
+        onDidChange: () => ({ dispose() {} }),
+      },
     } as never;
     const s = createSession(host, 0);
     await s.restore();
@@ -86,6 +95,8 @@ describe("a host without container parts [data.plugin.persistence]", () => {
     await s.flushPersist();
     const st = s.getState();
     expect(st.persistence.status).toBe("unavailable");
-    expect(st.diagnostics.filter((d) => d.source === "persist")).toHaveLength(1);
+    expect(st.diagnostics.filter((d) => d.source === "persist")).toHaveLength(
+      1,
+    );
   });
 });

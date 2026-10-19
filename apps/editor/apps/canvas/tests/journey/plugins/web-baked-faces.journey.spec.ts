@@ -38,9 +38,24 @@ import { fileURLToPath } from "node:url";
 import { expect, test, type Page } from "@playwright/test";
 
 import { Designer } from "../driver/designer";
-import { BAKE, insertWebFrameWith, invoke, mutationsSince, select, tapMark, tapSceneLayers } from "./web-kit";
+import {
+  BAKE,
+  insertWebFrameWith,
+  invoke,
+  mutationsSince,
+  select,
+  tapMark,
+  tapSceneLayers,
+} from "./web-kit";
 
-const REPO_ROOT = pathResolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "..", "..");
+const REPO_ROOT = pathResolve(
+  dirname(fileURLToPath(import.meta.url)),
+  "..",
+  "..",
+  "..",
+  "..",
+  "..",
+);
 /** A face no document holds, distinct from the default: a monospace. */
 const FACE = `${REPO_ROOT}/corpus/fonts/JetBrainsMono-VF.ttf`;
 const RESOURCE = "paged/media.paged.web/resources/fonts/mono.ttf";
@@ -54,22 +69,40 @@ type FontRow = { family: string; isMissing: boolean };
 
 const fonts = (page: Page): Promise<FontRow[]> =>
   page.evaluate(async () => {
-    const c = (globalThis as unknown as {
-      __canvas: { client: { collection(n: string): Promise<FontRow[]> } };
-    }).__canvas;
-    return (await c.client.collection("fonts")).map((f) => ({ family: f.family, isMissing: f.isMissing }));
+    const c = (
+      globalThis as unknown as {
+        __canvas: { client: { collection(n: string): Promise<FontRow[]> } };
+      }
+    ).__canvas;
+    return (await c.client.collection("fonts")).map((f) => ({
+      family: f.family,
+      isMissing: f.isMissing,
+    }));
   });
 
 /** The row of the family the baked text was set in (the face's own name). */
 const monoRow = async (page: Page): Promise<FontRow | undefined> =>
-  (await fonts(page)).find((f) => /mono/i.test(f.family) && !/^monospace$/i.test(f.family));
+  (await fonts(page)).find(
+    (f) => /mono/i.test(f.family) && !/^monospace$/i.test(f.family),
+  );
 
 const keptFaces = (page: Page): Promise<string[]> =>
   page.evaluate(async () => {
-    const c = (globalThis as unknown as {
-      __canvas: { client: { send(m: unknown): Promise<{ kind: string; payload: { paths?: string[] } }> } };
-    }).__canvas;
-    const r = await c.client.send({ kind: "listPagedParts", payload: { prefix: "paged/media.paged.web/faces/" } });
+    const c = (
+      globalThis as unknown as {
+        __canvas: {
+          client: {
+            send(
+              m: unknown,
+            ): Promise<{ kind: string; payload: { paths?: string[] } }>;
+          };
+        };
+      }
+    ).__canvas;
+    const r = await c.client.send({
+      kind: "listPagedParts",
+      payload: { prefix: "paged/media.paged.web/faces/" },
+    });
     return r.kind === "pagedPartList" ? (r.payload.paths ?? []) : [];
   });
 
@@ -86,11 +119,19 @@ test.describe("journey · a baked web face comes back when the document reopens"
     const face = Array.from(readFileSync(FACE));
     await page.evaluate(
       async ({ path, bytes }) => {
-        const c = (globalThis as unknown as {
-          __canvas: { client: { send(m: unknown): Promise<{ kind: string }> } };
-        }).__canvas;
-        const r = await c.client.send({ kind: "writePagedPart", payload: { path, bytes, caller: "media.paged.web" } });
-        if (r.kind !== "pagedPartWritten") throw new Error(`resource not written: ${r.kind}`);
+        const c = (
+          globalThis as unknown as {
+            __canvas: {
+              client: { send(m: unknown): Promise<{ kind: string }> };
+            };
+          }
+        ).__canvas;
+        const r = await c.client.send({
+          kind: "writePagedPart",
+          payload: { path, bytes, caller: "media.paged.web" },
+        });
+        if (r.kind !== "pagedPartWritten")
+          throw new Error(`resource not written: ${r.kind}`);
       },
       { path: RESOURCE, bytes: face },
     );
@@ -103,23 +144,41 @@ test.describe("journey · a baked web face comes back when the document reopens"
     });
     await select(page, [frame]);
     await invoke(page, BAKE);
-    await expect.poll(() => logs.length, { timeout: 20_000 }).toBeGreaterThan(0);
+    await expect
+      .poll(() => logs.length, { timeout: 20_000 })
+      .toBeGreaterThan(0);
     expect(logs.join(" | ")).toMatch(/baked \d+ native item/);
     const baked = await monoRow(page);
-    expect(baked, "the baked text names the face its source loads").toBeTruthy();
+    expect(
+      baked,
+      "the baked text names the face its source loads",
+    ).toBeTruthy();
     expect(baked!.isMissing, "the bake gave the document the face").toBe(false);
-    expect((await keptFaces(page)).length, "the bake kept the face with the document").toBeGreaterThan(0);
+    expect(
+      (await keptFaces(page)).length,
+      "the bake kept the face with the document",
+    ).toBeGreaterThan(0);
 
     // ── 2. Save and open again: the face is back, and no bake ran. ──
     const mark = await tapMark(page);
     await page.evaluate(async () => {
-      const c = (globalThis as unknown as {
-        __canvas: { client: { exportPaged(): Promise<Uint8Array>; loadDocument(b: Uint8Array): Promise<unknown> } };
-      }).__canvas;
+      const c = (
+        globalThis as unknown as {
+          __canvas: {
+            client: {
+              exportPaged(): Promise<Uint8Array>;
+              loadDocument(b: Uint8Array): Promise<unknown>;
+            };
+          };
+        }
+      ).__canvas;
       await c.client.loadDocument(await c.client.exportPaged());
     });
     await expect
-      .poll(async () => (await monoRow(page))?.isMissing, { timeout: 15_000, message: "the reopened document has its face" })
+      .poll(async () => (await monoRow(page))?.isMissing, {
+        timeout: 15_000,
+        message: "the reopened document has its face",
+      })
       .toBe(false);
     expect((await monoRow(page))?.family).toBe(baked!.family);
     expect(await mutationsSince(page, mark), "no bake ran on open").toEqual([]);

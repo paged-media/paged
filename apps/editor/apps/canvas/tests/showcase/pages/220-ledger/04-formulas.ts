@@ -42,9 +42,18 @@ import { fileURLToPath } from "node:url";
 
 import { openPanel } from "../../../fidelity/canvas-driver";
 import { withActivePage } from "../../active-page";
-import { assignLayer, marginNote, proseFrame, specLabel } from "../../annual-support";
+import {
+  assignLayer,
+  marginNote,
+  proseFrame,
+  specLabel,
+} from "../../annual-support";
 import { LAYER, STYLE, TABLE_STYLE, p } from "../../names-annual";
-import { clearSelection, partitionByPage, removeRefs } from "../../plugin-support";
+import {
+  clearSelection,
+  partitionByPage,
+  removeRefs,
+} from "../../plugin-support";
 import type { PageContext, PageReport } from "../../types";
 import {
   GRID_PANEL,
@@ -100,7 +109,11 @@ function readFamilies(): Family[] | null {
       const family = /^\s+family:[ \t]*(\S+)/m.exec(block)?.[1];
       const implemented = /^\s+status:[ \t]*implemented/m.test(block);
       if (!name || !family || !implemented) continue;
-      const fam = byFamily.get(family) ?? { name: family, count: 0, samples: [] };
+      const fam = byFamily.get(family) ?? {
+        name: family,
+        count: 0,
+        samples: [],
+      };
       fam.count += 1;
       if (fam.samples.length < 3) fam.samples.push(name);
       byFamily.set(family, fam);
@@ -116,9 +129,12 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   const covers: string[] = [];
   const elements: string[] = [];
 
-  const head = await proseFrame(ctx, p(99), [48, 96, 480, 124], [
-    { text: "Formulas, spill, and the roster", style: STYLE.head1 },
-  ]);
+  const head = await proseFrame(
+    ctx,
+    p(99),
+    [48, 96, 480, 124],
+    [{ text: "Formulas, spill, and the roster", style: STYLE.head1 }],
+  );
   elements.push(head.frameId);
 
   // ── import through the importXlsx COMMAND (host picker lane) ─────
@@ -158,7 +174,9 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   // ── the calc engine, through the formula bar ─────────────────────
   await doc.runCommand(`${SHEET_CMD}.openGrid`);
   const svg = page.locator("[data-grid-svg-root]");
-  await expect(svg, "the grid panel rendered").toBeVisible({ timeout: 120_000 });
+  await expect(svg, "the grid panel rendered").toBeVisible({
+    timeout: 120_000,
+  });
 
   // An aggregate, a text-family call, and a dynamic array that SPILLS
   // C3:C6 from one anchor. Each committed value is asserted in the
@@ -166,7 +184,9 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   await enterCell(page, 0, 2, "=SUM(A1:A2)+5");
   await expect(svg, "SUM computed").toContainText("10", { timeout: 8_000 });
   await enterCell(page, 1, 2, '=UPPER("paged")');
-  await expect(svg, "UPPER computed").toContainText("PAGED", { timeout: 8_000 });
+  await expect(svg, "UPPER computed").toContainText("PAGED", {
+    timeout: 8_000,
+  });
   await enterCell(page, 2, 2, "=SEQUENCE(4,1,10,10)");
   await expect(svg, "the array spilled to C6").toContainText("40", {
     timeout: 8_000,
@@ -192,29 +212,39 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     await page.locator("[data-sheet-lower]").click();
     fresh = await settleNewElements(page, before);
   });
-  expect(fresh.length, "the computed range lowered onto this page").toBeGreaterThan(0);
+  expect(
+    fresh.length,
+    "the computed range lowered onto this page",
+  ).toBeGreaterThan(0);
   const { here, elsewhere } = await partitionByPage(page, fresh, pg99);
   if (elsewhere.length > 0) {
     await removeRefs(doc, elsewhere);
     notes.push(`the lower strayed ${elsewhere.length} item(s); removed`);
   }
-  expect(here.length, "the computed range landed on page 99").toBeGreaterThan(0);
+  expect(here.length, "the computed range landed on page 99").toBeGreaterThan(
+    0,
+  );
 
   await placeElements(doc, here, 1, 24, 126, notes);
   elements.push(...here.map((e) => e.id));
   covers.push("sheet.lower.page");
 
-  const sideCaption = await proseFrame(ctx, p(99), [260, 150, 480, 268], [
-    {
-      text:
-        "The lowered range prints RESULTS: the SUM as 5 and 10, the " +
-        "concatenation as SumProduct, the uppercase call, and the spill " +
-        "range 10–40 that four cells inherited from one anchor. The " +
-        "formatted value is the value — the grid and the page share one " +
-        "format engine, so what you audited live is what went to press.",
-      style: STYLE.caption,
-    },
-  ]);
+  const sideCaption = await proseFrame(
+    ctx,
+    p(99),
+    [260, 150, 480, 268],
+    [
+      {
+        text:
+          "The lowered range prints RESULTS: the SUM as 5 and 10, the " +
+          "concatenation as SumProduct, the uppercase call, and the spill " +
+          "range 10–40 that four cells inherited from one anchor. The " +
+          "formatted value is the value — the grid and the page share one " +
+          "format engine, so what you audited live is what went to press.",
+        style: STYLE.caption,
+      },
+    ],
+  );
   elements.push(sideCaption.frameId);
 
   // ── the function-family roster, from the registry ────────────────
@@ -237,7 +267,8 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     const frameId = await doc.textFrame(pg99, box);
     await assignLayer(ctx, "textFrame", frameId, LAYER.content);
     const storyId = await doc.storyOf(pg99, box);
-    const caption = "Table — the function library, by family, counted from the registry at build time.";
+    const caption =
+      "Table — the function library, by family, counted from the registry at build time.";
     await doc.insertText(storyId, caption, 0);
     await doc.applyStyle(
       storyId,
@@ -266,7 +297,9 @@ export async function build(ctx: PageContext): Promise<PageReport> {
       if (id && typeof id === "object" && typeof id.table_id === "string") {
         return id.table_id;
       }
-      throw new Error(`insertTable minted no table id: ${JSON.stringify(created)}`);
+      throw new Error(
+        `insertTable minted no table id: ${JSON.stringify(created)}`,
+      );
     })();
 
     await doc.mutate("insertHeaderRow", { storyId, tableId });
@@ -283,13 +316,25 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     const tableBody = await doc.paragraphStyle(STYLE.tableBody);
     const tableNumber = await doc.paragraphStyle(STYLE.tableNumber);
 
-    for (const [c, label] of ["FAMILY", "FNS", "REPRESENTATIVE CALLS"].entries()) {
+    for (const [c, label] of [
+      "FAMILY",
+      "FNS",
+      "REPRESENTATIVE CALLS",
+    ].entries()) {
       await pourStyledCell(doc, storyId, tableId, 0, c, label, tableHead);
     }
     for (const [i, fam] of families.entries()) {
       const row = 1 + i;
       await pourStyledCell(doc, storyId, tableId, row, 0, fam.name, tableBody);
-      await pourStyledCell(doc, storyId, tableId, row, 1, String(fam.count), tableNumber);
+      await pourStyledCell(
+        doc,
+        storyId,
+        tableId,
+        row,
+        1,
+        String(fam.count),
+        tableNumber,
+      );
       await pourStyledCell(
         doc,
         storyId,
@@ -330,7 +375,9 @@ export async function build(ctx: PageContext): Promise<PageReport> {
 
     // The fixture's table style dresses the roster (banded fills,
     // hairlines) so the region cascade does the styling.
-    const tableStyles = (await doc.designer.collection("tableStyles")) as Array<{
+    const tableStyles = (await doc.designer.collection(
+      "tableStyles",
+    )) as Array<{
       selfId: string;
       name?: string;
     }>;

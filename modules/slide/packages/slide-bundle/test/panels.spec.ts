@@ -28,13 +28,24 @@ import { readFileSync } from "node:fs";
 
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
-import { createHeadlessHost, propertyRowsOf, validatePanelSchema, type HeadlessHost } from "@paged-media/plugin-sdk";
+import {
+  createHeadlessHost,
+  propertyRowsOf,
+  validatePanelSchema,
+  type HeadlessHost,
+} from "@paged-media/plugin-sdk";
 import type { ObjectValue, PropertySchema } from "@paged-media/plugin-api";
 
 import manifest from "../manifest.json";
 import slideBundle from "../src/index";
 import { SLIDES_PANEL_ID } from "../src/activate";
-import { IMPORT_PPTX_COMMAND, DECK_SCHEMA, LAYOUT_SCHEMA, PLACEHOLDER_SCHEMA, SLIDE_SCHEMA } from "../src/object-model";
+import {
+  IMPORT_PPTX_COMMAND,
+  DECK_SCHEMA,
+  LAYOUT_SCHEMA,
+  PLACEHOLDER_SCHEMA,
+  SLIDE_SCHEMA,
+} from "../src/object-model";
 import { SLIDE_PANEL_FIELDS } from "../src/panel-fields";
 import { SLIDE_PANELS } from "../src/panels";
 import { fileURLToPath } from "node:url";
@@ -46,7 +57,10 @@ import { fileURLToPath } from "node:url";
 const ENGINE_ANCHOR = fileURLToPath(new URL(".", import.meta.url));
 
 const P = "plugin:media.paged.slide";
-const FIXTURE = new URL("../../../slide-conformance/fixtures/placeholders.pptx", import.meta.url);
+const FIXTURE = new URL(
+  "../../../slide-conformance/fixtures/placeholders.pptx",
+  import.meta.url,
+);
 const byKind: Record<string, readonly PropertySchema[]> = {
   [`${P}/slide`]: SLIDE_SCHEMA as readonly PropertySchema[],
   [`${P}/placeholder`]: PLACEHOLDER_SCHEMA as readonly PropertySchema[],
@@ -58,7 +72,13 @@ const v = (x: ObjectValue): unknown => (x.kind === "value" ? x.value : x);
 describe("[plugin-slide.object-model] slide panels are property rows", () => {
   it("every panel validates against the manifest schemas", () => {
     for (const schema of SLIDE_PANELS) {
-      expect(validatePanelSchema(schema, { pluginId: manifest.id, schemaOf: (k) => byKind[k] }), schema.id).toEqual([]);
+      expect(
+        validatePanelSchema(schema, {
+          pluginId: manifest.id,
+          schemaOf: (k) => byKind[k],
+        }),
+        schema.id,
+      ).toEqual([]);
     }
   });
 
@@ -72,9 +92,13 @@ describe("[plugin-slide.object-model] slide panels are property rows", () => {
   });
 
   it("covers EVERY writable row of every kind (read-only and derived rows are readouts)", () => {
-    const declared = new Set(SLIDE_PANEL_FIELDS.flatMap((l) => l.fields.map((f) => `${l.kind}.${f}`)));
+    const declared = new Set(
+      SLIDE_PANEL_FIELDS.flatMap((l) => l.fields.map((f) => `${l.kind}.${f}`)),
+    );
     const writable = Object.entries(byKind).flatMap(([kind, rows]) =>
-      rows.filter((r) => (r.access ?? "readWrite") === "readWrite").map((r) => `${kind}.${r.path}`),
+      rows
+        .filter((r) => (r.access ?? "readWrite") === "readWrite")
+        .map((r) => `${kind}.${r.path}`),
     );
     expect(writable.length).toBeGreaterThan(0);
     expect(writable.filter((w) => !declared.has(w))).toEqual([]);
@@ -83,7 +107,9 @@ describe("[plugin-slide.object-model] slide panels are property rows", () => {
   it("the manifest declares every panel", () => {
     // The schema panels and the Slides sorter (the Notes panel shares the
     // notes schema panel's id).
-    expect([...manifest.contributes.panels].sort()).toEqual([...SLIDE_PANELS.map((s) => s.id), SLIDES_PANEL_ID].sort());
+    expect([...manifest.contributes.panels].sort()).toEqual(
+      [...SLIDE_PANELS.map((s) => s.id), SLIDES_PANEL_ID].sort(),
+    );
   });
 });
 
@@ -93,12 +119,20 @@ describe("[plugin-slide.object-model] property rows, headless", () => {
     h = await createHeadlessHost({ resolveFrom: ENGINE_ANCHOR });
     h.loadBundle(slideBundle);
     const bytes = new Uint8Array(readFileSync(FIXTURE));
-    await h.objects.invoke(IMPORT_PPTX_COMMAND, { bytes, name: "placeholders.pptx" });
+    await h.objects.invoke(IMPORT_PPTX_COMMAND, {
+      bytes,
+      name: "placeholders.pptx",
+    });
   }, 60_000);
   afterEach(() => h.dispose());
 
   it("activate contributes the five schema panels", () => {
-    expect(h.schemaPanelsContributed().map((c) => c.id).sort()).toEqual(SLIDE_PANELS.map((s) => s.id).sort());
+    expect(
+      h
+        .schemaPanelsContributed()
+        .map((c) => c.id)
+        .sort(),
+    ).toEqual(SLIDE_PANELS.map((s) => s.id).sort());
   });
 
   it("a selected placeholder frame resolves its slide and itself; a slide set is ONE undo step", async () => {
@@ -111,7 +145,10 @@ describe("[plugin-slide.object-model] property rows, headless", () => {
     expect(slide).toMatch(new RegExp(`^${P}/slide/`));
     const before = v(await h.objects.get(slide!, "transitionKind"));
     const next = before === "fade" ? "push" : "fade";
-    expect(await h.objects.set(slide!, "transitionKind", next)).toMatchObject({ applied: true, undoSteps: 1 });
+    expect(await h.objects.set(slide!, "transitionKind", next)).toMatchObject({
+      applied: true,
+      undoSteps: 1,
+    });
     expect(v(await h.objects.get(slide!, "transitionKind"))).toBe(next);
     await h.host.document.undo();
     expect(v(await h.objects.get(slide!, "transitionKind"))).toBe(before);

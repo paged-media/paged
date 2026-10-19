@@ -39,22 +39,34 @@ import { openPanel } from "../../fidelity/canvas-driver";
 import { Designer } from "../driver/designer";
 import { skipWithoutDuckDB } from "./data-duckdb-gate";
 
-const HARNESS = pathResolve(dirname(fileURLToPath(import.meta.url)), "../../e2e/harness");
+const HARNESS = pathResolve(
+  dirname(fileURLToPath(import.meta.url)),
+  "../../e2e/harness",
+);
 const SOURCES_PANEL = "media.paged.data.panel.sources";
 const IMPORT = "media.paged.data.command.importData";
 
-const FILES: { name: string; source: string; format: string; buffer: Buffer }[] = [
+const FILES: {
+  name: string;
+  source: string;
+  format: string;
+  buffer: Buffer;
+}[] = [
   {
     name: "catalog.json",
     source: "catalog",
     format: "json",
-    buffer: Buffer.from('[{"sku":"A-1","price":9.99},{"sku":"B-2","price":19.5}]'),
+    buffer: Buffer.from(
+      '[{"sku":"A-1","price":9.99},{"sku":"B-2","price":19.5}]',
+    ),
   },
   {
     name: "events.ndjson",
     source: "events",
     format: "json",
-    buffer: Buffer.from('{"id":1,"at":"2026-01-15"}\n{"id":2,"at":"2026-02-01"}\n'),
+    buffer: Buffer.from(
+      '{"id":1,"at":"2026-01-15"}\n{"id":2,"at":"2026-02-01"}\n',
+    ),
   },
   {
     name: "products.parquet",
@@ -70,13 +82,25 @@ const FILES: { name: string; source: string; format: string; buffer: Buffer }[] 
   },
 ];
 
-async function importFile(page: Page, f: (typeof FILES)[number]): Promise<void> {
+async function importFile(
+  page: Page,
+  f: (typeof FILES)[number],
+): Promise<void> {
   const chooser = page.waitForEvent("filechooser");
   await page.locator("[data-data-import-file]").click();
-  await (await chooser).setFiles({ name: f.name, mimeType: "application/octet-stream", buffer: f.buffer });
-  await expect(page.locator(`[data-data-source="${f.source}"]`)).toContainText(f.format, {
-    timeout: 45_000,
+  await (
+    await chooser
+  ).setFiles({
+    name: f.name,
+    mimeType: "application/octet-stream",
+    buffer: f.buffer,
   });
+  await expect(page.locator(`[data-data-source="${f.source}"]`)).toContainText(
+    f.format,
+    {
+      timeout: 45_000,
+    },
+  );
 }
 
 test.describe("journey · paged.data import formats", () => {
@@ -90,11 +114,21 @@ test.describe("journey · paged.data import formats", () => {
     page.on("request", (r) => {
       const u = r.url();
       if (/^(data|blob):/.test(u)) return;
-      if (u.includes("duckdb_extension")) extensionLoads.push(new URL(u).pathname);
-      if (!u.startsWith("http://127.0.0.1") && !u.startsWith("http://localhost")) offOrigin.push(u);
+      if (u.includes("duckdb_extension"))
+        extensionLoads.push(new URL(u).pathname);
+      if (
+        !u.startsWith("http://127.0.0.1") &&
+        !u.startsWith("http://localhost")
+      )
+        offOrigin.push(u);
     });
     page.on("console", (m) => {
-      if (m.type() === "error" && /unreachable|RuntimeError|Content Security Policy|extensions\.duckdb\.org/.test(m.text()))
+      if (
+        m.type() === "error" &&
+        /unreachable|RuntimeError|Content Security Policy|extensions\.duckdb\.org/.test(
+          m.text(),
+        )
+      )
         traps.push(m.text());
     });
     page.on("pageerror", (e) => {
@@ -106,7 +140,9 @@ test.describe("journey · paged.data import formats", () => {
     await designer.newDocument();
     await designer.runCommand(IMPORT);
     await openPanel(page, SOURCES_PANEL);
-    await expect(page.locator("[data-data-import-file]")).toBeVisible({ timeout: 10_000 });
+    await expect(page.locator("[data-data-import-file]")).toBeVisible({
+      timeout: 10_000,
+    });
 
     // The first import boots DuckDB; skip (or fail under REQUIRE_REAL_DUCKDB=1)
     // when it cannot, as every data journey does.
@@ -115,18 +151,30 @@ test.describe("journey · paged.data import formats", () => {
       try {
         await importFile(page, f);
       } catch (err) {
-        const got = (await status.getAttribute("data-status").catch(() => null)) ?? "unknown";
-        if (got !== "ready") skipWithoutDuckDB(got, `the import-formats journey needs DuckDB-WASM (engine status "${got}")`);
+        const got =
+          (await status.getAttribute("data-status").catch(() => null)) ??
+          "unknown";
+        if (got !== "ready")
+          skipWithoutDuckDB(
+            got,
+            `the import-formats journey needs DuckDB-WASM (engine status "${got}")`,
+          );
         throw err;
       }
     }
 
     await expect(status).toHaveAttribute("data-status", "ready");
-    await expect(page.locator('[data-data-diagnostics] li[data-level="error"]')).toHaveCount(0);
+    await expect(
+      page.locator('[data-data-diagnostics] li[data-level="error"]'),
+    ).toHaveCount(0);
     expect(traps).toEqual([]);
     expect(offOrigin).toEqual([]);
     // Both extensions came from the bundle's bin/duckdb-ext, nowhere else.
-    expect(extensionLoads.map((p) => p.replace(/^.*\/duckdb-ext\//, "duckdb-ext/")).sort()).toEqual([
+    expect(
+      extensionLoads
+        .map((p) => p.replace(/^.*\/duckdb-ext\//, "duckdb-ext/"))
+        .sort(),
+    ).toEqual([
       "duckdb-ext/v1.1.1/wasm_eh/json.duckdb_extension.wasm",
       "duckdb-ext/v1.1.1/wasm_eh/parquet.duckdb_extension.wasm",
     ]);

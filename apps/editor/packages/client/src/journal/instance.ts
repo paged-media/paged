@@ -17,7 +17,6 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-
 // The process-wide journal buffer (ADR 025).
 //
 // It lives in `@paged-media/client` rather than in the app because BOTH the

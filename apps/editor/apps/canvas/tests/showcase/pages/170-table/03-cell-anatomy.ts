@@ -49,21 +49,29 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   const pg = ctx.pageIds[0];
   const elements: string[] = [];
 
-  const head = await proseFrame(ctx, p(68), [60, 58, 492, 88], [
-    { text: "The cell, taken apart", style: STYLE.head1 },
-  ]);
-  const intro = await proseFrame(ctx, p(68), [60, 92, 492, 156], [
-    {
-      text:
-        "Sixteen cells, one property each, every label naming the exact " +
-        "path that produced what you see: the fills, then two cells " +
-        "wearing appliedCellStyle — Annual TH and Annual TD Number — " +
-        "the four insets (read where each caption stands), the " +
-        "four vertical justifications, and the twelve per-edge stroke " +
-        "paths — colour, weight and tint for each of the four edges.",
-      style: STYLE.bodySmall,
-    },
-  ]);
+  const head = await proseFrame(
+    ctx,
+    p(68),
+    [60, 58, 492, 88],
+    [{ text: "The cell, taken apart", style: STYLE.head1 }],
+  );
+  const intro = await proseFrame(
+    ctx,
+    p(68),
+    [60, 92, 492, 156],
+    [
+      {
+        text:
+          "Sixteen cells, one property each, every label naming the exact " +
+          "path that produced what you see: the fills, then two cells " +
+          "wearing appliedCellStyle — Annual TH and Annual TD Number — " +
+          "the four insets (read where each caption stands), the " +
+          "four vertical justifications, and the twelve per-edge stroke " +
+          "paths — colour, weight and tint for each of the four edges.",
+        style: STYLE.bodySmall,
+      },
+    ],
+  );
   elements.push(head.frameId, intro.frameId);
 
   // ── the sampler ──────────────────────────────────────────────────
@@ -118,9 +126,16 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   // insets re-wraps its text at a sliver of the real measure, so the
   // styled pair stays inset-free and wears short labels instead.
   await insetCells(doc, storyId, tableId, [
-    [0, 0, "both"], [0, 1, "both"],
-    [2, 0, "both"], [2, 1, "both"], [2, 2, "both"], [2, 3, "both"],
-    [3, 0, "both"], [3, 1, "both"], [3, 2, "both"], [3, 3, "both"],
+    [0, 0, "both"],
+    [0, 1, "both"],
+    [2, 0, "both"],
+    [2, 1, "both"],
+    [2, 2, "both"],
+    [2, 3, "both"],
+    [3, 0, "both"],
+    [3, 1, "both"],
+    [3, 2, "both"],
+    [3, 3, "both"],
   ]);
 
   // ── decor, one batch ─────────────────────────────────────────────
@@ -181,17 +196,22 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   ];
   await doc.batch(decor);
 
-  const caption = await proseFrame(ctx, p(68), [60, 494, 492, 560], [
-    {
-      text:
-        "Twenty property paths on one grid; the twenty-first, " +
-        "appliedTableStyle, dresses the long table overleaf. The EDGE " +
-        "tints paint — the pale right edge is the vermilion at 40 — " +
-        "and so does the FILL tint: the second cell is the same " +
-        "vermilion at 30.",
-      style: STYLE.caption,
-    },
-  ]);
+  const caption = await proseFrame(
+    ctx,
+    p(68),
+    [60, 494, 492, 560],
+    [
+      {
+        text:
+          "Twenty property paths on one grid; the twenty-first, " +
+          "appliedTableStyle, dresses the long table overleaf. The EDGE " +
+          "tints paint — the pale right edge is the vermilion at 40 — " +
+          "and so does the FILL tint: the second cell is the same " +
+          "vermilion at 30.",
+        style: STYLE.caption,
+      },
+    ],
+  );
   elements.push(caption.frameId);
 
   await marginNote(

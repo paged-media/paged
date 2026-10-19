@@ -84,11 +84,29 @@ export const INSERT_SHAPE_COMMAND_IDS = [
  *  spec derives the expected geometry from the same numbers. */
 export const INSERT_SHAPE_DEFAULTS = {
   /** A 270° open arc of radius 100 pt centered at (200, 200). */
-  arc: { cx: 200, cy: 200, rx: 100, ry: 100, startAngle: 0, sweep: 1.5 * Math.PI },
+  arc: {
+    cx: 200,
+    cy: 200,
+    rx: 100,
+    ry: 100,
+    startAngle: 0,
+    sweep: 1.5 * Math.PI,
+  },
   /** Three inward turns from 100 pt, 20% decay per turn, 8 seg/turn. */
-  spiral: { cx: 200, cy: 200, r0: 100, decay: 0.8, turns: 3, segmentsPerTurn: 8 },
+  spiral: {
+    cx: 200,
+    cy: 200,
+    r0: 100,
+    decay: 0.8,
+    turns: 3,
+    segmentsPerTurn: 8,
+  },
   /** A 4×4-cell grid in [100,100]..[300,300] → 5 + 5 = 10 lines. */
-  rectGrid: { bounds: [100, 100, 300, 300] as [number, number, number, number], rows: 4, cols: 4 },
+  rectGrid: {
+    bounds: [100, 100, 300, 300] as [number, number, number, number],
+    rows: 4,
+    cols: 4,
+  },
   /** 3 rings + 6 radials of radius 100 pt at (200, 200) → 9 paths. */
   polarGrid: { cx: 200, cy: 200, r: 100, rings: 3, radials: 6 },
 } as const;
@@ -202,8 +220,12 @@ const bool = (v: unknown, fallback: boolean): boolean =>
 
 /** A whole count in `min..max` (a fractional one is floored, as the
  *  generators floor it). */
-const count = (v: unknown, fallback: number, min: number, max: number): number =>
-  Math.min(max, Math.max(min, Math.floor(num(v, fallback))));
+const count = (
+  v: unknown,
+  fallback: number,
+  min: number,
+  max: number,
+): number => Math.min(max, Math.max(min, Math.floor(num(v, fallback))));
 
 const DEG = Math.PI / 180;
 
@@ -258,7 +280,12 @@ export function polarGridParamsFrom(payload?: Payload): PolarGridParams {
     cy: num(payload?.cy, d.cy),
     r: num(payload?.r, d.r),
     rings: count(payload?.rings, d.rings, 0, INSERT_SHAPE_LIMITS.maxCount),
-    radials: count(payload?.radials, d.radials, 0, INSERT_SHAPE_LIMITS.maxCount),
+    radials: count(
+      payload?.radials,
+      d.radials,
+      0,
+      INSERT_SHAPE_LIMITS.maxCount,
+    ),
   };
 }
 
@@ -374,19 +401,32 @@ async function applyInsertShape(
 
 /** Insert an arc. Payload `{ cx?, cy?, rx?, ry?, startAngleDeg?,
  *  sweepDeg?, closed? }`; none = the v0 arc. */
-export function applyInsertArc(host: BundleHost, payload?: Payload): Promise<boolean> {
+export function applyInsertArc(
+  host: BundleHost,
+  payload?: Payload,
+): Promise<boolean> {
   return applyInsertShape(host, INSERT_ARC_COMMAND_ID, arcTablesFor(payload));
 }
 
 /** Insert a spiral. Payload `{ cx?, cy?, r0?, decay?, turns?,
  *  segmentsPerTurn? }`. */
-export function applyInsertSpiral(host: BundleHost, payload?: Payload): Promise<boolean> {
-  return applyInsertShape(host, INSERT_SPIRAL_COMMAND_ID, spiralTablesFor(payload));
+export function applyInsertSpiral(
+  host: BundleHost,
+  payload?: Payload,
+): Promise<boolean> {
+  return applyInsertShape(
+    host,
+    INSERT_SPIRAL_COMMAND_ID,
+    spiralTablesFor(payload),
+  );
 }
 
 /** Insert a rectangular grid. Payload `{ x?, y?, width?, height?,
  *  rows?, cols? }`. */
-export function applyInsertRectGrid(host: BundleHost, payload?: Payload): Promise<boolean> {
+export function applyInsertRectGrid(
+  host: BundleHost,
+  payload?: Payload,
+): Promise<boolean> {
   return applyInsertShape(
     host,
     INSERT_RECT_GRID_COMMAND_ID,
@@ -395,7 +435,10 @@ export function applyInsertRectGrid(host: BundleHost, payload?: Payload): Promis
 }
 
 /** Insert a polar grid. Payload `{ cx?, cy?, r?, rings?, radials? }`. */
-export function applyInsertPolarGrid(host: BundleHost, payload?: Payload): Promise<boolean> {
+export function applyInsertPolarGrid(
+  host: BundleHost,
+  payload?: Payload,
+): Promise<boolean> {
   return applyInsertShape(
     host,
     INSERT_POLAR_GRID_COMMAND_ID,
@@ -441,14 +484,20 @@ export function contributeInsertShapeCommands(
       title: "Insert: Rectangular grid (last used values)",
       category: INSERT_SHAPE_COMMAND_CATEGORY,
       handler: (_paged, payload) =>
-        applyInsertRectGrid(host, (payload as Payload) ?? lastUsed.rectGrid?.()),
+        applyInsertRectGrid(
+          host,
+          (payload as Payload) ?? lastUsed.rectGrid?.(),
+        ),
     }),
     registerCommand(host, {
       id: INSERT_POLAR_GRID_COMMAND_ID,
       title: "Insert: Polar grid (last used values)",
       category: INSERT_SHAPE_COMMAND_CATEGORY,
       handler: (_paged, payload) =>
-        applyInsertPolarGrid(host, (payload as Payload) ?? lastUsed.polarGrid?.()),
+        applyInsertPolarGrid(
+          host,
+          (payload as Payload) ?? lastUsed.polarGrid?.(),
+        ),
     }),
   ];
   return {

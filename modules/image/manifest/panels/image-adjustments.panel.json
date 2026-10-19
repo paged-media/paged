@@ -34,7 +34,11 @@
       "title": { "key": "image.color" },
       "$comment": "T2 (M2): curves/levels/HSL land with image.kernel.t2; the LUT-backed soft-proof toggle is the cms.apply lane (M1).",
       "rows": [
-        { "type": "toggle", "bind": { "kind": "derived", "key": "invert" }, "label": { "key": "image.invert" } }
+        {
+          "type": "toggle",
+          "bind": { "kind": "derived", "key": "invert" },
+          "label": { "key": "image.invert" }
+        }
       ]
     }
   ]

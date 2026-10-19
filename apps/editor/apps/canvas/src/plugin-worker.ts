@@ -121,7 +121,8 @@ export function createEditorWorkerBackend(resolvers: {
           if (terminated) return;
           // `postMessage(msg, transfer)` — the transfer list moves
           // ownership of the listed transferables (e.g. an ArrayBuffer).
-          if (transfer && transfer.length) worker.postMessage(message, transfer);
+          if (transfer && transfer.length)
+            worker.postMessage(message, transfer);
           else worker.postMessage(message);
         },
         onMessage(handler) {

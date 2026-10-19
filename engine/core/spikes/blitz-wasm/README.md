@@ -7,13 +7,13 @@ what size/speed?
 
 ## Verdict — **GO** (measured 2026-06-06)
 
-| Question | Result |
-| --- | --- |
-| Compiles to wasm32? | **Yes** — whole stack (`blitz-* 0.3.0-alpha.4`, stylo 0.17), clean `cargo check`/`build`, no patches |
-| Executes on wasm? | **Yes** — run via `wasm-bindgen --target nodejs`; fragment paints 19 commands (see delta note) |
-| Binary size | raw 12.31 MB → `wasm-opt -Oz` 9.15 MB → **brotli 2.20 MB** (Vello EXCLUDED — counting backend; see sharing note) |
+| Question                   | Result                                                                                                                                                                                                             |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Compiles to wasm32?        | **Yes** — whole stack (`blitz-* 0.3.0-alpha.4`, stylo 0.17), clean `cargo check`/`build`, no patches                                                                                                               |
+| Executes on wasm?          | **Yes** — run via `wasm-bindgen --target nodejs`; fragment paints 19 commands (see delta note)                                                                                                                     |
+| Binary size                | raw 12.31 MB → `wasm-opt -Oz` 9.15 MB → **brotli 2.20 MB** (Vello EXCLUDED — counting backend; see sharing note)                                                                                                   |
 | Performance (native proxy) | persistent doc re-layout+repaint **58 µs/frame**; fresh doc with shared `FontContext` **373 µs**; naive fresh doc 59 ms (font discovery dominates); cold start 0.12–1.4 s (system-font discovery — absent on wasm) |
-| Paint-path correctness | representative fragment (flexbox, borders, backgrounds, nested flow, text) → 12 fills + 3 glyph runs + 7 layers natively |
+| Paint-path correctness     | representative fragment (flexbox, borders, backgrounds, nested flow, text) → 12 fills + 3 glyph runs + 7 layers natively                                                                                           |
 
 ### The 22 vs 19 command delta (native vs wasm)
 

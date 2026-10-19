@@ -52,7 +52,12 @@ function statefulEngine() {
   let nextReplace = {
     occurrences: 0,
     edits: [] as CellEditRecord[],
-    skipped: [] as { sheet: number; row: number; col: number; reason: string }[],
+    skipped: [] as {
+      sheet: number;
+      row: number;
+      col: number;
+      reason: string;
+    }[],
   };
   let nextHits: { sheet: number; row: number; col: number; excerpt: string }[] =
     [];
@@ -152,7 +157,10 @@ function statefulEngine() {
 const silentHost = {
   log: { debug() {}, info() {}, warn() {}, error() {} },
   // The document doors every host has; nothing here fires them.
-  document: { onDidChange: () => ({ dispose() {} }), onDidOpen: () => ({ dispose() {} }) },
+  document: {
+    onDidChange: () => ({ dispose() {} }),
+    onDidOpen: () => ({ dispose() {} }),
+  },
   supports: () => false,
 } as unknown as BundleHost;
 
@@ -213,7 +221,9 @@ describe("sheet_plugin_sort_command: session glue + grouped journal", () => {
 
   it("surfaces the engine's refusal message honestly (nothing journaled)", () => {
     const { session, setSortError } = booted();
-    setSortError("sort over a spilled region not supported (spilled cell at A2)");
+    setSortError(
+      "sort over a spilled region not supported (spilled cell at A2)",
+    );
     const res = session.sortRange(0, true, false);
     expect(res).toEqual({
       ok: false,

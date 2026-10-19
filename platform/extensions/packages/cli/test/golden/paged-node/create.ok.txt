@@ -1,0 +1,32 @@
+$ paged-node create <TMP>/fixture.paged swatch '{"name":"Brand","space":"CMYK","value":[100,0,0,0]}' -o <TMP>/create.paged --no-plugins
+# exit 0
+# stdout
+{
+  "kind": "swatch",
+  "created": [
+    "swatch:Color/Brand"
+  ],
+  "result": {
+    "applied": true,
+    "undoSteps": 1,
+    "outcome": {
+      "applied": true,
+      "createdId": null,
+      "pageIds": [
+        "usp"
+      ],
+      "minted": [],
+      "appliedSeq": 1
+    },
+    "created": [
+      "swatch:Color/Brand"
+    ]
+  },
+  "saved": {
+    "path": "<TMP>/create.paged",
+    "format": "paged",
+    "bytes": <N>
+  }
+}
+# stderr
+(empty)

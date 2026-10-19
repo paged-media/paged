@@ -47,7 +47,11 @@ import type {
 
 import { withAppearance, type AppearanceStack } from "../commands/appearance";
 import { stampDrawMetadata } from "../commands/appearance-bake";
-import { planRecipeWrites, RECIPE_LABEL_KEY, type RecipeWrite } from "../recipe-store";
+import {
+  planRecipeWrites,
+  RECIPE_LABEL_KEY,
+  type RecipeWrite,
+} from "../recipe-store";
 import { coreAddressOf } from "./shared";
 
 /** One element's appearance stack, to be written to its label. */
@@ -76,7 +80,8 @@ export const plan = (p: Partial<DrawPlan> = {}): DrawPlan => ({
 
 export const rejected = (reason: string): Planned => ({ rejected: reason });
 
-export const isRejected = (p: Planned): p is { rejected: string } => "rejected" in p;
+export const isRejected = (p: Planned): p is { rejected: string } =>
+  "rejected" in p;
 
 /** A kind that plans (the plugin-level batch's input). */
 export interface Planner {
@@ -85,7 +90,10 @@ export interface Planner {
 }
 
 /** Fold plans into the ONE write the registry commits. */
-export async function finishPlans(host: BundleHost, plans: readonly DrawPlan[]): Promise<ObjectWrite> {
+export async function finishPlans(
+  host: BundleHost,
+  plans: readonly DrawPlan[],
+): Promise<ObjectWrite> {
   const mutations: MutationInput[] = plans.flatMap((p) => p.mutations);
   const libraries = plans.flatMap((p) => p.libraries);
   const stamps = plans.flatMap((p) => p.stamps);
@@ -94,13 +102,20 @@ export async function finishPlans(host: BundleHost, plans: readonly DrawPlan[]):
   if (libraries.length > 0) {
     const r = await planRecipeWrites(host, libraries);
     if (typeof r === "string") return { kind: "rejected", reason: r };
-    state = { kind: "state", parts: r.parts, host: r.host, labelKey: r.labelKey, labelValue: r.labelValue };
+    state = {
+      kind: "state",
+      parts: r.parts,
+      host: r.host,
+      labelKey: r.labelKey,
+      labelValue: r.labelValue,
+    };
   }
   if (stamps.length > 0) {
     const els = new Set(stamps.map((s) => `${s.el.kind}:${String(s.el.id)}`));
     if (state === null && els.size === 1) {
       const last = stamps[stamps.length - 1]!;
-      const empty = last.stack.fills.length === 0 && last.stack.strokes.length === 0;
+      const empty =
+        last.stack.fills.length === 0 && last.stack.strokes.length === 0;
       state = {
         kind: "state",
         parts: [],
@@ -109,7 +124,10 @@ export async function finishPlans(host: BundleHost, plans: readonly DrawPlan[]):
         labelValue: JSON.stringify(empty ? null : last.stack),
       };
     } else {
-      for (const s of stamps) mutations.push(stampDrawMetadata(s.el, withAppearance(s.prev, s.stack)));
+      for (const s of stamps)
+        mutations.push(
+          stampDrawMetadata(s.el, withAppearance(s.prev, s.stack)),
+        );
     }
   }
   if (state === null) return { kind: "mutations", mutations };
@@ -122,7 +140,9 @@ export const kindBatch =
   (host: BundleHost, planner: Planner["plan"]) =>
   async (ops: readonly ObjectOp[]): Promise<ObjectWrite> => {
     const p = await planner(ops);
-    return isRejected(p) ? { kind: "rejected", reason: p.rejected } : finishPlans(host, [p]);
+    return isRejected(p)
+      ? { kind: "rejected", reason: p.rejected }
+      : finishPlans(host, [p]);
   };
 
 /** A kind whose ops are engine mutations only (path, symbolInstance):

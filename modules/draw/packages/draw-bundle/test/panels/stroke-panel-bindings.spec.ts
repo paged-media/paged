@@ -28,9 +28,20 @@
 // so the bundle's own copy of this driver is not running beside it and
 // every publish that lands is the one under test.
 
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "bun:test";
+import {
+  afterAll,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+} from "bun:test";
 
-import type { BundleHost, Disposable, ElementId } from "@paged-media/plugin-api";
+import type {
+  BundleHost,
+  Disposable,
+  ElementId,
+} from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
 
 import { drawBundle } from "../../src";
@@ -45,7 +56,7 @@ import {
   BIND_HAS_SELECTION,
 } from "../../src/panels/stroke-panel";
 import { pathItem } from "../fixtures/build-idml";
-import { openHost } from "../conformance/host";
+import { openHost } from "../headless/host";
 import { countingHost, type WorkLog } from "../perf/counting-host";
 import {
   documentChanges,
@@ -209,14 +220,20 @@ describe("installStrokePanelBindings — what it publishes, and what that costs"
     await quiesce(work);
     // The driver holds no document subscription, so nothing it derived
     // from the document (the dash gate's "is it a path?") is re-derived.
-    expect(await costOf(() => plainChange(h, 0))).toEqual({ publishes: 0, reads: 0 });
+    expect(await costOf(() => plainChange(h, 0))).toEqual({
+      publishes: 0,
+      reads: 0,
+    });
     expect(work.calls).toEqual({});
   });
 
   it("a burst of 20 document changes = 0 publishes, 0 reads", async () => {
     await h.host.selection.set([POLYGON]);
     await quiesce(work);
-    expect(await costOf(() => documentChanges(h))).toEqual({ publishes: 0, reads: 0 });
+    expect(await costOf(() => documentChanges(h))).toEqual({
+      publishes: 0,
+      reads: 0,
+    });
   });
 
   it("a burst of 20 selection changes = ONE recompute: 4 publishes, 1 read", async () => {

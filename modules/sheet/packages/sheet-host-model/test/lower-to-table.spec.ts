@@ -87,8 +87,13 @@ describe("native table emitters", () => {
   it("tableCellOps pours non-empty cells at their table row/col", () => {
     const batch = tableCellOps(CONTENT, "Story/u1", "tbl9");
     expect(batch.op).toBe("batch");
-    const ops = (batch as { args: { ops: Array<{ op: string; args: { text: string; cell: unknown } }> } })
-      .args.ops;
+    const ops = (
+      batch as {
+        args: {
+          ops: Array<{ op: string; args: { text: string; cell: unknown } }>;
+        };
+      }
+    ).args.ops;
     // 3 non-empty cells (Item, Qty, Apple); the empty col-2/row-1 is skipped.
     expect(ops).toHaveLength(3);
     expect(ops.every((o) => o.op === "insertText")).toBe(true);
@@ -166,9 +171,11 @@ describe("sheet_lower_paginate per-page table translation", () => {
     // The cells batch is built lazily once the tableId is known.
     const cells = ops.cells("tblP0");
     expect(cells.op).toBe("batch");
-    const cellOps = (cells as {
-      args: { ops: Array<{ args: { text: string; cell: unknown } }> };
-    }).args.ops;
+    const cellOps = (
+      cells as {
+        args: { ops: Array<{ args: { text: string; cell: unknown } }> };
+      }
+    ).args.ops;
     expect(cellOps).toHaveLength(2); // Item, Qty
     expect(cellOps.find((o) => o.args.text === "Item")!.args.cell).toEqual({
       tableId: "tblP0",
@@ -193,15 +200,17 @@ describe("sheet_lower_paginate per-page table translation", () => {
     expect(a1.rows).toBe(1);
     expect(a1.rowHeights).toEqual([20]);
 
-    const apple = (p1.cells("tblP1") as {
-      args: { ops: Array<{ args: { text: string; cell: unknown } }> };
-    }).args.ops.find((o) => o.args.text === "Apple")!;
+    const apple = (
+      p1.cells("tblP1") as {
+        args: { ops: Array<{ args: { text: string; cell: unknown } }> };
+      }
+    ).args.ops.find((o) => o.args.text === "Apple")!;
     expect(apple.args.cell).toEqual({ tableId: "tblP1", row: 0, col: 0 });
 
     // Page 0's table is a distinct op in a distinct story (no cross-frame leak).
-    expect(
-      (p0.insert as { args: { storyId: string } }).args.storyId,
-    ).toBe("Story/p0");
+    expect((p0.insert as { args: { storyId: string } }).args.storyId).toBe(
+      "Story/p0",
+    );
   });
 });
 
@@ -280,7 +289,11 @@ const STYLED: LoweredContent = {
         { col: 2, text: "Qty", align: "right", styleKey: 0 },
       ],
     },
-    { index: 1, heightPt: 20, cells: [{ col: 0, text: "Apple", align: "left" }] },
+    {
+      index: 1,
+      heightPt: 20,
+      cells: [{ col: 0, text: "Apple", align: "left" }],
+    },
   ],
   styles: [
     {
@@ -306,7 +319,6 @@ const STYLED: LoweredContent = {
 };
 
 describe("sheet_lower_native_table: style fills + borders → tableCell props", () => {
-
   it("a styled cell gets cellFillColor + per-edge stroke weights", () => {
     const decor = tableDecorOps(STYLED, "Story/u1", "tbl9");
     expect(decor.unmappedRules).toBe(0);
@@ -330,7 +342,9 @@ describe("sheet_lower_native_table: style fills + borders → tableCell props", 
     });
 
     const edgePaths = ops
-      .filter((o) => o.op === "setElementProperty" && o.args.path !== "cellFillColor")
+      .filter(
+        (o) => o.op === "setElementProperty" && o.args.path !== "cellFillColor",
+      )
       .map((o) => o.args.path)
       .sort();
     expect(edgePaths).toEqual([
@@ -339,7 +353,10 @@ describe("sheet_lower_native_table: style fills + borders → tableCell props", 
     ]);
     for (const o of ops) {
       if (o.args.path === "cellFillColor") continue;
-      expect(o.args.value).toEqual({ type: "length", value: CELL_EDGE_STROKE_PT });
+      expect(o.args.value).toEqual({
+        type: "length",
+        value: CELL_EDGE_STROKE_PT,
+      });
       expect(o.args.elementId.id).toMatchObject({ row: 0, col: 0 });
     }
   });
@@ -386,7 +403,9 @@ describe("sheet_lower_native_table: cell fills are MINTED swatches, not raw hex"
       };
     }[];
     const minted = new Set(
-      ops.filter((o) => o.op === "createSwatch").map((o) => o.args.spec!.selfId),
+      ops
+        .filter((o) => o.op === "createSwatch")
+        .map((o) => o.args.spec!.selfId),
     );
     const refs = ops
       .filter((o) => o.args.path === "cellFillColor")
@@ -460,9 +479,15 @@ describe("sheet_lower_native_table: grid rules → cell edge strokes", () => {
     const byPath = new Map<string, Array<{ row: number; col: number }>>();
     for (const o of ops) {
       expect(o.op).toBe("setElementProperty");
-      expect(o.args.value).toEqual({ type: "length", value: CELL_EDGE_STROKE_PT });
+      expect(o.args.value).toEqual({
+        type: "length",
+        value: CELL_EDGE_STROKE_PT,
+      });
       const cells = byPath.get(o.args.path) ?? [];
-      cells.push({ row: o.args.elementId.id.row, col: o.args.elementId.id.col });
+      cells.push({
+        row: o.args.elementId.id.row,
+        col: o.args.elementId.id.col,
+      });
       byPath.set(o.args.path, cells);
     }
 
@@ -548,7 +573,9 @@ describe("sheet_lower_native_table: tableContentBatch (pour + decor, one step)",
         merges: [{ row: 0, col: 0, rowSpan: 1, colSpan: 3 }],
       },
     };
-    const ops = opsOf(pageTableMutations(page, "Story/p0", [50, 60]).cells("tblP0"));
+    const ops = opsOf(
+      pageTableMutations(page, "Story/p0", [50, 60]).cells("tblP0"),
+    );
     expect(ops.some((o) => o.op === "setCellSpan")).toBe(true);
   });
 });

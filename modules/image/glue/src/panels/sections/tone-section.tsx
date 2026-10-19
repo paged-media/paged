@@ -58,7 +58,9 @@ export function ToneSection({
           data-image-tone-sponge
           value={tone.saturate ? "saturate" : "desaturate"}
           disabled={disabled}
-          onChange={(e) => onChange({ saturate: e.target.value === "saturate" })}
+          onChange={(e) =>
+            onChange({ saturate: e.target.value === "saturate" })
+          }
         >
           <option value="desaturate">desaturate</option>
           <option value="saturate">saturate</option>

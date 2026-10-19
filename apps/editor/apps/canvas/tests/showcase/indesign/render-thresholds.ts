@@ -66,10 +66,7 @@ export function loadRenderThresholds(): RenderThresholds {
   ) as RenderThresholds;
 }
 
-export function thresholdFor(
-  t: RenderThresholds,
-  page: number,
-): PageThreshold {
+export function thresholdFor(t: RenderThresholds, page: number): PageThreshold {
   return { ...t.default, ...(t.pages[String(page)] ?? {}) };
 }
 

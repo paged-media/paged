@@ -80,11 +80,10 @@ interface Handle {
 
 async function swatches(page: import("@playwright/test").Page) {
   return page.evaluate(() =>
-    (
-      globalThis as unknown as { __canvas: Handle }
-    ).__canvas.client.collection<{ selfId: string; name?: string | null }>(
-      "swatches",
-    ),
+    (globalThis as unknown as { __canvas: Handle }).__canvas.client.collection<{
+      selfId: string;
+      name?: string | null;
+    }>("swatches"),
   );
 }
 

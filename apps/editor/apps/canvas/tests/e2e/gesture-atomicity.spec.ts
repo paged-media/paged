@@ -35,13 +35,7 @@ import {
   type ElementRef,
   type LoadedFixture,
 } from "./harness/fixtures";
-import {
-  bounds,
-  pagePng,
-  redo,
-  runGesture,
-  undo,
-} from "./harness/gesture";
+import { bounds, pagePng, redo, runGesture, undo } from "./harness/gesture";
 import { dumpElement } from "./harness/model-dump";
 import { opSandwich, type PtRect } from "./harness/op-sandwich";
 
@@ -107,7 +101,9 @@ test.describe("Gesture atomicity & undo symmetry", () => {
     });
 
     const commits = replies.filter((r) => r.kind === "gestureCommitted").length;
-    const mutations = replies.filter((r) => r.kind === "mutationApplied").length;
+    const mutations = replies.filter(
+      (r) => r.kind === "mutationApplied",
+    ).length;
     expect(commits, "INV-1: exactly one commit envelope").toBe(1);
     expect(mutations, "INV-1: no stray mutation envelopes").toBe(0);
   });
@@ -131,9 +127,10 @@ test.describe("Gesture atomicity & undo symmetry", () => {
       );
       await redo(page);
       const r = await pagePng(page, pageInfo.pageId, pageInfo.widthPt);
-      expect(r.equals(post), `redo #${i} restores the post-gesture raster`).toBe(
-        true,
-      );
+      expect(
+        r.equals(post),
+        `redo #${i} restores the post-gesture raster`,
+      ).toBe(true);
     }
     await undo(page); // leave the doc at baseline
   });
@@ -248,7 +245,10 @@ test.describe("Gesture atomicity & undo symmetry", () => {
         let updateError = "";
         let commitError = "";
         try {
-          await c.client.updateGesture(h, [10, 10], { shift: false, alt: false });
+          await c.client.updateGesture(h, [10, 10], {
+            shift: false,
+            alt: false,
+          });
         } catch (e) {
           updateError = String(e);
         }
@@ -264,6 +264,8 @@ test.describe("Gesture atomicity & undo symmetry", () => {
 
     expect(result.updateError, "stale update rejected").toContain("failed");
     expect(result.commitError, "stale commit rejected").toContain("failed");
-    expect(await dumpElement(page, ref), "document untouched").toBe(modelBefore);
+    expect(await dumpElement(page, ref), "document untouched").toBe(
+      modelBefore,
+    );
   });
 });

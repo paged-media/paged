@@ -30,11 +30,13 @@ import type { HeadlessHost } from "@paged-media/plugin-sdk";
 
 import { drawBundle } from "../../src";
 import { F1_MULTI_SHAPE } from "../fixtures/corpus";
-import { openHost } from "../conformance/host";
+import { openHost } from "../headless/host";
 import { pathsOfTable, type OraclePath, type Rgb } from "./oracle";
 
 type MutationArg = Parameters<HeadlessHost["host"]["document"]["mutate"]>[0];
-type MutationOutcome = Awaited<ReturnType<HeadlessHost["host"]["document"]["mutate"]>>;
+type MutationOutcome = Awaited<
+  ReturnType<HeadlessHost["host"]["document"]["mutate"]>
+>;
 
 /** A booted engine holding the scratch page every oracle spec draws on
  *  (US Letter, 612 x 792 pt — the size of the probes' artboard). */
@@ -51,7 +53,8 @@ export async function leafIds(h: HeadlessHost): Promise<ElementId[]> {
   const out: ElementId[] = [];
   const walk = (nodes: { id?: unknown; children?: unknown[] }[]) => {
     for (const node of nodes) {
-      if (node.children && node.children.length > 0) walk(node.children as never);
+      if (node.children && node.children.length > 0)
+        walk(node.children as never);
       else if (node.id) out.push(node.id as ElementId);
     }
   };
@@ -61,14 +64,18 @@ export async function leafIds(h: HeadlessHost): Promise<ElementId[]> {
 
 /** The subpaths of one element, or `[]` when it has no anchor table
  *  (consumed by the op, or not a path). */
-export async function pathsOf(h: HeadlessHost, id: ElementId): Promise<OraclePath[]> {
+export async function pathsOf(
+  h: HeadlessHost,
+  id: ElementId,
+): Promise<OraclePath[]> {
   const table = await h.host.document.pathAnchors(id);
   return table ? pathsOfTable(table) : [];
 }
 
 /** The swatch an input's `fill` becomes in the engine: one RGB process
  *  colour per distinct triple, named so it can be read back. */
-export const swatchIdFor = (fill: Rgb): string => `Color/oracle-${fill.join("-")}`;
+export const swatchIdFor = (fill: Rgb): string =>
+  `Color/oracle-${fill.join("-")}`;
 
 /** A colour as the oracle lane reads it back: the RGB triple of a swatch
  *  this lane created, `"none"` for no paint, or the raw swatch id for one
@@ -83,16 +90,18 @@ export interface ElementPaint {
 }
 
 /** The fill and stroke an element carries now. */
-export async function paintOf(h: HeadlessHost, id: ElementId): Promise<ElementPaint> {
+export async function paintOf(
+  h: HeadlessHost,
+  id: ElementId,
+): Promise<ElementPaint> {
   const props = await h.host.document.elementProperties(id);
   const valueOf = (path: string) =>
     props?.entries.find((e) => e.path === path)?.value as
-      | { type?: string; value?: unknown }
-      | null
-      | undefined;
+      { type?: string; value?: unknown } | null | undefined;
   const colour = (path: string): Paint => {
     const v = valueOf(path);
-    if (!v || v.type !== "colorRef" || typeof v.value !== "string") return "none";
+    if (!v || v.type !== "colorRef" || typeof v.value !== "string")
+      return "none";
     if (v.value === "Swatch/None") return "none";
     const m = /^Color\/oracle-(\d+)-(\d+)-(\d+)$/.exec(v.value);
     return m ? [Number(m[1]), Number(m[2]), Number(m[3])] : v.value;
@@ -146,7 +155,9 @@ export async function onEngine<T>(
   const apply = async (mutation: MutationArg) => {
     const outcome = await attempt(mutation);
     if (!outcome.applied) {
-      throw new Error(`the engine refused ${JSON.stringify(mutation).slice(0, 200)}`);
+      throw new Error(
+        `the engine refused ${JSON.stringify(mutation).slice(0, 200)}`,
+      );
     }
     return outcome;
   };
@@ -178,7 +189,14 @@ export async function onEngine<T>(
         if (!swatches.has(swatch)) {
           await apply({
             op: "createSwatch",
-            args: { spec: { selfId: swatch, name: swatch, space: "RGB", value: input.fill } },
+            args: {
+              spec: {
+                selfId: swatch,
+                name: swatch,
+                space: "RGB",
+                value: input.fill,
+              },
+            },
           });
           swatches.add(swatch);
         }
@@ -199,7 +217,8 @@ export async function onEngine<T>(
       took: (n) => {
         steps += n;
       },
-      created: async () => (await leafIds(h)).filter((id) => !before.has(key(id))),
+      created: async () =>
+        (await leafIds(h)).filter((id) => !before.has(key(id))),
     });
   } finally {
     for (; steps > 0; steps--) await h.host.document.undo();

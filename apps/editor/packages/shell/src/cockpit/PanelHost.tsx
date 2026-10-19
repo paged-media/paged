@@ -41,8 +41,8 @@ export function PanelHost({ id }: { id: string }) {
             developer's sentence in a designer's workspace. The id stays,
             in a title, because a bug report needs it. */}
         <span title={id}>
-          This panel is unavailable. It may belong to a plugin that
-          failed to load.
+          This panel is unavailable. It may belong to a plugin that failed to
+          load.
         </span>
       </div>
     );
@@ -65,7 +65,11 @@ export function PanelHost({ id }: { id: string }) {
   // manifest); the editor's own panels leave it unset.
   const source = contribution.source;
   return (
-    <div data-panel-host={id} data-panel-source={source || "host"} style={{ display: "contents" }}>
+    <div
+      data-panel-host={id}
+      data-panel-source={source || "host"}
+      style={{ display: "contents" }}
+    >
       <PanelBindingScope panelId={id}>
         <Component paged={paged} api={{ id }} />
       </PanelBindingScope>

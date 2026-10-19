@@ -27,11 +27,7 @@ import {
 const M = { alt: false };
 const ALT = { alt: true };
 
-const click = (
-  m: CurvatureMachine,
-  point: [number, number],
-  modifiers = M,
-) => {
+const click = (m: CurvatureMachine, point: [number, number], modifiers = M) => {
   // The shim sync()s each event; the commit surfaces on the resolving
   // DOWN (a closing click), and the paired `up` is inert. Return the
   // down snapshot when it committed, else the up snapshot (an ordinary

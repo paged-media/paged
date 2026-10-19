@@ -70,7 +70,9 @@ export async function insertWebFrame(
   const refuse = (message: string, detail?: unknown): string => {
     host.log.warn(`insertWebFrame: ${message}`, detail);
     const text = `Web frame not inserted: ${message}`;
-    host.diagnostics.set(INSERT_DIAG_KEY, [{ severity: "error", message: text, source: "insert" }]);
+    host.diagnostics.set(INSERT_DIAG_KEY, [
+      { severity: "error", message: text, source: "insert" },
+    ]);
     return text;
   };
   const pageId = await activePageId(host);
@@ -101,7 +103,12 @@ export async function insertWebFrame(
     },
   });
   if (!outcome.applied || !outcome.createdId) {
-    return refuse(outcome.applied ? "the document created no frame" : describeRefusal(outcome.error), outcome);
+    return refuse(
+      outcome.applied
+        ? "the document created no frame"
+        : describeRefusal(outcome.error),
+      outcome,
+    );
   }
   if (!asFrameTarget(outcome.createdId)) {
     return refuse("the created element is not a frame");

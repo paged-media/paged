@@ -83,12 +83,14 @@ export interface FrameBakeToDocOutcome {
  *  estimates by itself where no shaper is wired), or estimate here when the
  *  measurement is refused (advance ≈ 0.5em/char; ascender 0.8em;
  *  descender −0.2em). */
-async function measureRun(
-  host: BundleHost,
-  t: BakeText,
-): Promise<RunMetrics> {
+async function measureRun(host: BundleHost, t: BakeText): Promise<RunMetrics> {
   try {
-    return await host.text.measureString(t.family ?? "", t.fontStyle ?? null, t.text, t.sizePt);
+    return await host.text.measureString(
+      t.family ?? "",
+      t.fontStyle ?? null,
+      t.text,
+      t.sizePt,
+    );
   } catch {
     // fall through to the estimate
   }
@@ -159,21 +161,29 @@ export async function bakeWebFrameToDocument(
   const applied = await applyBake(host, [placed]);
   if ("refused" in applied) return fail(applied.refused);
   // The faces go with the document, so its text keeps them when it reopens.
-  const kept = applied.created > 0 ? await keepDocumentFaces(host, faces.given) : [];
+  const kept =
+    applied.created > 0 ? await keepDocumentFaces(host, faces.given) : [];
 
   return {
     baked: applied.created > 0,
     createdCount: applied.created,
     swatchCount: applied.swatchCount,
     deferred: plan.deferred,
-    diagnostics: [...missing, ...faces.diagnostics, ...kept, ...deferredDiagnostics(applied.created, plan.deferred)],
+    diagnostics: [
+      ...missing,
+      ...faces.diagnostics,
+      ...kept,
+      ...deferredDiagnostics(applied.created, plan.deferred),
+    ],
   };
 }
 
 /** The families a bake's text runs name, in order of first use. */
 function textFamilies(plans: readonly PlacedBakePlan["plan"][]): string[] {
   const out: string[] = [];
-  for (const plan of plans) for (const t of plan.texts) if (t.family && !out.includes(t.family)) out.push(t.family);
+  for (const plan of plans)
+    for (const t of plan.texts)
+      if (t.family && !out.includes(t.family)) out.push(t.family);
   return out;
 }
 
@@ -196,7 +206,9 @@ async function placePlan(
       }
     }),
   );
-  for (const b of imageBytes) if (b === null) plan.deferred["image.encode"] = (plan.deferred["image.encode"] ?? 0) + 1;
+  for (const b of imageBytes)
+    if (b === null)
+      plan.deferred["image.encode"] = (plan.deferred["image.encode"] ?? 0) + 1;
   return { plan, pageId, top, left, metrics, imageBytes };
 }
 
@@ -208,7 +220,11 @@ async function existingIds(
 ): Promise<Set<string>> {
   try {
     const rows = await host.document.collection<{ selfId?: unknown }>(name);
-    return new Set(rows.map((r) => r.selfId).filter((id): id is string => typeof id === "string"));
+    return new Set(
+      rows
+        .map((r) => r.selfId)
+        .filter((id): id is string => typeof id === "string"),
+    );
   } catch {
     return new Set();
   }
@@ -220,7 +236,11 @@ async function applyBake(
 ): Promise<{ created: number; swatchCount: number } | { refused: string }> {
   const items = placed.reduce(
     (n, p) =>
-      n + p.plan.rects.length + p.plan.paths.length + p.plan.texts.length + p.plan.images.length,
+      n +
+      p.plan.rects.length +
+      p.plan.paths.length +
+      p.plan.texts.length +
+      p.plan.images.length,
     0,
   );
   const anySwatch = placed.some((p) => p.plan.swatches.length > 0);
@@ -235,9 +255,14 @@ async function applyBake(
   ]);
   const batch = bakeBatchOps(placed, existing);
   if (batch.ops.length === 0) return { created: 0, swatchCount: 0 };
-  const outcome = await host.document.mutate({ op: "batch", args: { ops: batch.ops } });
+  const outcome = await host.document.mutate({
+    op: "batch",
+    args: { ops: batch.ops },
+  });
   if (!outcome.applied) {
-    return { refused: `the document refused the bake: ${describeRefusal(outcome.error)}` };
+    return {
+      refused: `the document refused the bake: ${describeRefusal(outcome.error)}`,
+    };
   }
   const named = new Set([
     ...batch.handles.rects,
@@ -248,7 +273,8 @@ async function applyBake(
   // `minted` is additive on the wire; an engine that omits it applied the
   // whole batch all the same (a batch is all-or-nothing).
   const created = outcome.minted
-    ? outcome.minted.filter((m) => m.handle !== null && named.has(m.handle)).length
+    ? outcome.minted.filter((m) => m.handle !== null && named.has(m.handle))
+        .length
     : named.size;
   return { created, swatchCount: batch.swatchIds.length };
 }
@@ -302,7 +328,9 @@ export async function bakeSelectedWebFrame(host: BundleHost): Promise<void> {
         (outcome.diagnostics[0] ? ` (${outcome.diagnostics[0].message})` : ""),
     );
   } else {
-    host.log.info(`bakeWebFrame: ${outcome.diagnostics[0]?.message ?? "nothing baked"}`);
+    host.log.info(
+      `bakeWebFrame: ${outcome.diagnostics[0]?.message ?? "nothing baked"}`,
+    );
   }
 }
 
@@ -327,14 +355,19 @@ export async function bakeWebFlowToDocument(
     diagnostics: [{ severity: "info", message, source: "render" }],
   });
 
-  if (chain.length < 2) return fail("select a web frame plus one or more target frames");
+  if (chain.length < 2)
+    return fail("select a web frame plus one or more target frames");
 
   const engine = engineIn ?? (await loadWebEngine(host));
-  if (!engine) return fail("web rendering engine not loaded — the bake needs the engine");
+  if (!engine)
+    return fail("web rendering engine not loaded — the bake needs the engine");
 
   // Render the flow → one layer per chain frame (no ephemeral submit).
   const flow = await bakeWebFlow(host, chain, engine, { submit: false });
-  if (!flow.rendered) return fail(flow.diagnostics[0]?.message ?? "flow render produced no layers");
+  if (!flow.rendered)
+    return fail(
+      flow.diagnostics[0]?.message ?? "flow render produced no layers",
+    );
   // The shaped advance of every text item, one list per frame.
   const advances = engine.takeTextAdvances?.() ?? [];
 
@@ -342,21 +375,36 @@ export async function bakeWebFlowToDocument(
   const geos = await host.document.elementGeometry(chain);
 
   const deferred: Record<string, number> = {};
-  const plans: { plan: PlacedBakePlan["plan"]; pageId: PageId; top: number; left: number }[] = [];
+  const plans: {
+    plan: PlacedBakePlan["plan"];
+    pageId: PageId;
+    top: number;
+    left: number;
+  }[] = [];
   for (let i = 0; i < chain.length; i += 1) {
     const layer = flow.layers[i];
     const geo = geos[i];
     if (!layer || !geo?.bounds || !geo.pageId) continue;
     const plan = sceneLayerToBakePlan(layer, advances[i] ?? []);
-    plans.push({ plan, pageId: geo.pageId as PageId, top: geo.bounds[0], left: geo.bounds[1] });
+    plans.push({
+      plan,
+      pageId: geo.pageId as PageId,
+      top: geo.bounds[0],
+      left: geo.bounds[1],
+    });
     for (const [k, v] of Object.entries(plan.deferred)) {
       deferred[k] = (deferred[k] ?? 0) + v;
     }
   }
   // The faces the text names, in the document before the runs are measured.
-  const faces = await provideDocumentFaces(host, engine, textFamilies(plans.map((p) => p.plan)));
+  const faces = await provideDocumentFaces(
+    host,
+    engine,
+    textFamilies(plans.map((p) => p.plan)),
+  );
   const placed: PlacedBakePlan[] = [];
-  for (const p of plans) placed.push(await placePlan(host, p.plan, p.pageId, p.top, p.left));
+  for (const p of plans)
+    placed.push(await placePlan(host, p.plan, p.pageId, p.top, p.left));
 
   // The whole flow — every frame's content — as ONE batch: one undo step.
   const applied = await applyBake(host, placed);
@@ -369,6 +417,10 @@ export async function bakeWebFlowToDocument(
     createdCount: created,
     swatchCount,
     deferred,
-    diagnostics: [...faces.diagnostics, ...kept, ...deferredDiagnostics(created, deferred)],
+    diagnostics: [
+      ...faces.diagnostics,
+      ...kept,
+      ...deferredDiagnostics(created, deferred),
+    ],
   };
 }

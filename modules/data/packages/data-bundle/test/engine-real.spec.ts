@@ -138,7 +138,10 @@ describe.skipIf(!built)("real data engine (wasm artifact)", () => {
     expect(lowered.text).toBe("SKU\tPrice\nA-1\t$9.99\nB-2\t$19.99");
 
     // The recipe registered for real: session metadata counts it.
-    const meta = engine.metadata() as { sourceCount: number; bindingCount: number };
+    const meta = engine.metadata() as {
+      sourceCount: number;
+      bindingCount: number;
+    };
     expect(meta.sourceCount).toBe(1);
     expect(meta.bindingCount).toBe(1);
     engine.free();
@@ -153,11 +156,11 @@ describe.skipIf(!built)("real data engine (wasm artifact)", () => {
     // (sku "a-1", price 9.99). Expected texts are the Rust kernels' real
     // outputs — parse → eval → format entirely inside the wasm module.
     const cases: Array<[string, string]> = [
-      ["CONCAT(UPPER(sku), \" @ \", CURRENCY(price))", "A-1 @ $9.99"],
-      ["IF(price > 10, \"premium\", \"budget\")", "budget"],
+      ['CONCAT(UPPER(sku), " @ ", CURRENCY(price))', "A-1 @ $9.99"],
+      ['IF(price > 10, "premium", "budget")', "budget"],
       // TODAY() reads the injected serial (2026-06-09) — proves the
       // constructor's `today` threads through to the temporal kernels.
-      ["DATEFMT(TODAY(), \"DD/MM/YYYY\")", "09/06/2026"],
+      ['DATEFMT(TODAY(), "DD/MM/YYYY")', "09/06/2026"],
       ["LEN(TRIM(sku))", "3"],
     ];
     cases.forEach(([expr], i) => {
@@ -171,7 +174,10 @@ describe.skipIf(!built)("real data engine (wasm artifact)", () => {
       });
     });
     for (const [i, [expr, expected]] of cases.entries()) {
-      const v = engine.resolve_lowered(`v${i}`) as { kind: string; text: string };
+      const v = engine.resolve_lowered(`v${i}`) as {
+        kind: string;
+        text: string;
+      };
       expect(v.kind).toBe("variable");
       expect(v.text, expr).toBe(expected);
     }

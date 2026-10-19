@@ -29,12 +29,23 @@
 // Real engine: skipped without the wasm artifact, FAILS under
 // REQUIRE_REAL_ENGINE=1 (the engine-real.spec.ts dual gate).
 
-import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from "bun:test";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  setDefaultTimeout,
+} from "bun:test";
 
 import type { BundleHost } from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
 
-import { createWorkbookSession, storyOfFrame, type WorkbookSession } from "../src";
+import {
+  createWorkbookSession,
+  storyOfFrame,
+  type WorkbookSession,
+} from "../src";
 import { CHAIN_REFLOW_DEBOUNCE_MS } from "../src/lower";
 import {
   ENGINE_BUILT,
@@ -63,87 +74,131 @@ async function afterDebounce(): Promise<void> {
   for (let i = 0; i < 20; i++) await settle();
 }
 
-describe.skipIf(!ENGINE_BUILT)("a paginated range follows a handle resize [sheet.lower.paginate]", () => {
-  setDefaultTimeout(60_000);
-  let h: HeadlessHost;
-  let host: BundleHost;
-  let s: WorkbookSession | null = null;
+describe.skipIf(!ENGINE_BUILT)(
+  "a paginated range follows a handle resize [sheet.lower.paginate]",
+  () => {
+    setDefaultTimeout(60_000);
+    let h: HeadlessHost;
+    let host: BundleHost;
+    let s: WorkbookSession | null = null;
 
-  beforeEach(async () => {
-    h = await openHost();
-    await h.load(blankPageIdml());
-    host = withSceneChannel(sheetHost(h)).host;
-  });
-  afterEach(() => {
-    s?.dispose();
-    s = null;
-    h?.dispose();
-  });
-
-  /** Two threaded frames side by side on the page, a 40-row range
-   *  paginated over them; returns the first frame's id. */
-  async function paginatedChain(): Promise<string> {
-    const frame = async (bounds: [number, number, number, number]) => {
-      const o = await host.document.mutate({ op: "insertTextFrame", args: { pageId: "usp", bounds } });
-      expect(o.applied).toBe(true);
-      return (o as { createdId: { id: string } }).createdId.id;
-    };
-    const first = await frame([36, 36, 556, 296]);
-    const second = await frame([36, 316, 556, 576]);
-    expect((await host.document.mutate({ op: "linkFrames", args: { from: first, to: second } })).applied).toBe(true);
-    const storyId = await storyOfFrame(host, first);
-    expect(storyId, "the chain's story").toBeTruthy();
-    expect(await host.document.frameChain(storyId!)).toHaveLength(2);
-
-    const session = createWorkbookSession(host);
-    s = session;
-    await session.import(await authorWorkbook(40, 2, (r, c) => `r${r + 1}c${c + 1}`), "chain.xlsx");
-    session.setRange("A1:B40");
-    await host.selection.set([{ kind: "textFrame", id: first }]);
-    expect(await session.paginateSelection()).toEqual({ ok: true });
-    await settle();
-    return first;
-  }
-
-  it("rows move into the second frame when the first is shortened by its handle", async () => {
-    const first = await paginatedChain();
-    const before = await exportedTableRows(h);
-    expect(before, "one table per chain frame").toHaveLength(2);
-    expect(before[0].rows).toBeGreaterThan(0);
-    expect(before[1].rows).toBeGreaterThan(0);
-
-    // The first frame's bottom edge up by 200 pt, dragged by its handle.
-    await resizeByHandle(h, first, "south", [0, -200]);
-    await afterDebounce();
-
-    const after = await exportedTableRows(h);
-    expect(after).toHaveLength(2);
-    expect(after[0].rows, "the first frame holds fewer rows").toBeLessThan(before[0].rows);
-    expect(after[1].rows, "the rows it lost moved into the second").toBeGreaterThan(before[1].rows);
-    expect(after[0].rows + after[1].rows).toBe(before[0].rows + before[1].rows);
-    // Refreshed in place: the same two tables.
-    expect(after.map((t) => t.self)).toEqual(before.map((t) => t.self));
-  });
-
-  it("a move by the gesture kit leaves the split alone", async () => {
-    const first = await paginatedChain();
-    const before = await exportedTableRows(h);
-    const client = (h.host as unknown as {
-      editor: { client: { send(m: unknown): Promise<{ kind: string; payload: Record<string, unknown> }> } };
-    }).editor.client;
-    const begun = await client.send({
-      kind: "beginGesture",
-      payload: { nodes: [{ kind: "textFrame", id: first }], gesture: { kind: "translate" } },
+    beforeEach(async () => {
+      h = await openHost();
+      await h.load(blankPageIdml());
+      host = withSceneChannel(sheetHost(h)).host;
     });
-    expect(begun.kind).toBe("gestureBegun");
-    await client.send({
-      kind: "updateGesture",
-      payload: { handle: begun.payload.handle, delta: [0, 40], modifiers: { shift: false, alt: false, disableSnap: true } },
+    afterEach(() => {
+      s?.dispose();
+      s = null;
+      h?.dispose();
     });
-    const committed = await client.send({ kind: "commitGesture", payload: { handle: begun.payload.handle } });
-    expect(committed.kind).toBe("gestureCommitted");
-    expect(committed.payload.reflow ?? null, "a move reports no reflow").toBeNull();
-    await afterDebounce();
-    expect(await exportedTableRows(h)).toEqual(before);
-  });
-});
+
+    /** Two threaded frames side by side on the page, a 40-row range
+     *  paginated over them; returns the first frame's id. */
+    async function paginatedChain(): Promise<string> {
+      const frame = async (bounds: [number, number, number, number]) => {
+        const o = await host.document.mutate({
+          op: "insertTextFrame",
+          args: { pageId: "usp", bounds },
+        });
+        expect(o.applied).toBe(true);
+        return (o as { createdId: { id: string } }).createdId.id;
+      };
+      const first = await frame([36, 36, 556, 296]);
+      const second = await frame([36, 316, 556, 576]);
+      expect(
+        (
+          await host.document.mutate({
+            op: "linkFrames",
+            args: { from: first, to: second },
+          })
+        ).applied,
+      ).toBe(true);
+      const storyId = await storyOfFrame(host, first);
+      expect(storyId, "the chain's story").toBeTruthy();
+      expect(await host.document.frameChain(storyId!)).toHaveLength(2);
+
+      const session = createWorkbookSession(host);
+      s = session;
+      await session.import(
+        await authorWorkbook(40, 2, (r, c) => `r${r + 1}c${c + 1}`),
+        "chain.xlsx",
+      );
+      session.setRange("A1:B40");
+      await host.selection.set([{ kind: "textFrame", id: first }]);
+      expect(await session.paginateSelection()).toEqual({ ok: true });
+      await settle();
+      return first;
+    }
+
+    it("rows move into the second frame when the first is shortened by its handle", async () => {
+      const first = await paginatedChain();
+      const before = await exportedTableRows(h);
+      expect(before, "one table per chain frame").toHaveLength(2);
+      expect(before[0].rows).toBeGreaterThan(0);
+      expect(before[1].rows).toBeGreaterThan(0);
+
+      // The first frame's bottom edge up by 200 pt, dragged by its handle.
+      await resizeByHandle(h, first, "south", [0, -200]);
+      await afterDebounce();
+
+      const after = await exportedTableRows(h);
+      expect(after).toHaveLength(2);
+      expect(after[0].rows, "the first frame holds fewer rows").toBeLessThan(
+        before[0].rows,
+      );
+      expect(
+        after[1].rows,
+        "the rows it lost moved into the second",
+      ).toBeGreaterThan(before[1].rows);
+      expect(after[0].rows + after[1].rows).toBe(
+        before[0].rows + before[1].rows,
+      );
+      // Refreshed in place: the same two tables.
+      expect(after.map((t) => t.self)).toEqual(before.map((t) => t.self));
+    });
+
+    it("a move by the gesture kit leaves the split alone", async () => {
+      const first = await paginatedChain();
+      const before = await exportedTableRows(h);
+      const client = (
+        h.host as unknown as {
+          editor: {
+            client: {
+              send(
+                m: unknown,
+              ): Promise<{ kind: string; payload: Record<string, unknown> }>;
+            };
+          };
+        }
+      ).editor.client;
+      const begun = await client.send({
+        kind: "beginGesture",
+        payload: {
+          nodes: [{ kind: "textFrame", id: first }],
+          gesture: { kind: "translate" },
+        },
+      });
+      expect(begun.kind).toBe("gestureBegun");
+      await client.send({
+        kind: "updateGesture",
+        payload: {
+          handle: begun.payload.handle,
+          delta: [0, 40],
+          modifiers: { shift: false, alt: false, disableSnap: true },
+        },
+      });
+      const committed = await client.send({
+        kind: "commitGesture",
+        payload: { handle: begun.payload.handle },
+      });
+      expect(committed.kind).toBe("gestureCommitted");
+      expect(
+        committed.payload.reflow ?? null,
+        "a move reports no reflow",
+      ).toBeNull();
+      await afterDebounce();
+      expect(await exportedTableRows(h)).toEqual(before);
+    });
+  },
+);

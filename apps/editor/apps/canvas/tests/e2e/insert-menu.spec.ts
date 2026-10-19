@@ -35,16 +35,19 @@ import { expect, test, type Page } from "@playwright/test";
 import { openCanvas } from "../fidelity/canvas-driver";
 import { fixturePath } from "./harness/fixtures";
 
-async function menuItems(page: Page): Promise<{ path: string; command: string }[]> {
-  return page.evaluate(
-    () =>
-      (
-        globalThis as unknown as {
-          __canvas: {
-            registries: { menus: { list: () => { path: string; command: string }[] } };
+async function menuItems(
+  page: Page,
+): Promise<{ path: string; command: string }[]> {
+  return page.evaluate(() =>
+    (
+      globalThis as unknown as {
+        __canvas: {
+          registries: {
+            menus: { list: () => { path: string; command: string }[] };
           };
-        }
-      ).__canvas.registries.menus.list(),
+        };
+      }
+    ).__canvas.registries.menus.list(),
   );
 }
 
@@ -52,7 +55,9 @@ async function commandIds(page: Page): Promise<string[]> {
   return page.evaluate(
     () =>
       (
-        globalThis as unknown as { __canvas: { debugContext: () => { commands: string[] } } }
+        globalThis as unknown as {
+          __canvas: { debugContext: () => { commands: string[] } };
+        }
       ).__canvas.debugContext().commands,
   );
 }
@@ -65,7 +70,9 @@ test.describe("C1 — the Insert menu reaches plugin content", () => {
       .poll(
         () =>
           page.evaluate(
-            () => (globalThis as unknown as { __canvas: { ready: boolean } }).__canvas.ready,
+            () =>
+              (globalThis as unknown as { __canvas: { ready: boolean } })
+                .__canvas.ready,
           ),
         { timeout: 30_000 },
       )
@@ -116,11 +123,16 @@ test.describe("C1 — the Insert menu reaches plugin content", () => {
     const expected = new Map([
       ["Data/Data sources…", "paged.panel.show.media.paged.data.panel.sources"],
       ["Data/Bindings…", "paged.panel.show.media.paged.data.panel.bindings"],
-      ["Data/Dataset preview…", "paged.panel.show.media.paged.data.panel.dataset"],
+      [
+        "Data/Dataset preview…",
+        "paged.panel.show.media.paged.data.panel.dataset",
+      ],
     ]);
     for (const [path, command] of expected) {
       const entry = items.find((i) => i.path === path);
-      expect(entry?.command, `${path} points somewhere unexpected`).toBe(command);
+      expect(entry?.command, `${path} points somewhere unexpected`).toBe(
+        command,
+      );
     }
 
     for (const path of expected.keys()) {
@@ -129,9 +141,10 @@ test.describe("C1 — the Insert menu reaches plugin content", () => {
       expect(hit!.command, `${path} is still a soon() seam`).not.toMatch(
         /^paged\.soon\./,
       );
-      expect(registered.has(hit!.command), `${path} -> unregistered command`).toBe(
-        true,
-      );
+      expect(
+        registered.has(hit!.command),
+        `${path} -> unregistered command`,
+      ).toBe(true);
     }
   });
 
@@ -146,7 +159,9 @@ test.describe("C1 — the Insert menu reaches plugin content", () => {
     // input — applied to the menu.
     const items = await menuItems(page);
     const registered = new Set(await commandIds(page));
-    const pluginEntries = items.filter((i) => i.command.startsWith("media.paged."));
+    const pluginEntries = items.filter((i) =>
+      i.command.startsWith("media.paged."),
+    );
     expect(pluginEntries.length).toBeGreaterThanOrEqual(4);
 
     const dangling = pluginEntries.filter((i) => !registered.has(i.command));

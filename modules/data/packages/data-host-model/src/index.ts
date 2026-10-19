@@ -62,7 +62,11 @@ export {
   type BindingEnvelope,
 } from "./binding";
 
-export { DEFAULT_INSET_PT, defaultPlacement, type Placement } from "./placement";
+export {
+  DEFAULT_INSET_PT,
+  defaultPlacement,
+  type Placement,
+} from "./placement";
 
 export {
   bindingMetadata,
@@ -94,7 +98,11 @@ export {
   type ParagraphRange,
 } from "./fields";
 
-export { toRuleApplication, type RuleResult, type RuleApplication } from "./rule";
+export {
+  toRuleApplication,
+  type RuleResult,
+  type RuleApplication,
+} from "./rule";
 
 export {
   DATA_LABEL_KEY,

@@ -174,8 +174,7 @@ export function createQuickSelectStroke(
 
   const defaultRadius = options.radius ?? QUICK_SELECT_RADIUS_DEFAULT;
   const baseTolerance = options.baseTolerance ?? QUICK_SELECT_BASE_TOLERANCE;
-  const varianceWeight =
-    options.varianceWeight ?? QUICK_SELECT_VARIANCE_WEIGHT;
+  const varianceWeight = options.varianceWeight ?? QUICK_SELECT_VARIANCE_WEIGHT;
   const maxTolerance = options.maxTolerance ?? QUICK_SELECT_MAX_TOLERANCE;
   const maxPixels = Math.max(0, options.maxPixels ?? QUICK_SELECT_MAX_PIXELS);
   const tileSize = Math.max(1, options.tileSize ?? QUICK_SELECT_TILE);
@@ -242,7 +241,10 @@ export function createQuickSelectStroke(
       const sd = Math.sqrt(variance);
       mean[c] = m;
       deviation[c] = sd;
-      tolerance[c] = Math.min(maxTolerance, baseTolerance + varianceWeight * sd);
+      tolerance[c] = Math.min(
+        maxTolerance,
+        baseTolerance + varianceWeight * sd,
+      );
     }
   };
 

@@ -50,7 +50,9 @@ const URL_ = `${ORIGIN}/people.csv`;
 const NAME = `localhost_${PORT}_people`;
 const SOURCES_PANEL = "media.paged.data.panel.sources";
 const BINDINGS_PANEL = "media.paged.data.panel.bindings";
-const LISTED = (process.env.PAGED_DATA_ORIGINS ?? "").split(/[\s,]+/).includes(ORIGIN);
+const LISTED = (process.env.PAGED_DATA_ORIGINS ?? "")
+  .split(/[\s,]+/)
+  .includes(ORIGIN);
 
 let body = "name,role\nAda Lovelace,Author\nGrace Hopper,Engineer\n";
 let requests = 0;
@@ -80,13 +82,17 @@ test.afterAll(async () => {
   await new Promise<void>((ok) => (server ? server.close(() => ok()) : ok()));
 });
 
-const values = async (page: Page) => (await dataFields(page)).map((f) => f.value);
+const values = async (page: Page) =>
+  (await dataFields(page)).map((f) => f.value);
 
 test.describe("journey · paged.data live remote source", () => {
   test("a consented remote source refreshes on its interval @feat:data.source.adapters @feat:data.security.gates @level:happy", async ({
     page,
   }) => {
-    test.skip(!LISTED, `PAGED_DATA_ORIGINS must list ${ORIGIN} for the dev server (editor ADR 218)`);
+    test.skip(
+      !LISTED,
+      `PAGED_DATA_ORIGINS must list ${ORIGIN} for the dev server (editor ADR 218)`,
+    );
     test.setTimeout(180_000);
     const designer = new Designer(page);
     await designer.open();
@@ -98,45 +104,75 @@ test.describe("journey · paged.data live remote source", () => {
     await page.getByPlaceholder("https://example.com/data.csv").fill(URL_);
     await page.getByRole("button", { name: "Add remote" }).click();
     const item = page.locator("li[data-consent]").filter({ hasText: NAME });
-    await expect(item).toHaveAttribute("data-consent", "required", { timeout: 10_000 });
+    await expect(item).toHaveAttribute("data-consent", "required", {
+      timeout: 10_000,
+    });
     expect(requests, "defining a remote source fetches nothing").toBe(0);
 
     // ── 2. CONSENT — the editor's dialog, Allow ──────────────────────────
     await item.getByRole("button", { name: "Request consent" }).click();
     const dialog = page.getByTestId("consent-dialog");
     await expect(dialog).toBeVisible({ timeout: 10_000 });
-    await expect(dialog.locator(`[data-testid="consent-origin"][data-origin="${ORIGIN}"]`)).toBeVisible();
+    await expect(
+      dialog.locator(`[data-testid="consent-origin"][data-origin="${ORIGIN}"]`),
+    ).toBeVisible();
     // The build lists the origin, so the dialog does not warn it stays blocked.
-    await expect(dialog.locator(`[data-testid="consent-origin-blocked"][data-origin="${ORIGIN}"]`)).toHaveCount(0);
-    await dialog.locator(`[data-testid="consent-origin"][data-origin="${ORIGIN}"]`).check();
+    await expect(
+      dialog.locator(
+        `[data-testid="consent-origin-blocked"][data-origin="${ORIGIN}"]`,
+      ),
+    ).toHaveCount(0);
+    await dialog
+      .locator(`[data-testid="consent-origin"][data-origin="${ORIGIN}"]`)
+      .check();
     await dialog.getByTestId("consent-allow").click();
-    await expect(item).toHaveAttribute("data-consent", "granted", { timeout: 10_000 });
+    await expect(item).toHaveAttribute("data-consent", "granted", {
+      timeout: 10_000,
+    });
     expect(requests, "consent alone fetches nothing").toBe(0);
 
     // ── 3. LOAD + BIND + LOWER ────────────────────────────────────────────
     await item.getByRole("button", { name: "Load" }).click();
     try {
-      await expect(item).toHaveAttribute("data-status", "loaded", { timeout: 45_000 });
+      await expect(item).toHaveAttribute("data-status", "loaded", {
+        timeout: 45_000,
+      });
     } catch {
-      const got = (await item.getAttribute("data-status").catch(() => null)) ?? "unknown";
-      skipWithoutDuckDB(got, `the live-source journey needs the remote load (status "${got}")`);
+      const got =
+        (await item.getAttribute("data-status").catch(() => null)) ?? "unknown";
+      skipWithoutDuckDB(
+        got,
+        `the live-source journey needs the remote load (status "${got}")`,
+      );
     }
     expect(requests).toBe(1);
     await openPanel(page, BINDINGS_PANEL);
     await page.locator("[data-data-bind-field]").fill("name");
     await page.locator("[data-data-bind-add]").click();
-    await expect(page.locator("[data-data-bind-msg]")).toContainText("variable binding");
+    await expect(page.locator("[data-data-bind-msg]")).toContainText(
+      "variable binding",
+    );
     await page.getByRole("button", { name: /lower to document/i }).click();
-    await expect.poll(() => values(page), { timeout: 20_000 }).toEqual(["Ada Lovelace"]);
+    await expect
+      .poll(() => values(page), { timeout: 20_000 })
+      .toEqual(["Ada Lovelace"]);
 
     // ── 4. INTERVAL — the server's data changes; the poll picks it up ─────
     await openPanel(page, SOURCES_PANEL);
-    await item.locator(`[data-data-refresh-policy="${NAME}"] select`).selectOption("interval");
-    await item.locator(`[data-data-refresh-policy="${NAME}"] input[type="number"]`).fill("15");
-    await expect(item.locator(`[data-data-refresh-policy="${NAME}"]`)).toContainText("polling", { timeout: 10_000 });
+    await item
+      .locator(`[data-data-refresh-policy="${NAME}"] select`)
+      .selectOption("interval");
+    await item
+      .locator(`[data-data-refresh-policy="${NAME}"] input[type="number"]`)
+      .fill("15");
+    await expect(
+      item.locator(`[data-data-refresh-policy="${NAME}"]`),
+    ).toContainText("polling", { timeout: 10_000 });
     body = "name,role\nAda King,Countess\nGrace Hopper,Engineer\n";
     const before = requests;
-    await expect.poll(() => requests, { timeout: 45_000, intervals: [1_000] }).toBeGreaterThan(before);
+    await expect
+      .poll(() => requests, { timeout: 45_000, intervals: [1_000] })
+      .toBeGreaterThan(before);
     // The poll re-runs the queries once it has the new content; Refresh
     // fields then writes the new value (asked until the re-run has landed).
     await openPanel(page, BINDINGS_PANEL);

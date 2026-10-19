@@ -68,17 +68,19 @@ describe("data-host-model", () => {
     // The host's setPluginMetadata door validates the envelope as
     // { v: <int >= 1>, data: {…}, engine?: {…} }. A `{v, payload}` envelope is
     // rejected and sinks the whole atomic batch (the barcode-lower regression).
-    const raw = JSON.parse(makeEnvelope({ kind: "barcode", target: "f1" })) as Record<
-      string,
-      unknown
-    >;
+    const raw = JSON.parse(
+      makeEnvelope({ kind: "barcode", target: "f1" }),
+    ) as Record<string, unknown>;
     expect(raw.v as number).toBeGreaterThanOrEqual(1);
     expect(raw.data).toEqual({ kind: "barcode", target: "f1" });
     expect(raw).not.toHaveProperty("payload");
   });
 
   it("default placement sizes to the content box", () => {
-    const p = defaultPlacement("page-1" as never, { widthPt: 90, heightPt: 28 });
+    const p = defaultPlacement("page-1" as never, {
+      widthPt: 90,
+      heightPt: 28,
+    });
     const [top, left, bottom, right] = p.bounds;
     expect(right - left).toBe(90);
     expect(bottom - top).toBe(28);
@@ -86,15 +88,19 @@ describe("data-host-model", () => {
 
   it("lowers a table to the two-phase batch + text", () => {
     const placement = defaultPlacement("page-1" as never, table().bounds);
-    const { batch, text } = tableToMutations(table(), placement, makeEnvelope({ region: "r1" }));
+    const { batch, text } = tableToMutations(
+      table(),
+      placement,
+      makeEnvelope({ region: "r1" }),
+    );
     expect(batch.op).toBe("batch");
-    const ops = (batch as { op: "batch"; args: { ops: { op: string }[] } }).args.ops;
+    const ops = (batch as { op: "batch"; args: { ops: { op: string }[] } }).args
+      .ops;
     // insertTextFrame + 2 rules + setPluginMetadata.
     expect(ops[0].op).toBe("insertTextFrame");
     expect(ops.filter((o) => o.op === "insertLine")).toHaveLength(2);
     const meta = ops.find((o) => o.op === "setPluginMetadata") as
-      | { args: { key: string } }
-      | undefined;
+      { args: { key: string } } | undefined;
     expect(meta?.args.key).toBe(BINDING_KEY);
     expect(text).toBe("SKU\tPrice\nA-1\t$9.99");
   });
@@ -116,7 +122,11 @@ describe("data-host-model", () => {
     expect(ops).toHaveLength(4);
     const first = ops[0] as {
       op: string;
-      args: { storyId: string; text: string; cell: { tableId: string; row: number; col: number } };
+      args: {
+        storyId: string;
+        text: string;
+        cell: { tableId: string; row: number; col: number };
+      };
     };
     expect(first.op).toBe("insertText");
     expect(first.args.cell).toEqual({ tableId: "tbl-1", row: 0, col: 0 });

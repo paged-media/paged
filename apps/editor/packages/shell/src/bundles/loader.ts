@@ -121,7 +121,8 @@ export async function loadBundle(
         if (pending) {
           pendingInvokes.delete(msg.requestId);
           if (msg.ok) pending.resolve(msg.value);
-          else pending.reject(new Error(msg.error ?? "bundle invocation failed"));
+          else
+            pending.reject(new Error(msg.error ?? "bundle invocation failed"));
         }
         break;
       }
@@ -160,9 +161,7 @@ export async function loadBundle(
     worker.onerror = (err) => {
       window.clearTimeout(timeout);
       reject(
-        new Error(
-          `loadBundle("${manifest.id}"): worker error: ${err.message}`,
-        ),
+        new Error(`loadBundle("${manifest.id}"): worker error: ${err.message}`),
       );
     };
   });

@@ -17,7 +17,7 @@
  */
 
 // The engine catalog, shipped with this package so a consumer does not have
-// to install @paged-media/introspect-wasm (11.5 MB of wasm) to read 140 KB of
+// to install @paged-media/canvas-wasm (its introspect entry alone is 11.5 MB of wasm) to read 140 KB of
 // JSON. It is plugin-api's vendored copy, which CI holds in lockstep with
 // the engine version the wire types were synced from (publish.yml). A
 // separate entry point: the editor loads it on the first AI request, not at

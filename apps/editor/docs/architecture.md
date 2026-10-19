@@ -10,15 +10,15 @@ Where the repository's `README.md` or `CLAUDE.md` differ, this page follows the 
 A pnpm workspace (`apps/*`, `packages/*`): TypeScript, React 18, Vite, Tailwind. There is
 no Rust here. The engine and the plugins arrive as npm packages that carry their own wasm.
 
-| Path | Package | What it owns |
-|---|---|---|
-| `packages/client` | `@paged-media/client` | `CanvasClient` (the main-thread handle on the render worker), re-exports of the engine's wire types (`src/protocol.ts`), the two shared-memory buffers (`src/sab/`), the journal buffer (`src/journal/`). No React. The only manifest that is not private. |
-| `packages/catalog` | `@paged-media/catalog` | Types and registry for declarative panel compositions: `Binding`, `CompositionNode`, `CatalogRegistry`. |
-| `packages/shell` | `@paged-media/shell` | `PagedShell`, the React state contexts, twelve registries, the cockpit layout and chrome, canvas overlays, the composition renderer and its leaves, the actions recorder, the demo automation layer, icons and design tokens. |
-| `packages/ui` | `@paged-media/ui` | Input primitives (`NumberInput`, `LengthInput`, `ScrubField`, `BoundsInput`, `ColorPicker`), the colour mixer and wheel, a code editor widget. |
-| `packages/tools` | `@paged-media/tools` | The built-in tool list (`BUILT_IN_TOOLS`) and its gesture handlers. |
-| `apps/canvas` | `paged-canvas` | The application: composition root (`src/main.tsx`), render worker (`src/worker/`), viewport (`src/ui/`), panels (`src/panels/`), plugin host backends (`src/plugin-*.ts`), solo profiles, the playground, and every Playwright test (`tests/`). |
-| `apps/devtools` | `paged-devtools` | A separate scene inspector over `@paged-media/introspect-wasm`; it imports nothing from the other packages. |
+| Path               | Package                | What it owns                                                                                                                                                                                                                                               |
+| ------------------ | ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `packages/client`  | `@paged-media/client`  | `CanvasClient` (the main-thread handle on the render worker), re-exports of the engine's wire types (`src/protocol.ts`), the two shared-memory buffers (`src/sab/`), the journal buffer (`src/journal/`). No React. The only manifest that is not private. |
+| `packages/catalog` | `@paged-media/catalog` | Types and registry for declarative panel compositions: `Binding`, `CompositionNode`, `CatalogRegistry`.                                                                                                                                                    |
+| `packages/shell`   | `@paged-media/shell`   | `PagedShell`, the React state contexts, twelve registries, the cockpit layout and chrome, canvas overlays, the composition renderer and its leaves, the actions recorder, the demo automation layer, icons and design tokens.                              |
+| `packages/ui`      | `@paged-media/ui`      | Input primitives (`NumberInput`, `LengthInput`, `ScrubField`, `BoundsInput`, `ColorPicker`), the colour mixer and wheel, a code editor widget.                                                                                                             |
+| `packages/tools`   | `@paged-media/tools`   | The built-in tool list (`BUILT_IN_TOOLS`) and its gesture handlers.                                                                                                                                                                                        |
+| `apps/canvas`      | `paged-canvas`         | The application: composition root (`src/main.tsx`), render worker (`src/worker/`), viewport (`src/ui/`), panels (`src/panels/`), plugin host backends (`src/plugin-*.ts`), solo profiles, the playground, and every Playwright test (`tests/`).            |
+| `apps/devtools`    | `paged-devtools`       | A separate scene inspector over `@paged-media/introspect-wasm`; it imports nothing from the other packages.                                                                                                                                                |
 
 The packages are consumed as TypeScript source (`"main": "./src/index.ts"`); only
 `packages/client` has a `build` script and a `publishConfig`
@@ -168,10 +168,13 @@ application on the main thread; no bundle is discovered or loaded from a URL at 
 ([ADR 201](adr/201-plugins-as-pinned-packages.md)).
 
 - The host adapter is plugin-sdk's. The application supplies an editor handle and the
-  backends only it can provide (`sharedHostOptions`, `main.tsx:1251-1267`): file picker and
-  saver, blob store, clipboard, text-caret reader, worker backend, consent and secret
-  stores with their dialogs, the native-document door, a font asset source, a diagnostics
-  sink, the schema-panel renderer, and the data-provider and binding-provider registries.
+  backends only it can provide (`createEditorHostOptions`, `apps/canvas/src/plugin-host-options.ts`,
+  called from `main.tsx`): file picker and saver, blob store, clipboard, text-caret reader,
+  worker backend, consent and secret stores with their dialogs, the native-document door, a
+  font asset source, a diagnostics sink, the schema-panel renderer, and the data-provider and
+  binding-provider registries. The BundleHost contract tests
+  (`apps/canvas/test/contracts/bundle-host/`) build the same options, so what the editor
+  wires and what they prove cannot drift apart.
   The shell's registry types are the contract's contribution types, used as is or extended
   with editor-only optional fields ([ADR 226](adr/226-contribution-types-have-one-definition.md));
   `apps/canvas/src/plugin-api-compat.ts` asserts at type level that the editor's handles

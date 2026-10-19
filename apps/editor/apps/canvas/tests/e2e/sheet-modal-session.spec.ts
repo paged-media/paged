@@ -83,8 +83,7 @@ async function elementScreenCenter(
               Array<{
                 bounds: [number, number, number, number];
                 itemTransform?:
-                  | [number, number, number, number, number, number]
-                  | null;
+                  [number, number, number, number, number, number] | null;
               }>
             >;
           };
@@ -178,10 +177,7 @@ async function fitHome(page: Page): Promise<void> {
 
 /** Import the xlsx through the workbook panel's K-5 picker and lower
  *  `range` to a page frame; resolves to the created frame's ref. */
-async function importAndLower(
-  page: Page,
-  range: string,
-): Promise<ElementRef> {
+async function importAndLower(page: Page, range: string): Promise<ElementRef> {
   await openPanel(page, WORKBOOK_PANEL);
   const pick = page.locator("[data-sheet-pick]");
   await expect(pick).toBeVisible();
@@ -234,7 +230,8 @@ test.describe("E2E sheet modal session (K-1 live validation + ADR-012)", () => {
     // this suite caught: hitTest cannot resolve an EMPTY frame's story).
     const emptyPours: string[] = [];
     page.on("console", (msg) => {
-      if (msg.text().includes("frame placed empty")) emptyPours.push(msg.text());
+      if (msg.text().includes("frame placed empty"))
+        emptyPours.push(msg.text());
     });
     const frame = await importAndLower(page, "A1:B3");
     expect(emptyPours).toEqual([]);

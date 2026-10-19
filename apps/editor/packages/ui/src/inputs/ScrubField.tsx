@@ -19,13 +19,12 @@
 
 import type { ReactNode } from "react";
 
-import {
-  useScrubGesture,
-  type ScrubGestureOptions,
-} from "@paged-media/shell";
+import { useScrubGesture, type ScrubGestureOptions } from "@paged-media/shell";
 
-export interface ScrubFieldProps
-  extends Omit<ScrubGestureOptions, "onUpdate" | "onCommit" | "onCancel"> {
+export interface ScrubFieldProps extends Omit<
+  ScrubGestureOptions,
+  "onUpdate" | "onCommit" | "onCancel"
+> {
   /** Fires on begin + every pointer-move. */
   onUpdate?: (value: number, phase: "begin" | "update") => void;
   onCommit?: (value: number, initial: number) => void;

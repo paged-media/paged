@@ -51,7 +51,9 @@ describe("strokeWidthFromPressure", () => {
   });
 
   it("lands a mouse's neutral 0.5 mid-range", () => {
-    expect(strokeWidthFromPressure(NEUTRAL_PRESSURE, profile)).toBeCloseTo(2.25);
+    expect(strokeWidthFromPressure(NEUTRAL_PRESSURE, profile)).toBeCloseTo(
+      2.25,
+    );
   });
 
   it("clamps before interpolating so an out-of-range sample stays bounded", () => {

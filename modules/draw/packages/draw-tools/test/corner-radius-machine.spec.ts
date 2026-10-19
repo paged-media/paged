@@ -104,7 +104,11 @@ describe("polygonCorners", () => {
   it("an OPEN contour has no corners; a CURVED junction gets no handle", () => {
     expect(polygonCorners({ ...TRIANGLE, subpathOpen: [true] })).toEqual([]);
     const curved: AnchorTable = {
-      anchors: [pt(0, 0), { anchor: [100, 0], left: [80, -20], right: [100, 0] }, pt(0, 100)],
+      anchors: [
+        pt(0, 0),
+        { anchor: [100, 0], left: [80, -20], right: [100, 0] },
+        pt(0, 100),
+      ],
       subpathStarts: [0],
       subpathOpen: [false],
     };
@@ -129,7 +133,10 @@ describe("polygon radius from a drag", () => {
     const acute = polygonCorners(TRIANGLE)[1]!;
     // Drag 20 pt back along the base (toward (0,0)).
     const d = polygonTangentFromDrag(acute, [80, 0.5]);
-    expect(d).toBeCloseTo(Math.min(20, 20 * Math.SQRT1_2 + 0.5 * Math.SQRT1_2), 6);
+    expect(d).toBeCloseTo(
+      Math.min(20, 20 * Math.SQRT1_2 + 0.5 * Math.SQRT1_2),
+      6,
+    );
     const r = polygonRadiusFromDrag(acute, [80, 0.5]);
     expect(r).toBeCloseTo(d * Math.tan(Math.PI / 8), 12);
     const [pin, c, pout] = polygonCornerPreview(acute, r);

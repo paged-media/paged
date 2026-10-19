@@ -38,14 +38,23 @@ import { cli, FIXTURES, tempDir, writeFixture } from "./helpers";
 function keptSession() {
   let s: Promise<CliSession> | null = null;
   return {
-    open: (doc: string | null, args: ReturnType<typeof parseArgs>) => (s ??= openSession(doc, sessionOptions(args, tmp.dir))),
+    open: (doc: string | null, args: ReturnType<typeof parseArgs>) =>
+      (s ??= openSession(doc, sessionOptions(args, tmp.dir))),
     get: () => s!,
   };
 }
-async function verb(name: string, argv: string[], kept: ReturnType<typeof keptSession>) {
+async function verb(
+  name: string,
+  argv: string[],
+  kept: ReturnType<typeof keptSession>,
+) {
   const v = VERBS.find((x) => x.name === name)!;
   const args = parseArgs(argv, [...v.options, ...GLOBAL_OPTIONS]);
-  const r = await v.run({ args, cwd: tmp.dir, session: (doc) => kept.open(doc, args) });
+  const r = await v.run({
+    args,
+    cwd: tmp.dir,
+    session: (doc) => kept.open(doc, args),
+  });
   return r as typeof r & { json: any };
 }
 
@@ -63,12 +72,26 @@ afterAll(() => tmp.done());
 describe("plugin object kinds", () => {
   it("appear in plugins / schema, are created by a typed command, and round-trip get/set through files", async () => {
     const listed = await cli(["plugins", NOTES]);
-    expect(listed.json.plugins).toEqual([expect.objectContaining({ id: "acme.notes", kinds: ["plugin:acme.notes/note"] })]);
+    expect(listed.json.plugins).toEqual([
+      expect.objectContaining({
+        id: "acme.notes",
+        kinds: ["plugin:acme.notes/note"],
+      }),
+    ]);
     const kinds = await cli(["schema", fx.paged, NOTES]);
     // core's typed commands (owner "core") are listed beside the plugin's
     // Besides core's, the plugin's command and the CLI's own paged.ai.complete.
-    expect(kinds.json.commands.filter((c: { owner: string }) => c.owner !== "core").map((c: { id: string }) => c.id).sort()).toEqual(["acme.notes.attach", "paged.ai.complete"]);
-    expect((await cli(["schema", fx.paged, "plugin:acme.notes/note", NOTES])).json.rows.map((r: { path: string }) => r.path)).toEqual(
+    expect(
+      kinds.json.commands
+        .filter((c: { owner: string }) => c.owner !== "core")
+        .map((c: { id: string }) => c.id)
+        .sort(),
+    ).toEqual(["acme.notes.attach", "paged.ai.complete"]);
+    expect(
+      (
+        await cli(["schema", fx.paged, "plugin:acme.notes/note", NOTES])
+      ).json.rows.map((r: { path: string }) => r.path),
+    ).toEqual(
       expect.arrayContaining(["text", "size", "visible", "tone", "length"]),
     );
 
@@ -76,33 +99,70 @@ describe("plugin object kinds", () => {
     // rediscover it on load), so the verbs share ONE session here.
     const sess = keptSession();
     const script = join(tmp.dir, "attach.mjs");
-    writeFileSync(script, "export default (paged) => paged.invoke('acme.notes.attach', { frame: 'rectangle:urect', count: 2 });");
-    expect((await verb("run", [fx.paged, script, "--no-save", NOTES], sess)).json).toMatchObject({ result: 2 });
-    expect((await verb("query", [fx.paged, "plugin:acme.notes/note"], sess)).json.addresses).toEqual([NOTE, "plugin:acme.notes/note/n2"]);
-    const set = await verb("set", [fx.paged, NOTE, "size", "18", "--no-save"], sess);
+    writeFileSync(
+      script,
+      "export default (paged) => paged.invoke('acme.notes.attach', { frame: 'rectangle:urect', count: 2 });",
+    );
+    expect(
+      (await verb("run", [fx.paged, script, "--no-save", NOTES], sess)).json,
+    ).toMatchObject({ result: 2 });
+    expect(
+      (await verb("query", [fx.paged, "plugin:acme.notes/note"], sess)).json
+        .addresses,
+    ).toEqual([NOTE, "plugin:acme.notes/note/n2"]);
+    const set = await verb(
+      "set",
+      [fx.paged, NOTE, "size", "18", "--no-save"],
+      sess,
+    );
     expect(set.json.result).toMatchObject({ applied: true, undoSteps: 1 });
-    expect((await verb("get", [fx.paged, NOTE, "size"], sess)).json.value).toBe(18);
-    expect((await verb("query", [fx.paged, "plugin:acme.notes/note[size=18]"], sess)).json.addresses).toEqual([NOTE]);
+    expect((await verb("get", [fx.paged, NOTE, "size"], sess)).json.value).toBe(
+      18,
+    );
+    expect(
+      (await verb("query", [fx.paged, "plugin:acme.notes/note[size=18]"], sess))
+        .json.addresses,
+    ).toEqual([NOTE]);
     // One undo step reverts the plugin state (label-hash pattern).
     await (await sess.get()).driver.document.undo();
-    expect((await verb("get", [fx.paged, NOTE, "size"], sess)).json.value).toBe(12);
+    expect((await verb("get", [fx.paged, NOTE, "size"], sess)).json.value).toBe(
+      12,
+    );
 
     // Values are refused by the PLUGIN's schema: range, enum, derived.
-    await expect(verb("set", [fx.paged, NOTE, "size", "100", "--no-save"], sess)).rejects.toThrow(/size 100 is above 72/);
-    await expect(verb("set", [fx.paged, NOTE, "tone", "green", "--no-save"], sess)).rejects.toThrow(/expected enum \(red \| blue\)/);
-    await expect(verb("set", [fx.paged, NOTE, "length", "3", "--no-save"], sess)).rejects.toThrow(/length: is derived/);
+    await expect(
+      verb("set", [fx.paged, NOTE, "size", "100", "--no-save"], sess),
+    ).rejects.toThrow(/size 100 is above 72/);
+    await expect(
+      verb("set", [fx.paged, NOTE, "tone", "green", "--no-save"], sess),
+    ).rejects.toThrow(/expected enum \(red \| blue\)/);
+    await expect(
+      verb("set", [fx.paged, NOTE, "length", "3", "--no-save"], sess),
+    ).rejects.toThrow(/length: is derived/);
 
     // `create` on a PLUGIN kind answers the new address (the plugin's
     // write reports it in ObjectWrite.created).
-    const made = await verb("create", [fx.paged, "plugin:acme.notes/note", '{"text":"made"}', "--no-save"], sess);
+    const made = await verb(
+      "create",
+      [fx.paged, "plugin:acme.notes/note", '{"text":"made"}', "--no-save"],
+      sess,
+    );
     expect(made.json.created).toEqual(["plugin:acme.notes/note/n3"]);
     expect(made.text).toMatch(/^created plugin:acme\.notes\/note\/n3 /);
-    expect((await verb("get", [fx.paged, made.json.created[0], "text"], sess)).json.value).toBe("made");
+    expect(
+      (await verb("get", [fx.paged, made.json.created[0], "text"], sess)).json
+        .value,
+    ).toBe("made");
     (await sess.get()).dispose();
   });
 
   it("an explicit plugin that cannot load is a usage error", async () => {
-    const r = await cli(["query", fx.paged, "doc", "--plugins=@paged-media/not-installed"]);
+    const r = await cli([
+      "query",
+      fx.paged,
+      "doc",
+      "--plugins=@paged-media/not-installed",
+    ]);
     expect(r.code).toBe(2);
     expect(r.json.error.message).toMatch(/plugin @paged-media\/not-installed/);
   });

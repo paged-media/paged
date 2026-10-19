@@ -23,7 +23,12 @@
 import fc from "fast-check";
 import { describe, expect, it } from "bun:test";
 
-import { cssVarNames, cssVarValueProblem, scanCssVars, setCssVar } from "../src";
+import {
+  cssVarNames,
+  cssVarValueProblem,
+  scanCssVars,
+  setCssVar,
+} from "../src";
 
 const CSS = `/* --not: a var */
 :root { --brand: #c00; --gap:  12px !important }
@@ -59,13 +64,23 @@ describe("cssVar scanner @feat:plugin-web.object-model", () => {
   });
 
   it("a property the source does not declare is added as a :root rule", () => {
-    const out = setCssVar("p { color: red }", "--accent", "teal") as { css: string };
+    const out = setCssVar("p { color: red }", "--accent", "teal") as {
+      css: string;
+    };
     expect(out.css).toBe("p { color: red }\n:root { --accent: teal; }\n");
     expect(scanCssVars(out.css).map((d) => d.value)).toEqual(["teal"]);
   });
 
   it("refuses values that would end the declaration or the block", () => {
-    for (const bad of ["red; color: blue", "a }", "/* x */", '"open', "(", "", "x)"]) {
+    for (const bad of [
+      "red; color: blue",
+      "a }",
+      "/* x */",
+      '"open',
+      "(",
+      "",
+      "x)",
+    ]) {
       expect(cssVarValueProblem(bad)).not.toBeNull();
       expect("refused" in setCssVar(CSS, "--brand", bad)).toBe(true);
     }
@@ -82,8 +97,12 @@ describe("cssVar scanner @feat:plugin-web.object-model", () => {
         const out = setCssVar(CSS, "--brand", v) as { css: string };
         const first = scanCssVars(out.css).find((d) => d.name === "--brand")!;
         expect(first.value).toBe(v.trim());
-        expect(out.css.slice(0, first.start)).toBe(CSS.slice(0, scanCssVars(CSS)[0]!.start));
-        expect(out.css.slice(first.end)).toBe(CSS.slice(scanCssVars(CSS)[0]!.end));
+        expect(out.css.slice(0, first.start)).toBe(
+          CSS.slice(0, scanCssVars(CSS)[0]!.start),
+        );
+        expect(out.css.slice(first.end)).toBe(
+          CSS.slice(scanCssVars(CSS)[0]!.end),
+        );
       }),
     );
   });

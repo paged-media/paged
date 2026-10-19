@@ -23,12 +23,12 @@ Everything about how the plugin is designed and built is in [`docs/`](./docs/REA
 
 ## Packages
 
-| Package | Contents |
-|---|---|
-| `@paged-media/draw-geometry` | pure path math, zero deps: Bézier split / closest-t / flatten, RDP, compound winding, arc-length placement, affine, SVG path / arc / document parsing |
-| `@paged-media/draw-tools` | host-agnostic state machines (pen, anchor edit, pencil, curvature, brush, width, shape builder, live paint, measure, corner radius, repeat) — points in, snapshots and plans out |
+| Package                                      | Contents                                                                                                                                                                                           |
+| -------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@paged-media/draw-geometry`                 | pure path math, zero deps: Bézier split / closest-t / flatten, RDP, compound winding, arc-length placement, affine, SVG path / arc / document parsing                                              |
+| `@paged-media/draw-tools`                    | host-agnostic state machines (pen, anchor edit, pencil, curvature, brush, width, shape builder, live paint, measure, corner radius, repeat) — points in, snapshots and plans out                   |
 | `@paged-media/draw` (`packages/draw-bundle`) | the published bundle: `manifest.json` (id `media.paged.draw` — 19 tools, 11 panels, 101 commands, SVG import/export, 7 `.paged` part types) + `activate(host)`, gesture handlers, commands, panels |
-| `crates/draw-trace`, `crates/trace-js` | the Image Trace kernel (Rust → wasm, over `visioncortex`); `scripts/build-wasm.sh` (`moon run draw:wasm`) builds it into `packages/draw-bundle/wasm/` (gitignored) |
+| `crates/draw-trace`, `crates/trace-js`       | the Image Trace kernel (Rust → wasm, over `visioncortex`); `scripts/build-wasm.sh` (`moon run draw:wasm`) builds it into `packages/draw-bundle/wasm/` (gitignored)                                 |
 
 `panels/*.panel.json` are **design prototypes** (not interpreted by any
 host).
@@ -51,7 +51,7 @@ node ../../platform/extensions/packages/plugin-cli/bin/paged-plugin.mjs validate
 ## Tests
 
 - **Machines and geometry** — unit specs beside each package; no host.
-- **Conformance** (`packages/draw-bundle/test/conformance/`) — every spec
+- **Conformance** (`packages/draw-bundle/test/headless/`) — every spec
   boots the REAL engine wasm headlessly (`createHeadlessHost`) and drives
   the bundle's own handlers and commands against it, asserting the
   resulting document and that undo restores it. `test/engine-pin.spec.ts`

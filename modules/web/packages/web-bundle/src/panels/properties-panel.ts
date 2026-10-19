@@ -27,7 +27,11 @@
 // panel holds the render options, the document values and the CSS
 // variables.
 
-import type { BundleHost, Disposable, PanelSchema } from "@paged-media/plugin-api";
+import type {
+  BundleHost,
+  Disposable,
+  PanelSchema,
+} from "@paged-media/plugin-api";
 import { propertyRows, publishObjectList } from "@paged-media/plugin-sdk";
 
 import { PANEL_FIELDS, PLUGIN_ID } from "../object-model";
@@ -47,11 +51,18 @@ export const BIND = {
 } as const;
 
 const paths = (kind: string, group: string) =>
-  PANEL_FIELDS.filter((f) => `plugin:${PLUGIN_ID}/${f.kind}` === kind && f.group === group).map((f) => f.path);
+  PANEL_FIELDS.filter(
+    (f) => `plugin:${PLUGIN_ID}/${f.kind}` === kind && f.group === group,
+  ).map((f) => f.path);
 
 const list = (rows: string, select: string) => ({
   widget: "paged.list",
-  list: { items: { kind: "binding" as const, bind: rows }, labelField: "name", secondaryField: "secondary", selectionBinding: select },
+  list: {
+    items: { kind: "binding" as const, bind: rows },
+    labelField: "name",
+    secondaryField: "secondary",
+    selectionBinding: select,
+  },
 });
 
 /** The panel, from `PANEL_FIELDS` (every entry is a row of its kind). */
@@ -74,17 +85,23 @@ export const WEB_PROPERTIES_PANEL: PanelSchema = {
       rows: [
         {
           widget: "paged.label",
-          props: { text: "The values behind {{doc.…}} and {{data.…}}; edit a frame's variables in Web source." },
+          props: {
+            text: "The values behind {{doc.…}} and {{data.…}}; edit a frame's variables in Web source.",
+          },
         },
         list(BIND.templateVars, BIND.templateVar),
-        ...propertyRows(TEMPLATE_VAR, paths(TEMPLATE_VAR, "Document values"), { bind: BIND.templateVar }),
+        ...propertyRows(TEMPLATE_VAR, paths(TEMPLATE_VAR, "Document values"), {
+          bind: BIND.templateVar,
+        }),
       ],
     },
     {
       title: "CSS variables",
       rows: [
         list(BIND.cssVars, BIND.cssVar),
-        ...propertyRows(CSS_VAR, paths(CSS_VAR, "CSS variables"), { bind: BIND.cssVar }),
+        ...propertyRows(CSS_VAR, paths(CSS_VAR, "CSS variables"), {
+          bind: BIND.cssVar,
+        }),
       ],
     },
   ],

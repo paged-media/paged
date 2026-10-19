@@ -1,0 +1,10 @@
+$ paged-plugin validate <TMP>/bad.json
+# exit 1
+# stdout
+(empty)
+# stderr
+✗ <TMP>/bad.json
+  - "id" must match /^[a-z][a-z0-9]*(\.[a-z][a-z0-9-]*)+$/ (reverse-DNS, e.g. "media.paged.draw")
+  - "name" must be a non-empty string
+  - "version" must be semver (got "x")
+  - "apiVersion" must be a non-empty semver range

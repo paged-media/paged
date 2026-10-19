@@ -51,7 +51,10 @@ import { expect, test, type Page } from "@playwright/test";
 import { Designer } from "../driver/designer";
 import { objGet, undoOnce } from "../../e2e/harness/objects";
 
-const RETIRED = ["media.paged.draw.panel.stroke", "media.paged.draw.panel.fill"];
+const RETIRED = [
+  "media.paged.draw.panel.stroke",
+  "media.paged.draw.panel.fill",
+];
 const DRAW_SETTINGS = "media.paged.draw.panel.properties";
 
 const field = (page: Page, panel: string, path: string) =>
@@ -86,21 +89,26 @@ test.describe("journey · paged.draw stroke + fill rows in the host panels", () 
     const section = page.locator(`${STROKE} [data-section="Dashes & arrows"]`);
     await expect(section).toBeVisible();
     const toggle = section.locator("[data-section-toggle]");
-    if ((await toggle.getAttribute("aria-expanded")) !== "true") await toggle.click();
+    if ((await toggle.getAttribute("aria-expanded")) !== "true")
+      await toggle.click();
     await expect(toggle).toHaveAttribute("aria-expanded", "true");
 
     // ── 3. END ARROWHEAD — pick "Triangle"; the model holds core's enum
     //    member, and one undo takes it back off. ──
     const end = field(page, STROKE, "frameStrokeEndArrowhead");
     await expect(end).toHaveAttribute("data-value-type", "enum");
-    expect(isNone(await objGet(page, address, "frameStrokeEndArrowhead"))).toBe(true);
+    expect(isNone(await objGet(page, address, "frameStrokeEndArrowhead"))).toBe(
+      true,
+    );
     await end.locator("select").selectOption({ label: "Triangle" });
     await expect
       .poll(() => objGet(page, address, "frameStrokeEndArrowhead"))
       .toBe("TriangleArrowHead");
     await undoOnce(page);
     await expect
-      .poll(async () => isNone(await objGet(page, address, "frameStrokeEndArrowhead")))
+      .poll(async () =>
+        isNone(await objGet(page, address, "frameStrokeEndArrowhead")),
+      )
       .toBe(true);
     // Set it again so the path keeps an arrowhead through the dash edit.
     await end.locator("select").selectOption("TriangleArrowHead");
@@ -115,7 +123,9 @@ test.describe("journey · paged.draw stroke + fill rows in the host panels", () 
     const dashInput = dash.locator("input").first();
     await dashInput.fill("6, 3");
     await dashInput.press("Enter");
-    await expect.poll(() => objGet(page, address, "frameStrokeDashArray")).toEqual([6, 3]);
+    await expect
+      .poll(() => objGet(page, address, "frameStrokeDashArray"))
+      .toEqual([6, 3]);
     await undoOnce(page);
     await expect
       .poll(async () => {
@@ -124,7 +134,9 @@ test.describe("journey · paged.draw stroke + fill rows in the host panels", () 
       })
       .toBe(true);
     // The undo took ONLY the dash edit: the arrowhead stays.
-    expect(await objGet(page, address, "frameStrokeEndArrowhead")).toBe("TriangleArrowHead");
+    expect(await objGet(page, address, "frameStrokeEndArrowhead")).toBe(
+      "TriangleArrowHead",
+    );
   });
 
   test("a designer applies a gradient and sets its angle in the Gradients panel @feat:editor-shell.panels.gradients @feat:color-swatches.gradients @feat:round-tripping.undo-redo @level:happy", async ({
@@ -134,14 +146,24 @@ test.describe("journey · paged.draw stroke + fill rows in the host panels", () 
     await designer.open();
     await designer.newDocument();
 
-    const rectId = await designer.drawRectangle({ x0: 150, y0: 150, x1: 380, y1: 320 });
+    const rectId = await designer.drawRectangle({
+      x0: 150,
+      y0: 150,
+      x1: 380,
+      y1: 320,
+    });
     expect(rectId, "drew a rectangle").not.toBe("");
-    const gradient = await designer.createGradient("journey-grad", ["Color/Black", "Color/Paper"]);
+    const gradient = await designer.createGradient("journey-grad", [
+      "Color/Black",
+      "Color/Paper",
+    ]);
     expect(gradient).toMatch(/^Gradient\//);
     await designer.applyFill("rectangle", rectId, gradient);
     await designer.selectElement("rectangle", rectId);
     const address = `rectangle:${rectId}`;
-    await expect.poll(() => objGet(page, address, "frameFillColor")).toBe(gradient);
+    await expect
+      .poll(() => objGet(page, address, "frameFillColor"))
+      .toBe(gradient);
 
     await designer.openPanel("paged.gradients");
     const GRADIENTS = '[data-gradients-panel="ready"]';
@@ -151,10 +173,9 @@ test.describe("journey · paged.draw stroke + fill rows in the host panels", () 
     //    Gradients next to the applied gradient. ──
     const angle = field(page, GRADIENTS, "frameGradientFillAngle");
     await expect(angle).toHaveAttribute("data-value-type", "number");
-    await expect(field(page, GRADIENTS, "frameGradientFillLength")).toHaveAttribute(
-      "data-value-type",
-      "length",
-    );
+    await expect(
+      field(page, GRADIENTS, "frameGradientFillLength"),
+    ).toHaveAttribute("data-value-type", "length");
     const before = await objGet(page, address, "frameGradientFillAngle");
     const next = before === 45 ? 30 : 45;
     const input = angle.locator("input").first();
@@ -162,9 +183,13 @@ test.describe("journey · paged.draw stroke + fill rows in the host panels", () 
     await input.press("ControlOrMeta+a");
     await input.pressSequentially(String(next));
     await input.press("Enter");
-    await expect.poll(() => objGet(page, address, "frameGradientFillAngle")).toBe(next);
+    await expect
+      .poll(() => objGet(page, address, "frameGradientFillAngle"))
+      .toBe(next);
     await undoOnce(page);
-    await expect.poll(() => objGet(page, address, "frameGradientFillAngle")).toBe(before);
+    await expect
+      .poll(() => objGet(page, address, "frameGradientFillAngle"))
+      .toBe(before);
     // The fill is still the gradient: the undo took only the angle.
     expect(await objGet(page, address, "frameFillColor")).toBe(gradient);
   });
@@ -179,11 +204,18 @@ test.describe("journey · paged.draw stroke + fill rows in the host panels", () 
     const panels = await page.evaluate(() =>
       (
         globalThis as unknown as {
-          __canvas: { registries: { panels: { list: () => Array<{ id: string }> } } };
+          __canvas: {
+            registries: { panels: { list: () => Array<{ id: string }> } };
+          };
         }
-      ).__canvas.registries.panels.list().map((p) => p.id),
+      ).__canvas.registries.panels
+        .list()
+        .map((p) => p.id),
     );
-    expect(panels.filter((id) => RETIRED.includes(id)), "retired panels are not registered").toEqual([]);
+    expect(
+      panels.filter((id) => RETIRED.includes(id)),
+      "retired panels are not registered",
+    ).toEqual([]);
     expect(panels).toContain(DRAW_SETTINGS);
 
     const pathId = await designer.drawPath([
@@ -194,8 +226,12 @@ test.describe("journey · paged.draw stroke + fill rows in the host panels", () 
     await designer.selectElement("polygon", pathId);
     await designer.openPanel(DRAW_SETTINGS);
     const settings = page.locator(`[data-schema-panel="${DRAW_SETTINGS}"]`);
-    await expect(settings, "Draw settings mounts from the catalog").toBeVisible({ timeout: 6_000 });
-    await expect(settings.locator('[data-schema-section="Path"]')).toBeVisible();
+    await expect(settings, "Draw settings mounts from the catalog").toBeVisible(
+      { timeout: 6_000 },
+    );
+    await expect(
+      settings.locator('[data-schema-section="Path"]'),
+    ).toBeVisible();
   });
 
   test("Properties shows Draw settings inline for artwork draw made, not for a plain rectangle @feat:editor-shell.panels.properties @feat:plugin-platform.bundle-lifecycle @level:happy", async ({
@@ -204,7 +240,12 @@ test.describe("journey · paged.draw stroke + fill rows in the host panels", () 
     const designer = new Designer(page);
     await designer.open();
     await designer.newDocument();
-    const rectId = await designer.drawRectangle({ x0: 150, y0: 150, x1: 300, y1: 260 });
+    const rectId = await designer.drawRectangle({
+      x0: 150,
+      y0: 150,
+      x1: 300,
+      y1: 260,
+    });
     expect(rectId, "drew a rectangle").not.toBe("");
     await designer.selectElement("rectangle", rectId);
     await designer.openPanel("paged.properties");
@@ -216,8 +257,14 @@ test.describe("journey · paged.draw stroke + fill rows in the host panels", () 
     // `x-paged:media.paged.draw` envelope).
     await designer.runCommand("media.paged.draw.command.makeRadialRepeat");
     await designer.selectElement("rectangle", rectId);
-    await expect(owned, "Draw settings inline for the repeat's source").toHaveCount(1, { timeout: 10_000 });
-    await expect(owned).toHaveAttribute("data-properties-owner", "vectorGraphic");
+    await expect(
+      owned,
+      "Draw settings inline for the repeat's source",
+    ).toHaveCount(1, { timeout: 10_000 });
+    await expect(owned).toHaveAttribute(
+      "data-properties-owner",
+      "vectorGraphic",
+    );
     await expect(owned.getByText(/Radial repeat/).first()).toBeVisible();
   });
 });

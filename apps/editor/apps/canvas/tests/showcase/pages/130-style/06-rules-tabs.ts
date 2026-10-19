@@ -37,9 +37,12 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   const vermilion = await doc.swatch(SWATCH.vermilion);
   const slate = await doc.swatch(SWATCH.slate);
 
-  const head = await proseFrame(ctx, page, [60, 58, 492, 92], [
-    { text: "Rules, shading, borders, tabs", style: STYLE.head1 },
-  ]);
+  const head = await proseFrame(
+    ctx,
+    page,
+    [60, 58, 492, 92],
+    [{ text: "Rules, shading, borders, tabs", style: STYLE.head1 }],
+  );
   elements.push(head.frameId);
 
   // ── rules above and below, whole structs ─────────────────────────
@@ -47,9 +50,12 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     "Ruled matter: this paragraph carries a vermilion rule above and " +
     "a slate rule below, each a whole ParagraphRule struct - on, " +
     "colour, weight, offset - set on the range in a single write.";
-  const ruled = await proseFrame(ctx, page, [60, 112, 492, 172], [
-    { text: RULED, style: STYLE.body },
-  ]);
+  const ruled = await proseFrame(
+    ctx,
+    page,
+    [60, 112, 492, 172],
+    [{ text: RULED, style: STYLE.body }],
+  );
   elements.push(ruled.frameId);
   const ruledRange = doc.storyRangeId(ruled.storyId, 0, RULED.length);
   await doc.setProperty("storyRange", ruledRange, "paragraphRuleAbove", {
@@ -60,14 +66,19 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     type: "paragraphRule",
     value: { on: true, color: slate, weight: 0.5, offset: 3 },
   });
-  const ruleCap = await proseFrame(ctx, page, [60, 180, 492, 208], [
-    {
-      text:
-        "paragraphRuleAbove: Vermilion, 1 pt · paragraphRuleBelow: " +
-        "Slate, 0.5 pt",
-      style: STYLE.caption,
-    },
-  ]);
+  const ruleCap = await proseFrame(
+    ctx,
+    page,
+    [60, 180, 492, 208],
+    [
+      {
+        text:
+          "paragraphRuleAbove: Vermilion, 1 pt · paragraphRuleBelow: " +
+          "Slate, 0.5 pt",
+        style: STYLE.caption,
+      },
+    ],
+  );
   elements.push(ruleCap.frameId);
 
   // ── the tab-stop menu: one line per alignment, dot leaders ───────
@@ -119,14 +130,19 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     );
     offset += m.text.length + (i === menu.length - 1 ? 0 : 1);
   }
-  const menuCap = await proseFrame(ctx, page, [60, 300, 492, 328], [
-    {
-      text:
-        "paragraphTabStops · LeftAlign / CenterAlign / RightAlign / " +
-        "CharacterAlign with alignmentCharacter = period, leader = dot",
-      style: STYLE.caption,
-    },
-  ]);
+  const menuCap = await proseFrame(
+    ctx,
+    page,
+    [60, 300, 492, 328],
+    [
+      {
+        text:
+          "paragraphTabStops · LeftAlign / CenterAlign / RightAlign / " +
+          "CharacterAlign with alignmentCharacter = period, leader = dot",
+        style: STYLE.caption,
+      },
+    ],
+  );
   elements.push(menuCap.frameId);
 
   // ── the figure stack: three sums aligned on the point ────────────
@@ -150,37 +166,47 @@ export async function build(ctx: PageContext): Promise<PageReport> {
       ],
     },
   );
-  const stackCap = await proseFrame(ctx, page, [60, 410, 262, 452], [
-    {
-      text: "One CharacterAlign stop shared by three lines: the points sit plumb",
-      style: STYLE.caption,
-    },
-  ]);
+  const stackCap = await proseFrame(
+    ctx,
+    page,
+    [60, 410, 262, 452],
+    [
+      {
+        text: "One CharacterAlign stop shared by three lines: the points sit plumb",
+        style: STYLE.caption,
+      },
+    ],
+  );
   elements.push(stackCap.frameId);
 
   // ── prose + the honest margin ────────────────────────────────────
-  const prose = await proseFrame(ctx, page, [286, 344, 492, 560], [
-    {
-      text:
-        "A paragraph rule is not an underline: it belongs to the " +
-        "paragraph, spans the measure less its indents, and rides the " +
-        "wire as one struct, so a single write replaces colour, " +
-        "weight and offset together. Tab stops travel the same way - " +
-        "the whole TabList replaced per write, which is why each menu " +
-        "line above carries its own private stop.",
-      style: STYLE.bodyFirst,
-    },
-    {
-      text:
-        "Paragraph shading and paragraph borders are the missing " +
-        "guests at this table: the engine parses both from IDML and " +
-        "renders both faithfully, but neither has a property path, so " +
-        "a live page cannot yet author them. They appear in this book " +
-        "only where a fixture declared them - and honestly, in the " +
-        "margin, where they do not.",
-      style: STYLE.body,
-    },
-  ]);
+  const prose = await proseFrame(
+    ctx,
+    page,
+    [286, 344, 492, 560],
+    [
+      {
+        text:
+          "A paragraph rule is not an underline: it belongs to the " +
+          "paragraph, spans the measure less its indents, and rides the " +
+          "wire as one struct, so a single write replaces colour, " +
+          "weight and offset together. Tab stops travel the same way - " +
+          "the whole TabList replaced per write, which is why each menu " +
+          "line above carries its own private stop.",
+        style: STYLE.bodyFirst,
+      },
+      {
+        text:
+          "Paragraph shading and paragraph borders are the missing " +
+          "guests at this table: the engine parses both from IDML and " +
+          "renders both faithfully, but neither has a property path, so " +
+          "a live page cannot yet author them. They appear in this book " +
+          "only where a fixture declared them - and honestly, in the " +
+          "margin, where they do not.",
+        style: STYLE.body,
+      },
+    ],
+  );
   elements.push(prose.frameId);
 
   await marginNote(

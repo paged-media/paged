@@ -30,7 +30,13 @@ import type { PluginManifest } from "@paged-media/plugin-api";
 import manifestJson from "@paged-media/image-manifest/manifest.json";
 
 import { createImageSession } from "../src/session";
-import { makeFakeEditor, mapBacking, psdBytes, shellStub, silentConsole } from "./helpers";
+import {
+  makeFakeEditor,
+  mapBacking,
+  psdBytes,
+  shellStub,
+  silentConsole,
+} from "./helpers";
 import { countingEngine, type EngineLog } from "./perf/counting-engine";
 
 let log: EngineLog | null = null;
@@ -58,11 +64,15 @@ mock.module("../src/engine", () => {
 describe("editable adjustment layers", () => {
   it("bind on select, edit through the sliders, unbind on another layer", async () => {
     const fake = makeFakeEditor();
-    const handle = createBundleHost(() => fake.editor, manifestJson as PluginManifest, {
-      console: silentConsole,
-      storage: mapBacking(),
-      shell: shellStub(),
-    });
+    const handle = createBundleHost(
+      () => fake.editor,
+      manifestJson as PluginManifest,
+      {
+        console: silentConsole,
+        storage: mapBacking(),
+        shell: shellStub(),
+      },
+    );
     const session = createImageSession(handle.host);
     expect(await session.importBytes("a.psd", psdBytes())).toBe(true);
 
@@ -105,11 +115,15 @@ describe("editable adjustment layers", () => {
   // retune ITS layer, and unbinding would hand back the old panel.
   it("a new image unbinds the sliders and leaves the previous image's chains behind", async () => {
     const fake = makeFakeEditor();
-    const handle = createBundleHost(() => fake.editor, manifestJson as PluginManifest, {
-      console: silentConsole,
-      storage: mapBacking(),
-      shell: shellStub(),
-    });
+    const handle = createBundleHost(
+      () => fake.editor,
+      manifestJson as PluginManifest,
+      {
+        console: silentConsole,
+        storage: mapBacking(),
+        shell: shellStub(),
+      },
+    );
     const session = createImageSession(handle.host);
     expect(await session.importBytes("a.psd", psdBytes())).toBe(true);
     session.setParams({ exposureEv: 0.5 });

@@ -1,99 +1,102 @@
-$schema: '../../.moon/cache/schemas/project.json'
+$schema: "../../.moon/cache/schemas/project.json"
 
 # The editor: apps/canvas, apps/devtools and packages/*, members of the root
 # Bun workspace.
-language: 'typescript'
-layer: 'application'
-stack: 'frontend'
-tags: ['node', 'app']
+language: "typescript"
+layer: "application"
+stack: "frontend"
+tags: ["node", "app"]
 
 project:
-  title: 'apps/editor'
-  description: 'The editor application.'
+  title: "apps/editor"
+  description: "The editor application."
 
 dependsOn:
   # `workspace:*` dependencies the editor compiles from source: every module
   # bundle, the extension contract and ai, and the engine's wasm packages.
-  - id: 'core'
-    scope: 'production'
-  - id: 'extensions'
-    scope: 'production'
-  - id: 'data'
-    scope: 'production'
-  - id: 'doc'
-    scope: 'production'
-  - id: 'draw'
-    scope: 'production'
-  - id: 'image'
-    scope: 'production'
-  - id: 'publish'
-    scope: 'production'
-  - id: 'sheet'
-    scope: 'production'
-  - id: 'slide'
-    scope: 'production'
-  - id: 'web'
-    scope: 'production'
+  - id: "core"
+    scope: "production"
+  - id: "extensions"
+    scope: "production"
+  - id: "data"
+    scope: "production"
+  - id: "doc"
+    scope: "production"
+  - id: "draw"
+    scope: "production"
+  - id: "image"
+    scope: "production"
+  - id: "publish"
+    scope: "production"
+  - id: "sheet"
+    scope: "production"
+  - id: "slide"
+    scope: "production"
+  - id: "web"
+    scope: "production"
 
 tasks:
   js-check:
-    description: 'typecheck of apps/*, then the canvas test sources (as editor-tests runs them).'
-    script: 'bun run typecheck && bun run --filter ./apps/canvas typecheck:tests'
+    description: "typecheck of apps/*, then the canvas test sources (as editor-tests runs them)."
+    script: "bun run typecheck && bun run --filter ./apps/canvas typecheck:tests"
     # The workspace packages are compiled into the editor from source, and
     # canvas-wasm's .d.ts is a build output (core:wasm-pkg).
-    deps: ['core:wasm-pkg']
+    deps: ["core:wasm-pkg"]
     inputs:
-      - '@group(js-sources)'
-      - project: 'core'
-        filter: ['packages/*/**/*']
-      - project: 'extensions'
-        filter: ['packages/*/src/**/*', 'packages/*/package.json']
-      - project: 'data'
-        filter: ['packages/*/**/*']
-      - project: 'doc'
-        filter: ['packages/*/**/*']
-      - project: 'draw'
-        filter: ['packages/*/**/*']
-      - project: 'image'
-        filter: ['glue/**/*', 'manifest/**/*']
-      - project: 'publish'
-        filter: ['packages/*/**/*']
-      - project: 'sheet'
-        filter: ['packages/*/**/*']
-      - project: 'slide'
-        filter: ['packages/*/**/*']
-      - project: 'web'
-        filter: ['packages/web-bundle/**/*', 'packages/web-model/**/*']
+      - "@group(js-sources)"
+      - project: "core"
+        filter: ["packages/*/**/*"]
+      - project: "extensions"
+        filter: ["packages/*/src/**/*", "packages/*/package.json"]
+      - project: "data"
+        filter: ["packages/*/**/*"]
+      - project: "doc"
+        filter: ["packages/*/**/*"]
+      - project: "draw"
+        filter: ["packages/*/**/*"]
+      - project: "image"
+        filter: ["glue/**/*", "manifest/**/*"]
+      - project: "publish"
+        filter: ["packages/*/**/*"]
+      - project: "sheet"
+        filter: ["packages/*/**/*"]
+      - project: "slide"
+        filter: ["packages/*/**/*"]
+      - project: "web"
+        filter: ["packages/web-bundle/**/*", "packages/web-model/**/*"]
 
   # The repository's lint self-test lives here: the editor's zones were its
   # first cases (ADR 206). It checks the whole root config (the module and
   # extension contracts, the Rules of React), so it reads /bunfig.toml.
   js-lint:
-    deps: ['~:lint-selftest']
+    deps: ["~:lint-selftest"]
 
   lint-selftest:
-    description: 'Every lint boundary fires and every allowed import stays allowed (tooling/js/lint-selftest.mjs).'
-    toolchains: ['system']
-    command: 'bun $workspaceRoot/tooling/js/lint-selftest.mjs'
+    description: "Every lint boundary fires and every allowed import stays allowed (tooling/js/lint-selftest.mjs)."
+    toolchains: ["system"]
+    command: "bun $workspaceRoot/tooling/js/lint-selftest.mjs"
     inputs:
-      - '/bunfig.toml'
-      - '/tooling/js/lint-selftest.mjs'
-      - '/tooling/js/lint-selftest/**/*'
-      - '/tooling/js/bun-canary.sh'
-      - '/tooling/js/bun-canary-version'
-      - '/platform/shared/*/package.json'
+      - "/bunfig.toml"
+      - "/tooling/js/lint-selftest.mjs"
+      - "/tooling/js/lint-selftest/**/*"
+      - "/tooling/js/bun-canary.sh"
+      - "/tooling/js/bun-canary-version"
+      - "/platform/shared/*/package.json"
 
   js-test:
-    description: 'The static guards of the editor-tests `checks` job, in its order.'
+    description: "The static guards of the editor-tests `checks` job, in its order."
     script: >-
       bun run test:boot-coi
       && bun run test:network-policy
       && bun run test:modules
       && bun run test:spread-pages
       && bun run test:repository
+      && bun run test:tools
+      && bun run test:shell
+      && bun run test:shell-dom
+      && bun run test:canvas-unit
       && bun run test:thresholds
       && bun run test:wasm-budget
-      && bun run test:surface-coverage
       && bun run test:bundle-contracts
       && bun run test:seam-guard
       && bun run test:applicability
@@ -101,50 +104,85 @@ tasks:
       && bun run test:feat-vocabulary
       && bun run test:client-catalog
     # The wasm budget and the module door measure the wasm the app ships.
-    deps: ['core:wasm-pkg', 'doc:wasm', 'slide:wasm', 'sheet:wasm', 'data:wasm', 'web:wasm']
+    deps:
+      [
+        "core:wasm-pkg",
+        "doc:wasm",
+        "slide:wasm",
+        "sheet:wasm",
+        "data:wasm",
+        "web:wasm",
+      ]
     inputs:
-      - '@group(js-sources)'
-      - project: 'core'
-        filter: ['packages/*/**/*']
-      - project: 'extensions'
-        filter: ['packages/*/src/**/*', 'packages/*/package.json']
-      - project: 'data'
-        filter: ['packages/*/**/*']
-      - project: 'doc'
-        filter: ['packages/*/**/*']
-      - project: 'draw'
-        filter: ['packages/*/**/*']
-      - project: 'image'
-        filter: ['glue/**/*', 'manifest/**/*']
-      - project: 'publish'
-        filter: ['packages/*/**/*']
-      - project: 'sheet'
-        filter: ['packages/*/**/*']
-      - project: 'slide'
-        filter: ['packages/*/**/*']
-      - project: 'web'
-        filter: ['packages/web-bundle/**/*', 'packages/web-model/**/*']
+      - "@group(js-sources)"
+      - project: "core"
+        filter: ["packages/*/**/*"]
+      - project: "extensions"
+        filter: ["packages/*/src/**/*", "packages/*/package.json"]
+      - project: "data"
+        filter: ["packages/*/**/*"]
+      - project: "doc"
+        filter: ["packages/*/**/*"]
+      - project: "draw"
+        filter: ["packages/*/**/*"]
+      - project: "image"
+        filter: ["glue/**/*", "manifest/**/*"]
+      - project: "publish"
+        filter: ["packages/*/**/*"]
+      - project: "sheet"
+        filter: ["packages/*/**/*"]
+      - project: "slide"
+        filter: ["packages/*/**/*"]
+      - project: "web"
+        filter: ["packages/web-bundle/**/*", "packages/web-model/**/*"]
+
+  # The surface-conformance gate (docs/reference/surface-conformance.md).
+  # Its own task, because it reads every test file in the repository (the
+  # covers() calls) and the declarations of every surface, not just the
+  # editor's sources: the inputs say so, so a cached run is never stale.
+  surface-conformance:
+    description: "Every surface id asserted under covers() in its required layers, or acknowledged (scripts/surface-coverage.mjs)."
+    script: "bun test ./scripts/surface-coverage.test.mjs && bun scripts/surface-coverage.mjs --quiet"
+    inputs:
+      - "scripts/surface-coverage.mjs"
+      - "scripts/surface-coverage.test.mjs"
+      - "scripts/surface/**/*"
+      - "scripts/surface-acknowledged/**/*"
+      - "scripts/settings-inventory.json"
+      - "/apps/**/*.{ts,tsx,mts,mjs,js}"
+      - "/modules/**/*.{ts,tsx,mts,mjs,rs,json}"
+      - "/platform/**/*.{ts,tsx,mts,mjs,js,rs,json}"
+      - "/engine/core/crates/**/*.{rs,json}"
+      - "/package.json"
 
   js-build:
-    description: 'vite build of apps/* (needs the engine wasm and the bundles'' engine wasm).'
-    command: 'bun run build'
-    deps: ['core:wasm-pkg', 'doc:wasm', 'slide:wasm', 'sheet:wasm', 'data:wasm', 'web:wasm']
+    description: "vite build of apps/* (needs the engine wasm and the bundles' engine wasm)."
+    command: "bun run build"
+    deps:
+      [
+        "core:wasm-pkg",
+        "doc:wasm",
+        "slide:wasm",
+        "sheet:wasm",
+        "data:wasm",
+        "web:wasm",
+      ]
     inputs:
-      - '@group(js-sources)'
+      - "@group(js-sources)"
     options:
       runInCI: false
 
   fixtures:
-    description: 'paged-gen (engine/core) emits every sample into corpus/idml/generated/, as editor-tests does.'
-    toolchains: ['rust']
+    description: "paged-gen (engine/core) emits every sample into corpus/idml/generated/, as editor-tests does."
+    toolchains: ["rust"]
     script: >-
       cd "$workspaceRoot/engine/core"
       && cargo build --release -p paged-gen --bin paged-gen
       && mkdir -p "$projectRoot/corpus/idml/generated"
       && "${CARGO_TARGET_DIR:-target}/release/paged-gen" emit-all --out "$projectRoot/corpus/idml/generated"
     inputs:
-      - project: 'core'
-        filter: ['crates/**/*.rs', 'crates/**/Cargo.toml', 'Cargo.lock']
+      - project: "core"
+        filter: ["crates/**/*.rs", "crates/**/Cargo.toml", "Cargo.lock"]
     options:
       cache: false
       runInCI: false
@@ -154,10 +192,19 @@ tasks:
       Playwright, the chromium + journeys projects of editor-tests. Needs the
       private corpus at apps/editor/corpus (a symlink) and a browser
       (`bunx playwright install chromium` in apps/canvas).
-    script: 'cd apps/canvas && bunx --no-install playwright test --project=chromium --project=journeys'
-    deps: ['~:fixtures', 'core:wasm-pkg', 'doc:wasm', 'slide:wasm', 'sheet:wasm', 'data:wasm', 'web:wasm']
+    script: "cd apps/canvas && bunx --no-install playwright test --project=chromium --project=journeys"
+    deps:
+      [
+        "~:fixtures",
+        "core:wasm-pkg",
+        "doc:wasm",
+        "slide:wasm",
+        "sheet:wasm",
+        "data:wasm",
+        "web:wasm",
+      ]
     inputs:
-      - '@group(js-sources)'
+      - "@group(js-sources)"
     options:
       cache: false
       runInCI: false

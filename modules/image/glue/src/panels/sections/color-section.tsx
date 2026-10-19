@@ -69,13 +69,25 @@ export function ColorSection({
         <span style={mono}>{toHex(colors.bg)}</span>
       </div>
       <div style={row}>
-        <button type="button" data-image-swap-colors onClick={() => session.swapColors()}>
+        <button
+          type="button"
+          data-image-swap-colors
+          onClick={() => session.swapColors()}
+        >
           Swap
         </button>
-        <button type="button" data-image-reset-colors onClick={() => session.resetColors()}>
+        <button
+          type="button"
+          data-image-reset-colors
+          onClick={() => session.resetColors()}
+        >
           Black / white
         </button>
-        <button type="button" data-image-fill-fg onClick={() => void session.fillForeground()}>
+        <button
+          type="button"
+          data-image-fill-fg
+          onClick={() => void session.fillForeground()}
+        >
           Fill
         </button>
       </div>
@@ -85,7 +97,9 @@ export function ColorSection({
           id="pg-image-gradient-kind"
           data-image-gradient-kind
           value={gradientKind}
-          onChange={(e) => session.setGradientKind(e.target.value as GradientKind)}
+          onChange={(e) =>
+            session.setGradientKind(e.target.value as GradientKind)
+          }
         >
           {GRADIENT_KINDS.map((k) => (
             <option key={k} value={k}>

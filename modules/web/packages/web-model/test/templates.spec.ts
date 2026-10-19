@@ -58,9 +58,10 @@ describe("WEB_TEMPLATES — the vetted set", () => {
   it("non-empty templates are also balanced (no warnings either)", () => {
     for (const t of WEB_TEMPLATES.filter((x) => x.id !== "empty")) {
       const diags = diagnoseHtml(t.html);
-      expect(diags, `template ${t.id} produced ${JSON.stringify(diags)}`).toEqual(
-        [],
-      );
+      expect(
+        diags,
+        `template ${t.id} produced ${JSON.stringify(diags)}`,
+      ).toEqual([]);
     }
   });
 
@@ -97,7 +98,11 @@ describe("templateById", () => {
 describe("sourceFromTemplate", () => {
   it("seeds html/css from the template over the caller's options", () => {
     const card = templateById("card")!;
-    const opts = { media: "screen", overflow: "clip", viewportWidth: 480 } as const;
+    const opts = {
+      media: "screen",
+      overflow: "clip",
+      viewportWidth: 480,
+    } as const;
     const src = sourceFromTemplate(card, opts);
     expect(src.html).toBe(card.html);
     expect(src.css).toBe(card.css);

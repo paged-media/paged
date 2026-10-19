@@ -40,18 +40,34 @@ const json = (v: unknown) => JSON.stringify(v, null, 2) + "\n";
 
 describe("the manifest's object model is the registered one", () => {
   it("declares every registered kind and typed command, and the schema files hold the runtime rows", async () => {
-    const h = (live = await createHeadlessHost({ resolveFrom: ENGINE_ANCHOR, console: silent, ...(UPDATE ? { capabilityMode: "warn" as const } : {}) }));
+    const h = (live = await createHeadlessHost({
+      resolveFrom: ENGINE_ANCHOR,
+      console: silent,
+      ...(UPDATE ? { capabilityMode: "warn" as const } : {}),
+    }));
     await h.load(minimalIdml());
     h.loadBundle(imageBundle);
-    const commands = (await h.objects.commands()).filter((c) => c.owner === "media.paged.image");
+    const commands = (await h.objects.commands()).filter(
+      (c) => c.owner === "media.paged.image",
+    );
     const om = manifestObjectModel(
-      commands.map((c) => ({ id: c.id, title: c.title, args: c.args, handler: () => null })),
+      commands.map((c) => ({
+        id: c.id,
+        title: c.title,
+        args: c.args,
+        handler: () => null,
+      })),
     );
     for (const dir of MANIFESTS) {
       const path = join(dir, "manifest.json");
-      const manifest = JSON.parse(readFileSync(path, "utf8")) as { contributes: Record<string, unknown> };
+      const manifest = JSON.parse(readFileSync(path, "utf8")) as {
+        contributes: Record<string, unknown>;
+      };
       const files = Object.fromEntries(
-        (Object.keys(KIND_ROWS) as ImageKind[]).map((k) => [join(dir, "object-model", `${k}.json`), json(KIND_ROWS[k])]),
+        (Object.keys(KIND_ROWS) as ImageKind[]).map((k) => [
+          join(dir, "object-model", `${k}.json`),
+          json(KIND_ROWS[k]),
+        ]),
       );
       if (UPDATE) {
         manifest.contributes.objectModel = om;
@@ -60,17 +76,27 @@ describe("the manifest's object model is the registered one", () => {
         for (const [f, body] of Object.entries(files)) writeFileSync(f, body);
         continue;
       }
-      expect(manifest.contributes.objectModel, `${path}: regenerate with UPDATE_OBJECT_MODEL=1`).toEqual(om);
+      expect(
+        manifest.contributes.objectModel,
+        `${path}: regenerate with UPDATE_OBJECT_MODEL=1`,
+      ).toEqual(om);
       for (const [f, body] of Object.entries(files)) {
-        expect(existsSync(f) ? readFileSync(f, "utf8") : null, `${f} is stale`).toBe(body);
+        expect(
+          existsSync(f) ? readFileSync(f, "utf8") : null,
+          `${f} is stale`,
+        ).toBe(body);
       }
     }
     // Every untyped command has its typed twin (the shrink-only baseline
     // goes to zero for this plugin).
-    const declared = JSON.parse(readFileSync(join(ROOT, "manifest", "manifest.json"), "utf8")) as {
+    const declared = JSON.parse(
+      readFileSync(join(ROOT, "manifest", "manifest.json"), "utf8"),
+    ) as {
       contributes: { commands: string[] };
     };
     const typed = new Set(commands.map((c) => c.id));
-    expect(declared.contributes.commands.filter((id) => !typed.has(id))).toEqual([]);
+    expect(
+      declared.contributes.commands.filter((id) => !typed.has(id)),
+    ).toEqual([]);
   });
 });

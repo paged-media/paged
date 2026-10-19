@@ -56,30 +56,30 @@ worker may see torn reads under contention (spec §12.4).
 
 ## Shortcuts
 
-| Key | Action |
-|---|---|
-| Pointer drag (LMB) | Pan |
-| Ctrl/Cmd + wheel | Zoom-to-cursor |
-| Wheel (no modifier) | Pan via deltaX/Y |
-| Click | Hit-test → frame selection |
-| Cmd/Ctrl + 0 | Fit-to-document (animated) |
-| Cmd/Ctrl + 1 | 100 % zoom centred on viewport |
-| Page Down | Next page (animated fit) |
-| Page Up | Previous page (animated fit) |
-| Home / End | First / last page |
+| Key                 | Action                         |
+| ------------------- | ------------------------------ |
+| Pointer drag (LMB)  | Pan                            |
+| Ctrl/Cmd + wheel    | Zoom-to-cursor                 |
+| Wheel (no modifier) | Pan via deltaX/Y               |
+| Click               | Hit-test → frame selection     |
+| Cmd/Ctrl + 0        | Fit-to-document (animated)     |
+| Cmd/Ctrl + 1        | 100 % zoom centred on viewport |
+| Page Down           | Next page (animated fit)       |
+| Page Up             | Previous page (animated fit)   |
+| Home / End          | First / last page              |
 
 ## HUD
 
 The bottom-right HUD shows:
 
-| Field | Meaning |
-|---|---|
-| `GPU` / `CPU` badge | Renderer backend (green = WebGPU, amber = CPU fallback) |
-| `N fps` | Main-thread rAF cadence (proxy for perceived smoothness) |
-| `N pages` | Loaded page count |
-| `XX%` | Camera scale |
-| `tx, ty` | Camera translation in CSS pixels |
-| `frame XXX` | Self attribute of the most recently clicked frame |
+| Field               | Meaning                                                  |
+| ------------------- | -------------------------------------------------------- |
+| `GPU` / `CPU` badge | Renderer backend (green = WebGPU, amber = CPU fallback)  |
+| `N fps`             | Main-thread rAF cadence (proxy for perceived smoothness) |
+| `N pages`           | Loaded page count                                        |
+| `XX%`               | Camera scale                                             |
+| `tx, ty`            | Camera translation in CSS pixels                         |
+| `frame XXX`         | Self attribute of the most recently clicked frame        |
 
 ## File layout
 

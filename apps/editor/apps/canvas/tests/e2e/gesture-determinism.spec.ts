@@ -39,9 +39,7 @@ import { dumpElement } from "./harness/model-dump";
 
 /** One fresh load + the fixed three-gesture tape; returns the final
  *  model dump + raster bytes. */
-async function runTape(
-  page: Page,
-): Promise<{ dump: string; png: Buffer }> {
+async function runTape(page: Page): Promise<{ dump: string; png: Buffer }> {
   await openCanvas(page);
   const fx: LoadedFixture = await loadFixture(page, "geometry");
   const target = fx.frames.find((f) => f.ref.kind === "rectangle")!;

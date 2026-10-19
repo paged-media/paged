@@ -36,7 +36,10 @@ import { DEFAULT_SOURCE, type WebFrameSource } from "@paged-media/web-model";
 
 import { webBundle } from "../../src";
 import { sceneLayerToBakePlan } from "../../src/bake-plan";
-import { bakeWebFrameToDocument, bakeWebFlowToDocument } from "../../src/bake-to-document";
+import {
+  bakeWebFrameToDocument,
+  bakeWebFlowToDocument,
+} from "../../src/bake-to-document";
 import {
   engineExtras,
   parseSceneLayer,
@@ -78,7 +81,8 @@ const SOURCE: WebFrameSource = {
 };
 
 async function storyCount(h: HeadlessHost): Promise<number> {
-  return (await h.host.document.collection<{ selfId: string }>("stories")).length;
+  return (await h.host.document.collection<{ selfId: string }>("stories"))
+    .length;
 }
 
 describe.skipIf(!artifactPresent)(
@@ -94,24 +98,37 @@ describe.skipIf(!artifactPresent)(
       h.loadBundle(webBundle);
       // Insert a web frame, then override its default source with ours.
       const c = h.contributions.find(
-        (x) => x.kind === "command" && x.id === "media.paged.web.command.insertWebFrame",
+        (x) =>
+          x.kind === "command" &&
+          x.id === "media.paged.web.command.insertWebFrame",
       );
-      await (c!.value as { handler: (a: unknown) => unknown }).handler(undefined);
+      await (c!.value as { handler: (a: unknown) => unknown }).handler(
+        undefined,
+      );
       frame = h.host.selection.get()[0];
       await writeWebSource(h.host, frame, SOURCE);
 
       // Load the REAL Blitz engine (Node has no relative fetch → initSync).
-      const glue = (await import(new URL("../../bin/blitz_web.js", import.meta.url).href)) as {
+      const glue = (await import(
+        new URL("../../bin/blitz_web.js", import.meta.url).href
+      )) as {
         initSync: (m: { module: Uint8Array }) => unknown;
         render_web_frame: (html: string, w: number, h: number) => string;
-        render_web_flow: (html: string, framesJson: string, flowRoot: string) => string;
+        render_web_flow: (
+          html: string,
+          framesJson: string,
+          flowRoot: string,
+        ) => string;
       };
       glue.initSync({ module: readFileSync(wasmPath) });
       engine = {
         ...engineExtras(glue as never),
-        render: (html, w, hh) => parseSceneLayer(glue.render_web_frame(html, w, hh)),
+        render: (html, w, hh) =>
+          parseSceneLayer(glue.render_web_frame(html, w, hh)),
         renderFlow: (html, frames, flowRoot) =>
-          parseFlowResult(glue.render_web_flow(html, JSON.stringify(frames), flowRoot ?? "")),
+          parseFlowResult(
+            glue.render_web_flow(html, JSON.stringify(frames), flowRoot ?? ""),
+          ),
       };
     });
     afterAll(() => h?.dispose());
@@ -140,16 +157,21 @@ describe.skipIf(!artifactPresent)(
       // The colour lane really applied: a `Color/wb-…` swatch now exists in
       // the document (createSwatch landed against the real engine, so the
       // rect/text `colorRef`s resolve — not a dangling reference).
-      const swatches = await h.host.document.collection<{ selfId: string }>("swatches");
+      const swatches = await h.host.document.collection<{ selfId: string }>(
+        "swatches",
+      );
       expect(swatches.some((s) => s.selfId.startsWith("Color/wb-"))).toBe(true);
 
       // The run's text was poured into a minted story (not an empty frame).
-      const stories = await h.host.document.collection<{ selfId: string; characterCount: number }>(
-        "stories",
-      );
-      expect(stories.slice(storiesBefore).some((s) => s.characterCount === "Bake me".length)).toBe(
-        true,
-      );
+      const stories = await h.host.document.collection<{
+        selfId: string;
+        characterCount: number;
+      }>("stories");
+      expect(
+        stories
+          .slice(storiesBefore)
+          .some((s) => s.characterCount === "Bake me".length),
+      ).toBe(true);
     });
 
     it("a bake is ONE undo step, and re-baking reuses the swatches it made", async () => {
@@ -188,7 +210,9 @@ describe.skipIf(!artifactPresent)(
 
     it("bakes faces, gradients, opacity, a drop shadow and an image in ONE applied batch @feat:plugin-web.bake-to-native", async () => {
       const insert = h.contributions.find(
-        (x) => x.kind === "command" && x.id === "media.paged.web.command.insertWebFrame",
+        (x) =>
+          x.kind === "command" &&
+          x.id === "media.paged.web.command.insertWebFrame",
       )!.value as { handler: (a: unknown) => unknown };
       await insert.handler(undefined);
       const rich = h.host.selection.get()[0];
@@ -206,9 +230,14 @@ describe.skipIf(!artifactPresent)(
           ".grad{width:60px;height:20px;background:linear-gradient(to right,#ff0000,#0000ff)}" +
           ".glass{width:20px;height:20px;background:rgba(0,0,255,0.5)}",
       });
-      const gradientsBefore = (await h.host.document.collection<{ selfId: string }>("gradients")).length;
+      const gradientsBefore = (
+        await h.host.document.collection<{ selfId: string }>("gradients")
+      ).length;
       // See the batch the bake sends (the counting host counts, it does not keep).
-      const sent: { op: string; args: { ops: { op: string; args: Record<string, unknown> }[] } }[] = [];
+      const sent: {
+        op: string;
+        args: { ops: { op: string; args: Record<string, unknown> }[] };
+      }[] = [];
       const doc = h.host.document;
       const spied = new Proxy(h.host, {
         get(t, k) {
@@ -222,7 +251,9 @@ describe.skipIf(!artifactPresent)(
                   return doc.mutate(m);
                 };
               }
-              return typeof v === "function" ? (v as (...a: unknown[]) => unknown).bind(d) : v;
+              return typeof v === "function"
+                ? (v as (...a: unknown[]) => unknown).bind(d)
+                : v;
             },
           });
         },
@@ -231,14 +262,24 @@ describe.skipIf(!artifactPresent)(
       const outcome = await bakeWebFrameToDocument(host, rich, engine);
       await settle();
       expect(work.mutations.map((m) => m.op)).toEqual(["batch"]);
-      expect(outcome.diagnostics.map((d) => d.message).join(" | ")).not.toMatch(/refused/);
+      expect(outcome.diagnostics.map((d) => d.message).join(" | ")).not.toMatch(
+        /refused/,
+      );
       expect(outcome.baked).toBe(true);
       // Nothing of these kinds was left behind.
-      for (const k of ["image", "dropShadow", "dropShadow.noShape", "fillPathGradient.linear", "text"]) {
+      for (const k of [
+        "image",
+        "dropShadow",
+        "dropShadow.noShape",
+        "fillPathGradient.linear",
+        "text",
+      ]) {
         expect(outcome.deferred[k], k).toBeUndefined();
       }
       const ops = sent[0].args.ops;
-      const paths = ops.filter((o) => o.op === "setElementProperty").map((o) => o.args.path);
+      const paths = ops
+        .filter((o) => o.op === "setElementProperty")
+        .map((o) => o.args.path);
       for (const p of [
         "characterFontFamily",
         "characterFontStyle",
@@ -254,13 +295,17 @@ describe.skipIf(!artifactPresent)(
         .map((o) => (o.args.value as { value: string }).value);
       expect(styles).toEqual(expect.arrayContaining(["Bold", "Italic"]));
       // The engine applied it: the gradient swatch exists.
-      const gradients = await h.host.document.collection<{ selfId: string }>("gradients");
+      const gradients = await h.host.document.collection<{ selfId: string }>(
+        "gradients",
+      );
       expect(gradients.length).toBe(gradientsBefore + 1);
     });
 
     it("a rounded border (a multi-subpath fill) bakes whole, the engine taking its geometry @feat:plugin-web.bake-to-native", async () => {
       const insert = h.contributions.find(
-        (x) => x.kind === "command" && x.id === "media.paged.web.command.insertWebFrame",
+        (x) =>
+          x.kind === "command" &&
+          x.id === "media.paged.web.command.insertWebFrame",
       )!.value as { handler: (a: unknown) => unknown };
       await insert.handler(undefined);
       const ring = h.host.selection.get()[0];
@@ -280,7 +325,9 @@ describe.skipIf(!artifactPresent)(
 
     it("shadows of rounded boxes and of unequal-cornered boxes bake onto their shapes @feat:plugin-web.bake-to-native", async () => {
       const insert = h.contributions.find(
-        (x) => x.kind === "command" && x.id === "media.paged.web.command.insertWebFrame",
+        (x) =>
+          x.kind === "command" &&
+          x.id === "media.paged.web.command.insertWebFrame",
       )!.value as { handler: (a: unknown) => unknown };
       await insert.handler(undefined);
       const boxes = h.host.selection.get()[0];
@@ -291,7 +338,16 @@ describe.skipIf(!artifactPresent)(
           "body{margin:0}div{width:100px;height:40px;margin:10px;box-shadow:4px 4px 6px rgba(0,0,0,0.4)}" +
           ".pill{background:#2a9d8f;border-radius:12px}.leaf{background:#264653;border-radius:4px 20px}",
       });
-      const sent: { ops: { op: string; args: { path?: string; elementId?: { kind: string }; value?: { value: unknown } } }[] }[] = [];
+      const sent: {
+        ops: {
+          op: string;
+          args: {
+            path?: string;
+            elementId?: { kind: string };
+            value?: { value: unknown };
+          };
+        }[];
+      }[] = [];
       const doc = h.host.document;
       const spied = new Proxy(h.host, {
         get(t, k) {
@@ -305,7 +361,9 @@ describe.skipIf(!artifactPresent)(
                   return doc.mutate(m as never);
                 };
               }
-              return typeof v === "function" ? (v as (...a: unknown[]) => unknown).bind(d) : v;
+              return typeof v === "function"
+                ? (v as (...a: unknown[]) => unknown).bind(d)
+                : v;
             },
           });
         },
@@ -313,19 +371,27 @@ describe.skipIf(!artifactPresent)(
       const outcome = await bakeWebFrameToDocument(spied, boxes, engine);
       await settle();
       // The engine accepted the whole batch: shadows on a polygon included.
-      expect(outcome.diagnostics.map((d) => d.message).join(" | ")).not.toMatch(/refused/);
+      expect(outcome.diagnostics.map((d) => d.message).join(" | ")).not.toMatch(
+        /refused/,
+      );
       expect(outcome.baked).toBe(true);
       expect(outcome.deferred).toEqual({});
       const ops = sent[0].ops.filter((o) => o.op === "setElementProperty");
-      const shadowOn = ops.filter((o) => o.args.path === "frameDropShadowMode").map((o) => o.args.elementId!.kind);
+      const shadowOn = ops
+        .filter((o) => o.args.path === "frameDropShadowMode")
+        .map((o) => o.args.elementId!.kind);
       expect(shadowOn.sort()).toEqual(["polygon", "rectangle"]);
-      const radii = ops.filter((o) => o.args.path?.startsWith("frameCornerRadius")).map((o) => o.args.value!.value);
+      const radii = ops
+        .filter((o) => o.args.path?.startsWith("frameCornerRadius"))
+        .map((o) => o.args.value!.value);
       expect(radii).toEqual([9, 9, 9, 9]);
     });
 
     it("a shapes-only bake gets every path's handle back from the batch @feat:plugin-web.bake-to-native", async () => {
       const insert = h.contributions.find(
-        (x) => x.kind === "command" && x.id === "media.paged.web.command.insertWebFrame",
+        (x) =>
+          x.kind === "command" &&
+          x.id === "media.paged.web.command.insertWebFrame",
       )!.value as { handler: (a: unknown) => unknown };
       await insert.handler(undefined);
       const shapes = h.host.selection.get()[0];
@@ -339,7 +405,10 @@ describe.skipIf(!artifactPresent)(
           ".leaf{width:80px;height:40px;margin-top:6px;background:#2a9d8f;border-radius:4px 20px}",
       });
       const sent: { ops: { op: string; args: { handle?: string } }[] }[] = [];
-      const replies: { applied: boolean; minted?: { handle: string | null }[] }[] = [];
+      const replies: {
+        applied: boolean;
+        minted?: { handle: string | null }[];
+      }[] = [];
       const doc = h.host.document;
       const spied = new Proxy(h.host, {
         get(t, k) {
@@ -355,7 +424,9 @@ describe.skipIf(!artifactPresent)(
                   return r;
                 };
               }
-              return typeof v === "function" ? (v as (...a: unknown[]) => unknown).bind(d) : v;
+              return typeof v === "function"
+                ? (v as (...a: unknown[]) => unknown).bind(d)
+                : v;
             },
           });
         },
@@ -363,8 +434,12 @@ describe.skipIf(!artifactPresent)(
       const outcome = await bakeWebFrameToDocument(spied, shapes, engine);
       await settle();
       expect(outcome.baked).toBe(true);
-      const bound = sent[0].ops.filter((o) => o.op === "bindCreated").map((o) => o.args.handle);
-      expect(bound.filter((x) => x?.startsWith("p")).length).toBeGreaterThanOrEqual(2);
+      const bound = sent[0].ops
+        .filter((o) => o.op === "bindCreated")
+        .map((o) => o.args.handle);
+      expect(
+        bound.filter((x) => x?.startsWith("p")).length,
+      ).toBeGreaterThanOrEqual(2);
       expect(bound.some((x) => x?.startsWith("t"))).toBe(false);
       // Every mint is named: the engine fills the handle of each bindCreated
       // in a batch with no text in it too.
@@ -378,7 +453,10 @@ describe.skipIf(!artifactPresent)(
       // frame outcome — never throws, never invents content. (Uses a bogus
       // element id: `asFrameTarget` accepts the shape but `getMetadata`/part
       // read yields no source.)
-      const bogus = { kind: "rectangle", id: "uNOTWEB" } as unknown as ElementId;
+      const bogus = {
+        kind: "rectangle",
+        id: "uNOTWEB",
+      } as unknown as ElementId;
       const outcome = await bakeWebFrameToDocument(h.host, bogus, engine);
       expect(outcome.baked).toBe(false);
       expect(outcome.createdCount).toBe(0);
@@ -391,14 +469,19 @@ describe.skipIf(!artifactPresent)(
       // count, and content lands across BOTH frames (createdCount > a single
       // frame's worth).
       const insert = h.contributions.find(
-        (x) => x.kind === "command" && x.id === "media.paged.web.command.insertWebFrame",
+        (x) =>
+          x.kind === "command" &&
+          x.id === "media.paged.web.command.insertWebFrame",
       )!.value as { handler: (a: unknown) => unknown };
       await insert.handler(undefined);
       const src = h.host.selection.get()[0];
       await insert.handler(undefined);
       const rcp = h.host.selection.get()[0];
 
-      const many = Array.from({ length: 24 }, (_v, i) => `<p>Row ${i}</p>`).join("");
+      const many = Array.from(
+        { length: 24 },
+        (_v, i) => `<p>Row ${i}</p>`,
+      ).join("");
       await writeWebSource(h.host, src, {
         ...SOURCE,
         html: many,

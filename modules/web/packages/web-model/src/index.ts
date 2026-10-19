@@ -204,4 +204,9 @@ export {
   type InspectTextMap,
   type TextPosition,
 } from "./inspect";
-export { editTextNode, escapeText, scanTextNodes, type SourceTextNode } from "./source-text";
+export {
+  editTextNode,
+  escapeText,
+  scanTextNodes,
+  type SourceTextNode,
+} from "./source-text";

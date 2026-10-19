@@ -170,10 +170,7 @@ export function TabsPanel() {
         <StopRuler stops={draft} />
 
         {draft.length === 0 && (
-          <div
-            className="text-xs italic text-muted-foreground"
-            data-tabs-empty
-          >
+          <div className="text-xs italic text-muted-foreground" data-tabs-empty>
             {disabled
               ? "Place a text caret to edit tab stops."
               : "No tab stops. Add one to begin."}
@@ -262,9 +259,7 @@ export function TabsPanel() {
                     if (e.key === "Enter")
                       (e.target as HTMLInputElement).blur();
                   }}
-                  onBlur={(e) =>
-                    patch(i, { leader: e.target.value || null })
-                  }
+                  onBlur={(e) => patch(i, { leader: e.target.value || null })}
                   className="h-[28px] w-full rounded-[6px] border border-input bg-background px-2 text-[11.5px] text-foreground disabled:opacity-55"
                   style={{ fontFamily: "var(--font-mono)" }}
                 />

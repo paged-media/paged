@@ -149,7 +149,12 @@ function docAbove(lines, i) {
     .replace(/^\s*\/\*\*/, "")
     .replace(/\*\/\s*$/, "")
     .split("\n")
-    .map((l) => l.replace(/^\s*\*ary?/, "").replace(/^\s*\*\s?/, "").trim())
+    .map((l) =>
+      l
+        .replace(/^\s*\*ary?/, "")
+        .replace(/^\s*\*\s?/, "")
+        .trim(),
+    )
     .join(" ")
     .replace(/\s+/g, " ")
     .trim();
@@ -182,9 +187,11 @@ function signatureAt(lines, i) {
     const opens = (sig.match(/\(/g) ?? []).length;
     const closes = (sig.match(/\)/g) ?? []).length;
     // `>` of an arrow (`=>`) closes nothing.
-    const angles = (sig.match(/</g) ?? []).length - (sig.match(/(?<!=)>/g) ?? []).length;
+    const angles =
+      (sig.match(/</g) ?? []).length - (sig.match(/(?<!=)>/g) ?? []).length;
     if (opens === closes && angles === 0 && /[{;]\s*$/.test(sig)) break;
-    if (opens === 0 && closes === 0 && angles === 0 && /[;=]\s*$/.test(sig)) break;
+    if (opens === 0 && closes === 0 && angles === 0 && /[;=]\s*$/.test(sig))
+      break;
   }
   return sig
     .replace(/\s*\{\s*$/, "")
@@ -202,8 +209,13 @@ function signatureAt(lines, i) {
 /** Public members of `export class CanvasClient`. */
 function clientMembers(src) {
   const lines = src.split("\n");
-  const open = lines.findIndex((l) => /^export class CanvasClient\s*\{/.test(l));
-  if (open < 0) die("CanvasClient class not found — the parser is looking at the wrong file");
+  const open = lines.findIndex((l) =>
+    /^export class CanvasClient\s*\{/.test(l),
+  );
+  if (open < 0)
+    die(
+      "CanvasClient class not found — the parser is looking at the wrong file",
+    );
   const out = [];
   for (let i = open + 1; i < lines.length; i++) {
     const line = lines[i];
@@ -222,7 +234,11 @@ function clientMembers(src) {
     if (name === "constructor" || name === "if" || name === "return") continue;
     const doc = docAbove(lines, i);
     const sig = signatureAt(lines, i);
-    const kind = decl[1] ? "property" : /\(/.test(sig.slice(name.length)) ? "method" : "property";
+    const kind = decl[1]
+      ? "property"
+      : /\(/.test(sig.slice(name.length))
+        ? "method"
+        : "property";
     out.push({
       name: `CanvasClient.${name}`,
       kind,
@@ -239,11 +255,18 @@ function exportedNames(src) {
   const names = new Set();
   for (const m of src.matchAll(/export\s+(?:type\s+)?\{([^}]*)\}/g)) {
     for (const raw of m[1].split(",")) {
-      const id = raw.trim().replace(/^type\s+/, "").split(/\s+as\s+/).pop().trim();
+      const id = raw
+        .trim()
+        .replace(/^type\s+/, "")
+        .split(/\s+as\s+/)
+        .pop()
+        .trim();
       if (id && !id.startsWith("./") && !id.includes('"')) names.add(id);
     }
   }
-  for (const m of src.matchAll(/export\s+(?:declare\s+)?(?:const|function|class|interface|type)\s+([A-Za-z_$][\w$]*)/g)) {
+  for (const m of src.matchAll(
+    /export\s+(?:declare\s+)?(?:const|function|class|interface|type)\s+([A-Za-z_$][\w$]*)/g,
+  )) {
     names.add(m[1]);
   }
   return [...names];
@@ -252,9 +275,16 @@ function exportedNames(src) {
 /** Which module each barrel export comes from, per `export { … } from "x"`. */
 function exportOrigins(indexSrc) {
   const origin = new Map();
-  for (const m of indexSrc.matchAll(/export\s+(?:type\s+)?\{([^}]*)\}\s*from\s*"([^"]+)"/g)) {
+  for (const m of indexSrc.matchAll(
+    /export\s+(?:type\s+)?\{([^}]*)\}\s*from\s*"([^"]+)"/g,
+  )) {
     for (const raw of m[1].split(",")) {
-      const id = raw.trim().replace(/^type\s+/, "").split(/\s+as\s+/).pop().trim();
+      const id = raw
+        .trim()
+        .replace(/^type\s+/, "")
+        .split(/\s+as\s+/)
+        .pop()
+        .trim();
       if (id) origin.set(id, m[2]);
     }
   }
@@ -278,12 +308,16 @@ function exportOrigins(indexSrc) {
  */
 function wireKinds(src) {
   const kinds = new Set();
-  for (const m of src.matchAll(/this\.(?:send|post)\(\s*\{\s*kind:\s*"([a-z][A-Za-z0-9]*)"/g)) {
+  for (const m of src.matchAll(
+    /this\.(?:send|post)\(\s*\{\s*kind:\s*"([a-z][A-Za-z0-9]*)"/g,
+  )) {
     kinds.add(m[1]);
   }
   for (const { envelope, kind } of SHELL_ENVELOPES) {
     if (!src.includes(`kind: "${envelope}"`)) {
-      die(`SHELL_ENVELOPES maps ${envelope} -> ${kind}, but no such envelope is posted any more — delete the entry or fix it`);
+      die(
+        `SHELL_ENVELOPES maps ${envelope} -> ${kind}, but no such envelope is posted any more — delete the entry or fix it`,
+      );
     }
     kinds.add(kind);
   }
@@ -315,11 +349,16 @@ const barrelExports = exportedNames(indexSrc);
 // by the module they came from.
 const groupFor = (mod) => {
   if (!mod) return null;
-  const g = GROUPS.find((g) => mod.startsWith(`./${g.file.replace(/^src\//, "").replace(/\.ts$/, "")}`)
-    || mod.startsWith(`./${g.file.replace(/^src\//, "")}`)
-    || (g.key === "journal" && mod.startsWith("./journal"))
-    || (g.key === "client" && mod === "./client")
-    || (g.key === "protocol" && mod === "./protocol"));
+  const g = GROUPS.find(
+    (g) =>
+      mod.startsWith(
+        `./${g.file.replace(/^src\//, "").replace(/\.ts$/, "")}`,
+      ) ||
+      mod.startsWith(`./${g.file.replace(/^src\//, "")}`) ||
+      (g.key === "journal" && mod.startsWith("./journal")) ||
+      (g.key === "client" && mod === "./client") ||
+      (g.key === "protocol" && mod === "./protocol"),
+  );
   return g ? g.key : null;
 };
 
@@ -331,8 +370,11 @@ for (const m of members) byKey.client.members.push(m);
 for (const id of barrelExports) {
   const mod = origins.get(id);
   const key = groupFor(mod);
-  if (!key) die(`export ${id} comes from ${mod ?? "nowhere the parser could see"} — add a group for it in GROUPS`);
-  if (key === "client" && (id === "CanvasClient")) continue; // documented by its members
+  if (!key)
+    die(
+      `export ${id} comes from ${mod ?? "nowhere the parser could see"} — add a group for it in GROUPS`,
+    );
+  if (key === "client" && id === "CanvasClient") continue; // documented by its members
   byKey[key].members.push({
     name: id,
     kind: /^[A-Z]/.test(id) && !/^[A-Z_]+$/.test(id) ? "type" : "value",
@@ -348,7 +390,10 @@ if (origins.has("*./protocol")) {
     if (byKey.protocol.members.some((m) => m.name === id)) continue;
     byKey.protocol.members.push({
       name: id,
-      kind: id === "PROTOCOL_VERSION" || id === "protocolFromVersion" ? "value" : "type",
+      kind:
+        id === "PROTOCOL_VERSION" || id === "protocolFromVersion"
+          ? "value"
+          : "type",
       signature: id,
       summary: null,
     });
@@ -363,7 +408,11 @@ if (origins.has("*./protocol")) {
 // convention is missing.
 function engineProtocol() {
   // Whitespace-tolerant: the formatter may wrap the call over lines.
-  if (!/PROTOCOL_VERSION[^=]*=\s*protocolFromVersion\(\s*canvasWasmPackage\.version\s*,?\s*\)/.test(protocolSrc)) {
+  if (
+    !/PROTOCOL_VERSION[^=]*=\s*protocolFromVersion\(\s*canvasWasmPackage\.version\s*,?\s*\)/.test(
+      protocolSrc,
+    )
+  ) {
     return Number(protocolSrc.match(/PROTOCOL_VERSION\s*=\s*(\d+)/)?.[1] ?? 0);
   }
   try {
@@ -417,7 +466,10 @@ for (const [what, floor] of Object.entries(FLOORS)) {
     );
   }
 }
-if (!catalog.protocol) problems.push("no PROTOCOL_VERSION: src/protocol.ts has no literal and @paged-media/canvas-wasm (0.<protocol>.<patch>) did not resolve from packages/client");
+if (!catalog.protocol)
+  problems.push(
+    "no PROTOCOL_VERSION: src/protocol.ts has no literal and @paged-media/canvas-wasm (0.<protocol>.<patch>) did not resolve from packages/client",
+  );
 
 if (problems.length) {
   for (const p of problems) console.error(`client-api-catalog: ${p}`);
@@ -434,7 +486,9 @@ if (process.argv.includes("--check")) {
     die(`${TARGET} is missing — run: node scripts/client-api-catalog.mjs`);
   }
   if (current !== rendered) {
-    die("api-catalog.json is stale — regenerate: node scripts/client-api-catalog.mjs");
+    die(
+      "api-catalog.json is stale — regenerate: node scripts/client-api-catalog.mjs",
+    );
   }
   console.log(
     `client-api-catalog: OK — ${catalog.counts.clientMembers} members, ${catalog.counts.wireKinds} wire kinds, protocol ${catalog.protocol}`,

@@ -29,7 +29,11 @@ import { afterEach, describe, expect, it, vi } from "bun:test";
 
 import { createHeadlessHost, type HeadlessHost } from "../src/harness";
 import { minimalIdml } from "./fixtures/minimal-idml";
-import { makeNotesBundle, notesManifest, NOTES_ID } from "./fixtures/notes-bundle";
+import {
+  makeNotesBundle,
+  notesManifest,
+  NOTES_ID,
+} from "./fixtures/notes-bundle";
 
 const silent = { debug() {}, info() {}, warn() {}, error() {} };
 
@@ -42,7 +46,11 @@ afterEach(() => {
 const NOTE = `plugin:${NOTES_ID}/note`;
 
 /** A loaded document with one rectangle, the notes bundle attached to it. */
-async function setup(): Promise<{ h: HeadlessHost; rect: string; notes: string[] }> {
+async function setup(): Promise<{
+  h: HeadlessHost;
+  rect: string;
+  notes: string[];
+}> {
   const h = (live = await createHeadlessHost({ console: silent }));
   const [pageId] = await h.load(minimalIdml());
   const made = await h.host.document.mutate({
@@ -50,10 +58,14 @@ async function setup(): Promise<{ h: HeadlessHost; rect: string; notes: string[]
     args: { pageId: pageId!, bounds: [10, 10, 110, 210] },
   });
   expect(made.applied).toBe(true);
-  const created = (made as { createdId?: { kind: string; id: string } }).createdId!;
+  const created = (made as { createdId?: { kind: string; id: string } })
+    .createdId!;
   const rect = `${created.kind}:${created.id}`;
   h.loadBundle(makeNotesBundle());
-  const count = await h.objects.invoke("acme.notes.attach", { frame: rect, count: 2 });
+  const count = await h.objects.invoke("acme.notes.attach", {
+    frame: rect,
+    count: 2,
+  });
   expect(count).toBe(2);
   const notes = await h.objects.query(NOTE);
   return { h, rect, notes };
@@ -66,7 +78,17 @@ describe("host.objects — registry over core and a plugin (ADR 323, real engine
     const { h } = await setup();
     const kinds = await h.objects.kinds();
     const names = kinds.map((k) => k.kind);
-    expect(names).toEqual(expect.arrayContaining(["doc", "frame", "page", "layer", "swatch", "style", NOTE]));
+    expect(names).toEqual(
+      expect.arrayContaining([
+        "doc",
+        "frame",
+        "page",
+        "layer",
+        "swatch",
+        "style",
+        NOTE,
+      ]),
+    );
     expect(kinds.find((k) => k.kind === NOTE)).toMatchObject({
       owner: NOTES_ID,
       title: "Note",
@@ -78,20 +100,35 @@ describe("host.objects — registry over core and a plugin (ADR 323, real engine
     const { h, notes } = await setup();
     const rows = await h.objects.schema(NOTE);
     // The declared rows, plus `content` (the kind declares a ContentSchema).
-    expect(rows.map((r) => r.path)).toEqual(["text", "size", "visible", "tone", "length", "content"]);
+    expect(rows.map((r) => r.path)).toEqual([
+      "text",
+      "size",
+      "visible",
+      "tone",
+      "length",
+      "content",
+    ]);
     expect(rows[0]!.addressKind).toBe(NOTE);
     expect(await h.objects.schema(notes[0]!)).toEqual(rows);
     const frameRows = await h.objects.schema("frame");
-    expect(frameRows.find((r) => r.path === "frameStrokeWeight")?.type).toEqual({ kind: "length" });
-    expect(frameRows.find((r) => r.path === "frameFillColor")?.type).toEqual({ kind: "color" });
+    expect(frameRows.find((r) => r.path === "frameStrokeWeight")?.type).toEqual(
+      { kind: "length" },
+    );
+    expect(frameRows.find((r) => r.path === "frameFillColor")?.type).toEqual({
+      kind: "color",
+    });
     expect(await h.objects.schema("plugin:nobody/x")).toEqual([]);
   });
 
   it("query() — kind, predicates (plugin-honoured and registry-filtered), limit", async () => {
     const { h, notes } = await setup();
     expect(notes).toEqual([`${NOTE}/n1`, `${NOTE}/n2`]);
-    expect(await h.objects.query(`${NOTE}[text="hello"]`)).toEqual([`${NOTE}/n1`]);
-    expect(await h.objects.query(`${NOTE}[text^=note]`)).toEqual([`${NOTE}/n2`]);
+    expect(await h.objects.query(`${NOTE}[text="hello"]`)).toEqual([
+      `${NOTE}/n1`,
+    ]);
+    expect(await h.objects.query(`${NOTE}[text^=note]`)).toEqual([
+      `${NOTE}/n2`,
+    ]);
     expect(await h.objects.query(`${NOTE}[size!=12]`)).toEqual([]);
     expect(await h.objects.query(NOTE, { limit: 1 })).toEqual([`${NOTE}/n1`]);
     expect(await h.objects.query(`${NOTE}:nth(2)`)).toEqual([`${NOTE}/n2`]);
@@ -104,7 +141,9 @@ describe("host.objects — registry over core and a plugin (ADR 323, real engine
     expect(await h.objects.query("page:#1 > rectangle")).toContain(rect);
     expect(await h.objects.query(rect)).toEqual([rect]);
     expect((await h.objects.query("page")).length).toBeGreaterThan(0);
-    expect(await h.objects.query("swatch[name=Black]")).toEqual(["swatch:Color/Black"]);
+    expect(await h.objects.query("swatch[name=Black]")).toEqual([
+      "swatch:Color/Black",
+    ]);
   });
 
   it("get() / set() on a plugin object, schema-validated before the plugin is asked", async () => {
@@ -112,34 +151,71 @@ describe("host.objects — registry over core and a plugin (ADR 323, real engine
     const n1 = notes[0]!;
     expect(await h.objects.get(n1, "text")).toEqual(value("hello"));
     expect(await h.objects.get(n1, "length")).toEqual(value(5));
-    expect(await h.objects.get(n1, "nope")).toMatchObject({ kind: "refused", code: "unknownPath" });
-    expect(await h.objects.get(`${NOTE}/zz`, "text")).toMatchObject({ kind: "refused", code: "unknownAddress" });
+    expect(await h.objects.get(n1, "nope")).toMatchObject({
+      kind: "refused",
+      code: "unknownPath",
+    });
+    expect(await h.objects.get(`${NOTE}/zz`, "text")).toMatchObject({
+      kind: "refused",
+      code: "unknownAddress",
+    });
 
-    expect(await h.objects.set(n1, "size", 99)).toMatchObject({ applied: false, code: "invalidValue" });
-    expect(await h.objects.set(n1, "tone", "green")).toMatchObject({ applied: false, code: "invalidValue" });
-    expect(await h.objects.set(n1, "length", 3)).toMatchObject({ applied: false, code: "readOnly" });
+    expect(await h.objects.set(n1, "size", 99)).toMatchObject({
+      applied: false,
+      code: "invalidValue",
+    });
+    expect(await h.objects.set(n1, "tone", "green")).toMatchObject({
+      applied: false,
+      code: "invalidValue",
+    });
+    expect(await h.objects.set(n1, "length", 3)).toMatchObject({
+      applied: false,
+      code: "readOnly",
+    });
 
     const out = await h.objects.set(n1, "size", 18);
     expect(out).toMatchObject({ applied: true, undoSteps: 1 });
     expect(await h.objects.get(n1, "size")).toEqual(value(18));
-    expect(await h.objects.getAll(n1)).toMatchObject({ size: value(18), text: value("hello"), tone: value("red") });
+    expect(await h.objects.getAll(n1)).toMatchObject({
+      size: value(18),
+      text: value("hello"),
+      tone: value("red"),
+    });
   });
 
   it("get() / set() on core addresses, mapped onto today's wire", async () => {
     const { h, rect } = await setup();
-    expect(await h.objects.set(rect, "frameStrokeWeight", 3)).toMatchObject({ applied: true, undoSteps: 1 });
+    expect(await h.objects.set(rect, "frameStrokeWeight", 3)).toMatchObject({
+      applied: true,
+      undoSteps: 1,
+    });
     expect(await h.objects.get(rect, "frameStrokeWeight")).toEqual(value(3));
     // `frame:` is a kind-agnostic alias, resolved through the tree.
     const id = rect.split(":")[1];
-    expect(await h.objects.get(`frame:${id}`, "frameStrokeWeight")).toEqual(value(3));
-    expect(await h.objects.set(rect, "frameStrokeWeight", "thick")).toMatchObject({ applied: false, code: "invalidValue" });
-    expect(await h.objects.get("rectangle:nope", "frameStrokeWeight")).toMatchObject({ kind: "refused", code: "unknownAddress" });
+    expect(await h.objects.get(`frame:${id}`, "frameStrokeWeight")).toEqual(
+      value(3),
+    );
+    expect(
+      await h.objects.set(rect, "frameStrokeWeight", "thick"),
+    ).toMatchObject({ applied: false, code: "invalidValue" });
+    expect(
+      await h.objects.get("rectangle:nope", "frameStrokeWeight"),
+    ).toMatchObject({ kind: "refused", code: "unknownAddress" });
 
     // The minimal fixture has no layer; make one through the core op.
-    expect((await h.host.document.mutate({ op: "layerInsert", args: { position: 0, name: "Copy" } })).applied).toBe(true);
+    expect(
+      (
+        await h.host.document.mutate({
+          op: "layerInsert",
+          args: { position: 0, name: "Copy" },
+        })
+      ).applied,
+    ).toBe(true);
     const [layer] = await h.objects.query("layer[name=Copy]");
     expect(layer).toBeDefined();
-    expect(await h.objects.set(layer!, "layerVisible", false)).toMatchObject({ applied: true });
+    expect(await h.objects.set(layer!, "layerVisible", false)).toMatchObject({
+      applied: true,
+    });
     expect(await h.objects.get(layer!, "layerVisible")).toEqual(value(false));
     expect(await h.objects.get("doc", "pageCount")).toEqual(value(1));
   });
@@ -176,27 +252,44 @@ describe("host.objects — registry over core and a plugin (ADR 323, real engine
       { op: "set", address: rect, path: "frameStrokeWeight", value: 4 },
       { op: "set", address: notes[1]!, path: "size", value: 1000 },
     ]);
-    expect(out).toMatchObject({ applied: false, code: "invalidValue", index: 2, undoSteps: 0 });
+    expect(out).toMatchObject({
+      applied: false,
+      code: "invalidValue",
+      index: 2,
+      undoSteps: 0,
+    });
     expect(mutate).not.toHaveBeenCalled();
     expect(await h.objects.get(notes[0]!, "text")).toEqual(value("hello"));
   });
 
   it("create / delete route to the owning kind's batch", async () => {
     const { h } = await setup();
-    expect(await h.objects.batch([{ op: "create", kind: NOTE, props: { text: "third" } }])).toMatchObject({
+    expect(
+      await h.objects.batch([
+        { op: "create", kind: NOTE, props: { text: "third" } },
+      ]),
+    ).toMatchObject({
       applied: true,
     });
-    expect(await h.objects.query(`${NOTE}[text=third]`)).toEqual([`${NOTE}/n3`]);
-    expect(await h.objects.batch([{ op: "delete", address: `${NOTE}/n3` }])).toMatchObject({ applied: true });
+    expect(await h.objects.query(`${NOTE}[text=third]`)).toEqual([
+      `${NOTE}/n3`,
+    ]);
+    expect(
+      await h.objects.batch([{ op: "delete", address: `${NOTE}/n3` }]),
+    ).toMatchObject({ applied: true });
     expect(await h.objects.query(NOTE)).toHaveLength(2);
     // A CORE create (protocol 71) is validated like any other op (below
     // 71 core creates are unmapped)…
-    expect(await h.objects.batch([{ op: "create", kind: "rectangle" }])).toMatchObject({
+    expect(
+      await h.objects.batch([{ op: "create", kind: "rectangle" }]),
+    ).toMatchObject({
       applied: false,
       code: h.protocolVersion >= 71 ? "invalidValue" : "unmapped",
     });
     // …and a kind nobody creates is unmapped.
-    expect(await h.objects.batch([{ op: "create", kind: "spread" }])).toMatchObject({
+    expect(
+      await h.objects.batch([{ op: "create", kind: "spread" }]),
+    ).toMatchObject({
       applied: false,
       code: "unmapped",
     });
@@ -205,11 +298,17 @@ describe("host.objects — registry over core and a plugin (ADR 323, real engine
   it("typed commands: listed with schemas, args validated before the handler", async () => {
     const { h } = await setup();
     // Core's typed commands (§21.12) are listed too, owner "core".
-    expect((await h.objects.commands()).filter((c) => c.owner !== "core")).toEqual([
+    expect(
+      (await h.objects.commands()).filter((c) => c.owner !== "core"),
+    ).toEqual([
       expect.objectContaining({ id: "acme.notes.attach", owner: NOTES_ID }),
     ]);
-    await expect(h.objects.invoke("acme.notes.attach", { frame: "x", count: "two" })).rejects.toThrow(/^invalidValue/);
-    await expect(h.objects.invoke("acme.notes.nope", {})).rejects.toThrow(/^unknownCommand/);
+    await expect(
+      h.objects.invoke("acme.notes.attach", { frame: "x", count: "two" }),
+    ).rejects.toThrow(/^invalidValue/);
+    await expect(h.objects.invoke("acme.notes.nope", {})).rejects.toThrow(
+      /^unknownCommand/,
+    );
   });
 
   it("onDidChange — plugin writes and engine mutations both notify, filtered by selector", async () => {
@@ -217,7 +316,9 @@ describe("host.objects — registry over core and a plugin (ADR 323, real engine
     const all: unknown[] = [];
     const onlyNotes: unknown[] = [];
     const d1 = h.objects.onDidChange((e) => all.push(e));
-    const d2 = h.objects.onDidChange((e) => onlyNotes.push(e), { selector: notes[0]! });
+    const d2 = h.objects.onDidChange((e) => onlyNotes.push(e), {
+      selector: notes[0]!,
+    });
     await h.objects.set(notes[0]!, "text", "x");
     await h.objects.set(rect, "frameStrokeWeight", 2);
     expect(all.length).toBeGreaterThanOrEqual(2);
@@ -231,7 +332,12 @@ describe("host.objects — registry over core and a plugin (ADR 323, real engine
     await h.load(minimalIdml());
     let surface: import("@paged-media/plugin-api").ObjectsSurface | null = null;
     h.loadBundle({
-      manifest: { ...notesManifest, id: "acme.ro", contributes: {}, capabilities: { document: { read: "broad" } } },
+      manifest: {
+        ...notesManifest,
+        id: "acme.ro",
+        contributes: {},
+        capabilities: { document: { read: "broad" } },
+      },
       activate(host) {
         surface = host.objects;
         expect(host.supports("objects@1")).toBe(true);
@@ -240,10 +346,23 @@ describe("host.objects — registry over core and a plugin (ADR 323, real engine
       },
     });
     expect(await surface!.get("doc", "pageCount")).toEqual(value(1));
-    expect(await surface!.set("doc", "defaultStrokeWeight", 2)).toMatchObject({ applied: false, code: "denied" });
+    expect(await surface!.set("doc", "defaultStrokeWeight", 2)).toMatchObject({
+      applied: false,
+      code: "denied",
+    });
     // A typed CORE command writes the document: the same gate (§21.12).
-    await expect(surface!.invoke("core.layerInsert", { position: 0, name: "x" })).rejects.toThrow(/^denied/);
-    expect(await surface!.batch([{ op: "invoke", command: "core.layerInsert", args: { position: 0, name: "x" } }])).toMatchObject({
+    await expect(
+      surface!.invoke("core.layerInsert", { position: 0, name: "x" }),
+    ).rejects.toThrow(/^denied/);
+    expect(
+      await surface!.batch([
+        {
+          op: "invoke",
+          command: "core.layerInsert",
+          args: { position: 0, name: "x" },
+        },
+      ]),
+    ).toMatchObject({
       applied: false,
       code: "denied",
     });

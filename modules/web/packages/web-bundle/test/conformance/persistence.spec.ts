@@ -82,16 +82,22 @@ describe("web conformance — source persistence (real engine)", () => {
     const id = await carrier();
     expect((await writeWebSource(host, id, big("L1"))).applied).toBe(true);
     expect((await writeWebSource(host, id, big("L2"))).applied).toBe(true);
-    expect((await loadWebSource(host, id))?.html.startsWith("<p>L2</p>")).toBe(true);
+    expect((await loadWebSource(host, id))?.html.startsWith("<p>L2</p>")).toBe(
+      true,
+    );
     await h.host.document.undo();
-    expect((await loadWebSource(host, id))?.html.startsWith("<p>L1</p>")).toBe(true);
+    expect((await loadWebSource(host, id))?.html.startsWith("<p>L1</p>")).toBe(
+      true,
+    );
     await h.host.document.undo();
     await h.host.document.undo();
   });
 
   it("importing a large .html file creates the web frame in one batch", async () => {
     // Through the bundle's own importer — the File ▸ Open / drop path.
-    const importer = h.importersContributed().find((c) => c.id === "media.paged.web.importer.html");
+    const importer = h
+      .importersContributed()
+      .find((c) => c.id === "media.paged.web.importer.html");
     expect(importer, "the bundle contributes its .html importer").toBeDefined();
     const body = "<p>import</p>" + "<p>lorem ipsum dolor</p>".repeat(5000);
     await importer!.import({

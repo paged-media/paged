@@ -83,7 +83,14 @@ async function installSpy(page: Page): Promise<void> {
       __paged: { client: Record<string, Fn> };
       __imgSpy?: Spy & { installed?: boolean };
     };
-    const spy = { images: 0, tiles: 0, json: 0, imageBytes: 0, tileBytes: 0, last: 0 };
+    const spy = {
+      images: 0,
+      tiles: 0,
+      json: 0,
+      imageBytes: 0,
+      tileBytes: 0,
+      last: 0,
+    };
     const prior = g.__imgSpy;
     g.__imgSpy = Object.assign(prior ?? {}, spy);
     if (prior?.installed) return;
@@ -103,7 +110,8 @@ async function installSpy(page: Page): Promise<void> {
     });
     wrap("submitSceneImageTilesBinary", (a) => {
       g.__imgSpy!.tiles += (a[1] as unknown[]).length;
-      for (const t of a[1] as Array<{ rgba: Uint8Array }>) g.__imgSpy!.tileBytes += t.rgba.byteLength;
+      for (const t of a[1] as Array<{ rgba: Uint8Array }>)
+        g.__imgSpy!.tileBytes += t.rgba.byteLength;
     });
     wrap("submitSceneLayer", () => {
       g.__imgSpy!.json++;
@@ -114,7 +122,14 @@ async function installSpy(page: Page): Promise<void> {
 async function readSpy(page: Page): Promise<Spy> {
   return page.evaluate(() => {
     const s = (globalThis as unknown as { __imgSpy: Spy }).__imgSpy;
-    return { images: s.images, tiles: s.tiles, json: s.json, imageBytes: s.imageBytes, tileBytes: s.tileBytes, last: s.last };
+    return {
+      images: s.images,
+      tiles: s.tiles,
+      json: s.json,
+      imageBytes: s.imageBytes,
+      tileBytes: s.tileBytes,
+      last: s.last,
+    };
   });
 }
 
@@ -137,7 +152,9 @@ async function settled(page: Page, timeout = 120_000): Promise<number> {
 }
 
 async function layerCount(page: Page): Promise<number> {
-  const t = (await page.locator("[data-image-layers-title]").first().textContent()) ?? "";
+  const t =
+    (await page.locator("[data-image-layers-title]").first().textContent()) ??
+    "";
   const m = t.match(/\((\d+)\)/);
   return m ? Number(m[1]) : 0;
 }
@@ -156,7 +173,12 @@ test.describe("journey · paged.image performance (trend, not gated)", () => {
         "paged.image is GPU-only (no CPU kernel path); this trend lane runs on journeys-gpu (`pnpm --filter paged-canvas test:journeys:gpu`) and in showcase-nightly",
       );
     }
-    const frame = await designer.drawRectangle({ x0: 60, y0: 100, x1: 540, y1: 460 });
+    const frame = await designer.drawRectangle({
+      x0: 60,
+      y0: 100,
+      x1: 540,
+      y1: 460,
+    });
     expect(frame, "drew a target frame").not.toBe("");
 
     // A real 12 MP PNG, placed through the binary commit lane so the
@@ -178,14 +200,25 @@ test.describe("journey · paged.image performance (trend, not gated)", () => {
         const paged = (
           globalThis as unknown as {
             __paged: {
-              mutateWithBytes(m: unknown, b: Uint8Array, t?: boolean): Promise<{ kind: string }>;
+              mutateWithBytes(
+                m: unknown,
+                b: Uint8Array,
+                t?: boolean,
+              ): Promise<{ kind: string }>;
             };
           }
         ).__paged;
         const reply = await paged.mutateWithBytes(
           {
             op: "batch",
-            args: { ops: [{ op: "replaceImageBytes", args: { elementId: frame, bytes: [] } }] },
+            args: {
+              ops: [
+                {
+                  op: "replaceImageBytes",
+                  args: { elementId: frame, bytes: [] },
+                },
+              ],
+            },
           },
           bytes,
           true,
@@ -200,7 +233,9 @@ test.describe("journey · paged.image performance (trend, not gated)", () => {
     await designer.selectElement("rectangle", frame);
     await designer.runCommand("media.paged.image.command.adjustSelected");
     await designer.openPanel(ADJ_PANEL);
-    await expect.poll(() => layerCount(page), { timeout: 120_000 }).toBeGreaterThan(0);
+    await expect
+      .poll(() => layerCount(page), { timeout: 120_000 })
+      .toBeGreaterThan(0);
     const ingestMs = Date.now() - tIngest0;
     await installSpy(page);
 
@@ -209,7 +244,11 @@ test.describe("journey · paged.image performance (trend, not gated)", () => {
     const pts = await Promise.all(
       Array.from({ length: SAMPLES }, (_, i) => {
         const t = i / (SAMPLES - 1);
-        return screenPoint(page, 100 + 400 * t, 280 + 120 * Math.sin(t * Math.PI * 4));
+        return screenPoint(
+          page,
+          100 + 400 * t,
+          280 + 120 * Math.sin(t * Math.PI * 4),
+        );
       }),
     );
     await page.mouse.move(pts[0].x, pts[0].y);
@@ -222,7 +261,10 @@ test.describe("journey · paged.image performance (trend, not gated)", () => {
     const sInput = await now(page);
     const sLast = await settled(page);
     const stroke = await readSpy(page);
-    expect(stroke.images + stroke.tiles + stroke.json, "the stroke reached the renderer").toBeGreaterThan(0);
+    expect(
+      stroke.images + stroke.tiles + stroke.json,
+      "the stroke reached the renderer",
+    ).toBeGreaterThan(0);
 
     // ── 2. APPLY — push Exposure (a pending adjustment), let its live
     //    preview settle, then time the Apply alone. ──
@@ -247,11 +289,15 @@ test.describe("journey · paged.image performance (trend, not gated)", () => {
     // input/change events a pointer drag across the track fires.
     await opacity.focus();
     const o0 = await now(page);
-    for (let i = 0; i < OPACITY_STEPS; i++) await page.keyboard.press("ArrowLeft");
+    for (let i = 0; i < OPACITY_STEPS; i++)
+      await page.keyboard.press("ArrowLeft");
     const oInput = await now(page);
     const oLast = await settled(page);
     const drag = await readSpy(page);
-    expect(drag.images + drag.tiles + drag.json, "the drag reached the renderer").toBeGreaterThan(0);
+    expect(
+      drag.images + drag.tiles + drag.json,
+      "the drag reached the renderer",
+    ).toBeGreaterThan(0);
 
     const report = {
       when: new Date().toISOString(),
@@ -285,7 +331,10 @@ test.describe("journey · paged.image performance (trend, not gated)", () => {
     const json = JSON.stringify(report, null, 2);
     // eslint-disable-next-line no-console
     console.log(`[journey] paged.image perf (trend, not gated):\n${json}`);
-    await testInfo.attach("image-perf.json", { body: json, contentType: "application/json" });
+    await testInfo.attach("image-perf.json", {
+      body: json,
+      contentType: "application/json",
+    });
     mkdirSync(dirname(OUT), { recursive: true });
     writeFileSync(OUT, json);
   });

@@ -43,7 +43,7 @@ cargo build -p pdf-import --target wasm32-unknown-unknown
 The IDML adapter's own build, tests and wasm32 lint run from `engine/core`
 (`cargo nextest run -p idml-import -p idml-export -p idml-coverage`).
 
-Do **not** run `cargo fmt --all` to *rewrite* the tree if it drifts
+Do **not** run `cargo fmt --all` to _rewrite_ the tree if it drifts
 unrelated files — format only the files you touched.
 
 CI runs the same fmt + clippy + native/wasm32 build on every push and PR.

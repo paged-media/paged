@@ -27,7 +27,8 @@
 // browser and Node like plugin-sdk's wasm-loader; until it is built the
 // dynamic import rejects and boot says so.
 
-const ENGINE_NOT_BUILT = "paged.slide engine wasm not built: run scripts/build-wasm.sh";
+const ENGINE_NOT_BUILT =
+  "paged.slide engine wasm not built: run scripts/build-wasm.sh";
 
 /** A DrawingML transition as the deck wrote it (pptx-core `Transition`). */
 export interface Transition {
@@ -70,7 +71,14 @@ export interface EmbeddedFaceReport {
   /** `Regular`, `Bold`, `Italic` or `Bold Italic` (a run's FontStyle). */
   style: string;
   part: string;
-  use: "editable" | "previewAndPrint" | "restricted" | "bitmapOnly" | "sitesOnly" | "unreadable" | "missing";
+  use:
+    | "editable"
+    | "previewAndPrint"
+    | "restricted"
+    | "bitmapOnly"
+    | "sitesOnly"
+    | "unreadable"
+    | "missing";
   /** OS/2 fsType (the embedding permissions), when the part was read. */
   fsType: number | null;
   /** The face holds only the glyphs the deck uses. */
@@ -139,7 +147,9 @@ export interface SlidePlan {
 }
 
 interface SlideWasmModule {
-  default(init: { module_or_path: string | URL | BufferSource | WebAssembly.Module }): Promise<unknown>;
+  default(init: {
+    module_or_path: string | URL | BufferSource | WebAssembly.Module;
+  }): Promise<unknown>;
   initSync(module: { module: BufferSource | WebAssembly.Module }): unknown;
   importPptx(bytes: Uint8Array, name: string): WasmImported;
   embeddedFonts(bytes: Uint8Array): WasmDeckFonts;
@@ -167,7 +177,11 @@ export class SlideEngine {
   importPptx(bytes: Uint8Array, name: string): Imported {
     const out = this.mod.importPptx(bytes, name);
     try {
-      return { idml: out.idml, report: JSON.parse(out.report) as ImportReport, fonts: out.fonts };
+      return {
+        idml: out.idml,
+        report: JSON.parse(out.report) as ImportReport,
+        fonts: out.fonts,
+      };
     } finally {
       out.free();
     }
@@ -178,7 +192,10 @@ export class SlideEngine {
   embeddedFonts(bytes: Uint8Array): DeckFonts {
     const out = this.mod.embeddedFonts(bytes);
     try {
-      const { faces, diagnostics } = JSON.parse(out.report) as Omit<DeckFonts, "data">;
+      const { faces, diagnostics } = JSON.parse(out.report) as Omit<
+        DeckFonts,
+        "data"
+      >;
       return { faces, diagnostics, data: out.data };
     } finally {
       out.free();
@@ -190,7 +207,10 @@ export class SlideEngine {
   exportPptx(original: Uint8Array, slides: readonly SlidePlan[]): ExportedDeck {
     const out = this.mod.exportPptx(original, JSON.stringify({ slides }));
     try {
-      return { bytes: out.bytes, diagnostics: JSON.parse(out.diagnostics) as string[] };
+      return {
+        bytes: out.bytes,
+        diagnostics: JSON.parse(out.diagnostics) as string[],
+      };
     } finally {
       out.free();
     }
@@ -212,11 +232,17 @@ async function loadModule(): Promise<SlideWasmModule> {
   if (isNode()) {
     const { readFile } = await import("node:fs/promises");
     const { fileURLToPath } = await import("node:url");
-    const bytes = await readFile(fileURLToPath(new URL("../bin/slide_js_bg.wasm", import.meta.url)));
-    mod.initSync({ module: new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength) });
+    const bytes = await readFile(
+      fileURLToPath(new URL("../bin/slide_js_bg.wasm", import.meta.url)),
+    );
+    mod.initSync({
+      module: new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength),
+    });
   } else {
     // @ts-ignore: `?url` is a bundler affordance (the editor's wasm convention).
-    const wasmUrl = (await import("../bin/slide_js_bg.wasm?url")) as { default: string };
+    const wasmUrl = (await import("../bin/slide_js_bg.wasm?url")) as {
+      default: string;
+    };
     await mod.default({ module_or_path: wasmUrl.default });
   }
   return mod;

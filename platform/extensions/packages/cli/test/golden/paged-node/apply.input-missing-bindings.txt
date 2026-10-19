@@ -1,0 +1,11 @@
+$ paged-node apply <TMP>/fixture.paged --data <TMP>/records.csv --bindings <TMP>/missing.json --no-plugins
+# exit 2
+# stdout
+{
+  "error": {
+    "message": "cannot read bindings <TMP>/missing.json: ENOENT: no such file or directory, open '<TMP>/missing.json'",
+    "exit": 2
+  }
+}
+# stderr
+(empty)

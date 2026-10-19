@@ -8,14 +8,14 @@ once in the `paged-repo` crate and used by every host: the browser, the CLI and 
 An address is a 32-byte BLAKE3 hash in **derive-key mode**: the context string names the
 object kind and version, so equal bytes of two kinds never share an address.
 
-| Kind | Context string | Bytes hashed |
-|---|---|---|
-| Blob | `paged:blob:v1` | the part's uncompressed bytes, or one chunk |
-| Chunk list | `paged:chunks:v1` | canonical JSON of the chunk list |
-| Tree | `paged:tree:v1` | canonical JSON of the tree |
-| Commit | `paged:commit:v1` | canonical JSON of the commit |
-| Evidence | `paged:evidence:v1` | canonical JSON of the entry |
-| Recipe | `paged:recipe:v1` | canonical JSON of a projection recipe |
+| Kind       | Context string      | Bytes hashed                                |
+| ---------- | ------------------- | ------------------------------------------- |
+| Blob       | `paged:blob:v1`     | the part's uncompressed bytes, or one chunk |
+| Chunk list | `paged:chunks:v1`   | canonical JSON of the chunk list            |
+| Tree       | `paged:tree:v1`     | canonical JSON of the tree                  |
+| Commit     | `paged:commit:v1`   | canonical JSON of the commit                |
+| Evidence   | `paged:evidence:v1` | canonical JSON of the entry                 |
+| Recipe     | `paged:recipe:v1`   | canonical JSON of a projection recipe       |
 
 Addresses are written as 64 lowercase hex characters.
 
@@ -31,7 +31,7 @@ an object, re-encodes it, and rejects it if the bytes differ, so one object has 
 average 64 KiB, maximum 256 KiB).
 
 ```json
-{"v":1,"size":1048576,"chunks":["<hash>","<hash>"]}
+{ "v": 1, "size": 1048576, "chunks": ["<hash>", "<hash>"] }
 ```
 
 **Tree.** One entry per container part, sorted by path (byte order). `kind` is `blob` or
@@ -39,17 +39,32 @@ average 64 KiB, maximum 256 KiB).
 Entries under `paged/repo/` never appear in a tree; that folder holds history (below).
 
 ```json
-{"v":1,"entries":[{"path":"designmap.xml","kind":"blob","hash":"<hash>","size":1234}]}
+{
+  "v": 1,
+  "entries": [
+    { "path": "designmap.xml", "kind": "blob", "hash": "<hash>", "size": 1234 }
+  ]
+}
 ```
 
 **Commit.**
 
 ```json
-{"v":1,"parents":["<hash>"],"tree":"<hash>",
- "author":{"id":"user:42","kind":"human"},
- "message":"Save","ts":1760659200000,
- "provenance":{"client":"claude","model":"claude-opus-5-5","run":"r-1","on_behalf_of":"user:42"},
- "imported_from":{"name":"brochure.idml","sha256":"<hex>"}}
+{
+  "v": 1,
+  "parents": ["<hash>"],
+  "tree": "<hash>",
+  "author": { "id": "user:42", "kind": "human" },
+  "message": "Save",
+  "ts": 1760659200000,
+  "provenance": {
+    "client": "claude",
+    "model": "claude-opus-5-5",
+    "run": "r-1",
+    "on_behalf_of": "user:42"
+  },
+  "imported_from": { "name": "brochure.idml", "sha256": "<hex>" }
+}
 ```
 
 - `kind` is `human`, `service` or `agent`. `ts` is Unix milliseconds, supplied by the host.
@@ -59,20 +74,27 @@ Entries under `paged/repo/` never appear in a tree; that folder holds history (b
 **Evidence entry.** Append-only; each entry names the address of the one before it.
 
 ```json
-{"seq":7,"ts":1760659200000,"actor":{"id":"user:42","kind":"human"},
- "action":"export","target":"main","result":"ok","prev":"<hash>"}
+{
+  "seq": 7,
+  "ts": 1760659200000,
+  "actor": { "id": "user:42", "kind": "human" },
+  "action": "export",
+  "target": "main",
+  "result": "ok",
+  "prev": "<hash>"
+}
 ```
 
 The first entry has no `prev`. Verifying the log recomputes every address in order.
 
 ## Refs
 
-| Ref | Who moves it | Rule |
-|---|---|---|
-| `main` | humans and services with write access | fast-forward; merge-only when the policy says so |
-| `drafts/<actor>/<name>` | that actor | free |
-| `agent/<run>/<name>` | agents | the only refs an agent writes at the default autonomy |
-| `releases/<name>` | humans with write access | created once, never moved or deleted |
+| Ref                     | Who moves it                          | Rule                                                  |
+| ----------------------- | ------------------------------------- | ----------------------------------------------------- |
+| `main`                  | humans and services with write access | fast-forward; merge-only when the policy says so      |
+| `drafts/<actor>/<name>` | that actor                            | free                                                  |
+| `agent/<run>/<name>`    | agents                                | the only refs an agent writes at the default autonomy |
+| `releases/<name>`       | humans with write access              | created once, never moved or deleted                  |
 
 A ref moves only by compare-and-set against the value the writer last saw.
 
@@ -103,10 +125,10 @@ only those, then asks the remote to compare-and-set the ref.
 A host with a file system (the browser's private file system, a disk, an object store) keeps a
 repository as:
 
-| File | Content |
-|---|---|
-| `packs/<n>.pack` | object records, as in the history bundle; append-only, one per write |
-| `packs/<n>.idx` | one 45-byte record per object: address, kind tag, u64 offset of its bytes, u32 length (little-endian) |
+| File             | Content                                                                                               |
+| ---------------- | ----------------------------------------------------------------------------------------------------- |
+| `packs/<n>.pack` | object records, as in the history bundle; append-only, one per write                                  |
+| `packs/<n>.idx`  | one 45-byte record per object: address, kind tag, u64 offset of its bytes, u32 length (little-endian) |
 
 A record's bytes are deflated when that makes them smaller; the kind tag's high bit (`0x80`)
 says so, in the pack and in its index, and the length is of the bytes kept. Addresses are

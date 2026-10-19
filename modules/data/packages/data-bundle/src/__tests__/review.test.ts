@@ -20,7 +20,13 @@ const actualDuckdb = await importActual(() => import("../query/duckdb"));
 
 const silent = { debug() {}, info() {}, warn() {}, error() {} };
 
-type Field = { storyId: string; offset: number; plugin: string; key: string; value: string | null };
+type Field = {
+  storyId: string;
+  offset: number;
+  plugin: string;
+  key: string;
+  value: string | null;
+};
 
 function fakeHost(opts?: { placeholders?: () => Field[] | Promise<Field[]> }) {
   const mutations: Mutation[] = [];
@@ -29,14 +35,18 @@ function fakeHost(opts?: { placeholders?: () => Field[] | Promise<Field[]> }) {
     log: silent,
     supports: () => true,
     selection: { get: () => [], set: async () => [] },
-    network: { consentedOrigins: () => [], requestConsent: async () => ({ granted: [], denied: [] }) },
+    network: {
+      consentedOrigins: () => [],
+      requestConsent: async () => ({ granted: [], denied: [] }),
+    },
     document: {
       onWillSave: () => ({ dispose() {} }),
       mutate: async (m: Mutation) => {
         mutations.push(m);
         return { applied: true, createdId: null, pageIds: [] };
       },
-      placeholders: async () => (opts?.placeholders ? await opts.placeholders() : []),
+      placeholders: async () =>
+        opts?.placeholders ? await opts.placeholders() : [],
       frameChain: async () => [],
       elementGeometry: async () => [],
       hitTest: async () => null,
@@ -101,7 +111,12 @@ async function sessionWith(
   return createSession(host, 20613);
 }
 
-const field = (key: string, offset: number, value: string | null, storyId = "s1"): Field => ({
+const field = (
+  key: string,
+  offset: number,
+  value: string | null,
+  storyId = "s1",
+): Field => ({
   storyId,
   offset,
   plugin: "media.paged.data",
@@ -109,11 +124,18 @@ const field = (key: string, offset: number, value: string | null, storyId = "s1"
   value,
 });
 
-const variable = (text: string) => ({ kind: "variable", target: "anchor", text, hidden: false });
+const variable = (text: string) => ({
+  kind: "variable",
+  target: "anchor",
+  text,
+  hidden: false,
+});
 
 describe("accept source [data.bind.sync-review]", () => {
   it("relinks an overridden variable and writes the source value into its field [data.bind.sync-review]", async () => {
-    const fake = fakeHost({ placeholders: () => [field("v", 3, "typed by hand")] });
+    const fake = fakeHost({
+      placeholders: () => [field("v", 3, "typed by hand")],
+    });
     const log: string[] = [];
     let status = "overridden";
     const engine = fakeEngine({
@@ -132,7 +154,10 @@ describe("accept source [data.bind.sync-review]", () => {
     expect(await s.acceptSource("v")).toBe(true);
     expect(log).toEqual(["relink v", "resolve v (stale)"]);
     expect(fake.mutations).toEqual([
-      { op: "setFieldValue", args: { storyId: "s1", offset: 3, value: "from source" } },
+      {
+        op: "setFieldValue",
+        args: { storyId: "s1", offset: 3, value: "from source" },
+      },
     ]);
   });
 
@@ -160,9 +185,20 @@ describe("display pattern and locale per field [data.i18n.locale-table]", () => 
       const engine = fakeEngine({
         sync_state: () => ({ status }),
         payload: () => ({
-          bindings: [{ id: "v", kind: "variable", target: "anchor", query: "q", expr: "price" }],
+          bindings: [
+            {
+              id: "v",
+              kind: "variable",
+              target: "anchor",
+              query: "q",
+              expr: "price",
+            },
+          ],
         }),
-        split_expression: (src: string) => ({ inner: src, pattern: { kind: "plain" } }),
+        split_expression: (src: string) => ({
+          inner: src,
+          pattern: { kind: "plain" },
+        }),
         format_expression: (inner: string, p: unknown) =>
           `CURRENCY(${inner}, ${(p as { decimals: number }).decimals})`,
         define_binding: (d: unknown) => void defined.push(d),
@@ -171,13 +207,26 @@ describe("display pattern and locale per field [data.i18n.locale-table]", () => 
       const s = await sessionWith(fake.host, engine);
       await s.recordCount("q");
       defined.length = 0;
-      expect(await s.setBindingFormat("v", { kind: "currency", decimals: 0 })).toBe(true);
+      expect(
+        await s.setBindingFormat("v", { kind: "currency", decimals: 0 }),
+      ).toBe(true);
       expect(defined).toEqual([
-        { id: "v", kind: "variable", target: "anchor", query: "q", expr: "CURRENCY(price, 0)" },
+        {
+          id: "v",
+          kind: "variable",
+          target: "anchor",
+          query: "q",
+          expr: "CURRENCY(price, 0)",
+        },
       ]);
       expect(fake.mutations).toEqual(
         status === "linked"
-          ? [{ op: "setFieldValue", args: { storyId: "s1", offset: 0, value: "$1,235" } }]
+          ? [
+              {
+                op: "setFieldValue",
+                args: { storyId: "s1", offset: 0, value: "$1,235" },
+              },
+            ]
           : [],
       );
     });
@@ -200,7 +249,12 @@ describe("display pattern and locale per field [data.i18n.locale-table]", () => 
       ["v", "fr"],
       ["v", null],
     ]);
-    expect(s.getState().diagnostics.map((d) => d.message).join()).toMatch(/unknown locale 'xx'/);
+    expect(
+      s
+        .getState()
+        .diagnostics.map((d) => d.message)
+        .join(),
+    ).toMatch(/unknown locale 'xx'/);
   });
 
   it("the session locale is any tag the engine knows, saved as it is [data.i18n.locale-table]", () => {
@@ -214,7 +268,10 @@ describe("display pattern and locale per field [data.i18n.locale-table]", () => 
       remote: [],
     });
     const back = decodeSession(bytes);
-    expect(back).toMatchObject({ locale: "de-CH", sync: [{ binding: "v", status: "overridden" }] });
+    expect(back).toMatchObject({
+      locale: "de-CH",
+      sync: [{ binding: "v", status: "overridden" }],
+    });
   });
 });
 
@@ -227,17 +284,27 @@ describe("row diff lane [data.bind.row-diff]", () => {
       mark_rows_applied: () => void log.push("applied"),
     });
     const s = await sessionWith(fake.host, engine);
-    s.addRuleBinding("r", "r", "q_all", "price < 5", { action: "tableStyle", name: "x" }, {
-      kind: "tableColumn",
-      storyId: "s",
-      tableId: "t",
-      col: 0,
-      headerRows: 1,
-    });
+    s.addRuleBinding(
+      "r",
+      "r",
+      "q_all",
+      "price < 5",
+      { action: "tableStyle", name: "x" },
+      {
+        kind: "tableColumn",
+        storyId: "s",
+        tableId: "t",
+        col: 0,
+        headerRows: 1,
+      },
+    );
     s.setDiffKey("q_all", ["sku"]);
     await s.rowDiff();
     await s.lowerAll();
-    expect(log[0]).toEqual({ keys: { q_all: ["sku"] }, ruleQueries: { r: "q_all" } });
+    expect(log[0]).toEqual({
+      keys: { q_all: ["sku"] },
+      ruleQueries: { r: "q_all" },
+    });
     expect(log).toContain("applied");
   });
 });

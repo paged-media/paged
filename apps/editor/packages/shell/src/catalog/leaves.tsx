@@ -1013,11 +1013,14 @@ function parseListReorder(
   props: Record<string, unknown>,
 ): ListLeafReorder | null {
   const r = props.reorder as ListLeafReorder | undefined;
-  if (!r || typeof r !== "object" || typeof r.onDrop !== "function") return null;
+  if (!r || typeof r !== "object" || typeof r.onDrop !== "function")
+    return null;
   return r;
 }
 
-function parseListRename(props: Record<string, unknown>): ListLeafRename | null {
+function parseListRename(
+  props: Record<string, unknown>,
+): ListLeafRename | null {
   const r = props.rename as ListLeafRename | undefined;
   if (!r || typeof r !== "object" || typeof r.onCommit !== "function")
     return null;
@@ -1059,8 +1062,7 @@ function parseListRename(props: Record<string, unknown>): ListLeafRename | null 
  */
 export function ListLeaf({ props }: LeafProps) {
   const collectionName =
-    typeof props.collectionName === "string" &&
-    !Array.isArray(props.items)
+    typeof props.collectionName === "string" && !Array.isArray(props.items)
       ? (props.collectionName as CollectionName)
       : null;
   // Hook must run unconditionally — same safe-fallback idiom as
@@ -1310,25 +1312,25 @@ export function ListLeaf({ props }: LeafProps) {
                 const actionLabel =
                   on === false && a.state ? a.state.labelWhenOff : a.label;
                 return (
-                <button
-                  key={a.key}
-                  type="button"
-                  disabled={a.disabled}
-                  aria-label={`${actionLabel}: ${label}`}
-                  data-list-action={a.key}
-                  data-row-state={on === null ? undefined : on ? "on" : "off"}
-                  className="shrink-0 cursor-pointer rounded-[6px] border px-[7px] text-[11px] leading-[22px] disabled:cursor-default"
-                  style={{
-                    fontFamily: "var(--font-sans)",
-                    borderColor: "var(--pg-border)",
-                    background: "var(--pg-bg)",
-                    color: "var(--pg-muted-fg)",
-                    opacity: a.disabled ? 0.45 : 1,
-                  }}
-                  onClick={() => a.onInvoke(id)}
-                >
-                  {actionLabel}
-                </button>
+                  <button
+                    key={a.key}
+                    type="button"
+                    disabled={a.disabled}
+                    aria-label={`${actionLabel}: ${label}`}
+                    data-list-action={a.key}
+                    data-row-state={on === null ? undefined : on ? "on" : "off"}
+                    className="shrink-0 cursor-pointer rounded-[6px] border px-[7px] text-[11px] leading-[22px] disabled:cursor-default"
+                    style={{
+                      fontFamily: "var(--font-sans)",
+                      borderColor: "var(--pg-border)",
+                      background: "var(--pg-bg)",
+                      color: "var(--pg-muted-fg)",
+                      opacity: a.disabled ? 0.45 : 1,
+                    }}
+                    onClick={() => a.onInvoke(id)}
+                  >
+                    {actionLabel}
+                  </button>
                 );
               })}
             </div>
@@ -1342,12 +1344,9 @@ export function ListLeaf({ props }: LeafProps) {
             data-list-more
             onClick={() => setShown((n) => n + LIST_ROW_PAGE)}
           >
-            <span
-              className="pg-ui-xs"
-              style={{ color: "var(--pg-muted-fg)" }}
-            >
-              Show {Math.min(LIST_ROW_PAGE, items.length - visible.length)}{" "}
-              more ({visible.length} of {items.length})
+            <span className="pg-ui-xs" style={{ color: "var(--pg-muted-fg)" }}>
+              Show {Math.min(LIST_ROW_PAGE, items.length - visible.length)} more
+              ({visible.length} of {items.length})
             </span>
           </button>
         )}

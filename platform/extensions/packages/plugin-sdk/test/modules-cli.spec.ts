@@ -31,7 +31,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "bun:test";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const CLI = resolve(here, "../../plugin-cli/bin/paged-plugin.mjs");
+const CLI = resolve(here, "../bin/paged-plugin.mjs");
 // The 8-byte empty module.
 const WASM = new Uint8Array([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00]);
 const SRI = "sha384-" + createHash("sha384").update(WASM).digest("base64");
@@ -49,7 +49,13 @@ function bundle(artifact: Record<string, unknown> = {}): string {
   const dir = mkdtempSync(join(tmpdir(), "paged-modules-cli-"));
   mkdirSync(join(dir, "bin"));
   writeFileSync(join(dir, "bin", "engine.wasm"), WASM);
-  writeFileSync(join(dir, "package.json"), JSON.stringify({ name: "@paged-media/test-bundle", version: "0.0.1-test.0" }));
+  writeFileSync(
+    join(dir, "package.json"),
+    JSON.stringify({
+      name: "@paged-media/test-bundle",
+      version: "0.0.1-test.0",
+    }),
+  );
   writeFileSync(
     join(dir, "manifest.json"),
     JSON.stringify(
@@ -58,7 +64,16 @@ function bundle(artifact: Record<string, unknown> = {}): string {
         name: "test",
         version: "0.0.1",
         apiVersion: "^0.2",
-        capabilities: { wasm: [{ name: "engine", path: "bin/engine.wasm", purpose: "compute", ...artifact }] },
+        capabilities: {
+          wasm: [
+            {
+              name: "engine",
+              path: "bin/engine.wasm",
+              purpose: "compute",
+              ...artifact,
+            },
+          ],
+        },
       },
       null,
       2,
@@ -67,23 +82,33 @@ function bundle(artifact: Record<string, unknown> = {}): string {
   return dir;
 }
 
-const readManifest = (dir: string) => JSON.parse(readFileSync(join(dir, "manifest.json"), "utf8"));
+const readManifest = (dir: string) =>
+  JSON.parse(readFileSync(join(dir, "manifest.json"), "utf8"));
 
 describe("plugin-cli — wasm integrity (ADR 326)", () => {
   it("validate accepts a matching integrity stamp", () => {
-    const r = run(["validate", join(bundle({ integrity: SRI }), "manifest.json")]);
+    const r = run([
+      "validate",
+      join(bundle({ integrity: SRI }), "manifest.json"),
+    ]);
     expect(r.err).toBe("");
     expect(r.code).toBe(0);
   });
 
   it("validate rejects a malformed integrity", () => {
-    const r = run(["validate", join(bundle({ integrity: "md5-abc" }), "manifest.json")]);
+    const r = run([
+      "validate",
+      join(bundle({ integrity: "md5-abc" }), "manifest.json"),
+    ]);
     expect(r.code).toBe(1);
     expect(r.err).toMatch(/integrity must be a Subresource Integrity token/);
   });
 
   it("validate rejects a stamp that does not match the file", () => {
-    const r = run(["validate", join(bundle({ integrity: "sha384-" + "A".repeat(64) }), "manifest.json")]);
+    const r = run([
+      "validate",
+      join(bundle({ integrity: "sha384-" + "A".repeat(64) }), "manifest.json"),
+    ]);
     expect(r.code).toBe(1);
     expect(r.err).toMatch(/integrity does not match "bin\/engine\.wasm"/);
   });
@@ -95,7 +120,9 @@ describe("plugin-cli — wasm integrity (ADR 326)", () => {
     expect(r.code).toBe(0);
     expect(r.out).toMatch(/stamped 1 of 1/);
     expect(readManifest(dir).capabilities.wasm[0].integrity).toBe(SRI);
-    expect(readFileSync(join(dir, "manifest.json"), "utf8").endsWith("}\n")).toBe(true);
+    expect(
+      readFileSync(join(dir, "manifest.json"), "utf8").endsWith("}\n"),
+    ).toBe(true);
     expect(run(["integrity", dir, "--check"]).code).toBe(0);
     expect(run(["validate", join(dir, "manifest.json")]).code).toBe(0);
   });
@@ -116,7 +143,10 @@ describe("plugin-cli — wasm integrity (ADR 326)", () => {
     expect(skip.out).toContain(
       "http://127.0.0.1:9/@paged-media/test-bundle/0.0.1-test.0/bin/engine.wasm · not hosted (skipped: CLOUDFLARE_API_TOKEN is not set)",
     );
-    const dry = run(["modules-upload", dir, "--dry-run"], { ...env, CLOUDFLARE_API_TOKEN: "x" });
+    const dry = run(["modules-upload", dir, "--dry-run"], {
+      ...env,
+      CLOUDFLARE_API_TOKEN: "x",
+    });
     expect(dry.code).toBe(0);
     expect(dry.out).toMatch(/· would upload/);
   });

@@ -12,7 +12,14 @@
 // a failure instead of a skip.
 import { createServer, type Server } from "node:http";
 import { brotliCompressSync, constants as zlibConstants } from "node:zlib";
-import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir, homedir } from "node:os";
 import { dirname, extname, join, resolve } from "node:path";
@@ -85,9 +92,19 @@ export interface BrowserLane {
 
 /** Bundle the lane entry, serve it with bin/, open it in headless Chromium.
  *  Never throws: returns why not. */
-export async function startBrowserLane(): Promise<{ lane?: BrowserLane; error?: string }> {
-  for (const f of ["duckdb-engine.wasm", "duckdb-browser-eh.worker.js", "duckdb-browser.mjs"]) {
-    if (!existsSync(join(BIN, f))) return { error: `${join(BIN, f)} is missing — run scripts/vendor-duckdb.sh` };
+export async function startBrowserLane(): Promise<{
+  lane?: BrowserLane;
+  error?: string;
+}> {
+  for (const f of [
+    "duckdb-engine.wasm",
+    "duckdb-browser-eh.worker.js",
+    "duckdb-browser.mjs",
+  ]) {
+    if (!existsSync(join(BIN, f)))
+      return {
+        error: `${join(BIN, f)} is missing — run scripts/vendor-duckdb.sh`,
+      };
   }
   const req = createRequire(join(PKG, "package.json"));
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -98,7 +115,11 @@ export async function startBrowserLane(): Promise<{ lane?: BrowserLane; error?: 
     return { error: "playwright-core is not installed — pnpm install" };
   }
   const exe = findChromium(pw.chromium);
-  if (!exe) return { error: "no Chromium — set PAGED_CHROMIUM or `npx playwright-core install chromium-headless-shell`" };
+  if (!exe)
+    return {
+      error:
+        "no Chromium — set PAGED_CHROMIUM or `npx playwright-core install chromium-headless-shell`",
+    };
 
   // esbuild from modules/data (a devDependency there), as scripts/bundle-duckdb-api.mjs does.
   const rootReq = createRequire(resolve(PKG, "..", "..", "package.json"));
@@ -113,7 +134,10 @@ export async function startBrowserLane(): Promise<{ lane?: BrowserLane; error?: 
     target: "es2020",
     logLevel: "silent",
   });
-  writeFileSync(join(out, "index.html"), `<!doctype html><meta charset="utf-8"><script type="module" src="./entry.js"></script>`);
+  writeFileSync(
+    join(out, "index.html"),
+    `<!doctype html><meta charset="utf-8"><script type="module" src="./entry.js"></script>`,
+  );
 
   // The module host: a different port is a different origin.
   const moduleServed: string[] = [];
@@ -136,7 +160,9 @@ export async function startBrowserLane(): Promise<{ lane?: BrowserLane; error?: 
     // Quality 4: brotli at the default 11 takes a minute on DuckDB's 34 MB.
     let br = compressed.get(file);
     if (!br) {
-      br = brotliCompressSync(readFileSync(file), { params: { [zlibConstants.BROTLI_PARAM_QUALITY]: 4 } });
+      br = brotliCompressSync(readFileSync(file), {
+        params: { [zlibConstants.BROTLI_PARAM_QUALITY]: 4 },
+      });
       compressed.set(file, br);
     }
     rs.end(br);
@@ -178,7 +204,10 @@ export async function startBrowserLane(): Promise<{ lane?: BrowserLane; error?: 
   await new Promise<void>((ok) => server.listen(0, "127.0.0.1", ok));
   const port = (server.address() as { port: number }).port;
 
-  const browser = await pw.chromium.launch({ executablePath: exe, headless: true });
+  const browser = await pw.chromium.launch({
+    executablePath: exe,
+    headless: true,
+  });
   const page = await browser.newPage();
   const errors: string[] = [];
   page.on("console", (m: { type(): string; text(): string }) => {
@@ -188,10 +217,13 @@ export async function startBrowserLane(): Promise<{ lane?: BrowserLane; error?: 
   // Every request that leaves the lane's origin: the lane must make none.
   const offOrigin: string[] = [];
   page.on("request", (r: { url(): string }) => {
-    if (!r.url().startsWith(`http://127.0.0.1:${port}/`)) offOrigin.push(r.url());
+    if (!r.url().startsWith(`http://127.0.0.1:${port}/`))
+      offOrigin.push(r.url());
   });
   await page.goto(`http://127.0.0.1:${port}/lane/index.html`);
-  await page.waitForFunction(() => (window as unknown as { lane?: unknown }).lane !== undefined);
+  await page.waitForFunction(
+    () => (window as unknown as { lane?: unknown }).lane !== undefined,
+  );
   return {
     lane: {
       page,

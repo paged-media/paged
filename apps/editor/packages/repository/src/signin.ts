@@ -37,7 +37,8 @@ interface Tokens {
   expiresAt: number;
 }
 
-const key = (server: string, what: string) => `paged.server.${new URL(server).origin}.${what}`;
+const key = (server: string, what: string) =>
+  `paged.server.${new URL(server).origin}.${what}`;
 
 function b64url(bytes: Uint8Array): string {
   let s = "";
@@ -50,7 +51,11 @@ function random(n = 32): string {
 }
 
 async function s256(verifier: string): Promise<string> {
-  return b64url(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier))));
+  return b64url(
+    new Uint8Array(
+      await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier)),
+    ),
+  );
 }
 
 function load(server: string): Tokens | null {
@@ -73,21 +78,35 @@ async function clientId(server: string, redirectUri: string): Promise<string> {
   const resp = await fetch(`${server}/oauth/register`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ client_name: "paged editor", redirect_uris: [redirectUri] }),
+    body: JSON.stringify({
+      client_name: "paged editor",
+      redirect_uris: [redirectUri],
+    }),
   });
-  if (!resp.ok) throw new Error(`the server refused to register this editor (${resp.status})`);
+  if (!resp.ok)
+    throw new Error(
+      `the server refused to register this editor (${resp.status})`,
+    );
   const id = ((await resp.json()) as { client_id: string }).client_id;
   localStorage.setItem(key(server, `client:${redirectUri}`), id);
   return id;
 }
 
-async function exchange(server: string, form: Record<string, string>): Promise<Tokens> {
+async function exchange(
+  server: string,
+  form: Record<string, string>,
+): Promise<Tokens> {
   const resp = await fetch(`${server}/oauth/token`, {
     method: "POST",
     headers: { "content-type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams(form),
   });
-  const body = (await resp.json()) as { access_token?: string; refresh_token?: string; expires_in?: number; error_description?: string };
+  const body = (await resp.json()) as {
+    access_token?: string;
+    refresh_token?: string;
+    expires_in?: number;
+    error_description?: string;
+  };
   if (!resp.ok || !body.access_token || !body.refresh_token) {
     throw new Error(`sign-in failed: ${body.error_description ?? resp.status}`);
   }
@@ -119,21 +138,31 @@ export async function signIn(server: string): Promise<void> {
     url.searchParams.set(k, v);
   }
   const channel = new BroadcastChannel(OAUTH_CHANNEL);
-  const answer = new Promise<{ code?: string; error?: string }>((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error("sign-in timed out")), 5 * 60_000);
-    channel.onmessage = (e: MessageEvent<{ state?: string; code?: string; error?: string }>) => {
-      if (e.data?.state !== state) return;
-      clearTimeout(timer);
-      resolve(e.data);
-    };
-  });
-  if (!window.open(url.toString(), "paged-signin", "popup,width=520,height=680")) {
+  const answer = new Promise<{ code?: string; error?: string }>(
+    (resolve, reject) => {
+      const timer = setTimeout(
+        () => reject(new Error("sign-in timed out")),
+        5 * 60_000,
+      );
+      channel.onmessage = (
+        e: MessageEvent<{ state?: string; code?: string; error?: string }>,
+      ) => {
+        if (e.data?.state !== state) return;
+        clearTimeout(timer);
+        resolve(e.data);
+      };
+    },
+  );
+  if (
+    !window.open(url.toString(), "paged-signin", "popup,width=520,height=680")
+  ) {
     channel.close();
     throw new Error("the sign-in window was blocked");
   }
   try {
     const { code, error } = await answer;
-    if (!code) throw new Error(`sign-in was not completed (${error ?? "no code"})`);
+    if (!code)
+      throw new Error(`sign-in was not completed (${error ?? "no code"})`);
     store(
       server,
       await exchange(server, {
@@ -159,7 +188,11 @@ export async function accessToken(server: string): Promise<string | null> {
   const id = localStorage.getItem(key(server, `client:${redirectUri}`));
   if (!id) return null;
   try {
-    const next = await exchange(server, { grant_type: "refresh_token", refresh_token: t.refresh, client_id: id });
+    const next = await exchange(server, {
+      grant_type: "refresh_token",
+      refresh_token: t.refresh,
+      client_id: id,
+    });
     store(server, next);
     return next.access;
   } catch {
@@ -174,7 +207,13 @@ export function signedInAs(server: string): string | null {
   const body = t?.access.split(".")[1];
   if (!body) return null;
   try {
-    return (JSON.parse(atob(body.replace(/-/g, "+").replace(/_/g, "/"))) as { sub?: string }).sub ?? null;
+    return (
+      (
+        JSON.parse(atob(body.replace(/-/g, "+").replace(/_/g, "/"))) as {
+          sub?: string;
+        }
+      ).sub ?? null
+    );
   } catch {
     return null;
   }

@@ -55,7 +55,10 @@ const LETTER_PT: readonly [number, number] = [612, 792];
  *  fine follow-up; shipping nothing until it exists is not.
  *
  *  Returns true when it is safe to proceed. */
-export async function confirmDiscard(editor: PagedEditor, what: string): Promise<boolean> {
+export async function confirmDiscard(
+  editor: PagedEditor,
+  what: string,
+): Promise<boolean> {
   // A placement armed against the OUTGOING document must not resolve
   // into the incoming one. Clicking a MENU already cancels it (a click
   // outside the canvas stands the placement down), but the keyboard
@@ -89,7 +92,11 @@ export function buildNewDocumentCommand(options: {
     handler: async (paged) => {
       const editor = paged as PagedEditor;
       if (!(await confirmDiscard(editor, "Creating a new document"))) return;
-      await mintBlankDocument(editor, options.defaultSizePt ?? LETTER_PT, options);
+      await mintBlankDocument(
+        editor,
+        options.defaultSizePt ?? LETTER_PT,
+        options,
+      );
     },
   };
 }
@@ -169,7 +176,10 @@ export function buildOpenIdmlCommand(options: {
       // (e.g. paged.sheet's .xlsx). Route the bytes to the plugin instead
       // of the default IDML load — the plugin owns what the file becomes
       // (it does not replace the document unless it chooses to).
-      const importer = editor.registries.importers.resolve(file.name, file.type);
+      const importer = editor.registries.importers.resolve(
+        file.name,
+        file.type,
+      );
       if (importer) {
         options.setStatus(`importing ${file.name} via ${importer.title}…`);
         try {
@@ -178,7 +188,11 @@ export function buildOpenIdmlCommand(options: {
           // importer that OPENS a document does so through
           // `nativeDocument.open(bytes)`, which carries no name.
           setPendingImportSource(file.name);
-          await importer.import({ name: file.name, bytes, mimeType: file.type });
+          await importer.import({
+            name: file.name,
+            bytes,
+            mimeType: file.type,
+          });
           options.setStatus(`imported ${file.name}`);
         } catch (err) {
           options.pushWarning(
@@ -219,7 +233,9 @@ export function buildOpenIdmlCommand(options: {
 
 /** File ▸ New from a brief… (ADR 221) — opens the AI Assistant panel in
  *  its "New document" view, which mints the blank page and runs Claude. */
-export function buildNewFromBriefCommand(open: () => void): CommandContribution {
+export function buildNewFromBriefCommand(
+  open: () => void,
+): CommandContribution {
   return {
     id: PAGED_FILE_NEW_FROM_BRIEF,
     title: "New document from a brief…",

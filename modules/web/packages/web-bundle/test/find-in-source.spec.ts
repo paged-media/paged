@@ -26,7 +26,10 @@ import { describe, expect, it, vi } from "bun:test";
 
 import { tagOutline } from "@paged-media/web-model";
 
-import { selectRange, type SelectableTextarea } from "../src/panels/find-in-source";
+import {
+  selectRange,
+  type SelectableTextarea,
+} from "../src/panels/find-in-source";
 
 function fakeTextarea(value: string): SelectableTextarea & {
   setSelectionRange: ReturnType<typeof vi.fn>;
@@ -37,7 +40,11 @@ function fakeTextarea(value: string): SelectableTextarea & {
     selectionStart: 0,
     selectionEnd: 0,
     focus: vi.fn(),
-    setSelectionRange: vi.fn(function (this: SelectableTextarea, s: number, e: number) {
+    setSelectionRange: vi.fn(function (
+      this: SelectableTextarea,
+      s: number,
+      e: number,
+    ) {
       this.selectionStart = s;
       this.selectionEnd = e;
     }),

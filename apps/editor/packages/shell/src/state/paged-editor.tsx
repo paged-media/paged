@@ -340,7 +340,12 @@ function PagedEditorBinder({
           client.submitSceneLayer(elementId, layer, caller),
         clear: (elementId) => client.clearSceneLayer(elementId),
         submitImage: async (elementId, image, caller, transfer) => {
-          await client.submitSceneImageBinary(elementId, image, caller, transfer);
+          await client.submitSceneImageBinary(
+            elementId,
+            image,
+            caller,
+            transfer,
+          );
         },
         submitImageTiles: async (elementId, tiles, caller, transfer) => {
           await client.submitSceneImageTilesBinary(

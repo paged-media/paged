@@ -54,7 +54,9 @@ describe("image menu entries", () => {
     const stray = MENU_ENTRIES.map(([p]) => p.split("/")[0]).filter(
       (t) => t !== "Image" && !["Edit", "Object"].includes(t),
     );
-    expect(stray, `unexpected top-level menus: ${stray.join(", ")}`).toEqual([]);
+    expect(stray, `unexpected top-level menus: ${stray.join(", ")}`).toEqual(
+      [],
+    );
   });
 
   it("covers a real share of the bundle's commands", () => {

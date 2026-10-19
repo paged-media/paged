@@ -35,7 +35,9 @@ const openPanel = (page: Page, id: string) =>
   page.evaluate(
     (panelId) =>
       (
-        globalThis as unknown as { __canvas: { openPanel: (i: string) => void } }
+        globalThis as unknown as {
+          __canvas: { openPanel: (i: string) => void };
+        }
       ).__canvas.openPanel(panelId),
     id,
   );
@@ -48,7 +50,9 @@ test.describe("Phase E — learnability", () => {
       .poll(
         () =>
           page.evaluate(
-            () => (globalThis as unknown as { __canvas: { ready: boolean } }).__canvas.ready,
+            () =>
+              (globalThis as unknown as { __canvas: { ready: boolean } })
+                .__canvas.ready,
           ),
         { timeout: 30_000 },
       )
@@ -58,15 +62,16 @@ test.describe("Phase E — learnability", () => {
   test("AC-LEARN-1 — Help ▸ Keyboard shortcuts opens a panel built from the live registry @feat:editor-shell.keyboard-shortcuts @feat:editor-shell.menus @level:happy", async ({
     page,
   }) => {
-    const items = await page.evaluate(
-      () =>
-        (
-          globalThis as unknown as {
-            __canvas: {
-              registries: { menus: { list: () => { path: string; command: string }[] } };
+    const items = await page.evaluate(() =>
+      (
+        globalThis as unknown as {
+          __canvas: {
+            registries: {
+              menus: { list: () => { path: string; command: string }[] };
             };
-          }
-        ).__canvas.registries.menus.list(),
+          };
+        }
+      ).__canvas.registries.menus.list(),
     );
     const help = items.find((i) => i.path === "Help/Keyboard shortcuts");
     expect(help, "Help ▸ Keyboard shortcuts is missing").toBeTruthy();
@@ -96,15 +101,16 @@ test.describe("Phase E — learnability", () => {
   test("AC-LEARN-3 — the Window menu is grouped by heading and free of developer panels @feat:editor-shell.menus @feat:editor-shell.panel-rail @level:happy", async ({
     page,
   }) => {
-    const items = await page.evaluate(
-      () =>
-        (
-          globalThis as unknown as {
-            __canvas: {
-              registries: { menus: { list: () => { path: string; command: string }[] } };
+    const items = await page.evaluate(() =>
+      (
+        globalThis as unknown as {
+          __canvas: {
+            registries: {
+              menus: { list: () => { path: string; command: string }[] };
             };
-          }
-        ).__canvas.registries.menus.list(),
+          };
+        }
+      ).__canvas.registries.menus.list(),
     );
     const windowItems = items.filter((i) => i.path.startsWith("Window/"));
     expect(windowItems.length).toBeGreaterThan(20);
@@ -126,7 +132,9 @@ test.describe("Phase E — learnability", () => {
 
     // The Script panel left this list with its Ask Claude bar (ADR 221):
     // a designer can use it now, so the Window menu offers it.
-    expect(windowItems.map((i) => i.command)).toContain("paged.panel.show.paged.script-editor");
+    expect(windowItems.map((i) => i.command)).toContain(
+      "paged.panel.show.paged.script-editor",
+    );
 
     // …and they are still reachable, which is the half that makes the
     // above safe rather than a removal.
@@ -139,7 +147,9 @@ test.describe("Phase E — learnability", () => {
               () =>
                 (
                   globalThis as unknown as {
-                    __canvas: { debugContext: () => { panels: { open: string[] } } };
+                    __canvas: {
+                      debugContext: () => { panels: { open: string[] } };
+                    };
                   }
                 ).__canvas.debugContext().panels.open,
             )
@@ -153,9 +163,7 @@ test.describe("Phase E — learnability", () => {
     // by unlabelled hairlines. A separator says "these differ"; a
     // heading says how.
     await page.locator('[data-menu-trigger="Window"]').click();
-    await expect(
-      page.locator("[data-menu-group-label]").first(),
-    ).toBeVisible();
+    await expect(page.locator("[data-menu-group-label]").first()).toBeVisible();
     await page.keyboard.press("Escape");
   });
 
@@ -166,13 +174,13 @@ test.describe("Phase E — learnability", () => {
     // surface that exists to list what the app can do. Tools advertised
     // their keys in rail tooltips all along; commands never did.
     await page.locator('[data-menu-trigger="Object"]').click();
-    const accel = page.locator(
-      '[data-menu-accelerator="paged.object.group"]',
-    );
+    const accel = page.locator('[data-menu-accelerator="paged.object.group"]');
     await expect(accel).toBeVisible();
     // The menus show the platform's own chord: ⌘G on a Mac, Ctrl+G elsewhere
     // (CI runs on Linux).
-    const mac = await page.evaluate(() => /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent));
+    const mac = await page.evaluate(() =>
+      /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent),
+    );
     await expect(accel).toHaveText(mac ? "⌘G" : "Ctrl+G");
     await page.keyboard.press("Escape");
   });

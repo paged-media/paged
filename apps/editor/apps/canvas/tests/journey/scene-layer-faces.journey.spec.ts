@@ -102,21 +102,33 @@ async function submit(
 }
 
 /** Register a corpus font under `family` (the vite `/fonts/` route). */
-async function registerFont(page: Page, family: string, file: string): Promise<void> {
+async function registerFont(
+  page: Page,
+  family: string,
+  file: string,
+): Promise<void> {
   await page.evaluate(
     async ({ family, file }) => {
       const c = (
         globalThis as unknown as {
           __canvas: {
             client: {
-              registerFont(f: string, b: Uint8Array, s?: string | null): Promise<void>;
+              registerFont(
+                f: string,
+                b: Uint8Array,
+                s?: string | null,
+              ): Promise<void>;
             };
           };
         }
       ).__canvas;
       const resp = await fetch(`/fonts/${file}`);
       if (!resp.ok) throw new Error(`/fonts/${file}: ${resp.status}`);
-      await c.client.registerFont(family, new Uint8Array(await resp.arrayBuffer()), null);
+      await c.client.registerFont(
+        family,
+        new Uint8Array(await resp.arrayBuffer()),
+        null,
+      );
     },
     { family, file },
   );
@@ -129,7 +141,12 @@ test.describe("journey · protocol 68 scene-layer text faces", () => {
     const designer = new Designer(page);
     await designer.open();
     await designer.newDocument();
-    const frame = await designer.drawRectangle({ x0: 60, y0: 120, x1: 400, y1: 260 });
+    const frame = await designer.drawRectangle({
+      x0: 60,
+      y0: 120,
+      x1: 400,
+      y1: 260,
+    });
     expect(frame, "drew a target frame").not.toBe("");
 
     // ── 1. REPORT — nothing registered by name yet: every named family
@@ -151,7 +168,9 @@ test.describe("journey · protocol 68 scene-layer text faces", () => {
 
     // ── 2. REBUILD ON REGISTER — the Lora run draws in the default font;
     //    registering Lora repaints the frame in Lora with NO resubmit. ──
-    expect((await submit(page, frame, [text("Lora")])).fontFallbacks).toEqual(["Lora"]);
+    expect((await submit(page, frame, [text("Lora")])).fontFallbacks).toEqual([
+      "Lora",
+    ]);
     // Let the fallback render settle, then prove it is stable before the
     // register, so the change below is the register's doing.
     await page.waitForTimeout(300);
@@ -160,17 +179,25 @@ test.describe("journey · protocol 68 scene-layer text faces", () => {
     await registerFont(page, "Lora", "Lora.ttf");
     const relaid = await designer.expectRenderChangesFrom(fallback);
     // eslint-disable-next-line no-console
-    console.log(`[faces] Lora registered: ${relaid}px repainted without a resubmit`);
-    expect(await submit(page, frame, [text("Lora")])).toEqual({ fontFallbacks: [] });
+    console.log(
+      `[faces] Lora registered: ${relaid}px repainted without a resubmit`,
+    );
+    expect(await submit(page, frame, [text("Lora")])).toEqual({
+      fontFallbacks: [],
+    });
 
     // ── 3. WEIGHT — Inter registered by name resolves (no report), and
     //    the variable face's wght follows `weight`. ──
     await registerFont(page, "Inter", "Inter.ttf");
-    expect(await submit(page, frame, [text("Inter", 400)])).toEqual({ fontFallbacks: [] });
+    expect(await submit(page, frame, [text("Inter", 400)])).toEqual({
+      fontFallbacks: [],
+    });
     await page.waitForTimeout(300);
     const regular = await designer.renderBytes();
     await designer.expectRenderStable(regular, await designer.renderBytes());
-    expect(await submit(page, frame, [text("Inter", 700)])).toEqual({ fontFallbacks: [] });
+    expect(await submit(page, frame, [text("Inter", 700)])).toEqual({
+      fontFallbacks: [],
+    });
     const bolder = await designer.expectRenderChangesFrom(regular);
     // eslint-disable-next-line no-console
     console.log(`[faces] Inter 400 -> 700: ${bolder}px changed`);

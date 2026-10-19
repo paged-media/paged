@@ -113,7 +113,9 @@ describe("contribute.editContext — registration + gates (W3.2)", () => {
       console: silent,
     });
     contributeEditContext(host, vectorContext);
-    const reg = fake.editContexts.get("vectorGraphic") as EditContextContribution;
+    const reg = fake.editContexts.get(
+      "vectorGraphic",
+    ) as EditContextContribution;
     expect(reg.toolIds).toEqual([
       "media.paged.test.tool.addAnchor",
       "media.paged.test.tool.deleteAnchor",
@@ -153,7 +155,9 @@ describe("contribute.editContext — registration + gates (W3.2)", () => {
     });
     contributeEditContext(host, vectorContext);
     expect(fake.editContexts.types()).toEqual(["vectorGraphic"]);
-    expect(warned.some((w) => /editContexts\[\] must declare/.test(w))).toBe(true);
+    expect(warned.some((w) => /editContexts\[\] must declare/.test(w))).toBe(
+      true,
+    );
   });
 
   it("the type is NOT a namespaced id (a bare content-type name is fine)", () => {
@@ -206,7 +210,10 @@ describe("contribute.editContext — onContentWheel reaches the shell", () => {
     delta: [0, 48],
     modifiers: { shift: false, alt: false, cmd: false, ctrl: false },
   };
-  const sheet = (seen: ContentWheelEvent[], take: boolean): EditContextContribution => ({
+  const sheet = (
+    seen: ContentWheelEvent[],
+    take: boolean,
+  ): EditContextContribution => ({
     type: "vectorGraphic",
     entry: "doubleClick",
     onContentWheel: (e) => {
@@ -217,17 +224,25 @@ describe("contribute.editContext — onContentWheel reaches the shell", () => {
 
   it("is passed through with its answer (claimed and declined)", () => {
     const fake = makeFakeEditor();
-    const { host } = createBundleHost(() => fake.editor, MANIFEST, { console: silent });
+    const { host } = createBundleHost(() => fake.editor, MANIFEST, {
+      console: silent,
+    });
     const seen: ContentWheelEvent[] = [];
     contributeEditContext(host, sheet(seen, true));
-    const reg = fake.editContexts.get("vectorGraphic") as EditContextContribution;
+    const reg = fake.editContexts.get(
+      "vectorGraphic",
+    ) as EditContextContribution;
     expect(reg.onContentWheel?.(wheel)).toBe(true);
     expect(seen).toEqual([wheel]);
 
     const fake2 = makeFakeEditor();
-    const h2 = createBundleHost(() => fake2.editor, MANIFEST, { console: silent }).host;
+    const h2 = createBundleHost(() => fake2.editor, MANIFEST, {
+      console: silent,
+    }).host;
     contributeEditContext(h2, sheet(seen, false));
-    const reg2 = fake2.editContexts.get("vectorGraphic") as EditContextContribution;
+    const reg2 = fake2.editContexts.get(
+      "vectorGraphic",
+    ) as EditContextContribution;
     expect(reg2.onContentWheel?.(wheel)).toBe(false);
   });
 
@@ -239,16 +254,22 @@ describe("contribute.editContext — onContentWheel reaches the shell", () => {
     });
     const seen: ContentWheelEvent[] = [];
     contributeEditContext(host, sheet(seen, true));
-    const reg = fake.editContexts.get("vectorGraphic") as EditContextContribution;
+    const reg = fake.editContexts.get(
+      "vectorGraphic",
+    ) as EditContextContribution;
     expect(reg.onContentWheel?.(wheel)).toBe(true);
     expect(seen).toHaveLength(1);
   });
 
   it("stays absent when the context does not declare it (the canvas pans)", () => {
     const fake = makeFakeEditor();
-    const { host } = createBundleHost(() => fake.editor, MANIFEST, { console: silent });
+    const { host } = createBundleHost(() => fake.editor, MANIFEST, {
+      console: silent,
+    });
     contributeEditContext(host, vectorContext);
-    const reg = fake.editContexts.get("vectorGraphic") as EditContextContribution;
+    const reg = fake.editContexts.get(
+      "vectorGraphic",
+    ) as EditContextContribution;
     expect(reg.onContentWheel).toBeUndefined();
   });
 });

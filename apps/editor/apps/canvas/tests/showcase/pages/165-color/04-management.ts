@@ -152,29 +152,35 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   expect(meta.proofProfileName).toBe(PROFILE_NAME);
   expect(meta.useStandardLabForSpots).toBe(true);
   expect(meta.defaultFillColor).toBe(tintId);
-  const inks = (await doc.designer.collection(
-    "inks",
-  )) as unknown as InkRead[];
+  const inks = (await doc.designer.collection("inks")) as unknown as InkRead[];
   const ember = inks.find((i) => i.name === "Annual Ember");
   expect(ember?.aliasTo).toBe(vermilionId);
 
   // ── the page ─────────────────────────────────────────────────────
-  const head = await proseFrame(ctx, pg, [60, 58, 492, 90], [
-    { text: "The prepress bench", style: STYLE.head1 },
-  ]);
+  const head = await proseFrame(
+    ctx,
+    pg,
+    [60, 58, 492, 90],
+    [{ text: "The prepress bench", style: STYLE.head1 }],
+  );
   elements.push(head.frameId);
 
-  const intro = await proseFrame(ctx, pg, [60, 96, 492, 158], [
-    {
-      text:
-        "Everything on this page is a setting, not a shape. Each bench " +
-        "below applies one management op and then prints what the document " +
-        "reports back — the read is the exhibit. Where the effect lives at " +
-        "the proof or the press rather than in this composite, the label " +
-        "says so.",
-      style: STYLE.body,
-    },
-  ]);
+  const intro = await proseFrame(
+    ctx,
+    pg,
+    [60, 96, 492, 158],
+    [
+      {
+        text:
+          "Everything on this page is a setting, not a shape. Each bench " +
+          "below applies one management op and then prints what the document " +
+          "reports back — the read is the exhibit. Where the effect lives at " +
+          "the proof or the press rather than in this composite, the label " +
+          "says so.",
+        style: STYLE.body,
+      },
+    ],
+  );
   elements.push(intro.frameId);
 
   const bench = async (
@@ -182,9 +188,12 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     title: string,
     lines: string[],
   ): Promise<void> => {
-    const t = await proseFrame(ctx, pg, [60, y, 492, y + 24], [
-      { text: title, style: STYLE.head2 },
-    ]);
+    const t = await proseFrame(
+      ctx,
+      pg,
+      [60, y, 492, y + 24],
+      [{ text: title, style: STYLE.head2 }],
+    );
     const b = await proseFrame(
       ctx,
       pg,
@@ -231,13 +240,17 @@ export async function build(ctx: PageContext): Promise<PageReport> {
       "Annual Ember — the aliased spot, previewing through its CMYK build.",
     )),
   );
-  const nakedCaption = await proseFrame(ctx, pg, [60, 552, 294, 604], [
-    {
-      text:
-        "Born dressed: no fill or stroke was ever set on this rectangle.",
-      style: STYLE.caption,
-    },
-  ]);
+  const nakedCaption = await proseFrame(
+    ctx,
+    pg,
+    [60, 552, 294, 604],
+    [
+      {
+        text: "Born dressed: no fill or stroke was ever set on this rectangle.",
+        style: STYLE.caption,
+      },
+    ],
+  );
   elements.push(nakedCaption.frameId);
 
   await marginNote(

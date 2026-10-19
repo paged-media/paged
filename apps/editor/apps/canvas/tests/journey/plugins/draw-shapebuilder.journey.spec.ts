@@ -82,15 +82,30 @@ test.describe("journey · paged.draw shape builder", () => {
     //    the right, overlapping in the middle band. Distinct fills make
     //    the union — which keeps rect1's black identity over rect2's
     //    formerly-red exclusive region — a VISIBLE recolour on the page. ──
-    const rect1 = await designer.drawRectangle({ x0: 140, y0: 180, x1: 340, y1: 360 });
-    const rect2 = await designer.drawRectangle({ x0: 280, y0: 180, x1: 480, y1: 360 });
+    const rect1 = await designer.drawRectangle({
+      x0: 140,
+      y0: 180,
+      x1: 340,
+      y1: 360,
+    });
+    const rect2 = await designer.drawRectangle({
+      x0: 280,
+      y0: 180,
+      x1: 480,
+      y1: 360,
+    });
     expect(rect1, "drew rect1").not.toBe("");
     expect(rect2, "drew rect2").not.toBe("");
     await designer.applyFill("rectangle", rect1, "Color/Black");
-    const redSwatch = await designer.createSwatch("shape-builder-red", [220, 20, 20]);
+    const redSwatch = await designer.createSwatch(
+      "shape-builder-red",
+      [220, 20, 20],
+    );
     await designer.applyFill("rectangle", rect2, redSwatch);
 
-    expect(await designer.count("rectangle"), "two rectangles authored").toBe(2);
+    expect(await designer.count("rectangle"), "two rectangles authored").toBe(
+      2,
+    );
 
     // Re-fit so the live camera is settled for the drag mapping.
     await fitFirstPage(page);

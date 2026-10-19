@@ -22,7 +22,7 @@ carries.
 
 A bundle declares every wasm module it intends to load under
 `capabilities.wasm`. This is **not** a contribution (it registers nothing
-in a shell registry) — it is a *capability*, so it lives beside
+in a shell registry) — it is a _capability_, so it lives beside
 `document` / `rendering` / `network` / `clipboard`, the existing closed
 vocabulary the host reasons about and (eventually) grants.
 
@@ -33,25 +33,25 @@ vocabulary the host reasons about and (eventually) grants.
   "capabilities": {
     "wasm": [
       {
-        "name": "layout",            // logical handle for the loader
+        "name": "layout", // logical handle for the loader
         "path": "engine/layout.wasm", // bundle-relative; no "/", no ".."
-        "purpose": "layout",         // closed vocabulary (gates the grant)
-        "maxBytes": 4194304,         // optional self-imposed ceiling (≤ host hard cap)
-        "integrity": "sha384-…"      // optional; stamped at build time (§7)
-      }
-    ]
-  }
+        "purpose": "layout", // closed vocabulary (gates the grant)
+        "maxBytes": 4194304, // optional self-imposed ceiling (≤ host hard cap)
+        "integrity": "sha384-…", // optional; stamped at build time (§7)
+      },
+    ],
+  },
 }
 ```
 
-Why a manifest **field** and not a `wasm.load@1` *capability string* (the
+Why a manifest **field** and not a `wasm.load@1` _capability string_ (the
 `host.supports()` form): `supports()` answers "can the host do X at
 runtime"; this answers "what does the bundle SHIP". The two are different
-questions (DESIGN tenet 6). The artifacts must be *enumerable from the
-manifest alone* — the CLI validates them, the packager will checksum
+questions (DESIGN tenet 6). The artifacts must be _enumerable from the
+manifest alone_ — the CLI validates them, the packager will checksum
 them, and the loader enforces **declared-only** access against them — so
 they belong in the static manifest, not behind a runtime probe. The host
-*grant* (below) is the runtime gate; `host.supports("wasm.load@1")` can be
+_grant_ (below) is the runtime gate; `host.supports("wasm.load@1")` can be
 added later as the "does this host serve wasm at all" probe without
 changing the manifest shape.
 
@@ -89,7 +89,7 @@ loadBundleWasm(bundle, "layout", {
 The sequence:
 
 1. **Resolve from the manifest.** The `name` must appear in
-   `capabilities.wasm`. An undeclared name is refused — *declared-only* is
+   `capabilities.wasm`. An undeclared name is refused — _declared-only_ is
    the contract; the loader never loads a module the manifest didn't
    enumerate.
 2. **Check the host grant.** Wasm is opt-in: with no grant the load is
@@ -116,17 +116,17 @@ isolation + a threads story is a later milestone.)
 
 ## 3. Budget rules (v1 numbers, with rationale)
 
-| Budget | v1 value | Why |
-|---|---|---|
-| **App-wide wasm ceiling** | **100 MB** (whole editor + every plugin) | **THE budget since 2026-08-19** (maintainer decision). Every earlier ceiling was per-thing — one artifact, one bundle — so eight bundles could each pass their own gate while the app shipped a quarter of a gigabyte, and nothing in any repo measured the sum. What a user downloads is the sum. Enforced where the app is assembled: the editor's `scripts/wasm-budget.mjs`, run in its `checks` CI job, since only the app knows which bundles ship. It deduplicates **by real path** — pnpm links one store entry from many packages and a naive walk over-counts nearly 6x (286 MB reported for an app carrying 49). Measured 2026-08-19: **49.4 MB across 9 distinct artifacts**, ~50 MB headroom. |
-| **Per-artifact byte ceiling** | **100 MB** — folded into the envelope | Was 8 MiB, briefly 25. A single artifact stopped being independently interesting once the sum is bounded, so this is now a hard upper stop rather than a policy: it keeps a manifest `maxBytes` something to **tighten**, and keeps the loader refusing an absurd module. The `purpose: "engine"` distinction (D-07b) survives for governance and telemetry, no longer for size. |
-| **Total bundle wasm ceiling** | **100 MB** | Same number: one bundle may in principle spend the whole envelope. The app-wide check is what stops the app. |
-| **Load-time budget** | **3000 ms** | Wall-clock for fetch + compile + instantiate. Protects the editor's main flow from a pathological module; the loader aborts with a clear stage-tagged error rather than hanging the host. |
-| **Memory-growth ceiling** | **256 MiB** (4096 × 64 KiB pages) | Passed as `WebAssembly.Memory({ maximum })` when the host owns memory. A per-page layout pass should sit far under this; the cap turns "runaway `memory.grow`" into a trapped failure, not an OOM of the tab. |
+| Budget                        | v1 value                                 | Why                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| ----------------------------- | ---------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **App-wide wasm ceiling**     | **100 MB** (whole editor + every plugin) | **THE budget since 2026-08-19** (maintainer decision). Every earlier ceiling was per-thing — one artifact, one bundle — so eight bundles could each pass their own gate while the app shipped a quarter of a gigabyte, and nothing in any repo measured the sum. What a user downloads is the sum. Enforced where the app is assembled: the editor's `scripts/wasm-budget.mjs`, run in its `checks` CI job, since only the app knows which bundles ship. It deduplicates **by real path** — pnpm links one store entry from many packages and a naive walk over-counts nearly 6x (286 MB reported for an app carrying 49). Measured 2026-08-19: **49.4 MB across 9 distinct artifacts**, ~50 MB headroom. |
+| **Per-artifact byte ceiling** | **100 MB** — folded into the envelope    | Was 8 MiB, briefly 25. A single artifact stopped being independently interesting once the sum is bounded, so this is now a hard upper stop rather than a policy: it keeps a manifest `maxBytes` something to **tighten**, and keeps the loader refusing an absurd module. The `purpose: "engine"` distinction (D-07b) survives for governance and telemetry, no longer for size.                                                                                                                                                                                                                                                                                                                          |
+| **Total bundle wasm ceiling** | **100 MB**                               | Same number: one bundle may in principle spend the whole envelope. The app-wide check is what stops the app.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| **Load-time budget**          | **3000 ms**                              | Wall-clock for fetch + compile + instantiate. Protects the editor's main flow from a pathological module; the loader aborts with a clear stage-tagged error rather than hanging the host.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| **Memory-growth ceiling**     | **256 MiB** (4096 × 64 KiB pages)        | Passed as `WebAssembly.Memory({ maximum })` when the host owns memory. A per-page layout pass should sit far under this; the cap turns "runaway `memory.grow`" into a trapped failure, not an OOM of the tab.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 
 These are **v1, deliberately conservative** — generous enough for the
 first real layout engine, tight enough that the failure mode of a
-mis-built or hostile bundle is a *clean rejection*, not a degraded
+mis-built or hostile bundle is a _clean rejection_, not a degraded
 editor. They are revisited when a real engine measures against them
 (that measurement is the residual the W0 spike produces). The numbers
 live in exactly three places, kept in lockstep by comment:
@@ -148,9 +148,9 @@ imports omit one). There is:
 - **no `host.editor` reach** — that escape hatch is JS-side only.
 
 The module therefore has exactly the authority the **bundle's JS** gives
-it by wiring exports/imports — and that JS is *already* gated (namespace
+it by wiring exports/imports — and that JS is _already_ gated (namespace
 rule, capability manifest, the facade surface). The wasm is strictly
-*downstream* of the bundle's own sandbox: it can compute and hand results
+_downstream_ of the bundle's own sandbox: it can compute and hand results
 back to the JS, which then goes through the same gated doors every other
 bundle uses. Adding a wasm module grants the plugin **zero** new reach
 into the host.
@@ -165,8 +165,8 @@ size/compute concern, not a privilege-escalation one.
 - **No native plugins.** wasm only; no `.node`/dylib loading, ever.
 - **No wasm-side direct engine access.** The module never gets a
   `BundleHost`/`CanvasClient`/`PagedEditor` handle. If a future engine
-  wants a fast path to the document, that is a *new, separately-designed,
-  separately-budgeted* host import — not an implicit grant.
+  wants a fast path to the document, that is a _new, separately-designed,
+  separately-budgeted_ host import — not an implicit grant.
 - **No threads / SharedArrayBuffer.** Non-shared memory only.
 - **No host-served fetch path the bundle didn't declare.** The loader
   resolves strictly the declared `path` through the injected asset base,
@@ -213,7 +213,7 @@ size/compute concern, not a privilege-escalation one.
 ## Two loaders, ratified (2026-06-09 — closes paged.sheet S-10 / paged.image I-07)
 
 There are **two** sanctioned ways a bundle runs its own wasm, and which
-one applies is decided by the module's *shape*, not by preference:
+one applies is decided by the module's _shape_, not by preference:
 
 1. **Raw module → `host.loadBundleWasm`.** A hand-built / Blitz-class
    module with no JS glue (host-owned memory, only caller-passed imports,
@@ -226,7 +226,7 @@ one applies is decided by the module's *shape*, not by preference:
    `.js`) **cannot** load through door (1) — the raw instantiation has
    none of that glue. It is instead loaded by the bundle itself, in the
    bundle's JS realm, by `import init, { … } from "./<name>.js"; await
-   init(url)` — exactly how `@paged-media/sdk` / `idml-viewer` boot, and
+init(url)` — exactly how `@paged-media/sdk` / `idml-viewer` boot, and
    how `plugin-sheets`' `sheet-js` engine boots
    (`packages/sheet-bundle/src/engine.ts` `bootEngine`).
 
@@ -235,7 +235,7 @@ one applies is decided by the module's *shape*, not by preference:
    loader. `paged-sheet` (S-10) and `paged-image` (I-07) both ship this
    way. **This is the v1 contract**: there is no host-side wasm-bindgen
    loader and none is needed; the glue path is the answer. (If a future
-   host *wants* to own wasm-bindgen instantiation — e.g. to share a
+   host _wants_ to own wasm-bindgen instantiation — e.g. to share a
    `GPUDevice` import — that is the separate I-01/I-07 GPU-surface RFC,
    not this door.)
 
@@ -297,17 +297,26 @@ floor predates these exports inlines the same probe instead of importing
 them (they would be a missing export on an older host):
 
 ```ts
-const door = (host as { modules?: { resolve?(n: string): Promise<{ url: string; integrity: string | null } | null> } }).modules;
-const hosted = host.supports("modules@1") && typeof door?.resolve === "function"
-  ? await door.resolve(name).catch(() => null)
-  : null;
+const door = (
+  host as {
+    modules?: {
+      resolve?(
+        n: string,
+      ): Promise<{ url: string; integrity: string | null } | null>;
+    };
+  }
+).modules;
+const hosted =
+  host.supports("modules@1") && typeof door?.resolve === "function"
+    ? await door.resolve(name).catch(() => null)
+    : null;
 const url = hosted?.url ?? bundleRelativeUrl;
 ```
 
 Two shapes of consumer:
 
 - **wasm-bindgen glue** takes a `Response`: `await init({ module_or_path:
-  fetchWasm(host, "engine", new URL("../bin/x_bg.wasm", import.meta.url)) })`
+fetchWasm(host, "engine", new URL("../bin/x_bg.wasm", import.meta.url)) })`
   — streaming compile, with SRI.
 - **An engine that fetches inside its own worker** (DuckDB-WASM's
   `instantiate(url)`) takes the URL only, so the integrity cannot reach

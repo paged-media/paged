@@ -215,7 +215,8 @@ export class DirectSelectSession implements PathEditSession {
    *  move or the release at that position uses it; and the pointer of
    *  the newest move, so a late answer for an older position is dropped
    *  and a fresh one is applied by re-running that move. */
-  private engineSnap: { key: string; at: readonly [number, number] } | null = null;
+  private engineSnap: { key: string; at: readonly [number, number] } | null =
+    null;
   private engineAsked: string | null = null;
   private lastMove: PathEditPointer | null = null;
   private disposed = false;
@@ -305,7 +306,9 @@ export class DirectSelectSession implements PathEditSession {
     const key = `${at[0]},${at[1]}`;
     const engine = this.engineSnap?.key === key ? this.engineSnap.at : null;
     if (!engine) this.askEngine(key, at, pointer);
-    const to = engine ?? snapPoint(at, g.targets, SNAP_TOLERANCE_PX * pointer.ptPerPx).point;
+    const to =
+      engine ??
+      snapPoint(at, g.targets, SNAP_TOLERANCE_PX * pointer.ptPerPx).point;
     return [pointer.point[0] + to[0] - at[0], pointer.point[1] + to[1] - at[1]];
   }
 
@@ -325,7 +328,10 @@ export class DirectSelectSession implements PathEditSession {
     if (!ask || !pageId || !g || this.engineAsked === key) return;
     this.engineAsked = key;
     const exclude = [
-      { id: this.target, anchors: [g.index, ...this.selected.filter((i) => i !== g.index)] },
+      {
+        id: this.target,
+        anchors: [g.index, ...this.selected.filter((i) => i !== g.index)],
+      },
     ];
     void ask({
       pageId,

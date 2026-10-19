@@ -125,12 +125,14 @@ export function compileLimits(): Limit[] {
   // Dedupe: exact-normalised first, then near-identical by token
   // overlap (Jaccard ≥ 0.6) — the same seam recorded by two studios
   // in two wordings collapses to one entry carrying both folios.
-  const merged: Array<{ text: string; physicals: Set<number>; norm: Set<string> }> = [];
+  const merged: Array<{
+    text: string;
+    physicals: Set<number>;
+    norm: Set<string>;
+  }> = [];
   for (const note of raw) {
     const norm = tokens(note.text);
-    const hit = merged.find(
-      (m) => jaccard(m.norm, norm) >= 0.6,
-    );
+    const hit = merged.find((m) => jaccard(m.norm, norm) >= 0.6);
     if (hit) {
       for (const ph of note.physicals) hit.physicals.add(ph);
     } else {

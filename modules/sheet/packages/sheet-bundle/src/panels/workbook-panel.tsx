@@ -146,9 +146,19 @@ function Section(props: {
   children: ReactNode;
 }): ReactElement {
   return (
-    <details data-sheet-section={props.id} open={props.open} style={sectionStyle}>
+    <details
+      data-sheet-section={props.id}
+      open={props.open}
+      style={sectionStyle}
+    >
       <summary style={summaryStyle}>{props.title}</summary>
-      <div style={{ display: "flex", flexDirection: "column", marginTop: "var(--space-1, 4px)" }}>
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          marginTop: "var(--space-1, 4px)",
+        }}
+      >
         {props.children}
       </div>
     </details>
@@ -215,7 +225,10 @@ export function makeWorkbookPanel(
     const onPlace = useCallback(() => {
       setPlaceMsg(null);
       void session.lowerSelection().then((id) => {
-        if (id === null) setPlaceMsg("The range could not be placed. Check that it is a valid range like A1:D20.");
+        if (id === null)
+          setPlaceMsg(
+            "The range could not be placed. Check that it is a valid range like A1:D20.",
+          );
       });
     }, []);
 
@@ -225,10 +238,14 @@ export function makeWorkbookPanel(
     const [structMsg, setStructMsg] = useState<string | null>(null);
     const [sheetMsg, setSheetMsg] = useState<string | null>(null);
     const [renameTo, setRenameTo] = useState("");
-    const report = (r: { ok: true } | { ok: false; message: string }, done: string) =>
-      setStructMsg(r.ok ? done : r.message);
-    const reportSheet = (r: { ok: true } | { ok: false; message: string }, done: string) =>
-      setSheetMsg(r.ok ? done : r.message);
+    const report = (
+      r: { ok: true } | { ok: false; message: string },
+      done: string,
+    ) => setStructMsg(r.ok ? done : r.message);
+    const reportSheet = (
+      r: { ok: true } | { ok: false; message: string },
+      done: string,
+    ) => setSheetMsg(r.ok ? done : r.message);
     // Wave 6 — header rows repeated at the top of every threaded frame.
     const [headerRows, setHeaderRows] = useState(1);
     const onPaginate = useCallback(async () => {
@@ -352,7 +369,9 @@ export function makeWorkbookPanel(
         {/* S-11 RESOLVED: the host file picker is the primary path; the
          *  panel's own `<input>` is the honest fallback when no picker is
          *  wired (headless / a host that predates the door). */}
-        <div style={{ ...row, marginTop: 0, marginBottom: "var(--space-2, 8px)" }}>
+        <div
+          style={{ ...row, marginTop: 0, marginBottom: "var(--space-2, 8px)" }}
+        >
           {pickerSupported ? (
             <button
               data-sheet-pick
@@ -377,7 +396,11 @@ export function makeWorkbookPanel(
             data-sheet-new
             type="button"
             data-armed={armed === "new" ? "" : undefined}
-            title={sheets.length > 0 ? "Replaces the open workbook; this can't be undone" : undefined}
+            title={
+              sheets.length > 0
+                ? "Replaces the open workbook; this can't be undone"
+                : undefined
+            }
             onClick={() => {
               const run = () => void session.newWorkbook();
               if (sheets.length > 0) confirm("new", run);
@@ -415,7 +438,11 @@ export function makeWorkbookPanel(
 
         {st.fileName && (
           <p style={{ ...body, margin: "0 0 var(--space-1, 4px)" }}>
-            Imported <span style={{ fontFamily: "var(--font-mono, monospace)" }}>{st.fileName}</span>.
+            Imported{" "}
+            <span style={{ fontFamily: "var(--font-mono, monospace)" }}>
+              {st.fileName}
+            </span>
+            .
           </p>
         )}
 
@@ -475,10 +502,17 @@ export function makeWorkbookPanel(
                 data-armed={armed === "sheet" ? "" : undefined}
                 style={secondaryButton}
                 disabled={sheets.length <= 1}
-                title={sheets.length <= 1 ? "A workbook needs at least one sheet" : "Delete this sheet; this can't be undone"}
+                title={
+                  sheets.length <= 1
+                    ? "A workbook needs at least one sheet"
+                    : "Delete this sheet; this can't be undone"
+                }
                 onClick={() =>
                   confirm("sheet", () =>
-                    reportSheet(session.deleteSheet(st.activeSheet ?? 0), "Sheet deleted."),
+                    reportSheet(
+                      session.deleteSheet(st.activeSheet ?? 0),
+                      "Sheet deleted.",
+                    ),
                   )
                 }
               >
@@ -486,7 +520,11 @@ export function makeWorkbookPanel(
               </button>
             </div>
             {sheetMsg && (
-              <div data-sheet-sheet-msg role="status" style={{ ...body, marginTop: 4 }}>
+              <div
+                data-sheet-sheet-msg
+                role="status"
+                style={{ ...body, marginTop: 4 }}
+              >
                 {sheetMsg}
               </div>
             )}
@@ -494,7 +532,14 @@ export function makeWorkbookPanel(
             <div style={{ height: "var(--space-2, 8px)" }} />
 
             <Section id="place" title="Place on page" open>
-              <label style={{ ...body, display: "flex", flexDirection: "column", gap: 2 }}>
+              <label
+                style={{
+                  ...body,
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 2,
+                }}
+              >
                 Range
                 <input
                   data-sheet-range
@@ -511,7 +556,11 @@ export function makeWorkbookPanel(
                   data-sheet-lower
                   onClick={onPlace}
                   disabled={!hasRange}
-                  title={hasRange ? "Place the range on the page as a table" : "Enter a range first"}
+                  title={
+                    hasRange
+                      ? "Place the range on the page as a table"
+                      : "Enter a range first"
+                  }
                   style={{
                     ...primaryButton,
                     opacity: hasRange ? 1 : 0.5,
@@ -528,12 +577,21 @@ export function makeWorkbookPanel(
                   onClick={() => void onPaginate()}
                   disabled={!hasRange}
                   style={secondaryButton}
-                  title={hasRange ? "Select a text frame of a threaded chain first" : "Enter a range first"}
+                  title={
+                    hasRange
+                      ? "Select a text frame of a threaded chain first"
+                      : "Enter a range first"
+                  }
                 >
                   Paginate into threaded frames
                 </button>
                 <label
-                  style={{ ...body, display: "inline-flex", alignItems: "center", gap: 4 }}
+                  style={{
+                    ...body,
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 4,
+                  }}
                   title="Rows repeated at the top of every frame of the chain"
                 >
                   Header rows
@@ -548,38 +606,88 @@ export function makeWorkbookPanel(
                 </label>
               </div>
               {placeMsg && (
-                <div data-sheet-place-msg role="status" style={{ ...body, marginTop: 4 }}>
+                <div
+                  data-sheet-place-msg
+                  role="status"
+                  style={{ ...body, marginTop: 4 }}
+                >
                   {placeMsg}
                 </div>
               )}
             </Section>
 
             <Section id="structure" title="Rows and columns">
-              <p style={{ ...note, marginTop: 0 }}>Acts on the rows or columns selected in the grid.</p>
+              <p style={{ ...note, marginTop: 0 }}>
+                Acts on the rows or columns selected in the grid.
+              </p>
               <div style={row}>
-                <button type="button" data-sheet-insert-rows style={secondaryButton}
-                  onClick={() => report(session.structuralEdit("insertRows"), "Rows inserted.")}>
+                <button
+                  type="button"
+                  data-sheet-insert-rows
+                  style={secondaryButton}
+                  onClick={() =>
+                    report(
+                      session.structuralEdit("insertRows"),
+                      "Rows inserted.",
+                    )
+                  }
+                >
                   Insert rows
                 </button>
-                <button type="button" data-sheet-delete-rows style={secondaryButton}
+                <button
+                  type="button"
+                  data-sheet-delete-rows
+                  style={secondaryButton}
                   data-armed={armed === "rows" ? "" : undefined}
                   title="Delete the selected rows; this can't be undone"
-                  onClick={() => confirm("rows", () => report(session.structuralEdit("deleteRows"), "Rows deleted."))}>
+                  onClick={() =>
+                    confirm("rows", () =>
+                      report(
+                        session.structuralEdit("deleteRows"),
+                        "Rows deleted.",
+                      ),
+                    )
+                  }
+                >
                   {deleteLabel("rows", "Delete rows")}
                 </button>
-                <button type="button" data-sheet-insert-cols style={secondaryButton}
-                  onClick={() => report(session.structuralEdit("insertCols"), "Columns inserted.")}>
+                <button
+                  type="button"
+                  data-sheet-insert-cols
+                  style={secondaryButton}
+                  onClick={() =>
+                    report(
+                      session.structuralEdit("insertCols"),
+                      "Columns inserted.",
+                    )
+                  }
+                >
                   Insert columns
                 </button>
-                <button type="button" data-sheet-delete-cols style={secondaryButton}
+                <button
+                  type="button"
+                  data-sheet-delete-cols
+                  style={secondaryButton}
                   data-armed={armed === "cols" ? "" : undefined}
                   title="Delete the selected columns; this can't be undone"
-                  onClick={() => confirm("cols", () => report(session.structuralEdit("deleteCols"), "Columns deleted."))}>
+                  onClick={() =>
+                    confirm("cols", () =>
+                      report(
+                        session.structuralEdit("deleteCols"),
+                        "Columns deleted.",
+                      ),
+                    )
+                  }
+                >
                   {deleteLabel("cols", "Delete columns")}
                 </button>
               </div>
               {structMsg && (
-                <div data-sheet-struct-msg role="status" style={{ ...body, marginTop: 4 }}>
+                <div
+                  data-sheet-struct-msg
+                  role="status"
+                  style={{ ...body, marginTop: 4 }}
+                >
                   {structMsg}
                 </div>
               )}
@@ -605,7 +713,14 @@ export function makeWorkbookPanel(
              *  engine's message shows verbatim). */}
             <Section id="sort" title="Sort range">
               <div style={{ ...row, marginTop: 0 }}>
-                <label style={{ ...body, display: "flex", alignItems: "center", gap: 4 }}>
+                <label
+                  style={{
+                    ...body,
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 4,
+                  }}
+                >
                   Key column
                   <input
                     data-sheet-sort-key
@@ -627,7 +742,14 @@ export function makeWorkbookPanel(
                   <option value="asc">Ascending</option>
                   <option value="desc">Descending</option>
                 </select>
-                <label style={{ ...body, display: "flex", alignItems: "center", gap: 4 }}>
+                <label
+                  style={{
+                    ...body,
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 4,
+                  }}
+                >
                   <input
                     data-sheet-sort-header
                     type="checkbox"
@@ -654,7 +776,10 @@ export function makeWorkbookPanel(
                 </button>
               </div>
               {sortMsg && (
-                <p data-sheet-sort-msg style={{ ...body, margin: "var(--space-1, 4px) 0 0" }}>
+                <p
+                  data-sheet-sort-msg
+                  style={{ ...body, margin: "var(--space-1, 4px) 0 0" }}
+                >
                   {sortMsg}
                 </p>
               )}
@@ -684,12 +809,16 @@ export function makeWorkbookPanel(
                 </button>
               </div>
               {styleMsg && (
-                <p data-sheet-cellstyle-msg style={{ ...body, margin: "var(--space-1, 4px) 0 0" }}>
+                <p
+                  data-sheet-cellstyle-msg
+                  style={{ ...body, margin: "var(--space-1, 4px) 0 0" }}
+                >
                   {styleMsg}
                 </p>
               )}
               <p data-sheet-cellstyle-note style={note}>
-                Takes the fill and borders of the selected cell in a placed table.
+                Takes the fill and borders of the selected cell in a placed
+                table.
               </p>
             </Section>
 
@@ -769,7 +898,10 @@ export function makeWorkbookPanel(
                 </button>
               </div>
               {chartMsg && (
-                <p data-sheet-chart-msg style={{ ...body, margin: "var(--space-1, 4px) 0 0" }}>
+                <p
+                  data-sheet-chart-msg
+                  style={{ ...body, margin: "var(--space-1, 4px) 0 0" }}
+                >
                   {chartMsg}
                 </p>
               )}
@@ -778,16 +910,34 @@ export function makeWorkbookPanel(
                 const { charts } = inventories;
                 if (charts.length === 0) return null;
                 return (
-                  <div data-sheet-chart-list style={{ marginTop: "var(--space-2, 8px)" }}>
+                  <div
+                    data-sheet-chart-list
+                    style={{ marginTop: "var(--space-2, 8px)" }}
+                  >
                     {charts.map((c) => (
                       <div
                         key={c.index}
-                        style={{ display: "flex", alignItems: "center", gap: 6, padding: "2px 0", ...body }}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 6,
+                          padding: "2px 0",
+                          ...body,
+                        }}
                       >
-                        <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        <span
+                          style={{
+                            flex: 1,
+                            minWidth: 0,
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
                           {c.title || `${labelOf(c.kind)} chart`}
                           <span style={{ color: "var(--pg-muted-fg)" }}>
-                            {" "}· {c.title ? `${labelOf(c.kind)}, ` : ""}
+                            {" "}
+                            · {c.title ? `${labelOf(c.kind)}, ` : ""}
                             {c.seriesCount} series
                           </span>
                         </span>
@@ -822,11 +972,20 @@ export function makeWorkbookPanel(
                 style={input}
               />
               {fnMsg && (
-                <p role="status" style={{ ...body, margin: "var(--space-1, 4px) 0 0" }}>{fnMsg}</p>
+                <p
+                  role="status"
+                  style={{ ...body, margin: "var(--space-1, 4px) 0 0" }}
+                >
+                  {fnMsg}
+                </p>
               )}
               <div
                 data-sheet-fn-list
-                style={{ maxHeight: 180, overflowY: "auto", marginTop: "var(--space-1, 4px)" }}
+                style={{
+                  maxHeight: 180,
+                  overflowY: "auto",
+                  marginTop: "var(--space-1, 4px)",
+                }}
               >
                 {(() => {
                   if (!st.engine) return null;
@@ -837,7 +996,8 @@ export function makeWorkbookPanel(
                   const hitsFn = q
                     ? all.filter(
                         (f) =>
-                          f.name.includes(q) || f.family.toUpperCase().includes(q),
+                          f.name.includes(q) ||
+                          f.family.toUpperCase().includes(q),
                       )
                     : all;
                   const byFamily = new Map<string, FunctionEntry[]>();
@@ -910,25 +1070,38 @@ export function makeWorkbookPanel(
                 <Section id="inventory" title="Workbook contents">
                   <div data-sheet-inspect>
                     {freezes.map((f, i) => (
-                      <p key={`f${i}`} data-sheet-freeze style={{ ...body, margin: 0 }}>
-                        {sheets[f.sheet]?.name ?? `Sheet ${f.sheet + 1}`}: frozen{" "}
-                        {f.rows} row{f.rows === 1 ? "" : "s"}, {f.cols} column
+                      <p
+                        key={`f${i}`}
+                        data-sheet-freeze
+                        style={{ ...body, margin: 0 }}
+                      >
+                        {sheets[f.sheet]?.name ?? `Sheet ${f.sheet + 1}`}:
+                        frozen {f.rows} row{f.rows === 1 ? "" : "s"}, {f.cols}{" "}
+                        column
                         {f.cols === 1 ? "" : "s"}
                       </p>
                     ))}
                     {validations.map((v, i) => (
-                      <p key={`v${i}`} data-sheet-validation style={{ ...body, margin: 0 }}>
-                        {sheets[v.sheet]?.name ?? `Sheet ${v.sheet + 1}`}: {v.count}{" "}
-                        data validation{v.count === 1 ? "" : "s"} (
+                      <p
+                        key={`v${i}`}
+                        data-sheet-validation
+                        style={{ ...body, margin: 0 }}
+                      >
+                        {sheets[v.sheet]?.name ?? `Sheet ${v.sheet + 1}`}:{" "}
+                        {v.count} data validation{v.count === 1 ? "" : "s"} (
                         {v.kinds.join(", ")}), kept but not enforced
                       </p>
                     ))}
                     {comments.length > 0 && (
                       <p data-sheet-comments style={{ ...body, margin: 0 }}>
-                        {comments.length} comment{comments.length === 1 ? "" : "s"} (read-only):{" "}
+                        {comments.length} comment
+                        {comments.length === 1 ? "" : "s"} (read-only):{" "}
                         {comments
                           .slice(0, 3)
-                          .map((c) => `${c.author || "Unknown"} at ${columnLabel(c.col)}${c.row + 1}`)
+                          .map(
+                            (c) =>
+                              `${c.author || "Unknown"} at ${columnLabel(c.col)}${c.row + 1}`,
+                          )
                           .join(" · ")}
                         {comments.length > 3 ? " · …" : ""}
                       </p>
@@ -938,7 +1111,10 @@ export function makeWorkbookPanel(
               );
             })()}
 
-            <p data-sheet-find-pointer style={{ ...note, marginTop: "var(--space-2, 8px)" }}>
+            <p
+              data-sheet-find-pointer
+              style={{ ...note, marginTop: "var(--space-2, 8px)" }}
+            >
               Find and replace are in the{" "}
               <button
                 type="button"
@@ -959,7 +1135,10 @@ export function makeWorkbookPanel(
         {/* S-08 / .paged container: be honest about where the workbook lives —
          *  inside the .paged document (travels with the file) when host.parts
          *  is wired, else this browser's local store, else in-memory. */}
-        <p data-sheet-honesty style={{ ...note, marginTop: "var(--space-2, 8px)" }}>
+        <p
+          data-sheet-honesty
+          style={{ ...note, marginTop: "var(--space-2, 8px)" }}
+        >
           {host.supports("storage.parts@1")
             ? "The workbook is saved inside the document and travels with the .paged file."
             : host.supports("storage.blob@1")

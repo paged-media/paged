@@ -35,11 +35,23 @@ export interface WebDiagnostic {
 
 /** Void elements — no close tag expected. */
 const VOID = new Set([
-  "area", "base", "br", "col", "embed", "hr", "img", "input",
-  "link", "meta", "source", "track", "wbr",
+  "area",
+  "base",
+  "br",
+  "col",
+  "embed",
+  "hr",
+  "img",
+  "input",
+  "link",
+  "meta",
+  "source",
+  "track",
+  "wbr",
 ]);
 
-const TAG = /<\s*(\/)?\s*([a-zA-Z][a-zA-Z0-9-]*)((?:"[^"]*"|'[^']*'|[^"'>])*?)(\/)?\s*>/g;
+const TAG =
+  /<\s*(\/)?\s*([a-zA-Z][a-zA-Z0-9-]*)((?:"[^"]*"|'[^']*'|[^"'>])*?)(\/)?\s*>/g;
 
 function lineOf(html: string, index: number): number {
   let line = 1;

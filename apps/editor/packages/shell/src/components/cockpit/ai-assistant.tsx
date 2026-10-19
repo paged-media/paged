@@ -51,10 +51,17 @@ import {
   type AssistantStep,
 } from "../../ai/assistant-session";
 import { PoweredByClaude } from "../../ai/powered-by-claude";
-import { useCollection, useDocumentMeta, useDocumentStats } from "../../catalog/use-collection";
+import {
+  useCollection,
+  useDocumentMeta,
+  useDocumentStats,
+} from "../../catalog/use-collection";
 import { Icon } from "../../icons";
 import { useCanvasClient } from "../../state/canvas-client-context";
-import { confirmDiscard, mintBlankDocument } from "../../state/commands/file-commands";
+import {
+  confirmDiscard,
+  mintBlankDocument,
+} from "../../state/commands/file-commands";
 import { useContentSelection } from "../../state/content-selection-context";
 import { useDocument } from "../../state/document-context";
 import { useOptionalPaged } from "../../state/paged-editor";
@@ -66,7 +73,10 @@ const LOW_RES_PPI = 150;
 
 export type AssistantKind = "text" | "image" | "frame" | "page";
 
-const SUGGESTIONS: Record<AssistantKind, Array<[icon: string, label: string]>> = {
+const SUGGESTIONS: Record<
+  AssistantKind,
+  Array<[icon: string, label: string]>
+> = {
   text: [
     ["panel-character", "Shorten text to fit"],
     ["ui-leading", "Adjust spacing to fit"],
@@ -134,7 +144,8 @@ export function AIAssistant() {
   const meta = useDocumentMeta();
   // The engine's own page count, not only the shell's handle: a document
   // loaded through the client directly (an automation, a test) has no handle.
-  const hasDocument = (handle?.pageCount ?? 0) > 0 || (meta?.pageCount ?? 0) > 0;
+  const hasDocument =
+    (handle?.pageCount ?? 0) > 0 || (meta?.pageCount ?? 0) > 0;
   const view = hasDocument ? session.view : "brief";
   const run = session.run;
   const running = run.phase === "running";
@@ -152,25 +163,49 @@ export function AIAssistant() {
   const diagnosis = useMemo(() => {
     const issues: string[] = [];
     const overset = stats?.overset_stories ?? 0;
-    if (overset > 0) issues.push(`${overset} overset ${overset === 1 ? "story" : "stories"}`);
-    const lowRes = links?.filter((l) => l.effectivePpi != null && l.effectivePpi < LOW_RES_PPI).length ?? 0;
-    if (lowRes > 0) issues.push(`${lowRes} low-resolution ${lowRes === 1 ? "image" : "images"}`);
-    const missingLinks = links?.filter((l) => l.status === "missing").length ?? 0;
-    if (missingLinks > 0) issues.push(`${missingLinks} missing ${missingLinks === 1 ? "image" : "images"}`);
+    if (overset > 0)
+      issues.push(`${overset} overset ${overset === 1 ? "story" : "stories"}`);
+    const lowRes =
+      links?.filter(
+        (l) => l.effectivePpi != null && l.effectivePpi < LOW_RES_PPI,
+      ).length ?? 0;
+    if (lowRes > 0)
+      issues.push(
+        `${lowRes} low-resolution ${lowRes === 1 ? "image" : "images"}`,
+      );
+    const missingLinks =
+      links?.filter((l) => l.status === "missing").length ?? 0;
+    if (missingLinks > 0)
+      issues.push(
+        `${missingLinks} missing ${missingLinks === 1 ? "image" : "images"}`,
+      );
     const missingFonts = fonts?.filter((f) => f.isMissing).length ?? 0;
-    if (missingFonts > 0) issues.push(`${missingFonts} missing ${missingFonts === 1 ? "font" : "fonts"}`);
+    if (missingFonts > 0)
+      issues.push(
+        `${missingFonts} missing ${missingFonts === 1 ? "font" : "fonts"}`,
+      );
     return issues;
   }, [stats, links, fonts]);
 
   const context = useCallback((): string => {
     const lines: string[] = [];
-    const ids = elementSelection.filter((e) => typeof e.id === "string").map((e) => `${e.kind}:${e.id as string}`);
+    const ids = elementSelection
+      .filter((e) => typeof e.id === "string")
+      .map((e) => `${e.kind}:${e.id as string}`);
     if (ids.length) lines.push(`Selected elements: ${ids.join(", ")}.`);
     if (contentSelection) {
       const { storyId, start, end } = contentSelection;
-      lines.push(start === end ? `Text caret in ${storyId} at offset ${start}.` : `Selected text: storyRange:${storyId}@${start}..${end}.`);
+      lines.push(
+        start === end
+          ? `Text caret in ${storyId} at offset ${start}.`
+          : `Selected text: storyRange:${storyId}@${start}..${end}.`,
+      );
     }
-    lines.push(diagnosis.length ? `Document issues: ${diagnosis.join(", ")}.` : "The document has no overset text, image or font issues.");
+    lines.push(
+      diagnosis.length
+        ? `Document issues: ${diagnosis.join(", ")}.`
+        : "The document has no overset text, image or font issues.",
+    );
     return lines.join("\n");
   }, [elementSelection, contentSelection, diagnosis]);
 
@@ -185,7 +220,15 @@ export function AIAssistant() {
         prompt: `${scoped ? `The user has a ${kind ?? "frame"} selected.\n` : ""}${context()}\n\nRequest: ${text}`,
       });
     },
-    [client, context, running, hasDocument, elementSelection, contentSelection, kind],
+    [
+      client,
+      context,
+      running,
+      hasDocument,
+      elementSelection,
+      contentSelection,
+      kind,
+    ],
   );
 
   const build = useCallback(
@@ -198,8 +241,12 @@ export function AIAssistant() {
         mode: "document",
         prompt: `${text}\n\nPage size: ${size.label} (${size.pt[0]} × ${size.pt[1]} pt). The document is open with one blank page of that size.`,
         prepare: async () => {
-          if (!(await confirmDiscard(editor, "Creating a new document"))) return false;
-          await mintBlankDocument(editor, size.pt, { setStatus: () => {}, pushWarning: () => {} });
+          if (!(await confirmDiscard(editor, "Creating a new document")))
+            return false;
+          await mintBlankDocument(editor, size.pt, {
+            setStatus: () => {},
+            pushWarning: () => {},
+          });
           return true;
         },
       });
@@ -215,14 +262,38 @@ export function AIAssistant() {
   }, [session.autoRun, hasDocument, running, ask]);
 
   return (
-    <div data-ai-assistant data-ai-assistant-state={run.phase} data-ai-assistant-view={view} style={{ height: "100%", overflowY: "auto", fontFamily: "var(--font-sans)" }}>
-      <PanelHeader title="AI Assistant" action={<PoweredByClaude size={10} />} />
+    <div
+      data-ai-assistant
+      data-ai-assistant-state={run.phase}
+      data-ai-assistant-view={view}
+      style={{
+        height: "100%",
+        overflowY: "auto",
+        fontFamily: "var(--font-sans)",
+      }}
+    >
+      <PanelHeader
+        title="AI Assistant"
+        action={<PoweredByClaude size={10} />}
+      />
 
       <div style={{ display: "flex", gap: 6, padding: "0 14px 12px" }}>
-        <Btn sm tone={view === "ask" ? "soft" : undefined} disabled={!hasDocument || running} onClick={() => setAssistantView("ask")} testId="ai-view-ask">
+        <Btn
+          sm
+          tone={view === "ask" ? "soft" : undefined}
+          disabled={!hasDocument || running}
+          onClick={() => setAssistantView("ask")}
+          testId="ai-view-ask"
+        >
           Ask
         </Btn>
-        <Btn sm tone={view === "brief" ? "soft" : undefined} disabled={running} onClick={() => setAssistantView("brief")} testId="ai-view-brief">
+        <Btn
+          sm
+          tone={view === "brief" ? "soft" : undefined}
+          disabled={running}
+          onClick={() => setAssistantView("brief")}
+          testId="ai-view-brief"
+        >
           New document
         </Btn>
       </div>
@@ -236,19 +307,45 @@ export function AIAssistant() {
           onAsk={ask}
         />
       ) : (
-        <BriefView draft={session.draft} running={running} canBuild={editor != null} onBuild={build} />
+        <BriefView
+          draft={session.draft}
+          running={running}
+          canBuild={editor != null}
+          onBuild={build}
+        />
       )}
 
       {run.phase !== "idle" && (
-        <Section title={run.phase === "running" ? "Working" : run.phase === "done" ? "Done" : "Stopped"}>
-          <div data-ai-steps style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: 10 }}>
-            {run.steps.length === 0 && run.phase === "running" && <StepLine step={{ label: "Thinking…", state: "info" }} />}
+        <Section
+          title={
+            run.phase === "running"
+              ? "Working"
+              : run.phase === "done"
+                ? "Done"
+                : "Stopped"
+          }
+        >
+          <div
+            data-ai-steps
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: 4,
+              marginBottom: 10,
+            }}
+          >
+            {run.steps.length === 0 && run.phase === "running" && (
+              <StepLine step={{ label: "Thinking…", state: "info" }} />
+            )}
             {run.steps.map((s, i) => (
               <StepLine key={i} step={s} />
             ))}
           </div>
           {run.phase === "running" && (
-            <div data-ai-status style={{ display: "flex", justifyContent: "flex-end" }}>
+            <div
+              data-ai-status
+              style={{ display: "flex", justifyContent: "flex-end" }}
+            >
               <Btn sm onClick={() => stopAssistantRun()} testId="ai-stop">
                 Stop
               </Btn>
@@ -256,17 +353,35 @@ export function AIAssistant() {
           )}
           {run.phase === "done" && (
             <div data-ai-result>
-              <div data-ai-summary data-brief-summary style={{ fontSize: 12.5, lineHeight: 1.5, whiteSpace: "pre-wrap", marginBottom: 10 }}>
+              <div
+                data-ai-summary
+                data-brief-summary
+                style={{
+                  fontSize: 12.5,
+                  lineHeight: 1.5,
+                  whiteSpace: "pre-wrap",
+                  marginBottom: 10,
+                }}
+              >
                 {run.summary}
                 {run.stopped ? " (It stopped before finishing.)" : ""}
               </div>
               <div style={{ display: "flex", gap: 6 }}>
                 {run.changed && (
-                  <Btn sm onClick={() => void undoAssistantRun(client)} testId="ai-undo">
+                  <Btn
+                    sm
+                    onClick={() => void undoAssistantRun(client)}
+                    testId="ai-undo"
+                  >
                     Undo
                   </Btn>
                 )}
-                <Btn sm tone="soft" onClick={() => dismissAssistantRun()} testId="ai-dismiss">
+                <Btn
+                  sm
+                  tone="soft"
+                  onClick={() => dismissAssistantRun()}
+                  testId="ai-dismiss"
+                >
                   Done
                 </Btn>
               </div>
@@ -274,10 +389,24 @@ export function AIAssistant() {
           )}
           {run.phase === "error" && (
             <div>
-              <div data-ai-error data-brief-error role="alert" style={{ fontSize: 12.5, color: "var(--status-error)", marginBottom: 10 }}>
+              <div
+                data-ai-error
+                data-brief-error
+                role="alert"
+                style={{
+                  fontSize: 12.5,
+                  color: "var(--status-error)",
+                  marginBottom: 10,
+                }}
+              >
                 {run.message}
               </div>
-              <Btn sm tone="soft" onClick={() => dismissAssistantRun()} testId="ai-dismiss">
+              <Btn
+                sm
+                tone="soft"
+                onClick={() => dismissAssistantRun()}
+                testId="ai-dismiss"
+              >
                 Done
               </Btn>
             </div>
@@ -289,11 +418,34 @@ export function AIAssistant() {
 }
 
 function StepLine({ step }: { step: AssistantStep }) {
-  const icon = step.state === "ok" ? "ui-check" : step.state === "failed" ? "ui-x" : "ui-dot";
-  const color = step.state === "ok" ? "var(--status-approved)" : step.state === "failed" ? "var(--status-error)" : "var(--pg-muted-fg)";
+  const icon =
+    step.state === "ok"
+      ? "ui-check"
+      : step.state === "failed"
+        ? "ui-x"
+        : "ui-dot";
+  const color =
+    step.state === "ok"
+      ? "var(--status-approved)"
+      : step.state === "failed"
+        ? "var(--status-error)"
+        : "var(--pg-muted-fg)";
   return (
-    <div data-ai-step={step.state} style={{ display: "flex", alignItems: "flex-start", gap: 8, fontSize: 12, lineHeight: 1.4 }}>
-      <Icon name={icon} size={13} style={{ color, flexShrink: 0, marginTop: 1 }} />
+    <div
+      data-ai-step={step.state}
+      style={{
+        display: "flex",
+        alignItems: "flex-start",
+        gap: 8,
+        fontSize: 12,
+        lineHeight: 1.4,
+      }}
+    >
+      <Icon
+        name={icon}
+        size={13}
+        style={{ color, flexShrink: 0, marginTop: 1 }}
+      />
       <span>{step.label}</span>
     </div>
   );
@@ -322,20 +474,37 @@ function AskView({
           padding: 11,
           borderRadius: "var(--radius-lg)",
           background: "var(--primary-soft)",
-          border: "1px solid color-mix(in srgb, var(--pg-primary) 26%, transparent)",
+          border:
+            "1px solid color-mix(in srgb, var(--pg-primary) 26%, transparent)",
           marginBottom: 12,
         }}
       >
-        <Icon name="ui-wand" size={18} style={{ color: "var(--pg-primary)", flexShrink: 0, marginTop: 1 }} />
-        <div className="pg-ui-xs" style={{ flex: 1, lineHeight: 1.45, color: "var(--pg-fg)" }}>
-          {diagnosis.length ? `This document has ${diagnosis.join(", ")}.` : "No overset text, image or font issues found."}
+        <Icon
+          name="ui-wand"
+          size={18}
+          style={{ color: "var(--pg-primary)", flexShrink: 0, marginTop: 1 }}
+        />
+        <div
+          className="pg-ui-xs"
+          style={{ flex: 1, lineHeight: 1.45, color: "var(--pg-fg)" }}
+        >
+          {diagnosis.length
+            ? `This document has ${diagnosis.join(", ")}.`
+            : "No overset text, image or font issues found."}
         </div>
       </div>
 
       <div className="pg-label" style={{ margin: "0 0 8px" }}>
         Suggestions
       </div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 3, marginBottom: 12 }}>
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          gap: 3,
+          marginBottom: 12,
+        }}
+      >
         {SUGGESTIONS[kind].map(([icon, label]) => (
           <button
             type="button"
@@ -359,7 +528,11 @@ function AskView({
               opacity: running ? 0.5 : 1,
             }}
           >
-            <Icon name={icon} size={15} style={{ color: "var(--pg-muted-fg)" }} />
+            <Icon
+              name={icon}
+              size={15}
+              style={{ color: "var(--pg-muted-fg)" }}
+            />
             {label}
           </button>
         ))}
@@ -389,7 +562,13 @@ function AskView({
           style={field}
         />
         <div style={{ display: "flex", justifyContent: "flex-end" }}>
-          <Btn sm primary disabled={running || !draft.trim()} onClick={() => onAsk(draft)} testId="ai-ask">
+          <Btn
+            sm
+            primary
+            disabled={running || !draft.trim()}
+            onClick={() => onAsk(draft)}
+            testId="ai-ask"
+          >
             Ask Claude
           </Btn>
         </div>
@@ -411,9 +590,21 @@ function BriefView({
 }) {
   const sizeId = useSyncExternalStore(subscribeSize, getSize);
   return (
-    <div data-new-from-brief style={{ padding: "0 14px 14px", display: "flex", flexDirection: "column", gap: 10 }}>
-      <div className="pg-ui-xs" style={{ lineHeight: 1.45, color: "var(--pg-muted-fg)" }}>
-        Describe the document. Claude builds it page by page in a new document while you watch; every step can be undone.
+    <div
+      data-new-from-brief
+      style={{
+        padding: "0 14px 14px",
+        display: "flex",
+        flexDirection: "column",
+        gap: 10,
+      }}
+    >
+      <div
+        className="pg-ui-xs"
+        style={{ lineHeight: 1.45, color: "var(--pg-muted-fg)" }}
+      >
+        Describe the document. Claude builds it page by page in a new document
+        while you watch; every step can be undone.
       </div>
       <textarea
         value={draft}
@@ -425,9 +616,17 @@ function BriefView({
         data-brief-input
         style={field}
       />
-      <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12 }}>
+      <label
+        style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12 }}
+      >
         <span style={{ color: "var(--pg-muted-fg)" }}>Page size</span>
-        <select value={sizeId} onChange={(e) => setSize(e.target.value)} disabled={running} data-brief-size style={select}>
+        <select
+          value={sizeId}
+          onChange={(e) => setSize(e.target.value)}
+          disabled={running}
+          data-brief-size
+          style={select}
+        >
           {SIZES.map((s) => (
             <option key={s.id} value={s.id}>
               {s.label}
@@ -436,7 +635,13 @@ function BriefView({
         </select>
       </label>
       <div style={{ display: "flex", justifyContent: "flex-end" }}>
-        <Btn sm primary disabled={running || !draft.trim() || !canBuild} onClick={() => onBuild(draft, sizeId)} testId="brief-generate">
+        <Btn
+          sm
+          primary
+          disabled={running || !draft.trim() || !canBuild}
+          onClick={() => onBuild(draft, sizeId)}
+          testId="brief-generate"
+        >
           Build document
         </Btn>
       </div>

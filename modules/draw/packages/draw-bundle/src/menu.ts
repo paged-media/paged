@@ -58,7 +58,11 @@ const ENTRIES: [path: string, suffix: string, group: string][] = [
   ["Draw/Path/Join endpoints", "joinEndpoints", "path-ends"],
   ["Draw/Path/Average endpoints", "averageEndpoints", "path-ends"],
   ["Draw/Path/Close path", "closePath", "path-ends"],
-  ["Draw/Path/Reverse path direction", "reversePathDirection", "path-direction"],
+  [
+    "Draw/Path/Reverse path direction",
+    "reversePathDirection",
+    "path-direction",
+  ],
 
   // ── Transform — Reflect (the "…" row raises the Path Options panel's
   //    Reflect section: a typed axis angle, and Copy where the engine can)
@@ -140,7 +144,11 @@ const ENTRIES: [path: string, suffix: string, group: string][] = [
   ["Draw/Blend/Update", "updateBlend", "blend-edit"],
   ["Draw/Blend/Replace spine", "replaceBlendSpine", "blend-spine"],
   ["Draw/Blend/Reverse spine", "reverseBlendSpine", "blend-spine"],
-  ["Draw/Blend/Reverse front to back", "reverseBlendFrontToBack", "blend-spine"],
+  [
+    "Draw/Blend/Reverse front to back",
+    "reverseBlendFrontToBack",
+    "blend-spine",
+  ],
   ["Draw/Blend/Expand", "expandBlend", "blend-edit"],
   ["Draw/Blend/Release", "releaseBlend", "blend-edit"],
 

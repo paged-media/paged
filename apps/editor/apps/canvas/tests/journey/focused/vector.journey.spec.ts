@@ -39,7 +39,12 @@ test.describe("journey · vector", () => {
     await designer.newDocument();
 
     // Real input: arm the Rectangle tool, drag out a frame.
-    const id = await designer.drawRectangle({ x0: 90, y0: 120, x1: 320, y1: 300 });
+    const id = await designer.drawRectangle({
+      x0: 90,
+      y0: 120,
+      x1: 320,
+      y1: 300,
+    });
     expect(id, "rectangle should be created by the drag").toBeTruthy();
 
     // Ensure it's the selection the panels read, then assert the oracle:

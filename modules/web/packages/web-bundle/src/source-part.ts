@@ -92,7 +92,10 @@ function legacyPartPath(id: ElementId): string | null {
   return typeof raw === "string" ? `${raw}/source.json` : null;
 }
 
-async function readPartText(host: PersistHost, path: string): Promise<string | null> {
+async function readPartText(
+  host: PersistHost,
+  path: string,
+): Promise<string | null> {
   if (!host.supports("storage.parts@1")) return null;
   const bytes = await host.parts.read(path);
   return bytes ? decoder.decode(bytes) : null;
@@ -105,7 +108,9 @@ export async function loadWebSource(
   host: PersistHost,
   id: ElementId,
 ): Promise<WebFrameSource | null> {
-  const label = (await host.document.getMetadata(id)) as WebSourceEnvelope | null;
+  const label = (await host.document.getMetadata(
+    id,
+  )) as WebSourceEnvelope | null;
   const ref = sourceRefOf(label);
   if (ref) {
     const text = await readPartText(host, sourcePartPath(ref));
@@ -115,9 +120,14 @@ export async function loadWebSource(
   if (inline && hasNoLegacyPart(label)) return inline;
   const legacyPath = legacyPartPath(id);
   const legacyText = legacyPath ? await readPartText(host, legacyPath) : null;
-  if (legacyText !== null && (!inline || utf8Length(legacyText) > LABEL_INLINE_MAX_BYTES)) {
+  if (
+    legacyText !== null &&
+    (!inline || utf8Length(legacyText) > LABEL_INLINE_MAX_BYTES)
+  ) {
     try {
-      const legacy = sourceFromEnvelope(JSON.parse(legacyText) as WebSourceEnvelope);
+      const legacy = sourceFromEnvelope(
+        JSON.parse(legacyText) as WebSourceEnvelope,
+      );
       if (legacy) return legacy;
     } catch {
       // a corrupt legacy part reads as absent
@@ -130,8 +140,13 @@ export async function loadWebSource(
  *  pointer by content hash) — or `null` when the frame is not a web frame.
  *  For change detection (auto-render.ts); the source itself is read with
  *  {@link loadWebSource}. */
-export async function readWebLabel(host: PersistHost, id: ElementId): Promise<string | null> {
-  const label = (await host.document.getMetadata(id)) as WebSourceEnvelope | null;
+export async function readWebLabel(
+  host: PersistHost,
+  id: ElementId,
+): Promise<string | null> {
+  const label = (await host.document.getMetadata(
+    id,
+  )) as WebSourceEnvelope | null;
   return label && isWebFrameEnvelope(label) ? JSON.stringify(label) : null;
 }
 
@@ -179,7 +194,9 @@ export async function prepareSourceLabel(
     await host.parts.write(path, new TextEncoder().encode(stored.partText));
     partsWrittenThisSession(host).add(path);
   } catch (err) {
-    return { refused: `the web source (${kib} KiB) could not be stored: ${String(err)}` };
+    return {
+      refused: `the web source (${kib} KiB) could not be stored: ${String(err)}`,
+    };
   }
   return { label: stored.label };
 }
@@ -192,7 +209,8 @@ export async function writeWebSource(
   source: WebFrameSource,
 ): Promise<WriteOutcome> {
   const prepared = await prepareSourceLabel(host, source);
-  if ("refused" in prepared) return { applied: false, reason: prepared.refused };
+  if ("refused" in prepared)
+    return { applied: false, reason: prepared.refused };
   const outcome = await host.document.setMetadata(id, prepared.label);
   return outcome.applied
     ? { applied: true }
@@ -217,7 +235,8 @@ export function planSourceWrite(
   source: WebFrameSource,
 ): PlannedSourceWrite | { refused: string } {
   const stored = storeSource(source);
-  if (stored.kind === "inline") return { labelValue: JSON.stringify(stored.label), parts: [] };
+  if (stored.kind === "inline")
+    return { labelValue: JSON.stringify(stored.label), parts: [] };
   if (!host.supports("storage.parts@1")) {
     const kib = Math.ceil(stored.ref.bytes / 1024);
     return {
@@ -272,7 +291,10 @@ function valueMap(raw: unknown): Record<string, string> {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
   const out: Record<string, string> = {};
   for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
-    if (DOCUMENT_VALUE_KEY.test(k) && (typeof v === "string" || typeof v === "number")) {
+    if (
+      DOCUMENT_VALUE_KEY.test(k) &&
+      (typeof v === "string" || typeof v === "number")
+    ) {
       out[k] = String(v);
     }
   }
@@ -281,7 +303,9 @@ function valueMap(raw: unknown): Record<string, string> {
 
 /** This plugin's document metadata envelope, or `null` (none yet, an older
  *  engine, or a read that failed). */
-async function readDocumentEnvelope(host: PersistHost): Promise<PluginMetadataEnvelope | null> {
+async function readDocumentEnvelope(
+  host: PersistHost,
+): Promise<PluginMetadataEnvelope | null> {
   try {
     return await host.document.getDocumentMetadata();
   } catch {
@@ -291,7 +315,9 @@ async function readDocumentEnvelope(host: PersistHost): Promise<PluginMetadataEn
 
 /** The value map the old container part holds (empty when absent or
  *  unreadable). */
-async function readValuesPart(host: PersistHost): Promise<Record<string, string>> {
+async function readValuesPart(
+  host: PersistHost,
+): Promise<Record<string, string>> {
   const text = await readPartText(host, DOCUMENT_VALUES_PART).catch(() => null);
   if (!text) return {};
   try {
@@ -302,7 +328,9 @@ async function readValuesPart(host: PersistHost): Promise<Record<string, string>
 }
 
 /** Read the document value map (empty when absent or unreadable). */
-export async function readDocumentValues(host: PersistHost): Promise<Record<string, string>> {
+export async function readDocumentValues(
+  host: PersistHost,
+): Promise<Record<string, string>> {
   if (hasDocumentMetadata(host)) {
     const envelope = await readDocumentEnvelope(host);
     if (envelope) return valueMap(envelope.data?.documentValues);
@@ -316,7 +344,9 @@ export async function readDocumentValues(host: PersistHost): Promise<Record<stri
  *  undo of the write that created the metadata could make the part read
  *  again — so the collector (parts-gc.ts) drops the part only when this
  *  held when the document was opened and still holds at the save. */
-export async function documentValuesMigrated(host: PersistHost): Promise<boolean> {
+export async function documentValuesMigrated(
+  host: PersistHost,
+): Promise<boolean> {
   if (!hasDocumentMetadata(host)) return false;
   const values = (await readDocumentEnvelope(host))?.data?.documentValues;
   return !!values && typeof values === "object" && !Array.isArray(values);
@@ -338,7 +368,11 @@ export async function documentValuesMutation(
   };
   return {
     op: "setDocumentMetadata",
-    args: { key: LABEL_KEY, value: JSON.stringify(envelope), caller: PLUGIN_ID },
+    args: {
+      key: LABEL_KEY,
+      value: JSON.stringify(envelope),
+      caller: PLUGIN_ID,
+    },
   } as MutationInput;
 }
 
@@ -366,10 +400,16 @@ export async function writeDocumentValues(
     }
   }
   if (!host.supports("storage.parts@1")) {
-    return { applied: false, reason: "this host has no container parts to keep document values in" };
+    return {
+      applied: false,
+      reason: "this host has no container parts to keep document values in",
+    };
   }
   try {
-    await host.parts.write(DOCUMENT_VALUES_PART, new TextEncoder().encode(JSON.stringify(values)));
+    await host.parts.write(
+      DOCUMENT_VALUES_PART,
+      new TextEncoder().encode(JSON.stringify(values)),
+    );
     return { applied: true };
   } catch (err) {
     return { applied: false, reason: describeRefusal(err) };
@@ -459,9 +499,14 @@ function fromBase64(text: string): Uint8Array {
 
 /** The family and style of every face part read, by path: the parts are
  *  content-addressed, so what a path holds never changes. */
-const faceHeads = new WeakMap<object, Map<string, { family: string; style?: string }>>();
+const faceHeads = new WeakMap<
+  object,
+  Map<string, { family: string; style?: string }>
+>();
 
-function faceHeadCache(host: object): Map<string, { family: string; style?: string }> {
+function faceHeadCache(
+  host: object,
+): Map<string, { family: string; style?: string }> {
   let cache = faceHeads.get(host);
   if (!cache) {
     cache = new Map();
@@ -472,16 +517,27 @@ function faceHeadCache(host: object): Map<string, { family: string; style?: stri
 
 /** Keep a face the bake gave the document. Writes nothing when the document
  *  already keeps it. Answers whether the document keeps it now. */
-export async function keepFace(host: Pick<BundleHost, "supports" | "parts">, face: KeptFace): Promise<boolean> {
+export async function keepFace(
+  host: Pick<BundleHost, "supports" | "parts">,
+  face: KeptFace,
+): Promise<boolean> {
   if (!host.supports("storage.parts@1")) return false;
-  const text = JSON.stringify({ v: 1, family: face.family, style: face.style ?? null, face: toBase64(face.bytes) });
+  const text = JSON.stringify({
+    v: 1,
+    family: face.family,
+    style: face.style ?? null,
+    face: toBase64(face.bytes),
+  });
   const path = `${FACE_PREFIX}${contentHash(text)}.json`;
   // Kept this session whether written now or before: the collector leaves it.
   partsWrittenThisSession(host).add(path);
   try {
     if ((await host.parts.list(path)).includes(path)) return true;
     await host.parts.write(path, new TextEncoder().encode(text));
-    faceHeadCache(host).set(path, { family: face.family, ...(face.style ? { style: face.style } : {}) });
+    faceHeadCache(host).set(path, {
+      family: face.family,
+      ...(face.style ? { style: face.style } : {}),
+    });
     return true;
   } catch {
     return false;
@@ -489,10 +545,14 @@ export async function keepFace(host: Pick<BundleHost, "supports" | "parts">, fac
 }
 
 /** The paths of the face parts the document carries. */
-export async function keptFacePaths(host: Pick<BundleHost, "supports" | "parts">): Promise<string[]> {
+export async function keptFacePaths(
+  host: Pick<BundleHost, "supports" | "parts">,
+): Promise<string[]> {
   if (!host.supports("storage.parts@1")) return [];
   try {
-    return (await host.parts.list(FACE_PREFIX)).filter((p) => FACE_PART.test(p));
+    return (await host.parts.list(FACE_PREFIX)).filter((p) =>
+      FACE_PART.test(p),
+    );
   } catch {
     return [];
   }
@@ -507,11 +567,30 @@ export async function readKeptFace(
   try {
     const bytes = await host.parts.read(path);
     if (!bytes) return null;
-    const rec = JSON.parse(decoder.decode(bytes)) as { v?: unknown; family?: unknown; style?: unknown; face?: unknown };
-    if (rec.v !== 1 || typeof rec.family !== "string" || !rec.family || typeof rec.face !== "string") return null;
-    const style = typeof rec.style === "string" && rec.style ? rec.style : undefined;
-    faceHeadCache(host).set(path, { family: rec.family, ...(style ? { style } : {}) });
-    return { family: rec.family, ...(style ? { style } : {}), bytes: fromBase64(rec.face) };
+    const rec = JSON.parse(decoder.decode(bytes)) as {
+      v?: unknown;
+      family?: unknown;
+      style?: unknown;
+      face?: unknown;
+    };
+    if (
+      rec.v !== 1 ||
+      typeof rec.family !== "string" ||
+      !rec.family ||
+      typeof rec.face !== "string"
+    )
+      return null;
+    const style =
+      typeof rec.style === "string" && rec.style ? rec.style : undefined;
+    faceHeadCache(host).set(path, {
+      family: rec.family,
+      ...(style ? { style } : {}),
+    });
+    return {
+      family: rec.family,
+      ...(style ? { style } : {}),
+      bytes: fromBase64(rec.face),
+    };
   } catch {
     return null;
   }
@@ -527,4 +606,3 @@ export async function keptFaceFamily(
   if (cached) return cached.family;
   return (await readKeptFace(host, path))?.family ?? null;
 }
-

@@ -30,7 +30,8 @@ import { describe, expect, it } from "bun:test";
 const CHROME = fileURLToPath(new URL("../chrome/", import.meta.url));
 const WIDTHS = [240, 400];
 
-const sha = (p: string) => createHash("sha256").update(readFileSync(p)).digest("hex");
+const sha = (p: string) =>
+  createHash("sha256").update(readFileSync(p)).digest("hex");
 const htmlIn = (dir: string) =>
   readdirSync(join(CHROME, dir))
     .filter((f) => f.endsWith(".html"))
@@ -43,29 +44,58 @@ describe("chrome recordings are fresh", () => {
   it("there are at least 30 layout fixtures across the families", () => {
     expect(fixtures.length).toBeGreaterThanOrEqual(30);
     const families = new Set(fixtures.map((f) => f.split("-")[0]));
-    for (const fam of ["blocks", "inline", "text", "lists", "table", "flex", "grid", "floats", "positioned", "multicol", "pseudo", "paint"]) {
+    for (const fam of [
+      "blocks",
+      "inline",
+      "text",
+      "lists",
+      "table",
+      "flex",
+      "grid",
+      "floats",
+      "positioned",
+      "multicol",
+      "pseudo",
+      "paint",
+    ]) {
       expect(families, fam).toContain(fam);
     }
   });
 
-  it.each(fixtures)("%s: recorded at every width from the current bytes", (name) => {
-    const hash = sha(join(CHROME, "fixtures", `${name}.html`));
-    for (const w of WIDTHS) {
-      const json = join(CHROME, "recorded", `${name}@${w}.json`);
-      expect(existsSync(json), `${name}@${w}.json`).toBe(true);
-      expect(existsSync(join(CHROME, "recorded", `${name}@${w}.png`)), `${name}@${w}.png`).toBe(true);
-      const rec = JSON.parse(readFileSync(json, "utf8"));
-      expect(rec.sourceSha256, `${name} changed after recording — run chrome/record.mjs`).toBe(hash);
-      expect(rec.width).toBe(w);
-      expect(rec.elements.length).toBeGreaterThan(0);
-    }
-  });
+  it.each(fixtures)(
+    "%s: recorded at every width from the current bytes",
+    (name) => {
+      const hash = sha(join(CHROME, "fixtures", `${name}.html`));
+      for (const w of WIDTHS) {
+        const json = join(CHROME, "recorded", `${name}@${w}.json`);
+        expect(existsSync(json), `${name}@${w}.json`).toBe(true);
+        expect(
+          existsSync(join(CHROME, "recorded", `${name}@${w}.png`)),
+          `${name}@${w}.png`,
+        ).toBe(true);
+        const rec = JSON.parse(readFileSync(json, "utf8"));
+        expect(
+          rec.sourceSha256,
+          `${name} changed after recording — run chrome/record.mjs`,
+        ).toBe(hash);
+        expect(rec.width).toBe(w);
+        expect(rec.elements.length).toBeGreaterThan(0);
+      }
+    },
+  );
 
-  it.each(htmlIn("flow-fixtures"))("flow %s: recorded from the current bytes", (name) => {
-    const rec = JSON.parse(readFileSync(join(CHROME, "recorded-flow", `${name}.json`), "utf8"));
-    expect(rec.sourceSha256).toBe(sha(join(CHROME, "flow-fixtures", `${name}.html`)));
-    expect(rec.frameText.length).toBe(rec.frames.length);
-  });
+  it.each(htmlIn("flow-fixtures"))(
+    "flow %s: recorded from the current bytes",
+    (name) => {
+      const rec = JSON.parse(
+        readFileSync(join(CHROME, "recorded-flow", `${name}.json`), "utf8"),
+      );
+      expect(rec.sourceSha256).toBe(
+        sha(join(CHROME, "flow-fixtures", `${name}.html`)),
+      );
+      expect(rec.frameText.length).toBe(rec.frames.length);
+    },
+  );
 
   it("no recording is left without its fixture", () => {
     const names = new Set(fixtures);

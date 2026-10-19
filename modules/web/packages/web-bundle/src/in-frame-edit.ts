@@ -43,7 +43,11 @@
 // scaled, so a point on the canvas does not name one place in the layout
 // the inspected render reads.
 
-import type { BundleHost, ElementId, ElementGeometryItem } from "@paged-media/plugin-api";
+import type {
+  BundleHost,
+  ElementId,
+  ElementGeometryItem,
+} from "@paged-media/plugin-api";
 import {
   asFrameTarget,
   caretAt,
@@ -113,7 +117,9 @@ export interface InFrameEditSession {
    *  the text node there (committing an edit of another node first). */
   pointerDown(x: number, y: number): Promise<void>;
   /** A key while the context is active; `true` when it was handled. */
-  key(e: Pick<KeyboardEvent, "key" | "metaKey" | "ctrlKey" | "altKey">): boolean;
+  key(
+    e: Pick<KeyboardEvent, "key" | "metaKey" | "ctrlKey" | "altKey">,
+  ): boolean;
   isEditing(): boolean;
   /** Write the open edit to the document (one undo step). */
   commit(): Promise<boolean>;
@@ -124,7 +130,13 @@ export interface InFrameEditSession {
   canUndo(): boolean;
   canRedo(): boolean;
   /** What the session holds — for tests and the panel. */
-  state(): { frame: string | null; node: number | null; text: string | null; caret: number | null; html: string | null };
+  state(): {
+    frame: string | null;
+    node: number | null;
+    text: string | null;
+    caret: number | null;
+    html: string | null;
+  };
   /** Resolves when no re-render is pending. */
   idle(): Promise<void>;
 }
@@ -137,7 +149,9 @@ export interface InFrameEditOptions {
 const sessions = new WeakMap<BundleHost, InFrameEditSession>();
 
 /** The in-frame edit session `activate` created for `host`, if any. */
-export function inFrameSessionFor(host: BundleHost): InFrameEditSession | undefined {
+export function inFrameSessionFor(
+  host: BundleHost,
+): InFrameEditSession | undefined {
   return sessions.get(host);
 }
 
@@ -173,23 +187,37 @@ export function createInFrameEditSession(
       overlay(null);
       return;
     }
-    const at = caretAt(frame.current.text, { node: edit.ordinal, offset: edit.caret });
+    const at = caretAt(frame.current.text, {
+      node: edit.ordinal,
+      offset: edit.caret,
+    });
     if (!at) {
       overlay(null);
       return;
     }
     const pageId = frame.geometry.pageId;
     overlay([
-      { pageId, points: [contentToPage(frame.geometry, at.x, at.top), contentToPage(frame.geometry, at.x, at.bottom)] },
+      {
+        pageId,
+        points: [
+          contentToPage(frame.geometry, at.x, at.top),
+          contentToPage(frame.geometry, at.x, at.bottom),
+        ],
+      },
     ]);
   };
 
   const editedSource = (): WebFrameSource | null => {
     if (!frame || !edit) return null;
-    return { ...frame.source, html: editTextNode(frame.source.html, edit.node, edit.text) };
+    return {
+      ...frame.source,
+      html: editTextNode(frame.source.html, edit.node, edit.text),
+    };
   };
 
-  const renderSource = async (source: WebFrameSource): Promise<InspectedRender | null> => {
+  const renderSource = async (
+    source: WebFrameSource,
+  ): Promise<InspectedRender | null> => {
     if (!frame) return null;
     const engine = await engineOf();
     if (!engine?.renderInspected) return null;
@@ -212,10 +240,14 @@ export function createInFrameEditSession(
       frame.current = out;
       await submit(out.layer);
       drawCaret();
-    })().catch((err: unknown) => host.log.warn(`in-frame edit: ${String(err)}`));
-    const done: Promise<void> = (rendering ?? Promise.resolve()).then(() => run).then(() => {
-      if (rendering === done) rendering = null;
-    });
+    })().catch((err: unknown) =>
+      host.log.warn(`in-frame edit: ${String(err)}`),
+    );
+    const done: Promise<void> = (rendering ?? Promise.resolve())
+      .then(() => run)
+      .then(() => {
+        if (rendering === done) rendering = null;
+      });
     rendering = done;
   };
 
@@ -244,11 +276,15 @@ export function createInFrameEditSession(
     const source = await loadWebSource(host, id);
     if (!source) return null;
     if ((source.flow?.recipients.length ?? 0) > 0) {
-      note("a threaded frame is edited in the Web frame panel: its text is cut across frames");
+      note(
+        "a threaded frame is edited in the Web frame panel: its text is cut across frames",
+      );
       return null;
     }
     if (source.options.overflow === "shrink") {
-      note("a frame that shrinks its content to fit is edited in the Web frame panel");
+      note(
+        "a frame that shrinks its content to fit is edited in the Web frame panel",
+      );
       return null;
     }
     const [geometry] = await host.document.elementGeometry([id]);
@@ -262,7 +298,11 @@ export function createInFrameEditSession(
       source,
       geometry: geometry ?? null,
       base: { layer: { items: [] }, text: { nodes: [], lines: [] }, boxes: [] },
-      current: { layer: { items: [] }, text: { nodes: [], lines: [] }, boxes: [] },
+      current: {
+        layer: { items: [] },
+        text: { nodes: [], lines: [] },
+        boxes: [],
+      },
       widthPx,
       heightPx,
       bound,
@@ -321,7 +361,11 @@ export function createInFrameEditSession(
       // The panel's outline marks the element under the press.
       const fid = (f.id as { id?: unknown }).id;
       if (typeof fid === "string") {
-        reportCanvasPick(host, fid, outlineIndexAt(f.current.boxes, tagOutline(f.source.html), x, y));
+        reportCanvasPick(
+          host,
+          fid,
+          outlineIndexAt(f.current.boxes, tagOutline(f.source.html), x, y),
+        );
       }
       const hit = hitText(f.current.text, x, y);
       if (!hit) return;
@@ -349,7 +393,14 @@ export function createInFrameEditSession(
       }
       note(null);
       const caret = Math.max(0, Math.min(node.text.length, hit.offset));
-      edit = { node, ordinal: hit.node, text: node.text, caret, history: [{ text: node.text, caret }], at: 0 };
+      edit = {
+        node,
+        ordinal: hit.node,
+        text: node.text,
+        caret,
+        history: [{ text: node.text, caret }],
+        at: 0,
+      };
       drawCaret();
     },
     key(e) {
@@ -366,8 +417,17 @@ export function createInFrameEditSession(
       if (e.metaKey || e.ctrlKey) return false;
       const t = edit.text;
       const c = edit.caret;
-      const before = (i: number) => (i >= 2 && /[\udc00-\udfff]/.test(t[i - 1]) && /[\ud800-\udbff]/.test(t[i - 2]) ? 2 : 1);
-      const after = (i: number) => (/[\ud800-\udbff]/.test(t[i] ?? "") && /[\udc00-\udfff]/.test(t[i + 1] ?? "") ? 2 : 1);
+      const before = (i: number) =>
+        i >= 2 &&
+        /[\udc00-\udfff]/.test(t[i - 1]) &&
+        /[\ud800-\udbff]/.test(t[i - 2])
+          ? 2
+          : 1;
+      const after = (i: number) =>
+        /[\ud800-\udbff]/.test(t[i] ?? "") &&
+        /[\udc00-\udfff]/.test(t[i + 1] ?? "")
+          ? 2
+          : 1;
       switch (k) {
         case "ArrowLeft":
           edit.caret = Math.max(0, c - before(c));
@@ -416,7 +476,9 @@ export function createInFrameEditSession(
       if (!next || next.html === prev.html) return false;
       const out = await writeWebSource(host, frame.id, next);
       if (!out.applied) {
-        note(`the edit was not saved: ${out.reason ?? "the document refused it"}`);
+        note(
+          `the edit was not saved: ${out.reason ?? "the document refused it"}`,
+        );
         await submit(frame.base.layer);
         return false;
       }

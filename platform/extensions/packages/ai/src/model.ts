@@ -36,7 +36,12 @@ export const DEFAULT_MODEL = "claude-haiku-5-5";
  */
 export type AiMode = "script" | "assist" | "complete" | "document";
 
-export const AI_MODES: readonly AiMode[] = ["script", "assist", "complete", "document"];
+export const AI_MODES: readonly AiMode[] = [
+  "script",
+  "assist",
+  "complete",
+  "document",
+];
 
 export type Effort = "low" | "medium" | "high" | "xhigh" | "max";
 
@@ -60,5 +65,7 @@ export const MODE_SPECS: Readonly<Record<AiMode, ModeSpec>> = {
 };
 
 export function isAiMode(value: unknown): value is AiMode {
-  return typeof value === "string" && (AI_MODES as readonly string[]).includes(value);
+  return (
+    typeof value === "string" && (AI_MODES as readonly string[]).includes(value)
+  );
 }

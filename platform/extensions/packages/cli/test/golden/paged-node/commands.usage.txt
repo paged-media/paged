@@ -1,0 +1,11 @@
+$ paged-node commands a.paged b.paged
+# exit 2
+# stdout
+{
+  "error": {
+    "message": "usage: paged-node commands [doc]",
+    "exit": 2
+  }
+}
+# stderr
+(empty)

@@ -54,9 +54,7 @@ function isEditableTarget(target: EventTarget | null): boolean {
   const el = target as HTMLElement | null;
   if (!el || !el.tagName) return false;
   return (
-    el.tagName === "INPUT" ||
-    el.tagName === "TEXTAREA" ||
-    el.isContentEditable
+    el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable
   );
 }
 
@@ -118,9 +116,7 @@ export function useGestureSpine(): {
             onMove: (e: CanvasPointerEvent) => spine.pointerMove(e),
             onUp: (e: CanvasPointerEvent) => spine.pointerUp(e),
             onCancel: () =>
-              spine.key(
-                new KeyboardEvent("keydown", { key: "Escape" }),
-              ),
+              spine.key(new KeyboardEvent("keydown", { key: "Escape" })),
             hoverCursor: hasCursorAt
               ? (e: CanvasPointerEvent) => {
                   const spec = spine.cursorAt(e);

@@ -37,7 +37,6 @@
 // before the symbology and table pages, so its lowering pass has no
 // earlier symbols to re-draw and nothing to clean up.
 
-
 import { marginNote, proseFrame, specLabel } from "../../annual-support";
 import { withActivePage } from "../../active-page";
 import { LAYER, STYLE, SWATCH, p } from "../../names-annual";
@@ -56,7 +55,12 @@ import {
 } from "./00-support";
 
 /** Page-space (x0, y0, x1, y1) exhibit slots on the 25/12 grid. */
-const C128_SLOT: [number, number, number, number] = [60, 492, 60 + units(5), 548];
+const C128_SLOT: [number, number, number, number] = [
+  60,
+  492,
+  60 + units(5),
+  548,
+];
 const QR_SLOT: [number, number, number, number] = [319, 486, 415, 582];
 
 const C128_EXPR = "CURRENCY(unit_price)";
@@ -70,21 +74,29 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   const elements: string[] = [];
   const covers: string[] = [];
 
-  const head = await proseFrame(ctx, pg, [60, 54, 492, 84], [
-    { text: "The expression language", style: STYLE.head1 },
-  ]);
-  const intro = await proseFrame(ctx, pg, [60, 90, 492, 172], [
-    {
-      text:
-        "paged.data speaks its own publishing DSL — not a spreadsheet " +
-        "grammar — and its whole vocabulary is registry-driven: the files " +
-        "printed below are the same ones the engine's build turns into its " +
-        "dispatch table, so a function missing here is uncallable by " +
-        "construction. Forty-two functions, five families, and below them " +
-        "two expressions evaluated live against the order book.",
-      style: STYLE.bodySmall,
-    },
-  ]);
+  const head = await proseFrame(
+    ctx,
+    pg,
+    [60, 54, 492, 84],
+    [{ text: "The expression language", style: STYLE.head1 }],
+  );
+  const intro = await proseFrame(
+    ctx,
+    pg,
+    [60, 90, 492, 172],
+    [
+      {
+        text:
+          "paged.data speaks its own publishing DSL — not a spreadsheet " +
+          "grammar — and its whole vocabulary is registry-driven: the files " +
+          "printed below are the same ones the engine's build turns into its " +
+          "dispatch table, so a function missing here is uncallable by " +
+          "construction. Forty-two functions, five families, and below them " +
+          "two expressions evaluated live against the order book.",
+        style: STYLE.bodySmall,
+      },
+    ],
+  );
   elements.push(head.frameId, intro.frameId);
 
   // ── the roster, per family ────────────────────────────────────────
@@ -121,31 +133,51 @@ export async function build(ctx: PageContext): Promise<PageReport> {
       "the paged.data function registry (modules/data/registry/functions) " +
         "is absent — the roster could not be read and the page says so.",
     );
-    const missing = await proseFrame(ctx, pg, [60, 184, 492, 240], [
-      {
-        text:
-          "The function registry (modules/data/registry/functions) " +
-          "is absent from this checkout; the roster cannot be printed " +
-          "honestly and is not.",
-        style: STYLE.bodySmall,
-      },
-    ]);
+    const missing = await proseFrame(
+      ctx,
+      pg,
+      [60, 184, 492, 240],
+      [
+        {
+          text:
+            "The function registry (modules/data/registry/functions) " +
+            "is absent from this checkout; the roster cannot be printed " +
+            "honestly and is not.",
+          style: STYLE.bodySmall,
+        },
+      ],
+    );
     elements.push(missing.frameId);
   }
 
-  const liveHead = await proseFrame(ctx, pg, [60, 462, 492, 480], [
-    {
-      text: "Two expressions, evaluated live and lowered as page geometry:",
-      style: STYLE.caption,
-    },
-  ]);
+  const liveHead = await proseFrame(
+    ctx,
+    pg,
+    [60, 462, 492, 480],
+    [
+      {
+        text: "Two expressions, evaluated live and lowered as page geometry:",
+        style: STYLE.caption,
+      },
+    ],
+  );
   elements.push(liveHead.frameId);
 
   // The bound frames the expressions render into.
   const c128Rect = await doc.rectangle(pageId, C128_SLOT);
   const qrRect = await doc.rectangle(pageId, QR_SLOT);
-  await doc.designer.applyStroke("rectangle", c128Rect, await doc.swatch(SWATCH.slate), 0.5);
-  await doc.designer.applyStroke("rectangle", qrRect, await doc.swatch(SWATCH.slate), 0.5);
+  await doc.designer.applyStroke(
+    "rectangle",
+    c128Rect,
+    await doc.swatch(SWATCH.slate),
+    0.5,
+  );
+  await doc.designer.applyStroke(
+    "rectangle",
+    qrRect,
+    await doc.swatch(SWATCH.slate),
+    0.5,
+  );
   for (const id of [c128Rect, qrRect]) {
     await doc.setProperty("rectangle", id, "itemLayer", {
       type: "text",
@@ -154,8 +186,7 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   }
   elements.push(c128Rect, qrRect);
 
-  let c128Line =
-    `${C128_EXPR} — not evaluated: the query engine never reached ready on this lane.`;
+  let c128Line = `${C128_EXPR} — not evaluated: the query engine never reached ready on this lane.`;
   let qrLine = `${QR_EXPR} — not evaluated on this lane.`;
 
   if (await ensureOrdersReady(ctx, notes)) {
@@ -216,10 +247,16 @@ export async function build(ctx: PageContext): Promise<PageReport> {
       );
     };
     const geo = await geometryOf(page, fresh);
-    const c128Count = geo.filter((g) => g.bounds && inSlot(g.bounds, C128_SLOT)).length;
-    const qrCount = geo.filter((g) => g.bounds && inSlot(g.bounds, QR_SLOT)).length;
+    const c128Count = geo.filter(
+      (g) => g.bounds && inSlot(g.bounds, C128_SLOT),
+    ).length;
+    const qrCount = geo.filter(
+      (g) => g.bounds && inSlot(g.bounds, QR_SLOT),
+    ).length;
     const strays = geo.filter(
-      (g) => !g.bounds || (!inSlot(g.bounds, C128_SLOT) && !inSlot(g.bounds, QR_SLOT)),
+      (g) =>
+        !g.bounds ||
+        (!inSlot(g.bounds, C128_SLOT) && !inSlot(g.bounds, QR_SLOT)),
     );
 
     if (c128Count + qrCount === 0) {
@@ -257,7 +294,9 @@ export async function build(ctx: PageContext): Promise<PageReport> {
       fresh.map((r) => r.id),
       LAYER.content,
     ).catch((err) => {
-      notes.push(`layer assignment for the modules was refused: ${String(err).slice(0, 120)}`);
+      notes.push(
+        `layer assignment for the modules was refused: ${String(err).slice(0, 120)}`,
+      );
     });
     elements.push(...fresh.map((r) => r.id));
 
@@ -266,26 +305,42 @@ export async function build(ctx: PageContext): Promise<PageReport> {
         `${C128_EXPR} — the format family read record 1001's unit price and ` +
         `the engine encoded the formatted string as Code-128: ${c128Count} ` +
         "native filled paths, no image anywhere.";
-      covers.push("data.expr.engine", "data.barcode.symbology", "data.bind.authoring");
+      covers.push(
+        "data.expr.engine",
+        "data.barcode.symbology",
+        "data.bind.authoring",
+      );
     } else {
-      notes.push("the CURRENCY(unit_price) Code-128 drew no modules in its frame.");
+      notes.push(
+        "the CURRENCY(unit_price) Code-128 drew no modules in its frame.",
+      );
     }
     if (qrCount > 0) {
       qrLine =
         `${QR_EXPR} — the text family joined the record's SKU and order URL ` +
         `and the result is this QR: ${qrCount} native filled paths.`;
-      covers.push("data.expr.engine", "data.barcode.symbology", "data.bind.authoring");
+      covers.push(
+        "data.expr.engine",
+        "data.barcode.symbology",
+        "data.bind.authoring",
+      );
     } else {
       notes.push("the CONCAT QR drew no modules in its frame.");
     }
   }
 
-  const c128Caption = await proseFrame(ctx, pg, [60, 556, 60 + units(7), 640], [
-    { text: c128Line, style: STYLE.caption },
-  ]);
-  const qrCaption = await proseFrame(ctx, pg, [319, 588, 492, 652], [
-    { text: qrLine, style: STYLE.caption },
-  ]);
+  const c128Caption = await proseFrame(
+    ctx,
+    pg,
+    [60, 556, 60 + units(7), 640],
+    [{ text: c128Line, style: STYLE.caption }],
+  );
+  const qrCaption = await proseFrame(
+    ctx,
+    pg,
+    [319, 588, 492, 652],
+    [{ text: qrLine, style: STYLE.caption }],
+  );
   elements.push(c128Caption.frameId, qrCaption.frameId);
 
   elements.push(

@@ -80,7 +80,7 @@ The two repositories pin each other by git revision, so the steps run in this or
      `Visible="false"`;
    - `an_authored_text_variable_reaches_the_idml` should assert that both the definition
      and the instance are written.
-   Then commit and push, and check that CI passes.
+     Then commit and push, and check that CI passes.
 4. **core:** tag the patch release `v0.71.1`. The wire protocol does not change, so the
    plugin SDK's vendored contract stays as it is. Downstream, the editor moves its engine
    pins, and plugin-draw drops its `textPathEndBracketAbsent` finding, which now flips.

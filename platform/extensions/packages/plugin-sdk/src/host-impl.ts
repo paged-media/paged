@@ -29,7 +29,10 @@
 // thunk idiom, avoids stale-closure drift).
 
 import { createCoreObjects } from "./core-objects.js";
-import { createObjectRegistry, type ObjectRegistry } from "./object-registry.js";
+import {
+  createObjectRegistry,
+  type ObjectRegistry,
+} from "./object-registry.js";
 import { isCoreCommand } from "./core-commands.js";
 import { checkSchemaRows } from "./object-schema.js";
 import type {
@@ -169,7 +172,10 @@ function spliceBytesSlot(m: MutationInput, bytes: number[]): MutationInput {
     if (node.op === "batch") {
       return {
         ...node,
-        args: { ...node.args, ops: node.args.ops.map((op) => visit(op) as Mutation) },
+        args: {
+          ...node.args,
+          ops: node.args.ops.map((op) => visit(op) as Mutation),
+        },
       };
     }
     return node;
@@ -440,10 +446,7 @@ export const ASSET_BUDGETS = {
 export interface BundleAssetProvider {
   /** The bytes of a document font face, or `null` when the host has
    *  none. Style-agnostic when `style` is omitted. */
-  getFontFace(
-    family: string,
-    style?: string,
-  ): Promise<FontFaceAsset | null>;
+  getFontFace(family: string, style?: string): Promise<FontFaceAsset | null>;
   /** W-15 — register a face in the engine's SCENE-LAYER face table
    *  (`registerFont` with `scope: "sceneLayer"`): scene-layer text
    *  resolves it, the document never sees it. The SDK calls it once per
@@ -500,7 +503,12 @@ const documentFaceQueues = new WeakMap<object, Promise<unknown>>();
 function faceContainer(bytes: Uint8Array): "sfnt" | "woff" | null {
   if (bytes.byteLength < 4) return null;
   const magic = String.fromCharCode(bytes[0]!, bytes[1]!, bytes[2]!, bytes[3]!);
-  if (magic === "\u0000\u0001\u0000\u0000" || magic === "true" || magic === "OTTO" || magic === "ttcf") {
+  if (
+    magic === "\u0000\u0001\u0000\u0000" ||
+    magic === "true" ||
+    magic === "OTTO" ||
+    magic === "ttcf"
+  ) {
     return "sfnt";
   }
   if (magic === "wOFF" || magic === "wOF2") return "woff";
@@ -570,7 +578,11 @@ export interface SpawnedWorker {
  * no backend → `spawn` rejects + `supports("workers@1")` is false.
  */
 export interface WorkerBackend {
-  spawn(pluginId: string, module: string, name?: string): Promise<SpawnedWorker>;
+  spawn(
+    pluginId: string,
+    module: string,
+    name?: string,
+  ): Promise<SpawnedWorker>;
 }
 
 /**
@@ -888,8 +900,11 @@ export function createBindingProviderRegistry(): BindingProviderBackend {
   const providers = new Map<string, RegisteredBindingProvider[]>();
   /** The active context stack, OUTERMOST first (push order = the shell's
    *  enter order). Resolution reads it reversed. */
-  const stack: { plugin: string; contextType: string; elementId: string | null }[] =
-    [];
+  const stack: {
+    plugin: string;
+    contextType: string;
+    elementId: string | null;
+  }[] = [];
   const listeners = new Set<() => void>();
   // The separator is the ESCAPE `\u0000`, not a literal NUL byte. A raw
   // control character in the source makes every tool that sniffs content
@@ -966,7 +981,10 @@ export function createBindingProviderRegistry(): BindingProviderBackend {
         // entered twice (a frame inside a frame), and exiting must
         // unwind the one the shell is unwinding, not the outer one.
         for (let i = stack.length - 1; i >= 0; i--) {
-          if (stack[i].plugin === plugin && stack[i].contextType === contextType) {
+          if (
+            stack[i].plugin === plugin &&
+            stack[i].contextType === contextType
+          ) {
             stack.splice(i, 1);
             break;
           }
@@ -996,7 +1014,8 @@ export function createBindingProviderRegistry(): BindingProviderBackend {
       const rowScoped =
         request.target.kind === "row" ? request.target.collection : null;
       for (const { entry } of active()) {
-        if (rowScoped !== null && !declaresCollection(entry, rowScoped)) continue;
+        if (rowScoped !== null && !declaresCollection(entry, rowScoped))
+          continue;
         if (!declaresPath(entry, request.path)) {
           if (rowScoped === null) continue;
           return {
@@ -1024,12 +1043,17 @@ export function createBindingProviderRegistry(): BindingProviderBackend {
       const rowScoped =
         request.target.kind === "row" ? request.target.collection : null;
       for (const { entry } of active()) {
-        if (rowScoped !== null && !declaresCollection(entry, rowScoped)) continue;
+        if (rowScoped !== null && !declaresCollection(entry, rowScoped))
+          continue;
         if (!declaresWritablePath(entry, request.path)) continue;
         if (!entry.provider.writeProperty) continue;
         const write = await entry.provider.writeProperty(request);
         if (write.kind === "decline") continue;
-        return { handled: true, provider: entry.plugin, outcome: write.outcome };
+        return {
+          handled: true,
+          provider: entry.plugin,
+          outcome: write.outcome,
+        };
       }
       return {
         handled: false,
@@ -1056,7 +1080,11 @@ export function createBindingProviderRegistry(): BindingProviderBackend {
         if (!entry.provider.applyMutation) continue;
         const write = await entry.provider.applyMutation(mutation);
         if (write.kind === "decline") continue;
-        return { handled: true, provider: entry.plugin, outcome: write.outcome };
+        return {
+          handled: true,
+          provider: entry.plugin,
+          outcome: write.outcome,
+        };
       }
       return {
         handled: false,
@@ -1427,7 +1455,8 @@ export function createBundleHost(
 
   // ADR 323 — the shared object registry, or a private one over this
   // host's editor (core addresses + this bundle's own kinds).
-  const objectRegistry: ObjectRegistry = options?.objects ?? createPrivateObjects();
+  const objectRegistry: ObjectRegistry =
+    options?.objects ?? createPrivateObjects();
   function createPrivateObjects(): ObjectRegistry {
     const core = createCoreObjects(getEditor);
     store.add({ dispose: () => core.dispose() });
@@ -1514,8 +1543,7 @@ export function createBundleHost(
         : "none";
   /** K-3 — the worker door is DECLARED when `capabilities.workers` is
    *  present (an object with a numeric `max`). */
-  const hasWorkers = (): boolean =>
-    typeof caps?.workers?.max === "number";
+  const hasWorkers = (): boolean => typeof caps?.workers?.max === "number";
   /** D-11 — the credential-store door is DECLARED when
    *  `capabilities.secrets.sources` is true (the v1 grant). */
   const hasSecrets = (): boolean => caps?.secrets?.sources === true;
@@ -1529,10 +1557,8 @@ export function createBundleHost(
    *  `capabilities.documents.export` / `.open` true. */
   const hasDocuments = (dir: "export" | "open"): boolean =>
     caps?.documents?.[dir] === true;
-  const lists = (
-    arr: readonly string[] | undefined,
-    id: string,
-  ): boolean => arr?.includes(id) ?? false;
+  const lists = (arr: readonly string[] | undefined, id: string): boolean =>
+    arr?.includes(id) ?? false;
 
   /** W3.2 — an edit-context / object-type `type` is DECLARED when the
    *  manifest's `contributes.editContexts[]` / `contributes.objectTypes[]`
@@ -1566,7 +1592,11 @@ export function createBundleHost(
    *  throws): in 'enforce' a violation returns a failure REASON string
    *  (the caller maps it to `{ applied: false, error }`); in 'warn' it
    *  logs and returns null (proceed). `null` = authorized/allowed. */
-  const denyWrite = (ok: boolean, door: string, missing: string): string | null => {
+  const denyWrite = (
+    ok: boolean,
+    door: string,
+    missing: string,
+  ): string | null => {
     if (ok) return null;
     const reason = `${door} requires ${missing} (trust-line W0.11)`;
     if (capabilityMode === "warn") {
@@ -1745,8 +1775,7 @@ export function createBundleHost(
           `entry can invoke it`,
       );
       const scope = c.scope ?? "document";
-      const editContext =
-        typeof scope === "object" ? scope.editContext : null;
+      const editContext = typeof scope === "object" ? scope.editContext : null;
       const menus = getEditor().registries.menus;
       if (!menus) {
         // A host that predates this door. Report it rather than throwing:
@@ -1770,7 +1799,10 @@ export function createBundleHost(
               document?: { handle?: { pageCount?: number } | null } | null;
               editContext?: { type?: string } | null;
             } | null;
-            if (!st?.document?.handle || (st.document.handle.pageCount ?? 0) === 0) {
+            if (
+              !st?.document?.handle ||
+              (st.document.handle.pageCount ?? 0) === 0
+            ) {
               return false;
             }
             if (editContext === null) return true;
@@ -2008,8 +2040,14 @@ export function createBundleHost(
         const why = checkSchemaRows(k.schema);
         if (why) throw new Error(`plugin-api: object kind "${k.kind}": ${why}`);
         if (d && Array.isArray(d.schema)) {
-          const a = d.schema.map((r) => r.path).sort().join(",");
-          const b = k.schema.map((r) => r.path).sort().join(",");
+          const a = d.schema
+            .map((r) => r.path)
+            .sort()
+            .join(",");
+          const b = k.schema
+            .map((r) => r.path)
+            .sort()
+            .join(",");
           if (a !== b) {
             throw new Error(
               `plugin-api: object kind "${k.kind}" registers paths [${b}] but the manifest declares [${a}]`,
@@ -2025,7 +2063,12 @@ export function createBundleHost(
           `contributes.objectModel.commands[] must include "${c.id}"`,
         );
       }
-      const handle = objectRegistry.register({ plugin: manifest.id, model, parts, log });
+      const handle = objectRegistry.register({
+        plugin: manifest.id,
+        model,
+        parts,
+        log,
+      });
       store.add(handle);
       return handle;
     },
@@ -2063,7 +2106,9 @@ export function createBundleHost(
           // Protocol 68 — the faces that fell back to the default font. An
           // older host resolves void: no report, never a guess.
           const fontFallbacks =
-            reply && Array.isArray(reply.fontFallbacks) ? [...reply.fontFallbacks] : [];
+            reply && Array.isArray(reply.fontFallbacks)
+              ? [...reply.fontFallbacks]
+              : [];
           return { fontFallbacks };
         },
         async clear(elementId) {
@@ -2255,7 +2300,11 @@ export function createBundleHost(
     mutation: MutationInput,
     door: string,
   ): MutationOutcome | null => {
-    const denied = denyWrite(hasDoc("write"), door, "capabilities.document.write");
+    const denied = denyWrite(
+      hasDoc("write"),
+      door,
+      "capabilities.document.write",
+    );
     if (denied !== null) return { applied: false, error: denied };
     const foreign = foreignMetadataKey(mutation);
     if (foreign !== null) {
@@ -2281,7 +2330,9 @@ export function createBundleHost(
         pageIds: reply.payload.pageIds,
         ...(minted !== undefined ? { minted } : {}),
         ...(createdPages !== undefined ? { createdPages } : {}),
-        ...(typeof reply.payload.appliedSeq === "number" ? { appliedSeq: reply.payload.appliedSeq } : {}),
+        ...(typeof reply.payload.appliedSeq === "number"
+          ? { appliedSeq: reply.payload.appliedSeq }
+          : {}),
       };
     }
     return {
@@ -2416,9 +2467,7 @@ export function createBundleHost(
         const reply = await getEditor().client.send({
           kind: "requestDocumentPlaceholders",
         });
-        return reply.kind === "documentPlaceholders"
-          ? reply.payload.items
-          : [];
+        return reply.kind === "documentPlaceholders" ? reply.payload.items : [];
       } catch {
         return [];
       }
@@ -2432,9 +2481,7 @@ export function createBundleHost(
           kind: "requestElementProperties",
           payload: { id },
         });
-        return reply.kind === "elementProperties"
-          ? reply.payload.result
-          : null;
+        return reply.kind === "elementProperties" ? reply.payload.result : null;
       } catch {
         return null;
       }
@@ -2776,21 +2823,38 @@ export function createBundleHost(
       if (!pagesBackend) {
         return toDisposable(() => {});
       }
-      return store.add(toDisposable(pagesBackend.onDidChangeActivePage(listener)));
+      return store.add(
+        toDisposable(pagesBackend.onDidChangeActivePage(listener)),
+      );
     },
     async revealText(range, opts) {
       const textBackend = options?.text;
-      if (!textBackend || !range || typeof range.storyId !== "string" || range.storyId === "") {
+      if (
+        !textBackend ||
+        !range ||
+        typeof range.storyId !== "string" ||
+        range.storyId === ""
+      ) {
         return false;
       }
       const start = Math.trunc(Number(range.start));
       const end = Math.trunc(Number(range.end));
-      if (!Number.isFinite(start) || !Number.isFinite(end) || start < 0 || end < start) {
+      if (
+        !Number.isFinite(start) ||
+        !Number.isFinite(end) ||
+        start < 0 ||
+        end < start
+      ) {
         return false;
       }
       const select = opts?.select !== false;
       try {
-        return (await textBackend.revealText({ storyId: range.storyId, start, end }, select)) === true;
+        return (
+          (await textBackend.revealText(
+            { storyId: range.storyId, start, end },
+            select,
+          )) === true
+        );
       } catch {
         return false;
       }
@@ -2948,7 +3012,7 @@ export function createBundleHost(
       if (!sink && !overlayLayerWarned) {
         overlayLayerWarned = true;
         log.warn(
-          'host.overlay.layer — this host renders no overlay layers ' +
+          "host.overlay.layer — this host renders no overlay layers " +
             '(supports("overlay.layers@1") is false); shapes are dropped',
         );
       }
@@ -3042,7 +3106,11 @@ export function createBundleHost(
         );
       }
       const need = inScope.filter((o) => !granted.has(o));
-      let prompted: ConsentResult = { granted: [], denied: [], remembered: false };
+      let prompted: ConsentResult = {
+        granted: [],
+        denied: [],
+        remembered: false,
+      };
       if (need.length > 0) {
         if (options?.consent) {
           prompted = await options.consent.request(need, purpose);
@@ -3133,7 +3201,8 @@ export function createBundleHost(
       // SAME store via the injected sink; the mirror stays for
       // headless hosts).
       for (const d of items) {
-        const line = `${tag} ${key}: ${d.message}` +
+        const line =
+          `${tag} ${key}: ${d.message}` +
           (d.line !== undefined ? ` (${d.source ?? ""}:${d.line})` : "");
         if (d.severity === "error") sink.error(line);
         else if (d.severity === "warning") sink.warn(line);
@@ -3154,7 +3223,9 @@ export function createBundleHost(
     },
     onDidChange(listener) {
       diagnosticListeners.add(listener);
-      return store.add(toDisposable(() => diagnosticListeners.delete(listener)));
+      return store.add(
+        toDisposable(() => diagnosticListeners.delete(listener)),
+      );
     },
   };
 
@@ -3408,7 +3479,11 @@ export function createBundleHost(
         return { status: "refused", reason };
       };
       // It changes how the document lays out: a document write.
-      const denied = denyWrite(hasDoc("write"), "assets.registerDocumentFont", "capabilities.document.write");
+      const denied = denyWrite(
+        hasDoc("write"),
+        "assets.registerDocumentFont",
+        "capabilities.document.write",
+      );
       if (denied !== null) return refuse(denied);
       if (family.trim() === "") return refuse("the family is empty");
       if (bytes.byteLength > ASSET_BUDGETS.maxFontFaceBytes) {
@@ -3462,18 +3537,29 @@ export function createBundleHost(
           } else {
             reply = await client.send({
               kind: "registerFont",
-              payload: { family, style: style ?? null, bytes: Array.from(face), scope: "document" },
+              payload: {
+                family,
+                style: style ?? null,
+                bytes: Array.from(face),
+                scope: "document",
+              },
             });
           }
           if (reply.kind !== "fontRegistered") {
             return refuse(`the engine answered ${reply.kind}`);
           }
-          return { status: "registered", pageIds: [...(reply.payload.pageIds ?? [])] };
+          return {
+            status: "registered",
+            pageIds: [...(reply.payload.pageIds ?? [])],
+          };
         } catch (err) {
           return refuse(`the engine could not be reached (${String(err)})`);
         }
       };
-      const queued = (documentFaceQueues.get(client) ?? Promise.resolve()).then(run, run);
+      const queued = (documentFaceQueues.get(client) ?? Promise.resolve()).then(
+        run,
+        run,
+      );
       documentFaceQueues.set(client, queued);
       return queued;
     },
@@ -3634,7 +3720,7 @@ export function createBundleHost(
     requireDeclared(
       hasBlobStore(),
       door,
-      'capabilities.storage must include { blob: true }',
+      "capabilities.storage must include { blob: true }",
     );
   const blob: BlobSurface = {
     async write(key, bytes) {
@@ -3731,7 +3817,9 @@ export function createBundleHost(
       });
       if (reply.kind !== "pagedPartWritten") {
         const err =
-          reply.kind === "pagedPartFailed" ? reply.payload.error : `unexpected ${reply.kind}`;
+          reply.kind === "pagedPartFailed"
+            ? reply.payload.error
+            : `unexpected ${reply.kind}`;
         throw new Error(`host.parts.write("${path}"): ${err}`);
       }
     },
@@ -3744,7 +3832,9 @@ export function createBundleHost(
         payload: { path: full },
       });
       if (reply.kind === "pagedPartRead") {
-        return reply.payload.found ? Uint8Array.from(reply.payload.bytes) : null;
+        return reply.payload.found
+          ? Uint8Array.from(reply.payload.bytes)
+          : null;
       }
       return null; // pagedPartFailed (e.g. no document) → the honest null
     },
@@ -3778,7 +3868,9 @@ export function createBundleHost(
       });
       if (reply.kind === "pagedPartDeleted") return reply.payload.existed;
       const err =
-        reply.kind === "pagedPartFailed" ? reply.payload.error : `unexpected ${reply.kind}`;
+        reply.kind === "pagedPartFailed"
+          ? reply.payload.error
+          : `unexpected ${reply.kind}`;
       throw new Error(`host.parts.delete("${path}"): ${err}`);
     },
   };
@@ -3854,7 +3946,9 @@ export function createBundleHost(
         );
       }
       if (!(bytes instanceof Uint8Array) || bytes.byteLength === 0) {
-        throw new Error("host.documents.open: bytes must be a non-empty Uint8Array");
+        throw new Error(
+          "host.documents.open: bytes must be a non-empty Uint8Array",
+        );
       }
       const name =
         typeof opts?.name === "string" && opts.name.trim() !== ""
@@ -3918,7 +4012,7 @@ export function createBundleHost(
       // half (log once so the author sees the honest narrowing).
       if (tier === "vector" && payload.tabular !== undefined) {
         log.warn(
-          'clipboard.write: dropping the tabular payload — capabilities.clipboard ' +
+          "clipboard.write: dropping the tabular payload — capabilities.clipboard " +
             'is "vector" (text only); declare "full" to copy a cell grid',
         );
         const { tabular: _dropped, ...rest } = payload;
@@ -3973,9 +4067,9 @@ export function createBundleHost(
   // Cross-origin isolation is the hard browser gate for SharedArrayBuffer
   // (the editor's COOP/COEP). Read it honestly — false under a host that
   // isn't isolated (and in most test environments).
-  const crossOriginIsolated = (
-    globalThis as { crossOriginIsolated?: boolean }
-  ).crossOriginIsolated === true;
+  const crossOriginIsolated =
+    (globalThis as { crossOriginIsolated?: boolean }).crossOriginIsolated ===
+    true;
   // Live accounting across every worker this bundle spawns.
   let liveWorkerCount = 0;
   let sharedBytesUsed = 0;
@@ -4129,7 +4223,9 @@ export function createBundleHost(
       try {
         url = new URL(answer.url).href;
       } catch {
-        log.warn(`modules.resolve("${name}"): the host answered a non-absolute URL "${answer.url}"`);
+        log.warn(
+          `modules.resolve("${name}"): the host answered a non-absolute URL "${answer.url}"`,
+        );
         return null;
       }
       const declaredSri = artifact.integrity ?? null;
@@ -4305,7 +4401,8 @@ export function createBundleHost(
   // for React panels; optional members, so the probe is their presence.
   if (options?.widgets?.PropertyField) {
     featureSet.add("widgets.propertyField@1");
-    if (options.propertyFieldValues) featureSet.add("widgets.propertyField.values@1");
+    if (options.propertyFieldValues)
+      featureSet.add("widgets.propertyField.values@1");
   }
   if (options?.willSave) {
     featureSet.add("document.onWillSave@1");
@@ -4453,8 +4550,14 @@ export function createBundleHost(
   // (throws in 'enforce', like every read door), writes on
   // `document.write` (a refused write is a result, never a throw).
   const deniedWrite = (door: string): ObjectWriteResult | null => {
-    const reason = denyWrite(hasDoc("write"), door, "capabilities.document.write");
-    return reason === null ? null : { applied: false, code: "denied", reason, undoSteps: 0 };
+    const reason = denyWrite(
+      hasDoc("write"),
+      door,
+      "capabilities.document.write",
+    );
+    return reason === null
+      ? null
+      : { applied: false, code: "denied", reason, undoSteps: 0 };
   };
   const objects: ObjectsSurface = {
     query(selector, opts) {
@@ -4470,7 +4573,10 @@ export function createBundleHost(
       return objectRegistry.getAll(address, opts);
     },
     async set(address, path, value, opts) {
-      return deniedWrite("objects.set") ?? objectRegistry.set(address, path, value, opts);
+      return (
+        deniedWrite("objects.set") ??
+        objectRegistry.set(address, path, value, opts)
+      );
     },
     async batch(ops, opts) {
       return deniedWrite("objects.batch") ?? objectRegistry.batch(ops, opts);

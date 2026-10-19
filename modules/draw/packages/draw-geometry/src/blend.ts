@@ -45,9 +45,15 @@ export function interpolateAnchors(
     const pa = a[i];
     const pb = b[i];
     out.push({
-      anchor: [lerp(pa.anchor[0], pb.anchor[0], t), lerp(pa.anchor[1], pb.anchor[1], t)],
+      anchor: [
+        lerp(pa.anchor[0], pb.anchor[0], t),
+        lerp(pa.anchor[1], pb.anchor[1], t),
+      ],
       left: [lerp(pa.left[0], pb.left[0], t), lerp(pa.left[1], pb.left[1], t)],
-      right: [lerp(pa.right[0], pb.right[0], t), lerp(pa.right[1], pb.right[1], t)],
+      right: [
+        lerp(pa.right[0], pb.right[0], t),
+        lerp(pa.right[1], pb.right[1], t),
+      ],
     });
   }
   return out;

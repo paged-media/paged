@@ -16,7 +16,6 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-
 // The APPEARANCE panel, RENDERED (happy-dom) against the real engine:
 // behaviour first (empty state, the stack, buttons asserted on the
 // DOCUMENT), then its reload budgets as counts at the host doors — the
@@ -44,7 +43,7 @@ import {
   APPEARANCE_PANEL_ID,
   type AppearanceStack,
 } from "../../src";
-import { openHost } from "../conformance/host";
+import { openHost } from "../headless/host";
 import {
   documentBurst,
   drive,
@@ -100,9 +99,17 @@ describe("Appearance panel — rendered against the engine", () => {
       expect(panel.attr(PANEL, "data-draw-appearance-panel")).toBe("0");
       expect(panel.attr(PANEL, "data-draw-appearance-baked")).toBe("false");
       expect(panel.text()).toContain("Appearance (0)");
-      expect(panel.text()).toContain("Select an object to see its appearance stack.");
+      expect(panel.text()).toContain(
+        "Select an object to see its appearance stack.",
+      );
       expect(panel.count("[data-draw-appearance-row]")).toBe(0);
-      for (const button of ["add-fill", "add-stroke", "clear", "bake", "release"]) {
+      for (const button of [
+        "add-fill",
+        "add-stroke",
+        "clear",
+        "bake",
+        "release",
+      ]) {
         expect(panel.disabled(`[data-draw-appearance-${button}]`)).toBe(true);
       }
       // The B-24 note is on screen, verbatim.
@@ -170,7 +177,9 @@ describe("Appearance panel — rendered against the engine", () => {
       await h.host.selection.set([R0]);
       const panel = await mountPanel(h, makeAppearancePanel);
 
-      expect(panel.attr(PANEL, "data-draw-appearance-panel")).toBe(String(RECORDS));
+      expect(panel.attr(PANEL, "data-draw-appearance-panel")).toBe(
+        String(RECORDS),
+      );
       expect(panel.text()).toContain("Appearance (5)");
       // The model is bottom-to-top; the view reverses it per kind.
       expect(rowsOf(panel)).toEqual([
@@ -186,17 +195,19 @@ describe("Appearance panel — rendered against the engine", () => {
           .all("[data-draw-appearance-row]")
           .map((r) => r.getAttribute("data-draw-appearance-bakes")),
       ).toEqual(["true", "false", "false", "true", "false"]);
-      expect(panel.get('[data-draw-appearance-row="fill:2"]').textContent).toContain(
-        "Black · 100%",
-      );
-      expect(panel.get('[data-draw-appearance-row="stroke:1"]').textContent).toContain(
-        "Black · 3 pt",
-      );
+      expect(
+        panel.get('[data-draw-appearance-row="fill:2"]').textContent,
+      ).toContain("Black · 100%");
+      expect(
+        panel.get('[data-draw-appearance-row="stroke:1"]').textContent,
+      ).toContain("Black · 3 pt");
       // The front-most row cannot go further up, the bottom one further down.
       const front = '[data-draw-appearance-row="fill:2"]';
       const bottom = '[data-draw-appearance-row="fill:0"]';
       expect(panel.disabled(`${front} [data-draw-appearance-up]`)).toBe(true);
-      expect(panel.disabled(`${bottom} [data-draw-appearance-down]`)).toBe(true);
+      expect(panel.disabled(`${bottom} [data-draw-appearance-down]`)).toBe(
+        true,
+      );
     });
 
     it("Up reorders the stack in the document, and the bake follows the new front", async () => {
@@ -208,16 +219,20 @@ describe("Appearance panel — rendered against the engine", () => {
       });
 
       // The 60% fill moves in front of the 100% one.
-      await panel.click('[data-draw-appearance-row="fill:1"] [data-draw-appearance-up]');
+      await panel.click(
+        '[data-draw-appearance-row="fill:1"] [data-draw-appearance-up]',
+      );
 
-      expect((await stackOf(R0)).fills.map((f) => f.tint)).toEqual([20, 100, 60]);
+      expect((await stackOf(R0)).fills.map((f) => f.tint)).toEqual([
+        20, 100, 60,
+      ]);
       expect(await propertyOf(h, R0, "frameFillTint")).toEqual({
         type: "length",
         value: 60,
       });
-      expect(panel.get('[data-draw-appearance-row="fill:2"]').textContent).toContain(
-        "Black · 60%",
-      );
+      expect(
+        panel.get('[data-draw-appearance-row="fill:2"]').textContent,
+      ).toContain("Black · 60%");
     });
 
     it("Remove drops one layer; + Fill and + Stroke add one", async () => {
@@ -247,20 +262,26 @@ describe("Appearance panel — rendered against the engine", () => {
       await panel.click("[data-draw-appearance-bake]");
 
       // THE DOCUMENT: one derived path per layer joins the carrier.
-      expect(appearanceBakeOf(await h.host.document.getMetadata(R0))).not.toBeNull();
+      expect(
+        appearanceBakeOf(await h.host.document.getMetadata(R0)),
+      ).not.toBeNull();
       expect(await leafIds(h)).toHaveLength(PRISTINE + 6);
       // THE PANEL: every row is a real item now, and only Release is live.
       expect(panel.attr(PANEL, "data-draw-appearance-baked")).toBe("true");
       expect(
         panel
           .all("[data-draw-appearance-row]")
-          .every((r) => r.getAttribute("data-draw-appearance-bakes") === "true"),
+          .every(
+            (r) => r.getAttribute("data-draw-appearance-bakes") === "true",
+          ),
       ).toBe(true);
       expect(panel.disabled("[data-draw-appearance-bake]")).toBe(true);
 
       await panel.click("[data-draw-appearance-release]");
 
-      expect(appearanceBakeOf(await h.host.document.getMetadata(R0))).toBeNull();
+      expect(
+        appearanceBakeOf(await h.host.document.getMetadata(R0)),
+      ).toBeNull();
       expect(await leafIds(h)).toHaveLength(PRISTINE);
       expect(panel.attr(PANEL, "data-draw-appearance-baked")).toBe("false");
       // The stack itself survived the round trip.
@@ -294,7 +315,12 @@ describe("Appearance panel — rendered against the engine", () => {
     // seven of which read the selection after an `await` and got away
     // with it.
     it("follows a selection change (it was one selection behind)", async () => {
-      await commitAppearance(h.host, R0, STACK, await h.host.document.getMetadata(R0));
+      await commitAppearance(
+        h.host,
+        R0,
+        STACK,
+        await h.host.document.getMetadata(R0),
+      );
       const panel = await mountPanel(h, makeAppearancePanel);
       expect(panel.text()).toContain("Select an object");
 

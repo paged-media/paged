@@ -114,8 +114,7 @@ async function elementScreenCenter(
               Array<{
                 bounds: [number, number, number, number];
                 itemTransform?:
-                  | [number, number, number, number, number, number]
-                  | null;
+                  [number, number, number, number, number, number] | null;
               }>
             >;
           };
@@ -270,7 +269,10 @@ test.describe("journey · paged.sheet calc + functions through the grid", () => 
     await expect(breadcrumb).toBeVisible({ timeout: 10_000 });
     await page.waitForTimeout(800);
     const gridPx = await designer.expectRenderChangesFrom(beforeEnter);
-    expect(gridPx, "the in-frame grid (with computed cells) rendered onto the page").toBeGreaterThan(64);
+    expect(
+      gridPx,
+      "the in-frame grid (with computed cells) rendered onto the page",
+    ).toBeGreaterThan(64);
     await page.keyboard.press("Escape");
     await expect(breadcrumb).toHaveCount(0);
 
@@ -297,7 +299,9 @@ test.describe("journey · paged.sheet calc + functions through the grid", () => 
     }
 
     for (const note of collected) {
-      test.info().annotations.push({ type: "render-finding", description: note });
+      test
+        .info()
+        .annotations.push({ type: "render-finding", description: note });
       // eslint-disable-next-line no-console
       console.log(`[sheet-grid-formula] finding: ${note}`);
     }

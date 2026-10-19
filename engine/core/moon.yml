@@ -1,15 +1,15 @@
-$schema: '../../.moon/cache/schemas/project.json'
+$schema: "../../.moon/cache/schemas/project.json"
 
 # The engine's Cargo workspace. web/idml-viewer is its own project
 # (core-idml-viewer); spikes/blitz-wasm is excluded from the workspace.
-language: 'rust'
-layer: 'library'
-stack: 'systems'
-tags: ['rust', 'engine', 'wasm']
+language: "rust"
+layer: "library"
+stack: "systems"
+tags: ["rust", "engine", "wasm"]
 
 project:
-  title: 'engine/core'
-  description: 'Rust render engine: IDML parsing, composition, GPU rendering, wasm interfaces.'
+  title: "engine/core"
+  description: "Rust render engine: IDML parsing, composition, GPU rendering, wasm interfaces."
 
 # The Cargo git dependencies on paged-media/plugin-publish (idml-import,
 # idml-export) are fetched from the old repository at a pinned rev and read
@@ -18,40 +18,40 @@ project:
 
 fileGroups:
   rust-sources:
-    - '**/*.rs'
-    - '**/Cargo.toml'
-    - 'Cargo.lock'
-    - 'rust-toolchain*'
-    - '/.cargo/*.toml'
-    - '!web/**'
-    - '!spikes/blitz-wasm/**'
+    - "**/*.rs"
+    - "**/Cargo.toml"
+    - "Cargo.lock"
+    - "rust-toolchain*"
+    - "/.cargo/*.toml"
+    - "!web/**"
+    - "!spikes/blitz-wasm/**"
   rust-tests:
-    - '**/*'
-    - '!docs/**'
-    - '!**/*.md'
-    - '!web/**'
-    - '!packages/**'
-    - '!spikes/blitz-wasm/**'
-    - '/.cargo/*.toml'
+    - "**/*"
+    - "!docs/**"
+    - "!**/*.md"
+    - "!web/**"
+    - "!packages/**"
+    - "!spikes/blitz-wasm/**"
+    - "/.cargo/*.toml"
 
 tasks:
   fixtures:
-    description: 'Regenerate the gitignored corpus/generated/*.idml fixtures that tests read.'
-    toolchains: ['rust']
-    command: 'bash scripts/regen-fixtures.sh'
+    description: "Regenerate the gitignored corpus/generated/*.idml fixtures that tests read."
+    toolchains: ["rust"]
+    command: "bash scripts/regen-fixtures.sh"
     inputs:
-      - '@group(rust-sources)'
-      - 'scripts/regen-fixtures.sh'
+      - "@group(rust-sources)"
+      - "scripts/regen-fixtures.sh"
     options:
       cache: false
       # Only rust-test reads them, and `moon ci` runs no Rust task.
       runInCI: false
 
   rust-test:
-    deps: ['~:fixtures']
+    deps: ["~:fixtures"]
 
   rust-lint:
-    description: 'clippy as core-ci runs it: native, then the wasm32 surfaces with the shipped features.'
+    description: "clippy as core-ci runs it: native, then the wasm32 surfaces with the shipped features."
     script: >-
       cargo clippy --workspace --all-targets -- -D warnings
       && cargo clippy --target wasm32-unknown-unknown --all-targets
@@ -60,73 +60,71 @@ tasks:
       -- -D warnings
 
   wasm:
-    description: 'Standalone copies of the npm wasm packages in dist/, at 0.<protocol>.0-local.'
-    toolchains: ['rust']
-    command: 'bash scripts/build-wasm-packages.sh'
+    description: "Standalone copies in dist/: the canvas-wasm package at 0.<protocol>.0-local, and the viewer session's files."
+    toolchains: ["rust"]
+    command: "bash scripts/build-wasm-packages.sh"
     inputs:
-      - '@group(rust-sources)'
-      - 'crates/paged-introspect/catalog.json'
-      - 'scripts/build-wasm-packages.sh'
-      - 'packages/*/{package.json,README.md,LICENSE,LICENSE.md}'
+      - "@group(rust-sources)"
+      - "crates/paged-introspect/catalog.json"
+      - "scripts/build-wasm-packages.sh"
+      - "packages/canvas-wasm/{package.json,README.md,LICENSE,LICENSE.md}"
     outputs:
-      - 'dist/canvas-wasm/**/*'
-      - 'dist/introspect-wasm/**/*'
-      - 'dist/repo-wasm/**/*'
-      - 'dist/sdk/**/*'
+      - "dist/canvas-wasm/**/*"
+      - "dist/session/**/*"
     options:
       # Needs wasm-bindgen-cli at the Cargo.lock version and binaryen;
-      # core-publish-wasm.yml builds these in CI.
-      runInCI: 'skip'
+      # release.yml builds the same parts in CI.
+      runInCI: "skip"
 
   wasm-pkg:
-    description: 'The npm wasm packages built into their workspace packages, packages/<pkg>/ (ADR 185).'
-    toolchains: ['rust']
-    command: 'bash scripts/build-wasm-packages.sh --workspace'
+    description: "The engine's wasm built into the two workspace packages that ship it: packages/canvas-wasm/ (canvas, introspect/, repo/) and web/idml-viewer/wasm/ (the session), ADR 185, PM-0008."
+    toolchains: ["rust"]
+    command: "bash scripts/build-wasm-packages.sh --workspace"
     inputs:
-      - '@group(rust-sources)'
-      - 'crates/paged-introspect/catalog.json'
-      - 'scripts/build-wasm-packages.sh'
-      - 'packages/*/package.json'
+      - "@group(rust-sources)"
+      - "crates/paged-introspect/catalog.json"
+      - "scripts/build-wasm-packages.sh"
+      - "packages/canvas-wasm/package.json"
     # Only the generated files: package.json, README and the licence files in
     # the same directories are committed and must never be cleaned or restored.
     outputs:
-      - 'packages/canvas-wasm/paged_canvas_wasm*'
-      - 'packages/introspect-wasm/paged_introspect_wasm*'
-      - 'packages/introspect-wasm/catalog.json'
-      - 'packages/repo-wasm/paged_repo_wasm*'
-      - 'packages/sdk/paged_sdk*'
+      - "packages/canvas-wasm/paged_canvas_wasm*"
+      - "packages/canvas-wasm/introspect/**/*"
+      - "packages/canvas-wasm/repo/**/*"
+      - "web/idml-viewer/wasm/**/*"
     options:
       # As `wasm`: wasm-bindgen-cli at the Cargo.lock version and binaryen.
-      # core-publish-wasm.yml runs the same build in CI.
-      runInCI: 'skip'
+      # release.yml runs the same build in CI.
+      runInCI: "skip"
 
   wasm-pkg-version:
-    description: 'Every workspace wasm package is versioned 0.<PROTOCOL_VERSION>.0-dev (scripts/check-wasm-package-versions.mjs).'
-    toolchains: ['system']
-    command: 'bun scripts/check-wasm-package-versions.mjs'
+    description: "canvas-wasm and idml-viewer are versioned 0.<PROTOCOL_VERSION>.0-dev (scripts/check-wasm-package-versions.mjs)."
+    toolchains: ["system"]
+    command: "bun scripts/check-wasm-package-versions.mjs"
     inputs:
-      - 'scripts/check-wasm-package-versions.mjs'
-      - 'crates/paged-canvas/src/channel.rs'
-      - 'packages/*/package.json'
+      - "scripts/check-wasm-package-versions.mjs"
+      - "crates/paged-canvas/src/channel.rs"
+      - "packages/*/package.json"
+      - "web/idml-viewer/package.json"
 
   wire-schema:
-    description: 'The wire JSON Schema (ADR 187): crates/paged-wire/schema/mutation.schema.json is current and declares what tsify declares (paged-wire --features schema; core-ci runs it).'
-    toolchains: ['rust']
-    command: 'cargo test -p paged-wire --features schema'
+    description: "The wire JSON Schema (ADR 187): crates/paged-wire/schema/mutation.schema.json is current and declares what tsify declares (paged-wire --features schema; core-ci runs it)."
+    toolchains: ["rust"]
+    command: "cargo test -p paged-wire --features schema"
     inputs:
-      - '@group(rust-sources)'
-      - 'crates/paged-wire/schema/mutation.schema.json'
+      - "@group(rust-sources)"
+      - "crates/paged-wire/schema/mutation.schema.json"
 
   check:
-    deps: ['~:wasm-pkg-version']
+    deps: ["~:wasm-pkg-version"]
 
   wasm-test:
-    description: 'wasm-bindgen tests, Node-hosted (scripts/test-wasm.sh).'
-    toolchains: ['rust']
-    command: 'make test-wasm'
+    description: "wasm-bindgen tests, Node-hosted (scripts/test-wasm.sh)."
+    toolchains: ["rust"]
+    command: "make test-wasm"
     inputs:
-      - '@group(rust-sources)'
-      - 'scripts/test-wasm.sh'
+      - "@group(rust-sources)"
+      - "scripts/test-wasm.sh"
     options:
       cache: false
       # Needs wasm-bindgen-test-runner at the Cargo.lock version (core-ci's

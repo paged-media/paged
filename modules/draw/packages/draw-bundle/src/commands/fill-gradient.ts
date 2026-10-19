@@ -24,7 +24,7 @@
 // { stops: [...] }` — a vector, above the scalar §11.5 binding
 // ceiling), then point each selected element's `frameFillColor` at the
 // gradient's self-id (the B-03 ref assignment, pinned by
-// `test/conformance/gradient-fill.spec.ts`). The fill panel's schema
+// `test/headless/gradient-fill.spec.ts`). The fill panel's schema
 // can't express that, so each preset is a COMMAND; the panel's
 // gradient section (angle/length, scalar) then steers the result.
 //
@@ -74,9 +74,7 @@ export const FILL_GRADIENT_PRESETS: readonly FillGradientPreset[] = [
 ] as const;
 
 /** The contributed command ids, in registration order. */
-export const FILL_GRADIENT_COMMAND_IDS = FILL_GRADIENT_PRESETS.map(
-  (p) => p.id,
-);
+export const FILL_GRADIENT_COMMAND_IDS = FILL_GRADIENT_PRESETS.map((p) => p.id);
 
 /** Monotonic per-session counter folded into each invocation's selfId
  *  nonce, so two invocations in the same millisecond still mint
@@ -150,16 +148,14 @@ export function fillGradientMutationsFor(
         },
       },
     },
-    ...elementIds.map(
-      (elementId): Mutation => ({
-        op: "setElementProperty",
-        args: {
-          elementId,
-          path: "frameFillColor",
-          value: { type: "colorRef", value: ids.gradient },
-        },
-      }),
-    ),
+    ...elementIds.map((elementId): Mutation => ({
+      op: "setElementProperty",
+      args: {
+        elementId,
+        path: "frameFillColor",
+        value: { type: "colorRef", value: ids.gradient },
+      },
+    })),
   ];
 }
 

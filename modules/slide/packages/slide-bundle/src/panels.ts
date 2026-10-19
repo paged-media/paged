@@ -30,7 +30,10 @@
 //   · deck        — the selector `plugin:media.paged.slide/deck` (one per
 //                   document, doc-hosted).
 
-import type { PanelSchema, PropertyFieldAddress } from "@paged-media/plugin-api";
+import type {
+  PanelSchema,
+  PropertyFieldAddress,
+} from "@paged-media/plugin-api";
 import { propertyRows } from "@paged-media/plugin-sdk";
 
 import { SLIDE_PANEL_FIELDS, type PanelFieldList } from "./panel-fields.js";
@@ -56,9 +59,12 @@ function panelOf(list: PanelFieldList): PanelSchema {
     title: TITLES[list.panel] ?? list.panel,
     icon: "panel-pages",
     defaultDock: "right",
-    sections: [{ rows: propertyRows(list.kind, list.fields, addressFor(list.kind)) }],
+    sections: [
+      { rows: propertyRows(list.kind, list.fields, addressFor(list.kind)) },
+    ],
   };
 }
 
 /** One schema panel per field list, in declaration order. */
-export const SLIDE_PANELS: readonly PanelSchema[] = SLIDE_PANEL_FIELDS.map(panelOf);
+export const SLIDE_PANELS: readonly PanelSchema[] =
+  SLIDE_PANEL_FIELDS.map(panelOf);

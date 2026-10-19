@@ -36,7 +36,7 @@
 // by 2,019 px. paged.draw's own `supportsLiveCorners` gate kept saying
 // "rectangle" long after, so the presets were a silent no-op on a
 // polygon; that is fixed in the bundle and pinned there, against the
-// real engine, in `draw-bundle/test/conformance/live-corners.spec.ts`.
+// real engine, in `draw-bundle/test/headless/live-corners.spec.ts`.
 // It is NOT exercised here because the editor loads the PUBLISHED
 // `@paged-media/draw` canary — a journey for it would be red until that
 // package ships.
@@ -120,7 +120,12 @@ test.describe("journey · paged.draw live corners", () => {
 
     // ── 1. AUTHOR — a FILLED rectangle (so the squared corners carry ink
     //    that rounding visibly removes). ──
-    const id = await designer.drawRectangle({ x0: 170, y0: 170, x1: 430, y1: 360 });
+    const id = await designer.drawRectangle({
+      x0: 170,
+      y0: 170,
+      x1: 430,
+      y1: 360,
+    });
     expect(id, "drew a rectangle").not.toBe("");
     const ref = { kind: "rectangle", id };
     await designer.applyFill("rectangle", id, "Color/Black");
@@ -133,15 +138,21 @@ test.describe("journey · paged.draw live corners", () => {
     //    corners; the corner ink is carved away → the page changes. ──
     await invokeCommand(page, "media.paged.draw.command.cornersRounded");
     await expect
-      .poll(async () => (await propOf(page, ref, TOP_LEFT_OPTION))?.value ?? "", {
-        timeout: 6_000,
-      })
+      .poll(
+        async () => (await propOf(page, ref, TOP_LEFT_OPTION))?.value ?? "",
+        {
+          timeout: 6_000,
+        },
+      )
       .toBe("RoundedCorner");
     await expect
-      .poll(async () => {
-        const v = await propOf(page, ref, TOP_LEFT_RADIUS);
-        return v?.type === "length" ? (v.value as number) ?? 0 : 0;
-      }, { timeout: 6_000 })
+      .poll(
+        async () => {
+          const v = await propOf(page, ref, TOP_LEFT_RADIUS);
+          return v?.type === "length" ? ((v.value as number) ?? 0) : 0;
+        },
+        { timeout: 6_000 },
+      )
       .toBeGreaterThan(0);
     await designer.expectRenderChangesFrom(squareA);
 
@@ -149,14 +160,20 @@ test.describe("journey · paged.draw live corners", () => {
     //    corner-option token (the wire shape, read off the engine). ──
     for (const [cmd, token] of [
       ["media.paged.draw.command.cornersBevel", "BeveledCorner"],
-      ["media.paged.draw.command.cornersInverseRounded", "InverseRoundedCorner"],
+      [
+        "media.paged.draw.command.cornersInverseRounded",
+        "InverseRoundedCorner",
+      ],
       ["media.paged.draw.command.cornersFancy", "FancyCorner"],
     ] as const) {
       await invokeCommand(page, cmd);
       await expect
-        .poll(async () => (await propOf(page, ref, TOP_LEFT_OPTION))?.value ?? "", {
-          timeout: 6_000,
-        })
+        .poll(
+          async () => (await propOf(page, ref, TOP_LEFT_OPTION))?.value ?? "",
+          {
+            timeout: 6_000,
+          },
+        )
         .toBe(token);
     }
 
@@ -164,17 +181,24 @@ test.describe("journey · paged.draw live corners", () => {
     //    radius), restoring the square silhouette. ──
     await invokeCommand(page, "media.paged.draw.command.cornersNone");
     await expect
-      .poll(async () => (await propOf(page, ref, TOP_LEFT_OPTION))?.value ?? "<unset>", {
-        timeout: 6_000,
-      })
+      .poll(
+        async () =>
+          (await propOf(page, ref, TOP_LEFT_OPTION))?.value ?? "<unset>",
+        {
+          timeout: 6_000,
+        },
+      )
       // The None preset writes empty option text (the apply layer's
       // is_empty() arm maps it to CornerOption::None).
       .toBe("");
     await expect
-      .poll(async () => {
-        const v = await propOf(page, ref, TOP_LEFT_RADIUS);
-        return v?.type === "length" ? (v.value as number) ?? -1 : -1;
-      }, { timeout: 6_000 })
+      .poll(
+        async () => {
+          const v = await propOf(page, ref, TOP_LEFT_RADIUS);
+          return v?.type === "length" ? ((v.value as number) ?? -1) : -1;
+        },
+        { timeout: 6_000 },
+      )
       .toBe(0);
   });
 });

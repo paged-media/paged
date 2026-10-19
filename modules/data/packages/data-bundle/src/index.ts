@@ -32,11 +32,25 @@ export const dataBundle = defineBundle({
   activate,
 });
 
-export { activate, sessionFor, SOURCES_PANEL_ID, BINDINGS_PANEL_ID } from "./activate";
-export { createSession, type DataSourceSession, type SessionState } from "./session";
+export {
+  activate,
+  sessionFor,
+  SOURCES_PANEL_ID,
+  BINDINGS_PANEL_ID,
+} from "./activate";
+export {
+  createSession,
+  type DataSourceSession,
+  type SessionState,
+} from "./session";
 export { bootEngine, ENGINE_NOT_BUILT, type DataEngineLike } from "./engine";
 export { commitLoweredTable, commitLoweredVariable } from "./lower";
-export { bootDuckDB, DUCKDB_ARTIFACTS, DUCKDB_NOT_VENDORED, type DuckDBHandle } from "./query/duckdb";
+export {
+  bootDuckDB,
+  DUCKDB_ARTIFACTS,
+  DUCKDB_NOT_VENDORED,
+  type DuckDBHandle,
+} from "./query/duckdb";
 export {
   arrowToRecordSet,
   classifyType,

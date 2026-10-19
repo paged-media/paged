@@ -70,7 +70,9 @@ async function importPdf(host: BundleHost, file: ImportRequest): Promise<void> {
     return;
   }
   try {
-    const r = await openPdf(host, file.bytes, PDF_IMPORT_DEFAULTS, (bytes) => host.nativeDocument.open(bytes));
+    const r = await openPdf(host, file.bytes, PDF_IMPORT_DEFAULTS, (bytes) =>
+      host.nativeDocument.open(bytes),
+    );
     host.log.info(
       r.mode === "editable"
         ? `${PDF_IMPORTER_ID}: opened ${file.name} as an editable document (${r.pageCount} page(s))`
@@ -110,10 +112,18 @@ export async function openPdf(
   options: PdfImportOptions,
   open: (bytes: Uint8Array) => Promise<void>,
 ): Promise<{ mode: "editable" | "image"; pageCount: number }> {
-  if (options.maxPages !== undefined && (!Number.isInteger(options.maxPages) || options.maxPages < 1 || options.maxPages > 2000)) {
-    throw new Error("invalidValue: maxPages is 1–2000 (absent = the path's default)");
+  if (
+    options.maxPages !== undefined &&
+    (!Number.isInteger(options.maxPages) ||
+      options.maxPages < 1 ||
+      options.maxPages > 2000)
+  ) {
+    throw new Error(
+      "invalidValue: maxPages is 1–2000 (absent = the path's default)",
+    );
   }
-  if (options.dpi < 36 || options.dpi > 600) throw new Error("invalidValue: dpi is 36–600");
+  if (options.dpi < 36 || options.dpi > 600)
+    throw new Error("invalidValue: dpi is 36–600");
   const maxPages = options.maxPages;
   if (options.mode !== "image") {
     // Phase 1 — the editable reconstruction (wasm mapper present).
@@ -122,10 +132,14 @@ export async function openPdf(
       await open(editable.paged);
       return { mode: "editable", pageCount: editable.pageCount };
     }
-    if (options.mode === "editable") throw new Error("failed: the editable reconstruction could not run");
+    if (options.mode === "editable")
+      throw new Error("failed: the editable reconstruction could not run");
   }
   // Phase 0 — image-only fallback (mapper unavailable or reconstruction failed).
-  const pages = await rasterizePdf(bytes, { dpi: options.dpi, ...(maxPages ? { maxPages } : {}) });
+  const pages = await rasterizePdf(bytes, {
+    dpi: options.dpi,
+    ...(maxPages ? { maxPages } : {}),
+  });
   const idml = await buildIdmlFromRasters(pages);
   await open(idml);
   return { mode: "image", pageCount: pages.length };

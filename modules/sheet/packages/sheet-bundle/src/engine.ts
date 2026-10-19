@@ -433,14 +433,22 @@ export interface SheetEngine {
   /** Lower a range for the PAGE: the workbook's real per-cell styles with
    *  conditional formatting folded on top, grid rules on by default — the
    *  placed table's door (`getRangeLowered` keeps its key-0 contract). */
-  getRangePage?(sheet: number, range: string, opts?: LowerOptions): LoweredContent;
+  getRangePage?(
+    sheet: number,
+    range: string,
+    opts?: LowerOptions,
+  ): LoweredContent;
   /** Re-evaluate volatile cells (NOW/TODAY/RAND) against the host clock
    *  (the facade reads the clock itself). */
   recalcVolatile?(): { changed: CellChange[] };
   /** The `<calcPr>` iteration knobs in effect. */
   calcSettings?(): CalcSettingsInfo;
   /** Toggle iterative calculation (written back to `<calcPr>` on save). */
-  setIterative?(on: boolean, maxIter: number, maxChange: number): { changed: CellChange[] };
+  setIterative?(
+    on: boolean,
+    maxIter: number,
+    maxChange: number,
+  ): { changed: CellChange[] };
   /** Add a worksheet at the end (empty name = next free `SheetN`); its id. */
   addSheet?(name: string): number;
   /** Rename a worksheet (Excel's name rules; throws the reason). */
@@ -458,12 +466,21 @@ export interface SheetEngine {
   ): { changed: CellChange[] };
   /** Replace the workbook with delimited text (CSV/TSV) as one sheet.
    *  `delimiter` "" = sniff; `localeTag` reads numbers + dates. */
-  loadCsv?(text: string, delimiter: string, localeTag: string, sheetName: string): void;
+  loadCsv?(
+    text: string,
+    delimiter: string,
+    localeTag: string,
+    sheetName: string,
+  ): void;
 
   // ── Wave 6 doors (optional for older fakes; `wrapEngine` supplies all).
 
   /** Apply a partial style to a range (A1, a defined name or a table). */
-  setStyle?(sheet: number, range: string, patch: CellStylePatch): { cells: number; styles: number };
+  setStyle?(
+    sheet: number,
+    range: string,
+    patch: CellStylePatch,
+  ): { cells: number; styles: number };
   /** The full style of one cell. */
   getStyle?(sheet: number, row: number, col: number): CellStylePatch;
   /** Wave 9 — the style ids of every cell of `range`, row-major: an exact
@@ -477,15 +494,30 @@ export interface SheetEngine {
   /** Remove every merge intersecting a range; how many. */
   unmerge?(sheet: number, range: string): number;
   /** Set (`null` clears) the width of columns `first..=last`, characters. */
-  setColWidth?(sheet: number, first: number, last: number, width: number | null): void;
+  setColWidth?(
+    sheet: number,
+    first: number,
+    last: number,
+    width: number | null,
+  ): void;
   /** Set (`null` clears) the height of rows `first..=last`, points. */
-  setRowHeight?(sheet: number, first: number, last: number, height: number | null): void;
+  setRowHeight?(
+    sheet: number,
+    first: number,
+    last: number,
+    height: number | null,
+  ): void;
   /** Freeze the first `rows` rows and `cols` columns (`0, 0` clears). */
   setFreeze?(sheet: number, rows: number, cols: number): void;
   /** Sizes, merges and the frozen split of a sheet. */
   getLayout?(sheet: number): SheetLayoutInfo;
   /** Define (or redefine) a name → a range as seen from `sheet`. */
-  defineName?(sheet: number, name: string, refersTo: string, scope: number | null): void;
+  defineName?(
+    sheet: number,
+    name: string,
+    refersTo: string,
+    scope: number | null,
+  ): void;
   /** Delete a defined name. */
   deleteName?(sheet: number, name: string, scope: number | null): void;
   /** The workbook's defined names. */
@@ -500,10 +532,20 @@ export interface SheetEngine {
   getRangeInputs?(sheet: number, range: string): string[][];
   /** Re-address copied inputs for a paste `dRow` rows down / `dCol`
    *  columns right (the copy rule — `$` honoured, off-grid `#REF!`). Pure. */
-  shiftFormulas?(sheet: number, inputs: string[][], dRow: number, dCol: number): string[][];
+  shiftFormulas?(
+    sheet: number,
+    inputs: string[][],
+    dRow: number,
+    dCol: number,
+  ): string[][];
   /** Fill `dst` from `src` (`series` = the fill handle; false = fill
    *  down/right). The per-cell rewrites journal as one undo step. */
-  fillRange?(sheet: number, src: string, dst: string, series: boolean): SortResult;
+  fillRange?(
+    sheet: number,
+    src: string,
+    dst: string,
+    series: boolean,
+  ): SortResult;
   /** ADR 323 — the computed values of a range, typed and unformatted
    *  (number | string | boolean | null, errors as `{ error }`). */
   getRangeRaw?(sheet: number, range: string): RawValue[][];
@@ -558,7 +600,12 @@ export interface ChartPatch {
   kind?: string;
   title?: string | null;
   legend?: boolean;
-  series?: { values: string; categories: string; name: string; color: string }[];
+  series?: {
+    values: string;
+    categories: string;
+    name: string;
+    color: string;
+  }[];
   categoryAxisTitle?: string | null;
   valueAxisTitle?: string | null;
   valueAxisMin?: number | null;
@@ -628,10 +675,7 @@ export interface NameInfo {
 
 /** The structural edits `structuralEdit` accepts. */
 export type StructuralEditKind =
-  | "insertRows"
-  | "deleteRows"
-  | "insertCols"
-  | "deleteCols";
+  "insertRows" | "deleteRows" | "insertCols" | "deleteCols";
 
 /** The `<calcPr>` iteration knobs. */
 export interface CalcSettingsInfo {
@@ -739,31 +783,78 @@ export interface SheetWasmEngine {
   get_chart_geometry(index: number, w_pt: number, h_pt: number): ChartGeometry;
   free(): void;
   // Wave 4 (optional: older artifacts / fakes lack them).
-  get_range_page?(sheet: number, range: string, opts?: LowerOptions): LoweredContent;
+  get_range_page?(
+    sheet: number,
+    range: string,
+    opts?: LowerOptions,
+  ): LoweredContent;
   set_clock?(unix_ms: number, tz_offset_min: number): number;
   recalc_volatile?(): { changed: CellChange[] };
   calc_settings?(): CalcSettingsInfo;
-  set_iterative?(on: boolean, max_iter: number, max_change: number): { changed: CellChange[] };
+  set_iterative?(
+    on: boolean,
+    max_iter: number,
+    max_change: number,
+  ): { changed: CellChange[] };
   add_sheet?(name: string): number;
   rename_sheet?(sheet: number, name: string): void;
   delete_sheet?(sheet: number): { changed: CellChange[] };
-  structural_edit?(sheet: number, kind: string, at: number, n: number): { changed: CellChange[] };
+  structural_edit?(
+    sheet: number,
+    kind: string,
+    at: number,
+    n: number,
+  ): { changed: CellChange[] };
   get_range_inputs?(sheet: number, range: string): string[][];
-  shift_formulas?(sheet: number, inputs: string[][], drow: number, dcol: number): string[][];
-  fill_range?(sheet: number, src: string, dst: string, series: boolean): SortResult;
-  load_csv?(text: string, delimiter: string, locale_tag: string, sheet_name: string): void;
+  shift_formulas?(
+    sheet: number,
+    inputs: string[][],
+    drow: number,
+    dcol: number,
+  ): string[][];
+  fill_range?(
+    sheet: number,
+    src: string,
+    dst: string,
+    series: boolean,
+  ): SortResult;
+  load_csv?(
+    text: string,
+    delimiter: string,
+    locale_tag: string,
+    sheet_name: string,
+  ): void;
   // Wave 6.
-  set_style?(sheet: number, range: string, patch: CellStylePatch): { cells: number; styles: number };
+  set_style?(
+    sheet: number,
+    range: string,
+    patch: CellStylePatch,
+  ): { cells: number; styles: number };
   get_style?(sheet: number, row: number, col: number): CellStylePatch;
   get_style_ids?(sheet: number, range: string): Uint32Array;
   set_style_ids?(sheet: number, range: string, ids: Uint32Array): void;
   merge?(sheet: number, range: string): { changed: CellChange[] };
   unmerge?(sheet: number, range: string): number;
-  set_col_width?(sheet: number, first: number, last: number, width?: number): void;
-  set_row_height?(sheet: number, first: number, last: number, height?: number): void;
+  set_col_width?(
+    sheet: number,
+    first: number,
+    last: number,
+    width?: number,
+  ): void;
+  set_row_height?(
+    sheet: number,
+    first: number,
+    last: number,
+    height?: number,
+  ): void;
   set_freeze?(sheet: number, rows: number, cols: number): void;
   get_layout?(sheet: number): SheetLayoutInfo;
-  define_name?(sheet: number, name: string, refers_to: string, scope?: number): void;
+  define_name?(
+    sheet: number,
+    name: string,
+    refers_to: string,
+    scope?: number,
+  ): void;
   delete_name?(sheet: number, name: string, scope?: number): void;
   list_names?(): NameInfo[];
   resolve_range?(sheet: number, text: string): ResolvedRange;
@@ -827,8 +918,7 @@ export function wrapEngine(
           return wasm.set_cells!(inputs);
         }
       : undefined,
-    getCellDisplay: (sheet, row, col) =>
-      wasm.get_cell_display(sheet, row, col),
+    getCellDisplay: (sheet, row, col) => wasm.get_cell_display(sheet, row, col),
     getCellInput: (sheet, row, col) => wasm.get_cell_input(sheet, row, col),
     sortRange: (sheet, range, keyCol, ascending, hasHeader) => {
       tick();
@@ -872,7 +962,9 @@ export function wrapEngine(
     },
     calcSettings: () => need("calc_settings")() as CalcSettingsInfo,
     setIterative: (on, maxIter, maxChange) =>
-      need("set_iterative")(on, maxIter, maxChange) as { changed: CellChange[] },
+      need("set_iterative")(on, maxIter, maxChange) as {
+        changed: CellChange[];
+      },
     addSheet: (name) => need("add_sheet")(name) as number,
     renameSheet: (sheet, name) => {
       need("rename_sheet")(sheet, name);
@@ -894,9 +986,14 @@ export function wrapEngine(
     // Wave 6 — formatting & layout. `null` crosses as `undefined` (the
     // wasm `Option<…>` reads an absent value).
     setStyle: (sheet, range, patch) =>
-      need("set_style")(sheet, range, patch) as { cells: number; styles: number },
-    getStyle: (sheet, row, col) => need("get_style")(sheet, row, col) as CellStylePatch,
-    getStyleIds: (sheet, range) => Array.from(need("get_style_ids")(sheet, range) as Uint32Array),
+      need("set_style")(sheet, range, patch) as {
+        cells: number;
+        styles: number;
+      },
+    getStyle: (sheet, row, col) =>
+      need("get_style")(sheet, row, col) as CellStylePatch,
+    getStyleIds: (sheet, range) =>
+      Array.from(need("get_style_ids")(sheet, range) as Uint32Array),
     setStyleIds: (sheet, range, ids) =>
       need("set_style_ids")(sheet, range, Uint32Array.from(ids)),
     merge: (sheet, range) => {
@@ -934,8 +1031,8 @@ export function wrapEngine(
       return need("fill_range")(sheet, src, dst, series) as SortResult;
     },
     getRangeRaw: (sheet, range) =>
-      (need("get_range_raw")(sheet, range) as (RawValue | undefined)[][]).map((row) =>
-        row.map((v) => (v === undefined ? null : v)),
+      (need("get_range_raw")(sheet, range) as (RawValue | undefined)[][]).map(
+        (row) => row.map((v) => (v === undefined ? null : v)),
       ),
     listTables: () => need("list_tables")() as TableInfo[],
     chartSpecs: () => need("chart_specs")() as ChartSpec[],
@@ -957,7 +1054,8 @@ export function wrapEngine(
 export function guardTraps(engine: SheetEngine): SheetEngine {
   let trapped: Error | null = null;
   const isTrap = (err: unknown) =>
-    typeof WebAssembly !== "undefined" && err instanceof WebAssembly.RuntimeError;
+    typeof WebAssembly !== "undefined" &&
+    err instanceof WebAssembly.RuntimeError;
   const out: Record<string, unknown> = {};
   for (const [name, member] of Object.entries(engine)) {
     if (typeof member !== "function") {

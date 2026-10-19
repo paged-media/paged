@@ -86,7 +86,10 @@ export const GRAPHIC_STYLE_KIND = "graphicStyle";
 
 /** `base*` rows ↔ the `GraphicStyleBase` fields (exhaustive: a new base
  *  field fails typecheck until it has a row). */
-const BASE_ROWS: Record<keyof GraphicStyleBase, { path: string; type: PropertySchema["type"] }> = {
+const BASE_ROWS: Record<
+  keyof GraphicStyleBase,
+  { path: string; type: PropertySchema["type"] }
+> = {
   fill: { path: "baseFill", type: COLOR },
   fillTint: { path: "baseFillTint", type: PCT },
   stroke: { path: "baseStroke", type: COLOR },
@@ -96,20 +99,33 @@ const BASE_ROWS: Record<keyof GraphicStyleBase, { path: string; type: PropertySc
 };
 
 export const GRAPHIC_STYLE_SCHEMA: readonly PropertySchema[] = [
-  row("name", TEXT, { title: "Name", summary: "The style's name — what a persisted reference selects by." }),
-  row("fills", { kind: "list", of: FILL_LAYER }, { title: "Fills", summary: "Fill layers, bottom → top.", default: [] }),
-  row("strokes", { kind: "list", of: STROKE_LAYER }, { title: "Strokes", summary: "Stroke layers, bottom → top.", default: [] }),
+  row("name", TEXT, {
+    title: "Name",
+    summary: "The style's name — what a persisted reference selects by.",
+  }),
+  row(
+    "fills",
+    { kind: "list", of: FILL_LAYER },
+    { title: "Fills", summary: "Fill layers, bottom → top.", default: [] },
+  ),
+  row(
+    "strokes",
+    { kind: "list", of: STROKE_LAYER },
+    { title: "Strokes", summary: "Stroke layers, bottom → top.", default: [] },
+  ),
   ...Object.values(BASE_ROWS).map((b) =>
     row(b.path, b.type, {
       nullable: true,
-      summary: "The object-level paint; a top fill / stroke layer claims its slot (the bake rule).",
+      summary:
+        "The object-level paint; a top fill / stroke layer claims its slot (the bake rule).",
     }),
   ),
   derived("linkedCount", INT, "How many elements follow this style."),
 ];
 
 const baseKeyOf = (path: string): keyof GraphicStyleBase | null => {
-  for (const [k, b] of Object.entries(BASE_ROWS)) if (b.path === path) return k as keyof GraphicStyleBase;
+  for (const [k, b] of Object.entries(BASE_ROWS))
+    if (b.path === path) return k as keyof GraphicStyleBase;
   return null;
 };
 
@@ -130,14 +146,33 @@ const storedStroke = (s: FullStroke): StrokeLayer => ({
 });
 
 /** Apply one write to a style (pure). `null` = no such path. */
-function applyPath(style: GraphicStyle, path: string, value: unknown): GraphicStyle | null {
+function applyPath(
+  style: GraphicStyle,
+  path: string,
+  value: unknown,
+): GraphicStyle | null {
   const a = style.appearance;
   if (path === "name") return { ...style, name: String(value) };
   if (path === "fills") {
-    return { ...style, appearance: { ...a, stack: { ...a.stack, fills: (value as FullFill[]).map(storedFill) } } };
+    return {
+      ...style,
+      appearance: {
+        ...a,
+        stack: { ...a.stack, fills: (value as FullFill[]).map(storedFill) },
+      },
+    };
   }
   if (path === "strokes") {
-    return { ...style, appearance: { ...a, stack: { ...a.stack, strokes: (value as FullStroke[]).map(storedStroke) } } };
+    return {
+      ...style,
+      appearance: {
+        ...a,
+        stack: {
+          ...a.stack,
+          strokes: (value as FullStroke[]).map(storedStroke),
+        },
+      },
+    };
   }
   const key = baseKeyOf(path);
   if (!key) return null;
@@ -147,10 +182,15 @@ function applyPath(style: GraphicStyle, path: string, value: unknown): GraphicSt
 /** The bake rule over the full rectangle vocabulary (what Save reads). */
 const project = (style: GraphicStyle): GraphicStyle => ({
   ...style,
-  appearance: projectGraphicAppearance(style.appearance, GRAPHIC_STYLE_BASE_PATHS),
+  appearance: projectGraphicAppearance(
+    style.appearance,
+    GRAPHIC_STYLE_BASE_PATHS,
+  ),
 });
 
-export function makeGraphicStyleKind(host: BundleHost): ObjectKindContribution & Planner {
+export function makeGraphicStyleKind(
+  host: BundleHost,
+): ObjectKindContribution & Planner {
   const idOf = (address: string) => localIdOf(address, GRAPHIC_STYLE_KIND);
 
   /** Re-apply `style` to every follower (Illustrator: a style edit
@@ -177,16 +217,24 @@ export function makeGraphicStyleKind(host: BundleHost): ObjectKindContribution &
     schema: GRAPHIC_STYLE_SCHEMA,
     hostOf: () => "doc",
     async list() {
-      return (await readGraphicStyleLibrary(host)).styles.map((s) => addressOf(GRAPHIC_STYLE_KIND, s.id));
+      return (await readGraphicStyleLibrary(host)).styles.map((s) =>
+        addressOf(GRAPHIC_STYLE_KIND, s.id),
+      );
     },
     async get(address, path): Promise<ObjectValue> {
       const id = idOf(address);
-      const style = id ? findGraphicStyle(await readGraphicStyleLibrary(host), id) : null;
-      if (!style) return refuse("unknownAddress", `no graphic style ${address}`);
+      const style = id
+        ? findGraphicStyle(await readGraphicStyleLibrary(host), id)
+        : null;
+      if (!style)
+        return refuse("unknownAddress", `no graphic style ${address}`);
       if (path === "name") return val(style.name);
-      if (path === "fills") return val(style.appearance.stack.fills.map(fullFill));
-      if (path === "strokes") return val(style.appearance.stack.strokes.map(fullStroke));
-      if (path === "linkedCount") return val((await graphicStyleLinkCounts(host))[style.id] ?? 0);
+      if (path === "fills")
+        return val(style.appearance.stack.fills.map(fullFill));
+      if (path === "strokes")
+        return val(style.appearance.stack.strokes.map(fullStroke));
+      if (path === "linkedCount")
+        return val((await graphicStyleLinkCounts(host))[style.id] ?? 0);
       const key = baseKeyOf(path);
       if (key) return val(style.appearance.base[key]);
       return refuse("unknownPath", `graphicStyle has no "${path}"`);
@@ -196,55 +244,72 @@ export function makeGraphicStyleKind(host: BundleHost): ObjectKindContribution &
   };
 
   async function planOps(ops: readonly ObjectOp[]): Promise<Planned> {
-      let library: GraphicStyleLibrary = await readGraphicStyleLibrary(host);
-      const changed = new Set<string>();
-      const removed = new Set<string>();
-      for (const op of ops) {
-        if (op.op === "create") {
-          let style: GraphicStyle = {
-            id: mintGraphicStyleId(library),
-            name: `Graphic style ${library.styles.length + 1}`,
-            appearance: {
-              stack: { fills: [], strokes: [] },
-              base: { fill: null, fillTint: null, stroke: null, strokeWeight: null, opacity: null, blendMode: null },
+    let library: GraphicStyleLibrary = await readGraphicStyleLibrary(host);
+    const changed = new Set<string>();
+    const removed = new Set<string>();
+    for (const op of ops) {
+      if (op.op === "create") {
+        let style: GraphicStyle = {
+          id: mintGraphicStyleId(library),
+          name: `Graphic style ${library.styles.length + 1}`,
+          appearance: {
+            stack: { fills: [], strokes: [] },
+            base: {
+              fill: null,
+              fillTint: null,
+              stroke: null,
+              strokeWeight: null,
+              opacity: null,
+              blendMode: null,
             },
-          };
-          for (const [path, value] of Object.entries(op.props ?? {})) {
-            const next = applyPath(style, path, value);
-            if (!next) return rejected(`graphicStyle has no writable "${path}"`);
-            style = next;
-          }
-          library = upsertGraphicStyle(library, project(style));
-          continue;
+          },
+        };
+        for (const [path, value] of Object.entries(op.props ?? {})) {
+          const next = applyPath(style, path, value);
+          if (!next) return rejected(`graphicStyle has no writable "${path}"`);
+          style = next;
         }
-        const id = idOf(op.op === "invoke" ? "" : op.address);
-        const style = id ? findGraphicStyle(library, id) : null;
-        if (!style) return rejected(`no graphic style ${op.op === "invoke" ? "" : op.address}`);
-        if (op.op === "delete") {
-          library = removeGraphicStyleFrom(library, style.id);
-          removed.add(style.id);
-          continue;
-        }
-        if (op.op !== "set") return rejected(`graphicStyle cannot ${op.op}`);
-        const next = applyPath(style, op.path, op.value);
-        if (!next) return rejected(`graphicStyle has no writable "${op.path}"`);
-        library = upsertGraphicStyle(library, project(next));
-        if (op.path !== "name") changed.add(style.id);
+        library = upsertGraphicStyle(library, project(style));
+        continue;
       }
-      const mutations: MutationInput[] = [];
-      for (const id of changed) {
-        if (removed.has(id)) continue;
-        mutations.push(...(await propagate(findGraphicStyle(library, id)!)));
+      const id = idOf(op.op === "invoke" ? "" : op.address);
+      const style = id ? findGraphicStyle(library, id) : null;
+      if (!style)
+        return rejected(
+          `no graphic style ${op.op === "invoke" ? "" : op.address}`,
+        );
+      if (op.op === "delete") {
+        library = removeGraphicStyleFrom(library, style.id);
+        removed.add(style.id);
+        continue;
       }
-      for (const id of removed) {
-        for (const link of await graphicStyleLinks(host, id)) {
-          const env = await host.document.getMetadata(link.id).catch(() => null);
-          mutations.push(stampDrawMetadata(link.id, withGraphicStyleRef(env, null)));
-        }
+      if (op.op !== "set") return rejected(`graphicStyle cannot ${op.op}`);
+      const next = applyPath(style, op.path, op.value);
+      if (!next) return rejected(`graphicStyle has no writable "${op.path}"`);
+      library = upsertGraphicStyle(library, project(next));
+      if (op.path !== "name") changed.add(style.id);
+    }
+    const mutations: MutationInput[] = [];
+    for (const id of changed) {
+      if (removed.has(id)) continue;
+      mutations.push(...(await propagate(findGraphicStyle(library, id)!)));
+    }
+    for (const id of removed) {
+      for (const link of await graphicStyleLinks(host, id)) {
+        const env = await host.document.getMetadata(link.id).catch(() => null);
+        mutations.push(
+          stampDrawMetadata(link.id, withGraphicStyleRef(env, null)),
+        );
       }
-      return plan({
-        mutations,
-        libraries: [{ legacyPart: GRAPHIC_STYLES_PART, bytes: serializeGraphicStyleLibrary(library) }],
-      });
+    }
+    return plan({
+      mutations,
+      libraries: [
+        {
+          legacyPart: GRAPHIC_STYLES_PART,
+          bytes: serializeGraphicStyleLibrary(library),
+        },
+      ],
+    });
   }
 }

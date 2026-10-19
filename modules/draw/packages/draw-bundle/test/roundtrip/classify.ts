@@ -56,19 +56,29 @@ export interface Classification {
 
 /** Every observed difference must be classified with exactly its two
  *  values, and every classified one must still occur. */
-export function classify(observed: readonly Difference[], known: readonly KnownAt[]): Classification {
+export function classify(
+  observed: readonly Difference[],
+  known: readonly KnownAt[],
+): Classification {
   const byKey = new Map(known.map((k) => [key(k.at, k.field), k]));
   const seen = new Set<string>();
   const unclassified: Difference[] = [];
   for (const d of observed) {
     const k = byKey.get(key(d.at, d.field));
-    if (k && stable(k.ours) === stable(d.ours) && stable(k.theirs) === stable(d.theirs)) {
+    if (
+      k &&
+      stable(k.ours) === stable(d.ours) &&
+      stable(k.theirs) === stable(d.theirs)
+    ) {
       seen.add(key(d.at, d.field));
     } else {
       unclassified.push(d);
     }
   }
-  return { unclassified, missing: known.filter((k) => !seen.has(key(k.at, k.field))) };
+  return {
+    unclassified,
+    missing: known.filter((k) => !seen.has(key(k.at, k.field))),
+  };
 }
 
 /** A readable report of a classification failure. */
@@ -79,13 +89,16 @@ export const report = (c: Classification): string =>
         `UNCLASSIFIED at ${d.at} (${d.refs.join(" / ")}) ${d.field}: ours ${stable(d.ours)}, InDesign ${stable(d.theirs)}`,
     ),
     ...c.missing.map(
-      (k) => `NO LONGER OCCURS at ${k.at} ${k.field} (${k.finding}): was ours ${stable(k.ours)}, InDesign ${stable(k.theirs)}`,
+      (k) =>
+        `NO LONGER OCCURS at ${k.at} ${k.field} (${k.finding}): was ours ${stable(k.ours)}, InDesign ${stable(k.theirs)}`,
     ),
   ].join("\n");
 
 /** The DEFECT findings among a case's classified differences, each with
  *  the entries it covers. */
-export function defectsOf(known: readonly KnownAt[]): Map<FindingId, KnownAt[]> {
+export function defectsOf(
+  known: readonly KnownAt[],
+): Map<FindingId, KnownAt[]> {
   const out = new Map<FindingId, KnownAt[]>();
   for (const k of known) {
     if (FINDINGS[k.finding].verdict !== "defect") continue;
@@ -95,14 +108,26 @@ export function defectsOf(known: readonly KnownAt[]): Map<FindingId, KnownAt[]> 
 }
 
 /** A short "ours X, InDesign Y" for a test title. */
-export const bothValues = (entries: readonly KnownAt[], theirs = "InDesign"): string =>
+export const bothValues = (
+  entries: readonly KnownAt[],
+  theirs = "InDesign",
+): string =>
   entries
-    .map((k) => `${k.at} ${k.field}: ours ${short(k.ours)}, ${theirs} ${short(k.theirs)}`)
+    .map(
+      (k) =>
+        `${k.at} ${k.field}: ours ${short(k.ours)}, ${theirs} ${short(k.theirs)}`,
+    )
     .join("; ");
 
 const short = (v: unknown): string => {
-  if (v && typeof v === "object" && !Array.isArray(v) && "topLeft" in (v as object)) {
-    const c = (v as { topLeft: { option: string; radius: number | null } }).topLeft;
+  if (
+    v &&
+    typeof v === "object" &&
+    !Array.isArray(v) &&
+    "topLeft" in (v as object)
+  ) {
+    const c = (v as { topLeft: { option: string; radius: number | null } })
+      .topLeft;
     return `${c.option}${c.radius === null ? "" : ` r${c.radius}`} x4`;
   }
   return stable(v);

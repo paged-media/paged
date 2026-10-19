@@ -67,7 +67,9 @@ import {
 
 const MIN_SIZE_PT = 1;
 
-export function createRectangleHandler(options: DrawHandlerOptions = {}): GestureHandler {
+export function createRectangleHandler(
+  options: DrawHandlerOptions = {},
+): GestureHandler {
   const commit = options.frame ? mutateAndSelect : mutateGraphicAndSelect;
   let paged: PagedEditor | null = null;
   let startPageId: string | null = null;
@@ -121,7 +123,10 @@ export function createRectangleHandler(options: DrawHandlerOptions = {}): Gestur
     if (!paged || !startPageId || !lastEnd) return;
     const bounds = boundsFor(lastEnd);
     if (cols === 1 && rows === 1) {
-      paged.overlaySignals.setToolPreview({ pageId: startPageId, rect: bounds });
+      paged.overlaySignals.setToolPreview({
+        pageId: startPageId,
+        rect: bounds,
+      });
       return;
     }
     paged.overlaySignals.setToolPreview({

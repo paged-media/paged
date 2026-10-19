@@ -23,8 +23,16 @@ import { editTextNode, scanTextNodes } from "../src/source-text";
 
 describe("scanTextNodes @feat:plugin-web.in-frame-edit", () => {
   it("numbers the non-white-space text nodes in document order", () => {
-    const nodes = scanTextNodes("<h1>Title</h1>\n  <p>Hello <b>bold</b>  world</p><!-- c -->x");
-    expect(nodes.map((n) => n.text)).toEqual(["Title", "Hello ", "bold", "  world", "x"]);
+    const nodes = scanTextNodes(
+      "<h1>Title</h1>\n  <p>Hello <b>bold</b>  world</p><!-- c -->x",
+    );
+    expect(nodes.map((n) => n.text)).toEqual([
+      "Title",
+      "Hello ",
+      "bold",
+      "  world",
+      "x",
+    ]);
     expect(nodes.map((n) => n.ordinal)).toEqual([0, 1, 2, 3, 4]);
   });
 
@@ -32,7 +40,9 @@ describe("scanTextNodes @feat:plugin-web.in-frame-edit", () => {
     const html = "<p>Fish &amp; chips&nbsp;&#x41;\r\nend</p>";
     const [n] = scanTextNodes(html);
     expect(n.text).toBe("Fish & chips A\nend");
-    expect(html.slice(n.start, n.end)).toBe("Fish &amp; chips&nbsp;&#x41;\r\nend");
+    expect(html.slice(n.start, n.end)).toBe(
+      "Fish &amp; chips&nbsp;&#x41;\r\nend",
+    );
   });
 
   it("skips raw-text and form content, comments and doctype-like markup", () => {
@@ -48,7 +58,16 @@ describe("scanTextNodes @feat:plugin-web.in-frame-edit", () => {
   });
 
   it("never throws on broken input", () => {
-    for (const s of ["<", "<p", "<!--", "&", "&#;", "<p a='>", "</", "<script>"]) {
+    for (const s of [
+      "<",
+      "<p",
+      "<!--",
+      "&",
+      "&#;",
+      "<p a='>",
+      "</",
+      "<script>",
+    ]) {
       expect(() => scanTextNodes(s)).not.toThrow();
     }
   });

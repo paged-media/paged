@@ -1,0 +1,21 @@
+$ paged-node set --help
+# exit 0
+# stdout
+paged-node set <doc> <address|selector> <path> <value>
+
+set one property (value parsed through the path's schema); a selector sets every match in ONE undo step; saves in place unless -o / --no-save
+
+options:
+  -o, --out <file>                   write the result here (format from the extension: .paged, .idml, .pdf)
+  --no-save                          apply the change but write nothing (a dry run)
+  --json                             parse <value> as JSON instead of through the path's schema
+  --label <text>                     undo label for the write
+  --format <json|text>               output style (default json)
+  --plugins <a,b>                    load exactly these bundles (package names or paths) instead of discovering them
+  --no-plugins                       load no plugin bundles (core objects only)
+  --font <file.ttf>                  default font every load lays text out with
+  --engine-from <dir>                resolve @paged-media/canvas-wasm from this directory
+  --text                             human-readable output instead of JSON
+  -h, --help                         show help
+# stderr
+(empty)

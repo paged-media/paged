@@ -23,7 +23,12 @@
 
 import { describe, expect, it } from "bun:test";
 
-import { arrowToRecordSet, cellToValue, classifyType, type ArrowLikeTable } from "../query/recordset";
+import {
+  arrowToRecordSet,
+  cellToValue,
+  classifyType,
+  type ArrowLikeTable,
+} from "../query/recordset";
 
 function fakeTable(): ArrowLikeTable {
   return {
@@ -36,7 +41,11 @@ function fakeTable(): ArrowLikeTable {
       ],
     },
     getChildAt(i: number) {
-      const cols = [["A-1", "B-2"], [9.99, 19.99], [3, 7]];
+      const cols = [
+        ["A-1", "B-2"],
+        [9.99, 19.99],
+        [3, 7],
+      ];
       return { toArray: () => cols[i] };
     },
   };
@@ -60,7 +69,11 @@ describe("arrowToRecordSet", () => {
   it("materialises a columnar RecordSet with row_count", () => {
     const rs = arrowToRecordSet(fakeTable());
     expect(rs.row_count).toBe(2);
-    expect(rs.schema.fields.map((f) => f.name)).toEqual(["sku", "price", "qty"]);
+    expect(rs.schema.fields.map((f) => f.name)).toEqual([
+      "sku",
+      "price",
+      "qty",
+    ]);
     expect(rs.schema.fields.map((f) => f.ty)).toEqual(["text", "float", "int"]);
     expect(rs.columns[0]).toEqual([
       { t: "text", v: "A-1" },
@@ -75,14 +88,19 @@ describe("arrowToRecordSet", () => {
 import * as arrow from "apache-arrow";
 
 /** A 128-bit Decimal vector of UNSCALED integers (`null` → a null slot). */
-function decimalVector(unscaled: (bigint | null)[], scale: number, precision = 18) {
+function decimalVector(
+  unscaled: (bigint | null)[],
+  scale: number,
+  precision = 18,
+) {
   const words = new Uint32Array(unscaled.length * 4);
   const bitmap = new Uint8Array(Math.ceil(unscaled.length / 8));
   unscaled.forEach((v, i) => {
     if (v === null) return;
     bitmap[i >> 3] |= 1 << (i & 7);
     const b = BigInt.asUintN(128, v);
-    for (let k = 0; k < 4; k++) words[i * 4 + k] = Number((b >> BigInt(32 * k)) & 0xffffffffn);
+    for (let k = 0; k < 4; k++)
+      words[i * 4 + k] = Number((b >> BigInt(32 * k)) & 0xffffffffn);
   });
   const nulls = unscaled.filter((v) => v === null).length;
   return arrow.makeVector(
@@ -104,7 +122,9 @@ describe("arrowToRecordSet over real Arrow vectors [data.query.seam]", () => {
     const rs = arrowToRecordSet(table as unknown as ArrowLikeTable);
     expect(rs.row_count).toBe(4);
     // The scale crosses with the field, so `price` displays as 12.34 / 1.00.
-    expect(rs.schema.fields).toEqual([{ name: "price", ty: "float", nullable: true, scale: 2 }]);
+    expect(rs.schema.fields).toEqual([
+      { name: "price", ty: "float", nullable: true, scale: 2 },
+    ]);
     expect(rs.columns[0]).toEqual([
       { t: "number", v: 12.34 },
       { t: "number", v: -5.6 },
@@ -117,16 +137,24 @@ describe("arrowToRecordSet over real Arrow vectors [data.query.seam]", () => {
 
   it("a scale-0 Decimal is an integer value [data.query.seam]", () => {
     const table = new arrow.Table({ qty: decimalVector([42n, -7n], 0) });
-    expect(arrowToRecordSet(table as unknown as ArrowLikeTable).columns[0]).toEqual([
+    expect(
+      arrowToRecordSet(table as unknown as ArrowLikeTable).columns[0],
+    ).toEqual([
       { t: "number", v: 42 },
       { t: "number", v: -7 },
     ]);
   });
 
   it("a null in a numeric column stays null, not 0 [data.query.seam]", () => {
-    const table = arrow.tableFromArrays({ price: [1.5, null, 3] as (number | null)[] } as never);
+    const table = arrow.tableFromArrays({
+      price: [1.5, null, 3] as (number | null)[],
+    } as never);
     const rs = arrowToRecordSet(table as unknown as ArrowLikeTable);
-    expect(rs.columns[0]).toEqual([{ t: "number", v: 1.5 }, { t: "null" }, { t: "number", v: 3 }]);
+    expect(rs.columns[0]).toEqual([
+      { t: "number", v: 1.5 },
+      { t: "null" },
+      { t: "number", v: 3 },
+    ]);
   });
 });
 
@@ -137,7 +165,10 @@ import { arrowToColumns, columnToValues, needsText } from "../query/recordset";
 describe("arrowToColumns reads Arrow's buffers by type [data.query.seam]", () => {
   it("DateDay is days, Timestamp<µs> is floored ms, with and without nulls [data.query.seam]", () => {
     const table = arrow.tableFromArrays({
-      d: arrow.vectorFromArray([new Date(Date.UTC(1969, 11, 31)), new Date(Date.UTC(2024, 1, 29))], new arrow.DateDay()),
+      d: arrow.vectorFromArray(
+        [new Date(Date.UTC(1969, 11, 31)), new Date(Date.UTC(2024, 1, 29))],
+        new arrow.DateDay(),
+      ),
       ts: arrow.makeVector(
         arrow.makeData({
           type: new arrow.TimestampMicrosecond(),
@@ -149,14 +180,28 @@ describe("arrowToColumns reads Arrow's buffers by type [data.query.seam]", () =>
     } as never);
     const rs = arrowToRecordSet(table as unknown as ArrowLikeTable);
     expect(rs.schema.fields.map((f) => f.ty)).toEqual(["date", "datetime"]);
-    expect(rs.columns[0]).toEqual([{ t: "date", v: -1 }, { t: "date", v: 19782 }]);
+    expect(rs.columns[0]).toEqual([
+      { t: "date", v: -1 },
+      { t: "date", v: 19782 },
+    ]);
     // −1 µs floors to −1 ms (1969-12-31 23:59:59.999), not 0.
-    expect(rs.columns[1]).toEqual([{ t: "datetime", v: -1 }, { t: "datetime", v: 1_709_214_306_789 }]);
+    expect(rs.columns[1]).toEqual([
+      { t: "datetime", v: -1 },
+      { t: "datetime", v: 1_709_214_306_789 },
+    ]);
   });
 
   it("text crosses as ONE UTF-8 buffer + offsets across chunks; both forms agree [data.query.seam]", () => {
-    const a = arrow.tableFromArrays({ s: ["ä", null, "b"], n: [1, 2, 3], b: [true, false, null] } as never);
-    const b = arrow.tableFromArrays({ s: ["€uro"], n: [4], b: [true] } as never);
+    const a = arrow.tableFromArrays({
+      s: ["ä", null, "b"],
+      n: [1, 2, 3],
+      b: [true, false, null],
+    } as never);
+    const b = arrow.tableFromArrays({
+      s: ["€uro"],
+      n: [4],
+      b: [true],
+    } as never);
     const table = a.concat(b);
     const batch = arrowToColumns(table as unknown as ArrowLikeTable);
     const s = batch.columns[0];
@@ -166,15 +211,24 @@ describe("arrowToColumns reads Arrow's buffers by type [data.query.seam]", () =>
     expect(Array.from(s.offsets)).toEqual([0, 2, 2, 3, 9]);
     expect(Array.from(s.valid!)[0] & 0b1111).toBe(0b1101);
     const rs = arrowToRecordSet(table as unknown as ArrowLikeTable);
-    batch.columns.forEach((c, i) => expect(columnToValues(c, batch.row_count)).toEqual(rs.columns[i]));
-    expect(rs.columns[2]).toEqual([{ t: "bool", v: true }, { t: "bool", v: false }, { t: "null" }, { t: "bool", v: true }]);
+    batch.columns.forEach((c, i) =>
+      expect(columnToValues(c, batch.row_count)).toEqual(rs.columns[i]),
+    );
+    expect(rs.columns[2]).toEqual([
+      { t: "bool", v: true },
+      { t: "bool", v: false },
+      { t: "null" },
+      { t: "bool", v: true },
+    ]);
   });
 
   it("types without a data-core kind are named for the VARCHAR cast; timestamps are not [data.query.seam]", () => {
     expect(needsText({ name: "x", type: "Time64<MICROSECOND>" })).toBe(true);
     expect(needsText({ name: "x", type: "List<Int32>" })).toBe(true);
     expect(needsText({ name: "x", type: "Timestamp<ms>" })).toBe(false);
-    expect(classifyType({ name: "x", type: "Interval<MONTH_DAY_NANO>" })).toBe("text");
+    expect(classifyType({ name: "x", type: "Interval<MONTH_DAY_NANO>" })).toBe(
+      "text",
+    );
     expect(classifyType({ name: "x", type: "Binary" })).toBe("bytes");
   });
 });

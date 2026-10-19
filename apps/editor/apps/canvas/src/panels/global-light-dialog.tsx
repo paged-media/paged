@@ -28,7 +28,10 @@ import { useEffect, useSyncExternalStore } from "react";
 import type { CSSProperties } from "react";
 
 import { PropertyField } from "@paged-media/shell";
-import type { CommandContribution, MenuItemContribution } from "@paged-media/shell";
+import type {
+  CommandContribution,
+  MenuItemContribution,
+} from "@paged-media/shell";
 
 export const GLOBAL_LIGHT_COMMAND = "paged.effects.globalLight";
 
@@ -61,7 +64,12 @@ export const GLOBAL_LIGHT_COMMANDS: CommandContribution[] = [
 ];
 
 export const GLOBAL_LIGHT_MENU_ITEMS: MenuItemContribution[] = [
-  { path: "Object/Effects/Global light…", command: GLOBAL_LIGHT_COMMAND, order: 39, group: "effects" },
+  {
+    path: "Object/Effects/Global light…",
+    command: GLOBAL_LIGHT_COMMAND,
+    order: 39,
+    group: "effects",
+  },
 ];
 
 export function GlobalLightDialog() {
@@ -110,7 +118,10 @@ function GlobalLightForm() {
           boxShadow: "0 16px 48px rgba(0,0,0,0.5)",
         }}
       >
-        <h2 id="global-light-title" style={{ margin: "0 0 12px", fontSize: 14, fontWeight: 600 }}>
+        <h2
+          id="global-light-title"
+          style={{ margin: "0 0 12px", fontSize: 14, fontWeight: 600 }}
+        >
           Global light
         </h2>
         <div className="flex flex-col gap-1.5">
@@ -129,8 +140,15 @@ function GlobalLightForm() {
             chrome={{ suffix: "°" }}
           />
         </div>
-        <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 14 }}>
-          <button type="button" data-global-light-done="" onClick={close} style={buttonStyle}>
+        <div
+          style={{ display: "flex", justifyContent: "flex-end", marginTop: 14 }}
+        >
+          <button
+            type="button"
+            data-global-light-done=""
+            onClick={close}
+            style={buttonStyle}
+          >
             Done
           </button>
         </div>

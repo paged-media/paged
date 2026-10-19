@@ -1,7 +1,7 @@
 {
   "name": "@paged-media/idml-viewer",
-  "version": "0.1.0-canary.0",
-  "description": "Standalone IDML viewer for the browser — camera, pages, input and events over the @paged-media/sdk WebGPU ViewerSession.",
+  "version": "0.74.0-dev",
+  "description": "Standalone IDML viewer for the browser: camera, pages, input and events over the engine's WebGPU ViewerSession, which ships in the package (./session).",
   "license": "AGPL-3.0-only OR LicenseRef-PMEL",
   "repository": {
     "type": "git",
@@ -15,11 +15,19 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
-    }
+    },
+    "./session": {
+      "types": "./wasm/paged_sdk.d.ts",
+      "default": "./wasm/paged_sdk.js"
+    },
+    "./session/paged_sdk_bg.wasm": "./wasm/paged_sdk_bg.wasm",
+    "./package.json": "./package.json"
   },
   "files": [
     "dist",
-    "wasm",
+    "wasm/paged_sdk.js",
+    "wasm/paged_sdk.d.ts",
+    "wasm/paged_sdk_bg.wasm",
     "README.md"
   ],
   "scripts": {

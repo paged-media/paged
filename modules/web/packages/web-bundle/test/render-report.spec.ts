@@ -83,6 +83,8 @@ describe("render-report store", () => {
 describe("formatDeferred", () => {
   it("formats kind counts and stays empty on none", () => {
     expect(formatDeferred({})).toBe("");
-    expect(formatDeferred({ image: 2, stroke: 1 })).toBe("image ×2 · stroke ×1");
+    expect(formatDeferred({ image: 2, stroke: 1 })).toBe(
+      "image ×2 · stroke ×1",
+    );
   });
 });

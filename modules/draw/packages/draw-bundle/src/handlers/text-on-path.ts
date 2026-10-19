@@ -116,8 +116,9 @@ export function createTypeOnPathHandler(host: BundleHost): GestureHandler {
     if (!e.pageId || !e.pagePoint) return;
     let hit: ElementId | null = null;
     try {
-      hit = (await host.document.hitTest(e.pageId, e.pagePoint, "frame"))
-        ?.element ?? null;
+      hit =
+        (await host.document.hitTest(e.pageId, e.pagePoint, "frame"))
+          ?.element ?? null;
     } catch {
       hit = null;
     }
