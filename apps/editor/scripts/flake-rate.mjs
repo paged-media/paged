@@ -26,10 +26,11 @@
 // `--reporter=json` run, a `--repeat-each` run) and classifies every test
 // (project + file + title path) by all of its attempts:
 //
-//   passed   every attempt passed
-//   failed   every attempt failed (a deterministic red)
-//   flaky    it both passed and failed: a retry that passed (Playwright's
-//            own `flaky`), or repeats that disagree (`--repeat-each`)
+//   passed   every attempt did what the test expects (passed; or failed,
+//            for an expected failure under `test.fail()`)
+//   failed   no attempt did (a deterministic red)
+//   flaky    both: a retry that passed (Playwright's own `flaky`), or
+//            repeats that disagree (`--repeat-each`)
 //   skipped  it never ran
 //
 // flakeRate = flaky / (passed + failed + flaky). Tests tagged @quarantine
@@ -59,6 +60,9 @@ export function* testsOf(report) {
           titlePath: [...here, spec.title],
           tags: spec.tags ?? [],
           status: t.status,
+          // An attempt is judged against what the test expects: a
+          // `test.fail()` (an expected failure) that fails is a pass.
+          expected: t.expectedStatus ?? "passed",
           results: (t.results ?? []).map((r) => r.status),
         };
       }
@@ -89,9 +93,9 @@ export function flakeRate(reports) {
       };
       if (t.status === "skipped" || t.results.length === 0) row.skip++;
       for (const r of t.results) {
-        if (r === "passed") row.pass++;
-        else if (r === "skipped") row.skip++;
-        else row.fail++; // failed, timedOut, interrupted
+        if (r === "skipped") row.skip++;
+        else if (r === t.expected) row.pass++;
+        else row.fail++; // unexpected: failed, timedOut, interrupted, or passed when it should fail
       }
       byKey.set(key, row);
     }

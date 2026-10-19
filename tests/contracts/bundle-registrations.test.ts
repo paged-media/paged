@@ -26,13 +26,11 @@
 // over each entry of the editor's bundle table, against the real headless
 // engine.
 //
-// WHY HERE. The editor's canvas app is the one package that depends on all
-// nine bundles, plugin-sdk and canvas-wasm. A module may import only the
-// contract and its own packages, and platform/extensions only the public
-// packages (the lint zones of PM-0002/PM-0003), so neither can host a
-// cross-bundle spec; the root `tests/contracts/` the test plan names has no
-// package, runner or CI task yet. When it does, this file moves there
-// unchanged.
+// WHY HERE. A module may import only the contract and its own packages, and
+// platform/extensions only the public packages (the lint zones of
+// PM-0002/PM-0003), so neither can host a cross-bundle spec. The root
+// `tests/contracts/` can: it reads the editor's bundle table, the one list of
+// all nine bundles (tests/README.md).
 //
 // CONDITIONAL REGISTRATIONS are handled one by one, below:
 //  · most are gated on a host feature (`host.supports(...)`); the check's
@@ -59,10 +57,10 @@ import {
   type ManifestConformanceOptions,
 } from "@paged-media/plugin-sdk";
 
-import { PLUGIN_BUNDLES } from "../../src/plugin-bundle-table";
+import { PLUGIN_BUNDLES } from "../../apps/editor/apps/canvas/src/plugin-bundle-table";
 
-// The engine is this app's own @paged-media/canvas-wasm dependency.
-const ENGINE_ANCHOR = fileURLToPath(new URL("../..", import.meta.url));
+// The engine is this package's own @paged-media/canvas-wasm dependency.
+const ENGINE_ANCHOR = fileURLToPath(new URL("..", import.meta.url));
 
 /** A host feature a bundle probes before it registers something. */
 interface Condition {

@@ -43,7 +43,7 @@ import {
   readMergeTemplate,
   type RecordsPerPage,
 } from "../src/merge";
-import { ENGINE_ANCHOR, fixedFrom, REQUIRE_REAL_CORE } from "./real-core";
+import { ENGINE_ANCHOR, REQUIRE_REAL_CORE } from "./real-core";
 import { bootRealEngine, DATA_JS_WASM } from "./real-duckdb";
 
 const LANE = fileURLToPath(
@@ -185,21 +185,16 @@ describe.skipIf(!ready && !REQUIRE_REAL_CORE)(
 
     for (const id of BR_BETWEEN_PLACEHOLDERS) {
       // Fixed in core 0.70 (protocol 70): the break stays between them.
-      fixedFrom(70, it)(
-        `DEFECT core <70: ${id}'s template reads back with its line break inside the next placeholder [data.lower.merge-writer]`,
-        async () => {
-          const fx = (spec.fixtures as any[]).find((f) => f.id === id);
-          const { h, host } = await openTemplate(id);
-          hosts.push(h);
-          const { template } = await readMergeTemplate(host);
-          expect(template!.spec.frames[0].content).toEqual({
-            kind: "text",
-            text: fx.frames
-              .find((f: any) => f.kind === "text")
-              .lines.join("\n"),
-          });
-        },
-      );
+      it(`DEFECT core <70: ${id}'s template reads back with its line break inside the next placeholder [data.lower.merge-writer]`, async () => {
+        const fx = (spec.fixtures as any[]).find((f) => f.id === id);
+        const { h, host } = await openTemplate(id);
+        hosts.push(h);
+        const { template } = await readMergeTemplate(host);
+        expect(template!.spec.frames[0].content).toEqual({
+          kind: "text",
+          text: fx.frames.find((f: any) => f.kind === "text").lines.join("\n"),
+        });
+      });
     }
 
     for (const fx of spec.fixtures as any[]) {
