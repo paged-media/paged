@@ -85,10 +85,6 @@ pub(crate) fn rgb_to_naive_cmyk_8bit(r: u8, g: u8, b: u8) -> (u8, u8, u8, u8) {
 pub mod cmyk_compute;
 #[cfg(feature = "cpu")]
 pub(crate) mod ink_planes;
-#[cfg(feature = "cpu")]
-pub mod vcpu;
-#[cfg(any(feature = "cpu", feature = "vello-backend"))]
-pub(crate) mod vello_map;
 /// Ink separations + total-area-coverage readings off the CPU
 /// rasterizer's plane state. CPU-only: the Vello backend keeps plane
 /// state per overprint batch, not per page, so it has no separation to
@@ -97,21 +93,25 @@ pub(crate) mod vello_map;
 pub mod separations;
 #[cfg(all(feature = "vello-backend", target_arch = "wasm32"))]
 pub mod surface;
+#[cfg(feature = "cpu")]
+pub mod vcpu;
+#[cfg(any(feature = "cpu", feature = "vello-backend"))]
+pub(crate) mod vello_map;
 #[cfg(feature = "vello-backend")]
 pub mod vello_rs;
 
-#[cfg(feature = "cpu")]
-pub use vcpu::rasterize;
-#[cfg(feature = "cpu")]
-pub use vcpu::rasterize_with_separation;
-#[cfg(feature = "cpu")]
-pub use vcpu::CpuRasterizer;
 #[cfg(feature = "cpu")]
 pub use separations::{
     InkChannel, InkCoverageReport, InkPlate, PlateCoverage, Separation, TAC_BUCKETS, TAC_BUCKET_PCT,
 };
 #[cfg(all(feature = "vello-backend", target_arch = "wasm32"))]
 pub use surface::{PendingReadback, SurfaceError, SurfacePresenter, Viewport};
+#[cfg(feature = "cpu")]
+pub use vcpu::rasterize;
+#[cfg(feature = "cpu")]
+pub use vcpu::rasterize_with_separation;
+#[cfg(feature = "cpu")]
+pub use vcpu::CpuRasterizer;
 // Re-export vello::Scene so consumers (paged-canvas-wasm) don't need
 // vello as a direct dependency to hold cached scenes.
 #[cfg(all(feature = "vello-backend", target_arch = "wasm32"))]

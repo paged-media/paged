@@ -136,7 +136,10 @@ impl Coverage<'_> {
 /// the alternate at full strength. 0 for a spot whose alternate is
 /// paper.
 fn spot_tint_8(paint_cmyk: [f32; 4], alt: [u8; 4]) -> u16 {
-    let alt_max = alt.iter().map(|v| *v as f32 / 255.0).fold(0.0_f32, f32::max);
+    let alt_max = alt
+        .iter()
+        .map(|v| *v as f32 / 255.0)
+        .fold(0.0_f32, f32::max);
     let tint = if alt_max <= f32::EPSILON {
         0.0
     } else {
@@ -352,7 +355,12 @@ mod tests {
 
     #[test]
     fn naive_forward_and_inverse_round_trip() {
-        for &(c, m, y, k) in &[(0u8, 0, 0, 0), (255, 0, 0, 0), (40, 90, 10, 30), (0, 0, 0, 255)] {
+        for &(c, m, y, k) in &[
+            (0u8, 0, 0, 0),
+            (255, 0, 0, 0),
+            (40, 90, 10, 30),
+            (0, 0, 0, 255),
+        ] {
             let (r, g, b) = naive_cmyk_to_rgb_8bit(c, m, y, k);
             let (c2, m2, y2, k2) = rgb_to_naive_cmyk_8bit(r, g, b);
             let (r2, g2, b2) = naive_cmyk_to_rgb_8bit(c2, m2, y2, k2);
