@@ -1451,9 +1451,10 @@ pub(super) fn apply_set_group_transform(
             FrameRef::TextFrame(i) => spread.text_frames.get_mut(i).map(|f| &mut f.item_transform),
             FrameRef::Rectangle(i) => spread.rectangles.get_mut(i).map(|f| &mut f.item_transform),
             FrameRef::Oval(i) => spread.ovals.get_mut(i).map(|f| &mut f.item_transform),
-            FrameRef::GraphicLine(i) => {
-                spread.graphic_lines.get_mut(i).map(|f| &mut f.item_transform)
-            }
+            FrameRef::GraphicLine(i) => spread
+                .graphic_lines
+                .get_mut(i)
+                .map(|f| &mut f.item_transform),
             FrameRef::Polygon(i) => spread.polygons.get_mut(i).map(|f| &mut f.item_transform),
             FrameRef::Group(_) => unreachable!("walk descends into groups"),
         };

@@ -3495,7 +3495,11 @@ mod tests {
         // The inverse puts the touched paragraph back whole.
         assert!(matches!(
             &applied.inverse,
-            Operation::RestoreParagraphs { first: 0, count: 1, .. }
+            Operation::RestoreParagraphs {
+                first: 0,
+                count: 1,
+                ..
+            }
         ));
         crate::apply(project.document_mut(), &applied.inverse).expect("undo");
         let story = &project.document().stories[0].story;
@@ -5163,7 +5167,10 @@ mod tests {
         crate::apply(project.document_mut(), &applied.inverse).expect("undo");
         let story = &project.document().stories[0].story;
         assert_eq!(story.paragraphs[0].runs.len(), 2);
-        assert!(story.paragraphs[0].runs.iter().all(|r| r.font_style.is_none()));
+        assert!(story.paragraphs[0]
+            .runs
+            .iter()
+            .all(|r| r.font_style.is_none()));
     }
 
     // ---- W0.2: paragraph formatting paths ---------------------------------

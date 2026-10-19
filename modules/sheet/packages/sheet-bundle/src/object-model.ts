@@ -1227,7 +1227,7 @@ export function contributeObjectModel(
   async function write(
     plan: (engine: SheetEngine) => Step[],
   ): Promise<
-    | { ok: true; hash: string; parts: PartChange[] }
+    | { ok: true; hash: string; parts: PartChange[]; changed: boolean }
     | { ok: false; reason: string }
   > {
     await session.ensureRestored();
@@ -1268,7 +1268,8 @@ export function contributeObjectModel(
     parts.push(...next.parts);
     loadedHash = next.hash;
     bridge.afterWrite(pending.regions);
-    return { ok: true, hash: next.hash, parts };
+    // The same content hash is the same workbook: the write changed nothing.
+    return { ok: true, hash: next.hash, parts, changed: next.hash !== before.hash };
   }
 
   /** The document envelope with `data.wb = hash`, other sub-keys kept
@@ -1353,6 +1354,10 @@ export function contributeObjectModel(
     const r = await write(() => [apply]);
     if (!r.ok) throw new Error(r.reason);
     await writeParts(r.parts);
+    // A write that changed nothing (a replace with no match) is no undo
+    // step: an empty one would make the next undo take back nothing
+    // (finding SHT-2).
+    if (!r.changed) return;
     const outcome = await host.document.mutate(
       (await labelMutation(r.hash)) as never,
     );

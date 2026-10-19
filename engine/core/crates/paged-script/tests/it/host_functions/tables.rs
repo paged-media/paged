@@ -154,7 +154,11 @@ fn delete_then_undo(m: &mut CanvasModel, call: &str) {
     assert_eq!(cell_count(m), 6, "{call}: three cells go");
     let deleted = table_json(m);
     assert_eq!(ok(m, "paged.undo()"), "true");
-    assert_eq!(table_json(m), before, "{call}: the table is restored exactly");
+    assert_eq!(
+        table_json(m),
+        before,
+        "{call}: the table is restored exactly"
+    );
     assert_eq!(ok(m, "paged.redo()"), "true");
     assert_eq!(cell_count(m), 6);
     assert_eq!(table_json(m), deleted, "{call}: redo deletes it again");

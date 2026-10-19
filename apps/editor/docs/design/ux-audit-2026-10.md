@@ -600,6 +600,8 @@ Share is disabled (opacity 0.45 on the brand fill), but on the dark header it st
 
 **Screenshots:** `F-25-ai-unavailable.png`
 
+**Partly fixed (2026-10-19, `89219f88e`).** The AI Assistant's Ask and the Script panel's Ask probe the proxy once per session and, with no service, are disabled and say why before a request is typed (ADR 252; PN-352, PN-355). The palette's "Ask Claude" and "New from a brief…" do not read the probe yet.
+
 ### Canvas gestures and text editing
 
 <a id="f-26"></a>
@@ -649,8 +651,9 @@ Right-click on a frame, in text, on the page or on the pasteboard opens no edito
 **Fixed (2026-10-19, `fd16e431d`).** A right-click on the canvas opens the editor's menu
 (ADR 232): Cut, Copy, Paste, Paste in place, Duplicate, Arrange, Group, Ungroup, Delete, Select
 all, fed by the command registry and greyed by each command's `when`; it selects the item under
-the pointer first. Shift+F10 and the context-menu key open it from the keyboard. Not yet: Lock
-(F-41), Fitting and Effects rows, a text-specific menu, panel row menus.
+the pointer first. Shift+F10 and the context-menu key open it from the keyboard. Not yet:
+Fitting and Effects rows, a text-specific menu, panel row menus. Lock and Hide rows were added
+with F-41 (2026-10-19, `89219f88e`).
 
 <a id="f-28"></a>
 
@@ -705,6 +708,8 @@ Double-clicking a placed image opens paged.draw's "Vector graphic" context: the 
 **Screenshots:** `F-29-dblclick-image-vector-context.png`, `F-29-dblclick-group-vector-context.png`, `F-29-direct-select-selects-group.png`
 
 **Fixed (2026-10-19, `8cf6d4f0b`).** As recommended (ADR 235): Direct Selection selects the leaf; a double-click on a grouped shape selects that shape (entering the group), and a frame holding a placed image is claimed only by the plugin that owns it, never by the vector-graphic context. Not done: Esc climbing the selection one level at a time, and a raster context for placed photos paged.image does not see.
+
+**Fixed (2026-10-19, `89219f88e`).** Esc climbs one level at a time (ADR 250): with a group entered it selects the group holding the selected member, a nested group's parent next, and selecting the outermost group leaves the group. Still open: the raster context for placed photos paged.image does not see.
 
 <a id="f-30"></a>
 
@@ -1384,6 +1389,8 @@ The Object menu has no Lock (⌘L), Unlock all on spread, Hide (⌘3) or Show al
 
 **Screenshots:** `F-41-object-menu-no-lock-hide.png`
 
+**Fixed (2026-10-19, `89219f88e`).** Object ▸ Lock (⌘L), Unlock all on spread, Hide and Show all on spread, also on the canvas context menu (ADR 251). A group is locked or hidden through its members; each command is one undo step; a hidden item cannot be clicked. ⌘3, ⌥⌘L and ⌥⌘3 stay menu-only: Option rewrites the key to a layout glyph and ⌘3 is the browser's tab switch.
+
 ## DTP conventions: where paged departs from InDesign
 
 | Convention                                       | paged                                     | Documented?                                              | Finding       |
@@ -1400,7 +1407,7 @@ The Object menu has no Lock (⌘L), Unlock all on spread, Hide (⌘3) or Show al
 | Spreads side by side on a pasteboard             | Pages stacked vertically                  | Yes (status.md, Limits)                                  | —             |
 | New Document dialog                              | None; Letter in pt                        | No                                                       | [F-04](#f-04) |
 | Measurement units preference                     | Points only; mm and in in places          | No                                                       | [F-39](#f-39) |
-| Lock / Hide objects (⌘L, ⌘3)                     | Layer level only                          | No                                                       | [F-41](#f-41) |
+| Lock / Hide objects (⌘L, ⌘3)                     | Object menu since F-41; ⌘L only           | No                                                       | [F-41](#f-41) |
 | Missing Fonts and Links dialogs on open          | Passive counters only                     | No                                                       | [F-09](#f-09) |
 | Tab hides panels                                 | Yes, also inside fields and dialogs       | Yes (toolbar.md); the reach into fields is a side effect | [F-49](#f-49) |
 | Floating, dockable panels                        | Fixed docks with tabs                     | Yes (ADR 002)                                            | —             |

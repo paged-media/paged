@@ -128,6 +128,41 @@ export async function pourSteps(
   }
 }
 
+/** A story plan as ONE op list for a single `batch`: text steps at their
+ *  running offsets, each table followed by `bindCreated` so its cells
+ *  address it as `$h:<prefix><n>` (the engine's batch handles, C-15). The
+ *  story itself may be a handle (`$h:frame`), which a `storyId` position
+ *  resolves to the story the frame minted. One batch = one undo step
+ *  (finding DOC-1). */
+export function pourBatchOps(
+  steps: readonly StoryStep[],
+  tableHandlePrefix = "docTable",
+): Mutation[] {
+  const ops: Mutation[] = [];
+  let styleOffset = 0;
+  let textOffset = 0;
+  let tables = 0;
+  for (const step of steps) {
+    if (step.kind === "text") {
+      ops.push(...step.mutations(textOffset, styleOffset));
+      styleOffset += step.length;
+      textOffset += step.byteLength;
+    } else {
+      const handle = `${tableHandlePrefix}${tables++}`;
+      ops.push(step.insert, { op: "bindCreated", args: { handle } });
+      const cells = step.cells(`$h:${handle}`);
+      // `cells` is one batch: inline its children (a nested batch is one
+      // child of the outer batch either way).
+      if ((cells as { op: string }).op === "batch")
+        ops.push(...(cells as { args: { ops: Mutation[] } }).args.ops);
+      else ops.push(cells);
+      styleOffset += TABLE_FOOTPRINT_STYLE;
+      textOffset += TABLE_FOOTPRINT_TEXT;
+    }
+  }
+  return ops;
+}
+
 /** Diagnostics key for style properties the engine refused. */
 export const STYLE_DIAGNOSTICS_KEY = "media.paged.doc/styles";
 

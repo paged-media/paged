@@ -921,7 +921,11 @@ describe("Lock, Unlock all on spread, Hide, Show all on spread", () => {
   });
 
   test("Lock: a selected group locks every member, ONE batch; Cmd+L and the Object menu reach it", async () => {
-    covers("command:paged.object.lock");
+    covers(
+      "command:paged.object.lock",
+      "keybinding:cmd+l→paged.object.lock",
+      "keybinding:ctrl+l→paged.object.lock",
+    );
     const h = objects({ tree: grouped(), selection: [G, C] });
     await h.invoke("paged.object.lock");
     expect(h.fake.mutations()).toEqual([

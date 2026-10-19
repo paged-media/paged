@@ -127,11 +127,19 @@ pub(super) fn apply_replace_story_paragraphs(
 
 /// The paragraphs `[first, last]` a `[start, end)` range edit touches,
 /// counted as the run splitters count (each paragraph's run characters).
-fn touched_paragraphs(paragraphs: &[paged_model::Paragraph], start: u32, end: u32) -> Option<(usize, usize)> {
+fn touched_paragraphs(
+    paragraphs: &[paged_model::Paragraph],
+    start: u32,
+    end: u32,
+) -> Option<(usize, usize)> {
     let mut offset = 0u32;
     let mut touched: Option<(usize, usize)> = None;
     for (i, para) in paragraphs.iter().enumerate() {
-        let chars: u32 = para.runs.iter().map(|r| r.text.chars().count() as u32).sum();
+        let chars: u32 = para
+            .runs
+            .iter()
+            .map(|r| r.text.chars().count() as u32)
+            .sum();
         let (para_start, para_end) = (offset, offset + chars);
         offset = para_end;
         if para_end > start && para_start < end {
