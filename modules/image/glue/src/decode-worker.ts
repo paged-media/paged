@@ -32,11 +32,14 @@
 // lanes — it never requests a GPU device (kernels are GPU-only and stay
 // on the main realm; decode is pure CPU).
 //
-// The wasm is loaded the browser way (engine.ts's path): the glue JS via
-// a bare import, the `_bg.wasm` via a `?url` asset import. In a worker the
-// bundler serves both as worker chunks.
+// The wasm is loaded the browser way (engine.ts's path, through
+// @paged-media/wasm-boot): the glue JS via a bare import, the `_bg.wasm` via
+// a `?url` asset import. In a worker the bundler serves both as worker
+// chunks.
 
 /// <reference lib="webworker" />
+
+import { wasmBindgenModule } from "@paged-media/wasm-boot";
 
 // The decode subset of the image-js wasm-bindgen surface (a structural
 // subset of manifest/wasm/image_js.d.ts — only what the worker drives).
@@ -78,28 +81,20 @@ export type DecodeReply =
     }
   | { id: number; ok: false; error: string };
 
-let wasmPromise: Promise<DecodeWasm> | null = null;
-
-/** Boot the worker-local image-js (browser path, like engine.ts). */
-async function ensureWasm(): Promise<DecodeWasm> {
-  if (!wasmPromise) {
-    wasmPromise = (async () => {
-      // The glue + the `_bg.wasm` URL — resolved as worker chunks by the
-      // bundler (the editor's `?worker&url` build includes them).
-      const mod = (await import(
-        // @ts-ignore — artifact built by build-wasm.sh; absent from the source tree.
-        "../wasm/image_js.js"
-      )) as unknown as DecodeWasm;
-      const wasmUrl = (await import(
-        // @ts-ignore — `?url` is a bundler affordance, untyped.
-        "../wasm/image_js_bg.wasm?url"
-      )) as { default: string };
-      await mod.default({ module_or_path: wasmUrl.default });
-      return mod;
-    })();
-  }
-  return wasmPromise;
-}
+/** Boot the worker-local image-js (browser path, like engine.ts), once:
+ *  every request shares the one instantiation. */
+const ensureWasm = wasmBindgenModule<DecodeWasm>({
+  // The glue + the `_bg.wasm` URL — resolved as worker chunks by the
+  // bundler (the editor's `?worker&url` build includes them).
+  // @ts-ignore — artifact built by build-wasm.sh; absent from the source tree.
+  glue: () => import("../wasm/image_js.js"),
+  // @ts-ignore — `?url` is a bundler affordance, untyped.
+  wasmUrl: () => import("../wasm/image_js_bg.wasm?url"),
+  wasmFile: () => new URL("../wasm/image_js_bg.wasm", import.meta.url),
+  // A worker realm: always the browser way.
+  isNode: () => false,
+  notBuilt: "paged.image decode worker: the engine wasm is not built",
+});
 
 /** Decode bytes to a full RGBA8 buffer via a level-0 window cut over the
  *  whole image (image_tile_rgba8 with the natural extent — the same pure

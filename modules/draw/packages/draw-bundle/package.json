@@ -49,9 +49,13 @@
     "url": "git+https://github.com/paged-media/paged.git",
     "directory": "modules/draw/packages/draw-bundle"
   },
+  "dependencies": {
+    "@paged-media/helpers": "workspace:*",
+    "@paged-media/wasm-boot": "workspace:*"
+  },
   "peerDependencies": {
     "@paged-media/plugin-api": "workspace:*",
     "@paged-media/plugin-sdk": "workspace:*",
-    "react": "^18.3.0"
+    "react": ">=19.3"
   }
 }

@@ -20,9 +20,14 @@ on:
     branches: [main]
     paths:
       - "modules/image/**"
+      # The TypeScript base every package's tsconfig extends.
+      - "tsconfig.base.json"
       # The extension contract the bundle builds against (workspace:*).
       - "platform/extensions/packages/plugin-api/**"
       - "platform/extensions/packages/plugin-sdk/**"
+      # The internal shared code the bundle uses (workspace:*).
+      - "platform/shared/wasm-boot/**"
+      - "platform/shared/helpers/**"
       # The engine wasm packages this workflow builds against (workspace:*),
       # and what builds them, so an engine change re-tests its consumers.
       - "engine/core/crates/**"
@@ -32,6 +37,8 @@ on:
       - "engine/core/scripts/rust-channel.sh"
       - "engine/core/packages/**"
       - ".cargo/config.toml"
+      # The source hash the wasm is stamped with and its wasm-fresh spec checks.
+      - "tooling/js/source-hash.mjs"
       - "tooling/bootstrap.sh"
       - ".github/actions/engine-wasm/**"
       - ".github/actions/wasm-tools/**"
@@ -52,9 +59,14 @@ on:
   pull_request:
     paths:
       - "modules/image/**"
+      # The TypeScript base every package's tsconfig extends.
+      - "tsconfig.base.json"
       # The extension contract the bundle builds against (workspace:*).
       - "platform/extensions/packages/plugin-api/**"
       - "platform/extensions/packages/plugin-sdk/**"
+      # The internal shared code the bundle uses (workspace:*).
+      - "platform/shared/wasm-boot/**"
+      - "platform/shared/helpers/**"
       # The engine wasm packages this workflow builds against (workspace:*),
       # and what builds them, so an engine change re-tests its consumers.
       - "engine/core/crates/**"
@@ -64,6 +76,8 @@ on:
       - "engine/core/scripts/rust-channel.sh"
       - "engine/core/packages/**"
       - ".cargo/config.toml"
+      # The source hash the wasm is stamped with and its wasm-fresh spec checks.
+      - "tooling/js/source-hash.mjs"
       - "tooling/bootstrap.sh"
       - ".github/actions/engine-wasm/**"
       - ".github/actions/wasm-tools/**"

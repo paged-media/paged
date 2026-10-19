@@ -1,3 +1,1 @@
-{
-  "script:paged.frame": "Seeded 2026-10-19, when covers() became the measure: no script test calls paged.frame and asserts what it returns or changes under covers(); only mentioned, in 5 test files (e2e: apps/editor/apps/canvas/tests/frame-fitting-panel.spec.ts; e2e: apps/editor/apps/canvas/tests/object-model-frame-panels.spec.ts; …); declared in engine/core/crates/paged-script/src."
-}
+{}

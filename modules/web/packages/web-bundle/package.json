@@ -15,10 +15,14 @@
     "test": "bun test --parallel --preload ../../../../tooling/js/bun-test-setup.ts --path-ignore-patterns '**/*.dom.test.*'",
     "test:dom": "bun test --parallel --preload ../../../../tooling/js/bun-test-setup.ts --preload ./test/happydom.ts .dom.test."
   },
+  "dependencies": {
+    "@paged-media/helpers": "workspace:*",
+    "@paged-media/wasm-boot": "workspace:*"
+  },
   "peerDependencies": {
     "@paged-media/plugin-api": "workspace:*",
     "@paged-media/plugin-sdk": "workspace:*",
-    "react": "^18.3.0"
+    "react": ">=19.3"
   },
   "devDependencies": {
     "@happy-dom/global-registrator": "catalog:",
@@ -33,12 +37,12 @@
     "@types/node": "catalog:",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
-    "@types/react-test-renderer": "18.3.1",
+    "@types/react-test-renderer": "19.3.0",
     "fast-check": "4.10.2",
     "happy-dom": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",
-    "react-test-renderer": "18.3.1",
+    "react-test-renderer": "19.3.1",
     "typescript": "catalog:"
   },
   "files": [

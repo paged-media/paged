@@ -54,6 +54,7 @@ import type {
   PartChange,
   PluginMetadataEnvelope,
 } from "@paged-media/plugin-api";
+import { base64ToBytes, bytesToBase64 } from "@paged-media/helpers";
 import {
   contentHash,
   isWebFrameEnvelope,
@@ -482,21 +483,6 @@ export interface KeptFace {
   bytes: Uint8Array;
 }
 
-function toBase64(bytes: Uint8Array): string {
-  let s = "";
-  for (let i = 0; i < bytes.length; i += 0x8000) {
-    s += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
-  }
-  return btoa(s);
-}
-
-function fromBase64(text: string): Uint8Array {
-  const bin = atob(text);
-  const out = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i += 1) out[i] = bin.charCodeAt(i);
-  return out;
-}
-
 /** The family and style of every face part read, by path: the parts are
  *  content-addressed, so what a path holds never changes. */
 const faceHeads = new WeakMap<
@@ -526,7 +512,7 @@ export async function keepFace(
     v: 1,
     family: face.family,
     style: face.style ?? null,
-    face: toBase64(face.bytes),
+    face: bytesToBase64(face.bytes),
   });
   const path = `${FACE_PREFIX}${contentHash(text)}.json`;
   // Kept this session whether written now or before: the collector leaves it.
@@ -589,7 +575,7 @@ export async function readKeptFace(
     return {
       family: rec.family,
       ...(style ? { style } : {}),
-      bytes: fromBase64(rec.face),
+      bytes: base64ToBytes(rec.face),
     };
   } catch {
     return null;

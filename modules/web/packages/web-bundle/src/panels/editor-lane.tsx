@@ -28,12 +28,7 @@
 // `data-web-editor-lane` says which lane is live (honest seams — the
 // fallback never pretends to be the widget).
 
-import {
-  forwardRef,
-  type ComponentType,
-  type ReactElement,
-  type Ref,
-} from "react";
+import { type ComponentType, type ReactElement, type Ref } from "react";
 
 import type { CodeEditorProps } from "@paged-media/plugin-api";
 
@@ -45,10 +40,10 @@ import type { CodeEditorProps } from "@paged-media/plugin-api";
  *  Forwards a ref to its underlying <textarea> so the "Find in source"
  *  affordance can drive the caret in THIS lane (the host widget lane has
  *  no selection prop — see find-in-source.ts's seam note). */
-export const FallbackCodeEditor = forwardRef(function FallbackCodeEditor(
-  props: CodeEditorProps,
-  ref: Ref<HTMLTextAreaElement>,
-): ReactElement {
+export function FallbackCodeEditor({
+  ref,
+  ...props
+}: CodeEditorProps & { ref?: Ref<HTMLTextAreaElement> }): ReactElement {
   return (
     <textarea
       ref={ref}
@@ -73,7 +68,7 @@ export const FallbackCodeEditor = forwardRef(function FallbackCodeEditor(
       }}
     />
   );
-});
+}
 
 export interface EditorLane {
   /** True when the HOST's rich widget is live (the W-04 surface). */

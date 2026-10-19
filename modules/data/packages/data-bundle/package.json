@@ -17,10 +17,14 @@
     "test:duckdb": "REQUIRE_REAL_DUCKDB=1 bun test --preload ../../../../tooling/js/bun-test-setup.ts --timeout 30000 ./test/duckdb-real.spec.ts",
     "test:dom": "bun test --parallel --preload ../../../../tooling/js/bun-test-setup.ts --preload ./test/happydom.ts --timeout 60000 .dom.test."
   },
+  "dependencies": {
+    "@paged-media/helpers": "workspace:*",
+    "@paged-media/wasm-boot": "workspace:*"
+  },
   "peerDependencies": {
     "@paged-media/plugin-api": "workspace:*",
     "@paged-media/plugin-sdk": "workspace:*",
-    "react": "^18.3.0"
+    "react": ">=19.3"
   },
   "devDependencies": {
     "@paged-media/canvas-wasm": "workspace:*",
@@ -30,7 +34,7 @@
     "@types/node": "catalog:",
     "@types/react": "catalog:",
     "apache-arrow": "^17.0.0",
-    "playwright-core": "1.63.0",
+    "playwright-core": "1.64.1",
     "react": "catalog:",
     "typescript": "catalog:",
     "@paged-media/test-kit": "workspace:*",

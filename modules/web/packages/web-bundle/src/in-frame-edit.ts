@@ -48,6 +48,7 @@ import type {
   ElementId,
   ElementGeometryItem,
 } from "@paged-media/plugin-api";
+import { PX_PER_PT } from "@paged-media/helpers";
 import {
   asFrameTarget,
   caretAt,
@@ -70,9 +71,6 @@ import type { DraftSession } from "./panels/draft-store";
 import { contentToPage, reportCanvasPick } from "./outline-highlight";
 import { overlayChannel } from "./overlay-channel";
 import { loadWebSource, writeWebSource } from "./source-part";
-
-/** CSS px per point (the frame size the engine lays out at). */
-const PX_PER_PT = 96 / 72;
 
 /** Debounce between a keystroke and the frame's re-render, ms. */
 export const IN_FRAME_RENDER_MS = 80;
