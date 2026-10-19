@@ -1,0 +1,6 @@
+$ paged-plugin modules-upload <TMP>/ok.json
+# exit 1
+# stdout
+(empty)
+# stderr
+error: no package.json at or above <TMP>/ok.json

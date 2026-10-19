@@ -1,0 +1,11 @@
+$ paged-node batch <TMP>/fixture.paged <TMP>/missing.json --no-plugins
+# exit 2
+# stdout
+{
+  "error": {
+    "message": "cannot read <TMP>/missing.json: ENOENT: no such file or directory, open '<TMP>/missing.json'",
+    "exit": 2
+  }
+}
+# stderr
+(empty)

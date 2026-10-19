@@ -1,0 +1,11 @@
+$ paged-node set <TMP>/fixture.paged swatch:Black value
+# exit 2
+# stdout
+{
+  "error": {
+    "message": "usage: paged-node set <doc> <address|selector> <path> <value>",
+    "exit": 2
+  }
+}
+# stderr
+(empty)

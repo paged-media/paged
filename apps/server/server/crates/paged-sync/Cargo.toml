@@ -14,7 +14,11 @@ ureq = { version = "2", features = ["json"] }
 
 [dev-dependencies]
 paged-test-resources.workspace = true
-zip = { version = "2", default-features = false, features = ["deflate"] }
+# zip 9's `deflate` feature switches flate2 to its zlib-rs backend (and adds
+# zopfli). `deflate-flate2` with flate2's `rust_backend` beside it is what
+# zip 2's `deflate` was, and what engine/core uses (see its root Cargo.toml).
+zip = { version = "9.0.4", default-features = false, features = ["deflate-flate2"] }
+flate2 = { version = "1.1", default-features = false, features = ["rust_backend"] }
 tiny_http = "0.12"
 sha2 = { workspace = true }
 base64 = "0.22"

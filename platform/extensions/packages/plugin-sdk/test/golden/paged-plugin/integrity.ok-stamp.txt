@@ -1,0 +1,15 @@
+$ paged-plugin integrity <TMP>/stamp
+# exit 0
+# stdout
+✓ media.paged.test: stamped 1 of 1 wasm artifact(s)
+# stderr
+(empty)
+# structure
+[
+  {
+    "name": "engine",
+    "path": "bin/engine.wasm",
+    "purpose": "compute",
+    "integrity": "sha384-okyHV17AgVkZ4iL9gMeELR7Q1ISxRPcAHorFgvPJr/8CqM+btjXngbzNX3HOpqc/"
+  }
+]
