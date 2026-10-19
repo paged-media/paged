@@ -27,8 +27,8 @@ until 2026-06-22, when it was opened.)
 Tailwind.
 
 - `apps/canvas` (`paged-canvas`) — the editor app. React shell →
-  Web Worker → engine wasm on `OffscreenCanvas` (Vello/WebGPU, tiny-skia
-  CPU fallback). Owns `src/panels/*`, the REPL (`src/repl/`), the
+  Web Worker → engine wasm on `OffscreenCanvas` (Vello/WebGPU, `vello_cpu`
+  CPU fallback — one rendering model on both). Owns `src/panels/*`, the REPL (`src/repl/`), the
   script editor, and the Playwright suite (`tests/`).
 - `apps/devtools` (`paged-devtools`) — standalone scene-graph
   inspector over `paged-introspect-wasm` (its own `build-wasm.sh`).

@@ -58,8 +58,9 @@ content, and `paged-store` the codec that writes `Document` as a container part
 
 **Output.** `paged-compose` defines the display list, the effect masks and the scene-layer
 types plugins submit. `paged-gpu` owns the `PathRasterizer` trait and two implementations
-behind Cargo features: `cpu` (tiny-skia, the default) and `vello-backend` (Vello 0.11 on
-wgpu 30) ([ADR 100](adr/100-two-rasterisers-one-trait.md)). `paged-renderer` is the
+behind Cargo features: `cpu` (`vello_cpu` 0.3, the default) and `vello-backend` (Vello 0.11
+on wgpu 30), which share one mapping from the display list (`vello_map.rs`)
+([ADR 100](adr/100-two-rasterisers-one-trait.md), [ADR 189](adr/189-one-rendering-model.md)). `paged-renderer` is the
 pipeline: `pipeline::build_document`, the asset resolver, diagnostics, and the
 `paged-inspect` binary. `paged-export-pdf` writes PDF from the display list
 ([ADR 119](adr/119-pdf-export-backend.md)). `paged-composition-render` renders a
@@ -117,11 +118,11 @@ library and the `paged-diff` binary.
    value ([ADR 106](adr/106-colour-resolved-at-build-time.md)). `DisplayList::digest()`
    hashes the whole list and is the equality test between two builds
    ([ADR 101](adr/101-display-list-single-intermediate.md)).
-5. **Raster.** `paged_gpu::rasterize` draws a list with tiny-skia into an RGBA image; this
-   is what the command line, snapshots, ink coverage and the fidelity gate use.
+5. **Raster.** `paged_gpu::rasterize` draws a list with `vello_cpu` into an RGBA image;
+   this is what the command line, CPU snapshots, ink coverage and the fidelity gate use.
    `VelloRasterizer` draws the same list with Vello; in the browser `SurfacePresenter`
    (compiled for `wasm32` only) presents it to a canvas. Ink separations exist on the CPU
-   path only (`crates/paged-gpu/src/lib.rs:90-95`).
+   path only (`crates/paged-gpu/src/ink_planes.rs`).
 6. **PDF.** The export session rebuilds the document once with the glyph-run side channel
    on and the live build's caches off, then `paged-export-pdf` writes the pages from those
    display lists, one page per message (`crates/paged-canvas/src/export.rs:19-30`).
