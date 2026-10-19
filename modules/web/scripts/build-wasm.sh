@@ -13,7 +13,7 @@
 #     lowering + wire types, no Blitz). A light check that the lowering
 #     compiles and binds on wasm32; it renders nothing.
 #
-# Both stamp the source hash (scripts/source-hash.mjs) into the wasm and into
+# Both stamp the source hash (tooling/js/source-hash.mjs) into the wasm and into
 # bin/SOURCE_HASH, so packages/web-bundle/test/wasm-fresh.spec.ts can tell a
 # wasm built from these sources from one built from older ones.
 #
@@ -56,7 +56,7 @@ if [[ "$LOCKED" != "$CLI" ]]; then
   exit 1
 fi
 
-SOURCE_HASH=$(bun "$HERE/scripts/source-hash.mjs")
+SOURCE_HASH=$(bun "$HERE/../../tooling/js/source-hash.mjs" web)
 # The crate's `wasm-release` profile (Cargo.toml): release + fat LTO in one
 # codegen unit, which the shipped size depends on.
 PROFILE="wasm-release"

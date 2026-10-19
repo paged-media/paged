@@ -16,6 +16,8 @@ on:
     branches: [main]
     paths:
       - "modules/data/**"
+      # The TypeScript base every package's tsconfig extends.
+      - "tsconfig.base.json"
       # The extension contract the bundle builds against (workspace:*).
       - "platform/extensions/packages/plugin-api/**"
       - "platform/extensions/packages/plugin-sdk/**"
@@ -29,6 +31,8 @@ on:
       - "engine/core/scripts/build-wasm-packages.sh"
       - "engine/core/packages/**"
       - ".cargo/config.toml"
+      # The source hash the wasm is stamped with and its wasm-fresh spec checks.
+      - "tooling/js/source-hash.mjs"
       - "tooling/bootstrap.sh"
       - ".github/actions/engine-wasm/**"
       - ".github/actions/wasm-tools/**"
@@ -43,6 +47,8 @@ on:
   pull_request:
     paths:
       - "modules/data/**"
+      # The TypeScript base every package's tsconfig extends.
+      - "tsconfig.base.json"
       # The extension contract the bundle builds against (workspace:*).
       - "platform/extensions/packages/plugin-api/**"
       - "platform/extensions/packages/plugin-sdk/**"
@@ -56,6 +62,8 @@ on:
       - "engine/core/scripts/build-wasm-packages.sh"
       - "engine/core/packages/**"
       - ".cargo/config.toml"
+      # The source hash the wasm is stamped with and its wasm-fresh spec checks.
+      - "tooling/js/source-hash.mjs"
       - "tooling/bootstrap.sh"
       - ".github/actions/engine-wasm/**"
       - ".github/actions/wasm-tools/**"

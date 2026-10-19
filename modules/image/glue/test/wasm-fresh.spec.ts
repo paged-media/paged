@@ -38,8 +38,7 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, it, setDefaultTimeout } from "bun:test";
 
-// @ts-expect-error — a plain .mjs script with no type declarations.
-import { sourceHash } from "../../scripts/source-hash.mjs";
+import { sourceHash } from "../../../../tooling/js/source-hash.mjs";
 
 // The hash walks the module's Rust sources synchronously. Warm that is a few
 // milliseconds; the first read of a cold checkout, with every test worker
@@ -71,7 +70,7 @@ describe.skipIf(!present && !required)(
       expect(
         stamped,
         `the wasm was built from different sources than this checkout — ${REBUILD}`,
-      ).toBe(sourceHash());
+      ).toBe(sourceHash("image"));
     });
 
     it("the wasm itself carries the same hash (the stamp file was not edited by hand)", async () => {
