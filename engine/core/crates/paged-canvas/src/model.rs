@@ -791,6 +791,11 @@ fn node_address(node: &paged_mutate::NodeId) -> String {
         NodeId::Oval(id) => format!("oval:{id}"),
         NodeId::Polygon(id) => format!("polygon:{id}"),
         NodeId::GraphicLine(id) => format!("graphicLine:{id}"),
+        NodeId::Group(id) => format!("group:{id}"),
+        NodeId::Spread(id) => format!("spread:{id}"),
+        NodeId::Page(id) => format!("page:{id}"),
+        NodeId::Story(id) => format!("story:{id}"),
+        NodeId::Layer(id) => format!("layer:{id}"),
         other => format!("{other:?}"),
     }
 }

@@ -628,7 +628,7 @@ describe("draw conformance — REPEATS (radial / grid / mirror, §12.4)", () => 
       // reference then fails — which is exactly the confusing shape the
       // rule exists to prevent.
       expect(smuggled.applied).toBe(false);
-      expect(JSON.stringify(smuggled)).toContain("node not found");
+      expect(JSON.stringify(smuggled)).toContain('"kind":"notFound"');
       expect(await sortedLeafIds(h)).toEqual(PRISTINE);
     });
 
