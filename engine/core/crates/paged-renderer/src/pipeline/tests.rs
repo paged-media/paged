@@ -1120,7 +1120,7 @@ fn polygon_path_from_anchors_with_open_skips_close_for_open_contour() {
 /// point — the IDML serialisation for a straight corner — the
 /// emitted CubicTo's control points land exactly on the segment's
 /// endpoints, so the cubic reduces to a straight line in both
-/// rasterizers (tiny-skia / Vello flatten a degenerate cubic to a
+/// rasterizers (Vello and `vello_cpu` flatten a degenerate cubic to a
 /// LineTo). Locks the "handle == anchor ⇒ line" contract.
 #[test]
 fn polygon_path_from_anchors_straight_segment_cubic_collapses_to_line() {
@@ -1316,7 +1316,7 @@ fn resolve_paragraph_bytes_unnamed_family_on_fallback_is_not_substituted() {
     assert!(!pool[0].1);
 }
 
-// P-22: lock the stroke-alignment inset math. `tiny_skia` strokes
+// P-22: lock the stroke-alignment inset math. Strokes are drawn
 // centered on the path, so Inside alignment needs the path inset
 // by +stroke/2 inward (i.e. shrink the rect), Outside by
 // -stroke/2 (grow the rect), Center / None ⇒ 0. Regressions in
@@ -1658,7 +1658,7 @@ fn degraded_asset_markers_on_emits_pink_rect_and_ghost_cross() {
 /// outer)` where `outer` already incorporates the shape's
 /// `ItemTransform`. The composed transform IS what the rasterizer
 /// uses to push the unit-rect endpoints into page space (see
-/// `paged_gpu::cpu::build_linear_gradient_shader`), so a 90°
+/// `paged_gpu`'s `vello_map::resolve_paint`), so a 90°
 /// (bottom → top) gradient on a 90°-rotated frame should produce a
 /// horizontal page-space gradient line — InDesign keeps the angle in
 /// the frame's inner coordinates (gradient-geometry column 3: a 0°
@@ -3590,9 +3590,11 @@ fn corner_rect_path_shapes_per_kind() {
         lines(CornerOption::Inset) > lines(CornerOption::Bevel),
         "inset fold-in adds an extra line segment per corner vs bevel"
     );
-    // Fancy: the ornamental three-arc scallop — three cubics per
-    // corner (calibrated; was a two-cubic ogee before W1.8).
-    assert_eq!(cubics(CornerOption::Fancy), 12);
+    // Fancy: InDesign's straight knot — no cubics, six LineTos per
+    // corner (read from its PDF export; three arcs before) plus the
+    // four edges.
+    assert_eq!(cubics(CornerOption::Fancy), 0);
+    assert_eq!(lines(CornerOption::Fancy), 28);
     // None / zero radius: sharp corners, no cubics.
     assert_eq!(cubics(CornerOption::None), 0);
 }

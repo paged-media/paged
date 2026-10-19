@@ -85,7 +85,9 @@ export function makeDatasetPanel(
   host: BundleHost,
   session: DataSourceSession,
 ): () => ReactElement {
-  return function DatasetPanel(): ReactElement {
+  // A declaration, so the React Compiler sees the component (it cannot
+  // see `return function DatasetPanel()`, editor ADR 229).
+  function DatasetPanel(): ReactElement {
     const [snapshot, refreshSnapshot] = useSessionSnapshot(session);
     const [query, setQuery] = useState<string>("");
     const [catalog, setCatalog] = useState<GovernedCatalog | null>(null);
@@ -693,5 +695,6 @@ export function makeDatasetPanel(
         </p>
       </div>
     );
-  };
+  }
+  return DatasetPanel;
 }

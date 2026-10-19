@@ -81,7 +81,9 @@ export function makeQueryPanel(
   _host: BundleHost,
   session: DataSourceSession,
 ): () => ReactElement {
-  return function QueryPanel(): ReactElement {
+  // A declaration, so the React Compiler sees the component (it cannot
+  // see `return function QueryPanel()`, editor ADR 229).
+  function QueryPanel(): ReactElement {
     const [snapshot, refresh] = useSessionSnapshot(session);
     const [queryId, setQueryId] = useState("q");
     const [sql, setSql] = useState("");
@@ -513,5 +515,6 @@ export function makeQueryPanel(
         />
       </div>
     );
-  };
+  }
+  return QueryPanel;
 }

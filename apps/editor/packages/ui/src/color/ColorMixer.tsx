@@ -78,6 +78,7 @@ export function ColorMixer(props: ColorMixerProps) {
   const mixed = value === null;
 
   // The channels the active tab shows. HSB derives from RGB.
+  // eslint-disable-next-line no-restricted-syntax -- a computed block, not a single expression (ADR 229)
   const channels = useMemo(() => {
     if (tab === "HSB") {
       return [
@@ -89,6 +90,7 @@ export function ColorMixer(props: ColorMixerProps) {
     return SPACE_CHANNELS[tab];
   }, [tab]);
 
+  // eslint-disable-next-line no-restricted-syntax -- a computed block, not a single expression (ADR 229)
   const displayed: number[] = useMemo(() => {
     if (!value) return channels.map(() => 0);
     if (tab === "HSB") {

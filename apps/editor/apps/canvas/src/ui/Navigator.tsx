@@ -25,7 +25,6 @@
 // independent of the canvas's, so users can browse pages while
 // keeping their work in view.
 
-import { useCallback, useMemo } from "react";
 import type { Camera } from "@paged-media/client";
 import type { PageId } from "@paged-media/client";
 import { fitCamera, layoutPages, type PageRect } from "./layout";
@@ -41,19 +40,13 @@ export interface NavigatorProps {
 const THUMB_WIDTH_PX = 120;
 
 export function Navigator(props: NavigatorProps) {
-  const rects = useMemo(
-    () => layoutPages(props.pageSizesPt),
-    [props.pageSizesPt],
-  );
+  const rects = layoutPages(props.pageSizesPt);
 
-  const onJumpTo = useCallback(
-    (rect: PageRect) => {
-      const [vw, vh] = props.viewportSize;
-      if (vw < 10 || vh < 10) return;
-      props.onCameraChange(fitCamera(vw, vh, rect));
-    },
-    [props],
-  );
+  const onJumpTo = (rect: PageRect) => {
+    const [vw, vh] = props.viewportSize;
+    if (vw < 10 || vh < 10) return;
+    props.onCameraChange(fitCamera(vw, vh, rect));
+  };
 
   return (
     <aside style={panelStyle}>

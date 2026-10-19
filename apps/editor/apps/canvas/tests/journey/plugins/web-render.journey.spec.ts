@@ -158,7 +158,7 @@ test.describe("journey · paged.web render output", () => {
 
     // ── 4. NEGATIVE CONTROL — the oracle is sound: re-snapshot with no
     //    further edit and assert the page is STABLE (the deterministic
-    //    tiny-skia readback diffs to ~0 for an unchanged page, so the
+    //    CPU readback diffs to ~0 for an unchanged page, so the
     //    visible-paint signal above is real, not snapshot jitter). ──
     // `expectRenderChangesFrom` above POLLS and returns the changed-pixel
     // count, not the bytes — so the settled frame is re-sampled here to be

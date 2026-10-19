@@ -57,6 +57,9 @@
 //! quotes (`'literal'`) is passed through verbatim; `''` is a literal
 //! apostrophe. Punctuation and spaces pass straight through.
 
+use paged_fmt::calendar;
+use paged_fmt::locale::{CalendarNames, EN_NAMES};
+
 /// A concrete civil date-time. All fields are explicit so date-variable
 /// rendering never reads the wall clock — the document supplies these
 /// via [`crate::pipeline::DocumentClock`], keeping renders deterministic.
@@ -77,53 +80,19 @@ pub struct DateParts {
 }
 
 impl DateParts {
-    /// Day of the week. 0 = Sunday … 6 = Saturday, via Sakamoto's
-    /// algorithm on the proleptic Gregorian calendar. Pure integer math
-    /// — no `chrono`, no locale, no wall clock.
+    /// Day of the week. 0 = Sunday … 6 = Saturday, from the civil day count
+    /// on the proleptic Gregorian calendar (paged-fmt). Pure integer math —
+    /// no `chrono`, no locale, no wall clock. A month outside 1–12 counts as
+    /// the nearest valid one, as the names do.
     fn weekday(self) -> usize {
-        // Sakamoto's method.
-        const T: [i32; 12] = [0, 3, 2, 5, 0, 3, 5, 1, 4, 6, 2, 4];
-        let mut y = self.year;
-        let m = self.month as i32;
-        if m < 3 {
-            y -= 1;
-        }
-        let idx = (m - 1).clamp(0, 11) as usize;
-        let w = (y + y / 4 - y / 100 + y / 400 + T[idx] + self.day as i32).rem_euclid(7);
-        w as usize
+        let month = self.month.clamp(1, 12) as u32;
+        let days = calendar::days_from_civil(self.year as i64, month, self.day as u32);
+        calendar::weekday(days) as usize
     }
 }
 
-const MONTHS_FULL: [&str; 12] = [
-    "January",
-    "February",
-    "March",
-    "April",
-    "May",
-    "June",
-    "July",
-    "August",
-    "September",
-    "October",
-    "November",
-    "December",
-];
-
-const MONTHS_ABBR: [&str; 12] = [
-    "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
-];
-
-const WEEKDAYS_FULL: [&str; 7] = [
-    "Sunday",
-    "Monday",
-    "Tuesday",
-    "Wednesday",
-    "Thursday",
-    "Friday",
-    "Saturday",
-];
-
-const WEEKDAYS_ABBR: [&str; 7] = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+/// InDesign writes English names for a date variable.
+static NAMES: &CalendarNames = &EN_NAMES;
 
 /// Format `date` per the InDesign/ICU `pattern`. See the module docs for
 /// the supported token subset. An empty pattern yields an empty string;
@@ -198,8 +167,8 @@ fn render_token(c: char, run: usize, d: DateParts) -> String {
         'M' => match run {
             1 => d.month.to_string(),
             2 => format!("{:02}", d.month),
-            3 => month_name(d.month, &MONTHS_ABBR),
-            _ => month_name(d.month, &MONTHS_FULL),
+            3 => month_name(d.month, &NAMES.months_abbr),
+            _ => month_name(d.month, &NAMES.months_full),
         },
         'd' => {
             if run >= 2 {
@@ -211,9 +180,9 @@ fn render_token(c: char, run: usize, d: DateParts) -> String {
         'E' => {
             let w = d.weekday();
             if run >= 4 {
-                WEEKDAYS_FULL[w].to_string()
+                NAMES.days_full[w].to_string()
             } else {
-                WEEKDAYS_ABBR[w].to_string()
+                NAMES.days_abbr[w].to_string()
             }
         }
         'H' => {

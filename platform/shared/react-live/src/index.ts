@@ -112,6 +112,13 @@ export function useLive<T extends object>(source: T, listen: Listen<T>): T {
   ) as T;
 }
 
+/** A new view of `source`, for a caller that tracks the source's changes
+ *  itself (keeps it in state beside a snapshot, say): the same proxy
+ *  `useLive` hands out, without the subscription. */
+export function freshView<T extends object>(source: T): T {
+  return viewOf(source);
+}
+
 /** The current view of `source`, outside React (a test asserting that two
  *  reads before and after a change differ). */
 export function viewNow<T extends object>(source: T): T {

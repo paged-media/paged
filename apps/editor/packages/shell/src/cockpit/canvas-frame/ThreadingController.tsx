@@ -51,9 +51,14 @@
 // the spec asserts the two-op sequence. All on the same Operation
 // channel as every other edit.
 
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef } from "react";
 
-import type { Mutation, PageId, StorySummary } from "@paged-media/client";
+import type {
+  ElementGeometryItem,
+  Mutation,
+  PageId,
+  StorySummary,
+} from "@paged-media/client";
 
 import { useCamera } from "../../state/camera-context";
 import { useCanvasClient } from "../../state/canvas-client-context";
@@ -106,6 +111,160 @@ function pageForDoc(
   return null;
 }
 
+// The channel round trips the controller makes, outside the component:
+// the React Compiler does not compile a conditional inside a `try`
+// (ADR 229).
+
+/** Hit-test one page point; the frame under it, or null. */
+async function hitFrameAt(
+  client: ReturnType<typeof useCanvasClient>,
+  pageId: PageId,
+  docX: number,
+  docY: number,
+  rect: ShellPageRect,
+): Promise<FrameHit | null> {
+  try {
+    const reply = await client.send({
+      kind: "hitTest",
+      payload: {
+        pageId,
+        docPoint: [docX - rect.x, docY - rect.y],
+        filter: "any",
+      },
+    });
+    if (reply.kind !== "hitResult") return null;
+    const el = reply.payload.element;
+    if (el && "id" in el && typeof el.id === "string") {
+      return { kind: el.kind, id: el.id, storyId: reply.payload.storyId };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/** Fire one mutation; resolve the created id (if any) on success,
+ *  `false` on failure. */
+async function dispatchVia(
+  client: ReturnType<typeof useCanvasClient>,
+  mutation: Mutation,
+): Promise<string | true | false> {
+  try {
+    const reply = await client.mutate(mutation);
+    if (reply.kind !== "mutationApplied") return false;
+    const created = (
+      reply.payload as { createdId?: { id?: string } | null } | undefined
+    )?.createdId;
+    return created?.id ?? true;
+  } catch {
+    return false;
+  }
+}
+
+/** The selected text frames whose story is overset: each frame's own
+ *  page-local centre is hit-tested (HitResult.storyId resolves the owning
+ *  story). Empty when nothing is overset or a read fails. */
+async function oversetFrameIds(
+  client: ReturnType<typeof useCanvasClient>,
+  handle: { pageIds: PageId[]; pageSizesPt?: [number, number][] } | null,
+  geometry: readonly ElementGeometryItem[],
+  hitFrame: (
+    pageId: PageId,
+    docX: number,
+    docY: number,
+    rect: ShellPageRect,
+  ) => Promise<FrameHit | null>,
+): Promise<Set<string>> {
+  try {
+    // The StorySummary collection carries the live `overset` flag. A
+    // collection read, not a `paged.stories()` script: a script run reads
+    // as a document change to every listener, and this runs after every
+    // edit.
+    const stories = await client.collection<StorySummary>("stories");
+    const oversetStoryIds = new Set(
+      stories.filter((s) => s.overset).map((s) => s.selfId),
+    );
+    if (oversetStoryIds.size === 0) return new Set<string>();
+    const rects = layoutPageRects(handle?.pageSizesPt ?? []);
+    const pageIds = handle?.pageIds ?? [];
+    const next = new Set<string>();
+    for (const g of geometry) {
+      if (g.id.kind !== "textFrame") continue;
+      // C-23 — a pasteboard frame has no page to index or hit-test
+      // against. Threading is a PAGE-level relationship (ports are
+      // drawn in page space, and `hitFrame` probes a page), so an
+      // off-page frame is correctly out of scope here rather than
+      // something to fall back for.
+      if (!g.pageId) continue;
+      const pageIdx = pageIds.indexOf(g.pageId);
+      const rect = rects[pageIdx];
+      if (!rect) continue;
+      // Frame centre in document space (geometry bounds are page-local
+      // pre-transform; push the centre through the item transform).
+      const [top, left, bottom, right] = g.bounds;
+      const cx = (left + right) / 2;
+      const cy = (top + bottom) / 2;
+      const t = g.itemTransform ?? [1, 0, 0, 1, 0, 0];
+      const wx = t[0] * cx + t[2] * cy + t[4];
+      const wy = t[1] * cx + t[3] * cy + t[5];
+      const hit = await hitFrame(g.pageId, rect.x + wx, rect.y + wy, rect);
+      if (hit && hit.storyId && oversetStoryIds.has(hit.storyId)) {
+        next.add(g.id.id);
+      }
+    }
+    return next;
+  } catch {
+    return new Set<string>();
+  }
+}
+
+/** The engine's chain state of the selected text frames: which have a
+ *  next frame, which a previous one (`nextTextFrame` /
+ *  `previousTextFrame` off each). Empty on a failed read. */
+async function chainStateOf(
+  client: ReturnType<typeof useCanvasClient>,
+  geometry: readonly ElementGeometryItem[],
+): Promise<{ withNext: Set<string>; withPrev: Set<string> }> {
+  try {
+    const frames = geometry.filter((g) => g.id.kind === "textFrame");
+    if (frames.length === 0)
+      return { withNext: new Set(), withPrev: new Set() };
+    // A real linked frame is a `u…` element id; the IDML "no link"
+    // sentinel is the literal `"n"` (InDesign's `NextTextFrame="n"` /
+    // `PreviousTextFrame="n"`), and an absent/empty value is also no
+    // link. Treat both as "no chain".
+    const isLinked = (v: string): boolean => v !== "" && v !== "n";
+    const withNext = new Set<string>();
+    const withPrev = new Set<string>();
+    for (const g of frames) {
+      // `g.id.kind === "textFrame"` here (filtered above), so the
+      // ElementId's `id` is the bare frame-id string.
+      if (g.id.kind !== "textFrame") continue;
+      const frameId = g.id.id;
+      const props = await client.elementProperties(g.id);
+      if (!props) continue;
+      const next = props.entries.find((e) => e.path === "nextTextFrame");
+      const prev = props.entries.find((e) => e.path === "previousTextFrame");
+      if (
+        next?.value &&
+        next.value.type === "text" &&
+        isLinked(next.value.value)
+      ) {
+        withNext.add(frameId);
+      }
+      if (
+        prev?.value &&
+        prev.value.type === "text" &&
+        isLinked(prev.value.value)
+      ) {
+        withPrev.add(frameId);
+      }
+    }
+    return { withNext, withPrev };
+  } catch {
+    return { withNext: new Set(), withPrev: new Set() };
+  }
+}
 export function ThreadingController() {
   const client = useCanvasClient();
   const { camera } = useCamera();
@@ -115,21 +274,30 @@ export function ThreadingController() {
     useThreading();
   const setToolPreview = useOptionalOverlaySignals()?.setToolPreview ?? null;
   const setToolPreviewRef = useRef(setToolPreview);
-  setToolPreviewRef.current = setToolPreview;
+  useLayoutEffect(() => {
+    setToolPreviewRef.current = setToolPreview;
+  });
 
   // Live refs so the once-per-load window listeners read fresh values
   // without re-subscribing every render.
   const cameraRef = useRef(camera);
-  cameraRef.current = camera;
+  useLayoutEffect(() => {
+    cameraRef.current = camera;
+  });
   const handleRef = useRef(handle);
-  handleRef.current = handle;
+  useLayoutEffect(() => {
+    handleRef.current = handle;
+  });
   const loadedRef = useRef<LoadedCursor | null>(loaded);
-  loadedRef.current = loaded;
+  useLayoutEffect(() => {
+    loadedRef.current = loaded;
+  });
 
   /** Convert a client (viewport) pointer position to a document-space
    *  point through the live camera + the viewport wrapper rect — the
    *  same inversion the GuideDragController uses (`data-paged-viewport`
    *  tags the wrapper). */
+  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
   const clientToDoc = useCallback(
     (clientX: number, clientY: number): [number, number] | null => {
       const wrap = document.querySelector("[data-paged-viewport]");
@@ -151,50 +319,18 @@ export function ThreadingController() {
    *  engine's own precondition (linkFrames rejects a non-empty target),
    *  so the channel stays the authority and a rejection surfaces as a
    *  no-op. */
+  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
   const hitFrame = useCallback(
-    async (
-      pageId: PageId,
-      docX: number,
-      docY: number,
-      rect: ShellPageRect,
-    ): Promise<FrameHit | null> => {
-      try {
-        const reply = await client.send({
-          kind: "hitTest",
-          payload: {
-            pageId,
-            docPoint: [docX - rect.x, docY - rect.y],
-            filter: "any",
-          },
-        });
-        if (reply.kind !== "hitResult") return null;
-        const el = reply.payload.element;
-        if (el && "id" in el && typeof el.id === "string") {
-          return { kind: el.kind, id: el.id, storyId: reply.payload.storyId };
-        }
-        return null;
-      } catch {
-        return null;
-      }
-    },
+    (pageId: PageId, docX: number, docY: number, rect: ShellPageRect) =>
+      hitFrameAt(client, pageId, docX, docY, rect),
     [client],
   );
 
   /** Fire one mutation; resolve the created id (if any) on success,
    *  `false` on failure. */
+  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
   const dispatch = useCallback(
-    async (mutation: Mutation): Promise<string | true | false> => {
-      try {
-        const reply = await client.mutate(mutation);
-        if (reply.kind !== "mutationApplied") return false;
-        const created = (
-          reply.payload as { createdId?: { id?: string } | null } | undefined
-        )?.createdId;
-        return created?.id ?? true;
-      } catch {
-        return false;
-      }
-    },
+    (mutation: Mutation) => dispatchVia(client, mutation),
     [client],
   );
 
@@ -205,6 +341,7 @@ export function ThreadingController() {
    *
    *  `end` is where a DRAG was released (ED-5): the new frame is then the
    *  dragged box, like any frame tool draws, wherever the drag began. */
+  // eslint-disable-next-line no-restricted-syntax -- handed to a hook that compares it (ADR 229)
   const settleDrop = useCallback(
     async (
       src: LoadedCursor,
@@ -296,7 +433,9 @@ export function ThreadingController() {
     [clientToDoc, hitFrame, dispatch],
   );
   const settleRef = useRef(settleDrop);
-  settleRef.current = settleDrop;
+  useLayoutEffect(() => {
+    settleRef.current = settleDrop;
+  });
 
   // ── loaded-cursor window listeners (bound only while loaded) ──────
   const cursorLoaded = loaded != null;
@@ -357,9 +496,11 @@ export function ThreadingController() {
           finish();
           return;
         }
-        dragged ||=
-          Math.hypot(m.clientX - start.clientX, m.clientY - start.clientY) >
-          DRAG_THRESHOLD_PX;
+        // Not `||=`: the React Compiler does not lower it (ADR 229).
+        if (!dragged)
+          dragged =
+            Math.hypot(m.clientX - start.clientX, m.clientY - start.clientY) >
+            DRAG_THRESHOLD_PX;
         if (!dragged) return;
         const a = clientToDoc(start.clientX, start.clientY);
         const b = clientToDoc(m.clientX, m.clientY);
@@ -431,53 +572,20 @@ export function ThreadingController() {
   // never walk the whole document. Re-derives on selection change +
   // every Operation/stats push.
   const geomRef = useRef(elementGeometry);
-  geomRef.current = elementGeometry;
+  useLayoutEffect(() => {
+    geomRef.current = elementGeometry;
+  });
 
+  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
   const refreshOverset = useCallback(async () => {
-    try {
-      // The StorySummary collection carries the live `overset` flag. A
-      // collection read, not a `paged.stories()` script: a script run reads
-      // as a document change to every listener, and this runs after every
-      // edit.
-      const stories = await client.collection<StorySummary>("stories");
-      const oversetStoryIds = new Set(
-        stories.filter((s) => s.overset).map((s) => s.selfId),
-      );
-      if (oversetStoryIds.size === 0) {
-        setOversetFrames(new Set());
-        return;
-      }
-      const rects = layoutPageRects(handleRef.current?.pageSizesPt ?? []);
-      const pageIds = handleRef.current?.pageIds ?? [];
-      const next = new Set<string>();
-      for (const g of geomRef.current) {
-        if (g.id.kind !== "textFrame") continue;
-        // C-23 — a pasteboard frame has no page to index or hit-test
-        // against. Threading is a PAGE-level relationship (ports are
-        // drawn in page space, and `hitFrame` probes a page), so an
-        // off-page frame is correctly out of scope here rather than
-        // something to fall back for.
-        if (!g.pageId) continue;
-        const pageIdx = pageIds.indexOf(g.pageId);
-        const rect = rects[pageIdx];
-        if (!rect) continue;
-        // Frame centre in document space (geometry bounds are page-local
-        // pre-transform; push the centre through the item transform).
-        const [top, left, bottom, right] = g.bounds;
-        const cx = (left + right) / 2;
-        const cy = (top + bottom) / 2;
-        const t = g.itemTransform ?? [1, 0, 0, 1, 0, 0];
-        const wx = t[0] * cx + t[2] * cy + t[4];
-        const wy = t[1] * cx + t[3] * cy + t[5];
-        const hit = await hitFrame(g.pageId, rect.x + wx, rect.y + wy, rect);
-        if (hit && hit.storyId && oversetStoryIds.has(hit.storyId)) {
-          next.add(g.id.id);
-        }
-      }
-      setOversetFrames(next);
-    } catch {
-      setOversetFrames(new Set());
-    }
+    setOversetFrames(
+      await oversetFrameIds(
+        client,
+        handleRef.current,
+        geomRef.current,
+        hitFrame,
+      ),
+    );
   }, [client, hitFrame, setOversetFrames]);
 
   // ── engine-truth chain state (W3.A2) ─────────────────────────────
@@ -487,48 +595,9 @@ export function ThreadingController() {
   // whole document. Re-runs on selection change + every Operation push,
   // so load-time chains AND undo/redo are reflected directly from the
   // engine — no session mirror.
+  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
   const refreshChain = useCallback(async () => {
-    try {
-      const frames = geomRef.current.filter((g) => g.id.kind === "textFrame");
-      if (frames.length === 0) {
-        setChainState({ withNext: new Set(), withPrev: new Set() });
-        return;
-      }
-      // A real linked frame is a `u…` element id; the IDML "no link"
-      // sentinel is the literal `"n"` (InDesign's `NextTextFrame="n"` /
-      // `PreviousTextFrame="n"`), and an absent/empty value is also no
-      // link. Treat both as "no chain".
-      const isLinked = (v: string): boolean => v !== "" && v !== "n";
-      const withNext = new Set<string>();
-      const withPrev = new Set<string>();
-      for (const g of frames) {
-        // `g.id.kind === "textFrame"` here (filtered above), so the
-        // ElementId's `id` is the bare frame-id string.
-        if (g.id.kind !== "textFrame") continue;
-        const frameId = g.id.id;
-        const props = await client.elementProperties(g.id);
-        if (!props) continue;
-        const next = props.entries.find((e) => e.path === "nextTextFrame");
-        const prev = props.entries.find((e) => e.path === "previousTextFrame");
-        if (
-          next?.value &&
-          next.value.type === "text" &&
-          isLinked(next.value.value)
-        ) {
-          withNext.add(frameId);
-        }
-        if (
-          prev?.value &&
-          prev.value.type === "text" &&
-          isLinked(prev.value.value)
-        ) {
-          withPrev.add(frameId);
-        }
-      }
-      setChainState({ withNext, withPrev });
-    } catch {
-      setChainState({ withNext: new Set(), withPrev: new Set() });
-    }
+    setChainState(await chainStateOf(client, geomRef.current));
   }, [client, setChainState]);
 
   useEffect(() => {

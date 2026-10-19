@@ -28,6 +28,7 @@
 // ONLY its own `x-paged:<plugin id>` envelope.
 
 import { useEffect, useRef, useState } from "react";
+import type { ElementId } from "@paged-media/client";
 
 import { useCanvasClient } from "./canvas-client-context";
 import { useSelection } from "./selection-context";
@@ -46,6 +47,46 @@ export interface SelectionObjectType {
   editContext: EditContextContribution | null;
 }
 
+/** The object type that claims `element`, and the context a double-click
+ *  would enter; null when none does. Outside the hook: the React Compiler
+ *  does not compile a conditional inside a `try` (ADR 229). */
+async function classifySelection(
+  client: ReturnType<typeof useCanvasClient>,
+  element: ElementId,
+  objectTypes: ReturnType<typeof useRegistries>["objectTypes"],
+  editContexts: ReturnType<typeof useRegistries>["editContexts"],
+): Promise<SelectionObjectType | null> {
+  const kind = (element as unknown as { kind?: string }).kind;
+  let entries: ReadonlyArray<{ value?: unknown }> = [];
+  try {
+    const props = await client.elementProperties(element);
+    if (props) entries = props.entries as ReadonlyArray<{ value?: unknown }>;
+  } catch {
+    // Property read failed — unclassified, not an error state.
+  }
+  for (const ot of objectTypes.list()) {
+    const candidate = {
+      id: element,
+      kind,
+      groupChain: [] as readonly string[],
+      metadata: ot.metadataKey ? readEnvelope(entries, ot.metadataKey) : null,
+    };
+    try {
+      if (ot.matches(candidate)) {
+        return {
+          objectType: ot,
+          editContext: ot.editContextType
+            ? (editContexts.get(ot.editContextType) ?? null)
+            : null,
+        };
+      }
+    } catch {
+      // A throwing plugin matcher must not break the inspector.
+    }
+  }
+  return null;
+}
+
 export function useSelectionObjectType(): SelectionObjectType | null {
   const client = useCanvasClient();
   const { elementSelection } = useSelection();
@@ -62,42 +103,11 @@ export function useSelectionObjectType(): SelectionObjectType | null {
       return;
     }
     const element = elementSelection[0];
-    const kind = (element as unknown as { kind?: string }).kind;
-    void (async () => {
-      let entries: ReadonlyArray<{ value?: unknown }> = [];
-      try {
-        const props = await client.elementProperties(element);
-        if (props)
-          entries = props.entries as ReadonlyArray<{ value?: unknown }>;
-      } catch {
-        // Property read failed — unclassified, not an error state.
-      }
-      if (req !== requestRef.current) return;
-      for (const ot of objectTypes.list()) {
-        const candidate = {
-          id: element,
-          kind,
-          groupChain: [] as readonly string[],
-          metadata: ot.metadataKey
-            ? readEnvelope(entries, ot.metadataKey)
-            : null,
-        };
-        try {
-          if (ot.matches(candidate)) {
-            setResolved({
-              objectType: ot,
-              editContext: ot.editContextType
-                ? (editContexts.get(ot.editContextType) ?? null)
-                : null,
-            });
-            return;
-          }
-        } catch {
-          // A throwing plugin matcher must not break the inspector.
-        }
-      }
-      setResolved(null);
-    })();
+    void classifySelection(client, element, objectTypes, editContexts).then(
+      (next) => {
+        if (req === requestRef.current) setResolved(next);
+      },
+    );
     // Registry churn after a selection (a bundle activating late) is not
     // re-observed — the next selection change re-classifies. v1 depth.
   }, [elementSelection, client, objectTypes, editContexts]);

@@ -182,6 +182,7 @@ export function SchemaTreeDemoPanel() {
 
   // Publish the scene outline as tree rows; re-publish on every
   // committed mutation so a reorder is visible in the rows it moved.
+  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
   const refresh = useCallback(() => {
     void client
       .sceneTree()

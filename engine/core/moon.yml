@@ -15,6 +15,11 @@ project:
 # idml-export) are fetched from the old repository at a pinned rev and read
 # nothing in modules/publish, so they are not an edge here. publish -> core
 # is (modules/publish/moon.yml).
+#
+# paged-renderer takes platform/shared/fmt by path (its date variables).
+dependsOn:
+  - id: "fmt"
+    scope: "production"
 
 fileGroups:
   rust-sources:
@@ -23,6 +28,8 @@ fileGroups:
     - "Cargo.lock"
     - "rust-toolchain*"
     - "/.cargo/*.toml"
+    - "/platform/shared/fmt/src/**/*.rs"
+    - "/platform/shared/fmt/Cargo.toml"
     - "!web/**"
     - "!spikes/blitz-wasm/**"
   rust-tests:

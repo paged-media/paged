@@ -18,8 +18,8 @@ ignore = [
     "RUSTSEC-2024-0436", # paste — unmaintained
     "RUSTSEC-2024-0370", # proc-macro-error — unmaintained
     "RUSTSEC-2025-0048", # tsify-next — unmaintained (use tsify)
-    "RUSTSEC-2026-0192", # ttf-parser — unmaintained (via resvg; no safe upgrade, awaits upstream skrifa migration)
-    "RUSTSEC-2026-0206", # rustybuzz — unmaintained (via resvg/usvg; no safe upgrade available)
+    "RUSTSEC-2026-0192", # ttf-parser — unmaintained (via usvg; no safe upgrade, awaits upstream skrifa migration)
+    "RUSTSEC-2026-0206", # rustybuzz — unmaintained (via usvg; no safe upgrade available)
 ]
 
 [licenses]
@@ -30,7 +30,7 @@ confidence-threshold = 0.9
 # be distributed under both: the AGPL and the commercial PMEL. No GPL/AGPL
 # dependency can pass this gate.
 # Tighten/extend this list as `cargo deny check licenses` surfaces the
-# actual transitive set (wgpu, rustybuzz, ttf-parser, tiny-skia, Vello,
+# actual transitive set (wgpu, rustybuzz, ttf-parser, usvg, Vello,
 # lcms2, …).
 allow = [
     "MPL-2.0",

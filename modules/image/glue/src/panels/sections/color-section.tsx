@@ -18,6 +18,11 @@ const swatch = (c: Rgba01) => ({
   )}, ${c[3]})`,
 });
 
+/** `data-image-<which>` (built outside the component: the React Compiler
+ *  does not lower a computed template-literal key, editor ADR 229). */
+function colorAttr(which: string): Record<string, boolean> {
+  return { [`data-image-${which}`]: true };
+}
 export function ColorSection({
   session,
   colors,
@@ -48,7 +53,7 @@ export function ColorSection({
       <input
         id={`pg-image-${which}`}
         type="color"
-        {...{ [`data-image-${which}`]: true }}
+        {...colorAttr(which)}
         value={toHex(value)}
         onChange={(e) => pick(which)(e.target.value)}
       />

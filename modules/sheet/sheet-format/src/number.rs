@@ -398,24 +398,16 @@ fn render_int_part(digits: &str, specs: &[DigitKind], grouped: bool, loc: &Local
 }
 
 /// Insert the locale group separator every three digits from the right,
-/// ignoring leading spaces (en-US `,`, de-DE `.`).
+/// ignoring leading spaces (en-US `,`, de-DE `.`). Excel groups from four
+/// digits on in every locale (no CLDR minimum, which would leave Spanish
+/// `1234` ungrouped).
 fn group_thousands(s: &str, sep: &str) -> String {
     // Separate any leading spaces.
     let lead_spaces = s.len() - s.trim_start_matches(' ').len();
     let (spaces, digits) = s.split_at(lead_spaces);
-    if digits.is_empty() {
-        return s.to_string();
-    }
-    let bytes: Vec<char> = digits.chars().collect();
-    let mut out = String::new();
-    let n = bytes.len();
-    for (i, ch) in bytes.iter().enumerate() {
-        if i > 0 && (n - i).is_multiple_of(3) {
-            out.push_str(sep);
-        }
-        out.push(*ch);
-    }
-    format!("{spaces}{out}")
+    let mut out = String::from(spaces);
+    paged_fmt::digits::push_grouped(&mut out, digits, sep, 1);
+    out
 }
 
 /// Replace the ASCII `.` produced by Rust's float formatter with the locale's

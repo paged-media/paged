@@ -131,6 +131,7 @@ export function CockpitStateProvider({ children }: PropsWithChildren) {
     };
   }, [registries]);
 
+  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
   const current: ModeUiState = useMemo(() => {
     return (
       byMode[mode] ??
@@ -141,6 +142,7 @@ export function CockpitStateProvider({ children }: PropsWithChildren) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [byMode, mode, registries.modes, registryVersion]);
 
+  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
   const commit = useCallback(
     (next: ModeUiState) => {
       setByMode((prev) => ({ ...prev, [mode]: next }));
@@ -149,6 +151,7 @@ export function CockpitStateProvider({ children }: PropsWithChildren) {
     [mode],
   );
 
+  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
   const activateTab = useCallback(
     (id: string) => {
       if (!current.rightTabs.includes(id)) return;
@@ -157,6 +160,7 @@ export function CockpitStateProvider({ children }: PropsWithChildren) {
     [commit, current],
   );
 
+  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
   const openPanel = useCallback(
     (id: string, options?: { activate?: boolean }) => {
       // Any REGISTERED panel may open; unknown ids are ignored so a
@@ -179,6 +183,7 @@ export function CockpitStateProvider({ children }: PropsWithChildren) {
     [commit, current, registries.panels],
   );
 
+  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
   const closeTab = useCallback(
     (id: string) => {
       const idx = current.rightTabs.indexOf(id);
@@ -206,6 +211,7 @@ export function CockpitStateProvider({ children }: PropsWithChildren) {
     };
   }, [activeTab, closeTab, openPanel]);
 
+  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
   const value = useMemo<CockpitState>(
     () => ({
       rightTabs: current.rightTabs,

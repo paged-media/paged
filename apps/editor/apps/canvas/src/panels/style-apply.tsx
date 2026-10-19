@@ -99,6 +99,7 @@ export function StyleApplyPanel({
   const onCommit = applied.onCommit;
 
   const [items, setItems] = useState<StyleRow[]>([]);
+  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
   const refresh = useCallback(() => {
     void client
       .collection<StyleRow>(collection)

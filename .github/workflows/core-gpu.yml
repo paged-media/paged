@@ -37,6 +37,8 @@ on:
     branches: [main]
     paths:
       - "engine/core/**"
+      # The shared formatting crate (platform/shared/fmt), a path dependency.
+      - "platform/shared/fmt/**"
       - ".github/workflows/core-gpu.yml"
       # The root Cargo config and its linker/wrapper scripts apply to every build.
       - ".cargo/config.toml"

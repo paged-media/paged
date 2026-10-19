@@ -24,7 +24,7 @@
 // document outline next to the page navigator. Clicking an entry
 // animates the camera to fit-to-page on the anchor's page.
 
-import { useCallback, useMemo } from "react";
+import { useMemo } from "react";
 import type { Camera } from "@paged-media/client";
 import type { PageId, ResolutionResult } from "@paged-media/client";
 import { fitCamera, layoutPages, type PageRect } from "./layout";
@@ -46,6 +46,7 @@ interface OutlineEntry {
 }
 
 export function Outline(props: OutlineProps) {
+  // eslint-disable-next-line no-restricted-syntax -- a computed block, not a single expression (ADR 229)
   const entries = useMemo<OutlineEntry[]>(() => {
     if (!props.resolution) return [];
     const out: OutlineEntry[] = [];
@@ -71,36 +72,27 @@ export function Outline(props: OutlineProps) {
     return out;
   }, [props.resolution]);
 
-  const rects = useMemo(
-    () => layoutPages(props.pageSizesPt),
-    [props.pageSizesPt],
-  );
+  const rects = layoutPages(props.pageSizesPt);
 
-  const onJump = useCallback(
-    (entry: OutlineEntry) => {
-      if (!entry.pageId) return;
-      const idx = props.pageIds.indexOf(entry.pageId);
-      if (idx < 0) return;
-      const [vw, vh] = props.viewportSize;
-      if (vw < 10 || vh < 10) return;
-      props.onCameraChange(fitCamera(vw, vh, rects[idx] as PageRect));
-    },
-    [props, rects],
-  );
+  const onJump = (entry: OutlineEntry) => {
+    if (!entry.pageId) return;
+    const idx = props.pageIds.indexOf(entry.pageId);
+    if (idx < 0) return;
+    const [vw, vh] = props.viewportSize;
+    if (vw < 10 || vh < 10) return;
+    props.onCameraChange(fitCamera(vw, vh, rects[idx] as PageRect));
+  };
 
   const toc = props.resolution?.toc ?? [];
-  const onJumpToPageNumber = useCallback(
-    (pageNumber: number) => {
-      // TOC page numbers are 1-based document-order indices; map
-      // back to a page rect by index.
-      const idx = pageNumber - 1;
-      if (idx < 0 || idx >= rects.length) return;
-      const [vw, vh] = props.viewportSize;
-      if (vw < 10 || vh < 10) return;
-      props.onCameraChange(fitCamera(vw, vh, rects[idx] as PageRect));
-    },
-    [props, rects],
-  );
+  const onJumpToPageNumber = (pageNumber: number) => {
+    // TOC page numbers are 1-based document-order indices; map
+    // back to a page rect by index.
+    const idx = pageNumber - 1;
+    if (idx < 0 || idx >= rects.length) return;
+    const [vw, vh] = props.viewportSize;
+    if (vw < 10 || vh < 10) return;
+    props.onCameraChange(fitCamera(vw, vh, rects[idx] as PageRect));
+  };
 
   if (!props.resolution) {
     return null;

@@ -11,6 +11,8 @@ description = "paged.data frozen core types (spec §5): Value, DataSource, Query
 workspace = true
 
 [dependencies]
+# The calendar, the locale table and digit grouping (platform/shared/fmt).
+paged-fmt = { path = "../../../platform/shared/fmt" }
 thiserror.workspace = true
 smallvec.workspace = true
 compact_str.workspace = true

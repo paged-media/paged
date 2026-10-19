@@ -55,10 +55,12 @@ const Context = createContext<ScreenModeValue | null>(null);
 
 export function ScreenModeProvider({ children }: PropsWithChildren) {
   const [screenMode, setScreenMode] = useState<ScreenMode>("normal");
+  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
   const togglePreview = useCallback(
     () => setScreenMode((m) => (m === "preview" ? "normal" : "preview")),
     [],
   );
+  // eslint-disable-next-line no-restricted-syntax -- its type argument types the value (ADR 229)
   const value = useMemo<ScreenModeValue>(
     () => ({ screenMode, setScreenMode, togglePreview }),
     [screenMode, togglePreview],

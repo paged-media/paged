@@ -33,7 +33,7 @@
 //
 // The AI Assistant lives in its own panel (ADR 221); this one links to it.
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 
 import type { ElementId } from "@paged-media/client";
 import {
@@ -110,10 +110,13 @@ export function PropertiesPanel() {
   // something else falls back to what that is.
   const steer = cockpit?.inspectorContext ?? null;
   const selectionKey = JSON.stringify(elementSelection);
-  const steerAt = useRef({ steer, key: selectionKey });
-  if (steerAt.current.steer !== steer)
-    steerAt.current = { steer, key: selectionKey };
-  const imageSteer = steer === "image" && steerAt.current.key === selectionKey;
+  // The selection a steer was pressed on, kept in state and moved during
+  // render when the steer changes (React's pattern for state that follows
+  // a prop; a ref written during render keeps the component uncompiled).
+  const [steerAt, setSteerAt] = useState({ steer, key: selectionKey });
+  if (steerAt.steer !== steer) setSteerAt({ steer, key: selectionKey });
+  const pinnedKey = steerAt.steer === steer ? steerAt.key : selectionKey;
+  const imageSteer = steer === "image" && pinnedKey === selectionKey;
   const kind: InspectorKind = hasContent
     ? "text"
     : hasImage
