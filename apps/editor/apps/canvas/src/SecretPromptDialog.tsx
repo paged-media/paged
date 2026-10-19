@@ -40,6 +40,7 @@ import type {
   SecretPromptController,
 } from "./plugin-secret-store";
 import { color, font, radius } from "@paged-media/panel-kit";
+import { FocusScope } from "@paged-media/shell";
 
 export function SecretPromptDialog({
   controller,
@@ -111,85 +112,89 @@ function SecretPrompt({ pending }: { pending: PendingSecret }) {
           boxShadow: "0 16px 48px rgba(0,0,0,0.5)",
         }}
       >
-        <h2 id="secret-title" style={{ margin: "0 0 4px", fontSize: 15 }}>
-          This source uses a stored credential
-        </h2>
-        <p style={{ margin: "0 0 14px", color: color.mutedFg }}>
-          A plugin asked to store a credential under{" "}
-          <code
-            data-testid="secret-ref"
-            style={{
-              font: `12px ${font.mono}`,
-              color: color.fg,
-            }}
-          >
-            {pending.ref}
-          </code>
-          . The plugin keeps only this reference — never the secret itself.
-        </p>
+        {/* ADR 234 — focus moves in on open, Tab stays inside, and
+            focus returns to the opener on close. */}
+        <FocusScope trap autoFocus restoreFocus>
+          <h2 id="secret-title" style={{ margin: "0 0 4px", fontSize: 15 }}>
+            This source uses a stored credential
+          </h2>
+          <p style={{ margin: "0 0 14px", color: color.mutedFg }}>
+            A plugin asked to store a credential under{" "}
+            <code
+              data-testid="secret-ref"
+              style={{
+                font: `12px ${font.mono}`,
+                color: color.fg,
+              }}
+            >
+              {pending.ref}
+            </code>
+            . The plugin keeps only this reference — never the secret itself.
+          </p>
 
-        <label
-          style={{
-            display: "block",
-            margin: "0 0 6px",
-            color: color.mutedFg,
-          }}
-        >
-          Credential
-          <input
-            type="password"
-            data-testid="secret-input"
-            value={value}
-            autoFocus
-            onChange={(e) => setValue(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && value.length > 0) save();
-            }}
+          <label
             style={{
               display: "block",
-              width: "100%",
-              marginTop: 6,
-              padding: "8px 10px",
-              borderRadius: 7,
-              border: `1px solid ${color.border}`,
-              background: color.bg,
-              color: color.fg,
-              font: `12px ${font.mono}`,
-              boxSizing: "border-box",
+              margin: "0 0 6px",
+              color: color.mutedFg,
             }}
-          />
-        </label>
-
-        <p
-          data-testid="secret-tier-note"
-          style={{
-            margin: "8px 0 16px",
-            fontSize: 12,
-            color: color.mutedFg,
-          }}
-        >
-          {tierNote}
-        </p>
-
-        <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
-          <button
-            type="button"
-            data-testid="secret-cancel"
-            onClick={cancel}
-            style={btnStyle(false)}
           >
-            Cancel
-          </button>
-          <button
-            type="button"
-            data-testid="secret-save"
-            onClick={save}
-            disabled={value.length === 0}
-            style={btnStyle(true, value.length === 0)}
+            Credential
+            <input
+              type="password"
+              data-testid="secret-input"
+              value={value}
+              autoFocus
+              onChange={(e) => setValue(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && value.length > 0) save();
+              }}
+              style={{
+                display: "block",
+                width: "100%",
+                marginTop: 6,
+                padding: "8px 10px",
+                borderRadius: 7,
+                border: `1px solid ${color.border}`,
+                background: color.bg,
+                color: color.fg,
+                font: `12px ${font.mono}`,
+                boxSizing: "border-box",
+              }}
+            />
+          </label>
+
+          <p
+            data-testid="secret-tier-note"
+            style={{
+              margin: "8px 0 16px",
+              fontSize: 12,
+              color: color.mutedFg,
+            }}
           >
-            Store credential
-          </button>
-        </div>
+            {tierNote}
+          </p>
+
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+            <button
+              type="button"
+              data-testid="secret-cancel"
+              onClick={cancel}
+              style={btnStyle(false)}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              data-testid="secret-save"
+              onClick={save}
+              disabled={value.length === 0}
+              style={btnStyle(true, value.length === 0)}
+            >
+              Store credential
+            </button>
+          </div>
+        </FocusScope>
       </div>
     </div>
   );

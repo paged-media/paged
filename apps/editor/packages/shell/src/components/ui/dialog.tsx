@@ -49,12 +49,33 @@ function DialogOverlay({
 function DialogContent({
   className,
   children,
+  onOpenAutoFocus,
+  onCloseAutoFocus,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content>) {
+  // ADR 234 — focus returns to whatever opened the dialog. Radix gives it
+  // back to a Dialog TRIGGER only, and most of the editor's dialogs open
+  // from a command (a menu item, a shortcut), so focus fell to <body>.
+  // The opener is read as the dialog opens, before focus moves in.
+  const openerRef = React.useRef<Element | null>(null);
   return (
     <DialogPortal>
       <DialogOverlay />
       <DialogPrimitive.Content
+        onOpenAutoFocus={(event) => {
+          openerRef.current = document.activeElement;
+          onOpenAutoFocus?.(event);
+        }}
+        onCloseAutoFocus={(event) => {
+          onCloseAutoFocus?.(event);
+          if (event.defaultPrevented) return;
+          event.preventDefault();
+          const opener = openerRef.current;
+          openerRef.current = null;
+          if (opener instanceof HTMLElement && opener.isConnected) {
+            opener.focus({ preventScroll: true });
+          }
+        }}
         className={cn(
           "fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border bg-background p-6 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] sm:rounded-lg",
           className,

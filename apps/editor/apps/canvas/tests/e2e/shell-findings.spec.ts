@@ -17,19 +17,20 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// The shell's browser-only findings, each an expected failure beside a
-// control that proves the path it walks works (so the failure is the
-// finding's, not the harness's):
+// The shell's browser-only findings, each beside a control that proves the
+// path it walks works (so a failure is the finding's, not the harness's).
+// An open finding is an expected failure; a fixed one asserts the fix:
 //
-//   SH-2   (UX F-49)  Tab inside a dialog toggles the chrome; focus is stuck
-//   SH-3   (UX F-36)  text from an input method (insertText) or Option+-
-//                     never reaches the story
+//   SH-2   (UX F-49)  fixed (ADR 234): Tab inside a dialog moves focus
+//                     between its controls and leaves the chrome alone
+//   SH-3   (UX F-36)  fixed (ADR 234): text from an input method
+//                     (insertText) and Option+- reach the story
 //   SH-10  (UX F-01)  a file dropped on the canvas replaced an edited
 //                     document without the discard prompt — FIXED (ADR 230)
-//   SH-11             with a text caret in a story, an open menu's arrow
-//                     keys move the caret behind it and never reach the menu
-//   SH-12             Enter that chooses a menu item also reaches the canvas:
-//                     the selected frame enters path-edit mode
+//   SH-11             fixed (ADR 234): with a text caret in a story, an
+//                     open menu's arrow keys walk the menu, not the caret
+//   SH-12             fixed (ADR 234): Enter that chooses a menu item only
+//                     chooses it; the selected frame stays out of path edit
 //   SH-201 (UX F-28)  no Cut, Copy, Paste or Duplicate for page items
 
 import { expect, test, type Page } from "@playwright/test";
@@ -98,12 +99,15 @@ const railVisible = (page: Page) =>
   page.locator('nav[aria-label="Tools"]').isVisible();
 
 test.describe("SH-2 (UX F-49) — Tab in a dialog", () => {
-  test("control: Tab on the page toggles the chrome (the binding works)", async ({
+  test("control: Tab on the canvas the user clicked into toggles the chrome (the binding works)", async ({
     page,
   }) => {
     covers("keybinding:tab→paged.chrome.toggleAll");
     await openShell(page, { doc: true });
-    await blurAll(page);
+    // A real click on the pasteboard, as a user makes it.
+    await page
+      .locator("[data-paged-canvas]")
+      .click({ position: { x: 8, y: 8 } });
     expect(await railVisible(page)).toBe(true);
     await page.keyboard.press("Tab");
     await expect.poll(() => railVisible(page)).toBe(false);
@@ -111,10 +115,72 @@ test.describe("SH-2 (UX F-49) — Tab in a dialog", () => {
     await expect.poll(() => railVisible(page)).toBe(true);
   });
 
+  test("Tab from the page enters the chrome and walks it; the chrome stays", async ({
+    page,
+  }) => {
+    covers("keybinding:tab→paged.chrome.toggleAll");
+    await openShell(page, { doc: true });
+    await blurAll(page);
+    await page.keyboard.press("Tab");
+    // The first stop is the menu bar's (one stop for all its menus).
+    await expect(page.locator('[data-menu-trigger="File"]')).toBeFocused();
+    const seen: Array<{ name: string; tools: boolean }> = [];
+    for (let i = 0; i < 12; i++) {
+      await page.keyboard.press("Tab");
+      seen.push(
+        await page.evaluate(() => {
+          const el = document.activeElement;
+          return {
+            name: el?.getAttribute("aria-label") ?? "",
+            tools: el?.closest('[role="toolbar"][aria-label="Tools"]') != null,
+          };
+        }),
+      );
+    }
+    expect(await railVisible(page)).toBe(true);
+    // The tools are one stop, on the tool in hand, and the canvas is one.
+    expect(seen.filter((s) => s.tools).map((s) => s.name)).toEqual([
+      "Selection (V)",
+    ]);
+    expect(seen.map((s) => s.name)).toContain("Document canvas");
+  });
+
+  test("the canvas reached by Tab passes Tab on: it is not a trap", async ({
+    page,
+  }) => {
+    covers("keybinding:tab→paged.chrome.toggleAll");
+    await openShell(page, { doc: true });
+    const viewport = page.locator('[data-canvas-surface="viewport"]');
+    await viewport.focus();
+    await page.keyboard.press("Tab");
+    await expect(viewport).not.toBeFocused();
+    expect(await railVisible(page)).toBe(true);
+    // Shift+Tab comes back to it, and passes on backwards too.
+    await page.keyboard.press("Shift+Tab");
+    await expect(viewport).toBeFocused();
+    await page.keyboard.press("Shift+Tab");
+    await expect(viewport).not.toBeFocused();
+    expect(await railVisible(page)).toBe(true);
+  });
+
+  test("Cmd/Ctrl+\\ hides and shows the chrome from anywhere", async ({
+    page,
+  }) => {
+    covers(
+      "keybinding:cmd+\\→paged.chrome.toggleAll",
+      "keybinding:ctrl+\\→paged.chrome.toggleAll",
+    );
+    await openShell(page, { doc: true });
+    await page.locator('[data-menu-trigger="File"]').focus();
+    await page.keyboard.press("ControlOrMeta+Backslash");
+    await expect.poll(() => railVisible(page)).toBe(false);
+    await page.keyboard.press("ControlOrMeta+Backslash");
+    await expect.poll(() => railVisible(page)).toBe(true);
+  });
+
   test("SH-2: Tab moves focus between a dialog's controls and leaves the chrome alone", async ({
     page,
   }) => {
-    test.fail();
     covers("keybinding:tab→paged.chrome.toggleAll");
     await openShell(page, { doc: true });
     await page.evaluate(() =>
@@ -131,6 +197,16 @@ test.describe("SH-2 (UX F-49) — Tab in a dialog", () => {
     expect(await railVisible(page)).toBe(true);
     const after = await page.evaluate(() => document.activeElement?.outerHTML);
     expect(after).not.toBe(before);
+    // Focus stays inside the dialog however often Tab is pressed (a modal
+    // traps it), and the chrome stays.
+    for (let i = 0; i < 15; i++) await page.keyboard.press("Tab");
+    await page.keyboard.press("Shift+Tab");
+    expect(
+      await page.evaluate(
+        () => document.activeElement?.closest('[role="dialog"]') !== null,
+      ),
+    ).toBe(true);
+    expect(await railVisible(page)).toBe(true);
   });
 });
 
@@ -150,7 +226,6 @@ test.describe("SH-3 (UX F-36) — text from an input method", () => {
   test("SH-3: text committed by an input method (insertText) lands in the story", async ({
     page,
   }) => {
-    test.fail();
     await openShell(page, { doc: true });
     await select(page, [SHELL.text]);
     await setCaret(page, 0);
@@ -163,7 +238,6 @@ test.describe("SH-3 (UX F-36) — text from an input method", () => {
   });
 
   test("SH-3: Option+- types an en dash", async ({ page }) => {
-    test.fail();
     await openShell(page, { doc: true });
     await select(page, [SHELL.text]);
     await setCaret(page, 0);
@@ -300,7 +374,6 @@ test.describe("SH-11 — the arrows in an open menu while a caret is active", ()
   test("SH-11: with a caret, ArrowDown walks the open menu and the caret stays", async ({
     page,
   }) => {
-    test.fail();
     await openShell(page, { doc: true });
     await select(page, [SHELL.text]);
     await setCaret(page, 3);
@@ -343,7 +416,6 @@ test.describe("SH-12 — Enter in an open menu", () => {
   test("SH-12: choosing View ▸ Zoom in with Enter only zooms", async ({
     page,
   }) => {
-    test.fail();
     covers("menu:View/Zoom in");
     await openShell(page, { doc: true });
     await select(page, [SHELL.frame]);
@@ -355,7 +427,8 @@ test.describe("SH-12 — Enter in an open menu", () => {
     await page.keyboard.press("Enter");
     await expect(page.locator('[role="menu"]')).toHaveCount(0);
     // The control: Enter did choose the item (the menu closed). The
-    // finding: the same key also entered path-edit mode on the frame.
+    // finding was that the same key also entered path-edit mode on the
+    // frame; the focused menu now owns it (R9).
     expect(await pathEditMode(page)).toBe(false);
   });
 });

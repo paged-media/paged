@@ -26,6 +26,7 @@
 // hardcodes the list.
 
 import { hasIcon, Icon } from "../icons";
+import { useRovingFocus } from "../focus/roving-focus";
 import { PluginGlyph } from "../icons/plugin-glyph";
 import { useRegistries } from "../state/registries-context";
 import { useRegistryView } from "../state/live";
@@ -56,6 +57,11 @@ export function PanelRail({ items }: { items: PanelRailItem[] }) {
     .list()
     .filter((p) => p.rail)
     .map((p) => ({ panelId: p.id, title: p.title, icon: p.icon ?? "" }));
+  // One tab stop for the rail; Up/Down walk it (ADR 234).
+  const roving = useRovingFocus({
+    orientation: "vertical",
+    items: "[data-panel-rail-item]",
+  });
 
   if (!cockpit || (items.length === 0 && pluginItems.length === 0)) return null;
 
@@ -117,7 +123,14 @@ export function PanelRail({ items }: { items: PanelRailItem[] }) {
   };
 
   return (
-    <div data-panel-rail style={railStyle}>
+    <div
+      data-panel-rail
+      role="toolbar"
+      aria-label="Panels"
+      aria-orientation="vertical"
+      style={railStyle}
+      {...roving}
+    >
       {items.map((item) => renderItem(item, false))}
       {pluginItems.length > 0 && items.length > 0 && (
         <div
