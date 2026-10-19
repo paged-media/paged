@@ -100,3 +100,9 @@ Vello on the worker's WebGPU device when it has one, and on the CPU rasteriser o
 when the page overprints. Ink coverage stays on the CPU rasteriser. Natively, Vello draws every
 page that overprints through its compute path; it no longer hands pages with up to eight
 overprints to the CPU rasteriser.
+
+## Amendment 2026-10-19 (ADR 189)
+
+[ADR 189](189-one-rendering-model.md) replaces the CPU lane: `cpu` is `vello_cpu` 0.3, drawing
+from the same mapping as the Vello GPU lane (`vello_map.rs`), and tiny-skia is no longer a
+dependency of the engine. The trait, the two features and the surface path are unchanged.
