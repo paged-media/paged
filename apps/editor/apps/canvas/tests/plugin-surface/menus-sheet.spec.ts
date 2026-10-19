@@ -92,13 +92,11 @@ test.describe.serial("plugin menus — paged.sheet", () => {
     );
   });
 
-  test("MNU-1 — an entry whose command needs an open workbook is offered, and does nothing, while none is open", async () => {
-    test.fail(
-      true,
-      "MNU-1: the bar greys an entry on the SDK's document scope only; the eight Sheet entries " +
-        "whose COMMAND is gated on an open workbook (`when: workbookIsOpen`) render enabled, and " +
-        "a click is refused silently by the command registry (nothing runs, nothing is said)",
-    );
+  // MNU-1 (fixed, ADR 249): the bar greyed an entry on the SDK's document
+  // scope only, so the eight Sheet entries whose COMMAND is gated on an open
+  // workbook (`when: workbookIsOpen`) rendered enabled and a click was
+  // refused silently. An entry now takes its command's own `when`.
+  test("MNU-1 — an entry whose command needs an open workbook is greyed while none is open", async () => {
     // The document is open and no workbook is: the state a designer is in
     // before New blank workbook / Insert ▸ Spreadsheet….
     const gated = [
@@ -124,18 +122,17 @@ test.describe.serial("plugin menus — paged.sheet", () => {
   });
 
   test("MNU-1 (the other half) — clicking such an entry with no workbook runs nothing", async () => {
-    // Not an expected failure: this pins what MNU-1 costs the user. The
-    // item accepts the click and the registry refuses before the handler
-    // (no `started`), so there is no message either.
+    // The greyed item takes no click, and a forced one is refused by the
+    // registry before the handler (no `started`): nothing runs.
     const before = await documentDigest(live);
     const item = await openLeaf(live, routeOf("Sheet/Add sheet"));
-    expect(await isGreyed(item)).toBe(false);
+    expect(await isGreyed(item)).toBe(true);
     const runs = await live.evaluate(
       () =>
         (globalThis as unknown as { __menuProbe: { runs: unknown[] } })
           .__menuProbe.runs.length,
     );
-    await item.click();
+    await item.click({ force: true });
     await closeMenus(live);
     await live.waitForTimeout(500);
     expect(
