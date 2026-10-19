@@ -148,7 +148,7 @@ async function runCliDoor(c: ParityCase, door: CliDoor) {
   s.lastCase = `${name} ${door.id}`;
   let out: Uint8Array;
   try {
-    out = door.run(s.bin!, c, st.args, st.saved);
+    out = await door.run(s.bin!, c, st.args, st.saved);
   } catch (err) {
     const detail = err instanceof Error ? err.message : String(err);
     record(s, name, { status: "refused", door: door.id, detail });

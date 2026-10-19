@@ -31,6 +31,23 @@ export interface Finding {
 }
 
 export const KNOWN_FINDINGS: Readonly<Record<string, Finding>> = {
+  ...Object.fromEntries(
+    [
+      "insertFrame/command ui.command",
+      "insertFrame/command automation.command",
+      "insertOval/command ui.command",
+      "insertOval/command automation.command",
+    ].map((key) => [
+      key,
+      {
+        id: "PAR-6",
+        actual:
+          "Insert ▸ Rectangle / Ellipse make the frame with a 1 pt Color/Black stroke (the editor's graphic default); insertFrame / insertOval on every other surface make it unstroked",
+        expected:
+          "one capability, one object: the same frame from the menu as from host.objects, paged.insertFrame or paged invoke (either the engine applies the default, or the menu does not)",
+      },
+    ]),
+  ),
   "read:paged.schema boa": {
     id: "PAR-3",
     actual:

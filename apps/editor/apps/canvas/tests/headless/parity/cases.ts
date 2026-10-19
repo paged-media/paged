@@ -406,6 +406,30 @@ export const PARITY_CASES: readonly ParityCase[] = [
     args: { pageId: P.page, bounds: [500, 300, 560, 400] },
     boa: (a) => `paged.insertOval(${q(a.pageId)}, ${q(a.bounds)})`,
   },
+  // The Insert menu's commands place a default-sized item centred on the
+  // page in view (the camera's: the fixture's first page), so their case
+  // is the same op at those bounds.
+  {
+    op: "insertTextFrame",
+    variant: "command",
+    args: { pageId: P.page, bounds: [336, 186, 456, 426] },
+    boa: (a) => `paged.insertTextFrame(${q(a.pageId)}, ${q(a.bounds)})`,
+    command: { id: "paged.insert.textFrame", select: [] },
+  },
+  {
+    op: "insertFrame",
+    variant: "command",
+    args: { pageId: P.page, bounds: [316, 226, 476, 386] },
+    boa: (a) => `paged.insertFrame(${q(a.pageId)}, ${q(a.bounds)})`,
+    command: { id: "paged.insert.rectangle", select: [] },
+  },
+  {
+    op: "insertOval",
+    variant: "command",
+    args: { pageId: P.page, bounds: [316, 226, 476, 386] },
+    boa: (a) => `paged.insertOval(${q(a.pageId)}, ${q(a.bounds)})`,
+    command: { id: "paged.insert.ellipse", select: [] },
+  },
   {
     op: "insertLine",
     args: { pageId: P.page, start: [300, 500], end: [400, 560] },
@@ -693,6 +717,14 @@ export const PARITY_CASES: readonly ParityCase[] = [
     op: "insertPage",
     args: { afterPageId: P.page, masterId: null },
     boa: (a) => `paged.insertPage(${q(a.afterPageId)})`,
+    command: { id: "paged.insert.newPage", select: [] },
+  },
+  {
+    op: "deletePage",
+    variant: "current",
+    args: { pageId: P.page },
+    boa: (a) => `paged.deletePage(${q(a.pageId)})`,
+    command: { id: "paged.insert.deletePage", select: [] },
   },
   {
     op: "deletePage",
