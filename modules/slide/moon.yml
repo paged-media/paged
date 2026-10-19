@@ -41,6 +41,7 @@ tasks:
     inputs:
       - "@group(rust-sources)"
       - "scripts/build-wasm.sh"
+      - "/tooling/rust/build-wasm.sh"
       - "packages/slide-bundle/manifest.json"
     outputs:
       - "packages/slide-bundle/bin/slide_js*"
