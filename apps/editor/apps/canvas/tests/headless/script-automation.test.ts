@@ -39,11 +39,10 @@ import {
 } from "@paged-media/shell";
 import {
   covers,
-  dumpDiff,
-  elementKey,
   gestureFixture,
   GESTURE_TARGETS as T,
 } from "@paged-media/test-kit";
+import { dumpDiff, elementKey } from "@paged-media/test-kit/headless";
 
 import { createHeadlessEditor, type HeadlessEditor } from "./harness";
 
