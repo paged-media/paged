@@ -1,5 +1,5 @@
 {
-  "setting:paged.tool.polygon.sides": "Seeded 2026-10-19, when covers() became the measure: no unit test changes setting paged.tool.polygon.sides and asserts its effect under covers(); no test file names it at all; declared in apps/editor/packages/tools/src/built-in-tools.ts.",
-  "setting:paged.tool.polygon.starInset": "Seeded 2026-10-19, when covers() became the measure: no unit test changes setting paged.tool.polygon.starInset and asserts its effect under covers(); no test file names it at all; declared in apps/editor/packages/tools/src/built-in-tools.ts.",
-  "setting:paged.tool.smooth.tolerance": "Seeded 2026-10-19, when covers() became the measure: no unit test changes setting paged.tool.smooth.tolerance and asserts its effect under covers(); no test file names it at all; declared in apps/editor/packages/tools/src/built-in-tools.ts."
+  "setting:paged.library": "The flag is read only by startLibrary() in apps/canvas/src/main.tsx, the app's entry module: importing it boots the editor (createRoot at module scope, Vite ?worker imports), so no unit or component test can load it. Covering it needs the check moved into an importable module, a product change this test programme does not make.",
+  "setting:url.embed": "Read by IframeScriptBridge (apps/canvas/src/playground), a React component of the canvas app that also reads import.meta.env; the canvas DOM test lane with its Vite env shim is not on main yet. A component test follows it.",
+  "setting:url.script": "Read by PlaygroundController (apps/canvas/src/playground), a React component of the canvas app; the canvas DOM test lane (happy-dom, Vite env shim) is being added by the panel tests and is not on main yet. A component test follows it."
 }
