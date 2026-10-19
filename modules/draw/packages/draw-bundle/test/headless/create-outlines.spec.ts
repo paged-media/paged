@@ -23,14 +23,9 @@
 //       `Color/Black` for process black), grouped when there are several,
 //       the frame deleted LAST (insert-then-delete is the order the
 //       engine accepts);
-//   (2) through the REAL engine, when it speaks protocol 66: the frame
-//       goes, its glyphs come back as paths inside its box, ONE undo
-//       restores the frame;
-//   (3) on an OLDER engine the command refuses and the frame survives —
-//       it never deletes text it could not replace.
-// (2) and (3) are exclusive and each skips on the other engine;
-// `PAGED_REQUIRE_V66=1` turns (2)'s skip into a failure, for the local
-// override lane that is meant to prove it.
+//   (2) through the REAL engine (the workspace's, which speaks protocol
+//       66 and later): the frame goes, its glyphs come back as paths
+//       inside its box, ONE undo restores the frame.
 
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -45,12 +40,11 @@ import {
   it,
 } from "bun:test";
 
-import type { CommandContribution, ElementId } from "@paged-media/plugin-api";
+import type { ElementId } from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
 
 import {
   drawBundle,
-  CREATE_OUTLINES_COMMAND_ID,
   applyCreateOutlines,
   createOutlinesBatchFor,
   outlineSwatchFor,
@@ -98,12 +92,15 @@ const RESULT: TextOutlinesWire = {
   ],
 };
 
-/** Lora (OFL, `test/fixtures/fonts/OFL-lora.txt`). The headless host
+/** Lora (OFL, `engine/core/corpus/fonts/OFL-lora.txt`). The headless host
  *  loads with no fallback font, so text composes glyphs only in a family
  *  the font registry holds: the document below NAMES Lora, and the face
  *  is registered under that name BEFORE the load (fonts seed at load). */
 const LORA = readFileSync(
-  join(dirname(fileURLToPath(import.meta.url)), "../fixtures/fonts/Lora.ttf"),
+  join(
+    dirname(fileURLToPath(import.meta.url)),
+    "../../../../../../engine/core/corpus/fonts/Lora.ttf",
+  ),
 );
 
 /** One page; a text frame whose story is "Ho" in black then "o" in red,
@@ -155,28 +152,6 @@ const TEXT_DOC = buildIdml([
 
 type Op = { op: string; args: Record<string, unknown> };
 const opsOf = (m: unknown): Op[] => (m as { args: { ops: Op[] } }).args.ops;
-
-// Whether the engine answers requestTextOutlines (protocol 66), probed once
-// while the file loads: bun:test has no runtime skip (vitest's ctx.skip()),
-// so the two engine-dependent cases below are skipIf'd on it instead.
-const V66 = await (async () => {
-  const p = await openHost();
-  try {
-    await p.host.editor.client.send({
-      kind: "registerFont",
-      payload: { family: "Lora", style: null, bytes: Array.from(LORA) },
-    } as never);
-    await p.load(TEXT_DOC);
-    return (
-      (await rawTextOutlines(p.host, {
-        kind: "textFrame",
-        id: "tf",
-      } as ElementId)) !== null
-    );
-  } finally {
-    p.dispose();
-  }
-})();
 
 describe("draw conformance — create outlines (C-69, protocol 66)", () => {
   describe("the pure batch", () => {
@@ -256,15 +231,6 @@ describe("draw conformance — create outlines (C-69, protocol 66)", () => {
   describe("through the real engine", () => {
     let h: HeadlessHost;
     let frame: ElementId;
-    let v66 = false;
-
-    const commandFor = (id: string): CommandContribution => {
-      const rec = h.contributions.find(
-        (c) => c.kind === "command" && c.id === id,
-      );
-      if (!rec) throw new Error(`no command recorded for ${id}`);
-      return rec.value as CommandContribution;
-    };
 
     const leafKinds = async (): Promise<string[]> => {
       const out: string[] = [];
@@ -291,91 +257,73 @@ describe("draw conformance — create outlines (C-69, protocol 66)", () => {
       } as never);
       await h.load(TEXT_DOC);
       frame = { kind: "textFrame", id: "tf" } as ElementId;
-      v66 = (await rawTextOutlines(h.host, frame)) !== null;
     });
     afterAll(() => h?.dispose());
 
-    it.skipIf(!V66 && process.env.PAGED_REQUIRE_V66 !== "1")(
-      "protocol 66: the frame becomes paths inside its own box, in ONE batch; one undo brings the frame back",
-      async () => {
-        if (!v66)
-          throw new Error(
-            "PAGED_REQUIRE_V66=1 but the engine does not answer requestTextOutlines",
-          );
-        const read = (await rawTextOutlines(h.host, frame))!;
-        expect(read.runs.reduce((n, r) => n + r.glyphs, 0)).toBe(3);
-        expect(read.runs).toHaveLength(2);
-        const [geom] = await h.host.document.elementGeometry([frame]);
-        const m = (geom.itemTransform ?? null) as Affine | null;
-        const [top, left, bottom, right] = m
-          ? transformBounds(geom.bounds, m)
-          : geom.bounds;
-        const before = await leafKinds();
-        await h.host.selection.set([frame]);
-        const counted = countingHost(h.host);
-        expect(await applyCreateOutlines(counted.host)).toEqual([frame]);
-        expect(counted.work.mutations).toHaveLength(1);
+    it("protocol 66: the frame becomes paths inside its own box, in ONE batch; one undo brings the frame back", async () => {
+      const read = (await rawTextOutlines(h.host, frame))!;
+      expect(read.runs.reduce((n, r) => n + r.glyphs, 0)).toBe(3);
+      expect(read.runs).toHaveLength(2);
+      const [geom] = await h.host.document.elementGeometry([frame]);
+      const m = (geom.itemTransform ?? null) as Affine | null;
+      const [top, left, bottom, right] = m
+        ? transformBounds(geom.bounds, m)
+        : geom.bounds;
+      const before = await leafKinds();
+      await h.host.selection.set([frame]);
+      const counted = countingHost(h.host);
+      expect(await applyCreateOutlines(counted.host)).toEqual([frame]);
+      expect(counted.work.mutations).toHaveLength(1);
 
-        const after = await leafKinds();
-        const frameKey = `${frame.kind}:${String(frame.id)}`;
-        expect(after).not.toContain(frameKey);
-        const added = after.filter((k) => !before.includes(k));
-        expect(added.length).toBeGreaterThanOrEqual(1);
-        for (const key of added.filter((k) => k.startsWith("polygon:"))) {
-          const id = {
-            kind: "polygon",
-            id: key.slice("polygon:".length),
-          } as ElementId;
-          const anchors = (await h.host.document.pathAnchors(id))!;
-          expect(anchors.subpathStarts.length).toBeGreaterThanOrEqual(1);
-          // Inside the frame's page-space box (pathAnchors answers the
-          // path's own space, and an inserted path has no transform).
-          for (const a of anchors.anchors) {
-            expect(a.anchor[0]).toBeGreaterThan(left - 1);
-            expect(a.anchor[0]).toBeLessThan(right + 1);
-            expect(a.anchor[1]).toBeGreaterThan(top - 1);
-            expect(a.anchor[1]).toBeLessThan(bottom + 1);
-          }
+      const after = await leafKinds();
+      const frameKey = `${frame.kind}:${String(frame.id)}`;
+      expect(after).not.toContain(frameKey);
+      const added = after.filter((k) => !before.includes(k));
+      expect(added.length).toBeGreaterThanOrEqual(1);
+      for (const key of added.filter((k) => k.startsWith("polygon:"))) {
+        const id = {
+          kind: "polygon",
+          id: key.slice("polygon:".length),
+        } as ElementId;
+        const anchors = (await h.host.document.pathAnchors(id))!;
+        expect(anchors.subpathStarts.length).toBeGreaterThanOrEqual(1);
+        // Inside the frame's page-space box (pathAnchors answers the
+        // path's own space, and an inserted path has no transform).
+        for (const a of anchors.anchors) {
+          expect(a.anchor[0]).toBeGreaterThan(left - 1);
+          expect(a.anchor[0]).toBeLessThan(right + 1);
+          expect(a.anchor[1]).toBeGreaterThan(top - 1);
+          expect(a.anchor[1]).toBeLessThan(bottom + 1);
         }
-        // Two colours → two compound paths, grouped. "o" is a ring, so the
-        // red path (one "o") has two contours and the black one ("H" + "o")
-        // at least three.
-        const holes = await Promise.all(
-          added
-            .filter((k) => k.startsWith("polygon:"))
-            .map(
-              async (k) =>
-                (await h.host.document.pathAnchors({
-                  kind: "polygon",
-                  id: k.slice(8),
-                } as ElementId))!.subpathStarts.length,
-            ),
-        );
-        expect(holes.sort((a, b) => a - b)).toHaveLength(2);
-        expect(holes[0]).toBe(2);
-        expect(holes[1]).toBeGreaterThanOrEqual(3);
-        expect(added.some((k) => k.startsWith("group:"))).toBe(true);
-        // The red one is painted with a swatch named by its hex.
-        const swatches = (await h.host.document.collection("swatches")) as {
-          name: string;
-        }[];
-        expect(swatches.some((sw) => sw.name.toLowerCase() === "#ff0000")).toBe(
-          true,
-        );
+      }
+      // Two colours → two compound paths, grouped. "o" is a ring, so the
+      // red path (one "o") has two contours and the black one ("H" + "o")
+      // at least three.
+      const holes = await Promise.all(
+        added
+          .filter((k) => k.startsWith("polygon:"))
+          .map(
+            async (k) =>
+              (await h.host.document.pathAnchors({
+                kind: "polygon",
+                id: k.slice(8),
+              } as ElementId))!.subpathStarts.length,
+          ),
+      );
+      expect(holes.sort((a, b) => a - b)).toHaveLength(2);
+      expect(holes[0]).toBe(2);
+      expect(holes[1]).toBeGreaterThanOrEqual(3);
+      expect(added.some((k) => k.startsWith("group:"))).toBe(true);
+      // The red one is painted with a swatch named by its hex.
+      const swatches = (await h.host.document.collection("swatches")) as {
+        name: string;
+      }[];
+      expect(swatches.some((sw) => sw.name.toLowerCase() === "#ff0000")).toBe(
+        true,
+      );
 
-        await h.host.document.undo();
-        expect(await leafKinds()).toEqual(before);
-      },
-    );
-
-    it.skipIf(V66)(
-      "an OLDER engine: the command refuses and the frame is left as text",
-      async () => {
-        const before = await leafKinds();
-        await h.host.selection.set([frame]);
-        await commandFor(CREATE_OUTLINES_COMMAND_ID).handler(undefined);
-        expect(await leafKinds()).toEqual(before);
-      },
-    );
+      await h.host.document.undo();
+      expect(await leafKinds()).toEqual(before);
+    });
   });
 });

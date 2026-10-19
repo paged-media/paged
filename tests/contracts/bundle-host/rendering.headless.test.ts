@@ -73,7 +73,12 @@ const TRI = { kind: "polygon", id: "utri" } as ElementId;
 
 /** A face the engine can register (the editor's own default face). */
 const INTER = new Uint8Array(
-  readFileSync(new URL("../../../public/fonts/Inter.ttf", import.meta.url)),
+  readFileSync(
+    new URL(
+      "../../../apps/editor/apps/canvas/public/fonts/Inter.ttf",
+      import.meta.url,
+    ),
+  ),
 );
 
 const ADAPTERS = [

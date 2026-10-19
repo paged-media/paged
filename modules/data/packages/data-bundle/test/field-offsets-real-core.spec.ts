@@ -34,7 +34,6 @@ import type { DataEngineLike } from "../src/engine";
 import {
   dataFields,
   ENGINE_ANCHOR,
-  fixedFrom,
   openRealHost,
   REQUIRE_REAL_CORE,
 } from "./real-core";
@@ -386,49 +385,46 @@ describe.skipIf(!run)(
     // empty" and drops the history record. The Wave 1 W2 fixture built its
     // separators this way, which read as "the undo history is bounded at 89".
     // FIXED in engine protocol 69 (core ADR 127: typing at a field's edge lands
-    // beside the field): passes there, stays pinned on 68.
-    fixedFrom(69, it)(
-      "DEFECT core <69: text inserted at a field's start joins the field and a field write erases it [data.lower.v43-consumers]",
-      async () => {
-        h = await openRealHost();
-        const story = await newStory(h);
-        const host = h.host;
-        for (const i of [1, 0]) {
-          await host.document.mutate({
-            op: "insertField",
-            args: {
-              storyId: story,
-              offset: 0,
-              field: {
-                placeholder: { plugin: PLUGIN, key: `k${i}`, value: "x" },
-              },
+    // beside the field); the workspace engine has the fix.
+    it("DEFECT core <69: text inserted at a field's start joins the field and a field write erases it [data.lower.v43-consumers]", async () => {
+      h = await openRealHost();
+      const story = await newStory(h);
+      const host = h.host;
+      for (const i of [1, 0]) {
+        await host.document.mutate({
+          op: "insertField",
+          args: {
+            storyId: story,
+            offset: 0,
+            field: {
+              placeholder: { plugin: PLUGIN, key: `k${i}`, value: "x" },
             },
-          });
-          if (i > 0)
-            await host.document.mutate({
-              op: "insertText",
-              args: { storyId: story, offset: 0, text: " " },
-            });
-        }
-        const engine = fakeEngine({
-          resolve_lowered: (id: string) => ({
-            kind: "variable",
-            target: id,
-            text: `${id}-value`,
-            hidden: false,
-          }),
+          },
         });
-        const s = await sessionOver(h, engine);
-        s.addVariableBinding("k0", "anchor", "q", "k0");
-        s.addVariableBinding("k1", "anchor", "q", "k1");
-        const mark = await undoMark(h);
-        expect(await s.refreshFields()).toBe(2);
-        const text = (await host.document.storyContent(story))?.paragraphs
-          .map((p) => p.runs.map((r) => r.text).join(""))
-          .join("");
-        expect(text).toBe("k0-value k1-value");
-        expect(await undoSteps(h, mark)).toBe(1);
-      },
-    );
+        if (i > 0)
+          await host.document.mutate({
+            op: "insertText",
+            args: { storyId: story, offset: 0, text: " " },
+          });
+      }
+      const engine = fakeEngine({
+        resolve_lowered: (id: string) => ({
+          kind: "variable",
+          target: id,
+          text: `${id}-value`,
+          hidden: false,
+        }),
+      });
+      const s = await sessionOver(h, engine);
+      s.addVariableBinding("k0", "anchor", "q", "k0");
+      s.addVariableBinding("k1", "anchor", "q", "k1");
+      const mark = await undoMark(h);
+      expect(await s.refreshFields()).toBe(2);
+      const text = (await host.document.storyContent(story))?.paragraphs
+        .map((p) => p.runs.map((r) => r.text).join(""))
+        .join("");
+      expect(text).toBe("k0-value k1-value");
+      expect(await undoSteps(h, mark)).toBe(1);
+    });
   },
 );

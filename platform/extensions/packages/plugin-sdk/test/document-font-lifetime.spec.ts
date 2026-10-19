@@ -53,7 +53,9 @@ import { minimalIdml } from "./fixtures/minimal-idml";
 import { silentConsole as silent } from "../src/testing";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const FACE = new Uint8Array(
-  readFileSync(join(HERE, "fixtures", "fonts", "SpaceGrotesk-VF.ttf")),
+  readFileSync(
+    join(HERE, "../../../../../engine/core/corpus/fonts/SpaceGrotesk-VF.ttf"),
+  ),
 );
 const FAMILY = "Space Grotesk";
 

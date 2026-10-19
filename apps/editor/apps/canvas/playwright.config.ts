@@ -23,6 +23,9 @@ import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, "..", "..");
+// The repository's root tests (/tests, tests/README.md): the cross-component
+// Playwright lanes run on this config's dev server, as projects of their own.
+const ROOT_TESTS = resolve(__dirname, "..", "..", "..", "..", "tests");
 
 // Reuse an already-running Vite dev server when one is up (faster
 // iteration locally); otherwise spawn one. The wasm bundle is built
@@ -38,13 +41,15 @@ if (!process.env.NODE_OPTIONS) {
 }
 
 // Lean CI surface (tests.yml): the published-wasm CI runs the behaviour
-// surface without the Envato fidelity gate, which needs the 4.4 GB
+// surface without the Envato fidelity gate (the `fidelity` project, below,
+// which CI never selects), which needs the 4.4 GB
 // `corpus/idml` LFS packs + their InDesign reference PDFs + the
 // `paged-diff` Rust binary (built from a `core` checkout) + poppler's
-// `pdftoppm` — none of which the package-boundary runner has. Those two
-// specs read `corpus/config/manifest.json` at import time, so set
-// `PAGED_CI_LEAN=1` to drop them from collection entirely rather than
-// let the import throw. Local runs (no flag) keep the full surface.
+// `pdftoppm` — none of which the package-boundary runner has. The specs
+// read `corpus/config/manifest.json` at import time, so set
+// `PAGED_CI_LEAN=1` to drop extensive-corpus from collection entirely
+// rather than let the import throw. Local runs (no flag) keep the full
+// surface.
 const LEAN_CI = process.env.PAGED_CI_LEAN === "1";
 
 // The direct-manipulation specs (translate/resize/rotate-scale/
@@ -55,12 +60,11 @@ const LEAN_CI = process.env.PAGED_CI_LEAN === "1";
 // the lean runner omits. They have since been migrated onto the
 // license-clear `corpus/generated` fixtures (geometry / numbering /
 // layers-z / layout / images), so they now run in lean CI and the list
-// is empty. Only the two specs below remain dropped: they read
-// `corpus/config/manifest.json` + reference PDFs at import time and are
-// inherently envato-tier (per-pack pixel fidelity), not migratable.
-const LEAN_DROP = LEAN_CI
-  ? ["fidelity.spec.ts", "e2e/extensive-corpus.spec.ts"]
-  : [];
+// is empty. Only the spec below remains dropped: it reads
+// `corpus/config/manifest.json` + reference PDFs at import time and is
+// inherently envato-tier, not migratable. (The per-pack pixel fidelity
+// sweep, which does the same, is the root `tests/fidelity/` project.)
+const LEAN_DROP = LEAN_CI ? ["e2e/extensive-corpus.spec.ts"] : [];
 
 // tests/headless is the headless editor's `bun test` tier, not Playwright's.
 const HEADLESS = "headless/**";
@@ -220,6 +224,82 @@ export default defineConfig({
       use: {
         ...devices["Desktop Chrome"],
         deviceScaleFactor: 1,
+        headless: (process.env.BACKEND ?? "").toLowerCase() !== "gpu",
+        launchOptions:
+          (process.env.BACKEND ?? "").toLowerCase() === "gpu"
+            ? {
+                args: [
+                  "--enable-unsafe-webgpu",
+                  "--use-vulkan",
+                  "--enable-features=Vulkan",
+                ],
+              }
+            : {},
+      },
+    },
+    {
+      // Cross-component round trips (/tests/integration): a module's state
+      // saved into the editor's .paged container and read back on reopen.
+      // The same browser and settings as `journeys`; CI runs it beside the
+      // journeys (editor-tests.yml).
+      name: "integration",
+      testDir: resolve(ROOT_TESTS, "integration"),
+      testMatch: "**/*.spec.ts",
+      snapshotPathTemplate:
+        "{testDir}/__screenshots__/{testFileName}/{arg}-{projectName}-{platform}{ext}",
+      use: {
+        ...devices["Desktop Chrome"],
+        deviceScaleFactor: 1,
+        headless: (process.env.BACKEND ?? "").toLowerCase() !== "gpu",
+        launchOptions:
+          (process.env.BACKEND ?? "").toLowerCase() === "gpu"
+            ? {
+                args: [
+                  "--enable-unsafe-webgpu",
+                  "--use-vulkan",
+                  "--enable-features=Vulkan",
+                ],
+              }
+            : {},
+      },
+    },
+    {
+      // The round trips on the GPU backend, as `journeys-gpu` runs the
+      // journeys (real Chrome, new headless, Metal): paged.image's commit,
+      // undo and reopen are GPU-only. LOCAL, GATING NOTHING, like
+      // journeys-gpu: `bun run --filter paged-canvas test:integration:gpu`.
+      name: "integration-gpu",
+      testDir: resolve(ROOT_TESTS, "integration"),
+      testMatch: "**/*.spec.ts",
+      snapshotPathTemplate:
+        "{testDir}/__screenshots__/{testFileName}/{arg}-{projectName}-{platform}{ext}",
+      use: {
+        ...devices["Desktop Chrome"],
+        channel: "chrome",
+        deviceScaleFactor: 1,
+        headless: false,
+        launchOptions: {
+          args: [
+            "--headless=new",
+            "--enable-unsafe-webgpu",
+            "--use-angle=metal",
+          ],
+        },
+      },
+    },
+    {
+      // The editor's per-pack fidelity sweep (/tests/fidelity): every pack of
+      // the private corpus rendered through the editor and diffed against
+      // InDesign's PDF. Local only: it needs the corpus, the `paged-diff`
+      // binary and `pdftoppm` (see LEAN_CI above); no CI lane selects it.
+      //
+      //   bunx playwright test --project=fidelity
+      name: "fidelity",
+      testDir: resolve(ROOT_TESTS, "fidelity"),
+      testMatch: "**/*.spec.ts",
+      // The settings it had as a spec of the `chromium` project.
+      use: {
+        ...devices["Desktop Chrome"],
         headless: (process.env.BACKEND ?? "").toLowerCase() !== "gpu",
         launchOptions:
           (process.env.BACKEND ?? "").toLowerCase() === "gpu"

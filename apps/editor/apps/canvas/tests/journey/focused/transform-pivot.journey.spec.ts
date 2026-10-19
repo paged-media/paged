@@ -22,11 +22,8 @@
 // A click with the Rotate tool moves the reference point; the next drag
 // rotates the selection about it, so the clicked corner stays where it
 // is while the rest of the frame swings round. Before protocol 66 the
-// engine ignores `pivotInPage` and rotates about the centroid, which
-// moves that corner — so this journey runs only on an engine that has
-// the field: set `PAGED_REQUIRE_V66=1` with the local protocol-66
-// override (it skips otherwise, and must stop skipping once the editor
-// pins canvas-wasm 0.66).
+// engine ignored `pivotInPage` and rotated about the centroid, which
+// moved that corner; the workspace engine has the field.
 
 import { expect, test } from "@playwright/test";
 
@@ -86,11 +83,6 @@ async function drag(
 }
 
 test.describe("journey · rotate about a click-set pivot", () => {
-  test.skip(
-    process.env.PAGED_REQUIRE_V66 !== "1",
-    "needs a protocol-66 engine (PAGED_REQUIRE_V66=1)",
-  );
-
   test("the clicked corner stays put while the frame rotates @feat:editor-tools.rotate @level:gesture", async ({
     page,
   }) => {

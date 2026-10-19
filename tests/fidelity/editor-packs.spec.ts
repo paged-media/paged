@@ -40,28 +40,31 @@ import {
   packOutDir,
   packPagePath,
   selectPacks,
-} from "./fidelity/fixtures";
+} from "../../apps/editor/apps/canvas/tests/fidelity/fixtures";
 import {
   loadIdml,
   openCanvas,
   snapshotPagePng,
   snapshotWidthPx,
-} from "./fidelity/canvas-driver";
-import { rasterizeReferencePdf } from "./fidelity/pdf-rasterize";
-import { diffPng, DiffMetrics } from "./fidelity/diff";
+} from "../../apps/editor/apps/canvas/tests/fidelity/canvas-driver";
+import { rasterizeReferencePdf } from "../../apps/editor/apps/canvas/tests/fidelity/pdf-rasterize";
+import {
+  diffPng,
+  DiffMetrics,
+} from "../../apps/editor/apps/canvas/tests/fidelity/diff";
 import {
   CapturedBaseline,
   loadThresholds,
   PackThreshold,
   THRESHOLDS_PATH,
   writeThresholds,
-} from "./fidelity/thresholds";
+} from "../../apps/editor/apps/canvas/tests/fidelity/thresholds";
 import {
   DashboardPack,
   DashboardState,
   dashboardPath,
   writeDashboard,
-} from "./fidelity/dashboard";
+} from "../../apps/editor/apps/canvas/tests/fidelity/dashboard";
 
 const FIDELITY_MODE = (process.env.FIDELITY_MODE ?? "gate") as
   "gate" | "capture" | "advisory";
