@@ -48,7 +48,7 @@ import {
 } from "@paged-media/web-model";
 
 import { webBundle } from "../src";
-import { createDebouncer } from "../src/panels/debounce";
+import { createDebouncer } from "@paged-media/panel-kit";
 import {
   FallbackCodeEditor,
   resolveEditorLane,
