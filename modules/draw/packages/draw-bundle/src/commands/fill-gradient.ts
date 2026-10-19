@@ -24,7 +24,7 @@
 // { stops: [...] }` — a vector, above the scalar §11.5 binding
 // ceiling), then point each selected element's `frameFillColor` at the
 // gradient's self-id (the B-03 ref assignment, pinned by
-// `test/conformance/gradient-fill.spec.ts`). The fill panel's schema
+// `test/headless/gradient-fill.spec.ts`). The fill panel's schema
 // can't express that, so each preset is a COMMAND; the panel's
 // gradient section (angle/length, scalar) then steers the result.
 //

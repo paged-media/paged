@@ -47,7 +47,7 @@ import {
   SYMBOLS_NOTE,
   SYMBOLS_PANEL_ID,
 } from "../../src";
-import { openHost } from "../conformance/host";
+import { openHost } from "../headless/host";
 import {
   documentBurst,
   drive,
