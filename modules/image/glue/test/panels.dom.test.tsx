@@ -54,13 +54,23 @@ afterEach(() => cleanup());
  *  loader (see the header). */
 async function withNodeEngine<T>(fn: () => Promise<T>): Promise<T> {
   const g = globalThis as { window?: unknown };
-  const w = g.window;
-  g.window = undefined;
-  try {
-    return await fn();
-  } finally {
-    g.window = w;
-  }
+  let out!: T;
+  // React 19 reads `window.event` when it schedules and when it runs work,
+  // so no React work may run while `window` is hidden. Work already in the
+  // scheduler runs first, with `window` in place (a few macrotasks); work
+  // the engine boot triggers lands in act()'s queue, which act() flushes
+  // once the callback has returned and `window` is back.
+  await act(async () => {
+    for (let i = 0; i < 5; i++) await new Promise((r) => setTimeout(r, 0));
+    const w = g.window;
+    g.window = undefined;
+    try {
+      out = await fn();
+    } finally {
+      g.window = w;
+    }
+  });
+  return out;
 }
 
 const q = (root: HTMLElement, attr: string) =>
