@@ -149,7 +149,9 @@ Findings so far, each an expected failure in those files:
 ## Findings on record
 
 Every finding is an expected failure in the test named, and fails for the stated reason. The
-host findings (HOST-1 to HOST-7) are in the table above.
+host findings (HOST-1 to HOST-7) are in the table above. All of the programme's findings, the
+plugins' included, are indexed with severities and shared root causes in
+[conformance-findings-2026-10.md](../../../docs/development/conformance-findings-2026-10.md).
 
 | Id    | Surface                                                                                 | What happens                                                                           | Test                                                                          |
 | ----- | --------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
