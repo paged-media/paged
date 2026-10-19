@@ -303,31 +303,26 @@ describe("Stroke panel: findings", () => {
   );
 
   // Typing into that field anyway sends a write the engine refuses
-  // ("FrameStrokeMiterLimit is not supported on Oval"), and the field
-  // shows the refusal as raw wire JSON.
-  test.failing(
-    "PN-4: a refused write is reported in words, not as the wire's JSON",
-    async () => {
-      covers("panel:paged.stroke");
-      const h = await mount();
-      await h.select([h.scene.oval]);
-      await h.typeInto("frameStrokeMiterLimit", "9");
-      expect(h.field("frameStrokeMiterLimit").textContent).not.toContain(
-        '{"error"',
-      );
-    },
-  );
+  // ("FrameStrokeMiterLimit is not supported on Oval"); the field says so
+  // in words (the panel kit's refusalText), not as the wire's JSON.
+  test("PN-4: a refused write is reported in words, not as the wire's JSON", async () => {
+    covers("panel:paged.stroke");
+    const h = await mount();
+    await h.select([h.scene.oval]);
+    await h.typeInto("frameStrokeMiterLimit", "9");
+    const said = h.field("frameStrokeMiterLimit").textContent;
+    expect(said).not.toContain('{"error"');
+    expect(said).toContain("Stroke miter limit does not apply to an oval.");
+  });
 
-  test.failing(
-    "PN-2: toggle-group segments expose which one is on (aria-pressed)",
-    async () => {
-      covers("panel:paged.stroke");
-      const h = await mount();
-      await h.select([h.scene.rect]);
-      const active = h
-        .field("frameStrokeEndCap")
-        .querySelector('[data-active="true"]')!;
-      expect(active.getAttribute("aria-pressed")).toBe("true");
-    },
-  );
+  test("PN-2: toggle-group segments expose which one is on (aria-pressed)", async () => {
+    covers("panel:paged.stroke");
+    const h = await mount();
+    await h.select([h.scene.rect]);
+    const field = h.field("frameStrokeEndCap");
+    const active = field.querySelector('[data-active="true"]')!;
+    expect(active.getAttribute("aria-pressed")).toBe("true");
+    for (const off of field.querySelectorAll('[data-active="false"]'))
+      expect(off.getAttribute("aria-pressed")).toBe("false");
+  });
 });

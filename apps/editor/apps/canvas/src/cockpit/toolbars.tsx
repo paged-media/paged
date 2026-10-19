@@ -82,6 +82,8 @@ export function ToolPill(props: {
       type="button"
       title={props.title}
       disabled={props.disabled}
+      // A pill that toggles says whether it is on.
+      aria-pressed={props.on}
       data-cockpit-action={props.testId}
       data-on={props.on ? "" : undefined}
       onClick={props.onClick}

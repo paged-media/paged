@@ -23,6 +23,8 @@
 // localStorage blob, debounced writes, and a one-shot cleanup of the
 // legacy `paged.layout.*` keys.
 
+import { createDebouncer } from "@paged-media/panel-kit";
+
 import type { WorkflowMode } from "../state/workflow-mode-context";
 import { scopedChromeKey } from "../state/chrome-storage-scope";
 
@@ -76,8 +78,9 @@ export function loadCockpitStore(): CockpitStore {
   }
 }
 
-let pending: number | null = null;
 let latest: CockpitStore = {};
+/** One write 300 ms after the last change (the panel kit's debouncer). */
+const write = createDebouncer(300);
 
 /** Merge one mode's state into the blob; debounced 300 ms. */
 export function saveModeUiState(
@@ -89,14 +92,12 @@ export function saveModeUiState(
   latest = next;
   const ls = safeStorage();
   if (!ls) return next;
-  if (pending !== null) window.clearTimeout(pending);
-  pending = window.setTimeout(() => {
-    pending = null;
+  write.schedule(() => {
     try {
       ls.setItem(KEY(), JSON.stringify(latest));
     } catch {
       /* quota / privacy mode — state stays in-memory */
     }
-  }, 300);
+  });
   return next;
 }

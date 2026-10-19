@@ -45,25 +45,26 @@ import type {
   QueryPreview,
   VariableSummary,
 } from "../session";
+import { color, font, space, status } from "@paged-media/panel-kit";
 
 const wrap: CSSProperties = {
   display: "flex",
   flexDirection: "column",
-  gap: "var(--space-3, 12px)",
-  padding: "var(--space-3, 12px)",
+  gap: space[3],
+  padding: space[3],
   fontSize: "12px",
-  color: "var(--pg-fg, #ddd)",
+  color: color.fg,
 };
 
 const note: CSSProperties = {
-  color: "var(--pg-muted-fg, #999)",
+  color: color.mutedFg,
   fontSize: "11px",
   lineHeight: 1.5,
 };
 
 /** Values/ids stay mono; prose is the host's sans. */
 const mono: CSSProperties = {
-  fontFamily: "var(--font-mono, ui-monospace, monospace)",
+  fontFamily: font.mono,
 };
 
 /** How many rows "Preview rows" shows. */
@@ -74,7 +75,7 @@ const QUERY_PANEL_ID = "media.paged.data.panel.query";
 
 const row: CSSProperties = {
   display: "flex",
-  gap: "var(--space-2, 8px)",
+  gap: space[2],
   flexWrap: "wrap",
   alignItems: "center",
 };
@@ -630,7 +631,7 @@ export function makeDatasetPanel(
                     rows={8}
                     style={{
                       width: "100%",
-                      fontFamily: "var(--font-mono, ui-monospace, monospace)",
+                      fontFamily: font.mono,
                       fontSize: 11,
                     }}
                     data-data-variable-library
@@ -665,10 +666,7 @@ export function makeDatasetPanel(
               </div>
             )}
             {error && (
-              <div
-                data-status="error"
-                style={{ color: "var(--status-error, #e66)" }}
-              >
+              <div data-status="error" style={{ color: status.error }}>
                 {error}
               </div>
             )}

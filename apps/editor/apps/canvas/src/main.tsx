@@ -17,7 +17,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-import { StrictMode, useEffect, useRef, useState } from "react";
+import { StrictMode, useEffect, useEffectEvent, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
   PagedShell,
@@ -665,6 +665,75 @@ function PluginBundles() {
   return null;
 }
 
+/** Save (.paged) — the native container (the app's File ▸ Save, below).
+ *  A module function, not a `try` in the component: the compiler does
+ *  not lower the conditionals in it inside one (ADR 229). Throws what the
+ *  caller reports. */
+async function savePagedFile(
+  client: CanvasClient,
+  sourceName: string | null | undefined,
+): Promise<void> {
+  // v66 — plugins with an edit session outside the document
+  // commit it first (bounded; a stuck one is reported, not
+  // waited on forever), so the file holds what is on screen.
+  const prepared = await willSave.run({ format: "paged" });
+  for (const id of [...prepared.failed, ...prepared.timedOut]) {
+    console.warn(
+      `Save (.paged): ${id} did not finish preparing (` +
+        `${prepared.failed.includes(id) ? "threw" : "timed out"}); ` +
+        `saving its last committed state`,
+    );
+  }
+  const bytes = await client.exportPaged();
+  // What the bytes hold: an edit landing while they are written
+  // out is not part of this save.
+  const savedMark = client.editMark;
+  let baseName = sourceName || "document";
+  try {
+    const meta = await client.documentMeta();
+    if (meta.documentName) baseName = meta.documentName;
+  } catch {
+    /* meta unavailable — keep the fallback name */
+  }
+  // ADR 180 — the save is a commit in the local library, alongside
+  // (never instead of) the file write below. A library failure is
+  // reported and the file still gets written.
+  try {
+    await commitSave(bytes.slice(), baseName);
+  } catch (err) {
+    console.warn("Save (.paged): the library did not take this save:", err);
+  }
+  // A5 — write BACK to the file the document was opened from,
+  // when there is one. Until now every save minted a download,
+  // so a second Cmd+S produced "document (1).paged" and the file
+  // the user opened was never touched: a save-AS wearing the
+  // word Save, with no autosave behind it.
+  //
+  // Falls back to the download whenever the write cannot happen
+  // — no handle, no platform support, a declined permission
+  // prompt, a moved file.  returns false rather
+  // than throwing for exactly that reason: a save that did not
+  // happen must not look like one that did.
+  //
+  // ED-4 — either way the document is saved, so the edited flag
+  // clears (until the next edit). Until now nothing cleared it:
+  // after a save the next Open still warned of unsaved edits.
+  if (await writeToOpenFile(bytes, "application/x-paged+zip")) {
+    client.markSaved(savedMark);
+    return;
+  }
+  const blob = new Blob([bytes.slice()], {
+    type: "application/x-paged+zip",
+  });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `${baseName.replace(/\.(paged|idml)$/i, "")}.paged`;
+  a.click();
+  URL.revokeObjectURL(url);
+  client.markSaved(savedMark);
+}
+
 /**
  * Canvas-app integration: legacy keyboard + camera + text-editing
  * hooks that read from the shell contexts but key off canvas
@@ -774,17 +843,16 @@ function CanvasAppIntegration() {
   // ADR-012 Tier 1 — the MENU path of the undo routing (the controller
   // owns the keyboard chords): while a modal context declares undo
   // ownership, Edit/Undo + Edit/Redo drive ITS op-log, not the document
-  // stack. A ref so the command closures (registered once per effect
-  // run) always see the live stack without re-registering per enter/exit.
+  // stack. An effect event so the command closures (registered once per
+  // effect run) always see the live stack without re-registering per
+  // enter/exit.
   const editContextStack = useEditContextStack();
-  const editContextRef = useRef(editContextStack);
-  editContextRef.current = editContextStack;
-  // `paged.object.*` reads the LIVE element selection. Through a ref
-  // for the same reason the edit-context stack is: the command effect
-  // must not re-register on every click.
+  const currentEditContext = useEffectEvent(() => editContextStack);
+  // `paged.object.*` reads the LIVE element selection, for the same
+  // reason the edit-context stack is: the command effect must not
+  // re-register on every click.
   const selection = useSelection();
-  const selectionRef = useRef(selection);
-  selectionRef.current = selection;
+  const currentSelection = useEffectEvent(() => selection);
 
   const animateCamera = useAnimatedCamera(camera, setCamera);
   useKeyboardShortcuts({
@@ -798,14 +866,14 @@ function CanvasAppIntegration() {
     client,
     selection: contentSelection,
     setSelection: setContentSelection,
-    undoOwnedByContext: () =>
-      !!editContextRef.current?.activeContribution?.onUndo,
-    escapeOwnedByContext: () => !!editContextRef.current?.active,
+    // useTextEditing calls these through the latest render's context.
+    undoOwnedByContext: () => !!editContextStack?.activeContribution?.onUndo,
+    escapeOwnedByContext: () => !!editContextStack?.active,
     // ED-1 — Escape out of the text is InDesign's: the frame that held
     // the caret becomes the selection and the Selection tool is in hand,
     // so the next key is a shortcut again rather than more text.
     onLeaveText: (left) => {
-      selectionRef.current.setActiveTool("select");
+      selection.setActiveTool("select");
       void (async () => {
         const frameId = await frameHoldingCaret(client, left);
         if (!frameId) return;
@@ -813,10 +881,8 @@ function CanvasAppIntegration() {
           [{ kind: "textFrame", id: frameId }],
           "replace",
         );
-        selectionRef.current.setElementSelection(applied);
-        selectionRef.current.setElementGeometry(
-          await client.elementGeometry(applied),
-        );
+        selection.setElementSelection(applied);
+        selection.setElementGeometry(await client.elementGeometry(applied));
       })().catch(() => {
         /* worker reload / disconnect — the caret is gone either way */
       });
@@ -922,8 +988,7 @@ function CanvasAppIntegration() {
   // sat after its template page, not where it was moved), and the camera
   // went to whatever page now occupies that slot. So the order is taken
   // from the engine, and the camera waits for the handle that agrees.
-  const pageHandleRef = useRef(handle);
-  pageHandleRef.current = handle;
+  const currentPageHandle = useEffectEvent(() => handle);
   useEffect(() => {
     setPageGoTo(async (pageId, fit) => {
       let order: string[];
@@ -936,7 +1001,7 @@ function CanvasAppIntegration() {
       }
       if (!order.includes(pageId)) return false;
       const settled = () => {
-        const h = pageHandleRef.current;
+        const h = currentPageHandle();
         return h &&
           h.pageIds.length === order.length &&
           h.pageIds.every((id, i) => id === order[i])
@@ -998,7 +1063,7 @@ function CanvasAppIntegration() {
     const rects = layoutPages(pageSizes);
     const commands = buildAppCommands({
       undo: () => {
-        const owner = editContextRef.current.activeContribution;
+        const owner = currentEditContext().activeContribution;
         if (owner?.onUndo) {
           owner.onUndo();
           return;
@@ -1006,7 +1071,7 @@ function CanvasAppIntegration() {
         void client.undo();
       },
       redo: () => {
-        const owner = editContextRef.current.activeContribution;
+        const owner = currentEditContext().activeContribution;
         if (owner?.onUndo) {
           owner.onRedo?.();
           return;
@@ -1047,17 +1112,18 @@ function CanvasAppIntegration() {
       // document is open.
       saveAsIdml: async () => {
         if (!handle || handle.pageCount === 0) return;
+        // U14 — same identity preference as the doc title bar:
+        // meta.documentName, else the loaded file's name. Decided outside
+        // the `try`: the compiler does not lower a conditional inside one
+        // (ADR 229).
+        const fallbackName = sourceName || "document";
         try {
           const bytes = await client.exportIdml();
-          // U14 — same identity preference as the doc title bar:
-          // meta.documentName, else the loaded file's name.
-          let baseName = sourceName || "document";
-          try {
-            const meta = await client.documentMeta();
-            if (meta.documentName) baseName = meta.documentName;
-          } catch {
-            /* meta unavailable — keep the fallback name */
-          }
+          const baseName = await client.documentMeta().then(
+            (meta) => meta.documentName || fallbackName,
+            // meta unavailable — keep the fallback name
+            () => fallbackName,
+          );
           const blob = new Blob([bytes.slice()], {
             type: "application/vnd.adobe.indesign-idml-package",
           });
@@ -1080,75 +1146,12 @@ function CanvasAppIntegration() {
       // original OPC — none of which an IDML export can carry.
       savePaged: async () => {
         if (!handle || handle.pageCount === 0) return;
-        try {
-          // v66 — plugins with an edit session outside the document
-          // commit it first (bounded; a stuck one is reported, not
-          // waited on forever), so the file holds what is on screen.
-          const prepared = await willSave.run({ format: "paged" });
-          for (const id of [...prepared.failed, ...prepared.timedOut]) {
-            console.warn(
-              `Save (.paged): ${id} did not finish preparing (` +
-                `${prepared.failed.includes(id) ? "threw" : "timed out"}); ` +
-                `saving its last committed state`,
-            );
-          }
-          const bytes = await client.exportPaged();
-          // What the bytes hold: an edit landing while they are written
-          // out is not part of this save.
-          const savedMark = client.editMark;
-          let baseName = sourceName || "document";
-          try {
-            const meta = await client.documentMeta();
-            if (meta.documentName) baseName = meta.documentName;
-          } catch {
-            /* meta unavailable — keep the fallback name */
-          }
-          // ADR 180 — the save is a commit in the local library, alongside
-          // (never instead of) the file write below. A library failure is
-          // reported and the file still gets written.
-          try {
-            await commitSave(bytes.slice(), baseName);
-          } catch (err) {
-            console.warn(
-              "Save (.paged): the library did not take this save:",
-              err,
-            );
-          }
-          // A5 — write BACK to the file the document was opened from,
-          // when there is one. Until now every save minted a download,
-          // so a second Cmd+S produced "document (1).paged" and the file
-          // the user opened was never touched: a save-AS wearing the
-          // word Save, with no autosave behind it.
-          //
-          // Falls back to the download whenever the write cannot happen
-          // — no handle, no platform support, a declined permission
-          // prompt, a moved file.  returns false rather
-          // than throwing for exactly that reason: a save that did not
-          // happen must not look like one that did.
-          //
-          // ED-4 — either way the document is saved, so the edited flag
-          // clears (until the next edit). Until now nothing cleared it:
-          // after a save the next Open still warned of unsaved edits.
-          if (await writeToOpenFile(bytes, "application/x-paged+zip")) {
-            client.markSaved(savedMark);
-            return;
-          }
-          const blob = new Blob([bytes.slice()], {
-            type: "application/x-paged+zip",
-          });
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement("a");
-          a.href = url;
-          a.download = `${baseName.replace(/\.(paged|idml)$/i, "")}.paged`;
-          a.click();
-          URL.revokeObjectURL(url);
-          client.markSaved(savedMark);
-        } catch (err) {
+        await savePagedFile(client, sourceName).catch((err: unknown) => {
           // A failed save that reaches only the devtools console is a
           // failed save the user believes succeeded — and with no
           // autosave behind it, believing wrongly is how work is lost.
           reportFileFailure("Save (.paged)", err);
-        }
+        });
       },
       zoomIn: () => {
         const cx = vw / 2;
@@ -1195,15 +1198,15 @@ function CanvasAppIntegration() {
     // console.
     const objectDeps: ObjectCommandDeps = {
       client,
-      getSelection: () => selectionRef.current.elementSelection,
+      getSelection: () => currentSelection().elementSelection,
       // ADR 024 — read through the SAME ref the undo routing uses, so
       // the two cannot disagree about which context is active.
-      activeEditContext: () => editContextRef.current.active,
+      activeEditContext: () => currentEditContext().active,
       setSelection: async (ids) => {
         const applied = await client.setElementSelection(ids, "replace");
-        selectionRef.current.setElementSelection(applied);
+        currentSelection().setElementSelection(applied);
         try {
-          selectionRef.current.setElementGeometry(
+          currentSelection().setElementGeometry(
             await client.elementGeometry(applied),
           );
         } catch {
@@ -1215,16 +1218,16 @@ function CanvasAppIntegration() {
       // from — for a selected group those are its leaves, which the
       // group id itself could not be asked for.
       refreshSelectionGeometry: async () => {
-        const selected = selectionRef.current.elementSelection;
-        const shown = selectionRef.current.elementGeometry.map((g) => g.id);
+        const selected = currentSelection().elementSelection;
+        const shown = currentSelection().elementGeometry.map((g) => g.id);
         const ids = shown.length > 0 ? shown : selected;
         if (ids.length === 0) return;
         const items = await client.elementGeometry(ids);
         // The selection moved on while the engine answered: the path
         // that changed it fetched its own geometry, and this answer is
         // for something no longer on screen.
-        if (selectionRef.current.elementSelection !== selected) return;
-        selectionRef.current.setElementGeometry(items);
+        if (currentSelection().elementSelection !== selected) return;
+        currentSelection().setElementGeometry(items);
       },
       report: (severity, message) =>
         problemsSink.publish(OBJECT_DIAGNOSTIC_SOURCE, "object", [

@@ -41,7 +41,7 @@
 //
 // Driven end-to-end by tests/e2e/schema-list-panel.spec.ts.
 
-import { useEffect, useRef } from "react";
+import { useEffect, useEffectEvent } from "react";
 
 import {
   CatalogRegistryProvider,
@@ -113,10 +113,9 @@ export function SchemaListDemoPanel() {
   const client = useCanvasClient();
   const registries = useRegistries();
   const { elementSelection } = useSelection();
-  // Live ref — the command handler closes over the CURRENT selection,
-  // not the mount-time snapshot.
-  const selRef = useRef(elementSelection);
-  selRef.current = elementSelection;
+  // The command handler reads the CURRENT selection, not the mount-time
+  // snapshot.
+  const currentSelection = useEffectEvent(() => elementSelection);
 
   useEffect(() => {
     // Idempotent under a re-mount race (dockview can briefly hold two
@@ -130,7 +129,7 @@ export function SchemaListDemoPanel() {
         const swatchId = typeof payload === "string" ? payload : null;
         if (!swatchId) return;
         const value = { type: "colorRef", value: swatchId } as Value;
-        for (const id of selRef.current) {
+        for (const id of currentSelection()) {
           void client.mutate({
             op: "setElementProperty",
             args: { elementId: id, path: "frameStrokeColor", value },

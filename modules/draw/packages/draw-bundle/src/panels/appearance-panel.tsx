@@ -82,7 +82,13 @@ import {
 } from "../commands/appearance-bake";
 import { linkIndex } from "../link-index";
 import { usePanelReload } from "./use-panel-reload";
-import { About, Refusal, useActionFeedback } from "@paged-media/panel-kit";
+import {
+  About,
+  color,
+  font,
+  Refusal,
+  useActionFeedback,
+} from "@paged-media/panel-kit";
 import { PanelIntro } from "./panel-parts";
 
 export const APPEARANCE_PANEL_ID = "media.paged.draw.panel.appearance";
@@ -113,41 +119,41 @@ const rowStyle: React.CSSProperties = {
   alignItems: "center",
   gap: 6,
   padding: "3px 0",
-  font: "12px var(--font-sans, sans-serif)",
+  font: `12px ${font.sans}`,
 };
 const iconBtn: React.CSSProperties = {
   border: "none",
   background: "none",
   cursor: "pointer",
   padding: "0 3px",
-  font: "12px var(--font-sans, sans-serif)",
-  color: "var(--pg-fg, currentColor)",
+  font: `12px ${font.sans}`,
+  color: color.fg,
 };
 const sectionStyle: React.CSSProperties = {
-  font: "11px var(--font-sans, sans-serif)",
+  font: `11px ${font.sans}`,
   textTransform: "uppercase",
   letterSpacing: "0.04em",
   opacity: 0.65,
   paddingTop: 8,
 };
 const bakeTagStyle: React.CSSProperties = {
-  font: "10px var(--font-sans, sans-serif)",
+  font: `10px ${font.sans}`,
   textTransform: "uppercase",
   letterSpacing: "0.04em",
-  border: "1px solid var(--pg-border, rgba(127,127,127,0.5))",
+  border: `1px solid ${color.border}`,
   borderRadius: 2,
   padding: "0 3px",
 };
 
-const swatchChip = (color: string): React.CSSProperties => ({
+const swatchChip = (ref: string): React.CSSProperties => ({
   width: 10,
   height: 10,
   flex: "0 0 auto",
-  border: "1px solid var(--pg-border, rgba(127,127,127,0.6))",
+  border: `1px solid ${color.border}`,
   // The colorRef is a swatch SELF-ID, not a resolvable CSS colour (the
   // engine owns the colour book) — the chip is a marker, never a lie
   // about the rendered paint.
-  background: color === "Color/Paper" ? "#fff" : "transparent",
+  background: ref === "Color/Paper" ? "#fff" : "transparent",
 });
 
 /** A swatch reference as a name: "Color/Black" → "Black". */
@@ -461,9 +467,7 @@ export function makeAppearancePanel(host: BundleHost): {
         <Refusal text={refusal} />
 
         {!target && (
-          <div
-            style={{ opacity: 0.6, font: "12px var(--font-sans, sans-serif)" }}
-          >
+          <div style={{ opacity: 0.6, font: `12px ${font.sans}` }}>
             Select an object to see its appearance stack.
           </div>
         )}
@@ -474,7 +478,7 @@ export function makeAppearancePanel(host: BundleHost): {
               <div
                 style={{
                   opacity: 0.6,
-                  font: "11px var(--font-sans, sans-serif)",
+                  font: `11px ${font.sans}`,
                 }}
               >
                 Showing the first of {extra + 1} selected objects; edits apply
@@ -486,7 +490,7 @@ export function makeAppearancePanel(host: BundleHost): {
               <div
                 style={{
                   opacity: 0.6,
-                  font: "12px var(--font-sans, sans-serif)",
+                  font: `12px ${font.sans}`,
                 }}
               >
                 No extra fill layers — the frame's own fill is what renders.
@@ -499,7 +503,7 @@ export function makeAppearancePanel(host: BundleHost): {
               <div
                 style={{
                   opacity: 0.6,
-                  font: "12px var(--font-sans, sans-serif)",
+                  font: `12px ${font.sans}`,
                 }}
               >
                 No extra stroke layers — the frame's own stroke is what renders.

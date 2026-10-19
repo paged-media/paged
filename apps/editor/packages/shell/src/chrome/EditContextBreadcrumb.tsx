@@ -29,6 +29,7 @@
 // (top) crumb — the DTP "you are editing inside this" cue.
 
 import { useEditContextStack } from "../state/edit-context-stack";
+import { chrome, font, radius, space } from "@paged-media/panel-kit";
 
 /** `vectorGraphic` → `Vector graphic`; `webFrame` → `Web frame`. */
 function titleCase(type: string): string {
@@ -99,17 +100,17 @@ export function EditContextBreadcrumb() {
 const barStyle: React.CSSProperties = {
   display: "flex",
   alignItems: "center",
-  gap: "var(--space-2, 6px)",
+  gap: space[2],
   height: 28,
-  padding: "0 var(--space-3, 10px)",
-  borderBottom: "1px solid var(--chrome-border, rgba(255,255,255,0.08))",
+  padding: `0 ${space[3]}`,
+  borderBottom: `1px solid ${chrome.border}`,
   background: "var(--chrome-bg, transparent)",
   fontSize: 12,
 };
 
 const kickerStyle: React.CSSProperties = {
   textTransform: "uppercase",
-  letterSpacing: "var(--tracking-wide, 0.06em)",
+  letterSpacing: font.trackingWide,
   color: "var(--pg-muted-fg)",
   marginRight: 2,
 };
@@ -117,7 +118,7 @@ const kickerStyle: React.CSSProperties = {
 const crumbWrapStyle: React.CSSProperties = {
   display: "inline-flex",
   alignItems: "center",
-  gap: "var(--space-2, 6px)",
+  gap: space[2],
 };
 
 const crumbStyle: React.CSSProperties = {
@@ -136,8 +137,8 @@ const sepStyle: React.CSSProperties = {
 const exitStyle: React.CSSProperties = {
   marginLeft: "auto",
   background: "none",
-  border: "1px solid var(--chrome-border, rgba(255,255,255,0.12))",
-  borderRadius: "var(--radius-1, 4px)",
+  border: `1px solid ${chrome.border}`,
+  borderRadius: radius.sm,
   padding: "1px 6px",
   fontSize: 11,
   color: "var(--pg-muted-fg)",

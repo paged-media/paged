@@ -42,7 +42,8 @@
 //
 // REFUSALS ARE SHOWN. The engine caps the arrangement at 12 inputs and
 // 256 faces and REFUSES past either — it never truncates. The panel puts
-// the engine's own sentence in the status line rather than looking like
+// the engine's reason in the status line, in words (the panel kit's
+// refusalText: never the wire's variant name), rather than looking like
 // nothing happened.
 //
 // HONEST SEAMS, still: the CONVERT SHAPE row + the corner option (no
@@ -50,6 +51,7 @@
 
 import { useState } from "react";
 
+import { refusalText, StatusLine } from "@paged-media/panel-kit";
 import { useCanvasClient, useSelection, Icon } from "@paged-media/shell";
 
 import { CoreCommandButton } from "../core-command-dialog";
@@ -202,22 +204,15 @@ function topToBottom(selection: ElementId[], paint: string[]): ElementId[] {
     .map((e) => e.id);
 }
 
-/** The engine's own sentence for a refused mutation, or null when it
- *  applied. An apply-layer refusal arrives as
- *  `mutationFailed { error: NotImplemented { what: "frame mutation
- *  failed: invalid value for FramePath on X: <reason>" } }` — the user
- *  gets the trailing clause, not the envelope. */
-function refusalOf(reply: WorkerToMain): string | null {
+/** The engine's reason for a refused mutation, in words, or null when it
+ *  applied. An apply-layer refusal arrives as `mutationFailed { error:
+ *  NotImplemented { what: "frame mutation failed: invalid value for
+ *  FramePath on X: <reason>" } }` — the user gets the reason, not the
+ *  envelope; a bare variant name ("Mutation::PathfinderBoolean") says
+ *  that `subject` is not available for these objects. */
+function refusalOf(reply: WorkerToMain, subject: string): string | null {
   if (reply.kind !== "mutationFailed") return null;
-  const error = reply.payload.error;
-  const what =
-    error.kind === "notImplemented"
-      ? error.details.what
-      : error.kind === "noDocument"
-        ? "no document loaded"
-        : `the engine refused the operation (${error.kind})`;
-  const tail = /:\s*([^:]*(?:planar|face|path|value)[^:]*)$/.exec(what);
-  return (tail ? tail[1] : what).trim();
+  return refusalText(reply.payload.error, subject);
 }
 
 // The path verbs plus opacity mask and step-and-repeat (their menu groups
@@ -232,7 +227,7 @@ export function PathfinderPanel() {
   const [status, setStatus] = useState<string | null>(null);
   const enabled = elementSelection.length >= 2;
 
-  async function run(kind: PathfinderKind) {
+  async function run(kind: PathfinderKind, label: string) {
     if (!enabled) return;
     const [kept, ...others] = elementSelection as ElementId[];
     if (others.length === 0) return;
@@ -241,11 +236,11 @@ export function PathfinderPanel() {
       op: "pathfinderBoolean",
       args: { kept, others, kind },
     });
-    setStatus(refusalOf(reply));
+    setStatus(refusalOf(reply, label));
   }
 
   /** One region verb over the selection, ordered by real z. */
-  async function runRegion(verb: RegionVerb) {
+  async function runRegion(verb: RegionVerb, label: string) {
     if (!enabled) return;
     setStatus(null);
     let ordered = [...elementSelection] as ElementId[];
@@ -259,7 +254,7 @@ export function PathfinderPanel() {
       op: verb,
       args: { elementIds: ordered },
     } as Mutation);
-    setStatus(refusalOf(reply));
+    setStatus(refusalOf(reply, label));
   }
 
   return (
@@ -279,7 +274,7 @@ export function PathfinderPanel() {
             title={btn.hint}
             className={TILE_CLASS}
             onClick={() => {
-              void run(btn.kind);
+              void run(btn.kind, btn.label);
             }}
           >
             <Icon
@@ -308,7 +303,7 @@ export function PathfinderPanel() {
             title={btn.hint}
             className={TILE_CLASS}
             onClick={() => {
-              void runRegion(btn.verb);
+              void runRegion(btn.verb, btn.label);
             }}
           >
             <Icon
@@ -327,16 +322,9 @@ export function PathfinderPanel() {
           Select 2 or more frames to combine.
         </div>
       )}
-      {status === null ? null : (
-        <div
-          className="text-xs"
-          style={{ color: "var(--status-warn-fg, var(--pg-fg))" }}
-          role="status"
-          data-pathfinder-error
-        >
-          {status}
-        </div>
-      )}
+      <StatusLine tone="warn" attr="data-pathfinder-error">
+        {status}
+      </StatusLine>
       {/* ADR 323 §4 — the path verbs as typed core commands: point
           edits, close / join, outline stroke, offset, faces, type on a
           path, opacity masks, step and repeat. Each opens the generated
@@ -373,7 +361,7 @@ export function PathfinderPanel() {
       </div>
       <div className="grid grid-cols-[84px_1fr] items-center gap-2">
         <span className="text-xs text-muted-foreground">Corner</span>
-        <KitSelect value="" soft disabled data-seam>
+        <KitSelect aria-label="Corner" value="" soft disabled data-seam>
           <option value="">Rounded · 4 pt</option>
         </KitSelect>
       </div>

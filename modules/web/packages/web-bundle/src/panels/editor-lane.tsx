@@ -31,6 +31,7 @@
 import { type ComponentType, type ReactElement, type Ref } from "react";
 
 import type { CodeEditorProps } from "@paged-media/plugin-api";
+import { font, radius, space } from "@paged-media/panel-kit";
 
 /** The bundle's honest plain-textarea fallback. Same props CONTRACT as
  *  the host widget so the panel wires both lanes identically; the
@@ -57,13 +58,13 @@ export function FallbackCodeEditor({
         width: "100%",
         minHeight: props.minHeight ?? 96,
         resize: "vertical",
-        font: "12px/1.5 var(--font-mono, monospace)",
+        font: `12px/1.5 ${font.mono}`,
         fontVariantNumeric: "tabular-nums",
         color: "var(--pg-fg)",
         background: "var(--pg-bg)",
         border: "1px solid var(--pg-border)",
-        borderRadius: "var(--radius-sm, 4px)",
-        padding: "var(--space-2, 8px)",
+        borderRadius: radius.sm,
+        padding: space[2],
         boxSizing: "border-box",
       }}
     />

@@ -32,6 +32,7 @@
 
 import React, {
   useEffect,
+  useEffectEvent,
   useLayoutEffect,
   useRef,
   useState,
@@ -502,13 +503,8 @@ function ShellChrome({
   // Editor-ops — the worker-message subscriber below needs the live
   // document handle (to refresh the page grid on page-structure
   // mutations) without re-subscribing per handle change.
-  const handleRef = useRef(handle);
+  const currentHandle = useEffectEvent(() => handle);
   const refreshingPagesRef = useRef(false);
-  // Kept current after each commit (not during render, which keeps the
-  // React Compiler from compiling the component, ADR 229).
-  useLayoutEffect(() => {
-    handleRef.current = handle;
-  });
 
   // Thumbnails for pages added or edited after the load pass.
   usePageThumbnails();
@@ -587,12 +583,11 @@ function ShellChrome({
   const togglePanels = (_paged: PagedEditor) => {
     setPanelsHidden((v) => !v);
   };
-  const toggleAllRef = useRef(toggleAll);
-  const togglePanelsRef = useRef(togglePanels);
-  useLayoutEffect(() => {
-    toggleAllRef.current = toggleAll;
-    togglePanelsRef.current = togglePanels;
-  });
+  // The commands registered below run the toggles of the latest render.
+  const onToggleAll = useEffectEvent((paged: PagedEditor) => toggleAll(paged));
+  const onTogglePanels = useEffectEvent((paged: PagedEditor) =>
+    togglePanels(paged),
+  );
 
   // Cockpit — the Window menu lists every REGISTERED panel and opens
   // it as a right-dock tab (`paged.panel.show.*`). Registry-driven so
@@ -700,13 +695,13 @@ function ShellChrome({
         id: "paged.chrome.toggleAll",
         title: "Toggle panels and tool rail",
         category: "View",
-        handler: (paged) => toggleAllRef.current(paged as PagedEditor),
+        handler: (paged) => onToggleAll(paged as PagedEditor),
       }),
       registries.commands.register({
         id: "paged.chrome.togglePanels",
         title: "Toggle panels (keep tool rail)",
         category: "View",
-        handler: (paged) => togglePanelsRef.current(paged as PagedEditor),
+        handler: (paged) => onTogglePanels(paged as PagedEditor),
       }),
       registries.keybindings.register({
         key: "tab",
@@ -1109,7 +1104,7 @@ function ShellChrome({
     // in flight are one more read, not one each.
     let rereadAgain = false;
     const rereadPages = () => {
-      if (!handleRef.current) return;
+      if (!currentHandle()) return;
       if (refreshingPagesRef.current) {
         rereadAgain = true;
         return;
@@ -1118,7 +1113,7 @@ function ShellChrome({
       void client
         .collection<{ selfId: string; sizePt: [number, number] }>("pages")
         .then((pages) => {
-          const now = handleRef.current;
+          const now = currentHandle();
           if (!now) return;
           const same =
             pages.length === now.pageIds.length &&
@@ -1196,7 +1191,7 @@ function ShellChrome({
         // list + sizes; rebuild the document handle so the page grid
         // follows without a reload. `pageIds` on these replies is the
         // full post-mutation page list, ordered like `pageSizesPt`.
-        const prev = handleRef.current;
+        const prev = currentHandle();
         if (msg.payload.pageStructureChanged && msg.payload.pageSizesPt) {
           if (prev) {
             setHandle({

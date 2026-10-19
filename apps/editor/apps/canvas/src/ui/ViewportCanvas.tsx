@@ -34,7 +34,7 @@
 // `<canvas>` is opaque from React's perspective after the
 // `transferControlToOffscreen` call.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 
 import {
   OverlayHost,
@@ -286,7 +286,7 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
   }>({ t: 0, x: 0, y: 0, count: 0 });
 
   // Document-space layout — only used to compute initial fit-to-document.
-  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
+  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
   const rects = useMemo(
     () => layoutPages(props.pageSizesPt),
     [props.pageSizesPt],
@@ -297,6 +297,14 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
   // entire life. Re-mounting the React component is destructive
   // anyway (camera state resets), and the user flow that triggers
   // it (new document via file drop) also resets the worker model.
+  // The initial fit reads the page layout and camera callback as they are
+  // when the canvas attaches; later re-fits are driven by the document-id
+  // effect below.
+  const fitOnAttach = useEffectEvent((width: number, height: number) => {
+    if (rects.length > 0 && width > 10 && height > 10) {
+      props.onCameraChange(fitCamera(width, height, documentBounds(rects)));
+    }
+  });
   useEffect(() => {
     if (transferredRef.current) return;
     const canvas = canvasRef.current;
@@ -313,28 +321,27 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
     props.client.attachCanvas(offscreen, dpr, width, height);
     transferredRef.current = true;
     // Trigger initial fit-to-document (a replacement canvas keeps the view).
-    if (
-      canvasGeneration === 0 &&
-      rects.length > 0 &&
-      width > 10 &&
-      height > 10
-    ) {
-      props.onCameraChange(fitCamera(width, height, documentBounds(rects)));
-    }
-    // We deliberately depend on `client` only — fit-to-document
-    // takes the current rects/dims; subsequent re-fits are driven
-    // by the document-id effect below.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (canvasGeneration === 0) fitOnAttach(width, height);
   }, [props.client, canvasGeneration]);
 
   // ResizeObserver: post size updates to the worker so the
-  // OffscreenCanvas bitmap matches the device-pixel viewport.
+  // OffscreenCanvas bitmap matches the device-pixel viewport, and size
+  // the overlay host with the wrapper (state, not a ref read in render:
+  // the overlay follows a resize no other change re-renders for).
+  const [hostSize, setHostSize] = useState({ width: 0, height: 0 });
   useEffect(() => {
     const wrapper = wrapperRef.current;
     if (!wrapper) return;
     let lastW = 0;
     let lastH = 0;
     const ro = new ResizeObserver(() => {
+      const width = wrapper.clientWidth;
+      const height = wrapper.clientHeight;
+      setHostSize((prev) =>
+        prev.width === width && prev.height === height
+          ? prev
+          : { width, height },
+      );
       const r = wrapper.getBoundingClientRect();
       if (r.width === lastW && r.height === lastH) return;
       lastW = r.width;
@@ -383,99 +390,93 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
 
   // Resolve a DOM pointer event to the document-coordinate
   // CanvasPointerEvent a GestureHandler expects.
-  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
-  const buildToolPointer = useCallback(
-    (
-      e: React.PointerEvent<HTMLDivElement>,
-      maxDelta: number,
-    ): CanvasPointerEvent => {
-      const rect = e.currentTarget.getBoundingClientRect();
-      const [docX, docY] = viewportToDoc(
-        props.camera,
-        e.clientX - rect.left,
-        e.clientY - rect.top,
-      );
-      const containing = findContainingPage(rects, props.pageIds, docX, docY);
-      const pagePoint: [number, number] | null = containing
-        ? [docX - containing[1].x, docY - containing[1].y]
-        : null;
-      // B-08 — carry Pointer-Events pressure/tilt/pointerType straight
-      // off the DOM event onto the tool pointer so stylus input reaches
-      // draw tools (variable-width strokes, §13.12 Tier B). We read the
-      // browser's values verbatim to preserve its semantics (mouse:
-      // pressure 0 with no button, 0.5 while held; pen: physical
-      // pressure). `??` guards only the synthetic-event case where a
-      // field is absent — never overrides a real 0. NOTE: these ride
-      // the event OBJECT, not the gesture SAB, which is a wasm-coupled
-      // fixed-layout contract (see sab/gesture.ts + B-08 closure).
-      const pointerType: "mouse" | "pen" | "touch" =
-        e.pointerType === "pen" || e.pointerType === "touch"
-          ? e.pointerType
-          : "mouse";
-      const built: CanvasPointerEvent = {
-        pageId: containing ? containing[0] : null,
-        pagePoint,
-        docPoint: [docX, docY],
-        modifiers: {
-          shift: e.shiftKey,
-          alt: e.altKey,
-          cmd: e.metaKey,
-          ctrl: e.ctrlKey,
-        },
-        maxDelta,
-        button: e.button,
-        target: e.target,
-        pressure: e.pressure ?? 0.5,
-        tiltX: e.tiltX ?? 0,
-        tiltY: e.tiltY ?? 0,
-        pointerType,
-      };
-      // Dev/test hook (B-08 spec). Headless Chromium can't synthesize a
-      // physical-stylus pressure, so the Playwright spec asserts the
-      // PLUMBING: it reads the last tool pointer the canvas built and
-      // checks the new fields are present + typed. Stripped from prod
-      // builds; mirrors the `window.__canvas` convention.
-      if (!import.meta.env.PROD) {
-        (
-          globalThis as unknown as { __canvasPointer?: CanvasPointerEvent }
-        ).__canvasPointer = built;
-      }
-      return built;
-    },
-    [props.camera, props.pageIds, rects],
-  );
+  const buildToolPointer = (
+    e: React.PointerEvent<HTMLDivElement>,
+    maxDelta: number,
+  ): CanvasPointerEvent => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const [docX, docY] = viewportToDoc(
+      props.camera,
+      e.clientX - rect.left,
+      e.clientY - rect.top,
+    );
+    const containing = findContainingPage(rects, props.pageIds, docX, docY);
+    const pagePoint: [number, number] | null = containing
+      ? [docX - containing[1].x, docY - containing[1].y]
+      : null;
+    // B-08 — carry Pointer-Events pressure/tilt/pointerType straight
+    // off the DOM event onto the tool pointer so stylus input reaches
+    // draw tools (variable-width strokes, §13.12 Tier B). We read the
+    // browser's values verbatim to preserve its semantics (mouse:
+    // pressure 0 with no button, 0.5 while held; pen: physical
+    // pressure). `??` guards only the synthetic-event case where a
+    // field is absent — never overrides a real 0. NOTE: these ride
+    // the event OBJECT, not the gesture SAB, which is a wasm-coupled
+    // fixed-layout contract (see sab/gesture.ts + B-08 closure).
+    const pointerType: "mouse" | "pen" | "touch" =
+      e.pointerType === "pen" || e.pointerType === "touch"
+        ? e.pointerType
+        : "mouse";
+    const built: CanvasPointerEvent = {
+      pageId: containing ? containing[0] : null,
+      pagePoint,
+      docPoint: [docX, docY],
+      modifiers: {
+        shift: e.shiftKey,
+        alt: e.altKey,
+        cmd: e.metaKey,
+        ctrl: e.ctrlKey,
+      },
+      maxDelta,
+      button: e.button,
+      target: e.target,
+      pressure: e.pressure ?? 0.5,
+      tiltX: e.tiltX ?? 0,
+      tiltY: e.tiltY ?? 0,
+      pointerType,
+    };
+    // Dev/test hook (B-08 spec). Headless Chromium can't synthesize a
+    // physical-stylus pressure, so the Playwright spec asserts the
+    // PLUMBING: it reads the last tool pointer the canvas built and
+    // checks the new fields are present + typed. Stripped from prod
+    // builds; mirrors the `window.__canvas` convention.
+    if (!import.meta.env.PROD) {
+      (
+        globalThis as unknown as { __canvasPointer?: CanvasPointerEvent }
+      ).__canvasPointer = built;
+    }
+    return built;
+  };
 
   // Resolve a DOM pointer event for the path-edit session: page-local
   // pt on the page the PATH sits on — not the page under the pointer,
   // which a drag is free to leave — plus the zoom its pixel tolerances
   // are measured at. Null when the session has no path on a page yet.
-  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
-  const buildPathEditPointer = useCallback(
-    (e: React.PointerEvent<HTMLDivElement>): PathEditPointer | null => {
-      const view = props.pathEdit?.getView();
-      if (!view) return null;
-      const pageRect = rects[props.pageIds.indexOf(view.pageId)];
-      if (!pageRect) return null;
-      const rect = e.currentTarget.getBoundingClientRect();
-      const [docX, docY] = viewportToDoc(
-        props.camera,
-        e.clientX - rect.left,
-        e.clientY - rect.top,
-      );
-      const scale = props.camera.scale;
-      return {
-        point: [docX - pageRect.x, docY - pageRect.y],
-        modifiers: {
-          shift: e.shiftKey,
-          alt: e.altKey,
-          cmd: e.metaKey || e.ctrlKey,
-        },
-        ptPerPx: 1 / (scale > 0 ? scale : 1),
-        timeStamp: e.timeStamp,
-      };
-    },
-    [props.camera, props.pageIds, props.pathEdit, rects],
-  );
+  const buildPathEditPointer = (
+    e: React.PointerEvent<HTMLDivElement>,
+  ): PathEditPointer | null => {
+    const view = props.pathEdit?.getView();
+    if (!view) return null;
+    const pageRect = rects[props.pageIds.indexOf(view.pageId)];
+    if (!pageRect) return null;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const [docX, docY] = viewportToDoc(
+      props.camera,
+      e.clientX - rect.left,
+      e.clientY - rect.top,
+    );
+    const scale = props.camera.scale;
+    return {
+      point: [docX - pageRect.x, docY - pageRect.y],
+      modifiers: {
+        shift: e.shiftKey,
+        alt: e.altKey,
+        cmd: e.metaKey || e.ctrlKey,
+      },
+      ptPerPx: 1 / (scale > 0 ? scale : 1),
+      timeStamp: e.timeStamp,
+    };
+  };
 
   // K-1 — deliver a pointer to the ACTIVE edit context in FRAME-CONTENT
   // coordinates. Returns true when the pointer was over the active frame
@@ -484,770 +485,704 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
   // The active context's frame-content point under a client position, or
   // null when there is no active context or the point is outside its
   // content box. Shared by the pointer and wheel lanes.
-  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
-  const activeContentPointAt = useCallback(
-    (
-      target: HTMLDivElement,
-      clientX: number,
-      clientY: number,
-    ): { content: [number, number]; elementId: string } | null => {
-      const active = editContextStack?.active;
-      if (!active) return null;
-      const rect = target.getBoundingClientRect();
-      const [docX, docY] = viewportToDoc(
-        props.camera,
-        clientX - rect.left,
-        clientY - rect.top,
-      );
-      const containing = findContainingPage(rects, props.pageIds, docX, docY);
-      if (!containing) return null;
-      const [pageId, pageRect] = containing;
-      const pageLocal: [number, number] = [
-        docX - pageRect.x,
-        docY - pageRect.y,
-      ];
-      // The active frame's geometry (bounds + itemTransform) carries the
-      // page→content transform — same geometry the selection chrome reads.
-      const rootKey = `${active.scopeRoot.kind}:${active.scopeRoot.id}`;
-      const geom = (props.elementGeometry ?? []).find(
-        (g) => g.pageId === pageId && `${g.id.kind}:${g.id.id}` === rootKey,
-      );
-      if (!geom) return null;
-      const content = pageToContentPoint(geom, pageLocal);
-      if (!content) return null; // outside the content box
-      return {
-        content,
-        // Frame-like ElementIds carry a string `id` (the union also covers
-        // story-range / table-cell addresses, which never enter a context).
-        elementId:
-          typeof active.scopeRoot.id === "string" ? active.scopeRoot.id : "",
-      };
-    },
-    [
-      editContextStack,
+  const activeContentPointAt = (
+    target: HTMLDivElement,
+    clientX: number,
+    clientY: number,
+  ): { content: [number, number]; elementId: string } | null => {
+    const active = editContextStack?.active;
+    if (!active) return null;
+    const rect = target.getBoundingClientRect();
+    const [docX, docY] = viewportToDoc(
       props.camera,
-      props.pageIds,
-      props.elementGeometry,
-      rects,
-    ],
-  );
+      clientX - rect.left,
+      clientY - rect.top,
+    );
+    const containing = findContainingPage(rects, props.pageIds, docX, docY);
+    if (!containing) return null;
+    const [pageId, pageRect] = containing;
+    const pageLocal: [number, number] = [docX - pageRect.x, docY - pageRect.y];
+    // The active frame's geometry (bounds + itemTransform) carries the
+    // page→content transform — same geometry the selection chrome reads.
+    const rootKey = `${active.scopeRoot.kind}:${active.scopeRoot.id}`;
+    const geom = (props.elementGeometry ?? []).find(
+      (g) => g.pageId === pageId && `${g.id.kind}:${g.id.id}` === rootKey,
+    );
+    if (!geom) return null;
+    const content = pageToContentPoint(geom, pageLocal);
+    if (!content) return null; // outside the content box
+    return {
+      content,
+      // Frame-like ElementIds carry a string `id` (the union also covers
+      // story-range / table-cell addresses, which never enter a context).
+      elementId:
+        typeof active.scopeRoot.id === "string" ? active.scopeRoot.id : "",
+    };
+  };
 
-  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
-  const dispatchContentPointer = useCallback(
-    (
-      e: React.PointerEvent<HTMLDivElement>,
-      phase: "down" | "move" | "up",
-    ): boolean => {
-      const contribution = editContextStack?.activeContribution;
-      if (!contribution) return false;
-      const at = activeContentPointAt(e.currentTarget, e.clientX, e.clientY);
-      if (!at) return false;
-      const ev: ContentPointerEvent = {
-        contentPoint: at.content,
-        elementId: at.elementId,
-        modifiers: {
-          shift: e.shiftKey,
-          alt: e.altKey,
-          cmd: e.metaKey,
-          ctrl: e.ctrlKey,
-        },
-        button: e.button,
-      };
-      if (phase === "down") contribution.onContentPointerDown?.(ev);
-      else if (phase === "move") contribution.onContentPointerMove?.(ev);
-      else contribution.onContentPointerUp?.(ev);
-      return true;
-    },
-    [editContextStack, activeContentPointAt],
-  );
+  const dispatchContentPointer = (
+    e: React.PointerEvent<HTMLDivElement>,
+    phase: "down" | "move" | "up",
+  ): boolean => {
+    const contribution = editContextStack?.activeContribution;
+    if (!contribution) return false;
+    const at = activeContentPointAt(e.currentTarget, e.clientX, e.clientY);
+    if (!at) return false;
+    const ev: ContentPointerEvent = {
+      contentPoint: at.content,
+      elementId: at.elementId,
+      modifiers: {
+        shift: e.shiftKey,
+        alt: e.altKey,
+        cmd: e.metaKey,
+        ctrl: e.ctrlKey,
+      },
+      button: e.button,
+    };
+    if (phase === "down") contribution.onContentPointerDown?.(ev);
+    else if (phase === "move") contribution.onContentPointerMove?.(ev);
+    else contribution.onContentPointerUp?.(ev);
+    return true;
+  };
 
   // Begin a worker gesture. Fire-and-forget — the handle returns
   // asynchronously; pointer moves that arrive before it does are
   // accumulated into `pendingDelta` and flushed on resolve. A pointer
   // that went up in the meantime (a fast drag) is committed then.
-  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
-  const beginWorkerGesture = useCallback(
-    (gs: GestureState, anchor: GestureAnchor | null) => {
-      void props.client
-        .beginGesture(gs.target, gs.spec, anchor)
-        .then((handle) => {
-          const drag = dragStateRef.current;
-          const live = drag?.mode === "gesture" && drag.gestureState === gs;
-          if (!live && gs.release !== "commit") {
-            // A click, Escape or a lost pointer before the worker
-            // confirmed; cancel immediately to keep worker state clean.
-            void props.client.cancelGesture(handle).catch(() => {});
-            return;
-          }
-          gs.handle = handle;
-          const pending = gs.pendingDelta;
-          if (gs.release === "commit") {
-            void props.client
-              .updateGesture(handle, pending, gs.modifiers, "json")
-              .then(() => props.client.commitGesture(handle))
-              .then(() => {
-                setSnapLines([]);
-                props.onGestureCommitted?.();
-              })
-              .catch(() => {});
-            return;
-          }
-          if (pending[0] !== 0 || pending[1] !== 0) {
-            // Step 5e — SAB mode. The worker drains the SAB on its
-            // next tick and posts a `gestureSnapLines` notify; the
-            // subscription above routes it into `setSnapLines`.
-            void props.client
-              .updateGesture(handle, pending, gs.modifiers, "sab")
-              .catch(() => {});
-          }
-        })
-        .catch(() => {
-          // Worker rejected — typically a rotated frame in Phase B.
-          // Downgrade to pan so the drag still does *something*
-          // sensible.
-          const drag = dragStateRef.current;
-          if (drag && drag.gestureState === gs) drag.mode = "pan";
-        });
-    },
-    [props.client, props.onGestureCommitted, setSnapLines],
-  );
-
-  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
-  const onPointerDown = useCallback(
-    (e: React.PointerEvent<HTMLDivElement>) => {
-      if (e.button !== 0 && e.button !== 1) return;
-      // K-1 — while an edit context that OPTS INTO content pointers is
-      // active (has `onContentPointerDown` — sheet's "sheet" context; NOT
-      // draw/web, whose tools must keep working), a primary-button press
-      // over the active frame goes to the context in content coords; a
-      // press OUTSIDE the frame COMMITS the context and falls through so
-      // the same click can select what was under it. Contexts WITHOUT the
-      // handler skip this block entirely (unchanged tool behavior).
-      if (
-        e.button === 0 &&
-        editContextStack?.active &&
-        editContextStack.activeContribution?.onContentPointerDown
-      ) {
-        if (dispatchContentPointer(e, "down")) {
-          e.currentTarget.setPointerCapture(e.pointerId);
-          contentGestureRef.current = true;
+  const beginWorkerGesture = (
+    gs: GestureState,
+    anchor: GestureAnchor | null,
+  ) => {
+    void props.client
+      .beginGesture(gs.target, gs.spec, anchor)
+      .then((handle) => {
+        const drag = dragStateRef.current;
+        const live = drag?.mode === "gesture" && drag.gestureState === gs;
+        if (!live && gs.release !== "commit") {
+          // A click, Escape or a lost pointer before the worker
+          // confirmed; cancel immediately to keep worker state clean.
+          void props.client.cancelGesture(handle).catch(() => {});
           return;
         }
-        editContextStack.commit();
-      }
-      // Phase 2 — a handler-bearing tool (Rectangle, …) intercepts the
-      // pointer; the legacy select/text/pan path below is skipped.
-      //
-      // EXCEPT for a tool that declares BOTH a gesture and a legacyKey.
-      // The Type tool is the case: its DRAG pulls out a text frame
-      // (gesture) and its CLICK places a caret (legacy "text" path), and
-      // those are two halves of one tool rather than rival
-      // implementations. Without this, adding the gesture silently took
-      // the caret away — `onPointerUp` commits the tool drag and RETURNS
-      // before the click branch, so double-click word/line selection
-      // stopped selecting anything at all.
-      const legacyAlso = Boolean(props.toolGesture && props.legacyKeyForTool);
-      if (props.toolGesture && e.button === 0 && !legacyAlso) {
-        e.currentTarget.setPointerCapture(e.pointerId);
-        toolDragRef.current = {
-          startPointer: [e.clientX, e.clientY],
-          maxDelta: 0,
-        };
-        props.toolGesture.onDown(buildToolPointer(e, 0));
-        return;
-      }
-      if (props.toolGesture && e.button === 0 && legacyAlso) {
-        // Feed the handler AND fall through, so both refs are armed.
-        toolDragRef.current = {
-          startPointer: [e.clientX, e.clientY],
-          maxDelta: 0,
-        };
-        props.toolGesture.onDown(buildToolPointer(e, 0));
-      }
-      e.currentTarget.setPointerCapture(e.pointerId);
-      const modifiers: PointerModifiers = {
-        shift: e.shiftKey,
-        cmd: e.metaKey || e.ctrlKey,
-      };
-      const tool = props.activeTool ?? "select";
-      const rect = e.currentTarget.getBoundingClientRect();
-      const cx = e.clientX - rect.left;
-      const cy = e.clientY - rect.top;
-      const [docX, docY] = viewportToDoc(props.camera, cx, cy);
-      const containing = findContainingPage(rects, props.pageIds, docX, docY);
-      // Phase B — middle-button always pans (the convention every
-      // creative tool follows). With the select tool: if the pointer
-      // landed inside a currently-selected element, start a Translate
-      // gesture; otherwise fall through to marquee. Text tool stays
-      // pan so the existing typing UX is undisturbed.
-      let mode: "pan" | "marquee" | "gesture" = "pan";
-      let gestureState:
-        NonNullable<typeof dragStateRef.current>["gestureState"] | undefined;
-      // Path-edit mode — a primary press is the path's. The session
-      // takes it whatever it landed on (an empty press starts its
-      // anchor marquee), so none of the element gestures below is even
-      // considered: no frame translate, no element marquee, no pan. The
-      // drag state is still armed, as a no-op "pan" that never receives
-      // a move, because ONE outcome comes back to the code below — a
-      // click on nothing falls through to the ordinary hit-test click
-      // on release (the Type tool's dual-dispatch rule).
-      const pathEditPointer =
-        props.pathEdit &&
-        e.button === 0 &&
-        tool === "select" &&
-        !props.forcePan &&
-        !props.zoomClick
-          ? buildPathEditPointer(e)
-          : null;
-      if (props.pathEdit && pathEditPointer) {
-        pathEditDragRef.current = true;
-        props.pathEdit.pointerDown(pathEditPointer);
-      } else if (e.button === 1) {
-        mode = "pan";
-      } else if (props.forcePan || props.zoomClick) {
-        // Concept 1 — Hand (or a Space spring-load) pans on any drag;
-        // the Zoom tool also pans on drag (its click action is handled
-        // in onPointerUp's click branch).
-        mode = "pan";
-      } else if (tool === "select") {
-        // Phase C/D/G — if the pointer landed on a handle (resize
-        // handle or the rotation handle), begin the matching gesture
-        // for the currently-selected element(s). Single-select uses
-        // bounds-resize on corners (Phase C); multi-select corners
-        // route to matrix Scale because per-element bounds resize
-        // can't compose into a coherent union resize.
-        const handleAttr = readHandleAttr(e.target);
-        const selection = props.elementSelection ?? [];
-        const geometry = props.elementGeometry ?? [];
-        const selectedGeom = geometry.length === 1 ? geometry[0] : null;
-        const isMultiSelect = geometry.length > 1;
-        // Each item is hit in the space of the page it is drawn on, so a
-        // press on the part of it past the page's edge — on the
-        // pasteboard, or over the next page down — still lands on it.
-        const bodyHit = !handleAttr
-          ? findSelectedElementUnderPointer(selection, geometry, (pageId) => {
-              const r = rects[props.pageIds.indexOf(pageId)];
-              return r ? [docX - r.x, docY - r.y] : null;
-            })
-          : null;
-        const bodyHitElement = bodyHit?.id ?? null;
-        // The page a gesture's anchor speaks in: the one the selection's
-        // chrome is drawn on, which is not always the page under the
-        // pointer (a handle past the page's edge has none, or the next
-        // page's).
-        const gesturePage: PageId | null = handleAttr
-          ? (readHandlePage(e.target) ??
-            selectedGeom?.pageId ??
-            geometry.find((g) => g.pageId)?.pageId ??
-            null)
-          : (bodyHit?.pageId ?? null);
-        // Phase F / W2.10 — Cmd-drag on the body of a single-selected
-        // image-bearing frame drives the content grabber: plain Cmd
-        // translates the placed image, Cmd+Alt scales it, Cmd+Shift
-        // rotates it (see the gestureSpec branch below). Plain
-        // body-drag stays Translate; Cmd-drag on a resize handle stays
-        // Scale (Phase D).
-        const bodyHitIsImage =
-          !handleAttr &&
-          selectedGeom?.id.kind === "rectangle" &&
-          selectedGeom?.hasImage === true;
-        // Build gestureSpec + target list.
-        let gestureSpec: GestureType | null = null;
-        let targets: ElementId[] = [];
-        let scaleBox: HandleBox | null = null;
-        if (handleAttr === "rotate" && (selectedGeom || isMultiSelect)) {
-          gestureSpec = { kind: "rotate" };
-          targets = selectedGeom ? [selectedGeom.id] : selection.slice();
-        } else if (handleAttr && handleAttr !== "rotate") {
-          if (isMultiSelect) {
-            // Phase G — multi-select handle drag is always matrix
-            // Scale (rotated or not). Holding Cmd still does Scale —
-            // it's the only sensible per-element op for N>1.
-            gestureSpec = { kind: "scale" };
-            targets = selection.slice();
-            scaleBox = gesturePage
-              ? unionHandleBox(geometry.filter((g) => g.pageId === gesturePage))
-              : null;
-          } else if (selectedGeom) {
-            // A group has no bounds of its own to resize: its box is
-            // its members' union, so a handle drag scales the members
-            // (as InDesign scales a group's contents).
-            gestureSpec =
-              modifiers.cmd || selectedGeom.id.kind === "group"
-                ? { kind: "scale" }
-                : { kind: "resize", handle: handleAttr };
-            targets = [selectedGeom.id];
-            if (gestureSpec.kind === "scale")
-              scaleBox = itemHandleBox(selectedGeom);
-          }
-        } else if (bodyHitElement) {
-          // Body drag. For multi-select, move ALL selected items
-          // together; for single-select, just the one.
-          if (isMultiSelect) {
-            gestureSpec = { kind: "translate" };
-            targets = selection.slice();
-          } else if (modifiers.cmd && bodyHitIsImage) {
-            // W2.10 — content-transform gestures ride the SAME content
-            // grabber the Phase F TranslateContent uses. Cmd+drag on an
-            // image body translates the placed image; layering a
-            // modifier promotes it to a rotate/scale of the content,
-            // about the frame centroid (the engine's RotateContent /
-            // ScaleContent arms, which commit SetProperty{
-            // ImageContentTransform} without touching the frame's own
-            // bounds or ItemTransform):
-            //   Cmd + Alt   → scaleContent
-            //   Cmd + Shift → rotateContent (Shift also flows to
-            //                 update_gesture, so the rotation snaps to
-            //                 15° — the same Shift-constrain the frame
-            //                 Rotate uses; an unconstrained content
-            //                 rotate is a later affordance).
-            // Alt wins over Shift when both are held so the choice is
-            // deterministic. Shift stays the live constraint modifier
-            // (never consumed here for translate), so plain Cmd+drag is
-            // still a free TranslateContent.
-            if (e.altKey) {
-              gestureSpec = { kind: "scaleContent" };
-            } else if (modifiers.shift) {
-              gestureSpec = { kind: "rotateContent" };
-            } else {
-              gestureSpec = { kind: "translateContent" };
-            }
-            targets = [bodyHitElement];
-          } else {
-            gestureSpec = { kind: "translate" };
-            targets = [bodyHitElement];
-          }
-        }
-        const hit = gestureSpec ? (targets[0] ?? null) : null;
-        if (hit && gestureSpec && targets.length > 0) {
-          mode = "gesture";
-          // Phase D — Rotate / Scale need an anchor (pointer position
-          // at gesture start, page-local on the selection's page).
-          // Translate / Resize don't need one but we send it anyway
-          // for future use.
-          const gestureRect = gesturePage
-            ? rects[props.pageIds.indexOf(gesturePage)]
-            : undefined;
-          const anchorAt: [PageId, PageRect] | null =
-            gesturePage && gestureRect
-              ? [gesturePage, gestureRect]
-              : containing;
-          const anchor: GestureAnchor | null = anchorAt
-            ? {
-                pageId: anchorAt[0],
-                pointInPage: [docX - anchorAt[1].x, docY - anchorAt[1].y],
-              }
-            : null;
-          // The box was measured on `gesturePage`; the pivot is named there.
-          const scale: HandleScale | null =
-            gesturePage &&
-            gestureRect &&
-            scaleBox &&
-            handleAttr &&
-            handleAttr !== "rotate"
-              ? {
-                  pageId: gesturePage,
-                  grabbed: scaleBox.at(handleAttr),
-                  opposite: scaleBox.at(OPPOSITE_HANDLE[handleAttr]),
-                  centre: scaleBox.centre,
-                  alt: e.altKey,
-                }
-              : null;
-          gestureState = {
-            handle: null,
-            pendingDelta: [0, 0],
-            target: targets,
-            spec: gestureSpec,
-            modifiers: { shift: e.shiftKey, alt: e.altKey },
-            scale: scale ?? undefined,
-          };
-          beginWorkerGesture(gestureState, scale ? scaleAnchor(scale) : anchor);
-        } else {
-          mode = "marquee";
-        }
-      }
-      const marqueeAnchor =
-        mode === "marquee" && containing
-          ? {
-              pageId: containing[0],
-              pageX: docX - containing[1].x,
-              pageY: docY - containing[1].y,
-            }
-          : null;
-      dragStateRef.current = {
-        mode,
-        startCam: props.camera,
-        startDoc: [docX, docY],
-        startPointer: [e.clientX, e.clientY],
-        maxDelta: 0,
-        modifiers,
-        marqueeAnchor,
-        gestureState,
-      };
-    },
-    [
-      props.activeTool,
-      props.camera,
-      props.client,
-      props.elementGeometry,
-      props.elementSelection,
-      props.pageIds,
-      // A draw tool's gesture handler arrives AFTER the tool is
-      // activated; without this dep the callback keeps the stale
-      // `toolGesture` (null, from when Select was active) and the
-      // first drag silently falls through to the legacy select path
-      // — the Rectangle/Line/Pen tools never draw until some other
-      // dep (a pan, a selection) happens to rebuild the callback.
-      props.toolGesture,
-      props.pathEdit,
-      props.forcePan,
-      props.zoomClick,
-      buildPathEditPointer,
-      beginWorkerGesture,
-      rects,
-    ],
-  );
-
-  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
-  const onPointerMove = useCallback(
-    (e: React.PointerEvent<HTMLDivElement>) => {
-      // K-1 — while a content gesture owns the pointer, route moves to the
-      // active context (content coords) and skip tool/hover logic.
-      if (contentGestureRef.current) {
-        dispatchContentPointer(e, "move");
-        return;
-      }
-      // Phase 2 — route to the active tool handler while it owns the drag.
-      const toolDrag = toolDragRef.current;
-      if (toolDrag && props.toolGesture) {
-        const d = Math.hypot(
-          e.clientX - toolDrag.startPointer[0],
-          e.clientY - toolDrag.startPointer[1],
-        );
-        if (d > toolDrag.maxDelta) toolDrag.maxDelta = d;
-        props.toolGesture.onMove(buildToolPointer(e, toolDrag.maxDelta));
-        return;
-      }
-      // Path-edit mode — the session owns this drag.
-      if (pathEditDragRef.current) {
-        const pointer = buildPathEditPointer(e);
-        if (pointer) props.pathEdit?.pointerMove(pointer);
-        return;
-      }
-      const drag = dragStateRef.current;
-      if (!drag) {
-        // plugin-draw D2 — forward HOVER moves to the active handler
-        // too (the Pen's rubber band tracks them between clicks).
-        // Every handler guards its drag state, so hover moves are
-        // inert for drag-only tools; maxDelta 0 keeps click-vs-drag
-        // semantics intact.
-        if (props.toolGesture) {
-          props.toolGesture.onMove(buildToolPointer(e, 0));
-        }
-        // Concept 1 (Phase 3) — no drag in flight: let the active
-        // handler refine the cursor per pointer position (Pen near an
-        // anchor ≠ Pen over empty canvas). Imperative style write so a
-        // hover doesn't re-render the canvas.
-        const hover = props.toolGesture?.hoverCursor;
-        if (hover) {
-          const refined = hover(buildToolPointer(e, 0));
-          const el = wrapperRef.current;
-          if (el) el.style.cursor = refined ?? props.cursor ?? "grab";
-        }
-        return;
-      }
-      const dx = e.clientX - drag.startPointer[0];
-      const dy = e.clientY - drag.startPointer[1];
-      const delta = Math.hypot(dx, dy);
-      if (delta > drag.maxDelta) drag.maxDelta = delta;
-      if (drag.mode === "pan") {
-        props.onCameraChange({
-          scale: drag.startCam.scale,
-          tx: drag.startCam.tx + dx,
-          ty: drag.startCam.ty + dy,
-        });
-      } else if (drag.mode === "gesture") {
-        if (drag.maxDelta <= CLICK_DRAG_THRESHOLD_PX) return;
-        // Re-derive the doc-space delta from the original anchor so
-        // the gesture stays correct even if the user panned mid-drag.
-        const rect = e.currentTarget.getBoundingClientRect();
-        const cx = e.clientX - rect.left;
-        const cy = e.clientY - rect.top;
-        const [docX, docY] = viewportToDoc(props.camera, cx, cy);
-        const docDelta: [number, number] = [
-          docX - drag.startDoc[0],
-          docY - drag.startDoc[1],
-        ];
-        const gs = drag.gestureState;
-        if (!gs) return;
-        // Plan-2 §8.4 — Ctrl bypasses snap. Read `e.ctrlKey`
-        // independently of `metaKey`; on macOS the Ctrl key is its own
-        // thing (not Cmd), matching InDesign's "hold Ctrl to ignore
-        // snap targets" convention.
-        gs.modifiers = {
-          shift: e.shiftKey,
-          alt: e.altKey,
-          disableSnap: e.ctrlKey,
-        };
-        if (gs.scale && gs.handle !== null && e.altKey !== gs.scale.alt) {
-          // Alt/Option moves the pivot between the opposite handle and
-          // the centre. The engine fixes the pivot when the gesture
-          // begins, so the drag is begun again about the other one; the
-          // restarted gesture replays the whole delta, as one undo step.
-          gs.scale.alt = e.altKey;
-          const stale = gs.handle;
-          gs.handle = null;
-          gs.pendingDelta = docDelta;
-          void props.client.cancelGesture(stale).catch(() => {});
-          beginWorkerGesture(gs, scaleAnchor(gs.scale));
-          return;
-        }
-        if (gs.handle === null) {
-          // Begin hasn't resolved yet — buffer the delta; the
-          // resolver flushes it once the handle lands.
-          gs.pendingDelta = docDelta;
-        } else {
-          // Step 5e — SAB hot path. Fire-and-forget; the worker drains
-          // the SAB at ~125 Hz and emits `gestureSnapLines` notifies
-          // so the overlay still sees active guides. Falls back to
-          // JSON automatically when crossOriginIsolated is false.
+        gs.handle = handle;
+        const pending = gs.pendingDelta;
+        if (gs.release === "commit") {
           void props.client
-            .updateGesture(gs.handle, docDelta, gs.modifiers, "sab")
-            .catch(() => {});
-        }
-      } else if (drag.mode === "marquee") {
-        if (drag.maxDelta <= CLICK_DRAG_THRESHOLD_PX) return;
-        const anchor = drag.marqueeAnchor;
-        if (!anchor) return;
-        const rect = e.currentTarget.getBoundingClientRect();
-        const cx = e.clientX - rect.left;
-        const cy = e.clientY - rect.top;
-        const [docX, docY] = viewportToDoc(props.camera, cx, cy);
-        // Clamp the marquee to the anchor's page so the rect we
-        // commit is page-local. The hit-tester only knows pages.
-        const pageRect = rects[props.pageIds.indexOf(anchor.pageId)];
-        if (!pageRect) return;
-        const currentX = clamp(docX - pageRect.x, 0, pageRect.w);
-        const currentY = clamp(docY - pageRect.y, 0, pageRect.h);
-        const top = Math.min(anchor.pageY, currentY);
-        const left = Math.min(anchor.pageX, currentX);
-        const bottom = Math.max(anchor.pageY, currentY);
-        const right = Math.max(anchor.pageX, currentX);
-        setMarqueeRect({
-          pageId: anchor.pageId,
-          rect: [top, left, bottom, right],
-        });
-      }
-    },
-    [props, rects, buildPathEditPointer, beginWorkerGesture],
-  );
-
-  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
-  const onPointerUp = useCallback(
-    (e: React.PointerEvent<HTMLDivElement>) => {
-      // K-1 — end a content gesture: deliver the up to the active context
-      // and stop (don't run the tool/click path that would re-select).
-      if (contentGestureRef.current) {
-        contentGestureRef.current = false;
-        e.currentTarget.releasePointerCapture(e.pointerId);
-        dispatchContentPointer(e, "up");
-        return;
-      }
-      // Phase 2 — commit the active tool handler's gesture.
-      const toolDrag = toolDragRef.current;
-      if (toolDrag && props.toolGesture) {
-        toolDragRef.current = null;
-        const wasClick = toolDrag.maxDelta <= CLICK_DRAG_THRESHOLD_PX;
-        const legacyAlso = Boolean(props.legacyKeyForTool);
-        props.toolGesture.onUp(buildToolPointer(e, toolDrag.maxDelta));
-        // A dual tool's CLICK belongs to the legacy path (caret, click
-        // run, word/line granularity). Its handler has just been told
-        // the pointer went up, so it has cancelled itself, and the drag
-        // state armed at pointer-down is still there to fall through on.
-        if (!(wasClick && legacyAlso)) {
-          e.currentTarget.releasePointerCapture(e.pointerId);
-          // A dual tool's DRAG belonged to the handler, but pointer-down
-          // armed the legacy drag state too (as a "pan", for the click
-          // it might have been). Left armed, every later button-less
-          // move panned the view until the next press (ED-3).
-          dragStateRef.current = null;
-          return;
-        }
-      }
-      // Path-edit mode — hand the release to the session. Whatever it
-      // did with the gesture (moved anchors, selected some, inserted
-      // one) ends here; only a click on NOTHING is not its business,
-      // and that one runs the ordinary click below.
-      if (pathEditDragRef.current) {
-        pathEditDragRef.current = false;
-        const pointer = buildPathEditPointer(e);
-        const release =
-          pointer && props.pathEdit
-            ? props.pathEdit.pointerUp(pointer)
-            : "consumed";
-        pathEditConsumedRef.current = release === "consumed";
-        if (release === "consumed") {
-          if (dragStateRef.current) {
-            e.currentTarget.releasePointerCapture(e.pointerId);
-            dragStateRef.current = null;
-          }
-          return;
-        }
-      } else {
-        pathEditConsumedRef.current = false;
-      }
-      const drag = dragStateRef.current;
-      if (!drag) return;
-      e.currentTarget.releasePointerCapture(e.pointerId);
-      dragStateRef.current = null;
-      // Modifier state can change between down and up (user lifts
-      // Shift before releasing). Take whichever was held at either
-      // edge — matches industry convention.
-      const modifiers: PointerModifiers = {
-        shift: drag.modifiers.shift || e.shiftKey,
-        cmd: drag.modifiers.cmd || e.metaKey || e.ctrlKey,
-      };
-      // Click vs drag: if the pointer barely moved, treat it as a
-      // click and route through the worker's hit-tester. If a
-      // gesture was started at pointerdown (and never moved past the
-      // threshold), cancel it so the worker doesn't hold a stale
-      // handle.
-      if (drag.maxDelta <= CLICK_DRAG_THRESHOLD_PX) {
-        setMarqueeRect(null);
-        if (drag.mode === "gesture" && drag.gestureState) {
-          const stale = drag.gestureState.handle;
-          if (stale !== null) {
-            void props.client.cancelGesture(stale).catch(() => {});
-          }
-        }
-        // Concept 1 — Zoom tool: a click zooms in around the pointer
-        // (Alt-click zooms out) instead of hit-testing.
-        if (props.zoomClick) {
-          const rect = e.currentTarget.getBoundingClientRect();
-          const cx = e.clientX - rect.left;
-          const cy = e.clientY - rect.top;
-          const [docX, docY] = viewportToDoc(props.camera, cx, cy);
-          const factor = e.altKey ? 1 / 1.25 : 1.25;
-          const scale = Math.min(
-            64,
-            Math.max(0.01, props.camera.scale * factor),
-          );
-          props.onCameraChange({
-            scale,
-            tx: cx - docX * scale,
-            ty: cy - docY * scale,
-          });
-          return;
-        }
-        if (!props.onHit) return;
-        const rect = e.currentTarget.getBoundingClientRect();
-        const cx = e.clientX - rect.left;
-        const cy = e.clientY - rect.top;
-        // W2.11 — multi-click granularity (SEL-05). Track the click
-        // run so the 2nd consecutive click on the same point selects a
-        // word and the 3rd selects the line. Native `detail` is
-        // unreliable for the 3rd click, so we count ourselves.
-        const clickCount = bumpClickRun(
-          clickRunRef.current,
-          cx,
-          cy,
-          e.timeStamp,
-        );
-        const isText = (props.activeTool ?? "select") === "text";
-        const [docX, docY] = viewportToDoc(props.camera, cx, cy);
-        const containing = findContainingPage(rects, props.pageIds, docX, docY);
-        if (containing) {
-          const [pageId, pageRect] = containing;
-          const docPoint: [number, number] = [
-            docX - pageRect.x,
-            docY - pageRect.y,
-          ];
-          const filter = isText ? "text" : "any";
-          void (async () => {
-            try {
-              const reply = await props.client.send({
-                kind: "hitTest",
-                payload: { pageId, docPoint, filter },
-              });
-              if (reply.kind !== "hitResult") return;
-              const hit = reply.payload;
-              // C-4 — owned-content interception: a Type-tool click on
-              // a metadata-claimed frame (a lowered sheet table, a web
-              // frame) enters the OWNING plugin's modal context instead
-              // of raw text editing — manual edits must not corrupt
-              // content a plugin compiles. Object-type lane only; an
-              // empty objectType registry early-outs, so documents
-              // without plugins pay nothing.
-              if (isText && hit.element) {
-                const owned = await tryEnterOwnedContent({
-                  element: hit.element,
-                  groupChain: [],
-                  // W-19 — the click is the entering point.
-                  pageId,
-                  pagePoint: docPoint,
-                });
-                if (owned) return;
-              }
-              // Text tool, 2nd/3rd click on a story offset → granular
-              // selection (word / line) instead of placing a caret.
-              if (
-                isText &&
-                clickCount >= 2 &&
-                hit.storyId &&
-                hit.offsetWithinStory != null
-              ) {
-                await applyTextGranularity(
-                  props.client,
-                  hit.storyId,
-                  hit.offsetWithinStory,
-                  clickCount,
-                  setContentSelection,
-                );
-                return;
-              }
-              props.onHit?.({ pageId, docPoint, hit }, modifiers);
-            } catch (err) {
-              console.warn("hitTest failed:", err);
-            }
-          })();
-        } else {
-          props.onHit?.(null, modifiers);
-        }
-        return;
-      }
-      // Drag committed. Pan needs no commit work; marquee hands the
-      // final rect to the caller; gesture commits via the worker.
-      if (drag.mode === "marquee") {
-        if (marqueeRect && props.onMarquee) {
-          props.onMarquee(marqueeRect.pageId, marqueeRect.rect, modifiers);
-        }
-        setMarqueeRect(null);
-      } else if (drag.mode === "gesture" && drag.gestureState) {
-        const handle = drag.gestureState.handle;
-        if (handle === null) {
-          // Begin hasn't resolved (a fast drag, or one Alt re-began):
-          // the resolver commits once the handle lands.
-          drag.gestureState.release = "commit";
-        } else {
-          void props.client
-            .commitGesture(handle)
+            .updateGesture(handle, pending, gs.modifiers, "json")
+            .then(() => props.client.commitGesture(handle))
             .then(() => {
               setSnapLines([]);
               props.onGestureCommitted?.();
             })
             .catch(() => {});
+          return;
+        }
+        if (pending[0] !== 0 || pending[1] !== 0) {
+          // Step 5e — SAB mode. The worker drains the SAB on its
+          // next tick and posts a `gestureSnapLines` notify; the
+          // subscription above routes it into `setSnapLines`.
+          void props.client
+            .updateGesture(handle, pending, gs.modifiers, "sab")
+            .catch(() => {});
+        }
+      })
+      .catch(() => {
+        // Worker rejected — typically a rotated frame in Phase B.
+        // Downgrade to pan so the drag still does *something*
+        // sensible.
+        const drag = dragStateRef.current;
+        if (drag && drag.gestureState === gs) drag.mode = "pan";
+      });
+  };
+
+  const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.button !== 0 && e.button !== 1) return;
+    // K-1 — while an edit context that OPTS INTO content pointers is
+    // active (has `onContentPointerDown` — sheet's "sheet" context; NOT
+    // draw/web, whose tools must keep working), a primary-button press
+    // over the active frame goes to the context in content coords; a
+    // press OUTSIDE the frame COMMITS the context and falls through so
+    // the same click can select what was under it. Contexts WITHOUT the
+    // handler skip this block entirely (unchanged tool behavior).
+    if (
+      e.button === 0 &&
+      editContextStack?.active &&
+      editContextStack.activeContribution?.onContentPointerDown
+    ) {
+      if (dispatchContentPointer(e, "down")) {
+        e.currentTarget.setPointerCapture(e.pointerId);
+        contentGestureRef.current = true;
+        return;
+      }
+      editContextStack.commit();
+    }
+    // Phase 2 — a handler-bearing tool (Rectangle, …) intercepts the
+    // pointer; the legacy select/text/pan path below is skipped.
+    //
+    // EXCEPT for a tool that declares BOTH a gesture and a legacyKey.
+    // The Type tool is the case: its DRAG pulls out a text frame
+    // (gesture) and its CLICK places a caret (legacy "text" path), and
+    // those are two halves of one tool rather than rival
+    // implementations. Without this, adding the gesture silently took
+    // the caret away — `onPointerUp` commits the tool drag and RETURNS
+    // before the click branch, so double-click word/line selection
+    // stopped selecting anything at all.
+    const legacyAlso = Boolean(props.toolGesture && props.legacyKeyForTool);
+    if (props.toolGesture && e.button === 0 && !legacyAlso) {
+      e.currentTarget.setPointerCapture(e.pointerId);
+      toolDragRef.current = {
+        startPointer: [e.clientX, e.clientY],
+        maxDelta: 0,
+      };
+      props.toolGesture.onDown(buildToolPointer(e, 0));
+      return;
+    }
+    if (props.toolGesture && e.button === 0 && legacyAlso) {
+      // Feed the handler AND fall through, so both refs are armed.
+      toolDragRef.current = {
+        startPointer: [e.clientX, e.clientY],
+        maxDelta: 0,
+      };
+      props.toolGesture.onDown(buildToolPointer(e, 0));
+    }
+    e.currentTarget.setPointerCapture(e.pointerId);
+    const modifiers: PointerModifiers = {
+      shift: e.shiftKey,
+      cmd: e.metaKey || e.ctrlKey,
+    };
+    const tool = props.activeTool ?? "select";
+    const rect = e.currentTarget.getBoundingClientRect();
+    const cx = e.clientX - rect.left;
+    const cy = e.clientY - rect.top;
+    const [docX, docY] = viewportToDoc(props.camera, cx, cy);
+    const containing = findContainingPage(rects, props.pageIds, docX, docY);
+    // Phase B — middle-button always pans (the convention every
+    // creative tool follows). With the select tool: if the pointer
+    // landed inside a currently-selected element, start a Translate
+    // gesture; otherwise fall through to marquee. Text tool stays
+    // pan so the existing typing UX is undisturbed.
+    let mode: "pan" | "marquee" | "gesture" = "pan";
+    let gestureState:
+      NonNullable<typeof dragStateRef.current>["gestureState"] | undefined;
+    // Path-edit mode — a primary press is the path's. The session
+    // takes it whatever it landed on (an empty press starts its
+    // anchor marquee), so none of the element gestures below is even
+    // considered: no frame translate, no element marquee, no pan. The
+    // drag state is still armed, as a no-op "pan" that never receives
+    // a move, because ONE outcome comes back to the code below — a
+    // click on nothing falls through to the ordinary hit-test click
+    // on release (the Type tool's dual-dispatch rule).
+    const pathEditPointer =
+      props.pathEdit &&
+      e.button === 0 &&
+      tool === "select" &&
+      !props.forcePan &&
+      !props.zoomClick
+        ? buildPathEditPointer(e)
+        : null;
+    if (props.pathEdit && pathEditPointer) {
+      pathEditDragRef.current = true;
+      props.pathEdit.pointerDown(pathEditPointer);
+    } else if (e.button === 1) {
+      mode = "pan";
+    } else if (props.forcePan || props.zoomClick) {
+      // Concept 1 — Hand (or a Space spring-load) pans on any drag;
+      // the Zoom tool also pans on drag (its click action is handled
+      // in onPointerUp's click branch).
+      mode = "pan";
+    } else if (tool === "select") {
+      // Phase C/D/G — if the pointer landed on a handle (resize
+      // handle or the rotation handle), begin the matching gesture
+      // for the currently-selected element(s). Single-select uses
+      // bounds-resize on corners (Phase C); multi-select corners
+      // route to matrix Scale because per-element bounds resize
+      // can't compose into a coherent union resize.
+      const handleAttr = readHandleAttr(e.target);
+      const selection = props.elementSelection ?? [];
+      const geometry = props.elementGeometry ?? [];
+      const selectedGeom = geometry.length === 1 ? geometry[0] : null;
+      const isMultiSelect = geometry.length > 1;
+      // Each item is hit in the space of the page it is drawn on, so a
+      // press on the part of it past the page's edge — on the
+      // pasteboard, or over the next page down — still lands on it.
+      const bodyHit = !handleAttr
+        ? findSelectedElementUnderPointer(selection, geometry, (pageId) => {
+            const r = rects[props.pageIds.indexOf(pageId)];
+            return r ? [docX - r.x, docY - r.y] : null;
+          })
+        : null;
+      const bodyHitElement = bodyHit?.id ?? null;
+      // The page a gesture's anchor speaks in: the one the selection's
+      // chrome is drawn on, which is not always the page under the
+      // pointer (a handle past the page's edge has none, or the next
+      // page's).
+      const gesturePage: PageId | null = handleAttr
+        ? (readHandlePage(e.target) ??
+          selectedGeom?.pageId ??
+          geometry.find((g) => g.pageId)?.pageId ??
+          null)
+        : (bodyHit?.pageId ?? null);
+      // Phase F / W2.10 — Cmd-drag on the body of a single-selected
+      // image-bearing frame drives the content grabber: plain Cmd
+      // translates the placed image, Cmd+Alt scales it, Cmd+Shift
+      // rotates it (see the gestureSpec branch below). Plain
+      // body-drag stays Translate; Cmd-drag on a resize handle stays
+      // Scale (Phase D).
+      const bodyHitIsImage =
+        !handleAttr &&
+        selectedGeom?.id.kind === "rectangle" &&
+        selectedGeom?.hasImage === true;
+      // Build gestureSpec + target list.
+      let gestureSpec: GestureType | null = null;
+      let targets: ElementId[] = [];
+      let scaleBox: HandleBox | null = null;
+      if (handleAttr === "rotate" && (selectedGeom || isMultiSelect)) {
+        gestureSpec = { kind: "rotate" };
+        targets = selectedGeom ? [selectedGeom.id] : selection.slice();
+      } else if (handleAttr && handleAttr !== "rotate") {
+        if (isMultiSelect) {
+          // Phase G — multi-select handle drag is always matrix
+          // Scale (rotated or not). Holding Cmd still does Scale —
+          // it's the only sensible per-element op for N>1.
+          gestureSpec = { kind: "scale" };
+          targets = selection.slice();
+          scaleBox = gesturePage
+            ? unionHandleBox(geometry.filter((g) => g.pageId === gesturePage))
+            : null;
+        } else if (selectedGeom) {
+          // A group has no bounds of its own to resize: its box is
+          // its members' union, so a handle drag scales the members
+          // (as InDesign scales a group's contents).
+          gestureSpec =
+            modifiers.cmd || selectedGeom.id.kind === "group"
+              ? { kind: "scale" }
+              : { kind: "resize", handle: handleAttr };
+          targets = [selectedGeom.id];
+          if (gestureSpec.kind === "scale")
+            scaleBox = itemHandleBox(selectedGeom);
+        }
+      } else if (bodyHitElement) {
+        // Body drag. For multi-select, move ALL selected items
+        // together; for single-select, just the one.
+        if (isMultiSelect) {
+          gestureSpec = { kind: "translate" };
+          targets = selection.slice();
+        } else if (modifiers.cmd && bodyHitIsImage) {
+          // W2.10 — content-transform gestures ride the SAME content
+          // grabber the Phase F TranslateContent uses. Cmd+drag on an
+          // image body translates the placed image; layering a
+          // modifier promotes it to a rotate/scale of the content,
+          // about the frame centroid (the engine's RotateContent /
+          // ScaleContent arms, which commit SetProperty{
+          // ImageContentTransform} without touching the frame's own
+          // bounds or ItemTransform):
+          //   Cmd + Alt   → scaleContent
+          //   Cmd + Shift → rotateContent (Shift also flows to
+          //                 update_gesture, so the rotation snaps to
+          //                 15° — the same Shift-constrain the frame
+          //                 Rotate uses; an unconstrained content
+          //                 rotate is a later affordance).
+          // Alt wins over Shift when both are held so the choice is
+          // deterministic. Shift stays the live constraint modifier
+          // (never consumed here for translate), so plain Cmd+drag is
+          // still a free TranslateContent.
+          if (e.altKey) {
+            gestureSpec = { kind: "scaleContent" };
+          } else if (modifiers.shift) {
+            gestureSpec = { kind: "rotateContent" };
+          } else {
+            gestureSpec = { kind: "translateContent" };
+          }
+          targets = [bodyHitElement];
+        } else {
+          gestureSpec = { kind: "translate" };
+          targets = [bodyHitElement];
         }
       }
-    },
-    [
-      props,
-      rects,
-      marqueeRect,
-      setContentSelection,
-      tryEnterOwnedContent,
-      buildPathEditPointer,
-    ],
-  );
+      const hit = gestureSpec ? (targets[0] ?? null) : null;
+      if (hit && gestureSpec && targets.length > 0) {
+        mode = "gesture";
+        // Phase D — Rotate / Scale need an anchor (pointer position
+        // at gesture start, page-local on the selection's page).
+        // Translate / Resize don't need one but we send it anyway
+        // for future use.
+        const gestureRect = gesturePage
+          ? rects[props.pageIds.indexOf(gesturePage)]
+          : undefined;
+        const anchorAt: [PageId, PageRect] | null =
+          gesturePage && gestureRect ? [gesturePage, gestureRect] : containing;
+        const anchor: GestureAnchor | null = anchorAt
+          ? {
+              pageId: anchorAt[0],
+              pointInPage: [docX - anchorAt[1].x, docY - anchorAt[1].y],
+            }
+          : null;
+        // The box was measured on `gesturePage`; the pivot is named there.
+        const scale: HandleScale | null =
+          gesturePage &&
+          gestureRect &&
+          scaleBox &&
+          handleAttr &&
+          handleAttr !== "rotate"
+            ? {
+                pageId: gesturePage,
+                grabbed: scaleBox.at(handleAttr),
+                opposite: scaleBox.at(OPPOSITE_HANDLE[handleAttr]),
+                centre: scaleBox.centre,
+                alt: e.altKey,
+              }
+            : null;
+        gestureState = {
+          handle: null,
+          pendingDelta: [0, 0],
+          target: targets,
+          spec: gestureSpec,
+          modifiers: { shift: e.shiftKey, alt: e.altKey },
+          scale: scale ?? undefined,
+        };
+        beginWorkerGesture(gestureState, scale ? scaleAnchor(scale) : anchor);
+      } else {
+        mode = "marquee";
+      }
+    }
+    const marqueeAnchor =
+      mode === "marquee" && containing
+        ? {
+            pageId: containing[0],
+            pageX: docX - containing[1].x,
+            pageY: docY - containing[1].y,
+          }
+        : null;
+    dragStateRef.current = {
+      mode,
+      startCam: props.camera,
+      startDoc: [docX, docY],
+      startPointer: [e.clientX, e.clientY],
+      maxDelta: 0,
+      modifiers,
+      marqueeAnchor,
+      gestureState,
+    };
+  };
+
+  const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    // K-1 — while a content gesture owns the pointer, route moves to the
+    // active context (content coords) and skip tool/hover logic.
+    if (contentGestureRef.current) {
+      dispatchContentPointer(e, "move");
+      return;
+    }
+    // Phase 2 — route to the active tool handler while it owns the drag.
+    const toolDrag = toolDragRef.current;
+    if (toolDrag && props.toolGesture) {
+      const d = Math.hypot(
+        e.clientX - toolDrag.startPointer[0],
+        e.clientY - toolDrag.startPointer[1],
+      );
+      if (d > toolDrag.maxDelta) toolDrag.maxDelta = d;
+      props.toolGesture.onMove(buildToolPointer(e, toolDrag.maxDelta));
+      return;
+    }
+    // Path-edit mode — the session owns this drag.
+    if (pathEditDragRef.current) {
+      const pointer = buildPathEditPointer(e);
+      if (pointer) props.pathEdit?.pointerMove(pointer);
+      return;
+    }
+    const drag = dragStateRef.current;
+    if (!drag) {
+      // plugin-draw D2 — forward HOVER moves to the active handler
+      // too (the Pen's rubber band tracks them between clicks).
+      // Every handler guards its drag state, so hover moves are
+      // inert for drag-only tools; maxDelta 0 keeps click-vs-drag
+      // semantics intact.
+      if (props.toolGesture) {
+        props.toolGesture.onMove(buildToolPointer(e, 0));
+      }
+      // Concept 1 (Phase 3) — no drag in flight: let the active
+      // handler refine the cursor per pointer position (Pen near an
+      // anchor ≠ Pen over empty canvas). Imperative style write so a
+      // hover doesn't re-render the canvas.
+      const hover = props.toolGesture?.hoverCursor;
+      if (hover) {
+        const refined = hover(buildToolPointer(e, 0));
+        const el = wrapperRef.current;
+        if (el) el.style.cursor = refined ?? props.cursor ?? "grab";
+      }
+      return;
+    }
+    const dx = e.clientX - drag.startPointer[0];
+    const dy = e.clientY - drag.startPointer[1];
+    const delta = Math.hypot(dx, dy);
+    if (delta > drag.maxDelta) drag.maxDelta = delta;
+    if (drag.mode === "pan") {
+      props.onCameraChange({
+        scale: drag.startCam.scale,
+        tx: drag.startCam.tx + dx,
+        ty: drag.startCam.ty + dy,
+      });
+    } else if (drag.mode === "gesture") {
+      if (drag.maxDelta <= CLICK_DRAG_THRESHOLD_PX) return;
+      // Re-derive the doc-space delta from the original anchor so
+      // the gesture stays correct even if the user panned mid-drag.
+      const rect = e.currentTarget.getBoundingClientRect();
+      const cx = e.clientX - rect.left;
+      const cy = e.clientY - rect.top;
+      const [docX, docY] = viewportToDoc(props.camera, cx, cy);
+      const docDelta: [number, number] = [
+        docX - drag.startDoc[0],
+        docY - drag.startDoc[1],
+      ];
+      const gs = drag.gestureState;
+      if (!gs) return;
+      // Plan-2 §8.4 — Ctrl bypasses snap. Read `e.ctrlKey`
+      // independently of `metaKey`; on macOS the Ctrl key is its own
+      // thing (not Cmd), matching InDesign's "hold Ctrl to ignore
+      // snap targets" convention.
+      gs.modifiers = {
+        shift: e.shiftKey,
+        alt: e.altKey,
+        disableSnap: e.ctrlKey,
+      };
+      if (gs.scale && gs.handle !== null && e.altKey !== gs.scale.alt) {
+        // Alt/Option moves the pivot between the opposite handle and
+        // the centre. The engine fixes the pivot when the gesture
+        // begins, so the drag is begun again about the other one; the
+        // restarted gesture replays the whole delta, as one undo step.
+        gs.scale.alt = e.altKey;
+        const stale = gs.handle;
+        gs.handle = null;
+        gs.pendingDelta = docDelta;
+        void props.client.cancelGesture(stale).catch(() => {});
+        beginWorkerGesture(gs, scaleAnchor(gs.scale));
+        return;
+      }
+      if (gs.handle === null) {
+        // Begin hasn't resolved yet — buffer the delta; the
+        // resolver flushes it once the handle lands.
+        gs.pendingDelta = docDelta;
+      } else {
+        // Step 5e — SAB hot path. Fire-and-forget; the worker drains
+        // the SAB at ~125 Hz and emits `gestureSnapLines` notifies
+        // so the overlay still sees active guides. Falls back to
+        // JSON automatically when crossOriginIsolated is false.
+        void props.client
+          .updateGesture(gs.handle, docDelta, gs.modifiers, "sab")
+          .catch(() => {});
+      }
+    } else if (drag.mode === "marquee") {
+      if (drag.maxDelta <= CLICK_DRAG_THRESHOLD_PX) return;
+      const anchor = drag.marqueeAnchor;
+      if (!anchor) return;
+      const rect = e.currentTarget.getBoundingClientRect();
+      const cx = e.clientX - rect.left;
+      const cy = e.clientY - rect.top;
+      const [docX, docY] = viewportToDoc(props.camera, cx, cy);
+      // Clamp the marquee to the anchor's page so the rect we
+      // commit is page-local. The hit-tester only knows pages.
+      const pageRect = rects[props.pageIds.indexOf(anchor.pageId)];
+      if (!pageRect) return;
+      const currentX = clamp(docX - pageRect.x, 0, pageRect.w);
+      const currentY = clamp(docY - pageRect.y, 0, pageRect.h);
+      const top = Math.min(anchor.pageY, currentY);
+      const left = Math.min(anchor.pageX, currentX);
+      const bottom = Math.max(anchor.pageY, currentY);
+      const right = Math.max(anchor.pageX, currentX);
+      setMarqueeRect({
+        pageId: anchor.pageId,
+        rect: [top, left, bottom, right],
+      });
+    }
+  };
+
+  const onPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    // K-1 — end a content gesture: deliver the up to the active context
+    // and stop (don't run the tool/click path that would re-select).
+    if (contentGestureRef.current) {
+      contentGestureRef.current = false;
+      e.currentTarget.releasePointerCapture(e.pointerId);
+      dispatchContentPointer(e, "up");
+      return;
+    }
+    // Phase 2 — commit the active tool handler's gesture.
+    const toolDrag = toolDragRef.current;
+    if (toolDrag && props.toolGesture) {
+      toolDragRef.current = null;
+      const wasClick = toolDrag.maxDelta <= CLICK_DRAG_THRESHOLD_PX;
+      const legacyAlso = Boolean(props.legacyKeyForTool);
+      props.toolGesture.onUp(buildToolPointer(e, toolDrag.maxDelta));
+      // A dual tool's CLICK belongs to the legacy path (caret, click
+      // run, word/line granularity). Its handler has just been told
+      // the pointer went up, so it has cancelled itself, and the drag
+      // state armed at pointer-down is still there to fall through on.
+      if (!(wasClick && legacyAlso)) {
+        e.currentTarget.releasePointerCapture(e.pointerId);
+        // A dual tool's DRAG belonged to the handler, but pointer-down
+        // armed the legacy drag state too (as a "pan", for the click
+        // it might have been). Left armed, every later button-less
+        // move panned the view until the next press (ED-3).
+        dragStateRef.current = null;
+        return;
+      }
+    }
+    // Path-edit mode — hand the release to the session. Whatever it
+    // did with the gesture (moved anchors, selected some, inserted
+    // one) ends here; only a click on NOTHING is not its business,
+    // and that one runs the ordinary click below.
+    if (pathEditDragRef.current) {
+      pathEditDragRef.current = false;
+      const pointer = buildPathEditPointer(e);
+      const release =
+        pointer && props.pathEdit
+          ? props.pathEdit.pointerUp(pointer)
+          : "consumed";
+      pathEditConsumedRef.current = release === "consumed";
+      if (release === "consumed") {
+        if (dragStateRef.current) {
+          e.currentTarget.releasePointerCapture(e.pointerId);
+          dragStateRef.current = null;
+        }
+        return;
+      }
+    } else {
+      pathEditConsumedRef.current = false;
+    }
+    const drag = dragStateRef.current;
+    if (!drag) return;
+    e.currentTarget.releasePointerCapture(e.pointerId);
+    dragStateRef.current = null;
+    // Modifier state can change between down and up (user lifts
+    // Shift before releasing). Take whichever was held at either
+    // edge — matches industry convention.
+    const modifiers: PointerModifiers = {
+      shift: drag.modifiers.shift || e.shiftKey,
+      cmd: drag.modifiers.cmd || e.metaKey || e.ctrlKey,
+    };
+    // Click vs drag: if the pointer barely moved, treat it as a
+    // click and route through the worker's hit-tester. If a
+    // gesture was started at pointerdown (and never moved past the
+    // threshold), cancel it so the worker doesn't hold a stale
+    // handle.
+    if (drag.maxDelta <= CLICK_DRAG_THRESHOLD_PX) {
+      setMarqueeRect(null);
+      if (drag.mode === "gesture" && drag.gestureState) {
+        const stale = drag.gestureState.handle;
+        if (stale !== null) {
+          void props.client.cancelGesture(stale).catch(() => {});
+        }
+      }
+      // Concept 1 — Zoom tool: a click zooms in around the pointer
+      // (Alt-click zooms out) instead of hit-testing.
+      if (props.zoomClick) {
+        const rect = e.currentTarget.getBoundingClientRect();
+        const cx = e.clientX - rect.left;
+        const cy = e.clientY - rect.top;
+        const [docX, docY] = viewportToDoc(props.camera, cx, cy);
+        const factor = e.altKey ? 1 / 1.25 : 1.25;
+        const scale = Math.min(64, Math.max(0.01, props.camera.scale * factor));
+        props.onCameraChange({
+          scale,
+          tx: cx - docX * scale,
+          ty: cy - docY * scale,
+        });
+        return;
+      }
+      if (!props.onHit) return;
+      const rect = e.currentTarget.getBoundingClientRect();
+      const cx = e.clientX - rect.left;
+      const cy = e.clientY - rect.top;
+      // W2.11 — multi-click granularity (SEL-05). Track the click
+      // run so the 2nd consecutive click on the same point selects a
+      // word and the 3rd selects the line. Native `detail` is
+      // unreliable for the 3rd click, so we count ourselves.
+      const clickCount = bumpClickRun(clickRunRef.current, cx, cy, e.timeStamp);
+      const isText = (props.activeTool ?? "select") === "text";
+      const [docX, docY] = viewportToDoc(props.camera, cx, cy);
+      const containing = findContainingPage(rects, props.pageIds, docX, docY);
+      if (containing) {
+        const [pageId, pageRect] = containing;
+        const docPoint: [number, number] = [
+          docX - pageRect.x,
+          docY - pageRect.y,
+        ];
+        const filter = isText ? "text" : "any";
+        // A promise chain, not a try: the compiler does not lower
+        // conditionals inside a try (ADR 229).
+        const resolveHit = async () => {
+          const reply = await props.client.send({
+            kind: "hitTest",
+            payload: { pageId, docPoint, filter },
+          });
+          if (reply.kind !== "hitResult") return;
+          const hit = reply.payload;
+          // C-4 — owned-content interception: a Type-tool click on
+          // a metadata-claimed frame (a lowered sheet table, a web
+          // frame) enters the OWNING plugin's modal context instead
+          // of raw text editing — manual edits must not corrupt
+          // content a plugin compiles. Object-type lane only; an
+          // empty objectType registry early-outs, so documents
+          // without plugins pay nothing.
+          if (isText && hit.element) {
+            const owned = await tryEnterOwnedContent({
+              element: hit.element,
+              groupChain: [],
+              // W-19 — the click is the entering point.
+              pageId,
+              pagePoint: docPoint,
+            });
+            if (owned) return;
+          }
+          // Text tool, 2nd/3rd click on a story offset → granular
+          // selection (word / line) instead of placing a caret.
+          if (
+            isText &&
+            clickCount >= 2 &&
+            hit.storyId &&
+            hit.offsetWithinStory != null
+          ) {
+            await applyTextGranularity(
+              props.client,
+              hit.storyId,
+              hit.offsetWithinStory,
+              clickCount,
+              setContentSelection,
+            );
+            return;
+          }
+          props.onHit?.({ pageId, docPoint, hit }, modifiers);
+        };
+        void resolveHit().catch((err: unknown) => {
+          console.warn("hitTest failed:", err);
+        });
+      } else {
+        props.onHit?.(null, modifiers);
+      }
+      return;
+    }
+    // Drag committed. Pan needs no commit work; marquee hands the
+    // final rect to the caller; gesture commits via the worker.
+    if (drag.mode === "marquee") {
+      if (marqueeRect && props.onMarquee) {
+        props.onMarquee(marqueeRect.pageId, marqueeRect.rect, modifiers);
+      }
+      setMarqueeRect(null);
+    } else if (drag.mode === "gesture" && drag.gestureState) {
+      const handle = drag.gestureState.handle;
+      if (handle === null) {
+        // Begin hasn't resolved (a fast drag, or one Alt re-began):
+        // the resolver commits once the handle lands.
+        drag.gestureState.release = "commit";
+      } else {
+        void props.client
+          .commitGesture(handle)
+          .then(() => {
+            setSnapLines([]);
+            props.onGestureCommitted?.();
+          })
+          .catch(() => {});
+      }
+    }
+  };
 
   // GSM-07 / INV-8 — abort the in-flight drag WITHOUT committing.
   // Pointer-capture loss (`pointercancel`) and window blur both land
@@ -1258,8 +1193,7 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
   // spine — cancelled via its Escape-equivalent), the legacy worker
   // gesture (cancel the handle), and a marquee (drop the rect). A pan
   // has nothing to roll back.
-  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
-  const abortActiveDrag = useCallback(() => {
+  const abortActiveDrag = () => {
     // Tool-spine draw drag (Rectangle/Pen/…): cancel, don't commit.
     if (toolDragRef.current && props.toolGesture) {
       toolDragRef.current = null;
@@ -1289,32 +1223,33 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
     } else if (drag.mode === "marquee") {
       setMarqueeRect(null);
     }
-  }, [props, setSnapLines, setMarqueeRect]);
+  };
 
   // Phase B — Escape cancels the active gesture. Listen at document
   // level so it works while pointer capture is in flight on the
   // wrapper.
-  useEffect(() => {
-    function onKeyDown(e: KeyboardEvent) {
-      if (e.key !== "Escape") return;
-      const drag = dragStateRef.current;
-      if (!drag || drag.mode !== "gesture" || !drag.gestureState) return;
-      const handle = drag.gestureState.handle;
-      drag.mode = "pan";
-      drag.gestureState = undefined;
-      if (handle !== null) {
-        void props.client
-          .cancelGesture(handle)
-          .then(() => {
-            setSnapLines([]);
-            props.onGestureCommitted?.();
-          })
-          .catch(() => {});
-      }
+  const onEscapeKey = useEffectEvent((e: KeyboardEvent) => {
+    if (e.key !== "Escape") return;
+    const drag = dragStateRef.current;
+    if (!drag || drag.mode !== "gesture" || !drag.gestureState) return;
+    const handle = drag.gestureState.handle;
+    drag.mode = "pan";
+    drag.gestureState = undefined;
+    if (handle !== null) {
+      void props.client
+        .cancelGesture(handle)
+        .then(() => {
+          setSnapLines([]);
+          props.onGestureCommitted?.();
+        })
+        .catch(() => {});
     }
+  });
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => onEscapeKey(e);
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [props]);
+  }, []);
 
   // INV-8 — a window blur (Cmd/Alt-Tab away, devtools focus) while a
   // drag is in flight must abort it. Without this the gesture stays
@@ -1322,11 +1257,12 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
   // delta — the classic "alt-tab mid-drag leaves a stuck gesture" bug
   // (gestures.md E2E-11). pointercancel covers capture *theft*; blur
   // covers the case where the pointer never sends a cancel.
+  const onWindowBlur = useEffectEvent(() => abortActiveDrag());
   useEffect(() => {
-    const onBlur = () => abortActiveDrag();
+    const onBlur = () => onWindowBlur();
     window.addEventListener("blur", onBlur);
     return () => window.removeEventListener("blur", onBlur);
-  }, [abortActiveDrag]);
+  }, []);
 
   // GSM-07 / INV-8 — pointer-capture loss (`pointercancel`: capture
   // stolen, touch cancelled, element removed mid-drag). The browser has
@@ -1334,8 +1270,7 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
   // here; we just roll the gesture back. Previously this aliased
   // `onPointerUp`, which COMMITTED the interrupted gesture — a phantom
   // mutation. Now it aborts (the plan's pointercancel → abort).
-  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
-  const onPointerCancel = useCallback(() => {
+  const onPointerCancel = () => {
     // K-1 — a cancelled content gesture just ends (the context keeps its
     // state; no tool drag to abort).
     if (contentGestureRef.current) {
@@ -1343,284 +1278,145 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
       return;
     }
     abortActiveDrag();
-  }, [abortActiveDrag]);
+  };
 
-  function clamp(v: number, lo: number, hi: number): number {
-    return v < lo ? lo : v > hi ? hi : v;
-  }
-
-  /** Phase B — return the first selected element whose AABB
-   * (transformed corners → axis-aligned bbox) contains the pointer,
-   * with the page it was hit on. `pointerOn` gives the pointer in a
-   * page's local space. AABB rather than oriented-rect: fast, no
-   * transform math in TS, and a false positive at the AABB corner of a
-   * rotated frame is acceptable since the worker's `begin_gesture` then
-   * rejects it. Matches what the renderer paints for the selection
-   * chrome at the same point in time. */
-  function findSelectedElementUnderPointer(
-    selection: ReadonlyArray<ElementId>,
-    geometry: ReadonlyArray<ElementGeometryItem>,
-    pointerOn: (pageId: PageId) => [number, number] | null,
-  ): { id: ElementId; pageId: PageId } | null {
-    const inSel = new Set(selection.map((e) => `${e.kind}:${e.id}`));
-    for (const g of geometry) {
-      if (!g.pageId) continue;
-      if (!inSel.has(`${g.id.kind}:${g.id.id}`)) continue;
-      const pageLocal = pointerOn(g.pageId);
-      if (!pageLocal) continue;
-      const [top, left, bottom, right] = g.bounds;
-      const corners: Array<[number, number]> = [
-        applyAffineLocal(g.itemTransform, left, top),
-        applyAffineLocal(g.itemTransform, right, top),
-        applyAffineLocal(g.itemTransform, right, bottom),
-        applyAffineLocal(g.itemTransform, left, bottom),
-      ];
-      let minX = Infinity,
-        maxX = -Infinity,
-        minY = Infinity,
-        maxY = -Infinity;
-      for (const [x, y] of corners) {
-        if (x < minX) minX = x;
-        if (x > maxX) maxX = x;
-        if (y < minY) minY = y;
-        if (y > maxY) maxY = y;
-      }
-      if (
-        pageLocal[0] >= minX &&
-        pageLocal[0] <= maxX &&
-        pageLocal[1] >= minY &&
-        pageLocal[1] <= maxY
-      ) {
-        return { id: g.id, pageId: g.pageId };
-      }
-    }
-    return null;
-  }
-
-  function applyAffineLocal(
-    m: [number, number, number, number, number, number] | null | undefined,
-    x: number,
-    y: number,
-  ): [number, number] {
-    if (!m) return [x, y];
-    return [m[0] * x + m[2] * y + m[4], m[1] * x + m[3] * y + m[5]];
-  }
-
-  /** Phase C/D — read the `data-handle` attribute from a pointer
-   * event target. Returns the matching `ResizeHandle`, `"rotate"`
-   * for the Phase D rotation handle, or `null`. The Overlay tags
-   * both the visible handle and a larger hit-area rect with the same
-   * attribute, so a pointerdown anywhere in the grab zone fires
-   * this branch. */
-  function readHandleAttr(
-    target: EventTarget | null,
-  ): ResizeHandle | "rotate" | null {
-    if (!(target instanceof Element)) return null;
-    const v = target.getAttribute("data-handle");
-    if (!v) return null;
-    if (
-      v === "north" ||
-      v === "south" ||
-      v === "east" ||
-      v === "west" ||
-      v === "northEast" ||
-      v === "northWest" ||
-      v === "southEast" ||
-      v === "southWest" ||
-      v === "rotate"
-    ) {
-      return v;
-    }
-    return null;
-  }
-
-  /** The page a handle's box is drawn in (`data-handle-page`, on the
-   * handle's group). */
-  function readHandlePage(target: EventTarget | null): PageId | null {
-    if (!(target instanceof Element)) return null;
-    return (
-      target.closest("[data-handle-page]")?.getAttribute("data-handle-page") ??
-      null
-    );
-  }
-
-  function findContainingPage(
-    rects: ReadonlyArray<PageRect>,
-    ids: ReadonlyArray<PageId>,
-    docX: number,
-    docY: number,
-  ): [PageId, PageRect] | null {
-    for (let i = 0; i < rects.length; i++) {
-      const r = rects[i];
-      if (
-        docX >= r.x &&
-        docX <= r.x + r.w &&
-        docY >= r.y &&
-        docY <= r.y + r.h
-      ) {
-        return [ids[i], r];
-      }
-    }
-    return null;
-  }
-
-  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
-  const onWheel = useCallback(
-    (e: React.WheelEvent<HTMLDivElement>) => {
-      const rect = e.currentTarget.getBoundingClientRect();
-      const cx = e.clientX - rect.left;
-      const cy = e.clientY - rect.top;
-      // An active edit context that scrolls its own content (a sheet's
-      // in-frame grid window) takes a plain wheel over its frame; the
-      // canvas pans only when it declines. Cmd/Ctrl wheel stays zoom.
-      const onContentWheel =
-        editContextStack?.activeContribution?.onContentWheel;
-      if (onContentWheel && !e.ctrlKey && !e.metaKey) {
-        const at = activeContentPointAt(e.currentTarget, e.clientX, e.clientY);
-        if (at) {
-          const toPx =
-            e.deltaMode === 1
-              ? WHEEL_LINE_PX
-              : e.deltaMode === 2
-                ? rect.height
-                : 1;
-          const scale = props.camera.scale > 0 ? props.camera.scale : 1;
-          const taken = onContentWheel({
-            contentPoint: at.content,
-            elementId: at.elementId,
-            delta: [(e.deltaX * toPx) / scale, (e.deltaY * toPx) / scale],
-            modifiers: {
-              shift: e.shiftKey,
-              alt: e.altKey,
-              cmd: e.metaKey,
-              ctrl: e.ctrlKey,
-            },
-          });
-          if (taken) return;
-        }
-      }
-      if (e.ctrlKey || e.metaKey) {
-        const factor = Math.exp(-e.deltaY * 0.005);
-        props.onCameraChange(zoomAt(props.camera, cx, cy, factor));
-      } else {
-        props.onCameraChange({
-          scale: props.camera.scale,
-          tx: props.camera.tx - e.deltaX,
-          ty: props.camera.ty - e.deltaY,
+  const onWheel = (e: React.WheelEvent<HTMLDivElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const cx = e.clientX - rect.left;
+    const cy = e.clientY - rect.top;
+    // An active edit context that scrolls its own content (a sheet's
+    // in-frame grid window) takes a plain wheel over its frame; the
+    // canvas pans only when it declines. Cmd/Ctrl wheel stays zoom.
+    const onContentWheel = editContextStack?.activeContribution?.onContentWheel;
+    if (onContentWheel && !e.ctrlKey && !e.metaKey) {
+      const at = activeContentPointAt(e.currentTarget, e.clientX, e.clientY);
+      if (at) {
+        const toPx =
+          e.deltaMode === 1
+            ? WHEEL_LINE_PX
+            : e.deltaMode === 2
+              ? rect.height
+              : 1;
+        const scale = props.camera.scale > 0 ? props.camera.scale : 1;
+        const taken = onContentWheel({
+          contentPoint: at.content,
+          elementId: at.elementId,
+          delta: [(e.deltaX * toPx) / scale, (e.deltaY * toPx) / scale],
+          modifiers: {
+            shift: e.shiftKey,
+            alt: e.altKey,
+            cmd: e.metaKey,
+            ctrl: e.ctrlKey,
+          },
         });
+        if (taken) return;
       }
-    },
-    [props, editContextStack, activeContentPointAt],
-  );
+    }
+    if (e.ctrlKey || e.metaKey) {
+      const factor = Math.exp(-e.deltaY * 0.005);
+      props.onCameraChange(zoomAt(props.camera, cx, cy, factor));
+    } else {
+      props.onCameraChange({
+        scale: props.camera.scale,
+        tx: props.camera.tx - e.deltaX,
+        ty: props.camera.ty - e.deltaY,
+      });
+    }
+  };
 
-  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
-  const onDoubleClick = useCallback(
-    (e: React.MouseEvent<HTMLDivElement>) => {
-      // Phase H — double-click on a frame nested inside a group →
-      // select the whole outermost containing group as a unit.
-      if (!props.onDoubleClickGroup) return;
-      // W2.11 — with the Type tool, double-/triple-click is text
-      // granularity (handled in onPointerUp's click branch); skip the
-      // group-descent path so the two don't fight over the same click.
-      if ((props.activeTool ?? "select") === "text") return;
-      // Path-edit mode — a double-click whose second click the session
-      // took (on an anchor it converts corner ↔ smooth) is not ALSO a
-      // request to enter whatever lies under that anchor.
-      if (props.pathEdit && pathEditConsumedRef.current) return;
-      const rect = e.currentTarget.getBoundingClientRect();
-      const cx = e.clientX - rect.left;
-      const cy = e.clientY - rect.top;
-      const [docX, docY] = viewportToDoc(props.camera, cx, cy);
-      const containing = findContainingPage(rects, props.pageIds, docX, docY);
-      if (!containing) return;
-      const [pageId, pageRect] = containing;
-      const pagePoint: [number, number] = [
-        docX - pageRect.x,
-        docY - pageRect.y,
-      ];
-      void (async () => {
-        try {
-          const reply = await props.client.send({
-            kind: "hitTest",
-            payload: {
-              pageId,
-              docPoint: pagePoint,
-              filter: "any",
-            },
-          });
-          if (reply.kind !== "hitResult") return;
-          const chain = reply.payload.groupChain ?? [];
-          const element = reply.payload.element ?? null;
-          // TEXT FIRST, as in InDesign: a double-click on a text frame's
-          // text switches to the Type tool with the caret at the point —
-          // in the cell, when the point is in a table cell. Without this
-          // the first claim to answer was paged.draw's, which takes every
-          // path-bearing kind including text frames, so double-clicking a
-          // table entered vector editing. Content a plugin OWNS (a lowered
-          // sheet table, a web frame) still goes to that plugin.
-          const hit = reply.payload;
-          // A grouped frame descends into its group first (Track L); the
-          // next double-click, inside the group, reaches the text.
-          const inGroupScope =
-            chain.length === 0 ||
-            (activeGroup !== null && chain.includes(activeGroup));
-          if (
-            element?.kind === "textFrame" &&
-            inGroupScope &&
-            hit.storyId &&
-            hit.offsetWithinStory != null
-          ) {
-            const owned = await tryEnterOwnedContent({
-              element,
-              groupChain: chain,
-              pageId,
-              pagePoint,
-            });
-            if (owned) return;
-            const tc = hit.tableContext ?? null;
-            tool?.setBaseTool(TEXT_TOOL_ID);
-            setContentSelection({
-              storyId: hit.storyId,
-              start: hit.offsetWithinStory,
-              end: hit.offsetWithinStory,
-              affinity: false,
-              cell: tc
-                ? { tableId: tc.tableId, row: tc.row, col: tc.col }
-                : undefined,
-            });
-            return;
-          }
-          // W3.2 — consult the edit-context / object-type registries
-          // FIRST: a webFrame (object type) opens its source context, a
-          // polygon (edit context by kind) enters vectorGraphic. Only
-          // when nothing claims the double-click do we descend the group.
-          const claimed = await tryEnterEditContext({
-            element,
-            groupChain: chain,
-            // W-19 — the entered context's onEnter gets the point too.
-            pageId,
-            pagePoint,
-          });
-          if (claimed) return;
-          if (chain.length > 0) {
-            props.onDoubleClickGroup?.(chain[0], element);
-          }
-        } catch (err) {
-          // Same fail-quiet approach as the click hitTest.
-          console.warn("doubleClick hitTest failed:", err);
-        }
-      })();
-    },
-    [
-      props,
-      rects,
-      tryEnterEditContext,
-      tryEnterOwnedContent,
-      tool,
-      setContentSelection,
-      activeGroup,
-    ],
-  );
+  const onDoubleClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    // Phase H — double-click on a frame nested inside a group →
+    // select the whole outermost containing group as a unit.
+    if (!props.onDoubleClickGroup) return;
+    // W2.11 — with the Type tool, double-/triple-click is text
+    // granularity (handled in onPointerUp's click branch); skip the
+    // group-descent path so the two don't fight over the same click.
+    if ((props.activeTool ?? "select") === "text") return;
+    // Path-edit mode — a double-click whose second click the session
+    // took (on an anchor it converts corner ↔ smooth) is not ALSO a
+    // request to enter whatever lies under that anchor.
+    if (props.pathEdit && pathEditConsumedRef.current) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const cx = e.clientX - rect.left;
+    const cy = e.clientY - rect.top;
+    const [docX, docY] = viewportToDoc(props.camera, cx, cy);
+    const containing = findContainingPage(rects, props.pageIds, docX, docY);
+    if (!containing) return;
+    const [pageId, pageRect] = containing;
+    const pagePoint: [number, number] = [docX - pageRect.x, docY - pageRect.y];
+    // A promise chain, not a try (ADR 229).
+    const resolveDoubleClick = async () => {
+      const reply = await props.client.send({
+        kind: "hitTest",
+        payload: {
+          pageId,
+          docPoint: pagePoint,
+          filter: "any",
+        },
+      });
+      if (reply.kind !== "hitResult") return;
+      const chain = reply.payload.groupChain ?? [];
+      const element = reply.payload.element ?? null;
+      // TEXT FIRST, as in InDesign: a double-click on a text frame's
+      // text switches to the Type tool with the caret at the point —
+      // in the cell, when the point is in a table cell. Without this
+      // the first claim to answer was paged.draw's, which takes every
+      // path-bearing kind including text frames, so double-clicking a
+      // table entered vector editing. Content a plugin OWNS (a lowered
+      // sheet table, a web frame) still goes to that plugin.
+      const hit = reply.payload;
+      // A grouped frame descends into its group first (Track L); the
+      // next double-click, inside the group, reaches the text.
+      const inGroupScope =
+        chain.length === 0 ||
+        (activeGroup !== null && chain.includes(activeGroup));
+      if (
+        element?.kind === "textFrame" &&
+        inGroupScope &&
+        hit.storyId &&
+        hit.offsetWithinStory != null
+      ) {
+        const owned = await tryEnterOwnedContent({
+          element,
+          groupChain: chain,
+          pageId,
+          pagePoint,
+        });
+        if (owned) return;
+        const tc = hit.tableContext ?? null;
+        tool?.setBaseTool(TEXT_TOOL_ID);
+        setContentSelection({
+          storyId: hit.storyId,
+          start: hit.offsetWithinStory,
+          end: hit.offsetWithinStory,
+          affinity: false,
+          cell: tc
+            ? { tableId: tc.tableId, row: tc.row, col: tc.col }
+            : undefined,
+        });
+        return;
+      }
+      // W3.2 — consult the edit-context / object-type registries
+      // FIRST: a webFrame (object type) opens its source context, a
+      // polygon (edit context by kind) enters vectorGraphic. Only
+      // when nothing claims the double-click do we descend the group.
+      const claimed = await tryEnterEditContext({
+        element,
+        groupChain: chain,
+        // W-19 — the entered context's onEnter gets the point too.
+        pageId,
+        pagePoint,
+      });
+      if (claimed) return;
+      if (chain.length > 0) {
+        props.onDoubleClickGroup?.(chain[0], element);
+      }
+    };
+    void resolveDoubleClick().catch((err: unknown) => {
+      // Same fail-quiet approach as the click hitTest.
+      console.warn("doubleClick hitTest failed:", err);
+    });
+  };
 
   return (
     <div
@@ -1652,8 +1448,8 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
         camera={props.camera}
         pageIds={props.pageIds}
         pageRects={rects}
-        width={wrapperRef.current?.clientWidth ?? 0}
-        height={wrapperRef.current?.clientHeight ?? 0}
+        width={hostSize.width}
+        height={hostSize.height}
       />
       <ViewportHud
         camera={props.camera}
@@ -2083,3 +1879,120 @@ const hudStyle: React.CSSProperties = {
 const hudSelStyle: React.CSSProperties = {
   color: "var(--status-review)", // amber — highlights the click result
 };
+
+// Pure helpers of the pointer path (module scope: the component reads
+// them before their place in its body, ADR 229).
+
+function clamp(v: number, lo: number, hi: number): number {
+  return v < lo ? lo : v > hi ? hi : v;
+}
+
+/** Phase B — return the first selected element whose AABB
+ * (transformed corners → axis-aligned bbox) contains the pointer,
+ * with the page it was hit on. `pointerOn` gives the pointer in a
+ * page's local space. AABB rather than oriented-rect: fast, no
+ * transform math in TS, and a false positive at the AABB corner of a
+ * rotated frame is acceptable since the worker's `begin_gesture` then
+ * rejects it. Matches what the renderer paints for the selection
+ * chrome at the same point in time. */
+function findSelectedElementUnderPointer(
+  selection: ReadonlyArray<ElementId>,
+  geometry: ReadonlyArray<ElementGeometryItem>,
+  pointerOn: (pageId: PageId) => [number, number] | null,
+): { id: ElementId; pageId: PageId } | null {
+  const inSel = new Set(selection.map((e) => `${e.kind}:${e.id}`));
+  for (const g of geometry) {
+    if (!g.pageId) continue;
+    if (!inSel.has(`${g.id.kind}:${g.id.id}`)) continue;
+    const pageLocal = pointerOn(g.pageId);
+    if (!pageLocal) continue;
+    const [top, left, bottom, right] = g.bounds;
+    const corners: Array<[number, number]> = [
+      applyAffineLocal(g.itemTransform, left, top),
+      applyAffineLocal(g.itemTransform, right, top),
+      applyAffineLocal(g.itemTransform, right, bottom),
+      applyAffineLocal(g.itemTransform, left, bottom),
+    ];
+    let minX = Infinity,
+      maxX = -Infinity,
+      minY = Infinity,
+      maxY = -Infinity;
+    for (const [x, y] of corners) {
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+      if (y < minY) minY = y;
+      if (y > maxY) maxY = y;
+    }
+    if (
+      pageLocal[0] >= minX &&
+      pageLocal[0] <= maxX &&
+      pageLocal[1] >= minY &&
+      pageLocal[1] <= maxY
+    ) {
+      return { id: g.id, pageId: g.pageId };
+    }
+  }
+  return null;
+}
+
+function applyAffineLocal(
+  m: [number, number, number, number, number, number] | null | undefined,
+  x: number,
+  y: number,
+): [number, number] {
+  if (!m) return [x, y];
+  return [m[0] * x + m[2] * y + m[4], m[1] * x + m[3] * y + m[5]];
+}
+
+/** Phase C/D — read the `data-handle` attribute from a pointer
+ * event target. Returns the matching `ResizeHandle`, `"rotate"`
+ * for the Phase D rotation handle, or `null`. The Overlay tags
+ * both the visible handle and a larger hit-area rect with the same
+ * attribute, so a pointerdown anywhere in the grab zone fires
+ * this branch. */
+function readHandleAttr(
+  target: EventTarget | null,
+): ResizeHandle | "rotate" | null {
+  if (!(target instanceof Element)) return null;
+  const v = target.getAttribute("data-handle");
+  if (!v) return null;
+  if (
+    v === "north" ||
+    v === "south" ||
+    v === "east" ||
+    v === "west" ||
+    v === "northEast" ||
+    v === "northWest" ||
+    v === "southEast" ||
+    v === "southWest" ||
+    v === "rotate"
+  ) {
+    return v;
+  }
+  return null;
+}
+
+/** The page a handle's box is drawn in (`data-handle-page`, on the
+ * handle's group). */
+function readHandlePage(target: EventTarget | null): PageId | null {
+  if (!(target instanceof Element)) return null;
+  return (
+    target.closest("[data-handle-page]")?.getAttribute("data-handle-page") ??
+    null
+  );
+}
+
+function findContainingPage(
+  rects: ReadonlyArray<PageRect>,
+  ids: ReadonlyArray<PageId>,
+  docX: number,
+  docY: number,
+): [PageId, PageRect] | null {
+  for (let i = 0; i < rects.length; i++) {
+    const r = rects[i];
+    if (docX >= r.x && docX <= r.x + r.w && docY >= r.y && docY <= r.y + r.h) {
+      return [ids[i], r];
+    }
+  }
+  return null;
+}

@@ -40,6 +40,7 @@ import {
   subscribeProblems,
   type ProblemEntry,
 } from "./problems-store";
+import { font, radius, space } from "@paged-media/panel-kit";
 
 const DOT: Record<ProblemEntry["severity"], string> = {
   error: "var(--status-error)",
@@ -48,11 +49,11 @@ const DOT: Record<ProblemEntry["severity"], string> = {
 };
 
 const kicker: React.CSSProperties = {
-  font: "700 10px var(--font-sans, sans-serif)",
-  letterSpacing: "var(--tracking-wide, 0.14em)",
+  font: `700 10px ${font.sans}`,
+  letterSpacing: font.trackingWide,
   textTransform: "uppercase",
   color: "var(--pg-muted-fg)",
-  margin: "0 0 var(--space-2, 8px)",
+  margin: `0 0 ${space[2]}`,
 };
 
 export function ProblemsPanel() {
@@ -80,8 +81,8 @@ export function ProblemsPanel() {
     <div
       data-problems-panel
       style={{
-        padding: "var(--space-3, 12px)",
-        font: "12px var(--font-sans, sans-serif)",
+        padding: space[3],
+        font: `12px ${font.sans}`,
         color: "var(--pg-fg)",
       }}
     >
@@ -98,9 +99,9 @@ export function ProblemsPanel() {
           <p
             data-problems-summary
             style={{
-              margin: "0 0 var(--space-2, 8px)",
+              margin: `0 0 ${space[2]}`,
               color: "var(--pg-muted-fg)",
-              font: "11px var(--font-mono, monospace)",
+              font: `11px ${font.mono}`,
               fontVariantNumeric: "tabular-nums",
             }}
           >
@@ -119,15 +120,15 @@ export function ProblemsPanel() {
                   style={{
                     display: "flex",
                     alignItems: "baseline",
-                    gap: "var(--space-2, 8px)",
+                    gap: space[2],
                     width: "100%",
                     textAlign: "left",
                     border: "none",
                     background: "transparent",
                     cursor: "pointer",
                     padding: "4px 2px",
-                    borderRadius: "var(--radius-sm, 4px)",
-                    font: "11px/1.5 var(--font-mono, monospace)",
+                    borderRadius: radius.sm,
+                    font: `11px/1.5 ${font.mono}`,
                     color: "var(--pg-fg)",
                   }}
                 >
@@ -136,7 +137,7 @@ export function ProblemsPanel() {
                     style={{
                       width: 7,
                       height: 7,
-                      borderRadius: "var(--radius-full, 999px)",
+                      borderRadius: radius.full,
                       background: DOT[p.severity],
                       flex: "none",
                       transform: "translateY(1px)",

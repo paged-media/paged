@@ -31,6 +31,7 @@
     "@paged-media/catalog": "workspace:*",
     "@paged-media/client": "workspace:*",
     "@paged-media/helpers": "workspace:*",
+    "@paged-media/panel-kit": "workspace:*",
     "@paged-media/plugin-api": "workspace:*",
     "@paged-media/react-live": "workspace:*",
     "@paged-media/repository": "workspace:*",

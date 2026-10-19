@@ -30,7 +30,7 @@
 // caller uses for direct writes — so the SAB stays the single
 // source of truth for the worker.
 
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef } from "react";
 import type { Camera } from "@paged-media/client";
 
 export interface AnimateOptions {
@@ -46,11 +46,16 @@ export function useAnimatedCamera(
   const rafRef = useRef<number | null>(null);
   // Track the latest `setCamera` + `current` via refs so the
   // animation callback always reads fresh values without
-  // re-subscribing.
+  // re-subscribing. Written after each commit (a layout effect, so before
+  // any input that could start a tween); a ref written during render
+  // keeps the hook uncompiled (ADR 229). Not an effect event: the tween
+  // starts from event handlers.
   const setCameraRef = useRef(setCamera);
   const currentRef = useRef(current);
-  setCameraRef.current = setCamera;
-  currentRef.current = current;
+  useLayoutEffect(() => {
+    setCameraRef.current = setCamera;
+    currentRef.current = current;
+  });
 
   // Cancel any in-flight tween on unmount.
   useEffect(() => {
@@ -62,7 +67,7 @@ export function useAnimatedCamera(
     };
   }, []);
 
-  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
+  // eslint-disable-next-line no-restricted-syntax -- a hook's result, which callers may compare (ADR 229)
   const animateTo = useCallback((target: Camera, opts: AnimateOptions = {}) => {
     const duration = opts.durationMs ?? DEFAULT_DURATION_MS;
     if (rafRef.current !== null) {
