@@ -188,13 +188,14 @@ test.describe("chrome commands", () => {
     covers("command:paged.chrome.toggleAll");
     await openShell(page, { doc: true });
     await expect(rail(page)).toBeVisible();
-    await expect(leftPanel(page)).toHaveCount(1);
+    await expect(leftPanel(page)).toBeVisible();
     await invoke(page, "paged.chrome.toggleAll");
     await expect(rail(page)).toBeHidden();
-    await expect(leftPanel(page)).toHaveCount(0);
+    // Hidden, and kept mounted for the way back (ADR 233).
+    await expect(leftPanel(page)).toBeHidden();
     await invoke(page, "paged.chrome.toggleAll");
     await expect(rail(page)).toBeVisible();
-    await expect(leftPanel(page)).toHaveCount(1);
+    await expect(leftPanel(page)).toBeVisible();
   });
 
   test("toggle panels hides the panels and keeps the tool rail", async ({
@@ -203,10 +204,10 @@ test.describe("chrome commands", () => {
     covers("command:paged.chrome.togglePanels");
     await openShell(page, { doc: true });
     await invoke(page, "paged.chrome.togglePanels");
-    await expect(leftPanel(page)).toHaveCount(0);
+    await expect(leftPanel(page)).toBeHidden();
     await expect(rail(page)).toBeVisible();
     await invoke(page, "paged.chrome.togglePanels");
-    await expect(leftPanel(page)).toHaveCount(1);
+    await expect(leftPanel(page)).toBeVisible();
   });
 
   test("the command palette opens and closes", async ({ page }) => {
