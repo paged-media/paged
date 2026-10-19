@@ -13,13 +13,12 @@ import type { BundleHost } from "@paged-media/plugin-api";
 
 import type { DataEngineLike } from "../engine";
 
+import { silentConsole as silent } from "@paged-media/plugin-sdk";
 // bun:test hoists no vi.mock and has no vi.doMock / vi.resetModules: the
 // real exports are taken once, before anything is mocked, and mock.module
 // patches the loaded module in place (every importer sees the change).
 const actualEngine = await importActual(() => import("../engine"));
 const actualMerge = await importActual(() => import("../merge"));
-
-const silent = { debug() {}, info() {}, warn() {}, error() {} };
 
 function fakeEngine(): DataEngineLike {
   return {

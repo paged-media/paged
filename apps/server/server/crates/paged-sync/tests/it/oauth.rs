@@ -115,13 +115,25 @@ fn idp() {
     });
 }
 
+/// No redirects followed (the 302s are what the test reads), and an error
+/// status comes back as a response, so its headers and body can be read.
 fn agent() -> ureq::Agent {
-    ureq::AgentBuilder::new().redirects(0).build()
+    ureq::Agent::config_builder()
+        .max_redirects(0)
+        .http_status_as_error(false)
+        .build()
+        .into()
 }
 
-fn location(r: &ureq::Response) -> String {
-    assert_eq!(r.status(), 302, "expected a redirect from {}", r.get_url());
-    r.header("location").expect("a location").to_string()
+fn location(r: &ureq::http::Response<ureq::Body>) -> String {
+    use ureq::ResponseExt;
+    assert_eq!(r.status(), 302, "expected a redirect from {}", r.get_uri());
+    r.headers()
+        .get("location")
+        .expect("a location")
+        .to_str()
+        .unwrap()
+        .to_string()
 }
 
 /// Registers a client and signs in, returning (client_id, code, verifier).
@@ -129,7 +141,8 @@ fn sign_in(url: &str) -> (String, String, String) {
     let reg: serde_json::Value = ureq::post(&format!("{url}/oauth/register"))
         .send_json(serde_json::json!({ "client_name": "test", "redirect_uris": [REDIRECT] }))
         .unwrap()
-        .into_json()
+        .into_body()
+        .read_json()
         .unwrap();
     let client_id = reg["client_id"].as_str().unwrap().to_string();
     let verifier = "a-verifier-that-is-at-least-forty-three-characters-long".to_string();
@@ -150,10 +163,15 @@ fn sign_in(url: &str) -> (String, String, String) {
 }
 
 fn exchange(url: &str, form: &[(&str, &str)]) -> Result<serde_json::Value, (u16, String)> {
-    match ureq::post(&format!("{url}/oauth/token")).send_form(form) {
-        Ok(r) => Ok(r.into_json().unwrap()),
-        Err(ureq::Error::Status(s, r)) => Err((s, r.into_string().unwrap())),
-        Err(e) => panic!("{e}"),
+    let mut r = agent()
+        .post(&format!("{url}/oauth/token"))
+        .send_form(form.iter().copied())
+        .unwrap_or_else(|e| panic!("{e}"));
+    let status = r.status().as_u16();
+    if status < 400 {
+        Ok(r.body_mut().read_json().unwrap())
+    } else {
+        Err((status, r.body_mut().read_to_string().unwrap()))
     }
 }
 
@@ -175,22 +193,23 @@ fn an_mcp_client_signs_in_and_calls_the_api() {
         ureq::get(&format!("{url}/.well-known/oauth-authorization-server"))
             .call()
             .unwrap()
-            .into_json()
+            .into_body()
+            .read_json()
             .unwrap();
     assert_eq!(meta["code_challenge_methods_supported"][0], "S256");
-    match ureq::get(&format!("{url}/v1/r/anything/refs")).call() {
-        Err(ureq::Error::Status(401, r)) => {
-            assert!(r
-                .header("www-authenticate")
-                .unwrap()
-                .contains("oauth-protected-resource"))
-        }
-        other => panic!("expected 401, got {other:?}"),
-    }
+    let unauth = agent()
+        .get(&format!("{url}/v1/r/anything/refs"))
+        .call()
+        .unwrap();
+    assert_eq!(unauth.status(), 401);
+    assert!(unauth.headers()["www-authenticate"]
+        .to_str()
+        .unwrap()
+        .contains("oauth-protected-resource"));
     let bad = ureq::post(&format!("{url}/oauth/register"))
         .send_json(serde_json::json!({ "redirect_uris": ["http://evil.example/cb"] }));
     assert!(
-        matches!(bad, Err(ureq::Error::Status(400, _))),
+        matches!(bad, Err(ureq::Error::StatusCode(400))),
         "plain http off loopback is refused"
     );
 
@@ -226,10 +245,11 @@ fn an_mcp_client_signs_in_and_calls_the_api() {
     repo.import(&file, "d", "main", &me).unwrap();
     remote.push(&repo, "main").unwrap();
     let log: Vec<serde_json::Value> = ureq::get(&format!("{url}/v1/r/{name}/log/main"))
-        .set("authorization", &format!("Bearer {access}"))
+        .header("authorization", &format!("Bearer {access}"))
         .call()
         .unwrap()
-        .into_json()
+        .into_body()
+        .read_json()
         .unwrap();
     assert_eq!(log[0]["commit"]["author"]["id"], "user:alice@127.0.0.1");
     // The service-token user did not push this and has no role in it.

@@ -42,6 +42,6 @@ required-features = ["cli"]
 [dev-dependencies]
 paged-test-resources.workspace = true
 anyhow = { workspace = true }
-lopdf = "0.42"
+lopdf = "0.45"
 paged-scene = { path = "../paged-scene" }
 paged-gen = { path = "../paged-gen" }

@@ -132,6 +132,9 @@ vendored from `@paged-media/canvas-wasm` and `@paged-media/introspect-wasm` 0.73
   `gestures()` with its unit backend (a tool's handler driven in document points, against the
   fake or the headless engine), pointer tapes (`parseTape` / `replayTape`) and the invariants
   (`expectOneCommit`, `expectNoCommit`, `checkUndoRedo`, `checkCancel`, `engineModelChannel`).
+- **Test doubles beside the harness (0.2.80-canary.0, ADR 331):** `mapBacking()` and
+  `silentConsole` for a host under test, and `createFakeEditor().ids(registry)`; the harness's
+  hosts share one in-memory `host.storage` unless `storage` is given (finding HOST-1 fixed).
 - **For bundle authors:** `DisposableStore`, the page-drag gesture helpers, the wasm
   fallbacks `resolveWasm` / `fetchWasm`, the object-model helpers (`applyDefaults`,
   `findRow`, `rowPathOf`, `ROW_PATH`), and `createHeadlessHost`, which runs bundles in Node

@@ -30,6 +30,7 @@ import { loadBundle } from "../src/load";
 import { defineBundle } from "../src/define-bundle";
 import { makeFakeEditor } from "./fake-editor";
 
+import { mapBacking, silentConsole as silent } from "../src/testing";
 const MANIFEST: PluginManifest = {
   id: "media.paged.test",
   name: "test",
@@ -45,13 +46,6 @@ const DECLARED_MANIFEST: PluginManifest = {
   contributes: { tools: ["media.paged.test.tool.pen"] },
 };
 
-const silent = {
-  debug: () => {},
-  info: () => {},
-  warn: () => {},
-  error: () => {},
-};
-
 // These door-mechanics tests run in capabilityMode 'warn' (they cover
 // the doors themselves, not the declaration gate — which has its own
 // describe block below). 'warn' lets a capability-less manifest drive
@@ -63,16 +57,6 @@ function host(fake = makeFakeEditor()) {
     capabilityMode: "warn",
   });
   return { ...handle, fake };
-}
-
-function mapBacking() {
-  const map = new Map<string, string>();
-  return {
-    getItem: (k: string) => map.get(k) ?? null,
-    setItem: (k: string, v: string) => void map.set(k, v),
-    removeItem: (k: string) => void map.delete(k),
-    keys: () => Array.from(map.keys()),
-  };
 }
 
 const tool = (id: string): ToolContribution =>

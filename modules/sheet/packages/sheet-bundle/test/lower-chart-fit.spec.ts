@@ -48,7 +48,12 @@ import type {
   ElementId,
   SceneTreeNode,
 } from "@paged-media/plugin-api";
-import { createHeadlessHost, type HeadlessHost } from "@paged-media/plugin-sdk";
+import {
+  createHeadlessHost,
+  type HeadlessHost,
+  mapBacking,
+  silentConsole as silent,
+} from "@paged-media/plugin-sdk";
 
 import { readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -78,22 +83,6 @@ if (process.env.REQUIRE_REAL_ENGINE === "1" && !ENGINE_BUILT) {
     });
   });
 }
-
-const silent = {
-  debug: () => {},
-  info: () => {},
-  warn: () => {},
-  error: () => {},
-};
-const mapBacking = () => {
-  const m = new Map<string, string>();
-  return {
-    getItem: (k: string) => m.get(k) ?? null,
-    setItem: (k: string, v: string) => void m.set(k, v),
-    removeItem: (k: string) => void m.delete(k),
-    keys: () => Array.from(m.keys()),
-  };
-};
 
 type Box = [number, number, number, number]; // top, left, bottom, right
 

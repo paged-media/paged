@@ -31,8 +31,9 @@
 //! mutation, so nothing bumps generations yet). The per-node result is
 //! memoized in the `OperationCache` keyed on
 //! `(op id, ParamsHash, input ContentHash)`; the input hash is the
-//! content hash of the upstream node's materialized result, so a re-pull
-//! of an unchanged subtree is a cache hit.
+//! content hash of the upstream node's materialized result folded with
+//! the requested region, so a re-pull of an unchanged subtree over the
+//! same region is a cache hit.
 
 use std::future::Future;
 use std::pin::Pin;
@@ -83,7 +84,7 @@ pub(crate) fn materialize_node(
     // A run of point stages is pulled as ONE chain (see `point_run`).
     if let Some((base, run)) = point_run(nodes, node_id, cache.unbatched) {
         let (base_map, base_hash) = materialize_node(nodes, cache, base, roi, ctx, selection)?;
-        let key = run_key(nodes, &run, base_hash, selection);
+        let key = run_key(nodes, &run, base_hash, roi, selection);
         if let Some(hit) = cache.get(key) {
             return Ok((hit.clone(), content_hash_of(hit)));
         }
@@ -108,11 +109,14 @@ pub(crate) fn materialize_node(
             let (a_id, b_id) = apply.inputs.as_pair();
             let (a_map, a_hash) = materialize_node(nodes, cache, a_id, in_roi, ctx, selection)?;
             match b_id {
-                None => (a_hash, Some((a_map, None))),
+                None => (roi_keyed(a_hash, roi), Some((a_map, None))),
                 Some(b) => {
                     let (b_map, b_hash) =
                         materialize_node(nodes, cache, b, in_roi, ctx, selection)?;
-                    (fold_hashes(a_hash, b_hash), Some((a_map, Some(b_map))))
+                    (
+                        roi_keyed(fold_hashes(a_hash, b_hash), roi),
+                        Some((a_map, Some(b_map))),
+                    )
                 }
             }
         }
@@ -183,7 +187,7 @@ pub(crate) fn materialize_node_async<'a>(
         if let Some((base, run)) = point_run(nodes, node_id, cache.unbatched) {
             let (base_map, base_hash) =
                 materialize_node_async(nodes, cache, base, roi, ctx, selection).await?;
-            let key = run_key(nodes, &run, base_hash, selection);
+            let key = run_key(nodes, &run, base_hash, roi, selection);
             if let Some(hit) = cache.get(key) {
                 return Ok((hit.clone(), content_hash_of(hit)));
             }
@@ -202,11 +206,14 @@ pub(crate) fn materialize_node_async<'a>(
                 let (a_map, a_hash) =
                     materialize_node_async(nodes, cache, a_id, in_roi, ctx, selection).await?;
                 match b_id {
-                    None => (a_hash, Some((a_map, None))),
+                    None => (roi_keyed(a_hash, roi), Some((a_map, None))),
                     Some(b) => {
                         let (b_map, b_hash) =
                             materialize_node_async(nodes, cache, b, in_roi, ctx, selection).await?;
-                        (fold_hashes(a_hash, b_hash), Some((a_map, Some(b_map))))
+                        (
+                            roi_keyed(fold_hashes(a_hash, b_hash), roi),
+                            Some((a_map, Some(b_map))),
+                        )
                     }
                 }
             }
@@ -497,6 +504,7 @@ fn run_key(
     nodes: &[OpNode],
     run: &[NodeId],
     base: ContentHash,
+    roi: Region,
     selection: Option<&PipelineSelection>,
 ) -> OpKey {
     let mut bytes = b"point-run".to_vec();
@@ -509,7 +517,7 @@ fn run_key(
     OpKey {
         op_id: top.op_key(),
         params: image_core::ParamsHash::of(&bytes),
-        input: base,
+        input: roi_keyed(base, roi),
     }
 }
 
@@ -628,6 +636,25 @@ async fn run_tiles_async(
     let work = tile_work(&a, b.as_ref(), roi, selection)?;
     let outs = image_gpu::chain::execute_chain_async(ctx, stages, &chain_tiles(&work)).await?;
     Ok(collect_tiles(&work, outs))
+}
+
+/// Fold the REQUESTED region into an apply node's (or a run's) cache-key
+/// input component. A node's output is a function of its inputs AND of
+/// the region asked of it: a windowed kernel clamps its input region to
+/// the image, so two output regions at an image edge can read the very
+/// same input. Keyed on the input alone, the second pull got the first
+/// pull's tile map back, with its tiles sized to the other region, and
+/// the next stage uploaded its own work extent from those shorter
+/// tiles (GPU audit I-1). A leaf source already keys on its region
+/// ([`source_identity_hash`]).
+fn roi_keyed(input: ContentHash, roi: Region) -> ContentHash {
+    let mut bytes = [0u8; 24];
+    bytes[..8].copy_from_slice(&input.0.to_le_bytes());
+    bytes[8..12].copy_from_slice(&roi.x.to_le_bytes());
+    bytes[12..16].copy_from_slice(&roi.y.to_le_bytes());
+    bytes[16..20].copy_from_slice(&roi.w.to_le_bytes());
+    bytes[20..24].copy_from_slice(&roi.h.to_le_bytes());
+    ContentHash::of(&bytes)
 }
 
 /// Fold two input content hashes into one cache-key component for a

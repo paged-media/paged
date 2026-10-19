@@ -42,8 +42,7 @@ import { createHeadlessHost, type HeadlessHost } from "../src/harness";
 import { makeFakeEditor } from "./fake-editor";
 import { minimalIdml } from "./fixtures/minimal-idml";
 
-const silent = { debug() {}, info() {}, warn() {}, error() {} };
-
+import { silentConsole as silent } from "../src/testing";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const FACE = new Uint8Array(
   readFileSync(join(HERE, "fixtures", "fonts", "SpaceGrotesk-VF.ttf")),

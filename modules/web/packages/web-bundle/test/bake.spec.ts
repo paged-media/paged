@@ -42,9 +42,8 @@ import { bakeWebFlow, bakeWebFlows, bakeWebFrame } from "../src/bake";
 import type { WebEngine } from "../src/engine-loader";
 import { renderSelectedWebFrame } from "../src/render-command";
 
+import { silentConsole as silent } from "@paged-media/plugin-sdk";
 const WEB_ID: ElementId = { kind: "rectangle", id: "uWEB1" } as ElementId;
-const silent = { debug() {}, info() {}, warn() {}, error() {} };
-
 /** A host whose document returns `meta` for getMetadata and a fixed
  *  geometry. `sceneLayer` is a spy so we can assert it is NEVER called on
  *  the not-loaded path. */

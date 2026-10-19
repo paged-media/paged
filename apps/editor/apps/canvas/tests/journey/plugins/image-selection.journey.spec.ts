@@ -215,7 +215,7 @@ test.describe("journey · paged.image selection", () => {
     await expect(applyBtn).toBeEnabled({ timeout: 10_000 });
     await applyBtn.click();
 
-    const after = await designer.renderBytes();
-    await designer.expectRenderChanged(before, after);
+    // The re-composite is a Stage-A push after the click: polled (ADR 228).
+    await designer.expectRenderChangesFrom(before);
   });
 });

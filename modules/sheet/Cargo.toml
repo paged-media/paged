@@ -36,7 +36,7 @@ too_many_arguments = "allow"
 
 [workspace.dependencies]
 thiserror = "2"
-compact_str = { version = "0.8", features = ["serde"] }
+compact_str = { version = "0.10", features = ["serde"] }
 smallvec = "1"
 rustc-hash = "2"
 serde = { version = "1", features = ["derive"] }

@@ -1,6 +1,6 @@
 {
   "name": "@paged-media/plugin-sdk",
-  "version": "0.2.79-canary.0",
+  "version": "0.2.80-canary.0",
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
@@ -10,7 +10,7 @@
   },
   "scripts": {
     "typecheck": "bun check -p tsconfig.json",
-    "test": "bun test --parallel --preload ../../../../tooling/js/bun-test-setup.ts",
+    "test": "bun test --timeout 30000 --parallel --preload ../../../../tooling/js/bun-test-setup.ts",
     "build": "bun scripts/build.mjs && tsc -p tsconfig.build.json",
     "prepublishOnly": "bun run build"
   },

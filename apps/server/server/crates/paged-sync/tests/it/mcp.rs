@@ -34,15 +34,18 @@ struct Mcp {
 impl Mcp {
     fn connect(url: &str) -> Mcp {
         let resp = ureq::post(&format!("{url}/mcp"))
-            .set("authorization", "Bearer dev-token")
+            .header("authorization", "Bearer dev-token")
             .send_json(json!({ "jsonrpc": "2.0", "id": 0, "method": "initialize",
                                "params": { "protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": { "name": "test", "version": "0" } } }))
             .unwrap();
         let session = resp
-            .header("mcp-session-id")
+            .headers()
+            .get("mcp-session-id")
             .expect("a session id")
+            .to_str()
+            .unwrap()
             .to_string();
-        let init: Value = resp.into_json().unwrap();
+        let init: Value = resp.into_body().read_json().unwrap();
         assert_eq!(init["result"]["protocolVersion"], "2025-06-18");
         let mut m = Mcp {
             url: url.to_string(),
@@ -55,8 +58,8 @@ impl Mcp {
 
     fn notify(&mut self, method: &str) {
         let r = ureq::post(&format!("{}/mcp", self.url))
-            .set("authorization", "Bearer dev-token")
-            .set("mcp-session-id", &self.session)
+            .header("authorization", "Bearer dev-token")
+            .header("mcp-session-id", &self.session)
             .send_json(json!({ "jsonrpc": "2.0", "method": method }))
             .unwrap();
         assert_eq!(r.status(), 202);
@@ -65,13 +68,14 @@ impl Mcp {
     fn rpc(&mut self, method: &str, params: Value) -> Value {
         self.next += 1;
         ureq::post(&format!("{}/mcp", self.url))
-            .set("authorization", "Bearer dev-token")
-            .set("mcp-session-id", &self.session)
+            .header("authorization", "Bearer dev-token")
+            .header("mcp-session-id", &self.session)
             .send_json(
                 json!({ "jsonrpc": "2.0", "id": self.next, "method": method, "params": params }),
             )
             .unwrap()
-            .into_json()
+            .into_body()
+            .read_json()
             .unwrap()
     }
 
@@ -125,15 +129,19 @@ fn a_model_proposes_and_a_person_merges() {
             .as_nanos()
     );
 
-    let unauth = ureq::post(&format!("{url}/mcp"))
-        .send_json(json!({ "jsonrpc": "2.0", "id": 1, "method": "ping" }));
-    match unauth {
-        Err(ureq::Error::Status(401, r)) => assert!(r
-            .header("www-authenticate")
-            .unwrap()
-            .contains("resource_metadata")),
-        other => panic!("expected 401, got {other:?}"),
-    }
+    // An error status as a response, so its headers can be read.
+    let unauth = ureq::Agent::config_builder()
+        .http_status_as_error(false)
+        .build()
+        .new_agent()
+        .post(&format!("{url}/mcp"))
+        .send_json(json!({ "jsonrpc": "2.0", "id": 1, "method": "ping" }))
+        .unwrap();
+    assert_eq!(unauth.status(), 401);
+    assert!(unauth.headers()["www-authenticate"]
+        .to_str()
+        .unwrap()
+        .contains("resource_metadata"));
 
     // A person's document, pushed the ordinary way.
     let me = Ctx::human("user:dev", 1);
@@ -236,12 +244,12 @@ fn a_model_proposes_and_a_person_merges() {
         .unwrap();
     let file = ureq::get(link["url"].as_str().unwrap()).call().unwrap();
     let mut bytes = Vec::new();
-    std::io::Read::read_to_end(&mut file.into_reader(), &mut bytes).unwrap();
+    std::io::Read::read_to_end(&mut file.into_body().into_reader(), &mut bytes).unwrap();
     assert_eq!(&bytes[..2], b"PK");
     let forged = format!("{}x", link["url"].as_str().unwrap());
     assert!(matches!(
         ureq::get(&forged).call(),
-        Err(ureq::Error::Status(403, _))
+        Err(ureq::Error::StatusCode(403))
     ));
 
     let api = mcp

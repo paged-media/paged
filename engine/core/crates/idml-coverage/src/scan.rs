@@ -916,7 +916,12 @@ impl<'ast> Visit<'ast> for Walker<'_> {
         self.visit_expr(&m.expr);
         let key_scrutinee = is_key_expr(&m.expr);
         for arm in &m.arms {
-            let lits = pat_byte_lits(&arm.pat);
+            // syn 3 holds an arm's `if` guard inside its pattern.
+            let (pat, guard) = match &arm.pat {
+                Pat::Guard(g) => (&*g.pat, Some(&*g.guard)),
+                p => (p, None),
+            };
+            let lits = pat_byte_lits(pat);
             let mut pushed = false;
             if !lits.is_empty() {
                 for (l, s) in &lits {
@@ -932,17 +937,14 @@ impl<'ast> Visit<'ast> for Walker<'_> {
                     self.st.ctx.push(names);
                     pushed = true;
                 }
-            } else if self.side == Side::Export
-                && !key_scrutinee
-                && !pat_str_lits(&arm.pat).is_empty()
-            {
+            } else if self.side == Side::Export && !key_scrutinee && !pat_str_lits(pat).is_empty() {
                 // `match pref { "PageNumberVariablePreference" => … }`.
-                let names = pat_str_lits(&arm.pat);
+                let names = pat_str_lits(pat);
                 if names.iter().all(|n| is_element_shaped(n)) {
                     self.st.ctx.push(names);
                     pushed = true;
                 }
-            } else if let Some((n, child, span)) = pat_prop_tuple(&arm.pat) {
+            } else if let Some((n, child, span)) = pat_prop_tuple(pat) {
                 self.lit_site(&child, span);
                 if self.side == Side::Import {
                     match self.t.prop_kinds.get(&(self.file.clone(), n)) {
@@ -969,7 +971,7 @@ impl<'ast> Visit<'ast> for Walker<'_> {
                     }
                 }
             }
-            if let Some((_, g)) = &arm.guard {
+            if let Some(g) = guard {
                 if !pushed {
                     let els = name_cmp_elements(g);
                     if !els.is_empty() {

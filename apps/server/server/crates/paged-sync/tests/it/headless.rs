@@ -33,10 +33,10 @@ struct Mcp {
 impl Mcp {
     fn connect(url: &str, token: &str) -> Mcp {
         let r = ureq::post(&format!("{url}/mcp"))
-            .set("authorization", &format!("Bearer {token}"))
+            .header("authorization", &format!("Bearer {token}"))
             .send_json(json!({ "jsonrpc": "2.0", "id": 0, "method": "initialize", "params": { "protocolVersion": "2025-06-18", "capabilities": {} } }))
             .unwrap();
-        let session = r.header("mcp-session-id").unwrap().to_string();
+        let session = r.headers()["mcp-session-id"].to_str().unwrap().to_string();
         Mcp {
             url: url.into(),
             token: token.into(),
@@ -54,11 +54,12 @@ impl Mcp {
 
     fn tool(&self, name: &str, args: Value) -> Value {
         let r: Value = ureq::post(&format!("{}/mcp", self.url))
-            .set("authorization", &format!("Bearer {}", self.token))
-            .set("mcp-session-id", &self.session)
+            .header("authorization", &format!("Bearer {}", self.token))
+            .header("mcp-session-id", &self.session)
             .send_json(json!({ "jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": { "name": name, "arguments": args } }))
             .unwrap()
-            .into_json()
+            .into_body()
+            .read_json()
             .unwrap();
         r["result"].clone()
     }
