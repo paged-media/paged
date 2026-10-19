@@ -53,13 +53,12 @@ import {
 } from "../commands/objects-on-path";
 import { useFollowedDraft, usePanelReload } from "./use-panel-reload";
 import {
-  elementKindLabel,
+  About,
   humanize,
-  PanelAbout,
-  PanelIntro,
   Refusal,
   useActionFeedback,
-} from "./panel-kit";
+} from "@paged-media/panel-kit";
+import { elementKindLabel, PanelIntro } from "./panel-parts";
 
 export const OBJECTS_ON_PATH_PANEL_ID = "media.paged.draw.panel.objectsOnPath";
 
@@ -197,7 +196,7 @@ export function makeObjectsOnPathPanel(host: BundleHost): {
       },
     );
 
-    const { refusal, run } = useActionFeedback(host, reload);
+    const { refusal, run } = useActionFeedback(host, reload, "draw panel");
 
     const numberRow = (
       label: string,
@@ -446,10 +445,7 @@ export function makeObjectsOnPathPanel(host: BundleHost): {
           ))
         )}
 
-        <PanelAbout
-          text={OBJECTS_ON_PATH_PANEL_NOTE}
-          attr="data-draw-onpath-note"
-        />
+        <About attr="data-draw-onpath-note">{OBJECTS_ON_PATH_PANEL_NOTE}</About>
       </div>
     );
   };

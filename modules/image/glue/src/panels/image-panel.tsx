@@ -29,6 +29,7 @@
 import { Fragment, useState } from "react";
 import type { ReactNode } from "react";
 import { onDidChangeOf, useLive } from "@paged-media/react-live";
+import { About, Disclosure } from "@paged-media/panel-kit";
 
 import manifest from "../../manifest.json";
 
@@ -71,7 +72,7 @@ import { SelectModifySection } from "./sections/select-modify-section";
 import { MoveSection } from "./sections/move-section";
 import { PatternSection } from "./sections/pattern-section";
 import { SmartObjectSection } from "./sections/smart-object-section";
-import { About, Section } from "./sections/disclosure";
+import { Section } from "./sections/disclosure";
 import {
   actionBar,
   kicker,
@@ -3440,11 +3441,11 @@ export function makeImagePanel(session: ImageSession) {
         {/* DIAGNOSTICS — the developer readout (bundle, engine, source),
             collapsed at the bottom. The Source row keeps its exact
             span/span shape: journeys read it by text. */}
-        <details
+        <Disclosure
+          summary="Diagnostics"
           style={{ ...note, marginTop: "var(--space-3, 12px)" }}
           data-image-diagnostics
         >
-          <summary style={{ cursor: "pointer" }}>Diagnostics</summary>
           <div style={row}>
             <span>Bundle</span>
             <span style={mono}>
@@ -3471,7 +3472,7 @@ export function makeImagePanel(session: ImageSession) {
             (straightening needs WebGPU). The paint tools preview every pointer
             sample; the adjustment sliders preview when Live is on.
           </p>
-        </details>
+        </Disclosure>
       </div>
     );
   }

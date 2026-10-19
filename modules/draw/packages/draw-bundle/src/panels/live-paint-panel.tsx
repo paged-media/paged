@@ -59,12 +59,8 @@ import {
 import { getLivePaintFill, setLivePaintFill } from "../handlers/live-paint";
 import { linkIndex } from "../link-index";
 import { usePanelReload } from "./use-panel-reload";
-import {
-  PanelAbout,
-  PanelIntro,
-  Refusal,
-  useActionFeedback,
-} from "./panel-kit";
+import { About, Refusal, useActionFeedback } from "@paged-media/panel-kit";
+import { PanelIntro } from "./panel-parts";
 
 export const LIVE_PAINT_PANEL_ID = "media.paged.draw.panel.livePaint";
 
@@ -176,7 +172,7 @@ export function makeLivePaintPanel(host: BundleHost): {
       },
     );
 
-    const { refusal, run } = useActionFeedback(host, reload);
+    const { refusal, run } = useActionFeedback(host, reload, "draw panel");
 
     return (
       <div
@@ -362,7 +358,7 @@ export function makeLivePaintPanel(host: BundleHost): {
           ))
         )}
 
-        <PanelAbout text={LIVE_PAINT_NOTE} attr="data-draw-live-paint-note" />
+        <About attr="data-draw-live-paint-note">{LIVE_PAINT_NOTE}</About>
       </div>
     );
   };

@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "@paged-media/helpers": "workspace:*",
+    "@paged-media/panel-kit": "workspace:*",
     "@paged-media/wasm-boot": "workspace:*"
   },
   "peerDependencies": {

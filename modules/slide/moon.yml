@@ -25,6 +25,9 @@ dependsOn:
   # paged-ooxml, a path dependency of the Cargo workspace.
   - id: "ooxml"
     scope: "production"
+  # dml-chart, the shared DrawingML chart reader (slide ADR 709).
+  - id: "dml-chart"
+    scope: "production"
   # slide-chart labels through sheet-format (and sheet-core, whose build
   # reads sheet's function registry), which read platform/shared/fmt (ADR 710).
   - id: "sheet"
@@ -52,6 +55,8 @@ fileGroups:
     - "/engine/core/crates/**/Cargo.toml"
     - "/platform/shared/ooxml/src/**/*.rs"
     - "/platform/shared/ooxml/Cargo.toml"
+    - "/platform/shared/dml-chart/src/**/*.rs"
+    - "/platform/shared/dml-chart/Cargo.toml"
     - "/modules/sheet/Cargo.toml"
     - "/modules/sheet/sheet-core/**/*"
     - "/modules/sheet/sheet-format/**/*"
@@ -68,6 +73,8 @@ fileGroups:
     - "/engine/core/crates/**/Cargo.toml"
     - "/platform/shared/ooxml/src/**/*.rs"
     - "/platform/shared/ooxml/Cargo.toml"
+    - "/platform/shared/dml-chart/src/**/*.rs"
+    - "/platform/shared/dml-chart/Cargo.toml"
     - "/modules/sheet/Cargo.toml"
     - "/modules/sheet/sheet-core/**/*"
     - "/modules/sheet/sheet-format/**/*"

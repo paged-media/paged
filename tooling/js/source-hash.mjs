@@ -92,7 +92,12 @@ function specOf(module) {
   return spec;
 }
 
-/** The normal (and build) `path = "../x"` dependencies of a crate. */
+/**
+ * The normal (and build) `path = "../…"` dependencies of a crate, relative to
+ * the module's directory: a path is resolved from the crate's own directory,
+ * so a shared crate outside the module (platform/shared/*) that depends on
+ * another one by `../x` is followed too.
+ */
 function pathDeps(root, crate) {
   const toml = readFileSync(join(root, crate, "Cargo.toml"), "utf8");
   const deps = [];
@@ -105,8 +110,13 @@ function pathDeps(root, crate) {
     }
     if (/dev-dependencies/.test(section)) continue;
     if (!/dependencies/.test(section)) continue;
-    const m = line.match(/path\s*=\s*"\.\.\/([^"]+)"/);
-    if (m) deps.push(m[1]);
+    const m = line.match(/path\s*=\s*"(\.\.\/[^"]+)"/);
+    if (m)
+      deps.push(
+        relative(root, join(root, crate, m[1]))
+          .split("\\")
+          .join("/"),
+      );
   }
   return deps;
 }

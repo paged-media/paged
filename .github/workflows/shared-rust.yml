@@ -16,6 +16,7 @@ on:
     branches: [main]
     paths:
       - "platform/shared/ooxml/**"
+      - "platform/shared/dml-chart/**"
       - ".github/workflows/shared-rust.yml"
       # The root Cargo config and its linker/wrapper scripts apply to every build.
       - ".cargo/config.toml"
@@ -24,6 +25,7 @@ on:
   pull_request:
     paths:
       - "platform/shared/ooxml/**"
+      - "platform/shared/dml-chart/**"
       - ".github/workflows/shared-rust.yml"
       - ".cargo/config.toml"
       - "tooling/rust/**"
@@ -39,7 +41,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        crate: [ooxml]
+        crate: [ooxml, dml-chart]
     defaults:
       run:
         working-directory: platform/shared/${{ matrix.crate }}

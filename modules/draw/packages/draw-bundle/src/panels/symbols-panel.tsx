@@ -57,13 +57,13 @@ import {
 } from "../commands/symbols";
 import { usePanelReload } from "./use-panel-reload";
 import {
+  About,
   ConfirmButton,
   humanize,
-  PanelAbout,
-  PanelIntro,
   Refusal,
   useActionFeedback,
-} from "./panel-kit";
+} from "@paged-media/panel-kit";
+import { PanelIntro } from "./panel-parts";
 
 export const SYMBOLS_PANEL_ID = "media.paged.draw.panel.symbols";
 
@@ -176,7 +176,7 @@ export function makeSymbolsPanel(host: BundleHost): {
       },
     );
 
-    const { refusal, run } = useActionFeedback(host, reload);
+    const { refusal, run } = useActionFeedback(host, reload, "draw panel");
 
     const isInstance = selected.length > 0;
 
@@ -324,7 +324,7 @@ export function makeSymbolsPanel(host: BundleHost): {
           })
         )}
 
-        <PanelAbout text={SYMBOLS_NOTE} attr="data-draw-symbols-note" />
+        <About attr="data-draw-symbols-note">{SYMBOLS_NOTE}</About>
       </div>
     );
   };

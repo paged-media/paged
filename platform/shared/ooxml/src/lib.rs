@@ -37,7 +37,9 @@
 //! - **Byte-splice editing** ([`splice`]): change one element of a part and
 //!   keep every other byte.
 //! - **The XML helpers** ([`xml`]): attribute readers, reference resolution,
-//!   the escapes.
+//!   the escapes; and the namespace-aware element tree ([`tree`]) paged.slide
+//!   reads PresentationML and DrawingML through, and the shared chart reader
+//!   (`platform/shared/dml-chart`) every chart.
 //! - **DrawingML colour** ([`colour`]): the HSL arithmetic, SpreadsheetML's
 //!   `tint` (in HSL) and DrawingML's `tint`/`shade` (in linear RGB), kept
 //!   apart because they are different operations.
@@ -69,6 +71,7 @@ pub mod rels;
 pub mod splice;
 #[cfg(any(test, feature = "testing"))]
 pub mod testing;
+pub mod tree;
 pub mod xml;
 
 pub use content_types::{ContentTypes, CONTENT_TYPES_PART};

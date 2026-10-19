@@ -214,6 +214,11 @@
     },
     {
       matchManagers: ["cargo"],
+      matchFileNames: ["platform/shared/dml-chart/**"],
+      groupName: "rust: dml-chart",
+    },
+    {
+      matchManagers: ["cargo"],
       matchFileNames: ["apps/server/**"],
       groupName: "rust: server",
     },
