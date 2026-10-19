@@ -164,7 +164,7 @@ pub(crate) fn compute_snap_adjustment_with(
     // right page even in a multi-page selection.
     let mut best_x: Option<SnapMatch> = None;
     let mut best_y: Option<SnapMatch> = None;
-    for snap in &session.snapshots {
+    for snap in session.snapshots.iter().filter(|s| !is_group(s)) {
         let Some(page) = host_page_for_snapshot(snap, pages) else {
             continue;
         };
@@ -222,7 +222,7 @@ pub(crate) fn compute_snap_adjustment_with(
     // within `SMART_GUIDE_EPSILON_PT` (sub-pixel noise tolerance).
     let post_dx = dx + adj_dx;
     let post_dy = dy + adj_dy;
-    for snap in &session.snapshots {
+    for snap in session.snapshots.iter().filter(|s| !is_group(s)) {
         let Some(page) = host_page_for_snapshot(snap, pages) else {
             continue;
         };
@@ -307,8 +307,26 @@ pub(crate) fn compute_resize_snap(
     if !env.settings.enabled || session.modifiers.disable_snap {
         return pass;
     }
-    if session
-        .snapshots
+    // R6 — the edges that move: the selection box's when a group is
+    // resized as one (ADR 191), else each item's own. A group's
+    // snapshot has no geometry of its own and is never a candidate.
+    let moving: Vec<crate::gesture::NodeSnapshot> = match session.resize_box {
+        Some(rb) => match session.snapshots.first() {
+            Some(first) => vec![crate::gesture::NodeSnapshot {
+                bounds: rb.bounds,
+                item_transform: rb.placement,
+                ..first.clone()
+            }],
+            None => Vec::new(),
+        },
+        None => session
+            .snapshots
+            .iter()
+            .filter(|s| !is_group(s))
+            .cloned()
+            .collect(),
+    };
+    if moving
         .iter()
         .any(|s| !is_pure_translate_or_identity(s.item_transform))
     {
@@ -319,7 +337,7 @@ pub(crate) fn compute_resize_snap(
     let (dx, dy) = raw_delta;
     let mut best_x: Option<SnapMatch> = None;
     let mut best_y: Option<SnapMatch> = None;
-    for snap in &session.snapshots {
+    for snap in &moving {
         let Some(page) = host_page_for_snapshot(snap, pages) else {
             continue;
         };
@@ -393,6 +411,13 @@ pub(crate) fn compute_resize_snap(
         ),
         lines,
     }
+}
+
+/// A group's snapshot carries no geometry of its own (its members are
+/// snapshotted beside it): it is never a snap candidate, or its zero box
+/// would snap a phantom point at the group's origin.
+fn is_group(snap: &crate::gesture::NodeSnapshot) -> bool {
+    matches!(snap.node_id, paged_mutate::NodeId::Group(_))
 }
 
 /// Tolerance (pt) within which a candidate edge counts as "exactly
@@ -747,6 +772,7 @@ mod tests {
             camera_scale: None,
             scale_frame: None,
             group_frames: std::collections::HashMap::new(),
+            resize_box: None,
         }
     }
 

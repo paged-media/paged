@@ -155,8 +155,9 @@ describe("Conditions panel: controls", () => {
     await h.selectText(STRUCTURE.story, 0, 5);
     const select = h.field("appliedConditions").querySelector("select")!;
     expect(select.disabled).toBe(false);
+    // The range carries no condition and reads so (PN-100): no mixed
+    // "—" entry.
     expect([...select.options].map((o) => o.text)).toEqual([
-      "—",
       "[None]",
       "Draft",
       "Final",
@@ -189,22 +190,19 @@ describe("Conditions panel: controls", () => {
 });
 
 describe("Conditions panel: findings", () => {
-  // The engine answers noSuchPath for storyRange.appliedConditions: the
-  // field writes, but can never read, so it says "mixed" for a range that
-  // carries no condition and still says "mixed" after Draft was applied.
-  test.failing(
-    "PN-100: Conditional text reads back the condition it just applied",
-    async () => {
-      covers("panel:paged.conditions");
-      const h = await mount();
-      await h.selectText(STRUCTURE.story, 0, 5);
-      await h.choose("appliedConditions", STRUCTURE.conditions.draft);
-      expect(
-        h.field("appliedConditions").getAttribute("data-binding-state"),
-      ).toBe("value");
-      expect(h.field("appliedConditions").querySelector("select")!.value).toBe(
-        STRUCTURE.conditions.draft,
-      );
-    },
-  );
+  // PN-100 (fixed, R1): the engine answered noSuchPath for
+  // storyRange.appliedConditions, so the field wrote but never read: it
+  // said "mixed" before Draft was applied and after.
+  test("PN-100: Conditional text reads back the condition it just applied", async () => {
+    covers("panel:paged.conditions");
+    const h = await mount();
+    await h.selectText(STRUCTURE.story, 0, 5);
+    await h.choose("appliedConditions", STRUCTURE.conditions.draft);
+    expect(
+      h.field("appliedConditions").getAttribute("data-binding-state"),
+    ).toBe("value");
+    expect(h.field("appliedConditions").querySelector("select")!.value).toBe(
+      STRUCTURE.conditions.draft,
+    );
+  });
 });

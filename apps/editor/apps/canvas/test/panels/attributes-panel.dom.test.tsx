@@ -177,21 +177,18 @@ describe("Attributes panel: every control writes the selection", () => {
 });
 
 describe("Attributes panel: findings", () => {
-  // InDesign's Nonprinting applies to any page item; the engine has no
-  // frameNonprinting on an oval (noSuchPath), so an oval alone reads
-  // "mixed" and its switch writes something the engine cannot hold.
-  test.failing(
-    "PN-259: an oval can be made nonprinting, as any page item",
-    async () => {
-      covers("panel:paged.attributes");
-      const h = await mount();
-      await h.select([h.scene.oval]);
-      expect(state(h, "frameNonprinting")).toBe("value");
-      expect(await h.get(addr(h.scene.oval), "frameNonprinting")).toEqual(
-        bool(false),
-      );
-    },
-  );
+  // PN-259 (fixed, R1): InDesign's Nonprinting applies to any page item;
+  // the engine had no frameNonprinting on an oval (noSuchPath), so an
+  // oval alone read "mixed" and its switch wrote what it could not hold.
+  test("PN-259: an oval can be made nonprinting, as any page item", async () => {
+    covers("panel:paged.attributes");
+    const h = await mount();
+    await h.select([h.scene.oval]);
+    expect(state(h, "frameNonprinting")).toBe("value");
+    expect(await h.get(addr(h.scene.oval), "frameNonprinting")).toEqual(
+      bool(false),
+    );
+  });
 
   // Gap color is a seam "awaiting engine support", but frameStrokeGapColor
   // is on the wire: the Stroke panel reads and writes it on this frame.

@@ -275,17 +275,17 @@ fn translate_group_dispatches_a_single_undo_entry() {
 }
 
 /// Rotate on a Group target should compose the same rotation onto
-/// the Group's `item_transform` AND every member's. The pivot
-/// resolves to the union centroid of the snapshots; with the
-/// Group's zero-bounds sentinel the centroid lands at the
-/// members' centroid (correct intent).
+/// the Group's `item_transform` AND every member's. The pivot is the
+/// centre of the group's box, (55, 25) for members (0..50, 0..50) and
+/// (60..110, 0..50) — ADR 191; it was the mean of the snapshots'
+/// centres, the group's zero-bounds sentinel among them (GM-1).
 #[test]
 fn rotate_group_composes_same_rotation_onto_group_and_members() {
     let mut model = load_model();
     let group_id = ElementId::Group("g1".to_string());
     let anchor = GestureAnchor {
         page_id: PageId("p1".to_string()),
-        point_in_page: (55.0, 25.0), // roughly the centroid of (0..50, 0..50) + (60..110, 0..50)
+        point_in_page: (110.0, 25.0), // the box's east handle, right of its centre
         pivot_in_page: None,
     };
 
@@ -318,6 +318,18 @@ fn rotate_group_composes_same_rotation_onto_group_and_members() {
         g,
     );
 
+    // The box's centre is the fixed point: every transform keeps it.
+    for m in [g, leaf_transform(&model, "leafA").expect("leafA")] {
+        let (x, y) = (
+            m[0] * 55.0 + m[2] * 25.0 + m[4],
+            m[1] * 55.0 + m[3] * 25.0 + m[5],
+        );
+        assert!(
+            (x - 55.0).abs() < 1e-3 && (y - 25.0).abs() < 1e-3,
+            "the group's centre moved to ({x}, {y})"
+        );
+    }
+
     // Each leaf has its own rotated transform — same linear
     // 2×2 as the group (rotation is rigid), but with a different
     // translation reflecting the leaf's pivot offset.
@@ -348,9 +360,11 @@ fn rotate_group_composes_same_rotation_onto_group_and_members() {
 fn scale_group_composes_same_scale_onto_group_and_members() {
     let mut model = load_model();
     let group_id = ElementId::Group("g1".to_string());
+    // The box's east handle: 55 pt right of its centre (55, 25), the
+    // pivot. A +40 pt drag scales x by 95 / 55.
     let anchor = GestureAnchor {
         page_id: PageId("p1".to_string()),
-        point_in_page: (55.0, 25.0),
+        point_in_page: (110.0, 25.0),
         pivot_in_page: None,
     };
 
@@ -373,7 +387,9 @@ fn scale_group_composes_same_scale_onto_group_and_members() {
     let g = group_transform(&model).expect("group transform set");
     // Scale changes the diagonal entries; off-diagonal stays zero
     // for a pure scale.
-    assert!((g[0] - 1.0).abs() > 1e-3, "scaled x: {:?}", g);
+    assert!((g[0] - 95.0 / 55.0).abs() < 1e-4, "scaled x: {:?}", g);
+    // About the centre: (55, 25) stays put.
+    assert!((g[0] * 55.0 + g[4] - 55.0).abs() < 1e-3, "pivot x: {g:?}");
     // Each leaf's linear part matches the group's.
     for leaf in ["leafA", "leafB"] {
         let m = leaf_transform(&model, leaf).expect("leaf transform after scale");
@@ -386,4 +402,135 @@ fn scale_group_composes_same_scale_onto_group_and_members() {
             );
         }
     }
+}
+
+/// The group's box in page space, from the geometry door: its corners
+/// (top-left, top-right, bottom-right, bottom-left).
+fn group_corners(model: &CanvasModel) -> [(f32, f32); 4] {
+    let g = model
+        .element_geometry(&[ElementId::Group("g1".to_string())])
+        .pop()
+        .expect("group geometry");
+    let [t, l, b, r] = g.bounds;
+    let m = g.item_transform.unwrap_or([1.0, 0.0, 0.0, 1.0, 0.0, 0.0]);
+    let at = |x: f32, y: f32| (m[0] * x + m[2] * y + m[4], m[1] * x + m[3] * y + m[5]);
+    [at(l, t), at(r, t), at(r, b), at(l, b)]
+}
+
+fn dist(a: (f32, f32), b: (f32, f32)) -> f32 {
+    (a.0 - b.0).hypot(a.1 - b.1)
+}
+
+const NO_SNAP: GestureModifiers = GestureModifiers {
+    shift: false,
+    alt: false,
+    disable_snap: true,
+};
+
+/// GF-1 / ADR 191 — a group resized by a handle commits: its box scales
+/// about the opposite edge, the scale composed into every member's
+/// transform, the group keeping its own (it failed at commit with "FrameBounds is not
+/// supported on Group"). One undo puts all three back.
+#[test]
+fn a_group_resized_by_its_east_handle_widens_about_its_west_edge() {
+    let mut model = load_model();
+    let before = group_corners(&model);
+    assert!((dist(before[0], before[1]) - 110.0).abs() < 1e-3);
+    let handle = model
+        .begin_gesture(
+            vec![ElementId::Group("g1".to_string())],
+            GestureType::Resize {
+                handle: paged_canvas::gesture::ResizeHandle::East,
+            },
+            None,
+        )
+        .expect("begin resize");
+    model
+        .update_gesture(handle, (40.0, 0.0), NO_SNAP)
+        .expect("update");
+    model.commit_gesture(handle).expect("the resize commits");
+
+    let after = group_corners(&model);
+    assert!((dist(after[0], after[1]) - 150.0).abs() < 1e-3, "{after:?}");
+    assert!((dist(after[0], after[3]) - 50.0).abs() < 1e-3, "{after:?}");
+    assert!(
+        dist(after[0], before[0]) < 1e-3,
+        "the west edge stays: {after:?}"
+    );
+    // The scale is written once, on the members; the group keeps its
+    // (absent) transform.
+    assert_eq!(group_transform(&model), None);
+    let s = 150.0 / 110.0;
+    for leaf in ["leafA", "leafB"] {
+        let m = leaf_transform(&model, leaf).expect("leaf transform");
+        assert!(
+            (m[0] - s).abs() < 1e-5 && (m[3] - 1.0).abs() < 1e-6,
+            "{leaf} {m:?}"
+        );
+        assert!(m[4].abs() < 1e-4, "{leaf} keeps the west edge: {m:?}");
+    }
+
+    model.undo().expect("undo");
+    assert_eq!(group_transform(&model), None);
+    assert_eq!(leaf_transform(&model, "leafA"), None);
+    assert_eq!(leaf_transform(&model, "leafB"), None);
+}
+
+/// A turned group resizes along its OWN axes, as InDesign does (its box
+/// turns with it): turned 90°, its east handle moves along the page's y
+/// axis and the box stays a rectangle, 150 × 50.
+#[test]
+fn a_turned_group_resizes_along_its_own_axes() {
+    let mut model = load_model();
+    // Turn it 90° about its centre (55, 25): the pointer goes from the
+    // east handle (110, 25) to straight below the centre (55, 80).
+    let anchor = GestureAnchor {
+        page_id: PageId("p1".to_string()),
+        point_in_page: (110.0, 25.0),
+        pivot_in_page: None,
+    };
+    let h = model
+        .begin_gesture(
+            vec![ElementId::Group("g1".to_string())],
+            GestureType::Rotate,
+            Some(anchor),
+        )
+        .expect("begin rotate");
+    model
+        .update_gesture(h, (-55.0, 55.0), NO_SNAP)
+        .expect("turn");
+    model.commit_gesture(h).expect("commit turn");
+    let turned = group_corners(&model);
+    // The top edge now points down the page.
+    assert!(
+        (turned[1].1 - turned[0].1 - 110.0).abs() < 1e-2,
+        "{turned:?}"
+    );
+
+    let h = model
+        .begin_gesture(
+            vec![ElementId::Group("g1".to_string())],
+            GestureType::Resize {
+                handle: paged_canvas::gesture::ResizeHandle::East,
+            },
+            None,
+        )
+        .expect("begin resize");
+    model
+        .update_gesture(h, (0.0, 40.0), NO_SNAP)
+        .expect("update");
+    model.commit_gesture(h).expect("commit resize");
+    let after = group_corners(&model);
+    assert!((dist(after[0], after[1]) - 150.0).abs() < 1e-2, "{after:?}");
+    assert!((dist(after[0], after[3]) - 50.0).abs() < 1e-2, "{after:?}");
+    assert!(
+        dist(after[0], turned[0]) < 1e-2,
+        "the west edge stays: {after:?}"
+    );
+    // Still a rectangle: the two edges at the corner are perpendicular.
+    let (u, v) = (
+        (after[1].0 - after[0].0, after[1].1 - after[0].1),
+        (after[3].0 - after[0].0, after[3].1 - after[0].1),
+    );
+    assert!((u.0 * v.0 + u.1 * v.1).abs() < 1e-2, "{after:?}");
 }

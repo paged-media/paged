@@ -460,3 +460,45 @@ fn an_absent_pivot_keeps_the_centroid_default() {
         "{centre:?}"
     );
 }
+
+/// R6 / ADR 191 — several items turn about the centre of their
+/// axis-aligned box, InDesign's reference point for a selection, not the
+/// mean of their centres. r1 is cut to [100,400]-[200,600], so the box of
+/// the two is [100,100]-[300,600] (centre (350, 200)) while the mean of the
+/// centres is (350, 175).
+#[test]
+fn several_items_turn_about_the_centre_of_their_box() {
+    let mut m = model();
+    m.apply_mutation(&paged_canvas::channel::Mutation::SetElementProperty {
+        element_id: ElementId::Rectangle("r1".into()),
+        path: paged_mutate::PropertyPath::FrameBounds,
+        value: paged_mutate::Value::Bounds([100.0, 400.0, 200.0, 600.0]),
+    })
+    .expect("cut r1");
+    let h = m
+        .begin_gesture(
+            vec![
+                ElementId::TextFrame("tf1".into()),
+                ElementId::Rectangle("r1".into()),
+            ],
+            GestureType::Rotate,
+            Some(anchor_at((450.0, 200.0))),
+        )
+        .expect("begin");
+    m.update_gesture(h, (-100.0, 100.0), GestureModifiers::default())
+        .expect("update");
+    m.commit_gesture(h).expect("commit");
+    for t in [
+        tf_transform(&m, "tf1").expect("tf1"),
+        rect_transform(&m, "r1").expect("r1"),
+    ] {
+        let fixed = (
+            t[0] * 350.0 + t[2] * 200.0 + t[4],
+            t[1] * 350.0 + t[3] * 200.0 + t[5],
+        );
+        assert!(
+            (fixed.0 - 350.0).abs() < 1e-2 && (fixed.1 - 200.0).abs() < 1e-2,
+            "the box centre moved to {fixed:?}"
+        );
+    }
+}
