@@ -65,6 +65,7 @@
 //! TIMEVALUE string and AM/PM markers are *not* accepted in T1 — out of
 //! scope, surfaced as `#VALUE!`.
 
+use paged_fmt::calendar;
 use sheet_core::{CellError, CellValue, DateSystem};
 use sheet_format::serial::{serial_to_ymd, ymd_to_serial};
 
@@ -120,21 +121,11 @@ fn ymd_of(serial: i64, sys: DateSystem) -> Result<(i32, u32, u32), CellError> {
 
 /// Real Gregorian day-of-week as `0 = Monday .. 6 = Sunday` for a calendar
 /// date — used by the business-day and week-number kernels (which key off the
-/// *real* weekday, not Excel's serial-index off-by-one). Howard Hinnant's
-/// `days_from_civil` mod 7 with the 1970-01-01 (a Thursday = 3) anchor.
+/// *real* weekday, not Excel's serial-index off-by-one). paged-fmt's civil
+/// day count and weekday (`0 = Sunday`), shifted to start on Monday.
 fn weekday_mon0(y: i32, m: u32, d: u32) -> i64 {
-    // Days since 1970-01-01 (a Thursday). Local copy of the FMT-track civil
-    // algorithm restricted to weekday extraction.
-    let yy = if m <= 2 { y - 1 } else { y };
-    let era = (if yy >= 0 { yy } else { yy - 399 }) / 400;
-    let yoe = (yy - era * 400) as i64;
-    let mi = m as i64;
-    let di = d as i64;
-    let doy = (153 * (if mi > 2 { mi - 3 } else { mi + 9 }) + 2) / 5 + di - 1;
-    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
-    let days = era as i64 * 146097 + doe - 719468;
-    // 1970-01-01 is Thursday => Monday-based index 3.
-    (days + 3).rem_euclid(7)
+    let sun0 = calendar::weekday(calendar::days_from_civil(y as i64, m, d));
+    ((sun0 + 6) % 7) as i64
 }
 
 /// Whether `(y, m, d)` is a weekend (Saturday or Sunday) in the standard
@@ -144,25 +135,15 @@ fn is_weekend(y: i32, m: u32, d: u32) -> bool {
 }
 
 fn is_leap(y: i32) -> bool {
-    (y % 4 == 0 && y % 100 != 0) || y % 400 == 0
+    calendar::is_leap_year(y as i64)
 }
 
 fn days_in_month(y: i32, m: u32) -> u32 {
-    match m {
-        1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
-        4 | 6 | 9 | 11 => 30,
-        2 if is_leap(y) => 29,
-        2 => 28,
-        _ => 0,
-    }
+    calendar::days_in_month(y as i64, m)
 }
 
 fn days_in_year(y: i32) -> i64 {
-    if is_leap(y) {
-        366
-    } else {
-        365
-    }
+    calendar::days_in_year(y as i64) as i64
 }
 
 // ---- EDATE / EOMONTH -------------------------------------------------------
