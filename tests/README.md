@@ -5,10 +5,21 @@ together belongs to none of them, so it lives here, at the repository root
 (PM plan T1). Each directory is a category, named for what its tests are
 about:
 
-| Directory    | What it asserts                                                                                                                                                                                                                                                  | Runner                                | CI                           |
-| ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------- | ---------------------------- |
-| `contracts/` | The plugin contract between the editor, plugin-sdk and the nine built-ins: every manifest against what its bundle registers, the surface gate's static enumeration against the same, and the BundleHost doors on the editor's, the headless and the bare adapter | `bun test` (`bun run test:contracts`) | `tests / contracts + system` |
-| `system/`    | The product is complete: all nine built-ins live in the headless editor                                                                                                                                                                                          | `bun test` (`bun run test:system`)    | `tests / contracts + system` |
+| Directory      | What it asserts                                                                                                                                                                                                                                                  | Runner                                                   | CI                                      |
+| -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- | --------------------------------------- |
+| `contracts/`   | The plugin contract between the editor, plugin-sdk and the nine built-ins: every manifest against what its bundle registers, the surface gate's static enumeration against the same, and the BundleHost doors on the editor's, the headless and the bare adapter | `bun test` (`bun run test:contracts`)                    | `tests / contracts + system`            |
+| `system/`      | The product is complete: all nine built-ins live in the headless editor                                                                                                                                                                                          | `bun test` (`bun run test:system`)                       | `tests / contracts + system`            |
+| `integration/` | Round trips across components: a module's state saved into the editor's `.paged` container and read back after a reopen (sheet, data, image, web)                                                                                                                | Playwright, project `integration` of the editor's config | `editor / tests`, the Playwright shards |
+
+The Playwright lanes run on the editor's configuration
+(`apps/editor/apps/canvas/playwright.config.ts`), because they drive the
+editor's dev server and reuse its drivers (`apps/canvas/tests/fidelity/canvas-driver.ts`,
+`tests/journey/driver/`, `tests/e2e/harness/`):
+
+```sh
+cd apps/editor/apps/canvas
+bunx playwright test --project=integration
+```
 
 The `bun test` lanes run here:
 

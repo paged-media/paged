@@ -95,6 +95,7 @@ on:
       - ".github/actions/module-wasm/**"
       - ".github/actions/wasm-tools/**"
       - ".github/workflows/editor-tests.yml"
+      - "tests/integration/**"
       - "bun.lock"
       - "bunfig.toml"
       - "package.json"
@@ -134,6 +135,7 @@ on:
       - ".github/actions/module-wasm/**"
       - ".github/actions/wasm-tools/**"
       - ".github/workflows/editor-tests.yml"
+      - "tests/integration/**"
       - "bun.lock"
       - "bunfig.toml"
       - "package.json"
@@ -719,7 +721,8 @@ jobs:
       # THREE features red on state.paged.media (command-palette,
       # context-toolbars, panels.properties — the latter two attached only
       # because the ingest test-map unions them onto every journey spec).
-      # Naming the two real gating projects fixes all of it.
+      # Naming the real gating projects fixes all of it (`integration`,
+      # the root tests/integration round trips, joined them in T1).
       - name: playwright (lean surface, shard ${{ matrix.shard }})
         working-directory: apps/editor/apps/canvas
         env:
@@ -729,6 +732,7 @@ jobs:
           npx playwright test \
             --project=chromium \
             --project=journeys \
+            --project=integration \
             --grep-invert @quarantine \
             --shard=${{ matrix.shard }}/${{ env.SHARDS }} \
             --reporter=blob
@@ -750,6 +754,7 @@ jobs:
           npx playwright test \
             --project=chromium \
             --project=journeys \
+            --project=integration \
             --grep @quarantine \
             --retries=2 \
             --pass-with-no-tests \
