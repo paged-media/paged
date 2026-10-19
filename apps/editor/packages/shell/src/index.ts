@@ -412,6 +412,9 @@ export {
 // ── Hooks ──────────────────────────────────────────────────────
 export { useModifierState, type ModifierState } from "./hooks/useModifierState";
 
+// ── Keyboard focus (ADR 234) ───────────────────────────────────
+export * from "./focus";
+
 // ── Gestures ───────────────────────────────────────────────────
 export {
   useScrubGesture,

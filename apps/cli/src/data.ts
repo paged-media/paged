@@ -129,7 +129,7 @@ export async function dataSession(s: CliSession): Promise<DataSessionLike> {
     )?.error;
     throw new CliError(
       EXIT.usage,
-      `this verb needs the paged.data bundle — install @paged-media/data (and @duckdb/duckdb-wasm@1.29.0) beside the CLI` +
+      `this verb needs the paged.data bundle (media.paged.data), and none is loaded. The published @paged-media/paged does not include it: paged.data is built into the editor and runs on DuckDB-WASM (34 MiB). In a checkout of the repository, build its wasm (\`moon run data:wasm\`)` +
         (why ? ` (it was found but: ${why})` : ""),
     );
   }

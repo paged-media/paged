@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="240" height="160" viewBox="0 0 240 160">
+  <!-- The drop shadow most editors write: blur the alpha, move it, colour it, put the art on top. -->
+  <filter id="shadow" x="-20%" y="-20%" width="150%" height="150%">
+    <feGaussianBlur in="SourceAlpha" stdDeviation="3" result="blur"/>
+    <feOffset in="blur" dx="5" dy="5" result="moved"/>
+    <feFlood flood-color="#223344" flood-opacity="0.6"/>
+    <feComposite in2="moved" operator="in" result="tinted"/>
+    <feMerge><feMergeNode in="tinted"/><feMergeNode in="SourceGraphic"/></feMerge>
+  </filter>
+  <filter id="drop" x="-30%" y="-30%" width="170%" height="170%">
+    <feDropShadow dx="3" dy="6" stdDeviation="2.5" flood-color="navy" flood-opacity="0.55"/>
+  </filter>
+  <filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
+    <feMorphology in="SourceAlpha" operator="dilate" radius="2" result="fat"/>
+    <feGaussianBlur in="fat" stdDeviation="4" result="halo"/>
+    <feFlood flood-color="#ffcc00"/>
+    <feComposite in2="halo" operator="in"/>
+    <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
+  </filter>
+  <rect x="15" y="20" width="70" height="50" rx="8" fill="#e8eef7" stroke="#336" stroke-width="2" filter="url(#shadow)"/>
+  <circle cx="150" cy="45" r="28" fill="#ee5533" filter="url(#drop)"/>
+  <path d="M30 100 h60 l-30 45 z" fill="#4477aa" filter="url(#drop)"/>
+  <g filter="url(#glow)"><rect x="135" y="100" width="70" height="35" rx="17" fill="#663399"/></g>
+</svg>

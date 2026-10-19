@@ -73,3 +73,8 @@ naga = { version = "30", features = ["wgsl-in"] }
 
 [dev-dependencies]
 paged-test-resources.workspace = true
+# The placed-SVG reference lane (tests/it/svg_reference.rs): ΔE2000 and
+# PNG reading.
+paged-fidelity = { path = "../paged-fidelity" }
+image = { workspace = true }
+serde_json = { workspace = true }

@@ -27,7 +27,7 @@
 import { useEffect, useSyncExternalStore } from "react";
 import type { CSSProperties } from "react";
 
-import { PropertyField } from "@paged-media/shell";
+import { PropertyField, FocusScope } from "@paged-media/shell";
 import type {
   CommandContribution,
   MenuItemContribution,
@@ -119,40 +119,48 @@ function GlobalLightForm() {
           boxShadow: "0 16px 48px rgba(0,0,0,0.5)",
         }}
       >
-        <h2
-          id="global-light-title"
-          style={{ margin: "0 0 12px", fontSize: 14, fontWeight: 600 }}
-        >
-          Global light
-        </h2>
-        <div className="flex flex-col gap-1.5">
-          <PropertyField
-            path="documentGlobalLightAngle"
-            label="Angle"
-            targets={DOC_TARGETS}
-            schemaKind="doc"
-            chrome={{ suffix: "°" }}
-          />
-          <PropertyField
-            path="documentGlobalLightAltitude"
-            label="Altitude"
-            targets={DOC_TARGETS}
-            schemaKind="doc"
-            chrome={{ suffix: "°" }}
-          />
-        </div>
-        <div
-          style={{ display: "flex", justifyContent: "flex-end", marginTop: 14 }}
-        >
-          <button
-            type="button"
-            data-global-light-done=""
-            onClick={close}
-            style={buttonStyle}
+        {/* ADR 234 — focus moves in on open, Tab stays inside, and
+            focus returns to the opener on close. */}
+        <FocusScope trap autoFocus restoreFocus>
+          <h2
+            id="global-light-title"
+            style={{ margin: "0 0 12px", fontSize: 14, fontWeight: 600 }}
           >
-            Done
-          </button>
-        </div>
+            Global light
+          </h2>
+          <div className="flex flex-col gap-1.5">
+            <PropertyField
+              path="documentGlobalLightAngle"
+              label="Angle"
+              targets={DOC_TARGETS}
+              schemaKind="doc"
+              chrome={{ suffix: "°" }}
+            />
+            <PropertyField
+              path="documentGlobalLightAltitude"
+              label="Altitude"
+              targets={DOC_TARGETS}
+              schemaKind="doc"
+              chrome={{ suffix: "°" }}
+            />
+          </div>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "flex-end",
+              marginTop: 14,
+            }}
+          >
+            <button
+              type="button"
+              data-global-light-done=""
+              onClick={close}
+              style={buttonStyle}
+            >
+              Done
+            </button>
+          </div>
+        </FocusScope>
       </div>
     </div>
   );

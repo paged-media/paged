@@ -49,6 +49,7 @@ import {
   refusalText,
   status,
 } from "@paged-media/panel-kit";
+import { FocusScope } from "@paged-media/shell";
 
 type Args = Record<string, unknown>;
 
@@ -396,95 +397,102 @@ function CommandForm({ pending: p }: { pending: Pending }) {
         data-ready={info ? "true" : "false"}
         style={card}
       >
-        <h2 id="core-command-title" style={{ margin: "0 0 4px", fontSize: 15 }}>
-          {p.title ?? info?.title ?? "Run command"}
-        </h2>
-        <p
-          style={{
-            margin: "0 0 12px",
-            fontSize: 12,
-            color: color.mutedFg,
-          }}
-        >
-          {op ? (
-            <code data-core-command-id="" style={mono}>
-              {CORE_COMMAND_PREFIX}
-              {op}
-            </code>
-          ) : (
-            "Pick a core command. Its arguments are generated from its schema."
-          )}
-        </p>
-        {p.op === null && (
-          <label style={labelStyle}>
-            Command
-            <select
-              data-core-command-picker=""
-              value={op ?? ""}
-              onChange={(e) => setOp(e.target.value || null)}
-              style={input}
-            >
-              <option value="">—</option>
-              {(commands ?? []).map((c) => (
-                <option
-                  key={c.id}
-                  value={c.id.slice(CORE_COMMAND_PREFIX.length)}
-                >
-                  {c.title}
-                </option>
-              ))}
-            </select>
-          </label>
-        )}
-        {fields.map(([name, t]) => (
-          <ArgField
-            key={name}
-            name={name}
-            type={t}
-            text={texts[name] ?? ""}
-            options={options[name]}
-            onChange={(v) => setTexts((prev) => ({ ...prev, [name]: v }))}
-          />
-        ))}
-        {error && (
+        {/* ADR 234 — focus moves in on open, Tab stays inside, and
+            focus returns to the opener on close. */}
+        <FocusScope trap autoFocus restoreFocus>
+          <h2
+            id="core-command-title"
+            style={{ margin: "0 0 4px", fontSize: 15 }}
+          >
+            {p.title ?? info?.title ?? "Run command"}
+          </h2>
           <p
-            data-core-command-error=""
-            role="alert"
             style={{
-              margin: "8px 0",
+              margin: "0 0 12px",
               fontSize: 12,
-              color: status.error,
+              color: color.mutedFg,
             }}
           >
-            {error}
+            {op ? (
+              <code data-core-command-id="" style={mono}>
+                {CORE_COMMAND_PREFIX}
+                {op}
+              </code>
+            ) : (
+              "Pick a core command. Its arguments are generated from its schema."
+            )}
           </p>
-        )}
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "flex-end",
-            gap: 8,
-            marginTop: 12,
-          }}
-        >
-          <button
-            type="button"
-            data-core-command-cancel=""
-            onClick={close}
-            style={btn(false)}
+          {p.op === null && (
+            <label style={labelStyle}>
+              Command
+              <select
+                data-core-command-picker=""
+                value={op ?? ""}
+                onChange={(e) => setOp(e.target.value || null)}
+                style={input}
+              >
+                <option value="">—</option>
+                {(commands ?? []).map((c) => (
+                  <option
+                    key={c.id}
+                    value={c.id.slice(CORE_COMMAND_PREFIX.length)}
+                  >
+                    {c.title}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          {fields.map(([name, t]) => (
+            <ArgField
+              key={name}
+              name={name}
+              type={t}
+              text={texts[name] ?? ""}
+              options={options[name]}
+              onChange={(v) => setTexts((prev) => ({ ...prev, [name]: v }))}
+            />
+          ))}
+          {error && (
+            <p
+              data-core-command-error=""
+              role="alert"
+              style={{
+                margin: "8px 0",
+                fontSize: 12,
+                color: status.error,
+              }}
+            >
+              {error}
+            </p>
+          )}
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "flex-end",
+              gap: 8,
+              marginTop: 12,
+            }}
           >
-            Cancel
-          </button>
-          <button
-            type="button"
-            data-core-command-run=""
-            disabled={!info || busy}
-            onClick={() => void run()}
-            style={btn(true, !info || busy)}
-          >
-            Run
-          </button>
-        </div>
+            <button
+              type="button"
+              data-core-command-cancel=""
+              onClick={close}
+              style={btn(false)}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              data-core-command-run=""
+              disabled={!info || busy}
+              onClick={() => void run()}
+              style={btn(true, !info || busy)}
+            >
+              Run
+            </button>
+          </div>
+        </FocusScope>
       </div>
     </div>
   );

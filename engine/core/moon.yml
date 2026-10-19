@@ -105,7 +105,7 @@ tasks:
       runInCI: "skip"
 
   wasm-pkg-version:
-    description: "canvas-wasm and idml-viewer are versioned 0.<PROTOCOL_VERSION>.0-dev (scripts/check-wasm-package-versions.mjs)."
+    description: "canvas-wasm, the viewer and packages/paged are versioned 0.<PROTOCOL_VERSION>.0-dev (scripts/check-wasm-package-versions.mjs)."
     toolchains: ["system"]
     command: "bun scripts/check-wasm-package-versions.mjs"
     inputs:
@@ -113,6 +113,7 @@ tasks:
       - "crates/paged-canvas/src/channel.rs"
       - "packages/*/package.json"
       - "web/idml-viewer/package.json"
+      - "/packages/paged/package.json"
 
   wire-schema:
     description: "The wire JSON Schema (ADR 187): crates/paged-wire/schema/mutation.schema.json is current and declares what tsify declares (paged-wire --features schema; core-ci runs it)."

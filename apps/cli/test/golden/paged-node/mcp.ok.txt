@@ -1,0 +1,37 @@
+$ paged-node mcp --library <TMP>/mcp-library --no-plugins
+# exit 0
+# stdout
+(projected)
+[
+  {
+    "id": 1,
+    "protocolVersion": "2025-06-18",
+    "serverInfo": "paged (local)"
+  },
+  {
+    "id": 2,
+    "tools": [
+      "list_documents",
+      "describe_document",
+      "read_part",
+      "history",
+      "diff",
+      "create_branch",
+      "commit_parts",
+      "propose_change",
+      "list_changes",
+      "download_link",
+      "open_document",
+      "run_script",
+      "render_page",
+      "save_document",
+      "lookup_api"
+    ]
+  },
+  {
+    "id": 3,
+    "documents": []
+  }
+]
+# stderr
+(empty)

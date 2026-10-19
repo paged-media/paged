@@ -147,6 +147,7 @@ import {
   buildToolbarContributions,
   contentSelectionInactive,
 } from "./state/commands/tool-commands";
+import { canvasHasPointerFocus } from "./focus/canvas-surface";
 import { installRegistryDerivedContributions } from "./state/commands/registry-derived";
 import { useSpringLoadedTools } from "./tools/use-spring-loaded-tools";
 import type { PagedEditor } from "./state/paged-editor";
@@ -673,23 +674,19 @@ function ShellChrome({
   }, [cockpitActive, registries]);
 
   useEffect(() => {
-    // Tab must keep its focus-move role inside DOM editables; the
-    // canvas caret is covered by the contentSelection guard. Inside an
+    // F-49 (ADR 234) — Tab is the chrome toggle only on the canvas the
+    // user clicked into (InDesign's convention). Everywhere else it moves
+    // focus: the registry's `targetOwnsKey` hands Tab to a binding only
+    // from a canvas surface, and this guard narrows that to a viewport
+    // that holds pointer focus with no caret in a story (a caret's Tab is
+    // a tab character). Reached by keyboard, the viewport passes Tab on,
+    // so it is never a trap; Cmd/Ctrl+\ toggles from anywhere. Inside an
     // active edit context that claims Tab (a sheet's grid moves its cell
     // cursor) the toggle never sees the key: EditContextController offers
     // it to the context in the capture phase and stops a claimed key.
-    const chromeKeyGuard = (state: unknown) => {
-      const el = document.activeElement as HTMLElement | null;
-      if (
-        el &&
-        (el.tagName === "INPUT" ||
-          el.tagName === "TEXTAREA" ||
-          el.isContentEditable)
-      ) {
-        return false;
-      }
-      return (contentSelectionInactive as (s: unknown) => boolean)(state);
-    };
+    const chromeKeyGuard = (state: unknown) =>
+      canvasHasPointerFocus() &&
+      (contentSelectionInactive as (s: unknown) => boolean)(state);
     const disposables = [
       registries.commands.register({
         id: "paged.chrome.toggleAll",
@@ -712,6 +709,15 @@ function ShellChrome({
         key: "shift+tab",
         command: "paged.chrome.togglePanels",
         when: chromeKeyGuard,
+      }),
+      // The chord a keyboard user hides the chrome with, from anywhere.
+      registries.keybindings.register({
+        key: "cmd+\\",
+        command: "paged.chrome.toggleAll",
+      }),
+      registries.keybindings.register({
+        key: "ctrl+\\",
+        command: "paged.chrome.toggleAll",
       }),
     ];
     return () => {

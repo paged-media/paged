@@ -27,6 +27,7 @@ import {
 } from "../state/tool-context";
 import { useContentSelection } from "../state/content-selection-context";
 import type { ToolId } from "../registries/tool";
+import { canvasKeyYields } from "../focus/key-ownership";
 
 // Concept 1 (T2) — spring-loaded momentary tools. Holding a key pushes
 // a transient override onto the active-tool stack; releasing it pops.
@@ -37,17 +38,11 @@ import type { ToolId } from "../registries/tool";
 //   Cmd / Meta   → momentary Direct Selection
 //   Cmd + Space  → momentary Zoom (Alt at click time zooms out)
 //
-// Guards: inert while typing in a DOM editable or while the canvas
-// text caret is active (Space must type a space). Window blur clears
-// every override — Cmd+Tab away means the key-ups never arrive.
-
-function isEditableTarget(target: EventTarget | null): boolean {
-  const el = target as HTMLElement | null;
-  if (!el || !el.tagName) return false;
-  return (
-    el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable
-  );
-}
+// Guards: inert while the focused control owns the key (a field, a
+// dialog, an open menu, Space on a focused button — `canvasKeyYields`,
+// ADR 234) or while the canvas text caret is active (Space must type a
+// space). Window blur clears every override — Cmd+Tab away means the
+// key-ups never arrive.
 
 export function useSpringLoadedTools(): void {
   const { pushOverride, popOverride, clearOverrides } = useTool();
@@ -68,7 +63,7 @@ export function useSpringLoadedTools(): void {
       const key = keyFor(e);
       if (!key || e.repeat) return;
       if (pushedByKey.current.has(key)) return;
-      if (isEditableTarget(e.target)) return;
+      if (canvasKeyYields(e)) return;
       // A live text caret owns Space (it types). Cmd stays allowed —
       // it is a chord modifier everywhere.
       if (key === "space" && contentSelectionRef.current != null) return;

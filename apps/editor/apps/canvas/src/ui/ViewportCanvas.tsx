@@ -79,6 +79,7 @@ import {
   zoomAt,
   type PageRect,
 } from "./layout";
+import { TextInputSurface } from "./TextInputSurface";
 
 // Re-export the (now shell-owned) overlay state types so existing
 // imports from this module continue to work.
@@ -1450,6 +1451,13 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
         pageRects={rects}
         width={hostSize.width}
         height={hostSize.height}
+      />
+      {/* F-36 — where typed and composed text arrives while a caret is
+          in a story (ADR 234). */}
+      <TextInputSurface
+        camera={props.camera}
+        pageIds={props.pageIds}
+        pageRects={rects}
       />
       <ViewportHud
         camera={props.camera}
