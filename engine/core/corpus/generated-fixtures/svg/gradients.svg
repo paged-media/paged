@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="240" height="160" viewBox="0 0 240 160">
+  <defs>
+    <linearGradient id="lin" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff3300"/><stop offset="0.5" stop-color="#ffee00" stop-opacity="0.6"/><stop offset="1" stop-color="#0033ff"/></linearGradient>
+    <linearGradient id="reflect" x1="0.3" x2="0.5" spreadMethod="reflect"><stop offset="0" stop-color="#003"/><stop offset="1" stop-color="#9cf"/></linearGradient>
+    <linearGradient id="repeat" gradientUnits="userSpaceOnUse" x1="160" y1="0" x2="175" y2="0" gradientTransform="rotate(30 200 40)" spreadMethod="repeat"><stop offset="0" stop-color="#060"/><stop offset="1" stop-color="#cfc"/></linearGradient>
+    <radialGradient id="rad" cx="0.5" cy="0.5" r="0.5" fx="0.3" fy="0.3"><stop offset="0" stop-color="#fff"/><stop offset="0.6" stop-color="#e04080"/><stop offset="1" stop-color="#300"/></radialGradient>
+    <radialGradient id="focal" cx="0.5" cy="0.5" r="0.45" fx="0.5" fy="0.5" fr="0.15" spreadMethod="repeat"><stop offset="0" stop-color="#ffd700"/><stop offset="1" stop-color="#8b4513"/></radialGradient>
+    <linearGradient id="stroke" x1="0" x2="1"><stop offset="0" stop-color="#0aa"/><stop offset="1" stop-color="#a0a"/></linearGradient>
+  </defs>
+  <rect x="5" y="5" width="70" height="70" fill="url(#lin)"/>
+  <rect x="85" y="5" width="70" height="70" fill="url(#reflect)"/>
+  <rect x="165" y="5" width="70" height="70" fill="url(#repeat)"/>
+  <circle cx="40" cy="117" r="36" fill="url(#rad)"/>
+  <ellipse cx="120" cy="117" rx="38" ry="30" fill="url(#focal)"/>
+  <path d="M170 90 Q 200 160 230 90" fill="none" stroke="url(#stroke)" stroke-width="10" stroke-linecap="round"/>
+</svg>

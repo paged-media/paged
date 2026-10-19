@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="240" height="160" viewBox="0 0 240 160">
+  <defs>
+    <linearGradient id="g" x1="0" x2="1">
+      <stop offset="0" stop-color="#000"/><stop offset="0.5" stop-color="#c04080"/><stop offset="1" stop-color="#fff"/>
+    </linearGradient>
+    <rect id="strip" width="220" height="26" fill="url(#g)"/>
+  </defs>
+  <filter id="table"><feComponentTransfer><feFuncR type="table" tableValues="0 0.2 1"/><feFuncG type="table" tableValues="1 0.5 0"/><feFuncB type="table" tableValues="0 1"/></feComponentTransfer></filter>
+  <filter id="discrete"><feComponentTransfer><feFuncR type="discrete" tableValues="0 0.4 0.8 1"/><feFuncG type="discrete" tableValues="0 0.5 1"/><feFuncB type="discrete" tableValues="0.2 0.9"/></feComponentTransfer></filter>
+  <filter id="linear"><feComponentTransfer><feFuncR type="linear" slope="0.5" intercept="0.25"/><feFuncG type="linear" slope="1.5" intercept="-0.2"/><feFuncB type="linear" slope="-1" intercept="1"/></feComponentTransfer></filter>
+  <filter id="gamma"><feComponentTransfer><feFuncR type="gamma" amplitude="1" exponent="0.5" offset="0"/><feFuncG type="gamma" amplitude="1.2" exponent="2" offset="-0.05"/><feFuncB type="gamma" amplitude="0.8" exponent="1" offset="0.1"/><feFuncA type="table" tableValues="0 1 0.6"/></feComponentTransfer></filter>
+  <use href="#strip" x="10" y="6"/>
+  <use href="#strip" x="10" y="36" filter="url(#table)"/>
+  <use href="#strip" x="10" y="66" filter="url(#discrete)"/>
+  <use href="#strip" x="10" y="96" filter="url(#linear)"/>
+  <use href="#strip" x="10" y="126" filter="url(#gamma)"/>
+</svg>
