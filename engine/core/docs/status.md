@@ -18,7 +18,10 @@ rendered. How the parts fit is in [`architecture.md`](architecture.md).
 - **Render.** One display list per page, drawn on the CPU with `vello_cpu` (`paged render`,
   editor snapshots without WebGPU) or with Vello on WebGPU (`presentFrame` and editor snapshots
   in the editor wasm, `ViewerSession` in the viewer; [ADR 188](adr/188-snapshots-draw-on-the-worker-gpu.md)),
-  from one mapping ([ADR 189](adr/189-one-rendering-model.md)).
+  from one mapping ([ADR 189](adr/189-one-rendering-model.md)). The mapping applies stroke
+  adjustment as Acrobat and poppler do (edges along the axes on pixel boundaries) and flattens
+  filled curves to 0.1 device px, the same for both lanes; all 101 InDesign fidelity fixtures
+  pass on it.
 - **Edit.** 137 mutation operations over the wire, batches that are atomic and cost one
   rebuild and one undo step, undo and redo, and engine-minted ids reported in the reply.
 - **Locks and deletes follow InDesign.** A locked item, and the content of a locked container,
@@ -202,6 +205,10 @@ rendered. How the parts fit is in [`architecture.md`](architecture.md).
   and has no CPU page rasteriser. In the editor wasm `presentFrame` returns `false` without a
   GPU surface or after a device loss; `recoverGpu` asks for a new device, and the editor
   falls back to the CPU when none is granted (ADR 188).
+- **The CPU rasterizer is single-threaded**, natively too (ADR 189: `vello_cpu`'s threads
+  cost more than they save on effect-heavy and sparse pages). Without the glyph-run table (the
+  live canvas does not collect it) a glyph that is exactly a rectangle is stroke-adjusted like
+  a shape.
 - **No font and no colour profile is bundled.** Text for which neither a registered font
   nor a default font resolves is not shaped. Without a CMYK profile, CMYK is converted by a
   naive formula.

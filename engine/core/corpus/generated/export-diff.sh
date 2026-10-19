@@ -14,7 +14,7 @@
 #   2. pdftoppm -r 144 → pdf-NNN.png.
 #   3. paged-inspect --render (CPU, 144 dpi) → native-NNN.png.
 #   4. paged-diff per page; fail when mean ΔE > 1.5 or SSIM < 0.93
-#      (text AA differs between poppler and tiny-skia; geometry or
+#      (text AA differs between poppler and the CPU lane; geometry or
 #      colour bugs blow past these immediately). A few fixtures carry
 #      their own measured budget — max_mean_for / min_ssim_for below,
 #      each with its evidence.
