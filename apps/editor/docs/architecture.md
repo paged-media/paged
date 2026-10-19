@@ -173,7 +173,7 @@ application on the main thread; no bundle is discovered or loaded from a URL at 
   worker backend, consent and secret stores with their dialogs, the native-document door, a
   font asset source, a diagnostics sink, the schema-panel renderer, and the data-provider and
   binding-provider registries. The BundleHost contract tests
-  (`apps/canvas/test/contracts/bundle-host/`) build the same options, so what the editor
+  (`tests/contracts/bundle-host/` at the repository root) build the same options, so what the editor
   wires and what they prove cannot drift apart.
   The shell's registry types are the contract's contribution types, used as is or extended
   with editor-only optional fields ([ADR 226](adr/226-contribution-types-have-one-definition.md));

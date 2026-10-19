@@ -1,0 +1,48 @@
+$schema: "../.moon/cache/schemas/project.json"
+
+# The repository's cross-component tests (tests/README.md), a private package
+# of the root Bun workspace. js-check is the inherited `bun run typecheck`;
+# js-test runs the contracts lane, as the `tests` workflow does.
+language: "typescript"
+layer: "automation"
+stack: "frontend"
+tags: ["node", "tests"]
+
+project:
+  title: "tests"
+  description: "Cross-component tests: plugin contract, product completeness, integration and fidelity lanes."
+
+dependsOn:
+  # What the lanes boot: the editor's bundle table and headless harness (and
+  # through them every module bundle), the extension contract and the engine.
+  - id: "editor"
+    scope: "development"
+  - id: "extensions"
+    scope: "development"
+  - id: "core"
+    scope: "development"
+
+tasks:
+  js-test:
+    description: "The contracts lane (bun run test)."
+    # The bundles boot their own engine wasm when they activate.
+    deps:
+      [
+        "core:wasm-pkg",
+        "doc:wasm",
+        "slide:wasm",
+        "sheet:wasm",
+        "data:wasm",
+        "web:wasm",
+      ]
+    inputs:
+      - "@group(js-tests)"
+      - project: "editor"
+        filter:
+          [
+            "apps/canvas/src/**/*",
+            "apps/canvas/tests/headless/**/*",
+            "packages/*/src/**/*",
+          ]
+      - project: "core"
+        filter: ["packages/*/**/*"]

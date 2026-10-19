@@ -1,0 +1,25 @@
+{
+  "name": "paged-tests",
+  "private": true,
+  "version": "0.0.0",
+  "license": "AGPL-3.0-only OR LicenseRef-PMEL",
+  "description": "The repository's cross-component tests: contracts, system, integration and fidelity (tests/README.md). Never published.",
+  "type": "module",
+  "scripts": {
+    "typecheck": "bun check -p tsconfig.json",
+    "test": "bun run test:contracts",
+    "test:contracts": "bun test --timeout 30000 --preload ../tooling/js/bun-test-setup.ts ./contracts"
+  },
+  "devDependencies": {
+    "@happy-dom/global-registrator": "catalog:",
+    "@paged-media/canvas-wasm": "workspace:*",
+    "@paged-media/client": "workspace:*",
+    "@paged-media/plugin-api": "workspace:*",
+    "@paged-media/plugin-sdk": "workspace:*",
+    "@paged-media/test-kit": "workspace:*",
+    "@types/bun": "catalog:",
+    "happy-dom": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:"
+  }
+}

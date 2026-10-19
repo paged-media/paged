@@ -11,10 +11,10 @@ A plugin is tested in three places:
 | Where                                                                                | What it proves                                                                                           | Runs in CI as                                  |
 | ------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
 | the module's own package (`modules/<m>/packages/<m>-bundle/test`, image `glue/test`) | each contribution's BEHAVIOUR: commands, tools, panels, importers, exporters, key bindings, tool options | the module's `<m> / bun test` workflow         |
-| the editor's headless layer (`apps/editor/apps/canvas/tests/headless/`)              | the bundles inside the editor: all nine activate together, and the BundleHost contract                   | `editor / tests`, step `bun run test:headless` |
+| the editor's headless layer (`apps/editor/apps/canvas/tests/headless/`)              | the bundles inside the editor: all nine activate together                                                | `editor / tests`, step `bun run test:headless` |
 | the editor's Playwright suite (`apps/editor/apps/canvas/tests/plugin-surface/`)      | what a user reaches in a browser: the manifest against the live registries, the menu entries             | `editor / tests`, the Playwright shards        |
 
-`apps/editor/apps/canvas/test/contracts/bundle-registrations.test.ts` sits beside them: the
+`tests/contracts/bundle-registrations.test.ts` sits beside them: the
 two-way check of every manifest against what its bundle registers (plugin-sdk's
 `checkManifestConformance`).
 
@@ -130,7 +130,7 @@ and it must fail for that reason.
 
 ## The BundleHost contract
 
-`apps/editor/apps/canvas/tests/headless/bundle-host/` asserts that every door of the contract
+`tests/contracts/bundle-host/` asserts that every door of the contract
 (`plugin-api`'s `BundleHost`) behaves as `plugin-api` documents it, on three adapters
 (`hosts.ts`):
 
@@ -144,8 +144,8 @@ and it must fail for that reason.
 - `bare`: the SDK's adapter with no options, every door's documented no-backend answer.
 
 A case that holds on one adapter and not on another is a finding: a bundle tested headlessly
-would meet a different host in the editor. `supports.test.ts` pins which features each adapter
-answers; `storage`, `services`, `navigation`, `document` and `contribute` cover the doors.
+would meet a different host in the editor. `supports.headless.test.ts` pins which features each
+adapter answers; `storage`, `services`, `navigation`, `document` and `contribute` cover the doors.
 `built-in-bundles.test.ts` activates all nine built-in bundles in the headless editor, slide
 included, and checks every manifest declaration against the editor's registries.
 

@@ -25,7 +25,7 @@
 // reads its keys).
 //
 // It is built here, out of the `PluginBundles` effect in main.tsx, so the
-// BundleHost contract tests (test/contracts/bundle-host/) build the SAME
+// BundleHost contract tests (/tests/contracts/bundle-host/) build the SAME
 // object the editor builds: what the editor wires, and what the tests prove,
 // cannot drift apart. main.tsx keeps everything that needs React or the
 // browser's module graph (the widget components, the schema-panel renderer,

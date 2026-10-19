@@ -27,7 +27,8 @@
       "modules/image/manifest",
       "engine/core/web/idml-viewer",
       "engine/core/packages/*",
-      "platform/shared/*"
+      "platform/shared/*",
+      "tests"
     ],
     "catalog": {
       "@babel/core": "^7.29.7",

@@ -49,11 +49,11 @@ import {
   type ManifestConformanceOptions,
 } from "@paged-media/plugin-sdk";
 
-import { PLUGIN_BUNDLES } from "../../src/plugin-bundle-table";
-import { enumerateSurface } from "../../../../scripts/surface/enumerate.mjs";
+import { PLUGIN_BUNDLES } from "../../apps/editor/apps/canvas/src/plugin-bundle-table";
+import { enumerateSurface } from "../../apps/editor/scripts/surface/enumerate.mjs";
 
-const ENGINE_ANCHOR = fileURLToPath(new URL("../..", import.meta.url));
-const REPO_ROOT = fileURLToPath(new URL("../../../../../../", import.meta.url));
+const ENGINE_ANCHOR = fileURLToPath(new URL("..", import.meta.url));
+const REPO_ROOT = fileURLToPath(new URL("../../", import.meta.url));
 
 const PAGES: NonNullable<ManifestConformanceOptions["pages"]> = {
   goToPage: () => false,
