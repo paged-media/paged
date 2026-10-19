@@ -10,6 +10,10 @@ vendored from `@paged-media/canvas-wasm` and `@paged-media/introspect-wasm` 0.73
 
 ## Shipped
 
+- **One public package since PM-0008 amendment 3 (2026-10-19):** `plugin-sdk`, with the
+  contract as its type-only `./api` (inlined from the private `plugin-api` at build), and
+  `paged-plugin init`; the contract guard moves plugin-sdk's version for a change under either
+  `src/`, with plugin-api's in lockstep.
 - **Four packages, two of them public on npm** (PM-0008, 2026-10-18). `plugin-api` and
   `plugin-sdk` are published by `.github/workflows/release.yml` from a `v0.<protocol>.<patch>`
   tag, at the tag's version; `plugin-sdk` carries the `paged-plugin` bin, which was
