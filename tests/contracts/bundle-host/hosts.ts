@@ -236,6 +236,9 @@ export interface EditorApp {
   consent: EditorConsent;
   secrets: EditorSecretStore;
   documents: ReturnType<typeof createEditorDocuments>;
+  /** The replace question every open asks (ADR 230): attach a prompt
+   *  surface, then answer `current()`. */
+  replace: HeadlessEditor["hostApp"]["replace"];
   /** The will-save registry File ▸ Save runs (`run`) before it exports. */
   willSave: WillSaveRegistry;
   /** What the Problems panel lists (the editor's diagnostics sink). */
@@ -334,6 +337,7 @@ export async function editorAdapter(): Promise<HostUnderTest> {
       consent: app.consent,
       secrets: app.secrets,
       documents: app.documents,
+      replace: app.replace,
       willSave: app.willSave,
       problems: () => ed.problems(),
       workerResolvers: app.workerResolvers,

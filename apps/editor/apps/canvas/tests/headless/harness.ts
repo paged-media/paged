@@ -66,6 +66,9 @@ import {
   type CanvasHandleLike,
   type DemoGlobals,
   type PagedEditor,
+  type PendingReplace,
+  attachReplacePromptSurface,
+  replacePrompts,
   type RunResult,
   type ShellRegistries,
 } from "@paged-media/shell";
@@ -589,6 +592,13 @@ export interface HeadlessHostApp {
   consent: EditorConsent;
   secrets: EditorSecretStore;
   documents: ReturnType<typeof createEditorDocuments>;
+  /** The replace question every open asks (ADR 230). Headless, it is the
+   *  platform `confirm` unless a case attaches a prompt surface, then
+   *  answers `current()` as the shell's prompt would. */
+  replace: {
+    attach(): () => void;
+    current(): PendingReplace | null;
+  };
   willSave: WillSaveRegistry;
   /** Bundle worker modules per plugin id (main.tsx: Vite's `?worker&url`
    *  imports); a test adds its own. */
@@ -1058,6 +1068,10 @@ export async function createHeadlessEditor(
     consent,
     secrets,
     documents,
+    replace: {
+      attach: attachReplacePromptSurface,
+      current: () => replacePrompts.current(),
+    },
     willSave,
     workerResolvers,
   };
