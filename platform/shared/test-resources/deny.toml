@@ -1,0 +1,61 @@
+# cargo-deny configuration for paged-test-resources.
+# Run:  cargo deny check
+# Docs: https://embarkstudios.github.io/cargo-deny/
+#
+# The crate is standard library only; the policy is the engine's
+# (engine/core), so a dependency added here later meets the same terms as
+# every workspace that takes this crate as a dev-dependency.
+
+[advisories]
+version = 2
+
+[licenses]
+version = 2
+confidence-threshold = 0.9
+# paged is AGPL-3.0-only OR PMEL (ADR PM-0001). Dependencies must be
+# permissively licensed (weak copyleft MPL-2.0 at most) so the whole work can
+# be distributed under both: the AGPL and the commercial PMEL. No GPL/AGPL
+# dependency can pass this gate.
+allow = [
+    "MPL-2.0",
+    # First-party crates this workspace reaches outside itself (from another
+    # workspace in this repository, or by git revision from a former
+    # repository) carry `AGPL-3.0-only OR LicenseRef-PMEL`, or
+    # `MPL-2.0 OR LicenseRef-PMEL` for revisions released before the
+    # relicense (ADR PM-0001). SPDX has no id for the Paged Media Enterprise
+    # License, hence the LicenseRef form; it satisfies either expression.
+    "LicenseRef-PMEL",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "MIT",
+    "MIT-0",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Zlib",
+    "Unicode-3.0",
+    "Unicode-DFS-2016",
+    "CC0-1.0",
+    "BSL-1.0",
+]
+exceptions = []
+
+# This workspace's own crates are AGPL-3.0-only OR LicenseRef-PMEL
+# (ADR PM-0001). The policy above is for dependencies, so the unpublished
+# ones (`publish = false`) are not checked against it; a published one
+# passes through LicenseRef-PMEL.
+[licenses.private]
+ignore = true
+
+[bans]
+multiple-versions = "warn"
+wildcards = "warn"
+# The workspace crates refer to each other by path (none is published).
+allow-wildcard-paths = true
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+# No git sources and no dependencies at all.
+allow-git = []
