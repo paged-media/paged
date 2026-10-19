@@ -34,7 +34,10 @@ jobs:
     runs-on: ubuntu-latest
     # Without the Rust tasks the broadest diff so far ran its tasks in 4 min.
     timeout-minutes: 30
-    continue-on-error: true
+    # Advisory for people, binding for Renovate: a dependency PR merges
+    # itself only when every check is green (.github/renovate.json5), and
+    # this is the check that runs what the update affects.
+    continue-on-error: ${{ !startsWith(github.head_ref, 'renovate/') }}
     steps:
       - uses: actions/checkout@v4
         with:
