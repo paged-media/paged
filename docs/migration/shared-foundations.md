@@ -424,8 +424,8 @@ miniz_oxide 0.8 beside 0.9 (png 0.18, also in image's dev graph).
 paged.doc's standalone-open skeleton and paged.slide's deck are built as
 `paged_scene::Document`s with the engine's model crates and packaged by core's one `.paged`
 writer (`paged_store::package::wrap_document`), as the PDF mapper already did. The
-hand-written IDML writers are gone: `docx-skeleton`'s IDML half (408 → 0 lines of IDML
-templates) and `slide-idml` (1,363 lines). Decisions: doc ADR 606, slide ADR 708 (amending
+hand-written IDML writers are gone: `docx-skeleton`'s IDML half (237 lines) and `slide-idml`
+(1,363 lines), 1,600 lines in all. Decisions: doc ADR 606, slide ADR 708 (amending
 doc ADR 603 and slide ADR 700).
 
 ### Equivalence
