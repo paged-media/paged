@@ -1,0 +1,22 @@
+$ paged-plugin modules-upload <TMP>/upload
+# exit 0
+# stdout
+http://127.0.0.1:9/@paged-media/test-bundle/0.0.1-test.0/bin/engine.wasm · uploaded (0.0 MiB, 0.0 MiB brotli, sha384-okyHV17AgVkZ4iL9gMeELR7Q1ISxRPcAHorFgvPJr/8CqM+btjXngbzNX3HOpqc/)
+modules: 1 declared, all hosted
+# stderr
+(empty)
+# structure
+-y
+wrangler@3
+r2
+object
+put
+paged-modules/@paged-media/test-bundle/0.0.1-test.0/bin/engine.wasm
+--file
+<TMP>/child-tmp/paged-modules-<RND>/module.wasm.br
+--content-type
+application/wasm
+--content-encoding
+br
+--cache-control
+public, max-age=31536000, immutable
