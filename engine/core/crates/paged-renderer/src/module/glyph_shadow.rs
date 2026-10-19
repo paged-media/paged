@@ -32,7 +32,7 @@
 //! front of each one (with the shadow's offset baked into the
 //! transform). The `PathShadow` carries the same `path_id` as the
 //! glyph's fill, so the rasterizer reuses the interned outline; the
-//! Gaussian-blurred soft-shadow stamp lives entirely in cpu.rs.
+//! Gaussian-blurred soft-shadow stamp is the rasterizer's (`paged-gpu`).
 //!
 //! The inserted shadow commands are wrapped in their own
 //! transparency group (BlendGroup with Normal blend, the shadow's
@@ -67,7 +67,7 @@ pub(crate) enum GlyphShadowKind {
     /// `rect-shadows` fixture).
     Object,
     /// The `<StrokeTransparencySetting>` shadow: a wider `PathShadow`,
-    /// calibrated separately (see `cpu.rs`).
+    /// calibrated separately (see `paged-gpu`'s `vcpu.rs`, the shadow arm).
     Stroke,
 }
 
@@ -84,7 +84,7 @@ pub(crate) enum GlyphShadowKind {
 /// The shadow's `(offset_x, offset_y)` is left on the `DropShadow`
 /// struct; the rasterizer translates the path by that offset
 /// internally (see `DisplayCommand::DropShadow` / `PathShadow` in
-/// cpu.rs). We don't bake the offset into the transform here — that
+/// `paged-gpu`'s `vcpu.rs`). We don't bake the offset into the transform here — that
 /// would double-apply when the rasterizer reads `shadow.offset_*`.
 ///
 /// `group_bounds` is the page-space rectangle the wrapping

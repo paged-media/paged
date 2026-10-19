@@ -24,7 +24,7 @@
 //! — the "sibling, not a shrunk app" boundary. It is the engine the public
 //! viewer wraps and the docs `<live preview>` embeds.
 //!
-//! Forward rendering is **WebGPU-only**: there is no tiny-skia/CPU fallback
+//! Forward rendering is **WebGPU-only**: there is no CPU (`vello_cpu`) fallback
 //! in this binary (`paged-renderer` is linked with `default-features = false`,
 //! so its `cpu` rasterizer is excluded). When `navigator.gpu` is absent,
 //! [`ViewerSession::new`] rejects and the consumer shows a "requires WebGPU"

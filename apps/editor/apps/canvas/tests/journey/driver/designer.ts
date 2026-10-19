@@ -474,7 +474,7 @@ export class Designer {
 
   /**
    * Read the page back through the deterministic CPU snapshot (the same
-   * tiny-skia readback {@link contentCheckpoint} uses — it composites
+   * CPU readback {@link contentCheckpoint} uses — it composites
    * native content AND any plugin sceneLayer) and return the raw PNG
    * bytes. Unlike `contentCheckpoint`, there is NO committed baseline:
    * pair two of these around an action and assert with
@@ -504,7 +504,7 @@ export class Designer {
    * Count pixels that differ between two snapshots beyond an anti-aliasing
    * tolerance, decoding both PNGs in the (secure) page context via
    * `createImageBitmap` + `OffscreenCanvas` — no Node PNG decoder needed.
-   * The CPU snapshot is deterministic (tiny-skia, same display list → same
+   * The CPU snapshot is deterministic (`vello_cpu`, same display list → same
    * bytes), so two snapshots of an UNCHANGED page diff to exactly 0; any
    * non-zero count is genuine rendered-content signal. A dimension change
    * counts as fully changed. Returns the changed-pixel count.

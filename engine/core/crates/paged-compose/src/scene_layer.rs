@@ -28,7 +28,7 @@
 //! applies the frame's `ItemTransform` and clips to the content box at
 //! compose time, in [`emit_scene_layer`]. Because the layer lowers to
 //! ordinary [`DisplayCommand`]s, it renders through the *same* Vello (GPU)
-//! and tiny-skia (CPU) lanes as native content — so it is colour-managed,
+//! and `vello_cpu` (CPU) lanes as native content — so it is colour-managed,
 //! print-correct, and unit-testable on the CPU lane without a GPU.
 //!
 //! This is the VECTOR path of the GPU-surface RFC (`rfc-gpu-surface.md`).
@@ -98,7 +98,7 @@ pub enum SceneItem {
     /// frame-content points and clipped to the content box like every
     /// scene item. The RENDERER interns the pixels into the display-list
     /// image pool and emits the same [`DisplayCommand::Image`] lane placed
-    /// assets use, so it rasterises through tiny-skia (CPU) / Vello (GPU)
+    /// assets use, so it rasterises through `vello_cpu` (CPU) / Vello (GPU)
     /// with no new path. The shared-`GPUDevice` zero-copy stage (Stage B)
     /// is a follow-on. A malformed buffer (length ≠ `w*h*4`, or a
     /// zero-area image/dest) is skipped, never panicked.
@@ -134,7 +134,7 @@ pub enum SceneItem {
     /// ADR-011) tracks its box. Lowers to the **same** gradient fill lane
     /// IDML placed gradients use (`Paint::LinearGradient`/`RadialGradient`
     /// over the display-list gradient pool), so it rasterises through
-    /// tiny-skia (CPU) / Vello (GPU) with no new render path and is
+    /// `vello_cpu` (CPU) / Vello (GPU) with no new render path and is
     /// CPU-testable. An empty path or a gradient with <2 stops is skipped,
     /// never panicked.
     FillPathGradient {
@@ -149,7 +149,7 @@ pub enum SceneItem {
     /// [`DisplayCommand::FillPathBlend`] lane (an offscreen-pixmap
     /// composite that reads the page below), so a plugin lowering a CSS
     /// `mix-blend-mode` (paged.web) or a layer blend (paged.draw)
-    /// tracks its box and rasterises through tiny-skia (CPU) / Vello
+    /// tracks its box and rasterises through `vello_cpu` (CPU) / Vello
     /// (GPU) with no new render path. An empty path is skipped, never
     /// panicked.
     FillPathBlend {
@@ -312,9 +312,8 @@ pub enum SceneGradient {
     /// measured from +x, turning clockwise in the y-down content space)
     /// and wrapping once around the full turn. Lowers a CSS
     /// `conic-gradient` (paged.web). The display list has its own sweep
-    /// pool ([`SweepGradient`]); the rasterizers map it to
-    /// `tiny_skia::SweepGradient` (CPU) and `peniko::Gradient::new_sweep`
-    /// (GPU).
+    /// pool ([`SweepGradient`]); both rasterizers map it to
+    /// `peniko::Gradient::new_sweep`.
     Sweep {
         cx: f32,
         cy: f32,
@@ -715,7 +714,7 @@ pub fn emit_scene_layer<T>(
                 // Same transform as the path (`content_outer`): the
                 // rasterizer maps the gradient's content-point endpoints
                 // through it exactly as it maps the path geometry, so the
-                // gradient tracks the box (cpu.rs build_*_gradient_shader).
+                // gradient tracks the box (`vello_map::resolve_paint`).
                 list.push(DisplayCommand::FillPath {
                     path_id,
                     paint,

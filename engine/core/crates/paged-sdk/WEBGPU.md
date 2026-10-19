@@ -8,10 +8,10 @@
 
 **Status:** implemented in `src/lib.rs` as `ViewerSession` (the legacy
 `render_to_png`/`render_pages`/`parse_summary` free functions are gone).
-CPU/tiny-skia as a _page rasterizer_ is excluded from this crate
+The CPU page rasterizer (`vello_cpu`) is excluded from this crate
 (`paged-renderer` is linked `default-features = false`, dropping
-`paged-gpu/cpu`); it stays only as core's _internal_ headless CI fidelity
-backend (`corpus/generated/diff.sh`). This note is the design spec.
+`paged-gpu/cpu`); it is core's headless lane (the fidelity gate, the CLI)
+and the editor's snapshot fallback without WebGPU. This note is the design spec.
 
 **Deviations from the sketch below, as built:**
 
@@ -129,7 +129,7 @@ export class ViewerSession {
   (`Gpu`, `OffscreenCanvas`, `GpuCanvasContext`, …). Keep the `image` dep only if
   `render_to_bytes` encodes PNG; raw RGBA readback may not need it.
 - **wasm size:** the 3.5 MB compressed budget (`spikes/wasm-size`, CI gate) still
-  applies — Vello/wgpu is heavier than tiny-skia; measure.
+  applies — Vello/wgpu is heavier than the CPU rasterizer; measure.
 - **Build/publish:** `core/.github/workflows/publish-wasm.yml` is the template
   (no-op without `NPM_TOKEN`). Interim: built from a sibling checkout by
   `viewer/build-wasm.sh` (pinned in `viewer/core.pin`).

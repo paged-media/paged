@@ -221,10 +221,11 @@ Two behaviours worth knowing:
   when the document is built, so registering after a load cannot
   retroactively shape text already laid out. The reply says so rather
   than looking like it worked.
-- **`backend` is refused, not downgraded.** Core's native vello-backend
-  is a stub, so anything but `"cpu"` errors. Answering a `"vello"`
-  request with tiny-skia pixels would report a GPU parity nobody
-  measured.
+- **`backend` is refused, not downgraded.** The headless rasterizer is
+  the CPU one (`vello_cpu`), so anything but `"cpu"` errors (`"vello_cpu"`
+  and the lane's former name `"tiny-skia"` are accepted as aliases).
+  Answering a `"vello"` request with CPU pixels would report a GPU render
+  that never happened.
 
 `run-script` keeps the shipped 2 s budget — see above.
 

@@ -41,10 +41,10 @@ TypeScript + React 18 + Vite, Tailwind for styling.
 
 ### Apps
 
-| App             | Package name     | Role                                                                                                                                                                                                                                      |
-| --------------- | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `apps/canvas`   | `paged-canvas`   | The editor application. React shell driving a Web Worker that runs the engine wasm (Vello/WebGPU, tiny-skia CPU fallback) on an `OffscreenCanvas`. Owns the panel catalog wiring, REPL, script editor, and the Playwright fidelity suite. |
-| `apps/devtools` | `paged-devtools` | A Chrome-DevTools-style scene-graph inspector (Tree / Properties / Render panes) over `paged-introspect-wasm`. Standalone dev tool, separate wasm bundle.                                                                                 |
+| App | Package name | Role |
+|---|---|---|
+| `apps/canvas` | `paged-canvas` | The editor application. React shell driving a Web Worker that runs the engine wasm (Vello/WebGPU, `vello_cpu` CPU fallback) on an `OffscreenCanvas`. Owns the panel catalog wiring, REPL, script editor, and the Playwright fidelity suite. |
+| `apps/devtools` | `paged-devtools` | A Chrome-DevTools-style scene-graph inspector (Tree / Properties / Render panes) over `paged-introspect-wasm`. Standalone dev tool, separate wasm bundle. |
 
 ### Packages (`@paged-media/*`)
 

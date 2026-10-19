@@ -35,7 +35,7 @@ baseline snapshot + model dump
 ```
 
 **Byte-identical undo is an engine guarantee** (the CPU renderer is
-deterministic: tiny-skia, single-threaded, signature-keyed layout
+deterministic: `vello_cpu`, single-threaded, signature-keyed layout
 cache — core's `paged-canvas` AC-E-7). A violation the suite finds is
 an engine bug, not test flake.
 

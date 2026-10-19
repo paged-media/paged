@@ -23,7 +23,7 @@
 //!
 //! The rasterizer's overprint path is an *approximation* of CMYK
 //! overprinting performed in RGB: it composites the top fill onto the
-//! bottom with tiny-skia's `Darken` blend mode
+//! bottom with the `Darken` blend mode
 //! (per-channel `min(top, bottom)`). For dark-ink-on-lighter-background
 //! and black-on-tints — the common print workflows where overprint
 //! matters visually — this matches InDesign's overprint preview to
