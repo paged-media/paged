@@ -31,7 +31,7 @@ use paged_compose::{
     Color, DisplayCommand as Cmd, DisplayList, Feather, FeatherCornerType, Paint, PathData,
     PathSegment, Transform as XF,
 };
-use paged_gpu::{cpu::CpuRasterizer, vello_rs::VelloRasterizer, PathRasterizer, RasterOptions};
+use paged_gpu::{vello_rs::VelloRasterizer, CpuRasterizer, PathRasterizer, RasterOptions};
 use paged_test_resources::{skip, Resource};
 
 fn unit_rect(list: &mut DisplayList) -> paged_compose::PathId {

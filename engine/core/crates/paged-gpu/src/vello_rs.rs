@@ -61,10 +61,9 @@
 //!    (opacity masks) — see `emit_soft_mask`. Vello *does* have a
 //!    coverage-modulating layer: `Scene::push_luminance_mask_layer`
 //!    (v0.9.0, the tag we pin), whose `CMD_END_CLIP` computes
-//!    `dst = backdrop * svg_lum(unpremultiply(fg)) * fg.a` — the same
-//!    demultiply-weight-by-alpha that `tiny_skia::MaskType::Luminance`
-//!    does, to within the Rec.709-vs-SVG luma-coefficient rounding
-//!    (0.2126/0.7152/0.0722 vs 0.2125/0.7154/0.0721). Alpha masks need
+//!    `dst = backdrop * svg_lum(unpremultiply(fg)) * fg.a` — the luma
+//!    of the premultiplied colour, which is what the CPU lane reads
+//!    off its captured artwork (Rec. 709 weights on both). Alpha masks need
 //!    no special layer kind at all: `Compose::DestIn` composites a
 //!    layer as `backdrop * src.a`, and `Compose::DestOut` as
 //!    `backdrop * (1 − src.a)` — i.e. the inverted form for free.
@@ -85,8 +84,10 @@
 //! group below 100 % opacity whose members blend, are drawn as
 //! isolated groups — a Vello layer cannot read its initial backdrop.
 //!
-//! The CPU rasterizer (`cpu.rs`) remains the path of record for the
-//! fidelity harness. This lane is held to it page by page by
+//! The CPU rasterizer (`vcpu.rs`, `vello_cpu`) is the path of record
+//! for the fidelity harness, and draws the same model: both lanes take
+//! their paths, paints, strokes and blend modes from `vello_map`. This
+//! lane is held to it page by page by
 //! `corpus/generated/parity-diff.sh` against
 //! `corpus/generated/parity-thresholds.json`.
 //!
@@ -99,19 +100,19 @@
 use std::cell::RefCell;
 use std::sync::Arc;
 
-use paged_compose::{
-    BlendMode as ComposeBlendMode, Color as ComposeColor, DisplayCommand, DisplayList, LayerEffect,
-    LineCap, LineJoin, Paint, PathSegment,
-};
-use vello::kurbo::{self, Stroke as KurboStroke};
+use paged_compose::{BlendMode as ComposeBlendMode, DisplayCommand, DisplayList, LayerEffect, Paint};
+#[cfg(test)]
+use paged_compose::Color as ComposeColor;
+use vello::kurbo;
 use vello::peniko::{
-    BlendMode as PenikoBlendMode, Blob, BrushRef, Color as PenikoColor,
-    ColorStop as PenikoColorStop, Compose, Fill, Gradient as PenikoGradient, ImageAlphaType,
-    ImageBrush, ImageData, ImageFormat, Mix,
+    BlendMode as PenikoBlendMode, Blob, BrushRef, Color as PenikoColor, Compose, Fill,
+    ImageAlphaType, ImageBrush, ImageData, ImageFormat, Mix,
 };
 use vello::{AaConfig, AaSupport, RenderParams, Renderer, RendererOptions, Scene};
 use wgpu;
 
+pub(crate) use crate::vello_map::linear_to_peniko;
+use crate::vello_map::{blend_to_peniko, kurbo_stroke, path_to_bez, resolve_paint, PaintBrush};
 use crate::{PathRasterizer, RasterOptions};
 
 pub struct VelloRasterizer {
@@ -216,9 +217,9 @@ impl PathRasterizer for VelloRasterizer {
 /// Materialise an RGBA8 buffer from encoded image bytes at the
 /// dimensions the build phase recorded. Used by the wasm32 lazy
 /// path (`DecodedImage.rgba` empty, `encoded` populated) so peak
-/// heap stays at one decoded image at a time. Mirror of cpu.rs's
-/// helper of the same name; duplicated to avoid cross-feature
-/// visibility issues.
+/// heap stays at one decoded image at a time. Mirror of `vcpu.rs`'s
+/// helper of the same name; duplicated so this lane builds without the
+/// `cpu` feature.
 fn decode_image_for_render(bytes: &[u8], expected_w: u32, expected_h: u32) -> Option<Vec<u8>> {
     let img = image::load_from_memory(bytes).ok()?;
     let raw = if img.width() == expected_w && img.height() == expected_h {
@@ -965,7 +966,7 @@ fn build_scene_with_transform_filtered(
                 let Some(brush) = resolve_paint(paint, list, transform) else {
                     continue;
                 };
-                scene.fill(Fill::NonZero, page_to_px, brush.as_ref(), None, &path);
+                scene.fill(Fill::NonZero, page_to_px, brush_ref(&brush), None, &path);
             }
             DisplayCommand::FillPathBlend {
                 path_id,
@@ -989,12 +990,12 @@ fn build_scene_with_transform_filtered(
                 let pb = blend_to_peniko(*blend_mode);
                 if pb.mix == Mix::Normal && pb.compose == Compose::SrcOver {
                     // Fast path: Normal blend, no layer needed.
-                    scene.fill(Fill::NonZero, page_to_px, brush.as_ref(), None, &path);
+                    scene.fill(Fill::NonZero, page_to_px, brush_ref(&brush), None, &path);
                 } else {
                     // The blend layer's clip shape is the path
                     // itself — anything outside is unaffected.
                     scene.push_layer(Fill::NonZero, pb, 1.0, page_to_px, &path);
-                    scene.fill(Fill::NonZero, page_to_px, brush.as_ref(), None, &path);
+                    scene.fill(Fill::NonZero, page_to_px, brush_ref(&brush), None, &path);
                     scene.pop_layer();
                 }
             }
@@ -1013,7 +1014,7 @@ fn build_scene_with_transform_filtered(
                     continue;
                 };
                 let ks = kurbo_stroke(stroke);
-                scene.stroke(&ks, page_to_px, brush.as_ref(), None, &path);
+                scene.stroke(&ks, page_to_px, brush_ref(&brush), None, &path);
             }
             DisplayCommand::FillPathOverprint {
                 path_id,
@@ -1037,7 +1038,7 @@ fn build_scene_with_transform_filtered(
                 let Some(brush) = resolve_paint(paint, list, transform) else {
                     continue;
                 };
-                scene.fill(Fill::NonZero, page_to_px, brush.as_ref(), None, &path);
+                scene.fill(Fill::NonZero, page_to_px, brush_ref(&brush), None, &path);
             }
             DisplayCommand::StrokePathOverprint {
                 path_id,
@@ -1057,7 +1058,7 @@ fn build_scene_with_transform_filtered(
                     continue;
                 };
                 let ks = kurbo_stroke(stroke);
-                scene.stroke(&ks, page_to_px, brush.as_ref(), None, &path);
+                scene.stroke(&ks, page_to_px, brush_ref(&brush), None, &path);
             }
             DisplayCommand::Image {
                 image_id,
@@ -1488,14 +1489,14 @@ fn soft_mask_layer_rect() -> kurbo::Rect {
 /// * **Luminosity** — `push_luminance_mask_layer`, whose end-of-layer
 ///   composite is `bg * clamp(svg_lum(unpremultiply(fg)) * fg.a, 0, 1)`.
 ///   An unpainted pixel is `fg = 0`, so it resolves to 0 = hidden,
-///   matching PDF's black backdrop and `tiny_skia::MaskType::Luminance`
+///   matching PDF's black backdrop and the CPU lane's luminance mask
 ///   over an α = 0 capture buffer.
 /// * **Luminosity + invert** — the same layer, but the artwork is
 ///   composited over an opaque WHITE fill under `Mix::Difference`.
 ///   Difference against white is `1 − c` per channel, and luma is
 ///   affine with coefficients summing to 1, so the layer resolves to
-///   `1 − α·lum(c)` — exactly `tiny_skia::Mask::invert` of the
-///   non-inverted mask. (Doing it here rather than post-hoc is the
+///   `1 − α·lum(c)` — exactly the inverted CPU mask (`255 − m`) of
+///   the non-inverted one. (Doing it here rather than post-hoc is the
 ///   only option: Vello has no "invert the coverage" knob.)
 /// * **Alpha** — no mask layer needed. `Compose::DestIn` is defined as
 ///   `dst · src.a`, which *is* an alpha mask; unpainted artwork gives
@@ -2586,262 +2587,12 @@ fn build_overprint_batch_scene(
     scene
 }
 
-fn path_to_bez(
-    data: &paged_compose::PathData,
-    transform: &paged_compose::Transform,
-) -> kurbo::BezPath {
-    let apply = |x: f32, y: f32| -> kurbo::Point {
-        let [a, b, c, d, tx, ty] = transform.0;
-        kurbo::Point::new((a * x + c * y + tx) as f64, (b * x + d * y + ty) as f64)
-    };
-    let mut p = kurbo::BezPath::new();
-    for seg in &data.segments {
-        match seg {
-            PathSegment::MoveTo { x, y } => p.move_to(apply(*x, *y)),
-            PathSegment::LineTo { x, y } => p.line_to(apply(*x, *y)),
-            PathSegment::QuadTo { cx, cy, x, y } => {
-                p.quad_to(apply(*cx, *cy), apply(*x, *y));
-            }
-            PathSegment::CubicTo {
-                cx1,
-                cy1,
-                cx2,
-                cy2,
-                x,
-                y,
-            } => {
-                p.curve_to(apply(*cx1, *cy1), apply(*cx2, *cy2), apply(*x, *y));
-            }
-            PathSegment::Close => p.close_path(),
-        }
+/// A resolved paint as the brush `Scene::fill` / `Scene::stroke` take.
+fn brush_ref(b: &PaintBrush) -> BrushRef<'_> {
+    match b {
+        PaintBrush::Solid(c) => BrushRef::Solid(*c),
+        PaintBrush::Gradient(g) => BrushRef::Gradient(g),
     }
-    p
-}
-
-/// Owned brush variant to keep both arms of `BrushRef` alive long
-/// enough for the `scene.fill` / `scene.stroke` call. `BrushRef`
-/// borrows from a `peniko::Color` or a `peniko::Gradient`; we hold
-/// whichever one we built and convert via `as_ref()` at the call
-/// site.
-enum VelloBrush {
-    Solid(PenikoColor),
-    Gradient(PenikoGradient),
-}
-
-impl VelloBrush {
-    fn as_ref(&self) -> BrushRef<'_> {
-        match self {
-            VelloBrush::Solid(c) => BrushRef::Solid(*c),
-            VelloBrush::Gradient(g) => BrushRef::Gradient(g),
-        }
-    }
-}
-
-/// Convert a display-list `Paint` (solid or gradient id) into a
-/// vello brush. Gradient endpoints in the display list live in
-/// the path's unit-rect local coordinates; we apply the path's
-/// `transform` to them so the brush's coordinates land in the
-/// same page-space the shape lives in (vello's `brush_transform`
-/// is `None` here, meaning "brush in shape's local coords").
-fn resolve_paint(
-    paint: &Paint,
-    list: &DisplayList,
-    transform: &paged_compose::Transform,
-) -> Option<VelloBrush> {
-    match paint {
-        Paint::Solid(c) => Some(VelloBrush::Solid(linear_to_peniko(*c))),
-        Paint::Cmyk { rgb, .. } => {
-            // The pipeline baked the ICC-resolved display colour
-            // onto the paint at compose time — use it so ordinary
-            // (non-overprint) draws stay identical to the prior
-            // `Paint::Solid` path on the GPU backend.
-            //
-            // Stage C (`Paint::Cmyk::spot`) is ignored on the Vello
-            // backend: spot-on-same-spot overprint requires the same
-            // per-pixel plane walk Stage 4A/4B use on the CPU
-            // rasterizer, which doesn't have a Vello equivalent today
-            // (would need a custom shader). Spot paints still render
-            // visibly correct here because the cached `rgb` already
-            // encodes the alternate-CMYK × tint colour; only the
-            // spot-on-same-spot overprint case loses fidelity vs. the
-            // CPU rasterizer.
-            Some(VelloBrush::Solid(linear_to_peniko(*rgb)))
-        }
-        Paint::LinearGradient(id) => {
-            let g = list.linear_gradient(*id)?;
-            if g.stops.len() < 2 {
-                return None;
-            }
-            let (sx, sy) = transform.apply(g.start.0, g.start.1);
-            let (ex, ey) = transform.apply(g.end.0, g.end.1);
-            let stops: Vec<PenikoColorStop> = g
-                .stops
-                .iter()
-                .map(|s| PenikoColorStop {
-                    offset: s.offset,
-                    color: linear_to_peniko(s.color).into(),
-                })
-                .collect();
-            let pg = PenikoGradient::new_linear(
-                kurbo::Point::new(sx as f64, sy as f64),
-                kurbo::Point::new(ex as f64, ey as f64),
-            )
-            .with_stops(stops.as_slice());
-            Some(VelloBrush::Gradient(pg))
-        }
-        Paint::RadialGradient(id) => {
-            let g = list.radial_gradient(*id)?;
-            if g.stops.len() < 2 {
-                return None;
-            }
-            let (cx, cy) = transform.apply(g.center.0, g.center.1);
-            // Match cpu.rs: average the mapped per-axis radii so a
-            // non-square unit rect ovals the gradient with the path.
-            let [a, b, c, d, _, _] = transform.0;
-            let rx = (a * g.radius).hypot(b * g.radius);
-            let ry = (c * g.radius).hypot(d * g.radius);
-            let radius = (rx + ry) * 0.5;
-            if !radius.is_finite() || radius <= 0.0 {
-                return None;
-            }
-            let stops: Vec<PenikoColorStop> = g
-                .stops
-                .iter()
-                .map(|s| PenikoColorStop {
-                    offset: s.offset,
-                    color: linear_to_peniko(s.color).into(),
-                })
-                .collect();
-            let pg = PenikoGradient::new_radial(kurbo::Point::new(cx as f64, cy as f64), radius)
-                .with_stops(stops.as_slice());
-            Some(VelloBrush::Gradient(pg))
-        }
-        Paint::SweepGradient(id) => {
-            let g = list.sweep_gradient(*id)?;
-            if g.stops.len() < 2 {
-                return None;
-            }
-            let (cx, cy) = transform.apply(g.center.0, g.center.1);
-            // peniko's new_sweep takes start/end angles in RADIANS,
-            // clockwise in a y-down space — exactly our IR convention.
-            // Wrap one full turn so the ramp covers the whole circle
-            // (matches the CPU lane's 360°-degree sweep).
-            let start = g.start_angle;
-            let end = g.start_angle + std::f32::consts::TAU;
-            let stops: Vec<PenikoColorStop> = g
-                .stops
-                .iter()
-                .map(|s| PenikoColorStop {
-                    offset: s.offset,
-                    color: linear_to_peniko(s.color).into(),
-                })
-                .collect();
-            let pg = PenikoGradient::new_sweep(kurbo::Point::new(cx as f64, cy as f64), start, end)
-                .with_stops(stops.as_slice());
-            Some(VelloBrush::Gradient(pg))
-        }
-    }
-}
-
-/// Map our `BlendMode` to peniko's `(Mix, Compose)` pair. `Normal`
-/// maps to (`Mix::Normal`, `Compose::SrcOver`) — peniko's default —
-/// and every other variant lines up 1:1 with peniko's `Mix` enum,
-/// keeping `Compose::SrcOver` since IDML transparency groups are
-/// non-isolated source-over composites by default.
-fn blend_to_peniko(m: ComposeBlendMode) -> PenikoBlendMode {
-    let mix = match m {
-        ComposeBlendMode::Normal => Mix::Normal,
-        ComposeBlendMode::Multiply => Mix::Multiply,
-        ComposeBlendMode::Screen => Mix::Screen,
-        ComposeBlendMode::Overlay => Mix::Overlay,
-        ComposeBlendMode::Darken => Mix::Darken,
-        ComposeBlendMode::Lighten => Mix::Lighten,
-        ComposeBlendMode::ColorDodge => Mix::ColorDodge,
-        ComposeBlendMode::ColorBurn => Mix::ColorBurn,
-        ComposeBlendMode::HardLight => Mix::HardLight,
-        ComposeBlendMode::SoftLight => Mix::SoftLight,
-        ComposeBlendMode::Difference => Mix::Difference,
-        ComposeBlendMode::Exclusion => Mix::Exclusion,
-        ComposeBlendMode::Hue => Mix::Hue,
-        ComposeBlendMode::Saturation => Mix::Saturation,
-        ComposeBlendMode::Color => Mix::Color,
-        ComposeBlendMode::Luminosity => Mix::Luminosity,
-    };
-    PenikoBlendMode::new(mix, Compose::SrcOver)
-}
-
-/// The kurbo stroke for a display-list stroke, dash included. The
-/// dash pattern is in the path's own units, as the width is, and is
-/// taken only when tiny-skia would take it (an even count of two or
-/// more non-negative lengths with a positive sum); anything else is
-/// solid there, so it is solid here. Dropping the dash drew every
-/// dashed and dotted stroke solid on this lane.
-///
-/// A dotted stroke is a ZERO-length dash with round caps: tiny-skia
-/// caps a zero-length dash, kurbo's stroker drops it, and the dots
-/// vanished (`strokes-fills` "japanese-dots"). A hair of length keeps
-/// the caps; with butt caps it is a sliver no wider than the hair.
-fn kurbo_stroke(stroke: &paged_compose::Stroke) -> KurboStroke {
-    const DOT_PT: f64 = 1e-3;
-    let ks = KurboStroke::new(stroke.width.max(0.0) as f64)
-        .with_caps(map_cap(stroke.cap))
-        .with_join(map_join(stroke.join))
-        .with_miter_limit(stroke.miter_limit.max(1.0) as f64);
-    let dash = stroke.dash.as_slice();
-    let valid = dash.len() >= 2
-        && dash.len().is_multiple_of(2)
-        && dash.iter().all(|d| d.is_finite() && *d >= 0.0)
-        && dash.iter().sum::<f32>() > 0.0;
-    if valid {
-        ks.with_dashes(
-            0.0,
-            dash.iter().enumerate().map(|(i, d)| {
-                let d = *d as f64;
-                if i % 2 == 0 && d == 0.0 {
-                    DOT_PT
-                } else {
-                    d
-                }
-            }),
-        )
-    } else {
-        ks
-    }
-}
-
-fn map_cap(c: LineCap) -> kurbo::Cap {
-    match c {
-        LineCap::Butt => kurbo::Cap::Butt,
-        LineCap::Round => kurbo::Cap::Round,
-        LineCap::Square => kurbo::Cap::Square,
-    }
-}
-
-fn map_join(j: LineJoin) -> kurbo::Join {
-    match j {
-        LineJoin::Miter => kurbo::Join::Miter,
-        LineJoin::Round => kurbo::Join::Round,
-        LineJoin::Bevel => kurbo::Join::Bevel,
-    }
-}
-
-/// Linear RGB (0..1) → sRGB-encoded peniko Color (the format
-/// vello expects). Mirrors cpu.rs's `linear_color_to_ts`.
-pub(crate) fn linear_to_peniko(c: ComposeColor) -> PenikoColor {
-    let to_srgb = |v: f32| -> u8 {
-        let s = if v <= 0.0031308 {
-            12.92 * v
-        } else {
-            1.055 * v.powf(1.0 / 2.4) - 0.055
-        };
-        (s.clamp(0.0, 1.0) * 255.0).round() as u8
-    };
-    PenikoColor::from_rgba8(
-        to_srgb(c.r),
-        to_srgb(c.g),
-        to_srgb(c.b),
-        (c.a.clamp(0.0, 1.0) * 255.0).round() as u8,
-    )
 }
 
 #[cfg(test)]
@@ -4183,11 +3934,10 @@ mod tests {
     }
 
     /// Parity holds at a non-integer scale too. Step edges land on
-    /// fractional pixels at 300 dpi, where the analytic-coverage GPU
-    /// rasterizer and tiny-skia legitimately disagree by up to ~29/255
-    /// — with or without a mask (a no-mask render of the same artwork
-    /// diverges by ~20/255 in the same bands). Away from those bands
-    /// the two are identical, which is what this pins.
+    /// fractional pixels at 300 dpi, where the two lanes' coverage can
+    /// differ in the last bits at an edge — with or without a mask.
+    /// Away from those bands the two are identical, which is what this
+    /// pins.
     #[test]
     #[cfg(feature = "cpu")]
     fn soft_mask_parity_holds_at_300_dpi_away_from_edges() {
@@ -4752,7 +4502,7 @@ mod tests {
     /// both back ends must cut there.
     ///
     /// This is the divergence the C-28 mask test excluded a column for.
-    /// `cpu.rs` allocates the group buffer with a device pixel of AA
+    /// The CPU lane allocates the group buffer with a device pixel of AA
     /// slack (`pad_pt = 1.0 / scale`) on top of outward pixel snapping,
     /// and used to let that buffer edge BE the clip; the Vello backend
     /// passes `bounds` to `push_layer` verbatim. Content that reaches
@@ -4821,9 +4571,8 @@ mod tests {
         );
 
         // Fractional bounds, at two very different scales. Here the
-        // two back ends still differ on the boundary pixel, because
-        // they disagree about partial coverage in general — Vello is
-        // analytic, tiny-skia quantises. The bar is that the GROUP
+        // two back ends can still differ on the boundary pixel, in the
+        // last bits of partial coverage. The bar is that the GROUP
         // contributes nothing on top of that: the same scene with the
         // bracket removed must diverge by the same amount over the
         // same number of pixels.

@@ -200,7 +200,7 @@ struct Args {
     /// to the page items around it.
     #[arg(long)]
     dump_page: Option<usize>,
-    /// Rasterizer to render through: `cpu` (tiny-skia, the fidelity
+    /// Rasterizer to render through: `cpu` (`vello_cpu`, the fidelity
     /// harness's lane) or `vello` (the GPU lane the editor and the
     /// showcase render on). `vello` needs the `gpu` feature and a
     /// working GPU; it is how a GPU-only effect gap is measured
