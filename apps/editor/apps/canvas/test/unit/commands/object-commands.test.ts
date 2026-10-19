@@ -1146,9 +1146,14 @@ describe("inside an edit context the object verbs do not apply", () => {
     const h = objects({ tree: flat(), selection: [] });
     const commands = buildObjectCommands({} as never);
     const state = h.state;
+    // Only the spread-wide verbs apply: they act on the spread, not on a
+    // selection (ADR 251).
     expect(
       commands.filter((c) => isEnabled(c.when, () => state)).map((c) => c.id),
-    ).toEqual([]);
+    ).toEqual([
+      "paged.object.unlockAllOnSpread",
+      "paged.object.showAllOnSpread",
+    ]);
     const selected = objects({ tree: flat(), selection: [A] });
     expect(commands.every((c) => isEnabled(c.when, () => selected.state))).toBe(
       true,

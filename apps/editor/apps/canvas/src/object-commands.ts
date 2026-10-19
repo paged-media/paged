@@ -2285,7 +2285,7 @@ export function buildObjectCommands(
       id: PAGED_OBJECT_LOCK,
       title: "Lock",
       category: "Object",
-      when: objectVerbApplies,
+      when: onSelectionWhereKeysApply,
       handler: () => handlers.lock(),
     },
     {
@@ -2299,7 +2299,7 @@ export function buildObjectCommands(
       id: PAGED_OBJECT_HIDE,
       title: "Hide",
       category: "Object",
-      when: objectVerbApplies,
+      when: onSelectionWhereKeysApply,
       handler: () => handlers.hide(),
     },
     {
