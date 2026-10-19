@@ -11,7 +11,7 @@ release moves four npm packages in lockstep from one core tag.
 
 _Superseded 2026-10-18 by [PM-0008](../../../../docs/adr/PM-0008-npm-packages-and-release.md):
 the release is `.github/workflows/release.yml`. One root tag `v0.<protocol>.<patch>` publishes
-`@paged-media/canvas-wasm` (with `./introspect` and `./repo`), `@paged-media/idml-viewer` (with
+`@paged-media/canvas-wasm` (with `./introspect` and `./repo`), `@paged-media/viewer` (with
 `./session`), `@paged-media/plugin-api` and `@paged-media/plugin-sdk` at the tag's version,
 through npm trusted publishing with provenance. Steps 5 to 7 below are gone: first-party
 consumers take the engine and the contract from the workspace. The owner's steps are in

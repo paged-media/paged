@@ -108,6 +108,7 @@ export function RightDock() {
                 type="button"
                 data-dock-tab={t.id}
                 data-active={a || undefined}
+                aria-pressed={a}
                 onClick={() => activateTab(t.id)}
                 style={{
                   display: "inline-flex",

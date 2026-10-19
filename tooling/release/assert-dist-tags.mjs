@@ -25,7 +25,7 @@ import { execFileSync } from "node:child_process";
 
 const PACKAGES = [
   "@paged-media/canvas-wasm",
-  "@paged-media/idml-viewer",
+  "@paged-media/viewer",
   "@paged-media/plugin-api",
   "@paged-media/plugin-sdk",
 ];

@@ -77,6 +77,8 @@ export function SoftProofToggle() {
   return (
     <button
       type="button"
+      aria-label="Proof colors"
+      aria-pressed={proofOn}
       data-soft-proof={proofOn ? "on" : "off"}
       title={
         disabled

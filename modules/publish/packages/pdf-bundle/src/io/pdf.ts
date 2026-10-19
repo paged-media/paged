@@ -79,6 +79,14 @@ async function importPdf(host: BundleHost, file: ImportRequest): Promise<void> {
         : `${PDF_IMPORTER_ID}: opened ${file.name} as ${r.pageCount} image page(s) (image fallback)`,
     );
   } catch (err) {
+    // The host asked before replacing an edited document and the user
+    // kept it: an answer, not a failure.
+    if ((err as { name?: unknown } | null)?.name === "AbortError") {
+      host.log.info(
+        `${PDF_IMPORTER_ID}: ${file.name} not opened — the user kept the open document`,
+      );
+      return;
+    }
     host.log.error(
       `${PDF_IMPORTER_ID}: failed to open ${file.name} — ${String(err)}`,
     );

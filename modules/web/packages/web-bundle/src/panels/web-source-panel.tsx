@@ -66,6 +66,9 @@ import { PX_PER_PT } from "@paged-media/helpers";
 import {
   About as KitAbout,
   Disclosure,
+  font,
+  radius,
+  space,
   useDebouncedValue,
 } from "@paged-media/panel-kit";
 import {
@@ -157,19 +160,19 @@ export const PREVIEW_DEBOUNCE_MS = 300;
 // hairline borders, no hardcoded hexes in chrome.
 
 const kicker: CSSProperties = {
-  font: "700 10px var(--font-sans, sans-serif)",
-  letterSpacing: "var(--tracking-wide, 0.14em)",
+  font: `700 10px ${font.sans}`,
+  letterSpacing: font.trackingWide,
   textTransform: "uppercase",
   color: "var(--pg-muted-fg)",
-  margin: "var(--space-3, 12px) 0 var(--space-1, 4px)",
+  margin: `${space[3]} 0 ${space[1]}`,
 };
 
 const field: CSSProperties = {
-  font: "12px var(--font-sans, sans-serif)",
+  font: `12px ${font.sans}`,
   color: "var(--pg-fg)",
   background: "var(--pg-bg)",
   border: "1px solid var(--pg-border)",
-  borderRadius: "var(--radius-sm, 4px)",
+  borderRadius: radius.sm,
   padding: "2px 6px",
 };
 
@@ -177,22 +180,22 @@ const optionRow: CSSProperties = {
   display: "flex",
   flexWrap: "wrap",
   alignItems: "center",
-  gap: "var(--space-1, 4px) var(--space-2, 8px)",
-  font: "12px var(--font-sans, sans-serif)",
+  gap: `${space[1]} ${space[2]}`,
+  font: `12px ${font.sans}`,
   color: "var(--pg-fg)",
-  margin: "0 0 var(--space-1, 4px)",
+  margin: `0 0 ${space[1]}`,
 };
 
 /** The summary of a collapsed group of the panel: the kicker look. */
 const disclosureKicker: CSSProperties = {
-  font: "700 10px var(--font-sans, sans-serif)",
-  letterSpacing: "var(--tracking-wide, 0.14em)",
+  font: `700 10px ${font.sans}`,
+  letterSpacing: font.trackingWide,
   textTransform: "uppercase",
   color: "var(--pg-muted-fg)",
 };
 
 const mutedNote: CSSProperties = {
-  font: "10px var(--font-sans, sans-serif)",
+  font: `10px ${font.sans}`,
   color: "var(--pg-muted-fg)",
 };
 
@@ -202,11 +205,11 @@ const rowNote: CSSProperties = { ...mutedNote, flexBasis: "100%" };
 
 /** The panel's primary button (the theme's primary fill). */
 const primaryButton: CSSProperties = {
-  font: "500 12px var(--font-sans, sans-serif)",
+  font: `500 12px ${font.sans}`,
   color: "var(--pg-primary-fg)",
   background: "var(--pg-primary)",
   border: "none",
-  borderRadius: "var(--radius-md, 6px)",
+  borderRadius: radius.md,
   padding: "6px 12px",
   cursor: "pointer",
 };
@@ -222,7 +225,7 @@ function About({ children }: { children: ReactNode }): ReactElement {
 }
 const aboutLine: CSSProperties = {
   flexBasis: "100%",
-  margin: "var(--space-1, 4px) 0 0",
+  margin: `${space[1]} 0 0`,
 };
 
 const DOT: Record<WebDiagnostic["severity"], string> = {
@@ -307,13 +310,13 @@ function TemplatePicker({
   onSeed(templateId: string): void;
 }): ReactElement {
   return (
-    <div data-web-templates style={{ margin: "var(--space-1, 4px) 0" }}>
+    <div data-web-templates style={{ margin: `${space[1]} 0` }}>
       <div style={{ ...kicker, marginTop: 0 }}>Start from a template</div>
       <div
         style={{
           display: "flex",
           flexWrap: "wrap",
-          gap: "var(--space-1, 4px)",
+          gap: space[1],
         }}
       >
         {WEB_TEMPLATES.map((t) => (
@@ -324,11 +327,11 @@ function TemplatePicker({
             title={t.description}
             onClick={() => onSeed(t.id)}
             style={{
-              font: "500 11px var(--font-sans, sans-serif)",
+              font: `500 11px ${font.sans}`,
               color: "var(--pg-fg)",
               background: "var(--pg-bg)",
               border: "1px solid var(--pg-border)",
-              borderRadius: "var(--radius-sm, 4px)",
+              borderRadius: radius.sm,
               padding: "3px 9px",
               cursor: "pointer",
             }}
@@ -387,13 +390,13 @@ function FlowPicker({
     <div
       data-web-flow-picker
       style={{
-        padding: "var(--space-3, 12px)",
-        font: "12px var(--font-sans, sans-serif)",
+        padding: space[3],
+        font: `12px ${font.sans}`,
       }}
     >
       <p
         style={{
-          margin: "0 0 var(--space-2, 8px)",
+          margin: `0 0 ${space[2]}`,
           color: "var(--pg-muted-fg)",
         }}
       >
@@ -404,7 +407,7 @@ function FlowPicker({
         style={{
           display: "flex",
           flexWrap: "wrap",
-          gap: "var(--space-1, 4px)",
+          gap: space[1],
         }}
       >
         {options.map((o) => (
@@ -426,7 +429,7 @@ function FlowPicker({
         onClick={onUnthread}
         style={{
           ...chip,
-          marginTop: "var(--space-2, 8px)",
+          marginTop: space[2],
           color: "var(--pg-fg)",
           background: "transparent",
           border: "1px solid var(--pg-border)",
@@ -606,13 +609,13 @@ export function makeWebSourcePanel(
         <div
           data-web-panel="empty"
           style={{
-            padding: "var(--space-3, 12px)",
-            font: "12px var(--font-sans, sans-serif)",
+            padding: space[3],
+            font: `12px ${font.sans}`,
           }}
         >
           <p
             style={{
-              margin: "0 0 var(--space-2, 8px)",
+              margin: `0 0 ${space[2]}`,
               color: "var(--pg-muted-fg)",
             }}
           >
@@ -636,7 +639,7 @@ export function makeWebSourcePanel(
               role="alert"
               style={{
                 ...mutedNote,
-                margin: "var(--space-2, 8px) 0 0",
+                margin: `${space[2]} 0 0`,
                 color: "var(--status-error)",
               }}
             >
@@ -663,13 +666,13 @@ export function makeWebSourcePanel(
         <div
           data-web-panel="convert"
           style={{
-            padding: "var(--space-3, 12px)",
-            font: "12px var(--font-sans, sans-serif)",
+            padding: space[3],
+            font: `12px ${font.sans}`,
           }}
         >
           <p
             style={{
-              margin: "0 0 var(--space-2, 8px)",
+              margin: `0 0 ${space[2]}`,
               color: "var(--pg-muted-fg)",
             }}
           >
@@ -689,7 +692,7 @@ export function makeWebSourcePanel(
               role="alert"
               style={{
                 ...mutedNote,
-                margin: "var(--space-2, 8px) 0 0",
+                margin: `${space[2]} 0 0`,
                 color: "var(--status-error)",
               }}
             >
@@ -841,7 +844,7 @@ function BoundData({
       <div
         style={{
           ...mutedNote,
-          margin: "var(--space-2, 8px) 0 var(--space-1, 4px)",
+          margin: `${space[2]} 0 ${space[1]}`,
         }}
       >
         From the document and data
@@ -853,7 +856,7 @@ function BoundData({
           <div key={name} data-web-bound-row={name} style={optionRow}>
             <code
               style={{
-                font: "11px var(--font-mono, monospace)",
+                font: `11px ${font.mono}`,
                 width: 120,
                 overflow: "hidden",
               }}
@@ -876,11 +879,11 @@ function BoundData({
                   data-web-bound-set={name}
                   onClick={() => void save(key, values[name] ?? value ?? "")}
                   style={{
-                    font: "500 11px var(--font-sans, sans-serif)",
+                    font: `500 11px ${font.sans}`,
                     color: "var(--pg-fg)",
                     background: "var(--pg-bg)",
                     border: "1px solid var(--pg-border)",
-                    borderRadius: "var(--radius-sm, 4px)",
+                    borderRadius: radius.sm,
                     padding: "2px 6px",
                     cursor: "pointer",
                   }}
@@ -894,7 +897,7 @@ function BoundData({
                 style={
                   value === undefined
                     ? mutedNote
-                    : { font: "12px var(--font-sans, sans-serif)" }
+                    : { font: `12px ${font.sans}` }
                 }
               >
                 {value === undefined ? "No value" : value}
@@ -1231,7 +1234,7 @@ function SourceEditor({
       data-web-panel="source"
       data-web-editor-lane={lane.native ? "widget" : "textarea"}
       style={{
-        padding: "var(--space-3, 12px)",
+        padding: space[3],
         display: "flex",
         flexDirection: "column",
       }}
@@ -1257,11 +1260,11 @@ function SourceEditor({
               : "Paste HTML and sanitize it"
           }
           style={{
-            font: "500 10px var(--font-sans, sans-serif)",
+            font: `500 10px ${font.sans}`,
             color: "var(--pg-fg)",
             background: "var(--pg-bg)",
             border: "1px solid var(--pg-border)",
-            borderRadius: "var(--radius-sm, 4px)",
+            borderRadius: radius.sm,
             padding: "2px 8px",
             cursor: "pointer",
           }}
@@ -1270,7 +1273,7 @@ function SourceEditor({
         </button>
       </div>
       {pasteOpen && (
-        <div data-web-paste-box style={{ margin: "0 0 var(--space-1, 4px)" }}>
+        <div data-web-paste-box style={{ margin: `0 0 ${space[1]}` }}>
           <textarea
             data-web-paste-input
             autoFocus
@@ -1290,12 +1293,12 @@ function SourceEditor({
               width: "100%",
               minHeight: 56,
               resize: "vertical",
-              font: "11px/1.5 var(--font-mono, monospace)",
+              font: `11px/1.5 ${font.mono}`,
               color: "var(--pg-fg)",
               background: "var(--pg-bg)",
               border: "1px dashed var(--pg-border)",
-              borderRadius: "var(--radius-sm, 4px)",
-              padding: "var(--space-2, 8px)",
+              borderRadius: radius.sm,
+              padding: space[2],
               boxSizing: "border-box",
             }}
           />
@@ -1304,7 +1307,7 @@ function SourceEditor({
       {ingestNote && (
         <p
           data-web-ingest-note
-          style={{ margin: "0 0 var(--space-1, 4px)", ...mutedNote }}
+          style={{ margin: `0 0 ${space[1]}`, ...mutedNote }}
         >
           {ingestNote}
         </p>
@@ -1341,17 +1344,17 @@ function SourceEditor({
         <Disclosure
           summary={`${lane.native ? "Tags" : "Find in source"} (${outline.length})`}
           data-web-outline
-          style={{ margin: "var(--space-1, 4px) 0 0" }}
+          style={{ margin: `${space[1]} 0 0` }}
           summaryStyle={disclosureKicker}
         >
           <ul
             style={{
               listStyle: "none",
-              margin: "var(--space-1, 4px) 0 0",
+              margin: `${space[1]} 0 0`,
               padding: 0,
               display: "flex",
               flexWrap: "wrap",
-              gap: "var(--space-1, 4px)",
+              gap: space[1],
             }}
           >
             {outline.map((entry, i) => (
@@ -1368,11 +1371,11 @@ function SourceEditor({
                       : `Select <${entry.tag}> at line ${entry.line}`
                   }
                   style={{
-                    font: "11px var(--font-mono, monospace)",
+                    font: `11px ${font.mono}`,
                     color: "var(--pg-fg)",
                     background: lane.native ? "transparent" : "var(--pg-bg)",
                     border: `1px solid ${activeTag === i ? "var(--pg-primary)" : "var(--pg-border)"}`,
-                    borderRadius: "var(--radius-sm, 4px)",
+                    borderRadius: radius.sm,
                     padding: "1px 6px",
                     cursor: "pointer",
                   }}
@@ -1390,7 +1393,7 @@ function SourceEditor({
           {lane.native && (
             <p
               data-web-outline-hint
-              style={{ margin: "var(--space-1, 4px) 0 0", ...mutedNote }}
+              style={{ margin: `${space[1]} 0 0`, ...mutedNote }}
             >
               Each tag shows its line in the editor; click one to outline it on
               the canvas.
@@ -1399,7 +1402,7 @@ function SourceEditor({
           {highlightNote && (
             <p
               data-web-outline-note
-              style={{ margin: "var(--space-1, 4px) 0 0", ...mutedNote }}
+              style={{ margin: `${space[1]} 0 0`, ...mutedNote }}
             >
               {highlightNote}
             </p>
@@ -1422,7 +1425,7 @@ function SourceEditor({
       <Disclosure
         summary="Replace with template"
         data-web-template-replace
-        style={{ margin: "var(--space-1, 4px) 0 0" }}
+        style={{ margin: `${space[1]} 0 0` }}
         summaryStyle={disclosureKicker}
       >
         <TemplatePicker onSeed={seedTemplate} />
@@ -1501,7 +1504,7 @@ function SourceEditor({
             style={{
               ...field,
               width: 96,
-              fontFamily: "var(--font-mono, monospace)",
+              fontFamily: font.mono,
             }}
           />
           <input
@@ -1525,11 +1528,11 @@ function SourceEditor({
               )
             }
             style={{
-              font: "500 11px var(--font-sans, sans-serif)",
+              font: `500 11px ${font.sans}`,
               color: "var(--pg-fg)",
               background: "var(--pg-bg)",
               border: "1px solid var(--pg-border)",
-              borderRadius: "var(--radius-sm, 4px)",
+              borderRadius: radius.sm,
               padding: "2px 6px",
               cursor: "pointer",
             }}
@@ -1551,11 +1554,11 @@ function SourceEditor({
             >);
           }}
           style={{
-            font: "500 11px var(--font-sans, sans-serif)",
+            font: `500 11px ${font.sans}`,
             color: "var(--pg-fg)",
             background: "var(--pg-bg)",
             border: "1px solid var(--pg-border)",
-            borderRadius: "var(--radius-sm, 4px)",
+            borderRadius: radius.sm,
             padding: "2px 8px",
             cursor: "pointer",
           }}
@@ -1594,14 +1597,14 @@ function SourceEditor({
           style={{
             display: "flex",
             alignItems: "baseline",
-            gap: "var(--space-2, 8px)",
-            margin: "0 0 var(--space-1, 4px)",
+            gap: space[2],
+            margin: `0 0 ${space[1]}`,
             padding: "4px 8px",
-            font: "10px/1.5 var(--font-sans, sans-serif)",
+            font: `10px/1.5 ${font.sans}`,
             color: "var(--pg-fg)",
             background: "var(--pg-muted)",
             border: "1px solid var(--pg-border)",
-            borderRadius: "var(--radius-sm, 4px)",
+            borderRadius: radius.sm,
           }}
         >
           <span
@@ -1610,7 +1613,7 @@ function SourceEditor({
               width: 7,
               height: 7,
               flex: "none",
-              borderRadius: "var(--radius-full, 999px)",
+              borderRadius: radius.full,
               background:
                 badge.severity === "review"
                   ? "var(--status-review)"
@@ -1660,7 +1663,7 @@ function SourceEditor({
             height: frameSize ? `${frameSize.height}px` : 180,
             background: "#ffffff",
             border: "1px solid var(--pg-border)",
-            borderRadius: "var(--radius-sm, 4px)",
+            borderRadius: radius.sm,
           }}
         />
       </div>
@@ -1669,7 +1672,7 @@ function SourceEditor({
           frame's size changes (auto-render.ts). What still differs is said. */}
       <p
         data-web-preview-note
-        style={{ margin: "var(--space-1, 4px) 0 0", ...mutedNote }}
+        style={{ margin: `${space[1]} 0 0`, ...mutedNote }}
       >
         The canvas shows this preview once you save.
       </p>
@@ -1687,8 +1690,8 @@ function SourceEditor({
           display: "flex",
           flexWrap: "wrap",
           alignItems: "center",
-          gap: "var(--space-2, 8px)",
-          margin: "var(--space-2, 8px) 0 0",
+          gap: space[2],
+          margin: `${space[2]} 0 0`,
         }}
       >
         <button
@@ -1736,8 +1739,8 @@ function SourceEditor({
                 style={{
                   display: "flex",
                   alignItems: "baseline",
-                  gap: "var(--space-2, 8px)",
-                  font: "11px/1.6 var(--font-mono, monospace)",
+                  gap: space[2],
+                  font: `11px/1.6 ${font.mono}`,
                   color: "var(--pg-fg)",
                 }}
               >
@@ -1746,7 +1749,7 @@ function SourceEditor({
                   style={{
                     width: 7,
                     height: 7,
-                    borderRadius: "var(--radius-full, 999px)",
+                    borderRadius: radius.full,
                     background: DOT[d.severity],
                     flex: "none",
                     transform: "translateY(-1px)",
@@ -1779,7 +1782,7 @@ function SourceEditor({
             <div
               data-web-render-report={report.op}
               style={{
-                font: "11px/1.6 var(--font-mono, monospace)",
+                font: `11px/1.6 ${font.mono}`,
                 color: "var(--pg-fg)",
               }}
             >

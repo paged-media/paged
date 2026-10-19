@@ -31,7 +31,7 @@
 //     `otherId` / `maskId` = the second, `elementIds` = all of them,
 //     `storyId` / `offset` / `start` / `end` = the text caret);
 //   · Run = ONE `host.objects.invoke` = one batch = one undo step; a
-//     refusal stays in the dialog with its code, never a guessed write.
+//     refusal stays in the dialog, in words, never a guessed write.
 
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import type { CSSProperties } from "react";
@@ -41,6 +41,14 @@ import {
   objectModelEditor,
   objectRegistry,
 } from "./object-model";
+import {
+  chrome,
+  color,
+  font,
+  radius,
+  refusalText,
+  status,
+} from "@paged-media/panel-kit";
 
 type Args = Record<string, unknown>;
 
@@ -241,8 +249,9 @@ async function attempt(work: () => Promise<void>): Promise<string | null> {
     await work();
     return null;
   } catch (e) {
-    const err = e as { code?: string; message?: string };
-    return `${err.code ? `${err.code}: ` : ""}${err.message ?? String(e)}`;
+    // In words (the panel kit's refusalText): never the error's code
+    // token or the engine's JSON.
+    return refusalText(e);
   }
 }
 
@@ -394,7 +403,7 @@ function CommandForm({ pending: p }: { pending: Pending }) {
           style={{
             margin: "0 0 12px",
             fontSize: 12,
-            color: "var(--muted-fg, #9a9a9a)",
+            color: color.mutedFg,
           }}
         >
           {op ? (
@@ -444,7 +453,7 @@ function CommandForm({ pending: p }: { pending: Pending }) {
             style={{
               margin: "8px 0",
               fontSize: 12,
-              color: "var(--pg-danger, #ff6b6b)",
+              color: status.error,
             }}
           >
             {error}
@@ -564,9 +573,7 @@ function ArgField({
       <span>
         {name}
         {t.optional ? "" : " *"}{" "}
-        <span style={{ color: "var(--muted-fg, #9a9a9a)", fontSize: 11 }}>
-          — {hint}
-        </span>
+        <span style={{ color: color.mutedFg, fontSize: 11 }}>— {hint}</span>
       </span>
       {control}
     </label>
@@ -580,20 +587,20 @@ const backdrop: CSSProperties = {
   display: "grid",
   placeItems: "center",
   background: "rgba(0,0,0,0.6)",
-  font: "13px/1.5 var(--font-sans, system-ui, sans-serif)",
+  font: `13px/1.5 ${font.sans}`,
 };
 const card: CSSProperties = {
   width: "min(480px, 92vw)",
   maxHeight: "82vh",
   overflow: "auto",
   padding: 20,
-  borderRadius: "var(--radius-lg, 10px)",
-  border: "1px solid var(--border, #2a2a2a)",
-  background: "var(--elevated, var(--background, #161616))",
-  color: "var(--fg, #e7e7e7)",
+  borderRadius: radius.lg,
+  border: `1px solid ${color.border}`,
+  background: color.elevated,
+  color: color.fg,
   boxShadow: "0 16px 48px rgba(0,0,0,0.5)",
 };
-const mono: CSSProperties = { font: "12px var(--font-mono, monospace)" };
+const mono: CSSProperties = { font: `12px ${font.mono}` };
 const labelStyle: CSSProperties = {
   display: "flex",
   flexDirection: "column",
@@ -605,9 +612,9 @@ const input: CSSProperties = {
   width: "100%",
   padding: "6px 8px",
   borderRadius: 7,
-  border: "1px solid var(--border, #2a2a2a)",
-  background: "var(--background, #111)",
-  color: "var(--fg, #e7e7e7)",
+  border: `1px solid ${color.border}`,
+  background: color.bg,
+  color: color.fg,
   boxSizing: "border-box",
 };
 function btn(primary: boolean, disabled = false): CSSProperties {
@@ -617,9 +624,9 @@ function btn(primary: boolean, disabled = false): CSSProperties {
     fontSize: 13,
     cursor: disabled ? "not-allowed" : "pointer",
     opacity: disabled ? 0.5 : 1,
-    border: "1px solid var(--border, #2a2a2a)",
-    background: primary ? "var(--pg-primary, #4f7cff)" : "transparent",
-    color: primary ? "var(--pg-primary-fg, #fff)" : "var(--fg, #e7e7e7)",
+    border: `1px solid ${color.border}`,
+    background: primary ? color.primary : "transparent",
+    color: primary ? color.primaryFg : color.fg,
   };
 }
 
@@ -677,9 +684,7 @@ export function CoreCommandButton({
       onClick={() => void click()}
       className="inline-flex h-[28px] items-center justify-center rounded-[7px] border px-[10px] text-[12px]"
       style={{
-        borderColor: error
-          ? "var(--pg-danger, #ff6b6b)"
-          : "var(--chrome-divider, var(--border))",
+        borderColor: error ? status.error : chrome.divider,
         background: "transparent",
         color: "var(--pg-fg)",
         opacity: disabled ? 0.5 : 1,

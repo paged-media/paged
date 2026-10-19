@@ -14,7 +14,7 @@
 #   introspect  paged-introspect-wasm packages/canvas-wasm/introspect/   @paged-media/canvas-wasm/introspect
 #                                     (+ catalog.json)
 #   repo        paged-repo-wasm       packages/canvas-wasm/repo/         @paged-media/canvas-wasm/repo
-#   session     paged-sdk             web/idml-viewer/wasm/              @paged-media/idml-viewer/session
+#   session     paged-sdk             web/idml-viewer/wasm/              @paged-media/viewer/session
 #
 # The names the parts had as packages of their own (canvas-wasm,
 # introspect-wasm, repo-wasm, sdk) are accepted too.
@@ -27,7 +27,7 @@
 # canvas-wasm package (its committed files plus the parts built) at the
 # version 0.<PROTOCOL_VERSION>.0-local (PAGED_WASM_VERSION overrides it), and
 # dist/session/ holds the session's generated files, which ship inside
-# @paged-media/idml-viewer. The editor reads the protocol from the package
+# @paged-media/viewer. The editor reads the protocol from the package
 # version's minor, so a local build carries the engine's real protocol.
 #
 # wasm-bindgen-cli must match the wasm-bindgen version in Cargo.lock (checked

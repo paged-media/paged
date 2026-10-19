@@ -50,9 +50,10 @@ import {
   live,
 } from "../live-bridge";
 import { downloadBytes } from "../shell-file-saver";
+import { color, font, radius, status } from "@paged-media/panel-kit";
 
 const mono = {
-  fontFamily: "var(--font-mono, monospace)",
+  fontFamily: font.mono,
   fontSize: 11,
 } as const;
 const kicker = {
@@ -67,8 +68,8 @@ const button = {
   cursor: "pointer",
   background: "transparent",
   color: "var(--pg-fg)",
-  border: "1px solid var(--border, #2a2a2a)",
-  borderRadius: "var(--radius-sm, 4px)",
+  border: `1px solid ${color.border}`,
+  borderRadius: radius.sm,
   padding: "1px 6px",
 } as const;
 
@@ -232,7 +233,7 @@ export function LibraryPanel() {
         data-library-panel
         style={{
           padding: 12,
-          font: "12px var(--font-sans, sans-serif)",
+          font: `12px ${font.sans}`,
           color: "var(--pg-muted-fg)",
         }}
       >
@@ -247,7 +248,7 @@ export function LibraryPanel() {
       data-library-panel
       style={{
         padding: 12,
-        font: "12px var(--font-sans, sans-serif)",
+        font: `12px ${font.sans}`,
         color: "var(--pg-fg)",
       }}
     >
@@ -297,7 +298,7 @@ export function LibraryPanel() {
                 data-library-version={c.hash}
                 style={{
                   padding: "4px 0",
-                  borderTop: "1px solid var(--border, #2a2a2a)",
+                  borderTop: `1px solid ${color.border}`,
                 }}
               >
                 <div
@@ -325,7 +326,7 @@ export function LibraryPanel() {
                         style={{
                           ...mono,
                           marginLeft: 6,
-                          color: "var(--status-ok, #6c6)",
+                          color: status.ok,
                         }}
                       >
                         released {releases[c.hash]}
@@ -584,7 +585,7 @@ export function LibraryPanel() {
                   key={call.id}
                   data-library-live-pending={call.tool}
                   style={{
-                    border: "1px solid var(--status-warn, #c90)",
+                    border: `1px solid ${status.warn}`,
                     borderRadius: 4,
                     padding: 6,
                     marginTop: 6,

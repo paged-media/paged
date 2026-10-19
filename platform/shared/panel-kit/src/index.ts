@@ -21,7 +21,15 @@
 // internal; importable by the built-ins and the editor, never by
 // platform/extensions). Record: docs/migration/shared-foundations.md, C10.
 
-export { color, font, status, type Tone } from "./tokens";
+export {
+  chrome,
+  color,
+  font,
+  radius,
+  space,
+  status,
+  type Tone,
+} from "./tokens";
 export {
   ARMED_TITLE,
   CONFIRM_MS,

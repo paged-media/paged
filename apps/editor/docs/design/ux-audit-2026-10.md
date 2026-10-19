@@ -117,6 +117,11 @@ The canvas drop target hands the file straight to the open path. The discard che
 
 **Screenshots:** `F-01-drop-replaces-unsaved-doc.png`
 
+**Fixed (2026-10-19, `b665b140d`).** One guard asks before every replacement (ADR 230): the
+drop, File ▸ Open…, File ▸ Open PDF…, every importer that opens a document and both plugin
+doors ask Save / Don't save / Cancel. Placing a dropped file instead of opening it (F-03)
+stays open.
+
 <a id="f-02"></a>
 
 #### F-02 · Corrupt or unsupported files fail silently, sometimes with a success message
@@ -207,6 +212,10 @@ File ▸ New and File ▸ Open on an edited document show `window.confirm`: "Thi
 **Deliberate?** documented in code as deliberate.
 
 **Screenshots:** `F-05-dirty-state-before-prompt.png`
+
+**Fixed (2026-10-19, `b665b140d`).** The shell's own prompt asks Save / Don't save / Cancel
+(Save saves, then continues; ADR 230). The platform `confirm` remains only as the fallback
+when no prompt is mounted, and its text names the platform's chord.
 
 <a id="f-06"></a>
 
@@ -1063,6 +1072,12 @@ The menu bar is a `nav` of ten separate drop-downs, not a `menubar`: ArrowRight 
 **Evidence:** ARIA snapshot: 240 lines, 3 landmarks (banner, navigation "Main menu", navigation "Tools"), 0 headings, 0 tabs; 3 of 102 controls without a name.
 
 **Screenshots:** `F-50-menu-arrowright.png`
+
+**Partly fixed (2026-10-19, `f6c7836c1`, `5fd899bce` and the C10 docs commit):** every control of
+every built-in panel has an accessible name (the panel kit's field naming, ADR 233), glyph and
+icon buttons are named in words, toggle segments say which is on, the Style Options family row
+is a real tablist, and the page-strip arrows are named. The menubar, the dock's tablist, the
+landmarks and the headings remain.
 
 <a id="f-51"></a>
 

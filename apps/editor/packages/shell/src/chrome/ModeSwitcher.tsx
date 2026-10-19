@@ -34,6 +34,7 @@ import {
   useWorkflowMode,
   type WorkflowMode,
 } from "../state/workflow-mode-context";
+import { Segment } from "@paged-media/panel-kit";
 
 export interface ModeSwitcherProps {
   right?: ReactNode;
@@ -132,10 +133,9 @@ function ModeButton(props: {
 }) {
   const [hover, setHover] = useState(false);
   return (
-    <button
-      type="button"
+    <Segment
+      pressed={props.active}
       data-mode-option={props.id}
-      data-active={props.active ? "true" : "false"}
       title={props.blurb ?? props.title}
       onClick={props.onClick}
       onMouseEnter={() => setHover(true)}
@@ -164,7 +164,7 @@ function ModeButton(props: {
     >
       <Icon name={props.icon} size={15} />
       {props.title}
-    </button>
+    </Segment>
   );
 }
 

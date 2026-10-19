@@ -25,13 +25,14 @@
 //
 // The editor holds one document. A plugin-built document (paged.data's
 // "Merge to new document") therefore REPLACES the active one, which is the
-// same loss File > New and File > Open guard against with `confirmDiscard`.
-// Those run on a user's own menu choice; here a plugin asks, so the prompt
-// names the plugin and the document, and dismissing it KEEPS the document.
+// same loss every other open guards against: it asks the one replace
+// question (`confirmReplace`, ADR 230). Here a plugin asks, so the prompt
+// names the plugin and the document, and Cancel KEEPS the document.
 
 import type { OpenDocumentResult } from "@paged-media/plugin-api";
 import type { DocumentsBackend } from "@paged-media/plugin-sdk";
 import type { CanvasClient, DocumentHandle } from "@paged-media/client";
+import { confirmReplace } from "@paged-media/shell";
 
 export type { OpenDocumentResult };
 
@@ -40,22 +41,6 @@ export type OpenDocumentRequest = Parameters<DocumentsBackend["open"]>[1];
 
 /** The backend the SDK's `host.documents` door forwards to. */
 export type EditorDocumentsBackend = DocumentsBackend;
-
-/** A replace request awaiting the user's keep/discard answer. */
-export interface PendingReplace {
-  readonly id: number;
-  /** The plugin asking (its manifest name). */
-  readonly requester: string;
-  /** The document it wants to open. */
-  readonly documentName: string;
-  /** Settle once: `true` discards the open document's edits and opens. */
-  decide(discard: boolean): void;
-}
-
-export interface ReplaceController {
-  subscribe(listener: () => void): () => void;
-  current(): PendingReplace | null;
-}
 
 /** What the app attaches once its document context exists. */
 export interface DocumentsDeps {
@@ -68,7 +53,6 @@ export interface DocumentsDeps {
 
 export interface EditorDocuments {
   backend: EditorDocumentsBackend;
-  controller: ReplaceController;
   /** Bind the live client + open orchestration; returns the detach. */
   attach(deps: DocumentsDeps): () => void;
 }
@@ -83,43 +67,7 @@ function looksLikePackage(bytes: Uint8Array): boolean {
 
 export function createEditorDocuments(): EditorDocuments {
   let deps: DocumentsDeps | null = null;
-  let seq = 0;
   let busy = false;
-  const queue: PendingReplace[] = [];
-  const listeners = new Set<() => void>();
-  const notify = (): void => {
-    for (const l of listeners) l();
-  };
-
-  const controller: ReplaceController = {
-    subscribe(listener) {
-      listeners.add(listener);
-      return () => {
-        listeners.delete(listener);
-      };
-    },
-    current() {
-      return queue[0] ?? null;
-    },
-  };
-
-  const ask = (requester: string, documentName: string): Promise<boolean> =>
-    new Promise<boolean>((resolve) => {
-      const id = ++seq;
-      queue.push({
-        id,
-        requester,
-        documentName,
-        decide(discard) {
-          const idx = queue.findIndex((p) => p.id === id);
-          if (idx === -1) return; // already settled
-          queue.splice(idx, 1);
-          resolve(discard);
-          notify();
-        },
-      });
-      notify();
-    });
 
   const backend: EditorDocumentsBackend = {
     async exportPaged() {
@@ -141,16 +89,13 @@ export function createEditorDocuments(): EditorDocuments {
       if (busy) throw new Error("another document is being opened");
       busy = true;
       try {
-        let dirty = false;
-        try {
-          dirty = (await client.documentMeta()).dirty;
-        } catch {
-          dirty = false; // no document: nothing to lose
-        }
         const name = request.name ?? DEFAULT_NAME;
-        if (dirty && !(await ask(request.requester.name, name))) {
-          return { opened: false, reason: "declined" };
-        }
+        const proceed = await confirmReplace(client, {
+          action: `Opening ${name}`,
+          requester: request.requester.name,
+          documentName: name,
+        });
+        if (!proceed) return { opened: false, reason: "declined" };
         const handle = await d.openBytes(bytes, name);
         return { opened: true, pageIds: [...handle.pageIds] };
       } finally {
@@ -161,7 +106,6 @@ export function createEditorDocuments(): EditorDocuments {
 
   return {
     backend,
-    controller,
     attach(next) {
       deps = next;
       return () => {

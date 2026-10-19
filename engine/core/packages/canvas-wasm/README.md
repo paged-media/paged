@@ -22,7 +22,7 @@ await init({ module_or_path: repoWasmUrl });
 
 These replace `@paged-media/introspect-wasm` (now `./introspect`) and
 `@paged-media/repo-wasm` (now `./repo`). The renderer-only viewer session is
-`@paged-media/idml-viewer/session`.
+`@paged-media/viewer/session`.
 
 The version is `0.<protocol>.<patch>`: its minor is the engine's wire protocol
 (`PROTOCOL_VERSION` in `engine/core/crates/paged-canvas/src/channel.rs`). A release tag

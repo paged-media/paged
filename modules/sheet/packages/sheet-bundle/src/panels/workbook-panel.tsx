@@ -43,7 +43,16 @@ import {
   type ReactNode,
 } from "react";
 import { onDidChangeOf, useLive } from "@paged-media/react-live";
-import { Disclosure, useConfirm } from "@paged-media/panel-kit";
+import {
+  chrome,
+  color,
+  Disclosure,
+  font,
+  radius,
+  space,
+  status,
+  useConfirm,
+} from "@paged-media/panel-kit";
 
 import type { BundleHost } from "@paged-media/plugin-api";
 
@@ -58,53 +67,53 @@ const GRID_PANEL_ID = "media.paged.sheet.panel.grid";
 // ---------------------------------------------------------------- styles
 
 const kicker: CSSProperties = {
-  font: "700 10px var(--font-sans, sans-serif)",
-  letterSpacing: "var(--tracking-wide, 0.14em)",
+  font: `700 10px ${font.sans}`,
+  letterSpacing: font.trackingWide,
   textTransform: "uppercase",
   color: "var(--pg-muted-fg)",
-  margin: "var(--space-3, 12px) 0 var(--space-1, 4px)",
+  margin: `${space[3]} 0 ${space[1]}`,
 };
 
 const body: CSSProperties = {
-  font: "12px var(--font-sans, sans-serif)",
+  font: `12px ${font.sans}`,
   color: "var(--pg-fg)",
 };
 
 const note: CSSProperties = {
-  margin: "var(--space-1, 4px) 0 0",
-  font: "11px/1.5 var(--font-sans, sans-serif)",
+  margin: `${space[1]} 0 0`,
+  font: `11px/1.5 ${font.sans}`,
   color: "var(--pg-muted-fg)",
 };
 
 const input: CSSProperties = {
-  font: "12px var(--font-sans, sans-serif)",
-  fontFamily: "var(--font-mono, monospace)",
+  font: `12px ${font.sans}`,
+  fontFamily: font.mono,
   color: "var(--pg-fg)",
   background: "var(--pg-bg)",
   border: "1px solid var(--pg-border)",
-  borderRadius: "var(--radius-sm, 4px)",
+  borderRadius: radius.sm,
   padding: "4px 6px",
   minWidth: 0,
 };
 
 const primaryButton: CSSProperties = {
-  font: "500 12px var(--font-sans, sans-serif)",
-  color: "var(--primary-fg, #fff)",
+  font: `500 12px ${font.sans}`,
+  color: color.primaryFg,
   background: "var(--pg-primary)",
   border: "none",
-  borderRadius: "var(--radius-md, 6px)",
+  borderRadius: radius.md,
   padding: "6px 12px",
   cursor: "pointer",
 };
 
 /** A quieter button for the structure verbs. */
 const secondaryButton: CSSProperties = {
-  font: "12px var(--font-sans, system-ui)",
+  font: `12px ${font.sans}`,
   padding: "3px 8px",
   color: "var(--pg-fg)",
-  background: "var(--pg-subtle, var(--pg-bg))",
+  background: color.muted,
   border: "1px solid var(--pg-border)",
-  borderRadius: "var(--radius-sm, 4px)",
+  borderRadius: radius.sm,
   cursor: "pointer",
 };
 
@@ -112,8 +121,8 @@ const row: CSSProperties = {
   display: "flex",
   flexWrap: "wrap",
   alignItems: "center",
-  gap: "var(--space-1, 4px)",
-  marginTop: "var(--space-1, 4px)",
+  gap: space[1],
+  marginTop: space[1],
 };
 
 const linkButton: CSSProperties = {
@@ -127,12 +136,12 @@ const linkButton: CSSProperties = {
 };
 
 const sectionStyle: CSSProperties = {
-  borderTop: "1px solid var(--chrome-divider, var(--pg-border))",
-  padding: "var(--space-2, 8px) 0",
+  borderTop: `1px solid ${chrome.divider}`,
+  padding: `${space[2]} 0`,
 };
 
 const summaryStyle: CSSProperties = {
-  font: "600 12px var(--font-sans, sans-serif)",
+  font: `600 12px ${font.sans}`,
   color: "var(--pg-fg)",
   cursor: "pointer",
 };
@@ -156,7 +165,7 @@ function Section(props: {
         style={{
           display: "flex",
           flexDirection: "column",
-          marginTop: "var(--space-1, 4px)",
+          marginTop: space[1],
         }}
       >
         {props.children}
@@ -359,7 +368,7 @@ export function makeWorkbookPanel(
       <div
         data-sheet-panel="workbook"
         style={{
-          padding: "var(--space-3, 12px)",
+          padding: space[3],
           display: "flex",
           flexDirection: "column",
         }}
@@ -368,9 +377,7 @@ export function makeWorkbookPanel(
         {/* S-11 RESOLVED: the host file picker is the primary path; the
          *  panel's own `<input>` is the honest fallback when no picker is
          *  wired (headless / a host that predates the door). */}
-        <div
-          style={{ ...row, marginTop: 0, marginBottom: "var(--space-2, 8px)" }}
-        >
+        <div style={{ ...row, marginTop: 0, marginBottom: space[2] }}>
           {pickerSupported ? (
             <button
               data-sheet-pick
@@ -419,10 +426,10 @@ export function makeWorkbookPanel(
             style={{
               ...body,
               padding: "6px 8px",
-              color: "var(--status-error, #b00)",
-              background: "var(--pg-subtle, var(--pg-bg))",
+              color: status.error,
+              background: color.muted,
               border: "1px solid var(--pg-border)",
-              borderRadius: "var(--radius-sm, 4px)",
+              borderRadius: radius.sm,
             }}
           >
             The spreadsheet engine could not start: {st.bootError}.
@@ -436,12 +443,9 @@ export function makeWorkbookPanel(
         )}
 
         {st.fileName && (
-          <p style={{ ...body, margin: "0 0 var(--space-1, 4px)" }}>
+          <p style={{ ...body, margin: `0 0 ${space[1]}` }}>
             Imported{" "}
-            <span style={{ fontFamily: "var(--font-mono, monospace)" }}>
-              {st.fileName}
-            </span>
-            .
+            <span style={{ fontFamily: font.mono }}>{st.fileName}</span>.
           </p>
         )}
 
@@ -528,7 +532,7 @@ export function makeWorkbookPanel(
               </div>
             )}
 
-            <div style={{ height: "var(--space-2, 8px)" }} />
+            <div style={{ height: space[2] }} />
 
             <Section id="place" title="Place on page" open>
               <label
@@ -549,7 +553,7 @@ export function makeWorkbookPanel(
                   style={input}
                 />
               </label>
-              <div style={{ ...row, marginTop: "var(--space-2, 8px)" }}>
+              <div style={{ ...row, marginTop: space[2] }}>
                 <button
                   type="button"
                   data-sheet-lower
@@ -777,7 +781,7 @@ export function makeWorkbookPanel(
               {sortMsg && (
                 <p
                   data-sheet-sort-msg
-                  style={{ ...body, margin: "var(--space-1, 4px) 0 0" }}
+                  style={{ ...body, margin: `${space[1]} 0 0` }}
                 >
                   {sortMsg}
                 </p>
@@ -810,7 +814,7 @@ export function makeWorkbookPanel(
               {styleMsg && (
                 <p
                   data-sheet-cellstyle-msg
-                  style={{ ...body, margin: "var(--space-1, 4px) 0 0" }}
+                  style={{ ...body, margin: `${space[1]} 0 0` }}
                 >
                   {styleMsg}
                 </p>
@@ -899,7 +903,7 @@ export function makeWorkbookPanel(
               {chartMsg && (
                 <p
                   data-sheet-chart-msg
-                  style={{ ...body, margin: "var(--space-1, 4px) 0 0" }}
+                  style={{ ...body, margin: `${space[1]} 0 0` }}
                 >
                   {chartMsg}
                 </p>
@@ -909,10 +913,7 @@ export function makeWorkbookPanel(
                 const { charts } = inventories;
                 if (charts.length === 0) return null;
                 return (
-                  <div
-                    data-sheet-chart-list
-                    style={{ marginTop: "var(--space-2, 8px)" }}
-                  >
+                  <div data-sheet-chart-list style={{ marginTop: space[2] }}>
                     {charts.map((c) => (
                       <div
                         key={c.index}
@@ -971,10 +972,7 @@ export function makeWorkbookPanel(
                 style={input}
               />
               {fnMsg && (
-                <p
-                  role="status"
-                  style={{ ...body, margin: "var(--space-1, 4px) 0 0" }}
-                >
+                <p role="status" style={{ ...body, margin: `${space[1]} 0 0` }}>
                   {fnMsg}
                 </p>
               )}
@@ -983,7 +981,7 @@ export function makeWorkbookPanel(
                 style={{
                   maxHeight: 180,
                   overflowY: "auto",
-                  marginTop: "var(--space-1, 4px)",
+                  marginTop: space[1],
                 }}
               >
                 {(() => {
@@ -1009,9 +1007,9 @@ export function makeWorkbookPanel(
                     <div key={family}>
                       <div
                         style={{
-                          font: "600 11px var(--font-sans, sans-serif)",
+                          font: `600 11px ${font.sans}`,
                           color: "var(--pg-muted-fg)",
-                          margin: "var(--space-1, 4px) 0 2px",
+                          margin: `${space[1]} 0 2px`,
                         }}
                       >
                         {labelOf(family)} ({fns.length})
@@ -1038,7 +1036,7 @@ export function makeWorkbookPanel(
                             cursor: "pointer",
                             padding: "1px 0",
                             fontSize: 11,
-                            fontFamily: "var(--font-mono, monospace)",
+                            fontFamily: font.mono,
                             color: "var(--pg-fg)",
                           }}
                         >
@@ -1110,10 +1108,7 @@ export function makeWorkbookPanel(
               );
             })()}
 
-            <p
-              data-sheet-find-pointer
-              style={{ ...note, marginTop: "var(--space-2, 8px)" }}
-            >
+            <p data-sheet-find-pointer style={{ ...note, marginTop: space[2] }}>
               Find and replace are in the{" "}
               <button
                 type="button"
@@ -1134,10 +1129,7 @@ export function makeWorkbookPanel(
         {/* S-08 / .paged container: be honest about where the workbook lives —
          *  inside the .paged document (travels with the file) when host.parts
          *  is wired, else this browser's local store, else in-memory. */}
-        <p
-          data-sheet-honesty
-          style={{ ...note, marginTop: "var(--space-2, 8px)" }}
-        >
+        <p data-sheet-honesty style={{ ...note, marginTop: space[2] }}>
           {host.supports("storage.parts@1")
             ? "The workbook is saved inside the document and travels with the .paged file."
             : host.supports("storage.blob@1")

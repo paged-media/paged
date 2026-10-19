@@ -35,6 +35,7 @@ import { useState } from "react";
 
 import { ListRows, useCollection, type ListRowSpec } from "@paged-media/shell";
 import type { FontSummary } from "@paged-media/client";
+import { Segment } from "@paged-media/panel-kit";
 
 type FontFilter = "All" | "In use" | "Missing";
 
@@ -74,11 +75,10 @@ export function FontsPanel() {
     <div data-fonts-panel="ready">
       <div className="flex gap-1 px-3 pt-3">
         {(["All", "In use", "Missing"] as FontFilter[]).map((f) => (
-          <button
+          <Segment
             key={f}
-            type="button"
+            pressed={filter === f}
             data-font-filter={f}
-            data-active={filter === f ? "true" : "false"}
             onClick={() => setFilter(f)}
             className="text-xs px-2 h-[24px] rounded-[6px] border inline-flex items-center gap-1"
             style={{
@@ -99,7 +99,7 @@ export function FontsPanel() {
                 {missingCount}
               </span>
             )}
-          </button>
+          </Segment>
         ))}
       </div>
       {items.length === 0 ? (

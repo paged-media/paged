@@ -130,7 +130,9 @@ export class Designer {
   constructor(private readonly page: Page) {}
 
   /** Boot the app and wait for the worker client. */
-  async open(options: { search?: string } = {}): Promise<void> {
+  async open(
+    options: { search?: string; answerReplacePrompts?: boolean } = {},
+  ): Promise<void> {
     await openCanvas(this.page, options);
   }
 
