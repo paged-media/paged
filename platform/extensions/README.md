@@ -1,15 +1,20 @@
 # paged-media/plugin-sdk
 
-Plugin contract + tooling for the Paged editor. Two public packages: the
-contract and its runtime (with the manifest CLI, the `paged-plugin` bin). The
-first-party packages built on them, `paged-node` (`@paged-media/cli`, now
+Plugin contract + tooling for the Paged editor. One public package,
+`@paged-media/plugin-sdk`: the runtime (with the `paged-plugin` bin) and, as its
+type-only `./api` entry, the contract. The contract's source is the private
+`@paged-media/plugin-api` workspace package, which plugin-sdk's build inlines
+([PM-0008, amendment 3](../../docs/adr/PM-0008-npm-packages-and-release.md)). An
+extension imports its types from `@paged-media/plugin-sdk/api`, its values from
+`@paged-media/plugin-sdk`, and depends on plugin-sdk alone (a peer dependency;
+`paged-plugin init` writes one). The first-party packages built on them, `paged-node` (`@paged-media/cli`, now
 `apps/cli`) and `@paged-media/ai` (now `platform/shared/ai`), lived here until
 wave C.
 
-| Package                   | Contents                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | Tier                      |
-| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------- |
-| `@paged-media/plugin-api` | the contract: manifest types + schema, bundle lifecycle (`PagedBundle` / `BundleHandle`), the full `BundleHost` surface, the object model's types, curated type re-exports of the contribution + wire surface. **Type-only.**                                                                                                                                                                                                                                                                                                            | frozen at v1 (v0.2 today) |
-| `@paged-media/plugin-sdk` | the runtime: `createBundleHost` (in-process host adapter), `loadBundle` (apiVersion negotiation + teardown), the object registry behind `host.objects`, the headless host `createHeadlessHost`, the gesture kit, the gesture TEST kit (`createFakeEditor`, the gesture DSL `gestures()`, pointer tapes, the gesture invariants), `DisposableStore`, `API_VERSION`, `defineBundle`; and the `paged-plugin` bin: `validate <manifest.json>` (manifest schema, namespace and object-model checks), `untyped`, `integrity`, `modules-upload` | stable, faster-moving     |
+| Package                                                                       | Contents                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | Tier                      |
+| ----------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------- |
+| `@paged-media/plugin-sdk/api` (source: the private `@paged-media/plugin-api`) | the contract: manifest types + schema (`./api/manifest.schema.json`), bundle lifecycle (`PagedBundle` / `BundleHandle`), the full `BundleHost` surface, the object model's types, curated type re-exports of the contribution + wire surface. **Type-only.**                                                                                                                                                                                                                                                                                                                 | frozen at v1 (v0.2 today) |
+| `@paged-media/plugin-sdk`                                                     | the runtime: `createBundleHost` (in-process host adapter), `loadBundle` (apiVersion negotiation + teardown), the object registry behind `host.objects`, the headless host `createHeadlessHost`, the gesture kit, the gesture TEST kit (`createFakeEditor`, the gesture DSL `gestures()`, pointer tapes, the gesture invariants), `DisposableStore`, `API_VERSION`, `defineBundle`; and the `paged-plugin` bin: `init [dir]` (a minimal extension), `validate <manifest.json>` (manifest schema, namespace and object-model checks), `untyped`, `integrity`, `modules-upload` | stable, faster-moving     |
 
 **Declarations.** From 0.2.71 the published declarations of `plugin-api` and `plugin-sdk`
 are emitted by TypeScript 7 (`tsc --emitDeclarationOnly`). `plugin-sdk` ships one `.d.ts`
@@ -76,13 +81,17 @@ How the contract is designed and built is in [`docs/`](./docs/README.md) and in
 
 ## Status
 
-`plugin-api` and `plugin-sdk` are two of the four public npm packages of this
-repository ([PM-0008](../../docs/adr/PM-0008-npm-packages-and-release.md)): a
-release tag `v0.<protocol>.<patch>` publishes them, at the tag's version, with the
-engine's `@paged-media/canvas-wasm` and `@paged-media/viewer`
-(`.github/workflows/release.yml`). `plugin-sdk` ships the `paged-plugin` bin, which
-was the `@paged-media/plugin-cli` package. The in-tree versions (`0.2.N-canary.0`)
-count contract changes for the contract guard; they are not the published versions.
+`plugin-sdk` is one of the three public npm packages of this repository
+([PM-0008](../../docs/adr/PM-0008-npm-packages-and-release.md), amendment 3): a
+release tag `v0.<protocol>.<patch>` publishes it, at the tag's version, with the
+engine's `@paged-media/paged` and `@paged-media/viewer`
+(`.github/workflows/release.yml`). It ships the `paged-plugin` bin, which was the
+`@paged-media/plugin-cli` package, and the contract as `./api`, which was the
+`@paged-media/plugin-api` package. The in-tree versions (`0.2.N-canary.0`) count
+contract changes for the contract guard; they are not the published versions. A
+change under `packages/plugin-api/src` or `packages/plugin-sdk/src` moves
+plugin-sdk's version, the contract's one public number, and plugin-api's private
+version moves with it to the same value (`scripts/assert-contract-bumped.mjs`).
 The engine's wire types and capability catalog are vendored from the workspace's
 `@paged-media/canvas-wasm` (its `./introspect/catalog.json`)
 ([ADR 302](./docs/adr/302-vendored-wire-types.md)). What ships and what does not

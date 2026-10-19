@@ -2187,7 +2187,7 @@ export interface ToolsSurface {
 // ----------------------------------------------------------------- host
 
 /**
- * What `activate(host)` receives. Types from `@paged-media/plugin-api`,
+ * What `activate(host)` receives. Types from `@paged-media/plugin-sdk/api`,
  * values from here — never import host values into a bundle's module
  * graph.
  */

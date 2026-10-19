@@ -1,6 +1,7 @@
 # ADR 300 — The contract package is type-only; values reach a bundle through the host object
 
 - **Status:** Accepted. Recorded retroactively on 2026-10-02 from the code at `d90f727`.
+  Amended 2026-10-19: the contract ships inside plugin-sdk, as `./api` (see the amendment).
 - **Scope:** `packages/plugin-api`, and the split between it and `packages/plugin-sdk`
 
 ## Context
@@ -91,3 +92,22 @@ the raw editor handle (`packages/plugin-api/src/host.ts:1677-1683`).
 - [ADR 304](304-bundle-lifecycle.md) — `activate(host)` and teardown
 - [ADR 312](312-panels-as-data.md), [ADR 319](319-trust-line.md) — the panel form that can
   cross an isolate boundary; the boundary itself
+
+## Amendment — 2026-10-19: the contract ships as `@paged-media/plugin-sdk/api`
+
+[PM-0008, amendment 3](../../../../docs/adr/PM-0008-npm-packages-and-release.md) leaves one public
+extension package. The rule of this record holds, in a new place: the contract is still
+type-only and still a module of its own, so a bundle's module graph gains nothing at run time
+from importing it.
+
+- `packages/plugin-api` stays the contract's source and is private. plugin-sdk's build
+  (`packages/plugin-sdk/scripts/inline-api.mjs`) compiles its declarations into `dist/api/`,
+  beside an empty `index.js`, the vendored `wire.d.ts` and `manifest.schema.json`, and points
+  plugin-sdk's own declarations there. The build fails if anything in `dist/` still imports
+  `@paged-media/plugin-api`.
+- In the workspace `@paged-media/plugin-sdk/api` is `src/api.ts`, an `export type *` of
+  plugin-api, so first-party code may import either name.
+- An extension imports types from `@paged-media/plugin-sdk/api` and values from
+  `@paged-media/plugin-sdk` and the host object; the release consumer test typechecks exactly
+  that, under `nodenext` and `bundler`.
+

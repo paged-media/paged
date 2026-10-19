@@ -1,6 +1,7 @@
 # ADR 307 — Bundles take the contract packages as peer dependencies
 
 - **Status:** Accepted. Recorded retroactively on 2026-10-02 from the code at `d90f727`.
+  Amended 2026-10-19: one peer, `@paged-media/plugin-sdk` (see the amendment).
 - **Scope:** how a bundle package depends on `@paged-media/plugin-api` and
   `@paged-media/plugin-sdk`. The rule lives in the bundle repositories and the editor.
 
@@ -88,3 +89,17 @@ not as a published package (`editor: package.json:35`).
 - [ADR 300](300-type-only-contract.md), [ADR 301](301-host-adapter-lives-in-plugin-sdk.md) — why one copy of the type matters
 - [ADR 302](302-vendored-wire-types.md), [ADR 306](306-canary-releases.md) — what a contract version carries; the canary versions the range is written against
 - [ADR 201](https://github.com/paged-media/editor/blob/main/docs/adr/201-plugins-as-pinned-packages.md) — the host side: bundles as pinned published packages
+
+## Amendment — 2026-10-19: one peer, `@paged-media/plugin-sdk`
+
+With the contract inside plugin-sdk as `./api`
+([ADR 300](300-type-only-contract.md), amendment), a third-party extension has one peer
+dependency, `@paged-media/plugin-sdk`, at `>=` the release it was written against, and the same
+package as a development dependency for its own build and tests. One copy of plugin-sdk is one
+copy of the contract types, so the reason above holds with one package instead of two.
+`paged-plugin init` writes that shape.
+
+The built-in modules are private workspace packages, never installed from npm: their
+`workspace:` dependencies and peers on `plugin-api` and `plugin-sdk` stay as they are, and
+nothing in this rule changes for them.
+
