@@ -1,0 +1,14 @@
+$ paged new --help
+--- exit: 0
+--- stdout
+Mint a blank document
+
+Usage: paged new [OPTIONS] --out <OUT>
+
+Options:
+      --size <SIZE>      letter | legal | tabloid | a3 | a4 | a5, or WxH in points [default: letter]
+      --format <FORMAT>  idml | paged [default: paged]
+  -o, --out <OUT>        Output file
+  -h, --help             Print help
+--- stderr
+(empty)

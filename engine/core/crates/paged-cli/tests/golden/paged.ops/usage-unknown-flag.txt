@@ -1,0 +1,10 @@
+$ paged ops --compact
+--- exit: 2
+--- stdout
+(empty)
+--- stderr
+error: unexpected argument '--compact' found
+
+Usage: paged ops [OPTIONS]
+
+For more information, try '--help'.

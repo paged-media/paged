@@ -1,0 +1,11 @@
+$ paged digest
+--- exit: 2
+--- stdout
+(empty)
+--- stderr
+error: the following required arguments were not provided:
+  <DOC>
+
+Usage: paged digest <DOC>
+
+For more information, try '--help'.

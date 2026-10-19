@@ -1,0 +1,6 @@
+$ paged render doc.paged -o p.png
+--- exit: 0
+--- stdout
+p.png — page 1 at 144 dpi, 1224×1584 px
+--- stderr
+(empty)

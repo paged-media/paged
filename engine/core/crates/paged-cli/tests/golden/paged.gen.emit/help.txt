@@ -1,0 +1,13 @@
+$ paged gen emit --help
+--- exit: 0
+--- stdout
+Emit one built-in fixture
+
+Usage: paged gen emit [OPTIONS] --sample <SAMPLE>
+
+Options:
+      --sample <SAMPLE>  Fixture name; an unknown one lists them all
+      --out <OUT>        Output directory; the file lands at `<out>/<sample>.idml` [default: corpus/generated]
+  -h, --help             Print help
+--- stderr
+(empty)

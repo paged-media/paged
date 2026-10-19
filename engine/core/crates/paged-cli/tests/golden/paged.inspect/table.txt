@@ -1,0 +1,11 @@
+$ paged inspect doc.paged
+--- exit: 0
+--- stdout
+file        doc.paged
+protocol    <PROTOCOL>
+pages       1
+cmyk        (none — naive conversion)
+content     5 frame(s), 1 story(ies), 1 paragraph(s), 1 run(s), 11 glyph(s), 1 line(s)
+  page   1  usp  612 × 792 pt     <DIGEST>
+--- stderr
+(empty)

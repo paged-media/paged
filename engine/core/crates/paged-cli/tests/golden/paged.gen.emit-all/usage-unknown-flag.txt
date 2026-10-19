@@ -1,0 +1,10 @@
+$ paged gen emit-all --sample x
+--- exit: 2
+--- stdout
+(empty)
+--- stderr
+error: unexpected argument '--sample' found
+
+Usage: paged gen emit-all [OPTIONS]
+
+For more information, try '--help'.

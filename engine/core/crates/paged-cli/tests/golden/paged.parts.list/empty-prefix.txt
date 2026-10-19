@@ -1,0 +1,6 @@
+$ paged parts list doc.paged paged/plugins/
+--- exit: 0
+--- stdout
+(empty)
+--- stderr
+(empty)

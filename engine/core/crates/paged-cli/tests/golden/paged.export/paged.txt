@@ -1,0 +1,6 @@
+$ paged export doc.paged --format paged -o out.paged
+--- exit: 0
+--- stdout
+out.paged — paged, <N> bytes
+--- stderr
+(empty)

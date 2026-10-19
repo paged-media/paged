@@ -1,0 +1,12 @@
+$ paged diff doc.png doc.png --json
+--- exit: 0
+--- stdout
+{
+  "max_de": 0.0,
+  "mean_de": 0.0,
+  "p99_de": 0.0,
+  "passes": true,
+  "ssim": 1.0
+}
+--- stderr
+(empty)

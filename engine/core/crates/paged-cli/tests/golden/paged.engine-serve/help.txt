@@ -1,0 +1,43 @@
+$ paged engine-serve --help
+--- exit: 0
+--- stdout
+Serve the engine over HTTP for paged.server's headless lane: stateless `POST /run` calls that bring a document and take back the result
+
+Usage: paged engine-serve [OPTIONS]
+
+Options:
+      --port <PORT>
+          Port to listen on
+          
+          [default: 8080]
+
+      --bind <BIND>
+          Address to bind. A container binds every address; local use, loopback
+          
+          [default: 127.0.0.1]
+
+      --fonts <DIR|FILE>
+          Font file or directory to make available, repeatable.
+          
+          A directory is read one level deep and each face is asked for its own family name, so a corpus directory needs no mapping.
+
+      --font-family <NAME[/STYLE]=PATH>
+          Bind one family (and optionally a style) to a file, repeatable: `--font-family "Fraunces/Italic=/path/Fraunces-Italic.ttf"`.
+          
+          Wins over `--fonts` for the same family and style — a scan is a convenience, this is the instrument.
+
+      --font <FILE>
+          Fallback face for text no registered family answers for. Absent, the face the CLI bundles (Inter) stands in
+
+      --no-default-font
+          No fallback face: text no registered family answers for is not set, and the run says so (to see what a document is missing)
+
+      --cmyk-profile <NAME|FILE>
+          CMYK profile: a file path, or a name to resolve against the host's installed profiles (e.g. "Coated FOGRA39").
+          
+          Absent, the document's own declared profile name is resolved and made the working space. Absent that too, colour is naive math and the run says so.
+
+  -h, --help
+          Print help (see a summary with '-h')
+--- stderr
+(empty)

@@ -1,0 +1,7 @@
+$ paged query doc.paged 'page:#1 > oval'
+--- exit: 0
+--- stdout
+oval:u2
+oval:u3
+--- stderr
+(empty)

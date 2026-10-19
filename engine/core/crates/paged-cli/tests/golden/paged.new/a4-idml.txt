@@ -1,0 +1,6 @@
+$ paged new --size a4 --format idml -o a4.idml
+--- exit: 0
+--- stdout
+a4.idml — one 595 × 842 pt page, idml, <N> bytes
+--- stderr
+(empty)
