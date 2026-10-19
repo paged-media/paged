@@ -8,11 +8,11 @@ This page is the plugin layer of it.
 
 A plugin is tested in three places:
 
-| Where                                                                                | What it proves                                                                                           | Runs in CI as                                  |
-| ------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
-| the module's own package (`modules/<m>/packages/<m>-bundle/test`, image `glue/test`) | each contribution's BEHAVIOUR: commands, tools, panels, importers, exporters, key bindings, tool options | the module's `<m> / bun test` workflow         |
-| the editor's headless layer (`apps/editor/apps/canvas/tests/headless/`)              | the bundles inside the editor: all nine activate together                                                | `editor / tests`, step `bun run test:headless` |
-| the editor's Playwright suite (`apps/editor/apps/canvas/tests/plugin-surface/`)      | what a user reaches in a browser: the manifest against the live registries, the menu entries             | `editor / tests`, the Playwright shards        |
+| Where                                                                                | What it proves                                                                                           | Runs in CI as                           |
+| ------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------- | --------------------------------------- |
+| the module's own package (`modules/<m>/packages/<m>-bundle/test`, image `glue/test`) | each contribution's BEHAVIOUR: commands, tools, panels, importers, exporters, key bindings, tool options | the module's `<m> / bun test` workflow  |
+| the repository's root tests (`tests/system/`, `tests/contracts/`)                    | the bundles inside the editor: all nine activate together, and the BundleHost contract                   | `tests / contracts + system`            |
+| the editor's Playwright suite (`apps/editor/apps/canvas/tests/plugin-surface/`)      | what a user reaches in a browser: the manifest against the live registries, the menu entries             | `editor / tests`, the Playwright shards |
 
 `tests/contracts/bundle-registrations.test.ts` sits beside them: the
 two-way check of every manifest against what its bundle registers (plugin-sdk's
@@ -146,7 +146,7 @@ and it must fail for that reason.
 A case that holds on one adapter and not on another is a finding: a bundle tested headlessly
 would meet a different host in the editor. `supports.headless.test.ts` pins which features each
 adapter answers; `storage`, `services`, `navigation`, `document` and `contribute` cover the doors.
-`built-in-bundles.test.ts` activates all nine built-in bundles in the headless editor, slide
+`tests/system/built-in-bundles.headless.test.ts` activates all nine built-in bundles in the headless editor, slide
 included, and checks every manifest declaration against the editor's registries.
 
 Findings so far, each an expected failure in those files:

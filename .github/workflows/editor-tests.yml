@@ -358,9 +358,9 @@ jobs:
           retention-days: 90
       # The surface-conformance gate runs in its own job (`surface`, below):
       # it is static and needs none of the wasm this job builds.
-      # The two-way manifest check (ADR 226) and the BundleHost contract are
-      # the repository's root tests (tests/contracts): the `tests` workflow
-      # runs them.
+      # The two-way manifest check (ADR 226), the BundleHost contract and the
+      # nine built-ins in the headless editor are the repository's root tests
+      # (tests/contracts, tests/system): the `tests` workflow runs them.
       # The headless editor (apps/canvas/tests/headless): the shell, the
       # client and the real engine under bun test, no browser. Commands,
       # editor.* automation, Boa scripts and plugin hosts asserted against
