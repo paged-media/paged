@@ -27,7 +27,7 @@
 //! them as alpha images instead of approximating a soft edge with
 //! concentric stamps. It has no rasterizer and no writer dependency —
 //! only [`PathData`] and [`Transform`] — so it compiles into the wasm
-//! build that has no tiny-skia.
+//! build that has no CPU rasterizer.
 
 use crate::{DirectionalFeather, Feather, FeatherCornerType, PathData, Transform};
 

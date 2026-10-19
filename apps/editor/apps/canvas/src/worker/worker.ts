@@ -29,8 +29,8 @@
 //   - Receive `MainToWorker` envelopes, forward them to the wasm
 //     `CanvasWorker::handleMessage`, post the reply back.
 //
-// Phase 1 sub-phase A wires the render loop using the CPU
-// (tiny-skia) snapshot tier. Later sub-phases add WebGPU + Vello.
+// Without WebGPU the render loop blits CPU (`vello_cpu`) snapshot tiles;
+// with it, Vello presents straight to the canvas (`presentFrame`).
 
 /// <reference lib="webworker" />
 import type {

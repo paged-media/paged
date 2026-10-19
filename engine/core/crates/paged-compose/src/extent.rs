@@ -48,24 +48,18 @@
 //! buffer physically IS that size, so not clipping loses the overflow
 //! silently instead of sharply.
 //!
-//! Growing is safe by construction. The CPU composites a group with
-//! `draw_pixmap` at INTEGER pixel offsets derived from `bounds`, so a
+//! Growing is safe by construction. The CPU composites a group's buffer
+//! as an image at INTEGER pixel offsets derived from `bounds`, so a
 //! bigger buffer places every previously-covered pixel at exactly the
 //! same phase; and a premultiplied α=0 source pixel is a no-op under
-//! every separable blend mode. The one behaviour that does read the
-//! buffer's full rect is the Q-05 paper-backdrop probe
-//! (`cpu.rs`'s `snapshot_is_fully_transparent`), which asks whether the
-//! PARENT is untouched under the whole buffer — a group that grows into
-//! painted parent territory can stop qualifying for the
-//! paper substitution. That only arises for a group nested inside
-//! another group (the page pixmap is pre-filled with the background, so
-//! its snapshot is never fully transparent), and where it does arise
-//! the larger region is the more honest question to ask.
+//! every blend mode. Nothing reads the buffer's full rect: the page is
+//! an isolated group over the paper, so no composite asks whether the
+//! parent was untouched under it.
 //!
 //! # Extents, per command
 //!
 //! The numbers below mirror the CPU rasterizer's own scratch padding
-//! (`paged-gpu/src/cpu.rs`) so the two cannot drift: where that file
+//! (`paged-gpu/src/vcpu.rs`) so the two cannot drift: where that file
 //! allocates `3σ + 1` around a path's bbox and composites the whole
 //! scratch, this file claims the same rect. The effects that stay
 //! INSIDE the path claim only the path's bbox — they multiply their
@@ -367,7 +361,7 @@ fn painted_extent(
             .map(|e| e.inflate(stroke_outset(stroke))),
 
         // The rasterizer translates the stamp by `shadow.offset_*` and
-        // pads its scratch by `3σ + 1` (cpu.rs, the DropShadow arm).
+        // pads its scratch by `3σ + 1` (vcpu.rs, the shadow arm).
         // `PathShadow` shares that arm with a 3.5× σ scale — glyph
         // shadows want a wider Gaussian so neighbouring stamps' tails
         // meet inside the shadow group.

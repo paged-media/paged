@@ -32,7 +32,7 @@
 //   · the will-save registry — Save (.paged) waits for a listener.
 //
 // CPU-safe: the scene image rides the same display-list image lane as a
-// placed asset, so the deterministic tiny-skia snapshot sees it.
+// placed asset, so the deterministic CPU snapshot sees it.
 
 import { expect, test } from "@playwright/test";
 
