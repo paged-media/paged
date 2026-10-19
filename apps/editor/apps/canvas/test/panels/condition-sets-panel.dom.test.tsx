@@ -60,19 +60,11 @@ describe("Condition Sets panel", () => {
     ]);
   });
 
-  test("Apply is disabled today and sends nothing", async () => {
-    covers("panel:paged.condition-sets");
-    const h = await mount();
-    const from = h.mark();
-    expect(applyButton(h.root).disabled).toBe(true);
-    await h.click(applyButton(h.root));
-    expect(h.mutations(from)).toEqual([]);
-  });
-
   // The panel says Apply waits for an ActivateConditionSet operation; the
   // engine has it (`activateConditionSet`, which restores each member
   // condition's recorded visibility), so the seam outlived its gap.
-  test.failing(
+  // Fixed: Apply sends it.
+  test(
     "PN-101: Apply activates the set (activateConditionSet)",
     async () => {
       covers("panel:paged.condition-sets");

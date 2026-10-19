@@ -20,14 +20,39 @@
 // SDK Phase 5 / panel-gallery pass — Condition Sets panel.
 //
 // Gallery list shape over every `<ConditionSet>`: glyph rows with
-// the condition count, plus a per-set Apply trail button as an
-// honest seam (awaits `Operation::ActivateConditionSet`).
+// the condition count, plus a per-set Apply trail button that activates
+// the set (`activateConditionSet`: each member condition's recorded
+// visibility comes back). It was a disabled seam awaiting that operation
+// after the engine had it (PN-101); a refusal is said in words.
 
-import { CockpitBtn, ListRows, useCollection } from "@paged-media/shell";
+import { useState } from "react";
+
+import { refusalText } from "@paged-media/panel-kit";
+import {
+  CockpitBtn,
+  ListRows,
+  useCanvasClient,
+  useCollection,
+} from "@paged-media/shell";
 import type { ConditionSetSummary } from "@paged-media/client";
 
 export function ConditionSetsPanel() {
+  const client = useCanvasClient();
   const items = useCollection<ConditionSetSummary>("conditionSets");
+  const [refused, setRefused] = useState<string | null>(null);
+  const apply = async (set: string) => {
+    const reply = (await client
+      .mutate({ op: "activateConditionSet", args: { set } })
+      .catch((err: unknown) => ({ kind: "failed", payload: { error: err } }))) as {
+      kind: string;
+      payload?: { error?: unknown };
+    };
+    setRefused(
+      reply.kind === "mutationApplied"
+        ? null
+        : refusalText(reply.payload?.error ?? reply.kind, "Apply"),
+    );
+  };
   if (items === null) {
     return (
       <div
@@ -58,12 +83,27 @@ export function ConditionSetsPanel() {
                 set.conditions.length === 1 ? "" : "s"
               }`,
               trail: (
-                <CockpitBtn sm tone="soft" disabled>
+                <CockpitBtn
+                  sm
+                  tone="soft"
+                  title={`Show the conditions as ${set.name} records them`}
+                  onClick={() => void apply(set.selfId)}
+                >
                   Apply
                 </CockpitBtn>
               ),
             }))}
           />
+          {refused && (
+            <div
+              className="px-3 pb-2 text-xs"
+              role="status"
+              data-condition-set-refused
+              style={{ color: "var(--pg-danger, var(--pg-muted-fg))" }}
+            >
+              {refused}
+            </div>
+          )}
         </div>
       )}
     </div>

@@ -339,7 +339,11 @@ function StoryInspector({
       />
 
       {/* LIVE (v64) — the story's grow rule (setFlowGrowRule). */}
-      <StoryReflow key={story.selfId} storyId={story.selfId} />
+      <StoryReflow
+        key={story.selfId}
+        storyId={story.selfId}
+        rule={story.growRule ?? null}
+      />
 
       {/* HONEST SEAMS — no story-keyed read on the current wire. Each
           names the read a core follow-up must add. (The frame chain is
@@ -458,9 +462,7 @@ function Seam({
   );
 }
 
-/** What this session last wrote for a story's grow rule. `null` =
- *  unknown: the wire has no grow-rule READ, so after an undo / redo /
- *  load the panel cannot say what the model holds and must not guess. */
+/** The story's grow rule as the controls edit it. */
 interface GrowRuleState {
   grow: boolean;
   maxPages: number | null;
@@ -477,33 +479,29 @@ interface GrowRuleState {
  * Committing a max turns the rule on with that cap (InDesign has no
  * separate "on" step for a limit either).
  *
- * WRITE-FORWARD, honestly labelled: `StorySummary` carries no grow-rule
- * field and no request reads it back, so the controls show what THIS
- * session last wrote and fall back to "unknown" (a mixed pill, an
- * em-dash) whenever an undo / redo could have changed it.
+ * The controls show the rule as the model holds it: `StorySummary.growRule`
+ * of the stories collection, which follows every edit, undo and redo
+ * (PN-111: they showed only what this session last wrote, an "unknown"
+ * seam that outlived its gap). No rule is off.
  */
-function StoryReflow({ storyId }: { storyId: string }) {
+function StoryReflow({
+  storyId,
+  rule: held,
+}: {
+  storyId: string;
+  rule: { grow: boolean; maxPages?: number | null } | null;
+}) {
   const client = useCanvasClient();
-  const [rule, setRule] = useState<GrowRuleState | null>(null);
-
-  useEffect(
-    () =>
-      client.subscribe((msg) => {
-        if (msg.kind === "undoApplied" || msg.kind === "redoApplied") {
-          setRule(null);
-        }
-      }),
-    [client],
-  );
+  const rule: GrowRuleState = {
+    grow: held?.grow ?? false,
+    maxPages: held?.maxPages ?? null,
+  };
 
   const write = (next: GrowRuleState) => {
     void client
       .mutate({
         op: "setFlowGrowRule",
         args: { storyId, grow: next.grow, maxPages: next.maxPages },
-      })
-      .then((reply) => {
-        if (reply.kind === "mutationApplied") setRule(next);
       })
       .catch(() => {});
   };
@@ -525,9 +523,8 @@ function StoryReflow({ storyId }: { storyId: string }) {
         <span className="pg-ui-xs">Add pages while overset</span>
         <TogglePill
           testId="story-reflow-grow"
-          checked={rule?.grow ?? false}
-          mixed={rule === null}
-          onToggle={(grow) => write({ grow, maxPages: rule?.maxPages ?? null })}
+          checked={rule.grow}
+          onToggle={(grow) => write({ grow, maxPages: rule.maxPages })}
         />
       </div>
       <div
@@ -541,7 +538,8 @@ function StoryReflow({ storyId }: { storyId: string }) {
       >
         <span className="pg-ui-xs">Max added pages</span>
         <NumberInput
-          value={rule?.maxPages ?? null}
+          value={rule.maxPages}
+          unsetText="Default"
           min={1}
           precision={0}
           onChange={() => {}}
@@ -550,18 +548,6 @@ function StoryReflow({ storyId }: { storyId: string }) {
           }
           aria-label="story-reflow-max-pages"
         />
-      </div>
-      <div
-        className="pg-ui-xs"
-        data-story-reflow-note
-        style={{
-          marginTop: 4,
-          fontStyle: "italic",
-          color: "var(--pg-muted-fg)",
-        }}
-      >
-        Shows the value last set in this session; the editor cannot read it
-        back, so it is unknown after undo or redo.
       </div>
     </div>
   );

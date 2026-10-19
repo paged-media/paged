@@ -36,7 +36,11 @@
 import { useEffect, useState } from "react";
 
 import type { ElementId } from "@paged-media/client";
-import { formatLengthPair, useDocumentUnit } from "@paged-media/ui";
+import {
+  formatLength,
+  formatLengthPair,
+  useDocumentUnit,
+} from "@paged-media/ui";
 import {
   CatalogRegistryProvider,
   CockpitBtn,
@@ -47,6 +51,7 @@ import {
   CockpitValue,
   CompositionRenderer,
   PanelHost,
+  useCollection,
   useContentSelection,
   useDocument,
   useOptionalCockpitState,
@@ -381,13 +386,42 @@ function humanizeType(type: string): string {
   return spaced.charAt(0).toUpperCase() + spaced.slice(1);
 }
 
+/** The first page's geometry as the pages collection reports it. */
+interface PageGeometry {
+  marginTopPt?: number;
+  marginLeftPt?: number;
+  marginBottomPt?: number;
+  marginRightPt?: number;
+  columnCount?: number;
+  columnGutterPt?: number;
+  bleedTopPt?: number;
+  bleedLeftPt?: number;
+  bleedBottomPt?: number;
+  bleedRightPt?: number;
+}
+
+/** Four sides as InDesign's fields list them: top, left, bottom, right;
+ *  one value when all four agree. */
+function formatSides(
+  sides: readonly (number | undefined)[],
+  unit: Parameters<typeof formatLength>[1],
+): string {
+  const v = sides.map((s) => s ?? 0);
+  return v.every((x) => x === v[0])
+    ? formatLength(v[0]!, unit)
+    : v.map((x) => formatLength(x, unit)).join(" · ");
+}
+
 /** Page geometry summary (kit PageInspector). REAL: size from the
- *  document handle. Margins / bleed / columns await the engine's
- *  page-geometry reads; section/status await collaboration. */
+ *  document handle; margins, columns and bleed from the pages
+ *  collection, which carries them (PN-23: the seam that said they waited
+ *  for engine accessors outlived its gap). Section/status await
+ *  collaboration. */
 function PageSummary() {
   const { handle } = useDocument();
   const first = handle?.pageSizesPt[0];
   const unit = useDocumentUnit();
+  const page = useCollection<PageGeometry>("pages")?.[0] ?? null;
   return (
     <CockpitSection title="Geometry">
       <CockpitRow label="Pages">
@@ -398,10 +432,43 @@ function PageSummary() {
           {first ? formatLengthPair(first[0], first[1], unit) : "—"}
         </CockpitValue>
       </CockpitRow>
-      <span className="pg-ui-xs" style={{ lineHeight: 1.45 }}>
-        Margins, bleed and column reads land with the engine's page-geometry
-        accessors.
-      </span>
+      <CockpitRow label="Margins">
+        <CockpitValue>
+          {page
+            ? formatSides(
+                [
+                  page.marginTopPt,
+                  page.marginLeftPt,
+                  page.marginBottomPt,
+                  page.marginRightPt,
+                ],
+                unit,
+              )
+            : "—"}
+        </CockpitValue>
+      </CockpitRow>
+      <CockpitRow label="Columns">
+        <CockpitValue>
+          {page
+            ? `${page.columnCount ?? 1} · gutter ${formatLength(page.columnGutterPt ?? 0, unit)}`
+            : "—"}
+        </CockpitValue>
+      </CockpitRow>
+      <CockpitRow label="Bleed">
+        <CockpitValue>
+          {page
+            ? formatSides(
+                [
+                  page.bleedTopPt,
+                  page.bleedLeftPt,
+                  page.bleedBottomPt,
+                  page.bleedRightPt,
+                ],
+                unit,
+              )
+            : "—"}
+        </CockpitValue>
+      </CockpitRow>
     </CockpitSection>
   );
 }

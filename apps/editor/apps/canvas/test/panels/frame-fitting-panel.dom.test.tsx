@@ -236,7 +236,7 @@ describe("Frame Fitting panel: findings", () => {
   // every fitting path. The panel shows them as "mixed" for the one frame
   // and keeps them live, so Fill frame proportionally sends a write the
   // engine refuses.
-  test.failing(
+  test(
     "PN-257: on a text frame the fitting controls read as not applicable and send nothing",
     async () => {
       covers("panel:paged.frame-fitting");

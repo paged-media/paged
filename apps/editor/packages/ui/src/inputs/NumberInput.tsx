@@ -61,6 +61,11 @@ export interface NumberInputProps {
   /** Full display override (read-only text like "Metrics") — used
    * by seams whose placeholder isn't numeric. */
   displayText?: string;
+  /** The name of an UNSET value ("Auto" for auto leading): shown while
+   *  `value` is null and the field is not being edited, and the field
+   *  stays editable (unlike `displayText`). Without it a null value is
+   *  mixed (the em-dash). */
+  unsetText?: string;
   /** Reads typed text into a value; null when it is not one. Default: the
    *  leading number (`parseFloat`). A length field passes the unit-aware
    *  parser, so "10mm" in a pt field reads 28.35. */
@@ -107,16 +112,17 @@ export function NumberInput(props: NumberInputProps) {
     prefix,
     suffix,
     displayText,
+    unsetText,
     disabled = false,
     className = "",
     parse = parseLeading,
   } = props;
 
-  const mixed = value === null && displayText == null;
+  const mixed = value === null && displayText == null && unsetText == null;
 
   const displayFor = (v: number | null): string => {
     if (displayText != null) return displayText;
-    if (v === null) return "—";
+    if (v === null) return unsetText ?? "—";
     return suffix ? `${fmt(v, precision)} ${suffix}` : fmt(v, precision);
   };
 
@@ -139,7 +145,7 @@ export function NumberInput(props: NumberInputProps) {
   });
   useEffect(() => {
     syncText();
-  }, [value, suffix, displayText]);
+  }, [value, suffix, displayText, unsetText]);
 
   const scrub = useScrubGesture({
     initial: value ?? 0,

@@ -64,12 +64,32 @@ import { useCollection } from "./use-collection";
 // ---------------------------------------------------------------- helpers
 
 /** Unwraps a `Value::Length` to a number or null (mixed / absent /
- *  non-length variant). `Length(None)` reads as 0 — the "inherit
- *  default" convention the inspector established. */
-function unwrapLength(v: Value | null): number | null {
+ *  non-length variant). `Length(None)` is UNSET, not zero (R3, ADR 249):
+ *  it reads as the node's declared `unsetValue` (an untouched opacity's
+ *  100), else as 0, the InDesign default of most lengths (an indent, a
+ *  baseline shift). A node whose unset state has a name (auto leading)
+ *  says so with `unsetText` instead; see `unsetTextOf`. */
+function unwrapLength(
+  v: Value | null,
+  props: Record<string, unknown> = {},
+): number | null {
   if (v == null) return null;
   if (v.type !== "length") return null;
-  return v.value ?? 0;
+  if (v.value != null) return v.value;
+  return typeof props.unsetValue === "number" ? props.unsetValue : 0;
+}
+
+/** The text an unset length shows when the node names its unset state
+ *  (`unsetText: "Auto"` on leading), else undefined. */
+function unsetTextOf(
+  v: Value | null,
+  props: Record<string, unknown>,
+): string | undefined {
+  return v?.type === "length" &&
+    v.value == null &&
+    typeof props.unsetText === "string"
+    ? props.unsetText
+    : undefined;
 }
 
 function unwrapColorRef(v: Value | null): {
@@ -180,7 +200,8 @@ function rowProps(props: Record<string, unknown>) {
 export function LengthLeaf({ value, onCommit, props }: LeafProps) {
   const icon = iconFromProps(props);
   const seam = isSeam(props);
-  const pointValue = unwrapLength(value);
+  const unsetText = unsetTextOf(value, props);
+  const pointValue = unsetText ? null : unwrapLength(value, props);
   return (
     <LeafRow {...rowProps(props)}>
       <span data-seam={seam ? "true" : undefined} className="contents">
@@ -193,6 +214,7 @@ export function LengthLeaf({ value, onCommit, props }: LeafProps) {
           displayText={
             seam ? (strFromProps(props, "placeholder") ?? "—") : undefined
           }
+          unsetText={seam ? undefined : unsetText}
           disabled={seam || onCommit == null}
           onChangePt={() => {
             /* live updates ignored; commit on blur */
@@ -210,7 +232,8 @@ export function LengthLeaf({ value, onCommit, props }: LeafProps) {
 export function NumericScrubLeaf({ value, onCommit, props }: LeafProps) {
   const icon = iconFromProps(props);
   const seam = isSeam(props);
-  const pointValue = unwrapLength(value);
+  const unsetText = unsetTextOf(value, props);
+  const pointValue = unsetText ? null : unwrapLength(value, props);
   return (
     <LeafRow {...rowProps(props)}>
       <span data-seam={seam ? "true" : undefined} className="contents">
@@ -222,6 +245,7 @@ export function NumericScrubLeaf({ value, onCommit, props }: LeafProps) {
           displayText={
             seam ? (strFromProps(props, "placeholder") ?? "—") : undefined
           }
+          unsetText={seam ? undefined : unsetText}
           disabled={seam || onCommit == null}
           onChange={() => {
             /* live updates ignored; commit on blur */

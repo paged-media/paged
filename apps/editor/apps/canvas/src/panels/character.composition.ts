@@ -132,7 +132,8 @@ export const characterComposition: CompositionNode = asPropertyFields({
       children: [
         {
           catalogId: PAGED_INPUT_LENGTH,
-          props: { icon: "ui-leading" },
+          // Unset leading is Auto (R3, PN-21), not 0 pt.
+          props: { icon: "ui-leading", unsetText: "Auto" },
           bindings: {
             value: {
               kind: "selectionProperty",
