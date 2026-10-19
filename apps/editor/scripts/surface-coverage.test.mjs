@@ -130,6 +130,23 @@ describe("covers() reader", () => {
     );
   });
 
+  it("with a candidate list, reads only the candidates for calls", () => {
+    const dir = fixture({
+      "p/test/a.test.ts": `covers("command:paged.editor.undo");`,
+      "p/test/b.test.ts": `covers("command:paged.editor.redo");`,
+    });
+    const files = ["p/test/a.test.ts", "p/test/b.test.ts"];
+    const r = readCovers(dir, files, {
+      candidates: new Set(["p/test/a.test.ts"]),
+      keepTexts: false,
+    });
+    expect(r.calls.flatMap((c) => c.ids)).toEqual([
+      "command:paged.editor.undo",
+    ]);
+    expect(r.testFiles.sort()).toEqual(files);
+    expect(r.texts.size).toBe(0);
+  });
+
   it("normalises keybinding arrows", () => {
     expect(normaliseId("keybinding:cmd+z -> paged.editor.undo")).toEqual({
       kind: "keybinding",
