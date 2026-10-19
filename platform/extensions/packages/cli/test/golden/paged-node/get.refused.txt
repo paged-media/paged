@@ -1,0 +1,14 @@
+$ paged-node get <TMP>/fixture.paged page:#9 index --no-plugins
+# exit 1
+# stdout
+{
+  "address": "page:#9",
+  "path": "index",
+  "result": {
+    "kind": "refused",
+    "code": "unknownAddress",
+    "reason": "no page page:#9"
+  }
+}
+# stderr
+(empty)

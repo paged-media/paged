@@ -1,0 +1,11 @@
+$ paged-node invoke <TMP>/fixture.paged core.duplicatePage <TMP>/array.json --no-plugins
+# exit 2
+# stdout
+{
+  "error": {
+    "message": "args <TMP>/array.json: expected a JSON object",
+    "exit": 2
+  }
+}
+# stderr
+(empty)

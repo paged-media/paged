@@ -1,0 +1,22 @@
+$ paged-node create --help
+# exit 0
+# stdout
+paged-node create <doc> <kind> [props.json|{json}]
+
+create an object of a kind (core: swatch, gradient, colorGroup, style:<family>, textVariable, layer, page, textFrame/rectangle/oval — engine protocol >= 71; or a plugin kind) with its props in ONE undo step, then save
+
+options:
+  --within <address>                 the container (a page for frames, e.g. page:#1)
+  --handle <name>                    the batch handle of the new object ($h:<name>)
+  -o, --out <file>                   write the result here (format from the extension: .paged, .idml, .pdf)
+  --no-save                          apply the change but write nothing (a dry run)
+  --label <text>                     undo label for the write
+  --format <json|text>               output style (default json)
+  --plugins <a,b>                    load exactly these bundles (package names or paths) instead of discovering them
+  --no-plugins                       load no plugin bundles (core objects only)
+  --font <file.ttf>                  default font every load lays text out with
+  --engine-from <dir>                resolve @paged-media/canvas-wasm from this directory
+  --text                             human-readable output instead of JSON
+  -h, --help                         show help
+# stderr
+(empty)

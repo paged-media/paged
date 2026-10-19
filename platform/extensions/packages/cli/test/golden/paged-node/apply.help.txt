@@ -1,0 +1,23 @@
+$ paged-node apply --help
+# exit 0
+# stdout
+paged-node apply <doc>
+
+apply data bindings (bindings.json) for one record of --data, then save
+
+options:
+  --data <x.csv>                     the records (CSV/TSV/JSON/Parquet/XLSX through paged.data)
+  --query <sql>                      select the records (default SELECT * FROM "data")
+  --bindings <b.json>                { "bindings": [ { "kind": "property", "target", "path", "field" } | session kinds: variable, image, visibility, barcode, table, rule ] }
+  --record <n>                       the record to apply (0-based, default 0)
+  -o, --out <file>                   write the result here (format from the extension: .paged, .idml, .pdf)
+  --no-save                          apply the change but write nothing (a dry run)
+  --format <json|text>               output style (default json)
+  --plugins <a,b>                    load exactly these bundles (package names or paths) instead of discovering them
+  --no-plugins                       load no plugin bundles (core objects only)
+  --font <file.ttf>                  default font every load lays text out with
+  --engine-from <dir>                resolve @paged-media/canvas-wasm from this directory
+  --text                             human-readable output instead of JSON
+  -h, --help                         show help
+# stderr
+(empty)

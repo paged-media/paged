@@ -1,0 +1,28 @@
+$ paged-node delete <TMP>/fixture.paged rectangle:urect -o <TMP>/delete.paged --no-plugins
+# exit 0
+# stdout
+{
+  "targets": [
+    "rectangle:urect"
+  ],
+  "result": {
+    "applied": true,
+    "undoSteps": 1,
+    "outcome": {
+      "applied": true,
+      "createdId": null,
+      "pageIds": [
+        "usp"
+      ],
+      "minted": [],
+      "appliedSeq": 1
+    }
+  },
+  "saved": {
+    "path": "<TMP>/delete.paged",
+    "format": "paged",
+    "bytes": <N>
+  }
+}
+# stderr
+(empty)

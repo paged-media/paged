@@ -1,0 +1,11 @@
+$ paged-node merge
+# exit 2
+# stdout
+{
+  "error": {
+    "message": "usage: paged-node merge <template>",
+    "exit": 2
+  }
+}
+# stderr
+(empty)

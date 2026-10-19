@@ -1,0 +1,17 @@
+$ paged-node schema --help
+# exit 0
+# stdout
+paged-node schema <doc> [kind|address]
+
+the property schema of a kind or an object; without one: every kind and typed command
+
+options:
+  --format <json|text>               output style (default json)
+  --plugins <a,b>                    load exactly these bundles (package names or paths) instead of discovering them
+  --no-plugins                       load no plugin bundles (core objects only)
+  --font <file.ttf>                  default font every load lays text out with
+  --engine-from <dir>                resolve @paged-media/canvas-wasm from this directory
+  --text                             human-readable output instead of JSON
+  -h, --help                         show help
+# stderr
+(empty)

@@ -1,0 +1,7 @@
+$ paged-plugin integrity <TMP>/unbuilt
+# exit 1
+# stdout
+(empty)
+# stderr
+✗ <TMP>/unbuilt/manifest.json
+  - engine: "bin/engine.wasm" is not built — nothing to stamp
