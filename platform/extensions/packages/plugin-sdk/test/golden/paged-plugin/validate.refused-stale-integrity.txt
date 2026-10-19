@@ -1,0 +1,7 @@
+$ paged-plugin validate <TMP>/stale/manifest.json
+# exit 1
+# stdout
+(empty)
+# stderr
+✗ <TMP>/stale/manifest.json
+  - capabilities.wasm[0].integrity does not match "bin/engine.wasm" (the file is sha384-okyHV17AgVkZ4iL9gMeELR7Q1ISxRPcAHorFgvPJr/8CqM+btjXngbzNX3HOpqc/) — re-stamp with `paged-plugin integrity`

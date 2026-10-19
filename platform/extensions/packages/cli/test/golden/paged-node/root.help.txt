@@ -1,0 +1,40 @@
+$ paged-node --help
+# exit 0
+# stdout
+paged-node <CLI_VERSION> — the paged Node CLI over core and every installed plugin (ADR 324)
+
+usage: paged-node <verb> [args] [options]
+
+verbs:
+  get <doc> <address|selector> [path]           read one property, or every property of an object (all matches of a selector); heavy rows (pixels, story text) only with --content
+  set <doc> <address|selector> <path> <value>   set one property (value parsed through the path's schema); a selector sets every match in ONE undo step; saves in place unless -o / --no-save
+  create <doc> <kind> [props.json|{json}]       create an object of a kind (core: swatch, gradient, colorGroup, style:<family>, textVariable, layer, page, textFrame/rectangle/oval — engine protocol >= 71; or a plugin kind) with its props in ONE undo step, then save
+  delete <doc> <address|selector>               delete an object (a selector deletes every match) in ONE undo step, then save
+  query <doc> <selector>                        list the addresses a selector matches (kind, [name=…], [label.<key>=…], "page:#1 > frame", plugin kinds)
+  schema <doc> [kind|address]                   the property schema of a kind or an object; without one: every kind and typed command
+  batch <doc> <ops.json>                        apply a list of ObjectOps ({op:set|create|delete|invoke, …}; invoke a core.<op> command beside them) as ONE undo step, then save
+  commands [doc]                                the typed commands (core content / structure ops `core.<op>` and every plugin's) with their argument schemas
+  invoke <doc> <commandId> [args.json|{json}]   run one typed command (`paged-node commands` lists them; a core command is ONE undo step and answers created[]: what it made), then save
+  run <doc> <script.js> [-- args…]              run a JS module with `paged` = host.objects + typed commands (global, and the default export's argument); saves when it wrote
+  ai <doc> <brief> | --new <size> <brief>       Claude (claude-haiku-5-5) writes and runs paged.* scripts until the brief is done; saves when it wrote. Needs ANTHROPIC_API_KEY or `ant auth login`
+  export <doc>                                  export through core (pdf, idml, paged) or a plugin exporter (its id or extension); pdf goes through a typed exportPdf command (paged.publish) when one is installed, passing only the options given
+  apply <doc>                                   apply data bindings (bindings.json) for one record of --data, then save
+  merge <template>                              Data Merge: template + records → merged document(s) in --out, as pdf | idml | paged
+  plugins [doc]                                 the discovered bundles, their versions and object kinds
+  describe [doc]                                kinds × schemas × typed commands × verbs, as one JSON document (for agents and the docs)
+
+options (every verb):
+  --plugins <a,b>                    load exactly these bundles (package names or paths) instead of discovering them
+  --no-plugins                       load no plugin bundles (core objects only)
+  --font <file.ttf>                  default font every load lays text out with
+  --engine-from <dir>                resolve @paged-media/canvas-wasm from this directory
+  --text                             human-readable output instead of JSON
+  -h, --help                         show help
+
+Output is JSON; --text (or --format text where --format is not a file format) is for humans.
+Exit codes: 0 ok · 1 rejected write or failed check · 2 usage or IO error.
+Addresses: doc, page:#1, textFrame:<id>, story:<id>, storyRange:<id>@a..b, swatch:<name>, style:<family>/<name>,
+  layer:<id>, plugin:<pluginId>/<kind>/<id>. Selectors: swatch[name=Black], frame[label.<key>=v], page:#1 > frame.
+Run `paged-node <verb> --help` for a verb's options.
+# stderr
+(empty)

@@ -1,0 +1,7 @@
+$ paged-plugin modules-upload <TMP>/upload
+# exit 0
+# stdout
+http://127.0.0.1:9/@paged-media/test-bundle/0.0.1-test.0/bin/engine.wasm · not hosted (skipped: CLOUDFLARE_API_TOKEN is not set)
+modules: 1 declared, 1 not hosted (no token)
+# stderr
+(empty)

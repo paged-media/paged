@@ -1,0 +1,11 @@
+$ paged-node export <TMP>/fixture.paged -o <TMP>/x.docx --no-plugins
+# exit 2
+# stdout
+{
+  "error": {
+    "message": "no exporter for \"docx\" — known: pdf, idml, paged",
+    "exit": 2
+  }
+}
+# stderr
+(empty)

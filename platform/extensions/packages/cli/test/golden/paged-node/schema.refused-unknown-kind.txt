@@ -1,0 +1,11 @@
+$ paged-node schema <TMP>/fixture.paged nokind --no-plugins
+# exit 1
+# stdout
+{
+  "error": {
+    "message": "no kind or object \"nokind\" (see `paged-node schema <doc>`)",
+    "exit": 1
+  }
+}
+# stderr
+(empty)

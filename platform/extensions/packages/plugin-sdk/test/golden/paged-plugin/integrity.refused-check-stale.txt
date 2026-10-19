@@ -1,0 +1,7 @@
+$ paged-plugin integrity <TMP>/stale --check
+# exit 1
+# stdout
+(empty)
+# stderr
+✗ <TMP>/stale/manifest.json
+  - engine: stamp sha384-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA is stale (the file is sha384-okyHV17AgVkZ4iL9gMeELR7Q1ISxRPcAHorFgvPJr/8CqM+btjXngbzNX3HOpqc/)
