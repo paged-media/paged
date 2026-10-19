@@ -29,6 +29,7 @@ import { Icon } from "../icons";
 import { ZoomControl } from "./ZoomControl";
 import { useCamera } from "../state/camera-context";
 import { useRegistries } from "../state/registries-context";
+import { useRegistryView } from "../state/live";
 import {
   useWorkflowMode,
   type WorkflowMode,
@@ -40,7 +41,9 @@ export interface ModeSwitcherProps {
 
 export function ModeSwitcher({ right }: ModeSwitcherProps) {
   const { mode, setMode } = useWorkflowMode();
-  const { modes } = useRegistries();
+  // A view of the registry (state/live.ts, ADR 229): a bundle that
+  // registers a mode after the first render shows up.
+  const modes = useRegistryView(useRegistries().modes);
   const list = modes.list();
   if (list.length === 0) return null;
 

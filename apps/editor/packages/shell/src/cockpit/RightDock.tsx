@@ -29,15 +29,17 @@ import { useEffect, useRef } from "react";
 import { Icon, hasIcon } from "../icons";
 import { PluginGlyph } from "../icons/plugin-glyph";
 import { useRegistries } from "../state/registries-context";
+import { useRegistryView } from "../state/live";
 import { useCockpitState } from "./cockpit-state-context";
 import { PanelHost } from "./PanelHost";
 
 export function RightDock() {
   const { rightTabs, activeTab, activateTab, closeTab } = useCockpitState();
-  const { panels } = useRegistries();
+  const panels = useRegistryView(useRegistries().panels);
 
   // Resolve tabs against the registry — a disposed plugin panel
-  // simply drops out of the strip.
+  // simply drops out of the strip (read through a view that changes with
+  // the registry, state/live.ts, ADR 229).
   const tabs = rightTabs
     .map((id) => panels.get(id))
     .filter((c): c is NonNullable<typeof c> => c != null);

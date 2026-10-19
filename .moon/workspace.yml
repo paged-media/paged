@@ -26,6 +26,7 @@ projects:
   # Internal shared code of the built-ins (docs/adr/PM-0002)
   ai: "platform/shared/ai"
   helpers: "platform/shared/helpers"
+  react-live: "platform/shared/react-live"
   test-kit: "platform/shared/test-kit"
   test-resources: "platform/shared/test-resources"
   wasm-boot: "platform/shared/wasm-boot"

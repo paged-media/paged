@@ -22,6 +22,7 @@
   },
   "dependencies": {
     "@paged-media/helpers": "workspace:*",
+    "@paged-media/react-live": "workspace:*",
     "@paged-media/wasm-boot": "workspace:*"
   },
   "peerDependencies": {

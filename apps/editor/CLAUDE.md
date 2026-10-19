@@ -94,6 +94,26 @@ in the same checkout: `moon run core:wasm-pkg`, or
   bare loader default (it resolves relative to node_modules and
   breaks worker chunks).
 
+### The React Compiler compiles everything (ADR 229)
+
+The app, its packages and every module bundle ship compiled
+(`tooling/js/react-compiler.mjs`). The compiler memoizes what a
+component computes on the values it READS and treats them as immutable,
+so:
+
+- **Read a mutable source during render through a view.** A registry
+  (`useRegistryView(registries.menus).list()`), a store, a session or a
+  host surface (`useLive(source, subscribeOf)` from
+  `@paged-media/react-live`), or a `useSyncExternalStore` snapshot.
+  Never `registry.list()` on the registry object, a module variable, or
+  a value beside a version counter that only triggers the render.
+- **Name a component** with a declaration or a `const`: the compiler
+  cannot see `return function Panel()`.
+- `bun run test:dom:compiled` (canvas, shell) runs the DOM lane on
+  compiled code; CI does too. Fixing a bailout, or adding a component,
+  updates `compiler-coverage.json`:
+  `bun tooling/js/react-compiler-coverage.mjs --write`.
+
 ### `paged.*` scripting global
 
 The engine's `paged-script` crate registers a global `paged.*`

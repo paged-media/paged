@@ -47,7 +47,7 @@
 // own no-write-path disable still applies on top (so a row with no
 // selection stays disabled regardless).
 
-import { useEffect, useMemo, useReducer, useState } from "react";
+import { useMemo, useState } from "react";
 
 import type { Binding, CompositionNode } from "@paged-media/catalog";
 import type { CollectionName, ElementId, Value } from "@paged-media/client";
@@ -55,6 +55,7 @@ import type { CollectionName, ElementId, Value } from "@paged-media/client";
 import { useCanvasClient } from "../state/canvas-client-context";
 import { useContentSelection } from "../state/content-selection-context";
 import { useRegistries } from "../state/registries-context";
+import { useLive, type Listen } from "@paged-media/react-live";
 import { useSelection } from "../state/selection-context";
 import { useProvidedCollection } from "./binding-providers";
 import { PAGED_LIST } from "./built-in";
@@ -112,14 +113,17 @@ function rowToNode(row: PanelSchemaWidgetRow): CompositionNode {
   };
 }
 
-/** Subscribe to the bundle's published bindings; re-render on any
- *  change so the gates stay live. */
-function useBindingsTick(bindings: BindingsSurface): void {
-  const [, tick] = useReducer((n: number) => n + 1, 0);
-  useEffect(() => {
-    const d = bindings.onDidChange(() => tick());
-    return () => d.dispose();
-  }, [bindings]);
+/** The bundle's published bindings as a value that changes with them
+ *  (state/live.ts, ADR 229). Every gate below reads through it, so a
+ *  publish re-renders the rows that read the binding: the sections get a
+ *  new `bindings` prop, and a memoized gate recomputes. */
+const listenToBindings: Listen<BindingsSurface> = (bindings, onChange) => {
+  const d = bindings.onDidChange(() => onChange());
+  return () => d.dispose();
+};
+
+function useBindingsView(bindings: BindingsSurface): BindingsSurface {
+  return useLive(bindings, listenToBindings);
 }
 
 function gate(g: SchemaGate | undefined, bindings: BindingsSurface): boolean {
@@ -607,15 +611,11 @@ export function SchemaPanelRenderer({
   schema: PanelSchema;
   bindings: BindingsSurface;
 }) {
-  useBindingsTick(bindings);
+  const live = useBindingsView(bindings);
   return (
     <div className="flex flex-col gap-[9px] p-3" data-schema-panel={schema.id}>
       {schema.sections.map((section, i) => (
-        <SchemaSection
-          key={`section-${i}`}
-          section={section}
-          bindings={bindings}
-        />
+        <SchemaSection key={`section-${i}`} section={section} bindings={live} />
       ))}
     </div>
   );
