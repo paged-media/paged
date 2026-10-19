@@ -11,7 +11,7 @@
   "scripts": {
     "typecheck": "bun check -p tsconfig.json",
     "test": "bun test --parallel --preload ../../../../tooling/js/bun-test-setup.ts",
-    "build": "bun scripts/build.mjs",
+    "build": "bun scripts/build.mjs && tsc -p tsconfig.build.json",
     "prepublishOnly": "bun run build"
   },
   "dependencies": {
