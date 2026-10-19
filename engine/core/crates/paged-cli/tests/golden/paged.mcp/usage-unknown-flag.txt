@@ -1,0 +1,10 @@
+$ paged mcp --port 1
+--- exit: 2
+--- stdout
+(empty)
+--- stderr
+error: unexpected argument '--port' found
+
+Usage: paged mcp [OPTIONS]
+
+For more information, try '--help'.

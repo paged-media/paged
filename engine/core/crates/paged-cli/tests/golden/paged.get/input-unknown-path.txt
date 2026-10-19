@@ -1,0 +1,6 @@
+$ paged get doc.paged oval:u2 nope
+--- exit: 1
+--- stdout
+(empty)
+--- stderr
+Error: oval:u2.nope: frame.nope: no such readable path on a frame (noSuchPath)

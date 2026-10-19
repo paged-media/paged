@@ -1,0 +1,11 @@
+$ paged script doc.paged
+--- exit: 2
+--- stdout
+(empty)
+--- stderr
+error: the following required arguments were not provided:
+  <SCRIPT>
+
+Usage: paged script <DOC> <SCRIPT>
+
+For more information, try '--help'.

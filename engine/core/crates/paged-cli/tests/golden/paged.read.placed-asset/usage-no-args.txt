@@ -1,0 +1,12 @@
+$ paged read placed-asset
+--- exit: 2
+--- stdout
+(empty)
+--- stderr
+error: the following required arguments were not provided:
+  <DOC>
+  <ELEMENT_ID>
+
+Usage: paged read placed-asset <DOC> <ELEMENT_ID>
+
+For more information, try '--help'.

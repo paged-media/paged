@@ -1,0 +1,9 @@
+$ paged get red.paged oval:u2 frameFillColor
+--- exit: 0
+--- stdout
+{
+  "type": "colorRef",
+  "value": "Color/u1"
+}
+--- stderr
+(empty)

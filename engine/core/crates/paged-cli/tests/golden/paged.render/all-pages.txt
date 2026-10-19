@@ -1,0 +1,7 @@
+$ paged render two.paged --all --dpi 36 -o pages
+--- exit: 0
+--- stdout
+pages/page-001.png — page 1 at 36 dpi, 306×396 px
+pages/page-002.png — page 2 at 36 dpi, 306×396 px
+--- stderr
+(empty)

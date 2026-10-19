@@ -1,0 +1,6 @@
+$ paged script doc.paged loop.js --max-loop-iterations 1000
+--- exit: 1
+--- stdout
+(empty)
+--- stderr
+Error: "loop.js": runtime budget exceeded: RuntimeLimit: Maximum loop iteration limit 1000 exceeded (budget: Iterations)

@@ -1,0 +1,12 @@
+$ paged read planar-regions
+--- exit: 2
+--- stdout
+(empty)
+--- stderr
+error: the following required arguments were not provided:
+  <DOC>
+  <IDS>...
+
+Usage: paged read planar-regions <DOC> <IDS>...
+
+For more information, try '--help'.

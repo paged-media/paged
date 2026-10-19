@@ -1,0 +1,22 @@
+$ paged query doc.paged '*'
+--- exit: 0
+--- stdout
+doc
+layer:Layer/u0
+spread:us
+page:usp
+textFrame:u1
+oval:u2
+oval:u3
+polygon:u4
+rectangle:u5
+master:um
+story:Story/u0
+style:paragraph/ParagraphStyle/$ID/[No paragraph style]
+style:character/CharacterStyle/$ID/[No character style]
+swatch:Color/Black
+swatch:Color/u1
+swatch:Swatch/None
+gradient:Gradient/u0
+--- stderr
+(empty)

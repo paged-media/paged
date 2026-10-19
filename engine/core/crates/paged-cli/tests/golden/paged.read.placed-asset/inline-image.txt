@@ -1,0 +1,16 @@
+$ paged read placed-asset doc.paged u5 -o asset.png
+--- exit: 0
+--- stdout
+{
+  "kind": "placedAssetBytes",
+  "payload": {
+    "elementId": "u5",
+    "encoded": [],
+    "found": true,
+    "height": 792,
+    "uri": "inline:u5",
+    "width": 612
+  }
+}
+--- stderr
+placed asset: <N> bytes → asset.png

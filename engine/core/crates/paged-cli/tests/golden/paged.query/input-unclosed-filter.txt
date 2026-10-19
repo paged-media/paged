@@ -1,0 +1,8 @@
+$ paged query doc.paged 'frame['
+--- exit: 1
+--- stdout
+(empty)
+--- stderr
+Error: selector does not parse: a `[` filter is not closed
+  frame[
+       ^

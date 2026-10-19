@@ -1,0 +1,11 @@
+$ paged read gradient-detail doc.paged Gradient/nope
+--- exit: 0
+--- stdout
+{
+  "kind": "gradientDetailReply",
+  "payload": {
+    "result": null
+  }
+}
+--- stderr
+(empty)

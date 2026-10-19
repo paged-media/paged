@@ -1,0 +1,17 @@
+$ paged library --help
+--- exit: 0
+--- stdout
+The local library of documents `paged mcp` serves
+
+Usage: paged library [OPTIONS] <COMMAND>
+
+Commands:
+  import  Open a file into the library as a new document
+  list    The library's documents and their heads
+  help    Print this message or the help of the given subcommand(s)
+
+Options:
+      --library <LIBRARY>  The library directory. Default: `$PAGED_LIBRARY`, else `~/.paged/library`
+  -h, --help               Print help
+--- stderr
+(empty)

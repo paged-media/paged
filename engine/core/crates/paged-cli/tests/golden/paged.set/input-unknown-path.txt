@@ -1,0 +1,6 @@
+$ paged set doc.paged oval:u2 nope 1
+--- exit: 1
+--- stdout
+(empty)
+--- stderr
+Error: "nope" is not a property of a frame (see `paged describe`, propertySchemas)

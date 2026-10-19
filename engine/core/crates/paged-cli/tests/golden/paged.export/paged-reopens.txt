@@ -1,0 +1,10 @@
+$ paged query out.paged frame
+--- exit: 0
+--- stdout
+textFrame:u1
+oval:u2
+oval:u3
+polygon:u4
+rectangle:u5
+--- stderr
+(empty)

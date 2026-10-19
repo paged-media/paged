@@ -1,0 +1,18 @@
+$ paged read collection doc.paged gradients
+--- exit: 0
+--- stdout
+{
+  "kind": "collectionReply",
+  "payload": {
+    "items": [
+      {
+        "kind": "linear",
+        "name": "Dawn",
+        "selfId": "Gradient/u0"
+      }
+    ],
+    "name": "gradients"
+  }
+}
+--- stderr
+(empty)

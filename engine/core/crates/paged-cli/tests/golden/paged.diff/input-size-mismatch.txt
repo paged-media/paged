@@ -1,0 +1,9 @@
+$ paged diff doc.png big.png
+--- exit: 1
+--- stdout
+(empty)
+--- stderr
+Error: compare doc.png with big.png
+
+Caused by:
+    dimension mismatch: reference (306, 396) vs candidate (612, 792)

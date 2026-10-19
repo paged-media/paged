@@ -1,0 +1,6 @@
+$ paged read placed-asset doc.paged rectangle:u4 -o none.png
+--- exit: 1
+--- stdout
+(empty)
+--- stderr
+Error: no placed asset to write — the engine answered found: false

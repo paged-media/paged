@@ -1,0 +1,6 @@
+$ paged place doc.paged rectangle:u5 pic.idml
+--- exit: 1
+--- stdout
+(empty)
+--- stderr
+Error: the engine decodes png / jpg / jpeg / webp / tif / tiff / gif / bmp — pic.idml is a .idml. Transcode it first; placing bytes it cannot decode leaves the frame blank.

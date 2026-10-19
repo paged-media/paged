@@ -1,0 +1,6 @@
+$ paged query built.paged textFrame
+--- exit: 0
+--- stdout
+textFrame:u1
+--- stderr
+(empty)

@@ -1,0 +1,6 @@
+$ paged diff blank.png doc.png --json --heatmap heat.png
+--- exit: 1
+--- stdout
+keys ["max_de", "mean_de", "p99_de", "passes", "ssim"], passes false
+--- stderr
+(empty)

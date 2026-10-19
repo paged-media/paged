@@ -1,0 +1,40 @@
+$ paged read snap-point doc.paged usp 401 99
+--- exit: 0
+--- stdout
+{
+  "kind": "snapPoint",
+  "payload": {
+    "result": {
+      "lines": [
+        {
+          "axis": "x",
+          "pageId": "usp",
+          "position": 400.0
+        }
+      ],
+      "point": [
+        400.0,
+        99.0
+      ],
+      "pointTarget": null,
+      "segmentTarget": null,
+      "snapped": true,
+      "tolerancePt": 4.0,
+      "xTarget": {
+        "element": {
+          "id": "u1",
+          "kind": "textFrame"
+        },
+        "position": 400.0,
+        "source": "corner",
+        "through": [
+          400.0,
+          72.0
+        ]
+      },
+      "yTarget": null
+    }
+  }
+}
+--- stderr
+(empty)

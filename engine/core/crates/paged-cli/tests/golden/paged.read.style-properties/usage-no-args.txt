@@ -1,0 +1,13 @@
+$ paged read style-properties
+--- exit: 2
+--- stdout
+(empty)
+--- stderr
+error: the following required arguments were not provided:
+  <DOC>
+  <COLLECTION>
+  <STYLE_ID>
+
+Usage: paged read style-properties <DOC> <COLLECTION> <STYLE_ID>
+
+For more information, try '--help'.

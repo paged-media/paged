@@ -1,0 +1,25 @@
+$ paged read collection doc.paged swatches
+--- exit: 0
+--- stdout
+{
+  "kind": "collectionReply",
+  "payload": {
+    "items": [
+      {
+        "kind": "black",
+        "name": "Black",
+        "selfId": "Color/Black",
+        "totalAreaCoveragePct": 100.0
+      },
+      {
+        "kind": "process",
+        "name": "Vermilion",
+        "selfId": "Color/u1",
+        "totalAreaCoveragePct": 200.0
+      }
+    ],
+    "name": "swatches"
+  }
+}
+--- stderr
+(empty)
