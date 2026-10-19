@@ -10,7 +10,7 @@ rendered. How the parts fit is in [`architecture.md`](architecture.md).
 ## Shipped
 
 - **Two engine npm packages per release tag** (PM-0008). `@paged-media/canvas-wasm` (with
-  the `./introspect` and `./repo` entries) and `@paged-media/idml-viewer` (with the
+  the `./introspect` and `./repo` entries) and `@paged-media/viewer` (with the
   `./session` entry), built and published by `.github/workflows/release.yml` together with
   the extension contract's `@paged-media/plugin-api` and `@paged-media/plugin-sdk`.
 - **Open and create.** `LoadDocument` opens an `.idml` package or a `.paged` container;

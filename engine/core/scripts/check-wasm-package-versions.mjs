@@ -3,7 +3,7 @@
 // 0.<PROTOCOL_VERSION>.0-dev, with PROTOCOL_VERSION read from
 // crates/paged-canvas/src/channel.rs (ADR 185): @paged-media/canvas-wasm
 // (packages/canvas-wasm/, which carries the canvas, introspection and
-// repository wasm) and @paged-media/idml-viewer (web/idml-viewer/, which
+// repository wasm) and @paged-media/viewer (web/idml-viewer/, which
 // carries the viewer session wasm), PM-0008. The editor takes the wire
 // protocol from canvas-wasm's version minor, so a protocol bump that leaves
 // these versions behind runs the editor on the wrong number.
@@ -25,7 +25,7 @@ const SHELLS = join(CORE, "packages");
 // directory (relative to engine/core) -> package name
 const PACKAGES = {
   "packages/canvas-wasm": "@paged-media/canvas-wasm",
-  "web/idml-viewer": "@paged-media/idml-viewer",
+  "web/idml-viewer": "@paged-media/viewer",
 };
 const write = process.argv.includes("--write");
 
