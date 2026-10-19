@@ -93,6 +93,7 @@ import {
   resetProblems,
 } from "../../../src/panels/problems-store";
 import type { ModuleManifest } from "../../../src/plugin-modules";
+import type { BundleWorkerModuleResolver } from "../../../src/plugin-worker";
 
 import { fakeOpfs, fakeSystemClipboard, fakeLocalStorage } from "./platform";
 
@@ -212,6 +213,9 @@ export interface EditorApp {
   willSave: WillSaveRegistry;
   /** What the Problems panel lists (the editor's diagnostics sink). */
   problems: typeof getProblemsSnapshot;
+  /** The worker modules the editor serves per plugin (main.tsx: Vite's
+   *  `?worker&url` imports); a case adds the probe's. */
+  workerResolvers: Record<string, BundleWorkerModuleResolver>;
   /** What `host.shell.openPanel` / `closePanel` reached. */
   panelCalls: string[];
   /** What `host.shell.enterEditContext` reached. */
@@ -290,6 +294,7 @@ export async function editorAdapter(): Promise<HostUnderTest> {
   const documents = createEditorDocuments();
   const settings = toolSettingsStore();
   const willSave = createWillSaveRegistry();
+  const workerResolvers: Record<string, BundleWorkerModuleResolver> = {};
   resetProblems();
   const caret: EditorApp["caret"] = { current: null };
   const panelCalls: string[] = [];
@@ -322,7 +327,7 @@ export async function editorAdapter(): Promise<HostUnderTest> {
     schemaPanelRenderer: noComponent as unknown as NonNullable<
       CreateBundleHostOptions["schemaPanelRenderer"]
     >,
-    workerResolvers: {},
+    workerResolvers,
     moduleManifest: PROBE_MODULES,
     origin: "http://localhost:5180",
     consent: consent.backend,
@@ -368,6 +373,7 @@ export async function editorAdapter(): Promise<HostUnderTest> {
       documents,
       willSave,
       problems: getProblemsSnapshot,
+      workerResolvers,
       panelCalls,
       entered,
       toolSettings: settings,
