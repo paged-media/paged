@@ -92,12 +92,13 @@ jpeg-decoder = "0.3"
 # transitive dep via the image crate's PNG decoder).
 flate2 = "1"
 # SVG parsing; paged-gpu's `svg` feature draws the tree with vello_cpu.
-# Pure-Rust, compiles on wasm32. We disable the system-fonts /
-# memmap-fonts features (browser sandbox can't read system fonts; we'd
-# serve them through the renderer's font resolver if a placed SVG needed
-# text — most IDML-embedded SVGs are pure vector graphics like icons +
-# logos).
-usvg = { version = "0.48", default-features = false, features = ["text", "svgz"] }
+# Pure-Rust, compiles on wasm32. No `text` feature: with no font database
+# (the browser sandbox reads no system fonts) usvg drew no SVG text
+# anyway, and the feature's shaper cost 0.9 MB in every engine wasm. A
+# placed SVG that needs text would take `text` here and in paged-gpu plus
+# fonts from the renderer's resolver; most IDML-embedded SVGs are pure
+# vector graphics like icons and logos.
+usvg = { version = "0.48", default-features = false, features = ["svgz"] }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }

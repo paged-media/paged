@@ -46,7 +46,7 @@ vello = { version = "0.11.0", optional = true, default-features = false, feature
 # display list carries glyphs as outlines.
 vello_cpu = { version = "0.3.0", optional = true, default-features = false, features = ["std", "u8_pipeline"] }
 image = { workspace = true, optional = true }
-usvg = { version = "0.48", optional = true, default-features = false, features = ["text", "svgz"] }
+usvg = { version = "0.48", optional = true, default-features = false, features = ["svgz"] }
 wgpu = { version = "30.0.1", optional = true }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
