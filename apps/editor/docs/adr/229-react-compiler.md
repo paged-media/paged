@@ -110,7 +110,10 @@ run(host); }` where `host` does not exist; draw's Symbols and Appearance buttons
   each is its own change.
 - Fewer re-renders for the same interactions (the DOM lane's render counter, as written against
   compiled): Layers 116 to 67 panel renders, Properties 2,306 to 997, Swatches 267 to 88, Pages
-  5 to 1 per commit. The latency probe on the production build is in the migration record.
+  5 to 1 per commit. On the production build (the latency probe), the components rendered per
+  interaction fall by 31 to 67% with the same commits, the next frame comes sooner for Layers
+  (median 14.0 to 8.6 ms) and Swatches (16.6 to 8.0 ms) and is unchanged for the rest, and 288
+  of the 518 mounted function components carry a compiler cache (0 before).
 - A new component that reads a registry, a store or a host surface during render reads it
   through a view (`useRegistryView`, `useLive`) or a store snapshot. The compiled DOM lanes fail
   on the patterns above when a test renders the component.
