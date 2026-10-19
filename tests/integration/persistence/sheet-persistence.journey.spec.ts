@@ -33,16 +33,19 @@
 
 import { expect, test, type Page } from "@playwright/test";
 
-import { openPanel } from "../../fidelity/canvas-driver";
-import { Designer } from "../driver/designer";
-import { FORMULAS_A1_B3, placedValues } from "./sheet-kit";
+import { openPanel } from "../../../apps/editor/apps/canvas/tests/fidelity/canvas-driver";
+import { Designer } from "../../../apps/editor/apps/canvas/tests/journey/driver/designer";
+import {
+  FORMULAS_A1_B3,
+  placedValues,
+} from "../../../apps/editor/apps/canvas/tests/journey/plugins/sheet-kit";
 
 import { dirname, resolve as pathResolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const XLSX_FIXTURE = pathResolve(
   dirname(fileURLToPath(import.meta.url)),
-  "../../e2e/harness/sheet-02-formulas.xlsx",
+  "../../../apps/editor/apps/canvas/tests/e2e/harness/sheet-02-formulas.xlsx",
 );
 
 const WORKBOOK_PANEL = "media.paged.sheet.panel.workbook";

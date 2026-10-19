@@ -54,19 +54,21 @@ import { fileURLToPath } from "node:url";
 
 import { expect, test, type Page } from "@playwright/test";
 
-import { readZipText, zipEntryNames } from "../../e2e/harness/read-zip";
-import { openPanel } from "../../fidelity/canvas-driver";
-import { Designer } from "../driver/designer";
-import { skipWithoutDuckDB } from "./data-duckdb-gate";
+import {
+  readZipText,
+  zipEntryNames,
+} from "../../../apps/editor/apps/canvas/tests/e2e/harness/read-zip";
+import { openPanel } from "../../../apps/editor/apps/canvas/tests/fidelity/canvas-driver";
+import { Designer } from "../../../apps/editor/apps/canvas/tests/journey/driver/designer";
+import { skipWithoutDuckDB } from "../../../apps/editor/apps/canvas/tests/journey/plugins/data-duckdb-gate";
 import {
   dataFields as engineDataFields,
-  ENGINE_PROTOCOL,
   sessionLabel,
-} from "./data-engine";
+} from "../../../apps/editor/apps/canvas/tests/journey/plugins/data-engine";
 
 const CSV_FIXTURE = pathResolve(
   dirname(fileURLToPath(import.meta.url)),
-  "../../e2e/harness/data-people.csv",
+  "../../../apps/editor/apps/canvas/tests/e2e/harness/data-people.csv",
 );
 
 const SOURCES_PANEL = "media.paged.data.panel.sources";
@@ -163,9 +165,8 @@ test.describe("journey · paged.data persistence", () => {
       })
       .toEqual(["Ada Lovelace"]);
     const key = (await dataFields(page))[0].key;
-    const labelled = ENGINE_PROTOCOL >= 69 ? await sessionLabel(page) : null;
-    if (ENGINE_PROTOCOL >= 69)
-      expect(labelled, "the Lower carried the session label").not.toBeNull();
+    const labelled = await sessionLabel(page);
+    expect(labelled, "the Lower carried the session label").not.toBeNull();
 
     // ── 2. SAVE — the session part is in the file ─────────────────────────
     const saved = await savePaged(designer, page);

@@ -34,7 +34,7 @@ import {
   publishActivePage,
   setPageGoTo,
   setTextReveal,
-} from "../../../src/plugin-pages";
+} from "../../../apps/editor/apps/canvas/src/plugin-pages";
 
 import {
   PROBE_ID,

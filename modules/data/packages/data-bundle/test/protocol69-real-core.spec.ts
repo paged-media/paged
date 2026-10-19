@@ -23,7 +23,6 @@ import { commitLoweredVariable } from "../src/lower";
 import {
   ENGINE_ANCHOR,
   ENGINE_PROTOCOL,
-  fixedFrom,
   openRealHost,
   REQUIRE_REAL_CORE,
 } from "./real-core";
@@ -78,65 +77,59 @@ describe.skipIf(!run)(
       h = null;
     });
 
-    fixedFrom(69, it)(
-      "DEFECT core <69: undoing a deleteRange over a field puts the field back [data.lower.v43-consumers]",
-      async () => {
-        h = await openRealHost();
-        const host = h.host;
-        const story = await storyWith(host, "ab");
-        await host.document.mutate({
-          op: "insertField",
-          args: {
-            storyId: story,
-            offset: 1,
-            field: {
-              placeholder: { plugin: PLUGIN, key: "k", value: "VALUE" },
-            },
+    it("DEFECT core <69: undoing a deleteRange over a field puts the field back [data.lower.v43-consumers]", async () => {
+      h = await openRealHost();
+      const host = h.host;
+      const story = await storyWith(host, "ab");
+      await host.document.mutate({
+        op: "insertField",
+        args: {
+          storyId: story,
+          offset: 1,
+          field: {
+            placeholder: { plugin: PLUGIN, key: "k", value: "VALUE" },
           },
-        });
-        expect((await ours(host)).map((f) => f.key)).toEqual(["k"]);
-        const before = await storyText(host, story);
-        const del = await host.document.mutate({
-          op: "deleteRange",
-          args: { storyId: story, start: 0, end: before.length },
-        });
-        expect(del.applied).toBe(true);
-        expect(await ours(host)).toEqual([]);
-        await host.document.undo();
-        expect(await storyText(host, story)).toBe(before);
-        expect((await ours(host)).map((f) => [f.key, f.value])).toEqual([
-          ["k", "VALUE"],
-        ]);
-      },
-    );
+        },
+      });
+      expect((await ours(host)).map((f) => f.key)).toEqual(["k"]);
+      const before = await storyText(host, story);
+      const del = await host.document.mutate({
+        op: "deleteRange",
+        args: { storyId: story, start: 0, end: before.length },
+      });
+      expect(del.applied).toBe(true);
+      expect(await ours(host)).toEqual([]);
+      await host.document.undo();
+      expect(await storyText(host, story)).toBe(before);
+      expect((await ours(host)).map((f) => [f.key, f.value])).toEqual([
+        ["k", "VALUE"],
+      ]);
+    });
 
-    fixedFrom(69, it)(
-      "DEFECT core <69: a field placed at the caret in the second paragraph lands at the caret [data.lower.v43-consumers]",
-      async () => {
-        h = await openRealHost();
-        const story = await storyWith(h.host, "abc\ndef");
-        // The caret between "de" and "f": 3 bytes + 1 paragraph mark + 2 = 6.
-        const caretHost = new Proxy(h.host, {
-          get(t, p, r) {
-            if (p === "text")
-              return {
-                ...t.text,
-                caret: () => ({ storyId: story, offset: 6 }),
-              };
-            if (p === "supports")
-              return (f: string) => f === "text.caret@1" || t.supports(f);
-            return Reflect.get(t, p, r);
-          },
-        });
-        const placed = await commitLoweredVariable(
-          caretHost,
-          { kind: "variable", target: "a", text: "X", hidden: false } as never,
-          "k",
-        );
-        expect(placed).not.toBeNull();
-        expect(await storyText(h.host, story)).toBe("abc\ndeXf");
-      },
-    );
+    it("DEFECT core <69: a field placed at the caret in the second paragraph lands at the caret [data.lower.v43-consumers]", async () => {
+      h = await openRealHost();
+      const story = await storyWith(h.host, "abc\ndef");
+      // The caret between "de" and "f": 3 bytes + 1 paragraph mark + 2 = 6.
+      const caretHost = new Proxy(h.host, {
+        get(t, p, r) {
+          if (p === "text")
+            return {
+              ...t.text,
+              caret: () => ({ storyId: story, offset: 6 }),
+            };
+          if (p === "supports")
+            return (f: string) => f === "text.caret@1" || t.supports(f);
+          return Reflect.get(t, p, r);
+        },
+      });
+      const placed = await commitLoweredVariable(
+        caretHost,
+        { kind: "variable", target: "a", text: "X", hidden: false } as never,
+        "k",
+      );
+      expect(placed).not.toBeNull();
+      expect(await storyText(h.host, story)).toBe("abc\ndeXf");
+    });
   },
 );
 

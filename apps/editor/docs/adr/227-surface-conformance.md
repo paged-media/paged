@@ -69,7 +69,7 @@ The gate also measured only part of the surface:
 - `scripts/surface/static-eval.mjs`: the evaluator
 - `scripts/surface/covers-reader.mjs`: the forms and the layer rules
 - `scripts/surface-coverage.test.mjs`: each reader pinned against a fixture it must read in full
-- `apps/canvas/test/contracts/surface-enumeration.test.ts`: the static plugin enumeration
+- `tests/contracts/surface-enumeration.test.ts` (repository root): the static plugin enumeration
   (menus, keybindings, tool options) equals what the nine bundles register at run time
 - `platform/shared/test-kit/src/covers.ts`, `platform/shared/test-resources/src/lib.rs` (`covers!`)
 
@@ -82,10 +82,10 @@ The gate also measured only part of the surface:
   harness snapshot. Rejected as the gate's source: the Playwright lane needs a fixtures
   checkout that CI cannot always make, and a snapshot is only as fresh as its last run. The
   static enumeration runs everywhere in a minute. Instead, the runtime CHECKS it:
-  `apps/canvas/test/contracts/surface-enumeration.test.ts` activates every bundle against
+  `tests/contracts/surface-enumeration.test.ts` (repository root) activates every bundle against
   the headless engine, records each `contribute.menu`, `contribute.keybinding` and
   `contribute.tool` call (with its options), and asserts both lists are equal per bundle.
-  It runs in the `checks` job with the bundle contracts.
+  It runs in the `tests` workflow with the bundle contracts.
 - **One ACKNOWLEDGED map in the script.** Rejected. Six parallel efforts removing entries
   from one map collide on every merge; one line per entry, in files split by origin, kind and
   clause, merge cleanly.

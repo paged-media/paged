@@ -130,17 +130,32 @@ export async function openLeaf(page: Page, route: MenuRoute): Promise<Locator> {
   await closeMenus(page);
   await bar(page).locator(`[data-menu-trigger="${route.trigger}"]`).click();
   for (const name of route.submenus) {
-    const level = page.locator('[role="menu"]').last();
-    const sub = level.locator(`[data-menu-submenu="${name}"]`);
-    await expect(sub, `submenu "${name}"`).toBeVisible();
-    const count = await page.locator('[role="menu"]').count();
+    const menus = page.locator('[role="menu"]');
+    await expect(
+      menus.last().locator(`[data-menu-submenu="${name}"]`),
+      `submenu "${name}"`,
+    ).toBeVisible();
+    // Pin the trigger to the menu it is in NOW, by index. `last()` is
+    // re-resolved on every action, and the hover below opens this very
+    // submenu: once it has, `last()` is the new submenu, the trigger is not
+    // in it, and the press waited for a trigger that was never coming
+    // until the test timed out (seen in repeated runs, ADR 228).
+    const count = await menus.count();
+    const sub = menus.nth(count - 1).locator(`[data-menu-submenu="${name}"]`);
     await sub.hover();
     // ArrowRight as well: a hover alone is racy when the pointer path
     // crosses a sibling submenu trigger on the way.
     await sub.press("ArrowRight");
-    await expect(page.locator('[role="menu"]')).toHaveCount(count + 1);
+    await expect(menus).toHaveCount(count + 1);
   }
-  const level = page.locator('[role="menu"]').last();
+  // The leaf's menu, pinned by index for the same reason: the returned
+  // locator is clicked later, and a submenu the pointer opens on its way
+  // there would otherwise become `last()` and swap the menu under the item
+  // (seen: a click that waited on a detached `nth(16)` until the test timed
+  // out, ADR 228).
+  const menus = page.locator('[role="menu"]');
+  await expect(menus.last()).toBeVisible();
+  const level = menus.nth((await menus.count()) - 1);
   // An item's text carries its accelerator column (`Copy cells⌘C`) and a
   // label can prefix a sibling's (`Outline stroke` / `Outline stroke
   // options…`), so compare the item's OWN label: its text without the
