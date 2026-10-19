@@ -1,0 +1,9 @@
+$ paged inspect missing.idml
+--- exit: 1
+--- stdout
+(empty)
+--- stderr
+Error: read missing.idml
+
+Caused by:
+    No such file or directory (os error <N>)

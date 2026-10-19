@@ -1,0 +1,12 @@
+$ paged read color-preview
+--- exit: 2
+--- stdout
+(empty)
+--- stderr
+error: the following required arguments were not provided:
+  <DOC>
+  <SWATCH_ID>
+
+Usage: paged read color-preview <DOC> <SWATCH_ID>
+
+For more information, try '--help'.

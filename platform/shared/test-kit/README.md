@@ -22,7 +22,7 @@ inside the test body, next to the assertions it vouches for:
 import { covers } from "@paged-media/test-kit";
 
 it("undo restores the frame", async () => {
-  covers("command:paged.undo");
+  covers("command:paged.editor.undo");
   // ... the assertions
 });
 ```
@@ -39,7 +39,7 @@ and their ids; plugin contributions use the same kinds with their own ids:
 | `keybinding` | `<key>→<command>`, the key as registered (lowercase combo): `keybinding:cmd+z→paged.editor.undo`; `->` is read as `→`                                                                                                                           |
 | `setting`    | the configuration key; a tool option is `<toolId>.<key>`: `setting:paged.tool.polygon.sides`                                                                                                                                                    |
 | `cli`        | the binary and the command path, one space apart: `cli:paged export-pdf`                                                                                                                                                                        |
-| `script`     | the function's full name: `script:paged.document.pages`, `script:editor.select`                                                                                                                                                                 |
+| `script`     | the function's full name: `script:paged.pages`, `script:editor.select`                                                                                                                                                                          |
 | `importer`   | a bundle's importer id (`contributes.importers`)                                                                                                                                                                                                |
 | `exporter`   | a bundle's exporter id (`contributes.exporters`)                                                                                                                                                                                                |
 
@@ -118,9 +118,11 @@ The DSL is a thenable: `await g.drag(…)` runs the queue. An async function
 must not return it bare (the `await` of its caller would run it and get
 `undefined`); return it inside an object, as `gestureEditor` does.
 
-## The headless editor's engine half
+## The headless editor's engine half (`@paged-media/test-kit/headless`)
 
-`headlessEngineModule()` boots the editor's canvas-wasm once per process
+Its own entry point: it loads the plugin SDK's Node engine loader, which the
+root entry must not (Playwright specs import the root entry under Node ESM,
+which refuses the SDK's JSON import). `headlessEngineModule()` boots the editor's canvas-wasm once per process
 (through the plugin SDK's Node loader, which refuses a protocol skew) and
 hands out a fresh engine per editor. `createEngineWorker(engine)` is the
 render worker in process: a `Worker`-shaped object the real `CanvasClient`

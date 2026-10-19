@@ -1,0 +1,11 @@
+$ paged read group-leaves grouped.paged group:u6
+--- exit: 0
+--- stdout
+{
+  "kind": "groupLeaves",
+  "payload": {
+    "ids": []
+  }
+}
+--- stderr
+(empty)

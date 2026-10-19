@@ -1,0 +1,468 @@
+[
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
+    "description": "The documents you can read, with when each last changed.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "workspace": {
+          "description": "Only this workspace's documents.",
+          "type": "string"
+        }
+      },
+      "required": [],
+      "type": "object"
+    },
+    "name": "list_documents",
+    "title": "List documents"
+  },
+  {
+    "_meta": {
+      "ui": {
+        "resourceUri": "ui://paged/view"
+      }
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
+    "description": "A document's branches and releases, and the parts (files) of one version with their sizes.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "document": {
+          "description": "The document: its repository name, or <workspace>/<repository>.",
+          "type": "string"
+        },
+        "ref": {
+          "description": "A branch, release or version address. Default: main.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "document"
+      ],
+      "type": "object"
+    },
+    "name": "describe_document",
+    "title": "Describe a document"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
+    "description": "One part of a version: text parts as text (stories, styles, JSON), others as their size.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "document": {
+          "description": "The document: its repository name, or <workspace>/<repository>.",
+          "type": "string"
+        },
+        "path": {
+          "description": "The part's path, e.g. Stories/Story_u1.xml.",
+          "type": "string"
+        },
+        "ref": {
+          "description": "A branch, release or version address. Default: main.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "document",
+        "path"
+      ],
+      "type": "object"
+    },
+    "name": "read_part",
+    "title": "Read a part"
+  },
+  {
+    "_meta": {
+      "ui": {
+        "resourceUri": "ui://paged/view"
+      }
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
+    "description": "The versions of a branch, newest first: who made each (people and agents), when, and why.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "document": {
+          "description": "The document: its repository name, or <workspace>/<repository>.",
+          "type": "string"
+        },
+        "ref": {
+          "description": "A branch, release or version address. Default: main.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "document"
+      ],
+      "type": "object"
+    },
+    "name": "history",
+    "title": "History"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
+    "description": "Which parts differ between two versions or branches.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "document": {
+          "description": "The document: its repository name, or <workspace>/<repository>.",
+          "type": "string"
+        },
+        "from": {
+          "description": "A branch, release or version address. Default: main.",
+          "type": "string"
+        },
+        "to": {
+          "description": "A branch, release or version address. Default: main.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "document",
+        "from",
+        "to"
+      ],
+      "type": "object"
+    },
+    "name": "diff",
+    "title": "Compare versions"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Starts your branch (agent/<run>/<name>) at a version, to write on without touching main.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "document": {
+          "description": "The document: its repository name, or <workspace>/<repository>.",
+          "type": "string"
+        },
+        "from": {
+          "description": "A branch, release or version address. Default: main.",
+          "type": "string"
+        },
+        "name": {
+          "description": "A short name: letters, digits, '-'.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "document",
+        "name"
+      ],
+      "type": "object"
+    },
+    "name": "create_branch",
+    "title": "Start a branch"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Writes parts on your branch as one new version: each part given as text or base64, or deleted.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "branch": {
+          "description": "Your branch, from create_branch.",
+          "type": "string"
+        },
+        "document": {
+          "description": "The document: its repository name, or <workspace>/<repository>.",
+          "type": "string"
+        },
+        "message": {
+          "description": "Why: one line a person will read.",
+          "type": "string"
+        },
+        "parts": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "base64": {
+                "type": "string"
+              },
+              "delete": {
+                "type": "boolean"
+              },
+              "path": {
+                "type": "string"
+              },
+              "text": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "path"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "document",
+        "branch",
+        "message",
+        "parts"
+      ],
+      "type": "object"
+    },
+    "name": "commit_parts",
+    "title": "Write parts"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Asks for your branch to be merged into main (or another branch). A person reviews and merges it.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "branch": {
+          "type": "string"
+        },
+        "document": {
+          "description": "The document: its repository name, or <workspace>/<repository>.",
+          "type": "string"
+        },
+        "target": {
+          "description": "A branch, release or version address. Default: main.",
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "document",
+        "branch",
+        "title"
+      ],
+      "type": "object"
+    },
+    "name": "propose_change",
+    "title": "Propose a change"
+  },
+  {
+    "_meta": {
+      "ui": {
+        "resourceUri": "ui://paged/view"
+      }
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
+    "description": "Open and past change requests, with their approvals.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "document": {
+          "description": "The document: its repository name, or <workspace>/<repository>.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "document"
+      ],
+      "type": "object"
+    },
+    "name": "list_changes",
+    "title": "Change requests"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
+    "description": "A short-lived link to the .paged file of a version, for a person to open.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "document": {
+          "description": "The document: its repository name, or <workspace>/<repository>.",
+          "type": "string"
+        },
+        "ref": {
+          "description": "A branch, release or version address. Default: main.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "document"
+      ],
+      "type": "object"
+    },
+    "name": "download_link",
+    "title": "Download link"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
+    "description": "Opens a version in the engine, for run_script and render_page.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "document": {
+          "description": "The document: its repository name, or <workspace>/<repository>.",
+          "type": "string"
+        },
+        "ref": {
+          "description": "A branch, release or version address. Default: main.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "document"
+      ],
+      "type": "object"
+    },
+    "name": "open_document",
+    "title": "Open in the engine"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Runs paged.* JavaScript (Boa: no fetch, files or timers; about 2 s) against the open document. Returns console output, any error, and overset stories. Call lookup_api first.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "source": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "source"
+      ],
+      "type": "object"
+    },
+    "name": "run_script",
+    "title": "Run a script"
+  },
+  {
+    "_meta": {
+      "ui": {
+        "resourceUri": "ui://paged/view"
+      }
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
+    "description": "A PNG of one page of the open document, to check the result.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "page": {
+          "description": "1-based. Default: 1.",
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [],
+      "type": "object"
+    },
+    "name": "render_page",
+    "title": "Render a page"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false
+    },
+    "description": "Keeps the open document as a new version on your branch.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "message"
+      ],
+      "type": "object"
+    },
+    "name": "save_document",
+    "title": "Save as a version"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
+    "description": "Searches the engine's capability catalog: paged.* functions, address grammar, settable properties and their types, constraints.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "query": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "query"
+      ],
+      "type": "object"
+    },
+    "name": "lookup_api",
+    "title": "Look up the API"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
+    "description": "Your editor tabs connected to this server. Engine tools act in the tab you name; you see and can undo every step there.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {},
+      "required": [],
+      "type": "object"
+    },
+    "name": "list_live_sessions",
+    "title": "Open editor tabs"
+  }
+]

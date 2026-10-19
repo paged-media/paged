@@ -1,0 +1,18 @@
+$ paged diff --help
+--- exit: 0
+--- stdout
+Compare two PNGs — ΔE2000 and SSIM. Exits 1 when they differ beyond the budget
+
+Usage: paged diff [OPTIONS] <REFERENCE> <CANDIDATE>
+
+Arguments:
+  <REFERENCE>  The reference, first — the order is load-bearing
+  <CANDIDATE>  The candidate
+
+Options:
+      --json                           Emit the verdict as JSON instead of a line of prose
+      --heatmap <HEATMAP>              Also write a ΔE heatmap PNG here
+      --heatmap-scale <HEATMAP_SCALE>  ΔE mapped to peak heatmap intensity [default: 5]
+  -h, --help                           Print help
+--- stderr
+(empty)

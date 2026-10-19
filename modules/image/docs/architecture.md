@@ -234,8 +234,31 @@ of at most 8 MiB. No code in `glue/src` calls a hit-test door or uses shared mem
   found (`image-conformance/src/device.rs`). CI runs on `ubuntu-latest`, which per the
   comment in `ci.yml` has none, so GPU output is compared with the scalar reference only
   on a machine with an adapter ([ADR 453](adr/453-tolerance-not-golden-bytes.md)).
-- TypeScript: `pnpm test` runs the import lint, then `bun test` in `glue/` against the SDK's
-  `createBundleHost` and a fake editor. `glue/test/wasm-exec.spec.ts` loads the committed
-  module in Node and drives the CPU lanes; CI sets `REQUIRE_REAL_WASM=1`, which turns a
-  missing module from a skip into a failure. The manifest validator is the `plugin-cli` of
-  a sibling `plugin-sdk` checkout, called by the scripts of `manifest/`.
+- TypeScript: `bun run test` in `glue/` runs every spec but the DOM ones against the SDK's
+  `createBundleHost` and a fake editor, or the headless host; `bun run test:dom` runs the
+  `*.dom.test.tsx` panel specs with happy-dom preloaded. `glue/test/wasm-exec.spec.ts`
+  loads the built module in Node and drives the CPU lanes; CI sets `REQUIRE_REAL_WASM=1`,
+  which turns a missing module from a skip into a failure. The manifest validator is
+  `platform/extensions/packages/plugin-sdk/bin/paged-plugin.mjs`.
+
+## Tests of the editor surface
+
+Every contribution the bundle makes to the editor has a test that asserts what it does,
+marked with `covers("<kind>:<id>")` for the surface-conformance gate
+(`platform/extensions/docs/testing-plugins.md`). All of them run on the real image-js wasm
+in Node; GPU-only work is asserted to decline there, honestly, and its pixels are proved in
+Rust.
+
+| Surface                     | Test                                                         | What it asserts                                                                                                                                                                                     |
+| --------------------------- | ------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| commands (40), unit         | `glue/test/commands.spec.ts`                                 | each registered handler over the fake editor: the refusal before an image is ingested, the effect on the image, what reaches the document (nothing until Commit), the image journal's undo and redo |
+| commands, integration       | `glue/test/headless/commands.spec.ts`                        | the same commands on the headless host's real document: Commit as one change the document's undo reverts; the typed commands through `host.objects`, one undo step each                             |
+| tools (24)                  | `glue/test/tool-gestures.spec.ts`, `gestures.spec.ts`        | each registered tool through the gesture DSL: the image pixel a page point maps to, the tool's one edit, its preview; the stroke sequence (begin, extend, one commit)                               |
+| tool options (14)           | `glue/test/tool-settings.spec.ts`                            | each declared field set as the host's tool-options bar sets it, and the session state it lands in                                                                                                   |
+| importer, exporters (1 + 3) | `glue/test/headless/file-handlers.spec.ts`                   | PNG, PSD and JPEG opened through the importer; each exporter's bytes, its empty answer, and the round trip                                                                                          |
+| panels (2)                  | `glue/test/panels.dom.test.tsx`                              | the Image panel mounted and clicked; the properties schema panel's list, gates and row addresses with a stand-in renderer                                                                           |
+| menu entries                | `apps/editor/apps/canvas/tests/plugin-surface/image.spec.ts` | the entries in the editor's menu bar (Playwright)                                                                                                                                                   |
+
+Findings are kept as expected failures (`it.failing`, named by id): IMG-1 (undoing a 90°
+canvas rotation keeps the rotated size, `commands.spec.ts`) and IMG-2 (the drag tools other
+than the polygonal lasso ignore Escape, INV-2, `tool-gestures.spec.ts`).

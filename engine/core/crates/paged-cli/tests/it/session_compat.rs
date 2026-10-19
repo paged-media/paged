@@ -50,7 +50,7 @@ use std::process::{Command, Stdio};
 /// `paged`": one workspace build links the two binaries at different
 /// times, in either order (minutes apart on a cold build), so comparing
 /// them with each other skipped this half on about every other run.
-fn paged_run() -> Option<PathBuf> {
+pub(crate) fn paged_run() -> Option<PathBuf> {
     let mine = PathBuf::from(env!("CARGO_BIN_EXE_paged"));
     let sibling = mine.with_file_name(format!("paged-run{}", std::env::consts::EXE_SUFFIX));
     let built = std::fs::metadata(&sibling)

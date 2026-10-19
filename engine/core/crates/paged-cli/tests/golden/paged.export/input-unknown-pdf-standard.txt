@@ -1,0 +1,6 @@
+$ paged export doc.paged --standard nope -o bad.pdf
+--- exit: 1
+--- stdout
+(empty)
+--- stderr
+Error: begin pdf export: the engine answered ExportPdfFailed { error: "unknown standard: nope" }

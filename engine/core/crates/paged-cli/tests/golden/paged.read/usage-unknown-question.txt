@@ -1,0 +1,10 @@
+$ paged read nope doc.paged
+--- exit: 2
+--- stdout
+(empty)
+--- stderr
+error: unrecognized subcommand 'nope'
+
+Usage: paged read <COMMAND>
+
+For more information, try '--help'.

@@ -1,0 +1,11 @@
+$ paged read placeholders doc.paged
+--- exit: 0
+--- stdout
+{
+  "kind": "documentPlaceholders",
+  "payload": {
+    "items": []
+  }
+}
+--- stderr
+(empty)

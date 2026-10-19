@@ -1,0 +1,12 @@
+$ paged read text-outlines
+--- exit: 2
+--- stdout
+(empty)
+--- stderr
+error: the following required arguments were not provided:
+  <DOC>
+  <ID>
+
+Usage: paged read text-outlines <DOC> <ID>
+
+For more information, try '--help'.

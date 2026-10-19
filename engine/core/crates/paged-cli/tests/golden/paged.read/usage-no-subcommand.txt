@@ -1,0 +1,34 @@
+$ paged read
+--- exit: 2
+--- stdout
+(empty)
+--- stderr
+Ask the engine one of its diagnostic questions
+
+Usage: paged read <COMMAND>
+
+Commands:
+  layers              Every `<Layer>`, with its visible / locked / printable flags
+  collection          One typed document collection
+  frame-chain         The frames a story flows through, in order
+  story-content       A story's text content
+  style-properties    Every settable property of one style definition, in the shapes `SetStyleProperty` takes
+  placeholders        Plugin placeholder fields the document carries
+  color-preview       A swatch resolved to screen RGB through the colour settings
+  color-compute       Resolve arbitrary channel values through the document's profiles
+  gradient-detail     A gradient's stops, resolved
+  element-properties  Every property of one element — the Inspector's own read
+  element-geometry    Bounds and transform of one or more elements
+  group-leaves        The leaf page items inside a group, recursively
+  path-anchors        A path element's anchors, with their control handles
+  text-outlines       A text frame's composed glyphs as outlines in page space, one run per fill colour (what "Create Outlines" inserts)
+  snap-point          Snap a page point to the anchors, alignment lines, guides and outlines around it — what the Pen or a dragged anchor would land on
+  planar-regions      The planar arrangement of overlapping paths — the faces the pathfinder region verbs address
+  measure-text        Measure a string in a registered face
+  placed-asset        The bytes of a placed image, as the engine holds them
+  font-face           The bytes of a registered font face
+  swatch-library      Export the swatches as an Adobe `.ase` library
+  help                Print this message or the help of the given subcommand(s)
+
+Options:
+  -h, --help  Print help (see more with '--help')

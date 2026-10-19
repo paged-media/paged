@@ -1,0 +1,43 @@
+$ paged read text-outlines --help
+--- exit: 0
+--- stdout
+A text frame's composed glyphs as outlines in page space, one run per fill colour (what "Create Outlines" inserts)
+
+Usage: paged read text-outlines [OPTIONS] <DOC> <ID>
+
+Arguments:
+  <DOC>
+          IDML or `.paged` document
+
+  <ID>
+          `textFrame:<id>` address
+
+Options:
+      --compact
+          One JSON line instead of an indented block
+
+      --fonts <DIR|FILE>
+          Font file or directory to make available, repeatable.
+          
+          A directory is read one level deep and each face is asked for its own family name, so a corpus directory needs no mapping.
+
+      --font-family <NAME[/STYLE]=PATH>
+          Bind one family (and optionally a style) to a file, repeatable: `--font-family "Fraunces/Italic=/path/Fraunces-Italic.ttf"`.
+          
+          Wins over `--fonts` for the same family and style — a scan is a convenience, this is the instrument.
+
+      --font <FILE>
+          Fallback face for text no registered family answers for. Absent, the face the CLI bundles (Inter) stands in
+
+      --no-default-font
+          No fallback face: text no registered family answers for is not set, and the run says so (to see what a document is missing)
+
+      --cmyk-profile <NAME|FILE>
+          CMYK profile: a file path, or a name to resolve against the host's installed profiles (e.g. "Coated FOGRA39").
+          
+          Absent, the document's own declared profile name is resolved and made the working space. Absent that too, colour is naive math and the run says so.
+
+  -h, --help
+          Print help (see a summary with '-h')
+--- stderr
+(empty)

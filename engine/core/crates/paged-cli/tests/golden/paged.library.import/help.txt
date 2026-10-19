@@ -1,0 +1,16 @@
+$ paged library import --help
+--- exit: 0
+--- stdout
+Open a file into the library as a new document
+
+Usage: paged library import [OPTIONS] <FILE>
+
+Arguments:
+  <FILE>  The `.idml` or `.paged` file to open
+
+Options:
+      --name <NAME>        The document's name. Default: the file's name
+      --library <LIBRARY>  The library directory. Default: `$PAGED_LIBRARY`, else `~/.paged/library`
+  -h, --help               Print help
+--- stderr
+(empty)

@@ -1,0 +1,11 @@
+$ paged invoke doc.paged
+--- exit: 2
+--- stdout
+(empty)
+--- stderr
+error: the following required arguments were not provided:
+  <OP>
+
+Usage: paged invoke <DOC> <OP> [ARGS]
+
+For more information, try '--help'.

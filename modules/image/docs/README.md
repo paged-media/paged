@@ -5,7 +5,8 @@ What this folder holds.
 - [`concept.md`](concept.md): why the plugin exists, what it is for, and what it will never do.
 - [`architecture.md`](architecture.md): how it is built. The ten crates and the bundle, the
   two manifests, the wasm boundary, the path of one edit, how kernels run, where data is
-  stored, the host doors used, and how it is built and tested.
+  stored, the host doors used, and how it is built and tested, including the table of the
+  tests behind each command, tool, option, file handler and panel the bundle contributes.
 - [`status.md`](status.md): what ships today, the limits of what ships, and what is not built.
 - [`adr/`](adr/README.md): the decision records of this repository, 450–461.
 - [`design/16-bit-stack.md`](design/16-bit-stack.md): the design note for carrying 16 bits
