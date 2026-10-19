@@ -372,18 +372,21 @@ describe.each(ADAPTERS)("host.documents — %s", (name, make) => {
         op: "setElementProperty",
         args: { elementId: BOX, path: "frameOpacity", value: OPACITY },
       } as never);
+      // The shell's prompt asks (ADR 230); this case answers it.
+      const detach = t.editorApp!.replace.attach();
       const pending = t.host.documents.open(bytes, { name: "Merged" });
       // The prompt is raised after the dirty check, a few awaits in.
-      let prompt = t.editorApp!.documents.controller.current();
+      let prompt = t.editorApp!.replace.current();
       for (let i = 0; !prompt && i < 50; i++) {
         await new Promise((r) => setTimeout(r, 5));
-        prompt = t.editorApp!.documents.controller.current();
+        prompt = t.editorApp!.replace.current();
       }
       expect(prompt?.requester).toBe(`probe ${PROBE_ID}`);
       expect(prompt?.documentName).toBe("Merged");
-      prompt!.decide(false);
+      prompt!.answer("cancel");
       expect(await pending).toEqual({ opened: false, reason: "declined" });
       expect((await t.host.document.meta()).dirty).toBe(true);
+      detach();
     });
 
   test("an undeclared documents capability is a capability error", async () => {
