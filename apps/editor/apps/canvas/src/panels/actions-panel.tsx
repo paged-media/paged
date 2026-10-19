@@ -194,6 +194,7 @@ export function ActionsPanel(_: PanelProps) {
               ref={fileRef}
               type="file"
               accept="application/json,.json"
+              hidden
               style={{ display: "none" }}
               onChange={(e) => {
                 void onImport(e.target.files?.[0]);

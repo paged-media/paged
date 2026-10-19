@@ -22,7 +22,9 @@
 // Every new cockpit panel composes from these so density, borders
 // and the status language stay uniform.
 
-import { useState, type ReactNode } from "react";
+import { useId, useState, type ReactNode } from "react";
+
+import { LabelledBy } from "@paged-media/panel-kit";
 
 import { Icon } from "../../icons";
 
@@ -125,6 +127,8 @@ export function Row({
   label: string;
   children?: ReactNode;
 }) {
+  // The label names the row's controls (the panel kit's LabelledBy).
+  const labelId = useId();
   return (
     <div
       style={{
@@ -136,6 +140,7 @@ export function Row({
       }}
     >
       <span
+        id={labelId}
         style={{
           fontSize: 12,
           color: "var(--pg-muted-fg)",
@@ -145,7 +150,7 @@ export function Row({
       >
         {label}
       </span>
-      {children}
+      <LabelledBy id={labelId}>{children}</LabelledBy>
     </div>
   );
 }

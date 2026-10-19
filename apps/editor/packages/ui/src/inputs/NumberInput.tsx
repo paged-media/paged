@@ -26,6 +26,7 @@
 // typed commit write-replaces (the binding layer fans out).
 
 import { useEffect, useEffectEvent, useRef, useState } from "react";
+import { useFieldName } from "@paged-media/panel-kit";
 import { Icon, useScrubGesture } from "@paged-media/shell";
 
 export interface NumberInputProps {
@@ -82,6 +83,8 @@ function fmt(v: number, precision: number): string {
  * Escape during a scrub cancels and snaps back to the pre-scrub value.
  */
 export function NumberInput(props: NumberInputProps) {
+  // Named by its row's label when the caller gives it no name.
+  const named = useFieldName(props);
   const {
     value,
     onChange,
@@ -216,7 +219,8 @@ export function NumberInput(props: NumberInputProps) {
           fontFamily: "var(--font-mono)",
           color: mixed || readOnly ? "var(--pg-muted-fg)" : undefined,
         }}
-        aria-label={props["aria-label"]}
+        aria-label={named["aria-label"]}
+        aria-labelledby={named["aria-labelledby"]}
         onFocus={(e) => {
           if (readOnly || disabled) return;
           // Swap to the raw number for clean editing, and select it so

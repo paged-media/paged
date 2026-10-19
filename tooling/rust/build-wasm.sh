@@ -115,11 +115,14 @@ if [ -n "$HASH_MODULE" ]; then
 fi
 
 # Cargo names a crate outside the module's own workspace (platform/shared/*,
-# a path dependency) by its absolute path, so its panic locations would carry
-# the build machine's directory into the wasm, and the artifact's size would
-# depend on where the checkout is. Name those sources relative to the
-# repository, as cargo names the workspace's own crates.
-export RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }--remap-path-prefix=$REPO/platform/shared/=platform/shared/"
+# or an engine crate under engine/core/ reached by path) by its absolute path,
+# so its panic locations would carry the build machine's directory into the
+# wasm, and the artifact's size would depend on where the checkout is. Name
+# every source under the repository relative to it, as cargo names the
+# workspace's own crates, and the registry's sources by crate, not by the
+# builder's home directory.
+CARGO_REGISTRY_SRC="${CARGO_HOME:-$HOME/.cargo}/registry/src/"
+export RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }--remap-path-prefix=$REPO/= --remap-path-prefix=$CARGO_REGISTRY_SRC=registry/"
 
 CARGO_ARGS=(build --profile "$PROFILE" --target "$TARGET")
 [ -n "$PACKAGE" ] && CARGO_ARGS+=(-p "$PACKAGE")

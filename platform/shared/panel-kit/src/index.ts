@@ -52,7 +52,19 @@ export {
 export {
   IconButton,
   Segment,
+  Tab,
   type IconButtonProps,
   type SegmentProps,
+  type TabProps,
 } from "./controls";
+export {
+  FieldInput,
+  FieldSelect,
+  FieldTextarea,
+  LabelledBy,
+  NamedAs,
+  useFieldName,
+  useRowLabelId,
+  type FieldName,
+} from "./labels";
 export { humanize, refusalText } from "./text";

@@ -121,6 +121,7 @@ function RuleRow({
             checked={on}
             disabled={disabled}
             testId={testId}
+            label={name}
             onToggle={(next) => {
               // On → write the spec; off → clear the whole rule (null).
               write(
