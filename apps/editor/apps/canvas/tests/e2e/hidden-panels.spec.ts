@@ -17,7 +17,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// ADR 233 — what the cockpit hides stays mounted in an <Activity>: the
+// ADR 240 — what the cockpit hides stays mounted in an <Activity>: the
 // side columns under Tab / Shift+Tab, the left panel of a mode left
 // behind, the dock tabs that are not on screen, and the document viewport
 // under an export-style mode. Hidden, a panel keeps its state and its DOM
@@ -46,7 +46,7 @@ const invoke = (page: Page, id: string) =>
 const openPanel = (page: Page, id: string) =>
   invoke(page, `paged.panel.show.${id}`);
 
-test.describe("hidden panels stay mounted (ADR 233)", () => {
+test.describe("hidden panels stay mounted (ADR 240)", () => {
   test("a query typed in the left panel survives Tab hiding the panels", async ({
     page,
   }) => {

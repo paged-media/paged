@@ -29,6 +29,7 @@ import { hasIcon, Icon } from "../icons";
 import { PluginGlyph } from "../icons/plugin-glyph";
 import { useRegistries } from "../state/registries-context";
 import { useRegistryView } from "../state/live";
+import { directionOf, transitionWith } from "../view-transitions";
 import { useOptionalCockpitState } from "../cockpit/cockpit-state-context";
 import { Segment } from "@paged-media/panel-kit";
 
@@ -73,10 +74,16 @@ export function PanelRail({ items }: { items: PanelRailItem[] }) {
     if (isActive(item)) {
       cockpit.closeTab(item.panelId);
       if (item.inspectorContext) cockpit.setInspectorContext(null);
-    } else {
+      return;
+    }
+    // A view transition (ADR 240), its direction the rail's order: the
+    // panel comes in from the side of the rail item that was active.
+    const order = [...items, ...pluginItems].map((i) => i.panelId);
+    const from = order.indexOf(cockpit.activeTab ?? "");
+    transitionWith(directionOf(from, order.indexOf(item.panelId)), () => {
       cockpit.openPanel(item.panelId);
       cockpit.setInspectorContext(item.inspectorContext ?? null);
-    }
+    });
   };
 
   const renderItem = (item: PanelRailItem, plugin: boolean) => {

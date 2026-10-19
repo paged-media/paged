@@ -25,15 +25,23 @@
 // version being replaced stays in the list; a release is a name given once
 // to a version and never moved.
 
-import { useEffect, useState, useSyncExternalStore } from "react";
+import {
+  ViewTransition,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 
 import {
+  FADE,
   confirmDiscard,
   currentLibraryDocument,
   getLibrary,
   libraryVersion,
   loadDocumentFile,
   subscribeLibrary,
+  transitionWith,
   usePaged,
 } from "@paged-media/shell";
 import {
@@ -159,24 +167,36 @@ export function LibraryPanel() {
   const [branches, setBranches] = useState<string[]>([]);
   const refresh = () => setTick((t) => t + 1);
 
+  // ADR 240 — a version that appears after the first read (a save, a
+  // restore, a pull) fades in: the read lands as a view transition. The
+  // first read of a document just shows its list.
+  const readFor = useRef<string | null>(null);
   useEffect(() => {
     if (!library) return;
     let live = true;
     void readLibrary(library, current).then(
       ({ list, history, refs }) => {
         if (!live) return;
-        setDocs(list);
-        setLog(history);
-        const named: Record<string, string> = {};
-        for (const [ref, hash] of Object.entries(refs)) {
-          if (ref.startsWith("releases/"))
-            named[hash] = [named[hash], ref.slice(9)]
-              .filter(Boolean)
-              .join(", ");
-        }
-        setReleases(named);
-        setBranches(Object.keys(refs).filter((r) => r.startsWith("agent/")));
-        setError(null);
+        const key = current?.id ?? "";
+        const first = readFor.current !== key;
+        readFor.current = key;
+        const apply = first
+          ? (run: () => void) => run()
+          : (run: () => void) => transitionWith("next", run);
+        apply(() => {
+          setDocs(list);
+          setLog(history);
+          const named: Record<string, string> = {};
+          for (const [ref, hash] of Object.entries(refs)) {
+            if (ref.startsWith("releases/"))
+              named[hash] = [named[hash], ref.slice(9)]
+                .filter(Boolean)
+                .join(", ");
+          }
+          setReleases(named);
+          setBranches(Object.keys(refs).filter((r) => r.startsWith("agent/")));
+          setError(null);
+        });
       },
       (err: unknown) => {
         if (live) setError(err instanceof Error ? err.message : String(err));
@@ -293,111 +313,117 @@ export function LibraryPanel() {
             style={{ listStyle: "none", margin: "8px 0 0", padding: 0 }}
           >
             {log.map((c, i) => (
-              <li
+              <ViewTransition
                 key={c.hash}
-                data-library-version={c.hash}
-                style={{
-                  padding: "4px 0",
-                  borderTop: `1px solid ${color.border}`,
-                }}
+                enter={FADE}
+                exit={FADE}
+                update="none"
               >
-                <div
+                <li
+                  data-library-version={c.hash}
                   style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    gap: 8,
+                    padding: "4px 0",
+                    borderTop: `1px solid ${color.border}`,
                   }}
                 >
-                  <span>
-                    {c.message}
-                    {c.agent && (
-                      <span
-                        style={{
-                          ...mono,
-                          marginLeft: 6,
-                          color: "var(--status-warn)",
-                        }}
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      gap: 8,
+                    }}
+                  >
+                    <span>
+                      {c.message}
+                      {c.agent && (
+                        <span
+                          style={{
+                            ...mono,
+                            marginLeft: 6,
+                            color: "var(--status-warn)",
+                          }}
+                        >
+                          agent
+                        </span>
+                      )}
+                      {releases[c.hash] && (
+                        <span
+                          style={{
+                            ...mono,
+                            marginLeft: 6,
+                            color: status.ok,
+                          }}
+                        >
+                          released {releases[c.hash]}
+                        </span>
+                      )}
+                    </span>
+                    <span style={{ ...mono, color: "var(--pg-muted-fg)" }}>
+                      {when(c.ts)}
+                    </span>
+                  </div>
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: 6,
+                      marginTop: 3,
+                      alignItems: "center",
+                    }}
+                  >
+                    <span style={{ ...mono, color: "var(--pg-muted-fg)" }}>
+                      {c.hash.slice(0, 10)}
+                    </span>
+                    {i > 0 && (
+                      <button
+                        type="button"
+                        data-library-restore
+                        style={button}
+                        title="Make this version current again, as a new version; nothing is lost"
+                        onClick={act(async () => {
+                          await library.restore(current.id, c.hash);
+                          await open(current);
+                        })}
                       >
-                        agent
-                      </span>
+                        Restore
+                      </button>
                     )}
-                    {releases[c.hash] && (
-                      <span
-                        style={{
-                          ...mono,
-                          marginLeft: 6,
-                          color: status.ok,
-                        }}
-                      >
-                        released {releases[c.hash]}
-                      </span>
-                    )}
-                  </span>
-                  <span style={{ ...mono, color: "var(--pg-muted-fg)" }}>
-                    {when(c.ts)}
-                  </span>
-                </div>
-                <div
-                  style={{
-                    display: "flex",
-                    gap: 6,
-                    marginTop: 3,
-                    alignItems: "center",
-                  }}
-                >
-                  <span style={{ ...mono, color: "var(--pg-muted-fg)" }}>
-                    {c.hash.slice(0, 10)}
-                  </span>
-                  {i > 0 && (
                     <button
                       type="button"
-                      data-library-restore
+                      data-library-download
                       style={button}
-                      title="Make this version current again, as a new version; nothing is lost"
+                      onClick={act(async () =>
+                        downloadBytes(
+                          await library.exportPaged(current.id, c.hash),
+                          `${current.name}-${c.hash.slice(0, 8)}.paged`,
+                          "application/x-paged+zip",
+                        ),
+                      )}
+                    >
+                      Download
+                    </button>
+                    <button
+                      type="button"
+                      data-library-release
+                      style={button}
+                      title="Name this version; a release never moves"
                       onClick={act(async () => {
-                        await library.restore(current.id, c.hash);
-                        await open(current);
+                        const name = globalThis.prompt(
+                          "Release name (it never moves once given):",
+                          "",
+                        );
+                        if (name?.trim())
+                          await library.release(
+                            current.id,
+                            name.trim().replace(/\s+/g, "-"),
+                            c.hash,
+                          );
                       })}
                     >
-                      Restore
+                      Release
                     </button>
-                  )}
-                  <button
-                    type="button"
-                    data-library-download
-                    style={button}
-                    onClick={act(async () =>
-                      downloadBytes(
-                        await library.exportPaged(current.id, c.hash),
-                        `${current.name}-${c.hash.slice(0, 8)}.paged`,
-                        "application/x-paged+zip",
-                      ),
-                    )}
-                  >
-                    Download
-                  </button>
-                  <button
-                    type="button"
-                    data-library-release
-                    style={button}
-                    title="Name this version; a release never moves"
-                    onClick={act(async () => {
-                      const name = globalThis.prompt(
-                        "Release name (it never moves once given):",
-                        "",
-                      );
-                      if (name?.trim())
-                        await library.release(
-                          current.id,
-                          name.trim().replace(/\s+/g, "-"),
-                          c.hash,
-                        );
-                    })}
-                  >
-                    Release
-                  </button>
-                </div>
-              </li>
+                  </div>
+                </li>
+              </ViewTransition>
             ))}
           </ul>
         </>

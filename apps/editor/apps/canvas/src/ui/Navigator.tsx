@@ -24,7 +24,14 @@
 // rendering. Per spec §8.5 the navigator's scroll position is
 // independent of the canvas's, so users can browse pages while
 // keeping their work in view.
+//
+// A long document shows its thumbnails as they come near the panel's
+// view (one IntersectionObserver on a Fragment ref, ADR 240): the
+// browser decodes what is shown, not every page of a 130-page document.
 
+import { Fragment, ViewTransition } from "react";
+
+import { useNearViewport } from "@paged-media/shell";
 import type { Camera } from "@paged-media/client";
 import type { PageId } from "@paged-media/client";
 import { fitCamera, layoutPages, type PageRect } from "./layout";
@@ -41,6 +48,7 @@ const THUMB_WIDTH_PX = 120;
 
 export function Navigator(props: NavigatorProps) {
   const rects = layoutPages(props.pageSizesPt);
+  const { observe: observeNear, has: isNear } = useNearViewport();
 
   const onJumpTo = (rect: PageRect) => {
     const [vw, vh] = props.viewportSize;
@@ -57,45 +65,57 @@ export function Navigator(props: NavigatorProps) {
         </span>
       </header>
       <div style={listStyle}>
-        {props.pageIds.map((id, i) => {
-          const rect = rects[i];
-          const url = props.snapshots.get(id);
-          return (
-            <button
-              key={id}
-              type="button"
-              onClick={() => onJumpTo(rect)}
-              style={tileStyle}
-              title={`Jump to page ${i + 1} (${id})`}
-            >
-              <div
-                style={{
-                  width: THUMB_WIDTH_PX,
-                  aspectRatio: `${rect.w} / ${rect.h}`,
-                  border: "1px solid var(--chrome-border)",
-                  background: "var(--muted)",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  color: "var(--muted-fg)",
-                  fontSize: 10,
-                }}
+        <Fragment ref={observeNear}>
+          {props.pageIds.map((id, i) => {
+            const rect = rects[i];
+            const url = isNear(id, i) ? props.snapshots.get(id) : undefined;
+            return (
+              <button
+                key={id}
+                data-near={id}
+                type="button"
+                onClick={() => onJumpTo(rect)}
+                style={tileStyle}
+                title={`Jump to page ${i + 1} (${id})`}
               >
-                {url ? (
-                  <img
-                    src={url}
-                    alt={`Page ${i + 1}`}
-                    style={{ width: "100%", height: "100%", display: "block" }}
-                    draggable={false}
-                  />
-                ) : (
-                  "…"
-                )}
-              </div>
-              <span style={captionStyle}>{i + 1}</span>
-            </button>
-          );
-        })}
+                <div
+                  style={{
+                    width: THUMB_WIDTH_PX,
+                    aspectRatio: `${rect.w} / ${rect.h}`,
+                    border: "1px solid var(--chrome-border)",
+                    background: "var(--muted)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    color: "var(--muted-fg)",
+                    fontSize: 10,
+                  }}
+                >
+                  {url ? (
+                    // Never animates; inside it, a re-taken thumbnail (a
+                    // transition) commits once decoded, not as a blank
+                    // frame (ADR 240).
+                    <ViewTransition default="none">
+                      <img
+                        src={url}
+                        alt={`Page ${i + 1}`}
+                        style={{
+                          width: "100%",
+                          height: "100%",
+                          display: "block",
+                        }}
+                        draggable={false}
+                      />
+                    </ViewTransition>
+                  ) : (
+                    "…"
+                  )}
+                </div>
+                <span style={captionStyle}>{i + 1}</span>
+              </button>
+            );
+          })}
+        </Fragment>
       </div>
     </aside>
   );

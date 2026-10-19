@@ -35,7 +35,7 @@
 // single-threaded, so a burst of requests would only queue in front of
 // the user's next edit.
 
-import { useEffect, useLayoutEffect, useRef } from "react";
+import { startTransition, useEffect, useLayoutEffect, useRef } from "react";
 
 import type { PageId, WorkerToMain } from "@paged-media/client";
 import { createDebouncer } from "@paged-media/panel-kit";
@@ -131,13 +131,20 @@ function startThumbnailQueue(
             URL.revokeObjectURL(url);
             continue;
           }
-          setSnapshots((prev) => {
-            const next = new Map(prev);
-            const old = next.get(pageId);
-            if (old && old !== url) URL.revokeObjectURL(old);
-            next.set(pageId, url);
-            return next;
-          });
+          // A transition (ADR 240): a thumbnail inside a <ViewTransition>
+          // boundary (the filmstrip, the Pages panel) is committed once the
+          // new picture has decoded, so the old one stays on screen until
+          // then instead of a blank frame between the two (an image already
+          // decoded stays on screen when its URL is revoked).
+          startTransition(() =>
+            setSnapshots((prev) => {
+              const next = new Map(prev);
+              const old = next.get(pageId);
+              if (old && old !== url) URL.revokeObjectURL(old);
+              next.set(pageId, url);
+              return next;
+            }),
+          );
         }
       }
     } finally {
