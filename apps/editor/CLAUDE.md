@@ -87,7 +87,10 @@ in the same checkout: `moon run core:wasm-pkg`, or
 - **Plugin bundles** (`@paged-media/draw`, `image`, `sheet`, `data`,
   `web`, `doc`, `slide`, `pdf`, `publish`) and the contract
   (`plugin-api`, `plugin-sdk`) are workspace packages too, consumed from
-  source. A bundle whose engine wasm is a build output (doc, slide, sheet,
+  source. An edit under either contract package's `src/` bumps
+  plugin-sdk's version, and plugin-api's moves with it to the same value
+  (PM-0008, amendment 3: plugin-sdk is the one public package, with the
+  contract as its `./api`). A bundle whose engine wasm is a build output (doc, slide, sheet,
   data, web) needs its module's `scripts/build-wasm.sh` before the app boots.
 - The wasm asset loads in vite via explicit `?url` imports passed to
   the loader's `default({ module_or_path })` — don't revert to the

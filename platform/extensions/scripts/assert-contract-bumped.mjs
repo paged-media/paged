@@ -7,11 +7,14 @@
 // sat two protocols behind contract HEAD while consumers (template lane)
 // validated a stale surface.
 //
-// Rule: if a commit range touches a package's PUBLISHED contract source
-// (`packages/<pkg>/src/**`, which for plugin-api includes the vendored
-// `wire.d.ts` and `manifest.schema.json`), that package's
-// `package.json` version MUST also change in the same range. Otherwise
-// the change can never reach npm.
+// Rule (PM-0008, amendment 3: the contract has ONE public version,
+// plugin-sdk's): if a commit range touches the contract's source — under
+// `packages/plugin-api/src/**` (which includes the vendored `wire.d.ts` and
+// `manifest.schema.json`; plugin-sdk publishes it as its `./api` entry) or
+// `packages/plugin-sdk/src/**` — then plugin-sdk's `package.json` version
+// MUST change in the same range. And plugin-api's private version moves in
+// LOCKSTEP: at HEAD it equals plugin-sdk's, so the two counters never tell
+// different stories.
 //
 // Reformat commits are exempt: a commit tooling/js/mass-format.sh made
 // (subject `fmt: <component> (bun fmt, no other change)`) or one that
@@ -25,7 +28,7 @@
 //   * else HEAD~1 (the previous trunk tip — this repo is push-to-main)
 // A missing/zero base (first push of a branch) → skip (nothing to diff).
 //
-// Runs in CI (contract-guard.yml) and locally:
+// Runs in CI (extensions-contract-guard.yml) and locally:
 //   node scripts/assert-contract-bumped.mjs            # HEAD~1..HEAD
 //   node scripts/assert-contract-bumped.mjs <baseRef>  # <baseRef>..HEAD
 
@@ -35,9 +38,12 @@ import { dirname, join } from "node:path";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 
-// Packages whose published source is the contract. Each guards its own
-// `src/**` against its own version.
-const PACKAGES = ["packages/plugin-api", "packages/plugin-sdk"];
+// The contract's source directories, and the one package whose version is
+// the contract's public number. plugin-api is private and published inside
+// plugin-sdk (`./api`); its own version is held equal to plugin-sdk's.
+const SOURCES = ["packages/plugin-api/src", "packages/plugin-sdk/src"];
+const PUBLIC = "packages/plugin-sdk";
+const LOCKSTEP = "packages/plugin-api";
 
 const ZERO_SHA = "0000000000000000000000000000000000000000";
 
@@ -111,52 +117,57 @@ const blameIgnored = new Set(
 );
 
 const violations = [];
-for (const pkg of PACKAGES) {
-  const changed = git([
-    "diff",
-    "--name-only",
-    `${base}`,
-    "HEAD",
-    "--",
-    `${pkg}/src`,
-  ])
+const changed = [];
+const counted = [];
+for (const src of SOURCES) {
+  const files = git(["diff", "--name-only", `${base}`, "HEAD", "--", src])
     .split("\n")
     .filter(Boolean);
-  if (changed.length === 0) continue;
-
-  const touching = git(["rev-list", `${base}..HEAD`, "--", `${pkg}/src`])
+  if (files.length === 0) continue;
+  const touching = git(["rev-list", `${base}..HEAD`, "--", src])
     .split("\n")
     .filter(Boolean);
   if (touching.length > 0 && touching.every(isReformat)) {
     console.log(
-      `contract-guard: ${pkg}/src changed in reformat commits only (${touching.length}) — no bump needed.`,
+      `contract-guard: ${src} changed in reformat commits only (${touching.length}) — no bump needed.`,
     );
     continue;
   }
+  changed.push(...files);
+  counted.push(src);
+}
 
-  const before = versionAt(base, pkg);
-  const after = versionAtHead(pkg);
+if (changed.length > 0) {
+  const before = versionAt(base, PUBLIC);
+  const after = versionAtHead(PUBLIC);
   if (before !== null && before === after) {
-    violations.push({ pkg, version: after, files: changed });
+    violations.push(
+      `${PUBLIC} @ ${after} — unchanged across ${base}..HEAD, but ${counted.join(" and ")} changed:\n` +
+        changed.map((f) => `      ${f}`).join("\n"),
+    );
   }
+}
+
+const sdk = versionAtHead(PUBLIC);
+const api = versionAtHead(LOCKSTEP);
+if (sdk !== null && api !== null && sdk !== api) {
+  violations.push(
+    `${LOCKSTEP} @ ${api} is not in lockstep with ${PUBLIC} @ ${sdk}: set both to the same version`,
+  );
 }
 
 if (violations.length > 0) {
   console.error(
-    `\ncontract-guard FAILED — contract source changed without a version bump.\n` +
-      `Any change under packages/<pkg>/src/ must bump that package's version\n` +
-      `(a -canary.N rev), or publish.yml will no-op and npm will go stale (03 P2).\n`,
+    `\ncontract-guard FAILED — the contract changed without its version.\n` +
+      `A change under packages/plugin-api/src or packages/plugin-sdk/src moves\n` +
+      `plugin-sdk's version (the contract's one public number, PM-0008\n` +
+      `amendment 3), and plugin-api's private version moves with it.\n`,
   );
-  for (const v of violations) {
-    console.error(
-      `  ${v.pkg} @ ${v.version} — unchanged across ${base}..HEAD, but:`,
-    );
-    for (const f of v.files) console.error(`      ${f}`);
-  }
+  for (const v of violations) console.error(`  ${v}`);
   console.error("");
   process.exit(1);
 }
 
 console.log(
-  `contract-guard OK — every package with src changes in ${base}..HEAD bumped its version (reformat-only changes need none).`,
+  `contract-guard OK — ${changed.length ? `the contract changed in ${base}..HEAD and plugin-sdk moved to ${sdk}` : `no contract change in ${base}..HEAD`}; plugin-api is in lockstep (${api}).`,
 );

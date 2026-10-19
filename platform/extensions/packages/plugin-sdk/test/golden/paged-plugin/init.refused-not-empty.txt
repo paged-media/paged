@@ -1,0 +1,6 @@
+$ paged-plugin init <TMP>/taken
+# exit 1
+# stdout
+(empty)
+# stderr
+error: <TMP>/taken already has package.json; init writes into a new or empty directory

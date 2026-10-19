@@ -3,7 +3,8 @@ $ paged-plugin nope
 # stdout
 (empty)
 # stderr
-usage: paged-plugin validate <manifest.json> [--untyped-baseline <file>]
+usage: paged-plugin init [dir] [--id <reverse.dns.id>] [--name <name>]
+       paged-plugin validate <manifest.json> [--untyped-baseline <file>]
        paged-plugin untyped <manifest.json...>
        paged-plugin integrity <bundle-dir|manifest.json> [--check]
        paged-plugin modules-upload <bundle-dir|manifest.json> [--dry-run]

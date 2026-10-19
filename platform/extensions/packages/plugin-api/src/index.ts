@@ -16,7 +16,9 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// @paged-media/plugin-api — the plugin contract (API v0.2).
+// @paged-media/plugin-api — the plugin contract (API v0.2), private in the
+// workspace and published as `@paged-media/plugin-sdk/api` (PM-0008,
+// amendment 3).
 //
 // HARD RULE: this package is TYPE-ONLY. Every export is `export
 // type`; nothing here exists at runtime, so consuming a bundle never

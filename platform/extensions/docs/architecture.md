@@ -248,6 +248,9 @@ for a lazy registration and allowances that must give a reason.
   [`docs/development/testing-cli-and-scripting.md`](../../../docs/development/testing-cli-and-scripting.md).
 - `.github/workflows/contract-guard.yml` requires that a change under
   `packages/plugin-api/src` or `packages/plugin-sdk/src` comes with a version change.
+  _Since PM-0008 amendment 3 (2026-10-19): the workflow is
+  `extensions-contract-guard.yml`, the version that must change is plugin-sdk's (the one
+  public package), and plugin-api's private version must equal it._
 - `.github/workflows/publish.yml` runs on every push to `main`: typecheck, build, test, the
   two `--check` gates against a scratch install of the stamped engine version, then
   `npm publish --tag canary` for each package whose version is not on the registry yet

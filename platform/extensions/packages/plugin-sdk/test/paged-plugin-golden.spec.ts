@@ -34,6 +34,7 @@ import {
   chmodSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   rmSync,
   writeFileSync,
@@ -64,6 +65,11 @@ const GOLDEN = join(here, "golden", "paged-plugin");
 const WASM = new Uint8Array([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00]);
 const SRI = `sha384-${createHash("sha384").update(WASM).digest("base64")}`;
 const UNROUTABLE = "http://127.0.0.1:9";
+const SDK_VERSION = (
+  JSON.parse(readFileSync(resolve(here, "../package.json"), "utf8")) as {
+    version: string;
+  }
+).version;
 
 /** The subcommands the bin dispatches on, read out of its source. */
 function dispatched(): string[] {
@@ -167,8 +173,14 @@ beforeAll(() => {
   bundle("upload-fails");
   fakeNpx("npx-ok", 0);
   fakeNpx("npx-fails", 1);
+  writeJson(T("taken/package.json"), { name: "taken" });
   rules = [
     ...pathRules(tmp, "<TMP>"),
+    // `init` writes this package's version into the plugin it scaffolds.
+    {
+      from: new RegExp(SDK_VERSION.replace(/\./g, "\\."), "g"),
+      to: "<SDK_VERSION>",
+    },
     // The upload's scratch directory (mkdtemp under the child's TMPDIR).
     { from: /paged-modules-[A-Za-z0-9]+/g, to: "paged-modules-<RND>" },
   ];
@@ -211,6 +223,19 @@ const uploadEnv = (npx: string) => () => ({
   PATH: `${T(npx)}${delimiter}${process.env["PATH"] ?? ""}`,
 });
 
+/** Every file under `dir`, sorted, with package.json's text. */
+const scaffolded = (dir: string) => {
+  const files: string[] = [];
+  const walk = (d: string, rel: string) => {
+    for (const e of readdirSync(d, { withFileTypes: true })) {
+      if (e.isDirectory()) walk(join(d, e.name), `${rel}${e.name}/`);
+      else files.push(`${rel}${e.name}`);
+    }
+  };
+  walk(dir, "");
+  return `${files.sort().join("\n")}\n\n${readFileSync(join(dir, "package.json"), "utf8")}\n${readFileSync(join(dir, "src/manifest.json"), "utf8")}`;
+};
+
 const CASES: Record<string, Case[]> = {
   // No subcommand, an unknown one, and --help (there is no help flag: the
   // usage text is the answer, on stderr, exit 2).
@@ -218,6 +243,31 @@ const CASES: Record<string, Case[]> = {
     { name: "usage-no-command", argv: () => [], exit: 2 },
     { name: "usage-unknown-command", argv: () => ["nope"], exit: 2 },
     { name: "usage-help-flag", argv: () => ["--help"], exit: 2 },
+  ],
+  init: [
+    { name: "usage", argv: () => ["init", "--bogus"], exit: 2 },
+    {
+      name: "input-not-a-directory",
+      argv: () => ["init", T("ok.json")],
+      exit: 1,
+    },
+    {
+      name: "ok",
+      argv: () => ["init", T("hello-plugin")],
+      exit: 0,
+      structure: () => scaffolded(T("hello-plugin")),
+      check: () => {
+        const r = spawnSync(
+          process.execPath,
+          [BIN, "validate", join(T("hello-plugin"), "src/manifest.json")],
+          { encoding: "utf8" },
+        );
+        // The scaffold validates, with no warning (its command is typed).
+        expect(r.status).toBe(0);
+        expect(r.stderr).toBe("");
+      },
+    },
+    { name: "refused-not-empty", argv: () => ["init", T("taken")], exit: 1 },
   ],
   validate: [
     { name: "usage", argv: () => ["validate"], exit: 2 },
@@ -429,6 +479,10 @@ describe("paged-plugin golden transcripts", () => {
   it("the bare binary: no subcommand, an unknown one, --help", () => {
     covers("cli:paged-plugin");
     runSub("root");
+  }, 60_000);
+  it("init (a minimal extension, and the refusal to overwrite)", () => {
+    covers("cli:paged-plugin init");
+    runSub("init");
   }, 60_000);
   it("validate", () => {
     covers("cli:paged-plugin validate");
