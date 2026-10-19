@@ -41,6 +41,8 @@ import {
   type CSSProperties,
 } from "react";
 
+import { trustedHtml } from "@paged-media/helpers";
+
 import { highlight, type CodeLanguage } from "./highlight";
 import { font, radius } from "@paged-media/panel-kit";
 
@@ -242,9 +244,14 @@ export function CodeEditor({
             pointerEvents: "none",
           }}
           // Highlighted source: the regex tokenizer escapes every
-          // token, so this is safe to inject.
+          // token, so this is safe to inject; the highlighter is the
+          // Trusted Types policy (ADR 240).
           dangerouslySetInnerHTML={{
-            __html: highlightWithSquiggles(value, language, byLine),
+            __html: trustedHtml(
+              "paged-code-highlight",
+              (source) => highlightWithSquiggles(source, language, byLine),
+              value,
+            ),
           }}
         />
         <textarea

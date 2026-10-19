@@ -49,3 +49,9 @@
   # The module host (ADR 220) is part of the floor: the deployed build's wasm
   # redirects there.
   Content-Security-Policy: connect-src 'self' blob: data: https://modules.paged.media
+  # ADR 240 — Trusted Types, REPORT-ONLY for now: a string reaching an HTML,
+  # script or script-URL sink without a policy is reported to the Pages
+  # Function at /api/csp-report, not refused. The value is
+  # src/boot/trusted-types.ts's TRUSTED_TYPES_POLICY (the dev server sends
+  # it from there; scripts/trusted-types.test.mjs keeps the two equal).
+  Content-Security-Policy-Report-Only: require-trusted-types-for 'script'; report-uri /api/csp-report

@@ -23,6 +23,7 @@ import react, { reactCompilerPreset } from "@vitejs/plugin-react";
 import babel from "@rolldown/plugin-babel";
 import { resolve, sep } from "node:path";
 import {
+  appendFileSync,
   createReadStream,
   readFileSync,
   readdirSync,
@@ -36,6 +37,10 @@ import {
   parseDataOrigins,
   rewriteHeadersCsp,
 } from "./src/boot/network-policy";
+import {
+  REPORT_PATH as TRUSTED_TYPES_REPORT_PATH,
+  TRUSTED_TYPES_POLICY,
+} from "./src/boot/trusted-types";
 import { reactCompiler } from "../../../../tooling/js/react-compiler.mjs";
 
 // The monorepo root: apps/editor/apps/canvas → four levels up.
@@ -116,16 +121,56 @@ function isolate(
   res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
   next();
 }
+// ADR 240 — Trusted Types, report-only (src/boot/trusted-types.ts holds the
+// policy; public/_headers ships the same). The dev and preview servers answer
+// the report route themselves: a report is appended to the file
+// PAGED_CSP_REPORT_LOG names (one JSON line each, so a test run's violations
+// can be counted afterwards), and dropped when it is unset.
+function trustedTypesReportOnly(
+  req: {
+    method?: string;
+    url?: string;
+    on(e: string, f: (c?: Buffer) => void): void;
+  },
+  res: {
+    setHeader(name: string, value: string): void;
+    statusCode: number;
+    end(): void;
+  },
+  next: () => void,
+) {
+  if (req.method === "POST" && req.url?.startsWith(TRUSTED_TYPES_REPORT_PATH)) {
+    const chunks: Buffer[] = [];
+    req.on("data", (c?: Buffer) => {
+      if (c) chunks.push(c);
+    });
+    req.on("end", () => {
+      const log = process.env.PAGED_CSP_REPORT_LOG;
+      if (log) {
+        const body = Buffer.concat(chunks).toString("utf8").replace(/\n/g, " ");
+        appendFileSync(log, `${body}\n`);
+      }
+      res.statusCode = 204;
+      res.end();
+    });
+    return;
+  }
+  res.setHeader("Content-Security-Policy-Report-Only", TRUSTED_TYPES_POLICY);
+  next();
+}
+
 const crossOriginIsolation = {
   name: "cross-origin-isolation-headers",
   configureServer(server: import("vite").ViteDevServer) {
     server.middlewares.use(isolate);
+    server.middlewares.use(trustedTypesReportOnly);
   },
   // `vite preview` serves the production build with the same headers, so
   // a built app boots locally (the React Compiler's latency probe runs
   // against it, ADR 229).
   configurePreviewServer(server: import("vite").PreviewServer) {
     server.middlewares.use(isolate);
+    server.middlewares.use(trustedTypesReportOnly);
   },
 };
 

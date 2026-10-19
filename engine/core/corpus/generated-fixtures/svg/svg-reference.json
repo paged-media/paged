@@ -1,0 +1,262 @@
+{
+  "comment": [
+    "Budgets for crates/paged-gpu/tests/it/svg_reference.rs: each fixture SVG drawn by the engine (paged_gpu::svg, 1 px per user unit) against <name>.resvg.png, the same SVG drawn by resvg 0.48.1 as the engine's decoder called it before the CPU lane moved to vello_cpu (ADR 189). Both are composited over white; the numbers are the mean and 99th-percentile ΔE2000.",
+    "Measured 2026-10-19 (ADR 190). Each budget is the measurement plus 20 % (floors 0.05 / 0.5). Never loosen one to make a run pass: fix the renderer, then tighten.",
+    "Where resvg misreads the specification the rationale says so, with what Chrome 155 (headless, 1x) and librsvg 2.62 draw, measured the same way: displacement, lighting-color, morphology, tile and transformed.",
+    "measured.before is main before ADR 190 (filters dropped), against the same reference."
+  ],
+  "fixtures": [
+    {
+      "name": "blend",
+      "max_mean_de": 0.292,
+      "max_p99_de": 8.22,
+      "measured": {
+        "mean_de": 0.243,
+        "p99_de": 6.85,
+        "before": {
+          "mean_de": 12.148,
+          "p99_de": 47.39
+        }
+      },
+      "rationale": "feBlend in every separable and non-separable mode onto a flood, and onto an offset copy of itself. The modes match resvg to a level; what remains is the rasterizers' antialiasing on the discs' edges."
+    },
+    {
+      "name": "blur",
+      "max_mean_de": 0.359,
+      "max_p99_de": 2.96,
+      "measured": {
+        "mean_de": 0.299,
+        "p99_de": 2.46,
+        "before": {
+          "mean_de": 4.168,
+          "p99_de": 29.74
+        }
+      },
+      "rationale": "feGaussianBlur at σ 1.2 (the exact kernel), 6 and 10 × 2 (five boxes across, the exact kernel down), in sRGB, on a group at 60 % opacity."
+    },
+    {
+      "name": "clip-mask",
+      "max_mean_de": 0.12,
+      "max_p99_de": 2.28,
+      "measured": {
+        "mean_de": 0.1,
+        "p99_de": 1.9,
+        "before": {
+          "mean_de": 0.269,
+          "p99_de": 4.53
+        }
+      },
+      "rationale": "Clip paths (even-odd, objectBoundingBox units, a clip path clipped by another), a luminance mask with a gradient, an alpha mask on a group at 80 %, a pattern. No filters: before this change it measured 0.269 / 4.53, the pattern tile filtered bicubically where tiny-skia copies a tile that lands on whole pixels."
+    },
+    {
+      "name": "color-matrix",
+      "max_mean_de": 0.28,
+      "max_p99_de": 2.21,
+      "measured": {
+        "mean_de": 0.233,
+        "p99_de": 1.84,
+        "before": {
+          "mean_de": 21.767,
+          "p99_de": 76.49
+        }
+      },
+      "rationale": "feColorMatrix: a matrix (sepia), saturate, hueRotate, luminanceToAlpha."
+    },
+    {
+      "name": "component-transfer",
+      "max_mean_de": 0.165,
+      "max_p99_de": 1.16,
+      "measured": {
+        "mean_de": 0.137,
+        "p99_de": 0.96,
+        "before": {
+          "mean_de": 19.155,
+          "p99_de": 97.81
+        }
+      },
+      "rationale": "feComponentTransfer: table, discrete, linear and gamma functions, and a table on alpha."
+    },
+    {
+      "name": "composite",
+      "max_mean_de": 0.05,
+      "max_p99_de": 0.54,
+      "measured": {
+        "mean_de": 0.023,
+        "p99_de": 0.45,
+        "before": {
+          "mean_de": 6.678,
+          "p99_de": 43.02
+        }
+      },
+      "rationale": "feComposite: over, in, out, atop, xor and arithmetic, over a moved, recoloured copy of the source."
+    },
+    {
+      "name": "convolve",
+      "max_mean_de": 0.409,
+      "max_p99_de": 13.06,
+      "measured": {
+        "mean_de": 0.34,
+        "p99_de": 10.88,
+        "before": {
+          "mean_de": 8.874,
+          "p99_de": 72.06
+        }
+      },
+      "rationale": "feConvolveMatrix: emboss, edge detection with preserveAlpha and bias, sharpen with edgeMode duplicate. The kernels multiply the rasterizers' antialiasing differences on the circle's edge, hence the p99."
+    },
+    {
+      "name": "displacement",
+      "max_mean_de": 14.432,
+      "max_p99_de": 68.8,
+      "measured": {
+        "mean_de": 12.026,
+        "p99_de": 57.33,
+        "before": {
+          "mean_de": 11.964,
+          "p99_de": 57.33
+        }
+      },
+      "rationale": "feDisplacementMap driven by noise and by the art's own red channel. resvg multiplies the displacement by the scale twice (scale² · ½), so its art scatters off the canvas; the engine displaces by scale · (C − ½) as the specification and browsers do. Against a browser (Chrome 155 headless) the engine measures 0.683/31.75 and resvg 12.151/57.33; librsvg 0.872/34.46. The budget guards the engine's own result against resvg's."
+    },
+    {
+      "name": "drop-shadow",
+      "max_mean_de": 0.24,
+      "max_p99_de": 3.94,
+      "measured": {
+        "mean_de": 0.2,
+        "p99_de": 3.28,
+        "before": {
+          "mean_de": 2.184,
+          "p99_de": 30.29
+        }
+      },
+      "rationale": "The drop shadow editors write (feGaussianBlur of SourceAlpha → feOffset → feFlood → feComposite in → feMerge), feDropShadow, and a glow (feMorphology dilate → blur → flood → composite → merge)."
+    },
+    {
+      "name": "gradients",
+      "max_mean_de": 0.226,
+      "max_p99_de": 4.26,
+      "measured": {
+        "mean_de": 0.188,
+        "p99_de": 3.55,
+        "before": {
+          "mean_de": 0.95,
+          "p99_de": 15.23
+        }
+      },
+      "rationale": "Linear and radial gradients: stop opacity, reflect and repeat, a gradientTransform, a focal point and focal radius, a gradient on a stroke. No filters: before this change it measured 0.950 / 15.23, because vello_cpu interpolates stops premultiplied and SVG (resvg, browsers) does not; SVG gradients now interpolate straight."
+    },
+    {
+      "name": "lighting",
+      "max_mean_de": 0.255,
+      "max_p99_de": 3.87,
+      "measured": {
+        "mean_de": 0.212,
+        "p99_de": 3.22,
+        "before": {
+          "mean_de": 38.758,
+          "p99_de": 100.0
+        }
+      },
+      "rationale": "feSpecularLighting under a distant light over a blurred alpha (a bevel), feDiffuseLighting under a point light, feSpecularLighting under a spot light with a cone. White light only; coloured light is lighting-color."
+    },
+    {
+      "name": "lighting-color",
+      "max_mean_de": 5.508,
+      "max_p99_de": 15.12,
+      "measured": {
+        "mean_de": 4.59,
+        "p99_de": 12.6,
+        "before": {
+          "mean_de": 53.887,
+          "p99_de": 100.0
+        }
+      },
+      "rationale": "A coloured light. lighting-color is an sRGB colour, which the engine takes into the filter's linearRGB space, as Chrome does; resvg and librsvg use it as if it were already linear, so their light comes out paler. Against Chrome the engine measures 0.081/0.87, resvg 4.581/12.60, librsvg 4.581/12.60."
+    },
+    {
+      "name": "merge",
+      "max_mean_de": 0.142,
+      "max_p99_de": 3.36,
+      "measured": {
+        "mean_de": 0.118,
+        "p99_de": 2.8,
+        "before": {
+          "mean_de": 7.556,
+          "p99_de": 50.48
+        }
+      },
+      "rationale": "feMerge of three moved and recoloured copies and the source."
+    },
+    {
+      "name": "morphology",
+      "max_mean_de": 2.079,
+      "max_p99_de": 51.9,
+      "measured": {
+        "mean_de": 1.732,
+        "p99_de": 43.25,
+        "before": {
+          "mean_de": 6.76,
+          "p99_de": 78.78
+        }
+      },
+      "rationale": "feMorphology erode and dilate, fractional and per-axis radii, and an outline built on dilate. The engine's window is 2r + 1 pixels wide, as browsers and librsvg have it; resvg reads the specification's text (2r) and its window is a pixel narrower and off-centre. Against Chrome the engine measures 0.225/5.71, resvg 1.662/42.46, librsvg 0.188/3.79."
+    },
+    {
+      "name": "text",
+      "max_mean_de": 0.05,
+      "max_p99_de": 0.5,
+      "measured": {
+        "mean_de": 0.007,
+        "p99_de": 0.0,
+        "before": {
+          "mean_de": 0.114,
+          "p99_de": 0.0
+        }
+      },
+      "rationale": "SVG text, which neither this build nor the resvg one before it draws: usvg is built without fonts (ADR 189), so only the rectangles and the shadow under the last one draw, in both. A known gap."
+    },
+    {
+      "name": "tile",
+      "max_mean_de": 4.712,
+      "max_p99_de": 30.98,
+      "measured": {
+        "mean_de": 3.926,
+        "p99_de": 25.81,
+        "before": {
+          "mean_de": 26.669,
+          "p99_de": 93.8
+        }
+      },
+      "rationale": "feTile of a swatch built from a flood and the art, and of a flood in sRGB. resvg marks a tile's result sRGB whatever space its input was in, so a linearRGB tile comes out dark; the engine keeps the input's space. Against Chrome the engine measures 0.040/1.90, resvg 3.916/25.81, librsvg 0.071/2.19."
+    },
+    {
+      "name": "transformed",
+      "max_mean_de": 1.283,
+      "max_p99_de": 34.86,
+      "measured": {
+        "mean_de": 1.069,
+        "p99_de": 29.05,
+        "before": {
+          "mean_de": 5.616,
+          "p99_de": 69.6
+        }
+      },
+      "rationale": "Filters under a viewBox at half size (every length doubles), userSpaceOnUse and objectBoundingBox units, primitive subregions, a rotated and a skewed group. resvg (and librsvg) filter in device space, so a rotated group's flood stays upright; the engine filters in the group's own axes and draws the result back through the rotation, as Chrome does. Against Chrome the engine measures 0.347/3.02, resvg 1.177/29.05, librsvg 1.268/29.05."
+    },
+    {
+      "name": "turbulence",
+      "max_mean_de": 0.182,
+      "max_p99_de": 1.67,
+      "measured": {
+        "mean_de": 0.151,
+        "p99_de": 1.39,
+        "before": {
+          "mean_de": 44.175,
+          "p99_de": 97.46
+        }
+      },
+      "rationale": "feTurbulence (turbulence and fractalNoise, one to four octaves, a negative seed), a paper grain (noise, desaturated, arithmetic composite, clipped to the shape) and marbling (noise as the alpha of a colour). The noise is the specification's reference generator; resvg's and librsvg's agree with it to a level (Chrome samples it at pixel centres)."
+    }
+  ]
+}

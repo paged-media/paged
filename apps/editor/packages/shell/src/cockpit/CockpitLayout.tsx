@@ -29,7 +29,7 @@
 // through the panel registry (PanelHost) — the same contracts
 // plugins use, so a custom panel renders here untouched.
 //
-// What is hidden stays mounted (ADR 233): Tab / Shift+Tab hides the side
+// What is hidden stays mounted (ADR 240): Tab / Shift+Tab hides the side
 // columns in an <Activity>, the left panel of every mode visited so far
 // stays mounted beside the current one, and an export-style mode hides
 // the document viewport instead of unmounting it. A hidden subtree keeps

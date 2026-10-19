@@ -25,10 +25,19 @@ import {
   onChangeOf,
   onDidChangeOf,
   useLive,
+  useNearViewport,
   type Listen,
+  type NearViewport,
 } from "@paged-media/react-live";
 
-export { useLive, onChangeOf, onDidChangeOf, type Listen };
+export {
+  useLive,
+  onChangeOf,
+  onDidChangeOf,
+  useNearViewport,
+  type Listen,
+  type NearViewport,
+};
 
 /** A registry as a render value: `useRegistryView(menus).list()` reads the
  *  live list, and a memo over it (the compiler's included) recomputes when

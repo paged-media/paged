@@ -22,7 +22,7 @@
 // engine, with a stub canvas, one mode whose left slot holds a panel, and
 // the built-in tools on the rail. The commands run through the shell's
 // registry; what they change is which chrome is shown. The panel columns
-// are hidden, not unmounted (ADR 233): the panel that comes back is the
+// are hidden, not unmounted (ADR 240): the panel that comes back is the
 // panel that went, with its state.
 
 import { act, cleanup, render } from "@testing-library/react";
@@ -142,7 +142,7 @@ describe("the chrome toggles, on a mounted PagedShell", () => {
     expect(s.chrome()).toEqual({ rail: false, left: false, canvas: true });
     await s.invoke("paged.chrome.toggleAll");
     expect(s.chrome()).toEqual({ rail: true, left: true, canvas: true });
-    // The same panel, kept while hidden (ADR 233), not a new one.
+    // The same panel, kept while hidden (ADR 240), not a new one.
     expect(s.leftPanel()).toBe(panel);
   });
 

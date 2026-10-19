@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="240" height="160" viewBox="0 0 240 160">
+  <defs>
+    <g id="disc"><circle cx="25" cy="25" r="22" fill="#cc3366"/><circle cx="25" cy="25" r="10" fill="#33ccaa"/></g>
+  </defs>
+  <filter id="multiply" x="0" y="0" width="1" height="1"><feFlood flood-color="#6699cc" result="bg"/><feBlend in="SourceGraphic" in2="bg" mode="multiply"/></filter>
+  <filter id="screen" x="0" y="0" width="1" height="1"><feFlood flood-color="#6699cc" result="bg"/><feBlend in="SourceGraphic" in2="bg" mode="screen"/></filter>
+  <filter id="darken" x="0" y="0" width="1" height="1"><feFlood flood-color="#6699cc" result="bg"/><feBlend in="SourceGraphic" in2="bg" mode="darken"/></filter>
+  <filter id="lighten" x="0" y="0" width="1" height="1"><feFlood flood-color="#6699cc" result="bg"/><feBlend in="SourceGraphic" in2="bg" mode="lighten"/></filter>
+  <filter id="overlay" x="0" y="0" width="1" height="1"><feFlood flood-color="#6699cc" result="bg"/><feBlend in="SourceGraphic" in2="bg" mode="overlay"/></filter>
+  <filter id="difference" x="0" y="0" width="1" height="1"><feFlood flood-color="#6699cc" result="bg"/><feBlend in="SourceGraphic" in2="bg" mode="difference"/></filter>
+  <filter id="hue" x="0" y="0" width="1" height="1"><feFlood flood-color="#6699cc" result="bg"/><feBlend in="SourceGraphic" in2="bg" mode="hue"/></filter>
+  <filter id="luminosity" x="0" y="0" width="1" height="1"><feFlood flood-color="#6699cc" result="bg"/><feBlend in="SourceGraphic" in2="bg" mode="luminosity"/></filter>
+  <filter id="echo" x="-10%" y="-10%" width="150%" height="150%"><feOffset dx="9" dy="7" result="o"/><feBlend in="SourceGraphic" in2="o" mode="multiply"/></filter>
+  <rect width="240" height="160" fill="none"/>
+  <g transform="translate(5 5)">
+    <rect width="50" height="50" fill="none"/><use href="#disc" filter="url(#multiply)"/>
+    <use href="#disc" x="58" filter="url(#screen)"/>
+    <use href="#disc" x="116" filter="url(#darken)"/>
+    <use href="#disc" x="174" filter="url(#lighten)"/>
+    <use href="#disc" y="56" filter="url(#overlay)"/>
+    <use href="#disc" x="58" y="56" filter="url(#difference)"/>
+    <use href="#disc" x="116" y="56" filter="url(#hue)"/>
+    <use href="#disc" x="174" y="56" filter="url(#luminosity)"/>
+    <use href="#disc" x="80" y="104" filter="url(#echo)"/>
+  </g>
+</svg>
