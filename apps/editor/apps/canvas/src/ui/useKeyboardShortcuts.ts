@@ -29,12 +29,13 @@
 //   Home          → first page
 //   End           → last page
 //
-// Handlers are skipped when an interactive element has focus
-// (input, textarea, contenteditable) so the shortcuts don't
-// fight ordinary typing.
+// Handlers are skipped when the focused control owns the key (a field,
+// a dialog, an open menu, a toolbar's arrows — `canvasKeyYields`, ADR
+// 234) so the shortcuts don't fight ordinary typing or navigation.
 
 import { useEffect } from "react";
 import type { Camera } from "@paged-media/client";
+import { canvasKeyYields } from "@paged-media/shell";
 import { documentBounds, fitCamera, layoutPages } from "./layout";
 import type { PageId } from "@paged-media/client";
 
@@ -49,7 +50,7 @@ export interface ShortcutContext {
 export function useKeyboardShortcuts(ctx: ShortcutContext) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (isEditableTarget(e.target)) return;
+      if (canvasKeyYields(e)) return;
       const cmd = e.metaKey || e.ctrlKey;
       const [vw, vh] = ctx.viewportSize;
       if (vw < 10 || vh < 10) return;
@@ -130,12 +131,4 @@ export function useKeyboardShortcuts(ctx: ShortcutContext) {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [ctx]);
-}
-
-function isEditableTarget(target: EventTarget | null): boolean {
-  if (!(target instanceof HTMLElement)) return false;
-  const tag = target.tagName;
-  if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return true;
-  if (target.isContentEditable) return true;
-  return false;
 }

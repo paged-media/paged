@@ -2269,7 +2269,7 @@ fn paged_duplicate_elements(
     })
 }
 
-/// `paged.copyElements([id, ...])` — ADR 190: a copy of page items, whole
+/// `paged.copyElements([id, ...])` — ADR 193: a copy of page items, whole
 /// (the snippet `exportElements` answers): the JSON string
 /// `paged.pasteElements` takes, in this document or another. `null` when
 /// the engine refuses (a threaded text frame, items on two spreads, …) or
@@ -2292,7 +2292,7 @@ fn paged_copy_elements(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> 
     })
 }
 
-/// `paged.pasteElements(snippet, pageId, cx?, cy?)` — ADR 190: paste a
+/// `paged.pasteElements(snippet, pageId, cx?, cy?)` — ADR 193: paste a
 /// `paged.copyElements` copy on `pageId`'s spread, on top, in one undo
 /// step (`Mutation::PasteElements`): centred on `(cx, cy)` (page space),
 /// or with no centre in place. Selects the copies and returns their

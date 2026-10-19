@@ -697,7 +697,7 @@ export type WorkerToMain = WorkerToMainKind & {
 //   duplicatePage's copy, each inside a batch). Optional: absent when no
 //   page was created.
 // rides v74 (added before first consumer sync; v0.74.0 was tagged, never
-//   published) — ADR 190, page-item snippets: the `exportElements` request
+//   published) — ADR 193, page-item snippets: the `exportElements` request
 //   (`ElementsExported` reply) and the `pasteElements` mutation
 //   (`Operation::InsertSnippet` / `RemoveSnippet`). Alt+Translate commits
 //   as an `InsertSnippet` (GF-2, GF-3).
@@ -1343,7 +1343,7 @@ pub enum MainToWorkerKind {
     /// `StoryContentResult` whose `content` is `None` when the story id doesn't
     /// resolve.
     RequestStoryContent { story_id: String },
-    /// ADR 190 (rides v74, added before first consumer sync) — take a
+    /// ADR 193 (rides v74, added before first consumer sync) — take a
     /// copy of page items for the clipboard (Copy, Cut). Pure READ:
     /// `snippet` is the JSON `Mutation::PasteElements` takes back, whole
     /// (every property, a group's members, pasted-in children, a copy of
@@ -1989,7 +1989,7 @@ pub enum WorkerToMainKind {
         #[serde(default)]
         content: Option<StoryContent>,
     },
-    /// ADR 190 — `ExportElements` reply. `snippet` is the copy's JSON, or
+    /// ADR 193 — `ExportElements` reply. `snippet` is the copy's JSON, or
     /// `None` with `refused` saying why. `text` is the copied text frames'
     /// text, back to front, a blank line between frames (the plain-text
     /// form of the copy); `count` the copied roots.

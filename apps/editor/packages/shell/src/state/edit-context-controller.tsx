@@ -43,13 +43,7 @@ import { useEditContextStack } from "./edit-context-stack";
 import { useSelection } from "./selection-context";
 import { SELECT_TOOL_ID, VIEW_TOOL_IDS, useOptionalTool } from "./tool-context";
 import type { ToolId } from "../registries/tool";
-
-function isEditableTarget(target: EventTarget | null): boolean {
-  if (!(target instanceof HTMLElement)) return false;
-  const tag = target.tagName;
-  if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return true;
-  return target.isContentEditable;
-}
+import { canvasKeyYields } from "../focus/key-ownership";
 
 const MODIFIER_KEYS = new Set([
   "Shift",
@@ -107,7 +101,9 @@ export function EditContextController() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (!activeRef.current) return; // no context → don't intercept
-      if (isEditableTarget(e.target)) return;
+      // The focused control's keys stay its own (ADR 234): a field, a
+      // dialog, an open menu, a toolbar's arrows, Tab on a button.
+      if (canvasKeyYields(e)) return;
       const contribution = contributionRef.current;
       const onContentKey = contribution?.onContentKey;
 

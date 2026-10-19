@@ -1,0 +1,114 @@
+/*
+ * This file is part of paged (https://paged.media), the commercial editor
+ * for the paged IDML engine.
+ *
+ * paged is free software: you may redistribute it and/or modify it under the
+ * terms of the GNU Affero General Public License, version 3, as published by
+ * the Free Software Foundation, OR under the Paged Media Enterprise License
+ * (PMEL), a commercial license available from And The Next GmbH. Full
+ * copyright and license information is available in LICENSE.md, distributed
+ * with this source code.
+ *
+ * paged is distributed in the hope that it will be useful, but WITHOUT ANY
+ * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE. See the licenses for details.
+ *
+ *  @copyright  Copyright (c) And The Next GmbH
+ *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
+ */
+
+/* The editor's view transitions (React 19.3 <ViewTransition>, ADR 240).
+ *
+ * The classes below are the vocabulary a <ViewTransition> names in its
+ * enter / exit / share props; a transition type (addTransitionType) picks
+ * the direction. Only those boundaries animate:
+ *
+ *   - the root does not take part, so the page, the live canvas included,
+ *     keeps rendering under a transition instead of being frozen into a
+ *     screenshot;
+ *   - the transition overlay lets the pointer through, so a transition
+ *     never swallows a click;
+ *   - under prefers-reduced-motion nothing moves (the update still lands at
+ *     once).
+ */
+
+:root {
+  view-transition-name: none;
+}
+
+::view-transition {
+  pointer-events: none;
+}
+
+/* A panel coming in from the side its tab (or slide) is on, the one
+ * going out leaving toward the other side. */
+::view-transition-new(.pg-vt-from-end) {
+  animation: var(--dur-base) var(--ease-out) both pg-vt-in-from-end;
+}
+::view-transition-old(.pg-vt-to-start) {
+  animation: var(--dur-fast) var(--ease-in-out) both pg-vt-out-to-start;
+}
+::view-transition-new(.pg-vt-from-start) {
+  animation: var(--dur-base) var(--ease-out) both pg-vt-in-from-start;
+}
+::view-transition-old(.pg-vt-to-end) {
+  animation: var(--dur-fast) var(--ease-in-out) both pg-vt-out-to-end;
+}
+
+/* No direction: a cross-fade. */
+::view-transition-new(.pg-vt-fade) {
+  animation: var(--dur-base) var(--ease-out) both pg-vt-fade-in;
+}
+::view-transition-old(.pg-vt-fade) {
+  animation: var(--dur-fast) var(--ease-in-out) both pg-vt-fade-out;
+}
+
+/* A shared element (the filmstrip's selection ring) moves from where it
+ * was to where it is now. */
+::view-transition-group(.pg-vt-move) {
+  animation-duration: var(--dur-base);
+  animation-timing-function: var(--ease-out);
+}
+
+@keyframes pg-vt-in-from-end {
+  from {
+    opacity: 0;
+    transform: translateX(16px);
+  }
+}
+@keyframes pg-vt-in-from-start {
+  from {
+    opacity: 0;
+    transform: translateX(-16px);
+  }
+}
+@keyframes pg-vt-out-to-start {
+  to {
+    opacity: 0;
+    transform: translateX(-16px);
+  }
+}
+@keyframes pg-vt-out-to-end {
+  to {
+    opacity: 0;
+    transform: translateX(16px);
+  }
+}
+@keyframes pg-vt-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes pg-vt-fade-out {
+  to {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
+  }
+}

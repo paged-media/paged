@@ -21,8 +21,14 @@
 // ThumbnailRail). REAL: live page snapshots grouped into spreads,
 // labels are page ranges, click navigates (the app supplies the
 // camera-fit via `onNavigate` — the layout math lives app-side).
+//
+// The selection ring is one shared element (ADR 240): picking another
+// spread is a view transition in which the ring moves from the spread it
+// was on to the new one, in the direction of the move. Spreads show their
+// thumbnails as they come near the strip's view (one observer on a
+// Fragment ref).
 
-import { useState } from "react";
+import { Fragment, ViewTransition, useState } from "react";
 
 import { Icon } from "../../icons";
 import { useDocument } from "../../state/document-context";
@@ -31,11 +37,18 @@ import type { SpreadSummary } from "@paged-media/client";
 import { groupSpreads } from "../spread-grouping";
 import { navigateToPages } from "../cockpit-navigation";
 import { IconButton } from "@paged-media/panel-kit";
+import { useNearViewport } from "../../state/live";
+import {
+  SHARE_MOVE,
+  directionOf,
+  transitionWith,
+} from "../../view-transitions";
 
 export function ThumbnailRail() {
   const { handle, snapshots } = useDocument();
   const spreads = useCollection<SpreadSummary>("spreads");
   const [selected, setSelected] = useState<string | null>(null);
+  const { observe: observeNear, has: isNear } = useNearViewport();
 
   const entries = handle ? groupSpreads(handle.pageIds, spreads) : [];
 
@@ -81,86 +94,110 @@ export function ThumbnailRail() {
             Open a document to navigate its spreads.
           </span>
         ) : (
-          entries.map((e) => {
-            const sel = selected === e.key;
-            return (
-              <button
-                key={e.key}
-                type="button"
-                data-thumbnail-spread={e.key}
-                data-selected={sel || undefined}
-                onClick={() => {
-                  setSelected(e.key);
-                  navigateToPages(e.pageIndices);
-                }}
-                style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  alignItems: "center",
-                  gap: 6,
-                  border: "none",
-                  background: "transparent",
-                  cursor: "pointer",
-                  flexShrink: 0,
-                  padding: 0,
-                }}
-              >
-                <span
+          <Fragment ref={observeNear}>
+            {entries.map((e, index) => {
+              const sel = selected === e.key;
+              return (
+                <button
+                  key={e.key}
+                  type="button"
+                  data-near={e.key}
+                  data-thumbnail-spread={e.key}
+                  data-selected={sel || undefined}
+                  onClick={() => {
+                    const from = entries.findIndex((x) => x.key === selected);
+                    transitionWith(directionOf(from, index), () =>
+                      setSelected(e.key),
+                    );
+                    navigateToPages(e.pageIndices);
+                  }}
                   style={{
                     display: "flex",
-                    gap: 1,
-                    padding: sel ? 1 : 0,
-                    border: sel
-                      ? "2px solid var(--pg-primary)"
-                      : "1px solid var(--pg-border)",
-                    borderRadius: 2,
-                    background: "var(--pg-bg)",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    gap: 6,
+                    border: "none",
+                    background: "transparent",
+                    cursor: "pointer",
+                    flexShrink: 0,
+                    padding: 0,
                   }}
                 >
-                  {e.pageIndices.slice(0, 2).map((i) => {
-                    const url = handle
-                      ? snapshots.get(handle.pageIds[i])
-                      : undefined;
-                    return url ? (
-                      <img
-                        key={i}
-                        src={url}
-                        alt=""
-                        draggable={false}
-                        style={{
-                          width: 33,
-                          height: 48,
-                          objectFit: "cover",
-                          display: "block",
-                        }}
-                      />
-                    ) : (
-                      <span
-                        key={i}
-                        style={{
-                          width: 33,
-                          height: 48,
-                          background: "var(--pg-muted)",
-                          display: "block",
-                        }}
-                      />
-                    );
-                  })}
-                </span>
-                <span
-                  style={{
-                    fontFamily: "var(--font-sans)",
-                    fontSize: 10.5,
-                    color: sel ? "var(--pg-primary)" : "var(--pg-muted-fg)",
-                    fontWeight: sel ? 600 : 500,
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  {e.name === "Cover" ? "Cover" : e.range}
-                </span>
-              </button>
-            );
-          })
+                  <span
+                    style={{
+                      position: "relative",
+                      display: "flex",
+                      gap: 1,
+                      border: "1px solid var(--pg-border)",
+                      borderRadius: 2,
+                      background: "var(--pg-bg)",
+                    }}
+                  >
+                    {sel && (
+                      <ViewTransition
+                        name="filmstrip-selection"
+                        share={SHARE_MOVE}
+                        default="none"
+                      >
+                        <span
+                          aria-hidden
+                          data-thumbnail-selection
+                          style={{
+                            position: "absolute",
+                            inset: -3,
+                            border: "2px solid var(--pg-primary)",
+                            borderRadius: 3,
+                            pointerEvents: "none",
+                          }}
+                        />
+                      </ViewTransition>
+                    )}
+                    {e.pageIndices.slice(0, 2).map((i) => {
+                      const url =
+                        handle && isNear(e.key, index)
+                          ? snapshots.get(handle.pageIds[i])
+                          : undefined;
+                      return url ? (
+                        <img
+                          key={i}
+                          src={url}
+                          alt=""
+                          draggable={false}
+                          style={{
+                            width: 33,
+                            height: 48,
+                            objectFit: "cover",
+                            display: "block",
+                          }}
+                        />
+                      ) : (
+                        <span
+                          key={i}
+                          style={{
+                            width: 33,
+                            height: 48,
+                            background: "var(--pg-muted)",
+                            display: "block",
+                          }}
+                        />
+                      );
+                    })}
+                  </span>
+                  <span
+                    style={{
+                      fontFamily: "var(--font-sans)",
+                      fontSize: 10.5,
+                      color: sel ? "var(--pg-primary)" : "var(--pg-muted-fg)",
+                      fontWeight: sel ? 600 : 500,
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {e.name === "Cover" ? "Cover" : e.range}
+                  </span>
+                </button>
+              );
+            })}
+          </Fragment>
         )}
       </div>
       <RailArrow

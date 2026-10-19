@@ -26,6 +26,7 @@
 import { useState, type ReactNode } from "react";
 
 import { Icon } from "../icons";
+import { useRovingFocus } from "../focus/roving-focus";
 import { ZoomControl } from "./ZoomControl";
 import { useCamera } from "../state/camera-context";
 import { useRegistries } from "../state/registries-context";
@@ -46,6 +47,11 @@ export function ModeSwitcher({ right }: ModeSwitcherProps) {
   // registers a mode after the first render shows up.
   const modes = useRegistryView(useRegistries().modes);
   const list = modes.list();
+  // One tab stop for the modes; Left/Right walk them (ADR 234).
+  const roving = useRovingFocus({
+    orientation: "horizontal",
+    items: "[data-mode-option]",
+  });
   if (list.length === 0) return null;
 
   return (
@@ -55,7 +61,12 @@ export function ModeSwitcher({ right }: ModeSwitcherProps) {
             the name it describes. */}
       </div>
 
-      <div style={centerStyle}>
+      <div
+        role="toolbar"
+        aria-label="Workflow mode"
+        style={centerStyle}
+        {...roving}
+      >
         {list.map((m) => (
           <ModeButton
             key={m.id}

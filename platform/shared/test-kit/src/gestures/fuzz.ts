@@ -624,15 +624,9 @@ export async function runGestureFuzz(
  *  instances are counted and printed, not failed, so the fuzzer keeps
  *  hunting for NEW breakage. Remove an entry when its test flips.
  *
- *   GF-1 a group resized by a handle fails at commit;
  *   GF-4 the IDML writer prints 4 decimals, so a turned item drifts by
  *        up to ~1e-4 × its numbers per save → load. */
 export const GESTURE_FUZZ_KNOWN: readonly KnownFinding[] = [
-  {
-    id: "GF-1",
-    invariant: "no-error",
-    match: /property FrameBounds is not supported on Group/,
-  },
   { id: "GF-4", invariant: "round-trip", match: /^precision:/ },
 ];
 

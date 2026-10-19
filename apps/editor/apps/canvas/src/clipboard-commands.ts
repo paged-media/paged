@@ -21,7 +21,7 @@
 // Paste, Paste in Place and Duplicate for page items, as InDesign has them.
 //
 // WHAT IS ON THE CLIPBOARD. Copy asks the engine for a SNIPPET of the
-// selection (`exportElements`, engine ADR 190): the items whole — a group
+// selection (`exportElements`, engine ADR 193): the items whole — a group
 // with its members, a frame with a copy of its story — plus the swatches
 // and styles they name. That JSON is the internal format, held here, so a
 // paste works after a Cut deleted the items and after another document was

@@ -91,6 +91,7 @@ mod path_edit_gesture;
 mod place_image_wire;
 mod placeholder_wire;
 mod planar_regions_wire;
+mod property_sweep;
 mod render_effect_sweep;
 mod reorder_wire;
 mod resource_provider;

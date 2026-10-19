@@ -25,3 +25,35 @@ through the view; hand the source itself to effects and event handlers.
 `listen` adapters: `onChangeOf` (`onChange(handler): Disposable`, the
 editor's registries), `onDidChangeOf` (`onDidChange(listener): Disposable`,
 the contract's surfaces), `subscribeOf` (`subscribe(listener): () => void`).
+
+## `useNearViewport`
+
+Which items of a long list have come near the viewport, for lists whose
+items cost something to show (a thumbnail to decode, a page to render):
+one IntersectionObserver on a React 19.3 Fragment ref
+(`FragmentInstance.observeUsing`), so no item needs a ref of its own
+(apps/editor ADR 240).
+
+```tsx
+import { useNearViewport } from "@paged-media/react-live";
+
+function Thumbnails({ pages }: { pages: Page[] }) {
+  // Destructured: the React Compiler takes an object whose member is handed
+  // to a `ref` prop for a ref, and a ref is not read during render.
+  const { observe, has } = useNearViewport({ eager: 12 });
+  return (
+    <Fragment ref={observe}>
+      {pages.map((p, i) => (
+        <figure key={p.id} data-near={p.id}>
+          {has(p.id, i) ? <img src={p.url} alt="" /> : <Placeholder />}
+        </figure>
+      ))}
+    </Fragment>
+  );
+}
+```
+
+An item counts as near once it intersected the viewport (with a look-ahead
+margin) and stays near. The first `eager` items are near from the start, so
+the first paint never waits for the observer and a DOM without one (a test
+DOM) shows the head of the list.

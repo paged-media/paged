@@ -1791,7 +1791,7 @@ pub enum Mutation {
         element_ids: Vec<ElementId>,
         offset: (f32, f32),
     },
-    /// ADR 190 (rides v74, added before first consumer sync) — paste
+    /// ADR 193 (rides v74, added before first consumer sync) — paste
     /// page items copied with `exportElements`: `snippet` is the JSON that
     /// request answered. The copies land on `page_id`'s spread, on top of
     /// its z-order, as one undo step: centred on `center` (a point in

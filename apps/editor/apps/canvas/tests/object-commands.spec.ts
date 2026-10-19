@@ -1161,10 +1161,11 @@ test.describe("paged.object — the keyboard guards", () => {
         true,
       );
       // The rule this replaced, unchanged: a typed letter is text, a
-      // Cmd chord still opens the palette, and Tab/Escape still fire.
+      // Cmd chord still opens the palette, and Escape still fires. Tab is
+      // the field's since F-49 (ADR 234): it moves focus.
       expect(targetOwnsKey(key("v", field))).toBe(true);
       expect(targetOwnsKey(key("k", field, { metaKey: true }))).toBe(false);
-      expect(targetOwnsKey(key("Tab", field))).toBe(false);
+      expect(targetOwnsKey(key("Tab", field))).toBe(true);
       expect(targetOwnsKey(key("Escape", field))).toBe(false);
     }
   });
@@ -1183,8 +1184,12 @@ test.describe("paged.object — the keyboard guards", () => {
       expect(targetOwnsKey(key("ArrowDown", inside)), role).toBe(true);
       expect(targetOwnsKey(key("Backspace", inside)), role).toBe(true);
       // Letters are NOT claimed there — tool shortcuts keep working
-      // with focus on a tab or a tree row, as they always have.
-      expect(targetOwnsKey(key("v", inside)), role).toBe(false);
+      // with focus on a tab or a tree row, as they always have — except
+      // in an open menu (typeahead) or a dialog, which own every key but
+      // a chord (R9, ADR 234).
+      expect(targetOwnsKey(key("v", inside)), role).toBe(
+        role === "menu" || role === "dialog",
+      );
     }
     expect(targetOwnsKey(key("ArrowDown", el("SELECT")))).toBe(true);
 

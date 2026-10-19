@@ -2128,7 +2128,7 @@ fn frame_cases(c: &mut Vec<Case>) {
             offset: (40.0, 40.0),
         }
     }));
-    // ADR 190 — a paste paints its copy: the path copied and pasted,
+    // ADR 193 — a paste paints its copy: the path copied and pasted,
     // centred elsewhere on the page.
     c.push(paints("PasteElements", "geometry", |m| {
         let id = add_quad(m, 120.0, 120.0, 160.0, 120.0);

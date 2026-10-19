@@ -241,3 +241,12 @@ onto them is the follow-up if documents need it.
 - [ADR 149](149-corners-are-read-per-corner.md): how corners are read.
 - [ADR 188](188-snapshots-draw-on-the-worker-gpu.md): the editor's snapshot paths, whose CPU
   path this lane draws.
+
+## Amendment — 2026-10-19
+
+Decision 8's "Filters are not applied (a filtered group is drawn unfiltered)" and the
+Consequences paragraph on filters no longer hold: a placed SVG draws its filters again, all
+seventeen primitives, on the CPU when it is decoded, so both lanes draw the same filtered pixels
+([ADR 190](190-a-placed-svg-draws-its-filters.md)). The same change makes SVG gradients
+interpolate their stops unpremultiplied and samples a pattern tile that lands on whole pixels
+nearest, as `resvg` did. Raster images and text inside an SVG stay undrawn.

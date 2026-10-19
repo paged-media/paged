@@ -37,7 +37,7 @@
 //! with the object model's `paged query` → `RequestQuery`, 39 of 69 with
 //! v71's `paged get` → `RequestGet`, 39 of 70 once v71's script host
 //! bridge added `HostObjectsResult`, which only a host with an object
-//! registry sends; 40 of 71 with ADR 190's `paged read snippet` →
+//! registry sends; 40 of 71 with ADR 193's `paged read snippet` →
 //! `ExportElements`); what
 //! remains is almost entirely the first kind.
 //!

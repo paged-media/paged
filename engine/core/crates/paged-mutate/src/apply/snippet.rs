@@ -16,7 +16,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-//! ADR 190 — page-item snippets: what Copy takes out of a document and
+//! ADR 193 — page-item snippets: what Copy takes out of a document and
 //! Paste puts into one (this one or another).
 //!
 //! A snippet is the copied items WHOLE, as `DuplicateNodes` clones them

@@ -23,7 +23,7 @@
 // from SlidesStore.
 
 import type { BundleHost, PanelProps } from "@paged-media/plugin-api";
-import { subscribeOf, useLive } from "@paged-media/react-live";
+import { subscribeOf, useLive, useNearViewport } from "@paged-media/react-live";
 import * as React from "react";
 
 import {
@@ -57,10 +57,16 @@ export function makeSlidesPanel(
       .mutate(m)
       .catch((e) => host.log.warn(`paged.slide: ${String(e)}`));
 
-  const Thumb: React.FC<{ slide: Slide }> = ({ slide }) => {
+  const Thumb: React.FC<{ slide: Slide; near: boolean }> = ({
+    slide,
+    near,
+  }) => {
     // Its own view of the store: a thumbnail landing re-renders this
-    // thumbnail, not the list (react-live, editor ADR 229).
-    const url = useLive(store, subscribeOf).thumbnail(slide.pageId);
+    // thumbnail, not the list (react-live, editor ADR 229). Asked for only
+    // once the slide comes near the panel's view: a long deck renders the
+    // slides a user scrolls to, not all of them at once (editor ADR 240).
+    const thumbs = useLive(store, subscribeOf);
+    const url = near ? thumbs.thumbnail(slide.pageId) : null;
     const [w, h] = slide.sizePt;
     return (
       <div
@@ -145,6 +151,7 @@ export function makeSlidesPanel(
     // The store as a render value (react-live, editor ADR 229): a new view
     // after every change, so the list and the active slide are read again.
     const live = useLive(store, subscribeOf);
+    const { observe: observeNear, has: isNear } = useNearViewport();
     const [dragging, setDragging] = React.useState<string | null>(null);
     const [over, setOver] = React.useState<number | null>(null);
     const slides = live.list();
@@ -165,117 +172,120 @@ export function makeSlidesPanel(
     return (
       <div style={list} data-slides-panel="ready">
         <NewSlide slides={slides} />
-        {slides.map((slide, i) => (
-          <div
-            key={slide.pageId}
-            data-slide={slide.pageId}
-            data-active={slide.pageId === active || undefined}
-            draggable
-            onDragStart={(e) => {
-              setDragging(slide.pageId);
-              e.dataTransfer.effectAllowed = "move";
-            }}
-            onDragOver={(e) => {
-              if (dragging) {
-                e.preventDefault();
-                setOver(i);
-              }
-            }}
-            onDragEnd={() => {
-              setDragging(null);
-              setOver(null);
-            }}
-            onDrop={(e) => {
-              e.preventDefault();
-              if (dragging) {
-                const m = moveMutation(order, dragging, i);
-                if (m) mutate(m);
-              }
-              setDragging(null);
-              setOver(null);
-            }}
-            style={{
-              display: "flex",
-              gap: 8,
-              alignItems: "flex-start",
-              borderTop:
-                over === i && dragging
-                  ? "2px solid var(--overlay-selection, #e0218a)"
-                  : "2px solid transparent",
-            }}
-          >
+        <React.Fragment ref={observeNear}>
+          {slides.map((slide, i) => (
             <div
+              key={slide.pageId}
+              data-near={slide.pageId}
+              data-slide={slide.pageId}
+              data-active={slide.pageId === active || undefined}
+              draggable
+              onDragStart={(e) => {
+                setDragging(slide.pageId);
+                e.dataTransfer.effectAllowed = "move";
+              }}
+              onDragOver={(e) => {
+                if (dragging) {
+                  e.preventDefault();
+                  setOver(i);
+                }
+              }}
+              onDragEnd={() => {
+                setDragging(null);
+                setOver(null);
+              }}
+              onDrop={(e) => {
+                e.preventDefault();
+                if (dragging) {
+                  const m = moveMutation(order, dragging, i);
+                  if (m) mutate(m);
+                }
+                setDragging(null);
+                setOver(null);
+              }}
               style={{
-                width: 18,
-                fontSize: 11,
-                opacity: 0.7,
-                textAlign: "right",
-                paddingTop: 2,
+                display: "flex",
+                gap: 8,
+                alignItems: "flex-start",
+                borderTop:
+                  over === i && dragging
+                    ? "2px solid var(--overlay-selection, #e0218a)"
+                    : "2px solid transparent",
               }}
             >
-              {slide.number}
-            </div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <button
-                type="button"
-                title={`Go to slide ${slide.number}`}
-                onClick={() => void host.viewport.goToPage(slide.pageId)}
+              <div
                 style={{
-                  display: "block",
-                  width: "100%",
-                  padding: 0,
-                  border:
-                    slide.pageId === active
-                      ? "2px solid var(--overlay-selection, #e0218a)"
-                      : "2px solid transparent",
-                  background: "none",
-                  cursor: "pointer",
+                  width: 18,
+                  fontSize: 11,
+                  opacity: 0.7,
+                  textAlign: "right",
+                  paddingTop: 2,
                 }}
               >
-                <Thumb slide={slide} />
-              </button>
-              <div style={tools}>
+                {slide.number}
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
                 <button
                   type="button"
-                  style={small}
-                  title="Duplicate slide"
-                  onClick={() => mutate(duplicateMutation(slide.pageId))}
+                  title={`Go to slide ${slide.number}`}
+                  onClick={() => void host.viewport.goToPage(slide.pageId)}
+                  style={{
+                    display: "block",
+                    width: "100%",
+                    padding: 0,
+                    border:
+                      slide.pageId === active
+                        ? "2px solid var(--overlay-selection, #e0218a)"
+                        : "2px solid transparent",
+                    background: "none",
+                    cursor: "pointer",
+                  }}
                 >
-                  Duplicate
+                  <Thumb slide={slide} near={isNear(slide.pageId, i)} />
                 </button>
-                <button
-                  type="button"
-                  style={small}
-                  title="Delete slide"
-                  disabled={slides.length < 2}
-                  onClick={() => mutate(deleteMutation(slide.pageId))}
-                >
-                  Delete
-                </button>
-                <button
-                  type="button"
-                  style={small}
-                  aria-pressed={!!slide.state.hidden}
-                  title={
-                    slide.state.hidden
-                      ? "Show in slideshow"
-                      : "Hide from slideshow"
-                  }
-                  onClick={() =>
-                    mutate(
-                      setStateMutation(slide.pageId, {
-                        ...slide.state,
-                        hidden: !slide.state.hidden,
-                      }),
-                    )
-                  }
-                >
-                  {slide.state.hidden ? "Unhide" : "Hide"}
-                </button>
+                <div style={tools}>
+                  <button
+                    type="button"
+                    style={small}
+                    title="Duplicate slide"
+                    onClick={() => mutate(duplicateMutation(slide.pageId))}
+                  >
+                    Duplicate
+                  </button>
+                  <button
+                    type="button"
+                    style={small}
+                    title="Delete slide"
+                    disabled={slides.length < 2}
+                    onClick={() => mutate(deleteMutation(slide.pageId))}
+                  >
+                    Delete
+                  </button>
+                  <button
+                    type="button"
+                    style={small}
+                    aria-pressed={!!slide.state.hidden}
+                    title={
+                      slide.state.hidden
+                        ? "Show in slideshow"
+                        : "Hide from slideshow"
+                    }
+                    onClick={() =>
+                      mutate(
+                        setStateMutation(slide.pageId, {
+                          ...slide.state,
+                          hidden: !slide.state.hidden,
+                        }),
+                      )
+                    }
+                  >
+                    {slide.state.hidden ? "Unhide" : "Hide"}
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
-        ))}
+          ))}
+        </React.Fragment>
       </div>
     );
   };

@@ -1,4 +1,4 @@
-# ADR 190 — Page-item snippets: what Copy takes and Paste puts back
+# ADR 193 — Page-item snippets: what Copy takes and Paste puts back
 
 - **Status:** Accepted 2026-10-19.
 - **Scope:** `crates/paged-mutate/src/apply/snippet.rs` (`extract_snippet`, `Operation::InsertSnippet` /

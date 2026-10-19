@@ -23,13 +23,30 @@
 // only one tab is open — the kit's "single fixed inspector" look in
 // the non-design modes. The ONLY tabbed surface in the app; panels
 // never float or re-dock elsewhere.
+//
+// Every open tab's panel stays mounted (ADR 240): the inactive ones sit
+// in a hidden <Activity>, which keeps their state and DOM (a scrolled
+// list, a half-typed field, an expanded section) and unmounts their
+// effects, so a hidden panel holds no subscription and fetches nothing.
+// Switching tabs reveals a panel instead of mounting it again. Each panel
+// scrolls in its own container, so each keeps its scroll position.
+//
+// A switch from the strip is a view transition (ADR 240): the incoming
+// panel comes in from the side its tab is on, the outgoing one leaves the
+// other way; under reduced motion it just switches.
 
-import { useEffect, useRef } from "react";
+import { Activity, ViewTransition, useEffect, useRef } from "react";
 
 import { Icon, hasIcon } from "../icons";
 import { PluginGlyph } from "../icons/plugin-glyph";
 import { useRegistries } from "../state/registries-context";
 import { useRegistryView } from "../state/live";
+import {
+  ENTER_DIRECTIONAL,
+  EXIT_DIRECTIONAL,
+  directionOf,
+  transitionWith,
+} from "../view-transitions";
 import { useCockpitState } from "./cockpit-state-context";
 import { PanelHost } from "./PanelHost";
 
@@ -44,6 +61,14 @@ export function RightDock() {
     .map((id) => panels.get(id))
     .filter((c): c is NonNullable<typeof c> => c != null);
   const active = activeTab && panels.get(activeTab) ? activeTab : null;
+  const switchTo = (id: string) => {
+    if (id === active) return;
+    const order = tabs.map((t) => t.id);
+    transitionWith(
+      directionOf(order.indexOf(active ?? ""), order.indexOf(id)),
+      () => activateTab(id),
+    );
+  };
 
   // The strip scrolls sideways once tabs outgrow the dock. Opening a
   // panel (menu, palette, a pill) activates a tab that was then usually
@@ -102,7 +127,7 @@ export function RightDock() {
                 data-dock-tab={t.id}
                 data-active={a || undefined}
                 aria-pressed={a}
-                onClick={() => activateTab(t.id)}
+                onClick={() => switchTo(t.id)}
                 style={{
                   display: "inline-flex",
                   alignItems: "center",
@@ -153,14 +178,38 @@ export function RightDock() {
           <div style={{ flex: 1 }} />
         </div>
       )}
-      <div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
-        {active ? (
-          <PanelHost id={active} />
-        ) : (
+      <div style={{ flex: 1, minHeight: 0, display: "flex" }}>
+        {!active && (
           <div className="pg-ui-xs" style={{ padding: 16, opacity: 0.6 }}>
             No panel open.
           </div>
         )}
+        {tabs.map((t) => (
+          <Activity
+            key={t.id}
+            mode={t.id === active ? "visible" : "hidden"}
+            name={t.id}
+          >
+            <ViewTransition
+              enter={ENTER_DIRECTIONAL}
+              exit={EXIT_DIRECTIONAL}
+              update="none"
+              share="none"
+            >
+              <div
+                data-dock-panel={t.id}
+                style={{
+                  flex: 1,
+                  minWidth: 0,
+                  minHeight: 0,
+                  overflowY: "auto",
+                }}
+              >
+                <PanelHost id={t.id} />
+              </div>
+            </ViewTransition>
+          </Activity>
+        ))}
       </div>
     </div>
   );

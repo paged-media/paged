@@ -93,6 +93,30 @@ describe("the Notes panel", () => {
     await waitFor(() => expect(field.value).toBe(before ?? ""));
   });
 
+  it("steps to the next and the previous slide, and the notes follow (ADR 240)", async () => {
+    covers("panel:media.paged.slide.panel.notes");
+    const ids = await d.pageIds();
+    const view = mount(d.panel(NOTES_PANEL_ID));
+    const button = (which: "prev" | "next") =>
+      view.container.querySelector<HTMLButtonElement>(`[data-notes-${which}]`);
+    await waitFor(() => expect(button("next")).not.toBeNull());
+    // On the first slide there is no previous one.
+    expect(button("prev")!.disabled).toBe(true);
+    await drive(() => fireEvent.click(button("next")!));
+    await waitFor(() =>
+      expect(view.container.textContent).toContain("Slide 2"),
+    );
+    expect(
+      view.container.querySelector<HTMLTextAreaElement>("[data-notes-text]")!
+        .value,
+    ).toBe((await notesOf(ids[1]!)) ?? "");
+    expect(button("prev")!.disabled).toBe(false);
+    await drive(() => fireEvent.click(button("prev")!));
+    await waitFor(() =>
+      expect(view.container.textContent).toContain("Slide 1"),
+    );
+  });
+
   it("says so when no slide is active", async () => {
     covers("panel:media.paged.slide.panel.notes");
     await drive(() => d.setActivePage(null));

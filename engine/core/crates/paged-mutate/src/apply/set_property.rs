@@ -1181,10 +1181,10 @@ pub(super) fn apply_set_property(
         }
         // ---- SDK Phase 5 (v1 sweep) — frame nonprinting toggle --
         // Excludes the frame from print/export passes; canvas
-        // still renders it. v1 wires TextFrame + Rectangle; the
-        // other kinds (Oval / Polygon / GraphicLine) also carry
-        // the parsed field but their apply arms fall through to
-        // UnsupportedProperty until they're added.
+        // still renders it. Every leaf page-item kind carries the
+        // parsed field and the IDML writer writes it back for each,
+        // so each has its arm (R1, PN-259: an oval answered
+        // UnsupportedProperty while the Attributes panel offered it).
         (NodeId::TextFrame(id), PropertyPath::FrameNonprinting) => {
             let new_val = expect_bool(path, value)?;
             let frame = find_text_frame_mut(doc, id)
@@ -1205,6 +1205,26 @@ pub(super) fn apply_set_property(
                 .ok_or_else(|| OperationError::NodeNotFound(node.clone()))?;
             let prev = rect.nonprinting;
             rect.nonprinting = new_val;
+            (
+                Value::Bool(prev),
+                InvalidationHint {
+                    structural: true,
+                    ..Default::default()
+                },
+            )
+        }
+        (
+            NodeId::Oval(id) | NodeId::Polygon(id) | NodeId::GraphicLine(id),
+            PropertyPath::FrameNonprinting,
+        ) => {
+            let new_val = expect_bool(path, value)?;
+            let slot = match node {
+                NodeId::Oval(_) => find_oval_mut(doc, id).map(|o| &mut o.nonprinting),
+                NodeId::Polygon(_) => find_polygon_mut(doc, id).map(|p| &mut p.nonprinting),
+                _ => find_graphic_line_mut(doc, id).map(|l| &mut l.nonprinting),
+            }
+            .ok_or_else(|| OperationError::NodeNotFound(node.clone()))?;
+            let prev = std::mem::replace(slot, new_val);
             (
                 Value::Bool(prev),
                 InvalidationHint {

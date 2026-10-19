@@ -9,6 +9,7 @@
     "wasm": "bun run --filter './apps/*' wasm",
     "test:boot-coi": "bun test --timeout 30000 ./scripts/cross-origin-isolation-check.test.mjs",
     "test:network-policy": "bun test --timeout 30000 ./scripts/network-policy.test.mjs",
+    "test:trusted-types": "bun test --timeout 30000 ./scripts/trusted-types.test.mjs",
     "test:modules": "bun test --timeout 30000 ./scripts/modules.test.mjs",
     "test:spread-pages": "bun test --timeout 30000 ./scripts/spread-pages.test.mjs",
     "test:repository": "bun run --filter ./packages/repository test",

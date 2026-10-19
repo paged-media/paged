@@ -191,7 +191,11 @@ export {
   type ShellRegistries,
 } from "./state/registries-context";
 // ADR 229: read a registry during render through a view of it.
-export { useRegistryView } from "./state/live";
+export {
+  useNearViewport,
+  useRegistryView,
+  type NearViewport,
+} from "./state/live";
 
 // ── Registry primitives ────────────────────────────────────────
 export {
@@ -407,6 +411,9 @@ export {
 
 // ── Hooks ──────────────────────────────────────────────────────
 export { useModifierState, type ModifierState } from "./hooks/useModifierState";
+
+// ── Keyboard focus (ADR 234) ───────────────────────────────────
+export * from "./focus";
 
 // ── Gestures ───────────────────────────────────────────────────
 export {
@@ -789,3 +796,13 @@ export {
   type ApplicabilityStyle,
   type SurfaceKind,
 } from "./chrome/applicability";
+export {
+  ENTER_DIRECTIONAL,
+  EXIT_DIRECTIONAL,
+  FADE,
+  SHARE_MOVE,
+  TRANSITION,
+  directionOf,
+  transitionWith,
+  type TransitionDirection,
+} from "./view-transitions";

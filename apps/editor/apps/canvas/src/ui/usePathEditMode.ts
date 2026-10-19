@@ -63,6 +63,8 @@ import { useEffect, useEffectEvent, useRef } from "react";
 
 import {
   DIRECT_SELECT_TOOL_ID,
+  canvasKeyYields,
+  canvasSurfaceOf,
   elementSupportsPathEdit,
   useCanvasClient,
   useOptionalTool,
@@ -175,13 +177,16 @@ export function usePathEditMode() {
   // click hands back a new array) is a new request.
   const dismissedRef = useRef<unknown>(null);
 
-  // Enter / Escape and the anchors' keys — skip when an editable
-  // element has focus so typing in the command palette / inspector
-  // doesn't toggle path-edit mode by accident.
+  // Enter / Escape and the anchors' keys — skip when the focused control
+  // owns the key (ADR 234): a field (the palette, the inspector), a
+  // dialog, an open menu (Enter that chose View ▸ Zoom in must not also
+  // enter path editing, SH-12), a focused button. And Enter in the text
+  // editor's input is a paragraph break, not "edit this path".
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (isEditableTarget(e.target)) return;
+      if (canvasKeyYields(e)) return;
       if (e.key === "Enter") {
+        if (canvasSurfaceOf(e.target) === "text") return;
         if (pathEditMode) return; // already on; let other handlers see Enter
         if (elementSelection.length !== 1) return;
         if (!elementSupportsPathEdit(elementSelection[0])) return;
@@ -253,12 +258,4 @@ export function usePathEditMode() {
     wasDirectSelect.current = directSelect;
     if (was && !directSelect) setPathEditMode(false);
   }, [directSelect, setPathEditMode]);
-}
-
-function isEditableTarget(target: EventTarget | null): boolean {
-  if (!(target instanceof HTMLElement)) return false;
-  const tag = target.tagName;
-  if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return true;
-  if (target.isContentEditable) return true;
-  return false;
 }
