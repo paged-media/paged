@@ -31,19 +31,23 @@
 //! work adds the atlas packing + LRU bookkeeping that turn the
 //! per-page output into a single GPU texture.
 //!
-//! The wire-format types (`SnapshotPng`, `SnapshotError`) are
-//! always compiled so the typed message channel stays wire-
-//! compatible across feature configs; the actual rendering
-//! functions live behind the `cpu` feature.
+//! Two backends draw a snapshot. This module's functions rasterise on
+//! the CPU (the `cpu` feature's rasterizer); the canvas worker
+//! draws the same page with Vello on its WebGPU device when it has one
+//! (`renderSnapshotGpu` in `paged-canvas-wasm`). Both resolve the page
+//! and the dpi through [`snapshot_page`] and encode through
+//! [`encode_snapshot_png`], so the two differ only in the rasterizer.
+//!
+//! The wire-format types (`SnapshotPng`, `SnapshotError`) are always
+//! compiled so the typed message channel stays wire-compatible across
+//! feature configs.
 
-use paged_renderer::PageId;
+use paged_renderer::{BuiltPage, PageId};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tsify_next::Tsify;
 
-#[cfg(feature = "cpu")]
 use crate::model::CanvasModel;
-#[cfg(feature = "cpu")]
 use image::{codecs::png::PngEncoder, ImageEncoder};
 #[cfg(feature = "cpu")]
 use paged_renderer::render_built_page;
@@ -51,7 +55,6 @@ use paged_renderer::render_built_page;
 /// A rendered page bitmap. RGBA8, tightly packed (no row padding),
 /// row-major from top to bottom. Caller decides whether to encode to
 /// PNG, hand to a `<canvas>`, or pack into a WebGPU texture.
-#[cfg(feature = "cpu")]
 #[derive(Debug, Clone)]
 pub struct Snapshot {
     pub page_id: PageId,
@@ -122,6 +125,54 @@ pub fn render_snapshot_at_dpi(
     render_snapshot_inner(model, page_id, SnapshotSize::Dpi(dpi))
 }
 
+/// The page a snapshot draws: the model's own, or a copy built with
+/// items hidden.
+pub enum SnapshotPage<'a> {
+    Built(&'a BuiltPage),
+    Hiding(Box<BuiltPage>),
+}
+
+impl std::ops::Deref for SnapshotPage<'_> {
+    type Target = BuiltPage;
+    fn deref(&self) -> &BuiltPage {
+        match self {
+            SnapshotPage::Built(p) => p,
+            SnapshotPage::Hiding(p) => p,
+        }
+    }
+}
+
+/// What a `RequestSnapshot` draws and at what dpi — the one resolution
+/// both snapshot backends use. An explicit `dpi` (> 0) wins over
+/// `target_width_px`, which sets the dpi from the page width; `hide`
+/// draws the page without those items (a slideshow build step).
+pub fn snapshot_page<'a>(
+    model: &'a CanvasModel,
+    page_id: &PageId,
+    target_width_px: u32,
+    dpi: Option<f32>,
+    hide: &[crate::element_selection::ElementId],
+) -> Result<(SnapshotPage<'a>, f32), SnapshotError> {
+    let unknown = || SnapshotError::UnknownPage {
+        page_id: page_id.clone(),
+    };
+    let page = if hide.is_empty() {
+        SnapshotPage::Built(model.page(page_id).ok_or_else(unknown)?)
+    } else {
+        SnapshotPage::Hiding(Box::new(
+            model
+                .build_page_hiding(page_id, hide)
+                .map_err(|_| unknown())?,
+        ))
+    };
+    let dpi = match dpi {
+        Some(d) if d > 0.0 && d.is_finite() => d,
+        _ if target_width_px == 0 => return Err(SnapshotError::InvalidWidth(0)),
+        _ => (target_width_px as f32) / page.width_pt * 72.0,
+    };
+    Ok((page, dpi))
+}
+
 /// v70 — a snapshot of the page with `hide` items hidden (a slideshow
 /// build step). `dpi` wins over `target_width_px` when given, as in
 /// `RequestSnapshot`. With nothing to hide it is the plain snapshot.
@@ -133,22 +184,7 @@ pub fn render_snapshot_png_hiding(
     dpi: Option<f32>,
     hide: &[crate::element_selection::ElementId],
 ) -> Result<SnapshotPng, SnapshotError> {
-    if hide.is_empty() {
-        return match dpi {
-            Some(d) if d > 0.0 => render_snapshot_png_at_dpi(model, page_id, d),
-            _ => render_snapshot_png(model, page_id, target_width_px),
-        };
-    }
-    let page = model
-        .build_page_hiding(page_id, hide)
-        .map_err(|_| SnapshotError::UnknownPage {
-            page_id: page_id.clone(),
-        })?;
-    let dpi = match dpi {
-        Some(d) if d > 0.0 && d.is_finite() => d,
-        _ if target_width_px == 0 => return Err(SnapshotError::InvalidWidth(0)),
-        _ => (target_width_px as f32) / page.width_pt * 72.0,
-    };
+    let (page, dpi) = snapshot_page(model, page_id, target_width_px, dpi, hide)?;
     let img = render_built_page(&page, dpi, paged_compose::Color::WHITE);
     encode_snapshot_png(Snapshot {
         page_id: page_id.clone(),
@@ -221,8 +257,8 @@ pub fn render_snapshot_png_at_dpi(
     encode_snapshot_png(snap)
 }
 
-#[cfg(feature = "cpu")]
-fn encode_snapshot_png(snap: Snapshot) -> Result<SnapshotPng, SnapshotError> {
+/// PNG-encode a snapshot for the `SnapshotReady` reply.
+pub fn encode_snapshot_png(snap: Snapshot) -> Result<SnapshotPng, SnapshotError> {
     let mut png_bytes = Vec::with_capacity((snap.width_px * snap.height_px) as usize);
     PngEncoder::new(&mut png_bytes)
         .write_image(
