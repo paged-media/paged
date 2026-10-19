@@ -109,6 +109,11 @@ so:
   a value beside a version counter that only triggers the render.
 - **Name a component** with a declaration or a `const`: the compiler
   cannot see `return function Panel()`.
+- **Write a "latest value" ref in a layout effect**, not during render
+  (`useLayoutEffect(() => { ref.current = value; })`); a ref written in
+  render keeps the whole component uncompiled. Inside a `try`, no
+  `finally` and no conditional or `??`: move the work to a function
+  that returns its outcome, or use a promise chain.
 - **No new `useMemo` / `useCallback`.** The compiler memoizes compiled
   components with the dependencies it can prove. Keep one only where
   identity is the point (an effect dependency it stabilises, a value a

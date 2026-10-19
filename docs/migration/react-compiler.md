@@ -110,54 +110,124 @@ static ones (the catalog registry, `host.supports`).
 ## Coverage
 
 `compiler-coverage.json` per package; `bun tooling/js/react-compiler-coverage.mjs` prints the
-table (this is the state the ratchet starts from):
+table. The first compiled run: 491 compiled, 76 bailouts, 9 not compiled (85.2%). Now:
 
 | Package | Compiled | Bailouts | Not compiled | Coverage |
 |---|---:|---:|---:|---:|
-| apps/editor/apps/canvas | 186 | 32 | 0 | 85.3% |
+| apps/editor/apps/canvas | 203 | 15 | 0 | 93.1% |
 | apps/editor/apps/devtools | 10 | 0 | 0 | 100.0% |
-| apps/editor/packages/shell | 228 | 32 | 0 | 87.7% |
-| apps/editor/packages/ui | 8 | 4 | 0 | 66.7% |
-| modules/data/packages/data-bundle | 4 | 0 | 4 | 50.0% |
+| apps/editor/packages/shell | 249 | 12 | 0 | 95.4% |
+| apps/editor/packages/ui | 9 | 3 | 0 | 75.0% |
+| modules/data/packages/data-bundle | 5 | 2 | 0 | 71.4% |
 | modules/doc/packages/doc-bundle | 5 | 0 | 0 | 100.0% |
-| modules/draw/packages/draw-bundle | 10 | 6 | 0 | 62.5% |
-| modules/image/glue | 23 | 1 | 1 | 92.0% |
-| modules/sheet/packages/sheet-bundle | 5 | 0 | 3 | 62.5% |
+| modules/draw/packages/draw-bundle | 15 | 1 | 0 | 93.8% |
+| modules/image/glue | 25 | 0 | 0 | 100.0% |
+| modules/sheet/packages/sheet-bundle | 7 | 1 | 0 | 87.5% |
 | modules/slide/packages/slide-bundle | 4 | 0 | 0 | 100.0% |
 | modules/web/packages/web-bundle | 8 | 1 | 1 | 80.0% |
-| **all** | **491** | **76** | **9** | **85.2%** |
+| platform/shared/react-live | 1 | 0 | 0 | 100.0% |
+| **all** | **541** | **35** | **1** | **93.8%** |
 
-The 76 bailouts by the compiler's reason: Todo 28 (syntax it does not lower yet: `try` with
-`finally`, a conditional or optional chain inside `try`, `||=`, a computed object key), Refs 22
-(a ref read or written during render), Suppression 19 (the function disables a Rules-of-React
-lint rule), PreserveManualMemo 3, Immutability 2, Hooks 2. The 9 not compiled are module panels
-returned by their factory as `return function Panel()`. A run takes 9 s here (268 files).
+A run takes 7 s here (270 files).
 
-The production build reports the same from the bundle's side: 474 components and hooks compiled
-in 204 modules, 76 skipped, in the eight chunks that hold first-party React code, all of them
-reaching `react/compiler-runtime` in the entry chunk.
+What the 76 first bailouts were, and what was done:
+
+| Reason | First run | Now | The change |
+|---|---:|---:|---|
+| Todo | 28 | 2 | a `try` the compiler does not lower (a `finally`; a conditional, optional chain or `??` inside it) moved to a module function returning its outcome, or became a promise chain; `\|\|=`, `??=` and computed template keys written out |
+| Refs | 22 | 9 | a "latest value" ref written during render is written in a layout effect; the properties panel's steer pin is state; the dev handle (`__canvas`) is published from a layout effect |
+| Suppression | 19 | 19 | none yet (below) |
+| PreserveManualMemo | 3 | 1 | the dependency arrays the compiler could not match were completed (two were missing a dependency) |
+| Immutability | 2 | 2 | none yet |
+| Hooks | 2 | 2 | none yet |
+
+The 9 not compiled were module panels returned by their factory as `return function Panel()`;
+the compiler names a component only from a declaration, a variable, an assignment or an object
+key. They are declarations now and read their session through `useLive`. Eight compile (image
+adjustments, sheet's workbook and datasets panels, data's query and sources panels) or are
+recorded bailouts (data's bindings and dataset panels, sheet's grid); web's source panel is
+still returned from a factory.
+
+What is left, and why:
+
+- **Suppression (19)**: a function that disables a Rules-of-React rule, every one of them
+  `exhaustive-deps` on an effect that runs on fewer dependencies than it reads, on purpose (the
+  viewport canvas, the gesture spine, path editing, the overlay host, the cockpit state, the
+  panel rail, the number input and dial, the three prompt dialogs, ...). Making those effects
+  honest changes when they run; each is its own change with its own test.
+- **Refs (9)**: providers and hooks that read or write a ref during render deliberately. The
+  editor handle and the caret are written during render because children read them while
+  rendering (`PagedEditorBinder`, `ContentSelectionProvider`); the edit-context stack, the
+  registries provider, the camera animation, text editing, the canvas panel, the schema-list
+  demo and the app's integration component read theirs in render.
+- **Todo (2)**: data's bindings and dataset panels have a value block inside a `try`.
+- **Immutability (2)**, **Hooks (2)**, **PreserveManualMemo (1)**, **not compiled (1)**: the
+  app's plugin-bundle host (sets a global test handle during render), draw's path options
+  (assigns to its factory's session in a handler), two hooks that call a hook conditionally
+  (`useAddressFields`, `useObjectBindings`), sheet's grid (a memo whose dependencies the
+  compiler cannot match), web's source panel (returned from its factory).
+
+No `"use no memo"` is in the tree. The ratchet fails CI on a new entry, so these 36 only go
+down.
+
+The production build reports the same from the bundle's side: 523 components and hooks
+compiled in 231 modules, 35 skipped, in the eight chunks that hold first-party React code, all
+of them reaching `react/compiler-runtime` in the entry chunk.
+
+The Rules-of-React lint suppressions (`eslint-suppressions.json`, recorded when the rules were
+turned on) went from 194 to 136 on the way (refs 104 to 54).
+
+## Manual memoization
+
+At the start, the first-party sources held 296 `useMemo`/`useCallback` calls (107 and 189,
+tests not counted). In a compiled component the compiler memoizes every value on the
+dependencies it proves, and its preserve-manual-memoization check (a function whose
+hand-written memo it cannot match is a `PreserveManualMemo` bailout, left as written) means a
+hand-written memo in a compiled component adds nothing. A call was removed when its component
+compiles and the value is used in the component itself or handed to a compiled child that does
+not compare it. Six went with the fixes above, 76 in one pass; 214 stay (76 `useMemo`, 138
+`useCallback`), each with its reason on the line above:
+
+| Why it stays | Calls |
+|---|---:|
+| its component or hook is not compiled (a bailout, or not a component the compiler considers) | 83 |
+| it keeps an effect's dependency stable | 67 |
+| a `useMemo` with a block body (unwrapping it is a rewrite of the component, not a deletion) | 24 |
+| its type argument types the value (`useMemo<ActionsApi>(…)`: dropping it loses the contextual type) | 16 |
+| a hook's result, which callers may compare | 11 |
+| its result is not bound to a plain name (destructured, or used inline) | 7 |
+| handed to a hook that compares it | 4 |
+| handed to a component that compares it | 2 |
+
+New code adds none: `bun lint`'s `no-restricted-syntax` rejects a `useMemo` or `useCallback`
+call (`React.useMemo` included) unless the line above says why
+(`// eslint-disable-next-line no-restricted-syntax -- <reason>`); the lint self-test has a case
+for each. The root `CLAUDE.md` and the editor's say the same. After the pass the DOM lanes pass
+both ways, the Playwright runs below are unchanged, and the render counts and latency are
+measured on this state.
 
 ## Testing both ways
 
-`bun test` runs the sources as written; the same lanes run compiled with the preload. After the
-fixes, both ways, every lane:
+`bun test` runs the sources as written; the same lanes run compiled with the preload. At the
+end of the work, both ways, every lane:
 
 | Lane | As written | Compiled |
 |---|---|---|
-| canvas DOM | 1,077 | 1,077 |
-| canvas unit / contracts / headless | 120 / 21 / 1,671 | 120 / 21 / 1,671 |
-| shell / shell DOM / tools | 196 / 95 / 133 | 196 / 95 / 133 |
-| data-bundle (+ DOM) | 265 + 173 skipped (0 + 5 skipped) | the same |
+| canvas DOM | 1,094 | 1,094 |
+| canvas unit / contracts / headless | 122 / 21 / 1,683 | 122 / 21 / 1,683 |
+| shell / shell DOM / tools | 200 / 95 / 144 | 200 / 95 / 144 |
+| data-bundle (+ DOM) | 264 + 173 skipped (0 + 5 skipped) | the same |
 | doc-bundle (+ DOM) | 54 (6) | 54 (6) |
 | draw-bundle DOM | 168 | 168 |
-| image glue (+ DOM) | 477 (5) | 477 (5) |
-| sheet-bundle (+ DOM) | 404 + 1 skipped (7) | the same |
+| image glue (+ DOM) | 476 (5) | 476 (5) |
+| sheet-bundle (+ DOM) | 403 + 1 skipped (7) | the same |
 | slide-bundle (+ DOM) | 69 (13) | 69 (13) |
-| web-bundle (+ DOM) | 346 (5) | 346 (5) |
-| plugin-sdk | 752 | 752 |
+| web-bundle (+ DOM) | 345 (5) | 345 (5) |
+| plugin-sdk | 755 | 755 |
 
-(The data-bundle's 173 skipped are its DuckDB lanes, unavailable on this machine; they skip the
-same way before and after.)
+(The data-bundle's 173 skipped are its DuckDB lanes, unavailable on the measuring machine; they
+skip the same way both ways. The data, image, sheet and web lanes also hold the wasm freshness
+check, which needs wasm built from the current Rust and is left out of the counts.)
 
 CI runs the shell's and the canvas app's DOM lanes compiled (`editor / tests`, job `checks`),
 next to the production build with its compiler check.
