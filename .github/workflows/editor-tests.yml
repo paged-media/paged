@@ -269,6 +269,8 @@ jobs:
       # the command layer, against the test kit's fake editor.
       - name: shell registries and stores (packages/shell)
         run: bun run test:shell
+      - name: shell stores and settings, DOM lane (packages/shell)
+        run: bun run test:shell-dom
       - name: built-in command handlers (apps/canvas unit)
         run: bun run test:canvas-unit
 

@@ -93,6 +93,7 @@ tasks:
       && bun run test:repository
       && bun run test:tools
       && bun run test:shell
+      && bun run test:shell-dom
       && bun run test:canvas-unit
       && bun run test:thresholds
       && bun run test:wasm-budget
