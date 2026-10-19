@@ -1,0 +1,11 @@
+$ paged-node create <TMP>/fixture.paged swatch <TMP>/array.json --no-plugins
+# exit 2
+# stdout
+{
+  "error": {
+    "message": "props <TMP>/array.json: expected a JSON object",
+    "exit": 2
+  }
+}
+# stderr
+(empty)
