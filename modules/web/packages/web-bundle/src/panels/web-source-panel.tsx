@@ -62,7 +62,7 @@ import type {
   CodeEditorDiagnostic,
   ElementId,
 } from "@paged-media/plugin-api";
-import { PX_PER_PT } from "@paged-media/helpers";
+import { PX_PER_PT, trustedHtml } from "@paged-media/helpers";
 import {
   About as KitAbout,
   Disclosure,
@@ -1657,7 +1657,10 @@ function SourceEditor({
           data-web-preview
           title="Web frame preview"
           sandbox=""
-          srcDoc={srcdoc}
+          // Trusted Types (editor ADR 240): the composed preview — the
+          // source pasted HTML is sanitized on the way in, and the frame
+          // runs no script (sandbox="").
+          srcDoc={trustedHtml("paged-web-preview", (doc) => doc, srcdoc)}
           style={{
             width: viewportWidth ? `${viewportWidth}px` : "100%",
             height: frameSize ? `${frameSize.height}px` : 180,

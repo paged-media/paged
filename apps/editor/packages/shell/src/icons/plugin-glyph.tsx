@@ -25,6 +25,8 @@
 // attributes and javascript:/data:text URLs dropped. Anything left is
 // inert vector markup rendered under currentColor.
 
+import { trustedHtml } from "@paged-media/helpers";
+
 const SCRIPT_BLOCK = /<script\b[\s\S]*?<\/script\s*>|<script\b[^>]*\/?>/gi;
 const FOREIGN_BLOCK =
   /<foreignObject\b[\s\S]*?<\/foreignObject\s*>|<foreignObject\b[^>]*\/?>/gi;
@@ -60,7 +62,10 @@ export function PluginGlyph({
       fill="none"
       aria-hidden
       // Sanitized above — script/foreignObject/event/URL vectors removed.
-      dangerouslySetInnerHTML={{ __html: sanitizeSvgGlyph(svg) }}
+      // Trusted Types (ADR 240): the sanitizer is the policy.
+      dangerouslySetInnerHTML={{
+        __html: trustedHtml("paged-plugin-glyph", sanitizeSvgGlyph, svg),
+      }}
     />
   );
 }

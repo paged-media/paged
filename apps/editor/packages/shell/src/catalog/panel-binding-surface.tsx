@@ -155,7 +155,7 @@ export function useReportBindingSurface(
 /** The union of everything the panel's mounted hooks reported. Empty when
  *  the panel is not on screen — the normal state of every dock tab but the
  *  active one (a hidden tab's panel stays mounted, but an <Activity> that
- *  hides it unmounts its effects, ADR 233) — which is why the caller must
+ *  hides it unmounts its effects, ADR 240) — which is why the caller must
  *  treat "empty" as "unknown", never as "serves nothing". */
 export function panelBindingSurface(panelId: string): PanelBindingSurface {
   const collections = new Set<CollectionName>();

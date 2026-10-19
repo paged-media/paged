@@ -1,5 +1,5 @@
 {
-  "comment": "CPU ↔ Vello budgets for corpus/generated/parity-diff.sh: the worst page's mean ΔE2000 between the two rasterizers at 144 dpi. Both lanes are Vello (vello_cpu on the CPU, Vello on wgpu, one mapping, ADR 189); measured on Metal (Apple M-series) 2026-10-19, where every fixture but transparency-targets measures 0.131 or less (median 0.003). The default stays 0.2 until lavapipe has measured this lane. Never loosen one to make a run pass: fix the lane, then tighten (ADR 146). A fixture with no entry gets the default.",
+  "comment": "CPU ↔ Vello budgets for corpus/generated/parity-diff.sh: the worst page's mean ΔE2000 between the two rasterizers at 144 dpi. Both lanes are Vello (vello_cpu on the CPU, Vello on wgpu, one mapping, ADR 189); measured on Metal (Apple M-series) 2026-10-19, where every fixture but transparency-targets measures 0.131 or less (median 0.003). The default stays 0.2 until lavapipe has measured this lane. Never loosen one to make a run pass: fix the lane, then tighten (ADR 146). A fixture with no entry gets the default. An entry marked parity_only names a generated fixture with no InDesign reference that this lane runs too.",
   "default_worst_mean_de": 0.2,
   "fixtures": [
     {
@@ -7,6 +7,12 @@
       "worst_mean_de": 0.89,
       "measured": 0.72,
       "rationale": "Page 4, cases 43-48: knockout groups and non-isolated groups at 50 % with Multiply members. A Vello layer is always isolated and cannot read its initial backdrop, so both draw as isolated groups (ADR 146, known gap)."
+    },
+    {
+      "name": "svg-filters",
+      "parity_only": true,
+      "measured": 0.051,
+      "rationale": "The placed-SVG fixtures (ADR 190), no InDesign reference. Both lanes draw the same pixels, the SVG drawn and filtered on the CPU when it is decoded; what differs is how each samples the image at 144 dpi."
     }
   ]
 }

@@ -41,6 +41,7 @@ import {
   type ReactElement,
 } from "react";
 import { onDidChangeOf, useLive } from "@paged-media/react-live";
+import { trustedHtml } from "@paged-media/helpers";
 import {
   About,
   color,
@@ -1115,7 +1116,11 @@ export function makeGridPanel(
             // The pure helper already produced the inner SVG; we re-host its
             // body so the React handlers attach. dangerouslySetInnerHTML is
             // the body the engine+helper produced (already XML-escaped).
-            dangerouslySetInnerHTML={{ __html: innerOf(svg) }}
+            // Trusted Types (editor ADR 240): the engine's own render is
+            // the policy's input, re-hosted as is.
+            dangerouslySetInnerHTML={{
+              __html: trustedHtml("paged-sheet-grid", innerOf, svg),
+            }}
           />
           {editor && edRect && (
             <input

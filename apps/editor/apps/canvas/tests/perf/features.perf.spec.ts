@@ -17,7 +17,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// The React 19 features' probe (apps/editor ADR 233,
+// The React 19 features' probe (apps/editor ADR 240,
 // docs/migration/react-19-features.md): the shell interactions the features
 // change, each driven the same number of times and measured like the panel
 // probe (./probe.ts: next frame, settled, commits, renders, listeners):
@@ -27,7 +27,17 @@
 //   - dock tab switch: the right dock's tabs, round robin;
 //   - chrome toggle: Tab hides the panels and the rail, Tab shows them;
 //   - mode round trip: Design → Export → Design;
-//   - memory: JS heap and DOM counters after the switches (CDP, after a GC).
+//   - memory: JS heap and DOM counters after the switches (CDP, after a GC);
+//   - long page list: the Pages panel over a 60-page document, how many
+//     thumbnails it decodes and how long it takes to settle (ADR 240: they
+//     are shown as they come near the panel's view);
+//   - boot: the fetch priority Chromium gave the lazy bundle chunks and the
+//     engine wasm, whether any module preload carries a `fetchpriority`,
+//     and the time to the boot lane settling (ADR 222);
+//   - canvas resize: frames from a window resize until the canvas overlay is
+//     sized to the viewport again (React 19 lands the ResizeObserver's
+//     update in the next frame; before the overlay read the size during
+//     render and kept the old one until something else re-rendered).
 //
 // Run against the production build like the panel probe
 // (docs/migration/react-compiler.md has the commands). Numbers, not
@@ -158,4 +168,121 @@ test("mode round trip", async ({ page }) => {
   await expect(page.locator("[data-paged-canvas]")).toBeVisible();
   results["mode round trip"] = out;
   memory["after mode switches"] = await measureMemory(page);
+});
+
+test("canvas resize", async ({ page }) => {
+  await seed(page);
+  const overlay = page.locator("[data-paged-viewport] svg").first();
+  await expect(overlay).toBeVisible();
+  const frames: number[] = [];
+  for (let i = 0; i < ROUNDS; i++) {
+    const width = i % 2 === 0 ? 1400 : 1600;
+    await page.setViewportSize({ width, height: 1000 });
+    frames.push(
+      await page.evaluate(async () => {
+        const wrap = document.querySelector<HTMLElement>(
+          "[data-paged-viewport]",
+        )!;
+        const svg = wrap.querySelector("svg")!;
+        for (let f = 0; f < 60; f++) {
+          if (Number(svg.getAttribute("width")) === wrap.clientWidth) return f;
+          await new Promise((r) => requestAnimationFrame(r));
+        }
+        return -1;
+      }),
+    );
+  }
+  memory["canvas resize: frames until the overlay fits (-1: never)"] = frames;
+});
+
+test("long page list", async ({ page }) => {
+  const { d } = await seed(page);
+  for (let i = 0; i < 54; i++) await d.addPage();
+  await expect
+    .poll(
+      () =>
+        page.evaluate(
+          () =>
+            (
+              globalThis as unknown as {
+                __canvas: { handle?: { pageCount: number } };
+              }
+            ).__canvas.handle?.pageCount ?? 0,
+        ),
+      { timeout: 60_000 },
+    )
+    .toBeGreaterThanOrEqual(60);
+  await page.waitForTimeout(1500); // the thumbnail queue settles
+  const out: Sample[] = [];
+  const shown: number[] = [];
+  for (let i = 0; i < Math.min(ROUNDS, 6); i++) {
+    await d.openPanel("paged.properties");
+    await resetProbe(page);
+    await page.evaluate(() =>
+      (
+        globalThis as unknown as { __pagedProbe: { mark(): void } }
+      ).__pagedProbe.mark(),
+    );
+    await d.openPanel("paged.pages");
+    out.push(await sample(page, 500));
+    shown.push(
+      await page.locator('[data-panel-host="paged.pages"] img').count(),
+    );
+  }
+  results["long page list (open Pages)"] = out;
+  memory["long page list: thumbnails decoded by the Pages panel"] = shown;
+  memory["long page list"] = await measureMemory(page);
+});
+
+test("boot", async ({ page }) => {
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send("Network.enable");
+  const priorities: Record<string, Record<string, number>> = {};
+  cdp.on(
+    "Network.requestWillBeSent",
+    (e: {
+      request: { url: string; initialPriority: string };
+      type?: string;
+    }) => {
+      const url = e.request.url;
+      const kind = url.endsWith(".wasm")
+        ? "wasm"
+        : /\.m?js(\?|$)/.test(url)
+          ? "js"
+          : null;
+      if (!kind) return;
+      const row = (priorities[kind] ??= {});
+      row[e.request.initialPriority] =
+        (row[e.request.initialPriority] ?? 0) + 1;
+    },
+  );
+  const t0 = Date.now();
+  await page.goto("/");
+  await expect
+    .poll(
+      () =>
+        page.evaluate(
+          () =>
+            (
+              globalThis as unknown as {
+                __pluginBundles?: { settled: boolean };
+              }
+            ).__pluginBundles?.settled ?? false,
+        ),
+      { timeout: 60_000, intervals: [50] },
+    )
+    .toBe(true);
+  const settledMs = Date.now() - t0;
+  const preloads = await page.evaluate(() =>
+    [...document.querySelectorAll('link[rel="modulepreload"]')].map(
+      (l) => l.getAttribute("fetchpriority") ?? "",
+    ),
+  );
+  memory["boot"] = {
+    settledMs,
+    priorities,
+    modulePreloads: preloads.length,
+    modulePreloadsWithFetchPriority: preloads.filter(Boolean).length,
+  };
+  await cdp.detach();
 });

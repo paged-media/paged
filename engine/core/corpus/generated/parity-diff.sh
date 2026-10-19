@@ -19,7 +19,9 @@
 #
 # Budgets live in corpus/generated/parity-thresholds.json: a default
 # worst-page mean ΔE, and per-fixture entries, each with the measured
-# cause when it is above the default. The same never-loosen rule as
+# cause when it is above the default. The fixtures are those of
+# fidelity-thresholds.json and the entries here marked "parity_only"
+# (generated fixtures without an InDesign reference). The same never-loosen rule as
 # fidelity-thresholds.json applies: fix the lane, then tighten.
 #
 # The CPU side renders WITHOUT --snap-glyph-origins. That flag mimics
@@ -65,7 +67,10 @@ else
         [ -n "$line" ] && FIXTURES+=("$line")
     done < <(python3 -c "
 import json
-print('\n'.join(f['name'] for f in json.load(open('$GENERATED_DIR/fidelity-thresholds.json'))['fixtures']))
+names = [f['name'] for f in json.load(open('$GENERATED_DIR/fidelity-thresholds.json'))['fixtures']]
+# Fixtures with no InDesign reference that the parity lane still runs.
+names += [f['name'] for f in json.load(open('$THRESHOLDS'))['fixtures'] if f.get('parity_only')]
+print('\n'.join(names))
 ")
 fi
 

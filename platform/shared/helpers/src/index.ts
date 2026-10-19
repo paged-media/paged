@@ -40,3 +40,8 @@ export {
   labelKey,
   type LabelEnvelope,
 } from "./label.ts";
+export {
+  isApprovedScript,
+  trustedHtml,
+  trustedScript,
+} from "./trusted-types.ts";

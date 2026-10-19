@@ -87,7 +87,7 @@ export const cockpitActions: {
   openPanel: ((id: string, options?: { activate?: boolean }) => void) | null;
   closeTab: ((id: string) => void) | null;
   /** The tab currently ON SCREEN (this dock shows only that one; the
-   *  other open tabs stay mounted in a hidden Activity, ADR 233), or
+   *  other open tabs stay mounted in a hidden Activity, ADR 240), or
    *  null. Read by the edit-context controller to decide whether raising
    *  a context's own panels would displace a panel it serves. */
   activeTab: (() => string | null) | null;
