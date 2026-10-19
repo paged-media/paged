@@ -280,18 +280,15 @@ describe("Style Options panel: findings", () => {
     },
   );
 
-  // UX audit F-50 (ARIA structure): the family row declares a tablist,
-  // but its buttons are not tabs and none says it is selected.
-  test.failing(
-    "PN-162 (UX F-50): the family tablist's buttons are tabs with a selected one",
-    async () => {
-      covers("panel:paged.style-options");
-      const h = await mount();
-      const tabs = [...h.root.querySelectorAll('[role="tablist"] > *')];
-      expect(tabs.every((t) => t.getAttribute("role") === "tab")).toBe(true);
-      expect(
-        tabs.filter((t) => t.getAttribute("aria-selected") === "true"),
-      ).toHaveLength(1);
-    },
-  );
+  // The family row is a tablist of real tabs (the panel kit's Tab): exactly
+  // one says it is selected.
+  test("PN-162 (UX F-50): the family tablist's buttons are tabs with a selected one", async () => {
+    covers("panel:paged.style-options");
+    const h = await mount();
+    const tabs = [...h.root.querySelectorAll('[role="tablist"] > *')];
+    expect(tabs.every((t) => t.getAttribute("role") === "tab")).toBe(true);
+    expect(
+      tabs.filter((t) => t.getAttribute("aria-selected") === "true"),
+    ).toHaveLength(1);
+  });
 });

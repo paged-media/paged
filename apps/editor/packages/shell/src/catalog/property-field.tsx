@@ -37,10 +37,11 @@
 // (transform, point, list, ref, text, struct) get a typed text field that
 // refuses input it cannot parse rather than coercing it.
 
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 
 import type { LeafProps } from "@paged-media/catalog";
 import type { Value } from "@paged-media/client";
+import { LabelledBy, NamedAs } from "@paged-media/panel-kit";
 
 import { Input } from "../components/ui/input";
 import { useOptionalCanvasClient } from "../state/canvas-client-context";
@@ -797,7 +798,15 @@ export function PropertyField(props: PropertyFieldProps) {
       bindScope={props.bindScope}
       badges={!label}
     >
-      {control}
+      {label ? (
+        control
+      ) : (
+        // No visible label (an icon chip, a cell): the control is named
+        // after the row's title, unless an enclosing row names it.
+        <NamedAs name={row?.title ?? humanizePath(path)} fallback>
+          {control}
+        </NamedAs>
+      )}
     </ObjectFieldFrame>
   );
 }
@@ -811,14 +820,22 @@ function LabelledRow({
   adornment: React.ReactNode;
   children: React.ReactNode;
 }) {
+  // The label names the row's controls (the panel kit's LabelledBy).
+  const labelId = useId();
   if (!label) return <>{children}</>;
   return (
     <div className="grid grid-cols-[84px_1fr] items-center gap-2">
-      <span className="text-xs" style={{ color: "var(--pg-muted-fg)" }}>
+      <span
+        id={labelId}
+        className="text-xs"
+        style={{ color: "var(--pg-muted-fg)" }}
+      >
         {label}
         {adornment}
       </span>
-      <div className="min-w-0">{children}</div>
+      <div className="min-w-0">
+        <LabelledBy id={labelId}>{children}</LabelledBy>
+      </div>
     </div>
   );
 }

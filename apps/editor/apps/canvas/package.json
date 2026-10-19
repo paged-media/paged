@@ -38,6 +38,7 @@
     "@paged-media/doc": "workspace:*",
     "@paged-media/draw": "workspace:*",
     "@paged-media/helpers": "workspace:*",
+    "@paged-media/panel-kit": "workspace:*",
     "@paged-media/image": "workspace:*",
     "@paged-media/pdf": "workspace:*",
     "@paged-media/plugin-api": "workspace:*",

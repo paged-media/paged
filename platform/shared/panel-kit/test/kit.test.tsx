@@ -67,6 +67,18 @@ describe("refusalText", () => {
     expect(refusalText(raw)).not.toContain("{");
   });
 
+  // The draw commands log `<label>: rejected by engine: <the error's JSON>`.
+  it("reads an engine error behind words as the error", () => {
+    expect(
+      refusalText(
+        'Blend: rejected by engine: {"kind":"notImplemented","details":{"what":"frame mutation failed: property FrameFillColor is not supported on Group(\\"g1\\")"}}',
+      ),
+    ).toBe("Fill color does not apply to a group.");
+    expect(refusalText("Could not place {name} here")).toBe(
+      "Could not place {name} here.",
+    );
+  });
+
   // PN-262: Intersect on a rectangle and an oval showed the variant name.
   it("never shows a Rust variant name; the subject says what was refused", () => {
     const error = {

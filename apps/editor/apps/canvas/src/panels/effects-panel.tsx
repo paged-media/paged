@@ -228,6 +228,7 @@ function EffectDisclosure({
             resolved.enabled.onCommit?.({ type: "bool", value: next } as Value);
           }}
           testId={name}
+          label={name}
         />
         <span
           className="flex-1 text-xs"
@@ -285,6 +286,7 @@ function GroupOption({ field, label }: { field: ObjectField; label: string }) {
           field.onCommit?.({ type: "bool", value: next } as Value)
         }
         testId={label}
+        label={label}
       />
       <span
         className="flex-1 text-xs"
@@ -366,6 +368,7 @@ export function EffectsPanel() {
             Blend
           </span>
           <KitSelect
+            aria-label="Blend"
             value={blendMixed ? "__mixed__" : blendId}
             soft={blendMixed}
             disabled={blendDisabled}

@@ -25,6 +25,8 @@
 
 import { useState } from "react";
 
+import { Segment } from "@paged-media/panel-kit";
+
 import {
   ConceptShell,
   Kicker,
@@ -49,11 +51,10 @@ export function ExportTaggingPanel() {
         data-tagging-scope
       >
         {(["Paragraph", "Character"] as Scope[]).map((s, i) => (
-          <button
+          <Segment
             key={s}
-            type="button"
+            pressed={scope === s}
             data-scope={s}
-            data-active={scope === s ? "true" : "false"}
             onClick={() => setScope(s)}
             className="flex-1 text-xs h-[27px] border-0 cursor-pointer"
             style={{
@@ -67,7 +68,7 @@ export function ExportTaggingPanel() {
             }}
           >
             {s}
-          </button>
+          </Segment>
         ))}
       </div>
       <Row label="Style">

@@ -35,10 +35,15 @@
 //
 // The style panels open it on their applied style ("Style Options…").
 
-import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import {
+  useEffect,
+  useMemo,
+  useState,
+  useSyncExternalStore,
+  type CSSProperties,
+} from "react";
 
 import {
-  CockpitBtn,
   CockpitPanelHeader,
   CockpitRow,
   PropertyField,
@@ -47,6 +52,7 @@ import {
   useCollection,
 } from "@paged-media/shell";
 import { formatAddress } from "@paged-media/plugin-sdk";
+import { FieldSelect, Tab } from "@paged-media/panel-kit";
 import type { CollectionName } from "@paged-media/client";
 
 import { SchemaSections, type SectionSpec } from "./schema-sections";
@@ -55,6 +61,27 @@ export type StyleFamily =
   "paragraph" | "character" | "object" | "cell" | "table";
 
 export const STYLE_OPTIONS_PANEL = "paged.style-options";
+
+/** A family tab: the shell kit's small button look (primary when it is
+ *  the selected one), on a real tab (the panel kit's Tab). */
+function familyTab(selected: boolean): CSSProperties {
+  return {
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    height: 28,
+    padding: "0 11px",
+    borderRadius: "var(--radius-md)",
+    border: selected ? "none" : "1px solid var(--pg-border)",
+    background: selected ? "var(--pg-primary)" : "transparent",
+    color: selected ? "var(--pg-primary-fg)" : "var(--pg-fg)",
+    cursor: "pointer",
+    fontFamily: "var(--font-sans)",
+    fontSize: 12,
+    fontWeight: 600,
+    whiteSpace: "nowrap",
+  };
+}
 
 const FAMILIES: ReadonlyArray<{
   family: StyleFamily;
@@ -450,20 +477,20 @@ export function StyleOptionsPanel() {
       <CockpitPanelHeader title="Style Options" />
       <div className="flex flex-wrap gap-1 px-3.5 pb-2" role="tablist">
         {FAMILIES.map((f) => (
-          <CockpitBtn
+          <Tab
             key={f.family}
-            sm
-            testId={`style-family-${f.family}`}
-            primary={f.family === family}
+            selected={f.family === family}
+            data-cockpit-action={`style-family-${f.family}`}
+            style={familyTab(f.family === family)}
             onClick={() => setStyleOptionsTarget(f.family, null)}
           >
             {f.title}
-          </CockpitBtn>
+          </Tab>
         ))}
       </div>
       <div className="flex flex-col gap-1.5 px-3.5 pb-2">
         <CockpitRow label="Style">
-          <select
+          <FieldSelect
             data-style-options-select=""
             className="h-[28px] w-full rounded-[6px] border border-input bg-background px-2 text-[12px]"
             value={selfId ?? ""}
@@ -474,7 +501,7 @@ export function StyleOptionsPanel() {
                 {displayName(s.name)}
               </option>
             ))}
-          </select>
+          </FieldSelect>
         </CockpitRow>
         {address ? (
           <>

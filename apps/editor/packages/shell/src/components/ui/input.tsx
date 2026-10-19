@@ -19,9 +19,13 @@
 
 import * as React from "react";
 
+import { useFieldName } from "@paged-media/panel-kit";
+
 import { cn } from "../../lib/utils";
 
 function Input({ className, type, ...props }: React.ComponentProps<"input">) {
+  // Named by its row's label when the caller gives it no name.
+  const named = useFieldName(props);
   return (
     <input
       type={type}
@@ -30,6 +34,7 @@ function Input({ className, type, ...props }: React.ComponentProps<"input">) {
         className,
       )}
       {...props}
+      {...named}
     />
   );
 }

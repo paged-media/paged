@@ -51,6 +51,7 @@ import {
   useObjectField,
   useObjectModel,
 } from "@paged-media/shell";
+import { FieldInput, FieldSelect } from "@paged-media/panel-kit";
 import { formatAddress } from "@paged-media/plugin-sdk";
 import type { SectionSummary, SwatchSummary } from "@paged-media/client";
 
@@ -158,7 +159,7 @@ function Picker({
   onChange(v: string): void;
 }) {
   return (
-    <select
+    <FieldSelect
       data-options-picker={testId}
       className={SELECT}
       value={value}
@@ -169,7 +170,7 @@ function Picker({
           {o.label}
         </option>
       ))}
-    </select>
+    </FieldSelect>
   );
 }
 
@@ -251,7 +252,7 @@ function SwatchColorEditor({ address }: { address: string }) {
   return (
     <ObjectFieldFrame field={field} className="relative flex flex-col gap-1.5">
       <CockpitRow label="Space">
-        <select
+        <FieldSelect
           data-swatch-color-space=""
           className={SELECT}
           value={space}
@@ -263,10 +264,10 @@ function SwatchColorEditor({ address }: { address: string }) {
               {s}
             </option>
           ))}
-        </select>
+        </FieldSelect>
       </CockpitRow>
       <CockpitRow label="Value">
-        <input
+        <FieldInput
           data-swatch-color-value=""
           className={`${SELECT} font-mono`}
           value={text}

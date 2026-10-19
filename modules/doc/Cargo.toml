@@ -30,10 +30,21 @@ publish = false
 # preservation carry-through, and the ooxmlsdk typed part DOM (`dom`; DOC-02:
 # committed as the semantic-parse foundation). ooxmlsdk is held at 0.12 there:
 # 0.13 makes docx_js 0.8 MB (12 %) larger, which the app-wide wasm budget has
-# no room for (docs/migration/rust-majors.md). `deflate` keeps the zip
-# backend this workspace always had (zlib-rs).
-paged-ooxml = { path = "../../platform/shared/ooxml", features = ["dom", "deflate"] }
-zip = { version = "9", default-features = false, features = ["deflate"] }
+# no room for (docs/migration/rust-majors.md). Its zip goes through flate2
+# (`deflate-flate2`), as this workspace's does.
+paged-ooxml = { path = "../../platform/shared/ooxml", features = ["dom", "deflate-flate2"] }
+# zip 9 deflates through flate2 alone, the declaration of engine/core, sheet,
+# publish and the server (and paged-store, which this workspace builds on):
+# zip's `deflate` feature would add zopfli (only for compression levels
+# above 9, which nothing here asks for) and pick flate2's zlib-rs backend.
+# flate2 below names the backend, so every crate that depends on `zip` lists
+# `flate2` beside it.
+zip = { version = "9", default-features = false, features = ["deflate-flate2"] }
+flate2 = { version = "1.1", default-features = false, features = ["rust_backend"] }
+# ooxmlsdk 0.12's `parts` feature (which `mce` needs) also brings zip 8 with
+# `deflate-flate2-zlib-rs`, and flate2 prefers zlib-rs to miniz_oxide when
+# both are on: the packages are deflated by zlib-rs, as before, byte for byte
+# (docs/migration/shared-foundations.md, C5).
 quick-xml = "0.41"
 # Shared data plumbing.
 serde = { version = "1", features = ["derive"] }
