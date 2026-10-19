@@ -27,6 +27,15 @@ export { stubGlobal, unstubAllGlobals } from "./globals.ts";
 export { importActual } from "./modules.ts";
 export { advanceTimersByTimeAsync, settle, type TimerClock } from "./timers.ts";
 
+// The surface-conformance marker (apps/editor/docs/reference/
+// surface-conformance.md): a typed no-op the gate reads statically.
+export {
+  covers,
+  SURFACE_KINDS,
+  type SurfaceId,
+  type SurfaceKind,
+} from "./covers.ts";
+
 // The gesture kit (apps/editor/docs/reference/gestures.md, "How gestures
 // are tested"). The public half lives in the plugin-sdk (the fake editor,
 // the DSL's unit backend, tapes, invariants) and is re-exported here, so

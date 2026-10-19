@@ -9,6 +9,67 @@ plugins use the public subset that ships in `@paged-media/plugin-sdk`.
 What vitest's `vi` had and bun:test's does not: `waitFor`, `stubGlobal` /
 `unstubAllGlobals`, `importActual`, `advanceTimersByTimeAsync`, `settle`.
 
+## covers(): the surface-conformance marker
+
+`covers(...ids)` marks the surface ids a test ASSERTS, for the
+surface-conformance gate (`apps/editor/scripts/surface-coverage.mjs`; the
+overview is
+[`apps/editor/docs/reference/surface-conformance.md`](../../../apps/editor/docs/reference/surface-conformance.md)).
+It does nothing at run time; the gate reads the calls statically. Call it
+inside the test body, next to the assertions it vouches for:
+
+```ts
+import { covers } from "@paged-media/test-kit";
+
+it("undo restores the frame", async () => {
+  covers("command:paged.undo");
+  // ... the assertions
+});
+```
+
+An id is `<kind>:<id>` (the `SurfaceId` type); the kinds are `command`,
+`panel`, `tool`, `menu`, `keybinding`, `setting`, `cli` and `script`
+(`SURFACE_KINDS`). Plugin contributions use the same kinds with their own
+ids. `cli:` ids are the binary and the command path, one space apart
+(`cli:paged export-pdf`); `keybinding:` ids are the binding's id or
+`<chord>→<command>`; `menu:` ids are the item's id.
+
+**The forms the gate reads, and nothing else:**
+
+| Where                                                                                           | Form                                                                                                                                                                                |
+| ----------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| TypeScript / JavaScript tests that may import the kit                                           | `covers("kind:id", …)` imported from `@paged-media/test-kit`.                                                                                                                       |
+| TypeScript / JavaScript tests that may not (`platform/extensions/*`, community-facing packages) | the same call against a local no-op in the file: `const covers = (..._ids: string[]): void => {};`.                                                                                 |
+| Rust tests                                                                                      | `covers!("kind:id", …)`: `paged_test_resources::covers` (a dev-dependency most workspaces already have) or a local no-op `macro_rules! covers { ($($id:literal),+ $(,)?) => {}; }`. |
+| Rust tests, without a macro                                                                     | a line comment directly above the assertion: `// covers: kind:id, kind:id` (ids separated by commas).                                                                               |
+
+The rules the gate enforces on them:
+
+- The callee is the bare identifier `covers` (not `x.covers`); calls in
+  comments and strings do not count.
+- Every argument is a string literal (`"…"`, `'…'`, or a backtick literal
+  without `${…}`). A variable, a spread or an interpolation is a gate
+  ERROR: the gate cannot read it, and a call it cannot read must not pass
+  silently. A table-driven test writes its ids out.
+- Every id has a known kind and names a surface the gate enumerated; an
+  unknown id (a typo, a renamed command) is an error, not a quiet zero.
+- The call sits in a test file: `*.test.*`, `*.spec.*`, `*.film.ts`, or a
+  file under `test/`, `tests/` or `__tests__/`; for Rust, a file under
+  `tests/` or one with a `#[cfg(test)]` module. A call elsewhere is an error.
+
+**The layer comes from the file's path**, never from the call:
+
+| Layer       | Files                                                                                                                                |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `unit`      | every TypeScript test file not matched below                                                                                         |
+| `component` | `*.dom.test.ts(x)` (happy-dom)                                                                                                       |
+| `headless`  | a `headless/` directory or `*.headless.test.ts` (the headless editor)                                                                |
+| `e2e`       | Playwright: `apps/editor/apps/canvas/tests/**` (outside `headless/`) or an `e2e/` directory                                          |
+| `rust`      | a Rust test                                                                                                                          |
+| `golden`    | ALSO, in addition to the above: a path containing `golden` (`cli.golden.test.ts`, `tests/golden/…`, `tests/cli_golden.rs`)           |
+| `script`    | ALSO: a file name with the word `script`, `scripts` or `scripting` (`script-console.spec.ts`, `scripting.test.ts`, `script_host.rs`) |
+| `gesture`   | ALSO: a file that drives the gesture DSL (`gestures(…)`, `browserGestures(…)`, `createGestureDsl(…)`, `unitBackend(…)`)              |
+
 ## The gesture kit
 
 How gestures are tested is in
