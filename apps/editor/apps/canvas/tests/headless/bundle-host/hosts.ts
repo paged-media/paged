@@ -20,19 +20,19 @@
 // The hosts the BundleHost contract runs against.
 //
 // A bundle sees one `BundleHost`; plugin-api documents what each door does.
-// Three adapters build one, and each case below runs on every adapter it
-// applies to:
+// Three adapters build one, and each case runs on every adapter it applies
+// to:
 //
-//   · `editor`   — the SDK's adapter (`loadBundle`) with the options the
-//                  EDITOR passes (`createEditorHostOptions`, the same factory
-//                  main.tsx calls), over the real engine. The app-level pieces
-//                  the factory takes (panel placement, the widgets, the
-//                  worker URLs, the module manifest) are test doubles; the
-//                  backends behind the doors are the editor's own modules.
-//                  Browser platform objects the backends talk to (OPFS,
-//                  `navigator.clipboard`, `localStorage`) are faked at the
-//                  PLATFORM level, below the backend, so the backend's own
-//                  code runs.
+//   · `editor`   — the editor's: the headless editor (./harness.ts: the
+//                  shell's PagedEditor and registries over a real
+//                  CanvasClient and engine) loading the probe through the
+//                  SDK's `loadBundle` with the options main.tsx passes
+//                  (`createEditorHostOptions`). Browser platform objects the
+//                  editor's backends talk to (OPFS, `navigator.clipboard`,
+//                  `localStorage`) are faked at the PLATFORM level, below the
+//                  backend, so the backend's own code runs; what needs the
+//                  browser shell (panel placement, edit-context entry) is
+//                  recorded in `ed.opened`.
 //   · `headless` — plugin-sdk's `createHeadlessHost`, the in-process adapter
 //                  a bundle's own conformance tests use (in-memory stores).
 //   · `bare`     — the SDK's adapter with NO options: every door's documented
@@ -41,12 +41,6 @@
 // A divergence between `editor` and `headless` on the same case is a
 // finding: a bundle tested headlessly would meet a different host in the
 // editor.
-//
-// The editor's PagedEditor here is the harness's engine-backed one, not the
-// shell's own handle (no shell editor runs without a browser yet), so the
-// doors that are pure functions of the PagedEditor (document, selection,
-// overlay, render) are the SDK's in both adapters; the doors the editor
-// OPTIONS decide are the editor's own.
 
 import { fileURLToPath } from "node:url";
 
@@ -57,43 +51,22 @@ import type {
   PluginManifest,
 } from "@paged-media/plugin-api";
 import {
-  createBindingProviderRegistry,
   createBundleHost,
   createHeadlessHost,
-  createObjectRegistry,
-  createCoreObjects,
-  loadBundle,
-  type CreateBundleHostOptions,
   type HeadlessHost,
 } from "@paged-media/plugin-sdk";
 
-import {
-  createEditorHostOptions,
-  hostOptionsForPlugin,
-  type EditorHostOptions,
-  type EditorHandleForHost,
-} from "../../../src/plugin-host-options";
-import {
-  createEditorConsentBackend,
-  type EditorConsent,
-} from "../../../src/plugin-consent";
-import {
-  createEditorSecretStore,
-  type EditorSecretStore,
-} from "../../../src/plugin-secret-store";
-import { createEditorDocuments } from "../../../src/plugin-documents";
-import { createEditorNativeDocumentBackend } from "../../../src/plugin-native-document";
-import {
-  createWillSaveRegistry,
-  type WillSaveRegistry,
-} from "../../../src/plugin-will-save";
-import {
-  getProblemsSnapshot,
-  problemsSink,
-  resetProblems,
-} from "../../../src/panels/problems-store";
+import type { EditorHostOptions } from "../../../src/plugin-host-options";
+import type { EditorConsent } from "../../../src/plugin-consent";
+import type { EditorSecretStore } from "../../../src/plugin-secret-store";
+import type { createEditorDocuments } from "../../../src/plugin-documents";
+import type { WillSaveRegistry } from "../../../src/plugin-will-save";
+import type { ProblemEntry } from "../../../src/panels/problems-store";
+import { resetProblems } from "../../../src/panels/problems-store";
 import type { ModuleManifest } from "../../../src/plugin-modules";
+import type { BundleWorkerModuleResolver } from "../../../src/plugin-worker";
 
+import { createHeadlessEditor, type HeadlessEditor } from "../harness";
 import { fakeOpfs, fakeSystemClipboard, fakeLocalStorage } from "./platform";
 
 /** The engine is this app's own @paged-media/canvas-wasm dependency. */
@@ -178,6 +151,56 @@ export function probeBundle(manifest: PluginManifest): {
 
 export type AdapterName = "editor" | "headless" | "bare";
 
+/** Contribution ids per registry. */
+export interface Registered {
+  tools: string[];
+  panels: string[];
+  commands: string[];
+  keybindings: string[];
+  importers: string[];
+  exporters: string[];
+  editContexts: string[];
+  objectTypes: string[];
+  menus: string[];
+}
+
+/** The harness's recorded contributions, as a {@link Registered}. */
+function recorded(hh: HeadlessHost): Registered {
+  const of = (kind: string) =>
+    hh.contributions.filter((c) => c.kind === kind).map((c) => c.id);
+  return {
+    tools: of("tool"),
+    // A schema panel registers a synthesized React panel too.
+    panels: [...new Set([...of("panel"), ...of("schemaPanel")])],
+    commands: of("command"),
+    keybindings: hh.contributions
+      .filter((c) => c.kind === "keybinding")
+      .map((c) => {
+        const k = c.value as { key: string; command: string };
+        return `${k.key}→${k.command}`;
+      }),
+    importers: of("importer"),
+    exporters: of("exporter"),
+    editContexts: of("editContext"),
+    objectTypes: of("objectType"),
+    menus: [],
+  };
+}
+
+async function invokeRecorded(
+  hh: HeadlessHost,
+  editor: PagedEditor,
+  id: string,
+  payload?: unknown,
+): Promise<unknown> {
+  const c = hh.contributions.find((x) => x.kind === "command" && x.id === id);
+  if (!c) throw new Error(`no command ${id} registered`);
+  return (c.value as { handler(p: unknown, a?: unknown): unknown }).handler(
+    editor,
+    payload,
+  );
+}
+
 /** What a case gets: the probe's host and the means to play the user. */
 export interface HostUnderTest {
   readonly name: AdapterName;
@@ -196,14 +219,22 @@ export interface HostUnderTest {
   newBlank(): Promise<string[]>;
   /** The engine-backed editor every adapter's host reads. */
   readonly editor: PagedEditor;
+  /** What the host's registries hold now, by contribution kind (the
+   *  editor's shell registries; the harness's recording log). */
+  registered(): Registered;
+  /** Run a registered command as the host runs it (the editor: through its
+   *  command registry, `when`-gated; the harness: the recorded handler). */
+  invokeCommand(id: string, payload?: unknown): Promise<unknown>;
   /** The editor-only controllers (null on the SDK adapters). */
   readonly editorApp: EditorApp | null;
-  dispose(): void;
+  dispose(): void | Promise<void>;
 }
 
-/** The app-level state the editor's options were built over, so a case can
- *  play the user (answer a prompt, set a tool option, move the caret). */
+/** The editor app around the editor adapter's host, so a case can play the
+ *  user (answer a prompt, set a tool option, move the caret) and observe what
+ *  the editor's chrome was asked to do. */
 export interface EditorApp {
+  ed: HeadlessEditor;
   options: EditorHostOptions;
   consent: EditorConsent;
   secrets: EditorSecretStore;
@@ -211,18 +242,19 @@ export interface EditorApp {
   /** The will-save registry File ▸ Save runs (`run`) before it exports. */
   willSave: WillSaveRegistry;
   /** What the Problems panel lists (the editor's diagnostics sink). */
-  problems: typeof getProblemsSnapshot;
-  /** What `host.shell.openPanel` / `closePanel` reached. */
-  panelCalls: string[];
-  /** What `host.shell.enterEditContext` reached. */
-  entered: Array<{ type: string; elementId: unknown }>;
-  /** The tool-options store the editor's options read (the shell's
-   *  ToolSettingsProvider's contract: get / set / subscribe). */
+  problems: () => ProblemEntry[];
+  /** The worker modules the editor serves per plugin; a case adds the
+   *  probe's. */
+  workerResolvers: Record<string, BundleWorkerModuleResolver>;
+  /** What the shell was asked to do: `openPanel` / `closePanel` /
+   *  `enterEditContext` entries. */
+  opened: HeadlessEditor["opened"];
+  /** The shell's tool-options store (what the tool-options popover writes). */
   toolSettings: {
     set(toolId: string, key: string, value: number | boolean | string): void;
   };
   /** The live content selection the caret reader reads. */
-  caret: { current: { storyId: string; start: number; cell?: unknown } | null };
+  caret: { current: unknown };
   platform: {
     opfs: ReturnType<typeof fakeOpfs>;
     clipboard: ReturnType<typeof fakeSystemClipboard>;
@@ -235,6 +267,7 @@ export const PROBE_MODULES: ModuleManifest = {
   host: null,
   packages: {
     "@paged-media/probe": {
+      version: "0.0.0",
       files: {
         "probe/wasm/probe.wasm": {
           version: "0.0.0",
@@ -247,136 +280,73 @@ export const PROBE_MODULES: ModuleManifest = {
   plugins: {
     [PROBE_ID]: { package: "@paged-media/probe", base: "probe" },
   },
-} as unknown as ModuleManifest;
-
-const noComponent = () => null;
-
-/** A shell tool-settings store with the ToolSettingsProvider's semantics
- *  (the write moves the value before listeners run). */
-function toolSettingsStore() {
-  const values = new Map<string, Record<string, number | boolean | string>>();
-  const subs = new Map<string, Set<() => void>>();
-  return {
-    get: (toolId: string) => values.get(toolId) ?? {},
-    set(toolId: string, key: string, value: number | boolean | string) {
-      values.set(toolId, { ...(values.get(toolId) ?? {}), [key]: value });
-      for (const l of subs.get(toolId) ?? []) l();
-    },
-    subscribe(toolId: string, listener: () => void) {
-      let set = subs.get(toolId);
-      if (!set) subs.set(toolId, (set = new Set()));
-      set.add(listener);
-      return () => void set!.delete(listener);
-    },
-  };
-}
+};
 
 async function engine(): Promise<HeadlessHost> {
   return createHeadlessHost({ console: silent, resolveFrom: ENGINE_ANCHOR });
 }
 
-/** The editor adapter: the editor's own options over the real engine. */
+/** The editor adapter: the editor's own options over the headless editor. */
 export async function editorAdapter(): Promise<HostUnderTest> {
-  const hh = await engine();
-  const editor = hh.host.editor;
   const opfs = fakeOpfs();
   const clipboard = fakeSystemClipboard();
   const restoreStorage = fakeLocalStorage();
   const restoreOpfs = opfs.install();
   const restoreClipboard = clipboard.install();
-
-  const consent = createEditorConsentBackend();
-  const secrets = createEditorSecretStore();
-  const documents = createEditorDocuments();
-  const settings = toolSettingsStore();
-  const willSave = createWillSaveRegistry();
   resetProblems();
-  const caret: EditorApp["caret"] = { current: null };
-  const panelCalls: string[] = [];
-  const entered: EditorApp["entered"] = [];
-  const handle: EditorHandleForHost = {
-    client: null,
-    toolSettings: settings,
-    contentSelection: { contentSelectionRef: caret },
-  };
-  const objects = createObjectRegistry({
-    core: createCoreObjects(() => editor, { protocol: hh.protocolVersion }),
-    log: silent,
-  });
-  const options = createEditorHostOptions({
-    getEditor: () => handle,
-    panels: {
-      openPanel: (id) => void panelCalls.push(`open ${id}`),
-      closeTab: (id) => void panelCalls.push(`close ${id}`),
-    },
-    enterEditContext: async (type, elementId) => {
-      entered.push({ type, elementId });
-      return true;
-    },
-    widgets: {
-      CodeEditor: noComponent,
-      ColorPicker: noComponent,
-      PropertyField: noComponent,
-      PropertyFrame: noComponent,
-    } as unknown as NonNullable<CreateBundleHostOptions["widgets"]>,
-    schemaPanelRenderer: noComponent as unknown as NonNullable<
-      CreateBundleHostOptions["schemaPanelRenderer"]
-    >,
-    workerResolvers: {},
+  const ed = await createHeadlessEditor({
+    blank: [612, 792],
     moduleManifest: PROBE_MODULES,
     origin: "http://localhost:5180",
-    consent: consent.backend,
-    secrets: secrets.backend,
-    documents: documents.backend,
-    nativeDocument: createEditorNativeDocumentBackend(() => null),
-    bindingProviders: createBindingProviderRegistry(),
-    willSave,
-    objects,
-    diagnosticsSink: problemsSink,
   });
-  const disposers: Array<() => void> = [];
-  let lastProbe: (() => void) | null = null;
-  const load = (manifest: PluginManifest): BundleHost => {
-    const probe = probeBundle(manifest);
-    const loaded = loadBundle(
-      () => editor,
-      probe.bundle,
-      hostOptionsForPlugin(options.shared, manifest.id),
-    );
-    const dispose = () => loaded.dispose();
-    disposers.push(dispose);
-    if (manifest.id === PROBE_ID) lastProbe = dispose;
-    return probe.host();
-  };
-  const host = load(probeManifest());
+  // The probe is LOADED (loadBundle, as main.tsx loads a bundle); the
+  // siblings and the narrowed manifests are hosts built with the same
+  // options (`ed.host`), which is all a case needs of them.
+  const host = await ed.loadBundle(probeBundle(probeManifest()).bundle);
+  const make = (manifest: PluginManifest): BundleHost => ed.host(manifest);
+  const app = ed.hostApp;
+  const pageIds = (h: { pageIds: readonly string[] }) => [...h.pageIds];
   return {
     name: "editor",
     host,
-    editor,
-    sibling: (m) => load(m ?? probeManifest(OTHER_ID)),
-    withManifest: (m) => load(m),
-    reactivate() {
-      lastProbe?.();
-      return load(probeManifest());
+    editor: ed.editor as unknown as PagedEditor,
+    registered: () => {
+      const r = ed.registries;
+      return {
+        tools: r.tools.list().map((x) => x.id),
+        panels: r.panels.list().map((x) => x.id),
+        commands: r.commands.list().map((x) => x.id),
+        keybindings: r.keybindings.list().map((x) => `${x.key}→${x.command}`),
+        importers: (r.importers?.list() ?? []).map((x) => x.id),
+        exporters: (r.exporters?.list() ?? []).map((x) => x.id),
+        editContexts: (r.editContexts?.list() ?? []).map((x) => x.type),
+        objectTypes: (r.objectTypes?.list() ?? []).map((x) => x.type),
+        menus: (r.menus?.list() ?? []).map((x) => `${x.path}→${x.command}`),
+      };
     },
-    load: (idml) => hh.load(idml),
-    newBlank: () => hh.newBlank(612, 792),
+    invokeCommand: (id, payload) => ed.invoke(id, payload),
+    sibling: (m) => make(m ?? probeManifest(OTHER_ID)),
+    withManifest: (m) => make(m),
+    // A reload: the bundle's host is built again, over the same backends.
+    reactivate: () => make(probeManifest()),
+    load: async (idml) => pageIds(await ed.load(idml)),
+    newBlank: async () => pageIds(await ed.client.newBlankDocument(612, 792)),
     editorApp: {
-      options,
-      consent,
-      secrets,
-      documents,
-      willSave,
-      problems: getProblemsSnapshot,
-      panelCalls,
-      entered,
-      toolSettings: settings,
-      caret,
+      ed,
+      options: app.options,
+      consent: app.consent,
+      secrets: app.secrets,
+      documents: app.documents,
+      willSave: app.willSave,
+      problems: () => ed.problems(),
+      workerResolvers: app.workerResolvers,
+      opened: ed.opened,
+      toolSettings: ed.state.toolSettings,
+      caret: ed.state.contentSelection.contentSelectionRef,
       platform: { opfs, clipboard },
     },
-    dispose() {
-      for (const d of disposers.splice(0)) d();
-      hh.dispose();
+    async dispose() {
+      await ed.dispose();
       resetProblems();
       restoreClipboard();
       restoreOpfs();
@@ -389,10 +359,16 @@ export async function editorAdapter(): Promise<HostUnderTest> {
 export async function headlessAdapter(): Promise<HostUnderTest> {
   const hh = await engine();
   let lastProbe: { dispose(): void } | null = null;
-  const load = (manifest: PluginManifest): BundleHost => {
+  // The harness loads a bundle id once; a second ask for the same id (a
+  // sibling several cases use) is the host it already has.
+  const loadedById = new Map<string, BundleHost>();
+  const load = (manifest: PluginManifest, again = false): BundleHost => {
+    const known = loadedById.get(manifest.id);
+    if (known && !again) return known;
     const probe = probeBundle(manifest);
     const loaded = hh.loadBundle(probe.bundle);
     if (manifest.id === PROBE_ID) lastProbe = loaded;
+    loadedById.set(manifest.id, probe.host());
     return probe.host();
   };
   const host = load(probeManifest());
@@ -400,11 +376,14 @@ export async function headlessAdapter(): Promise<HostUnderTest> {
     name: "headless",
     host,
     editor: hh.host.editor,
+    registered: () => recorded(hh),
+    invokeCommand: (id, payload) =>
+      invokeRecorded(hh, hh.host.editor, id, payload),
     sibling: (m) => load(m ?? probeManifest(OTHER_ID)),
     withManifest: (m) => load(m),
     reactivate() {
       lastProbe?.dispose();
-      return load(probeManifest());
+      return load(probeManifest(), true);
     },
     load: (idml) => hh.load(idml),
     newBlank: () => hh.newBlank(612, 792),
@@ -427,6 +406,8 @@ export async function bareAdapter(): Promise<HostUnderTest> {
     name: "bare",
     host: make(probeManifest()),
     editor,
+    registered: () => recorded(hh),
+    invokeCommand: (id, payload) => invokeRecorded(hh, editor, id, payload),
     sibling: (m) => make(m ?? probeManifest(OTHER_ID)),
     withManifest: (m) => make(m),
     reactivate: () => make(probeManifest()),
