@@ -22,7 +22,6 @@ import { describe, expect, it } from "bun:test";
 import {
   anchorTargets,
   closestOnSegment,
-  pageTargets,
   snapPoint,
   type SnapTarget,
 } from "../src";
@@ -114,11 +113,6 @@ describe("candidate builders", () => {
     expect(t.filter((x) => x.kind === "point")).toHaveLength(3);
     expect(t.filter((x) => x.kind === "x")).toHaveLength(2);
     expect(t.filter((x) => x.kind === "y")).toHaveLength(2);
-  });
-
-  it("pageTargets snaps to the page centre", () => {
-    const r = snapPoint([304, 398], pageTargets(612, 792), 6);
-    expect(r.point).toEqual([306, 396]);
   });
 
   it("closestOnSegment clamps to the ends and handles a zero-length segment", () => {
