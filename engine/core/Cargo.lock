@@ -2690,7 +2690,7 @@ dependencies = [
  "blake3",
  "fastcdc",
  "flate2",
- "miniz_oxide 0.8.9",
+ "miniz_oxide 0.9.1",
  "paged-test-resources",
  "serde",
  "serde_json",

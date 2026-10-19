@@ -1,0 +1,15 @@
+$ paged-node get <TMP>/fixture.paged swatch:Black value --no-plugins
+# exit 0
+# stdout
+{
+  "address": "swatch:Black",
+  "path": "value",
+  "value": [
+    0,
+    0,
+    0,
+    100
+  ]
+}
+# stderr
+(empty)

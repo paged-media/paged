@@ -1,0 +1,11 @@
+$ paged-node delete <TMP>/fixture.paged
+# exit 2
+# stdout
+{
+  "error": {
+    "message": "usage: paged-node delete <doc> <address|selector>",
+    "exit": 2
+  }
+}
+# stderr
+(empty)

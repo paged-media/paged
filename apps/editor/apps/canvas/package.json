@@ -11,6 +11,7 @@
     "typecheck": "bun check -p tsconfig.json && bun check -p functions/tsconfig.json && bun check -p test/tsconfig.json",
     "typecheck:tests": "bun check -p tsconfig.tests.json",
     "test:contracts": "bun test --preload ../../../../tooling/js/bun-test-setup.ts ./test/contracts",
+    "test:unit": "bun test --parallel --timeout 30000 --preload ../../../../tooling/js/bun-test-setup.ts ./test/unit",
     "test:fidelity": "playwright test --config=playwright.config.ts",
     "test:journeys": "playwright test --project=journeys",
     "test:journeys:gpu": "playwright test --project=journeys-gpu",
@@ -49,7 +50,11 @@
     "react-dom": "catalog:"
   },
   "devDependencies": {
+    "@happy-dom/global-registrator": "catalog:",
     "@playwright/test": "^1.63.0",
+    "@testing-library/dom": "catalog:",
+    "@testing-library/react": "catalog:",
+    "@testing-library/user-event": "catalog:",
     "@types/bun": "catalog:",
     "@types/node": "catalog:node25",
     "@types/pngjs": "^6.0.5",
@@ -57,6 +62,7 @@
     "@types/react-dom": "catalog:",
     "@vitejs/plugin-react": "^4.7.0",
     "autoprefixer": "^10.5.5",
+    "happy-dom": "catalog:",
     "pngjs": "^7.0.0",
     "postcss": "^8.5.28",
     "tailwindcss": "^3.4.19",
