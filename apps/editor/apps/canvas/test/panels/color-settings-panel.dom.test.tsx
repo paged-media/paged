@@ -198,7 +198,7 @@ describe("Color settings panel: findings", () => {
   // The list of profiles is built from the registration messages the
   // panel saw while mounted: a profile registered before it opened (or
   // while its tab was closed) is not offered.
-  test.failing(
+  test(
     "PN-158: a profile registered before the panel opened is offered",
     async () => {
       covers("panel:paged.color-settings");

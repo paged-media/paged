@@ -41,6 +41,8 @@ import {
   useCanvasClient,
   useDocument,
   useDocumentMeta,
+  useRegistries,
+  useRegistryView,
 } from "@paged-media/shell";
 
 import {
@@ -48,6 +50,7 @@ import {
   exportTargetById,
   exportReadiness,
   runImageExport,
+  runPluginExporter,
   setSelectedExportTarget,
   useImageSettings,
   useSelectedExportTarget,
@@ -72,8 +75,22 @@ export function ExportCenterPanel() {
   const selected = useSelectedExportTarget();
   const image = useImageSettings();
   const [busy, setBusy] = useState<ExportTargetId | null>(null);
+  // The plugins' exporters (paged.publish's IDML, a sheet's .xlsx), as
+  // rows of the same table: "every format from one place" (PN-309). A
+  // view of the registry, so one a bundle registers later is listed too.
+  const pluginExporters = useRegistryView(useRegistries().exporters).list();
+  const [pluginBusy, setPluginBusy] = useState<string | null>(null);
+  const runPlugin = async (id: string) => {
+    const exporter = pluginExporters.find((e) => e.id === id);
+    if (!exporter || !loaded) return;
+    setPluginBusy(id);
+    await runPluginExporter(exporter)
+      .catch(() => false)
+      .finally(() => setPluginBusy(null));
+  };
 
-  const liveCount = EXPORT_TARGETS.filter((t) => t.live).length;
+  const liveCount =
+    EXPORT_TARGETS.filter((t) => t.live).length + pluginExporters.length;
 
   // Run the selected (or a given) LIVE target's real action.
   const runTarget = async (id: ExportTargetId) => {
@@ -225,6 +242,53 @@ export function ExportCenterPanel() {
               </div>
             );
           })}
+          {pluginExporters.map((e) => (
+            <div
+              key={e.id}
+              data-export-plugin={e.id}
+              style={{
+                display: "flex",
+                flexWrap: "wrap",
+                alignItems: "center",
+                gap: "8px 13px",
+                padding: "13px 16px",
+                borderTop: "1px solid var(--pg-border)",
+              }}
+            >
+              <Icon
+                name="ui-export"
+                size={19}
+                style={{ color: "var(--pg-muted-fg)", flexShrink: 0 }}
+              />
+              <div style={{ flex: "1 1 160px", minWidth: 0 }}>
+                <div style={{ fontSize: 13.5, fontWeight: 500 }}>{e.title}</div>
+                <div className="pg-ui-xs" style={{ marginTop: 1 }}>
+                  {e.extension} · from a plugin
+                </div>
+              </div>
+              <span
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 10,
+                  marginLeft: "auto",
+                }}
+              >
+                <StatusPill tone={loaded ? "ready" : "draft"}>
+                  {loaded ? "ready" : "no document"}
+                </StatusPill>
+                <CockpitBtn
+                  sm
+                  primary
+                  disabled={!loaded || pluginBusy === e.id}
+                  testId={`export-center-plugin-${e.id}`}
+                  onClick={() => void runPlugin(e.id)}
+                >
+                  {pluginBusy === e.id ? "Working…" : "Export…"}
+                </CockpitBtn>
+              </span>
+            </div>
+          ))}
         </div>
 
         <div

@@ -200,7 +200,7 @@ describe("Publication health: findings", () => {
   // UX audit F-44: "Publication health stays at '0 Stories, 0 Frames'
   // after the insert". The tiles read the stats the engine sends at load
   // and in reply to a content selection; an edit sends none.
-  test.failing(
+  test(
     "PN-300 (UX F-44): the Frames and Stories tiles follow an edit that adds a text frame",
     async () => {
       covers("panel:paged.publication-health");
