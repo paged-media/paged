@@ -134,19 +134,16 @@ pub(crate) fn calls_of(queued: &[Queued]) -> Vec<HostObjectCall> {
 /// An `Error` whose message is `"<code>: <reason>"` and whose `code`
 /// property is the registry's code — what a refused call throws.
 pub(crate) fn coded_error(code: &str, reason: &str, ctx: &mut Context) -> JsValue {
-    let err: JsError = JsNativeError::error()
+    let obj = JsNativeError::error()
         .with_message(format!("{code}: {reason}"))
-        .into();
-    let value = err.to_opaque(ctx);
-    if let Some(obj) = value.as_object() {
-        let _ = obj.set(
-            JsString::from("code"),
-            JsValue::from(JsString::from(code)),
-            false,
-            ctx,
-        );
-    }
-    value
+        .into_opaque(ctx);
+    let _ = obj.set(
+        JsString::from("code"),
+        JsValue::from(JsString::from(code)),
+        false,
+        ctx,
+    );
+    obj.into()
 }
 
 /// Queue `call` for the host and return the promise that waits on it.
