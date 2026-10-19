@@ -1336,6 +1336,8 @@ Everything shows in points (the control bar, Properties, rulers, "612 × 792 pt"
 
 **Screenshots:** `F-39-align-panel-mm.png`, `F-39-prepress-bleed-mm.png`
 
+**Fixed (2026-10-19, `888868127`, editor ADR 245):** one document unit, chosen in Document Setup's Units row (points, picas, inches, millimetres, centimetres or pixels; points by default, persisted as `paged.units`). Every geometry field and readout shows it through one formatter, and one parser reads a typed unit ("10mm" sets 28.35 pt; a bare number is in the document unit). Type sizes, leading and stroke weights stay in points, as in InDesign. The engine still reports no unit of its own (`documentMeta().units`); the Info panel shows the chosen one.
+
 <a id="f-41"></a>
 
 #### F-41 · No object Lock, Hide or Show all
