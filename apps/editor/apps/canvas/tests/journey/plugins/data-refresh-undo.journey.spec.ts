@@ -44,12 +44,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { openPanel } from "../../fidelity/canvas-driver";
 import { Designer } from "../driver/designer";
 import { skipWithoutDuckDB } from "./data-duckdb-gate";
-import {
-  dataFields,
-  ENGINE_PROTOCOL,
-  partText,
-  sessionLabel,
-} from "./data-engine";
+import { dataFields, partText, sessionLabel } from "./data-engine";
 
 const CSV_FIXTURE = pathResolve(
   dirname(fileURLToPath(import.meta.url)),
@@ -62,7 +57,6 @@ const CMD = {
   importData: "media.paged.data.command.importData",
   undo: "paged.editor.undo",
 } as const;
-const LABELLED = ENGINE_PROTOCOL >= 69;
 
 async function importCsv(page: Page, designer: Designer): Promise<void> {
   await designer.runCommand(CMD.importData);
@@ -123,12 +117,8 @@ test.describe("journey · paged.data refresh and undo", () => {
     await expect
       .poll(() => values(page), { timeout: 20_000 })
       .toEqual(["Ada Lovelace", "Author"]);
-    const lowered = LABELLED ? await sessionLabel(page) : null;
-    if (LABELLED)
-      expect(
-        lowered,
-        "the Lower write carried the session label",
-      ).not.toBeNull();
+    const lowered = await sessionLabel(page);
+    expect(lowered, "the Lower write carried the session label").not.toBeNull();
 
     // ── 2. CHANGE THE QUERY — a session change, no document write ────────
     await designer.runCommand("media.paged.data.command.editQuery");
@@ -146,7 +136,7 @@ test.describe("journey · paged.data refresh and undo", () => {
       "Ada Lovelace",
       "Author",
     ]);
-    if (LABELLED) expect(await sessionLabel(page)).toBe(lowered);
+    expect(await sessionLabel(page)).toBe(lowered);
 
     // ── 3. REFRESH — both fields in one write ─────────────────────────────
     await openPanel(page, BINDINGS_PANEL);
@@ -161,35 +151,27 @@ test.describe("journey · paged.data refresh and undo", () => {
     await expect
       .poll(() => values(page), { timeout: 20_000 })
       .toEqual(["Engineer", "Grace Hopper"]);
-    let refreshed: string | null = null;
-    if (LABELLED) {
-      refreshed = await sessionLabel(page);
-      expect(refreshed, "the refresh carried a new session label").not.toBe(
-        lowered,
-      );
-      expect(
-        await partText(
-          page,
-          `paged/media.paged.data/sessions/${refreshed}.json`,
-        ),
-      ).toContain("WHERE");
-    }
+    const refreshed = await sessionLabel(page);
+    expect(refreshed, "the refresh carried a new session label").not.toBe(
+      lowered,
+    );
+    expect(
+      await partText(page, `paged/media.paged.data/sessions/${refreshed}.json`),
+    ).toContain("WHERE");
 
     // ── 4. UNDO — one step takes both values back ─────────────────────────
     await designer.runCommand(CMD.undo);
     await expect
       .poll(() => values(page), { timeout: 20_000 })
       .toEqual(["Ada Lovelace", "Author"]);
-    if (LABELLED) {
-      // The label went back with the write: it names the version the Lower
-      // wrote, whose part holds the query as it was.
-      expect(await sessionLabel(page)).toBe(lowered);
-      const before = await partText(
-        page,
-        `paged/media.paged.data/sessions/${lowered}.json`,
-      );
-      expect(before).not.toBeNull();
-      expect(before).not.toContain("WHERE");
-    }
+    // The label went back with the write: it names the version the Lower
+    // wrote, whose part holds the query as it was.
+    expect(await sessionLabel(page)).toBe(lowered);
+    const before = await partText(
+      page,
+      `paged/media.paged.data/sessions/${lowered}.json`,
+    );
+    expect(before).not.toBeNull();
+    expect(before).not.toContain("WHERE");
   });
 });
