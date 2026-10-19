@@ -45,8 +45,6 @@
 //! assigns each section the same story index, so the pour and save-back stay
 //! aligned with this skeleton.
 
-#[doc(hidden)]
-pub mod idml;
 pub mod native;
 
 use docx_core::{DocxDocument, Section};
