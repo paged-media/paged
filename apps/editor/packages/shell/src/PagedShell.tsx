@@ -63,7 +63,6 @@ import {
 } from "./state/open-file-handle";
 import { DocumentProvider, useDocument } from "./state/document-context";
 import { usePageThumbnails } from "./state/page-thumbnails";
-import { setPendingImportSource } from "./state/import-source";
 import {
   InstrumentationProvider,
   useInstrumentation,
@@ -109,6 +108,7 @@ import { CommandPalette } from "./chrome/CommandPalette";
 import { openAssistant } from "./ai/assistant-session";
 import { DemoOverlay, DemoSpotlight } from "./demo/overlay";
 import { runDemoScriptWithHandle } from "./demo/runner";
+import { ReplaceDocumentPrompt } from "./chrome/ReplaceDocumentPrompt";
 import { ExportPdfDialog } from "./chrome/ExportPdfDialog";
 import { ToolRail } from "./chrome/ToolRail";
 import { ScreenModeSelector } from "./chrome/ScreenModeSelector";
@@ -120,13 +120,13 @@ import {
   cockpitActions,
   useOptionalCockpitState,
 } from "./cockpit/cockpit-state-context";
-import { loadDocumentFile } from "./state/document-loader";
 import {
   PAGED_FILE_OPEN_IDML,
   buildNewDocumentCommand,
   buildNewFromBriefCommand,
   mintBlankDocument,
   buildOpenIdmlCommand,
+  openFile,
 } from "./state/commands/file-commands";
 import {
   buildExportAseCommand,
@@ -426,17 +426,7 @@ function ShellChrome({
 }>) {
   const client = useCanvasClient();
   const objectModel = useObjectModel();
-  const {
-    handle,
-    snapshotsReady,
-    setHandle,
-    setSourceName,
-    setLoading,
-    setSnapshots,
-    setSnapshotsReady,
-    setResolution,
-    resetForNewDocument,
-  } = useDocument();
+  const { handle, snapshotsReady, setHandle, setResolution } = useDocument();
   const {
     elementSelection,
     setElementSelection,
@@ -1255,52 +1245,13 @@ function ShellChrome({
     setSelectionRects,
   ]);
 
+  // A file dropped on the canvas or handed to the shell's file input takes
+  // File ▸ Open's own path (`openFile`): the importer routing, and the
+  // replace question before an edited document is replaced (F-01, ADR 230).
   const onFile = (file: File) => {
-    // K-2 / S-06 — a registered plugin importer may claim this file
-    // type (drag-drop / header input). Route the bytes to the plugin
-    // instead of the default IDML load — the plugin owns what the file
-    // becomes (it does not replace the document unless it chooses to).
-    const importer = registries.importers.resolve(file.name, file.type);
-    if (importer) {
-      setStatus(`importing ${file.name} via ${importer.title}…`);
-      // A promise chain, not try/finally: the React Compiler does not
-      // compile a component with a `finally` in it (ADR 229).
-      void (async () => {
-        const bytes = new Uint8Array(await file.arrayBuffer());
-        // U14 — park the file name for the open orchestration: an
-        // importer that OPENS a document does so through
-        // `nativeDocument.open(bytes)`, which carries no name.
-        setPendingImportSource(file.name);
-        await importer.import({
-          name: file.name,
-          bytes,
-          mimeType: file.type,
-        });
-        setStatus(`imported ${file.name}`);
-      })()
-        .catch((err: unknown) => {
-          setWarnings((prev) => [
-            ...prev,
-            `import of ${file.name} via ${importer.title} failed: ` +
-              (err instanceof Error ? err.message : String(err)),
-          ]);
-        })
-        .finally(() => setPendingImportSource(null));
-      return;
-    }
-    void loadDocumentFile(client, file, {
-      setHandle,
-      setSourceName,
-      setLoading,
+    if (!paged) return;
+    void openFile(paged as PagedEditor, file, {
       setStatus,
-      setSnapshotsReady,
-      addSnapshot: (pageId, url) =>
-        setSnapshots((prev) => {
-          const next = new Map(prev);
-          next.set(pageId, url);
-          return next;
-        }),
-      resetForNewDocument,
       pushWarning: (w) => setWarnings((prev) => [...prev, w]),
     });
   };
@@ -1383,6 +1334,7 @@ function ShellChrome({
       <DemoSpotlight />
       <DemoOverlay />
       <ExportPdfDialog />
+      <ReplaceDocumentPrompt />
 
       {/* Canvas-app-specific integration: legacy hooks (keyboard
        *   shortcuts, camera tweens, text editing) that read from
