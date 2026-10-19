@@ -2,7 +2,9 @@
 # belong to no one component. `contracts` holds the plugin contract between
 # the editor, plugin-sdk and the nine built-ins (the two-way manifest check,
 # the gate's static enumeration against what the bundles register, the
-# BundleHost contract on the editor's, the headless and the bare adapter).
+# BundleHost contract on the editor's, the headless and the bare adapter);
+# `system` holds product completeness (all nine built-ins live in the
+# headless editor).
 #
 # They boot the engine and the bundles' own wasm, so the job builds (or
 # restores from the cache) the engine's wasm packages and every module's
@@ -138,6 +140,10 @@ jobs:
       - name: contracts (tests/contracts)
         working-directory: tests
         run: bun run test:contracts --reporter=junit --reporter-outfile=junit.contracts.bun.xml
+
+      - name: system (tests/system)
+        working-directory: tests
+        run: bun run test:system --reporter=junit --reporter-outfile=junit.system.bun.xml
 
       - name: JUnit in the shape the evidence reads
         if: always()

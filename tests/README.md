@@ -8,12 +8,14 @@ about:
 | Directory    | What it asserts                                                                                                                                                                                                                                                  | Runner                                | CI                           |
 | ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------- | ---------------------------- |
 | `contracts/` | The plugin contract between the editor, plugin-sdk and the nine built-ins: every manifest against what its bundle registers, the surface gate's static enumeration against the same, and the BundleHost doors on the editor's, the headless and the bare adapter | `bun test` (`bun run test:contracts`) | `tests / contracts + system` |
+| `system/`    | The product is complete: all nine built-ins live in the headless editor                                                                                                                                                                                          | `bun test` (`bun run test:system`)    | `tests / contracts + system` |
 
 The `bun test` lanes run here:
 
 ```sh
 cd tests
 bun run test:contracts
+bun run test:system          # needs the engine's and the modules' wasm built
 ```
 
 ## What is not here, and why
