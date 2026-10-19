@@ -24,6 +24,7 @@
 // free) with `appearance: none` and the chevron overlaid.
 
 import type { ReactNode, SelectHTMLAttributes } from "react";
+import { useFieldName } from "@paged-media/panel-kit";
 import { Icon } from "@paged-media/shell";
 
 export interface KitSelectProps extends Omit<
@@ -44,10 +45,13 @@ export function KitSelect({
   disabled,
   ...rest
 }: KitSelectProps) {
+  // Named by its row's label when the caller gives it no name.
+  const named = useFieldName(rest);
   return (
     <span className={`relative inline-flex w-full ${className}`}>
       <select
         {...rest}
+        {...named}
         disabled={disabled}
         className="w-full h-[30px] appearance-none rounded-[6px] border border-input bg-background pl-2.5 pr-7 text-[12.5px] overflow-hidden text-ellipsis whitespace-nowrap disabled:opacity-55"
         style={{

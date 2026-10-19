@@ -26,6 +26,8 @@
 //   · `Segment`: one segment of a toggle group or a filter row. It says
 //     whether it is on with `aria-pressed`, beside the `data-active` the
 //     panels style and test by.
+//   · `Tab`: one tab of a `role="tablist"` row: `role="tab"` and
+//     `aria-selected`.
 
 import * as React from "react";
 
@@ -66,6 +68,29 @@ export function Segment(props: SegmentProps): React.ReactElement {
       {...rest}
       aria-pressed={pressed}
       data-active={pressed ? "true" : "false"}
+    />
+  );
+}
+
+export type TabProps = {
+  /** Whether this tab is the selected one. */
+  selected: boolean;
+} & Omit<
+  React.ButtonHTMLAttributes<HTMLButtonElement>,
+  "role" | "aria-selected"
+>;
+
+/** One tab of a `role="tablist"` row: `role="tab"`, `aria-selected` and
+ *  `data-active` follow `selected`. */
+export function Tab(props: TabProps): React.ReactElement {
+  const { selected, type, ...rest } = props;
+  return (
+    <button
+      type={type ?? "button"}
+      {...rest}
+      role="tab"
+      aria-selected={selected}
+      data-active={selected ? "true" : "false"}
     />
   );
 }
