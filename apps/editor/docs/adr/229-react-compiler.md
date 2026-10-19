@@ -106,10 +106,11 @@ run(host); }` where `host` does not exist; draw's Symbols and Appearance buttons
 ## Consequences
 
 - The production bundle ships compiled components: 523 compiled in 231 modules, 35 left as
-  written, across the eight chunks that hold first-party React code. The ratchet stands at 541
-  compiled, 35 bailouts and 1 not compiled (93.8%; the first compiled run: 491, 76, 9). The
-  19 suppression bailouts are effects that deliberately run on fewer dependencies than they read;
-  each is its own change.
+  written, across the eight chunks that hold first-party React code. The ratchet stands at 542
+  compiled, 34 bailouts and 1 not compiled (93.9%; the first compiled run: 491, 76, 9). The
+  18 suppression bailouts are effects that deliberately run on fewer dependencies than they read;
+  each is its own change. One more hid a real bug (the FPS hook set its state on every frame
+  and re-rendered the shell chrome with it) and is fixed.
 - Fewer re-renders for the same interactions (the DOM lane's render counter, as written against
   compiled): Layers 116 to 67 panel renders, Properties 2,306 to 997, Swatches 267 to 88, Pages
   5 to 1 per commit. On the production build (the latency probe), the components rendered per
