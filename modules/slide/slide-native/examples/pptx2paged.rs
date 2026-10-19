@@ -16,8 +16,9 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-//! `cargo run -p slide-idml --example pptx2idml -- deck.pptx out.idml`
-//! reads, resolves and writes a deck (the native import path, minus the host).
+//! `cargo run -p slide-native --example pptx2paged -- deck.pptx out.paged`
+//! reads, resolves and builds a deck (the native import path, minus the
+//! host). `paged-inspect` renders the package.
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
@@ -26,11 +27,11 @@ fn main() {
     let resolved = slide_resolve::resolve(&deck);
     let pkg = paged_ooxml::OpcPackage::read(&bytes).unwrap();
     let images = |part: &str| pkg.part(part).map(|b| b.to_vec());
-    let w = slide_idml::write(&resolved, &images, "deck").unwrap();
-    std::fs::write(&args[2], &w.idml).unwrap();
+    let w = slide_native::write(&resolved, &images, "deck").unwrap();
+    std::fs::write(&args[2], &w.paged).unwrap();
     eprintln!(
         "{} bytes; {} masters, {} slides, {} stories; fonts {:?}",
-        w.idml.len(),
+        w.paged.len(),
         resolved.masters.len(),
         resolved.slides.len(),
         w.stories.len(),
