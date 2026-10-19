@@ -35,6 +35,7 @@
 use pptx_core::chart::{Axis, Chart, DataLabels, PlotKind, Series};
 use pptx_core::{Color, ColorBase, Fill, Line, RunProps};
 use serde::{Deserialize, Serialize};
+use sheet_core::CellValue;
 
 /// Text a chart title shows when the file gives none (PowerPoint shows its
 /// UI language's word; English here).
@@ -226,7 +227,19 @@ fn cartesian(
         .map(|i| scale.min + i as f64 * scale.unit)
         .take_while(|v| *v <= scale.max + scale.unit * 1e-6)
         .collect();
-    let tick_text: Vec<String> = ticks.iter().map(|v| format_number(*v, &fmt)).collect();
+    // A tick that is zero up to rounding (an explicit minimum such as -0.6
+    // stepped by 0.2 lands on 1.1e-16) is labelled 0, as PowerPoint does.
+    let tick_text: Vec<String> = ticks
+        .iter()
+        .map(|v| {
+            let v = if v.abs() < scale.unit.abs() * 1e-9 {
+                0.0
+            } else {
+                *v
+            };
+            format_number(v, &fmt)
+        })
+        .collect();
     let show_val = !val_axis.deleted && val_axis.tick_labels != "none";
     let show_cat = !cat_axis.deleted && cat_axis.tick_labels != "none";
 
@@ -994,47 +1007,18 @@ fn single_series_name(chart: &Chart) -> Option<String> {
     (all.len() == 1).then(|| all[0].name.clone())
 }
 
-/// A number in an Excel format code: `General`, `0`, `0.0…`, `#,##0…`,
-/// and a trailing `%`.
+/// A number in its Excel format code, as PowerPoint labels a chart:
+/// sheet-format's renderer of the Excel number-format grammar (sections,
+/// literals, currency and locale tokens, scientific, dates), with Excel's
+/// rounding (half away from zero), en-US and the 1900 date system. A code that
+/// does not compile renders as `General`.
 pub fn format_number(v: f64, code: &str) -> String {
-    let code = code.split(';').next().unwrap_or("General").trim();
-    if code.eq_ignore_ascii_case("general") || code.is_empty() {
-        if v == v.trunc() && v.abs() < 1e15 {
-            return format!("{}", v as i64);
-        }
-        let s = format!("{:.10}", v);
-        return s.trim_end_matches('0').trim_end_matches('.').to_string();
+    let value = CellValue::Number(v);
+    let ctx = sheet_format::FormatCtx::default();
+    match sheet_format::compile(code) {
+        Ok(format) => sheet_format::format_value(&value, &format, &ctx),
+        Err(_) => sheet_format::format_general(&value),
     }
-    let percent = code.ends_with('%');
-    let v = if percent { v * 100.0 } else { v };
-    let body = code.trim_end_matches('%');
-    let decimals = body
-        .split('.')
-        .nth(1)
-        .map(|d| d.chars().filter(|c| *c == '0' || *c == '#').count())
-        .unwrap_or(0);
-    let grouped = body.contains(',');
-    let mut s = format!("{:.*}", decimals, v);
-    if grouped {
-        let (int, frac) = match s.find('.') {
-            Some(i) => (s[..i].to_string(), s[i..].to_string()),
-            None => (s.clone(), String::new()),
-        };
-        let neg = int.starts_with('-');
-        let digits: Vec<char> = int.trim_start_matches('-').chars().collect();
-        let mut g = String::new();
-        for (i, c) in digits.iter().enumerate() {
-            if i > 0 && (digits.len() - i).is_multiple_of(3) {
-                g.push(',');
-            }
-            g.push(*c);
-        }
-        s = format!("{}{g}{frac}", if neg { "-" } else { "" });
-    }
-    if percent {
-        s.push('%');
-    }
-    s
 }
 
 #[cfg(test)]
@@ -1076,5 +1060,13 @@ mod tests {
         assert_eq!(format_number(0.25, "0%"), "25%");
         assert_eq!(format_number(1234567.0, "#,##0"), "1,234,567");
         assert_eq!(format_number(1.23456, "0.00"), "1.23");
+        // What the Excel grammar adds: sections, literals and locale tokens,
+        // and Excel's rounding.
+        assert_eq!(format_number(-1234.0, "#,##0;(#,##0)"), "(1,234)");
+        assert_eq!(format_number(1234.5, "\"$\"#,##0.00"), "$1,234.50");
+        assert_eq!(format_number(2.5, "0"), "3");
+        assert_eq!(format_number(0.125, "0.00"), "0.13");
+        assert_eq!(format_number(45658.0, "m/d/yyyy"), "1/1/2025");
+        assert_eq!(format_number(4.5, ""), "4.5");
     }
 }

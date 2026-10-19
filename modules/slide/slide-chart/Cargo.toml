@@ -13,3 +13,7 @@ workspace = true
 [dependencies]
 pptx-core.workspace = true
 serde.workspace = true
+# Number-format labels: paged.sheet's Excel number-format engine. Built-in
+# modules depend on each other through the workspace (PM-0005).
+sheet-format = { path = "../../sheet/sheet-format" }
+sheet-core = { path = "../../sheet/sheet-core" }
