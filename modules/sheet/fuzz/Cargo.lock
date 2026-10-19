@@ -265,6 +265,7 @@ version = "0.0.0"
 name = "paged-ooxml"
 version = "0.0.0"
 dependencies = [
+ "flate2",
  "quick-xml",
  "thiserror",
  "zip",
