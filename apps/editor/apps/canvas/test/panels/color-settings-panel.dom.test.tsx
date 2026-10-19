@@ -198,23 +198,20 @@ describe("Color settings panel: findings", () => {
   // The list of profiles is built from the registration messages the
   // panel saw while mounted: a profile registered before it opened (or
   // while its tab was closed) is not offered.
-  test(
-    "PN-158: a profile registered before the panel opened is offered",
-    async () => {
-      covers("panel:paged.color-settings");
-      const h = await mountPanel(ColorSettingsPanel, {
-        id: "paged.color-settings",
-        scene: async ({ client }) => {
-          await client.registerColorProfile("Earlier", new Uint8Array(132));
-        },
-      });
-      expect(
-        [...setting<HTMLSelectElement>(h, "proof-profile").options].map(
-          (o) => o.value,
-        ),
-      ).toContain("Earlier");
-    },
-  );
+  test("PN-158: a profile registered before the panel opened is offered", async () => {
+    covers("panel:paged.color-settings");
+    const h = await mountPanel(ColorSettingsPanel, {
+      id: "paged.color-settings",
+      scene: async ({ client }) => {
+        await client.registerColorProfile("Earlier", new Uint8Array(132));
+      },
+    });
+    expect(
+      [...setting<HTMLSelectElement>(h, "proof-profile").options].map(
+        (o) => o.value,
+      ),
+    ).toContain("Earlier");
+  });
 
   // Any bytes are accepted as an ICC profile and made the working space;
   // a file that is not a profile should be refused with a message.

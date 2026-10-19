@@ -235,19 +235,16 @@ describe("Stories panel: findings", () => {
   // The reflow controls say the rule cannot be read back and show
   // "unknown" (a mixed pill); the engine reports it as
   // StorySummary.growRule. Fixed: they read it.
-  test(
-    "PN-111: the reflow controls show the story's grow rule as the model holds it",
-    async () => {
-      covers("panel:paged.stories");
-      const h = await mount();
-      await h.mutate({
-        op: "setFlowGrowRule",
-        args: { storyId: STRUCTURE.story, grow: true, maxPages: 3 },
-      } as never);
-      await h.click(storyRow(h.root));
-      expect(grow(h.root).hasAttribute("data-mixed")).toBe(false);
-      expect(grow(h.root).getAttribute("aria-checked")).toBe("true");
-      expect(maxPages(h.root).value).toBe("3");
-    },
-  );
+  test("PN-111: the reflow controls show the story's grow rule as the model holds it", async () => {
+    covers("panel:paged.stories");
+    const h = await mount();
+    await h.mutate({
+      op: "setFlowGrowRule",
+      args: { storyId: STRUCTURE.story, grow: true, maxPages: 3 },
+    } as never);
+    await h.click(storyRow(h.root));
+    expect(grow(h.root).hasAttribute("data-mixed")).toBe(false);
+    expect(grow(h.root).getAttribute("aria-checked")).toBe("true");
+    expect(maxPages(h.root).value).toBe("3");
+  });
 });

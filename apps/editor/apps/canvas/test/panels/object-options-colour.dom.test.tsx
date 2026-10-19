@@ -226,16 +226,13 @@ describe("Swatch Options panel", () => {
 
   // A swatch with no tint of its own is at 100 %; the engine answers
   // "unset" (null) and the fields show 0 %.
-  test(
-    "PN-164: Tint and Alpha of an untinted, opaque swatch read 100 %",
-    async () => {
-      covers("panel:paged.swatch-options");
-      const h = await mount();
-      await pickRed(h);
-      expect(h.field("tint").querySelector("input")!.value).toBe("100 %");
-      expect(h.field("alpha").querySelector("input")!.value).toBe("100 %");
-    },
-  );
+  test("PN-164: Tint and Alpha of an untinted, opaque swatch read 100 %", async () => {
+    covers("panel:paged.swatch-options");
+    const h = await mount();
+    await pickRed(h);
+    expect(h.field("tint").querySelector("input")!.value).toBe("100 %");
+    expect(h.field("alpha").querySelector("input")!.value).toBe("100 %");
+  });
 
   // The Swatches grid treats [Black] as reserved (no rename, no edit),
   // as InDesign does; Swatch Options offers it first and edits it.

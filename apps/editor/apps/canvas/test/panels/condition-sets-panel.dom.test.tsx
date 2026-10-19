@@ -64,20 +64,17 @@ describe("Condition Sets panel", () => {
   // engine has it (`activateConditionSet`, which restores each member
   // condition's recorded visibility), so the seam outlived its gap.
   // Fixed: Apply sends it.
-  test(
-    "PN-101: Apply activates the set (activateConditionSet)",
-    async () => {
-      covers("panel:paged.condition-sets");
-      const h = await mount();
-      await h.mutate({
-        op: "setConditionVisible",
-        args: { condition: STRUCTURE.conditions.draft, visible: false },
-      } as never);
-      const from = h.mark();
-      await h.click(applyButton(h.root));
-      expect(h.mutations(from)).toEqual([
-        { op: "activateConditionSet", args: { set: STRUCTURE.conditionSet } },
-      ] as never);
-    },
-  );
+  test("PN-101: Apply activates the set (activateConditionSet)", async () => {
+    covers("panel:paged.condition-sets");
+    const h = await mount();
+    await h.mutate({
+      op: "setConditionVisible",
+      args: { condition: STRUCTURE.conditions.draft, visible: false },
+    } as never);
+    const from = h.mark();
+    await h.click(applyButton(h.root));
+    expect(h.mutations(from)).toEqual([
+      { op: "activateConditionSet", args: { set: STRUCTURE.conditionSet } },
+    ] as never);
+  });
 });

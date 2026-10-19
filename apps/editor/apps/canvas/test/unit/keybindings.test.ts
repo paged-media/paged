@@ -361,14 +361,18 @@ describe("the tables as a whole", () => {
   // Finding SH-9 (UX F-16), fixed: Cmd+0 (Fit document) and Cmd+1 (Zoom
   // to 100%) worked through a canvas hook, not the registry, so the View
   // menu showed no chord for them and a plugin could not see or rebind them.
-  test(
-    "SH-9 (F-16): Fit document and Zoom to 100% are registry bindings",
-    () => {
-      covers("command:paged.view.zoomFit", "command:paged.view.zoom100");
-      expect(fires("cmd+0")).toBe("paged.view.zoomFit");
-      expect(fires("ctrl+0")).toBe("paged.view.zoomFit");
-      expect(fires("cmd+1")).toBe("paged.view.zoom100");
-      expect(fires("ctrl+1")).toBe("paged.view.zoom100");
-    },
-  );
+  test("SH-9 (F-16): Fit document and Zoom to 100% are registry bindings", () => {
+    covers(
+      "command:paged.view.zoomFit",
+      "command:paged.view.zoom100",
+      "keybinding:cmd+0→paged.view.zoomFit",
+      "keybinding:ctrl+0→paged.view.zoomFit",
+      "keybinding:cmd+1→paged.view.zoom100",
+      "keybinding:ctrl+1→paged.view.zoom100",
+    );
+    expect(fires("cmd+0")).toBe("paged.view.zoomFit");
+    expect(fires("ctrl+0")).toBe("paged.view.zoomFit");
+    expect(fires("cmd+1")).toBe("paged.view.zoom100");
+    expect(fires("ctrl+1")).toBe("paged.view.zoom100");
+  });
 });

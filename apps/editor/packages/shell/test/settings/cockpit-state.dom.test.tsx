@@ -172,21 +172,15 @@ describe("setting paged.cockpit.v1 in the cockpit", () => {
   // first `includes`/`map` over it throws — the right dock (and every
   // openPanel, the Window menu's panel commands) breaks on a stale or
   // hand-edited value instead of falling back to the mode's seed.
-  test(
-    "SH-101: a mode entry of the wrong shape falls back to the slot seed",
-    () => {
-      covers("setting:paged.cockpit.v1");
-      localStorage.setItem(
-        KEY,
-        JSON.stringify({ design: { rightTabs: 5, activeTab: 7 } }),
-      );
-      const { result } = mount();
-      expect(result.current.cockpit.rightTabs).toEqual([
-        "p.props",
-        "p.swatches",
-      ]);
-      act(() => result.current.cockpit.openPanel("p.layers"));
-      expect(result.current.cockpit.rightTabs).toContain("p.layers");
-    },
-  );
+  test("SH-101: a mode entry of the wrong shape falls back to the slot seed", () => {
+    covers("setting:paged.cockpit.v1");
+    localStorage.setItem(
+      KEY,
+      JSON.stringify({ design: { rightTabs: 5, activeTab: 7 } }),
+    );
+    const { result } = mount();
+    expect(result.current.cockpit.rightTabs).toEqual(["p.props", "p.swatches"]);
+    act(() => result.current.cockpit.openPanel("p.layers"));
+    expect(result.current.cockpit.rightTabs).toContain("p.layers");
+  });
 });

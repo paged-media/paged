@@ -660,6 +660,10 @@ let live: HeadlessEditor | null = null;
 export async function createHeadlessEditor(
   options: HeadlessEditorOptions = {},
 ): Promise<HeadlessEditor> {
+  // A new editor is a new app: the Problems store is module-scoped only
+  // because every editor of a test file shares one process, so the last
+  // editor's reports go, also for an editor that never loads a document.
+  resetProblems();
   const engines = await headlessEngineModule();
   const worker = createEngineWorker(engines.create(), {
     gestureReader: (buffer) => new GestureBuffer(buffer),

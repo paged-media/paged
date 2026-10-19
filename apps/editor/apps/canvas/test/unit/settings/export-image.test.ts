@@ -169,17 +169,14 @@ describe("setting paged.export.image.v1", () => {
   // snapshot, 100000 for a 850000-px one. The other fields degrade by
   // luck (an unknown scope exports every page, an unknown format writes
   // PNG); dpi has no such fallback.
-  test(
-    "SH-102: a stored DPI outside 72/150/300 falls back to the default",
-    async () => {
-      covers("setting:paged.export.image.v1");
-      for (const dpi of ["huge", 0, 100000]) {
-        const ls = memoryStorage({ [KEY]: JSON.stringify({ dpi }) });
-        expect({ stored: dpi, dpi: current(await load(ls), ls).dpi }).toEqual({
-          stored: dpi,
-          dpi: 150,
-        });
-      }
-    },
-  );
+  test("SH-102: a stored DPI outside 72/150/300 falls back to the default", async () => {
+    covers("setting:paged.export.image.v1");
+    for (const dpi of ["huge", 0, 100000]) {
+      const ls = memoryStorage({ [KEY]: JSON.stringify({ dpi }) });
+      expect({ stored: dpi, dpi: current(await load(ls), ls).dpi }).toEqual({
+        stored: dpi,
+        dpi: 150,
+      });
+    }
+  });
 });

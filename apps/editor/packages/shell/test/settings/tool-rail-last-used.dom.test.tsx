@@ -185,19 +185,16 @@ describe("setting paged.toolRail.lastUsed", () => {
   // object — `null` here — makes `lastUsed[group]` throw inside the
   // rail's render and effects, so the whole tool rail fails to mount
   // instead of falling back to the group defaults.
-  test(
-    "SH-104: a stored null falls back to the defaults instead of breaking the rail",
-    async () => {
-      covers("setting:paged.toolRail.lastUsed");
-      localStorage.setItem(KEY, "null");
-      const original = console.error;
-      console.error = () => {};
-      try {
-        mount();
-        await waitFor(() => expect(face("t.shape")).toBe("t.shape.rect"));
-      } finally {
-        console.error = original;
-      }
-    },
-  );
+  test("SH-104: a stored null falls back to the defaults instead of breaking the rail", async () => {
+    covers("setting:paged.toolRail.lastUsed");
+    localStorage.setItem(KEY, "null");
+    const original = console.error;
+    console.error = () => {};
+    try {
+      mount();
+      await waitFor(() => expect(face("t.shape")).toBe("t.shape.rect"));
+    } finally {
+      console.error = original;
+    }
+  });
 });

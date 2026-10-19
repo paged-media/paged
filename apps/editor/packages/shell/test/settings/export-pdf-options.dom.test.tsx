@@ -249,28 +249,25 @@ describe("setting paged.exportPdf.options.v1", () => {
   // exported: `standard: "bogus"` reaches `client.exportPdf` as the PDF
   // standard (the comment above OPTIONS_KEY promises "schema drift falls
   // back to defaults").
-  test(
-    "SH-103: a stored standard the dialog does not offer falls back to the default",
-    async () => {
-      covers("setting:paged.exportPdf.options.v1");
-      localStorage.setItem(
-        KEY,
-        JSON.stringify({
-          ...DEFAULTS,
-          standard: "bogus",
-          outputIntentProfile: "x",
-        }),
-      );
-      const { client, exports } = fakeClient();
-      mount(client);
-      const confirm = await waitFor(() => {
-        const b = field<HTMLButtonElement>("[data-export-confirm]");
-        if (b.disabled) throw new Error("export not ready");
-        return b;
-      });
-      fireEvent.click(confirm);
-      await waitFor(() => expect(exports).toHaveLength(1));
-      expect(exports[0].standard).toBe("pdfx4");
-    },
-  );
+  test("SH-103: a stored standard the dialog does not offer falls back to the default", async () => {
+    covers("setting:paged.exportPdf.options.v1");
+    localStorage.setItem(
+      KEY,
+      JSON.stringify({
+        ...DEFAULTS,
+        standard: "bogus",
+        outputIntentProfile: "x",
+      }),
+    );
+    const { client, exports } = fakeClient();
+    mount(client);
+    const confirm = await waitFor(() => {
+      const b = field<HTMLButtonElement>("[data-export-confirm]");
+      if (b.disabled) throw new Error("export not ready");
+      return b;
+    });
+    fireEvent.click(confirm);
+    await waitFor(() => expect(exports).toHaveLength(1));
+    expect(exports[0].standard).toBe("pdfx4");
+  });
 });

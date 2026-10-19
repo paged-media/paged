@@ -256,22 +256,19 @@ describe("Properties panel: findings", () => {
   // engine's page-geometry accessors", but the pages collection carries
   // them (marginTopPt, bleedTopPt, columnCount): a seam that outlived its
   // gap. Fixed: the summary reads them from the collection.
-  test(
-    "PN-23: the page summary shows margins, bleed and columns the engine already reports",
-    async () => {
-      covers("panel:paged.properties");
-      const h = await mount();
-      const pages = (await h.client.collection("pages")) as Array<{
-        marginTopPt: number;
-        columnCount: number;
-      }>;
-      expect(pages[0]).toHaveProperty("marginTopPt");
-      expect(pages[0]).toHaveProperty("columnCount");
-      await h.steer("page");
-      expect(root(h).textContent).not.toContain("land with the engine");
-      expect(root(h).textContent).toContain("Margins");
-    },
-  );
+  test("PN-23: the page summary shows margins, bleed and columns the engine already reports", async () => {
+    covers("panel:paged.properties");
+    const h = await mount();
+    const pages = (await h.client.collection("pages")) as Array<{
+      marginTopPt: number;
+      columnCount: number;
+    }>;
+    expect(pages[0]).toHaveProperty("marginTopPt");
+    expect(pages[0]).toHaveProperty("columnCount");
+    await h.steer("page");
+    expect(root(h).textContent).not.toContain("land with the engine");
+    expect(root(h).textContent).toContain("Margins");
+  });
 
   // UX audit F-39 (fixed, ADR 245): the Page summary read "8.5 in × 11 in"
   // while every other length was in points.

@@ -15,6 +15,7 @@
  *
  *  @copyright  Copyright (c) And The Next GmbH
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
+ */
 
 // One zoom range for every way the camera changes (ADR 246, the UX
 // audit's F-31). Keyboard zoom, ctrl+wheel, the % field, the fit

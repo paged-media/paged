@@ -293,16 +293,13 @@ describe("content selection", () => {
   // selection (Escape) while the caret request is in flight and the late
   // answer puts a caret back with no selection behind it — a blinking
   // caret in a story the user has left.
-  test(
-    "SH-106: a late caret answer for a superseded selection is dropped",
-    async () => {
-      const c = contentClient();
-      const { result } = mount(c.client);
-      act(() => result.current.setContentSelection(SEL(5, 5)));
-      act(() => result.current.setContentSelection(null));
-      await act(async () => c.carets[0].resolve({ x: 5 }));
-      expect(result.current.contentSelection).toBeNull();
-      expect(result.current.caret).toBeNull();
-    },
-  );
+  test("SH-106: a late caret answer for a superseded selection is dropped", async () => {
+    const c = contentClient();
+    const { result } = mount(c.client);
+    act(() => result.current.setContentSelection(SEL(5, 5)));
+    act(() => result.current.setContentSelection(null));
+    await act(async () => c.carets[0].resolve({ x: 5 }));
+    expect(result.current.contentSelection).toBeNull();
+    expect(result.current.caret).toBeNull();
+  });
 });

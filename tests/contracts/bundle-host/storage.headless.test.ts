@@ -206,23 +206,20 @@ describe("host.blob — the editor's OPFS backing", () => {
   // whenever it injected its OPFS backend, also where OPFS was unavailable
   // (an insecure context, a denied origin). Fixed (HOST-2, ADR 248): the
   // store says whether bytes persist and supports() follows it.
-  test(
-    "HOST-2 — with OPFS unavailable, supports(storage.blob@1) still says bytes persist",
-    async () => {
-      t.editorApp!.platform.opfs.setAvailable(false);
+  test("HOST-2 — with OPFS unavailable, supports(storage.blob@1) still says bytes persist", async () => {
+    t.editorApp!.platform.opfs.setAvailable(false);
+    try {
+      let persisted = true;
       try {
-        let persisted = true;
-        try {
-          await t.host.blob.write("k", bytes(1));
-        } catch {
-          persisted = false;
-        }
-        expect(t.host.supports("storage.blob@1")).toBe(persisted);
-      } finally {
-        t.editorApp!.platform.opfs.setAvailable(true);
+        await t.host.blob.write("k", bytes(1));
+      } catch {
+        persisted = false;
       }
-    },
-  );
+      expect(t.host.supports("storage.blob@1")).toBe(persisted);
+    } finally {
+      t.editorApp!.platform.opfs.setAvailable(true);
+    }
+  });
 });
 
 // ── host.clipboard ───────────────────────────────────────────────────

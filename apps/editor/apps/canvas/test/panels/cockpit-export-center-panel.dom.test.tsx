@@ -216,20 +216,17 @@ describe("Export Center: findings", () => {
   // "Publish every format from one place": the Outputs nav lists the
   // plugins' exporters (paged.publish's IDML among them), the Export
   // Center's table lists only its five built-in outputs.
-  test(
-    "PN-309: the Export Center lists the plugins' exporters too",
-    async () => {
-      covers("panel:paged.export-center");
-      const h = await mount();
-      h.registries.exporters.register({
-        id: "test.exporter.idml",
-        title: "IDML package",
-        extension: ".idml",
-        export: () => null,
-      });
-      // Re-render the table (selection is a store it reads).
-      await h.click(row(h, "image"));
-      expect(h.root.textContent).toContain("IDML package");
-    },
-  );
+  test("PN-309: the Export Center lists the plugins' exporters too", async () => {
+    covers("panel:paged.export-center");
+    const h = await mount();
+    h.registries.exporters.register({
+      id: "test.exporter.idml",
+      title: "IDML package",
+      extension: ".idml",
+      export: () => null,
+    });
+    // Re-render the table (selection is a store it reads).
+    await h.click(row(h, "image"));
+    expect(h.root.textContent).toContain("IDML package");
+  });
 });

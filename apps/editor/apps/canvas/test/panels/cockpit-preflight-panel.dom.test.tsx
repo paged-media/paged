@@ -165,24 +165,21 @@ describe("Preflight: findings", () => {
   // The links collection carries every placement's effective PPI (Health
   // and Output readiness count the low-res ones from it), yet the section
   // said those checks waited for the engine. Fixed: it runs the check.
-  test(
-    "PN-302: Images & bleed reports the effective-PPI check the links already carry, not a seam",
-    async () => {
-      covers("panel:paged.preflight");
-      const h = await mount(linksDocument());
-      const links = (await h.client.collection("links")) as Array<{
-        effectivePpi: number | null;
-      }>;
-      expect(links.map((l) => l.effectivePpi)).toEqual([72, 300]);
-      const section = [...h.root.querySelectorAll("button")].find(
-        (b) => b.textContent === "Images & bleed",
-      )!;
-      await h.click(section);
-      expect(h.root.textContent).not.toContain(
-        "Effective-PPI and bleed-coverage checks land with the engine's preflight accessors.",
-      );
-      // The check itself: the 72-ppi placement is the low one.
-      expect(h.root.textContent).toContain("1 of 2 placed images below 150 ppi");
-    },
-  );
+  test("PN-302: Images & bleed reports the effective-PPI check the links already carry, not a seam", async () => {
+    covers("panel:paged.preflight");
+    const h = await mount(linksDocument());
+    const links = (await h.client.collection("links")) as Array<{
+      effectivePpi: number | null;
+    }>;
+    expect(links.map((l) => l.effectivePpi)).toEqual([72, 300]);
+    const section = [...h.root.querySelectorAll("button")].find(
+      (b) => b.textContent === "Images & bleed",
+    )!;
+    await h.click(section);
+    expect(h.root.textContent).not.toContain(
+      "Effective-PPI and bleed-coverage checks land with the engine's preflight accessors.",
+    );
+    // The check itself: the 72-ppi placement is the low one.
+    expect(h.root.textContent).toContain("1 of 2 placed images below 150 ppi");
+  });
 });

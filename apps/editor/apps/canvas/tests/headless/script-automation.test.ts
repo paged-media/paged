@@ -257,17 +257,14 @@ describe("editor.*", () => {
   // write the engine refuses (an unknown path) resolves as if it landed;
   // `editor.set` and `editor.mutate`'s callers see the refusal. It should
   // reject with the engine's reason.
-  test(
-    "finding AUTO-1: editor.setProperty rejects a write the engine refuses",
-    async () => {
-      covers("script:editor.setProperty");
-      const e = await open();
-      await e.automation.editor.select([T.frame.id]);
-      await expect(
-        e.automation.editor.setProperty("noSuchPath", 1),
-      ).rejects.toThrow();
-    },
-  );
+  test("finding AUTO-1: editor.setProperty rejects a write the engine refuses", async () => {
+    covers("script:editor.setProperty");
+    const e = await open();
+    await e.automation.editor.select([T.frame.id]);
+    await expect(
+      e.automation.editor.setProperty("noSuchPath", 1),
+    ).rejects.toThrow();
+  });
 
   test("editor.mutate sends one wire op and answers the engine's reply", async () => {
     covers("script:editor.mutate");
@@ -316,14 +313,11 @@ describe("editor.*", () => {
   // console), so a typo reads as "nothing matched". `paged query` on the
   // command line refuses it ("selector does not parse"); the automation
   // should reject too, as its own doc promises for refusals.
-  test(
-    "finding AUTO-2: editor.query rejects a selector that does not parse",
-    async () => {
-      covers("script:editor.query");
-      const e = await open();
-      await expect(e.automation.editor.query("frame[")).rejects.toThrow();
-    },
-  );
+  test("finding AUTO-2: editor.query rejects a selector that does not parse", async () => {
+    covers("script:editor.query");
+    const e = await open();
+    await expect(e.automation.editor.query("frame[")).rejects.toThrow();
+  });
 
   test("editor.get reads one property; a refusal throws with its code", async () => {
     covers("script:editor.get");

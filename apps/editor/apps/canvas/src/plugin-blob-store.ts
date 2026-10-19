@@ -47,31 +47,30 @@ type DirHandle = FileSystemDirectoryHandle & {
 /** Whether the last attempt to reach the OPFS root was refused. */
 let rootRefused = false;
 
-function opfs(): (() => Promise<FileSystemDirectoryHandle>) | null {
-  const storage = (globalThis.navigator?.storage ?? null) as
-    | (StorageManager & {
-        getDirectory?: () => Promise<FileSystemDirectoryHandle>;
-      })
-    | null;
-  return storage?.getDirectory ? () => storage.getDirectory!() : null;
+type OpfsStorage = StorageManager & {
+  getDirectory?: () => Promise<FileSystemDirectoryHandle>;
+};
+
+function opfsStorage(): OpfsStorage | null {
+  return (globalThis.navigator?.storage ?? null) as OpfsStorage | null;
 }
 
 /** Bytes can persist: OPFS exists, the context is secure, and the root
  *  was not refused the last time it was asked for. */
 function opfsAvailable(): boolean {
   if (globalThis.isSecureContext === false) return false;
-  return opfs() !== null && !rootRefused;
+  return Boolean(opfsStorage()?.getDirectory) && !rootRefused;
 }
 
 async function pluginDir(
   pluginId: string,
   create: boolean,
 ): Promise<DirHandle | null> {
-  const getDirectory = opfs();
-  if (!getDirectory) return null;
+  const storage = opfsStorage();
+  if (!storage?.getDirectory) return null;
   let root: FileSystemDirectoryHandle;
   try {
-    root = await getDirectory();
+    root = await storage.getDirectory();
     rootRefused = false;
   } catch {
     // OPFS access denied (an insecure context, a denied origin).

@@ -313,15 +313,12 @@ describe("Master Options (paged.master-options)", () => {
   // The picker's labels are fetched once per LIST of addresses
   // (useObjectNames keys on the list), so a rename that keeps the list
   // leaves the old name in the picker.
-  test(
-    "PN-208: after a rename the picker shows the new name",
-    async () => {
-      covers("panel:paged.master-options");
-      const h = await mount();
-      await h.typeInto("name", "Body");
-      expect(pickerLabels(h, "master")).toEqual(["Body"]);
-    },
-  );
+  test("PN-208: after a rename the picker shows the new name", async () => {
+    covers("panel:paged.master-options");
+    const h = await mount();
+    await h.typeInto("name", "Body");
+    expect(pickerLabels(h, "master")).toEqual(["Body"]);
+  });
 
   test("New… opens the form sized to the page; running it adds a master", async () => {
     covers("panel:paged.master-options", "command:paged.core.createMaster");

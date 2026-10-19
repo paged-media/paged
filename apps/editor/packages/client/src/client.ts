@@ -290,8 +290,7 @@ export function changesTheDocument(msg: WorkerToMain): boolean {
     case "undoApplied":
     case "redoApplied":
     case "gestureCommitted":
-    // A script writes without mutationApplied notifications.
-    case "scriptResult":
+    case "scriptResult": // a script writes without mutationApplied
     case "fontRegistered":
     case "fontRegistryCleared":
     case "pagedPartWritten":
@@ -943,13 +942,6 @@ export class CanvasClient {
     throw new Error(`unexpected reply: ${reply.kind}`);
   }
 
-  /**
-   * Concept 2 — register a named ICC profile with the worker's
-   * registry (the RegisterFont pattern; survives loads). Working-
-   * space / proof names in `setColorSettings`/`setProofSetup`
-   * resolve against it; a document whose designmap names a
-   * registered profile activates it at load.
-   */
   /** The names of the colour profiles registered with this worker, in
    *  registration order: a view that lists them seeds from here and
    *  follows `colorProfileRegistered` (PN-158: a list built only from the
@@ -958,6 +950,13 @@ export class CanvasClient {
     return [...this.colorProfiles];
   }
 
+  /**
+   * Concept 2 — register a named ICC profile with the worker's
+   * registry (the RegisterFont pattern; survives loads). Working-
+   * space / proof names in `setColorSettings`/`setProofSetup`
+   * resolve against it; a document whose designmap names a
+   * registered profile activates it at load.
+   */
   async registerColorProfile(name: string, bytes: Uint8Array): Promise<void> {
     const reply = await this.send({
       kind: "registerColorProfile",
@@ -1924,7 +1923,9 @@ export class CanvasClient {
     options: { scope?: FontScope } = {},
   ): Promise<void> {
     const documentScope = (options.scope ?? "document") === "document";
-    const face = documentScope ? this.addSessionFace(family, style, bytes) : null;
+    const face = documentScope
+      ? this.addSessionFace(family, style, bytes)
+      : null;
     // A session face the engine already holds byte for byte (the default
     // family's other faces, asked for again after every load) is not
     // posted again: the engine keeps every registered face for later

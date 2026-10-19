@@ -976,9 +976,9 @@ describe("inside an edit context the object verbs do not apply", () => {
       commands.filter((c) => isEnabled(c.when, () => state)).map((c) => c.id),
     ).toEqual([]);
     const selected = objects({ tree: flat(), selection: [A] });
-    expect(
-      commands.every((c) => isEnabled(c.when, () => selected.state)),
-    ).toBe(true);
+    expect(commands.every((c) => isEnabled(c.when, () => selected.state))).toBe(
+      true,
+    );
   });
 
   test("a text caret or path-edit mode takes Delete and the nudges, not the arrange verbs", async () => {
