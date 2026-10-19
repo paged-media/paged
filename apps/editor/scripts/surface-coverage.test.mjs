@@ -119,6 +119,30 @@ describe("covers() reader", () => {
     expect([...r.calls[0].layers].sort()).toEqual(["golden", "rust"]);
   });
 
+  it("does not read a Rust covers! that sits inside a string, a raw string or a comment", () => {
+    const dir = fixture({
+      "crates/c/tests/golden.rs": [
+        "#[test]",
+        "fn every_path() {",
+        '    covers!("cli:paged");',
+        '    let path = "render";',
+        '    let wanted = format!("covers!(\\"cli:{path}\\")");',
+        '    let raw = r#"covers!("cli:raw")',
+        '// covers: cli:inside-raw"#;',
+        '    /* covers!("cli:in-a-block") */',
+        "    let c = '\"';",
+        '    covers!("cli:paged render");',
+        "}",
+      ].join("\n"),
+    });
+    const r = readCovers(dir, ["crates/c/tests/golden.rs"]);
+    expect(r.errors).toEqual([]);
+    expect(r.calls.flatMap((c) => c.ids)).toEqual([
+      "cli:paged",
+      "cli:paged render",
+    ]);
+  });
+
   it("refuses a covers() outside a test file", () => {
     const dir = fixture({
       "src/feature.ts": `covers("command:paged.editor.undo");`,
