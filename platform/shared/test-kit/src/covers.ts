@@ -42,6 +42,8 @@ export const SURFACE_KINDS = [
   "setting",
   "cli",
   "script",
+  "importer",
+  "exporter",
 ] as const;
 
 export type SurfaceKind = (typeof SURFACE_KINDS)[number];
@@ -51,11 +53,17 @@ export type SurfaceKind = (typeof SURFACE_KINDS)[number];
  * the same kinds, each with its own registered id:
  *
  * - `command:paged.undo`, `panel:paged.layers`, `tool:paged.tool.rectangle`
- * - `menu:<menu item id>` (the item's `id`, or its command when it has none)
- * - `keybinding:<binding id>` or `keybinding:<chord>→<command>`
- * - `setting:<configuration key>`
+ *   (plugin: manifest commands and typed object-model commands, manifest
+ *   tools, panels and schema panels, by their ids)
+ * - `menu:<path>`: the item's path as registered, the menu registry's own
+ *   key (`menu:File/Export PDF…`). `menu:<command id>` is accepted as an
+ *   alias while exactly one item invokes that command.
+ * - `keybinding:<key>→<command>`: the key as registered (lowercase combo),
+ *   `keybinding:cmd+z→paged.editor.undo`; `->` is read as `→`.
+ * - `setting:<configuration key>`; a tool option is `setting:<toolId>.<key>`
  * - `cli:paged export-pdf` (the binary, then the command path, one space each)
  * - `script:paged.document.pages`, `script:editor.select`
+ * - `importer:<id>`, `exporter:<id>`: a bundle's file importers / exporters
  */
 export type SurfaceId = `${SurfaceKind}:${string}`;
 
