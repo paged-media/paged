@@ -208,7 +208,8 @@ rendered. How the parts fit is in [`architecture.md`](architecture.md).
 - **The CPU rasterizer is single-threaded**, natively too (ADR 189: `vello_cpu`'s threads
   cost more than they save on effect-heavy and sparse pages). Without the glyph-run table (the
   live canvas does not collect it) a glyph that is exactly a rectangle is stroke-adjusted like
-  a shape.
+  a shape. A placed SVG is drawn without its filters and without its text (no font database
+  is given to `usvg`).
 - **No font and no colour profile is bundled.** Text for which neither a registered font
   nor a default font resolves is not shaped. Without a CMYK profile, CMYK is converted by a
   naive formula.
