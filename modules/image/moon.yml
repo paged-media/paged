@@ -49,7 +49,7 @@ tasks:
     inputs:
       - "@group(rust-sources)"
       - "scripts/build-wasm.sh"
-      - "scripts/source-hash.mjs"
+      - "/tooling/js/source-hash.mjs"
       - "registry/**/*.yaml"
     outputs:
       - "glue/wasm/image_js*"

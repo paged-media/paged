@@ -30,6 +30,8 @@ on:
       - "engine/core/scripts/build-wasm-packages.sh"
       - "engine/core/packages/**"
       - ".cargo/config.toml"
+      # The source hash the wasm is stamped with and its wasm-fresh spec checks.
+      - "tooling/js/source-hash.mjs"
       - "tooling/bootstrap.sh"
       - ".github/actions/engine-wasm/**"
       - ".github/actions/wasm-tools/**"
@@ -57,6 +59,8 @@ on:
       - "engine/core/scripts/build-wasm-packages.sh"
       - "engine/core/packages/**"
       - ".cargo/config.toml"
+      # The source hash the wasm is stamped with and its wasm-fresh spec checks.
+      - "tooling/js/source-hash.mjs"
       - "tooling/bootstrap.sh"
       - ".github/actions/engine-wasm/**"
       - ".github/actions/wasm-tools/**"
