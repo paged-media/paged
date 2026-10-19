@@ -38,6 +38,10 @@ export interface PropertyLaneResult {
   written: Record<string, number>;
   /** Host calls made (the count budget). */
   calls: number;
+  /** What became of the `alongside` wire mutations: written in the same
+   *  batch (`applied`), or not sent (`unsent`: no batch could carry them,
+   *  nothing of theirs landed; the caller writes them itself). */
+  alongside: "applied" | "unsent";
 }
 
 /** `host.objects`, when this host announces the object model (`objects@1`). */
@@ -57,6 +61,7 @@ export async function commitProperties(
   applies: readonly PropertyApply[],
   hostOids: Readonly<Record<string, string>> = {},
   label = "Apply data",
+  alongside: readonly Mutation[] = [],
 ): Promise<PropertyLaneResult> {
   const result: PropertyLaneResult = {
     applied: 0,
@@ -64,7 +69,15 @@ export async function commitProperties(
     skipped: {},
     written: {},
     calls: 0,
+    alongside: "unsent",
   };
+  // Wire mutations of another lane (a data set's visibility writes) ride in
+  // the SAME batch as object `set` ops, so the whole apply is one undo step
+  // (finding DAT-2). A mutation with no object form keeps them all out.
+  const asSets = alongside.map(asObjectSet);
+  let side: ObjectOp[] = asSets.every((o) => o !== null)
+    ? (asSets as ObjectOp[])
+    : [];
   const objects = objectsOf(host);
   if (!objects) {
     for (const a of applies) result.skipped[a.binding] = NO_OBJECT_MODEL;
@@ -124,15 +137,26 @@ export async function commitProperties(
   let bindings = plan.bindings;
   while (ops.length > 0) {
     result.calls++;
-    const out = await objects.batch([...creates, ...ops], { label });
+    const out = await objects.batch([...creates, ...side, ...ops], { label });
     if (out.applied) {
       result.undoSteps += out.undoSteps;
       result.applied = ops.length;
+      if (side.length > 0) result.alongside = "applied";
       for (const b of bindings)
         result.written[b] = (result.written[b] ?? 0) + 1;
       break;
     }
-    const at = out.index !== undefined ? out.index - creates.length : undefined;
+    const at =
+      out.index !== undefined
+        ? out.index - creates.length - side.length
+        : undefined;
+    // A refusal of the other lane's ops (or one that names no op) is not a
+    // binding's: send the bindings alone and give the caller its mutations
+    // back (`alongside: "unsent"`).
+    if (side.length > 0 && (at === undefined || at < 0)) {
+      side = [];
+      continue;
+    }
     const failed = at !== undefined && at >= 0 ? bindings[at] : undefined;
     if (failed === undefined) {
       for (const b of new Set(bindings))
@@ -173,4 +197,46 @@ function createSwatchOp(m: Mutation): ObjectOp {
       },
     },
   };
+}
+
+/** A wire property write as the object model's `set` op, or `null` when it
+ *  has no such form (a text pour, a structural op, a value kind the object
+ *  layer spells differently). */
+function asObjectSet(m: Mutation): ObjectOp | null {
+  const plain = (v: unknown): { ok: boolean; value?: unknown } => {
+    const w = v as { type?: string; value?: unknown } | null;
+    if (
+      w &&
+      typeof w === "object" &&
+      ["bool", "number", "length", "text", "int"].includes(String(w.type))
+    )
+      return { ok: true, value: w.value };
+    return { ok: false };
+  };
+  if (m.op === "setElementProperty") {
+    const { elementId, path, value } = m.args as {
+      elementId: { kind: string; id: unknown };
+      path: string;
+      value: unknown;
+    };
+    const v = plain(value);
+    if (!v.ok || typeof elementId?.id !== "string") return null;
+    return {
+      op: "set",
+      address: `${elementId.kind}:${elementId.id}`,
+      path,
+      value: v.value,
+    } as ObjectOp;
+  }
+  if (m.op === "set") {
+    const { address, path, value } = m.args as {
+      address: string;
+      path: string;
+      value: unknown;
+    };
+    const v = plain(value);
+    if (!v.ok) return null;
+    return { op: "set", address, path, value: v.value } as ObjectOp;
+  }
+  return null;
 }

@@ -619,7 +619,14 @@ export function propertyMethods(ctx: PropertyContext) {
     ): Promise<PropertyLaneResult> {
       const e = await ctx.ensureEngine();
       if (typeof e.resolve_properties_at !== "function") {
-        return { applied: 0, undoSteps: 0, skipped: {}, written: {}, calls: 0 };
+        return {
+          applied: 0,
+          undoSteps: 0,
+          skipped: {},
+          written: {},
+          calls: 0,
+          alongside: "unsent",
+        };
       }
       const applies = (e.resolve_properties_at(
         opts.record ?? 0,

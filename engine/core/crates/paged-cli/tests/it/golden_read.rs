@@ -461,7 +461,11 @@ fn snap_point_without_a_point_is_a_usage_error() {
         .run(&["read", "snap-point", "doc.paged", "usp"])
         .code(2)
         .golden("paged read snap-point", "usage-no-point");
-    assert!(r.stderr.contains("<X>") && r.stderr.contains("<Y>"), "{}", r.stderr);
+    assert!(
+        r.stderr.contains("<X>") && r.stderr.contains("<Y>"),
+        "{}",
+        r.stderr
+    );
 }
 
 #[test]

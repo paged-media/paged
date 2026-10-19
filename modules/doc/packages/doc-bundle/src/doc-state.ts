@@ -110,7 +110,36 @@ export async function discoverDocs(host: BundleHost): Promise<DocState[]> {
     const state = text ? stateOf(frame, text) : null;
     if (state) out.push(state);
   }
+  await resolveFrameStories(host, out);
   return out;
+}
+
+/** A document placed in ONE batch (DOC-1) carries no `sections`: its story
+ *  was minted in that batch, after the label was planned. It is the frame's
+ *  own story; find it through the stories and their frame chains (one scan,
+ *  only when some document needs it). */
+async function resolveFrameStories(
+  host: BundleHost,
+  states: DocState[],
+): Promise<void> {
+  const open = states.filter((s) => !s.data.sections);
+  if (open.length === 0) return;
+  const storyOf = new Map<string, string>();
+  try {
+    for (const story of await host.document.collection<{ selfId: string }>(
+      "stories",
+    )) {
+      for (const link of await host.document.frameChain(story.selfId))
+        storyOf.set(link.frameId, story.selfId);
+    }
+  } catch {
+    return; // no story read: the documents stay without a story
+  }
+  for (const s of open) {
+    const raw = (s.frame as { id: string }).id;
+    const story = storyOf.get(raw);
+    if (story) s.data = { ...s.data, sections: [story] };
+  }
 }
 
 function stateOf(frame: ElementId, labelText: string): DocState | null {

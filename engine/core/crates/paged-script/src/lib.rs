@@ -2276,8 +2276,8 @@ fn paged_duplicate_elements(
     args: &[JsValue],
     ctx: &mut Context,
 ) -> JsResult<JsValue> {
-    let Some(element_ids) = strict_element_id_array(args.get_or_undefined(0), ctx)
-        .filter(|ids| !ids.is_empty())
+    let Some(element_ids) =
+        strict_element_id_array(args.get_or_undefined(0), ctx).filter(|ids| !ids.is_empty())
     else {
         return Ok(JsValue::null());
     };
@@ -2319,8 +2319,8 @@ fn paged_duplicate_elements(
 /// the engine refuses (a threaded text frame, items on two spreads, …) or
 /// an id does not parse. A read: nothing changes.
 fn paged_copy_elements(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
-    let Some(element_ids) = strict_element_id_array(args.get_or_undefined(0), ctx)
-        .filter(|ids| !ids.is_empty())
+    let Some(element_ids) =
+        strict_element_id_array(args.get_or_undefined(0), ctx).filter(|ids| !ids.is_empty())
     else {
         return Ok(JsValue::null());
     };
@@ -2913,8 +2913,8 @@ fn paged_pathfinder_faces(
     args: &[JsValue],
     ctx: &mut Context,
 ) -> JsResult<JsValue> {
-    let Some(element_ids) = strict_element_id_array(args.get_or_undefined(0), ctx)
-        .filter(|ids| !ids.is_empty())
+    let Some(element_ids) =
+        strict_element_id_array(args.get_or_undefined(0), ctx).filter(|ids| !ids.is_empty())
     else {
         return Ok(JsValue::from(false));
     };

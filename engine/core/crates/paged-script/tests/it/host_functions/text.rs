@@ -68,7 +68,11 @@ fn insert_text() {
     );
     // SCR-1 (fixed): a missing text is refused, the story untouched.
     refuses(&mut m, &format!("paged.insertText({sid:?}, 0)"), "false");
-    refuses(&mut m, &format!("paged.insertText({sid:?}, 0, null)"), "false");
+    refuses(
+        &mut m,
+        &format!("paged.insertText({sid:?}, 0, null)"),
+        "false",
+    );
     assert!(!story_text(&mut m, &sid).contains("undefined"));
 }
 

@@ -756,7 +756,11 @@ fn group_transform_undo_restores_the_stored_member_transforms() {
         let undone = apply(&mut doc, &moved.inverse).expect("undo");
         assert_eq!(snapshot(&doc), before, "undo restores the spread exactly");
         apply(&mut doc, &undone.inverse).expect("redo");
-        assert_eq!(snapshot(&doc), after, "redo restores the moved spread exactly");
+        assert_eq!(
+            snapshot(&doc),
+            after,
+            "redo restores the moved spread exactly"
+        );
         apply(&mut doc, &moved.inverse).expect("undo again");
         assert_eq!(snapshot(&doc), before);
     }

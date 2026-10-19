@@ -166,15 +166,10 @@ describe.skipIf(!gate.ready && !gate.required)(
       },
     );
 
-    it.failing(
-      "DAT-2 — applyDataSet over a property and a visibility binding is ONE undo step",
-      async () => {
-        // Today the set is written twice — the visibility through
-        // document.mutate, the property through objects.batch — so one undo
-        // takes back the property only and the frame stays hidden; the log
-        // says "in one undo step".
-        await S.applyDataSetIsOneUndoStep(env);
-      },
-    );
+    it("DAT-2 — applyDataSet over a property and a visibility binding is ONE undo step", async () => {
+      // The visibility write rides in the property lane's objects.batch as
+      // a typed core command, so one undo takes the whole set back.
+      await S.applyDataSetIsOneUndoStep(env);
+    });
   },
 );

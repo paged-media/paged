@@ -201,13 +201,9 @@ describe.skipIf(!ENGINE_BUILT)(
       },
     );
 
-    it.failing(
-      "SHT-2 — findReplace (typed) that matches nothing writes no undo step",
-      async () => {
-        // Today a zero-occurrence replace still writes a version label: one
-        // empty document undo step, so the next Cmd-Z undoes nothing.
-        await S.findReplaceNoMatchWritesNothing(env);
-      },
-    );
+    it("SHT-2 — findReplace (typed) that matches nothing writes no undo step", async () => {
+      // A write whose workbook hash is unchanged writes no version label.
+      await S.findReplaceNoMatchWritesNothing(env);
+    });
   },
 );
