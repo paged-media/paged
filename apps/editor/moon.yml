@@ -88,6 +88,7 @@ tasks:
     script: >-
       bun run test:boot-coi
       && bun run test:network-policy
+      && bun run test:trusted-types
       && bun run test:modules
       && bun run test:spread-pages
       && bun run test:repository

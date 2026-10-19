@@ -32,12 +32,15 @@
 // depth. It deliberately does NOT handle regex literals — demo scripts don't use
 // them (documented constraint).
 
+import { trustedScript } from "@paged-media/helpers";
+
 import {
   buildAutomation,
   type CanvasHandleLike,
   type DemoGlobals,
 } from "./automation";
 import { demoResetOverlay } from "./overlay";
+import { DEMO_SCRIPT_POLICY } from "./runner";
 
 export interface Statement {
   index: number;
@@ -262,10 +265,14 @@ export class DemoSession {
       .map((s) => `await __gate(${s.index});\n${s.text};`)
       .join("\n");
     const names = [...Object.keys(this.globals), "__gate"];
+    // Trusted Types: the playground's own policy (runner.ts, ADR 240).
     // eslint-disable-next-line no-new-func
     const factory = new Function(
-      ...names,
-      `"use strict"; return (async () => {\n${body}\n})();`,
+      ...names.map((n) => trustedScript(DEMO_SCRIPT_POLICY, n)),
+      trustedScript(
+        DEMO_SCRIPT_POLICY,
+        `"use strict"; return (async () => {\n${body}\n})();`,
+      ),
     ) as (...args: unknown[]) => Promise<void>;
     return factory;
   }
