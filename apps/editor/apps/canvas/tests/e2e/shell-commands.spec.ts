@@ -191,7 +191,7 @@ test.describe("chrome commands", () => {
     await expect(leftPanel(page)).toBeVisible();
     await invoke(page, "paged.chrome.toggleAll");
     await expect(rail(page)).toBeHidden();
-    // Hidden, and kept mounted for the way back (ADR 233).
+    // Hidden, and kept mounted for the way back (ADR 240).
     await expect(leftPanel(page)).toBeHidden();
     await invoke(page, "paged.chrome.toggleAll");
     await expect(rail(page)).toBeVisible();

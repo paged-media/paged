@@ -457,7 +457,7 @@ test.describe("E2E layers-retarget (ADR 023 — one panel, many providers)", () 
     const drawRows = await renderedRowIds(page);
 
     // Take Layers off screen entirely (the tab stays; the panel stays
-    // mounted, hidden, with its effects unmounted — ADR 233), then bring it
+    // mounted, hidden, with its effects unmounted — ADR 240), then bring it
     // back.
     await page.locator(`[data-dock-tab="${CONTEXT_TAB}"]`).click();
     await expect(
