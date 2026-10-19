@@ -39,11 +39,15 @@ try {
   fail(`Photoshop's reply is not JSON (${e.message})`);
 }
 if (reply.error) fail(`the probe failed before its cases: ${reply.error}`);
-if (reply.close_error) fail(`a probe document did not close: ${reply.close_error}`);
-if (reply.probe !== name) fail(`the reply is for "${reply.probe}", not "${name}"`);
+if (reply.close_error)
+  fail(`a probe document did not close: ${reply.close_error}`);
+if (reply.probe !== name)
+  fail(`the reply is for "${reply.probe}", not "${name}"`);
 if (!Array.isArray(reply.cases) || reply.cases.length === 0) fail("no cases");
 if (reply.documents_after !== reply.documents_before) {
-  fail(`${reply.documents_before} document(s) before, ${reply.documents_after} after`);
+  fail(
+    `${reply.documents_before} document(s) before, ${reply.documents_after} after`,
+  );
 }
 const ids = reply.cases.map((c) => c.id);
 if (new Set(ids).size !== ids.length) fail("duplicate case ids");
@@ -57,20 +61,27 @@ if (broken.length > 0) {
 for (const c of reply.cases) {
   if (!c.output) continue; // a case may record values instead of an image
   const p = path.join(stage, c.output);
-  if (!fs.existsSync(p)) fail(`${c.id}: Photoshop reported ${c.output} but wrote nothing`);
+  if (!fs.existsSync(p))
+    fail(`${c.id}: Photoshop reported ${c.output} but wrote nothing`);
   const h = pngHeader(fs.readFileSync(p));
   if (!h) fail(`${c.id}: ${c.output} is not a PNG`);
-  if (h.width !== SIZE || h.height !== SIZE) fail(`${c.id}: ${h.width}x${h.height}, not ${SIZE}x${SIZE}`);
-  if (h.depth !== 16) fail(`${c.id}: ${h.depth}-bit output; the lane records 16-bit`);
+  if (h.width !== SIZE || h.height !== SIZE)
+    fail(`${c.id}: ${h.width}x${h.height}, not ${SIZE}x${SIZE}`);
+  if (h.depth !== 16)
+    fail(`${c.id}: ${h.depth}-bit output; the lane records 16-bit`);
 }
 
 fs.mkdirSync(path.join(outDir, name), { recursive: true });
 fs.mkdirSync(path.join(outDir, "stimuli"), { recursive: true });
 for (const f of fs.readdirSync(path.join(stage, "stimuli"))) {
-  fs.copyFileSync(path.join(stage, "stimuli", f), path.join(outDir, "stimuli", f));
+  fs.copyFileSync(
+    path.join(stage, "stimuli", f),
+    path.join(outDir, "stimuli", f),
+  );
 }
 for (const c of reply.cases) {
-  if (c.output) fs.copyFileSync(path.join(stage, c.output), path.join(outDir, c.output));
+  if (c.output)
+    fs.copyFileSync(path.join(stage, c.output), path.join(outDir, c.output));
   for (const extra of c.files || []) {
     fs.copyFileSync(path.join(stage, extra), path.join(outDir, extra));
   }
@@ -93,16 +104,21 @@ const fixture = {
   // Probe-level findings beyond the cases (e.g. the Color Settings'
   // conversion options a colour probe reads), carried verbatim.
   ...(reply.findings ? { findings: reply.findings } : {}),
-  cases: reply.cases.map(({ id, params, output, profile, bits, files, values, views }) => ({
-    id,
-    params,
-    output,
-    profile,
-    bits,
-    ...(files ? { files } : {}),
-    ...(values ? { values } : {}),
-    ...(views ? { views } : {}),
-  })),
+  cases: reply.cases.map(
+    ({ id, params, output, profile, bits, files, values, views }) => ({
+      id,
+      params,
+      output,
+      profile,
+      bits,
+      ...(files ? { files } : {}),
+      ...(values ? { values } : {}),
+      ...(views ? { views } : {}),
+    }),
+  ),
 };
-fs.writeFileSync(path.join(outDir, `${name}.photoshop.json`), JSON.stringify(fixture, null, 2) + "\n");
+fs.writeFileSync(
+  path.join(outDir, `${name}.photoshop.json`),
+  JSON.stringify(fixture, null, 2) + "\n",
+);
 console.log(`run-probe: recorded ${reply.cases.length} case(s)`);

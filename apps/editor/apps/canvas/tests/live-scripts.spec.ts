@@ -28,10 +28,17 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { openCanvas } from "./fidelity/canvas-driver";
 
-const manifest = JSON.parse(readFileSync(join(import.meta.dirname, "..", "public", "scripts", "manifest.json"), "utf8")) as {
+const manifest = JSON.parse(
+  readFileSync(
+    join(import.meta.dirname, "..", "public", "scripts", "manifest.json"),
+    "utf8",
+  ),
+) as {
   scripts: Array<{ id: string }>;
 };
-const LIVE = manifest.scripts.map((s) => s.id).filter((id) => id.endsWith("-live"));
+const LIVE = manifest.scripts
+  .map((s) => s.id)
+  .filter((id) => id.endsWith("-live"));
 
 for (const id of LIVE) {
   test(`live script ${id} runs to the end hands-free`, async ({ page }) => {
@@ -40,13 +47,23 @@ for (const id of LIVE) {
     page.on("pageerror", (e) => errors.push(e.message));
     await openCanvas(page, { search: `?script=${id}&autoplay&embed` });
     const chip = page.locator("[data-playground-status]");
-    await expect(chip).toHaveAttribute("data-playground-status", /playing|done/, { timeout: 30_000 });
+    await expect(chip).toHaveAttribute(
+      "data-playground-status",
+      /playing|done/,
+      { timeout: 30_000 },
+    );
     await expect
-      .poll(async () => {
-        const status = await chip.getAttribute("data-playground-status");
-        if (status === "error") throw new Error(`${id}: ${await chip.getAttribute("data-playground-error")}`);
-        return status;
-      }, { timeout: 90_000, intervals: [500] })
+      .poll(
+        async () => {
+          const status = await chip.getAttribute("data-playground-status");
+          if (status === "error")
+            throw new Error(
+              `${id}: ${await chip.getAttribute("data-playground-error")}`,
+            );
+          return status;
+        },
+        { timeout: 90_000, intervals: [500] },
+      )
       .toBe("done");
     expect(errors).toEqual([]);
   });

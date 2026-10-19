@@ -53,7 +53,11 @@ import type {
   SceneTreeNode,
 } from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
-import { PenMachine, penPlanMutation, type PenPlan } from "@paged-media/draw-tools";
+import {
+  PenMachine,
+  penPlanMutation,
+  type PenPlan,
+} from "@paged-media/draw-tools";
 
 import {
   applyAttachTextToPath,
@@ -68,7 +72,7 @@ import {
   writeGraphicStyleLibrary,
 } from "../../src";
 import { packageWithSpread } from "../fixtures/build-idml";
-import { openHost } from "../conformance/host";
+import { openHost } from "../headless/host";
 import { exportIdml } from "./package";
 
 export const PAGE = "usp";
@@ -76,7 +80,8 @@ export const PAGE = "usp";
 export type Vec2 = [number, number];
 
 /** How a case reached the engine — see the header. */
-export type Surface = "machine" | "command" | "importer" | "panel" | "builder" | "wire";
+export type Surface =
+  "machine" | "command" | "importer" | "panel" | "builder" | "wire";
 
 /** Something the author ASKED for that the engine refused. Kept, because
  *  a refused write is a capability gap the InDesign comparison cannot see
@@ -104,7 +109,11 @@ export interface AuthorContext {
   attempt(m: MutationInput, what: string): Promise<boolean>;
   /** A document swatch (RGB 0-255), `Color/<id>`, named `name` (default:
    *  the id) — "wire": no draw surface creates a swatch. */
-  swatch(id: string, rgb: [number, number, number], name?: string): Promise<string>;
+  swatch(
+    id: string,
+    rgb: [number, number, number],
+    name?: string,
+  ): Promise<string>;
   /** The Fill panel's swatch row: `frameFillColor` ("panel"). */
   fill(id: ElementId, colorRef: string | null): Promise<void>;
   /** The Stroke panel's Weight row: `frameStrokeWeight` ("panel"). */
@@ -154,7 +163,10 @@ function commandFor(h: HeadlessHost, id: string): CommandContribution {
 function context(h: HeadlessHost): AuthorContext {
   const refusals: Refusal[] = [];
   const surfaces = new Set<Surface>();
-  const mutate = async (m: MutationInput, what: string): Promise<MutationOutcome> => {
+  const mutate = async (
+    m: MutationInput,
+    what: string,
+  ): Promise<MutationOutcome> => {
     const outcome = await h.host.document.mutate(m);
     if (!outcome.applied) {
       throw new Error(`${what}: the engine refused ${JSON.stringify(outcome)}`);
@@ -170,26 +182,49 @@ function context(h: HeadlessHost): AuthorContext {
       const m = new PenMachine({ closeTolerance: 4, dragThreshold: 2 });
       for (const p of points) {
         m.handle({ type: "down", point: p.at, modifiers: NO_MODIFIERS });
-        if (p.drag) m.handle({ type: "move", point: p.drag, modifiers: NO_MODIFIERS });
-        m.handle({ type: "up", point: p.drag ?? p.at, modifiers: NO_MODIFIERS });
+        if (p.drag)
+          m.handle({ type: "move", point: p.drag, modifiers: NO_MODIFIERS });
+        m.handle({
+          type: "up",
+          point: p.drag ?? p.at,
+          modifiers: NO_MODIFIERS,
+        });
       }
       let snap;
       if (close) {
-        m.handle({ type: "down", point: points[0].at, modifiers: NO_MODIFIERS });
-        snap = m.handle({ type: "up", point: points[0].at, modifiers: NO_MODIFIERS });
+        m.handle({
+          type: "down",
+          point: points[0].at,
+          modifiers: NO_MODIFIERS,
+        });
+        snap = m.handle({
+          type: "up",
+          point: points[0].at,
+          modifiers: NO_MODIFIERS,
+        });
       } else {
         snap = m.handle({ type: "key", key: "Enter" });
       }
       const plan: PenPlan | null =
         snap.plan ??
         (snap.commit
-          ? { kind: "insertPath", anchors: snap.commit.anchors, open: snap.commit.open }
+          ? {
+              kind: "insertPath",
+              anchors: snap.commit.anchors,
+              open: snap.commit.open,
+            }
           : null);
       if (!plan || plan.kind !== "insertPath") {
-        throw new Error(`the pen committed no new path (${JSON.stringify(snap.plan)})`);
+        throw new Error(
+          `the pen committed no new path (${JSON.stringify(snap.plan)})`,
+        );
       }
-      if (plan.open === close) throw new Error("the pen did not close/open the path as asked");
-      const outcome = await mutate(penPlanMutation(plan, PAGE) as MutationInput, "pen");
+      if (plan.open === close)
+        throw new Error("the pen did not close/open the path as asked");
+      const outcome = await mutate(
+        penPlanMutation(plan, PAGE) as MutationInput,
+        "pen",
+      );
       const id = (outcome as { createdId?: ElementId | null }).createdId;
       if (!id) throw new Error("the pen's insertPath created nothing");
       return id;
@@ -205,7 +240,12 @@ function context(h: HeadlessHost): AuthorContext {
     async attempt(m, what) {
       const outcome = await h.host.document.mutate(m);
       if (!outcome.applied) {
-        refusals.push({ what, error: JSON.stringify((outcome as { error?: unknown }).error ?? outcome) });
+        refusals.push({
+          what,
+          error: JSON.stringify(
+            (outcome as { error?: unknown }).error ?? outcome,
+          ),
+        });
       }
       return outcome.applied;
     },
@@ -213,7 +253,10 @@ function context(h: HeadlessHost): AuthorContext {
       surfaces.add("wire");
       const selfId = `Color/${swatchId}`;
       await mutate(
-        { op: "createSwatch", args: { spec: { selfId, name, space: "RGB", value: [...rgb] } } } as MutationInput,
+        {
+          op: "createSwatch",
+          args: { spec: { selfId, name, space: "RGB", value: [...rgb] } },
+        } as MutationInput,
         `swatch ${name}`,
       );
       return selfId;
@@ -223,7 +266,11 @@ function context(h: HeadlessHost): AuthorContext {
       await mutate(
         {
           op: "setElementProperty",
-          args: { elementId: id, path: "frameFillColor", value: { type: "colorRef", value: colorRef } },
+          args: {
+            elementId: id,
+            path: "frameFillColor",
+            value: { type: "colorRef", value: colorRef },
+          },
         } as MutationInput,
         "Fill panel: frameFillColor",
       );
@@ -233,7 +280,11 @@ function context(h: HeadlessHost): AuthorContext {
       await mutate(
         {
           op: "setElementProperty",
-          args: { elementId: id, path: "frameStrokeWeight", value: { type: "length", value: pt } },
+          args: {
+            elementId: id,
+            path: "frameStrokeWeight",
+            value: { type: "length", value: pt },
+          },
         } as MutationInput,
         "Stroke panel: frameStrokeWeight",
       );
@@ -256,7 +307,13 @@ export async function authorCase(c: RoundtripCase): Promise<AuthoredCase> {
   const ctx = context(h);
   await c.author(ctx);
   const { bytes, lost } = await exportIdml(h);
-  return { h, idml: bytes, lost, refusals: ctx.refusals, surfaces: [...ctx.surfaces].sort() };
+  return {
+    h,
+    idml: bytes,
+    lost,
+    refusals: ctx.refusals,
+    surfaces: [...ctx.surfaces].sort(),
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -280,19 +337,33 @@ function circle(cx: number, cy: number, r: number): PenPoint[] {
 
 /** A pen-drawn axis-aligned rectangle: four clicks, clockwise. */
 function box(x0: number, y0: number, x1: number, y1: number): PenPoint[] {
-  return [{ at: [x0, y0] }, { at: [x1, y0] }, { at: [x1, y1] }, { at: [x0, y1] }];
+  return [
+    { at: [x0, y0] },
+    { at: [x1, y0] },
+    { at: [x1, y1] },
+    { at: [x0, y1] },
+  ];
 }
 
 /** The `<Rectangle>` a user's own IDML carries (draw cannot mint one:
  *  every draw insert is a `<Polygon>`). */
-function rectangleXml(self: string, top: number, left: number, bottom: number, right: number): string {
+function rectangleXml(
+  self: string,
+  top: number,
+  left: number,
+  bottom: number,
+  right: number,
+): string {
   const pt = (x: number, y: number) =>
     `<PathPointType Anchor="${x} ${y}" LeftDirection="${x} ${y}" RightDirection="${x} ${y}"/>`;
   return (
     `<Rectangle Self="${self}" GeometricBounds="${top} ${left} ${bottom} ${right}" ` +
     `ItemTransform="1 0 0 1 0 0" FillColor="Color/Black">` +
     `<Properties><PathGeometry><GeometryPathType PathOpen="false"><PathPointArray>` +
-    pt(left, top) + pt(left, bottom) + pt(right, bottom) + pt(right, top) +
+    pt(left, top) +
+    pt(left, bottom) +
+    pt(right, bottom) +
+    pt(right, top) +
     `</PathPointArray></GeometryPathType></PathGeometry></Properties></Rectangle>`
   );
 }
@@ -304,7 +375,8 @@ function graphicLineXml(self: string, a: Vec2, b: Vec2): string {
   return (
     `<GraphicLine Self="${self}" ItemTransform="1 0 0 1 0 0" StrokeColor="Color/Black" StrokeWeight="3">` +
     `<Properties><PathGeometry><GeometryPathType PathOpen="true"><PathPointArray>` +
-    pt(a) + pt(b) +
+    pt(a) +
+    pt(b) +
     `</PathPointArray></GeometryPathType></PathGeometry></Properties></GraphicLine>`
   );
 }
@@ -312,14 +384,30 @@ function graphicLineXml(self: string, a: Vec2, b: Vec2): string {
 const D = "media.paged.draw.command.";
 
 /** Text set on a `setElementProperty` text path ("panel"). */
-const textProp = (elementId: ElementId, path: string, value: string): MutationInput =>
-  ({ op: "setElementProperty", args: { elementId, path, value: { type: "text", value } } }) as MutationInput;
-const lengthProp = (elementId: ElementId, path: string, value: number): MutationInput =>
-  ({ op: "setElementProperty", args: { elementId, path, value: { type: "length", value } } }) as MutationInput;
+const textProp = (
+  elementId: ElementId,
+  path: string,
+  value: string,
+): MutationInput =>
+  ({
+    op: "setElementProperty",
+    args: { elementId, path, value: { type: "text", value } },
+  }) as MutationInput;
+const lengthProp = (
+  elementId: ElementId,
+  path: string,
+  value: number,
+): MutationInput =>
+  ({
+    op: "setElementProperty",
+    args: { elementId, path, value: { type: "length", value } },
+  }) as MutationInput;
 
 /** The Illustrator oracle's pathfinder inputs: a circle (back) cut by a
  *  rectangle (front), both filled, so every verb cuts curves. */
-async function pathfinderInputs(ctx: AuthorContext): Promise<[ElementId, ElementId]> {
+async function pathfinderInputs(
+  ctx: AuthorContext,
+): Promise<[ElementId, ElementId]> {
   const blue = await ctx.swatch("rt-blue", [40, 90, 200]);
   const orange = await ctx.swatch("rt-orange", [240, 140, 30]);
   const back = await ctx.pen(circle(160, 160, 50), true);
@@ -409,17 +497,15 @@ export const ROUNDTRIP_CASES: readonly RoundtripCase[] = [
       await ctx.command(D + "makeCompoundPath");
     },
   },
-  ...PATHFINDER_VERBS.map(
-    ([kind, command]): RoundtripCase => ({
-      id: `pathfinder-${kind}`,
-      row: `Pathfinder ${kind}`,
-      async author(ctx) {
-        const [back, front] = await pathfinderInputs(ctx);
-        await ctx.select([back, front]);
-        await ctx.command(D + command);
-      },
-    }),
-  ),
+  ...PATHFINDER_VERBS.map(([kind, command]): RoundtripCase => ({
+    id: `pathfinder-${kind}`,
+    row: `Pathfinder ${kind}`,
+    async author(ctx) {
+      const [back, front] = await pathfinderInputs(ctx);
+      await ctx.select([back, front]);
+      await ctx.command(D + command);
+    },
+  })),
   {
     id: "pathfinder-divide",
     row: "Pathfinder Divide",
@@ -445,7 +531,11 @@ export const ROUNDTRIP_CASES: readonly RoundtripCase[] = [
       );
       await ctx.fill(id, await ctx.swatch("rt-green", [60, 170, 70]));
       await ctx.select([id]);
-      await ctx.command(D + "offsetPath", { delta: 12, join: "miter", miterLimit: 4 });
+      await ctx.command(D + "offsetPath", {
+        delta: 12,
+        join: "miter",
+        miterLimit: 4,
+      });
     },
   },
   {
@@ -453,12 +543,20 @@ export const ROUNDTRIP_CASES: readonly RoundtripCase[] = [
     row: "outline stroke",
     async author(ctx) {
       const id = await ctx.pen(
-        [{ at: [120, 300], drag: [200, 200] }, { at: [320, 300], drag: [400, 400] }, { at: [480, 300] }],
+        [
+          { at: [120, 300], drag: [200, 200] },
+          { at: [320, 300], drag: [400, 400] },
+          { at: [480, 300] },
+        ],
         false,
       );
       await ctx.strokeWeight(id, 16);
       await ctx.select([id]);
-      await ctx.command(D + "outlineStroke", { width: 16, cap: "round", join: "round" });
+      await ctx.command(D + "outlineStroke", {
+        width: 16,
+        cap: "round",
+        join: "round",
+      });
     },
   },
   {
@@ -469,7 +567,8 @@ export const ROUNDTRIP_CASES: readonly RoundtripCase[] = [
       const pts: PenPoint[] = [];
       for (let i = 0; i <= 12; i++) {
         const x = 100 + i * 30;
-        const y = 300 - 120 * Math.sin((Math.PI * i) / 12) + (i % 2 === 0 ? 3 : -3);
+        const y =
+          300 - 120 * Math.sin((Math.PI * i) / 12) + (i % 2 === 0 ? 3 : -3);
         pts.push({ at: [x, Math.round(y * 100) / 100] });
       }
       const id = await ctx.pen(pts, false);
@@ -482,8 +581,14 @@ export const ROUNDTRIP_CASES: readonly RoundtripCase[] = [
     id: "join",
     row: "join",
     async author(ctx) {
-      const a = await ctx.pen([{ at: [100, 200], drag: [150, 150] }, { at: [250, 200] }], false);
-      const b = await ctx.pen([{ at: [250, 200] }, { at: [400, 200], drag: [450, 250] }], false);
+      const a = await ctx.pen(
+        [{ at: [100, 200], drag: [150, 150] }, { at: [250, 200] }],
+        false,
+      );
+      const b = await ctx.pen(
+        [{ at: [250, 200] }, { at: [400, 200], drag: [450, 250] }],
+        false,
+      );
       await ctx.strokeWeight(a, 3);
       await ctx.strokeWeight(b, 3);
       await ctx.select([a, b]);
@@ -498,7 +603,12 @@ export const ROUNDTRIP_CASES: readonly RoundtripCase[] = [
     ).join(""),
     async author(ctx) {
       for (const [i, [style, command]] of CORNER_STYLES.entries()) {
-        await applyCornerStyle(ctx, { kind: "rectangle", id: `rc${i}` } as ElementId, style, command);
+        await applyCornerStyle(
+          ctx,
+          { kind: "rectangle", id: `rc${i}` } as ElementId,
+          style,
+          command,
+        );
       }
     },
   },
@@ -507,7 +617,10 @@ export const ROUNDTRIP_CASES: readonly RoundtripCase[] = [
     row: "live corners — every style, on a Polygon",
     async author(ctx) {
       for (const [i, [style, command]] of CORNER_STYLES.entries()) {
-        const id = await ctx.pen(box(100, 60 + i * 140, 300, 160 + i * 140), true);
+        const id = await ctx.pen(
+          box(100, 60 + i * 140, 300, 160 + i * 140),
+          true,
+        );
         await ctx.fill(id, "Color/Black");
         await applyCornerStyle(ctx, id, style, command);
       }
@@ -517,7 +630,12 @@ export const ROUNDTRIP_CASES: readonly RoundtripCase[] = [
     id: "dash-presets",
     row: "dash presets",
     async author(ctx) {
-      const presets = ["strokeDashSolid", "strokeDashDashed", "strokeDashDotted", "strokeDashDashDot"];
+      const presets = [
+        "strokeDashSolid",
+        "strokeDashDashed",
+        "strokeDashDotted",
+        "strokeDashDashDot",
+      ];
       for (const [i, preset] of presets.entries()) {
         const y = 150 + i * 100;
         const id = await ctx.pen([{ at: [100, y] }, { at: [500, y] }], false);
@@ -535,15 +653,30 @@ export const ROUNDTRIP_CASES: readonly RoundtripCase[] = [
       // The Stroke panel's Line-ends section: a GraphicLine takes them.
       ctx.surfaces.add("panel");
       const line = { kind: "graphicLine", id: "uline" } as ElementId;
-      await ctx.mutate(textProp(line, "frameStrokeStartArrowhead", "CircleSolidArrowHead"), "start arrowhead");
-      await ctx.mutate(textProp(line, "frameStrokeEndArrowhead", "TriangleArrowHead"), "end arrowhead");
+      await ctx.mutate(
+        textProp(line, "frameStrokeStartArrowhead", "CircleSolidArrowHead"),
+        "start arrowhead",
+      );
+      await ctx.mutate(
+        textProp(line, "frameStrokeEndArrowhead", "TriangleArrowHead"),
+        "end arrowhead",
+      );
       // A Pen-drawn line is a POLYGON: the same two writes, ATTEMPTED so a
       // refusal would be recorded. Until 0.66.0 the engine refused both
       // (RFI C-62); now they apply and InDesign reads both line ends.
-      const pen = await ctx.pen([{ at: [100, 300] }, { at: [500, 300] }], false);
+      const pen = await ctx.pen(
+        [{ at: [100, 300] }, { at: [500, 300] }],
+        false,
+      );
       await ctx.strokeWeight(pen, 3);
-      await ctx.attempt(textProp(pen, "frameStrokeStartArrowhead", "CircleSolidArrowHead"), "start arrowhead on a pen path");
-      await ctx.attempt(textProp(pen, "frameStrokeEndArrowhead", "TriangleArrowHead"), "end arrowhead on a pen path");
+      await ctx.attempt(
+        textProp(pen, "frameStrokeStartArrowhead", "CircleSolidArrowHead"),
+        "start arrowhead on a pen path",
+      );
+      await ctx.attempt(
+        textProp(pen, "frameStrokeEndArrowhead", "TriangleArrowHead"),
+        "end arrowhead on a pen path",
+      );
     },
   },
   {
@@ -568,12 +701,23 @@ export const ROUNDTRIP_CASES: readonly RoundtripCase[] = [
         const id = await ctx.pen(zig(100 + i * 150), false);
         await ctx.strokeWeight(id, 10);
         ctx.surfaces.add("wire");
-        await ctx.attempt(textProp(id, "frameStrokeJoin", join), `join ${join}`);
-        if (miter !== null) await ctx.attempt(lengthProp(id, "frameStrokeMiterLimit", miter), "miter limit");
+        await ctx.attempt(
+          textProp(id, "frameStrokeJoin", join),
+          `join ${join}`,
+        );
+        if (miter !== null)
+          await ctx.attempt(
+            lengthProp(id, "frameStrokeMiterLimit", miter),
+            "miter limit",
+          );
         // The Stroke panel's Cap row on the first one (a POLYGON; refused
         // until 0.66.0 — RFI C-62 — and applied since, InDesign reading a
         // round cap).
-        if (i === 0) await ctx.attempt(textProp(id, "frameStrokeEndCap", "RoundEndCap"), "cap on a pen path");
+        if (i === 0)
+          await ctx.attempt(
+            textProp(id, "frameStrokeEndCap", "RoundEndCap"),
+            "cap on a pen path",
+          );
       }
     },
   },
@@ -586,7 +730,10 @@ export const ROUNDTRIP_CASES: readonly RoundtripCase[] = [
       await ctx.command(D + "fillGradientLinear");
       // The Gradient Annotator's drag commits the axis (angle, length).
       ctx.surfaces.add("builder");
-      await ctx.mutate(gradientAxisMutationFor([id], 30, 250) as MutationInput, "gradient axis");
+      await ctx.mutate(
+        gradientAxisMutationFor([id], 30, 250) as MutationInput,
+        "gradient axis",
+      );
     },
   },
   {
@@ -631,7 +778,10 @@ export const ROUNDTRIP_CASES: readonly RoundtripCase[] = [
           },
         ],
       });
-      if (!saved) throw new Error("the graphic style library was not written (no parts writer)");
+      if (!saved)
+        throw new Error(
+          "the graphic style library was not written (no parts writer)",
+        );
       await ctx.select([front]);
       await ctx.command(D + "applyGraphicStyle", { styleId: "gs-roundtrip" });
     },
@@ -661,7 +811,10 @@ export const ROUNDTRIP_CASES: readonly RoundtripCase[] = [
         ctx.h.host,
         rect,
         {
-          fills: [{ color: "Color/Black", tint: 40, blendMode: "Multiply" }, { color: "Color/Paper" }],
+          fills: [
+            { color: "Color/Black", tint: 40, blendMode: "Multiply" },
+            { color: "Color/Paper" },
+          ],
           strokes: [{ color: "Color/Black", weight: 6, opacity: 55 }],
         },
         await ctx.h.host.document.getMetadata(rect),
@@ -675,12 +828,19 @@ export const ROUNDTRIP_CASES: readonly RoundtripCase[] = [
     row: "repeat (expanded)",
     async author(ctx) {
       const petal = await ctx.pen(
-        [{ at: [300, 300], drag: [330, 270] }, { at: [300, 200], drag: [270, 230] }],
+        [
+          { at: [300, 300], drag: [330, 270] },
+          { at: [300, 200], drag: [270, 230] },
+        ],
         true,
       );
       await ctx.fill(petal, await ctx.swatch("rt-violet", [130, 60, 180]));
       await ctx.select([petal]);
-      await ctx.command(D + "makeRadialRepeat", { count: 6, radiusPt: 110, startDeg: -90 });
+      await ctx.command(D + "makeRadialRepeat", {
+        count: 6,
+        radiusPt: 110,
+        startDeg: -90,
+      });
       await ctx.command(D + "expandRepeat", {});
     },
   },
@@ -721,7 +881,8 @@ export const ROUNDTRIP_CASES: readonly RoundtripCase[] = [
         bytes: new TextEncoder().encode(svg),
         mimeType: "image/svg+xml",
       });
-      if (ids.length !== 4) throw new Error(`the SVG import made ${ids.length} elements, not 4`);
+      if (ids.length !== 4)
+        throw new Error(`the SVG import made ${ids.length} elements, not 4`);
     },
   },
   {
@@ -732,27 +893,41 @@ export const ROUNDTRIP_CASES: readonly RoundtripCase[] = [
       // type into a frame, then delete the FRAME — "wire".
       ctx.surfaces.add("wire");
       const before = new Set(
-        (await ctx.h.host.document.collection<{ selfId: string }>("stories")).map((s) => s.selfId),
+        (
+          await ctx.h.host.document.collection<{ selfId: string }>("stories")
+        ).map((s) => s.selfId),
       );
       const frame = await ctx.mutate(
-        { op: "insertTextFrame", args: { pageId: PAGE, bounds: [20, 20, 140, 80] } } as MutationInput,
+        {
+          op: "insertTextFrame",
+          args: { pageId: PAGE, bounds: [20, 20, 140, 80] },
+        } as MutationInput,
         "text frame",
       );
-      const story = (await ctx.h.host.document.collection<{ selfId: string }>("stories")).find(
-        (s) => !before.has(s.selfId),
-      );
+      const story = (
+        await ctx.h.host.document.collection<{ selfId: string }>("stories")
+      ).find((s) => !before.has(s.selfId));
       if (!story) throw new Error("the text frame minted no story");
       await ctx.mutate(
-        { op: "insertText", args: { storyId: story.selfId, offset: 0, text: "Type on a path" } } as MutationInput,
+        {
+          op: "insertText",
+          args: { storyId: story.selfId, offset: 0, text: "Type on a path" },
+        } as MutationInput,
         "text",
       );
       const frameId = (frame as { createdId?: ElementId | null }).createdId;
       await ctx.mutate(
-        { op: "deleteFrame", args: { frameId: String(frameId!.id) } } as MutationInput,
+        {
+          op: "deleteFrame",
+          args: { frameId: String(frameId!.id) },
+        } as MutationInput,
         "delete the frame",
       );
       const path = await ctx.pen(
-        [{ at: [100, 300], drag: [200, 150] }, { at: [450, 300], drag: [550, 450] }],
+        [
+          { at: [100, 300], drag: [200, 150] },
+          { at: [450, 300], drag: [550, 450] },
+        ],
         false,
       );
       ctx.surfaces.add("command");

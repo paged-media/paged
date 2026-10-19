@@ -55,10 +55,7 @@
 // DOM hook and tests only.
 
 import { useEffect, useMemo, useState } from "react";
-import type {
-  Binding,
-  SelectionPropertyBinding,
-} from "@paged-media/catalog";
+import type { Binding, SelectionPropertyBinding } from "@paged-media/catalog";
 import type {
   CanvasClient,
   ElementId,
@@ -153,9 +150,9 @@ export function useBindings(
     [bindings, elementSelection, contentSelection],
   );
 
-  const [snapshot, setSnapshot] = useState<Map<string, ElementProperties | null>>(
-    new Map(),
-  );
+  const [snapshot, setSnapshot] = useState<
+    Map<string, ElementProperties | null>
+  >(new Map());
 
   // ADR 023 follow-up — report the PATHS this composition node binds, so
   // the shell can tell whether entering an edit context would displace a
@@ -181,7 +178,10 @@ export function useBindings(
       Promise.all(
         distinct.map(async (id) => {
           try {
-            return [JSON.stringify(id), await client.elementProperties(id)] as const;
+            return [
+              JSON.stringify(id),
+              await client.elementProperties(id),
+            ] as const;
           } catch {
             return [JSON.stringify(id), null] as const;
           }
@@ -272,7 +272,15 @@ export function useBindings(
   ]);
 
   return useMemo(
-    () => buildResolved(bindings, addresses, snapshot, client, claims, providerHost),
+    () =>
+      buildResolved(
+        bindings,
+        addresses,
+        snapshot,
+        client,
+        claims,
+        providerHost,
+      ),
     [bindings, addresses, snapshot, client, claims, providerHost],
   );
 }
@@ -490,7 +498,13 @@ function providerBinding(
         }
       : undefined;
   if (claim.read.kind === "mixed") {
-    return { ...base, value: null, mixed: true, state: "mixed", onCommit: commit };
+    return {
+      ...base,
+      value: null,
+      mixed: true,
+      state: "mixed",
+      onCommit: commit,
+    };
   }
   return { ...base, value: claim.read.value, state: "value", onCommit: commit };
 }

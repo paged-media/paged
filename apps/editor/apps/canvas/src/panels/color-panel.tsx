@@ -128,7 +128,10 @@ export function ColorPanel() {
         } else {
           // W2.5 — no selection: write the document-default fill; the
           // core seam preserves the existing stroke/weight defaults.
-          resolved.docDefault.onCommit?.({ type: "colorRef", value: last.selfId });
+          resolved.docDefault.onCommit?.({
+            type: "colorRef",
+            value: last.selfId,
+          });
         }
       })
       .catch(() => {});

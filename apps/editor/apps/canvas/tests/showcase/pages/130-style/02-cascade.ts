@@ -39,25 +39,33 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   const elements: string[] = [];
   const page = p(28);
 
-  const head = await proseFrame(ctx, page, [60, 58, 492, 92], [
-    { text: "The cascade, printed by itself", style: STYLE.head1 },
-  ]);
+  const head = await proseFrame(
+    ctx,
+    page,
+    [60, 58, 492, 92],
+    [{ text: "The cascade, printed by itself", style: STYLE.head1 }],
+  );
   elements.push(head.frameId);
 
-  const intro = await proseFrame(ctx, page, [60, 104, 492, 196], [
-    {
-      text:
-        "A style rarely says everything it means. Body First declares " +
-        "only that its first line does not indent; its font, size, " +
-        "leading, ink and justification all arrive from Annual Body " +
-        "through the basedOn chain, resolved at compose time. Each " +
-        "line below prints its own chain, set in its own style - the " +
-        "specimen and the citation are the same ink. The chains are " +
-        "read live from the paragraphStyles collection, not typed, so " +
-        "this page cannot drift from the document it sits in.",
-      style: STYLE.bodyFirst,
-    },
-  ]);
+  const intro = await proseFrame(
+    ctx,
+    page,
+    [60, 104, 492, 196],
+    [
+      {
+        text:
+          "A style rarely says everything it means. Body First declares " +
+          "only that its first line does not indent; its font, size, " +
+          "leading, ink and justification all arrive from Annual Body " +
+          "through the basedOn chain, resolved at compose time. Each " +
+          "line below prints its own chain, set in its own style - the " +
+          "specimen and the citation are the same ink. The chains are " +
+          "read live from the paragraphStyles collection, not typed, so " +
+          "this page cannot drift from the document it sits in.",
+        style: STYLE.bodyFirst,
+      },
+    ],
+  );
   elements.push(intro.frameId);
 
   // Live read: selfId → summary, then walk basedOn to the root.
@@ -108,19 +116,24 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   const list = await proseFrame(ctx, page, [60, 208, 492, 500], paras);
   elements.push(list.frameId);
 
-  const outro = await proseFrame(ctx, page, [60, 512, 492, 610], [
-    {
-      text:
-        "Read the list as evidence, not decoration: Numbered 2 walks " +
-        "two hops to the root and inherits its numbering through the " +
-        "first; Caption stands alone and must say everything itself. " +
-        "Direct formatting still outranks any of them - the cascade " +
-        "resolves direct overrides above character styles above " +
-        "paragraph styles - which is how the next page will dress a " +
-        "style it has only just invented.",
-      style: STYLE.body,
-    },
-  ]);
+  const outro = await proseFrame(
+    ctx,
+    page,
+    [60, 512, 492, 610],
+    [
+      {
+        text:
+          "Read the list as evidence, not decoration: Numbered 2 walks " +
+          "two hops to the root and inherits its numbering through the " +
+          "first; Caption stands alone and must say everything itself. " +
+          "Direct formatting still outranks any of them - the cascade " +
+          "resolves direct overrides above character styles above " +
+          "paragraph styles - which is how the next page will dress a " +
+          "style it has only just invented.",
+        style: STYLE.body,
+      },
+    ],
+  );
   elements.push(outro.frameId);
 
   elements.push(

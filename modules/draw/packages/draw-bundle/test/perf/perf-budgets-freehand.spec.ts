@@ -41,7 +41,14 @@
 // The in-flight budgets do not depend on it — and say so, by asserting
 // zero reads — the lasso's release and the commits do.
 
-import { afterAll, beforeAll, describe, expect, it, setDefaultTimeout } from "bun:test";
+import {
+  afterAll,
+  beforeAll,
+  describe,
+  expect,
+  it,
+  setDefaultTimeout,
+} from "bun:test";
 
 import type {
   BundleHost,
@@ -208,9 +215,10 @@ describe("perf budgets — the freehand tools", () => {
     return {
       built,
       look() {
-        const shape = w.h.lastToolPreview() as
-          | { points?: readonly unknown[]; anchors?: readonly unknown[] }
-          | null;
+        const shape = w.h.lastToolPreview() as {
+          points?: readonly unknown[];
+          anchors?: readonly unknown[];
+        } | null;
         const list = shape?.points ?? shape?.anchors;
         if (!list) return;
         const had = seen.get(list);
@@ -276,7 +284,9 @@ describe("perf budgets — the freehand tools", () => {
     await draw(handler, samples, "burst");
     work.reset();
     const last = samples[samples.length - 1]!;
-    handler.onPointerUp(pointerAt(w.pageId, last.point, { pressure: last.pressure }));
+    handler.onPointerUp(
+      pointerAt(w.pageId, last.point, { pressure: last.pressure }),
+    );
     await settle();
     const counted = work.snapshot();
     handler.onDeactivate("switch" as never);
@@ -317,14 +327,21 @@ describe("perf budgets — the freehand tools", () => {
 
     it.each(Object.keys(SWEEP_TOOLS))("%s: 500 samples", async (tool) => {
       const stroke = spiral(500);
-      const { work, built, preview } = await inFlight(`${tool} 500`, SWEEP_TOOLS[tool]!, stroke);
+      const { work, built, preview } = await inFlight(
+        `${tool} 500`,
+        SWEEP_TOOLS[tool]!,
+        stroke,
+      );
       // A stroke in flight touches the overlay and nothing else.
       expect(work.mutations).toEqual([]);
       expect(work.reads()).toBe(0);
       // One publish per pointer event, the pointer-down's empty one
       // included. Fine as it is.
       expect(work.previews()).toBe(500);
-      expectWholeStroke(preview, stroke.map((s) => s.point));
+      expectWholeStroke(
+        preview,
+        stroke.map((s) => s.point),
+      );
       // As found: 499 arrays, 125 249 points.
       expect(built).toEqual({ arrays: 1, points: 500 });
       // 2 + 3 + … + 500: publish k names all k+1 samples. The door's
@@ -334,11 +351,18 @@ describe("perf budgets — the freehand tools", () => {
 
     it.each(Object.keys(SWEEP_TOOLS))("%s: 2 000 samples", async (tool) => {
       const stroke = spiral(2000);
-      const { work, built, preview } = await inFlight(`${tool} 2000`, SWEEP_TOOLS[tool]!, stroke);
+      const { work, built, preview } = await inFlight(
+        `${tool} 2000`,
+        SWEEP_TOOLS[tool]!,
+        stroke,
+      );
       expect(work.mutations).toEqual([]);
       expect(work.reads()).toBe(0);
       expect(work.previews()).toBe(2000);
-      expectWholeStroke(preview, stroke.map((s) => s.point));
+      expectWholeStroke(
+        preview,
+        stroke.map((s) => s.point),
+      );
       // As found: 1 999 arrays, 2 000 999 points.
       expect(built).toEqual({ arrays: 1, points: 2000 });
       // 2 + 3 + … + 2 000. TARGET 2 000 (the door).
@@ -347,9 +371,17 @@ describe("perf budgets — the freehand tools", () => {
 
     it("pacing changes nothing: the handler is synchronous and waits on no reply", async () => {
       const stroke = spiral(500);
-      const { work, built, preview } = await inFlight("pencil 500 paced", createPencilHandler, stroke, "paced");
+      const { work, built, preview } = await inFlight(
+        "pencil 500 paced",
+        createPencilHandler,
+        stroke,
+        "paced",
+      );
       expect(work.previews()).toBe(500);
-      expectWholeStroke(preview, stroke.map((s) => s.point));
+      expectWholeStroke(
+        preview,
+        stroke.map((s) => s.point),
+      );
       expect(built).toEqual({ arrays: 1, points: 500 });
       expect(work.previewPoints).toBe(125_249);
     });
@@ -360,7 +392,11 @@ describe("perf budgets — the freehand tools", () => {
       // The stream is what it says: jitter put samples closer together
       // than the floor, so the machine keeps fewer than it was sent.
       expect(kept).toHaveLength(KEPT_OF_2000);
-      const { work, built, preview } = await inFlight("pencil pen 2000", createPencilHandler, stroke);
+      const { work, built, preview } = await inFlight(
+        "pencil pen 2000",
+        createPencilHandler,
+        stroke,
+      );
       // The preview is the KEPT samples — a dropped one never shows.
       expectWholeStroke(preview, kept);
       // One publish per kept sample. As found: 2 000 — the unchanged
@@ -371,34 +407,39 @@ describe("perf budgets — the freehand tools", () => {
       // 2 + 3 + … + K, K the kept count. As found 1 861 241. TARGET K
       // (the door).
       expect(work.previewPoints).toBe(PEN_2000_PREVIEW_POINTS);
-      expect(PEN_2000_PREVIEW_POINTS).toBe((KEPT_OF_2000 * (KEPT_OF_2000 + 1)) / 2 - 1);
+      expect(PEN_2000_PREVIEW_POINTS).toBe(
+        (KEPT_OF_2000 * (KEPT_OF_2000 + 1)) / 2 - 1,
+      );
     });
 
     // The array handed to the overlay keeps growing while its stroke is
     // in flight. What that sharing must never do is reach PAST the
     // stroke: a second stroke appending to the first one's array would
     // draw both, and would rewrite a shape a host may still be holding.
-    it.each(Object.keys(SWEEP_TOOLS))("%s: a second stroke gets its own array, and leaves the first one's alone", async (tool) => {
-      await w.h.host.selection.set([]);
-      const handler = SWEEP_TOOLS[tool]!(w.h.host);
-      handler.onActivate(undefined as never);
-      const first = spiral(50);
-      const second = mouse(linePoints([40, 40], [140, 90], 30));
+    it.each(Object.keys(SWEEP_TOOLS))(
+      "%s: a second stroke gets its own array, and leaves the first one's alone",
+      async (tool) => {
+        await w.h.host.selection.set([]);
+        const handler = SWEEP_TOOLS[tool]!(w.h.host);
+        handler.onActivate(undefined as never);
+        const first = spiral(50);
+        const second = mouse(linePoints([40, 40], [140, 90], 30));
 
-      await draw(handler, first, "burst");
-      const firstShape = w.h.lastToolPreview() as { points: readonly Pt[] };
-      handler.onKey?.({ key: "Escape" } as KeyboardEvent);
-      expect(w.h.lastToolPreview()).toBeNull();
+        await draw(handler, first, "burst");
+        const firstShape = w.h.lastToolPreview() as { points: readonly Pt[] };
+        handler.onKey?.({ key: "Escape" } as KeyboardEvent);
+        expect(w.h.lastToolPreview()).toBeNull();
 
-      await draw(handler, second, "burst");
-      const secondShape = w.h.lastToolPreview() as { points: readonly Pt[] };
-      handler.onKey?.({ key: "Escape" } as KeyboardEvent);
-      handler.onDeactivate("switch" as never);
+        await draw(handler, second, "burst");
+        const secondShape = w.h.lastToolPreview() as { points: readonly Pt[] };
+        handler.onKey?.({ key: "Escape" } as KeyboardEvent);
+        handler.onDeactivate("switch" as never);
 
-      expect(secondShape.points).toEqual(second.map((s) => s.point));
-      expect(secondShape.points).not.toBe(firstShape.points);
-      expect(firstShape.points).toEqual(first.map((s) => s.point));
-    });
+        expect(secondShape.points).toEqual(second.map((s) => s.point));
+        expect(secondShape.points).not.toBe(firstShape.points);
+        expect(firstShape.points).toEqual(first.map((s) => s.point));
+      },
+    );
   });
 
   // COVERS: `preview()` in `handlers/lasso.ts` — the same stroke-long
@@ -420,7 +461,11 @@ describe("perf budgets — the freehand tools", () => {
       [2000, 2_000_999],
     ])("%i samples in flight", async (samples, previewPoints) => {
       const stroke = lassoSpiral(samples);
-      const { work, built, preview } = await inFlight(`lasso ${samples}`, createLassoSelectHandler, stroke);
+      const { work, built, preview } = await inFlight(
+        `lasso ${samples}`,
+        createLassoSelectHandler,
+        stroke,
+      );
       expect(work.mutations).toEqual([]);
       expect(work.reads()).toBe(0);
       // No publish on pointer-down, one per move.
@@ -453,10 +498,18 @@ describe("perf budgets — the freehand tools", () => {
       const stroke = penStroke(2000);
       const kept = keptAbove(stroke, LASSO_FLOOR_PX);
       expect(kept).toHaveLength(LASSO_KEPT_OF_2000);
-      const { work, built, preview } = await inFlight("lasso pen 2000", createLassoSelectHandler, stroke);
+      const { work, built, preview } = await inFlight(
+        "lasso pen 2000",
+        createLassoSelectHandler,
+        stroke,
+      );
       expect(preview).toEqual({
         pageId: w.pageId,
-        anchors: kept.map((point) => ({ anchor: point, left: point, right: point })),
+        anchors: kept.map((point) => ({
+          anchor: point,
+          left: point,
+          right: point,
+        })),
         close: true,
         dashed: true,
       });
@@ -472,8 +525,9 @@ describe("perf budgets — the freehand tools", () => {
     // The harness camera is identity; doubling its scale halves the
     // floor to 1.5 pt, and the second drag must record by THAT.
     it("the floor is read again on the next press, so it follows a zoom between drags", async () => {
-      const camera = (w.h.host.editor as unknown as { camera: { camera: { scale: number } } })
-        .camera.camera;
+      const camera = (
+        w.h.host.editor as unknown as { camera: { camera: { scale: number } } }
+      ).camera.camera;
       const stroke = penStroke(600);
       const outline = (shape: unknown): Pt[] =>
         (shape as { anchors: { anchor: Pt }[] }).anchors.map((a) => a.anchor);
@@ -549,7 +603,8 @@ describe("perf budgets — the freehand tools", () => {
     it("the release under the CENTRE rule costs what the lasso always cost — no path read", async () => {
       const store = {
         toolSettings: {
-          getValue: (_tool: string, key: string) => (key === "mode" ? "centre" : undefined),
+          getValue: (_tool: string, key: string) =>
+            key === "mode" ? "centre" : undefined,
         },
       };
       const { work } = await lift(
@@ -678,7 +733,9 @@ describe("perf budgets — the freehand tools", () => {
     const refusingBatches = (host: BundleHost): BundleHost => {
       const bindsAHandle = (mutation: MutationInput): boolean =>
         mutation.op === "batch" &&
-        (mutation.args.ops as readonly MutationInput[]).some((op) => op.op === "bindCreated");
+        (mutation.args.ops as readonly MutationInput[]).some(
+          (op) => op.op === "bindCreated",
+        );
       const document = new Proxy(host.document, {
         get(target, prop, receiver) {
           if (prop !== "mutate") return Reflect.get(target, prop, receiver);
@@ -686,14 +743,17 @@ describe("perf budgets — the freehand tools", () => {
             bindsAHandle(mutation)
               ? Promise.resolve({
                   applied: false,
-                  error: "batch refused — the spec standing in for an engine without bindCreated",
+                  error:
+                    "batch refused — the spec standing in for an engine without bindCreated",
                 })
               : target.mutate(mutation);
         },
       });
       return new Proxy(host, {
         get(target, prop, receiver) {
-          return prop === "document" ? document : Reflect.get(target, prop, receiver);
+          return prop === "document"
+            ? document
+            : Reflect.get(target, prop, receiver);
         },
       });
     };
@@ -704,7 +764,12 @@ describe("perf budgets — the freehand tools", () => {
     };
 
     it("pencil, mouse: one insert and its paint, one step", async () => {
-      const { work, undoSteps } = await lift("pencil lift mouse", createPencilHandler, spiral(500), []);
+      const { work, undoSteps } = await lift(
+        "pencil lift mouse",
+        createPencilHandler,
+        spiral(500),
+        [],
+      );
       // insert + the graphic default's stroke colour and weight (the
       // workload has no `[Normal Graphics Frame]`, so InDesign's). As
       // found: a bare `insertPath`, 0 reads.
@@ -717,8 +782,21 @@ describe("perf budgets — the freehand tools", () => {
 
     it("pencil, pen pressure: the insert and its variable-width outline are one batch", async () => {
       const stroke = penStroke(2000);
-      const batched = await lift("pencil lift pen", createPencilHandler, stroke, [], landedOver([]));
-      const stepwise = await lift("pencil lift pen, stepwise", createPencilHandler, stroke, [], landedOver([]), refusingBatches);
+      const batched = await lift(
+        "pencil lift pen",
+        createPencilHandler,
+        stroke,
+        [],
+        landedOver([]),
+      );
+      const stepwise = await lift(
+        "pencil lift pen, stepwise",
+        createPencilHandler,
+        stroke,
+        [],
+        landedOver([]),
+        refusingBatches,
+      );
 
       // insert + its paint (stroke colour, weight) + bind + outline. As
       // found: 2 mutations, 2 undo steps.
@@ -726,7 +804,9 @@ describe("perf budgets — the freehand tools", () => {
       expect(batched.undoSteps).toBe(1);
       expect(batched.work.count("document.meta")).toBe(1);
       expect(batched.work.reads()).toBe(1);
-      expect(batched.work.count("editor.client.send:requestStyleProperties")).toBe(1);
+      expect(
+        batched.work.count("editor.client.send:requestStyleProperties"),
+      ).toBe(1);
 
       // One new element, selected, and it is the OUTLINE — a closed
       // contour — not the open centerline the stroke was drawn as.
@@ -752,8 +832,21 @@ describe("perf budgets — the freehand tools", () => {
     it("paintbrush: one read, one batch, one undo step", async () => {
       const stroke = spiral(500);
       const before = await landedOver([])();
-      const batched = await lift("paintbrush lift", createPaintbrushHandler, stroke, [], landedOver([]));
-      const stepwise = await lift("paintbrush lift, stepwise", createPaintbrushHandler, stroke, [], landedOver([]), refusingBatches);
+      const batched = await lift(
+        "paintbrush lift",
+        createPaintbrushHandler,
+        stroke,
+        [],
+        landedOver([]),
+      );
+      const stepwise = await lift(
+        "paintbrush lift, stepwise",
+        createPaintbrushHandler,
+        stroke,
+        [],
+        landedOver([]),
+        refusingBatches,
+      );
 
       // defaults → insert → bind → outline → restore. As found: 4
       // mutations, 2 undo steps.
@@ -793,8 +886,21 @@ describe("perf budgets — the freehand tools", () => {
       const stroke = mouse(linePoints([296, 20], [420, 60], 60));
       const target = w.plain[0]!;
       const before = await landedOver([target])();
-      const batched = await lift("blob lift", createBlobBrushHandler, stroke, [target], landedOver([target]));
-      const stepwise = await lift("blob lift, stepwise", createBlobBrushHandler, stroke, [target], landedOver([target]), refusingBatches);
+      const batched = await lift(
+        "blob lift",
+        createBlobBrushHandler,
+        stroke,
+        [target],
+        landedOver([target]),
+      );
+      const stepwise = await lift(
+        "blob lift, stepwise",
+        createBlobBrushHandler,
+        stroke,
+        [target],
+        landedOver([target]),
+        refusingBatches,
+      );
       const after = await landedOver([target])();
 
       // The five sweep ops, then the unite. As found: 5 mutations, 3
@@ -839,8 +945,20 @@ describe("perf budgets — the freehand tools", () => {
 
     it("blob brush with nothing to merge into: the sweep stands alone, in one batch", async () => {
       const stroke = mouse(linePoints([296, 20], [420, 60], 60));
-      const batched = await lift("blob lift, alone", createBlobBrushHandler, stroke, [], landedOver([]));
-      const painted = await lift("paintbrush, same stroke", createPaintbrushHandler, stroke, [], landedOver([]));
+      const batched = await lift(
+        "blob lift, alone",
+        createBlobBrushHandler,
+        stroke,
+        [],
+        landedOver([]),
+      );
+      const painted = await lift(
+        "paintbrush, same stroke",
+        createPaintbrushHandler,
+        stroke,
+        [],
+        landedOver([]),
+      );
       expect(batched.work.mutations).toEqual([{ op: "batch", ops: 5 }]);
       expect(batched.undoSteps).toBe(1);
       expect(batched.seen.created).toHaveLength(1);
@@ -855,8 +973,21 @@ describe("perf budgets — the freehand tools", () => {
       const targets = [...w.arrangement];
       expect(targets).toHaveLength(12);
       const before = await landedOver(targets)();
-      const batched = await lift("eraser lift x12", createEraserBrushHandler, stroke, targets, landedOver(targets));
-      const stepwise = await lift("eraser lift x12, stepwise", createEraserBrushHandler, stroke, targets, landedOver(targets), refusingBatches);
+      const batched = await lift(
+        "eraser lift x12",
+        createEraserBrushHandler,
+        stroke,
+        targets,
+        landedOver(targets),
+      );
+      const stepwise = await lift(
+        "eraser lift x12, stepwise",
+        createEraserBrushHandler,
+        stroke,
+        targets,
+        landedOver(targets),
+        refusingBatches,
+      );
       const after = await landedOver(targets)();
 
       // 12 × (insert, bind, outline), then 12 subtracts. As found: 60
@@ -875,7 +1006,9 @@ describe("perf budgets — the freehand tools", () => {
       expect(batched.seen.created).toEqual([]);
       expect(batched.seen.selection).toEqual(targets);
       batched.seen.targets.forEach((shape, i) => {
-        expect(shape.anchors, `target ${i}`).not.toEqual(before.targets[i]!.anchors);
+        expect(shape.anchors, `target ${i}`).not.toEqual(
+          before.targets[i]!.anchors,
+        );
       });
       // …the SAME bite the stepwise chain takes, target by target —
       // which is what licenses dropping the defaults swap.

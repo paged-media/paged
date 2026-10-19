@@ -98,10 +98,7 @@ export const PANEL_GLYPHS: Record<string, ReactNode> = {
   // A folder with small colour dots.
   "panel-color-groups": (
     <>
-      <path
-        d="M3 6 L9 6 L11 8 L21 8 L21 19 L3 19 Z"
-        {...LINE}
-      />
+      <path d="M3 6 L9 6 L11 8 L21 8 L21 19 L3 19 Z" {...LINE} />
       <circle cx={8} cy={14} r={1.4} />
       <circle cx={12.5} cy={14} r={1.4} />
       <circle cx={17} cy={14} r={1.4} />
@@ -120,9 +117,15 @@ export const PANEL_GLYPHS: Record<string, ReactNode> = {
   // A chain link with a small globe (web hyperlink).
   "panel-hyperlinks": (
     <>
-      <path d="M8 13 L11 10 a2.6 2.6 0 0 0 -3.6 -3.6 l-2 2 a2.6 2.6 0 0 0 0 3.6" {...LINE} />
+      <path
+        d="M8 13 L11 10 a2.6 2.6 0 0 0 -3.6 -3.6 l-2 2 a2.6 2.6 0 0 0 0 3.6"
+        {...LINE}
+      />
       <circle cx={16} cy={16} r={4} {...LINE} />
-      <path d="M12 16 L20 16 M16 12 C18 14 18 18 16 20 C14 18 14 14 16 12" {...LINE} />
+      <path
+        d="M12 16 L20 16 M16 12 C18 14 18 18 16 20 C14 18 14 14 16 12"
+        {...LINE}
+      />
     </>
   ),
 
@@ -147,7 +150,10 @@ export const PANEL_GLYPHS: Record<string, ReactNode> = {
     <>
       <path d="M4 9 L5.6 4.5 L7.2 9 M4.5 7.6 L7.1 7.6" {...LINE} />
       <path d="M4.4 15 L7.2 15 L4.4 19.5 L7.2 19.5" {...LINE} />
-      <path d="M11 6 L20 6 M11 11 L20 11 M11 16 L20 16 M11 20 L17 20" {...LINE} />
+      <path
+        d="M11 6 L20 6 M11 11 L20 11 M11 16 L20 16 M11 20 L17 20"
+        {...LINE}
+      />
     </>
   ),
 
@@ -191,10 +197,7 @@ export const PANEL_GLYPHS: Record<string, ReactNode> = {
   "panel-table-styles": (
     <>
       <rect x={3} y={4} width={18} height={16} rx={1} {...LINE} />
-      <path
-        d="M3 9 L21 9 M3 14.5 L21 14.5 M9 4 L9 20 M15 4 L15 20"
-        {...LINE}
-      />
+      <path d="M3 9 L21 9 M3 14.5 L21 14.5 M9 4 L9 20 M15 4 L15 20" {...LINE} />
     </>
   ),
 
@@ -202,7 +205,10 @@ export const PANEL_GLYPHS: Record<string, ReactNode> = {
   "panel-fonts": (
     <>
       <path d="M3 19 L7 5 L11 19 M4.3 14.5 L9.7 14.5" {...LINE} />
-      <path d="M20 11.5 a2.6 2.6 0 0 0 -5.2 0 M14.8 16.4 a2.6 2.6 0 0 0 5.2 0 L20 19" {...LINE} />
+      <path
+        d="M20 11.5 a2.6 2.6 0 0 0 -5.2 0 M14.8 16.4 a2.6 2.6 0 0 0 5.2 0 L20 19"
+        {...LINE}
+      />
       <path d="M20 11.5 L20 16.5" {...LINE} />
       <path d="M14.8 13.9 a2.6 2.6 0 0 0 5.2 0" {...LINE} />
     </>
@@ -386,7 +392,10 @@ export const PANEL_GLYPHS: Record<string, ReactNode> = {
   "panel-text-wrap": (
     <>
       <circle cx={7} cy={9} r={3.2} {...LINE} />
-      <path d="M12 6 L21 6 M12 9.5 L21 9.5 M4 14 L21 14 M4 17.5 L21 17.5" {...LINE} />
+      <path
+        d="M12 6 L21 6 M12 9.5 L21 9.5 M4 14 L21 14 M4 17.5 L21 17.5"
+        {...LINE}
+      />
     </>
   ),
 
@@ -402,8 +411,14 @@ export const PANEL_GLYPHS: Record<string, ReactNode> = {
   // Sparkles / star-burst — effects.
   "panel-effects": (
     <>
-      <path d="M9 4 L10.4 8.6 L15 10 L10.4 11.4 L9 16 L7.6 11.4 L3 10 L7.6 8.6 Z" {...LINE} />
-      <path d="M17 13 L17.8 15.6 L20.5 16.5 L17.8 17.4 L17 20 L16.2 17.4 L13.5 16.5 L16.2 15.6 Z" {...LINE} />
+      <path
+        d="M9 4 L10.4 8.6 L15 10 L10.4 11.4 L9 16 L7.6 11.4 L3 10 L7.6 8.6 Z"
+        {...LINE}
+      />
+      <path
+        d="M17 13 L17.8 15.6 L20.5 16.5 L17.8 17.4 L17 20 L16.2 17.4 L13.5 16.5 L16.2 15.6 Z"
+        {...LINE}
+      />
     </>
   ),
 
@@ -420,7 +435,13 @@ export const PANEL_GLYPHS: Record<string, ReactNode> = {
   "panel-info": (
     <>
       <circle cx={12} cy={12} r={9} {...LINE} />
-      <circle cx={12} cy={8} r={0.6} fill="currentColor" stroke="currentColor" />
+      <circle
+        cx={12}
+        cy={8}
+        r={0.6}
+        fill="currentColor"
+        stroke="currentColor"
+      />
       <path d="M12 11 L12 17" {...LINE} />
     </>
   ),

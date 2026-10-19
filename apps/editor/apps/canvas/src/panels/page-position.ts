@@ -118,14 +118,17 @@ export function usePagePosition(): PagePosition {
       try {
         const leaves = ids.filter((id) => id.kind !== "group");
         const groups = ids.filter((id) => id.kind === "group");
-        const geometry = leaves.length > 0 ? await client.elementGeometry(leaves) : [];
+        const geometry =
+          leaves.length > 0 ? await client.elementGeometry(leaves) : [];
         // An id with no geometry is not a free page item (or is gone):
         // a box that silently left it out would be a wrong number.
         if (geometry.length !== leaves.length) {
           if (!cancelled) setState(EMPTY);
           return;
         }
-        const boxes = geometry.map((g) => composedBox(g.bounds, g.itemTransform));
+        const boxes = geometry.map((g) =>
+          composedBox(g.bounds, g.itemTransform),
+        );
         for (const group of groups) {
           // A group's box is the union of its members' boxes, read
           // through its leaves.
@@ -135,12 +138,19 @@ export function usePagePosition(): PagePosition {
             if (!cancelled) setState(EMPTY);
             return;
           }
-          boxes.push(...placed.map((g) => composedBox(g.bounds, g.itemTransform)));
+          boxes.push(
+            ...placed.map((g) => composedBox(g.bounds, g.itemTransform)),
+          );
         }
-        const only = ids.length === 1 && geometry.length === 1 ? geometry[0] : null;
+        const only =
+          ids.length === 1 && geometry.length === 1 ? geometry[0] : null;
         const leaf: PlacedLeaf | null =
           only && isPageItem(only.id)
-            ? { id: only.id, bounds: only.bounds, transform: only.itemTransform ?? null }
+            ? {
+                id: only.id,
+                bounds: only.bounds,
+                transform: only.itemTransform ?? null,
+              }
             : null;
         if (!cancelled) {
           setState({

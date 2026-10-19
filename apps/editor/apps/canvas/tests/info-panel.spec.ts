@@ -66,8 +66,9 @@ test.describe("Info panel", () => {
     // Pages row == the wire handle's page count (the value the app itself
     // computes from), derived — never a pinned number.
     const pageCount = await page.evaluate(() => {
-      const c = (window as unknown as { __canvas?: { handle?: { pageCount?: number } } })
-        .__canvas;
+      const c = (
+        window as unknown as { __canvas?: { handle?: { pageCount?: number } } }
+      ).__canvas;
       return c?.handle?.pageCount ?? null;
     });
     expect(pageCount).toBeGreaterThan(0);
@@ -79,7 +80,6 @@ test.describe("Info panel", () => {
     await expect(
       page.locator('[data-info-row="Dirty"] [data-info-value]'),
     ).toHaveText("no");
-
   });
 
   test("AC-INFO-2 — Dirty follows a real edit @feat:editor-shell.panels.info @level:happy", async ({
@@ -101,7 +101,9 @@ test.describe("Info panel", () => {
     await page.evaluate(async () => {
       type DebugCanvas = {
         client: {
-          executeScript(src: string): Promise<{ output: string[]; error: string | null }>;
+          executeScript(
+            src: string,
+          ): Promise<{ output: string[]; error: string | null }>;
           mutate(op: unknown): Promise<unknown>;
         };
       };
@@ -109,7 +111,9 @@ test.describe("Info panel", () => {
       if (!dbg?.client) throw new Error("__canvas client not available");
       const stories = await dbg.client
         .executeScript("paged.stories()")
-        .then((r) => JSON.parse(r.output[0] ?? "[]") as Array<{ selfId: string }>);
+        .then(
+          (r) => JSON.parse(r.output[0] ?? "[]") as Array<{ selfId: string }>,
+        );
       if (!stories.length) throw new Error("text fixture has no stories");
       await dbg.client.mutate({
         op: "insertText",

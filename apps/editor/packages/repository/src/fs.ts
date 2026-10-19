@@ -59,12 +59,14 @@ export function memoryFs(): RepoFs {
       const prefix = `${dir}/`;
       const names = new Set<string>();
       for (const p of files.keys()) {
-        if (p.startsWith(prefix)) names.add(p.slice(prefix.length).split("/")[0]);
+        if (p.startsWith(prefix))
+          names.add(p.slice(prefix.length).split("/")[0]);
       }
       return [...names].sort();
     },
     async removeDir(dir) {
-      for (const p of [...files.keys()]) if (p.startsWith(`${dir}/`)) files.delete(p);
+      for (const p of [...files.keys()])
+        if (p.startsWith(`${dir}/`)) files.delete(p);
     },
   };
 }
@@ -87,14 +89,24 @@ interface FileH {
 }
 
 function notFound(e: unknown): boolean {
-  return e instanceof DOMException && (e.name === "NotFoundError" || e.name === "TypeMismatchError");
+  return (
+    e instanceof DOMException &&
+    (e.name === "NotFoundError" || e.name === "TypeMismatchError")
+  );
 }
 
 /** A library under `root` in the origin-private file system. */
 export async function opfsFs(root = "paged-library"): Promise<RepoFs> {
-  const storage = (globalThis.navigator as unknown as { storage?: { getDirectory?(): Promise<Dir> } }).storage;
-  if (!storage?.getDirectory) throw new Error("this browser has no origin-private file system");
-  const top = await (await storage.getDirectory()).getDirectoryHandle(root, { create: true });
+  const storage = (
+    globalThis.navigator as unknown as {
+      storage?: { getDirectory?(): Promise<Dir> };
+    }
+  ).storage;
+  if (!storage?.getDirectory)
+    throw new Error("this browser has no origin-private file system");
+  const top = await (
+    await storage.getDirectory()
+  ).getDirectoryHandle(root, { create: true });
 
   async function dirOf(parts: string[], create: boolean): Promise<Dir> {
     let d = top;
@@ -110,7 +122,9 @@ export async function opfsFs(root = "paged-library"): Promise<RepoFs> {
   return {
     async read(path) {
       try {
-        return new Uint8Array(await (await (await file(path, false)).getFile()).arrayBuffer());
+        return new Uint8Array(
+          await (await (await file(path, false)).getFile()).arrayBuffer(),
+        );
       } catch (e) {
         if (notFound(e)) return null;
         throw e;
@@ -118,7 +132,9 @@ export async function opfsFs(root = "paged-library"): Promise<RepoFs> {
     },
     async readSlice(path, offset, length) {
       const f = await (await file(path, false)).getFile();
-      return new Uint8Array(await f.slice(offset, offset + length).arrayBuffer());
+      return new Uint8Array(
+        await f.slice(offset, offset + length).arrayBuffer(),
+      );
     },
     async write(path, bytes) {
       // createWritable writes a swap file and replaces the target on close.
@@ -137,7 +153,8 @@ export async function opfsFs(root = "paged-library"): Promise<RepoFs> {
     async list(dir) {
       try {
         const out: string[] = [];
-        for await (const k of (await dirOf(dir.split("/"), false)).keys()) out.push(k);
+        for await (const k of (await dirOf(dir.split("/"), false)).keys())
+          out.push(k);
         return out.sort();
       } catch (e) {
         if (notFound(e)) return [];
@@ -148,7 +165,9 @@ export async function opfsFs(root = "paged-library"): Promise<RepoFs> {
       const parts = dir.split("/");
       const name = parts.pop()!;
       try {
-        await (await dirOf(parts, false)).removeEntry(name, { recursive: true });
+        await (
+          await dirOf(parts, false)
+        ).removeEntry(name, { recursive: true });
       } catch (e) {
         if (!notFound(e)) throw e;
       }

@@ -16,7 +16,6 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-
 // The PATTERN OPTIONS panel, RENDERED (happy-dom) against the real engine:
 // behaviour first (empty state, records, buttons asserted on the
 // DOCUMENT), then its reload budgets as counts at the host doors — the
@@ -48,7 +47,7 @@ import {
   PATTERN_PANEL_ID,
   PATTERN_PANEL_NOTE,
 } from "../../src";
-import { openHost } from "../conformance/host";
+import { openHost } from "../headless/host";
 import {
   documentBurst,
   drive,
@@ -70,7 +69,6 @@ import {
 } from "./harness";
 
 const PANEL = "[data-draw-pattern-panel]";
-
 
 /** Per-leaf `getMetadata` one link walk costs on this engine (RFI C-65:
  *  1 before tree rows carried metadata, 0 after), and what a walk over
@@ -153,11 +151,16 @@ describe("Pattern options panel — rendered against the engine", () => {
       expect(await leafIds(h)).toHaveLength(PRISTINE + 1);
       const library = await readPatternLibrary(h.host);
       expect(
-        library.fields.map((f) => [f.id, f.params.layout, f.params.columns, f.params.rows]),
+        library.fields.map((f) => [
+          f.id,
+          f.params.layout,
+          f.params.columns,
+          f.params.rows,
+        ]),
       ).toEqual([["pat-1", "grid", 2, 1]]);
-      expect(patternSourceOf(await h.host.document.getMetadata(poly("s0")))?.pattern).toBe(
-        "pat-1",
-      );
+      expect(
+        patternSourceOf(await h.host.document.getMetadata(poly("s0")))?.pattern,
+      ).toBe("pat-1");
       const tiles = [];
       for (const id of await leafIds(h)) {
         const tile = patternTileOf(await h.host.document.getMetadata(id));
@@ -179,7 +182,9 @@ describe("Pattern options panel — rendered against the engine", () => {
       expect(panel.attr(PANEL, "data-draw-pattern-panel")).toBe("1");
       expect(panel.attr(PANEL, "data-draw-pattern-active")).toBe("pat-1");
       expect(panel.text()).toContain("Pattern 1");
-      expect(panel.text()).toContain("Grid · 2 × 1 (1 copy requested, 1 placed)");
+      expect(panel.text()).toContain(
+        "Grid · 2 × 1 (1 copy requested, 1 placed)",
+      );
     });
 
     it("Re-plan rebuilds the field with the options above it", async () => {
@@ -187,9 +192,13 @@ describe("Pattern options panel — rendered against the engine", () => {
       panel.change('[data-draw-pattern-field="columns"]', "3");
       await panel.click("[data-draw-pattern-replan]");
 
-      expect((await readPatternLibrary(h.host)).fields[0]!.params.columns).toBe(3);
+      expect((await readPatternLibrary(h.host)).fields[0]!.params.columns).toBe(
+        3,
+      );
       expect(await leafIds(h)).toHaveLength(PRISTINE + 2);
-      expect(panel.text()).toContain("Grid · 3 × 1 (2 copies requested, 2 placed)");
+      expect(panel.text()).toContain(
+        "Grid · 3 × 1 (2 copies requested, 2 placed)",
+      );
     });
 
     // WAS A BUG (measured, then fixed) — the same one blend-panel.dom.test.tsx
@@ -201,20 +210,18 @@ describe("Pattern options panel — rendered against the engine", () => {
     // value). The form now follows the record (`useFollowedDraft`) and
     // takes its options only when the record, or what is saved for it,
     // changes.
-    it(
-      "typed options survive the selection change that a bake needs (one field in the library)",
-      async () => {
-        expect((await readPatternLibrary(h.host)).fields).toHaveLength(1);
-        const panel = await mountPanel(h, makePatternPanel);
-        const columns = () =>
-          panel.get<HTMLInputElement>('[data-draw-pattern-field="columns"]').value;
-        await drive(() => h.host.selection.set([]), panel.work);
-        panel.change('[data-draw-pattern-field="columns"]', "7");
-        expect(columns()).toBe("7");
-        await drive(() => h.host.selection.set([poly("s1")]), panel.work);
-        expect(columns()).toBe("7");
-      },
-    );
+    it("typed options survive the selection change that a bake needs (one field in the library)", async () => {
+      expect((await readPatternLibrary(h.host)).fields).toHaveLength(1);
+      const panel = await mountPanel(h, makePatternPanel);
+      const columns = () =>
+        panel.get<HTMLInputElement>('[data-draw-pattern-field="columns"]')
+          .value;
+      await drive(() => h.host.selection.set([]), panel.work);
+      panel.change('[data-draw-pattern-field="columns"]', "7");
+      expect(columns()).toBe("7");
+      await drive(() => h.host.selection.set([poly("s1")]), panel.work);
+      expect(columns()).toBe("7");
+    });
 
     it("Delete tiles un-bakes: the copies and the recipe go, the source stays", async () => {
       const panel = await mountPanel(h, makePatternPanel);
@@ -222,7 +229,9 @@ describe("Pattern options panel — rendered against the engine", () => {
 
       expect(await leafIds(h)).toHaveLength(PRISTINE);
       expect((await readPatternLibrary(h.host)).fields).toEqual([]);
-      expect(patternSourceOf(await h.host.document.getMetadata(poly("s0")))).toBeNull();
+      expect(
+        patternSourceOf(await h.host.document.getMetadata(poly("s0"))),
+      ).toBeNull();
       expect(panel.count("[data-draw-pattern-row]")).toBe(0);
       expect(panel.attr(PANEL, "data-draw-pattern-panel")).toBe("0");
     });
@@ -237,8 +246,12 @@ describe("Pattern options panel — rendered against the engine", () => {
       await panel.click("[data-draw-pattern-release]");
 
       expect((await readPatternLibrary(h.host)).fields).toEqual([]);
-      expect(patternSourceOf(await h.host.document.getMetadata(poly("s2")))).toBeNull();
-      expect(patternTileOf(await h.host.document.getMetadata(tiles[0]!))).toBeNull();
+      expect(
+        patternSourceOf(await h.host.document.getMetadata(poly("s2"))),
+      ).toBeNull();
+      expect(
+        patternTileOf(await h.host.document.getMetadata(tiles[0]!)),
+      ).toBeNull();
       // The copy is ordinary artwork now — it is still there.
       expect(await leafIds(h)).toHaveLength(PRISTINE + 1);
       expect(panel.count("[data-draw-pattern-row]")).toBe(0);
@@ -254,23 +267,25 @@ describe("Pattern options panel — rendered against the engine", () => {
     // open panel showing a field that no longer existed (1 row).
     // `writePatternLibrary` now announces the write, and the panel
     // reloads on that.
-    it(
-      "an OPEN panel drops a field released by the COMMAND, not only by its own button",
-      async () => {
-        await h.host.selection.set([poly("s1")]);
-        expect(await applyMakePattern(h.host, { columns: 2, rows: 1 })).toHaveLength(1);
-        const panel = await mountPanel(h, makePatternPanel);
-        expect(panel.count("[data-draw-pattern-row]")).toBe(1);
-        const field = (await readPatternLibrary(h.host)).fields[0]!.id;
+    it("an OPEN panel drops a field released by the COMMAND, not only by its own button", async () => {
+      await h.host.selection.set([poly("s1")]);
+      expect(
+        await applyMakePattern(h.host, { columns: 2, rows: 1 }),
+      ).toHaveLength(1);
+      const panel = await mountPanel(h, makePatternPanel);
+      expect(panel.count("[data-draw-pattern-row]")).toBe(1);
+      const field = (await readPatternLibrary(h.host)).fields[0]!.id;
 
-        await drive(() => applyReleasePattern(h.host, { patternId: field }), panel.work);
+      await drive(
+        () => applyReleasePattern(h.host, { patternId: field }),
+        panel.work,
+      );
 
-        // The document has let go of it…
-        expect((await readPatternLibrary(h.host)).fields).toEqual([]);
-        // …and so has the panel.
-        expect(panel.count("[data-draw-pattern-row]")).toBe(0);
-      },
-    );
+      // The document has let go of it…
+      expect((await readPatternLibrary(h.host)).fields).toEqual([]);
+      // …and so has the panel.
+      expect(panel.count("[data-draw-pattern-row]")).toBe(0);
+    });
 
     // The same, in the order the EDITOR has (see blend-panel.dom.test.tsx):
     // the recipe write lands a task after the reload the mutation
@@ -279,13 +294,16 @@ describe("Pattern options panel — rendered against the engine", () => {
     // is over before that reload starts.
     it("…and when the recipe write lands AFTER the reload its mutation started", async () => {
       await h.host.selection.set([poly("s1")]);
-      expect(await applyMakePattern(h.host, { columns: 2, rows: 1 })).toHaveLength(1);
+      expect(
+        await applyMakePattern(h.host, { columns: 2, rows: 1 }),
+      ).toHaveLength(1);
       const panel = await mountPanel(h, makePatternPanel);
       expect(panel.count("[data-draw-pattern-row]")).toBe(1);
       const field = (await readPatternLibrary(h.host)).fields[0]!.id;
 
       await drive(
-        () => applyReleasePattern(slowRecipeWrites(h.host), { patternId: field }),
+        () =>
+          applyReleasePattern(slowRecipeWrites(h.host), { patternId: field }),
         panel.work,
       );
 
@@ -313,12 +331,17 @@ describe("Pattern options panel — rendered against the engine", () => {
         if (k > 0) {
           await drive(async () => {
             await h.host.selection.set([poly(`s${k - 1}`)]);
-            const made = await applyMakePattern(h.host, { columns: 2, rows: 1 });
+            const made = await applyMakePattern(h.host, {
+              columns: 2,
+              rows: 1,
+            });
             if (made.length !== 1) throw new Error(`field ${k} was not baked`);
             await h.host.selection.set([]);
           }, panel.work);
         }
-        walksByRecords.push((await panel.costOf(() => plainChange(h, k))).walks);
+        walksByRecords.push(
+          (await panel.costOf(() => plainChange(h, k))).walks,
+        );
       }
       unmountAll();
     });
@@ -401,15 +424,12 @@ describe("Pattern options panel — rendered against the engine", () => {
     // WAS A BUG (measured, then fixed) — the last reload to FINISH won,
     // not the last to start, and the panel showed "" with a source of
     // pat-1 selected; see blend-panel.dom.test.tsx for the mechanism.
-    it(
-      "the panel ends on the LATEST selection when a slower, older reload is still in flight",
-      async () => {
-        const panel = await mountPanel(h, makePatternPanel);
-        expect(panel.attr(PANEL, "data-draw-pattern-active")).toBe("");
-        await selectDuringWalk(h, panel, [poly("s0")]);
-        expect(panel.attr(PANEL, "data-draw-pattern-active")).toBe("pat-1");
-        expect(panel.cost()).toMatchObject({ reloads: 2, walks: 1 });
-      },
-    );
+    it("the panel ends on the LATEST selection when a slower, older reload is still in flight", async () => {
+      const panel = await mountPanel(h, makePatternPanel);
+      expect(panel.attr(PANEL, "data-draw-pattern-active")).toBe("");
+      await selectDuringWalk(h, panel, [poly("s0")]);
+      expect(panel.attr(PANEL, "data-draw-pattern-active")).toBe("pat-1");
+      expect(panel.cost()).toMatchObject({ reloads: 2, walks: 1 });
+    });
   });
 });

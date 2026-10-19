@@ -16,7 +16,6 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-
 // The LIVE PAINT panel, RENDERED (happy-dom) against the real engine:
 // behaviour first (empty state, records, buttons asserted on the
 // DOCUMENT), then its reload budgets as counts at the host doors — the
@@ -53,7 +52,7 @@ import {
   LIVE_PAINT_NOTE,
   LIVE_PAINT_PANEL_ID,
 } from "../../src";
-import { openHost } from "../conformance/host";
+import { openHost } from "../headless/host";
 import {
   documentBurst,
   drive,
@@ -83,7 +82,6 @@ const pair = (i: number): ElementId[] => [poly(`a${i}`), poly(`b${i}`)];
 
 const PANEL = "[data-draw-live-paint-panel]";
 const ROW = '[data-draw-live-paint-row="lp-1"]';
-
 
 /** Per-leaf `getMetadata` one link walk costs on this engine (RFI C-65:
  *  1 before tree rows carried metadata, 0 after), and what a walk over
@@ -195,7 +193,12 @@ describe("Live paint panel — rendered against the engine", () => {
       expect(await leafIds(h)).toHaveLength(PRISTINE);
       const library = await readLivePaintLibrary(h.host);
       expect(
-        library.groups.map((g) => [g.id, g.name, g.inputs.length, g.faces.length]),
+        library.groups.map((g) => [
+          g.id,
+          g.name,
+          g.inputs.length,
+          g.faces.length,
+        ]),
       ).toEqual([["lp-1", "Live Paint 1", 2, 0]]);
       for (const member of pair(0)) {
         expect(
@@ -209,7 +212,9 @@ describe("Live paint panel — rendered against the engine", () => {
       expect(panel.attr(PANEL, "data-draw-live-paint-panel")).toBe("1");
       expect(panel.attr(PANEL, "data-draw-live-paint-active")).toBe("lp-1");
       expect(panel.get(ROW).textContent).toContain("Live Paint 1");
-      expect(panel.get(ROW).textContent).toContain("2 members · 0 painted faces");
+      expect(panel.get(ROW).textContent).toContain(
+        "2 members · 0 painted faces",
+      );
       expect(panel.count("[data-draw-live-paint-face]")).toBe(0);
     });
 
@@ -227,19 +232,21 @@ describe("Live paint panel — rendered against the engine", () => {
       expect(await leafIds(h)).toHaveLength(PRISTINE + 1);
 
       const rows = panel.all("[data-draw-live-paint-face]");
-      expect(rows.map((r) => r.getAttribute("data-draw-live-paint-face"))).toEqual([
-        face,
-      ]);
+      expect(
+        rows.map((r) => r.getAttribute("data-draw-live-paint-face")),
+      ).toEqual([face]);
       // "materialised" = the recipe's face has real artwork on the page.
-      expect(rows[0]!.getAttribute("data-draw-live-paint-face-materialised")).toBe(
-        "true",
-      );
+      expect(
+        rows[0]!.getAttribute("data-draw-live-paint-face-materialised"),
+      ).toBe("true");
       // A face reads as "Area n" with its swatch's NAME (the face id and
       // the swatch self-id are not for people).
       expect(rows[0]!.textContent).toContain("Area 1");
       expect(rows[0]!.textContent).toContain("Black");
       expect(rows[0]!.textContent).not.toContain("Color/Black");
-      expect(panel.get(ROW).textContent).toContain("2 members · 1 painted face");
+      expect(panel.get(ROW).textContent).toContain(
+        "2 members · 1 painted face",
+      );
     });
 
     it("a face row's Select selects that face's artwork", async () => {
@@ -271,7 +278,9 @@ describe("Live paint panel — rendered against the engine", () => {
       expect(await leafIds(h)).toHaveLength(PRISTINE);
       expect((await readLivePaintLibrary(h.host)).groups[0]!.faces).toEqual([]);
       expect(panel.count("[data-draw-live-paint-face]")).toBe(0);
-      expect(panel.get(ROW).textContent).toContain("2 members · 0 painted faces");
+      expect(panel.get(ROW).textContent).toContain(
+        "2 members · 0 painted faces",
+      );
     });
 
     // WAS A BUG (measured, then fixed). The panel reloaded on document
@@ -304,7 +313,9 @@ describe("Live paint panel — rendered against the engine", () => {
       const panel = await mountPanel(h, makeLivePaintPanel);
       expect(panel.count("[data-draw-live-paint-face]")).toBe(1);
       const facesOf = async () =>
-        (await readLivePaintLibrary(h.host)).groups[0]!.faces.map((f) => f.face);
+        (await readLivePaintLibrary(h.host)).groups[0]!.faces.map(
+          (f) => f.face,
+        );
       const before = await facesOf();
 
       // A SECOND face: a0 alone, at (45, 45).
@@ -324,7 +335,8 @@ describe("Live paint panel — rendered against the engine", () => {
       // Taken off again, so the cases below see the document they expect
       // — and the panel follows that too.
       await drive(
-        () => applyDeleteLivePaintFace(h.host, { groupId: "lp-1", face: added[0] }),
+        () =>
+          applyDeleteLivePaintFace(h.host, { groupId: "lp-1", face: added[0] }),
         panel.work,
       );
       expect(await fills()).toHaveLength(1);
@@ -368,12 +380,16 @@ describe("Live paint panel — rendered against the engine", () => {
         if (k > 0) {
           await drive(async () => {
             await h.host.selection.set(pair(k - 1));
-            const made = await applyMakeLivePaintGroup(h.host, { name: `Group ${k}` });
+            const made = await applyMakeLivePaintGroup(h.host, {
+              name: `Group ${k}`,
+            });
             if (!made) throw new Error(`group ${k} was not recorded`);
             await h.host.selection.set([]);
           }, panel.work);
         }
-        walksByRecords.push((await panel.costOf(() => plainChange(h, k))).walks);
+        walksByRecords.push(
+          (await panel.costOf(() => plainChange(h, k))).walks,
+        );
       }
       unmountAll();
     });

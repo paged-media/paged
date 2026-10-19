@@ -28,14 +28,26 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "bun:test";
 import { waitFor } from "@paged-media/test-kit";
 
-import type { BundleHost, Diagnostic, Disposable, ImporterContribution } from "@paged-media/plugin-api";
+import type {
+  BundleHost,
+  Diagnostic,
+  Disposable,
+  ImporterContribution,
+} from "@paged-media/plugin-api";
 
-import { activate, FONT_DIAGNOSTICS, IMPORT_DIAGNOSTICS, SOURCE_PART } from "../src/activate";
+import {
+  activate,
+  FONT_DIAGNOSTICS,
+  IMPORT_DIAGNOSTICS,
+  SOURCE_PART,
+} from "../src/activate";
 import type { EmbeddedFaceReport } from "../src/engine";
 import { type DocumentFontOutcome, usableFaces } from "../src/fonts";
 
 const FONTS = new Uint8Array(
-  readFileSync(new URL("../../../slide-conformance/fixtures/fonts.pptx", import.meta.url)),
+  readFileSync(
+    new URL("../../../slide-conformance/fixtures/fonts.pptx", import.meta.url),
+  ),
 );
 
 interface Call {
@@ -74,11 +86,20 @@ function fontHost(options: {
       },
     },
     assets: {
-      async registerDocumentFont(bytes: Uint8Array, family: string, style?: string) {
+      async registerDocumentFont(
+        bytes: Uint8Array,
+        family: string,
+        style?: string,
+      ) {
         const magic = Array.from(bytes.subarray(0, 4)).join(",");
         calls.push({ family, style, magic, at: events.length });
         events.push(`font ${family} ${style}`);
-        return options.answer?.(family, style) ?? { status: "registered", pageIds: [] };
+        return (
+          options.answer?.(family, style) ?? {
+            status: "registered",
+            pageIds: [],
+          }
+        );
       },
     },
     nativeDocument: {
@@ -115,7 +136,15 @@ function fontHost(options: {
       },
     },
   } as unknown as BundleHost;
-  return { host, importers, calls, events, diagnostics, parts, fireOpened: () => opened.forEach((l) => l()) };
+  return {
+    host,
+    importers,
+    calls,
+    events,
+    diagnostics,
+    parts,
+    fireOpened: () => opened.forEach((l) => l()),
+  };
 }
 
 const STYLES = [
@@ -132,16 +161,26 @@ describe("a deck's embedded fonts", () => {
   it("are given to the deck's document once it is open, each style as a TrueType face", async () => {
     const r = fontHost({});
     activate(r.host);
-    await r.importers[0].import({ name: "fonts.pptx", bytes: FONTS, mimeType: "" });
-    expect(r.calls.map((c) => `${c.family} ${c.style}`).sort()).toEqual([...STYLES].sort());
+    await r.importers[0].import({
+      name: "fonts.pptx",
+      bytes: FONTS,
+      mimeType: "",
+    });
+    expect(r.calls.map((c) => `${c.family} ${c.style}`).sort()).toEqual(
+      [...STYLES].sort(),
+    );
     expect(r.calls.every((c) => c.magic === "0,1,0,0")).toBe(true);
     // Every face after the open: a face belongs to the document open when it
     // is given and goes with it (plugin-sdk ADR 330), so a face given before
     // the open would leave with the document the deck replaces.
     expect(r.events.indexOf("open")).toBe(0);
     expect(r.calls.every((c) => c.at > 0)).toBe(true);
-    const messages = (r.diagnostics.get(IMPORT_DIAGNOSTICS) ?? []).map((d) => d.message);
-    expect(messages.filter((m) => /embedded font|cannot give/i.test(m))).toEqual([]);
+    const messages = (r.diagnostics.get(IMPORT_DIAGNOSTICS) ?? []).map(
+      (d) => d.message,
+    );
+    expect(
+      messages.filter((m) => /embedded font|cannot give/i.test(m)),
+    ).toEqual([]);
   });
 
   it("are named when the host refuses one", async () => {
@@ -154,22 +193,34 @@ describe("a deck's embedded fonts", () => {
             : { status: "registered", pageIds: [] },
     });
     activate(r.host);
-    await r.importers[0].import({ name: "fonts.pptx", bytes: FONTS, mimeType: "" });
+    await r.importers[0].import({
+      name: "fonts.pptx",
+      bytes: FONTS,
+      mimeType: "",
+    });
     const warnings = (r.diagnostics.get(IMPORT_DIAGNOSTICS) ?? []).filter((d) =>
       d.message.includes("embedded font"),
     );
     expect(warnings).toHaveLength(1);
-    expect(warnings[0].message).toContain("“Lato” (Bold) was not loaded: over the per-face cap");
+    expect(warnings[0].message).toContain(
+      "“Lato” (Bold) was not loaded: over the per-face cap",
+    );
     expect(warnings[0].message).toContain("substitute");
   });
 
   it("are reported, not lost silently, on a host without the document-font door", async () => {
     const r = fontHost({ door: false });
     activate(r.host);
-    await r.importers[0].import({ name: "fonts.pptx", bytes: FONTS, mimeType: "" });
+    await r.importers[0].import({
+      name: "fonts.pptx",
+      bytes: FONTS,
+      mimeType: "",
+    });
     expect(r.calls).toEqual([]);
     expect(r.events).toEqual(["open"]);
-    const line = (r.diagnostics.get(IMPORT_DIAGNOSTICS) ?? []).find((d) => d.message.includes("cannot give"));
+    const line = (r.diagnostics.get(IMPORT_DIAGNOSTICS) ?? []).find((d) =>
+      d.message.includes("cannot give"),
+    );
     expect(line?.message).toContain("Caveat, Gloria Hallelujah, Lato");
   });
 
@@ -194,7 +245,10 @@ describe("a deck's embedded fonts", () => {
   });
 
   it("are used only when their licence allows an editable document", () => {
-    const face = (use: EmbeddedFaceReport["use"], length = 10): EmbeddedFaceReport => ({
+    const face = (
+      use: EmbeddedFaceReport["use"],
+      length = 10,
+    ): EmbeddedFaceReport => ({
       family: "F",
       style: "Regular",
       part: "ppt/fonts/font1.fntdata",

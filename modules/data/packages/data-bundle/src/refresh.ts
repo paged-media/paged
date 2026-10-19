@@ -29,7 +29,10 @@ export const MANUAL: RefreshPolicy = { policy: "manual" };
 export const MIN_INTERVAL_SECS = 15;
 
 /** Can a source of this kind take this policy? Returns why not, or null. */
-export function refusePolicy(kind: "file" | "remote", p: RefreshPolicy): string | null {
+export function refusePolicy(
+  kind: "file" | "remote",
+  p: RefreshPolicy,
+): string | null {
   if (p.policy === "interval") {
     if (kind === "file") {
       return "a local file cannot be watched from the browser — import it again to update it, or refresh on open";
@@ -86,7 +89,10 @@ export const realTimers: TimerApi = {
  *  the wanted set; a tick that is still running when the next one is due is
  *  skipped, so a slow source never stacks fetches. */
 export class IntervalScheduler {
-  private readonly timers = new Map<string, { handle: unknown; secs: number }>();
+  private readonly timers = new Map<
+    string,
+    { handle: unknown; secs: number }
+  >();
   private readonly busy = new Set<string>();
 
   constructor(

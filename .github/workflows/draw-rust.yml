@@ -20,13 +20,15 @@ concurrency:
 # MONOREPO (step A3): ported from paged-media/plugin-draw
 # .github/workflows/rust.yml; runs in modules/draw. The sibling
 # paged-media/sdk checkout is gone: the manifest validator is the in-tree
-# platform/extensions plugin-cli, so its sources are in the path filters too.
+# `paged-plugin` bin of platform/extensions' plugin-sdk, so its sources are in
+# the path filters too.
 on:
   push:
     branches: [main]
     paths:
       - "modules/draw/**"
-      - "platform/extensions/packages/plugin-cli/**"
+      - "platform/extensions/packages/plugin-sdk/bin/**"
+      - "platform/extensions/packages/plugin-sdk/untyped-commands.baseline.json"
       - ".github/workflows/draw-rust.yml"
       # The root Cargo config and its linker/wrapper scripts apply to every build.
       - ".cargo/config.toml"
@@ -36,7 +38,8 @@ on:
   pull_request:
     paths:
       - "modules/draw/**"
-      - "platform/extensions/packages/plugin-cli/**"
+      - "platform/extensions/packages/plugin-sdk/bin/**"
+      - "platform/extensions/packages/plugin-sdk/untyped-commands.baseline.json"
       - ".github/workflows/draw-rust.yml"
       # The root Cargo config and its linker/wrapper scripts apply to every build.
       - ".cargo/config.toml"
@@ -56,7 +59,7 @@ jobs:
   rust:
     runs-on: ubuntu-latest
     steps:
-      # One checkout of the repository: modules/draw and the plugin-cli the
+      # One checkout of the repository: modules/draw and the paged-plugin bin the
       # manifest validate below needs (platform/extensions) are both in it.
       - uses: actions/checkout@v4
       - name: toolchain (rust-toolchain.toml pins the channel + target)
@@ -97,5 +100,5 @@ jobs:
           proto-version: "0.63.1"
       - name: manifest validate (measures the freshly built artifact)
         run: |
-          bun "$GITHUB_WORKSPACE/platform/extensions/packages/plugin-cli/bin/paged-plugin.mjs" validate \
+          bun "$GITHUB_WORKSPACE/platform/extensions/packages/plugin-sdk/bin/paged-plugin.mjs" validate \
             packages/draw-bundle/manifest.json

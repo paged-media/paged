@@ -30,13 +30,17 @@ interface Port {
 }
 
 type Call = { id: number; method: string; args: unknown[] };
-type Reply = { id: number; ok: true; value: unknown } | { id: number; ok: false; error: string };
+type Reply =
+  | { id: number; ok: true; value: unknown }
+  | { id: number; ok: false; error: string };
 
 /** The library's methods, every one answering asynchronously. */
 export type LibraryClient = {
-  [K in keyof Library as Library[K] extends (...a: never[]) => unknown ? K : never]: Library[K] extends (
-    ...a: infer A
-  ) => infer R
+  [
+    K in keyof Library as Library[K] extends (...a: never[]) => unknown
+      ? K
+      : never
+  ]: Library[K] extends (...a: infer A) => infer R
     ? (...a: A) => Promise<Awaited<R>>
     : never;
 };
@@ -55,11 +59,19 @@ export function serveLibrary(port: Port, make: () => Promise<Library>): void {
     let reply: Reply;
     try {
       library ??= make();
-      const lib = (await library) as unknown as Record<string, (...a: unknown[]) => Promise<unknown>>;
-      if (typeof lib[method] !== "function") throw new Error(`no library method ${method}`);
+      const lib = (await library) as unknown as Record<
+        string,
+        (...a: unknown[]) => Promise<unknown>
+      >;
+      if (typeof lib[method] !== "function")
+        throw new Error(`no library method ${method}`);
       reply = { id, ok: true, value: await lib[method](...args) };
     } catch (err) {
-      reply = { id, ok: false, error: err instanceof Error ? err.message : String(err) };
+      reply = {
+        id,
+        ok: false,
+        error: err instanceof Error ? err.message : String(err),
+      };
     }
     port.postMessage(reply, reply.ok ? transfers(reply.value) : []);
   });
@@ -69,7 +81,10 @@ export function serveLibrary(port: Port, make: () => Promise<Library>): void {
  *  are transferred: the caller must not use them after the call. */
 export function connectLibrary(port: Port): LibraryClient {
   let next = 0;
-  const pending = new Map<number, { resolve(v: unknown): void; reject(e: Error): void }>();
+  const pending = new Map<
+    number,
+    { resolve(v: unknown): void; reject(e: Error): void }
+  >();
   port.addEventListener("message", (e: MessageEvent<Reply>) => {
     const p = pending.get(e.data.id);
     if (!p) return;
@@ -84,7 +99,10 @@ export function connectLibrary(port: Port): LibraryClient {
         new Promise((resolve, reject) => {
           const id = next++;
           pending.set(id, { resolve, reject });
-          port.postMessage({ id, method, args } satisfies Call, transfers(args));
+          port.postMessage(
+            { id, method, args } satisfies Call,
+            transfers(args),
+          );
         });
     },
   });

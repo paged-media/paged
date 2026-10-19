@@ -61,7 +61,9 @@ export function HueSatSection({
     session.setParams({ hueSat: next });
   };
   const setColorize = (patch: Partial<HueSatParams["colorize"]>) =>
-    session.setParams({ hueSat: { ...hueSat, colorize: { ...hueSat.colorize, ...patch } } });
+    session.setParams({
+      hueSat: { ...hueSat, colorize: { ...hueSat.colorize, ...patch } },
+    });
   const off = disabled || hueSat.colorize.on;
   return (
     <>
@@ -83,9 +85,34 @@ export function HueSatSection({
           ))}
         </select>
       </div>
-      {slider("Hue", "pg-image-hs-hue", -180, 180, Math.round(hsl[0]), (v) => set(0, v), off, "°")}
-      {slider("Saturation", "pg-image-hs-sat", -100, 100, Math.round(hsl[1] * 100), (v) => set(1, v), off)}
-      {slider("Lightness", "pg-image-hs-light", -100, 100, Math.round(hsl[2] * 100), (v) => set(2, v), disabled)}
+      {slider(
+        "Hue",
+        "pg-image-hs-hue",
+        -180,
+        180,
+        Math.round(hsl[0]),
+        (v) => set(0, v),
+        off,
+        "°",
+      )}
+      {slider(
+        "Saturation",
+        "pg-image-hs-sat",
+        -100,
+        100,
+        Math.round(hsl[1] * 100),
+        (v) => set(1, v),
+        off,
+      )}
+      {slider(
+        "Lightness",
+        "pg-image-hs-light",
+        -100,
+        100,
+        Math.round(hsl[2] * 100),
+        (v) => set(2, v),
+        disabled,
+      )}
       <div style={row}>
         <label htmlFor="pg-image-hs-colorize">Colorize</label>
         <input
@@ -98,7 +125,16 @@ export function HueSatSection({
         />
       </div>
       {hueSat.colorize.on &&
-        slider("Colorize hue", "pg-image-hs-c-hue", 0, 360, Math.round(hueSat.colorize.hue), (v) => setColorize({ hue: v }), disabled, "°")}
+        slider(
+          "Colorize hue",
+          "pg-image-hs-c-hue",
+          0,
+          360,
+          Math.round(hueSat.colorize.hue),
+          (v) => setColorize({ hue: v }),
+          disabled,
+          "°",
+        )}
       {hueSat.colorize.on &&
         slider(
           "Colorize saturation",
@@ -110,8 +146,9 @@ export function HueSatSection({
           disabled,
         )}
       <div style={note}>
-        A colour range is fully affected within 15° of its centre and fades out by
-        45°; greys belong to no range. Colorize tints every pixel with one hue.
+        A colour range is fully affected within 15° of its centre and fades out
+        by 45°; greys belong to no range. Colorize tints every pixel with one
+        hue.
       </div>
     </>
   );

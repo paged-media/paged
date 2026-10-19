@@ -65,14 +65,20 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   const page = p(40);
   const elements: string[] = [];
 
-  const head = await prose(ctx, page, [60, 104, 476, 146], [
-    { text: "The anchored object", style: STYLE.head1 },
-  ]);
+  const head = await prose(
+    ctx,
+    page,
+    [60, 104, 476, 146],
+    [{ text: "The anchored object", style: STYLE.head1 }],
+  );
   elements.push(head.frameId);
 
-  const host = await prose(ctx, page, [60, 160, 476, 356], [
-    { text: HOST_TEXT, style: STYLE.body },
-  ]);
+  const host = await prose(
+    ctx,
+    page,
+    [60, 160, 476, 356],
+    [{ text: HOST_TEXT, style: STYLE.body }],
+  );
   elements.push(host.frameId);
 
   // The one permitted insert, at the words "just here" — CONTIGUOUS

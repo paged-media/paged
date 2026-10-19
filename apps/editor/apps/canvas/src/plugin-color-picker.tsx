@@ -46,7 +46,11 @@ export interface HostColorPickerProps {
 }
 
 function toMixer(hex: string): MixerValue {
-  return { space: "RGB", value: hexToRgb(hex) ?? [0, 0, 0], tint: 100 } as MixerValue;
+  return {
+    space: "RGB",
+    value: hexToRgb(hex) ?? [0, 0, 0],
+    tint: 100,
+  } as MixerValue;
 }
 
 export function HostColorPicker(props: HostColorPickerProps) {

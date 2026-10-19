@@ -93,7 +93,8 @@ export function createEditorAssetSource(
       style?: string,
     ): Promise<void> {
       const client = getClient();
-      if (!client) throw new Error("no engine client to register the face with");
+      if (!client)
+        throw new Error("no engine client to register the face with");
       await client.registerFont(family, bytes, style ?? null, {
         scope: "sceneLayer",
       });

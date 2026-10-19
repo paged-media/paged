@@ -48,9 +48,9 @@ symbol or a pattern. Tests pin the panel notes of pattern, repeat and blend.
   `packages/draw-bundle/src/commands/blend.ts:235-240` — the notes shown to the user: real
   artwork plus a recipe; Update re-reads the sources
 - `packages/draw-bundle/src/activate.ts:278-284`;
-  `packages/draw-bundle/test/conformance/pattern.spec.ts:260-263`,
-  `packages/draw-bundle/test/conformance/repeat.spec.ts:1293-1296`,
-  `packages/draw-bundle/test/conformance/blend.spec.ts:1017` — panel notes and their tests
+  `packages/draw-bundle/test/headless/pattern.spec.ts:260-263`,
+  `packages/draw-bundle/test/headless/repeat.spec.ts:1293-1296`,
+  `packages/draw-bundle/test/headless/blend.spec.ts:1017` — panel notes and their tests
 - `packages/draw-bundle/src/commands/group.ts:39-47` — a clip group is not representable
 
 ## Alternatives considered

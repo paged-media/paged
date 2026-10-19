@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.0.0",
   "license": "AGPL-3.0-only OR LicenseRef-PMEL",
-  "description": "Internal, runner-agnostic test helpers for the built-in modules (docs/adr/PM-0002). Never published; community-facing packages do not import it.",
+  "description": "Internal, runner-agnostic test helpers for the built-in modules and the editor (docs/adr/PM-0002): the async shims, the editor-side gesture kit (fake shell editor, browser backend, fixtures, fuzzer, gesture matrix). Never published; community-facing packages do not import it (their public subset is the plugin-sdk's gesture kit).",
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
@@ -16,6 +16,11 @@
   },
   "devDependencies": {
     "@types/bun": "catalog:",
+    "fast-check": "^4.10.2",
     "typescript": "catalog:"
+  },
+  "dependencies": {
+    "@paged-media/plugin-api": "workspace:*",
+    "@paged-media/plugin-sdk": "workspace:*"
   }
 }

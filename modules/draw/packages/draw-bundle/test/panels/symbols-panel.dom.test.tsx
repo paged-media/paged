@@ -16,7 +16,6 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-
 // The SYMBOLS panel, RENDERED (happy-dom) against the real engine: behaviour
 // first (empty state, records, buttons asserted on the DOCUMENT), then
 // its reload budgets as counts at the host doors — the
@@ -48,7 +47,7 @@ import {
   SYMBOLS_NOTE,
   SYMBOLS_PANEL_ID,
 } from "../../src";
-import { openHost } from "../conformance/host";
+import { openHost } from "../headless/host";
 import {
   documentBurst,
   drive,
@@ -70,7 +69,6 @@ import {
 
 const PANEL = "[data-draw-symbols-panel]";
 const ROW = '[data-draw-symbol-row="sym-1"]';
-
 
 /** Per-leaf `getMetadata` one link walk costs on this engine (RFI C-65:
  *  1 before tree rows carried metadata, 0 after), and what a walk over
@@ -98,12 +96,16 @@ describe("Symbols panel — rendered against the engine", () => {
       expect(panel.text()).toContain(
         "No symbols yet — select artwork and capture its definition.",
       );
-      expect(panel.text()).toContain("Select artwork to capture it as a symbol");
+      expect(panel.text()).toContain(
+        "Select artwork to capture it as a symbol",
+      );
       expect(panel.count("[data-draw-symbol-row]")).toBe(0);
       expect(panel.disabled("[data-draw-symbol-define]")).toBe(true);
       expect(panel.disabled("[data-draw-symbol-reset]")).toBe(true);
       expect(panel.disabled("[data-draw-symbol-break]")).toBe(true);
-      expect(panel.get("[data-draw-symbols-note]").textContent).toBe(SYMBOLS_NOTE);
+      expect(panel.get("[data-draw-symbols-note]").textContent).toBe(
+        SYMBOLS_NOTE,
+      );
     });
 
     it("THE FLOOR: what a reload costs before the document holds anything", async () => {
@@ -148,9 +150,9 @@ describe("Symbols panel — rendered against the engine", () => {
       await panel.click("[data-draw-symbol-define]");
 
       const library = await readSymbolLibrary(h.host);
-      expect(library.symbols.map((s) => [s.id, s.name, s.pieces.length])).toEqual([
-        ["sym-1", "Symbol 1", 1],
-      ]);
+      expect(
+        library.symbols.map((s) => [s.id, s.name, s.pieces.length]),
+      ).toEqual([["sym-1", "Symbol 1", 1]]);
       // A definition is a container write: ZERO mutations, zero undo steps.
       expect(panel.work.mutations).toEqual([]);
       expect(panel.work.count("parts.write")).toBe(1);
@@ -209,7 +211,9 @@ describe("Symbols panel — rendered against the engine", () => {
 
       await panel.click("[data-draw-symbol-break]");
 
-      expect(symbolInstanceOf(await h.host.document.getMetadata(leaves[0]!))).toBeNull();
+      expect(
+        symbolInstanceOf(await h.host.document.getMetadata(leaves[0]!)),
+      ).toBeNull();
       expect(await leafIds(h)).toHaveLength(PRISTINE + 1);
       expect(panel.attr(ROW, "data-draw-symbol-instance-count")).toBe("0");
       expect(panel.attr(PANEL, "data-draw-symbol-selected")).toBe("");
@@ -247,25 +251,22 @@ describe("Symbols panel — rendered against the engine", () => {
     // No timing can make this one pass by luck: with no document event
     // and no selection event, the announcement is the ONLY thing that
     // tells the panel.
-    it(
-      "an OPEN panel shows a symbol defined by the COMMAND, not only by its own button",
-      async () => {
-        await h.host.selection.set([poly("s1")]);
-        const panel = await mountPanel(h, makeSymbolsPanel);
-        panel.reset();
-        await drive(async () => {
-          if (!(await applyDefineSymbol(h.host))) throw new Error("not defined");
-        }, panel.work);
+    it("an OPEN panel shows a symbol defined by the COMMAND, not only by its own button", async () => {
+      await h.host.selection.set([poly("s1")]);
+      const panel = await mountPanel(h, makeSymbolsPanel);
+      panel.reset();
+      await drive(async () => {
+        if (!(await applyDefineSymbol(h.host))) throw new Error("not defined");
+      }, panel.work);
 
-        // The document has it, and the host delivered NO event for it —
-        // not a document change, not a selection change…
-        expect((await readSymbolLibrary(h.host)).symbols).toHaveLength(1);
-        expect(panel.cost().events).toBe(0);
-        // …and the panel reloaded all the same, once, and shows it.
-        expect(panel.cost().reloads).toBe(1);
-        expect(panel.count("[data-draw-symbol-row]")).toBe(1);
-      },
-    );
+      // The document has it, and the host delivered NO event for it —
+      // not a document change, not a selection change…
+      expect((await readSymbolLibrary(h.host)).symbols).toHaveLength(1);
+      expect(panel.cost().events).toBe(0);
+      // …and the panel reloaded all the same, once, and shows it.
+      expect(panel.cost().reloads).toBe(1);
+      expect(panel.count("[data-draw-symbol-row]")).toBe(1);
+    });
   });
 
   // COVERS: `reload()` on a document with R = 5 symbols among L = 40 plain
@@ -286,17 +287,22 @@ describe("Symbols panel — rendered against the engine", () => {
         if (k > 0) {
           await drive(async () => {
             await h.host.selection.set([poly(`s${k - 1}`)]);
-            const symbol = await applyDefineSymbol(h.host, { name: `Symbol ${k}` });
+            const symbol = await applyDefineSymbol(h.host, {
+              name: `Symbol ${k}`,
+            });
             if (!symbol) throw new Error(`symbol ${k} was not defined`);
             const placed = await applyPlaceSymbolInstance(h.host, symbol.id, {
               x: 50 + (k - 1) * 110,
               y: 150,
             });
-            if (placed.length !== 1) throw new Error(`symbol ${k} was not placed`);
+            if (placed.length !== 1)
+              throw new Error(`symbol ${k} was not placed`);
             await h.host.selection.set([]);
           }, panel.work);
         }
-        walksByRecords.push((await panel.costOf(() => plainChange(h, k))).walks);
+        walksByRecords.push(
+          (await panel.costOf(() => plainChange(h, k))).walks,
+        );
       }
       unmountAll();
     });
@@ -342,7 +348,9 @@ describe("Symbols panel — rendered against the engine", () => {
     it("ONE reload with ANYTHING selected = no walk at all, 0 reads", async () => {
       const panel = await mountPanel(h, makeSymbolsPanel);
       // A plain leaf: not an instance, not a symbol's source.
-      const selected = await panel.costOf(() => h.host.selection.set([plainId(0)]));
+      const selected = await panel.costOf(() =>
+        h.host.selection.set([plainId(0)]),
+      );
       expect(selected).toEqual({
         events: 1,
         reloads: 1,

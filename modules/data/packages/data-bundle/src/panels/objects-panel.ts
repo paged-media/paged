@@ -28,7 +28,11 @@
 // expression builder, preview and diagnostics; this panel is the property
 // view of the same objects.
 
-import type { BundleHost, Disposable, PanelSchema } from "@paged-media/plugin-api";
+import type {
+  BundleHost,
+  Disposable,
+  PanelSchema,
+} from "@paged-media/plugin-api";
 import { propertyRows, publishObjectList } from "@paged-media/plugin-sdk";
 
 import { PANEL_FIELDS, PLUGIN_ID, type KindName } from "../object-model";
@@ -74,24 +78,52 @@ const SECTIONS: ReadonlyArray<{
   empty: string;
 }> = [
   {
-    kind: "source", title: "Sources", rows: BIND.sources, select: BIND.source, secondaryPath: "type",
-    panel: PANEL.sources, empty: "No sources yet. Import a file or add a remote source in Data sources.",
+    kind: "source",
+    title: "Sources",
+    rows: BIND.sources,
+    select: BIND.source,
+    secondaryPath: "type",
+    panel: PANEL.sources,
+    empty:
+      "No sources yet. Import a file or add a remote source in Data sources.",
   },
   {
-    kind: "query", title: "Queries", rows: BIND.queries, select: BIND.query, secondaryPath: "shape",
-    panel: PANEL.query, empty: "No saved queries. Build and save one in Data query.",
+    kind: "query",
+    title: "Queries",
+    rows: BIND.queries,
+    select: BIND.query,
+    secondaryPath: "shape",
+    panel: PANEL.query,
+    empty: "No saved queries. Build and save one in Data query.",
   },
   {
-    kind: "binding", title: "Bindings", rows: BIND.bindings, select: BIND.binding, secondaryPath: "kind",
-    panel: PANEL.bindings, empty: "Nothing on the page is bound yet. Bind a frame's text or image in Bindings.",
+    kind: "binding",
+    title: "Bindings",
+    rows: BIND.bindings,
+    select: BIND.binding,
+    secondaryPath: "kind",
+    panel: PANEL.bindings,
+    empty:
+      "Nothing on the page is bound yet. Bind a frame's text or image in Bindings.",
   },
   {
-    kind: "dataSet", title: "Data sets", rows: BIND.dataSets, select: BIND.dataSet,
-    panel: PANEL.dataset, empty: "No data sets. Capture the current values as one in Dataset preview.",
+    kind: "dataSet",
+    title: "Data sets",
+    rows: BIND.dataSets,
+    select: BIND.dataSet,
+    panel: PANEL.dataset,
+    empty:
+      "No data sets. Capture the current values as one in Dataset preview.",
   },
   {
-    kind: "variable", title: "Variables", rows: BIND.variables, select: BIND.variable, secondaryPath: "trait",
-    panel: PANEL.dataset, empty: "No variables yet. They appear once a source or a query defines them.",
+    kind: "variable",
+    title: "Variables",
+    rows: BIND.variables,
+    select: BIND.variable,
+    secondaryPath: "trait",
+    panel: PANEL.dataset,
+    empty:
+      "No variables yet. They appear once a source or a query defines them.",
   },
 ];
 
@@ -100,9 +132,14 @@ const SECTIONS: ReadonlyArray<{
  *  first read — the host reads an unpublished gate as false) shows it. */
 export const hasRowsBinding = (rows: string) => `${rows}.any`;
 
-const paths = (kind: KindName) => PANEL_FIELDS.filter((f) => f.kind === kind).map((f) => f.path);
+const paths = (kind: KindName) =>
+  PANEL_FIELDS.filter((f) => f.kind === kind).map((f) => f.path);
 
-const list = (rows: string, select: string, panel: { id: string; title: string }) => ({
+const list = (
+  rows: string,
+  select: string,
+  panel: { id: string; title: string },
+) => ({
   widget: "paged.list",
   list: {
     items: { kind: "binding" as const, bind: rows },
@@ -110,7 +147,15 @@ const list = (rows: string, select: string, panel: { id: string; title: string }
     secondaryField: "secondary",
     selectionBinding: select,
     // The host derives `paged.panel.show.<id>` for every registered panel.
-    actions: [{ label: `Open in ${panel.title}`, action: { kind: "command" as const, command: `paged.panel.show.${panel.id}` } }],
+    actions: [
+      {
+        label: `Open in ${panel.title}`,
+        action: {
+          kind: "command" as const,
+          command: `paged.panel.show.${panel.id}`,
+        },
+      },
+    ],
   },
 });
 
@@ -139,10 +184,17 @@ export const DATA_OBJECTS_PANEL: PanelSchema = {
       title: s.title,
       ...(i > 1 ? { collapsible: true } : {}),
       rows: [
-        { widget: "paged.label", props: { text: s.empty }, visible: { bind: hasRowsBinding(s.rows), negate: true } },
+        {
+          widget: "paged.label",
+          props: { text: s.empty },
+          visible: { bind: hasRowsBinding(s.rows), negate: true },
+        },
         // The list shows once it has rows; until then the sentence above
         // says what "No entries" would, and where to start.
-        { ...list(s.rows, s.select, s.panel), visible: { bind: hasRowsBinding(s.rows) } },
+        {
+          ...list(s.rows, s.select, s.panel),
+          visible: { bind: hasRowsBinding(s.rows) },
+        },
         ...propertyRows(qualified(s.kind), paths(s.kind), { bind: s.select }),
       ],
     })),
@@ -156,7 +208,10 @@ export const DATA_OBJECTS_PANEL: PanelSchema = {
  *  activation boots nothing; a restore or an undo reloading the session
  *  (status idle meanwhile) is never raced. They start with the first ready
  *  session, so activation pays no host calls for them (perf W7). */
-export function publishObjectLists(host: BundleHost, session: DataSourceSession): Disposable {
+export function publishObjectLists(
+  host: BundleHost,
+  session: DataSourceSession,
+): Disposable {
   const ready = () => session.getState().status === "ready";
   let lists: ReturnType<typeof publishObjectList>[] | null = null;
   // The empty lines show while their list has not reported rows, so
@@ -164,7 +219,10 @@ export function publishObjectLists(host: BundleHost, session: DataSourceSession)
   // republished list carries its flag along.
   const publishEmpty = (rowsName: string) => {
     const rows = host.bindings.get(rowsName);
-    host.bindings.publish(hasRowsBinding(rowsName), Array.isArray(rows) && rows.length > 0);
+    host.bindings.publish(
+      hasRowsBinding(rowsName),
+      Array.isArray(rows) && rows.length > 0,
+    );
   };
   const rowNames = new Set(SECTIONS.map((s) => s.rows));
   let emptySub: Disposable | null = null;

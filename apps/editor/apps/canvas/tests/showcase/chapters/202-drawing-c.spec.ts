@@ -32,12 +32,12 @@ import { build as blends } from "../pages/200-drawing-office/09-blends";
 import { build as typepath } from "../pages/200-drawing-office/10-typepath";
 import { build as tracePlate } from "../pages/200-drawing-office/11-plate";
 
-
 // Continuation of 200-drawing-office - split for the in-chain per-op cost;
 // the checkpoint chain absorbs splits with zero logic change.
 annualChapter({
   id: "202-drawing-c",
-  title: "Ch.14 The Drawing Office - repeats, blends, type on a path, the trace plate",
+  title:
+    "Ch.14 The Drawing Office - repeats, blends, type on a path, the trace plate",
   modules: [
     { id: "do-repeats", pages: [p(83)], build: repeats },
     { id: "do-blends", pages: [p(84)], build: blends },

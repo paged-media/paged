@@ -60,7 +60,9 @@ export const ALIGN_PARAGRAPH_STYLES: Readonly<
 
 /** The paragraph style each populated cell's paragraph should carry, keyed
  *  `row:col` at TABLE positions (`NO_PARAGRAPH_STYLE` for left/general). */
-export function cellAlignMap(content: LoweredContent): Map<string, { style: string; text: string }> {
+export function cellAlignMap(
+  content: LoweredContent,
+): Map<string, { style: string; text: string }> {
   const colPos = new Map<number, number>();
   columnOrder(content).forEach((m, i) => colPos.set(m, i));
   const out = new Map<string, { style: string; text: string }>();
@@ -98,7 +100,10 @@ export function cellAlignStyleMints(
   const ops: Mutation[] = [];
   for (const st of Object.values(ALIGN_PARAGRAPH_STYLES)) {
     if (!st || !used.has(st.id) || knownStyleIds.has(st.id)) continue;
-    ops.push({ op: "createParagraphStyle", args: { selfId: st.id, name: st.name } });
+    ops.push({
+      op: "createParagraphStyle",
+      args: { selfId: st.id, name: st.name },
+    });
     ops.push({
       op: "setStyleProperty",
       args: {
@@ -121,13 +126,22 @@ export function cellAlignApplies(
   content: LoweredContent,
   storyId: string,
   tableId: string,
-  opts: { cells?: ReadonlySet<string>; includeDefault?: boolean; available?: ReadonlySet<string> } = {},
+  opts: {
+    cells?: ReadonlySet<string>;
+    includeDefault?: boolean;
+    available?: ReadonlySet<string>;
+  } = {},
 ): Mutation[] {
   const ops: Mutation[] = [];
   for (const [key, { style, text }] of cellAlignMap(content)) {
     if (opts.cells && !opts.cells.has(key)) continue;
     if (style === NO_PARAGRAPH_STYLE && !opts.includeDefault) continue;
-    if (style !== NO_PARAGRAPH_STYLE && opts.available && !opts.available.has(style)) continue;
+    if (
+      style !== NO_PARAGRAPH_STYLE &&
+      opts.available &&
+      !opts.available.has(style)
+    )
+      continue;
     const [row, col] = key.split(":").map(Number);
     ops.push({
       op: "applyStyle",
@@ -146,7 +160,10 @@ export function cellAlignApplies(
 
 /** The cells a refresh must re-align: the alignment changed, or the text was
  *  re-poured into a cell whose new alignment is not the default. */
-export function cellsNeedingRealign(prev: LoweredContent, next: LoweredContent): Set<string> {
+export function cellsNeedingRealign(
+  prev: LoweredContent,
+  next: LoweredContent,
+): Set<string> {
   const a = cellAlignMap(prev);
   const out = new Set<string>();
   for (const [k, v] of cellAlignMap(next)) {

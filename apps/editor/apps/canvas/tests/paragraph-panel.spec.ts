@@ -154,14 +154,22 @@ test.describe("Phase 3 — Paragraph panel (declarative composition)", () => {
     await expect(
       keep.locator('div.grid:has(> span:text-is("Keep with next")) input'),
     ).toBeVisible();
-    await expect(keep.locator('[data-check-row="Keep lines together"]')).toBeVisible();
-    await expect(keep.locator('[data-check-row="All lines in paragraph"]')).toBeVisible();
     await expect(
-      keep.locator('div.mb-px:has(> div:text-is("Start paragraph")) select option:not([value="__mixed__"])'),
+      keep.locator('[data-check-row="Keep lines together"]'),
+    ).toBeVisible();
+    await expect(
+      keep.locator('[data-check-row="All lines in paragraph"]'),
+    ).toBeVisible();
+    await expect(
+      keep.locator(
+        'div.mb-px:has(> div:text-is("Start paragraph")) select option:not([value="__mixed__"])',
+      ),
     ).toHaveCount(7);
     const span = root.locator('[data-section="Span columns"]');
     await expect(
-      span.locator('div.mb-px:has(> div:text-is("Paragraph layout")) select option:not([value="__mixed__"])'),
+      span.locator(
+        'div.mb-px:has(> div:text-is("Paragraph layout")) select option:not([value="__mixed__"])',
+      ),
     ).toHaveCount(4);
     await expect(
       span.locator('div.grid:has(> span:text-is("Columns")) select'),

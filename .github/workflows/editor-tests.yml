@@ -75,6 +75,8 @@ on:
       # them (paged-gen, the fixture generator, is under crates/ too).
       - "modules/**"
       - "platform/extensions/packages/**"
+      # The internal test kit (the tools' gesture DSL, the headless editor).
+      - "platform/shared/**"
       - "engine/core/crates/**"
       - "engine/core/Cargo.*"
       - "engine/core/rust-toolchain.toml"
@@ -106,6 +108,8 @@ on:
       # them (paged-gen, the fixture generator, is under crates/ too).
       - "modules/**"
       - "platform/extensions/packages/**"
+      # The internal test kit (the tools' gesture DSL, the headless editor).
+      - "platform/shared/**"
       - "engine/core/crates/**"
       - "engine/core/Cargo.*"
       - "engine/core/rust-toolchain.toml"
@@ -253,6 +257,23 @@ jobs:
       - name: local library (packages/repository)
         run: bun run test:repository
 
+      # The built-in tools' gesture handlers, driven through the gesture
+      # DSL against the test kit's recording fake editor (no engine, no
+      # browser): previews, modifier semantics, the exact mutation, the
+      # one-gesture-one-commit and cancel invariants.
+      - name: tool gesture handlers (packages/tools)
+        run: bun run test:tools
+
+      # The shell's registries, stores and settings (packages/shell) and
+      # the canvas app's built-in command handlers (apps/canvas/test/unit):
+      # the command layer, against the test kit's fake editor.
+      - name: shell registries and stores (packages/shell)
+        run: bun run test:shell
+      - name: shell stores and settings, DOM lane (packages/shell)
+        run: bun run test:shell-dom
+      - name: built-in command handlers (apps/canvas unit)
+        run: bun run test:canvas-unit
+
       # Every gated fidelity pack must carry a threshold entry, or the
       # fidelity gate silently skips it.
       - name: fidelity thresholds schema
@@ -283,17 +304,20 @@ jobs:
           path: ${{ runner.temp }}/paged-measurements-wasm.json
           if-no-files-found: warn
           retention-days: 90
-      # Every panel / tool / keybinding / menu item the host registers, and
-      # every contribution the loaded plugin bundles inject, must be named
-      # by some spec or sit under a per-kind ceiling that only ever falls.
-      - name: editor surface coverage
-        run: bun run test:surface-coverage
+      # The surface-conformance gate runs in its own job (`surface`, below):
+      # it is static and needs none of the wasm this job builds.
       # The two-way manifest check (ADR 226): every bundle in the editor's
       # table, activated against the headless engine, registers what its
       # manifest declares — and, in 'warn' mode, nothing it does not. The
       # host adapter only ever refused the second kind.
       - name: bundle manifests match their registrations
         run: bun run test:bundle-contracts
+      # The headless editor (apps/canvas/tests/headless): the shell, the
+      # client and the real engine under bun test, no browser. Commands,
+      # editor.* automation, Boa scripts and plugin hosts asserted against
+      # the canonical model dump, and the cross-surface parity suite.
+      - name: headless editor
+        run: bun run test:headless
       # A seam may not outlive the gap it names: a capability lands and
       # the UI still says it is missing, which is the same lie as
       # claiming an unbuilt feature works, only harder to notice.
@@ -330,6 +354,51 @@ jobs:
       # comment to generate a summary from.
       - name: client SDK catalog is current
         run: bun run test:client-catalog
+
+  # THE SURFACE-CONFORMANCE GATE (apps/editor/docs/reference/
+  # surface-conformance.md): every command, panel, tool, menu item,
+  # keybinding, setting, CLI command and script function is asserted by a
+  # test under covers() in the layers its kind requires, or acknowledged
+  # with a reason; a ratchet both ways. Static (no wasm, no browser, no
+  # secrets), so it runs on its own and answers in a minute.
+  surface:
+    name: surface conformance (covers() ratchet)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: moonrepo/setup-toolchain@v0.6.4
+        with:
+          auto-install: true
+          proto-version: "0.63.1"
+      - name: cache Bun's package cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
+      - name: bun install (root workspace)
+        working-directory: .
+        run: bun install --frozen-lockfile
+      - name: the gate's own tests (readers, layers, evaluator)
+        run: bun test ./scripts/surface-coverage.test.mjs
+      # `--json-out` / `--md-out` write the report as a side effect and the
+      # exit code is still the gate's (no pipe).
+      - name: surface conformance
+        run: >-
+          bun scripts/surface-coverage.mjs --quiet --summary
+          --json-out "$RUNNER_TEMP/surface-conformance.json"
+          --md-out "$RUNNER_TEMP/surface-conformance.md"
+      - name: upload the surface-conformance report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: surface-conformance
+          path: |
+            ${{ runner.temp }}/surface-conformance.json
+            ${{ runner.temp }}/surface-conformance.md
+          if-no-files-found: warn
+          retention-days: 90
 
   playwright:
     name: playwright (shard ${{ matrix.shard }}/3)
@@ -607,24 +676,16 @@ jobs:
             --shard=${{ matrix.shard }}/${{ env.SHARDS }} \
             --reporter=blob
 
-      # Advisory GPU lane — re-run the journey tier through the WebGPU /
-      # Vello present path (headed via xvfb; software Vulkan when present,
-      # CPU fallback otherwise). Opt-in (workflow_dispatch only) on one
-      # shard, `continue-on-error` so it NEVER gates: the journeys' visual
-      # regression is the deterministic CPU readback above — this only
-      # smoke-checks that the GPU live-render path runs without crashing.
-      - name: journeys (GPU, advisory)
-        if: ${{ github.event_name == 'workflow_dispatch' && matrix.shard == 1 }}
-        continue-on-error: true
-        working-directory: apps/editor/apps/canvas
-        env:
-          CI: "1"
-          PAGED_CI_LEAN: "1"
-          BACKEND: gpu
-        run: |
-          xvfb-run -a npx playwright test \
-            --project=journeys \
-            --reporter=list
+      # No step here tests the editor on a GPU. A "journeys (GPU, advisory)"
+      # step used to re-run the journey tier with BACKEND=gpu under xvfb, but
+      # this runner has no Vulkan driver and the bundled Chromium no WebGPU
+      # adapter, the `journeys` project ignores the specs that assert the GPU
+      # is active, and nothing checked for an adapter: it could only exercise
+      # the CPU fallback the step above already runs, while its name claimed
+      # GPU coverage (docs/development/gpu-audit-2026-10.md, L-4). The WebGPU
+      # path runs end to end in the local `journeys-gpu` project and the macOS
+      # showcase nightly; a CI lane for it must require an adapter and fail
+      # without one (docs/development/testing.md).
 
       # Seed/refresh the committed LINUX visual baselines. Opt-in
       # (workflow_dispatch only) on one shard: runs the journey tier with

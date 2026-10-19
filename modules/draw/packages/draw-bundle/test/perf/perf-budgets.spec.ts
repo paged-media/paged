@@ -41,7 +41,7 @@ import type { HeadlessHost } from "@paged-media/plugin-sdk";
 
 import { createShapeBuilderHandler, drawBundle } from "../../src";
 import { F4_OVERLAP } from "../fixtures/corpus";
-import { openHost } from "../conformance/host";
+import { openHost } from "../headless/host";
 import { countingHost, type WorkLog } from "./counting-host";
 import {
   drive,
@@ -113,7 +113,10 @@ describe("perf budgets — work counted at the host doors", () => {
       await settle();
       const counted = work.snapshot();
       handler.onDeactivate("switch" as never);
-      show(`shape builder drag (${selection.length} selected), ${pacing}`, counted);
+      show(
+        `shape builder drag (${selection.length} selected), ${pacing}`,
+        counted,
+      );
       return counted;
     };
 

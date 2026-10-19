@@ -9,25 +9,25 @@
   ADR 029 (an unpublished proposal on opening DOCX files; its acceptance metric),
   ADR 030 (an unpublished proposal on the wasm build; the font-hash fix that came before this).
 
-*Status note (2026-10-02): the plan was carried out. Steps 0 to 7 are on `main`; §6 lists each
+_Status note (2026-10-02): the plan was carried out. Steps 0 to 7 are on `main`; §6 lists each
 step with its commit, its measured result and what is still not done. §0 to §5 are kept as
-written on 2026-10-01 and describe the code at `6dea692`.*
+written on 2026-10-01 and describe the code at `6dea692`._
 
 ## 0. Headline
 
-*Status note (2026-10-02): this section predates the implementation; see §6 for what was built
+_Status note (2026-10-02): this section predates the implementation; see §6 for what was built
 and what a keystroke cost after it, and [ADR 027](../adr/027-incremental-flow-invalidation.md)
-for the decision.*
+for the decision._
 
 One typed character costs a **full rebuild**, and the rebuild grows with the document:
 
-| Document | Pages | Native, per keystroke | wasm (node, `-Oz`), per keystroke |
-|---|---|---|---|
-| `reflow` (ADR 026 fixture, growing) | 3 | 1.2 ms | 2.6 ms |
-| `docx-pagination` (ADR 029 fixture, growing) | 5 | 2.4 ms | 3.7 ms |
-| Long DOCX-shaped story (growing, keepNext) | 232 | **170 ms** | **235 ms** |
-| The same, a 60-paragraph paste that adds a page | 232 → 233 | 586 ms (pasted at the end) / 1 493 ms (pasted on page 3) | 1 881 ms (pasted on page 3) |
-| The 134-page annual (`after-312-appendix-b.paged`, real fonts, CMYK profile) | 134 | **149 ms** | **178 ms** |
+| Document                                                                     | Pages     | Native, per keystroke                                    | wasm (node, `-Oz`), per keystroke |
+| ---------------------------------------------------------------------------- | --------- | -------------------------------------------------------- | --------------------------------- |
+| `reflow` (ADR 026 fixture, growing)                                          | 3         | 1.2 ms                                                   | 2.6 ms                            |
+| `docx-pagination` (ADR 029 fixture, growing)                                 | 5         | 2.4 ms                                                   | 3.7 ms                            |
+| Long DOCX-shaped story (growing, keepNext)                                   | 232       | **170 ms**                                               | **235 ms**                        |
+| The same, a 60-paragraph paste that adds a page                              | 232 → 233 | 586 ms (pasted at the end) / 1 493 ms (pasted on page 3) | 1 881 ms (pasted on page 3)       |
+| The 134-page annual (`after-312-appendix-b.paged`, real fonts, CMYK profile) | 134       | **149 ms**                                               | **178 ms**                        |
 
 The editor's own budget is 32 ms per rebuild (AC-E-1, quoted in the `LayoutCacheStats`
 doc comment). The two large documents are 5–7× over it in wasm.
@@ -111,25 +111,25 @@ gate) come first.
 Wall 170.4 ms. Engine `build_ms` 164.3 ms. The other ~6 ms is op apply, `compute_story_pages`
 and dropping the previous `BuiltDocument`.
 
-| Phase | ms | Note |
-|---|---|---|
-| `with_generated_pages` | **49.4** | Clones the document, appends 230 pages, and calls `rebuild_indexes()` once per page. Each call walks every spread and every paragraph and lowercases style names (the heading-anchor table). |
-| Emit pass 0 (both section stories) | **48.0** | The edited story re-emits all 2 120 paragraphs. |
-| Keep re-emit pass | **43.2** | P054 `keepNext`: the fixpoint restarts from an empty `forced_breaks` and needs a second full emit on every build. |
-| Text z-slot relocation and transparency-group fit | 13.7 | Every page, after the story loop. |
-| Story capture (segments and cache delta copy) | 6.3 | Copies the whole story's commands into a cache entry that the next text edit throws away. |
-| Rollback between passes | 2.5 | |
-| Everything else in `build_document_inner` | < 1 | Frame pass, wrap collection, page walk, master overlay, auto-size. |
+| Phase                                             | ms       | Note                                                                                                                                                                                         |
+| ------------------------------------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `with_generated_pages`                            | **49.4** | Clones the document, appends 230 pages, and calls `rebuild_indexes()` once per page. Each call walks every spread and every paragraph and lowercases style names (the heading-anchor table). |
+| Emit pass 0 (both section stories)                | **48.0** | The edited story re-emits all 2 120 paragraphs.                                                                                                                                              |
+| Keep re-emit pass                                 | **43.2** | P054 `keepNext`: the fixpoint restarts from an empty `forced_breaks` and needs a second full emit on every build.                                                                            |
+| Text z-slot relocation and transparency-group fit | 13.7     | Every page, after the story loop.                                                                                                                                                            |
+| Story capture (segments and cache delta copy)     | 6.3      | Copies the whole story's commands into a cache entry that the next text edit throws away.                                                                                                    |
+| Rollback between passes                           | 2.5      |                                                                                                                                                                                              |
+| Everything else in `build_document_inner`         | < 1      | Frame pass, wrap collection, page walk, master overlay, auto-size.                                                                                                                           |
 
 Inside paragraph emission (4 280 calls per edit = 2 140 paragraphs × 2 passes, 89 ms in all,
 about 21 µs a paragraph):
 
-| Part | ms | Share |
-|---|---|---|
-| Attribute cascade, font bytes, runs, substitutions | 10.7 | 12 % |
-| Per-line wrap widths (`build_perline_wrap_widths`) | 7.9 | 9 % |
-| Layout cache: key hashing 4.0, hit lookup and clone 4.2, misses 0.1 | 8.8 | 10 % |
-| Line placement, glyph emission, decorations (the rest) | ~62 | 69 % |
+| Part                                                                | ms   | Share |
+| ------------------------------------------------------------------- | ---- | ----- |
+| Attribute cascade, font bytes, runs, substitutions                  | 10.7 | 12 %  |
+| Per-line wrap widths (`build_perline_wrap_widths`)                  | 7.9  | 9 %   |
+| Layout cache: key hashing 4.0, hit lookup and clone 4.2, misses 0.1 | 8.8  | 10 %  |
+| Line placement, glyph emission, decorations (the rest)              | ~62  | 69 %  |
 
 A typed character at the **end** of the story costs the same as one on page 3 (168 against
 170 ms): there is no early stop.
@@ -143,16 +143,16 @@ post passes. This is the floor of today's structure, before any story is re-emit
 Wall 149.0 ms. The edited story `Story/u38` costs **0.20 ms** of the 83.5 ms spent emitting
 stories. Everything else is re-emitting stories the edit did not touch.
 
-| Phase | ms | Note |
-|---|---|---|
-| First inner build | 73.2 | |
-| Second inner build (post-layout: running headers, page references) | **69.8** | `build_document_fixed` re-runs the whole build with the master-text and body-story caches **off** (`crates/paged-renderer/src/pipeline/build_engine.rs`: `if post.is_some() { None }`). |
-| of which: emit (1 029 stories × 2 builds) | 56.1 | **Zero cache hits.** The annual declares a `ContinueNumbersAcrossStories` list, so `cross_story_numbering.is_some()` disables the cache document-wide. |
-| of which: build setup | **38.3** (2 passes) | The CMYK ICC transform is built in every `build_document_inner`. Without the profile the edit is 103.8 ms. |
-| of which: footnote measure and keep check | 16.0 | The lap covers the keep check and `measure_footnote_pools`. The code measures the pools over **all** pages for every story once any page holds a footnote: O(stories × pages). |
-| of which: z-slot and group-fit passes | 9.9 | |
-| of which: span/split planning per story | 6.5 | `plan_span_columns` resolves every paragraph's attributes in every story, every build, to find out that most stories have no spans. |
-| of which: master stories, auto-size, post-layout context | 5.1 + 2.7 + 2.3 | |
+| Phase                                                              | ms                  | Note                                                                                                                                                                                    |
+| ------------------------------------------------------------------ | ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| First inner build                                                  | 73.2                |                                                                                                                                                                                         |
+| Second inner build (post-layout: running headers, page references) | **69.8**            | `build_document_fixed` re-runs the whole build with the master-text and body-story caches **off** (`crates/paged-renderer/src/pipeline/build_engine.rs`: `if post.is_some() { None }`). |
+| of which: emit (1 029 stories × 2 builds)                          | 56.1                | **Zero cache hits.** The annual declares a `ContinueNumbersAcrossStories` list, so `cross_story_numbering.is_some()` disables the cache document-wide.                                  |
+| of which: build setup                                              | **38.3** (2 passes) | The CMYK ICC transform is built in every `build_document_inner`. Without the profile the edit is 103.8 ms.                                                                              |
+| of which: footnote measure and keep check                          | 16.0                | The lap covers the keep check and `measure_footnote_pools`. The code measures the pools over **all** pages for every story once any page holds a footnote: O(stories × pages).          |
+| of which: z-slot and group-fit passes                              | 9.9                 |                                                                                                                                                                                         |
+| of which: span/split planning per story                            | 6.5                 | `plan_span_columns` resolves every paragraph's attributes in every story, every build, to find out that most stories have no spans.                                                     |
+| of which: master stories, auto-size, post-layout context           | 5.1 + 2.7 + 2.3     |                                                                                                                                                                                         |
 
 ### 2.3 Spikes and cliffs found on the way
 
@@ -164,6 +164,7 @@ stories. Everything else is re-emitting stories the edit did not touch.
 
   That costs 586 ms native when pasted at the end. With the paste on page 3, 1 493 ms native
   and 1 881 ms in wasm (wasm also pasted on page 3).
+
 - **The layout cache clears everything at 10 000 entries** (`LayoutCache::insert`, "no LRU
   yet"). The long story holds about 4 entries per paragraph (8 245 for 2 120 paragraphs) and
   adds about 2 per keystroke. The page-3 paste tipped it over mid-build: 4 125 misses, 886 ms
@@ -184,19 +185,21 @@ stories. Everything else is re-emitting stories the edit did not touch.
 ### 2.4 Simulating decision 1 on the annual, with a digest diff
 
 Two env-gated hacks were run (not committed):
+
 - drop only the edited story's body-story entries instead of `clear()`;
 - allow the cache despite cross-story numbering.
 
 Each edit was applied to two models loaded from the same bytes: one with the hacks, one
 without. Then all 134 page digests were compared.
 
-| Variant | Per keystroke | Pages whose digest differs from the full rebuild |
-|---|---|---|
-| Today (the reference model in the same run) | 159 ms | — |
-| Per-story invalidation, cache on despite cross-story numbering | **124 ms** (−22 %) | **0** on every edit |
-| … and the cache also on in the post-layout pass | 90 ms (−43 %) | **98** on every edit |
+| Variant                                                        | Per keystroke      | Pages whose digest differs from the full rebuild |
+| -------------------------------------------------------------- | ------------------ | ------------------------------------------------ |
+| Today (the reference model in the same run)                    | 159 ms             | —                                                |
+| Per-story invalidation, cache on despite cross-story numbering | **124 ms** (−22 %) | **0** on every edit                              |
+| … and the cache also on in the post-layout pass                | 90 ms (−43 %)      | **98** on every edit                             |
 
 What the simulation shows:
+
 - Even with invalidation, 135 stories per build still re-emit. 134 of them are uncacheable
   because they produced a diagnostic, and the cache stores no diagnostics.
 - The 0 holds for this edit and this document only. Cross-story numbering is correct here only
@@ -208,38 +211,39 @@ What the simulation shows:
 
 ## 3. Where ADR 027 cuts, against the code as it is now
 
-*Status note (2026-10-02): "the code as it is now" is `6dea692`. This section predates the
-implementation; see §6.*
+_Status note (2026-10-02): "the code as it is now" is `6dea692`. This section predates the
+implementation; see §6._
 
-| ADR 027 decision | Fit with `6dea692` | What changes |
-|---|---|---|
-| 1. Record a read set, not a hand key | Fits, and is needed more than the ADR said. The hand key (`crates/paged-renderer/src/pipeline/deltas.rs::body_story_signature`) covers chain ids and bounds, the wrap shapes on chain pages, and the absolute page index. It misses content, styles, variables, the cross-story numbering ledger and frame options (insets, columns, first-baseline offset). Four `clear()` sites paper over it: `apply_mutation` text lane, `apply_operation`, `undo`, `redo`. | Revisions per story and per definition from `paged_mutate::apply`. Emission records what it resolves. |
-| 2. Identity, not absolute index | Generated pages already have stable ids (`<story>_grow<k>_page`, ADR 026 §3). Both emit caches still key on the absolute index: `master_text_emit_cache` is `(frame, page_idx)`, the body key hashes `page`, and deltas are `per_page: Vec<(usize, …)>`. | Key and splice by `PageId`. Page numbers become variables. |
-| 3. Early stop inside a story | Not possible yet. A story emits in one `for paragraph in &story.paragraphs` loop with emitter state (`frame_idx`, `y_cursor`, numbering, footnote captures, `forced_breaks`) that is never snapshotted per frame. The keeps fixpoint and the footnote fixpoint both re-emit the **whole** story. | Per-frame resume points: paragraph index, line, emitter state, per-frame command ranges (already tracked as `frame_cmd_ranges`). |
-| 4. Digest gate | `DisplayList::digest()` exists and is used by `paged-sdk`'s equivalence test and three `paged-canvas` tests. No incremental-vs-full lane exists. | New lane (step 0). |
-| 5. One commit path | Confirmed: four clear-then-rebuild copies, and two near-identical `PipelineOptions` constructions (`build_for_export`, `rebuild_after_mutation`). | `commit_and_rebuild(invalidation)`, `pipeline_options(purpose)`. |
-| 6. Structural ops rebuild everything | Fits. | — |
-| 7. Dirty pages drive redraw | Today a text edit reports **every** page: `MutationOutcome.page_ids` is all pages, and the wasm `CacheEffect::InvalidatePages` uses all pages of the story's chain, which for a DOCX is the whole document. | Report the pages whose emission changed. |
+| ADR 027 decision                     | Fit with `6dea692`                                                                                                                                                                                                                                                                                                                                                                                                                                              | What changes                                                                                                                     |
+| ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| 1. Record a read set, not a hand key | Fits, and is needed more than the ADR said. The hand key (`crates/paged-renderer/src/pipeline/deltas.rs::body_story_signature`) covers chain ids and bounds, the wrap shapes on chain pages, and the absolute page index. It misses content, styles, variables, the cross-story numbering ledger and frame options (insets, columns, first-baseline offset). Four `clear()` sites paper over it: `apply_mutation` text lane, `apply_operation`, `undo`, `redo`. | Revisions per story and per definition from `paged_mutate::apply`. Emission records what it resolves.                            |
+| 2. Identity, not absolute index      | Generated pages already have stable ids (`<story>_grow<k>_page`, ADR 026 §3). Both emit caches still key on the absolute index: `master_text_emit_cache` is `(frame, page_idx)`, the body key hashes `page`, and deltas are `per_page: Vec<(usize, …)>`.                                                                                                                                                                                                        | Key and splice by `PageId`. Page numbers become variables.                                                                       |
+| 3. Early stop inside a story         | Not possible yet. A story emits in one `for paragraph in &story.paragraphs` loop with emitter state (`frame_idx`, `y_cursor`, numbering, footnote captures, `forced_breaks`) that is never snapshotted per frame. The keeps fixpoint and the footnote fixpoint both re-emit the **whole** story.                                                                                                                                                                | Per-frame resume points: paragraph index, line, emitter state, per-frame command ranges (already tracked as `frame_cmd_ranges`). |
+| 4. Digest gate                       | `DisplayList::digest()` exists and is used by `paged-sdk`'s equivalence test and three `paged-canvas` tests. No incremental-vs-full lane exists.                                                                                                                                                                                                                                                                                                                | New lane (step 0).                                                                                                               |
+| 5. One commit path                   | Confirmed: four clear-then-rebuild copies, and two near-identical `PipelineOptions` constructions (`build_for_export`, `rebuild_after_mutation`).                                                                                                                                                                                                                                                                                                               | `commit_and_rebuild(invalidation)`, `pipeline_options(purpose)`.                                                                 |
+| 6. Structural ops rebuild everything | Fits.                                                                                                                                                                                                                                                                                                                                                                                                                                                           | —                                                                                                                                |
+| 7. Dirty pages drive redraw          | Today a text edit reports **every** page: `MutationOutcome.page_ids` is all pages, and the wasm `CacheEffect::InvalidatePages` uses all pages of the story's chain, which for a DOCX is the whole document.                                                                                                                                                                                                                                                     | Report the pages whose emission changed.                                                                                         |
 
 **Every global pass a local edit pays for today.** These are measured costs per keystroke,
 native:
 
-| # | Pass | Long story | Annual |
-|---|---|---|---|
-| G1 | `with_generated_pages`: clone + `rebuild_indexes()` per generated page | 49 ms (950 ms at 2 000 pages) | — |
-| G2 | Edited story re-emitted from paragraph 0, no early stop | 48 ms | 0.2 ms |
-| G3 | Keeps fixpoint restarts from empty `forced_breaks` on every build | 43 ms | ~0 |
-| G4 | Unedited stories re-emitted: cache off under cross-story numbering, uncacheable when they emit a diagnostic | — | ~80 ms (both builds) |
-| G5 | Post-layout second build with every cache off | — | 70 ms |
-| G6 | CMYK ICC transform rebuilt per inner build | — | 38 ms |
-| G7 | Footnote-pool measure over all pages, once per story | — | 16 ms |
-| G8 | Z-slot relocation and transparency-group fit over all pages | 14 ms | 10 ms |
-| G9 | Span/split planning resolves every paragraph of every story | 0.7 ms | 6.5 ms |
-| G10 | Whole-story delta capture, and splice of cached stories (O(commands)) | 6 + 10 ms | 2 ms |
-| G11 | Grow loop doubles on overset, then trims (two extra full builds) | +2 builds on a page-adding edit | — |
-| G12 | Layout cache wholesale clear at 10 000 entries | 886 ms spike | — |
+| #   | Pass                                                                                                        | Long story                      | Annual               |
+| --- | ----------------------------------------------------------------------------------------------------------- | ------------------------------- | -------------------- |
+| G1  | `with_generated_pages`: clone + `rebuild_indexes()` per generated page                                      | 49 ms (950 ms at 2 000 pages)   | —                    |
+| G2  | Edited story re-emitted from paragraph 0, no early stop                                                     | 48 ms                           | 0.2 ms               |
+| G3  | Keeps fixpoint restarts from empty `forced_breaks` on every build                                           | 43 ms                           | ~0                   |
+| G4  | Unedited stories re-emitted: cache off under cross-story numbering, uncacheable when they emit a diagnostic | —                               | ~80 ms (both builds) |
+| G5  | Post-layout second build with every cache off                                                               | —                               | 70 ms                |
+| G6  | CMYK ICC transform rebuilt per inner build                                                                  | —                               | 38 ms                |
+| G7  | Footnote-pool measure over all pages, once per story                                                        | —                               | 16 ms                |
+| G8  | Z-slot relocation and transparency-group fit over all pages                                                 | 14 ms                           | 10 ms                |
+| G9  | Span/split planning resolves every paragraph of every story                                                 | 0.7 ms                          | 6.5 ms               |
+| G10 | Whole-story delta capture, and splice of cached stories (O(commands))                                       | 6 + 10 ms                       | 2 ms                 |
+| G11 | Grow loop doubles on overset, then trims (two extra full builds)                                            | +2 builds on a page-adding edit | —                    |
+| G12 | Layout cache wholesale clear at 10 000 entries                                                              | 886 ms spike                    | —                    |
 
 Also global, but not a cost in these documents:
+
 - `expand_column_chain` measures the whole story for balanced columns.
 - `auto_size::fit_all` measures every auto-sized frame.
 - TOC stories rebuild from `page_labels` on every build.
@@ -247,8 +251,8 @@ Also global, but not a cost in these documents:
 
 ## 4. The plan
 
-*Status note (2026-10-02): this section predates the implementation; §6 records, per step, what
-was built and where it departs from the plan.*
+_Status note (2026-10-02): this section predates the implementation; §6 records, per step, what
+was built and where it departs from the plan._
 
 Each step lands on its own, keeps output byte-identical, and is tested by the digest gate from
 step 0. The "expected win" figures are measured components from §2, not forecasts of
@@ -335,6 +339,7 @@ interaction effects.
 
   The key is the hash of that set. The entry also stores the ledger value **out**, so a hit
   can replay the ledger update.
+
 - **Key by `PageId`**, and splice by page id, for both emit caches.
 - **Store diagnostics in the delta**, so the 134 stories that emit a diagnostic (overset,
   substitution) become cacheable and replay their diagnostics.
@@ -421,7 +426,7 @@ interaction effects.
     and an early stop (step 6) both depend on that being deterministic from the frame-start
     state.
   - Keep-with-next on the last paragraph of a frame looks one region ahead, so the stop
-    condition must compare the frame *after* keeps are applied, not raw.
+    condition must compare the frame _after_ keeps are applied, not raw.
 - **Growth.**
   - The grow loop and early stop must both converge: the loop repeats until the page set
     **and** the per-frame break positions stop changing (ADR 027 consequences).
@@ -477,21 +482,22 @@ every scripted op on reflow, docx-pagination, keeps, span-columns, footnotes, nu
 variables, navigation and a growing DOCX-shaped story, and the annual with
 `PAGED_DIGEST_GATE_ANNUAL=<.paged>`.
 
-| Step | Commit | Long story, native | Annual, native | wasm (node) |
-|---|---|---|---|---|
-| baseline (`3b9694e` + the cycle-guard fix) | — | 194 ms | 154 ms (typing in `u020c4a`) | — |
-| 0: digest gate; generated pages index once | `1be3e7f` | **146 ms** | 151 ms | — |
-| 1: one commit path (`commit_and_rebuild`) | `9810367` | unchanged | unchanged | long 244 ms, annual 176 ms |
-| 3: keeps fixpoint seeded from the last build | `493da64` | **90 ms** | unchanged | long **167 ms**, annual 159 ms |
-| (step 2 constants, see the table further down: CMYK cache, footnote pages, span early-out) | `770bd88`…`c401ded` | — | — | — |
-| 3 again, typing in **Story/u38** (the §2.2 edit) | `493da64` + step 2 | 90 ms | 110 ms | long 155 ms, annual 154 ms |
-| 4: a text edit drops only its own story | `f81dfb4` | 90 ms | **70 ms** | — |
-| 5: post-layout pass uses the caches | `0879078` | 90 ms | **41–44 ms** | long 155 ms, annual **59 ms** |
-| 6: resume at the edit, stop where the flow rejoins | `0f6c008` | **~56 ms**, 1 frame laid out | unchanged (u38's frame is not recorded) | — |
-| 6a: layout cache position-independent (the finding in the step 2 notes) | `aa29214` | unchanged; **page-3 paste 1 381 → 454 ms** | unchanged | — |
-| 7: only changed pages reported, re-encoded and finished | `0fd3b67` | **19.4 ms**, 1 of 227 pages changed | **38 ms**, 3 of 134 pages changed | long **26 ms**, annual **53 ms**, page-3 paste **592 ms** |
+| Step                                                                                       | Commit              | Long story, native                         | Annual, native                          | wasm (node)                                               |
+| ------------------------------------------------------------------------------------------ | ------------------- | ------------------------------------------ | --------------------------------------- | --------------------------------------------------------- |
+| baseline (`3b9694e` + the cycle-guard fix)                                                 | —                   | 194 ms                                     | 154 ms (typing in `u020c4a`)            | —                                                         |
+| 0: digest gate; generated pages index once                                                 | `1be3e7f`           | **146 ms**                                 | 151 ms                                  | —                                                         |
+| 1: one commit path (`commit_and_rebuild`)                                                  | `9810367`           | unchanged                                  | unchanged                               | long 244 ms, annual 176 ms                                |
+| 3: keeps fixpoint seeded from the last build                                               | `493da64`           | **90 ms**                                  | unchanged                               | long **167 ms**, annual 159 ms                            |
+| (step 2 constants, see the table further down: CMYK cache, footnote pages, span early-out) | `770bd88`…`c401ded` | —                                          | —                                       | —                                                         |
+| 3 again, typing in **Story/u38** (the §2.2 edit)                                           | `493da64` + step 2  | 90 ms                                      | 110 ms                                  | long 155 ms, annual 154 ms                                |
+| 4: a text edit drops only its own story                                                    | `f81dfb4`           | 90 ms                                      | **70 ms**                               | —                                                         |
+| 5: post-layout pass uses the caches                                                        | `0879078`           | 90 ms                                      | **41–44 ms**                            | long 155 ms, annual **59 ms**                             |
+| 6: resume at the edit, stop where the flow rejoins                                         | `0f6c008`           | **~56 ms**, 1 frame laid out               | unchanged (u38's frame is not recorded) | —                                                         |
+| 6a: layout cache position-independent (the finding in the step 2 notes)                    | `aa29214`           | unchanged; **page-3 paste 1 381 → 454 ms** | unchanged                               | —                                                         |
+| 7: only changed pages reported, re-encoded and finished                                    | `0fd3b67`           | **19.4 ms**, 1 of 227 pages changed        | **38 ms**, 3 of 134 pages changed       | long **26 ms**, annual **53 ms**, page-3 paste **592 ms** |
 
 Notes per step:
+
 - **Step 0.** The gate compares page ids, every page's digest, `story_layout` and the
   diagnostics against a cold build (fresh layout cache, no emit caches, no grow hint).
   `PAGED_DIGEST_GATE=1` runs it inside every rebuild. It was checked to bite: leaving the
@@ -555,7 +561,6 @@ Notes per step:
    other story is spliced twice (two passes). The editor's `rebuild-profile.spec.ts`
    (Chrome, with repaint) was not run.
 
-
 ### Step 2 and the two cliffs (G6, G7, G9, G11, G12)
 
 Measured with a throwaway `paged-canvas` example (not committed) driving `CanvasModel` as
@@ -566,16 +571,17 @@ docx-pagination, 2 000-paragraph and annual load / 3 keystrokes / 60-paragraph p
 scripts, identical to the parent (1 612–1 615 page digests), and `digest_gate` green with
 `PAGED_DIGEST_GATE_ANNUAL` set from item 4 on.
 
-| Item | Commit | Before | After |
-|---|---|---|---|
-| 257-frame cap on generated chains (bug) | `a4c9cdb` | 2 600 paragraphs: 2 003 pages (1 709 padding), 1 149 ms per keystroke | 294 pages, 202 ms |
-| Layout cache: LRU instead of clear-all at 10 000 (G12) | `4963b68` | after crossing: 2 656 entries kept, 3 185 / 4 048 misses in the crossing build | 7 614 kept, 3 143 / 3 268 misses; wall time not measurably different; wasm high-water +12.7 MiB (1 254.6 → 1 267.3 MiB, +1 %) |
-| CMYK transform kept on the model (G6) | `770bd88` | annual 143.4 / 142.9 ms; wasm 164.5 / 166.1 ms | **105.2 / 104.1 ms** (−38 ms); wasm 152.9 / 148.8 ms (≈ −14 ms, qcms is cheaper) |
-| Footnote measure on the chain's own pages (G7) | `3831aa7` | annual 109.5 / 112.8 ms | **96.1 / 96.1 ms** (−13 to −17 ms) |
-| Span/split planning returns early (G9) | `c401ded` | planner 817 µs per inner build; annual 87.9 / 87.6 ms | 157 µs; 87.2 / 86.3 ms (≈ −1.3 ms; the plan's 6.5 ms was measured on `6dea692`) |
-| Grow by estimate, not doubling (G11); lowered `max_pages` holds (bug) | `d1fc71a` | paste at the end adding 3 pages: 3 builds, 315 / 325 ms; page-3 paste 671 / 684 ms; open+grow 1 391 / 1 393 ms | 2 builds, 241 / 258 ms; 601 / 630 ms; 1 060 / 1 083 ms |
+| Item                                                                  | Commit    | Before                                                                                                         | After                                                                                                                         |
+| --------------------------------------------------------------------- | --------- | -------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| 257-frame cap on generated chains (bug)                               | `a4c9cdb` | 2 600 paragraphs: 2 003 pages (1 709 padding), 1 149 ms per keystroke                                          | 294 pages, 202 ms                                                                                                             |
+| Layout cache: LRU instead of clear-all at 10 000 (G12)                | `4963b68` | after crossing: 2 656 entries kept, 3 185 / 4 048 misses in the crossing build                                 | 7 614 kept, 3 143 / 3 268 misses; wall time not measurably different; wasm high-water +12.7 MiB (1 254.6 → 1 267.3 MiB, +1 %) |
+| CMYK transform kept on the model (G6)                                 | `770bd88` | annual 143.4 / 142.9 ms; wasm 164.5 / 166.1 ms                                                                 | **105.2 / 104.1 ms** (−38 ms); wasm 152.9 / 148.8 ms (≈ −14 ms, qcms is cheaper)                                              |
+| Footnote measure on the chain's own pages (G7)                        | `3831aa7` | annual 109.5 / 112.8 ms                                                                                        | **96.1 / 96.1 ms** (−13 to −17 ms)                                                                                            |
+| Span/split planning returns early (G9)                                | `c401ded` | planner 817 µs per inner build; annual 87.9 / 87.6 ms                                                          | 157 µs; 87.2 / 86.3 ms (≈ −1.3 ms; the plan's 6.5 ms was measured on `6dea692`)                                               |
+| Grow by estimate, not doubling (G11); lowered `max_pages` holds (bug) | `d1fc71a` | paste at the end adding 3 pages: 3 builds, 315 / 325 ms; page-3 paste 671 / 684 ms; open+grow 1 391 / 1 393 ms | 2 builds, 241 / 258 ms; 601 / 630 ms; 1 060 / 1 083 ms                                                                        |
 
 Notes:
+
 - **The 10 000-entry cliff was mostly not the clear.** `paged_text::cache` folds the
   paragraph's absolute `first_baseline` into the layout key (`layout_runs_cached`), so every
   paragraph that moves vertically misses. A paste on page 3 re-lays every paragraph below it

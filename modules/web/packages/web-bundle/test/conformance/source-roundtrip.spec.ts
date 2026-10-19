@@ -53,7 +53,9 @@ import { openHost } from "./host";
  *  carrier a source envelope attaches to (the bundle's insert does the
  *  same, in one batch; here we split so each metadata assertion is
  *  isolated). */
-async function insertCarrier(h: HeadlessHost): Promise<{ kind: string; id: string }> {
+async function insertCarrier(
+  h: HeadlessHost,
+): Promise<{ kind: string; id: string }> {
   const out = await h.host.document.mutate({
     op: "insertFrame",
     args: { pageId: W1_EMPTY_PAGE.pageId, bounds: [60, 60, 240, 300] },
@@ -92,7 +94,10 @@ describe("web conformance — source metadata round-trip", () => {
 
   it("a re-write replaces the source (latest wins)", async () => {
     const carrier = await insertCarrier(h);
-    await h.host.document.setMetadata(carrier as never, envelopeFor(DEFAULT_SOURCE));
+    await h.host.document.setMetadata(
+      carrier as never,
+      envelopeFor(DEFAULT_SOURCE),
+    );
     const edited: WebFrameSource = {
       html: "<h1>{{title}}</h1>",
       css: "h1 { color: rebeccapurple; }",
@@ -113,7 +118,10 @@ describe("web conformance — source metadata round-trip", () => {
 
   it("the source survives an unrelated document mutate", async () => {
     const carrier = await insertCarrier(h);
-    await h.host.document.setMetadata(carrier as never, envelopeFor(DEFAULT_SOURCE));
+    await h.host.document.setMetadata(
+      carrier as never,
+      envelopeFor(DEFAULT_SOURCE),
+    );
     // An unrelated insert on the same page.
     const other = await h.host.document.mutate({
       op: "insertFrame",

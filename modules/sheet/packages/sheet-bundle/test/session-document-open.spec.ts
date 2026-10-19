@@ -52,12 +52,20 @@ import { bootEngine } from "../src/engine";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const WASM = join(HERE, "..", "bin", "sheet_js_bg.wasm");
 const built = existsSync(WASM);
-const FIXTURE = join(HERE, "..", "..", "..", "corpus/xlsx-corpus/01-minimal.xlsx");
+const FIXTURE = join(
+  HERE,
+  "..",
+  "..",
+  "..",
+  "corpus/xlsx-corpus/01-minimal.xlsx",
+);
 
 if (process.env.REQUIRE_REAL_ENGINE === "1" && !built) {
   describe("session document open (wasm artifact) — REQUIRED", () => {
     it("FAILS: REQUIRE_REAL_ENGINE=1 but the wasm artifact is missing", () => {
-      throw new Error(`REQUIRE_REAL_ENGINE=1 but ${WASM} is missing — run scripts/build-wasm.sh`);
+      throw new Error(
+        `REQUIRE_REAL_ENGINE=1 but ${WASM} is missing — run scripts/build-wasm.sh`,
+      );
     });
   });
 }
@@ -201,113 +209,146 @@ async function a10(bytes: Uint8Array | null): Promise<string | null> {
 const texts = (layer: SceneLayer) =>
   layer.items.flatMap((i) => (i.kind === "text" ? [i.text] : []));
 
-describe.skipIf(!built)("the workbook follows the open document [sheet.plugin.persistence]", () => {
-  it("a document opened after boot restores its workbook part (document.onDidOpen)", async () => {
-    const ed = fakeEditor({ broadcasts: true });
-    const handle = activate(ed.host);
-    await waitFor(async () => expect(await ed.exported()).toBeNull()); // boot: nothing yet
-    // Nothing holds a raw client subscription.
-    expect(ed.rawSubscribers()).toBe(0);
+describe.skipIf(!built)(
+  "the workbook follows the open document [sheet.plugin.persistence]",
+  () => {
+    it("a document opened after boot restores its workbook part (document.onDidOpen)", async () => {
+      const ed = fakeEditor({ broadcasts: true });
+      const handle = activate(ed.host);
+      await waitFor(async () => expect(await ed.exported()).toBeNull()); // boot: nothing yet
+      // Nothing holds a raw client subscription.
+      expect(ed.rawSubscribers()).toBe(0);
 
-    ed.open("A", { "workbook.xlsx": await workbookWith("from A"), "workbook.name": new TextEncoder().encode("a.xlsx") });
-    await waitFor(async () => expect(await a10(await ed.exported())).toBe("from A"));
-    handle.dispose();
-    expect(ed.rawSubscribers()).toBe(0);
-  });
-
-  it("entering a sheet frame with no workbook loaded restores it first (no open signal)", async () => {
-    const ed = fakeEditor({ broadcasts: false });
-    const handle = activate(ed.host);
-    await new Promise((r) => setTimeout(r, 20)); // the boot restore found nothing
-    ed.open("A", { "workbook.xlsx": await workbookWith("lazy") });
-
-    ed.sheetContext().onEnter?.({ type: "sheet", id: { kind: "textFrame", id: "f1" } } as never);
-    await waitFor(() => expect(ed.submits.length).toBeGreaterThan(0));
-    expect(texts(ed.submits.at(-1)!)).toContain("lazy");
-    handle.dispose();
-  });
-
-  it("each document has its own workbook; one without a part has none", async () => {
-    const ed = fakeEditor({ broadcasts: true });
-    const handle = activate(ed.host);
-    ed.open("A", { "workbook.xlsx": await workbookWith("from A") });
-    await waitFor(async () => expect(await a10(await ed.exported())).toBe("from A"));
-
-    ed.open("B", { "workbook.xlsx": await workbookWith("from B") });
-    await waitFor(async () => expect(await a10(await ed.exported())).toBe("from B"));
-
-    // A new document: the per-browser blob still holds B's workbook (every
-    // persist writes it), and it must NOT leak into a document of its own.
-    ed.open("C");
-    await waitFor(async () => expect(await ed.exported()).toBeNull());
-    expect(ed.parts("C")!.has("workbook.xlsx")).toBe(false);
-
-    ed.open("A");
-    await waitFor(async () => expect(await a10(await ed.exported())).toBe("from A"));
-    handle.dispose();
-  });
-
-  it("an edit pending when another document opens is not written into it", async () => {
-    const ed = fakeEditor({ broadcasts: true });
-    const handle = activate(ed.host);
-    ed.open("A", { "workbook.xlsx": await workbookWith("from A") });
-    await waitFor(async () => expect(await a10(await ed.exported())).toBe("from A"));
-    // Enter the frame and type into A1 (the debounce has not elapsed).
-    const ctx = ed.sheetContext();
-    ctx.onEnter?.({ type: "sheet", id: { kind: "textFrame", id: "f1" } } as never);
-    await waitFor(() => expect(ed.submits.length).toBeGreaterThan(0));
-    ctx.onContentPointerDown?.({
-      contentPoint: [5, 5],
-      button: 0,
-      modifiers: { shift: false, alt: false, cmd: false, ctrl: false },
-    } as never);
-    for (const key of ["x", "Enter"]) ctx.onContentKey?.({ key } as KeyboardEvent);
-    await waitFor(() => expect(texts(ed.submits.at(-1)!)).toContain("x")); // the edit landed
-
-    ed.open("B", { "workbook.xlsx": await workbookWith("from B") });
-    await waitFor(async () => expect(await a10(await ed.exported())).toBe("from B"));
-    await new Promise((r) => setTimeout(r, 1_600)); // past the persist debounce
-    expect(await a10(ed.parts("B")!.get("workbook.xlsx")!)).toBe("from B");
-    handle.dispose();
-  });
-});
-
-describe.skipIf(!built)("a wheel over the entered frame scrolls the grid [sheet.grid.inframe]", () => {
-  it("declares onContentWheel: down scrolls by rows and claims; up at row 1 declines", async () => {
-    const ed = fakeEditor({ broadcasts: true });
-    const handle = activate(ed.host);
-    ed.open("A", { "workbook.xlsx": await workbookWith("row ten") });
-    await waitFor(async () => expect(await a10(await ed.exported())).toBe("row ten"));
-    const ctx = ed.sheetContext() as EditContextContribution & {
-      onContentWheel?(e: unknown): boolean;
-    };
-    expect(typeof ctx.onContentWheel).toBe("function");
-    const wheel = (dy: number, dx = 0, shift = false) =>
-      ctx.onContentWheel!({
-        contentPoint: [10, 10],
-        elementId: "f1",
-        delta: [dx, dy],
-        modifiers: { shift, alt: false, cmd: false, ctrl: false },
+      ed.open("A", {
+        "workbook.xlsx": await workbookWith("from A"),
+        "workbook.name": new TextEncoder().encode("a.xlsx"),
       });
+      await waitFor(async () =>
+        expect(await a10(await ed.exported())).toBe("from A"),
+      );
+      handle.dispose();
+      expect(ed.rawSubscribers()).toBe(0);
+    });
 
-    expect(wheel(40)).toBe(false); // no grid showing yet: the canvas pans
-    ctx.onEnter?.({ type: "sheet", id: { kind: "textFrame", id: "f1" } } as never);
-    await waitFor(() => expect(ed.submits.length).toBeGreaterThan(0));
-    expect(wheel(-40)).toBe(false); // already at row 1: decline
+    it("entering a sheet frame with no workbook loaded restores it first (no open signal)", async () => {
+      const ed = fakeEditor({ broadcasts: false });
+      const handle = activate(ed.host);
+      await new Promise((r) => setTimeout(r, 20)); // the boot restore found nothing
+      ed.open("A", { "workbook.xlsx": await workbookWith("lazy") });
 
-    const before = ed.submits.length;
-    expect(texts(ed.submits.at(-1)!)).toContain("1"); // A1's value
-    expect(wheel(400)).toBe(true); // many rows down
-    await waitFor(() => expect(ed.submits.length).toBeGreaterThan(before));
-    expect(texts(ed.submits.at(-1)!)).not.toContain("1"); // row 1 scrolled off
+      ed.sheetContext().onEnter?.({
+        type: "sheet",
+        id: { kind: "textFrame", id: "f1" },
+      } as never);
+      await waitFor(() => expect(ed.submits.length).toBeGreaterThan(0));
+      expect(texts(ed.submits.at(-1)!)).toContain("lazy");
+      handle.dispose();
+    });
 
-    const scrolled = ed.submits.length;
-    expect(wheel(1)).toBe(true); // a sub-row step is still the grid's (carried)
-    await new Promise((r) => setTimeout(r, 20));
-    expect(ed.submits.length).toBe(scrolled); // …but moves nothing yet
-    expect(wheel(-4000)).toBe(true); // back up, clamped at row 1
-    await waitFor(() => expect(texts(ed.submits.at(-1)!)).toContain("1"));
-    expect(wheel(-40)).toBe(false);
-    handle.dispose();
-  });
-});
+    it("each document has its own workbook; one without a part has none", async () => {
+      const ed = fakeEditor({ broadcasts: true });
+      const handle = activate(ed.host);
+      ed.open("A", { "workbook.xlsx": await workbookWith("from A") });
+      await waitFor(async () =>
+        expect(await a10(await ed.exported())).toBe("from A"),
+      );
+
+      ed.open("B", { "workbook.xlsx": await workbookWith("from B") });
+      await waitFor(async () =>
+        expect(await a10(await ed.exported())).toBe("from B"),
+      );
+
+      // A new document: the per-browser blob still holds B's workbook (every
+      // persist writes it), and it must NOT leak into a document of its own.
+      ed.open("C");
+      await waitFor(async () => expect(await ed.exported()).toBeNull());
+      expect(ed.parts("C")!.has("workbook.xlsx")).toBe(false);
+
+      ed.open("A");
+      await waitFor(async () =>
+        expect(await a10(await ed.exported())).toBe("from A"),
+      );
+      handle.dispose();
+    });
+
+    it("an edit pending when another document opens is not written into it", async () => {
+      const ed = fakeEditor({ broadcasts: true });
+      const handle = activate(ed.host);
+      ed.open("A", { "workbook.xlsx": await workbookWith("from A") });
+      await waitFor(async () =>
+        expect(await a10(await ed.exported())).toBe("from A"),
+      );
+      // Enter the frame and type into A1 (the debounce has not elapsed).
+      const ctx = ed.sheetContext();
+      ctx.onEnter?.({
+        type: "sheet",
+        id: { kind: "textFrame", id: "f1" },
+      } as never);
+      await waitFor(() => expect(ed.submits.length).toBeGreaterThan(0));
+      ctx.onContentPointerDown?.({
+        contentPoint: [5, 5],
+        button: 0,
+        modifiers: { shift: false, alt: false, cmd: false, ctrl: false },
+      } as never);
+      for (const key of ["x", "Enter"])
+        ctx.onContentKey?.({ key } as KeyboardEvent);
+      await waitFor(() => expect(texts(ed.submits.at(-1)!)).toContain("x")); // the edit landed
+
+      ed.open("B", { "workbook.xlsx": await workbookWith("from B") });
+      await waitFor(async () =>
+        expect(await a10(await ed.exported())).toBe("from B"),
+      );
+      await new Promise((r) => setTimeout(r, 1_600)); // past the persist debounce
+      expect(await a10(ed.parts("B")!.get("workbook.xlsx")!)).toBe("from B");
+      handle.dispose();
+    });
+  },
+);
+
+describe.skipIf(!built)(
+  "a wheel over the entered frame scrolls the grid [sheet.grid.inframe]",
+  () => {
+    it("declares onContentWheel: down scrolls by rows and claims; up at row 1 declines", async () => {
+      const ed = fakeEditor({ broadcasts: true });
+      const handle = activate(ed.host);
+      ed.open("A", { "workbook.xlsx": await workbookWith("row ten") });
+      await waitFor(async () =>
+        expect(await a10(await ed.exported())).toBe("row ten"),
+      );
+      const ctx = ed.sheetContext() as EditContextContribution & {
+        onContentWheel?(e: unknown): boolean;
+      };
+      expect(typeof ctx.onContentWheel).toBe("function");
+      const wheel = (dy: number, dx = 0, shift = false) =>
+        ctx.onContentWheel!({
+          contentPoint: [10, 10],
+          elementId: "f1",
+          delta: [dx, dy],
+          modifiers: { shift, alt: false, cmd: false, ctrl: false },
+        });
+
+      expect(wheel(40)).toBe(false); // no grid showing yet: the canvas pans
+      ctx.onEnter?.({
+        type: "sheet",
+        id: { kind: "textFrame", id: "f1" },
+      } as never);
+      await waitFor(() => expect(ed.submits.length).toBeGreaterThan(0));
+      expect(wheel(-40)).toBe(false); // already at row 1: decline
+
+      const before = ed.submits.length;
+      expect(texts(ed.submits.at(-1)!)).toContain("1"); // A1's value
+      expect(wheel(400)).toBe(true); // many rows down
+      await waitFor(() => expect(ed.submits.length).toBeGreaterThan(before));
+      expect(texts(ed.submits.at(-1)!)).not.toContain("1"); // row 1 scrolled off
+
+      const scrolled = ed.submits.length;
+      expect(wheel(1)).toBe(true); // a sub-row step is still the grid's (carried)
+      await new Promise((r) => setTimeout(r, 20));
+      expect(ed.submits.length).toBe(scrolled); // …but moves nothing yet
+      expect(wheel(-4000)).toBe(true); // back up, clamped at row 1
+      await waitFor(() => expect(texts(ed.submits.at(-1)!)).toContain("1"));
+      expect(wheel(-40)).toBe(false);
+      handle.dispose();
+    });
+  },
+);

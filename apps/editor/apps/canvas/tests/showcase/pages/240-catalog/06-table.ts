@@ -78,35 +78,48 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   const elements: string[] = [];
   const covers: string[] = [];
 
-  const head = await proseFrame(ctx, pg, [48, 54, 480, 84], [
-    { text: "A native table, governed", style: STYLE.head1 },
-  ]);
-  const intro = await proseFrame(ctx, pg, [48, 90, 480, 192], [
-    {
-      text:
-        "The bound table is not a picture of a grid: the plugin inserts a " +
-        "frame, mints a real Paged table in its story, and pours every cell " +
-        "by table, row and column — one row per record of the order book. " +
-        "It reflows, it styles, and it exports to IDML as a table because " +
-        "it is one. Its columns are named in the bindings panel — order id, " +
-        "region, product and quantity — and each cell is resolved from the " +
-        "record, not typed.",
-      style: STYLE.bodySmall,
-    },
-  ]);
+  const head = await proseFrame(
+    ctx,
+    pg,
+    [48, 54, 480, 84],
+    [{ text: "A native table, governed", style: STYLE.head1 }],
+  );
+  const intro = await proseFrame(
+    ctx,
+    pg,
+    [48, 90, 480, 192],
+    [
+      {
+        text:
+          "The bound table is not a picture of a grid: the plugin inserts a " +
+          "frame, mints a real Paged table in its story, and pours every cell " +
+          "by table, row and column — one row per record of the order book. " +
+          "It reflows, it styles, and it exports to IDML as a table because " +
+          "it is one. Its columns are named in the bindings panel — order id, " +
+          "region, product and quantity — and each cell is resolved from the " +
+          "record, not typed.",
+        style: STYLE.bodySmall,
+      },
+    ],
+  );
   elements.push(head.frameId, intro.frameId);
 
-  const tableCaption = await proseFrame(ctx, pg, [252, 216, 480, 400], [
-    {
-      text:
-        "The lowered table — minted with 49 native rows (one header, 48 " +
-        "records) over the four authored columns, trimmed here to eight " +
-        "records because a native table paints past its frame. Each " +
-        "column's header is its field name and each body cell the field's " +
-        "value for that record, as the engine resolved it.",
-      style: STYLE.caption,
-    },
-  ]);
+  const tableCaption = await proseFrame(
+    ctx,
+    pg,
+    [252, 216, 480, 400],
+    [
+      {
+        text:
+          "The lowered table — minted with 49 native rows (one header, 48 " +
+          "records) over the four authored columns, trimmed here to eight " +
+          "records because a native table paints past its frame. Each " +
+          "column's header is its field name and each body cell the field's " +
+          "value for that record, as the engine resolved it.",
+        style: STYLE.caption,
+      },
+    ],
+  );
   elements.push(tableCaption.frameId);
 
   let ledger: string[] = [];
@@ -120,9 +133,12 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     const throwawayStory = await doc.storyOf(pageId, throwawayBox);
 
     await addAuthoredBinding(page, "table", TABLE_COLUMNS);
-    await expect(page.locator("[data-data-bind-msg]")).toContainText(/^table binding /, {
-      timeout: 30_000,
-    });
+    await expect(page.locator("[data-data-bind-msg]")).toContainText(
+      /^table binding /,
+      {
+        timeout: 30_000,
+      },
+    );
     const framesBefore = await sceneRefs(page, "textFrame");
     const polysBefore = await sceneRefs(page, "polygon");
     await withActivePage(page, pageId, async () => {
@@ -130,8 +146,7 @@ export async function build(ctx: PageContext): Promise<PageReport> {
       await page.getByRole("button", { name: /^lower to document$/i }).click();
       await settle(
         page,
-        async () =>
-          (await newRefs(page, "textFrame", framesBefore)).length > 0,
+        async () => (await newRefs(page, "textFrame", framesBefore)).length > 0,
         30_000,
       );
       await page.waitForTimeout(1_000);
@@ -143,7 +158,12 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     // because the pass commits symbol after symbol and an early sample
     // would leave the late ones as litter (measured on the symbology
     // page).
-    const strayPolys = await settleStableNew(page, "polygon", polysBefore, 20_000);
+    const strayPolys = await settleStableNew(
+      page,
+      "polygon",
+      polysBefore,
+      20_000,
+    );
     if (strayPolys.length > 0) {
       await removeRefs(doc, strayPolys);
       notes.push(

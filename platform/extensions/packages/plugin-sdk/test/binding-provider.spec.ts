@@ -126,7 +126,10 @@ describe("contribute.bindingProvider — registration + the three gates", () => 
     const { host } = setup();
     const handle = contributeBindingProvider(host, "rasterImage", {
       provides: { paths: ["layerVisible"] },
-      readProperty: () => ({ kind: "value", value: { type: "bool", value: true } }),
+      readProperty: () => ({
+        kind: "value",
+        value: { type: "bool", value: true },
+      }),
     });
     expect(typeof handle.invalidate).toBe("function");
     // STATIC: this SDK has the door. DYNAMIC: a registry is wired.
@@ -143,7 +146,11 @@ describe("contribute.bindingProvider — registration + the three gates", () => 
     const { host } = createBundleHost(
       () => fake.editor,
       { ...MANIFEST, contributes: {} },
-      { console: silent, bindingProviders: registry, capabilityMode: "enforce" },
+      {
+        console: silent,
+        bindingProviders: registry,
+        capabilityMode: "enforce",
+      },
     );
     expect(() =>
       contributeBindingProvider(host, "rasterImage", {
@@ -198,7 +205,9 @@ describe("contribute.bindingProvider — registration + the three gates", () => 
         provides: { paths: ["layerVisible"], writablePaths: ["layerLocked"] },
         readProperty: () => ({ kind: "decline" }),
       }),
-    ).toThrow(/writablePaths lists "layerLocked", which is not in provides.paths/);
+    ).toThrow(
+      /writablePaths lists "layerLocked", which is not in provides.paths/,
+    );
     // A NON-empty narrowing needs the callback; an EMPTY one is exactly
     // how a read-only provider declares itself and needs none.
     expect(() =>
@@ -224,15 +233,18 @@ describe("contribute.bindingProvider — registration + the three gates", () => 
     contributeEditContext(host, { type: "rasterImage", entry: "doubleClick" });
     const handle = contributeBindingProvider(host, "rasterImage", {
       provides: { paths: ["layerVisible"] },
-      readProperty: () => ({ kind: "value", value: { type: "bool", value: true } }),
+      readProperty: () => ({
+        kind: "value",
+        value: { type: "bool", value: true },
+      }),
     });
     expect(() => handle.invalidate()).not.toThrow();
     expect(() => handle.dispose()).not.toThrow();
     expect(host.supports("contribute.bindingProvider@1")).toBe(true);
     expect(host.supports("bindings.provider@1")).toBe(false);
-    expect(warned.some((w) => /wired no binding-provider registry/.test(w))).toBe(
-      true,
-    );
+    expect(
+      warned.some((w) => /wired no binding-provider registry/.test(w)),
+    ).toBe(true);
   });
 });
 
@@ -241,7 +253,10 @@ describe("contribute.bindingProvider — registration + the three gates", () => 
 describe("lifetime — borrowed from the edit context, not declared", () => {
   const provider: BindingProvider = {
     provides: { paths: ["layerVisible"] },
-    readProperty: () => ({ kind: "value", value: { type: "bool", value: false } }),
+    readProperty: () => ({
+      kind: "value",
+      value: { type: "bool", value: false },
+    }),
   };
 
   it("is NOT consulted before its context is entered", async () => {
@@ -308,7 +323,10 @@ describe("lifetime — borrowed from the edit context, not declared", () => {
       onEnter?: (c: unknown) => void;
       onExit?: (c: unknown) => void;
     };
-    const entered = { type: "rasterImage", id: { kind: "rectangle", id: "u3" } };
+    const entered = {
+      type: "rasterImage",
+      id: { kind: "rectangle", id: "u3" },
+    };
     ctx.onEnter?.(entered);
     ctx.onExit?.(entered);
     expect(seen).toEqual(["enter:u3", "exit:u3"]);
@@ -350,11 +368,17 @@ describe("precedence — innermost active context wins, then decline, then core"
     const inner = setup(MANIFEST_B, "sheetGrid", registry);
     contributeBindingProvider(outer.host, "rasterImage", {
       provides: { paths: ["characterFontSize"] },
-      readProperty: () => ({ kind: "value", value: { type: "length", value: 10 } }),
+      readProperty: () => ({
+        kind: "value",
+        value: { type: "length", value: 10 },
+      }),
     });
     contributeBindingProvider(inner.host, "sheetGrid", {
       provides: { paths: ["characterFontSize"] },
-      readProperty: () => ({ kind: "value", value: { type: "length", value: 99 } }),
+      readProperty: () => ({
+        kind: "value",
+        value: { type: "length", value: 99 },
+      }),
     });
     outer.enter();
     inner.enter();
@@ -383,7 +407,10 @@ describe("precedence — innermost active context wins, then decline, then core"
     const inner = setup(MANIFEST_B, "sheetGrid", registry);
     contributeBindingProvider(outer.host, "rasterImage", {
       provides: { paths: ["characterFontSize"] },
-      readProperty: () => ({ kind: "value", value: { type: "length", value: 10 } }),
+      readProperty: () => ({
+        kind: "value",
+        value: { type: "length", value: 10 },
+      }),
     });
     contributeBindingProvider(inner.host, "sheetGrid", {
       provides: { paths: ["characterFontSize"] },
@@ -435,14 +462,19 @@ describe("fall-through to core — a typed refusal, never an empty answer", () =
     // The point of the split: a caller cannot mistake this for a claimed
     // answer whose value happens to be empty/mixed/absent.
     expect(read).not.toHaveProperty("read");
-    expect((read as { reason: string }).reason).toMatch(/no active binding provider/);
+    expect((read as { reason: string }).reason).toMatch(
+      /no active binding provider/,
+    );
   });
 
   it("the host completes the fall-through by reading CORE (the two-step)", async () => {
     const { host, registry, fake, enter } = setup();
     contributeBindingProvider(host, "rasterImage", {
       provides: { paths: ["layerVisible"] },
-      readProperty: () => ({ kind: "value", value: { type: "bool", value: false } }),
+      readProperty: () => ({
+        kind: "value",
+        value: { type: "bool", value: false },
+      }),
     });
     enter();
     fake.setElementProperties({
@@ -508,7 +540,10 @@ describe("fall-through to core — a typed refusal, never an empty answer", () =
     const { host, registry, enter } = setup();
     contributeBindingProvider(host, "rasterImage", {
       provides: { paths: ["layerVisible"] },
-      readProperty: () => ({ kind: "value", value: { type: "bool", value: true } }),
+      readProperty: () => ({
+        kind: "value",
+        value: { type: "bool", value: true },
+      }),
     });
     enter();
     expect(
@@ -559,7 +594,10 @@ describe("provides.writablePaths — a provider that READS more than it WRITES",
     const { host, registry, enter } = setup();
     contributeBindingProvider(host, "rasterImage", {
       provides: { paths: ["layerVisible"] },
-      readProperty: () => ({ kind: "value", value: { type: "bool", value: true } }),
+      readProperty: () => ({
+        kind: "value",
+        value: { type: "bool", value: true },
+      }),
       writeProperty: () => ({ kind: "applied", outcome: applied }),
     });
     enter();
@@ -648,8 +686,22 @@ describe("consumer 1 — LAYERS: a collection addressed by row identity", () => 
    *  list renders provider rows and core rows identically. */
   const rasterLayers = () => {
     const rows = [
-      { selfId: "r2", name: "Type", visible: true, locked: false, printable: true, z: 1 },
-      { selfId: "r1", name: "Base", visible: true, locked: false, printable: true, z: 0 },
+      {
+        selfId: "r2",
+        name: "Type",
+        visible: true,
+        locked: false,
+        printable: true,
+        z: 1,
+      },
+      {
+        selfId: "r1",
+        name: "Base",
+        visible: true,
+        locked: false,
+        printable: true,
+        z: 0,
+      },
     ];
     const provider: BindingProvider = {
       provides: {
@@ -680,7 +732,11 @@ describe("consumer 1 — LAYERS: a collection addressed by row identity", () => 
       applyMutation: (m) => {
         if (m.op !== "layerMove") return { kind: "decline" };
         const from = rows.findIndex((r) => r.selfId === m.args.layerId);
-        if (from < 0) return { kind: "applied", outcome: { applied: false, error: "unknown layer" } };
+        if (from < 0)
+          return {
+            kind: "applied",
+            outcome: { applied: false, error: "unknown layer" },
+          };
         rows.splice(m.args.newIndex, 0, ...rows.splice(from, 1));
         return { kind: "applied", outcome: applied };
       },
@@ -693,7 +749,10 @@ describe("consumer 1 — LAYERS: a collection addressed by row identity", () => 
     contributeBindingProvider(host, "rasterImage", rasterLayers().provider);
     enter();
     const read = await registry.readCollection({ collection: "layers" });
-    expect(read).toMatchObject({ resolved: true, provider: "media.paged.test" });
+    expect(read).toMatchObject({
+      resolved: true,
+      provider: "media.paged.test",
+    });
     const rows = (read as { rows: readonly Record<string, unknown>[] }).rows;
     expect(rows).toHaveLength(2);
     expect(Object.keys(rows[0]).sort()).toEqual(
@@ -706,10 +765,16 @@ describe("consumer 1 — LAYERS: a collection addressed by row identity", () => 
     const { rows, provider } = rasterLayers();
     contributeBindingProvider(host, "rasterImage", provider);
     enter();
-    const target = { kind: "row" as const, collection: "layers" as const, id: "r1" };
+    const target = {
+      kind: "row" as const,
+      collection: "layers" as const,
+      id: "r1",
+    };
     expect(
       await registry.readProperty({ path: "layerVisible", target }),
-    ).toMatchObject({ read: { kind: "value", value: { type: "bool", value: true } } });
+    ).toMatchObject({
+      read: { kind: "value", value: { type: "bool", value: true } },
+    });
     const wrote = await registry.writeProperty({
       path: "layerVisible",
       target,
@@ -734,7 +799,10 @@ describe("consumer 1 — LAYERS: a collection addressed by row identity", () => 
       path: "layerPrintable",
       target: { kind: "row", collection: "layers", id: "r1" },
     });
-    expect(read).toMatchObject({ resolved: true, provider: "media.paged.test" });
+    expect(read).toMatchObject({
+      resolved: true,
+      provider: "media.paged.test",
+    });
     expect((read as { read: { kind: string } }).read.kind).toBe("absent");
   });
 
@@ -779,9 +847,15 @@ describe("consumer 2 — CHARACTER/PARAGRAPH: scalar paths over a RANGE", () => 
     provides: { paths: ["characterFontSize", "paragraphJustification"] },
     readProperty: (req) => {
       if (req.path === "paragraphJustification") {
-        return { kind: "absent", reason: "DOCX runs carry no justification here" };
+        return {
+          kind: "absent",
+          reason: "DOCX runs carry no justification here",
+        };
       }
-      if (req.target.kind === "element" && req.target.id.kind === "storyRange") {
+      if (
+        req.target.kind === "element" &&
+        req.target.id.kind === "storyRange"
+      ) {
         const { start, end } = req.target.id.id;
         // One run → a value; a span crossing runs → mixed, never a winner.
         return end - start > 4
@@ -805,7 +879,9 @@ describe("consumer 2 — CHARACTER/PARAGRAPH: scalar paths over a RANGE", () => 
         path: "characterFontSize",
         target: { kind: "element", id: range(0, 3) },
       }),
-    ).toMatchObject({ read: { kind: "value", value: { type: "length", value: 12 } } });
+    ).toMatchObject({
+      read: { kind: "value", value: { type: "length", value: 12 } },
+    });
   });
 
   it("a multi-format range answers MIXED, not an arbitrary winner", async () => {
@@ -871,7 +947,9 @@ describe("consumer 2 — CHARACTER/PARAGRAPH: scalar paths over a RANGE", () => 
       value: { type: "length", value: 18 },
     });
     expect(wrote).toMatchObject({ handled: true });
-    expect((wrote as { outcome: { applied: boolean } }).outcome.applied).toBe(true);
+    expect((wrote as { outcome: { applied: boolean } }).outcome.applied).toBe(
+      true,
+    );
   });
 });
 
@@ -882,7 +960,9 @@ describe("consumer 3 — SWATCHES/COLOUR: a document-scoped resource", () => {
    *  cell + chart colour through the raw ops, with no panel to drive
    *  them from. Here that write path has a surface. */
   const swatchProvider = () => {
-    const swatches = [{ selfId: "sw1", name: "Header", colorValue: [0, 0, 0, 100] }];
+    const swatches = [
+      { selfId: "sw1", name: "Header", colorValue: [0, 0, 0, 100] },
+    ];
     const provider: BindingProvider = {
       provides: {
         collections: ["swatches"],
@@ -897,7 +977,11 @@ describe("consumer 3 — SWATCHES/COLOUR: a document-scoped resource", () => {
       writeProperty: () => ({ kind: "applied", outcome: applied }),
       applyMutation: (m) => {
         if (m.op === "createSwatch") {
-          swatches.push({ selfId: "sw2", name: "New", colorValue: [0, 0, 0, 0] });
+          swatches.push({
+            selfId: "sw2",
+            name: "New",
+            colorValue: [0, 0, 0, 0],
+          });
           return { kind: "applied", outcome: { ...applied, createdId: null } };
         }
         if (m.op === "deleteSwatch") {
@@ -958,15 +1042,15 @@ describe("consumer 3 — SWATCHES/COLOUR: a document-scoped resource", () => {
     const { host, registry, enter, exit } = setup();
     contributeBindingProvider(host, "rasterImage", swatchProvider().provider);
     enter();
-    expect((await registry.readCollection({ collection: "swatches" })).resolved).toBe(
-      true,
-    );
+    expect(
+      (await registry.readCollection({ collection: "swatches" })).resolved,
+    ).toBe(true);
     exit();
     // Deliberate: the host Swatches panel retargets to the DOCUMENT's own
     // swatches the moment you leave the plugin's frame.
-    expect((await registry.readCollection({ collection: "swatches" })).resolved).toBe(
-      false,
-    );
+    expect(
+      (await registry.readCollection({ collection: "swatches" })).resolved,
+    ).toBe(false);
   });
 });
 
@@ -1003,9 +1087,9 @@ describe("invalidation + teardown", () => {
     // The edit context is untouched — phase D retires a duplicate panel
     // behind the seam and rolls back by disposing ONE handle.
     expect(fake.editContexts.types()).toEqual(["rasterImage"]);
-    expect((await registry.readCollection({ collection: "layers" })).resolved).toBe(
-      false,
-    );
+    expect(
+      (await registry.readCollection({ collection: "layers" })).resolved,
+    ).toBe(false);
   });
 
   it("host dispose() tears the provider down with everything else", async () => {

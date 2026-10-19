@@ -50,7 +50,16 @@ describe("sourceFromHtmlFile", () => {
 
   it("never throws on hostile input (scanner, not parser)", () => {
     expect(() => sourceFromHtmlFile("<style><body><style></p")).not.toThrow();
-    for (const text of ["<!--", "<!-- <style>", "<body><!--", "<script>", "<style", "<body", "<", "<a b='>"]) {
+    for (const text of [
+      "<!--",
+      "<!-- <style>",
+      "<body><!--",
+      "<script>",
+      "<style",
+      "<body",
+      "<",
+      "<a b='>",
+    ]) {
       expect(() => sourceFromHtmlFile(text)).not.toThrow();
     }
   });
@@ -78,7 +87,9 @@ describe("sourceFromHtmlFile", () => {
       `<head><style>p{margin:0}</style></head><body><!-- not css: <style>h1{color:red}</style> --><p>a</p></body>`,
     );
     expect(source.css).toBe("p{margin:0}");
-    expect(source.html).toBe(`<!-- not css: <style>h1{color:red}</style> --><p>a</p>`);
+    expect(source.html).toBe(
+      `<!-- not css: <style>h1{color:red}</style> --><p>a</p>`,
+    );
   });
 
   it("reads no tags out of raw-text elements (a title, a script's strings)", () => {
@@ -91,13 +102,17 @@ describe("sourceFromHtmlFile", () => {
   });
 
   it("keeps a style block's legacy comment wrapper as css (CDO/CDC are css tokens)", () => {
-    const { source } = sourceFromHtmlFile(`<style><!-- p { color: red; } --></style><body><p>a</p></body>`);
+    const { source } = sourceFromHtmlFile(
+      `<style><!-- p { color: red; } --></style><body><p>a</p></body>`,
+    );
     expect(source.css).toBe("<!-- p { color: red; } -->");
     expect(source.html).toBe("<p>a</p>");
   });
 
   it("takes the body to the end of the file when </body> is missing", () => {
-    const { source } = sourceFromHtmlFile(`<html><head><style>p{margin:0}</style></head><body><p>a</p></html>`);
+    const { source } = sourceFromHtmlFile(
+      `<html><head><style>p{margin:0}</style></head><body><p>a</p></html>`,
+    );
     expect(source.css).toBe("p{margin:0}");
     expect(source.html).toBe("<p>a</p>");
   });

@@ -125,13 +125,24 @@ function decode(raw: string): Decoded {
   while (i < raw.length) {
     const c = raw[i];
     if (c === "&") {
-      const m = /^&(#[0-9]{1,7}|#[xX][0-9a-fA-F]{1,6}|[A-Za-z][A-Za-z0-9]{1,31});/.exec(raw.slice(i, i + 40));
+      const m =
+        /^&(#[0-9]{1,7}|#[xX][0-9a-fA-F]{1,6}|[A-Za-z][A-Za-z0-9]{1,31});/.exec(
+          raw.slice(i, i + 40),
+        );
       if (m) {
         const body = m[1];
         let out: string | undefined;
         if (body[0] === "#") {
-          const code = body[1] === "x" || body[1] === "X" ? parseInt(body.slice(2), 16) : parseInt(body.slice(1), 10);
-          if (Number.isFinite(code) && code > 0 && code <= 0x10ffff && !(code >= 0xd800 && code <= 0xdfff)) {
+          const code =
+            body[1] === "x" || body[1] === "X"
+              ? parseInt(body.slice(2), 16)
+              : parseInt(body.slice(1), 10);
+          if (
+            Number.isFinite(code) &&
+            code > 0 &&
+            code <= 0x10ffff &&
+            !(code >= 0xd800 && code <= 0xdfff)
+          ) {
             out = String.fromCodePoint(code);
           }
         } else {
@@ -174,7 +185,11 @@ export function scanTextNodes(html: string): SourceTextNode[] {
     let start = textStart;
     let raw = html.slice(start, end);
     if (DROP_LEADING_NEWLINE.has(lastOpenTag)) {
-      const drop = raw.startsWith("\r\n") ? 2 : raw.startsWith("\n") || raw.startsWith("\r") ? 1 : 0;
+      const drop = raw.startsWith("\r\n")
+        ? 2
+        : raw.startsWith("\n") || raw.startsWith("\r")
+          ? 1
+          : 0;
       start += drop;
       raw = raw.slice(drop);
     }
@@ -244,7 +259,11 @@ export function scanTextNodes(html: string): SourceTextNode[] {
 
 /** Escape text for an HTML text position. */
 export function escapeText(text: string): string {
-  return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\u00A0/g, "&nbsp;");
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\u00A0/g, "&nbsp;");
 }
 
 /**
@@ -253,19 +272,32 @@ export function escapeText(text: string): string {
  * of the old and new text keep their raw form (entities included), the
  * middle is escaped. Returns the new source.
  */
-export function editTextNode(html: string, node: SourceTextNode, next: string): string {
+export function editTextNode(
+  html: string,
+  node: SourceTextNode,
+  next: string,
+): string {
   const prev = node.text;
   if (prev === next) return html;
   let p = 0;
   const max = Math.min(prev.length, next.length);
   while (p < max && prev[p] === next[p]) p += 1;
   let s = 0;
-  while (s < max - p && prev[prev.length - 1 - s] === next[next.length - 1 - s]) s += 1;
+  while (s < max - p && prev[prev.length - 1 - s] === next[next.length - 1 - s])
+    s += 1;
   // Never cut inside a decoded entity: rawAt groups the units of one
   // reference at the same raw offset, so widen to whole references.
   while (p > 0 && node.rawAt[p] === node.rawAt[p - 1]) p -= 1;
-  while (s > 0 && node.rawAt[prev.length - s] === node.rawAt[prev.length - s - 1]) s -= 1;
+  while (
+    s > 0 &&
+    node.rawAt[prev.length - s] === node.rawAt[prev.length - s - 1]
+  )
+    s -= 1;
   const rawFrom = node.start + node.rawAt[p];
   const rawTo = node.start + node.rawAt[prev.length - s];
-  return html.slice(0, rawFrom) + escapeText(next.slice(p, next.length - s)) + html.slice(rawTo);
+  return (
+    html.slice(0, rawFrom) +
+    escapeText(next.slice(p, next.length - s)) +
+    html.slice(rawTo)
+  );
 }

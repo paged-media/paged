@@ -110,8 +110,14 @@ describe("sheet_plugin_formula_bar: applying a completion", () => {
 
 describe("sheet_plugin_formula_bar: arity hints", () => {
   it("renders variadic / fixed / ranged arities", () => {
-    expect(arityHint({ name: "SUM", family: "", minArgs: 1, maxArgs: null })).toBe("1+");
-    expect(arityHint({ name: "IF", family: "", minArgs: 2, maxArgs: 2 })).toBe("2");
-    expect(arityHint({ name: "X", family: "", minArgs: 2, maxArgs: 4 })).toBe("2–4");
+    expect(
+      arityHint({ name: "SUM", family: "", minArgs: 1, maxArgs: null }),
+    ).toBe("1+");
+    expect(arityHint({ name: "IF", family: "", minArgs: 2, maxArgs: 2 })).toBe(
+      "2",
+    );
+    expect(arityHint({ name: "X", family: "", minArgs: 2, maxArgs: 4 })).toBe(
+      "2–4",
+    );
   });
 });

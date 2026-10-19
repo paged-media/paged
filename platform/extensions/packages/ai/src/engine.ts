@@ -48,15 +48,25 @@ const HEALTH_PROBE = `console.log(paged.stories());`;
 
 /** Read which stories are overset. A failure reads as "unknown" (null)
  *  rather than failing the agent's turn. */
-export async function readStoryHealth(engine: ScriptEngine): Promise<StoryHealth | null> {
+export async function readStoryHealth(
+  engine: ScriptEngine,
+): Promise<StoryHealth | null> {
   const run = await engine.runScript(HEALTH_PROBE);
   if (run.error) return null;
   // Console lines carry their level: `[log] [{"selfId":…}]`.
-  const line = run.output.map((l) => l.replace(/^\[\w+\] /, "")).find((l) => l.startsWith("["));
+  const line = run.output
+    .map((l) => l.replace(/^\[\w+\] /, ""))
+    .find((l) => l.startsWith("["));
   if (!line) return null;
   try {
-    const rows = JSON.parse(line) as Array<{ selfId: string; overset?: boolean }>;
-    return { stories: rows.length, overset: rows.filter((r) => r.overset).map((r) => r.selfId) };
+    const rows = JSON.parse(line) as Array<{
+      selfId: string;
+      overset?: boolean;
+    }>;
+    return {
+      stories: rows.length,
+      overset: rows.filter((r) => r.overset).map((r) => r.selfId),
+    };
   } catch {
     return null;
   }

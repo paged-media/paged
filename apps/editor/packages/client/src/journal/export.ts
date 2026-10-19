@@ -17,7 +17,6 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-
 // The exported journal bundle (ADR 025 §5).
 //
 // ONE `.json` file — readable in a GitHub issue, diffable, greppable, no new
@@ -201,9 +200,7 @@ function round10(n: number): number {
  * Build the bundle. Pure — same inputs, byte-identical output, which is what
  * the golden test pins.
  */
-export function buildJournalBundle(
-  options: BuildBundleOptions,
-): JournalBundle {
+export function buildJournalBundle(options: BuildBundleOptions): JournalBundle {
   let errors = 0;
   let warnings = 0;
   for (const e of options.entries) {

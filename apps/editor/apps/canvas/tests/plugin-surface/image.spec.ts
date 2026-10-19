@@ -126,7 +126,11 @@ const EDIT_CONTEXT = "rasterImage";
  *  their own plus two flyout members. */
 const SELECTION_TOOLS = [
   { id: "media.paged.image.tool.marqueeRect", key: "y", ownSlot: true },
-  { id: "media.paged.image.tool.marqueeEllipse", key: "shift+y", ownSlot: true },
+  {
+    id: "media.paged.image.tool.marqueeEllipse",
+    key: "shift+y",
+    ownSlot: true,
+  },
   { id: "media.paged.image.tool.lasso", key: "shift+l", ownSlot: true },
   { id: "media.paged.image.tool.polygonal-lasso", key: null, ownSlot: false },
   { id: "media.paged.image.tool.magicWand", key: "shift+w", ownSlot: true },
@@ -148,22 +152,21 @@ interface RegistryGlobal {
       panels: { list: () => Array<{ id: string }> };
       importers: {
         list: () => Array<{ id: string }>;
-        resolve: (
-          name: string,
-          mime?: string,
-        ) => { id: string } | null;
+        resolve: (name: string, mime?: string) => { id: string } | null;
         acceptExtensions: () => string[];
       };
       exporters: { list: () => Array<{ id: string }> };
       editContexts: {
         list: () => Array<{ type: string }>;
-        get: (type: string) => {
-          type: string;
-          entry?: string;
-          toolIds?: string[];
-          panelIds?: string[];
-          matches?: (c: unknown) => boolean;
-        } | undefined;
+        get: (type: string) =>
+          | {
+              type: string;
+              entry?: string;
+              toolIds?: string[];
+              panelIds?: string[];
+              matches?: (c: unknown) => boolean;
+            }
+          | undefined;
       };
       keybindings: { list: () => Array<{ key: string; command: string }> };
     };
@@ -172,14 +175,19 @@ interface RegistryGlobal {
 
 const ids = (page: Page, arm: string): Promise<string[]> =>
   page.evaluate((which) => {
-    const r = (globalThis as unknown as RegistryGlobal).__canvas.registries as
-      unknown as Record<string, { list: () => Array<{ id?: string; type?: string }> }>;
+    const r = (globalThis as unknown as RegistryGlobal).__canvas
+      .registries as unknown as Record<
+      string,
+      { list: () => Array<{ id?: string; type?: string }> }
+    >;
     return r[which].list().map((x) => x.id ?? x.type ?? "");
   }, arm);
 
 /** The keybinding table IN REGISTRATION ORDER — the order the dispatcher
  *  walks, and therefore the only thing that decides a collision. */
-const keyTable = (page: Page): Promise<Array<{ key: string; command: string }>> =>
+const keyTable = (
+  page: Page,
+): Promise<Array<{ key: string; command: string }>> =>
   page.evaluate(() =>
     (globalThis as unknown as RegistryGlobal).__canvas.registries.keybindings
       .list()
@@ -266,10 +274,18 @@ test.describe("plugin surface · paged.image", () => {
         globalThis as unknown as RegistryGlobal
       ).__canvas.registries.editContexts.get(type);
       return ec
-        ? { type: ec.type, entry: ec.entry, toolIds: ec.toolIds, panelIds: ec.panelIds }
+        ? {
+            type: ec.type,
+            entry: ec.entry,
+            toolIds: ec.toolIds,
+            panelIds: ec.panelIds,
+          }
         : null;
     }, EDIT_CONTEXT);
-    expect(ctx, `the ${EDIT_CONTEXT} edit context is registered`).not.toBeNull();
+    expect(
+      ctx,
+      `the ${EDIT_CONTEXT} edit context is registered`,
+    ).not.toBeNull();
     expect(ctx?.entry, "entered by double-click").toBe("doubleClick");
     // The context restricts the rail to its own tools — brush first,
     // because that is what a designer who just double-clicked an image
@@ -347,7 +363,9 @@ test.describe("plugin surface · paged.image", () => {
     //    separates them but position. ──
     const js = table.filter((b) => b.key === "j");
     // eslint-disable-next-line no-console
-    console.log(`[surface] "j" bindings in registration order: ${JSON.stringify(js)}`);
+    console.log(
+      `[surface] "j" bindings in registration order: ${JSON.stringify(js)}`,
+    );
     expect(js.length, 'two contributions claim "j"').toBe(2);
     expect(
       js.map((b) => b.command).sort(),
@@ -385,7 +403,9 @@ test.describe("plugin surface · paged.image", () => {
     await page.waitForTimeout(400);
 
     await expect(
-      page.locator('[data-tool="media.paged.image.tool.heal"][data-active="true"]'),
+      page.locator(
+        '[data-tool="media.paged.image.tool.heal"][data-active="true"]',
+      ),
       "`j` does NOT reach the healing brush — the shell binding shadows it",
     ).toHaveCount(0);
   });
@@ -416,10 +436,9 @@ test.describe("plugin surface · paged.image", () => {
       "data-image-fill-noise",
       "data-image-layer-bake",
     ]) {
-      await expect(
-        page.locator(`[${hook}]`),
-        `${hook} is present`,
-      ).toHaveCount(1);
+      await expect(page.locator(`[${hook}]`), `${hook} is present`).toHaveCount(
+        1,
+      );
       await expect(
         page.locator(`[${hook}]`),
         `${hook} is disabled with no source`,
@@ -427,7 +446,9 @@ test.describe("plugin surface · paged.image", () => {
     }
     // Content-aware fill gates on the SELECTION, not the source, and says
     // which in the panel rather than only in a changelog.
-    await expect(page.locator("[data-image-content-aware-fill]")).toBeDisabled();
+    await expect(
+      page.locator("[data-image-content-aware-fill]"),
+    ).toBeDisabled();
     await expect(page.getByText("Select an area first.")).toBeVisible();
 
     // ── the refusals. Each of these commands is invoked with no image in
@@ -535,7 +556,9 @@ test.describe("plugin surface · paged.image", () => {
     //    Cmd+D exactly as a user reaches it. ──
     const chooser = page.waitForEvent("filechooser", { timeout: 30_000 });
     const invoked = designer.runCommand(PLACE);
-    await (await chooser).setFiles({
+    await (
+      await chooser
+    ).setFiles({
       name: "place-sample.png",
       mimeType: "image/png",
       buffer: samplePng(),
@@ -545,10 +568,9 @@ test.describe("plugin surface · paged.image", () => {
     // positions the image. Without this click the command waits
     // forever — which is exactly how this spec first reported the
     // change, as a 5-minute timeout.
-    await expect(page.locator("html[data-paged-placement='armed']")).toHaveCount(
-      1,
-      { timeout: 15_000 },
-    );
+    await expect(
+      page.locator("html[data-paged-placement='armed']"),
+    ).toHaveCount(1, { timeout: 15_000 });
     const vp = (await page.locator("[data-paged-viewport]").boundingBox())!;
     await page.mouse.click(
       Math.round(vp.x + vp.width * 0.45),
@@ -566,7 +588,8 @@ test.describe("plugin surface · paged.image", () => {
     //    The plugin that owns raster editing is not consulted, not
     //    offered the bytes, and not told a photo entered the document. ──
     const resolveCalls = await page.evaluate(
-      () => (globalThis as unknown as { __resolveCalls: string[] }).__resolveCalls,
+      () =>
+        (globalThis as unknown as { __resolveCalls: string[] }).__resolveCalls,
     );
     expect(
       resolveCalls,
@@ -640,7 +663,10 @@ test.describe("plugin surface · paged.image", () => {
         children?: unknown[];
       }>;
       const out: string[] = [];
-      const visit = (n: { id?: { kind: string; id: string } | null; children?: unknown[] }) => {
+      const visit = (n: {
+        id?: { kind: string; id: string } | null;
+        children?: unknown[];
+      }) => {
         if (n.id?.kind === "rectangle") out.push(n.id.id);
         for (const ch of (n.children ?? []) as typeof tree) visit(ch);
       };

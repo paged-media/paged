@@ -72,8 +72,16 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   const layerContent = await doc.layerId(LAYER.content);
   const keyA = await mintRgbSwatch(ctx, "Color/annualBlendA", [217, 79, 43]);
   const keyB = await mintRgbSwatch(ctx, "Color/annualBlendB", [28, 63, 148]);
-  const smoothA = await mintRgbSwatch(ctx, "Color/annualSmoothA", [122, 156, 200]);
-  const smoothB = await mintRgbSwatch(ctx, "Color/annualSmoothB", [200, 122, 156]);
+  const smoothA = await mintRgbSwatch(
+    ctx,
+    "Color/annualSmoothA",
+    [122, 156, 200],
+  );
+  const smoothB = await mintRgbSwatch(
+    ctx,
+    "Color/annualSmoothB",
+    [200, 122, 156],
+  );
 
   const layerBatch = async (refs: Ref[]): Promise<void> => {
     if (refs.length === 0) return;
@@ -89,16 +97,23 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     );
   };
 
-  const head = await proseFrame(ctx, page, [left, 54, right, 82], [
-    { text: "Blends and objects on a path", style: STYLE.head1 },
-  ]);
-  const intro = await proseFrame(ctx, page, [left, 86, right, 126], [
-    {
-      text:
-        "Interpolation and distribution. A blend mints NEW intermediate shapes between two keys; objects on a path moves the shapes you already have and mints nothing - two arranging verbs with opposite manners.",
-      style: STYLE.bodyFirst,
-    },
-  ]);
+  const head = await proseFrame(
+    ctx,
+    page,
+    [left, 54, right, 82],
+    [{ text: "Blends and objects on a path", style: STYLE.head1 }],
+  );
+  const intro = await proseFrame(
+    ctx,
+    page,
+    [left, 86, right, 126],
+    [
+      {
+        text: "Interpolation and distribution. A blend mints NEW intermediate shapes between two keys; objects on a path moves the shapes you already have and mints nothing - two arranging verbs with opposite manners.",
+        style: STYLE.bodyFirst,
+      },
+    ],
+  );
   elements.push(head.frameId, intro.frameId);
 
   // ── the three spacing modes ──────────────────────────────────────
@@ -111,7 +126,12 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     const id = await path(
       ctx,
       pageId,
-      [corner(cx, cy - r), corner(cx + r, cy), corner(cx, cy + r), corner(cx - r, cy)],
+      [
+        corner(cx, cy - r),
+        corner(cx + r, cy),
+        corner(cx, cy + r),
+        corner(cx - r, cy),
+      ],
       false,
       { fill },
     );
@@ -221,13 +241,17 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   );
   expect(expanded, "expand dropped the distance blend's recipe").toBe(true);
 
-  const blendCaption = await proseFrame(ctx, page, [left, 336, right, 404], [
-    {
-      text:
-        `Top: Specified Steps placed exactly ${stepsMinted.length} intermediates${reverseWorked ? ", then Reverse spine read the spine from the far end - the warm shape now finishes the run" : " (its Reverse spine re-plan was refused by this engine at the group re-create; the margin note carries the sentence)"}. Middle: Specified Distance fit ${distanceMinted.length} intermediates at one per 18 pt of spine, then Expand kept them all and dropped the recipe. Bottom: Smooth Color derived ${smoothMinted.length} steps from the keys' own colour distance and shingled them into the full-width ribbon. A typed count over 200 is refused; a derived one clamps - a typo is not data.`,
-      style: STYLE.caption,
-    },
-  ]);
+  const blendCaption = await proseFrame(
+    ctx,
+    page,
+    [left, 336, right, 404],
+    [
+      {
+        text: `Top: Specified Steps placed exactly ${stepsMinted.length} intermediates${reverseWorked ? ", then Reverse spine read the spine from the far end - the warm shape now finishes the run" : " (its Reverse spine re-plan was refused by this engine at the group re-create; the margin note carries the sentence)"}. Middle: Specified Distance fit ${distanceMinted.length} intermediates at one per 18 pt of spine, then Expand kept them all and dropped the recipe. Bottom: Smooth Color derived ${smoothMinted.length} steps from the keys' own colour distance and shingled them into the full-width ribbon. A typed count over 200 is refused; a derived one clamps - a typo is not data.`,
+        style: STYLE.caption,
+      },
+    ],
+  );
   elements.push(blendCaption.frameId);
 
   // ── objects on a path ────────────────────────────────────────────
@@ -270,7 +294,11 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   await expect
     .poll(
       async () => {
-        const v = await propOf(ctx, { kind: "oval", id: dots[3] }, "frameTransform");
+        const v = await propOf(
+          ctx,
+          { kind: "oval", id: dots[3] },
+          "frameTransform",
+        );
         return v?.value ? 1 : 0;
       },
       { message: "make wrote a transform onto the dots", timeout: 120_000 },
@@ -286,11 +314,9 @@ export async function build(ctx: PageContext): Promise<PageReport> {
 
   // UPDATE — re-distribute from the HOME transforms (idempotent), with
   // a start offset so the whole run slides along the wave.
-  const beforeUpdate = (await propOf(
-    ctx,
-    { kind: "oval", id: dots[0] },
-    "frameTransform",
-  ))?.value;
+  const beforeUpdate = (
+    await propOf(ctx, { kind: "oval", id: dots[0] }, "frameTransform")
+  )?.value;
   await draw(ctx, "updateObjectsOnPath", {
     onPathId: assoc!.id,
     startOffsetPt: 26,
@@ -299,17 +325,26 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   await expect
     .poll(
       async () => {
-        const v = await propOf(ctx, { kind: "oval", id: dots[0] }, "frameTransform");
-        return JSON.stringify(v?.value) === JSON.stringify(beforeUpdate) ? 0 : 1;
+        const v = await propOf(
+          ctx,
+          { kind: "oval", id: dots[0] },
+          "frameTransform",
+        );
+        return JSON.stringify(v?.value) === JSON.stringify(beforeUpdate)
+          ? 0
+          : 1;
       },
-      { message: "update moved the first dot along the path", timeout: 120_000 },
+      {
+        message: "update moved the first dot along the path",
+        timeout: 120_000,
+      },
     )
     .toBe(1);
 
   // RELEASE — demonstrated on a transient trio, because an exact
   // restore would take the resident dots OFF the wave the reader is
   // looking at. Scratch in, verb run, restore verified, scratch out.
-  const run = <T,>(fn: () => Promise<T>): Promise<T> =>
+  const run = <T>(fn: () => Promise<T>): Promise<T> =>
     ctx.doc.ledger ? ctx.doc.ledger.transient(fn) : fn();
   await run(async () => {
     const sPath = await path(
@@ -351,7 +386,8 @@ export async function build(ctx: PageContext): Promise<PageReport> {
         },
         10_000,
       );
-      if (!restored) notes.push("scratch release left its association — recorded");
+      if (!restored)
+        notes.push("scratch release left its association — recorded");
     } else {
       notes.push("the scratch association never reached the part — recorded");
     }
@@ -361,13 +397,17 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     ]);
   });
 
-  const oopCaption = await proseFrame(ctx, page, [left, 560, right, 622], [
-    {
-      text:
-        "Seven dots drawn in a row below, then distributed along the wave - the dots ON the path ARE the originals, moved by one transform write each (ids intact, nothing minted, one undo step). Update slid the whole run 26 pt from the path's start, re-placing every dot from its recorded HOME transform rather than from where it stood - which is what makes it idempotent, and what makes Release an exact restore rather than an inverse - proven on a scratch trio that went home and left the page (demonstrated, not resident).",
-      style: STYLE.caption,
-    },
-  ]);
+  const oopCaption = await proseFrame(
+    ctx,
+    page,
+    [left, 560, right, 622],
+    [
+      {
+        text: "Seven dots drawn in a row below, then distributed along the wave - the dots ON the path ARE the originals, moved by one transform write each (ids intact, nothing minted, one undo step). Update slid the whole run 26 pt from the path's start, re-placing every dot from its recorded HOME transform rather than from where it stood - which is what makes it idempotent, and what makes Release an exact restore rather than an inverse - proven on a scratch trio that went home and left the page (demonstrated, not resident).",
+        style: STYLE.caption,
+      },
+    ],
+  );
   elements.push(oopCaption.frameId);
 
   elements.push(

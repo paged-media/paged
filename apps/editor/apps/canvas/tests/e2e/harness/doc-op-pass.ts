@@ -871,7 +871,9 @@ export async function docOpPass(
   // clothes. Probe for a genuinely stroked rectangle; skip HONESTLY with
   // the reason when the document has none.
   const strokePick = await (async () => {
-    const rects = fx.frames.filter((f) => f.ref.kind === "rectangle").slice(0, 40);
+    const rects = fx.frames
+      .filter((f) => f.ref.kind === "rectangle")
+      .slice(0, 40);
     for (const r of rects) {
       const pid = await elementHostPageId(page, r.ref);
       if (pid === null || !fx.pages.some((p) => p.pageId === pid)) continue;
@@ -891,7 +893,8 @@ export async function docOpPass(
     const host = await hostPage(rect);
     if (host) {
       const current = await readPropValue(page, rect, "frameStrokeWeight");
-      const cur = current?.type === "length" ? (current.value as number | null) : null;
+      const cur =
+        current?.type === "length" ? (current.value as number | null) : null;
       // A visible delta on the target's own scale: double a thin stroke,
       // halve a thick one (never a sub-pixel nudge at 420px snapshots).
       const base = cur ?? strokePick.weight;
@@ -916,7 +919,10 @@ export async function docOpPass(
             },
             expectModel: async () => {
               const v = await readPropValue(page, rect, "frameStrokeWeight");
-              if (!(v?.type === "length" && Math.abs((v.value as number) - target) < 0.01)) {
+              if (!(
+                v?.type === "length" &&
+                Math.abs((v.value as number) - target) < 0.01
+              )) {
                 throw new Error(
                   `frameStrokeWeight did not land in the model: expected ${target}, read ${JSON.stringify(v)}`,
                 );
@@ -949,7 +955,8 @@ export async function docOpPass(
     const host = await hostPage(rect);
     const currentStroke = await readPropValue(page, rect, "frameStrokeColor");
     const exclude =
-      currentStroke?.type === "colorRef" && typeof currentStroke.value === "string"
+      currentStroke?.type === "colorRef" &&
+      typeof currentStroke.value === "string"
         ? currentStroke.value
         : null;
     const sw = await firstSwatchId(page, exclude);
@@ -1026,7 +1033,8 @@ export async function docOpPass(
             // read as a false failure (5 corpus packs, 2026-08-18).
             deletePreCount = await storyChars(page, t.storyId);
             deleteSpan = Math.min(3, Math.max(0, deletePreCount));
-            if (deleteSpan === 0) throw new Error("story is empty — nothing to delete");
+            if (deleteSpan === 0)
+              throw new Error("story is empty — nothing to delete");
             const reply = await mutate(page, {
               op: "deleteRange",
               args: { storyId: t.storyId, start: 0, end: deleteSpan },
@@ -1064,7 +1072,9 @@ export async function docOpPass(
       const c = (
         globalThis as unknown as {
           __canvas: {
-            client: { collection: (n: string) => Promise<Array<{ selfId: string }>> };
+            client: {
+              collection: (n: string) => Promise<Array<{ selfId: string }>>;
+            };
           };
         }
       ).__canvas;
@@ -1096,7 +1106,9 @@ export async function docOpPass(
             },
             expectModel: async () => {
               if ((await storyChars(page, t.storyId)) !== t.before) {
-                throw new Error("applyStyle must not change the character count");
+                throw new Error(
+                  "applyStyle must not change the character count",
+                );
               }
             },
           }).then(() => undefined),

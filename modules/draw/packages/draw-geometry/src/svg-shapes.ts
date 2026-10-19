@@ -55,7 +55,8 @@ export function polyToPath(
   points: readonly Vec2[],
   close: boolean,
 ): AnchorTable {
-  if (points.length < 2) return { anchors: [], subpathStarts: [], subpathOpen: [] };
+  if (points.length < 2)
+    return { anchors: [], subpathStarts: [], subpathOpen: [] };
   return tableFrom(
     points.map((p) => corner(p)),
     !close,
@@ -195,9 +196,16 @@ export function mapTable(
   m: readonly [number, number, number, number, number, number] | null,
 ): AnchorTable {
   if (!m) return table;
-  const at = (p: Vec2): Vec2Mut => [m[0] * p[0] + m[2] * p[1] + m[4], m[1] * p[0] + m[3] * p[1] + m[5]];
+  const at = (p: Vec2): Vec2Mut => [
+    m[0] * p[0] + m[2] * p[1] + m[4],
+    m[1] * p[0] + m[3] * p[1] + m[5],
+  ];
   return {
-    anchors: table.anchors.map((a) => ({ anchor: at(a.anchor), left: at(a.left), right: at(a.right) })),
+    anchors: table.anchors.map((a) => ({
+      anchor: at(a.anchor),
+      left: at(a.left),
+      right: at(a.right),
+    })),
     subpathStarts: [...table.subpathStarts],
     ...(table.subpathOpen ? { subpathOpen: [...table.subpathOpen] } : {}),
   };

@@ -5,20 +5,35 @@
 // pointer as the preview. A drag shorter than a pixel patches nothing, and
 // with no selection the tool says so instead of doing nothing silently.
 
-import type { BundleHost, CanvasPointerEvent, GestureHandler } from "@paged-media/plugin-api";
+import type {
+  BundleHost,
+  CanvasPointerEvent,
+  GestureHandler,
+} from "@paged-media/plugin-api";
 
-import { imageToPage, pageToImage, resolveFrameFit, type FitTransform } from "./frame-fit";
+import {
+  imageToPage,
+  pageToImage,
+  resolveFrameFit,
+  type FitTransform,
+} from "./frame-fit";
 import type { ImageSession } from "./session";
 
 /** The source offset a drag from `a` to `b` names (image px), or null for
  *  a drag too short to mean anything. */
-export function patchOffset(a: [number, number], b: [number, number]): [number, number] | null {
+export function patchOffset(
+  a: [number, number],
+  b: [number, number],
+): [number, number] | null {
   const dx = Math.round(b[0] - a[0]);
   const dy = Math.round(b[1] - a[1]);
   return dx === 0 && dy === 0 ? null : [dx, dy];
 }
 
-export function makePatchGesture(host: BundleHost, session: ImageSession): GestureHandler {
+export function makePatchGesture(
+  host: BundleHost,
+  session: ImageSession,
+): GestureHandler {
   let fit: FitTransform | null = null;
   let from: [number, number] | null = null;
   let to: [number, number] | null = null;
@@ -42,9 +57,11 @@ export function makePatchGesture(host: BundleHost, session: ImageSession): Gestu
 
   return {
     onActivate() {
-      void resolveFrameFit(host, session.state().source, "patch tool").then((f) => {
-        fit = f;
-      });
+      void resolveFrameFit(host, session.state().source, "patch tool").then(
+        (f) => {
+          fit = f;
+        },
+      );
     },
     onDeactivate() {
       host.overlay.setToolPreview(null);

@@ -53,7 +53,10 @@ export function parentGroupOf(
   if (typeof target.id !== "string") return null;
   const targetId = target.id;
   let found: ElementId | null = null;
-  const walk = (nodes: readonly SceneTreeNode[], groups: ElementId[]): boolean => {
+  const walk = (
+    nodes: readonly SceneTreeNode[],
+    groups: ElementId[],
+  ): boolean => {
     for (const node of nodes) {
       const id = node.id ?? null;
       if (id && typeof id.id === "string" && id.id === targetId) {
@@ -62,8 +65,7 @@ export function parentGroupOf(
       }
       const children = node.children ?? [];
       if (children.length > 0) {
-        const nextGroups =
-          id && id.kind === "group" ? [...groups, id] : groups;
+        const nextGroups = id && id.kind === "group" ? [...groups, id] : groups;
         if (walk(children, nextGroups)) return true;
       }
     }

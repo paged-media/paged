@@ -148,7 +148,9 @@ export function makeLayersBindingProvider(
   const indexOfRow = (selfId: string): number | null => {
     const parsed = parseRowId(selfId);
     if (!parsed || parsed.kind !== "layer") return null;
-    const i = session.state().layers.layers.findIndex((l) => l.id === parsed.id);
+    const i = session
+      .state()
+      .layers.layers.findIndex((l) => l.id === parsed.id);
     return i < 0 ? null : i;
   };
 
@@ -180,7 +182,9 @@ export function makeLayersBindingProvider(
       // renderer stops sorting.
       const rows: Record<string, unknown>[] = [];
       stack.groups.forEach((g, i) => rows.push(groupRow(g, i)));
-      stack.layers.forEach((l, i) => rows.push(layerRow(l, stack.groups.length + i)));
+      stack.layers.forEach((l, i) =>
+        rows.push(layerRow(l, stack.groups.length + i)),
+      );
       return { kind: "rows", rows };
     },
 
@@ -256,6 +260,9 @@ function notOurs(id: string | undefined): BindingWrite {
  */
 function applied(ok: boolean): BindingWrite {
   return ok
-    ? { kind: "applied", outcome: { applied: true, createdId: null, pageIds: [] } }
+    ? {
+        kind: "applied",
+        outcome: { applied: true, createdId: null, pageIds: [] },
+      }
     : { kind: "decline", reason: "the raster engine refused the edit" };
 }

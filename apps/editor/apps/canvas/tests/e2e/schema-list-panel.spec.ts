@@ -170,9 +170,7 @@ test.describe("E2E schema-list-panel (B-01 list widget + G3 applyEntity)", () =>
     await expect(demoRow).toBeVisible();
     await expect(demoRow).toContainText(DEMO_SWATCH_NAME);
     // Secondary field (`kind`) renders as the mono second line.
-    await expect(
-      demoRow.locator("[data-list-secondary]"),
-    ).toBeVisible();
+    await expect(demoRow.locator("[data-list-secondary]")).toBeVisible();
   });
 
   test("AC-LIST-2 — row click publishes the selection binding and flips the gate", async ({

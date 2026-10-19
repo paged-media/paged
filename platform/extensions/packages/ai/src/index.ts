@@ -19,12 +19,36 @@
 // @paged-media/ai — Claude for paged. The proxy's server half is a separate
 // entry (`@paged-media/ai/proxy`) so the browser bundle never carries it.
 
-export { DEFAULT_MODEL, MODE_SPECS, AI_MODES, isAiMode, type AiMode, type Effort, type ModeSpec } from "./model";
+export {
+  DEFAULT_MODEL,
+  MODE_SPECS,
+  AI_MODES,
+  isAiMode,
+  type AiMode,
+  type Effort,
+  type ModeSpec,
+} from "./model";
 export { renderCatalog, lookupApi, type ApiCatalog } from "./catalog";
 export { AUTHORING_GUIDE } from "./guide";
-export { readStoryHealth, type ScriptEngine, type ScriptRun, type StoryHealth } from "./engine";
-export { SCRIPT_TOOLS, RUN_SCRIPT, LOOKUP_API, RENDER_PAGE, parseToolInput, type ToolInput } from "./tools";
-export { buildRequest, systemPrompt, type BuildRequestOptions } from "./request";
+export {
+  readStoryHealth,
+  type ScriptEngine,
+  type ScriptRun,
+  type StoryHealth,
+} from "./engine";
+export {
+  SCRIPT_TOOLS,
+  RUN_SCRIPT,
+  LOOKUP_API,
+  RENDER_PAGE,
+  parseToolInput,
+  type ToolInput,
+} from "./tools";
+export {
+  buildRequest,
+  systemPrompt,
+  type BuildRequestOptions,
+} from "./request";
 export {
   createDirectTransport,
   createProxyTransport,
@@ -35,5 +59,18 @@ export {
   type DirectTransportOptions,
   type ProxyTransportOptions,
 } from "./transport";
-export { runAgent, complete, type AgentEvent, type AgentOptions, type AgentResult, type AgentRefusal } from "./agent";
-export { aiObjectModel, AI_COMPLETE_COMMAND, AI_COMPLETE_MAX_PROMPT, AI_COMPLETE_PER_MINUTE, type AiCompleteBackend } from "./object-model";
+export {
+  runAgent,
+  complete,
+  type AgentEvent,
+  type AgentOptions,
+  type AgentResult,
+  type AgentRefusal,
+} from "./agent";
+export {
+  aiObjectModel,
+  AI_COMPLETE_COMMAND,
+  AI_COMPLETE_MAX_PROMPT,
+  AI_COMPLETE_PER_MINUTE,
+  type AiCompleteBackend,
+} from "./object-model";

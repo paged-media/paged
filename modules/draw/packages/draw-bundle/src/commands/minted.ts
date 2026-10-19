@@ -25,7 +25,7 @@
 // raw client's reply or a scene-tree diff; see docs/migration/seams.md.)
 //
 // WHAT `minted` IS — measured against the booted engine and pinned in
-// `test/conformance/minted.spec.ts`, because every flow below depends on
+// `test/headless/minted.spec.ts`, because every flow below depends on
 // it:
 //   · a SINGLE mutation answers `minted: []` and names its one creation
 //     in `createdId`; this module folds that into a one-element list;
@@ -43,7 +43,12 @@
 // named and which were groups, and refuses rather than mis-binds when the
 // two disagree.
 
-import type { BundleHost, ElementId, MutationInput, MutationOutcome } from "@paged-media/plugin-api";
+import type {
+  BundleHost,
+  ElementId,
+  MutationInput,
+  MutationOutcome,
+} from "@paged-media/plugin-api";
 
 /** One element a mutation minted. */
 export interface MintedElement {
@@ -67,8 +72,13 @@ const sameElement = (a: ElementId, b: ElementId): boolean =>
  *  list is not this mutation's: the outcome's `createdId` is the LAST
  *  thing a mutation minted (measured), so a list ending in something
  *  else was not built from the same reply. */
-function mintedOf(outcome: Extract<MutationOutcome, { applied: true }>): MintedElement[] | null {
-  const minted = (outcome.minted ?? []).map((m) => ({ element: m.element, handle: m.handle }));
+function mintedOf(
+  outcome: Extract<MutationOutcome, { applied: true }>,
+): MintedElement[] | null {
+  const minted = (outcome.minted ?? []).map((m) => ({
+    element: m.element,
+    handle: m.handle,
+  }));
   const created = outcome.createdId;
   if (minted.length === 0) {
     return created ? [{ element: created, handle: null }] : [];
@@ -130,7 +140,10 @@ function creationsOf(batch: MutationInput): Creation[] | null {
       // A bind names the creating child before it. After a `createGroup`
       // (or another bind) that child is already on the list.
       const creation = out[out.length - 1];
-      if (!creation || (previous !== "createGroup" && previous !== "bindCreated")) {
+      if (
+        !creation ||
+        (previous !== "createGroup" && previous !== "bindCreated")
+      ) {
         out.push({ handle, group: false });
       } else if (creation.handle === null) {
         creation.handle = handle;
@@ -164,7 +177,11 @@ export function bindMinted(
     const creation = creations[i]!;
     const minted = minting.minted[i]!;
     if (creation.group !== (minted.element.kind === "group")) return null;
-    if (minted.handle !== null && creation.handle !== null && minted.handle !== creation.handle) {
+    if (
+      minted.handle !== null &&
+      creation.handle !== null &&
+      minted.handle !== creation.handle
+    ) {
       return null;
     }
     if (creation.group) groups.push(minted.element);

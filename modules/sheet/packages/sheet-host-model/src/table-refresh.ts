@@ -64,7 +64,8 @@ function cellTexts(content: LoweredContent): Map<string, string> {
   content.rows.forEach((row, r) => {
     for (const cell of row.cells) {
       const c = colPos.get(cell.col);
-      if (c !== undefined && cell.text.length > 0) out.set(`${r}:${c}`, cell.text);
+      if (c !== undefined && cell.text.length > 0)
+        out.set(`${r}:${c}`, cell.text);
     }
   });
   return out;
@@ -72,7 +73,10 @@ function cellTexts(content: LoweredContent): Map<string, string> {
 
 /** A stable key for a decor op (the property it sets on which cell). */
 function decorKey(op: Mutation): string | null {
-  if (op.op === "setElementProperty" && op.args.elementId.kind === "tableCell") {
+  if (
+    op.op === "setElementProperty" &&
+    op.args.elementId.kind === "tableCell"
+  ) {
     const id = op.args.elementId.id;
     return `${id.row}:${id.col}:${op.args.path}`;
   }
@@ -81,7 +85,11 @@ function decorKey(op: Mutation): string | null {
 }
 
 /** A row's identity for alignment: its cells' text + style keys + height. */
-function rowSignature(content: LoweredContent, r: number, colPos: Map<number, number>): string {
+function rowSignature(
+  content: LoweredContent,
+  r: number,
+  colPos: Map<number, number>,
+): string {
   const row = content.rows[r];
   const cells = row.cells
     .filter((c) => c.text.length > 0 || (c.styleKey ?? 0) !== 0)
@@ -102,7 +110,7 @@ function alignRows(prev: LoweredContent, next: LoweredContent): number[] {
   const m = next.rows.length;
   const match = new Array<number>(m).fill(-1);
   if (n === 0 || m === 0) return match;
-  if (n * m > ALIGN_LIMIT * ALIGN_LIMIT / 4) {
+  if (n * m > (ALIGN_LIMIT * ALIGN_LIMIT) / 4) {
     // Too big to align: keep positions (tail reshape).
     for (let j = 0; j < Math.min(n, m); j++) match[j] = j;
     return match;
@@ -114,11 +122,16 @@ function alignRows(prev: LoweredContent, next: LoweredContent): number[] {
   const a = prev.rows.map((_, i) => rowSignature(prev, i, pc));
   const b = next.rows.map((_, j) => rowSignature(next, j, nc));
   // lcs[i][j] = LCS length of a[i..], b[j..].
-  const lcs: Uint32Array[] = Array.from({ length: n + 1 }, () => new Uint32Array(m + 1));
+  const lcs: Uint32Array[] = Array.from(
+    { length: n + 1 },
+    () => new Uint32Array(m + 1),
+  );
   for (let i = n - 1; i >= 0; i--) {
     for (let j = m - 1; j >= 0; j--) {
       lcs[i][j] =
-        a[i] === b[j] ? lcs[i + 1][j + 1] + 1 : Math.max(lcs[i + 1][j], lcs[i][j + 1]);
+        a[i] === b[j]
+          ? lcs[i + 1][j + 1] + 1
+          : Math.max(lcs[i + 1][j], lcs[i][j + 1]);
     }
   }
   let i = 0;
@@ -208,17 +221,26 @@ export function tableRefreshOps(
   // j is inserted, rows 0..j-1 already stand).
   for (let i = prevRows - 1; i >= 0; i--) {
     if (!kept.has(i)) {
-      structure.push({ op: "deleteTableRow", args: { storyId, tableId, at: i } });
+      structure.push({
+        op: "deleteTableRow",
+        args: { storyId, tableId, at: i },
+      });
     }
   }
   for (let j = 0; j < nextRows; j++) {
     if (match[j] < 0) {
-      structure.push({ op: "insertTableRow", args: { storyId, tableId, at: j } });
+      structure.push({
+        op: "insertTableRow",
+        args: { storyId, tableId, at: j },
+      });
     }
   }
   // Columns: append or drop at the END.
   for (let c = prevCols; c < nextCols; c++) {
-    structure.push({ op: "insertTableColumn", args: { storyId, tableId, at: c } });
+    structure.push({
+      op: "insertTableColumn",
+      args: { storyId, tableId, at: c },
+    });
   }
   for (let c = prevCols; c > nextCols; c--) {
     structure.push({
@@ -238,7 +260,10 @@ export function tableRefreshOps(
   for (let c = 0; c < nextCols; c++) {
     const w = nextWidths[c];
     if (w !== undefined && (c >= prevCols || prevWidths[c] !== w)) {
-      structure.push({ op: "setColumnWidth", args: { storyId, tableId, col: c, width: w } });
+      structure.push({
+        op: "setColumnWidth",
+        args: { storyId, tableId, col: c, width: w },
+      });
     }
   }
 
@@ -259,7 +284,10 @@ export function tableRefreshOps(
         });
       }
       if (now.length > 0) {
-        text.push({ op: "insertText", args: { storyId, offset: 0, text: now, cell } });
+        text.push({
+          op: "insertText",
+          args: { storyId, offset: 0, text: now, cell },
+        });
       }
     }
   }
@@ -332,7 +360,10 @@ export function offsetTableRows(
       case "applyStyle": {
         const cell = op.args.cell;
         return cell && cell.tableId === tableId
-          ? ({ ...op, args: { ...op.args, cell: { ...cell, row: cell.row + by } } } as Mutation)
+          ? ({
+              ...op,
+              args: { ...op.args, cell: { ...cell, row: cell.row + by } },
+            } as Mutation)
           : op;
       }
       case "setElementProperty": {
@@ -340,14 +371,19 @@ export function offsetTableRows(
         if (el.kind !== "tableCell" || el.id.table_id !== tableId) return op;
         return {
           ...op,
-          args: { ...op.args, elementId: { ...el, id: { ...el.id, row: el.id.row + by } } },
+          args: {
+            ...op.args,
+            elementId: { ...el, id: { ...el.id, row: el.id.row + by } },
+          },
         };
       }
       case "batch":
-        return { ...op, args: { ops: offsetTableRows(op.args.ops, tableId, by) } };
+        return {
+          ...op,
+          args: { ops: offsetTableRows(op.args.ops, tableId, by) },
+        };
       default:
         return op;
     }
   });
 }
-

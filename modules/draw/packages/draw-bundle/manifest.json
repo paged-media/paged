@@ -9,16 +9,9 @@
       "read": "broad",
       "write": "scoped"
     },
-    "rendering": [
-      "overlay",
-      "hitTest"
-    ],
-    "editContext": [
-      "vectorGraphic"
-    ],
-    "assets": [
-      "images"
-    ],
+    "rendering": ["overlay", "hitTest"],
+    "editContext": ["vectorGraphic"],
+    "assets": ["images"],
     "network": false,
     "workers": {
       "max": 2
@@ -177,12 +170,8 @@
       "media.paged.draw.command.releaseObjectsOnPath",
       "media.paged.draw.command.imageTrace"
     ],
-    "importers": [
-      "media.paged.draw.importer.svg"
-    ],
-    "exporters": [
-      "media.paged.draw.exporter.svg"
-    ],
+    "importers": ["media.paged.draw.importer.svg"],
+    "exporters": ["media.paged.draw.exporter.svg"],
     "partTypes": [
       {
         "type": "graphicStyleLibrary",
@@ -786,11 +775,7 @@
               "path": "layout",
               "type": {
                 "kind": "enum",
-                "members": [
-                  "grid",
-                  "brick",
-                  "hex"
-                ]
+                "members": ["grid", "brick", "hex"]
               },
               "default": "grid",
               "summary": "Tile lattice."
@@ -809,10 +794,7 @@
               "type": {
                 "kind": "point"
               },
-              "default": [
-                6,
-                6
-              ],
+              "default": [6, 6],
               "summary": "[horizontal, vertical] spacing in pt; negative overlaps."
             },
             {
@@ -871,17 +853,11 @@
                 "fields": {
                   "horizontal": {
                     "kind": "enum",
-                    "members": [
-                      "leftInFront",
-                      "rightInFront"
-                    ]
+                    "members": ["leftInFront", "rightInFront"]
                   },
                   "vertical": {
                     "kind": "enum",
-                    "members": [
-                      "topInFront",
-                      "bottomInFront"
-                    ]
+                    "members": ["topInFront", "bottomInFront"]
                   }
                 }
               },
@@ -929,11 +905,7 @@
               "path": "kind",
               "type": {
                 "kind": "enum",
-                "members": [
-                  "radial",
-                  "grid",
-                  "mirror"
-                ]
+                "members": ["radial", "grid", "mirror"]
               },
               "default": "radial",
               "summary": "Which repeat: around a ring, on a grid, or mirrored."
@@ -1021,10 +993,7 @@
               "type": {
                 "kind": "point"
               },
-              "default": [
-                12,
-                12
-              ],
+              "default": [12, 12],
               "summary": "Grid: [horizontal, vertical] gap in pt."
             },
             {
@@ -1138,11 +1107,7 @@
               "path": "spacing",
               "type": {
                 "kind": "enum",
-                "members": [
-                  "smoothColor",
-                  "steps",
-                  "distance"
-                ]
+                "members": ["smoothColor", "steps", "distance"]
               },
               "default": "steps",
               "summary": "Spacing mode: smooth colour, specified steps, specified distance."
@@ -1175,10 +1140,7 @@
               "path": "orientation",
               "type": {
                 "kind": "enum",
-                "members": [
-                  "page",
-                  "path"
-                ]
+                "members": ["page", "path"]
               },
               "default": "page",
               "summary": "Align intermediates to the page, or turn them with the spine."
@@ -1187,12 +1149,7 @@
               "path": "easing",
               "type": {
                 "kind": "enum",
-                "members": [
-                  "linear",
-                  "easeIn",
-                  "easeOut",
-                  "easeInOut"
-                ]
+                "members": ["linear", "easeIn", "easeOut", "easeInOut"]
               },
               "default": "linear",
               "summary": "Position easing curve."
@@ -1213,12 +1170,7 @@
               "path": "colorEasing",
               "type": {
                 "kind": "enum",
-                "members": [
-                  "linear",
-                  "easeIn",
-                  "easeOut",
-                  "easeInOut"
-                ]
+                "members": ["linear", "easeIn", "easeOut", "easeInOut"]
               },
               "nullable": true,
               "default": null,
@@ -1366,10 +1318,7 @@
               "path": "distribute",
               "type": {
                 "kind": "enum",
-                "members": [
-                  "count",
-                  "spacing"
-                ]
+                "members": ["count", "spacing"]
               },
               "default": "count",
               "summary": "Spread the objects evenly, or at a fixed spacing."
@@ -1669,19 +1618,11 @@
               },
               "cap": {
                 "kind": "enum",
-                "members": [
-                  "butt",
-                  "round",
-                  "square"
-                ]
+                "members": ["butt", "round", "square"]
               },
               "join": {
                 "kind": "enum",
-                "members": [
-                  "miter",
-                  "round",
-                  "bevel"
-                ]
+                "members": ["miter", "round", "bevel"]
               },
               "miterLimit": {
                 "kind": "number"
@@ -1707,11 +1648,7 @@
               },
               "join": {
                 "kind": "enum",
-                "members": [
-                  "miter",
-                  "round",
-                  "bevel"
-                ]
+                "members": ["miter", "round", "bevel"]
               },
               "miterLimit": {
                 "kind": "number"
@@ -2159,10 +2096,7 @@
               },
               "kind": {
                 "kind": "enum",
-                "members": [
-                  "fill",
-                  "stroke"
-                ]
+                "members": ["fill", "stroke"]
               },
               "index": {
                 "kind": "number",
@@ -2186,10 +2120,7 @@
               },
               "kind": {
                 "kind": "enum",
-                "members": [
-                  "fill",
-                  "stroke"
-                ]
+                "members": ["fill", "stroke"]
               },
               "index": {
                 "kind": "number",
@@ -2553,10 +2484,7 @@
               },
               "maskType": {
                 "kind": "enum",
-                "members": [
-                  "luminosity",
-                  "alpha"
-                ]
+                "members": ["luminosity", "alpha"]
               },
               "invert": {
                 "kind": "bool"
@@ -2607,10 +2535,7 @@
               },
               "flipPathEffect": {
                 "kind": "enum",
-                "members": [
-                  "NotFlipped",
-                  "Flipped"
-                ]
+                "members": ["NotFlipped", "Flipped"]
               }
             }
           }
@@ -3095,12 +3020,7 @@
               },
               "which": {
                 "kind": "enum",
-                "members": [
-                  "keys",
-                  "steps",
-                  "spine",
-                  "all"
-                ]
+                "members": ["keys", "steps", "spine", "all"]
               }
             }
           },
@@ -3178,11 +3098,7 @@
               },
               "which": {
                 "kind": "enum",
-                "members": [
-                  "objects",
-                  "path",
-                  "all"
-                ]
+                "members": ["objects", "path", "all"]
               }
             }
           },
@@ -3233,17 +3149,11 @@
               },
               "mode": {
                 "kind": "enum",
-                "members": [
-                  "color",
-                  "bw"
-                ]
+                "members": ["color", "bw"]
               },
               "pathMode": {
                 "kind": "enum",
-                "members": [
-                  "spline",
-                  "polygon"
-                ]
+                "members": ["spline", "polygon"]
               },
               "colorPrecision": {
                 "kind": "number",

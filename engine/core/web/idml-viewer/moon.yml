@@ -1,32 +1,32 @@
-$schema: '../../../../.moon/cache/schemas/project.json'
+$schema: "../../../../.moon/cache/schemas/project.json"
 
 # @paged-media/idml-viewer: the TypeScript wrapper around the engine's
 # paged-sdk wasm, a package of the root Bun workspace (Moon installs that
 # once, at the root, before the first JS task).
-language: 'typescript'
-layer: 'library'
-stack: 'frontend'
-tags: ['node', 'engine']
+language: "typescript"
+layer: "library"
+stack: "frontend"
+tags: ["node", "engine"]
 
 project:
-  title: 'engine/core/web/idml-viewer'
-  description: 'TypeScript viewer wrapper published as @paged-media/idml-viewer.'
+  title: "engine/core/web/idml-viewer"
+  description: "TypeScript viewer wrapper published as @paged-media/idml-viewer."
 
-# It wraps core's paged-sdk wasm (core:wasm builds dist/sdk/, which the
-# release copies into wasm/). Its tests use a fake session and need no wasm.
+# It ships core's paged-sdk wasm as its ./session entry: core:wasm-pkg
+# builds it into wasm/ (PM-0008). Its tests use a fake session and need no wasm.
 dependsOn:
-  - id: 'core'
-    scope: 'build'
+  - id: "core"
+    scope: "build"
 
 tasks:
   # js-check and js-test are the inherited `bun run typecheck` and
   # `bun run test`; a single package builds with its own script.
   js-build:
-    description: 'tsc (TypeScript 7) to dist/: JavaScript and declarations.'
-    command: 'bun run build'
+    description: "tsc (TypeScript 7) to dist/: JavaScript and declarations."
+    command: "bun run build"
     inputs:
-      - '@group(js-sources)'
+      - "@group(js-sources)"
     outputs:
-      - 'dist/**/*'
+      - "dist/**/*"
     options:
       runInCI: false

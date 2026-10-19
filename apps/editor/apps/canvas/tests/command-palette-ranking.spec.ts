@@ -40,7 +40,9 @@ async function topTitles(page: Page, query: string, n = 6): Promise<string[]> {
     .locator("[cmdk-list] [cmdk-item]:not([data-palette-ai])")
     .evaluateAll(
       (els, n) =>
-        els.slice(0, n).map((e) => (e.querySelector("span")?.textContent ?? "").trim()),
+        els
+          .slice(0, n)
+          .map((e) => (e.querySelector("span")?.textContent ?? "").trim()),
       n,
     );
 }
@@ -53,10 +55,15 @@ test.describe("ED-15 — command palette ranking", () => {
     await designer.open();
     await designer.newDocument();
     await designer.runCommand("paged.palette.toggle");
-    await expect(page.getByPlaceholder("Ask or search anything…")).toBeVisible();
+    await expect(
+      page.getByPlaceholder("Ask or search anything…"),
+    ).toBeVisible();
 
     const exportTop = await topTitles(page, "export");
-    expect(exportTop[0], `first row for "export": ${exportTop.join(" | ")}`).toMatch(/export/i);
+    expect(
+      exportTop[0],
+      `first row for "export": ${exportTop.join(" | ")}`,
+    ).toMatch(/export/i);
     expect(exportTop.filter((t) => /blend/i.test(t))).toEqual([]);
 
     for (const q of ["table", "style"]) {
@@ -72,22 +79,37 @@ test.describe("ED-15 — command palette ranking", () => {
   });
 
   test("AC-PALETTE-RANK-2 — the score: a title word beats the id, scattered letters match nothing @feat:editor-shell.command-palette @level:edge", () => {
-    const blendExpand = paletteScore("media.paged.draw.command.blendExpand", "export", [
-      "Blend: Expand",
-      "Draw",
-    ]);
+    const blendExpand = paletteScore(
+      "media.paged.draw.command.blendExpand",
+      "export",
+      ["Blend: Expand", "Draw"],
+    );
     expect(blendExpand, "a scattered subsequence is no match").toBe(0);
 
-    const exportPdf = paletteScore("paged.file.exportPdf", "export", ["Export PDF…", "File"]);
-    const exportInId = paletteScore("media.paged.x.command.exportThing", "export", [
-      "Write a thing",
-      "X",
+    const exportPdf = paletteScore("paged.file.exportPdf", "export", [
+      "Export PDF…",
+      "File",
     ]);
+    const exportInId = paletteScore(
+      "media.paged.x.command.exportThing",
+      "export",
+      ["Write a thing", "X"],
+    );
     expect(exportPdf).toBeGreaterThan(exportInId);
     expect(exportInId).toBeGreaterThan(0);
 
     // Every word of the query must land somewhere.
-    expect(paletteScore("paged.insert.textFrame", "text frame", ["Insert text frame", "Insert"])).toBeGreaterThan(0);
-    expect(paletteScore("paged.insert.textFrame", "text banana", ["Insert text frame", "Insert"])).toBe(0);
+    expect(
+      paletteScore("paged.insert.textFrame", "text frame", [
+        "Insert text frame",
+        "Insert",
+      ]),
+    ).toBeGreaterThan(0);
+    expect(
+      paletteScore("paged.insert.textFrame", "text banana", [
+        "Insert text frame",
+        "Insert",
+      ]),
+    ).toBe(0);
   });
 });

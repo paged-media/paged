@@ -51,7 +51,9 @@ export interface IdmlExport {
 export async function exportIdml(h: HeadlessHost): Promise<IdmlExport> {
   const reply = await clientOf(h).send({ kind: "exportIdml", payload: {} });
   if (reply.kind !== "idmlExported") {
-    throw new Error(`exportIdml answered ${reply.kind}: ${JSON.stringify(reply.payload)}`);
+    throw new Error(
+      `exportIdml answered ${reply.kind}: ${JSON.stringify(reply.payload)}`,
+    );
   }
   return {
     bytes: new Uint8Array(reply.payload.idmlBytes as number[]),
@@ -67,20 +69,28 @@ export function unzip(bytes: Uint8Array): Map<string, Uint8Array> {
   const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   let eocd = bytes.length - 22;
   while (eocd >= 0 && dv.getUint32(eocd, true) !== 0x06054b50) eocd--;
-  if (eocd < 0) throw new Error("not a ZIP package: no end-of-central-directory record");
+  if (eocd < 0)
+    throw new Error("not a ZIP package: no end-of-central-directory record");
   const count = dv.getUint16(eocd + 10, true);
   let p = dv.getUint32(eocd + 16, true);
   const out = new Map<string, Uint8Array>();
   for (let i = 0; i < count; i++) {
-    if (dv.getUint32(p, true) !== 0x02014b50) throw new Error("bad central directory entry");
+    if (dv.getUint32(p, true) !== 0x02014b50)
+      throw new Error("bad central directory entry");
     const method = dv.getUint16(p + 10, true);
     const compressed = dv.getUint32(p + 20, true);
     const nameLength = dv.getUint16(p + 28, true);
     const extraLength = dv.getUint16(p + 30, true);
     const commentLength = dv.getUint16(p + 32, true);
     const local = dv.getUint32(p + 42, true);
-    const name = new TextDecoder().decode(bytes.subarray(p + 46, p + 46 + nameLength));
-    const start = local + 30 + dv.getUint16(local + 26, true) + dv.getUint16(local + 28, true);
+    const name = new TextDecoder().decode(
+      bytes.subarray(p + 46, p + 46 + nameLength),
+    );
+    const start =
+      local +
+      30 +
+      dv.getUint16(local + 26, true) +
+      dv.getUint16(local + 28, true);
     const data = bytes.subarray(start, start + compressed);
     if (method === 0) out.set(name, data.slice());
     else if (method === 8) out.set(name, new Uint8Array(inflateRawSync(data)));

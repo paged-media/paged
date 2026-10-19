@@ -75,7 +75,10 @@ import {
 } from "./view";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const READER = resolve(HERE, "../../../../scripts/indesign/lib/read-document.jsx");
+const READER = resolve(
+  HERE,
+  "../../../../scripts/indesign/lib/read-document.jsx",
+);
 
 /** Every unset value compared as an InDesign default, over all cases. */
 const DEFAULTS_SEEN = new Set<DefaultKey>();
@@ -85,7 +88,11 @@ describe("InDesign round trip — the lane itself", () => {
     const ids = ROUNDTRIP_CASES.map((c) => c.id);
     expect(new Set(ids).size).toBe(ids.length);
     for (const id of ids) expect(() => loadRecording(id), id).not.toThrow();
-    for (const id of [...Object.keys(KNOWN), ...Object.keys(KNOWN_REFUSALS), ...Object.keys(KNOWN_LOST)]) {
+    for (const id of [
+      ...Object.keys(KNOWN),
+      ...Object.keys(KNOWN_REFUSALS),
+      ...Object.keys(KNOWN_LOST),
+    ]) {
       expect(ids, `a classification names unknown case "${id}"`).toContain(id);
     }
   });
@@ -96,11 +103,17 @@ describe("InDesign round trip — the lane itself", () => {
       const rec = loadRecording(c.id);
       expect(rec.produced_by.app, c.id).toBe("Adobe InDesign");
       expect(rec.produced_by.version, c.id).toMatch(/^20\./);
-      expect(rec.produced_by.script, c.id).toBe("scripts/indesign/lib/read-document.jsx");
-      expect(rec.produced_by.script_sha256, `${c.id}: recorded by another reader — re-record`).toBe(readerSha);
-      expect(rec.idml.sha256, `${c.id}: recorded from another IDML — re-record`).toBe(
-        sha256(readFileSync(idmlPath(c.id))),
+      expect(rec.produced_by.script, c.id).toBe(
+        "scripts/indesign/lib/read-document.jsx",
       );
+      expect(
+        rec.produced_by.script_sha256,
+        `${c.id}: recorded by another reader — re-record`,
+      ).toBe(readerSha);
+      expect(
+        rec.idml.sha256,
+        `${c.id}: recorded from another IDML — re-record`,
+      ).toBe(sha256(readFileSync(idmlPath(c.id))));
     }
   });
 });
@@ -116,16 +129,22 @@ for (const c of ROUNDTRIP_CASES) {
       authored = await authorCase(c);
       rec = loadRecording(c.id);
       const defaults = new Set<DefaultKey>();
-      diffs = compareViews(await engineView(authored.h, defaults), indesignView(rec));
+      diffs = compareViews(
+        await engineView(authored.h, defaults),
+        indesignView(rec),
+      );
       for (const d of defaults) DEFAULTS_SEEN.add(d);
     }, 60_000);
     afterAll(() => authored?.h.dispose());
 
     it("the committed IDML is what the engine exports today (else the recording is stale)", () => {
       const today = normalizedParts(authored.idml);
-      const committed = normalizedParts(new Uint8Array(readFileSync(idmlPath(c.id))));
+      const committed = normalizedParts(
+        new Uint8Array(readFileSync(idmlPath(c.id))),
+      );
       expect([...today.keys()]).toEqual([...committed.keys()]);
-      for (const [name, text] of committed) expect(today.get(name), name).toBe(text);
+      for (const [name, text] of committed)
+        expect(today.get(name), name).toBe(text);
     });
 
     it("InDesign's own bounds are the exact curve box of the anchors it reported (the reader is sound)", () => {
@@ -139,9 +158,10 @@ for (const c of ROUNDTRIP_CASES) {
           Math.max(...boxes.map((b) => b[3])),
         ];
         for (let i = 0; i < 4; i++) {
-          expect(Math.abs(union[i] - item.geometricBounds[i]), `${item.kind}#${item.id}`).toBeLessThan(
-            BOUNDS_ABS_TOL,
-          );
+          expect(
+            Math.abs(union[i] - item.geometricBounds[i]),
+            `${item.kind}#${item.id}`,
+          ).toBeLessThan(BOUNDS_ABS_TOL);
         }
       }
     });
@@ -149,13 +169,19 @@ for (const c of ROUNDTRIP_CASES) {
     it("InDesign reported no unresolved font, broken link or overset story but the classified ones", () => {
       // A known warning is the symptom of a classified finding (its DEFECT
       // is an `it.failing` below); one that stops occurring fails here.
-      expect(rec.warnings).toEqual((KNOWN_WARNINGS[c.id] ?? []).map((w) => w.warning));
+      expect(rec.warnings).toEqual(
+        (KNOWN_WARNINGS[c.id] ?? []).map((w) => w.warning),
+      );
     });
 
     it("the authoring was refused exactly where it is known to be", () => {
       const want = KNOWN_REFUSALS[c.id] ?? [];
-      expect(authored.refusals.map((r) => r.what)).toEqual(want.map((r) => r.what));
-      authored.refusals.forEach((r, i) => expect(r.error).toContain(want[i].error));
+      expect(authored.refusals.map((r) => r.what)).toEqual(
+        want.map((r) => r.what),
+      );
+      authored.refusals.forEach((r, i) =>
+        expect(r.error).toContain(want[i].error),
+      );
     });
 
     it("the export's lost list says exactly what it is known to say", () => {
@@ -171,37 +197,53 @@ for (const c of ROUNDTRIP_CASES) {
 
     for (const [finding, entries] of defectsOf(known)) {
       const f = FINDINGS[finding];
-      it.failing(`DEFECT (${f.owner}) — ${f.title}: ${bothValues(entries)}`, () => {
-        for (const k of entries) {
-          expect(diffs.find((d) => d.at === k.at && d.field === k.field)).toBeUndefined();
-        }
-      });
+      it.failing(
+        `DEFECT (${f.owner}) — ${f.title}: ${bothValues(entries)}`,
+        () => {
+          for (const k of entries) {
+            expect(
+              diffs.find((d) => d.at === k.at && d.field === k.field),
+            ).toBeUndefined();
+          }
+        },
+      );
     }
 
-    for (const k of known.filter((x) => FINDINGS[x.finding].verdict !== "defect")) {
+    for (const k of known.filter(
+      (x) => FINDINGS[x.finding].verdict !== "defect",
+    )) {
       const f = FINDINGS[k.finding];
       const label = f.verdict === "loss" ? "EXPECTED LOSS" : "CONVENTION";
       it(`${label} — ${f.title}: ${bothValues([k])}`, () => {
         // Pinned by the classification test above; a LOSS must also be
         // named by the export itself.
-        expect(diffs.some((d) => d.at === k.at && d.field === k.field)).toBe(true);
-        if (f.verdict === "loss") expect(authored.lost.length).toBeGreaterThan(0);
+        expect(diffs.some((d) => d.at === k.at && d.field === k.field)).toBe(
+          true,
+        );
+        if (f.verdict === "loss")
+          expect(authored.lost.length).toBeGreaterThan(0);
       });
     }
 
     const refusals = KNOWN_REFUSALS[c.id] ?? [];
     if (refusals.length > 0) {
       const f = REFUSAL_FINDINGS[refusals[0].finding];
-      it.failing(`DEFECT (${f.owner}) — ${f.title}: refused ${refusals.map((r) => r.what).join(", ")}`, () => {
-        expect(authored.refusals).toEqual([]);
-      });
+      it.failing(
+        `DEFECT (${f.owner}) — ${f.title}: refused ${refusals.map((r) => r.what).join(", ")}`,
+        () => {
+          expect(authored.refusals).toEqual([]);
+        },
+      );
     }
 
     const missing = MISSING_LOST[c.id];
     if (missing) {
-      it.failing(`DEFECT (${FINDINGS[missing.finding].owner}) — the lost list does not name what the export drops: ours [], want an entry matching ${missing.pattern}`, () => {
-        expect(authored.lost.some((l) => missing.pattern.test(l))).toBe(true);
-      });
+      it.failing(
+        `DEFECT (${FINDINGS[missing.finding].owner}) — the lost list does not name what the export drops: ours [], want an entry matching ${missing.pattern}`,
+        () => {
+          expect(authored.lost.some((l) => missing.pattern.test(l))).toBe(true);
+        },
+      );
     }
 
     if (known.length === 0) {
@@ -227,15 +269,17 @@ describe("InDesign round trip — the comparison is not blind", () => {
     front.paths![0].anchors[1].right[0] += 0.02; // just past GEOMETRY_TOL
     front.fill!.name = "rt-green";
     front.strokeWeight = 1.01;
-    expect(compareViews(theirs, indesignView(moved)).map((d) => `${d.at} ${d.field}`)).toEqual([
-      "1 geometry",
-      "1 fill",
-      "1 strokeWeight",
-    ]);
+    expect(
+      compareViews(theirs, indesignView(moved)).map(
+        (d) => `${d.at} ${d.field}`,
+      ),
+    ).toEqual(["1 geometry", "1 fill", "1 strokeWeight"]);
 
     const swapped = structuredClone(rec);
     for (const item of swapped.items) item.z = 1 - item.z;
-    const fields = new Set(compareViews(theirs, indesignView(swapped)).map((d) => d.field));
+    const fields = new Set(
+      compareViews(theirs, indesignView(swapped)).map((d) => d.field),
+    );
     expect(fields.has("geometry")).toBe(true);
     expect(fields.has("fill")).toBe(true);
   });
@@ -246,6 +290,8 @@ describe("InDesign round trip — what an UNSET value of ours is compared as", (
   // own default. The table in view.ts says which default; every entry must
   // have been USED by some case above, or it is a guess nobody tested.
   it("every entry of INDESIGN_DEFAULTS was exercised by a recording", () => {
-    expect([...DEFAULTS_SEEN].sort()).toEqual(Object.keys(INDESIGN_DEFAULTS).sort());
+    expect([...DEFAULTS_SEEN].sort()).toEqual(
+      Object.keys(INDESIGN_DEFAULTS).sort(),
+    );
   });
 });

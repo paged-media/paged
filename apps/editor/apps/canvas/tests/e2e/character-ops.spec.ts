@@ -237,37 +237,36 @@ test.describe("E2E character ops", () => {
   // engine skew cache fix landed, so this is a normal test (was
   // `test.fail` while undo left a ~58 px residual) — undo now restores
   // the page byte-identically.
-  test(
-    "AC-E2E-CHAR-skew-undo — characterSkew undo restores byte-identically (engine determinism follow-up) @feat:editor-shell.panels.character @level:happy",
-    async ({ page }) => {
-      await opSandwich(page, {
-        pageId: pageInfo.pageId,
-        pageWidthPt: pageInfo.widthPt,
-        region,
-        containment: false,
-        dumpModel: () => dumpElement(page, range),
-        apply: async () => {
-          await mutate(page, {
-            op: "setElementProperty",
-            args: {
-              elementId: range,
-              path: "characterSkew",
-              value: { type: "length", value: 12 },
-            },
-          });
-        },
-        expectModel: async () => {
-          expect(
-            (
-              (await readRangeProp(page, range, "characterSkew")) as {
-                value: number;
-              }
-            ).value,
-          ).toBe(12);
-        },
-      });
-    },
-  );
+  test("AC-E2E-CHAR-skew-undo — characterSkew undo restores byte-identically (engine determinism follow-up) @feat:editor-shell.panels.character @level:happy", async ({
+    page,
+  }) => {
+    await opSandwich(page, {
+      pageId: pageInfo.pageId,
+      pageWidthPt: pageInfo.widthPt,
+      region,
+      containment: false,
+      dumpModel: () => dumpElement(page, range),
+      apply: async () => {
+        await mutate(page, {
+          op: "setElementProperty",
+          args: {
+            elementId: range,
+            path: "characterSkew",
+            value: { type: "length", value: 12 },
+          },
+        });
+      },
+      expectModel: async () => {
+        expect(
+          (
+            (await readRangeProp(page, range, "characterSkew")) as {
+              value: number;
+            }
+          ).value,
+        ).toBe(12);
+      },
+    });
+  });
 
   test("AC-E2E-CHAR-baseline — characterBaselineShift lands + repaints @feat:editor-shell.panels.character @level:happy", async ({
     page,

@@ -9,7 +9,7 @@ paged.data external-data + automation subsystem, delivered as a Paged plugin
 A Rust/WASM data-binding engine that makes Paged capable of **database
 publishing** — the EasyCatalog category: variable replacement, dynamic tables,
 image placeholders, record flow across pages, data-driven formatting, and batch
-generation. The thesis: a publication is a *projection of governed data*, not a
+generation. The thesis: a publication is a _projection of governed data_, not a
 hand-assembled artifact. Bound content is COMPILED to native Paged content via
 committed Operations (the content-space / lowering model proven in
 plugin-sheet), so frame ops (scale/rotate/skew/crop/reposition) are honored for
@@ -42,6 +42,7 @@ load the same files with every other URL refused, `test/duckdb-node-ext.ts`).
 **State (the live ledger is the Cockpit feature registry and `docs/status.md`,
 not this prose; the 2026-10-05 analysis is `docs/design/analysis-2026-10-05.md`).**
 The ENGINE is far ahead of what a user can reach from the panels:
+
 - The binding-expression DSL is SHIPPED — its own publishing grammar (not
   Excel's), ~42 functions across format/logic/text/math/temporal, registry-
   driven FnId-parity dispatch (no row → no dispatch → uncallable).
@@ -91,7 +92,7 @@ Rules for every code change in this repo:
    ending in `__feat__<id_with_underscores>` or containing `[<id>]`. Otherwise an entry in
    `cockpit/test-map.yaml`.
 3. STATUS CHANGE → `claims:` in the feature file, never prose. "X is now shipped/partial" is a
-   claim edit; whether it *works* is computed from evidence and cannot be written.
+   claim edit; whether it _works_ is computed from evidence and cannot be written.
 4. BEFORE claiming a feature done: `cockpit feature <id> --json` (or its page in
    `cockpit serve`) — done means the linked tests are green and were produced after the
    latest implementation commit.
@@ -125,7 +126,7 @@ Rules for every code change in this repo:
 - **LICENSE-BOUNDARY GATE (§3 — unique to this plugin, decisive).** NO
   source-available / ELv2 / SSPL / proprietary data engine is ever embedded,
   linked, or redistributed. Such tools are integrated, if at all, ONLY by
-  consuming their data *outputs* (tables + optional metadata sidecars) through
+  consuming their data _outputs_ (tables + optional metadata sidecars) through
   the standard source adapters (§7) — touching zero engine code. The ONE
   bundled engine is **MIT DuckDB-WASM**, vendored as a prebuilt artifact under
   `vendor/duckdb-wasm/` (attribution in `SOURCE.md`), never compiled in-tree.
@@ -222,10 +223,8 @@ bash scripts/build-wasm.sh
 bun install && bun run typecheck && bun run test
 bun run validate:manifest
 
-# Publishing (publish.yml, after green CI): a version already on npm must be
-# bumped when its inputs changed, and the tarball must carry DuckDB.
-bun scripts/package-hash.mjs --check
-bash scripts/pubcheck.sh <packed.tgz>
+# The bundle is a private workspace package, built into the editor and never
+# published on its own (PM-0008).
 
 # Oracles (docs/design/oracles.md): replays run in the suites above
 # (data-conformance oracle.rs / oracle_props.rs; bun test duckdb-sql-oracle +

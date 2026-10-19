@@ -58,7 +58,8 @@ export interface GraphicPaint {
 }
 
 /** The style InDesign applies to a shape drawn with a tool. */
-export const NORMAL_GRAPHICS_FRAME_STYLE = "ObjectStyle/$ID/[Normal Graphics Frame]";
+export const NORMAL_GRAPHICS_FRAME_STYLE =
+  "ObjectStyle/$ID/[Normal Graphics Frame]";
 
 /** `[Normal Graphics Frame]` as InDesign ships it — what a document
  *  without that style (one made with File ▸ New) gets. */
@@ -69,8 +70,14 @@ export const INDESIGN_GRAPHIC_PAINT: GraphicPaint = {
 };
 
 /** The document's own `[Normal Graphics Frame]`, when it has one. */
-async function normalGraphicsFramePaint(host: BundleHost): Promise<GraphicPaint | null> {
-  const style = await rawStyleProperties(host, "object", NORMAL_GRAPHICS_FRAME_STYLE);
+async function normalGraphicsFramePaint(
+  host: BundleHost,
+): Promise<GraphicPaint | null> {
+  const style = await rawStyleProperties(
+    host,
+    "object",
+    NORMAL_GRAPHICS_FRAME_STYLE,
+  );
   if (!style) return null;
   const entry = (path: string) =>
     style.entries.find((e) => e.path === path)?.value ?? null;
@@ -82,7 +89,9 @@ async function normalGraphicsFramePaint(host: BundleHost): Promise<GraphicPaint 
     fill: fill?.type === "colorRef" ? ref(fill.value) : null,
     stroke: stroke?.type === "colorRef" ? ref(stroke.value) : null,
     strokeWeight:
-      weight?.type === "length" && typeof weight.value === "number" ? weight.value : null,
+      weight?.type === "length" && typeof weight.value === "number"
+        ? weight.value
+        : null,
   };
 }
 
@@ -91,7 +100,9 @@ async function normalGraphicsFramePaint(host: BundleHost): Promise<GraphicPaint 
  * document has defaults of its own (the engine paints the shape with
  * them; adding ours would override the user's choice).
  */
-export async function graphicPaintFor(host: BundleHost): Promise<GraphicPaint | null> {
+export async function graphicPaintFor(
+  host: BundleHost,
+): Promise<GraphicPaint | null> {
   const [meta, style] = await Promise.all([
     host.document.meta().catch(() => null),
     normalGraphicsFramePaint(host).catch(() => null),
@@ -111,7 +122,10 @@ type ShapeInsertOp = "insertFrame" | "insertOval" | "insertLine" | "insertPath";
 
 /** The element kind each shape insert mints — what `$created` is
  *  addressed as. */
-const KIND_OF: Record<ShapeInsertOp, "rectangle" | "oval" | "graphicLine" | "polygon"> = {
+const KIND_OF: Record<
+  ShapeInsertOp,
+  "rectangle" | "oval" | "graphicLine" | "polygon"
+> = {
   insertFrame: "rectangle",
   insertOval: "oval",
   insertLine: "graphicLine",
@@ -126,19 +140,30 @@ function shapeInsertOp(m: MutationInput): ShapeInsertOp | null {
  *  (`$created`, the engine's most-recent-creating-child sentinel). A
  *  `null` fill is skipped: an insert with no document defaults already
  *  has none. A line never gets a fill. */
-export function graphicPaintOps(op: ShapeInsertOp, paint: GraphicPaint): MutationInput[] {
+export function graphicPaintOps(
+  op: ShapeInsertOp,
+  paint: GraphicPaint,
+): MutationInput[] {
   const elementId = { kind: KIND_OF[op], id: "$created" } as ElementId;
   const ops: MutationInput[] = [];
   if (paint.fill !== null && op !== "insertLine") {
     ops.push({
       op: "setElementProperty",
-      args: { elementId, path: "frameFillColor", value: { type: "colorRef", value: paint.fill } },
+      args: {
+        elementId,
+        path: "frameFillColor",
+        value: { type: "colorRef", value: paint.fill },
+      },
     });
   }
   if (paint.stroke !== null) {
     ops.push({
       op: "setElementProperty",
-      args: { elementId, path: "frameStrokeColor", value: { type: "colorRef", value: paint.stroke } },
+      args: {
+        elementId,
+        path: "frameStrokeColor",
+        value: { type: "colorRef", value: paint.stroke },
+      },
     });
     if (paint.strokeWeight !== null) {
       ops.push({

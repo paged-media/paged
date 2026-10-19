@@ -173,7 +173,12 @@ import {
   handleElementId,
 } from "./batch-handles";
 import { insertPathMutationFor } from "../handlers/insert-path";
-import { pageOriginOf, SPREAD_ORIGIN, spreadTableOf, type PageOrigin } from "../page-origin";
+import {
+  pageOriginOf,
+  SPREAD_ORIGIN,
+  spreadTableOf,
+  type PageOrigin,
+} from "../page-origin";
 import {
   faceToPageSpace,
   readPlanarRegions,
@@ -432,7 +437,8 @@ export function livePaintMemberOf(
   if (typeof r.group !== "string" || r.group.length === 0) return null;
   return {
     group: r.group,
-    index: typeof r.index === "number" && Number.isFinite(r.index) ? r.index : 0,
+    index:
+      typeof r.index === "number" && Number.isFinite(r.index) ? r.index : 0,
   };
 }
 
@@ -604,7 +610,10 @@ export function livePaintFinishBatchFor(args: {
       // as given, where `insertPath` added the page's origin: so the
       // page-space table gets that origin too.
       ops.push(
-        framePathMutationFor(binding.keep, spreadTableOf(face.table, args.plan.pageOrigin ?? SPREAD_ORIGIN)),
+        framePathMutationFor(
+          binding.keep,
+          spreadTableOf(face.table, args.plan.pageOrigin ?? SPREAD_ORIGIN),
+        ),
       );
       for (const id of binding.absorb) {
         ops.push({ op: "deleteFrame", args: { frameId: id.id as string } });
@@ -672,7 +681,10 @@ export function livePaintBatchFor(plan: LivePaintFillPlan): MutationInput {
  *  carrying its index in the ordered basis. One batch ⇒ one undo step. */
 export function livePaintMemberBatchFor(
   groupId: string,
-  members: readonly { id: ElementId; envelope: PluginMetadataEnvelope | null }[],
+  members: readonly {
+    id: ElementId;
+    envelope: PluginMetadataEnvelope | null;
+  }[],
 ): Mutation {
   return {
     op: "batch",
@@ -770,7 +782,8 @@ export async function writeLivePaintLibrary(
     return false;
   }
   try {
-    await writeRecipeBytes(host, 
+    await writeRecipeBytes(
+      host,
       LIVE_PAINT_PART,
       serializeLivePaintLibrary(library),
     );
@@ -861,7 +874,12 @@ export async function livePaintArrangement(
   host: BundleHost,
   group: LivePaintRecipe,
   label: string,
-): Promise<{ faces: RegionFace[]; pageId: string; pageOrigin: PageOrigin; complete: boolean } | null> {
+): Promise<{
+  faces: RegionFace[];
+  pageId: string;
+  pageOrigin: PageOrigin;
+  complete: boolean;
+} | null> {
   const inputs = livePaintInputs(group);
   if (inputs.length < 2) {
     host.log.warn(
@@ -982,7 +1000,9 @@ export async function emitLivePaintFills(
   const built = await mutateMinting(host, batch);
   if (built.outcome.applied) {
     const bound = bindMinted(built, batch);
-    let created = faces.map((_, f) => bound?.byHandle.get(livePaintHandle(f, 0)));
+    let created = faces.map((_, f) =>
+      bound?.byHandle.get(livePaintHandle(f, 0)),
+    );
     if (created.some((id) => id === undefined)) {
       // The fills ARE painted, and the engine's account does not match
       // the batch. Each fill carries its face link: ask the document.
@@ -1122,7 +1142,9 @@ export async function applyMakeLivePaintGroup(
     inputs: ordered.map((e) => ({ kind: e.kind, id: String(e.id) })),
     faces: [],
   };
-  if (!(await writeLivePaintLibrary(host, upsertLivePaintGroup(library, group)))) {
+  if (
+    !(await writeLivePaintLibrary(host, upsertLivePaintGroup(library, group)))
+  ) {
     return null;
   }
 
@@ -1186,11 +1208,13 @@ export async function applyFillLivePaintFace(
     ids = payload.faces.filter((f): f is string => typeof f === "string");
   } else if (typeof payload?.face === "string") {
     ids = [payload.face];
-  } else if (
-    typeof payload?.x === "number" &&
-    typeof payload?.y === "number"
-  ) {
-    const at = await livePaintFaceAt(host, group, [payload.x, payload.y], label);
+  } else if (typeof payload?.x === "number" && typeof payload?.y === "number") {
+    const at = await livePaintFaceAt(
+      host,
+      group,
+      [payload.x, payload.y],
+      label,
+    );
     if (at) ids = [at];
   }
   if (ids.length === 0) {
@@ -1397,7 +1421,10 @@ export async function applyReleaseLivePaint(
       `and ${links.fills.length} painted face(s) keep their artwork; nothing ` +
       "can be regenerated from it any more",
   );
-  return writeLivePaintLibrary(host, removeLivePaintGroupFrom(library, group.id));
+  return writeLivePaintLibrary(
+    host,
+    removeLivePaintGroupFrom(library, group.id),
+  );
 }
 
 // ------------------------------------------------------------- commands
@@ -1434,7 +1461,9 @@ export function contributeLivePaintCommands(host: BundleHost): Disposable {
         "Live Paint: Regenerate faces (re-derive after a member edit; ids may not survive)",
       category: LIVE_PAINT_COMMAND_CATEGORY,
       handler: (_paged, payload) =>
-        applyRegenerateLivePaint(host, payloadOf(payload)).then(() => undefined),
+        applyRegenerateLivePaint(host, payloadOf(payload)).then(
+          () => undefined,
+        ),
     }),
     registerCommand(host, {
       id: SELECT_LIVE_PAINT_FACES_COMMAND_ID,
@@ -1450,7 +1479,9 @@ export function contributeLivePaintCommands(host: BundleHost): Disposable {
       title: "Live Paint: Delete painted face",
       category: LIVE_PAINT_COMMAND_CATEGORY,
       handler: (_paged, payload) =>
-        applyDeleteLivePaintFace(host, payloadOf(payload)).then(() => undefined),
+        applyDeleteLivePaintFace(host, payloadOf(payload)).then(
+          () => undefined,
+        ),
     }),
     registerCommand(host, {
       id: RELEASE_LIVE_PAINT_COMMAND_ID,

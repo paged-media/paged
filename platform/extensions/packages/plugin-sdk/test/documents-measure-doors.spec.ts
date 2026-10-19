@@ -51,7 +51,10 @@ const manifest = (
 });
 
 function recordingBackend(answer: "opened" | "declined" = "opened") {
-  const calls: { bytes: Uint8Array; request: Parameters<DocumentsBackend["open"]>[1] }[] = [];
+  const calls: {
+    bytes: Uint8Array;
+    request: Parameters<DocumentsBackend["open"]>[1];
+  }[] = [];
   let exports = 0;
   const backend: DocumentsBackend = {
     async exportPaged() {
@@ -72,13 +75,19 @@ describe("host.documents — D-26 (SDK adapter)", () => {
   const caps = { documents: { export: true, open: true } };
 
   it("is unsupported and rejects both doors when the host wires no backend", async () => {
-    const { host } = createBundleHost(() => makeFakeEditor().editor, manifest(caps), {
-      console: silent,
-      capabilityMode: "enforce",
-    });
+    const { host } = createBundleHost(
+      () => makeFakeEditor().editor,
+      manifest(caps),
+      {
+        console: silent,
+        capabilityMode: "enforce",
+      },
+    );
     expect(host.supports("documents.open@1")).toBe(false);
     expect(host.supports("documents.exportPaged@1")).toBe(false);
-    await expect(host.documents.exportPaged()).rejects.toThrow(/no documents backend/);
+    await expect(host.documents.exportPaged()).rejects.toThrow(
+      /no documents backend/,
+    );
     await expect(host.documents.open(new Uint8Array([1]))).rejects.toThrow(
       /no documents backend/,
     );
@@ -91,32 +100,42 @@ describe("host.documents — D-26 (SDK adapter)", () => {
       manifest({ documents: { export: true } }),
       { console: silent, capabilityMode: "enforce", documents: rec.backend },
     ).host;
-    await expect(exportOnly.documents.exportPaged()).resolves.toBeInstanceOf(Uint8Array);
-    await expect(exportOnly.documents.open(new Uint8Array([1]))).rejects.toBeInstanceOf(
-      PluginCapabilityError,
+    await expect(exportOnly.documents.exportPaged()).resolves.toBeInstanceOf(
+      Uint8Array,
     );
+    await expect(
+      exportOnly.documents.open(new Uint8Array([1])),
+    ).rejects.toBeInstanceOf(PluginCapabilityError);
     const none = createBundleHost(() => makeFakeEditor().editor, manifest({}), {
       console: silent,
       capabilityMode: "enforce",
       documents: rec.backend,
     }).host;
-    await expect(none.documents.exportPaged()).rejects.toBeInstanceOf(PluginCapabilityError);
+    await expect(none.documents.exportPaged()).rejects.toBeInstanceOf(
+      PluginCapabilityError,
+    );
     expect(rec.calls).toHaveLength(0);
     expect(rec.exports()).toBe(1);
   });
 
   it("forwards open with the MANIFEST's identity, a trimmed name and a copy of the bytes", async () => {
     const rec = recordingBackend();
-    const { host } = createBundleHost(() => makeFakeEditor().editor, manifest(caps), {
-      console: silent,
-      capabilityMode: "enforce",
-      documents: rec.backend,
-    });
+    const { host } = createBundleHost(
+      () => makeFakeEditor().editor,
+      manifest(caps),
+      {
+        console: silent,
+        capabilityMode: "enforce",
+        documents: rec.backend,
+      },
+    );
     expect(host.supports("documents.open@1")).toBe(true);
     expect(host.supports("documents.exportPaged@1")).toBe(true);
 
     const bytes = new Uint8Array([0x50, 0x4b, 3, 4]);
-    const r = await host.documents.open(bytes, { name: "  Catalog (merged)  " });
+    const r = await host.documents.open(bytes, {
+      name: "  Catalog (merged)  ",
+    });
     expect(r).toEqual({ opened: true, pageIds: ["p1"] });
     expect(rec.calls).toHaveLength(1);
     const call = rec.calls[0];
@@ -129,15 +148,21 @@ describe("host.documents — D-26 (SDK adapter)", () => {
 
     await host.documents.open(bytes, { name: "   " });
     expect(rec.calls[1].request.name).toBeNull();
-    await expect(host.documents.open(new Uint8Array())).rejects.toThrow(/non-empty/);
+    await expect(host.documents.open(new Uint8Array())).rejects.toThrow(
+      /non-empty/,
+    );
   });
 
   it("passes a decline through as an ordinary answer", async () => {
     const rec = recordingBackend("declined");
-    const { host } = createBundleHost(() => makeFakeEditor().editor, manifest(caps), {
-      console: silent,
-      documents: rec.backend,
-    });
+    const { host } = createBundleHost(
+      () => makeFakeEditor().editor,
+      manifest(caps),
+      {
+        console: silent,
+        documents: rec.backend,
+      },
+    );
     await expect(host.documents.open(new Uint8Array([1]))).resolves.toEqual({
       opened: false,
       reason: "declined",
@@ -163,7 +188,12 @@ describe("host.text.measureStrings — D-27 (SDK adapter)", () => {
         },
         ...(text === "batch"
           ? {
-              async measureMany(_f: string, _s: string | null, texts: readonly string[], sizePt: number) {
+              async measureMany(
+                _f: string,
+                _s: string | null,
+                texts: readonly string[],
+                sizePt: number,
+              ) {
                 counts.measureMany += 1;
                 return texts.map((t) => metric(t, sizePt));
               },
@@ -171,7 +201,9 @@ describe("host.text.measureStrings — D-27 (SDK adapter)", () => {
           : {}),
       };
     }
-    const { host } = createBundleHost(() => fake.editor, manifest(), { console: silent });
+    const { host } = createBundleHost(() => fake.editor, manifest(), {
+      console: silent,
+    });
     return { host, counts };
   }
 
@@ -180,7 +212,12 @@ describe("host.text.measureStrings — D-27 (SDK adapter)", () => {
   it("is ONE host round-trip when the editor wires measureMany", async () => {
     const { host, counts } = editorWith("batch");
     expect(host.supports("text.measureStrings@1")).toBe(true);
-    const out = await host.text.measureStrings("Minion Pro", "Regular", words, 10);
+    const out = await host.text.measureStrings(
+      "Minion Pro",
+      "Regular",
+      words,
+      10,
+    );
     expect(out).toEqual(words.map((w) => metric(w, 10)));
     expect(counts).toEqual({ measure: 0, measureMany: 1 });
   });
@@ -218,10 +255,12 @@ describe("host.text.measureStrings — D-27 (SDK adapter)", () => {
       measure: async () => metric("x", 1),
       measureMany: async () => [metric("x", 1)],
     };
-    const { host } = createBundleHost(() => fake.editor, manifest(), { console: silent });
-    await expect(host.text.measureStrings("X", null, ["a", "b"], 10)).rejects.toThrow(
-      /answered 1 metrics for 2 strings/,
-    );
+    const { host } = createBundleHost(() => fake.editor, manifest(), {
+      console: silent,
+    });
+    await expect(
+      host.text.measureStrings("X", null, ["a", "b"], 10),
+    ).rejects.toThrow(/answered 1 metrics for 2 strings/);
   });
 });
 
@@ -285,16 +324,22 @@ describe("headless host — documents + measureStrings over the real engine", ()
       op: "insertFrame",
       args: { pageId, bounds: [10, 10, 60, 60] },
     } as never);
-    const before = (await host.document.collection("pageItems" as never)).length;
+    const before = (await host.document.collection("pageItems" as never))
+      .length;
     expect(await host.documents.open(template, { name: "Merged" })).toEqual({
       opened: false,
       reason: "declined",
     });
     expect(asked).toEqual([
-      { name: "Merged", requester: { id: "media.paged.harness", name: "harness" } },
+      {
+        name: "Merged",
+        requester: { id: "media.paged.harness", name: "harness" },
+      },
     ]);
     expect((await host.document.meta()).dirty).toBe(true);
-    expect((await host.document.collection("pageItems" as never)).length).toBe(before);
+    expect((await host.document.collection("pageItems" as never)).length).toBe(
+      before,
+    );
 
     keep = false;
     expect((await host.documents.open(template)).opened).toBe(true);
@@ -304,9 +349,9 @@ describe("headless host — documents + measureStrings over the real engine", ()
   it("rejects bytes that do not load", async () => {
     live = await createHeadlessHost({ console: silent });
     await live.load(minimalIdml());
-    await expect(live.host.documents.open(new Uint8Array([1, 2, 3]))).rejects.toThrow(
-      /headless load failed/,
-    );
+    await expect(
+      live.host.documents.open(new Uint8Array([1, 2, 3])),
+    ).rejects.toThrow(/headless load failed/);
   });
 
   it("estimate by default; the engine shaper on request, batch == single", async () => {
@@ -320,7 +365,12 @@ describe("headless host — documents + measureStrings over the real engine", ()
     expect(host.supports("text.measure@1")).toBe(true);
     expect(host.supports("text.measureStrings@1")).toBe(true);
     const words = ["Lorem", "ipsum", "dolor", "WWW", "i"];
-    const batch = await host.text.measureStrings("Minion Pro", "Regular", words, 12);
+    const batch = await host.text.measureStrings(
+      "Minion Pro",
+      "Regular",
+      words,
+      12,
+    );
     const single = await Promise.all(
       words.map((w) => host.text.measureString("Minion Pro", "Regular", w, 12)),
     );

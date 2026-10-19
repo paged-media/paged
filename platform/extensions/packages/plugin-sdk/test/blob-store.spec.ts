@@ -119,18 +119,18 @@ describe("host.blob — the quota (K-4)", () => {
     const { host } = makeHost(TINY, inMemoryBlobStore());
     expect((await host.blob.usage()).quota).toBe(8);
     await host.blob.write("ok", new Uint8Array(8)); // exactly the cap
-    await expect(
-      host.blob.write("over", new Uint8Array(1)),
-    ).rejects.toThrow(/quota/);
+    await expect(host.blob.write("over", new Uint8Array(1))).rejects.toThrow(
+      /quota/,
+    );
   });
 });
 
 describe("host.blob — the gate (K-4)", () => {
   it("throws in enforce mode when storage.blob is not declared", async () => {
     const { host } = makeHost(UNDECLARED, inMemoryBlobStore(), "enforce");
-    await expect(host.blob.write("wb", new Uint8Array(1))).rejects.toBeInstanceOf(
-      PluginCapabilityError,
-    );
+    await expect(
+      host.blob.write("wb", new Uint8Array(1)),
+    ).rejects.toBeInstanceOf(PluginCapabilityError);
   });
 
   it("warns + proceeds in warn mode when undeclared", async () => {

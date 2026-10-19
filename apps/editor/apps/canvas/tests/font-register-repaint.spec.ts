@@ -39,18 +39,26 @@ import { Designer } from "./journey/driver/designer";
 
 type Client = {
   drainJournal(): Promise<{ entries: Array<{ code: string }> } | null>;
-  registerFont(family: string, bytes: Uint8Array, style: string | null): Promise<void>;
+  registerFont(
+    family: string,
+    bytes: Uint8Array,
+    style: string | null,
+  ): Promise<void>;
   clearFontRegistry(): Promise<void>;
-  subscribe(l: (m: { kind: string; payload?: { pageIds?: string[] } }) => void): () => void;
+  subscribe(
+    l: (m: { kind: string; payload?: { pageIds?: string[] } }) => void,
+  ): () => void;
 };
 
 /** Frames the worker drew since the last drain, after `settleMs`. */
 async function framesAfter(page: Page, settleMs: number): Promise<number> {
   return page.evaluate(async (ms) => {
-    const c = (globalThis as unknown as { __canvas: { client: Client } }).__canvas.client;
+    const c = (globalThis as unknown as { __canvas: { client: Client } })
+      .__canvas.client;
     await new Promise((r) => setTimeout(r, ms));
     const drain = await c.drainJournal();
-    return (drain?.entries ?? []).filter((e) => e.code === "worker.frame").length;
+    return (drain?.entries ?? []).filter((e) => e.code === "worker.frame")
+      .length;
   }, settleMs);
 }
 
@@ -63,7 +71,8 @@ async function afterFontReply(
   // Let the load's own repaints and the resolver settle, then start clean.
   await expect.poll(() => framesAfter(page, 600), { timeout: 15_000 }).toBe(0);
   const { pageIds, resolved } = await page.evaluate(async (which) => {
-    const c = (globalThis as unknown as { __canvas: { client: Client } }).__canvas.client;
+    const c = (globalThis as unknown as { __canvas: { client: Client } })
+      .__canvas.client;
     let pageIds: string[] = [];
     let resolved = false;
     const off = c.subscribe((m) => {
@@ -74,8 +83,13 @@ async function afterFontReply(
     });
     if (which === "register") {
       const resp = await fetch("/fonts/CormorantGaramond.ttf");
-      if (!resp.ok) throw new Error(`/fonts/CormorantGaramond.ttf: ${resp.status}`);
-      await c.registerFont("Open Sans", new Uint8Array(await resp.arrayBuffer()), null);
+      if (!resp.ok)
+        throw new Error(`/fonts/CormorantGaramond.ttf: ${resp.status}`);
+      await c.registerFont(
+        "Open Sans",
+        new Uint8Array(await resp.arrayBuffer()),
+        null,
+      );
     } else {
       await c.clearFontRegistry();
     }
@@ -98,9 +112,18 @@ test.describe("A font registration repaints the pages it re-lays out", () => {
     const designer = new Designer(page);
     const before = await designer.renderBytes();
 
-    const { pageIds, resolved, frames } = await afterFontReply(page, "register");
-    expect(pageIds.length, "the engine re-laid out the pages that name the face").toBeGreaterThan(0);
-    expect(frames, "the canvas redrew without a camera move or an edit").toBeGreaterThan(0);
+    const { pageIds, resolved, frames } = await afterFontReply(
+      page,
+      "register",
+    );
+    expect(
+      pageIds.length,
+      "the engine re-laid out the pages that name the face",
+    ).toBeGreaterThan(0);
+    expect(
+      frames,
+      "the canvas redrew without a camera move or an edit",
+    ).toBeGreaterThan(0);
     expect(resolved, "the resolver re-ran after the re-layout").toBe(true);
     // And what it redrew is the new face.
     await designer.expectRenderChangesFrom(before);

@@ -25,7 +25,7 @@
 // and committed beside this lane as
 // `test/fixtures/oracle/<probe>.illustrator.json`. CI never drives
 // Illustrator; it replays the committed file against the real headless
-// engine (`conformance/host.ts`).
+// engine (`headless/host.ts`).
 //
 // WHY SHAPE AND NOT ANCHORS. Two correct offsets of the same rectangle
 // can start at different corners, run in opposite directions, and — for
@@ -163,12 +163,10 @@ const cross = (a: Vec2, b: Vec2): number => a[0] * b[1] - a[1] * b[0];
 
 /** The four control points of the cubic that leaves anchor `a` and
  *  arrives at anchor `b`. */
-const segment = (a: OracleAnchor, b: OracleAnchor): [Vec2, Vec2, Vec2, Vec2] => [
-  a.anchor,
-  a.right,
-  b.left,
-  b.anchor,
-];
+const segment = (
+  a: OracleAnchor,
+  b: OracleAnchor,
+): [Vec2, Vec2, Vec2, Vec2] => [a.anchor, a.right, b.left, b.anchor];
 
 /** EXACT signed area of a closed path of cubic Béziers (Green's theorem,
  *  integrated in closed form per segment — no flattening, so a round
@@ -221,7 +219,9 @@ function extremaT(p0: number, p1: number, p2: number, p3: number): number[] {
 
 const cubicAt = (p0: number, p1: number, p2: number, p3: number, t: number) => {
   const u = 1 - t;
-  return u * u * u * p0 + 3 * u * u * t * p1 + 3 * u * t * t * p2 + t * t * t * p3;
+  return (
+    u * u * u * p0 + 3 * u * u * t * p1 + 3 * u * t * t * p2 + t * t * t * p3
+  );
 };
 
 /** EXACT bounds of a path's curve (not of its control polygon): the
@@ -244,10 +244,16 @@ export function pathBounds(path: OraclePath): [number, number, number, number] {
     if (i === n - 1 && !path.closed) break;
     const [p0, p1, p2, p3] = segment(a, path.anchors[(i + 1) % n]);
     for (const t of extremaT(p0[0], p1[0], p2[0], p3[0])) {
-      take(cubicAt(p0[0], p1[0], p2[0], p3[0], t), cubicAt(p0[1], p1[1], p2[1], p3[1], t));
+      take(
+        cubicAt(p0[0], p1[0], p2[0], p3[0], t),
+        cubicAt(p0[1], p1[1], p2[1], p3[1], t),
+      );
     }
     for (const t of extremaT(p0[1], p1[1], p2[1], p3[1])) {
-      take(cubicAt(p0[0], p1[0], p2[0], p3[0], t), cubicAt(p0[1], p1[1], p2[1], p3[1], t));
+      take(
+        cubicAt(p0[0], p1[0], p2[0], p3[0], t),
+        cubicAt(p0[1], p1[1], p2[1], p3[1], t),
+      );
     }
   }
   return [minX, minY, maxX, maxY];
@@ -281,7 +287,8 @@ export function isCurvedSegment(a: OracleAnchor, b: OracleAnchor): boolean {
       Math.hypot(p2[0] - p0[0], p2[1] - p0[1]) > STRAIGHT_TOL
     );
   }
-  const off = (p: Vec2) => Math.abs(cross(chord, [p[0] - p0[0], p[1] - p0[1]])) / len;
+  const off = (p: Vec2) =>
+    Math.abs(cross(chord, [p[0] - p0[0], p[1] - p0[1]])) / len;
   return off(p1) > STRAIGHT_TOL || off(p2) > STRAIGHT_TOL;
 }
 
@@ -385,7 +392,10 @@ export function paintedArea(
     const hits: { x: number; dir: number }[] = [];
     for (const e of edges) {
       if (y < e.y0 || y >= e.y1) continue;
-      hits.push({ x: e.x0 + ((y - e.y0) / (e.y1 - e.y0)) * (e.x1 - e.x0), dir: e.dir });
+      hits.push({
+        x: e.x0 + ((y - e.y0) / (e.y1 - e.y0)) * (e.x1 - e.x0),
+        dir: e.dir,
+      });
     }
     hits.sort((p, q) => p.x - q.x);
     let winding = 0;
@@ -442,7 +452,8 @@ export function summarize(paths: readonly OraclePath[]): ShapeSummary {
     anchors += p.anchors.length;
     const n = p.anchors.length;
     for (let i = 0; i < (p.closed ? n : n - 1); i++) {
-      if (isCurvedSegment(p.anchors[i], p.anchors[(i + 1) % n])) curvedSegments++;
+      if (isCurvedSegment(p.anchors[i], p.anchors[(i + 1) % n]))
+        curvedSegments++;
     }
     const s = signedArea(p);
     area += Math.abs(s);
@@ -475,7 +486,8 @@ export function pathsOfTable(table: {
   subpathStarts: readonly number[];
   subpathOpen?: readonly boolean[];
 }): OraclePath[] {
-  const starts = table.subpathStarts.length > 0 ? [...table.subpathStarts] : [0];
+  const starts =
+    table.subpathStarts.length > 0 ? [...table.subpathStarts] : [0];
   return starts.map((start, i) => {
     const end = i + 1 < starts.length ? starts[i + 1] : table.anchors.length;
     return {

@@ -1,0 +1,11 @@
+$ paged-node plugins a.paged b.paged
+# exit 2
+# stdout
+{
+  "error": {
+    "message": "usage: paged-node plugins [doc]",
+    "exit": 2
+  }
+}
+# stderr
+(empty)

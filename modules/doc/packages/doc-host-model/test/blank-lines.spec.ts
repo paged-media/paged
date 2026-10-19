@@ -21,7 +21,13 @@ const para = (style: string, text: string): LoweredBlock => ({
   runs: text ? [{ text, charStyleId: "CharacterStyle/c" }] : [],
   sourceIndex: 0,
 });
-const table: LoweredBlock = { kind: "table", rows: 1, cols: 1, columnWidthsPt: [], cells: [] };
+const table: LoweredBlock = {
+  kind: "table",
+  rows: 1,
+  cols: 1,
+  columnWidthsPt: [],
+  cells: [],
+};
 
 /** Run a story plan the way `pourSteps` does (table footprint 0 / 1). */
 function run(blocks: LoweredBlock[]): Op[][] {
@@ -89,7 +95,12 @@ describe("blank lines", () => {
       para("ParagraphStyle/y", ""),
       para("ParagraphStyle/b", "cd"),
     ]);
-    expect(steps.map((s) => s[0].op)).toEqual(["insertText", "insertTable", "insertText", "applyStyle"]);
+    expect(steps.map((s) => s[0].op)).toEqual([
+      "insertText",
+      "insertTable",
+      "insertText",
+      "applyStyle",
+    ]);
     // "ab" is paragraph 0, x's blank line 1; the table takes paragraph 2,
     // and the text after a table continues in the table's own paragraph,
     // so y's blank line IS paragraph 2. In order: an engine without the
@@ -105,11 +116,20 @@ describe("blank lines", () => {
   });
 
   it("buildTextPour still inlines carets unless asked to defer them", () => {
-    const paras = [para("ParagraphStyle/a", "ab"), para("ParagraphStyle/blank", "")] as LoweredParagraph[];
+    const paras = [
+      para("ParagraphStyle/a", "ab"),
+      para("ParagraphStyle/blank", ""),
+    ] as LoweredParagraph[];
     const inline = buildTextPour(paras, "s", 0);
-    expect(paraStyles(inline.mutations as unknown as Op[])).toContainEqual([2, 2, "ParagraphStyle/blank"]);
+    expect(paraStyles(inline.mutations as unknown as Op[])).toContainEqual([
+      2,
+      2,
+      "ParagraphStyle/blank",
+    ]);
     const deferred = buildTextPour(paras, "s", 0, 0, { deferCarets: true });
-    expect(paraStyles(deferred.mutations as unknown as Op[])).toEqual([[0, 2, "ParagraphStyle/a"]]);
+    expect(paraStyles(deferred.mutations as unknown as Op[])).toEqual([
+      [0, 2, "ParagraphStyle/a"],
+    ]);
     expect(deferred.carets).toHaveLength(1);
   });
 });
@@ -123,7 +143,11 @@ describe("plain line breaks (U+2028)", () => {
     ],
     sourceIndex: 0,
   };
-  const next: LoweredParagraph = { paraStyleId: "ParagraphStyle/q", runs: [{ text: "n" }], sourceIndex: 1 };
+  const next: LoweredParagraph = {
+    paraStyleId: "ParagraphStyle/q",
+    runs: [{ text: "n" }],
+    sourceIndex: 1,
+  };
   const out = buildTextPour([br, next], "s", 10, 4);
   const ops = out.mutations as unknown as Op[];
 
@@ -137,7 +161,9 @@ describe("plain line breaks (U+2028)", () => {
       [4, 16, "ParagraphStyle/p"],
       [16, 17, "ParagraphStyle/q"],
     ]);
-    const chr = ops.filter((o) => o.op === "applyStyle" && o.args.scope === "character").map((o) => [o.args.start, o.args.end]);
+    const chr = ops
+      .filter((o) => o.op === "applyStyle" && o.args.scope === "character")
+      .map((o) => [o.args.start, o.args.end]);
     expect(chr).toEqual([
       [4, 13],
       [13, 16],

@@ -36,11 +36,7 @@
 // the ids are minted by the arrangement ("0-1#0" = the overlap of
 // inputs 0 and 1).
 
-import {
-  assignLayer,
-  proseFrame,
-  specLabel,
-} from "../../annual-support";
+import { assignLayer, proseFrame, specLabel } from "../../annual-support";
 import { LAYER, STYLE, SWATCH, contentBox, p } from "../../names-annual";
 import type { PageContext, PageReport } from "../../types";
 import { corner, pathAnchors, planarFaces, type WireId } from "./wire";
@@ -60,19 +56,27 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   const screenBlue = await doc.swatch(SWATCH.screenBlue);
   const marigold = await doc.swatch(SWATCH.labMarigold);
 
-  const head = await proseFrame(ctx, page, [left, 54, right, 84], [
-    { text: "Topology and the pathfinder", style: STYLE.head1 },
-  ]);
+  const head = await proseFrame(
+    ctx,
+    page,
+    [left, 54, right, 84],
+    [{ text: "Topology and the pathfinder", style: STYLE.head1 }],
+  );
   elements.push(head.frameId);
-  const intro = await proseFrame(ctx, page, [left, 90, right, 128], [
-    {
-      text:
-        "Each tile in the upper band holds the same shape twice - " +
-        "untouched at left, operated on at right. The lower band feeds " +
-        "overlapping pairs to every planar verb the wire declares.",
-      style: STYLE.bodyFirst,
-    },
-  ]);
+  const intro = await proseFrame(
+    ctx,
+    page,
+    [left, 90, right, 128],
+    [
+      {
+        text:
+          "Each tile in the upper band holds the same shape twice - " +
+          "untouched at left, operated on at right. The lower band feeds " +
+          "overlapping pairs to every planar verb the wire declares.",
+        style: STYLE.bodyFirst,
+      },
+    ],
+  );
   elements.push(intro.frameId);
 
   // ── shared machinery ─────────────────────────────────────────────
@@ -114,9 +118,12 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   // the chapter notes), so each row of tiles is captioned once,
   // left to right.
   const rowCaption = async (y: number, text: string): Promise<void> => {
-    const cap = await proseFrame(ctx, page, [left, y, right, y + 16], [
-      { text, style: STYLE.caption },
-    ]);
+    const cap = await proseFrame(
+      ctx,
+      page,
+      [left, y, right, y + 16],
+      [{ text, style: STYLE.caption }],
+    );
     elements.push(cap.frameId);
   };
 
@@ -235,7 +242,10 @@ export async function build(ctx: PageContext): Promise<PageReport> {
       corner(sx, A2 + 42),
     ];
     await path(square(x), false, { fill: null, stroke: ink });
-    const after = await path(square(x + 54), false, { fill: null, stroke: ink });
+    const after = await path(square(x + 54), false, {
+      fill: null,
+      stroke: ink,
+    });
     await doc.mutate("pathOpenAt", { elementId: wid(after), index: 0 });
   }
   {
@@ -373,7 +383,12 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   };
 
   const B1 = 380;
-  for (const [i, kind] of ["union", "intersect", "subtract", "exclude"].entries()) {
+  for (const [i, kind] of [
+    "union",
+    "intersect",
+    "subtract",
+    "exclude",
+  ].entries()) {
     const x = COL(i);
     const { top, bottom } = await pair(x, B1);
     await doc.mutate("pathfinderBoolean", {

@@ -20,7 +20,7 @@ idml-import → paged-scene → paged-text → paged-compose → paged-gpu
 **Engine/app split.** This repo is the open engine, dual-licensed
 **AGPL-3.0-only OR PMEL** like the rest of the monorepo (ADR PM-0001;
 every source file carries the AGPL/PMEL header; new files must too — copy
-from any `crates/**/*.rs`). The editor is a *separate* repo
+from any `crates/**/*.rs`). The editor is a _separate_ repo
 (`paged-media/editor`, public, **AGPL-3.0 OR PMEL**) that consumes the published `@paged-media` SDK/wasm packages
 across a package boundary — there is **no Cargo path dependency** from the
 editor into this code. Design documents,
@@ -78,7 +78,7 @@ formatted in one mechanical pass; the workaround is retired.
   path-depends on `idml-import` and the model crates, so an IDML change and
   its callers land in one commit. `crates/idml-coverage/` is the static
   inventory of both (`cargo run -p idml-coverage >
-  docs/reference/idml-coverage.json`; its tests fail when the committed file
+docs/reference/idml-coverage.json`; its tests fail when the committed file
   or the ratchet `docs/reference/idml-coverage-ratchet.json` is stale).
 - `crates/paged-scene/` — `Document::open`. Resolves cascade,
   `frame_for_story`, `text_frame_index`, `frame_chain` (threading).
@@ -116,12 +116,13 @@ formatted in one mechanical pass; the workaround is retired.
   `crates/paged-wire/schema/mutation.schema.json` (ADR 187; the plugin SDK's
   typed core commands are generated from it). After changing a type the wire
   carries: `cargo run -p paged-wire --features schema --example emit-schema >
-  crates/paged-wire/schema/mutation.schema.json`; `cargo test -p paged-wire
-  --features schema` checks it is current and agrees with tsify.
+crates/paged-wire/schema/mutation.schema.json`; `cargo test -p paged-wire
+--features schema` checks it is current and agrees with tsify.
 - `crates/paged-gen/` — IDML fixture generator (the `paged-gen` bin).
 - `crates/paged-sdk/` — published SDK wasm surface: a WebGPU
   `ViewerSession` (load IDML → present to OffscreenCanvas/Canvas via
-  Vello → headless RGBA readback); npm `@paged-media/sdk`. WebGPU-only
+  Vello → headless RGBA readback); npm `@paged-media/idml-viewer/session`
+  (the `./session` entry, PM-0008; built into `web/idml-viewer/wasm/`). WebGPU-only
   (no CPU page rasterizer); see `crates/paged-sdk/WEBGPU.md`.
 - `corpus/generated/` — license-clear generator fixtures (IDML + paired
   InDesign-exported PDF + meta JSON). Hard fidelity gate runs over these via
@@ -138,7 +139,7 @@ formatted in one mechanical pass; the workaround is retired.
 - **Don't loosen fidelity thresholds to make a failure go away.** The
   per-fixture thresholds in `corpus/generated/fidelity-thresholds.json` are
   sized to current measurements + ~15–25% headroom. If a regression trips
-  them, fix the regression. Tighten *after* fixing, never before.
+  them, fix the regression. Tighten _after_ fixing, never before.
 - **CPU backend for headless / CI.** Vello requires a GPU; the CI fidelity
   gate uses tiny-skia.
 - **Reference PDFs are baked.** If a fixture's reference PDF was exported on
@@ -153,8 +154,8 @@ formatted in one mechanical pass; the workaround is retired.
 - **Per-paragraph state on `StoryEmitter`.** Vertical-justify distribute
   mode, numbering counter, frame-chain bookkeeping, and per-frame paragraph
   command ranges all live on `StoryEmitter` — add new per-story state there.
-- **Keep the format/project naming line.** `idml` as the *project* prefix
-  was renamed to `paged`; `idml` as the *format* (`.idml`, `idml_bytes`,
+- **Keep the format/project naming line.** `idml` as the _project_ prefix
+  was renamed to `paged`; `idml` as the _format_ (`.idml`, `idml_bytes`,
   "parses IDML", `designmap`, the `idml-package` mimetype) is kept. Don't
   blanket-rename across that line.
 - **Comments earn their place.** Add one when the WHY is non-obvious (a

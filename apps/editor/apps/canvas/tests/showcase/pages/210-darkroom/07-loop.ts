@@ -63,15 +63,22 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   const gpu = await doc.gpuActive();
   const asShot = statSync(APPLES).size;
 
-  const head = await proseFrame(ctx, page, [60, 58, 492, 88], [
-    { text: "The darkroom loop, closed", style: STYLE.head2 },
-  ]);
+  const head = await proseFrame(
+    ctx,
+    page,
+    [60, 58, 492, 88],
+    [{ text: "The darkroom loop, closed", style: STYLE.head2 }],
+  );
   elements.push(head.frameId);
 
   // ── run the loop once more, for the byte counts ──────────────────
   const placed = await doc.rectangle(pg, PLACED);
   await assignLayer(ctx, "rectangle", placed, LAYER.content);
-  await doc.mutate("placeImage", { elementId: placed, uri: APPLES_URI, fit: null });
+  await doc.mutate("placeImage", {
+    elementId: placed,
+    uri: APPLES_URI,
+    fit: null,
+  });
   await replaceBytesFromFile(ctx, placed, APPLES);
 
   const committedFrame = await doc.rectangle(pg, COMMITTED);
@@ -127,85 +134,103 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   // Numbered 1: the live list marker renders its separator as a tofu
   // box on this lane (seen in the proof render), and a procedure whose
   // numbers are typographic content reads identically without it.
-  const procedure = await proseFrame(ctx, page, [60, 96, 492, 256], [
-    {
-      text:
-        `1 · Place. The frame takes a link and a fitting; the photograph ` +
-        `goes in as inline bytes (${asShot.toLocaleString("en-US")} B as shot).`,
-      style: STYLE.body,
-    },
-    {
-      text:
-        "2 · Ingest. The raster importer decodes the file into the " +
-        "paged.image session, bound to the selected frame.",
-      style: STYLE.body,
-    },
-    {
-      text:
-        "3 · Adjust. Panel parameters drive the registered kernel chain on " +
-        "the GPU — here a 480 × 320 resample, +0.9 EV, saturation 1.5. The " +
-        "document is untouched.",
-      style: STYLE.body,
-    },
-    { text: `4 · ${stepFour}`, style: STYLE.body },
-    {
-      text:
-        "5 · Commit. replaceImageBytes writes the exported bytes back into " +
-        "the frame — inline image data, the lane every checkpoint and the " +
-        "IDML round trip preserve.",
-      style: STYLE.body,
-    },
-  ]);
+  const procedure = await proseFrame(
+    ctx,
+    page,
+    [60, 96, 492, 256],
+    [
+      {
+        text:
+          `1 · Place. The frame takes a link and a fitting; the photograph ` +
+          `goes in as inline bytes (${asShot.toLocaleString("en-US")} B as shot).`,
+        style: STYLE.body,
+      },
+      {
+        text:
+          "2 · Ingest. The raster importer decodes the file into the " +
+          "paged.image session, bound to the selected frame.",
+        style: STYLE.body,
+      },
+      {
+        text:
+          "3 · Adjust. Panel parameters drive the registered kernel chain on " +
+          "the GPU — here a 480 × 320 resample, +0.9 EV, saturation 1.5. The " +
+          "document is untouched.",
+        style: STYLE.body,
+      },
+      { text: `4 · ${stepFour}`, style: STYLE.body },
+      {
+        text:
+          "5 · Commit. replaceImageBytes writes the exported bytes back into " +
+          "the frame — inline image data, the lane every checkpoint and the " +
+          "IDML round trip preserve.",
+        style: STYLE.body,
+      },
+    ],
+  );
   elements.push(procedure.frameId);
 
-  const capA = await proseFrame(ctx, page, [60, 359, 190, 399], [
-    { text: "Step 1 — placed, as shot", style: STYLE.specLabel },
-  ]);
-  const capB = await proseFrame(ctx, page, [232, 359, 382, 399], [
-    {
-      text:
-        exported !== null
-          ? "Steps 2–5 — corrected, committed"
-          : "Steps 2–5 — did not run on this lane",
-      style: STYLE.specLabel,
-    },
-  ]);
+  const capA = await proseFrame(
+    ctx,
+    page,
+    [60, 359, 190, 399],
+    [{ text: "Step 1 — placed, as shot", style: STYLE.specLabel }],
+  );
+  const capB = await proseFrame(
+    ctx,
+    page,
+    [232, 359, 382, 399],
+    [
+      {
+        text:
+          exported !== null
+            ? "Steps 2–5 — corrected, committed"
+            : "Steps 2–5 — did not run on this lane",
+        style: STYLE.specLabel,
+      },
+    ],
+  );
   elements.push(capA.frameId, capB.frameId);
 
   // ── the honesty block ────────────────────────────────────────────
-  const honesty = await proseFrame(ctx, page, [60, 410, 492, 636], [
-    { text: "What this chapter does not claim", style: STYLE.head2 },
-    {
-      text:
-        "Apply is a preview. The panel's Apply composites a Stage-A scene " +
-        "layer over the frame — the fastest way to see a correction, and " +
-        "session state by design. Reload the document and the layer is " +
-        "gone; that is why every exhibit here committed its pixels before " +
-        "its module returned.",
-      style: STYLE.bodySmall,
-    },
-    {
-      text:
-        "The brush-library lane exists; its fixture cannot. The .abr " +
-        "reader is real — built clean-room against a measured corpus of " +
-        "3,215 presets, a 24-variant warning channel for what it declines " +
-        "— but no redistributable .abr ships with this book: the " +
-        "published corpus references are licence-blocked for committed " +
-        "test assets, and authoring a fake library to press the button " +
-        "would demonstrate nothing true. The loader stays unpressed here.",
-      style: STYLE.bodySmall,
-    },
-    {
-      text:
-        "Tiles are level-0. The plugin's tile provider serves the " +
-        "renderer full-resolution level-0 tiles; the buffer graph's mip " +
-        "pyramid stays engine-side, not yet across the wasm boundary. " +
-        "This chapter's exhibits never depended on it — the committed " +
-        "bytes are the document's own, decoded by the engine like any " +
-        "placed image.",
-      style: STYLE.bodySmall,
-    },
-  ]);
+  const honesty = await proseFrame(
+    ctx,
+    page,
+    [60, 410, 492, 636],
+    [
+      { text: "What this chapter does not claim", style: STYLE.head2 },
+      {
+        text:
+          "Apply is a preview. The panel's Apply composites a Stage-A scene " +
+          "layer over the frame — the fastest way to see a correction, and " +
+          "session state by design. Reload the document and the layer is " +
+          "gone; that is why every exhibit here committed its pixels before " +
+          "its module returned.",
+        style: STYLE.bodySmall,
+      },
+      {
+        text:
+          "The brush-library lane exists; its fixture cannot. The .abr " +
+          "reader is real — built clean-room against a measured corpus of " +
+          "3,215 presets, a 24-variant warning channel for what it declines " +
+          "— but no redistributable .abr ships with this book: the " +
+          "published corpus references are licence-blocked for committed " +
+          "test assets, and authoring a fake library to press the button " +
+          "would demonstrate nothing true. The loader stays unpressed here.",
+        style: STYLE.bodySmall,
+      },
+      {
+        text:
+          "Tiles are level-0. The plugin's tile provider serves the " +
+          "renderer full-resolution level-0 tiles; the buffer graph's mip " +
+          "pyramid stays engine-side, not yet across the wasm boundary. " +
+          "This chapter's exhibits never depended on it — the committed " +
+          "bytes are the document's own, decoded by the engine like any " +
+          "placed image.",
+        style: STYLE.bodySmall,
+      },
+    ],
+  );
   elements.push(honesty.frameId);
 
   await marginNote(

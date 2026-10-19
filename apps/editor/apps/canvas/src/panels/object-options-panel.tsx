@@ -26,7 +26,11 @@
 // object commands keep writing their own gestures — this is where the
 // same paths are visible, typed and bindable.
 
-import { CockpitPanelHeader, CockpitSection, ObjectPropertyField } from "@paged-media/shell";
+import {
+  CockpitPanelHeader,
+  CockpitSection,
+  ObjectPropertyField,
+} from "@paged-media/shell";
 
 import { SchemaSections, type SectionSpec } from "./schema-sections";
 
@@ -36,7 +40,11 @@ const OBJECT_OPTION_SECTIONS: readonly SectionSpec[] = [
     fields: [
       { path: "itemName", label: "Name" },
       { path: "itemLayer", label: "Layer", collection: "layers" },
-      { path: "appliedObjectStyle", label: "Object style", collection: "objectStyles" },
+      {
+        path: "appliedObjectStyle",
+        label: "Object style",
+        collection: "objectStyles",
+      },
     ],
   },
   {
@@ -97,7 +105,11 @@ export function ObjectOptionsPanel() {
   return (
     <div data-object-options-panel="ready">
       <CockpitPanelHeader title="Object Options" />
-      <SchemaSections schemaKind="frame" sections={OBJECT_OPTION_SECTIONS} testId="frame" />
+      <SchemaSections
+        schemaKind="frame"
+        sections={OBJECT_OPTION_SECTIONS}
+        testId="frame"
+      />
       <AppearanceStacks />
     </div>
   );
@@ -111,8 +123,15 @@ const DRAW_APPEARANCE = "plugin:media.paged.draw/appearance";
  *  the list reads top-first like a layers panel; edits still name value
  *  indices). */
 const STACK_FIELDS = (weight: boolean) => [
-  { field: "color", label: "Colour", style: "collection" as const, props: { collectionName: "swatches" } },
-  ...(weight ? [{ field: "weight", label: "Weight" }] : [{ field: "tint", label: "Tint" }]),
+  {
+    field: "color",
+    label: "Colour",
+    style: "collection" as const,
+    props: { collectionName: "swatches" },
+  },
+  ...(weight
+    ? [{ field: "weight", label: "Weight" }]
+    : [{ field: "tint", label: "Tint" }]),
   { field: "opacity", label: "Opacity" },
   { field: "blendMode", label: "Blend" },
 ];
@@ -123,7 +142,10 @@ const STACK_FIELDS = (weight: boolean) => [
 function AppearanceStacks() {
   return (
     <CockpitSection title="Appearance" defaultOpen={false}>
-      <div className="flex flex-col gap-1.5 pb-2" data-options-section="Appearance">
+      <div
+        className="flex flex-col gap-1.5 pb-2"
+        data-options-section="Appearance"
+      >
         <ObjectPropertyField
           address="selection"
           kind={DRAW_APPEARANCE}
@@ -133,7 +155,12 @@ function AppearanceStacks() {
             reversed: true,
             itemLabel: "color",
             fields: STACK_FIELDS(false),
-            newItem: { color: "Color/Black", tint: 100, opacity: 100, blendMode: "Normal" },
+            newItem: {
+              color: "Color/Black",
+              tint: 100,
+              opacity: 100,
+              blendMode: "Normal",
+            },
           }}
         />
         <ObjectPropertyField
@@ -145,7 +172,12 @@ function AppearanceStacks() {
             reversed: true,
             itemLabel: "color",
             fields: STACK_FIELDS(true),
-            newItem: { color: "Color/Black", weight: 1, opacity: 100, blendMode: "Normal" },
+            newItem: {
+              color: "Color/Black",
+              weight: 1,
+              opacity: 100,
+              blendMode: "Normal",
+            },
           }}
         />
       </div>

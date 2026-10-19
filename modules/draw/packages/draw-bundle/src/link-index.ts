@@ -103,7 +103,9 @@ const OWN_KEY = `x-paged:${manifest.id}`;
  *  leaves still need a read each. An engine that has it lists the field
  *  on EVERY item row, empty when there is nothing, so its absence is
  *  never "no metadata". */
-export function treeEnvelopeOf(node: SceneTreeNode): PluginMetadataEnvelope | null | undefined {
+export function treeEnvelopeOf(
+  node: SceneTreeNode,
+): PluginMetadataEnvelope | null | undefined {
   const entries = (node as { pluginMetadata?: unknown }).pluginMetadata;
   if (!Array.isArray(entries)) return undefined;
   for (const entry of entries as { key?: unknown; value?: unknown }[]) {
@@ -299,7 +301,7 @@ let epoch = 0;
  * `load()` calls the worker directly and broadcasts nothing (the SDK's
  * own `parentOf` index has the same blind spot), so the conformance
  * harness calls this from its `load`
- * (`test/conformance/host.ts`). There is no door to ASK whether the
+ * (`test/headless/host.ts`). There is no door to ASK whether the
  * document is still the same one — no revision on `document.meta()`, and
  * a reloaded fixture has the same ids — so it has to be told.
  */
@@ -378,7 +380,10 @@ function createLinkIndex(host: BundleHost): LinkIndex {
     return rev.envelopes.get(key)!;
   };
 
-  const seedFromTree = (rev: Revision, roots: readonly SceneTreeNode[]): void => {
+  const seedFromTree = (
+    rev: Revision,
+    roots: readonly SceneTreeNode[],
+  ): void => {
     const walk = (nodes: readonly SceneTreeNode[]) => {
       for (const node of nodes) {
         const children = node.children ?? [];

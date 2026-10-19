@@ -80,10 +80,19 @@ vi.mock("../query/duckdb", () => ({
 function fakeHost(grant: string[]): BundleHost {
   const consented = new Set<string>();
   return {
-    manifest: { id: "media.paged.data", name: "d", version: "0.0.1", apiVersion: "^0.2" },
+    manifest: {
+      id: "media.paged.data",
+      name: "d",
+      version: "0.0.1",
+      apiVersion: "^0.2",
+    },
     log: { debug() {}, info() {}, warn() {}, error() {} },
     // The document doors every host has; nothing here fires them.
-    document: { onWillSave: () => ({ dispose() {} }), onDidChange: () => ({ dispose() {} }), onDidOpen: () => ({ dispose() {} }) },
+    document: {
+      onWillSave: () => ({ dispose() {} }),
+      onDidChange: () => ({ dispose() {} }),
+      onDidOpen: () => ({ dispose() {} }),
+    },
     supports: (f: string) => f === "network.consent@1",
     network: {
       async requestConsent(origins: readonly string[]): Promise<ConsentResult> {
@@ -102,7 +111,10 @@ function fakeHost(grant: string[]): BundleHost {
 
 const fetchSpy = vi.fn(
   async () =>
-    new Response("sku,price\nA,1\n", { status: 200, headers: { "content-type": "text/csv" } }),
+    new Response("sku,price\nA,1\n", {
+      status: 200,
+      headers: { "content-type": "text/csv" },
+    }),
 );
 
 beforeEach(() => {
@@ -122,7 +134,11 @@ afterEach(() => {
 describe("remote sources — inert until consent (data.source.remote / data.security.no-network-pre-consent)", () => {
   it("defining a remote source fetches NOTHING (a document loads cold)", () => {
     const session = createSession(fakeHost([]), 0);
-    const err = session.addRemoteSource("feed", "https://api.test/feed.csv", "csv");
+    const err = session.addRemoteSource(
+      "feed",
+      "https://api.test/feed.csv",
+      "csv",
+    );
     expect(err).toBeNull();
     const remote = session.getState().remote;
     expect(remote).toHaveLength(1);
@@ -158,17 +174,23 @@ describe("remote sources — inert until consent (data.source.remote / data.secu
 
     // Exactly one edit-time fetch, with deterministically composed params.
     expect(fetchSpy).toHaveBeenCalledTimes(1);
-    expect(fetchSpy).toHaveBeenCalledWith("https://api.test/feed.csv?region=eu");
+    expect(fetchSpy).toHaveBeenCalledWith(
+      "https://api.test/feed.csv?region=eu",
+    );
 
     // Bytes entered the DuckDB lane exactly like an imported file.
-    expect(registerCsvCalls).toEqual([{ name: "feed", text: "sku,price\nA,1\n" }]);
+    expect(registerCsvCalls).toEqual([
+      { name: "feed", text: "sku,price\nA,1\n" },
+    ]);
 
     // The engine got the transport-agnostic descriptor + computed the key.
     expect(defineSourceCalls[0]).toMatchObject({
       id: "feed",
       kind: { kind: "remote", url: "https://api.test/feed.csv", format: "csv" },
     });
-    expect(keyCalls).toEqual([{ source: "feed", byteLen: "sku,price\nA,1\n".length }]);
+    expect(keyCalls).toEqual([
+      { source: "feed", byteLen: "sku,price\nA,1\n".length },
+    ]);
 
     const state = session.getState();
     expect(state.remote[0]).toMatchObject({
@@ -197,10 +219,16 @@ describe("remote sources — inert until consent (data.source.remote / data.secu
 describe("remote descriptors — credentialRef strings only (data.security.credentials-absent)", () => {
   it("rejects URLs with embedded credentials", () => {
     const session = createSession(fakeHost([]), 0);
-    const err = session.addRemoteSource("bad", "https://user:secret@api.test/x.csv", "csv");
+    const err = session.addRemoteSource(
+      "bad",
+      "https://user:secret@api.test/x.csv",
+      "csv",
+    );
     expect(err).toContain("stored credential");
     expect(session.getState().remote).toHaveLength(0);
-    expect(validateRemoteUrl("https://user:secret@api.test/x.csv")).toContain("credentials");
+    expect(validateRemoteUrl("https://user:secret@api.test/x.csv")).toContain(
+      "credentials",
+    );
   });
 
   it("carries a credentialRef as a ref STRING only", async () => {

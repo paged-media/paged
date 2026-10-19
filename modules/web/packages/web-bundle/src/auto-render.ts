@@ -43,7 +43,11 @@
 // caused by an edit (not an undo/redo, not an open) and the frame's source
 // or width changed since it last grew — so undoing a grow sticks.
 
-import type { BundleHost, ElementId, SceneTreeNode } from "@paged-media/plugin-api";
+import type {
+  BundleHost,
+  ElementId,
+  SceneTreeNode,
+} from "@paged-media/plugin-api";
 import {
   asFrameTarget,
   flowGroups,
@@ -54,7 +58,12 @@ import {
   type WebSourceEnvelope,
 } from "../../web-model/src";
 
-import { bakeWebFlows, bakeWebFrame, framesWithLayers, persistentSceneSurface } from "./bake";
+import {
+  bakeWebFlows,
+  bakeWebFrame,
+  framesWithLayers,
+  persistentSceneSurface,
+} from "./bake";
 import { resolveBindings, watchProviders } from "./bindings";
 import { onDocumentOpened } from "./document-opened";
 import { retainSceneFaces } from "./engine-inputs";
@@ -99,7 +108,10 @@ export interface Found {
 
 /** Walk the scene tree: every string-id page item, and its plugin label
  *  when the engine reports labels on tree rows (`null` = not reported). */
-function pageItems(roots: readonly SceneTreeNode[]): { items: ElementId[]; labels: Map<string, string> | null } {
+function pageItems(roots: readonly SceneTreeNode[]): {
+  items: ElementId[];
+  labels: Map<string, string> | null;
+} {
   const items: ElementId[] = [];
   let labels: Map<string, string> | null = null;
   const walk = (nodes: readonly SceneTreeNode[] | undefined) => {
@@ -139,7 +151,8 @@ export async function discoverWebFrames(
   if (labels) {
     for (const id of items) {
       const text = labels.get((id as { id: string }).id);
-      if (text !== undefined && isWebFrameEnvelope(parseLabel(text))) found.push({ id, label: text });
+      if (text !== undefined && isWebFrameEnvelope(parseLabel(text)))
+        found.push({ id, label: text });
     }
     return { items, found };
   }
@@ -150,7 +163,10 @@ export async function discoverWebFrames(
   return { items, found };
 }
 
-export function startAutoRender(host: BundleHost, opts: AutoRenderOptions = {}): AutoRenderer {
+export function startAutoRender(
+  host: BundleHost,
+  opts: AutoRenderOptions = {},
+): AutoRenderer {
   const debounceMs = opts.debounceMs ?? DEFAULT_DEBOUNCE_MS;
   const engineOf = opts.engine ?? (() => loadWebEngine(host));
 
@@ -168,7 +184,10 @@ export function startAutoRender(host: BundleHost, opts: AutoRenderOptions = {}):
   let running: Promise<void> | null = null;
   let disposed = false;
 
-  const merge = (a: ReconcileReason | null, b: ReconcileReason): ReconcileReason => {
+  const merge = (
+    a: ReconcileReason | null,
+    b: ReconcileReason,
+  ): ReconcileReason => {
     // An undo anywhere in a burst withholds grow for the whole pass.
     if (a === "undo" || b === "undo") return "undo";
     if (a === "open" || b === "open") return "open";
@@ -186,11 +205,14 @@ export function startAutoRender(host: BundleHost, opts: AutoRenderOptions = {}):
     const surface = persistentSceneSurface(host);
     if (!surface) return; // no scene channel: nothing can show
     const { found } = await discoverWebFrames(host);
-    lastLabels = new Map(found.map((f) => [(f.id as { id: string }).id, f.label]));
+    lastLabels = new Map(
+      found.map((f) => [(f.id as { id: string }).id, f.label]),
+    );
     const engine = await engineOf();
 
     // Resolve every source's frames; one geometry read for all of them.
-    const plans: { f: Found; source: WebFrameSource; frames: FrameTarget[] }[] = [];
+    const plans: { f: Found; source: WebFrameSource; frames: FrameTarget[] }[] =
+      [];
     const wanted = new Map<string, ElementId>();
     for (const f of found) {
       const source = await sourceFor(f);
@@ -200,12 +222,16 @@ export function startAutoRender(host: BundleHost, opts: AutoRenderOptions = {}):
       plans.push({ f, source, frames });
       for (const fr of frames) wanted.set(fr.id, fr as unknown as ElementId);
     }
-    const geos = wanted.size > 0 ? await host.document.elementGeometry([...wanted.values()]) : [];
+    const geos =
+      wanted.size > 0
+        ? await host.document.elementGeometry([...wanted.values()])
+        : [];
     const size = new Map<string, string>();
     for (const g of geos) {
       const b = g.bounds;
       const id = (g.id as { id?: unknown }).id;
-      if (typeof id === "string" && b) size.set(id, `${(b[3] - b[1]).toFixed(2)}x${(b[2] - b[0]).toFixed(2)}`);
+      if (typeof id === "string" && b)
+        size.set(id, `${(b[3] - b[1]).toFixed(2)}x${(b[2] - b[0]).toFixed(2)}`);
     }
 
     const keep = new Set<string>();
@@ -217,14 +243,21 @@ export function startAutoRender(host: BundleHost, opts: AutoRenderOptions = {}):
       // A source that names bound data (bindings.ts) also re-renders when
       // a bound value changes: the document's name or value map, the page
       // the frame is on, a data provider's revision.
-      const bound = referencesBoundData(source) ? (await resolveBindings(host, f.id, source)).key : "";
+      const bound = referencesBoundData(source)
+        ? (await resolveBindings(host, f.id, source)).key
+        : "";
       const key =
-        f.label + "|" + present.map((fr) => `${fr.id}:${size.get(fr.id)}`).join(",") + (bound ? `|${bound}` : "");
+        f.label +
+        "|" +
+        present.map((fr) => `${fr.id}:${size.get(fr.id)}`).join(",") +
+        (bound ? `|${bound}` : "");
       if (engine && renderedKey.get(sid) !== key) {
         const threaded = (source.flow?.recipients.length ?? 0) > 0;
         if (threaded) {
           const out = await bakeWebFlows(host, f.id, engine);
-          const got = present.filter((_, i) => out.layers[i] != null).map((fr) => fr.id);
+          const got = present
+            .filter((_, i) => out.layers[i] != null)
+            .map((fr) => fr.id);
           layerFrames.set(sid, got);
         } else {
           const width = size.get(sid)?.split("x")[0] ?? "";
@@ -265,7 +298,9 @@ export function startAutoRender(host: BundleHost, opts: AutoRenderOptions = {}):
     const next = prev
       .then(() => (disposed ? undefined : pass(reason)))
       .catch((err: unknown) => {
-        host.log.warn(`auto render: ${err instanceof Error ? err.message : String(err)}`);
+        host.log.warn(
+          `auto render: ${err instanceof Error ? err.message : String(err)}`,
+        );
       });
     running = next;
     void next.then(() => {
@@ -293,7 +328,9 @@ export function startAutoRender(host: BundleHost, opts: AutoRenderOptions = {}):
   // Every change but an undo or redo is an edit: a gesture's commit (a
   // resize by the handles may grow the frame again) and a script run too.
   const docSub = host.document.onDidChange((e) => {
-    schedule(e.kind === "undoApplied" || e.kind === "redoApplied" ? "undo" : "change");
+    schedule(
+      e.kind === "undoApplied" || e.kind === "redoApplied" ? "undo" : "change",
+    );
   });
 
   // A newly opened document: its layers start empty and its sources are new.

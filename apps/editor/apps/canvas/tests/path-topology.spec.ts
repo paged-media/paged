@@ -123,7 +123,8 @@ test.describe("Track J — path topology acceptance", () => {
     // Remove index 1 (one of the outer-square corners).
     await page.evaluate(
       async ({ polygonId }) => {
-        const c = (globalThis as unknown as { __canvas: CanvasGlobal }).__canvas;
+        const c = (globalThis as unknown as { __canvas: CanvasGlobal })
+          .__canvas;
         await c.client.mutate({
           op: "pathPointRemove",
           args: { elementId: { kind: "polygon", id: polygonId }, index: 1 },
@@ -150,12 +151,12 @@ test.describe("Track J — path topology acceptance", () => {
     const before = await pathSnapshot(page);
     // All 8 fixture anchors start as corners (handles == anchor).
     for (const a of before.anchors) {
-      expect(Math.hypot(a.left[0] - a.anchor[0], a.left[1] - a.anchor[1])).toBeLessThan(
-        1e-3,
-      );
-      expect(Math.hypot(a.right[0] - a.anchor[0], a.right[1] - a.anchor[1])).toBeLessThan(
-        1e-3,
-      );
+      expect(
+        Math.hypot(a.left[0] - a.anchor[0], a.left[1] - a.anchor[1]),
+      ).toBeLessThan(1e-3);
+      expect(
+        Math.hypot(a.right[0] - a.anchor[0], a.right[1] - a.anchor[1]),
+      ).toBeLessThan(1e-3);
     }
 
     // Toggle index 1 to smooth — interior anchor of the outer
@@ -164,10 +165,15 @@ test.describe("Track J — path topology acceptance", () => {
     // (non-zero) handle offsets.
     await page.evaluate(
       async ({ polygonId }) => {
-        const c = (globalThis as unknown as { __canvas: CanvasGlobal }).__canvas;
+        const c = (globalThis as unknown as { __canvas: CanvasGlobal })
+          .__canvas;
         await c.client.mutate({
           op: "pathPointCurveType",
-          args: { elementId: { kind: "polygon", id: polygonId }, index: 1, smooth: true },
+          args: {
+            elementId: { kind: "polygon", id: polygonId },
+            index: 1,
+            smooth: true,
+          },
         });
       },
       { polygonId: POLYGON_ID },
@@ -186,10 +192,15 @@ test.describe("Track J — path topology acceptance", () => {
     // Toggle back to corner — handles collapse to the anchor.
     await page.evaluate(
       async ({ polygonId }) => {
-        const c = (globalThis as unknown as { __canvas: CanvasGlobal }).__canvas;
+        const c = (globalThis as unknown as { __canvas: CanvasGlobal })
+          .__canvas;
         await c.client.mutate({
           op: "pathPointCurveType",
-          args: { elementId: { kind: "polygon", id: polygonId }, index: 1, smooth: false },
+          args: {
+            elementId: { kind: "polygon", id: polygonId },
+            index: 1,
+            smooth: false,
+          },
         });
       },
       { polygonId: POLYGON_ID },
@@ -215,7 +226,8 @@ test.describe("Track J — path topology acceptance", () => {
     // has 3 anchors after, so it doesn't collapse).
     await page.evaluate(
       async ({ polygonId }) => {
-        const c = (globalThis as unknown as { __canvas: CanvasGlobal }).__canvas;
+        const c = (globalThis as unknown as { __canvas: CanvasGlobal })
+          .__canvas;
         await c.client.mutate({
           op: "pathPointRemove",
           args: { elementId: { kind: "polygon", id: polygonId }, index: 5 },
@@ -233,12 +245,15 @@ test.describe("Track J — path topology acceptance", () => {
     expect(after.subpathStarts).toEqual([0, 4]);
   });
 
-  test("AC-J-5 — undo round-trips delete bytewise @feat:editor-tools.path.direct-edit @feat:geometry-coordinates.path-topology-ops @level:happy", async ({ page }) => {
+  test("AC-J-5 — undo round-trips delete bytewise @feat:editor-tools.path.direct-edit @feat:geometry-coordinates.path-topology-ops @level:happy", async ({
+    page,
+  }) => {
     const before = await pathSnapshot(page);
 
     await page.evaluate(
       async ({ polygonId }) => {
-        const c = (globalThis as unknown as { __canvas: CanvasGlobal }).__canvas;
+        const c = (globalThis as unknown as { __canvas: CanvasGlobal })
+          .__canvas;
         await c.client.mutate({
           op: "pathPointRemove",
           args: { elementId: { kind: "polygon", id: polygonId }, index: 2 },
@@ -274,10 +289,15 @@ test.describe("Track J — path topology acceptance", () => {
     // insert.
     await page.evaluate(
       async ({ polygonId }) => {
-        const c = (globalThis as unknown as { __canvas: CanvasGlobal }).__canvas;
+        const c = (globalThis as unknown as { __canvas: CanvasGlobal })
+          .__canvas;
         await c.client.mutate({
           op: "pathPointCurveType",
-          args: { elementId: { kind: "polygon", id: polygonId }, index: 0, smooth: true },
+          args: {
+            elementId: { kind: "polygon", id: polygonId },
+            index: 0,
+            smooth: true,
+          },
         });
       },
       { polygonId: POLYGON_ID },
@@ -309,10 +329,11 @@ test.describe("Track J — path topology acceptance", () => {
     // would produce for a click at t=0.4 on this segment.
     // Compute the split's three results inline so the spec
     // exercises the same math the overlay does.
-    const lerp = (a: [number, number], b: [number, number], t: number): [number, number] => [
-      a[0] + t * (b[0] - a[0]),
-      a[1] + t * (b[1] - a[1]),
-    ];
+    const lerp = (
+      a: [number, number],
+      b: [number, number],
+      t: number,
+    ): [number, number] => [a[0] + t * (b[0] - a[0]), a[1] + t * (b[1] - a[1])];
     const q0 = lerp(a0.anchor, a0.right, tEval);
     const q1 = lerp(a0.right, a1.left, tEval);
     const q2 = lerp(a1.left, a1.anchor, tEval);
@@ -322,18 +343,29 @@ test.describe("Track J — path topology acceptance", () => {
 
     await page.evaluate(
       async ({ polygonId, q0, q2, r0, mid, r1 }) => {
-        const c = (globalThis as unknown as { __canvas: CanvasGlobal }).__canvas;
+        const c = (globalThis as unknown as { __canvas: CanvasGlobal })
+          .__canvas;
         await c.client.mutate({
           op: "batch",
           args: {
             ops: [
               {
                 op: "pathPointSet",
-                args: { elementId: { kind: "polygon", id: polygonId }, index: 0, role: "right", position: q0 },
+                args: {
+                  elementId: { kind: "polygon", id: polygonId },
+                  index: 0,
+                  role: "right",
+                  position: q0,
+                },
               },
               {
                 op: "pathPointSet",
-                args: { elementId: { kind: "polygon", id: polygonId }, index: 1, role: "left", position: q2 },
+                args: {
+                  elementId: { kind: "polygon", id: polygonId },
+                  index: 1,
+                  role: "left",
+                  position: q2,
+                },
               },
               {
                 op: "pathPointInsert",
@@ -355,8 +387,12 @@ test.describe("Track J — path topology acceptance", () => {
     expect(after.anchors.length).toBe(9);
     // New mid anchor matches the cubic evaluation at t=0.4 — the
     // strict shape-preservation invariant.
-    expect(Math.abs(after.anchors[1].anchor[0] - expectedMid[0])).toBeLessThan(1e-3);
-    expect(Math.abs(after.anchors[1].anchor[1] - expectedMid[1])).toBeLessThan(1e-3);
+    expect(Math.abs(after.anchors[1].anchor[0] - expectedMid[0])).toBeLessThan(
+      1e-3,
+    );
+    expect(Math.abs(after.anchors[1].anchor[1] - expectedMid[1])).toBeLessThan(
+      1e-3,
+    );
     // subpath_starts shifted: outer subpath grew, inner-hole start
     // bumped from 4 to 5.
     expect(after.subpathStarts).toEqual([0, 5]);
@@ -401,10 +437,15 @@ test.describe("Track J — path topology acceptance", () => {
     for (const idx of [0, 3]) {
       await page.evaluate(
         async ({ polygonId, idx }) => {
-          const c = (globalThis as unknown as { __canvas: CanvasGlobal }).__canvas;
+          const c = (globalThis as unknown as { __canvas: CanvasGlobal })
+            .__canvas;
           await c.client.mutate({
             op: "pathPointCurveType",
-            args: { elementId: { kind: "polygon", id: polygonId }, index: idx, smooth: true },
+            args: {
+              elementId: { kind: "polygon", id: polygonId },
+              index: idx,
+              smooth: true,
+            },
           });
         },
         { polygonId: POLYGON_ID, idx },
@@ -431,18 +472,29 @@ test.describe("Track J — path topology acceptance", () => {
     // prevSubpathStarts = [0, 5] so the boundary entry shifts +1.
     await page.evaluate(
       async ({ polygonId, q0, q2, r0, mid, r1 }) => {
-        const c = (globalThis as unknown as { __canvas: CanvasGlobal }).__canvas;
+        const c = (globalThis as unknown as { __canvas: CanvasGlobal })
+          .__canvas;
         await c.client.mutate({
           op: "batch",
           args: {
             ops: [
               {
                 op: "pathPointSet",
-                args: { elementId: { kind: "polygon", id: polygonId }, index: 3, role: "right", position: q0 },
+                args: {
+                  elementId: { kind: "polygon", id: polygonId },
+                  index: 3,
+                  role: "right",
+                  position: q0,
+                },
               },
               {
                 op: "pathPointSet",
-                args: { elementId: { kind: "polygon", id: polygonId }, index: 0, role: "left", position: q2 },
+                args: {
+                  elementId: { kind: "polygon", id: polygonId },
+                  index: 0,
+                  role: "left",
+                  position: q2,
+                },
               },
               {
                 op: "pathPointInsert",
@@ -469,7 +521,9 @@ test.describe("Track J — path topology acceptance", () => {
     expect(Math.abs(after.anchors[4].anchor[1] - mid[1])).toBeLessThan(1e-3);
     // Inner-hole subpath shifted by 1 but otherwise unchanged.
     for (let i = 0; i < 4; i++) {
-      expect(anchorsClose(after.anchors[5 + i], smoothed.anchors[4 + i])).toBe(true);
+      expect(anchorsClose(after.anchors[5 + i], smoothed.anchors[4 + i])).toBe(
+        true,
+      );
     }
 
     // Single undo reverts the whole batch (insert + both handle sets).
@@ -497,7 +551,8 @@ test.describe("Track J — path topology acceptance", () => {
     const TEXT_FRAME_ID = "ua365e1";
     const before = await page.evaluate(
       async ({ id }) => {
-        const c = (globalThis as unknown as { __canvas: CanvasGlobal }).__canvas;
+        const c = (globalThis as unknown as { __canvas: CanvasGlobal })
+          .__canvas;
         return c.client.pathAnchors({ kind: "textFrame", id });
       },
       { id: TEXT_FRAME_ID },
@@ -508,7 +563,8 @@ test.describe("Track J — path topology acceptance", () => {
     // Remove anchor index 1 via the generic wire shape.
     await page.evaluate(
       async ({ id }) => {
-        const c = (globalThis as unknown as { __canvas: CanvasGlobal }).__canvas;
+        const c = (globalThis as unknown as { __canvas: CanvasGlobal })
+          .__canvas;
         await c.client.mutate({
           op: "pathPointRemove",
           args: { elementId: { kind: "textFrame", id }, index: 1 },
@@ -519,7 +575,8 @@ test.describe("Track J — path topology acceptance", () => {
 
     const after = await page.evaluate(
       async ({ id }) => {
-        const c = (globalThis as unknown as { __canvas: CanvasGlobal }).__canvas;
+        const c = (globalThis as unknown as { __canvas: CanvasGlobal })
+          .__canvas;
         return c.client.pathAnchors({ kind: "textFrame", id });
       },
       { id: TEXT_FRAME_ID },
@@ -531,10 +588,15 @@ test.describe("Track J — path topology acceptance", () => {
     // second fan-out arm before undoing both.
     await page.evaluate(
       async ({ id }) => {
-        const c = (globalThis as unknown as { __canvas: CanvasGlobal }).__canvas;
+        const c = (globalThis as unknown as { __canvas: CanvasGlobal })
+          .__canvas;
         await c.client.mutate({
           op: "pathPointCurveType",
-          args: { elementId: { kind: "textFrame", id }, index: 1, smooth: true },
+          args: {
+            elementId: { kind: "textFrame", id },
+            index: 1,
+            smooth: true,
+          },
         });
       },
       { id: TEXT_FRAME_ID },
@@ -548,7 +610,8 @@ test.describe("Track J — path topology acceptance", () => {
     });
     const restored = await page.evaluate(
       async ({ id }) => {
-        const c = (globalThis as unknown as { __canvas: CanvasGlobal }).__canvas;
+        const c = (globalThis as unknown as { __canvas: CanvasGlobal })
+          .__canvas;
         return c.client.pathAnchors({ kind: "textFrame", id });
       },
       { id: TEXT_FRAME_ID },
@@ -567,10 +630,15 @@ test.describe("Track J — path topology acceptance", () => {
 
     await page.evaluate(
       async ({ polygonId }) => {
-        const c = (globalThis as unknown as { __canvas: CanvasGlobal }).__canvas;
+        const c = (globalThis as unknown as { __canvas: CanvasGlobal })
+          .__canvas;
         await c.client.mutate({
           op: "pathPointCurveType",
-          args: { elementId: { kind: "polygon", id: polygonId }, index: 2, smooth: true },
+          args: {
+            elementId: { kind: "polygon", id: polygonId },
+            index: 2,
+            smooth: true,
+          },
         });
       },
       { polygonId: POLYGON_ID },

@@ -12,10 +12,10 @@ core wire change. K-3, S-07 and I-02 are the ids this door carries in
 
 ## Why now (the deferral lifts)
 
-*Status note (2026-10-02): this section predates the implementation; of the two consumers
+_Status note (2026-10-02): this section predates the implementation; of the two consumers
 named here only paged.image declares `capabilities.workers` and spawns through the door
 (`plugin-image: glue/src/decode-pool.ts`). paged.data does not: it constructs its DuckDB worker
-itself (`plugin-data: packages/data-bundle/src/query/duckdb.ts`).*
+itself (`plugin-data: packages/data-bundle/src/query/duckdb.ts`)._
 
 K-3 was DEFERRED earlier under the no-speculative-surface rule: no
 bundle actually threaded. Two real consumers now exist, so the door
@@ -46,27 +46,28 @@ the primitive, the manifest gates it, the host can budget + tear down).
 
 ### Manifest capability
 
-*Status note (2026-10-02): this section predates the implementation; the shipped capability
-also takes an optional `maxSharedBytes` (`packages/plugin-api/src/manifest.ts`).*
+_Status note (2026-10-02): this section predates the implementation; the shipped capability
+also takes an optional `maxSharedBytes` (`packages/plugin-api/src/manifest.ts`)._
 
 ```jsonc
 "capabilities": {
   "workers": { "max": 4, "sharedMemory": true }
 }
 ```
+
 - `max` — the worker-count ceiling the host grants (clamped to a hard
   cap, e.g. `min(declared, navigator.hardwareConcurrency, 8)`).
 - `sharedMemory` — declares SAB use (gates the `SharedArrayBuffer`
   allocation door; absent ⇒ message-copy only).
-Closed vocabulary, validated by the CLI + schema like every capability.
+  Closed vocabulary, validated by the CLI + schema like every capability.
 
 ### SDK surface (plugin-api / plugin-sdk)
 
-*Status note (2026-10-02): this section predates the implementation; the shipped surface adds
+_Status note (2026-10-02): this section predates the implementation; the shipped surface adds
 `host.workers.concurrency()` (the granted worker count), and the manifest carries no list of
 worker modules — which module paths resolve is decided by the host's `WorkerBackend`
 (`packages/plugin-sdk/src/host-impl.ts`; in the editor a per-bundle resolver,
-`editor: apps/canvas/src/plugin-worker.ts`).*
+`editor: apps/canvas/src/plugin-worker.ts`)._
 
 ```ts
 // host.workers (gated on capabilities.workers)
@@ -87,6 +88,7 @@ interface BundleWorker {
   terminate(): void;            // also runs on bundle dispose
 }
 ```
+
 - `supports("workers@1")` gates feature detection.
 - Budget: a per-bundle shared-memory ceiling (default e.g. 256 MiB,
   manifest may tighten) + the worker-count cap. The host facade tracks
@@ -98,9 +100,9 @@ interface BundleWorker {
 
 ### Editor backend
 
-*Status note (2026-10-02): this section predates the implementation; the shipped backend is
+_Status note (2026-10-02): this section predates the implementation; the shipped backend is
 `spawn(pluginId, module, name?)` and only constructs the worker — the `SharedArrayBuffer`
-allocation and its budget live in the SDK adapter (`packages/plugin-sdk/src/host-impl.ts`).*
+allocation and its budget live in the SDK adapter (`packages/plugin-sdk/src/host-impl.ts`)._
 
 The editor injects a `WorkerBackend` (like `assetSource`/`blobStore`):
 `spawn(moduleUrl)` resolves the bundle-relative module through the same

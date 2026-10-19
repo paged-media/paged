@@ -49,7 +49,12 @@ import {
   type VisibilityTargetKind,
 } from "../../data-host-model/src";
 
-import { bootEngine, ENGINE_NOT_BUILT, ingestColumnBatch, type DataEngineLike } from "./engine";
+import {
+  bootEngine,
+  ENGINE_NOT_BUILT,
+  ingestColumnBatch,
+  type DataEngineLike,
+} from "./engine";
 import { hostWasm } from "./bin-url";
 import { reviewMethods, type ReviewSession } from "./review";
 import {
@@ -71,7 +76,16 @@ import {
 } from "./persist";
 import type { LowerStamp, LoweredTableAt } from "./lower";
 import { commitRecordFlow } from "./flow-writer";
-import { fitRecipe, labelKey, labelledVersion, labelMutation, labelRider, sessionVersionPath, splitBase, withBase } from "./doc-label";
+import {
+  fitRecipe,
+  labelKey,
+  labelledVersion,
+  labelMutation,
+  labelRider,
+  sessionVersionPath,
+  splitBase,
+  withBase,
+} from "./doc-label";
 import { propertyMethods, type PropertyMethods } from "./property-session";
 import { objectsOf } from "./property-lane";
 import { readTextVariableFields, textVariablesOn } from "./text-variables";
@@ -85,7 +99,11 @@ import {
   type RecordsPerPage,
 } from "./merge";
 import { documentElements, planRelower, type RelowerTarget } from "./relower";
-import { bootDuckDB, DUCKDB_NOT_VENDORED, type DuckDBHandle } from "./query/duckdb";
+import {
+  bootDuckDB,
+  DUCKDB_NOT_VENDORED,
+  type DuckDBHandle,
+} from "./query/duckdb";
 import {
   formatOfFile,
   loadIntoDuckDB,
@@ -94,7 +112,12 @@ import {
   type ImportFormat,
   type XlsxImport,
 } from "./query/import";
-import { checkQuery, diagnoseDuckDBError, previewSql, type SqlDiagnostic } from "./query/sql";
+import {
+  checkQuery,
+  diagnoseDuckDBError,
+  previewSql,
+  type SqlDiagnostic,
+} from "./query/sql";
 import {
   IntervalScheduler,
   MANUAL,
@@ -142,16 +165,29 @@ interface LiveFrameCapacity {
  *  (`elementGeometry` bounds → bottom−top). Replaces the caller-supplied chain
  *  the paginator was built ahead of (like sheet S-05's `lowerPaginatedToChain`).
  *  Returns `[]` when the story has no frame (the engine reports overflow). */
-async function readLiveChain(host: BundleHost, storyId: string): Promise<LiveFrameCapacity[]> {
-  let links: readonly { frameId: string; next: string | null; overflow: boolean }[] = [];
+async function readLiveChain(
+  host: BundleHost,
+  storyId: string,
+): Promise<LiveFrameCapacity[]> {
+  let links: readonly {
+    frameId: string;
+    next: string | null;
+    overflow: boolean;
+  }[] = [];
   try {
     links = await host.document.frameChain(storyId);
   } catch {
     return [];
   }
   if (links.length === 0) return [];
-  const ids = links.map((l) => ({ kind: "textFrame", id: l.frameId }) as ElementId);
-  let geom: { id: ElementId; pageId: string; bounds: [number, number, number, number] }[] = [];
+  const ids = links.map(
+    (l) => ({ kind: "textFrame", id: l.frameId }) as ElementId,
+  );
+  let geom: {
+    id: ElementId;
+    pageId: string;
+    bounds: [number, number, number, number];
+  }[] = [];
   try {
     geom = (await host.document.elementGeometry(ids)) as never;
   } catch {
@@ -493,7 +529,10 @@ export const NO_NEW_DOCUMENT_DOOR =
 /** Whether the host wired a documents backend (D-26: `exportPaged` and
  *  `open`); without one both doors reject. */
 export function hasDocumentsDoors(host: BundleHost): boolean {
-  return host.supports("documents.open@1") && host.supports("documents.exportPaged@1");
+  return (
+    host.supports("documents.open@1") &&
+    host.supports("documents.exportPaged@1")
+  );
 }
 
 /** The session API the panels + commands drive. */
@@ -534,7 +573,11 @@ export interface DataSourceSession extends ReviewSession, PropertyMethods {
    *  an imported file, define the source on the engine, and record the
    *  engine-computed content-hash invalidation key. */
   loadRemoteSource(name: string): Promise<void>;
-  addQuery(id: string, sql: string, shape: "recordStream" | "singleRecord" | "scalar"): void;
+  addQuery(
+    id: string,
+    sql: string,
+    shape: "recordStream" | "singleRecord" | "scalar",
+  ): void;
   /** Import a local file as a source table: CSV, TSV, JSON (array or
    *  newline-delimited), Parquet, XLSX (one worksheet, `sheet` absent = the
    *  first). The source is named after the file unless `name` is given. The
@@ -568,8 +611,18 @@ export interface DataSourceSession extends ReviewSession, PropertyMethods {
    *  Returns why it was refused, or null. */
   setRefreshPolicy(source: string, policy: RefreshPolicy): string | null;
   getRefreshPolicy(source: string): RefreshPolicy;
-  addVariableBinding(id: string, target: string, query: string, expr: string): void;
-  addTableBinding(id: string, region: string, query: string, columns: ColumnSpec[]): void;
+  addVariableBinding(
+    id: string,
+    target: string,
+    query: string,
+    expr: string,
+  ): void;
+  addTableBinding(
+    id: string,
+    region: string,
+    query: string,
+    columns: ColumnSpec[],
+  ): void;
   /** D-14: define an image binding bound to a RECTANGLE (`elementId`). `expr`
    *  yields the image reference per record (the engine classifies uri/path/
    *  assetId/bytes + applies the missing policy); `fit` is the IDML
@@ -625,7 +678,10 @@ export interface DataSourceSession extends ReviewSession, PropertyMethods {
     scope: string,
     query: string,
     when: string,
-    apply: { action: "characterStyle" | "paragraphStyle" | "tableStyle"; name: string },
+    apply: {
+      action: "characterStyle" | "paragraphStyle" | "tableStyle";
+      name: string;
+    },
     target: RuleTarget,
   ): void;
   /** Re-run every query through DuckDB and ingest the results (no document
@@ -671,7 +727,9 @@ export interface DataSourceSession extends ReviewSession, PropertyMethods {
    *  written plus the per-variable reasons for everything skipped, which the
    *  caller must SHOW (a data set that half-applies in silence is the failure
    *  this return shape exists to prevent). */
-  applyDataSet(name: string): Promise<{ applied: number; skipped: Record<string, string> }>;
+  applyDataSet(
+    name: string,
+  ): Promise<{ applied: number; skipped: Record<string, string> }>;
   /** Export the variable set as an Illustrator-compatible variable library
    *  (XML). See `data-dataset/src/xml.rs` for the two declared deviations. */
   exportVariableLibrary(): Promise<string>;
@@ -786,7 +844,10 @@ export interface DataSourceSession extends ReviewSession, PropertyMethods {
    *  diagnostics. Requires the query's result to be ingested first
    *  (`refreshData`). The byte-read of the governed table + sidecar from a
    *  file/URL/DB location is the broader `data.governed.extract` path (M2). */
-  governedCatalog(queryId: string, metadata: DatasetMetadata): Promise<GovernedCatalog>;
+  governedCatalog(
+    queryId: string,
+    metadata: DatasetMetadata,
+  ): Promise<GovernedCatalog>;
   /** §9.1: set the session formatting locale (a tag from the engine's locale
    *  table — `locales()` lists them) for the display kernels
    *  (NUMBER/CURRENCY/PERCENT/DATEFMT). Applies immediately if the engine is up,
@@ -837,7 +898,10 @@ export interface DataSourceSession extends ReviewSession, PropertyMethods {
   syncStatusOf(id: string): string | null;
   /** ADR 559: write this document as an InDesign Data Merge template (IDML
    *  + a UTF-16 CSV of the merged query); `save` hands both to the user. */
-  exportDataMergeTemplate(opts?: { save?: boolean; dataSourceFile?: string }): Promise<DataMergeExport>;
+  exportDataMergeTemplate(opts?: {
+    save?: boolean;
+    dataSourceFile?: string;
+  }): Promise<DataMergeExport>;
   /** Listen for session changes (a restore finishing, a diagnostic, a save). */
   onDidChange(listener: () => void): Disposable;
   /** Restore the document's saved session part (activate calls this once).
@@ -862,7 +926,10 @@ interface QueryDef {
 
 /** Create a session bound to a host. Construction is synchronous + side-effect
  *  free (the engines boot lazily on first use) so `activate` stays light. */
-export function createSession(rawHost: BundleHost, today: number): DataSourceSession {
+export function createSession(
+  rawHost: BundleHost,
+  today: number,
+): DataSourceSession {
   // The document label naming the live session version (engine protocol 69,
   // doc-label.ts). `labelActive` is true until a write refuses the label (it
   // is reset when another document opens); `labelHash` is the version the
@@ -904,7 +971,14 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
   // re-places, a table re-lowers).
   const bindingKinds = new Map<
     string,
-    "variable" | "table" | "image" | "rule" | "recordFlow" | "barcode" | "visibility" | "property"
+    | "variable"
+    | "table"
+    | "image"
+    | "rule"
+    | "recordFlow"
+    | "barcode"
+    | "visibility"
+    | "property"
   >();
   // §9.8: the bound element a visibility binding shows/hides. `kind` is the
   // caller's (the panel binds from the selection, which carries it); absent, it
@@ -956,7 +1030,8 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
   // page, and a re-merge reuses it.
   const mergeTemplates = new Map<string, MergeTemplate>();
   // Definitions made before the engine booted, replayed (in order) on boot.
-  const pendingDefs: { binding?: string; run: (e: DataEngineLike) => void }[] = [];
+  const pendingDefs: { binding?: string; run: (e: DataEngineLike) => void }[] =
+    [];
   // A saved engine recipe to load as the engine boots (set by restore).
   let bootPayload: unknown = null;
   // Data parts this session wrote or read (a large CSV is written once).
@@ -1010,7 +1085,10 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
   function noteRecordCount(e: DataEngineLike, queryId: string): number {
     let n = 0;
     try {
-      n = typeof e.query_record_count === "function" ? e.query_record_count(queryId) : 0;
+      n =
+        typeof e.query_record_count === "function"
+          ? e.query_record_count(queryId)
+          : 0;
     } catch {
       n = 0;
     }
@@ -1034,7 +1112,10 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
   // Restored files not yet in DuckDB (registered on DuckDB's first boot).
   const pendingFiles = new Map<string, ImportedFile>();
   // The file a CSV / TSV source came from (display only).
-  const csvFileNames = new Map<string, { format: "csv" | "tsv"; fileName: string }>();
+  const csvFileNames = new Map<
+    string,
+    { format: "csv" | "tsv"; fileName: string }
+  >();
   const refreshPolicies = new Map<string, RefreshPolicy>();
   const poller = new IntervalScheduler((name) => pollRemote(name));
 
@@ -1077,7 +1158,10 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
 
   /** Run a definition on the engine now, or on its boot if it is not up yet.
    *  A definition the engine refuses is reported against the binding. */
-  function defineOnEngine(run: (e: DataEngineLike) => void, binding?: string): void {
+  function defineOnEngine(
+    run: (e: DataEngineLike) => void,
+    binding?: string,
+  ): void {
     if (!engine) {
       pendingDefs.push({ binding, run });
       return;
@@ -1120,14 +1204,23 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
     let elements: ReturnType<typeof documentElements> = [];
     let pages: string[] = [];
     try {
-      elements = documentElements((read?.tree ?? (await host.document.tree())) as never);
+      elements = documentElements(
+        (read?.tree ?? (await host.document.tree())) as never,
+      );
       // Only a flow or a merge adds pages that a re-lower may remove.
       if (target.kind === "merge" || target.kind === "recordFlow") {
-        pages = (read?.pages ?? (await host.document.collection<{ selfId: string }>("pages"))).map((p) => p.selfId);
+        pages = (
+          read?.pages ??
+          (await host.document.collection<{ selfId: string }>("pages"))
+        ).map((p) => p.selfId);
       }
     } catch {
       // no tree read: fall back to the remembered ids below
-      elements = (minted ?? []).map((element) => ({ element, page: -1, data: null }));
+      elements = (minted ?? []).map((element) => ({
+        element,
+        page: -1,
+        data: null,
+      }));
     }
     return planRelower(elements, target, { pages: pages as never, minted });
   }
@@ -1151,7 +1244,9 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
     lastPayload = payload;
     const sync: PersistedSession["sync"] = [];
     try {
-      const report = (engine.sync_report() as { binding: string; status: string }[] | null) ?? [];
+      const report =
+        (engine.sync_report() as
+          { binding: string; status: string }[] | null) ?? [];
       for (const e of report) {
         if (e.status === "pinned" || e.status === "overridden") {
           sync.push({ binding: e.binding, status: e.status });
@@ -1175,7 +1270,11 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
         knownDataParts,
       );
       const label = csvFileNames.get(source);
-      data.push(label ? { ...stored, fileName: label.fileName, delimiter: label.format } : stored);
+      data.push(
+        label
+          ? { ...stored, fileName: label.fileName, delimiter: label.format }
+          : stored,
+      );
     }
     for (const [source, f] of importedFiles) {
       data.push(
@@ -1225,9 +1324,14 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
         const version = encodeSession(built);
         const labels = labelActive && epoch === docEpoch;
         // Protocol 69: the part records the version the label names (`base`).
-        const text = labels ? withBase(new TextDecoder().decode(version), labelHash) : new TextDecoder().decode(version);
+        const text = labels
+          ? withBase(new TextDecoder().decode(version), labelHash)
+          : new TextDecoder().decode(version);
         if (text !== lastWritten) {
-          await host.parts.write(SESSION_PART, labels ? new TextEncoder().encode(text) : version);
+          await host.parts.write(
+            SESSION_PART,
+            labels ? new TextEncoder().encode(text) : version,
+          );
           lastWritten = text;
           persistence.hash = await contentHash(version);
         }
@@ -1239,7 +1343,8 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
             await host.parts.write(path, version);
             knownVersions.add(path);
           }
-          pendingLabel = persistence.hash === labelHash ? null : persistence.hash;
+          pendingLabel =
+            persistence.hash === labelHash ? null : persistence.hash;
         }
         persistence.status = "saved";
       } catch (err) {
@@ -1271,7 +1376,9 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
         }),
       );
       for (const rel of await host.parts.list(DATA_PART_DIR)) {
-        const path = rel.startsWith(DATA_PART_DIR) ? rel : `${DATA_PART_DIR}${rel}`;
+        const path = rel.startsWith(DATA_PART_DIR)
+          ? rel
+          : `${DATA_PART_DIR}${rel}`;
         if (!named.has(path)) {
           await host.parts.delete(path);
           knownDataParts.delete(path);
@@ -1301,8 +1408,12 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
     const pageId = options.pageId ?? (await startPage());
     if (!pageId) return fail("no template page");
     // The template must be readable here before the copy is made.
-    const probe = await readMergeTemplate(host, { pageId: pageId as never, imageFields: options.imageFields });
-    if (!probe.template) return fail(probe.diagnostics.join("; ") || "no template on the page");
+    const probe = await readMergeTemplate(host, {
+      pageId: pageId as never,
+      imageFields: options.imageFields,
+    });
+    if (!probe.template)
+      return fail(probe.diagnostics.join("; ") || "no template on the page");
     await flushPersistInternal();
     let bytes: Uint8Array;
     try {
@@ -1332,7 +1443,15 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
       state.status = "ready";
       state.message = "Merge cancelled: the current document was kept.";
       emit();
-      return { ok: false, plan: null, pages: [], records: [], overset: [], mutateCalls: 0, diagnostics: ["merge: the user kept the current document"] };
+      return {
+        ok: false,
+        plan: null,
+        pages: [],
+        records: [],
+        overset: [],
+        mutateCalls: 0,
+        diagnostics: ["merge: the user kept the current document"],
+      };
     }
     // The host announces the new document; wait for the session to follow
     // (or follow it here when the host does not announce it).
@@ -1344,7 +1463,12 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
       openedWaiters = [];
       await self.documentOpened();
     }
-    return self.mergeRecords({ ...options, destination: "current", template: "consume", pageId: pageId as string });
+    return self.mergeRecords({
+      ...options,
+      destination: "current",
+      template: "consume",
+      pageId: pageId as string,
+    });
   }
 
   /** Before a document write: write a pending session change now, so the
@@ -1375,7 +1499,11 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
       bytes = null;
     }
     if (!bytes) {
-      report({ level: "warn", source: "restore", message: `the session version ${version} the document names is missing; the session stays as it is` });
+      report({
+        level: "warn",
+        source: "restore",
+        message: `the session version ${version} the document names is missing; the session stays as it is`,
+      });
       return;
     }
     // Reload the version without rebooting either engine: an undo must stay
@@ -1394,19 +1522,35 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
         await kept.exec(`DROP TABLE IF EXISTS ${quoteIdent(name)}`);
         await kept.registerCsv(name, text);
       } catch (err) {
-        report({ level: "error", source: "restore", message: `the source "${name}" could not be reloaded: ${errText(err)}` });
+        report({
+          level: "error",
+          source: "restore",
+          message: `the source "${name}" could not be reloaded: ${errText(err)}`,
+        });
       }
     }
     for (const [name, f] of [...pendingFiles]) {
       pendingFiles.delete(name);
       const was = loaded.files.get(name);
-      if (was && was.sheet === f.sheet && sameBytes(was.bytes, f.bytes)) continue;
+      if (was && was.sheet === f.sheet && sameBytes(was.bytes, f.bytes))
+        continue;
       try {
         const e = f.format === "xlsx" ? await ensureEngine() : null;
         await kept.exec(`DROP TABLE IF EXISTS ${quoteIdent(name)}`);
-        await loadIntoDuckDB(kept, name, f.format, f.bytes, xlsxReader(e), f.sheet);
+        await loadIntoDuckDB(
+          kept,
+          name,
+          f.format,
+          f.bytes,
+          xlsxReader(e),
+          f.sheet,
+        );
       } catch (err) {
-        report({ level: "error", source: "restore", message: `the file "${f.fileName}" could not be reloaded: ${errText(err)}` });
+        report({
+          level: "error",
+          source: "restore",
+          message: `the file "${f.fileName}" could not be reloaded: ${errText(err)}`,
+        });
       }
     }
   }
@@ -1426,18 +1570,28 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
     await flushPersistInternal();
     // The flush just serialised the recipe; hash the definition from that
     // copy instead of asking the engine for a second one.
-    const stamp: LowerStamp = { binding, def: await definitionHash(binding, lastPayload), session: persistence.hash };
+    const stamp: LowerStamp = {
+      binding,
+      def: await definitionHash(binding, lastPayload),
+      session: persistence.hash,
+    };
     // ADR 559: a table's frame carries its own recipe from the start, so
     // the save after the lowering has no label left to write.
     if (bindingKinds.get(binding) === "table" && lastPayload) {
-      Object.assign(stamp, contentPatch(lastPayload as PayloadJson, binding) ?? {});
+      Object.assign(
+        stamp,
+        contentPatch(lastPayload as PayloadJson, binding) ?? {},
+      );
     }
     return stamp;
   }
 
   /** The content hash of one binding's definition and the query it reads, or
    *  null when the engine does not know it. */
-  async function definitionHash(binding: string, recipe?: unknown): Promise<string | null> {
+  async function definitionHash(
+    binding: string,
+    recipe?: unknown,
+  ): Promise<string | null> {
     if (!engine) return null;
     const p = (recipe ?? engine.payload()) as {
       bindings?: { id: string; query?: string }[];
@@ -1446,7 +1600,9 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
     const def = p?.bindings?.find((b) => b.id === binding);
     if (!def) return null;
     const query = p?.queries?.find((q) => q.id === def.query) ?? null;
-    return contentHash(new TextEncoder().encode(JSON.stringify({ def, query })));
+    return contentHash(
+      new TextEncoder().encode(JSON.stringify({ def, query })),
+    );
   }
 
   /** Re-read which variable bindings have a field in the document (after a
@@ -1455,9 +1611,9 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
     if (!host.supports("document.placeholders@1")) return null;
     let fields: PlaceholderField[];
     try {
-      fields = ((await host.document.placeholders()) as readonly PlaceholderField[]).filter(
-        (p) => p.plugin === FIELD_PLUGIN,
-      );
+      fields = (
+        (await host.document.placeholders()) as readonly PlaceholderField[]
+      ).filter((p) => p.plugin === FIELD_PLUGIN);
       // ADR 559 (protocol 71): a variable placed as a text variable counts
       // as placed while its definition exists.
       fields.push(...(await readTextVariableFields(rawHost)));
@@ -1465,7 +1621,8 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
       return null;
     }
     placedVariables.clear();
-    for (const f of fields) if (bindingKinds.get(f.key) === "variable") placedVariables.add(f.key);
+    for (const f of fields)
+      if (bindingKinds.get(f.key) === "variable") placedVariables.add(f.key);
     return fields;
   }
 
@@ -1482,7 +1639,8 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
     emit();
   }
 
-  const errText = (err: unknown) => (err instanceof Error ? err.message : String(err));
+  const errText = (err: unknown) =>
+    err instanceof Error ? err.message : String(err);
 
   /** Our placeholder fields with key `key` (or all of ours), freshly read.
    *  `null` when the read failed — reported against `source`. */
@@ -1491,11 +1649,18 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
     key?: string,
   ): Promise<PlaceholderField[] | null> {
     try {
-      const all = (await host.document.placeholders()) as readonly PlaceholderField[];
+      const all =
+        (await host.document.placeholders()) as readonly PlaceholderField[];
       // ADR 559 (protocol 71): our text variables, as fields; placeholder
       // fields of documents made before stay in the list (and are refreshed).
       const variables = await readTextVariableFields(rawHost, key);
-      return [...all.filter((p) => p.plugin === FIELD_PLUGIN && (key === undefined || p.key === key)), ...variables];
+      return [
+        ...all.filter(
+          (p) =>
+            p.plugin === FIELD_PLUGIN && (key === undefined || p.key === key),
+        ),
+        ...variables,
+      ];
     } catch (err) {
       report({
         level: "error",
@@ -1519,7 +1684,13 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
    *  rejection that names no child is reported against every write in it. */
   async function writeFields(
     source: SessionDiagnostic["source"],
-    writes: readonly { storyId: string; offset: number; key: string; value: string | null; variable?: string }[],
+    writes: readonly {
+      storyId: string;
+      offset: number;
+      key: string;
+      value: string | null;
+      variable?: string;
+    }[],
   ): Promise<number> {
     if (writes.length > 0) await settleLabel();
     let pending = backToFront(writes);
@@ -1583,7 +1754,10 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
   async function resolveDataSetTargets(
     applies: readonly DataSetApply[],
   ): Promise<DataSetTargets> {
-    const fields: Record<string, { storyId: string; offset: number; variable?: string }> = {};
+    const fields: Record<
+      string,
+      { storyId: string; offset: number; variable?: string }
+    > = {};
     const frames: Record<string, string> = {};
     const elements: Record<string, ElementId> = {};
 
@@ -1592,19 +1766,25 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
     const wantsField = applies.some((a) => a.applicable && a.kind === "text");
     if (wantsField && host.supports("document.placeholders@1")) {
       try {
-        const placed = (await host.document.placeholders()) as PlaceholderField[];
+        const placed =
+          (await host.document.placeholders()) as PlaceholderField[];
         for (const p of placed) {
           if (p.plugin !== FIELD_PLUGIN) continue;
           // First occurrence wins: a variable placed twice in a document is a
           // real authoring case, and the refresh loop (refreshFields) updates
           // EVERY copy — this apply path drives the first, then refreshFields
           // brings the rest in line on the next resolve.
-          if (!(p.key in fields)) fields[p.key] = { storyId: p.storyId, offset: p.offset };
+          if (!(p.key in fields))
+            fields[p.key] = { storyId: p.storyId, offset: p.offset };
         }
         // ADR 559 (protocol 71): a text variable wins over an old field —
         // one Set re-bakes every instance of it.
         for (const v of await readTextVariableFields(rawHost)) {
-          fields[v.key] = { storyId: v.storyId, offset: v.offset, variable: v.variable! };
+          fields[v.key] = {
+            storyId: v.storyId,
+            offset: v.offset,
+            variable: v.variable!,
+          };
         }
       } catch (err) {
         host.log.warn(`data set: placeholders() read failed — ${String(err)}`);
@@ -1633,12 +1813,18 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
     const consented = consentedOriginsSafe();
     return Array.from(remoteSources.values(), (r) => ({
       ...r,
-      consent: consented.includes(r.origin) ? ("granted" as const) : ("required" as const),
+      consent: consented.includes(r.origin)
+        ? ("granted" as const)
+        : ("required" as const),
     }));
   }
 
   async function ensureEngine(): Promise<DataEngineLike> {
-    if (engine && bootPayload !== null && typeof engine.load_payload === "function") {
+    if (
+      engine &&
+      bootPayload !== null &&
+      typeof engine.load_payload === "function"
+    ) {
       // A kept engine (an undo reloaded another session version): the saved
       // recipe replaces its own.
       const saved = bootPayload;
@@ -1713,7 +1899,14 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
       for (const [name, f] of [...pendingFiles]) {
         try {
           const e = f.format === "xlsx" ? await ensureEngine() : null;
-          await loadIntoDuckDB(d, name, f.format, f.bytes, xlsxReader(e), f.sheet);
+          await loadIntoDuckDB(
+            d,
+            name,
+            f.format,
+            f.bytes,
+            xlsxReader(e),
+            f.sheet,
+          );
           pendingFiles.delete(name);
         } catch (err) {
           report({
@@ -1736,7 +1929,9 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
   }
 
   /** The data engine's worksheet reader (xlsx imports). */
-  function xlsxReader(e: DataEngineLike | null): (bytes: Uint8Array, sheet?: string) => XlsxImport {
+  function xlsxReader(
+    e: DataEngineLike | null,
+  ): (bytes: Uint8Array, sheet?: string) => XlsxImport {
     return (bytes, sheet) => {
       if (!e || typeof e.xlsx_import !== "function") {
         throw new Error(
@@ -1760,7 +1955,8 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
     const wanted = new Map<string, number>();
     for (const [name, p] of refreshPolicies) {
       const r = remoteSources.get(name);
-      if (p.policy === "interval" && r && consented.includes(r.origin)) wanted.set(name, p.secs);
+      if (p.policy === "interval" && r && consented.includes(r.origin))
+        wanted.set(name, p.secs);
     }
     poller.sync(wanted);
     state.polling = [...wanted.keys()];
@@ -1789,7 +1985,9 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
    *  again; when any source asks for it, the queries re-run (this boots
    *  DuckDB — the user chose it for this document). Never throws. */
   async function applyOnOpen(): Promise<void> {
-    const onOpen = [...refreshPolicies].filter(([, p]) => p.policy === "onOpen").map(([n]) => n);
+    const onOpen = [...refreshPolicies]
+      .filter(([, p]) => p.policy === "onOpen")
+      .map(([n]) => n);
     if (onOpen.length === 0) return;
     const consented = consentedOriginsSafe();
     for (const name of onOpen) {
@@ -1877,7 +2075,9 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
    *  document opened, or an undo named another session version). An undo
    *  keeps the engines (`keepEngines`): the data engine takes the version's
    *  recipe, and DuckDB keeps its tables (see `followLabel`). */
-  async function resetState(opts: { keepEngines?: boolean } = {}): Promise<void> {
+  async function resetState(
+    opts: { keepEngines?: boolean } = {},
+  ): Promise<void> {
     docEpoch += 1;
     if (persistTimer) clearTimeout(persistTimer);
     persistTimer = null;
@@ -1936,7 +2136,9 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
   /** The document label read by the last restore (ADR 559: its recipe
    *  rebuilds a session whose part is gone) — read once per open. */
   let openedDocLabel: unknown = undefined;
-  async function labelledSession(latest: Uint8Array | null): Promise<Uint8Array | null> {
+  async function labelledSession(
+    latest: Uint8Array | null,
+  ): Promise<Uint8Array | null> {
     let envelope: unknown = null;
     try {
       envelope = await rawHost.document.getDocumentMetadata();
@@ -1954,7 +2156,8 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
       knownVersions.add(path);
       return bytes;
     }
-    if (latest && (await contentHash(splitBase(latest).version)) === named) return latest;
+    if (latest && (await contentHash(splitBase(latest).version)) === named)
+      return latest;
     report({
       level: "warn",
       source: "restore",
@@ -1968,12 +2171,16 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
    *  in DuckDB on its first boot) and remote descriptors (inert). Then reconcile
    *  with the document: which variable fields are placed, and whether each
    *  recorded table is still there and still labelled with its binding. */
-  async function restoreInternal(given?: Uint8Array, reload = false): Promise<void> {
+  async function restoreInternal(
+    given?: Uint8Array,
+    reload = false,
+  ): Promise<void> {
     if (!partsAvailable()) return;
     let bytes: Uint8Array | null = given ?? null;
     try {
       // Protocol 69: the part, or the version the document's label names.
-      if (!bytes) bytes = await labelledSession(await host.parts.read(SESSION_PART));
+      if (!bytes)
+        bytes = await labelledSession(await host.parts.read(SESSION_PART));
     } catch (err) {
       report({
         level: "error",
@@ -2008,7 +2215,11 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
     try {
       e = await ensureEngine();
     } catch (err) {
-      report({ level: "error", source: "restore", message: `engine unavailable: ${errText(err)}` });
+      report({
+        level: "error",
+        source: "restore",
+        message: `engine unavailable: ${errText(err)}`,
+      });
       return;
     }
     for (const d of saved.sync) {
@@ -2025,16 +2236,22 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
       queries?: { id: string; sql: string }[];
       bindings?: { id: string; kind: string }[];
     };
-    for (const q of recipe.queries ?? []) queries.set(q.id, { id: q.id, sql: q.sql });
+    for (const q of recipe.queries ?? [])
+      queries.set(q.id, { id: q.id, sql: q.sql });
     for (const b of recipe.bindings ?? []) {
       bindingKinds.set(b.id, b.kind as never);
       if (!bindingIds.includes(b.id)) bindingIds.push(b.id);
     }
-    for (const [id, t] of Object.entries(saved.targets.image)) imageTargets.set(id, t);
-    for (const [id, t] of Object.entries(saved.targets.barcode)) barcodeTargets.set(id, t);
-    for (const [id, t] of Object.entries(saved.targets.visibility)) visibilityTargets.set(id, t);
-    for (const [id, t] of Object.entries(saved.targets.rule)) ruleTargets.set(id, t);
-    for (const [id, el] of Object.entries(saved.targets.lowered)) loweredInto.set(id, el);
+    for (const [id, t] of Object.entries(saved.targets.image))
+      imageTargets.set(id, t);
+    for (const [id, t] of Object.entries(saved.targets.barcode))
+      barcodeTargets.set(id, t);
+    for (const [id, t] of Object.entries(saved.targets.visibility))
+      visibilityTargets.set(id, t);
+    for (const [id, t] of Object.entries(saved.targets.rule))
+      ruleTargets.set(id, t);
+    for (const [id, el] of Object.entries(saved.targets.lowered))
+      loweredInto.set(id, el);
 
     // Imported data: back into DuckDB when it first boots.
     for (const d of saved.data) {
@@ -2073,7 +2290,11 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
       if ("ref" in d) knownDataParts.add(`${DATA_PART_DIR}${d.ref.hash}.csv`);
       importedCsv.set(d.source, text);
       pendingCsv.set(d.source, text);
-      if (d.fileName) csvFileNames.set(d.source, { format: d.delimiter ?? "csv", fileName: d.fileName });
+      if (d.fileName)
+        csvFileNames.set(d.source, {
+          format: d.delimiter ?? "csv",
+          fileName: d.fileName,
+        });
       if (!sourceNames.includes(d.source)) sourceNames.push(d.source);
     }
 
@@ -2095,7 +2316,8 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
         credentialRef: r.credentialRef,
         consent: "required",
         status: "inert",
-        message: "Inert — saved with the document; load it to fetch (origin consent first).",
+        message:
+          "Inert — saved with the document; load it to fetch (origin consent first).",
         contentKey: null,
       });
     }
@@ -2109,7 +2331,8 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
             level: "warn",
             source: "restore",
             binding: f.key,
-            message: "a data field in the document names a binding the saved session does not have",
+            message:
+              "a data field in the document names a binding the saved session does not have",
           });
         }
       }
@@ -2139,7 +2362,8 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
           level: "info",
           source: "restore",
           binding: id,
-          message: "the document shows this binding as it was defined earlier — Lower updates it",
+          message:
+            "the document shows this binding as it was defined earlier — Lower updates it",
         });
       }
     }
@@ -2189,16 +2413,31 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
     if (fields === null) return null;
     let value: string | null;
     try {
-      const lowered = e.resolve_lowered(id) as { kind?: string; text?: string; hidden?: boolean } | null;
+      const lowered = e.resolve_lowered(id) as {
+        kind?: string;
+        text?: string;
+        hidden?: boolean;
+      } | null;
       if (lowered?.kind !== "variable") return 0;
       value = lowered.hidden ? null : (lowered.text ?? null);
     } catch (err) {
-      report({ level: "warn", source: "refresh", binding: id, message: `did not resolve: ${errText(err)}` });
+      report({
+        level: "warn",
+        source: "refresh",
+        binding: id,
+        message: `did not resolve: ${errText(err)}`,
+      });
       return null;
     }
     const writes = fields
       .filter((f) => f.value !== value)
-      .map((f) => ({ storyId: f.storyId, offset: f.offset, key: id, value, ...(f.variable ? { variable: f.variable } : {}) }));
+      .map((f) => ({
+        storyId: f.storyId,
+        offset: f.offset,
+        key: id,
+        value,
+        ...(f.variable ? { variable: f.variable } : {}),
+      }));
     return writeFields("refresh", writes);
   }
 
@@ -2254,7 +2493,10 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
       // ops plus this one; an engine refusing it refuses the labels too).
       labelHash = hash;
       pendingLabel = null;
-      return [...ops, labelMutation(hash, labelKey(rawHost), labelRecipe ?? undefined)];
+      return [
+        ...ops,
+        labelMutation(hash, labelKey(rawHost), labelRecipe ?? undefined),
+      ];
     },
     ...reviewMethods({
       host,
@@ -2324,7 +2566,10 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
       } catch (err) {
         // Keep the more specific engine-missing / duckdb-missing status the
         // boot helpers set; anything else is an import error.
-        if (state.status !== "engine-missing" && state.status !== "duckdb-missing") {
+        if (
+          state.status !== "engine-missing" &&
+          state.status !== "duckdb-missing"
+        ) {
           state.status = "error";
         }
         state.message = `Import of "${name}" failed: ${errText(err)}`;
@@ -2376,7 +2621,9 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
 
     addQuery(id, sql, shape) {
       queries.set(id, { id, sql });
-      defineOnEngine((e) => e.define_query({ id, sql, params: [], shape: { shape } }));
+      defineOnEngine((e) =>
+        e.define_query({ id, sql, params: [], shape: { shape } }),
+      );
       sync();
       markDirty();
     },
@@ -2394,8 +2641,9 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
         const before = diagnostics.length;
         await this.registerCsvSource(name, text);
         if (importedCsv.get(name) !== text) {
-          const error = diagnostics.slice(before).find((d) => d.source === "import")?.message ??
-            `Import of "${name}" failed`;
+          const error =
+            diagnostics.slice(before).find((d) => d.source === "import")
+              ?.message ?? `Import of "${name}" failed`;
           return { source: name, format, error };
         }
         importedFiles.delete(name);
@@ -2407,10 +2655,21 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
       try {
         const d = await ensureDuck();
         const e = await ensureEngine();
-        const out = await loadIntoDuckDB(d, name, format, bytes, xlsxReader(e), options?.sheet);
+        const out = await loadIntoDuckDB(
+          d,
+          name,
+          format,
+          bytes,
+          xlsxReader(e),
+          options?.sheet,
+        );
         e.define_source({
           id: name,
-          kind: { kind: "file", format: format === "xlsx" ? "excel" : format, name: fileName },
+          kind: {
+            kind: "file",
+            format: format === "xlsx" ? "excel" : format,
+            name: fileName,
+          },
           capability: "file-import",
           refresh: refreshPolicies.get(name) ?? MANUAL,
         });
@@ -2446,7 +2705,10 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
           ...(out.sheets !== undefined ? { sheets: out.sheets } : {}),
         };
       } catch (err) {
-        if (state.status !== "engine-missing" && state.status !== "duckdb-missing") {
+        if (
+          state.status !== "engine-missing" &&
+          state.status !== "duckdb-missing"
+        ) {
           state.status = "error";
         }
         const error = `Import of "${fileName}" failed: ${errText(err)}`;
@@ -2488,18 +2750,28 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
       try {
         d = await ensureDuck();
       } catch (err) {
-        return { ...empty, diagnostic: { kind: "Engine", message: errText(err) } };
+        return {
+          ...empty,
+          diagnostic: { kind: "Engine", message: errText(err) },
+        };
       }
       const refused = checkQuery(sql);
       if (refused) return { ...empty, diagnostic: refused };
       try {
         const limited = previewSql(sql, limit);
         const desc = await d.rows(`DESCRIBE ${limited}`);
-        const columns = desc.rows.map((r) => ({ name: r[0] ?? "", type: r[1] ?? "" }));
+        const columns = desc.rows.map((r) => ({
+          name: r[0] ?? "",
+          type: r[1] ?? "",
+        }));
         // DuckDB renders every value (dates, decimals with their scale, …)
         // the way it would print them.
-        const shown = await d.rows(`SELECT COLUMNS(*)::VARCHAR FROM (${limited})`);
-        const count = await d.rows(`SELECT count(*) FROM (\n${sql.replace(/[\s;]+$/, "")}\n)`);
+        const shown = await d.rows(
+          `SELECT COLUMNS(*)::VARCHAR FROM (${limited})`,
+        );
+        const count = await d.rows(
+          `SELECT count(*) FROM (\n${sql.replace(/[\s;]+$/, "")}\n)`,
+        );
         const total = Number(count.rows[0]?.[0] ?? NaN);
         return {
           columns,
@@ -2566,7 +2838,8 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
           level: "warn",
           source: "binding",
           binding: id,
-          message: "the binding has an empty expression — it resolves to nothing; bind a field",
+          message:
+            "the binding has an empty expression — it resolves to nothing; bind a field",
         });
       }
       defineOnEngine(
@@ -2594,7 +2867,11 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
             kind: "table",
             region,
             query,
-            columns: columns.map((c) => ({ header: c.header, expr: c.expr, style: null })),
+            columns: columns.map((c) => ({
+              header: c.header,
+              expr: c.expr,
+              style: null,
+            })),
             options: { header_row: true, group_by: [] },
           }),
         id,
@@ -2616,7 +2893,10 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
             // ImgPolicy: { fit, missing } — the engine's ImgFit drives the default
             // placement vocab; the explicit IDML `fit` (options.fit) overrides at
             // commit time. Map the IDML choice back to the engine ImgFit when given.
-            policy: { fit: engineFit(options?.fit), missing: options?.missing ?? "skip" },
+            policy: {
+              fit: engineFit(options?.fit),
+              missing: options?.missing ?? "skip",
+            },
           }),
         id,
       );
@@ -2658,7 +2938,10 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
             target,
             query,
             expr,
-            options: { invert: options?.invert ?? false, missing: options?.missing ?? "hide" },
+            options: {
+              invert: options?.invert ?? false,
+              missing: options?.missing ?? "hide",
+            },
           }),
         id,
       );
@@ -2669,7 +2952,10 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
     },
 
     addRuleBinding(id, scope, query, when, apply, target) {
-      defineOnEngine((e) => e.define_binding({ id, kind: "rule", scope, when, apply }), id);
+      defineOnEngine(
+        (e) => e.define_binding({ id, kind: "rule", scope, when, apply }),
+        id,
+      );
       bindingKinds.set(id, "rule");
       ruleTargets.set(id, { query, target });
       if (!bindingIds.includes(id)) bindingIds.push(id);
@@ -2683,20 +2969,28 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
       try {
         e = await ensureEngine();
       } catch (err) {
-        report({ level: "error", source: "variables", message: `engine unavailable: ${errText(err)}` });
+        report({
+          level: "error",
+          source: "variables",
+          message: `engine unavailable: ${errText(err)}`,
+        });
         return [];
       }
       if (typeof e.variables !== "function") {
         report({
           level: "info",
           source: "variables",
-          message: "the engine wasm predates the variables lane — rebuild it (scripts/build-wasm.sh)",
+          message:
+            "the engine wasm predates the variables lane — rebuild it (scripts/build-wasm.sh)",
         });
         return [];
       }
       try {
         const set = e.variables() as { variables?: VariableSummary[] } | null;
-        const decls = (set?.variables ?? []) as { name: string; trait: string }[];
+        const decls = (set?.variables ?? []) as {
+          name: string;
+          trait: string;
+        }[];
         return decls.map((d) => ({
           name: d.name,
           trait: d.trait as VariableSummary["trait"],
@@ -2807,19 +3101,31 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
         // The engine decided WHAT; the host knows WHERE. Resolve each applicable
         // row's address from the live document, then commit the lot as ONE batch.
         const targets = await resolveDataSetTargets(applies);
-        const plan = dataSetPlan(applies.filter((a) => a.kind !== "property"), targets);
+        const plan = dataSetPlan(
+          applies.filter((a) => a.kind !== "property"),
+          targets,
+        );
         const result = await commitDataSet(host, plan);
         // ADR 558: the property rows — any property of any object — in ONE
         // host.objects batch (a data set over both lanes is two steps until
         // field writes have an object-model address).
         const propertyRows = applies.filter(
-          (a) => a.kind === "property" && a.applicable && (a as { property?: unknown }).property,
-        ) as unknown as { variable: string; property: import("../../data-host-model/src").LoweredProperty }[];
+          (a) =>
+            a.kind === "property" &&
+            a.applicable &&
+            (a as { property?: unknown }).property,
+        ) as unknown as {
+          variable: string;
+          property: import("../../data-host-model/src").LoweredProperty;
+        }[];
         if (propertyRows.length > 0) {
           const { commitProperties } = await import("./property-lane");
           const r = await commitProperties(
             host,
-            propertyRows.map((a) => ({ binding: a.variable, property: a.property })),
+            propertyRows.map((a) => ({
+              binding: a.variable,
+              property: a.property,
+            })),
             Object.fromEntries(hostOids),
             `Apply data set "${name}"`,
           );
@@ -2873,7 +3179,8 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
         return empty;
       }
       try {
-        const report = (e.import_variable_library(xml) as ImportReport | null) ?? empty;
+        const report =
+          (e.import_variable_library(xml) as ImportReport | null) ?? empty;
         markDirty();
         state.status = "ready";
         state.message =
@@ -2960,7 +3267,13 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
       // §8 change report: the engine fingerprints every binding's current
       // resolved content and diffs it against the previous report's snapshot. We
       // call it AFTER refreshData so "current" reflects the fresh data.
-      const empty: ChangeReport = { entries: [], changed: 0, unchanged: 0, added: 0, removed: 0 };
+      const empty: ChangeReport = {
+        entries: [],
+        changed: 0,
+        unchanged: 0,
+        added: 0,
+        removed: 0,
+      };
       let e: DataEngineLike;
       try {
         e = await ensureEngine();
@@ -2969,7 +3282,8 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
       }
       if (typeof e.refresh_change_report !== "function") return empty;
       try {
-        const report = (e.refresh_change_report() as ChangeReport | null) ?? empty;
+        const report =
+          (e.refresh_change_report() as ChangeReport | null) ?? empty;
         state.message =
           `Change report: ${report.changed} changed, ${report.unchanged} unchanged` +
           (report.added ? `, ${report.added} added` : "") +
@@ -2999,7 +3313,10 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
           if (lowerCtx?.properties) {
             lowerCtx.properties.push(id);
           } else {
-            const r = await props.applyProperties({ ids: [id], withVisibility: true });
+            const r = await props.applyProperties({
+              ids: [id],
+              withVisibility: true,
+            });
             state.status = "ready";
             state.message = `Applied "${id}": ${r.applied} write(s) in ${r.undoSteps} undo step(s).`;
           }
@@ -3013,12 +3330,29 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
           // pages it added (relower.ts) in the same first batch.
           const page = await startPage();
           if (!page) {
-            report({ level: "error", source: "flow", binding: id, message: "no page to lower the record flow onto" });
+            report({
+              level: "error",
+              source: "flow",
+              binding: id,
+              message: "no page to lower the record flow onto",
+            });
             return;
           }
           const plan = await relowerPlan({ kind: "recordFlow", binding: id });
-          const res = await commitRecordFlow(host, e, id, page as never, plan.remove);
-          for (const d of res.diagnostics) report({ level: res.ok ? "warn" : "error", source: "flow", binding: id, message: d });
+          const res = await commitRecordFlow(
+            host,
+            e,
+            id,
+            page as never,
+            plan.remove,
+          );
+          for (const d of res.diagnostics)
+            report({
+              level: res.ok ? "warn" : "error",
+              source: "flow",
+              binding: id,
+              message: d,
+            });
           if (res.ok && res.frames[0]) {
             loweredInto.set(id, res.frames[0]);
             markDirty();
@@ -3045,7 +3379,8 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
             const geom = await host.document.elementGeometry([
               { kind: "rectangle", id: tgt.elementId } as ElementId,
             ]);
-            const bounds = geom[0]?.bounds as [number, number, number, number] | undefined;
+            const bounds = geom[0]?.bounds as
+              [number, number, number, number] | undefined;
             if (bounds) {
               const [top, left, bottom, right] = bounds;
               boxW = Math.max(1, right - left);
@@ -3054,11 +3389,20 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
           }
           const bc = e.lower_barcode(id, boxW, boxH) as LoweredBarcode | null;
           if (bc) {
-            const plan = await relowerPlan({ kind: "barcode", binding: id }, barcodeMinted.get(id));
-            await commitLoweredBarcode(host, bc, tgt?.elementId ?? null, await stampFor(id), {
-              clear: plan.remove,
-              onMinted: (ids) => barcodeMinted.set(id, ids),
-            });
+            const plan = await relowerPlan(
+              { kind: "barcode", binding: id },
+              barcodeMinted.get(id),
+            );
+            await commitLoweredBarcode(
+              host,
+              bc,
+              tgt?.elementId ?? null,
+              await stampFor(id),
+              {
+                clear: plan.remove,
+                onMinted: (ids) => barcodeMinted.set(id, ids),
+              },
+            );
           }
           state.status = "ready";
           state.message = `Resolved + lowered barcode "${id}".`;
@@ -3069,17 +3413,32 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
           const plan = await relowerPlan({ kind: "table", binding: id });
           const known = tableAt.get(id);
           const inPlace =
-            known && plan.reuse && plan.reuse.id === known.frame.id ? known : undefined;
+            known && plan.reuse && plan.reuse.id === known.frame.id
+              ? known
+              : undefined;
           // A labelled frame whose table we cannot address goes, too.
           const clear = [...plan.remove];
-          if (plan.reuse && !inPlace) clear.push({ op: "deleteFrame", args: { frameId: plan.reuse.id as string } });
-          const frameId = await commitLoweredTable(host, lowered as never, await stampFor(id), lowerCtx, {
-            inPlace,
-            clear,
-            onTable: (at) => tableAt.set(id, at),
-          });
+          if (plan.reuse && !inPlace)
+            clear.push({
+              op: "deleteFrame",
+              args: { frameId: plan.reuse.id as string },
+            });
+          const frameId = await commitLoweredTable(
+            host,
+            lowered as never,
+            await stampFor(id),
+            lowerCtx,
+            {
+              inPlace,
+              clear,
+              onTable: (at) => tableAt.set(id, at),
+            },
+          );
           if (frameId) {
-            loweredInto.set(id, { kind: "textFrame", id: frameId } as ElementId);
+            loweredInto.set(id, {
+              kind: "textFrame",
+              id: frameId,
+            } as ElementId);
             markDirty();
           }
         } else if (lowered?.kind === "variable") {
@@ -3090,7 +3449,13 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
               // lowerAll: planned now, placed with the others in ONE batch.
               lowerCtx.variables.push({ variable: lowered as never, key: id });
             } else {
-              const placed = await commitLoweredVariable(host, lowered as never, id, null, lowerCtx);
+              const placed = await commitLoweredVariable(
+                host,
+                lowered as never,
+                id,
+                null,
+                lowerCtx,
+              );
               if (placed) placedVariables.add(id);
             }
           } else if (lowerCtx) {
@@ -3104,7 +3469,12 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
           // D-14: place onto the bound rectangle (caller-supplied target).
           const tgt = imageTargets.get(id);
           if (tgt) {
-            await commitLoweredImage(host, lowered as never, tgt.elementId, tgt.fit);
+            await commitLoweredImage(
+              host,
+              lowered as never,
+              tgt.elementId,
+              tgt.fit,
+            );
           } else {
             host.log.info(
               `image binding "${id}" has no bound rectangle target — define it via addImageBinding`,
@@ -3113,7 +3483,9 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
         } else if (lowered?.kind === "visibility") {
           // §9.8: show/hide the bound element via its own elementVisible property.
           const tgt = visibilityTargets.get(id);
-          const el = tgt?.kind ? visibilityTarget(tgt.kind, tgt.elementId) : null;
+          const el = tgt?.kind
+            ? visibilityTarget(tgt.kind, tgt.elementId)
+            : null;
           await commitLoweredVisibility(host, lowered as never, el, lowerCtx);
         }
         state.status = "ready";
@@ -3130,7 +3502,10 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
       // One command: its lowerings share one read of the active page.
       // Variables are planned first and placed together: one batch, one undo
       // step for the whole command (budget W5).
-      const ctx: LowerContext & { properties?: string[] } = { variables: [], properties: [] };
+      const ctx: LowerContext & { properties?: string[] } = {
+        variables: [],
+        properties: [],
+      };
       lowerCtx = ctx;
       try {
         for (const id of [...bindingIds]) {
@@ -3141,7 +3516,10 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
         for (const key of placed.keys()) placedVariables.add(key);
         // ADR 558: every property binding of the command in ONE batch.
         if (ctx.properties!.length > 0) {
-          await props.applyProperties({ ids: ctx.properties!, withVisibility: true });
+          await props.applyProperties({
+            ids: ctx.properties!,
+            withVisibility: true,
+          });
         }
       } finally {
         lowerCtx = undefined;
@@ -3217,7 +3595,11 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
         if (kind === "rule" || kind === "recordFlow") return;
         // ADR 558: a property binding steps through host.objects.
         if (kind === "property" || (kind === "visibility" && objectsUp())) {
-          await props.applyProperties({ record, ids: [bindingId], withVisibility: true });
+          await props.applyProperties({
+            record,
+            ids: [bindingId],
+            withVisibility: true,
+          });
           return;
         }
 
@@ -3230,7 +3612,8 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
             const geom = await host.document.elementGeometry([
               { kind: "rectangle", id: tgt.elementId } as ElementId,
             ]);
-            const bounds = geom[0]?.bounds as [number, number, number, number] | undefined;
+            const bounds = geom[0]?.bounds as
+              [number, number, number, number] | undefined;
             if (bounds) {
               const [top, left, bottom, right] = bounds;
               boxW = Math.max(1, right - left);
@@ -3239,8 +3622,16 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
           }
           // The preview-aware lower (`lower_barcode_at`) falls back to the
           // record-0 `lower_barcode` when the wasm predates the lane.
-          const lowerAt = (e as { lower_barcode_at?: (b: string, r: number, w: number, h: number) => unknown })
-            .lower_barcode_at;
+          const lowerAt = (
+            e as {
+              lower_barcode_at?: (
+                b: string,
+                r: number,
+                w: number,
+                h: number,
+              ) => unknown;
+            }
+          ).lower_barcode_at;
           const bc = (
             typeof lowerAt === "function"
               ? lowerAt.call(e, bindingId, record, boxW, boxH)
@@ -3248,11 +3639,20 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
           ) as LoweredBarcode | null;
           if (bc) {
             // Update in place: the previous step's symbol goes in the same batch.
-            const plan = await relowerPlan({ kind: "barcode", binding: bindingId }, barcodeMinted.get(bindingId));
-            await commitLoweredBarcode(host, bc, tgt?.elementId ?? null, await stampFor(bindingId), {
-              clear: plan.remove,
-              onMinted: (ids) => barcodeMinted.set(bindingId, ids),
-            });
+            const plan = await relowerPlan(
+              { kind: "barcode", binding: bindingId },
+              barcodeMinted.get(bindingId),
+            );
+            await commitLoweredBarcode(
+              host,
+              bc,
+              tgt?.elementId ?? null,
+              await stampFor(bindingId),
+              {
+                clear: plan.remove,
+                onMinted: (ids) => barcodeMinted.set(bindingId, ids),
+              },
+            );
           }
           state.status = "ready";
           state.message = `Preview: barcode "${bindingId}" against record ${record}.`;
@@ -3288,7 +3688,9 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
             previewFields?.binding === bindingId &&
             previewFields.changes === docChanges &&
             previewFields.doc === docEpoch;
-          const fields = reuse ? previewFields!.fields : await readOwnFields("preview", bindingId);
+          const fields = reuse
+            ? previewFields!.fields
+            : await readOwnFields("preview", bindingId);
           previewFields = null;
           if (fields === null) return;
           if (fields.length > 0) {
@@ -3296,10 +3698,19 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
             const before = docChanges;
             const written = await writeFields(
               "preview",
-              stale.map((f) => ({ storyId: f.storyId, offset: f.offset, key: bindingId, value, ...(f.variable ? { variable: f.variable } : {}) })),
+              stale.map((f) => ({
+                storyId: f.storyId,
+                offset: f.offset,
+                key: bindingId,
+                value,
+                ...(f.variable ? { variable: f.variable } : {}),
+              })),
             );
-            const oneCopyPerStory = new Set(fields.map((f) => f.storyId)).size === fields.length;
-            const onlyOurWrite = stale.length === 0 || (written === stale.length && docChanges === before + 1);
+            const oneCopyPerStory =
+              new Set(fields.map((f) => f.storyId)).size === fields.length;
+            const onlyOurWrite =
+              stale.length === 0 ||
+              (written === stale.length && docChanges === before + 1);
             if (oneCopyPerStory && onlyOurWrite) {
               previewFields = {
                 binding: bindingId,
@@ -3310,7 +3721,11 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
             }
           } else if (!placedVariables.has(bindingId)) {
             // Not in the document yet: place it once (the normal lower lane).
-            const placed = await commitLoweredVariable(host, lowered as never, bindingId);
+            const placed = await commitLoweredVariable(
+              host,
+              lowered as never,
+              bindingId,
+            );
             if (placed) placedVariables.add(bindingId);
           } else {
             // Placed earlier and since removed from the document. Placing it
@@ -3319,13 +3734,19 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
               level: "warn",
               source: "preview",
               binding: bindingId,
-              message: "the field is no longer in the document — Lower places it again",
+              message:
+                "the field is no longer in the document — Lower places it again",
             });
           }
         } else if (lowered?.kind === "image") {
           const tgt = imageTargets.get(bindingId);
           if (tgt) {
-            await commitLoweredImage(host, lowered as never, tgt.elementId, tgt.fit);
+            await commitLoweredImage(
+              host,
+              lowered as never,
+              tgt.elementId,
+              tgt.fit,
+            );
           }
         }
         state.status = "ready";
@@ -3333,7 +3754,9 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
       } catch (err) {
         state.status = "error";
         state.message = err instanceof Error ? err.message : String(err);
-        host.log.warn(`previewRecord(${bindingId}, ${record}): ${state.message}`);
+        host.log.warn(
+          `previewRecord(${bindingId}, ${record}): ${state.message}`,
+        );
       }
     },
 
@@ -3348,7 +3771,8 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
         report({
           level: "warn",
           source: "refresh",
-          message: "the host predates the placeholder field model (document.placeholders@1)",
+          message:
+            "the host predates the placeholder field model (document.placeholders@1)",
         });
         return 0;
       }
@@ -3356,27 +3780,47 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
       try {
         e = await ensureEngine();
       } catch (err) {
-        report({ level: "error", source: "refresh", message: `engine unavailable: ${errText(err)}` });
+        report({
+          level: "error",
+          source: "refresh",
+          message: `engine unavailable: ${errText(err)}`,
+        });
         return 0;
       }
       const fields = await readOwnFields("refresh");
       if (fields === null) return 0;
 
-      const writes: { storyId: string; offset: number; key: string; value: string | null; variable?: string }[] = [];
+      const writes: {
+        storyId: string;
+        offset: number;
+        key: string;
+        value: string | null;
+        variable?: string;
+      }[] = [];
       // Resolve each binding once, however many copies of its field exist —
       // all of them in ONE engine call when the wasm has it.
-      const resolved = new Map<string, { value: string | null } | "kept" | "failed" | "same">();
+      const resolved = new Map<
+        string,
+        { value: string | null } | "kept" | "failed" | "same"
+      >();
       const ours = fields.filter((f) => bindingKinds.get(f.key) === "variable");
       if (typeof e.refresh_field_values === "function" && ours.length > 0) {
         let decided: FieldRefreshOut[] = [];
         try {
-          decided = (e.refresh_field_values([...new Set(ours.map((f) => f.key))]) as FieldRefreshOut[] | null) ?? [];
+          decided =
+            (e.refresh_field_values([...new Set(ours.map((f) => f.key))]) as
+              FieldRefreshOut[] | null) ?? [];
         } catch (err) {
-          report({ level: "error", source: "refresh", message: `the engine could not resolve the fields: ${errText(err)}` });
+          report({
+            level: "error",
+            source: "refresh",
+            message: `the engine could not resolve the fields: ${errText(err)}`,
+          });
           return 0;
         }
         for (const d of decided) {
-          if (d.outcome === "value") resolved.set(d.binding, { value: d.value ?? null });
+          if (d.outcome === "value")
+            resolved.set(d.binding, { value: d.value ?? null });
           else if (d.outcome === "kept") resolved.set(d.binding, "kept");
           else if (d.outcome === "notVariable") resolved.set(d.binding, "same");
           else {
@@ -3398,9 +3842,11 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
             r = "kept";
           } else {
             try {
-              const lowered = e.resolve_lowered(f.key) as
-                | { kind?: string; text?: string; hidden?: boolean }
-                | null;
+              const lowered = e.resolve_lowered(f.key) as {
+                kind?: string;
+                text?: string;
+                hidden?: boolean;
+              } | null;
               r =
                 lowered?.kind === "variable"
                   ? { value: lowered.hidden ? null : (lowered.text ?? null) }
@@ -3419,7 +3865,13 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
         }
         if (r === "kept" || r === "failed" || r === "same") continue;
         if (r.value === f.value) continue; // minimal: only changed → a write
-        writes.push({ storyId: f.storyId, offset: f.offset, key: f.key, value: r.value, ...(f.variable ? { variable: f.variable } : {}) });
+        writes.push({
+          storyId: f.storyId,
+          offset: f.offset,
+          key: f.key,
+          value: r.value,
+          ...(f.variable ? { variable: f.variable } : {}),
+        });
       }
 
       const written = await writeFields("refresh", writes);
@@ -3428,14 +3880,18 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
       state.status = "ready";
       state.message =
         `Refreshed ${written} field(s) from the live data.` +
-        (kept > 0 ? ` Left ${kept} pinned/overridden binding(s) unchanged.` : "");
+        (kept > 0
+          ? ` Left ${kept} pinned/overridden binding(s) unchanged.`
+          : "");
       return written;
     },
 
     async applyRule(ruleId) {
       const meta = ruleTargets.get(ruleId);
       if (!meta) {
-        host.log.warn(`applyRule(${ruleId}): no rule target — define it via addRuleBinding`);
+        host.log.warn(
+          `applyRule(${ruleId}): no rule target — define it via addRuleBinding`,
+        );
         return 0;
       }
       const e = await ensureEngine();
@@ -3474,7 +3930,8 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
       const delayMs = options?.delayMs ?? 16;
       const timers = options?.timers ?? {
         setTimeout: (fn: () => void, ms: number) => setTimeout(fn, ms),
-        clearTimeout: (h: unknown) => clearTimeout(h as ReturnType<typeof setTimeout>),
+        clearTimeout: (h: unknown) =>
+          clearTimeout(h as ReturnType<typeof setTimeout>),
       };
       let chainFrames: Set<string> | null = null;
       let timer: unknown = null;
@@ -3487,7 +3944,8 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
           const e = await ensureEngine();
           const chain = await readLiveChain(host, storyId);
           chainFrames = new Set(chain.map((c) => c.frame));
-          if (!disposed) onRepaginate(e.lower_record_flow(bindingId, chain, undefined));
+          if (!disposed)
+            onRepaginate(e.lower_record_flow(bindingId, chain, undefined));
         } catch (err) {
           host.log.warn(`subscribeChainReflow(${bindingId}): ${String(err)}`);
         } finally {
@@ -3560,7 +4018,11 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
       // OUR realm, so a consumer pull cannot induce a fetch we are not consented
       // to (§7.1 security shape; composes with D-03).
       const e = await ensureEngine();
-      const pub = e.publish_provider(queryId, providerId, category) as DataProviderPublication;
+      const pub = e.publish_provider(
+        queryId,
+        providerId,
+        category,
+      ) as DataProviderPublication;
 
       // D-09: the registry door exists in the contract; a host that injects it
       // answers `supports("dataProviders@1")`.
@@ -3580,13 +4042,21 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
               // Re-resolve the current snapshot on demand. The engine RecordSet
               // is snake-cased (`row_count`); map it to the contract's camelCase
               // `rowCount` at the boundary.
-              const fresh = e.publish_provider(queryId, providerId, category) as DataProviderPublication;
+              const fresh = e.publish_provider(
+                queryId,
+                providerId,
+                category,
+              ) as DataProviderPublication;
               const rec = fresh.records as {
                 schema: ProviderSchema;
                 columns: unknown[][];
                 row_count: number;
               };
-              return { schema: rec.schema, columns: rec.columns, rowCount: rec.row_count };
+              return {
+                schema: rec.schema,
+                columns: rec.columns,
+                rowCount: rec.row_count,
+              };
             },
           };
           providerHandles.set(providerId, registry.register(registration));
@@ -3614,7 +4084,11 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
         try {
           engine.set_locale(next);
         } catch (err) {
-          report({ level: "error", source: "binding", message: `unknown locale "${next}": ${errText(err)}` });
+          report({
+            level: "error",
+            source: "binding",
+            message: `unknown locale "${next}": ${errText(err)}`,
+          });
           return;
         }
       }
@@ -3631,7 +4105,10 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
     },
 
     listBindings() {
-      return bindingIds.map((id) => ({ id, kind: bindingKinds.get(id) ?? "?" }));
+      return bindingIds.map((id) => ({
+        id,
+        kind: bindingKinds.get(id) ?? "?",
+      }));
     },
 
     syncStatusOf(id) {
@@ -3639,8 +4116,16 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
     },
 
     async exportDataMergeTemplate(opts = {}) {
-      const fail = (reason: string): DataMergeExport => ({ ok: false, reason, fields: [], skipped: [] });
-      if (!hasDocumentsDoors(rawHost)) return fail("this host cannot export the document (documents.exportPaged)");
+      const fail = (reason: string): DataMergeExport => ({
+        ok: false,
+        reason,
+        fields: [],
+        skipped: [],
+      });
+      if (!hasDocumentsDoors(rawHost))
+        return fail(
+          "this host cannot export the document (documents.exportPaged)",
+        );
       const docs = rawHost.documents;
       let e: DataEngineLike;
       try {
@@ -3650,7 +4135,8 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
       }
       await flushPersistInternal();
       const payload = (e.payload() ?? {}) as PayloadJson;
-      const bare = (x: unknown) => typeof x === "string" && /^[A-Za-z_][A-Za-z0-9_]*$/.test(x.trim());
+      const bare = (x: unknown) =>
+        typeof x === "string" && /^[A-Za-z_][A-Za-z0-9_]*$/.test(x.trim());
       const defs = payload.bindings ?? [];
       // Text: placed variable fields whose expression is a bare column.
       const texts: import("./datamerge-export").TextField[] = [];
@@ -3661,17 +4147,33 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
         if (!def || !bare(def.expr)) continue;
         // A text variable (protocol 71): each instance of it is a placeholder.
         if (f.variable) {
-          variables.push({ variable: f.variable, field: String(def.expr).trim() });
+          variables.push({
+            variable: f.variable,
+            field: String(def.expr).trim(),
+          });
           continue;
         }
-        texts.push({ storyId: f.storyId, offset: f.offset, length: [...(f.value ?? "")].length, field: String(def.expr).trim() });
+        texts.push({
+          storyId: f.storyId,
+          offset: f.offset,
+          length: [...(f.value ?? "")].length,
+          field: String(def.expr).trim(),
+        });
       }
       // Images: image bindings with a bare column, on their rectangle.
       const images = defs
-        .filter((d) => d.kind === "image" && bare(d.expr) && imageTargets.has(d.id))
-        .map((d) => ({ frame: imageTargets.get(d.id)!.elementId, field: String(d.expr).trim() }));
-      const used = defs.find((d) => (d.kind === "variable" || d.kind === "image") && bare(d.expr));
-      const queryId = (used?.query as string | undefined) ?? [...queries.keys()][0];
+        .filter(
+          (d) => d.kind === "image" && bare(d.expr) && imageTargets.has(d.id),
+        )
+        .map((d) => ({
+          frame: imageTargets.get(d.id)!.elementId,
+          field: String(d.expr).trim(),
+        }));
+      const used = defs.find(
+        (d) => (d.kind === "variable" || d.kind === "image") && bare(d.expr),
+      );
+      const queryId =
+        (used?.query as string | undefined) ?? [...queries.keys()][0];
       const dm = await import("./datamerge-export");
       let entries: import("./datamerge-export").ZipEntry[];
       try {
@@ -3680,16 +4182,31 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
         return fail(`the document could not be exported: ${errText(err)}`);
       }
       const csvName = `${queryId ?? "data"}.csv`;
-      const res = dm.dataMergeTemplate(entries, { texts, variables, images, dataSourceFile: opts.dataSourceFile ?? csvName });
-      if (res.fields.length === 0) return { ...fail("no merge field: place a variable or image binding over a column, or type <<field>> into a frame"), skipped: res.skipped };
+      const res = dm.dataMergeTemplate(entries, {
+        texts,
+        variables,
+        images,
+        dataSourceFile: opts.dataSourceFile ?? csvName,
+      });
+      if (res.fields.length === 0)
+        return {
+          ...fail(
+            "no merge field: place a variable or image binding over a column, or type <<field>> into a frame",
+          ),
+          skipped: res.skipped,
+        };
       // The data source: the query's rows, the template's columns.
       let rows: (string | null)[][] = [];
       const q = queryId ? queries.get(queryId) : undefined;
       if (q) {
         try {
           const preview = await self.previewQuery(q.sql, 100_000);
-          const ix = res.fields.map((f) => preview.columns.findIndex((c) => c.name === f.replace(/^@/, "")));
-          rows = preview.rows.map((r) => ix.map((i) => (i >= 0 ? (r[i] ?? null) : null)));
+          const ix = res.fields.map((f) =>
+            preview.columns.findIndex((c) => c.name === f.replace(/^@/, "")),
+          );
+          rows = preview.rows.map((r) =>
+            ix.map((i) => (i >= 0 ? (r[i] ?? null) : null)),
+          );
         } catch (err) {
           res.skipped.push(`the data rows could not be read: ${errText(err)}`);
         }
@@ -3705,15 +4222,32 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
       const fileName = `${name.replace(/\.(paged|idml|indd)$/i, "")} (Data Merge).idml`;
       if (opts.save) {
         try {
-          await host.shell.saveFile({ suggestedName: fileName, bytes: idml, mimeType: "application/vnd.adobe.indesign-idml-package" });
-          await host.shell.saveFile({ suggestedName: csvName, bytes: csv, mimeType: "text/csv" });
+          await host.shell.saveFile({
+            suggestedName: fileName,
+            bytes: idml,
+            mimeType: "application/vnd.adobe.indesign-idml-package",
+          });
+          await host.shell.saveFile({
+            suggestedName: csvName,
+            bytes: csv,
+            mimeType: "text/csv",
+          });
         } catch (err) {
-          res.skipped.push(`the files could not be handed out: ${errText(err)}`);
+          res.skipped.push(
+            `the files could not be handed out: ${errText(err)}`,
+          );
         }
       }
       state.message = `Data Merge template: ${res.fields.length} field(s)${res.skipped.length ? `, ${res.skipped.length} skipped` : ""}.`;
       emit();
-      return { ok: true, idml, csv, fields: res.fields, skipped: res.skipped, fileName };
+      return {
+        ok: true,
+        idml,
+        csv,
+        fields: res.fields,
+        skipped: res.skipped,
+        fileName,
+      };
     },
 
     async planBatch(queryId, mode) {
@@ -3727,7 +4261,12 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
       // §10: resolve the flow, partition by mode, paginate each unit — the same
       // data-lower path the live document uses, so headless == interactive.
       const e = await ensureEngine();
-      return e.run_record_flow_batch(bindingId, mode, chain, undefined) as BatchRun[];
+      return e.run_record_flow_batch(
+        bindingId,
+        mode,
+        chain,
+        undefined,
+      ) as BatchRun[];
     },
 
     defineRecordFlow(id, query, fields, options) {
@@ -3737,7 +4276,8 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
           level: "warn",
           source: "binding",
           binding: id,
-          message: "the record flow has no field — each record would render empty; add a field",
+          message:
+            "the record flow has no field — each record would render empty; add a field",
         });
       }
       defineOnEngine(
@@ -3772,11 +4312,23 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
 
     async mergeRecords(options) {
       const fail = (message: string): MergeResult => {
-        report({ level: "error", source: "flow", message: `merge: ${message}` });
+        report({
+          level: "error",
+          source: "flow",
+          message: `merge: ${message}`,
+        });
         state.status = "error";
         state.message = `Merge failed: ${message}`;
         emit();
-        return { ok: false, plan: null, pages: [], records: [], overset: [], mutateCalls: 0, diagnostics: [message] };
+        return {
+          ok: false,
+          plan: null,
+          pages: [],
+          records: [],
+          overset: [],
+          mutateCalls: 0,
+          diagnostics: [message],
+        };
       };
       let e: DataEngineLike;
       try {
@@ -3785,14 +4337,21 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
         return fail(`engine unavailable: ${errText(err)}`);
       }
       if (!e.plan_merge || !e.merge_words || !e.merge_overset) {
-        return fail("this engine build has no merge lane — rebuild the data-js wasm");
+        return fail(
+          "this engine build has no merge lane — rebuild the data-js wasm",
+        );
       }
-      if (!queries.has(options.query)) return fail(`no query "${options.query}"`);
+      if (!queries.has(options.query))
+        return fail(`no query "${options.query}"`);
       // The merge reads the query's result as delivered: run it if it has none.
-      if (options.destination === "newDocument") return mergeToNewDocument(options, fail);
+      if (options.destination === "newDocument")
+        return mergeToNewDocument(options, fail);
       if ((e.query_record_count?.(options.query) ?? 0) === 0) {
         await this.refreshData();
-        if (state.status === "error" && (e.query_record_count?.(options.query) ?? 0) === 0) {
+        if (
+          state.status === "error" &&
+          (e.query_record_count?.(options.query) ?? 0) === 0
+        ) {
           return fail(`the query did not run: ${state.message}`);
         }
       }
@@ -3807,7 +4366,10 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
       // (reusing the stored template then left them on every output page).
       // The pages and the scene tree, read once for the template and for the
       // re-merge plan (nothing changes the document between the two).
-      let snapshot: { tree?: Awaited<ReturnType<typeof host.document.tree>>; pages?: readonly TemplatePageRow[] } = {};
+      let snapshot: {
+        tree?: Awaited<ReturnType<typeof host.document.tree>>;
+        pages?: readonly TemplatePageRow[];
+      } = {};
       try {
         snapshot = {
           pages: await host.document.collection<TemplatePageRow>("pages"),
@@ -3816,15 +4378,27 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
       } catch {
         // a host without one of the reads: each reader reads (or falls back) itself
       }
-      const read = await readMergeTemplate(host, { pageId: pageId as never, imageFields: options.imageFields, ...snapshot });
-      const stored = mode === "consume" ? (mergeTemplates.get(mergeId) ?? null) : null;
+      const read = await readMergeTemplate(host, {
+        pageId: pageId as never,
+        imageFields: options.imageFields,
+        ...snapshot,
+      });
+      const stored =
+        mode === "consume" ? (mergeTemplates.get(mergeId) ?? null) : null;
       const template = read.template ?? stored;
       const templatePresent = read.template !== null;
-      if (!template) return fail(read.diagnostics.join("; ") || "no template on the page");
+      if (!template)
+        return fail(read.diagnostics.join("; ") || "no template on the page");
       // Replace the previous run of this merge in the first batch.
-      const plan = await relowerPlan({ kind: "merge", merge: mergeId }, undefined, snapshot);
+      const plan = await relowerPlan(
+        { kind: "merge", merge: mergeId },
+        undefined,
+        snapshot,
+      );
       await settleLabel();
-      const engineForMerge = e as Required<Pick<DataEngineLike, "plan_merge" | "merge_words" | "merge_overset">>;
+      const engineForMerge = e as Required<
+        Pick<DataEngineLike, "plan_merge" | "merge_words" | "merge_overset">
+      >;
       const result = await writeMerge(host, engineForMerge, template, {
         query: options.query,
         recordsPerPage: options.recordsPerPage ?? { mode: "single" },
@@ -3838,7 +4412,11 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
       });
       if (result.ok) mergeTemplates.set(mergeId, template);
       for (const d of result.diagnostics) {
-        report({ level: result.ok ? "warn" : "error", source: "flow", message: d });
+        report({
+          level: result.ok ? "warn" : "error",
+          source: "flow",
+          message: d,
+        });
       }
       state.status = result.ok ? "ready" : "error";
       state.message = result.ok
@@ -3876,20 +4454,35 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
         // the list a merge would place, before any page geometry applies.
         const flow = e.lower_record_flow(
           id,
-          [{ frame: "preview", page: "preview", heightPt: Number.MAX_SAFE_INTEGER }],
+          [
+            {
+              frame: "preview",
+              page: "preview",
+              heightPt: Number.MAX_SAFE_INTEGER,
+            },
+          ],
           undefined,
         ) as {
           total: number;
-          frames: { blocks: { block: string; text?: string; cells?: string[] }[] }[];
+          frames: {
+            blocks: { block: string; text?: string; cells?: string[] }[];
+          }[];
         };
         const blocks: RecordFlowPreview["blocks"] = [];
         for (const f of flow.frames) {
           for (const b of f.blocks) {
-            if (b.block === "groupHeader") blocks.push({ kind: "header", text: b.text ?? "" });
+            if (b.block === "groupHeader")
+              blocks.push({ kind: "header", text: b.text ?? "" });
             else if (b.block === "record")
-              blocks.push({ kind: "record", text: (b.cells ?? []).join(" · ") });
+              blocks.push({
+                kind: "record",
+                text: (b.cells ?? []).join(" · "),
+              });
             else if (b.block === "groupFooter")
-              blocks.push({ kind: "footer", text: (b.cells ?? []).join(" · ") });
+              blocks.push({
+                kind: "footer",
+                text: (b.cells ?? []).join(" · "),
+              });
           }
         }
         state.status = "ready";
@@ -3938,22 +4531,22 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
     },
 
     flushPersist() {
-        return flushPersistInternal();
-      },
+      return flushPersistInternal();
+    },
 
-      dispose() {
-        if (persistTimer) clearTimeout(persistTimer);
-        persistTimer = null;
-        for (const d of hostSubs.splice(0)) d.dispose();
-        poller.stopAll();
-        listeners.clear();
-        for (const h of providerHandles.values()) h.dispose();
-        providerHandles.clear();
-        void duck?.close();
-        engine?.free();
-        engine = null;
-        duck = null;
-      },
-    };
+    dispose() {
+      if (persistTimer) clearTimeout(persistTimer);
+      persistTimer = null;
+      for (const d of hostSubs.splice(0)) d.dispose();
+      poller.stopAll();
+      listeners.clear();
+      for (const h of providerHandles.values()) h.dispose();
+      providerHandles.clear();
+      void duck?.close();
+      engine?.free();
+      engine = null;
+      duck = null;
+    },
+  };
   return self;
 }

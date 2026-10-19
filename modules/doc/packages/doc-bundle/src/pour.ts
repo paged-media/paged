@@ -46,7 +46,10 @@ function tableIdOf(id: ElementId | null): string | null {
 }
 
 /** Execute a story plan against the host, in order. */
-export async function pourSteps(host: BundleHost, steps: readonly StoryStep[]): Promise<void> {
+export async function pourSteps(
+  host: BundleHost,
+  steps: readonly StoryStep[],
+): Promise<void> {
   // Walk the story plan in order: text runs pour at the running offset;
   //    tables insert (the outcome mints the id) then pour their cells.
   // `styleOffset` addresses the CONTIGUOUS character space (applyStyle /
@@ -69,7 +72,10 @@ export async function pourSteps(host: BundleHost, steps: readonly StoryStep[]): 
       const ops = step.mutations(textOffset, styleOffset);
       let sequential = engineBatchesText === false || ops.length <= 1;
       if (!sequential) {
-        const outcome = await host.document.mutate({ op: "batch", args: { ops } });
+        const outcome = await host.document.mutate({
+          op: "batch",
+          args: { ops },
+        });
         if (outcome.applied) {
           engineBatchesText = true;
         } else {
@@ -119,7 +125,6 @@ export async function pourSteps(host: BundleHost, steps: readonly StoryStep[]): 
       textOffset += TABLE_FOOTPRINT_TEXT;
     }
   }
-
 }
 
 /** Diagnostics key for style properties the engine refused. */
@@ -157,7 +162,10 @@ export async function applyStyleOpsReporting(
 ): Promise<StyleRefusals> {
   const out: StyleRefusals = { messages: [], paths: new Set() };
   if (ops.length === 0) return out;
-  const whole = await host.document.mutate({ op: "batch", args: { ops: [...ops] } } as Mutation);
+  const whole = await host.document.mutate({
+    op: "batch",
+    args: { ops: [...ops] },
+  } as Mutation);
   if (whole.applied) {
     host.diagnostics.set(STYLE_DIAGNOSTICS_KEY, []);
     return out;
@@ -166,8 +174,12 @@ export async function applyStyleOpsReporting(
     const one = await host.document.mutate(op);
     if (!one.applied) {
       const args = (op as { args?: { styleId?: string; path?: string } }).args;
-      const what = args?.path ? `${args.path} on ${args.styleId ?? "?"}` : (op as { op?: string }).op ?? "?";
-      out.messages.push(`This engine cannot apply ${what}: ${JSON.stringify(one.error)}`);
+      const what = args?.path
+        ? `${args.path} on ${args.styleId ?? "?"}`
+        : ((op as { op?: string }).op ?? "?");
+      out.messages.push(
+        `This engine cannot apply ${what}: ${JSON.stringify(one.error)}`,
+      );
       if (args?.path) out.paths.add(args.path);
     }
   }
@@ -177,4 +189,3 @@ export async function applyStyleOpsReporting(
   );
   return out;
 }
-

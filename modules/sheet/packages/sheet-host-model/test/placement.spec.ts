@@ -108,9 +108,15 @@ function textRegion(rowH: number[], texts: string[]): LoweredContent {
 describe("sheet_plugin_lower_mutations: a native table's frame height [sheet.lower.page]", () => {
   it("adds the engine's lead-in line: the ascender plus 0.4 of the 12 pt default", () => {
     // The engine's metric-less estimate (ascender 0.8 em): measured 14.41.
-    expect(tableLeadInPt({ defaultAscenderPt: 9.6 }, true)).toBeCloseTo(14.4, 6);
+    expect(tableLeadInPt({ defaultAscenderPt: 9.6 }, true)).toBeCloseTo(
+      14.4,
+      6,
+    );
     // Inter (ascender 0.96875 em = 11.625 pt at 12): measured 16.43.
-    expect(tableLeadInPt({ defaultAscenderPt: 11.625 }, true)).toBeCloseTo(16.425, 6);
+    expect(tableLeadInPt({ defaultAscenderPt: 11.625 }, true)).toBeCloseTo(
+      16.425,
+      6,
+    );
   });
 
   it("an engine that places the table in the story's first paragraph adds no lead-in", () => {
@@ -118,7 +124,10 @@ describe("sheet_plugin_lower_mutations: a native table's frame height [sheet.low
   });
 
   it("the price list's 105 pt of rows needs the lead-in on top — 121.4 pt under Inter", () => {
-    const c = textRegion([15, 15, 15, 15, 15, 15, 15], ["Item", "Notebooks", "Pencils", "Erasers", "Rulers", "Markers", "Total"]);
+    const c = textRegion(
+      [15, 15, 15, 15, 15, 15, 15],
+      ["Item", "Notebooks", "Pencils", "Erasers", "Rulers", "Markers", "Total"],
+    );
     const fit = { defaultAscenderPt: 11.625, cellAscenderPt: () => 11.625 };
     const h = tableFrameHeightPt(c, fit);
     // The engine needs 121.44 pt (bisected against the real engine with
@@ -149,15 +158,23 @@ describe("sheet_plugin_lower_mutations: a native table's frame height [sheet.low
   });
 
   it("an empty region needs no frame", () => {
-    expect(tableFrameHeightPt(region([], []), { defaultAscenderPt: 9.6 })).toBe(0);
+    expect(tableFrameHeightPt(region([], []), { defaultAscenderPt: 9.6 })).toBe(
+      0,
+    );
   });
 
   it("defaultPlacement sizes to the fit when given one, clamped like any placement", () => {
     const c = textRegion([15, 15], ["a", "b"]);
     const fit = { defaultAscenderPt: 9.6 };
     const [top, , bottom] = defaultPlacement("Page/u1", c, fit).bounds;
-    expect(bottom - top).toBeCloseTo(30 + tableLeadInPt(fit) + FIT_ALLOWANCE_PT, 6);
-    const tall = textRegion(Array.from({ length: 100 }, () => 15), []);
+    expect(bottom - top).toBeCloseTo(
+      30 + tableLeadInPt(fit) + FIT_ALLOWANCE_PT,
+      6,
+    );
+    const tall = textRegion(
+      Array.from({ length: 100 }, () => 15),
+      [],
+    );
     const [t2, , b2] = defaultPlacement("Page/u1", tall, fit).bounds;
     expect(b2 - t2).toBe(MAX_HEIGHT_PT);
   });

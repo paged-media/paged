@@ -16,11 +16,11 @@ and 024 predate that scheme and keep their numbers. Records 200–217 were writt
 | [023](023-shared-panels-binding-providers.md) | Shared panels: the host owns the panel, plugins provide the values | Accepted (amended 2026-10-02) |
 | [024](024-context-sensitivity-is-a-core-concept.md) | Context-sensitivity is a core concept of paged | Accepted (amended 2026-10-02) |
 | [200](200-engine-as-npm-wasm-packages.md) | The engine is consumed as published npm wasm packages | Accepted, recorded retroactively 2026-10-02 |
-| [201](201-plugins-as-pinned-packages.md) | First-party plugins are compiled in as pinned published packages | Accepted, recorded retroactively 2026-10-02 |
+| [201](201-plugins-as-pinned-packages.md) | First-party plugins are compiled in as pinned published packages | Accepted, recorded retroactively 2026-10-02; superseded by PM-0008 (2026-10-18) |
 | [202](202-render-worker-owns-the-canvas.md) | The render worker owns the canvas; main thread and engine talk over a sequenced channel and shared memory | Accepted, recorded retroactively 2026-10-02 |
 | [203](203-shell-is-a-registry-host.md) | The shell is an app-agnostic registry host: the app declares, the shell renders | Accepted, recorded retroactively 2026-10-02 (amended 2026-10-18) |
 | [204](204-declarative-property-panels.md) | Property panels are declarative compositions over a curated catalogue | Accepted, recorded retroactively 2026-10-02 |
-| [205](205-client-packaged-as-write-sdk.md) | The editor's wasm client is packaged as the write SDK | Accepted, recorded retroactively 2026-10-02 |
+| [205](205-client-packaged-as-write-sdk.md) | The editor's wasm client is packaged as the write SDK | Accepted, recorded retroactively 2026-10-02; amended by PM-0008 (2026-10-18) |
 | [206](206-package-layering-lint-zones.md) | Package layering is enforced by lint zones that have their own tests | Accepted, recorded retroactively 2026-10-02 |
 | [207](207-honest-seams.md) | Unbacked UI ships as a visible, inert seam | Accepted, recorded retroactively 2026-10-02 |
 | [208](208-tools-are-data-plus-gesture-handler.md) | Tools are data plus a gesture handler | Accepted, recorded retroactively 2026-10-02 (amended 2026-10-18) |
@@ -31,7 +31,7 @@ and 024 predate that scheme and keep their numbers. Records 200–217 were writt
 | [213](213-solo-mode.md) | Solo mode is a filter over the same app | Accepted, recorded retroactively 2026-10-02 |
 | [214](214-operation-sandwich.md) | Every operation is proven by one invariant: model, pixels, byte-identical undo | Accepted, recorded retroactively 2026-10-02 |
 | [215](215-measured-capability-table.md) | The capability table is measured, not declared | Accepted, recorded retroactively 2026-10-02 |
-| [216](216-test-tiers.md) | Test tiers, and where each one gates | Accepted, recorded retroactively 2026-10-02 |
+| [216](216-test-tiers.md) | Test tiers, and where each one gates | Accepted, recorded retroactively 2026-10-02 (amended 2026-10-19) |
 | [217](217-showcase-reference-document.md) | The showcase: one reference document built through the real editor | Accepted, recorded retroactively 2026-10-02 |
 | [218](218-network-wall-build-time-data-origins.md) | The network wall admits exact data origins listed at build time | Accepted, 2026-10-05 |
 | [219](219-plugin-documents-door.md) | A plugin may replace the open document, and the editor asks first | Accepted, 2026-10-06 |
@@ -42,6 +42,7 @@ and 024 predate that scheme and keep their numbers. Records 200–217 were writt
 | [224](224-films-are-recorded-by-the-editor.md) | The paged.media films are recorded by the editor's own test runner | Accepted 2026-10-12 |
 | [225](225-the-local-library.md) | The local library: open is an import, save is a version | Proposed 2026-10-17 |
 | [226](226-contribution-types-have-one-definition.md) | Contribution types have one definition: the contract, extended by the shell | Accepted 2026-10-18 |
+| [227](227-surface-conformance.md) | Surface conformance: a surface counts as tested when a test asserts it under covers() | Accepted 2026-10-19 |
 
 Decisions made in other repositories that this editor's code rests on are listed in
 [`../README.md`](../README.md). Comments in the source also cite ADR 025 (the journal) and

@@ -1,5 +1,6 @@
 {
   "compilerOptions": {
+    "types": ["bun"],
     "target": "ES2022",
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "module": "ESNext",
@@ -16,5 +17,5 @@
     "noFallthroughCasesInSwitch": true,
     "useDefineForClassFields": true
   },
-  "include": ["src"]
+  "include": ["src", "test", "../../../../tooling/js/bun-test-matchers.d.ts"]
 }

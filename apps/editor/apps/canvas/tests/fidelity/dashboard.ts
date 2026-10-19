@@ -93,9 +93,7 @@ function renderHtml(state: DashboardState): string {
   // Auto-refresh meta tag is omitted on a finalised run (`done ===
   // total`) so the report doesn't keep pulling assets after every
   // test has reported.
-  const refresh = done < total
-    ? `<meta http-equiv="refresh" content="3">`
-    : "";
+  const refresh = done < total ? `<meta http-equiv="refresh" content="3">` : "";
 
   return `<!doctype html>
 <html lang="en">
@@ -200,9 +198,10 @@ ${refresh}
   </div>
 </header>
 <main>
-${state.packs.length === 0
-  ? `<div class="card">Waiting for first pack to complete…</div>`
-  : `<table>
+${
+  state.packs.length === 0
+    ? `<div class="card">Waiting for first pack to complete…</div>`
+    : `<table>
   <thead>
     <tr>
       <th>Pack</th>
@@ -215,7 +214,8 @@ ${state.packs.length === 0
     </tr>
   </thead>
   <tbody>${rows}</tbody>
-</table>`}
+</table>`
+}
 </main>
 </body>
 </html>`;
@@ -228,8 +228,12 @@ function computeSummary(packs: DashboardPack[]): {
   avgMean: number | null;
   worstMean: number | null;
 } {
-  let pass = 0, fail = 0, smoke = 0;
-  let sum = 0, count = 0, worst = -Infinity;
+  let pass = 0,
+    fail = 0,
+    smoke = 0;
+  let sum = 0,
+    count = 0,
+    worst = -Infinity;
   for (const p of packs) {
     if (p.stage === "smoke") smoke += 1;
     else if (p.gateViolations && p.gateViolations.length > 0) fail += 1;
@@ -241,7 +245,9 @@ function computeSummary(packs: DashboardPack[]): {
     }
   }
   return {
-    pass, fail, smoke,
+    pass,
+    fail,
+    smoke,
     avgMean: count > 0 ? sum / count : null,
     worstMean: count > 0 ? worst : null,
   };
@@ -249,17 +255,20 @@ function computeSummary(packs: DashboardPack[]): {
 
 function packRow(p: DashboardPack): string {
   const status = packStatus(p);
-  const stageBadge = p.stage === "skip"
-    ? `<span class="stage" style="background:#f1f5f9;color:#64748b">skip</span>`
-    : `<span class="stage stage-${p.stage}">${p.stage}</span>`;
-  const violations = p.gateViolations && p.gateViolations.length > 0
-    ? `<div class="violations">${p.gateViolations.map(escapeHtml).join("<br>")}</div>`
-    : "";
-  const detail = p.pages.length > 0
-    ? `<details><summary>▸ ${p.pagesDiffed} pages diffed · click to inspect</summary>
+  const stageBadge =
+    p.stage === "skip"
+      ? `<span class="stage" style="background:#f1f5f9;color:#64748b">skip</span>`
+      : `<span class="stage stage-${p.stage}">${p.stage}</span>`;
+  const violations =
+    p.gateViolations && p.gateViolations.length > 0
+      ? `<div class="violations">${p.gateViolations.map(escapeHtml).join("<br>")}</div>`
+      : "";
+  const detail =
+    p.pages.length > 0
+      ? `<details><summary>▸ ${p.pagesDiffed} pages diffed · click to inspect</summary>
         <div class="pages-grid">${p.pages.map((pg) => pageTile(p.name, pg)).join("")}</div>
        </details>`
-    : "";
+      : "";
   return `<tr>
     <td colspan="7" style="padding: 0;">
       <table style="width: 100%; border: none;">
@@ -282,9 +291,10 @@ function pageTile(packName: string, pg: DashboardPage): string {
   const dir = relative(FIDELITY_OUT_ROOT, resolve(FIDELITY_OUT_ROOT, packName));
   const refRel = pg.refPath ? `${dir}/${basename(pg.refPath)}` : null;
   const candRel = `${dir}/${basename(pg.candPath)}`;
-  const heatRel = pg.heatPath && existsSync(pg.heatPath)
-    ? `${dir}/${basename(pg.heatPath)}`
-    : null;
+  const heatRel =
+    pg.heatPath && existsSync(pg.heatPath)
+      ? `${dir}/${basename(pg.heatPath)}`
+      : null;
   return `<div class="page-tile">
     <h4>page ${pg.page}</h4>
     <div class="page-tile-metrics">

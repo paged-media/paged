@@ -7,33 +7,33 @@
 # `test`, `build`) is in all.yml and runs both halves.
 #
 # Nothing here declares `target/` as an output: Moon never caches it.
-$schema: '../cache/schemas/tasks.json'
+$schema: "../cache/schemas/tasks.json"
 
 inheritedBy:
-  tags: ['rust']
+  tags: ["rust"]
 
 fileGroups:
   # What a compile reads. A project whose directory contains another
   # project overrides this group to exclude it.
   rust-sources:
-    - '**/*.rs'
-    - '**/Cargo.toml'
-    - 'Cargo.lock'
-    - 'rust-toolchain*'
-    - '/.cargo/*.toml'
+    - "**/*.rs"
+    - "**/Cargo.toml"
+    - "Cargo.lock"
+    - "rust-toolchain*"
+    - "/.cargo/*.toml"
   rust-fmt-config:
-    - '*rustfmt.toml'
+    - "*rustfmt.toml"
   # What tests may read: sources plus fixtures, corpora and registries.
   rust-tests:
-    - '**/*'
-    - '!docs/**'
-    - '!**/*.md'
-    - '/.cargo/*.toml'
+    - "**/*"
+    - "!docs/**"
+    - "!**/*.md"
+    - "/.cargo/*.toml"
 
 taskOptions:
   # A project that redefines one of these tasks replaces its command line
   # instead of appending to it.
-  mergeArgs: 'replace'
+  mergeArgs: "replace"
 
 # `moon ci` runs none of the Rust tasks (runInCI: false, step A10): every
 # Rust workspace's own workflow already runs its fmt, clippy and tests, with
@@ -44,31 +44,31 @@ taskOptions:
 
 tasks:
   rust-fmt:
-    description: 'rustfmt check over the whole workspace.'
-    toolchains: ['rust']
-    command: 'cargo fmt --all --check'
+    description: "rustfmt check over the whole workspace."
+    toolchains: ["rust"]
+    command: "cargo fmt --all --check"
     inputs:
-      - '@group(rust-sources)'
-      - '@group(rust-fmt-config)'
+      - "@group(rust-sources)"
+      - "@group(rust-fmt-config)"
     options:
       runInCI: false
 
   rust-check:
-    description: 'cargo check of every target. Local only: rust-lint type-checks the same targets in CI.'
-    toolchains: ['rust']
-    command: 'cargo check --workspace --all-targets'
+    description: "cargo check of every target. Local only: rust-lint type-checks the same targets in CI."
+    toolchains: ["rust"]
+    command: "cargo check --workspace --all-targets"
     inputs:
-      - '@group(rust-sources)'
+      - "@group(rust-sources)"
     options:
       runInCI: false
 
   rust-lint:
-    description: 'clippy with the flags the component CI uses.'
-    toolchains: ['rust']
-    command: 'cargo clippy --workspace --all-targets -- -D warnings'
+    description: "clippy with the flags the component CI uses."
+    toolchains: ["rust"]
+    command: "cargo clippy --workspace --all-targets -- -D warnings"
     inputs:
-      - '@group(rust-sources)'
-      - '*clippy.toml'
+      - "@group(rust-sources)"
+      - "*clippy.toml"
     options:
       runInCI: false
 
@@ -77,23 +77,23 @@ tasks:
       cargo-nextest over the workspace, then the doctests (nextest does not run
       them). Under CI it uses the workspace's `ci` nextest profile when
       .config/nextest.toml defines one.
-    toolchains: ['rust']
+    toolchains: ["rust"]
     script: >-
       profile=default;
       if [ -n "${CI:-}" ] && grep -qs '^\[profile\.ci\]' .config/nextest.toml; then profile=ci; fi;
       cargo nextest run --workspace --profile "$profile"
       && cargo test --doc --workspace
     inputs:
-      - '@group(rust-tests)'
+      - "@group(rust-tests)"
     options:
       cache: false
       runInCI: false
 
   rust-build:
-    description: 'Native debug build of the workspace. Local only.'
-    toolchains: ['rust']
-    command: 'cargo build --workspace'
+    description: "Native debug build of the workspace. Local only."
+    toolchains: ["rust"]
+    command: "cargo build --workspace"
     inputs:
-      - '@group(rust-sources)'
+      - "@group(rust-sources)"
     options:
       runInCI: false

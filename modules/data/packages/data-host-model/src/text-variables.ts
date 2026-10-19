@@ -59,21 +59,33 @@ export function keyOfTextVariable(idNameOrAddress: string): string | null {
 
 /** The text a text variable shows for a resolved value: a value that did not
  *  resolve (null) shows `<key>`, as the placeholder field does. */
-export function textVariableContents(key: string, value: string | null): string {
+export function textVariableContents(
+  key: string,
+  value: string | null,
+): string {
   return value ?? `<${key}>`;
 }
 
 /** The value a text variable's contents stands for (inverse of
  *  {@link textVariableContents}). */
-export function valueOfContents(key: string, contents: string | null): string | null {
+export function valueOfContents(
+  key: string,
+  contents: string | null,
+): string | null {
   return contents === null || contents === `<${key}>` ? null : contents;
 }
 
 /** Define binding `key`'s custom text variable with its first value. */
-export function createTextVariableMutation(key: string, value: string | null): Mutation {
+export function createTextVariableMutation(
+  key: string,
+  value: string | null,
+): Mutation {
   return {
     op: "createTextVariable",
-    args: { name: textVariableName(key), contents: textVariableContents(key, value) },
+    args: {
+      name: textVariableName(key),
+      contents: textVariableContents(key, value),
+    },
   } as Mutation;
 }
 
@@ -98,7 +110,11 @@ export function insertTextVariableMutation(
 
 /** Switch the value of a text variable (`id`, its `Self`): one wire `Set` on
  *  `textVariableContents`, which re-bakes every instance. */
-export function setTextVariableMutation(id: string, key: string, value: string | null): Mutation {
+export function setTextVariableMutation(
+  id: string,
+  key: string,
+  value: string | null,
+): Mutation {
   return {
     op: "set",
     args: {
@@ -112,7 +128,11 @@ export function setTextVariableMutation(id: string, key: string, value: string |
 /** One of our text variables as the field loops see it: a pseudo field whose
  *  `storyId` is its address (unique per variable, so `backToFront` leaves it
  *  alone) and whose `variable` names the text variable. */
-export function textVariableField(id: string, key: string, contents: string | null): PlaceholderField {
+export function textVariableField(
+  id: string,
+  key: string,
+  contents: string | null,
+): PlaceholderField {
   return {
     storyId: textVariableAddress(id),
     offset: 0,
@@ -131,7 +151,10 @@ export function fieldWriteMutation(
 ): Mutation {
   return w.variable
     ? setTextVariableMutation(w.variable, w.key, value)
-    : ({ op: "setFieldValue", args: { storyId: w.storyId, offset: w.offset, value } } as Mutation);
+    : ({
+        op: "setFieldValue",
+        args: { storyId: w.storyId, offset: w.offset, value },
+      } as Mutation);
 }
 
 // ── addresses (core 71, ADR 131) ────────────────────────────────────────────
@@ -141,7 +164,8 @@ export function encodeAddressPart(id: string, delimiters: string): string {
   let out = "";
   for (const ch of id) {
     if (ch === "%" || delimiters.includes(ch)) {
-      for (const b of new TextEncoder().encode(ch)) out += `%${b.toString(16).toUpperCase().padStart(2, "0")}`;
+      for (const b of new TextEncoder().encode(ch))
+        out += `%${b.toString(16).toUpperCase().padStart(2, "0")}`;
     } else {
       out += ch;
     }
@@ -176,9 +200,19 @@ export function ruleCellOps(
   if (fires.length === 0) return [];
   const ops: ObjectOp[] = [];
   const self = existing ?? cellStyleSelf(styleName);
-  if (!existing) ops.push({ op: "create", kind: "style", props: { family: "cell", name: styleName.replace(/^CellStyle\//, "") } });
+  if (!existing)
+    ops.push({
+      op: "create",
+      kind: "style",
+      props: { family: "cell", name: styleName.replace(/^CellStyle\//, "") },
+    });
   for (const r of fires) {
-    ops.push({ op: "set", address: cellAddress(tableId, r + headerRows, col), path: "appliedCellStyle", value: self });
+    ops.push({
+      op: "set",
+      address: cellAddress(tableId, r + headerRows, col),
+      path: "appliedCellStyle",
+      value: self,
+    });
   }
   return ops;
 }

@@ -110,7 +110,11 @@ describe("clampScroll", () => {
     const cam = clampScroll(big, layout, VIEWPORT);
     expect(cam.x).toBe(0); // can't open a gap on the left
     expect(cam.y).toBe(0); // …or at the top
-    const low = clampScroll({ zoom: 2, x: -99999, y: -99999 }, layout, VIEWPORT);
+    const low = clampScroll(
+      { zoom: 2, x: -99999, y: -99999 },
+      layout,
+      VIEWPORT,
+    );
     expect(low.x).toBe(VIEWPORT.width - 612 * 2);
     expect(low.y).toBe(VIEWPORT.height - height * 2);
   });
@@ -124,9 +128,7 @@ describe("currentPageAt", () => {
     // Page 1 spans yPt 816..1608; put its middle on the centre line.
     const target = 816 + 396;
     const camY = VIEWPORT.height / 2 - target * zoom;
-    expect(
-      currentPageAt({ zoom, x: 0, y: camY }, layout, VIEWPORT),
-    ).toBe(1);
+    expect(currentPageAt({ zoom, x: 0, y: camY }, layout, VIEWPORT)).toBe(1);
   });
 
   it("falls back to the nearest band inside a gap", () => {

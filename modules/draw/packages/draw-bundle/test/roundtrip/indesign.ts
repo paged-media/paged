@@ -111,7 +111,10 @@ export interface InDesignItem {
   gapTint?: number;
   leftLineEnd?: string;
   rightLineEnd?: string;
-  corners?: Record<"topLeft" | "topRight" | "bottomRight" | "bottomLeft", InDesignCorner>;
+  corners?: Record<
+    "topLeft" | "topRight" | "bottomRight" | "bottomLeft",
+    InDesignCorner
+  >;
   transparency?: InDesignTransparency;
   fillTransparency?: InDesignTransparency;
   strokeTransparency?: InDesignTransparency;
@@ -147,7 +150,11 @@ export interface InDesignRecording {
   layers: string[];
   warnings: InDesignWarning[];
   /** Every story InDesign holds, with the kinds of what holds it. */
-  stories: { contents: string; textContainers: number; containerKinds: string[] }[];
+  stories: {
+    contents: string;
+    textContainers: number;
+    containerKinds: string[];
+  }[];
   items: InDesignItem[];
 }
 
@@ -156,7 +163,8 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 /** Where the lane's committed files live. */
 export const ROUNDTRIP_FIXTURES = resolve(HERE, "../fixtures/roundtrip");
 
-export const idmlPath = (id: string): string => resolve(ROUNDTRIP_FIXTURES, `${id}.idml`);
+export const idmlPath = (id: string): string =>
+  resolve(ROUNDTRIP_FIXTURES, `${id}.idml`);
 export const recordingPath = (id: string): string =>
   resolve(ROUNDTRIP_FIXTURES, `${id}.indesign.json`);
 /** InDesign's OWN IDML export of the case (recorded for the re-import
@@ -176,9 +184,17 @@ export function loadRecording(id: string): InDesignRecording {
     );
   }
   const parsed = JSON.parse(readFileSync(path, "utf8")) as InDesignRecording;
-  if (parsed.fixture !== id) throw new Error(`${path}: fixture is "${parsed.fixture}"`);
-  if (parsed.units !== "pt") throw new Error(`${path}: units are "${parsed.units}"`);
-  for (const key of ["app", "version", "script", "script_sha256", "recorded_at"] as const) {
+  if (parsed.fixture !== id)
+    throw new Error(`${path}: fixture is "${parsed.fixture}"`);
+  if (parsed.units !== "pt")
+    throw new Error(`${path}: units are "${parsed.units}"`);
+  for (const key of [
+    "app",
+    "version",
+    "script",
+    "script_sha256",
+    "recorded_at",
+  ] as const) {
     if (typeof parsed.produced_by?.[key] !== "string") {
       throw new Error(`${path}: produced_by.${key} is missing`);
     }

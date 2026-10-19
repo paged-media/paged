@@ -49,7 +49,10 @@ const SCHEMA_IN_CORE = "crates/paged-wire/schema/mutation.schema.json";
 export const SCHEMA = process.env.CORE_REPO
   ? resolve(process.env.CORE_REPO, SCHEMA_IN_CORE)
   : resolve(ROOT, "../../engine/core", SCHEMA_IN_CORE);
-export const TARGET = resolve(ROOT, "packages/plugin-sdk/src/core-commands.generated.ts");
+export const TARGET = resolve(
+  ROOT,
+  "packages/plugin-sdk/src/core-commands.generated.ts",
+);
 
 /** Id positions: field name → ADR 131 address kind (`item` = any page item). */
 const ID_FIELDS = {
@@ -99,17 +102,26 @@ export function generate(schemaText) {
 
   /** The `$defs` name a `$ref` points at (the schema is self-contained). */
   function refName(s, at) {
-    if (!s.$ref.startsWith(DEFS)) throw new Error(`${at}: $ref ${s.$ref} does not point into $defs`);
+    if (!s.$ref.startsWith(DEFS))
+      throw new Error(`${at}: $ref ${s.$ref} does not point into $defs`);
     const name = s.$ref.slice(DEFS.length);
-    if (!(name in defs)) throw new Error(`${at}: $ref ${s.$ref} names no definition`);
+    if (!(name in defs))
+      throw new Error(`${at}: $ref ${s.$ref} names no definition`);
     return name;
   }
-  const isNullSchema = (s) => s.type === "null" || (s.const === null && Object.keys(s).length === 1);
+  const isNullSchema = (s) =>
+    s.type === "null" || (s.const === null && Object.keys(s).length === 1);
   /** A named struct: what tsify writes as an `interface`. */
-  const isStruct = (s) => s.type === "object" && s.properties !== undefined && !s.oneOf && !s.anyOf && !s.allOf;
+  const isStruct = (s) =>
+    s.type === "object" &&
+    s.properties !== undefined &&
+    !s.oneOf &&
+    !s.anyOf &&
+    !s.allOf;
   /** The members of a string enum schema (`enum` / `const`), else null. */
   function stringMembers(s) {
-    if (Array.isArray(s.enum) && s.enum.every((m) => typeof m === "string")) return s.enum;
+    if (Array.isArray(s.enum) && s.enum.every((m) => typeof m === "string"))
+      return s.enum;
     if (typeof s.const === "string") return [s.const];
     return null;
   }
@@ -119,14 +131,18 @@ export function generate(schemaText) {
     if (Array.isArray(s.type) && s.type.includes("null")) {
       const types = s.type.filter((t) => t !== "null");
       const rest = { ...s, type: types.length === 1 ? types[0] : types };
-      if (Array.isArray(rest.enum)) rest.enum = rest.enum.filter((m) => m !== null);
+      if (Array.isArray(rest.enum))
+        rest.enum = rest.enum.filter((m) => m !== null);
       return { rest, nullable: true };
     }
     for (const key of ["anyOf", "oneOf"]) {
       if (!Array.isArray(s[key]) || !s[key].some(isNullSchema)) continue;
       const arms = s[key].filter((x) => !isNullSchema(x));
       const { [key]: _drop, ...annotations } = s;
-      const rest = arms.length === 1 ? { ...annotations, ...arms[0] } : { ...annotations, [key]: arms };
+      const rest =
+        arms.length === 1
+          ? { ...annotations, ...arms[0] }
+          : { ...annotations, [key]: arms };
       return { rest, nullable: true };
     }
     return { rest: s, nullable: false };
@@ -156,27 +172,42 @@ export function generate(schemaText) {
     const { rest: s, nullable } = stripNull(input);
     if (typeof s.$ref === "string") {
       const name = refName(s, at);
-      if (name === "ElementId") return { type: { kind: "ref", to: "item" }, nullable };
+      if (name === "ElementId")
+        return { type: { kind: "ref", to: "item" }, nullable };
       const d = defs[name];
       if (isStruct(d)) {
-        if (depth > 4) return { type: { kind: "struct", fields: {}, shape: name, open: true }, nullable };
+        if (depth > 4)
+          return {
+            type: { kind: "struct", fields: {}, shape: name, open: true },
+            nullable,
+          };
         const { fields } = members(d, depth, name);
-        return { type: { kind: "struct", fields, shape: name, open: true }, nullable };
+        return {
+          type: { kind: "struct", fields, shape: name, open: true },
+          nullable,
+        };
       }
       const inner = typeOf(d, depth, name);
-      if (inner.type.kind === "struct" && inner.type.shape === undefined) inner.type = { ...inner.type, shape: name };
+      if (inner.type.kind === "struct" && inner.type.shape === undefined)
+        inner.type = { ...inner.type, shape: name };
       return { type: inner.type, nullable: nullable || inner.nullable };
     }
     const union = s.oneOf ?? s.anyOf;
     if (union) {
-      if (!Array.isArray(union) || s.allOf) throw new Error(`${at}: unsupported union schema`);
+      if (!Array.isArray(union) || s.allOf)
+        throw new Error(`${at}: unsupported union schema`);
       const lits = union.map(stringMembers);
       const all = lits.every((l) => l !== null) ? lits.flat() : null;
-      if (all && all.length > 1) return { type: { kind: "enum", members: all }, nullable };
+      if (all && all.length > 1)
+        return { type: { kind: "enum", members: all }, nullable };
       return { type: OPAQUE(), nullable };
     }
     const lits = stringMembers(s);
-    if (lits) return { type: lits.length > 1 ? { kind: "enum", members: lits } : OPAQUE(), nullable };
+    if (lits)
+      return {
+        type: lits.length > 1 ? { kind: "enum", members: lits } : OPAQUE(),
+        nullable,
+      };
     switch (s.type) {
       case "string":
         return { type: { kind: "text" }, nullable };
@@ -189,28 +220,46 @@ export function generate(schemaText) {
         const fixed = s.minItems !== undefined && s.minItems === s.maxItems;
         if (fixed || s.prefixItems) {
           // A tuple: `prefixItems` (a Rust tuple) or `items` of a fixed length (`[T; N]`).
-          const elems = s.prefixItems ?? Array.from({ length: s.minItems }, () => s.items);
-          const numeric = elems.every((e) => e && (e.type === "number" || e.type === "integer"));
+          const elems =
+            s.prefixItems ?? Array.from({ length: s.minItems }, () => s.items);
+          const numeric = elems.every(
+            (e) => e && (e.type === "number" || e.type === "integer"),
+          );
           const n = elems.length;
           if (numeric && n === 2) return { type: { kind: "point" }, nullable };
           if (numeric && n === 4) return { type: { kind: "bounds" }, nullable };
-          if (numeric && n === 6) return { type: { kind: "transform" }, nullable };
+          if (numeric && n === 6)
+            return { type: { kind: "transform" }, nullable };
           return { type: OPAQUE(), nullable };
         }
         if (!s.items) throw new Error(`${at}: an array schema without items`);
-        return { type: { kind: "list", of: typeOf(s.items, depth, `${at}[]`).type }, nullable };
+        return {
+          type: { kind: "list", of: typeOf(s.items, depth, `${at}[]`).type },
+          nullable,
+        };
       }
       case "object":
-        if (s.properties === undefined) throw new Error(`${at}: an object schema without properties`);
+        if (s.properties === undefined)
+          throw new Error(`${at}: an object schema without properties`);
         if (depth > 4) return { type: OPAQUE(), nullable };
-        return { type: { kind: "struct", fields: members(s, depth, at).fields, open: true }, nullable };
+        return {
+          type: {
+            kind: "struct",
+            fields: members(s, depth, at).fields,
+            open: true,
+          },
+          nullable,
+        };
       default:
-        throw new Error(`${at}: unsupported schema ${JSON.stringify(s).slice(0, 200)}`);
+        throw new Error(
+          `${at}: unsupported schema ${JSON.stringify(s).slice(0, 200)}`,
+        );
     }
   }
 
   const mutation = schema.$ref ? defs[refName(schema, "Mutation")] : null;
-  if (!mutation || !Array.isArray(mutation.oneOf)) throw new Error("the schema's root is not the `Mutation` union");
+  if (!mutation || !Array.isArray(mutation.oneOf))
+    throw new Error("the schema's root is not the `Mutation` union");
 
   const rows = [];
   for (const arm of mutation.oneOf) {
@@ -223,13 +272,22 @@ export function generate(schemaText) {
     // Id positions become refs (the command also takes an address there).
     for (const [name, f] of Object.entries(fields)) {
       const k = idKind(op, name);
-      if (k && f.kind === "text") fields[name] = { kind: "ref", to: k, ...(f.optional ? { optional: true } : {}) };
-      else if (k && f.kind === "list" && f.of.kind === "text") fields[name] = { ...f, of: { kind: "ref", to: k } };
+      if (k && f.kind === "text")
+        fields[name] = {
+          kind: "ref",
+          to: k,
+          ...(f.optional ? { optional: true } : {}),
+        };
+      else if (k && f.kind === "list" && f.of.kind === "text")
+        fields[name] = { ...f, of: { kind: "ref", to: k } };
     }
     rows.push({ op, args: { kind: "struct", fields }, nullFill });
   }
   const body = rows
-    .map((r) => `  ${JSON.stringify(r.op)}: { args: ${JSON.stringify(r.args)}, nullFill: ${JSON.stringify(r.nullFill)} },`)
+    .map(
+      (r) =>
+        `  ${JSON.stringify(r.op)}: { args: ${JSON.stringify(r.args)}, nullFill: ${JSON.stringify(r.nullFill)} },`,
+    )
     .join("\n");
   // The header still names wire.d.ts: the output is plugin-contract source
   // (a changed byte needs a contract version bump), and it declares what
@@ -252,13 +310,17 @@ ${body}
 `;
 }
 
-const isMain = process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.meta.url;
+const isMain =
+  process.argv[1] &&
+  pathToFileURL(resolve(process.argv[1])).href === import.meta.url;
 if (isMain) {
   const out = generate(readFileSync(SCHEMA, "utf8"));
   if (process.argv.includes("--check")) {
     const cur = readFileSync(TARGET, "utf8");
     if (cur !== out) {
-      console.error(`${TARGET} is stale: run node scripts/gen-core-commands.mjs`);
+      console.error(
+        `${TARGET} is stale: run node scripts/gen-core-commands.mjs`,
+      );
       process.exit(1);
     }
     console.log("core commands up to date");

@@ -73,7 +73,10 @@ test.describe("journey · paged.sheet render output", () => {
     await expect(breadcrumb).toBeVisible({ timeout: 10_000 });
     await page.waitForTimeout(800);
     const gridPx = await designer.expectRenderChangesFrom(afterLower);
-    expect(gridPx, "the in-frame grid sceneLayer rendered onto the page").toBeGreaterThan(64);
+    expect(
+      gridPx,
+      "the in-frame grid sceneLayer rendered onto the page",
+    ).toBeGreaterThan(64);
     await exitSheet(page);
 
     // ── 3. EDIT — A1 → 4321; leaving refreshes the placed table. ──

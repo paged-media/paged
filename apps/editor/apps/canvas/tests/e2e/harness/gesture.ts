@@ -27,8 +27,15 @@
 
 import type { Page } from "@playwright/test";
 
+import {
+  checkCancel,
+  checkUndoRedo,
+  type UndoRedoReport,
+} from "@paged-media/test-kit";
+
 import { snapshotPagePng } from "../../fidelity/canvas-driver";
 import type { ElementRef } from "./fixtures";
+import { browserModel } from "./gesture-kit";
 
 export interface GestureMods {
   shift: boolean;
@@ -66,8 +73,11 @@ interface ClientSurface {
     h: number,
     d: [number, number],
     m: unknown,
+    mode?: "json" | "sab",
   ) => Promise<{ pageIds: string[]; snapLines: unknown[] }>;
-  commitGesture: (h: number) => Promise<{ appliedSeq: number; pageIds: string[] }>;
+  commitGesture: (
+    h: number,
+  ) => Promise<{ appliedSeq: number; pageIds: string[] }>;
   cancelGesture: (h: number) => Promise<string[]>;
   undo: () => Promise<unknown>;
   redo: () => Promise<unknown>;
@@ -110,7 +120,11 @@ export async function updateGesture(
   return page.evaluate(
     async ({ handle, delta, mods }) => {
       const c = (globalThis as unknown as CanvasGlobal).__canvas;
-      return (await c.client.updateGesture(handle, delta, mods)) as UpdateResult;
+      return (await c.client.updateGesture(
+        handle,
+        delta,
+        mods,
+      )) as UpdateResult;
     },
     { handle, delta, mods },
   );
@@ -130,19 +144,29 @@ export async function cancelGesture(page: Page, handle: number): Promise<void> {
   }, handle);
 }
 
-/** begin → update×N → commit (or cancel) in one evaluate round-trip. */
+/** begin → update×N → commit (or cancel) in one evaluate round-trip.
+ *  `lane: "sab"` streams the deltas through the gesture SAB, as the
+ *  canvas does during a drag (no reply per delta; a JSON round trip after
+ *  the last one is the barrier before the commit). */
 export async function runGesture(
   page: Page,
   refs: ElementRef[],
   spec: GestureSpec,
   steps: GestureStep[],
-  opts: { anchor?: GestureAnchor | null; commit?: boolean } = {},
+  opts: {
+    anchor?: GestureAnchor | null;
+    commit?: boolean;
+    lane?: "json" | "sab";
+  } = {},
 ): Promise<void> {
   await page.evaluate(
-    async ({ refs, spec, steps, anchor, commit }) => {
+    async ({ refs, spec, steps, anchor, commit, lane }) => {
       const c = (globalThis as unknown as CanvasGlobal).__canvas;
       const h = await c.client.beginGesture(refs, spec, anchor ?? null);
-      for (const s of steps) await c.client.updateGesture(h, s.delta, s.mods);
+      for (const s of steps) {
+        await c.client.updateGesture(h, s.delta, s.mods, lane);
+      }
+      if (lane === "sab") await c.client.send({ kind: "requestDocumentMeta" });
       if (commit) await c.client.commitGesture(h);
       else await c.client.cancelGesture(h);
     },
@@ -152,8 +176,34 @@ export async function runGesture(
       steps,
       anchor: opts.anchor ?? null,
       commit: opts.commit ?? true,
+      lane: opts.lane ?? "json",
     },
   );
+}
+
+// ── model assertions ──────────────────────────────────────────────
+// The gesture invariants through the MODEL DUMP of the running document
+// (the test kit's engine dump: scene tree, every element's properties,
+// the document meta and collections), not through notification counts.
+
+/** INV-1 + INV-4: `run` the gesture; ONE undo restores the dump exactly,
+ *  ONE redo re-applies it exactly. Leaves the gesture applied. */
+export function modelSandwich(
+  page: Page,
+  run: () => Promise<unknown>,
+  label?: string,
+): Promise<UndoRedoReport> {
+  return checkUndoRedo(browserModel(page), run, label);
+}
+
+/** INV-2: `run` (a gesture cancelled mid-way) leaves the dump
+ *  byte-identical. */
+export function cancelSandwich(
+  page: Page,
+  run: () => Promise<unknown>,
+  label?: string,
+): Promise<void> {
+  return checkCancel(browserModel(page), run, label);
 }
 
 export async function undo(page: Page, steps = 1): Promise<void> {
@@ -250,7 +300,10 @@ export async function installGestureRecorder(page: Page): Promise<void> {
     if (g.__gestureUnsub) return;
     g.__gestureLog = [];
     g.__gestureUnsub = g.__canvas.client.subscribe((msg) => {
-      const m = msg as { kind: string; payload?: { error?: { kind?: string } } };
+      const m = msg as {
+        kind: string;
+        payload?: { error?: { kind?: string } };
+      };
       if ((kinds as readonly string[]).includes(m.kind)) {
         g.__gestureLog!.push({
           kind: m.kind,
@@ -272,9 +325,6 @@ export async function drainGestureLog(
   });
 }
 
-export function countKind(
-  log: Array<{ kind: string }>,
-  kind: string,
-): number {
+export function countKind(log: Array<{ kind: string }>, kind: string): number {
   return log.filter((e) => e.kind === kind).length;
 }

@@ -255,7 +255,11 @@ export function withLiveCornerMarker(
   if (preset.style === "None" && Object.keys(data).length === 0) {
     return null;
   }
-  return { v: prev?.v ?? 1, data, ...(prev?.engine ? { engine: prev.engine } : {}) };
+  return {
+    v: prev?.v ?? 1,
+    data,
+    ...(prev?.engine ? { engine: prev.engine } : {}),
+  };
 }
 
 // ------------------------------------------------------------ appliers
@@ -277,7 +281,9 @@ export async function applyLiveCornerPreset(
     return;
   }
   for (const id of targets) {
-    const outcome = await host.document.mutate(cornerStyleMutationFor(id, preset));
+    const outcome = await host.document.mutate(
+      cornerStyleMutationFor(id, preset),
+    );
     if (!outcome.applied) {
       host.log.warn(
         `${preset.id} rejected by engine: ${JSON.stringify(outcome.error)}`,

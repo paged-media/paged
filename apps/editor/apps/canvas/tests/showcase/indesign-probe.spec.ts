@@ -61,19 +61,34 @@ test.describe("InDesign", () => {
   test("keeps what the annual's IDML declares @feat:round-tripping.idml-reserialization @level:happy", async () => {
     const available = inDesignAvailable();
     if (!available && process.env.REQUIRE_REAL_INDESIGN) {
-      throw new Error("REQUIRE_REAL_INDESIGN is set and Adobe InDesign 2025 is not installed");
+      throw new Error(
+        "REQUIRE_REAL_INDESIGN is set and Adobe InDesign 2025 is not installed",
+      );
     }
-    test.skip(!available, "Adobe InDesign 2025 is not installed here — the probe is skipped, not passed");
+    test.skip(
+      !available,
+      "Adobe InDesign 2025 is not installed here — the probe is skipped, not passed",
+    );
 
-    const idmlPath = process.env.INDESIGN_PROBE_IDML ?? join(OUT, "showcase.idml");
-    expect(existsSync(idmlPath), `${idmlPath} missing — the assembly spec runs first`).toBe(true);
+    const idmlPath =
+      process.env.INDESIGN_PROBE_IDML ?? join(OUT, "showcase.idml");
+    expect(
+      existsSync(idmlPath),
+      `${idmlPath} missing — the assembly spec runs first`,
+    ).toBe(true);
     const workDir = join(OUT, "indesign");
     mkdirSync(workDir, { recursive: true });
 
     const expected = idmlExpectation(readFileSync(idmlPath));
     const seen = probeInDesign(idmlPath, workDir);
-    writeFileSync(join(workDir, "expected.json"), JSON.stringify(expected, null, 2));
-    writeFileSync(join(workDir, "indesign.json"), JSON.stringify(seen, null, 2));
+    writeFileSync(
+      join(workDir, "expected.json"),
+      JSON.stringify(expected, null, 2),
+    );
+    writeFileSync(
+      join(workDir, "indesign.json"),
+      JSON.stringify(seen, null, 2),
+    );
 
     expect(seen.open_error, "InDesign opened the file").toBeNull();
     expect(seen.errors, "every section of the walk answered").toEqual([]);
@@ -83,8 +98,13 @@ test.describe("InDesign", () => {
     expect(seen.spreads).toBe(expected.spreads);
     expect(seen.master_spreads).toBe(expected.master_spreads);
     expect(seen.items, "page items per class, spreads").toEqual(expected.items);
-    expect(seen.master_items, "page items per class, masters").toEqual(expected.master_items);
-    expect(seen.other_classes, "no page item of a class the probe cannot name").toEqual([]);
+    expect(seen.master_items, "page items per class, masters").toEqual(
+      expected.master_items,
+    );
+    expect(
+      seen.other_classes,
+      "no page item of a class the probe cannot name",
+    ).toEqual([]);
 
     // ── navigation and conditions: exact ─────────────────────────────
     // A document always has one section; a book that declares none
@@ -98,9 +118,10 @@ test.describe("InDesign", () => {
     // An orphaned story (no frame references it) must not be exported
     // at all, so InDesign's count IS the placed count.
     expect(seen.tables, "tables").toBe(expected.tables_in_placed_stories);
-    expect(expected.tables, "no table in an orphaned story reaches the export").toBe(
-      expected.tables_in_placed_stories,
-    );
+    expect(
+      expected.tables,
+      "no table in an orphaned story reaches the export",
+    ).toBe(expected.tables_in_placed_stories);
 
     // ── images: placed, linked, and RESOLVED ─────────────────────────
     // IDML cannot embed pixels; the export writes `<Link>`s with absolute
@@ -134,9 +155,10 @@ test.describe("InDesign", () => {
     // the book carries deliberate overset exhibits, so InDesign may
     // report those — and nothing beyond them.
     if (model) {
-      expect(seen.overset_stories, "overset stories, against the model's own count").toBeLessThanOrEqual(
-        model.oversetStories,
-      );
+      expect(
+        seen.overset_stories,
+        "overset stories, against the model's own count",
+      ).toBeLessThanOrEqual(model.oversetStories);
     }
 
     // ── the tint ─────────────────────────────────────────────────────
@@ -148,8 +170,14 @@ test.describe("InDesign", () => {
     }
 
     // ── spellings InDesign ignores: none may be present ──────────────
-    expect(expected.applied_font_attribute_form, "AppliedFont as an attribute").toBe(0);
-    expect(expected.root_paragraph_style_groups, "one root paragraph style group").toBe(1);
+    expect(
+      expected.applied_font_attribute_form,
+      "AppliedFont as an attribute",
+    ).toBe(0);
+    expect(
+      expected.root_paragraph_style_groups,
+      "one root paragraph style group",
+    ).toBe(1);
 
     // ── recorded ─────────────────────────────────────────────────────
     const missing = unresolvedFonts.length;

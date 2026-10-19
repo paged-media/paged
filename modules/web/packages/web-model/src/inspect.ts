@@ -60,14 +60,22 @@ export interface InspectedRender {
 /** Parse the engine's inspect JSON defensively: anything malformed reads
  *  as an empty render, never a throw. */
 export function parseInspected(json: string): InspectedRender {
-  const empty: InspectedRender = { layer: { items: [] }, text: { nodes: [], lines: [] }, boxes: [] };
+  const empty: InspectedRender = {
+    layer: { items: [] },
+    text: { nodes: [], lines: [] },
+    boxes: [],
+  };
   try {
     const p = JSON.parse(json) as Partial<InspectedRender> | null;
     if (!p || typeof p !== "object") return empty;
     const layer =
-      p.layer && Array.isArray((p.layer as { items?: unknown }).items) ? (p.layer as SceneLayer) : { items: [] };
+      p.layer && Array.isArray((p.layer as { items?: unknown }).items)
+        ? (p.layer as SceneLayer)
+        : { items: [] };
     const nodes = Array.isArray(p.text?.nodes) ? p.text.nodes : [];
-    const lines = Array.isArray(p.text?.lines) ? p.text.lines.filter((l) => Array.isArray(l?.c)) : [];
+    const lines = Array.isArray(p.text?.lines)
+      ? p.text.lines.filter((l) => Array.isArray(l?.c))
+      : [];
     const boxes = Array.isArray(p.boxes) ? p.boxes : [];
     return { layer, text: { nodes, lines }, boxes };
   } catch {
@@ -87,12 +95,17 @@ export interface TextPosition {
  * the character, right half after it. Clusters of no node (generated
  * content, list markers) are skipped. `null` when the frame has no text.
  */
-export function hitText(map: InspectTextMap, x: number, y: number): TextPosition | null {
+export function hitText(
+  map: InspectTextMap,
+  x: number,
+  y: number,
+): TextPosition | null {
   let best: InspectLine | null = null;
   let bestD = Infinity;
   for (const line of map.lines) {
     if (!line.c.some((c) => c[2] >= 0)) continue;
-    const d = y < line.top ? line.top - y : y > line.bottom ? y - line.bottom : 0;
+    const d =
+      y < line.top ? line.top - y : y > line.bottom ? y - line.bottom : 0;
     if (d < bestD) {
       bestD = d;
       best = line;
@@ -121,21 +134,34 @@ export function caretAt(
   pos: TextPosition,
 ): { x: number; top: number; bottom: number } | null {
   let ends: { x: number; top: number; bottom: number } | null = null;
-  let nearest: { x: number; top: number; bottom: number; d: number } | null = null;
+  let nearest: { x: number; top: number; bottom: number; d: number } | null =
+    null;
   for (const line of map.lines) {
     for (const c of line.c) {
       if (c[2] !== pos.node || c[4] === 0) continue;
-      if (c[3] === pos.offset) return { x: c[0], top: line.top, bottom: line.bottom };
-      if (c[3] + c[4] === pos.offset && !ends) ends = { x: c[0] + c[1], top: line.top, bottom: line.bottom };
-      const d = Math.min(Math.abs(c[3] - pos.offset), Math.abs(c[3] + c[4] - pos.offset));
+      if (c[3] === pos.offset)
+        return { x: c[0], top: line.top, bottom: line.bottom };
+      if (c[3] + c[4] === pos.offset && !ends)
+        ends = { x: c[0] + c[1], top: line.top, bottom: line.bottom };
+      const d = Math.min(
+        Math.abs(c[3] - pos.offset),
+        Math.abs(c[3] + c[4] - pos.offset),
+      );
       if (!nearest || d < nearest.d) {
         const right = pos.offset >= c[3] + c[4];
-        nearest = { x: right ? c[0] + c[1] : c[0], top: line.top, bottom: line.bottom, d };
+        nearest = {
+          x: right ? c[0] + c[1] : c[0],
+          top: line.top,
+          bottom: line.bottom,
+          d,
+        };
       }
     }
   }
   if (ends) return ends;
-  return nearest ? { x: nearest.x, top: nearest.top, bottom: nearest.bottom } : null;
+  return nearest
+    ? { x: nearest.x, top: nearest.top, bottom: nearest.bottom }
+    : null;
 }
 
 /** The painted boxes of an outline entry: the box of the same tag at the
@@ -149,7 +175,9 @@ export function boxesForOutline(
   if (!entry) return [];
   let n = 0;
   for (let i = 0; i < index; i += 1) if (outline[i].tag === entry.tag) n += 1;
-  return boxes.filter((b) => b.tag === entry.tag && b.n === n && b.w > 0 && b.h > 0);
+  return boxes.filter(
+    (b) => b.tag === entry.tag && b.n === n && b.w > 0 && b.h > 0,
+  );
 }
 
 /** The outline entry of the innermost painted box under a point (the box

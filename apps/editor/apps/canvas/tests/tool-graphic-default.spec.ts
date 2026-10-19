@@ -57,9 +57,12 @@ type CanvasGlobal = {
 
 async function paintOf(page: Page, ref: Ref): Promise<Paint | null> {
   return page.evaluate(async (r) => {
-    const props = await (globalThis as unknown as CanvasGlobal).__canvas.client.elementProperties(r);
+    const props = await (
+      globalThis as unknown as CanvasGlobal
+    ).__canvas.client.elementProperties(r);
     if (!props) return null;
-    const read = (path: string) => props.entries.find((e) => e.path === path)?.value?.value ?? null;
+    const read = (path: string) =>
+      props.entries.find((e) => e.path === path)?.value?.value ?? null;
     return {
       fill: read("frameFillColor"),
       stroke: read("frameStrokeColor"),
@@ -69,14 +72,24 @@ async function paintOf(page: Page, ref: Ref): Promise<Paint | null> {
 }
 
 async function undo(page: Page): Promise<void> {
-  await page.evaluate(() => (globalThis as unknown as CanvasGlobal).__canvas.client.undo());
+  await page.evaluate(() =>
+    (globalThis as unknown as CanvasGlobal).__canvas.client.undo(),
+  );
 }
 
 /** Pick a tool from its rail slot's flyout (a single-tool slot is just
  *  clicked). */
-async function pickTool(page: Page, slot: string, toolId: string): Promise<void> {
+async function pickTool(
+  page: Page,
+  slot: string,
+  toolId: string,
+): Promise<void> {
   const button = page.locator(`[data-tool-slot="${slot}"]`);
-  if ((await page.locator(`[data-tool-slot="${slot}"][data-tool="${toolId}"]`).count()) === 0) {
+  if (
+    (await page
+      .locator(`[data-tool-slot="${slot}"][data-tool="${toolId}"]`)
+      .count()) === 0
+  ) {
     await button.click({ button: "right" });
     const flyout = page.locator(`[data-tool-flyout="${slot}"]`);
     await expect(flyout).toBeVisible();
@@ -85,17 +98,30 @@ async function pickTool(page: Page, slot: string, toolId: string): Promise<void>
     await button.click();
   }
   await expect(
-    page.locator(`[data-tool-slot="${slot}"][data-tool="${toolId}"][data-active="true"]`),
+    page.locator(
+      `[data-tool-slot="${slot}"][data-tool="${toolId}"][data-active="true"]`,
+    ),
   ).toBeVisible();
 }
 
 /** A drag from one page point to another. */
-async function dragPt(page: Page, from: [number, number], to: [number, number]): Promise<void> {
-  await dragMouse(page, await screenPoint(page, ...from), await screenPoint(page, ...to));
+async function dragPt(
+  page: Page,
+  from: [number, number],
+  to: [number, number],
+): Promise<void> {
+  await dragMouse(
+    page,
+    await screenPoint(page, ...from),
+    await screenPoint(page, ...to),
+  );
 }
 
 /** A freehand stroke through page points, sampled densely. */
-async function scribble(page: Page, points: Array<[number, number]>): Promise<void> {
+async function scribble(
+  page: Page,
+  points: Array<[number, number]>,
+): Promise<void> {
   const first = await screenPoint(page, ...points[0]);
   await page.mouse.move(first.x, first.y);
   await page.mouse.down();
@@ -107,7 +133,10 @@ async function scribble(page: Page, points: Array<[number, number]>): Promise<vo
 }
 
 /** Click a run of page points, then commit the open path with Enter. */
-async function penClicks(page: Page, points: Array<[number, number]>): Promise<void> {
+async function penClicks(
+  page: Page,
+  points: Array<[number, number]>,
+): Promise<void> {
   for (const p of points) {
     const s = await screenPoint(page, ...p);
     await page.mouse.click(s.x, s.y);
@@ -202,8 +231,12 @@ test.describe("ED-22 — a tool-drawn shape wears InDesign's graphic default", (
       const blank = await designer.renderBytes();
 
       await t.draw(page);
-      await expect.poll(async () => (await treeIds(page, t.kind)).length).toBe(before.length + 1);
-      const created = (await treeIds(page, t.kind)).find((r) => !before.some((b) => b.id === r.id))!;
+      await expect
+        .poll(async () => (await treeIds(page, t.kind)).length)
+        .toBe(before.length + 1);
+      const created = (await treeIds(page, t.kind)).find(
+        (r) => !before.some((b) => b.id === r.id),
+      )!;
       const ref = { kind: t.kind, id: created.id };
 
       expect(await paintOf(page, ref)).toEqual(GRAPHIC);
@@ -235,9 +268,14 @@ test.describe("ED-22 — a tool-drawn shape wears InDesign's graphic default", (
     await page.keyboard.press("ArrowUp");
     await page.mouse.up();
 
-    await expect.poll(async () => (await treeIds(page, "rectangle")).length).toBe(4);
+    await expect
+      .poll(async () => (await treeIds(page, "rectangle")).length)
+      .toBe(4);
     for (const r of await treeIds(page, "rectangle")) {
-      expect(await paintOf(page, { kind: "rectangle", id: r.id }), `cell ${r.id}`).toEqual(GRAPHIC);
+      expect(
+        await paintOf(page, { kind: "rectangle", id: r.id }),
+        `cell ${r.id}`,
+      ).toEqual(GRAPHIC);
     }
     await undo(page);
     expect(await treeIds(page, "rectangle")).toHaveLength(0);
@@ -251,7 +289,9 @@ test.describe("ED-22 — a tool-drawn shape wears InDesign's graphic default", (
     await designer.newDocument();
     await pickTool(page, "frame", "paged.tool.rectangleFrame");
     await dragPt(page, [100, 100], [260, 220]);
-    await expect.poll(async () => (await treeIds(page, "rectangle")).length).toBe(1);
+    await expect
+      .poll(async () => (await treeIds(page, "rectangle")).length)
+      .toBe(1);
     const [frame] = await treeIds(page, "rectangle");
     expect(await paintOf(page, { kind: "rectangle", id: frame.id })).toEqual({
       fill: null,
@@ -269,7 +309,11 @@ test.describe("ED-22 — a tool-drawn shape wears InDesign's graphic default", (
     const set = await page.evaluate(() =>
       (globalThis as unknown as CanvasGlobal).__canvas.client.mutate({
         op: "setDocumentDefaults",
-        args: { fillColor: "Color/Black", strokeColor: null, strokeWeight: null },
+        args: {
+          fillColor: "Color/Black",
+          strokeColor: null,
+          strokeWeight: null,
+        },
       }),
     );
     expect(set.kind).toBe("mutationApplied");
@@ -293,10 +337,17 @@ test.describe("ED-22 — a tool-drawn shape wears InDesign's graphic default", (
     await designer.newDocument();
     const insert = (id: string) =>
       page.evaluate(
-        (cmd) => (globalThis as unknown as CanvasGlobal).__canvas.registries.commands.invoke(cmd),
+        (cmd) =>
+          (
+            globalThis as unknown as CanvasGlobal
+          ).__canvas.registries.commands.invoke(cmd),
         id,
       ) as Promise<{ applied: boolean; createdId: Ref | null }>;
-    for (const id of ["paged.insert.rectangle", "paged.insert.ellipse", "paged.insert.line"]) {
+    for (const id of [
+      "paged.insert.rectangle",
+      "paged.insert.ellipse",
+      "paged.insert.line",
+    ]) {
       const outcome = await insert(id);
       expect(outcome.applied, id).toBe(true);
       expect(await paintOf(page, outcome.createdId!), id).toEqual(GRAPHIC);
@@ -314,18 +365,22 @@ test.describe("ED-22 — a tool-drawn shape wears InDesign's graphic default", (
     await designer.newDocument();
     const chooser = page.waitForEvent("filechooser");
     const invoked = page.evaluate(() =>
-      (globalThis as unknown as CanvasGlobal).__canvas.registries.commands.invoke(
-        "paged.insert.placeImage",
-      ),
+      (
+        globalThis as unknown as CanvasGlobal
+      ).__canvas.registries.commands.invoke("paged.insert.placeImage"),
     ) as Promise<{ applied: boolean; createdId: Ref | null }>;
     const png = new PNG({ width: 40, height: 20 });
     png.data.fill(200);
-    await (await chooser).setFiles({
+    await (
+      await chooser
+    ).setFiles({
       name: "swatch.png",
       mimeType: "image/png",
       buffer: PNG.sync.write(png),
     });
-    await expect(page.locator("html[data-paged-placement='armed']")).toHaveCount(1, {
+    await expect(
+      page.locator("html[data-paged-placement='armed']"),
+    ).toHaveCount(1, {
       timeout: 10_000,
     });
     const at = await screenPoint(page, 200, 200);

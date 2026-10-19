@@ -23,7 +23,7 @@ import { composeSrcdoc, DEFAULT_SOURCE, sourceKeyFor } from "../src/source";
 
 describe("diagnoseHtml — policy", () => {
   it("flags <script> as a policy error with its line", () => {
-    const d = diagnoseHtml('<p>ok</p>\n<script>alert(1)</script>');
+    const d = diagnoseHtml("<p>ok</p>\n<script>alert(1)</script>");
     expect(d).toHaveLength(1);
     expect(d[0].severity).toBe("error");
     expect(d[0].line).toBe(2);

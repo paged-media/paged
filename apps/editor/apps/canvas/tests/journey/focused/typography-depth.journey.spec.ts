@@ -37,7 +37,12 @@ test.describe("journey · typography depth", () => {
     await designer.open();
     await designer.newDocument();
 
-    const { storyId } = await designer.addTextFrame({ x0: 70, y0: 90, x1: 480, y1: 200 });
+    const { storyId } = await designer.addTextFrame({
+      x0: 70,
+      y0: 90,
+      x1: 480,
+      y1: 200,
+    });
     expect(storyId).toBeTruthy();
     await designer.placeCaret(storyId!, 0);
     const heading = "Spring Collection";
@@ -71,6 +76,8 @@ test.describe("journey · typography depth", () => {
     await set("characterVerticalScale", { type: "length", value: 110 });
     await set("characterSkew", { type: "length", value: 10 });
 
-    expect(failed, `character props that failed: ${failed.join(", ")}`).toEqual([]);
+    expect(failed, `character props that failed: ${failed.join(", ")}`).toEqual(
+      [],
+    );
   });
 });

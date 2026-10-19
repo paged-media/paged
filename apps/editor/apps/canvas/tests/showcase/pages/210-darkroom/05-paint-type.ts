@@ -103,26 +103,38 @@ export async function build(ctx: PageContext): Promise<PageReport> {
 
   const gpu = await doc.gpuActive();
 
-  const head = await proseFrame(ctx, page, [60, 58, 492, 88], [
-    { text: "Paint and the raster word", style: STYLE.head2 },
-  ]);
-  const intro = await proseFrame(ctx, page, [60, 92, 492, 148], [
-    {
-      text:
-        "Painting needed no new kernel: a dab is a solid composited " +
-        "through the requested blend with stroke coverage as the mask, " +
-        "and erasing is one alpha write. Type is the fifth feature to " +
-        "fall out of the same mask ABI — a shaped glyph run IS a coverage " +
-        "field, so a word composites exactly like a brushstroke that " +
-        "happens to spell something.",
-      style: STYLE.bodySmall,
-    },
-  ]);
+  const head = await proseFrame(
+    ctx,
+    page,
+    [60, 58, 492, 88],
+    [{ text: "Paint and the raster word", style: STYLE.head2 }],
+  );
+  const intro = await proseFrame(
+    ctx,
+    page,
+    [60, 92, 492, 148],
+    [
+      {
+        text:
+          "Painting needed no new kernel: a dab is a solid composited " +
+          "through the requested blend with stroke coverage as the mask, " +
+          "and erasing is one alpha write. Type is the fifth feature to " +
+          "fall out of the same mask ABI — a shaped glyph run IS a coverage " +
+          "field, so a word composites exactly like a brushstroke that " +
+          "happens to spell something.",
+        style: STYLE.bodySmall,
+      },
+    ],
+  );
   elements.push(head.frameId, intro.frameId);
 
   const tile = await doc.rectangle(pg, TILE);
   await assignLayer(ctx, "rectangle", tile, LAYER.content);
-  await doc.mutate("placeImage", { elementId: tile, uri: APPLES_URI, fit: null });
+  await doc.mutate("placeImage", {
+    elementId: tile,
+    uri: APPLES_URI,
+    fit: null,
+  });
   await replaceBytesFromFile(ctx, tile, APPLES);
   elements.push(tile);
 
@@ -182,7 +194,8 @@ export async function build(ctx: PageContext): Promise<PageReport> {
         [280, 210],
       ]);
       const one = await statusLanded(ctx, /Painted \d+ dab/, 20_000, preOne);
-      if (one) strokes.push(`brush, default colour, 150 px → ${one.slice(0, 60)}`);
+      if (one)
+        strokes.push(`brush, default colour, 150 px → ${one.slice(0, 60)}`);
 
       // ── stroke two: a narrower magenta counter-curve ─────────────
       // Status reset between strokes — identical "Painted N dabs"
@@ -212,7 +225,12 @@ export async function build(ctx: PageContext): Promise<PageReport> {
         [180, 240],
         [290, 232],
       ]);
-      const three = await statusLanded(ctx, /Painted \d+ dab/, 20_000, preThree);
+      const three = await statusLanded(
+        ctx,
+        /Painted \d+ dab/,
+        20_000,
+        preThree,
+      );
       if (three) strokes.push(`pencil, cyan, 26 px → ${three.slice(0, 60)}`);
       if (dabCount(one) + dabCount(two) + dabCount(three) === 0) {
         // Every solid stroke committed with ZERO dabs — brush, pencil,
@@ -232,9 +250,7 @@ export async function build(ctx: PageContext): Promise<PageReport> {
 
       // ── the word: raster type at a clicked baseline ──────────────
       await ctx.page.locator("[data-image-type-text]").fill("DARKROOM");
-      await ctx.page
-        .locator("[data-image-type-family]")
-        .fill("Space Grotesk");
+      await ctx.page.locator("[data-image-type-family]").fill("Space Grotesk");
       await setSlider(ctx, "Size (px)", 190, 1); // type section — second; image px
       await pickBrushColour(ctx, "White"); // type paints the brush colour
       await armTool(ctx, TOOL.type);
@@ -274,42 +290,52 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     );
   }
 
-  const cap = await proseFrame(ctx, page, [60, 352, 340, 420], [
-    {
-      text:
-        committed !== null && changed
-          ? `Three strokes (brush 150 px in the default ink, brush 64 px ` +
-            `magenta, pencil 26 px cyan) and one shaped run — “DARKROOM”, ` +
-            `Space Grotesk 190 px — committed as ` +
-            `${committed.toLocaleString("en-US")} B of inline JPEG.`
-          : "The strokes and the word did not land on this lane; the tile " +
-            "carries the photograph unpainted, and this caption is the " +
-            "record of that.",
-      style: STYLE.specLabel,
-    },
-  ]);
+  const cap = await proseFrame(
+    ctx,
+    page,
+    [60, 352, 340, 420],
+    [
+      {
+        text:
+          committed !== null && changed
+            ? `Three strokes (brush 150 px in the default ink, brush 64 px ` +
+              `magenta, pencil 26 px cyan) and one shaped run — “DARKROOM”, ` +
+              `Space Grotesk 190 px — committed as ` +
+              `${committed.toLocaleString("en-US")} B of inline JPEG.`
+            : "The strokes and the word did not land on this lane; the tile " +
+              "carries the photograph unpainted, and this caption is the " +
+              "record of that.",
+        style: STYLE.specLabel,
+      },
+    ],
+  );
   elements.push(cap.frameId);
 
-  const method = await proseFrame(ctx, page, [352, 158, 492, 412], [
-    { text: "HOW A STROKE LANDS", style: STYLE.specLabel },
-    {
-      text:
-        "Arm the tool, hover, drag: spacing carries leftover arc length " +
-        "across pointer samples, so a fast drag still paints a stroke " +
-        "rather than a row of dots. Parameters freeze at pointer-down. " +
-        "Strokes commit per gesture into the active layer, journaled in " +
-        "the plugin's bounded undo.",
-      style: STYLE.caption,
-    },
-    {
-      text:
-        "The word is shaped by the face's own tables through harfrust — " +
-        "joining scripts come out joined — and the face comes from the " +
-        "document's registry, never the network. A glyph the face lacks " +
-        "is counted and left undrawn.",
-      style: STYLE.caption,
-    },
-  ]);
+  const method = await proseFrame(
+    ctx,
+    page,
+    [352, 158, 492, 412],
+    [
+      { text: "HOW A STROKE LANDS", style: STYLE.specLabel },
+      {
+        text:
+          "Arm the tool, hover, drag: spacing carries leftover arc length " +
+          "across pointer samples, so a fast drag still paints a stroke " +
+          "rather than a row of dots. Parameters freeze at pointer-down. " +
+          "Strokes commit per gesture into the active layer, journaled in " +
+          "the plugin's bounded undo.",
+        style: STYLE.caption,
+      },
+      {
+        text:
+          "The word is shaped by the face's own tables through harfrust — " +
+          "joining scripts come out joined — and the face comes from the " +
+          "document's registry, never the network. A glyph the face lacks " +
+          "is counted and left undrawn.",
+        style: STYLE.caption,
+      },
+    ],
+  );
   elements.push(method.frameId);
 
   await marginNote(

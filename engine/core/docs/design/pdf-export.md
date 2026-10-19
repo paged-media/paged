@@ -4,9 +4,9 @@ June 2026. Concept paper. Sections describe intent; where the implementation dif
 
 Sections not relevant outside the original planning context have been removed; numbering is unchanged.
 
-*Status note (2026-10-02): source comments in this repository cite this document as "Concept 3" and [colour-and-swatches.md](colour-and-swatches.md) as "Concept 2", with the decision ids (E1 to E9) used below. "Concept 1" is a toolbar concept for the editor and is not in this repository. The exporter was built as `crates/paged-export-pdf` and diverged from this text in two ways: it is written directly on `pdf-writer` and has no `krilla` dependency, and there is no `SceneConsumer` trait; it consumes the display list. [ADR 119](../adr/119-pdf-export-backend.md) records what was built.*
+_Status note (2026-10-02): source comments in this repository cite this document as "Concept 3" and [colour-and-swatches.md](colour-and-swatches.md) as "Concept 2", with the decision ids (E1 to E9) used below. "Concept 1" is a toolbar concept for the editor and is not in this repository. The exporter was built as `crates/paged-export-pdf` and diverged from this text in two ways: it is written directly on `pdf-writer` and has no `krilla` dependency, and there is no `SceneConsumer` trait; it consumes the display list. [ADR 119](../adr/119-pdf-export-backend.md) records what was built._
 
-*Subtitle: colour-managed PDF export with ICC profiles and PDF/X conformance.*
+_Subtitle: colour-managed PDF export with ICC profiles and PDF/X conformance._
 
 ---
 
@@ -29,13 +29,13 @@ In scope:
 
 Out of scope:
 
-- The transparency *flattener* implementation (needed for X-1a) — defined as a boundary here, built with `paged.flattener-preview` later.
+- The transparency _flattener_ implementation (needed for X-1a) — defined as a boundary here, built with `paged.flattener-preview` later.
 - Imposition / printer spreads / booklet — a production add-on beyond document export.
-- The colour *model and engine* themselves — Concept 2, which this concept consumes.
+- The colour _model and engine_ themselves — Concept 2, which this concept consumes.
 
 ## Position in the architecture — and why it isn't a panel
 
-*Status note (2026-10-02): this section predates the implementation; no `SceneConsumer` trait exists. The exporter walks `paged_compose::DisplayList`, the same per-page display list the rasterisers consume (`crates/paged-export-pdf/src/page.rs`). See [ADR 119](../adr/119-pdf-export-backend.md) and [ADR 101](../adr/101-display-list-single-intermediate.md).*
+_Status note (2026-10-02): this section predates the implementation; no `SceneConsumer` trait exists. The exporter walks `paged_compose::DisplayList`, the same per-page display list the rasterisers consume (`crates/paged-export-pdf/src/page.rs`). See [ADR 119](../adr/119-pdf-export-backend.md) and [ADR 101](../adr/101-display-list-single-intermediate.md)._
 
 The panel catalogue deliberately has no `paged.export` panel; the nearest entries are `paged.background-tasks` (async progress), `paged.preflight`, and `paged.separations-preview`/`paged.flattener-preview` (view-only). That is correct: **export is not a panel, it is an output backend.** The central architectural claim:
 
@@ -74,11 +74,11 @@ One foot-gun to settle up front: IDML/InDesign space is y-down with the origin a
 
 ## The writer: krilla on pdf-writer
 
-*Status note (2026-10-02): this section predates the implementation; `krilla` is not a dependency. The exporter is built directly on `pdf-writer`, with `subsetter` for fonts and `xmp-writer` for the conformance metadata (`crates/paged-export-pdf/Cargo.toml`). See [ADR 119](../adr/119-pdf-export-backend.md).*
+_Status note (2026-10-02): this section predates the implementation; `krilla` is not a dependency. The exporter is built directly on `pdf-writer`, with `subsetter` for fonts and `xmp-writer` for the conformance metadata (`crates/paged-export-pdf/Cargo.toml`). See [ADR 119](../adr/119-pdf-export-backend.md)._
 
 For Rust → PDF, **krilla** is the right high-level base. It is built on `pdf-writer` (the low-level crate from the Typst project), abstracts the plumbing behind fills/strokes/gradients/glyphs/images, and is the backend Typst itself is moving to. Capabilities it already carries that matter here: **ICC profile embedding (including custom CMYK), font embedding and subsetting, gradients with transparency, image XObjects, alpha/luminosity masks, outlines/destinations, and tagged-PDF plus PDF/A & PDF/UA export modes.** It compiles as a normal Rust crate and runs in the worker.
 
-The honest boundary: krilla's standards focus has been **PDF/A and PDF/UA** (archival and accessibility). Full **PDF/X** output-intent conformance (the *print* standard) may not be turnkey. Where krilla's high-level surface does not yet cover a PDF/X requirement — the `GTS_PDFX` OutputIntent dictionary, `Separation`/`DeviceN` colourants with custom tint transforms, the PDF/X XMP keys, the `Trapped` flag — `pdf-writer` is the escape hatch underneath, and krilla does not hide it. Plan for **krilla for ~90% (pages, text, vectors, images, transparency, ICC), `pdf-writer` for the PDF/X conformance edges**, with `crates/typst-pdf` as the reading reference for how to drive krilla over a real document (see Prior art).
+The honest boundary: krilla's standards focus has been **PDF/A and PDF/UA** (archival and accessibility). Full **PDF/X** output-intent conformance (the _print_ standard) may not be turnkey. Where krilla's high-level surface does not yet cover a PDF/X requirement — the `GTS_PDFX` OutputIntent dictionary, `Separation`/`DeviceN` colourants with custom tint transforms, the PDF/X XMP keys, the `Trapped` flag — `pdf-writer` is the escape hatch underneath, and krilla does not hide it. Plan for **krilla for ~90% (pages, text, vectors, images, transparency, ICC), `pdf-writer` for the PDF/X conformance edges**, with `crates/typst-pdf` as the reading reference for how to drive krilla over a real document (see Prior art).
 
 ## Colour in PDF — preserve native spaces, don't collapse to display
 
@@ -90,7 +90,7 @@ This is where **Concept 2's CMM** pays off a second time, used in `convert_for_e
 - **Spot colours** → **`Separation`** colour space: `[/Separation /InkName altSpace tintTransform]`, where `altSpace` is the swatch's alternate (process or Lab) and `tintTransform` is a function mapping tint 0..1 to alternate components. A 50% tint of a spot is then a single `sc` operand, not an opacity.
 - **Mixed inks** → **`DeviceN`**: `[/DeviceN [/Ink1 /Ink2 …] altSpace tintTransform attributes]`, one channel per spot.
 - **Registration** → the `All` colorant (`DeviceN` with the reserved `/All` name) so crop/registration marks hit every plate.
-- **OutputIntent** → embed the destination profile so the file declares its press condition: `/OutputIntents [ << /Type /OutputIntent /S /GTS_PDFX /OutputConditionIdentifier (FOGRA39) /DestOutputProfile <profile stream> >> ]`. PDF/X *requires* this.
+- **OutputIntent** → embed the destination profile so the file declares its press condition: `/OutputIntents [ << /Type /OutputIntent /S /GTS_PDFX /OutputConditionIdentifier (FOGRA39) /DestOutputProfile <profile stream> >> ]`. PDF/X _requires_ this.
 
 The two colour policies mirror InDesign's, both implemented via the CMM:
 
@@ -103,26 +103,26 @@ The Ink Manager settings from Concept 2 (spot→process, aliasing, standard-Lab-
 
 PDF 1.4+ has a native transparency model, and **InDesign's effects map onto it almost one-to-one** — which is the whole reason to target PDF/X-4 (live transparency) rather than flattening. The mapping (`paged.effects` → PDF):
 
-| InDesign / `paged.effects` | PDF construct |
-| -------------------------- | ------------- |
-| Object / fill / stroke / text opacity | constant alpha (`/ca`, `/CA`) at the right graphics-state scope |
-| Blend mode (Multiply, Screen, Overlay, …) | `/BM` blend mode — the 16 PDF modes match InDesign's set |
-| Drop shadow / inner shadow | a blurred, offset copy painted through a **soft mask** (`/SMask` luminosity) |
-| Outer/inner glow, feather (basic/directional/gradient) | **soft mask** from the feathered alpha |
-| Bevel, satin | composited fills with blend + mask |
-| Transparency group (object group with effects) | a **transparency group XObject** (`/Group << /S /Transparency >>`) |
-| Knockout group | group with `/K true` |
-| Isolated blending | group with `/I true` |
+| InDesign / `paged.effects`                             | PDF construct                                                                |
+| ------------------------------------------------------ | ---------------------------------------------------------------------------- |
+| Object / fill / stroke / text opacity                  | constant alpha (`/ca`, `/CA`) at the right graphics-state scope              |
+| Blend mode (Multiply, Screen, Overlay, …)              | `/BM` blend mode — the 16 PDF modes match InDesign's set                     |
+| Drop shadow / inner shadow                             | a blurred, offset copy painted through a **soft mask** (`/SMask` luminosity) |
+| Outer/inner glow, feather (basic/directional/gradient) | **soft mask** from the feathered alpha                                       |
+| Bevel, satin                                           | composited fills with blend + mask                                           |
+| Transparency group (object group with effects)         | a **transparency group XObject** (`/Group << /S /Transparency >>`)           |
+| Knockout group                                         | group with `/K true`                                                         |
+| Isolated blending                                      | group with `/I true`                                                         |
 
-So the exporter emits graphics-state dictionaries for opacity/blend, transparency-group XObjects for grouped effects, and soft-mask XObjects for shadows/glows/feather. None of it rasterises under X-4. The gradient-feather *angle handle* is an authoring gesture (Concept 1); at export it is just a gradient soft mask.
+So the exporter emits graphics-state dictionaries for opacity/blend, transparency-group XObjects for grouped effects, and soft-mask XObjects for shadows/glows/feather. None of it rasterises under X-4. The gradient-feather _angle handle_ is an authoring gesture (Concept 1); at export it is just a gradient soft mask.
 
 ## PDF/X levels — recommend X-4 first
 
-| Standard | ISO | Transparency | Colour | Paged fit |
-| -------- | --- | ------------ | ------ | --------- |
-| PDF/X-1a | 15930-1/-4 | must be **flattened** | CMYK + spot only; no RGB, no live ICC | needs the flattener; defer |
-| PDF/X-3 | 15930-3/-6 | flattened | CMYK + spot + ICC-tagged RGB | superseded by X-4 |
-| **PDF/X-4** | 15930-7 | **live** (PDF 1.6) | CMYK + spot + ICC + layers (OCGs) | **target first** |
+| Standard    | ISO        | Transparency          | Colour                                | Paged fit                  |
+| ----------- | ---------- | --------------------- | ------------------------------------- | -------------------------- |
+| PDF/X-1a    | 15930-1/-4 | must be **flattened** | CMYK + spot only; no RGB, no live ICC | needs the flattener; defer |
+| PDF/X-3     | 15930-3/-6 | flattened             | CMYK + spot + ICC-tagged RGB          | superseded by X-4          |
+| **PDF/X-4** | 15930-7    | **live** (PDF 1.6)    | CMYK + spot + ICC + layers (OCGs)     | **target first**           |
 
 **Target PDF/X-4 first.** Paged's effects map onto live PDF transparency (above); X-4 keeps all of it live, no flattening, with ICC colour management and optional layers. Conformance is declared in **XMP** (`pdfxid:GTS_PDFXVersion = "PDF/X-4"`), the document must carry an OutputIntent, the `Trapped` key must be `True` or `False` (never `Unknown`), and a `TrimBox` (or `ArtBox`) is mandatory on every page.
 
@@ -134,7 +134,7 @@ Flattening decomposes overlapping transparent regions into opaque atomic regions
 
 ## Fonts
 
-*Status note (2026-10-02): this section predates the implementation; fonts are subset with the `subsetter` crate, not through krilla (`crates/paged-export-pdf/src/text.rs`), and shaping uses `harfrust`, not `rustybuzz` ([ADR 102](../adr/102-text-stack.md)).*
+_Status note (2026-10-02): this section predates the implementation; fonts are subset with the `subsetter` crate, not through krilla (`crates/paged-export-pdf/src/text.rs`), and shaping uses `harfrust`, not `rustybuzz` ([ADR 102](../adr/102-text-stack.md))._
 
 - **Subset and embed.** The renderer already owns font data (the Inter side-channel + font handling); krilla subsets to embedded **CID-keyed Type0** fonts (CFF or TrueType outlines), with the conventional 6-letter subset tag. Subset, never full-embed, for size.
 - **`ToUnicode` CMaps.** Emit them so text is copyable and searchable, and so tagged-PDF/accessibility works. Without `ToUnicode`, the file is a picture of text.
@@ -158,7 +158,7 @@ The quality differentiators live here:
 
 ## How it's invoked and where it runs
 
-*Status note (2026-10-02): this section predates the implementation; the worker side is an export session of four messages, `ExportPdfBegin`, `ExportPdfPage`, `ExportPdfFinish` and `ExportPdfCancel` (`crates/paged-canvas/src/channel.rs`, `crates/paged-canvas/src/export.rs`). The command, the options dialog and the progress panel belong to the editor repository.*
+_Status note (2026-10-02): this section predates the implementation; the worker side is an export session of four messages, `ExportPdfBegin`, `ExportPdfPage`, `ExportPdfFinish` and `ExportPdfCancel` (`crates/paged-canvas/src/channel.rs`, `crates/paged-canvas/src/export.rs`). The command, the options dialog and the progress panel belong to the editor repository._
 
 Export is heavy and belongs in the worker (the same Rust WASM module, or a dedicated export entry the worker calls). The plumbing reuses existing constructs cleanly, with no new SDK surface:
 
@@ -171,14 +171,14 @@ For **determinism**, fix the XMP timestamps to the document's own metadata (not 
 
 ## Generalising the backend
 
-*Status note (2026-10-02): this section predates the implementation; no `SceneConsumer` trait exists (see [ADR 119](../adr/119-pdf-export-backend.md)).*
+_Status note (2026-10-02): this section predates the implementation; no `SceneConsumer` trait exists (see [ADR 119](../adr/119-pdf-export-backend.md))._
 
 Because export is a `SceneConsumer`, the architecture pays forward:
 
 - **SVG export** — a `SceneConsumer` emitting SVG; near-free given the same scene walk.
 - **Raster export (PNG/JPEG)** — reuse the Vello raster path at a chosen ppi; it is already a `SceneConsumer`.
 - **IDML round-trip** — the document model (not the resolved scene) serialises back to IDML; orthogonal but in the same "output" family.
-- **Interactive PDF** — a *second PDF mode*, not PDF/X: bookmarks (`paged.bookmarks`), hyperlinks (`paged.hyperlinks`), buttons/forms and media, page transitions, RGB colour, tagged structure. The options dialog's "intent: Print vs Interactive" switch selects which feature set and which conformance the same krilla backend targets. Print (PDF/X) is v1; Interactive is a fast follow once those panels exist.
+- **Interactive PDF** — a _second PDF mode_, not PDF/X: bookmarks (`paged.bookmarks`), hyperlinks (`paged.hyperlinks`), buttons/forms and media, page transitions, RGB colour, tagged structure. The options dialog's "intent: Print vs Interactive" switch selects which feature set and which conformance the same krilla backend targets. Print (PDF/X) is v1; Interactive is a fast follow once those panels exist.
 
 ## What not to do
 
@@ -215,37 +215,37 @@ Because export is a `SceneConsumer`, the architecture pays forward:
 
 ## Decisions register
 
-*Status note (2026-10-02): the statuses in the table are those of the draft. E2 was built differently (`pdf-writer` only, no krilla), and the `SceneConsumer` trait of E1 and E9 was not built; see [ADR 119](../adr/119-pdf-export-backend.md).*
+_Status note (2026-10-02): the statuses in the table are those of the draft. E2 was built differently (`pdf-writer` only, no krilla), and the `SceneConsumer` trait of E1 and E9 was not built; see [ADR 119](../adr/119-pdf-export-backend.md)._
 
-| # | Decision | Status |
-| - | -------- | ------ |
-| E1 | PDF export is a second backend (`SceneConsumer`) over the four-tier resolved scene, sibling to Vello. No rasterisation; text/vectors/images stay native. | Proposed |
-| E2 | `paged-export-pdf` built on **krilla** (on `pdf-writer`); drop to `pdf-writer` for PDF/X OutputIntent, `Separation`/`DeviceN`, XMP, and `Trapped` edges krilla doesn't cover. | Proposed |
-| E3 | Reuse Concept 2's CMM in export-convert mode. Preserve native spaces (CMYK→DeviceCMYK/ICCBased, spot→Separation, mixed→DeviceN, Lab→PDF Lab); embed OutputIntent; honour Ink Manager. | Proposed |
-| E4 | Target **PDF/X-4 first** (live transparency, ICC). X-1a + the transparency flattener ship together with `paged.flattener-preview`, later. | Proposed |
-| E5 | Default CMYK policy is **Preserve Numbers** (pure-K stays pure-K); Convert-to-Destination is opt-in via the options dialog. | Proposed |
-| E6 | Export is a worker `request` returning bytes — not a `mutate`. Command `paged.file.exportPdf`; options are a composition; progress via `paged.background-tasks`; cancellable; deterministic output. | Proposed |
-| E7 | Placed raster passes through without re-encoding (DCT) and preserves embedded ICC; placed PDF/EPS/AI embeds as a Form XObject, never rasterised. | Proposed |
-| E8 | Emit `ToUnicode`, subset/CID-embed fonts, honour `fsType`; outlining text is an explicit user-chosen fallback surfaced in preflight, never silent. | Proposed |
-| E9 | The backend is a `SceneConsumer`, generalising to SVG/raster/IDML and to a second **Interactive PDF** mode (RGB + bookmarks/links/forms/media) selected by export intent. | Proposed |
+| #   | Decision                                                                                                                                                                                            | Status   |
+| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
+| E1  | PDF export is a second backend (`SceneConsumer`) over the four-tier resolved scene, sibling to Vello. No rasterisation; text/vectors/images stay native.                                            | Proposed |
+| E2  | `paged-export-pdf` built on **krilla** (on `pdf-writer`); drop to `pdf-writer` for PDF/X OutputIntent, `Separation`/`DeviceN`, XMP, and `Trapped` edges krilla doesn't cover.                       | Proposed |
+| E3  | Reuse Concept 2's CMM in export-convert mode. Preserve native spaces (CMYK→DeviceCMYK/ICCBased, spot→Separation, mixed→DeviceN, Lab→PDF Lab); embed OutputIntent; honour Ink Manager.               | Proposed |
+| E4  | Target **PDF/X-4 first** (live transparency, ICC). X-1a + the transparency flattener ship together with `paged.flattener-preview`, later.                                                           | Proposed |
+| E5  | Default CMYK policy is **Preserve Numbers** (pure-K stays pure-K); Convert-to-Destination is opt-in via the options dialog.                                                                         | Proposed |
+| E6  | Export is a worker `request` returning bytes — not a `mutate`. Command `paged.file.exportPdf`; options are a composition; progress via `paged.background-tasks`; cancellable; deterministic output. | Proposed |
+| E7  | Placed raster passes through without re-encoding (DCT) and preserves embedded ICC; placed PDF/EPS/AI embeds as a Form XObject, never rasterised.                                                    | Proposed |
+| E8  | Emit `ToUnicode`, subset/CID-embed fonts, honour `fsType`; outlining text is an explicit user-chosen fallback surfaced in preflight, never silent.                                                  | Proposed |
+| E9  | The backend is a `SceneConsumer`, generalising to SVG/raster/IDML and to a second **Interactive PDF** mode (RGB + bookmarks/links/forms/media) selected by export intent.                           | Proposed |
 
 ## Prior art / reference implementations
 
-*Status note (2026-10-02): this section predates the implementation; krilla is not a dependency ([ADR 119](../adr/119-pdf-export-backend.md)), salsa was not adopted ([ADR 107](../adr/107-whole-document-build.md)), and shaping uses `harfrust` ([ADR 102](../adr/102-text-stack.md)). The module comment of `crates/paged-export-pdf/src/lib.rs` keeps `typst-pdf` as "the reading reference, never a dependency".*
+_Status note (2026-10-02): this section predates the implementation; krilla is not a dependency ([ADR 119](../adr/119-pdf-export-backend.md)), salsa was not adopted ([ADR 107](../adr/107-whole-document-build.md)), and shaping uses `harfrust` ([ADR 102](../adr/102-text-stack.md)). The module comment of `crates/paged-export-pdf/src/lib.rs` keeps `typst-pdf` as "the reading reference, never a dependency"._
 
-The Rust ecosystem already has a large-scale production user of nearly the exact stack this concept rests on: **Typst** (`github.com/typst/typst`). Treat it as a reference implementation and a validation of the leaf technologies — with one sharp caveat about *which* parts transfer.
+The Rust ecosystem already has a large-scale production user of nearly the exact stack this concept rests on: **Typst** (`github.com/typst/typst`). Treat it as a reference implementation and a validation of the leaf technologies — with one sharp caveat about _which_ parts transfer.
 
-**Borrow the leaves, not the trunk.** Typst is a *batch compiler*: immutable source markup → layout → PDF, recompiled (incrementally) on change. It has no mutable scene graph, no gesture mutations, no `paged.mutate`/Operation model, no IDML round-trip. Paged's four-tier incremental pipeline with salsa and per-story layout is the right model for an *interactive* editor; Typst's `comemo`-memoized batch model is the right model for a *compiler*. So the overall architecture does not transfer — only the leaf technology does.
+**Borrow the leaves, not the trunk.** Typst is a _batch compiler_: immutable source markup → layout → PDF, recompiled (incrementally) on change. It has no mutable scene graph, no gesture mutations, no `paged.mutate`/Operation model, no IDML round-trip. Paged's four-tier incremental pipeline with salsa and per-story layout is the right model for an _interactive_ editor; Typst's `comemo`-memoized batch model is the right model for a _compiler_. So the overall architecture does not transfer — only the leaf technology does.
 
-| Paged concern | Typst reference | What to take |
-| ------------- | --------------- | ------------ |
-| **PDF export (E2)** | `crates/typst-pdf` (drives **krilla**, which came out of the Typst project, same author, on Typst's `pdf-writer`) | The readable reference for driving krilla over a real document model — colour encoding, font subsetting, transparency groups, image XObjects. Read this *before* krilla's own examples. De-risks E2. |
-| **Text stack** | `rustybuzz` (HarfBuzz shaping), `ttf-parser`, `unicode-bidi` | Align the renderer, layout, and export on the font types krilla expects, so all three speak one vocabulary. |
-| **Incrementality** | `comemo` (memoized pure functions) | Not to adopt — to corroborate. Typst proves incremental layout in Rust holds up; Paged's **salsa** choice is a deliberate divergence (a mutable-document editor wants query-style invalidation, not pure-function memoization). |
-| **Line breaking** | Typst's Knuth-Plass implementation | A readable reference for the algorithm Paged already checkpoints, rather than re-deriving it. |
-| **Determinism** | Typst's reproducible-output discipline | Fix XMP timestamps to document metadata so the same input yields the same bytes; enables golden-file tests. |
+| Paged concern       | Typst reference                                                                                                   | What to take                                                                                                                                                                                                                    |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **PDF export (E2)** | `crates/typst-pdf` (drives **krilla**, which came out of the Typst project, same author, on Typst's `pdf-writer`) | The readable reference for driving krilla over a real document model — colour encoding, font subsetting, transparency groups, image XObjects. Read this _before_ krilla's own examples. De-risks E2.                            |
+| **Text stack**      | `rustybuzz` (HarfBuzz shaping), `ttf-parser`, `unicode-bidi`                                                      | Align the renderer, layout, and export on the font types krilla expects, so all three speak one vocabulary.                                                                                                                     |
+| **Incrementality**  | `comemo` (memoized pure functions)                                                                                | Not to adopt — to corroborate. Typst proves incremental layout in Rust holds up; Paged's **salsa** choice is a deliberate divergence (a mutable-document editor wants query-style invalidation, not pure-function memoization). |
+| **Line breaking**   | Typst's Knuth-Plass implementation                                                                                | A readable reference for the algorithm Paged already checkpoints, rather than re-deriving it.                                                                                                                                   |
+| **Determinism**     | Typst's reproducible-output discipline                                                                            | Fix XMP timestamps to document metadata so the same input yields the same bytes; enables golden-file tests.                                                                                                                     |
 
-**Where Typst is a *weak* reference — and it's exactly the hard part.** Typst is a document compiler, not a prepress tool. Its colour story is screen/oklab-leaning, and spot colours as `Separation`, mixed inks as `DeviceN`, ICC **OutputIntent**s, and **PDF/X** conformance are not its priorities. That is precisely the krilla edge in **E2** where Paged drops to `pdf-writer` and hand-writes the conformance dictionaries. Net: Typst shows ~90% of how to drive krilla; the prepress 10% Paged owns either way.
+**Where Typst is a _weak_ reference — and it's exactly the hard part.** Typst is a document compiler, not a prepress tool. Its colour story is screen/oklab-leaning, and spot colours as `Separation`, mixed inks as `DeviceN`, ICC **OutputIntent**s, and **PDF/X** conformance are not its priorities. That is precisely the krilla edge in **E2** where Paged drops to `pdf-writer` and hand-writes the conformance dictionaries. Net: Typst shows ~90% of how to drive krilla; the prepress 10% Paged owns either way.
 
 **Dependency posture.** Paged depends on **krilla + pdf-writer**, not on Typst the application. Typst is read as a guide and cited as prior art.
 

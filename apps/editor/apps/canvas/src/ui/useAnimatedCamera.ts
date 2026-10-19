@@ -62,46 +62,43 @@ export function useAnimatedCamera(
     };
   }, []);
 
-  const animateTo = useCallback(
-    (target: Camera, opts: AnimateOptions = {}) => {
-      const duration = opts.durationMs ?? DEFAULT_DURATION_MS;
-      if (rafRef.current !== null) {
-        cancelAnimationFrame(rafRef.current);
+  const animateTo = useCallback((target: Camera, opts: AnimateOptions = {}) => {
+    const duration = opts.durationMs ?? DEFAULT_DURATION_MS;
+    if (rafRef.current !== null) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    }
+    const start = currentRef.current;
+    // No-op if already at target (within float tolerance).
+    if (
+      nearly(start.scale, target.scale) &&
+      nearly(start.tx, target.tx) &&
+      nearly(start.ty, target.ty)
+    ) {
+      return;
+    }
+    // Trivial duration → snap.
+    if (duration <= 16) {
+      setCameraRef.current(target);
+      return;
+    }
+    const t0 = performance.now();
+    const step = (now: number) => {
+      const t = Math.min(1, (now - t0) / duration);
+      const eased = easeOutCubic(t);
+      setCameraRef.current({
+        scale: lerp(start.scale, target.scale, eased),
+        tx: lerp(start.tx, target.tx, eased),
+        ty: lerp(start.ty, target.ty, eased),
+      });
+      if (t < 1) {
+        rafRef.current = requestAnimationFrame(step);
+      } else {
         rafRef.current = null;
       }
-      const start = currentRef.current;
-      // No-op if already at target (within float tolerance).
-      if (
-        nearly(start.scale, target.scale) &&
-        nearly(start.tx, target.tx) &&
-        nearly(start.ty, target.ty)
-      ) {
-        return;
-      }
-      // Trivial duration → snap.
-      if (duration <= 16) {
-        setCameraRef.current(target);
-        return;
-      }
-      const t0 = performance.now();
-      const step = (now: number) => {
-        const t = Math.min(1, (now - t0) / duration);
-        const eased = easeOutCubic(t);
-        setCameraRef.current({
-          scale: lerp(start.scale, target.scale, eased),
-          tx: lerp(start.tx, target.tx, eased),
-          ty: lerp(start.ty, target.ty, eased),
-        });
-        if (t < 1) {
-          rafRef.current = requestAnimationFrame(step);
-        } else {
-          rafRef.current = null;
-        }
-      };
-      rafRef.current = requestAnimationFrame(step);
-    },
-    [],
-  );
+    };
+    rafRef.current = requestAnimationFrame(step);
+  }, []);
 
   return animateTo;
 }

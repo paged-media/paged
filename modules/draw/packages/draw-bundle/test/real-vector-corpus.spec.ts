@@ -70,7 +70,7 @@ import { describe, expect, it } from "bun:test";
 
 import { leafIdsOf } from "../src";
 import { commitSvgImport, shapesFromSvgBytes } from "../src/io/svg";
-import { openHost } from "./conformance/host";
+import { openHost } from "./headless/host";
 import { F4_OVERLAP } from "./fixtures/corpus";
 
 const GROUPS = ["idml", "docx", "psd", "html", "vector", "pptx"] as const;
@@ -163,9 +163,10 @@ describe.skipIf(!gated)("real SVG corpus", () => {
         `${totalShapes} shapes total`,
     );
 
-    expect(failures, `SVG files that THREW out of the importer:\n  ${failures.join("\n  ")}`).toEqual(
-      [],
-    );
+    expect(
+      failures,
+      `SVG files that THREW out of the importer:\n  ${failures.join("\n  ")}`,
+    ).toEqual([]);
 
     // The one hard floor on yield. Zero would mean the importer only ever
     // handled the shapes our own spec strings describe — which is the
@@ -210,14 +211,23 @@ describe.skipIf(!gated)("real SVG corpus — the import", () => {
         elements += done.elements;
         swatches += done.swatches;
         if (done.batches !== 1 || done.refused !== 0) {
-          wrong.push(`${name}: ${done.batches} batches, ${done.refused} refused`);
+          wrong.push(
+            `${name}: ${done.batches} batches, ${done.refused} refused`,
+          );
         }
-        if ((await leafCount()) - base !== done.elements || done.elements > contours) {
-          wrong.push(`${name}: ${done.elements} elements for ${contours} contours`);
+        if (
+          (await leafCount()) - base !== done.elements ||
+          done.elements > contours
+        ) {
+          wrong.push(
+            `${name}: ${done.elements} elements for ${contours} contours`,
+          );
         }
         await h.host.document.undo();
         if ((await leafCount()) !== base) {
-          wrong.push(`${name}: one undo left ${(await leafCount()) - base} element(s)`);
+          wrong.push(
+            `${name}: one undo left ${(await leafCount()) - base} element(s)`,
+          );
           break; // the document is no longer the baseline; stop counting
         }
       }
@@ -237,44 +247,50 @@ describe.skipIf(!gated)("real SVG corpus — the import", () => {
   }, 600_000);
 });
 
-describe.skipIf(foreign.length === 0)("foreign vector formats are refused, not half-read", () => {
-  it("yields no shapes for .ai and .eps", () => {
-    const halfRead: string[] = [];
-    const threw: string[] = [];
-    const byExt: Record<string, number> = {};
+describe.skipIf(foreign.length === 0)(
+  "foreign vector formats are refused, not half-read",
+  () => {
+    it("yields no shapes for .ai and .eps", () => {
+      const halfRead: string[] = [];
+      const threw: string[] = [];
+      const byExt: Record<string, number> = {};
 
-    for (const path of foreign) {
-      const ext = path.slice(path.lastIndexOf(".")).toLowerCase();
-      byExt[ext] = (byExt[ext] ?? 0) + 1;
-      const bytes = new Uint8Array(readFileSync(path));
-      try {
-        const shapes = shapesFromSvgBytes(bytes);
-        if (shapes.length > 0) {
-          halfRead.push(`${path.split("/").pop()} -> ${shapes.length} shape(s)`);
+      for (const path of foreign) {
+        const ext = path.slice(path.lastIndexOf(".")).toLowerCase();
+        byExt[ext] = (byExt[ext] ?? 0) + 1;
+        const bytes = new Uint8Array(readFileSync(path));
+        try {
+          const shapes = shapesFromSvgBytes(bytes);
+          if (shapes.length > 0) {
+            halfRead.push(
+              `${path.split("/").pop()} -> ${shapes.length} shape(s)`,
+            );
+          }
+        } catch (e) {
+          // Throwing is not acceptable either: the importer is a front
+          // door and a foreign file is an ordinary thing to be handed.
+          threw.push(`${path.split("/").pop()}: ${(e as Error).message}`);
         }
-      } catch (e) {
-        // Throwing is not acceptable either: the importer is a front
-        // door and a foreign file is an ordinary thing to be handed.
-        threw.push(`${path.split("/").pop()}: ${(e as Error).message}`);
       }
-    }
 
-    console.log(
-      `foreign vector formats: ${foreign.length} file(s) ` +
-        `(${Object.entries(byExt)
-          .map(([e, n]) => `${n} ${e}`)
-          .join(", ")})`,
-    );
+      console.log(
+        `foreign vector formats: ${foreign.length} file(s) ` +
+          `(${Object.entries(byExt)
+            .map(([e, n]) => `${n} ${e}`)
+            .join(", ")})`,
+      );
 
-    expect(threw, `foreign files that THREW instead of being refused:\n  ${threw.join("\n  ")}`).toEqual(
-      [],
-    );
-    expect(
-      halfRead,
-      `${halfRead.length} foreign file(s) were PARTIALLY parsed as SVG:\n  ` +
-        `${halfRead.join("\n  ")}\n` +
-        `A half-read import is worse than a refused one — the caller gets shapes ` +
-        `that are not the artwork they opened.`,
-    ).toEqual([]);
-  });
-});
+      expect(
+        threw,
+        `foreign files that THREW instead of being refused:\n  ${threw.join("\n  ")}`,
+      ).toEqual([]);
+      expect(
+        halfRead,
+        `${halfRead.length} foreign file(s) were PARTIALLY parsed as SVG:\n  ` +
+          `${halfRead.join("\n  ")}\n` +
+          `A half-read import is worse than a refused one — the caller gets shapes ` +
+          `that are not the artwork they opened.`,
+      ).toEqual([]);
+    });
+  },
+);

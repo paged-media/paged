@@ -24,20 +24,24 @@ import { DEFAULT_SOURCE } from "../src/source";
 
 describe("sanitizeHtml — script removal", () => {
   it("strips a <script>…</script> block, body and all", () => {
-    const r = sanitizeHtml('<p>ok</p><script>alert(1)</script><p>after</p>');
+    const r = sanitizeHtml("<p>ok</p><script>alert(1)</script><p>after</p>");
     expect(r.html).toBe("<p>ok</p><p>after</p>");
     expect(r.removed).toContain("<script> element");
   });
 
   it("strips multiple script blocks", () => {
-    const r = sanitizeHtml('<script>a()</script><div>x</div><script>b()</script>');
+    const r = sanitizeHtml(
+      "<script>a()</script><div>x</div><script>b()</script>",
+    );
     expect(r.html).toBe("<div>x</div>");
     // One removal class, even across several blocks.
     expect(r.removed).toEqual(["<script> element"]);
   });
 
   it("strips a script with attributes and whitespace in the tag", () => {
-    const r = sanitizeHtml('<p>x</p>< script type="text/javascript" >evil()</ script >');
+    const r = sanitizeHtml(
+      '<p>x</p>< script type="text/javascript" >evil()</ script >',
+    );
     expect(r.html).toBe("<p>x</p>");
     expect(r.removed).toContain("<script> element");
   });
@@ -101,7 +105,9 @@ describe("sanitizeHtml — javascript: URLs", () => {
   });
 
   it("leaves a normal http/relative URL untouched", () => {
-    const r = sanitizeHtml('<a href="https://paged.media">p</a><img src="a.png">');
+    const r = sanitizeHtml(
+      '<a href="https://paged.media">p</a><img src="a.png">',
+    );
     expect(r.html).toBe('<a href="https://paged.media">p</a><img src="a.png">');
     expect(r.removed).toEqual([]);
   });

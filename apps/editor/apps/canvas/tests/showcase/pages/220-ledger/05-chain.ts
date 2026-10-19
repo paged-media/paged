@@ -45,9 +45,18 @@ import { expect } from "@playwright/test";
 
 import { openPanel } from "../../../fidelity/canvas-driver";
 import { withActivePage } from "../../active-page";
-import { assignLayer, marginNote, proseFrame, specLabel } from "../../annual-support";
+import {
+  assignLayer,
+  marginNote,
+  proseFrame,
+  specLabel,
+} from "../../annual-support";
 import { LAYER, STYLE, TRIM_W_PT, isRecto, p } from "../../names-annual";
-import { clearSelection, partitionByPage, removeRefs } from "../../plugin-support";
+import {
+  clearSelection,
+  partitionByPage,
+  removeRefs,
+} from "../../plugin-support";
 import type { PageContext, PageReport } from "../../types";
 import {
   SHEET_CMD,
@@ -68,7 +77,13 @@ import { fileURLToPath as chainFileUrl } from "node:url";
 
 const FORMULAS_XLSX = chainResolve(
   chainFileUrl(import.meta.url),
-  "..", "..", "..", "..", "e2e", "harness", "sheet-02-formulas.xlsx",
+  "..",
+  "..",
+  "..",
+  "..",
+  "e2e",
+  "harness",
+  "sheet-02-formulas.xlsx",
 );
 
 /** Frame A (p100, verso): deliberately too short for 25 rows. */
@@ -89,9 +104,12 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   // Baseline for the continuation oracle — before ANY authoring.
   const before101 = await doc.renderPage(p(101));
 
-  const head = await proseFrame(ctx, p(100), [60, 96, 492, 124], [
-    { text: "A day-book across the gutter", style: STYLE.head1 },
-  ]);
+  const head = await proseFrame(
+    ctx,
+    p(100),
+    [60, 96, 492, 124],
+    [{ text: "A day-book across the gutter", style: STYLE.head1 }],
+  );
   elements.push(head.frameId);
 
   // This module opens the 223 spec: the formulas workbook session it
@@ -230,36 +248,46 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   if (overset !== false) notes.push(oversetLine);
 
   // ── commentary ───────────────────────────────────────────────────
-  const capA = await proseFrame(ctx, p(100), [292, 152, 492, 420], [
-    {
-      text:
-        "Twenty-four delivery days, three columns, all of it typed as " +
-        "three SEQUENCE anchors and spilled by the engine. The frame on " +
-        "this page is deliberately too short: the table breaks mid-body " +
-        "and walks across the gutter.",
-      style: STYLE.bodySmall,
-    },
-    {
-      text:
-        "The header band was added AFTER the lowering, through the same " +
-        "insertHeaderRow every native table answers — the strongest " +
-        "evidence the plugin's output is not plugin-private.",
-      style: STYLE.bodySmall,
-    },
-  ]);
-  const capB = await proseFrame(ctx, p(101), [292, 152, 480, 420], [
-    {
-      text:
-        (banded
-          ? "The continuation. The band above the first body row here was " +
-            "poured once, on the facing page; the renderer repeats it at " +
-            "the break because bands are structure, not decoration. "
-          : "The continuation — the same story, walking on across the " +
-            "gutter. (No header band could be added on this run; see the " +
-            "chapter notes.) ") + oversetLine,
-      style: STYLE.bodySmall,
-    },
-  ]);
+  const capA = await proseFrame(
+    ctx,
+    p(100),
+    [292, 152, 492, 420],
+    [
+      {
+        text:
+          "Twenty-four delivery days, three columns, all of it typed as " +
+          "three SEQUENCE anchors and spilled by the engine. The frame on " +
+          "this page is deliberately too short: the table breaks mid-body " +
+          "and walks across the gutter.",
+        style: STYLE.bodySmall,
+      },
+      {
+        text:
+          "The header band was added AFTER the lowering, through the same " +
+          "insertHeaderRow every native table answers — the strongest " +
+          "evidence the plugin's output is not plugin-private.",
+        style: STYLE.bodySmall,
+      },
+    ],
+  );
+  const capB = await proseFrame(
+    ctx,
+    p(101),
+    [292, 152, 480, 420],
+    [
+      {
+        text:
+          (banded
+            ? "The continuation. The band above the first body row here was " +
+              "poured once, on the facing page; the renderer repeats it at " +
+              "the break because bands are structure, not decoration. "
+            : "The continuation — the same story, walking on across the " +
+              "gutter. (No header band could be added on this run; see the " +
+              "chapter notes.) ") + oversetLine,
+        style: STYLE.bodySmall,
+      },
+    ],
+  );
   elements.push(capA.frameId, capB.frameId);
 
   elements.push(

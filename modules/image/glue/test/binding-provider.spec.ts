@@ -42,7 +42,13 @@ import manifestJson from "@paged-media/image-manifest/manifest.json";
 import { activate } from "../src/activate";
 import { createImageSession } from "../src/session";
 import { makeTextBindingProvider } from "../src/binding-provider/text-provider";
-import { makeFakeEditor, mapBacking, psdBytes, shellStub, silentConsole } from "./helpers";
+import {
+  makeFakeEditor,
+  mapBacking,
+  psdBytes,
+  shellStub,
+  silentConsole,
+} from "./helpers";
 
 const PLUGIN = "media.paged.image";
 const CTX = "rasterImage";
@@ -52,12 +58,16 @@ const CTX = "rasterImage";
 function boot(opts: { active?: boolean } = {}) {
   const registry = createBindingProviderRegistry();
   const fake = makeFakeEditor();
-  const handle = createBundleHost(() => fake.editor, manifestJson as PluginManifest, {
-    console: silentConsole,
-    storage: mapBacking(),
-    shell: shellStub(),
-    bindingProviders: registry,
-  });
+  const handle = createBundleHost(
+    () => fake.editor,
+    manifestJson as PluginManifest,
+    {
+      console: silentConsole,
+      storage: mapBacking(),
+      shell: shellStub(),
+      bindingProviders: registry,
+    },
+  );
   const bundle = activate(handle.host);
   if (opts.active !== false) {
     registry.setContextActive(PLUGIN, CTX, "u1", true);
@@ -307,8 +317,6 @@ describe("the character provider", () => {
     bundle.dispose();
     handle.dispose();
   });
-
-
 });
 
 // ── the tool condition, ISOLATED ────────────────────────────────────

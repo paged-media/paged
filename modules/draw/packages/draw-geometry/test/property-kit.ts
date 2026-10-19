@@ -59,8 +59,9 @@ import fc from "fast-check";
 import type { AnchorTable, AnchorTriple, Vec2, Vec2Mut } from "../src";
 
 const envInt = (name: string): number | undefined => {
-  const raw = (globalThis as { process?: { env?: Record<string, string | undefined> } })
-    .process?.env?.[name];
+  const raw = (
+    globalThis as { process?: { env?: Record<string, string | undefined> } }
+  ).process?.env?.[name];
   if (raw === undefined || raw === "") return undefined;
   const n = Number(raw);
   return Number.isFinite(n) ? Math.trunc(n) : undefined;
@@ -208,14 +209,14 @@ export interface StarPolygon {
 }
 export const starPolygon: fc.Arbitrary<StarPolygon> = fc
   .tuple(
-    fc.tuple(fc.integer({ min: -50, max: 50 }), fc.integer({ min: -50, max: 50 })),
-    fc.array(
-      fc.tuple(
-        real(1, 100),
-        real(-0.24, 0.24),
-      ),
-      { minLength: 3, maxLength: 12 },
+    fc.tuple(
+      fc.integer({ min: -50, max: 50 }),
+      fc.integer({ min: -50, max: 50 }),
     ),
+    fc.array(fc.tuple(real(1, 100), real(-0.24, 0.24)), {
+      minLength: 3,
+      maxLength: 12,
+    }),
     fc.boolean(),
   )
   .map(([center, spokes, clockwise]) => {
@@ -250,13 +251,11 @@ export const canonicalTable: fc.Arbitrary<AnchorTable> = (() => {
   const contour = fc
     .tuple(fc.array(anchor, { minLength: 1, maxLength: 5 }), fc.boolean())
     .map(([anchors, open]) => {
-      const run = anchors.map(
-        (a): AnchorTriple => ({
-          anchor: [a.anchor[0], a.anchor[1]],
-          left: [a.left[0], a.left[1]],
-          right: [a.right[0], a.right[1]],
-        }),
-      );
+      const run = anchors.map((a): AnchorTriple => ({
+        anchor: [a.anchor[0], a.anchor[1]],
+        left: [a.left[0], a.left[1]],
+        right: [a.right[0], a.right[1]],
+      }));
       if (open) {
         run[0].left = [run[0].anchor[0], run[0].anchor[1]];
         const last = run[run.length - 1];

@@ -47,10 +47,9 @@ export const ENGINE_PIN: Readonly<EnginePin> = Object.freeze({
  *  (`Record<string, string>` — the structural twin of the host's
  *  `PluginMetadataEnvelope.engine`). Stamped on every save so the
  *  document records which stack a render used. */
-export function engineStamp(pin: Readonly<EnginePin> = ENGINE_PIN): Record<
-  string,
-  string
-> {
+export function engineStamp(
+  pin: Readonly<EnginePin> = ENGINE_PIN,
+): Record<string, string> {
   return { blitz: pin.blitz, stylo: pin.stylo, anyrender: pin.anyrender };
 }
 
@@ -63,12 +62,18 @@ export function pinFromStamp(
 ): EnginePin {
   const s = stamp ?? {};
   const str = (v: unknown): string => (typeof v === "string" ? v : "");
-  return { blitz: str(s.blitz), stylo: str(s.stylo), anyrender: str(s.anyrender) };
+  return {
+    blitz: str(s.blitz),
+    stylo: str(s.stylo),
+    anyrender: str(s.anyrender),
+  };
 }
 
 /** Whether two pins describe the same stack (a re-render under a
  *  matching pin is byte-reproducible; a mismatch means the engine moved
  *  and the cached scene is stale). */
 export function pinMatches(a: EnginePin, b: EnginePin): boolean {
-  return a.blitz === b.blitz && a.stylo === b.stylo && a.anyrender === b.anyrender;
+  return (
+    a.blitz === b.blitz && a.stylo === b.stylo && a.anyrender === b.anyrender
+  );
 }

@@ -14,7 +14,7 @@ cap/envelope while PLUGIN-identity enforcement lives in the SDK door
 **One facility, two consumers:** paged.draw live-shapes and
 paged.web's `x-paged-web:*` source. Build it once.
 
-*Status note (2026-10-02): checked against this repository at `9f933f1` and
+_Status note (2026-10-02): checked against this repository at `9f933f1` and
 `plugin-sdk` at `d90f727`. The carrier, the engine gate and the two SDK doors are
 built as the header says. Three things differ from the text. The IDML reader and
 writer it calls `paged-parse` and `paged-write` have moved to `plugin-publish`
@@ -24,7 +24,7 @@ The engine gate has gained an optional caller check
 (`crates/paged-mutate/src/apply/layer.rs:565`). And the host bake loop of §4 is
 still not built: what plugins leave in a document today is recorded in
 [ADR 316](https://github.com/paged-media/plugin-sdk/blob/main/docs/adr/316-native-content-and-baking.md)
-of plugin-sdk.*
+of plugin-sdk._
 
 ## 1. Contract (the fidelity doctrine, made mechanical)
 
@@ -76,7 +76,7 @@ We use it as-is — no schema invention, maximal foreign-tool survival:
 
 ## 3. Engine surface (paged-mutate / parse / write)
 
-*Status note (2026-10-02): this section predates the implementation. As built,
+_Status note (2026-10-02): this section predates the implementation. As built,
 `PropertyPath::PluginMetadata` is a unit variant and the key travels in the
 value, `Value::PluginMetadata { key, value, caller, prev }`
 (`crates/paged-mutate/src/operation.rs:1255`, `:2097`); the wire op is
@@ -85,7 +85,7 @@ value, `Value::PluginMetadata { key, value, caller, prev }`
 are read by `crates/idml-import/src/spread.rs:1865` and written
 by `crates/idml-export/src/rewrite.rs:1233`. The SDK doors are
 `getMetadata(id)` and `setMetadata(id, envelope)`, with the key implicit
-(`plugin-sdk: packages/plugin-api/src/host.ts:976`, `:984`).*
+(`plugin-sdk: packages/plugin-api/src/host.ts:976`, `:984`)._
 
 - Parse: `Label` already round-trips? **Verify first** — if
   `paged-parse` drops Labels today, carrying them through parse → scene
@@ -102,7 +102,7 @@ by `crates/idml-export/src/rewrite.rs:1233`. The SDK doors are
 
 ## 4. The bake() contract (SDK-side)
 
-*Status note (2026-10-02): this section predates the implementation and is only
+_Status note (2026-10-02): this section predates the implementation and is only
 partly built. `contribute.objectType` is no longer reserved: the host adapter
 registers an object type and its matcher
 (`plugin-sdk: packages/plugin-sdk/src/host-impl.ts:1463`). It takes no baker.
@@ -110,7 +110,7 @@ registers an object type and its matcher
 (`plugin-sdk: packages/plugin-api/src/host.ts:1015`, `:1019`) that no host code
 calls, so nothing below about when the host calls `bake()` happens today; see
 [ADR 316](https://github.com/paged-media/plugin-sdk/blob/main/docs/adr/316-native-content-and-baking.md)
-of plugin-sdk.*
+of plugin-sdk._
 
 ```ts
 interface ObjectTypeBaker {
@@ -130,10 +130,10 @@ interface ObjectTypeBaker {
 
 ## 5. Acceptance fixtures (the facility's definition of done)
 
-*Status note (2026-10-02): the metadata half of F1 is fixtured in
+_Status note (2026-10-02): the metadata half of F1 is fixtured in
 `crates/paged-canvas/tests/it/idml_export_saveback.rs:744` and in
 `crates/idml-export/tests/it/label_roundtrip.rs`. The "derived
-children regenerated" half depends on the bake loop of §4, which is not built.*
+children regenerated" half depends on the bake loop of §4, which is not built._
 
 - **F1 round-trip live:** create live construct → save → reopen in
   Paged → live construct identical (metadata-equal, derived children
@@ -144,14 +144,14 @@ children regenerated" half depends on the bake loop of §4, which is not built.*
 
 ## 6. Consumer sequencing
 
-*Status note (2026-10-02): this section predates the implementation. paged.web
+_Status note (2026-10-02): this section predates the implementation. paged.web
 marks its frame with this metadata and keeps the source in a container part as
 well
 ([ADR 406](https://github.com/paged-media/plugin-web/blob/main/docs/adr/406-web-frame-and-source-storage.md));
 its bake is an explicit command
 ([ADR 407](https://github.com/paged-media/plugin-web/blob/main/docs/adr/407-baking-flattens-to-native-items.md)).
 paged.draw stores live constructs as recipes in container parts
-([ADR 356](https://github.com/paged-media/plugin-draw/blob/main/docs/adr/356-live-constructs-are-recipes.md)).*
+([ADR 356](https://github.com/paged-media/plugin-draw/blob/main/docs/adr/356-live-constructs-are-recipes.md))._
 
 1. **paged.web** first (simplest bake: source → nothing yet /
    placeholder rectangle is already the baked form; later vector

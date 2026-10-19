@@ -61,40 +61,76 @@ export interface AiProxyOptions {
   fetch?: typeof fetch;
 }
 
-const ALLOWED_BLOCKS = new Set(["text", "image", "tool_use", "tool_result", "thinking", "redacted_thinking"]);
+const ALLOWED_BLOCKS = new Set([
+  "text",
+  "image",
+  "tool_use",
+  "tool_result",
+  "thinking",
+  "redacted_thinking",
+]);
 
-function errorResponse(status: number, type: string, message: string): Response {
+function errorResponse(
+  status: number,
+  type: string,
+  message: string,
+): Response {
   // The Anthropic error envelope, so the SDK on the client raises its
   // typed error classes for proxy refusals too.
-  return new Response(JSON.stringify({ type: "error", error: { type, message } }), {
-    status,
-    headers: { "content-type": "application/json", "cache-control": "no-store" },
-  });
+  return new Response(
+    JSON.stringify({ type: "error", error: { type, message } }),
+    {
+      status,
+      headers: {
+        "content-type": "application/json",
+        "cache-control": "no-store",
+      },
+    },
+  );
 }
 
 /** Check the conversation's shape: user/assistant turns only (no
  *  mid-conversation system messages — those carry operator authority), and
  *  only the block types the agent itself produces. */
-export function validateMessages(value: unknown, maxMessages: number): Anthropic.MessageParam[] | string {
-  if (!Array.isArray(value) || value.length === 0) return "messages must be a non-empty array";
-  if (value.length > maxMessages) return `at most ${maxMessages} messages per conversation`;
+export function validateMessages(
+  value: unknown,
+  maxMessages: number,
+): Anthropic.MessageParam[] | string {
+  if (!Array.isArray(value) || value.length === 0)
+    return "messages must be a non-empty array";
+  if (value.length > maxMessages)
+    return `at most ${maxMessages} messages per conversation`;
   for (const [i, m] of value.entries()) {
-    if (typeof m !== "object" || m === null) return `messages[${i}] is not an object`;
+    if (typeof m !== "object" || m === null)
+      return `messages[${i}] is not an object`;
     const { role, content } = m as { role?: unknown; content?: unknown };
-    if (role !== "user" && role !== "assistant") return `messages[${i}].role must be user or assistant`;
+    if (role !== "user" && role !== "assistant")
+      return `messages[${i}].role must be user or assistant`;
     if (typeof content === "string") continue;
-    if (!Array.isArray(content)) return `messages[${i}].content must be a string or an array`;
+    if (!Array.isArray(content))
+      return `messages[${i}].content must be a string or an array`;
     for (const [j, b] of content.entries()) {
       const type = (b as { type?: unknown } | null)?.type;
-      if (typeof type !== "string" || !ALLOWED_BLOCKS.has(type)) return `messages[${i}].content[${j}]: block type ${String(type)} is not accepted`;
+      if (typeof type !== "string" || !ALLOWED_BLOCKS.has(type))
+        return `messages[${i}].content[${j}]: block type ${String(type)} is not accepted`;
     }
   }
   return value as Anthropic.MessageParam[];
 }
 
 /** Read token usage off the streamed SSE without holding the stream up. */
-async function meterStream(stream: ReadableStream<Uint8Array>, mode: AiMode, onUsage: NonNullable<AiProxyOptions["onUsage"]>): Promise<void> {
-  const usage: ProxyUsage = { mode, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 };
+async function meterStream(
+  stream: ReadableStream<Uint8Array>,
+  mode: AiMode,
+  onUsage: NonNullable<AiProxyOptions["onUsage"]>,
+): Promise<void> {
+  const usage: ProxyUsage = {
+    mode,
+    inputTokens: 0,
+    outputTokens: 0,
+    cacheReadTokens: 0,
+    cacheWriteTokens: 0,
+  };
   const decoder = new TextDecoder();
   let buffer = "";
   const reader = stream.getReader();
@@ -109,12 +145,21 @@ async function meterStream(stream: ReadableStream<Uint8Array>, mode: AiMode, onU
       if (!line.startsWith("data:")) continue;
       try {
         const event = JSON.parse(line.slice(5));
-        const u = event.type === "message_start" ? event.message?.usage : event.type === "message_delta" ? event.usage : null;
+        const u =
+          event.type === "message_start"
+            ? event.message?.usage
+            : event.type === "message_delta"
+              ? event.usage
+              : null;
         if (!u) continue;
-        if (typeof u.input_tokens === "number") usage.inputTokens = u.input_tokens;
-        if (typeof u.output_tokens === "number") usage.outputTokens = u.output_tokens;
-        if (typeof u.cache_read_input_tokens === "number") usage.cacheReadTokens = u.cache_read_input_tokens;
-        if (typeof u.cache_creation_input_tokens === "number") usage.cacheWriteTokens = u.cache_creation_input_tokens;
+        if (typeof u.input_tokens === "number")
+          usage.inputTokens = u.input_tokens;
+        if (typeof u.output_tokens === "number")
+          usage.outputTokens = u.output_tokens;
+        if (typeof u.cache_read_input_tokens === "number")
+          usage.cacheReadTokens = u.cache_read_input_tokens;
+        if (typeof u.cache_creation_input_tokens === "number")
+          usage.cacheWriteTokens = u.cache_creation_input_tokens;
       } catch {
         // a partial or non-JSON data line: nothing to meter
       }
@@ -123,20 +168,32 @@ async function meterStream(stream: ReadableStream<Uint8Array>, mode: AiMode, onU
   await onUsage(usage);
 }
 
-export async function handleAiProxy(request: Request, options: AiProxyOptions): Promise<Response> {
-  if (request.method !== "POST") return errorResponse(405, "invalid_request_error", "POST only");
-  if (!new URL(request.url).pathname.endsWith("/v1/messages")) return errorResponse(404, "not_found_error", "unknown route");
+export async function handleAiProxy(
+  request: Request,
+  options: AiProxyOptions,
+): Promise<Response> {
+  if (request.method !== "POST")
+    return errorResponse(405, "invalid_request_error", "POST only");
+  if (!new URL(request.url).pathname.endsWith("/v1/messages"))
+    return errorResponse(404, "not_found_error", "unknown route");
   const mode = request.headers.get(MODE_HEADER);
-  if (!isAiMode(mode)) return errorResponse(400, "invalid_request_error", `missing or unknown ${MODE_HEADER}`);
+  if (!isAiMode(mode))
+    return errorResponse(
+      400,
+      "invalid_request_error",
+      `missing or unknown ${MODE_HEADER}`,
+    );
 
   const refused = await options.authorize?.(request, mode);
   if (refused) return refused;
 
   const maxBody = options.maxBodyBytes ?? 4 * 1024 * 1024;
   const declared = Number(request.headers.get("content-length") ?? "0");
-  if (declared > maxBody) return errorResponse(413, "request_too_large", "request body too large");
+  if (declared > maxBody)
+    return errorResponse(413, "request_too_large", "request body too large");
   const raw = await request.text();
-  if (raw.length > maxBody) return errorResponse(413, "request_too_large", "request body too large");
+  if (raw.length > maxBody)
+    return errorResponse(413, "request_too_large", "request body too large");
   let body: { messages?: unknown };
   try {
     body = JSON.parse(raw);
@@ -144,31 +201,52 @@ export async function handleAiProxy(request: Request, options: AiProxyOptions): 
     return errorResponse(400, "invalid_request_error", "body is not JSON");
   }
   const messages = validateMessages(body.messages, options.maxMessages ?? 160);
-  if (typeof messages === "string") return errorResponse(400, "invalid_request_error", messages);
+  if (typeof messages === "string")
+    return errorResponse(400, "invalid_request_error", messages);
 
   const client = new Anthropic({
     apiKey: options.apiKey,
-    ...(options.workspaceId ? { defaultHeaders: { "anthropic-workspace-id": options.workspaceId } } : {}),
+    ...(options.workspaceId
+      ? { defaultHeaders: { "anthropic-workspace-id": options.workspaceId } }
+      : {}),
     ...(options.fetch ? { fetch: options.fetch } : {}),
   });
-  const params = buildRequest({ mode, messages, catalog: options.catalog, model: options.model });
+  const params = buildRequest({
+    mode,
+    messages,
+    catalog: options.catalog,
+    model: options.model,
+  });
   let upstream: Response;
   try {
-    upstream = await client.messages.create({ ...params, stream: true }).asResponse();
+    upstream = await client.messages
+      .create({ ...params, stream: true })
+      .asResponse();
   } catch (err) {
     if (err instanceof Anthropic.APIError) {
       const status = typeof err.status === "number" ? err.status : 502;
       // Always in the server log (the platform's function logs).
-      console.error(`paged ai proxy: upstream ${status} (${mode}): ${err.message}`);
-      const type = status === 429 ? "rate_limit_error" : status === 529 ? "overloaded_error" : status >= 500 ? "api_error" : "invalid_request_error";
+      console.error(
+        `paged ai proxy: upstream ${status} (${mode}): ${err.message}`,
+      );
+      const type =
+        status === 429
+          ? "rate_limit_error"
+          : status === 529
+            ? "overloaded_error"
+            : status >= 500
+              ? "api_error"
+              : "invalid_request_error";
       // A 400 describes the request's shape, which the client needs to see;
       // anything else (401/403 name the account) passes only its status.
-      const message = status === 400 ? `upstream 400: ${err.message}` : `upstream ${status}`;
+      const message =
+        status === 400 ? `upstream 400: ${err.message}` : `upstream ${status}`;
       return errorResponse(status, type, message);
     }
     return errorResponse(502, "api_error", "upstream unreachable");
   }
-  if (!upstream.body) return errorResponse(502, "api_error", "upstream sent no body");
+  if (!upstream.body)
+    return errorResponse(502, "api_error", "upstream sent no body");
 
   let body$ = upstream.body;
   if (options.onUsage) {
@@ -178,7 +256,11 @@ export async function handleAiProxy(request: Request, options: AiProxyOptions): 
   }
   return new Response(body$, {
     status: upstream.status,
-    headers: { "content-type": "text/event-stream", "cache-control": "no-store", "x-accel-buffering": "no" },
+    headers: {
+      "content-type": "text/event-stream",
+      "cache-control": "no-store",
+      "x-accel-buffering": "no",
+    },
   });
 }
 
@@ -187,10 +269,20 @@ export async function handleAiProxy(request: Request, options: AiProxyOptions): 
  *  $0.50 / $2.50 above; cache reads 0.1× and 5-minute cache writes 1.25×
  *  the input rate. For a spend cap, not for billing — the invoice is the
  *  authority, and prices change. */
-export function haikuCostUsd(usage: Pick<ProxyUsage, "inputTokens" | "outputTokens" | "cacheReadTokens" | "cacheWriteTokens">): number {
-  const prompt = usage.inputTokens + usage.cacheReadTokens + usage.cacheWriteTokens;
+export function haikuCostUsd(
+  usage: Pick<
+    ProxyUsage,
+    "inputTokens" | "outputTokens" | "cacheReadTokens" | "cacheWriteTokens"
+  >,
+): number {
+  const prompt =
+    usage.inputTokens + usage.cacheReadTokens + usage.cacheWriteTokens;
   const [inRate, outRate] = prompt > 100_000 ? [0.5, 2.5] : [0.1, 0.5];
   return (
-    (usage.inputTokens * inRate + usage.cacheReadTokens * inRate * 0.1 + usage.cacheWriteTokens * inRate * 1.25 + usage.outputTokens * outRate) / 1_000_000
+    (usage.inputTokens * inRate +
+      usage.cacheReadTokens * inRate * 0.1 +
+      usage.cacheWriteTokens * inRate * 1.25 +
+      usage.outputTokens * outRate) /
+    1_000_000
   );
 }

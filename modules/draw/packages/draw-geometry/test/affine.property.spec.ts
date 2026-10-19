@@ -56,14 +56,7 @@ const scaleFactor = fc
  * the 1e-7 tolerance below is generous without being vacuous.
  */
 const invertible: fc.Arbitrary<Affine> = fc
-  .tuple(
-    angleRad,
-    scaleFactor,
-    scaleFactor,
-    real(-2, 2),
-    coord,
-    coord,
-  )
+  .tuple(angleRad, scaleFactor, scaleFactor, real(-2, 2), coord, coord)
   .map(([theta, sx, sy, shear, tx, ty]) => {
     const cos = Math.cos(theta);
     const sin = Math.sin(theta);
@@ -118,8 +111,18 @@ describe("affine — applyAffine (properties)", () => {
     fc.assert(
       fc.property(intAffine, (m) => {
         assertVecClose(applyAffine(m, 0, 0), [m[4], m[5]], 0, "origin");
-        assertVecClose(applyAffine(m, 1, 0), [m[0] + m[4], m[1] + m[5]], 0, "x unit");
-        assertVecClose(applyAffine(m, 0, 1), [m[2] + m[4], m[3] + m[5]], 0, "y unit");
+        assertVecClose(
+          applyAffine(m, 1, 0),
+          [m[0] + m[4], m[1] + m[5]],
+          0,
+          "x unit",
+        );
+        assertVecClose(
+          applyAffine(m, 0, 1),
+          [m[2] + m[4], m[3] + m[5]],
+          0,
+          "y unit",
+        );
       }),
     );
   });
@@ -133,7 +136,15 @@ describe("affine — applyAffine (properties)", () => {
         assertVecClose(
           mid,
           [(mp[0] + mq[0]) / 2, (mp[1] + mq[1]) / 2],
-          1e-9 * size(m) * Math.max(1, Math.abs(p[0]), Math.abs(p[1]), Math.abs(q[0]), Math.abs(q[1])),
+          1e-9 *
+            size(m) *
+            Math.max(
+              1,
+              Math.abs(p[0]),
+              Math.abs(p[1]),
+              Math.abs(q[0]),
+              Math.abs(q[1]),
+            ),
         );
       }),
     );
@@ -147,7 +158,11 @@ describe("affine — inverseApplyAffine (properties)", () => {
         const there = applyAffine(m, x, y);
         const back = inverseApplyAffine(m, there[0], there[1]);
         assertTrue(back !== null, "an invertible transform answered null");
-        assertVecClose(back!, [x, y], 1e-7 * Math.max(1, Math.abs(x), Math.abs(y)));
+        assertVecClose(
+          back!,
+          [x, y],
+          1e-7 * Math.max(1, Math.abs(x), Math.abs(y)),
+        );
       }),
     );
   });
@@ -161,7 +176,14 @@ describe("affine — inverseApplyAffine (properties)", () => {
         assertVecClose(
           there,
           [x, y],
-          1e-7 * Math.max(1, Math.abs(x), Math.abs(y), Math.abs(m[4]), Math.abs(m[5])),
+          1e-7 *
+            Math.max(
+              1,
+              Math.abs(x),
+              Math.abs(y),
+              Math.abs(m[4]),
+              Math.abs(m[5]),
+            ),
         );
       }),
     );
@@ -172,11 +194,20 @@ describe("affine — inverseApplyAffine (properties)", () => {
     // bit, with no cancellation noise.
     const small = fc.integer({ min: -9, max: 9 });
     fc.assert(
-      fc.property(small, small, small, small, coord, coord, vec2, (u0, u1, v0, v1, tx, ty, p) => {
-        const m: Affine = [u0 * v0, u1 * v0, u0 * v1, u1 * v1, tx, ty];
-        expect(det(m) === 0).toBe(true);
-        expect(inverseApplyAffine(m, p[0], p[1])).toBeNull();
-      }),
+      fc.property(
+        small,
+        small,
+        small,
+        small,
+        coord,
+        coord,
+        vec2,
+        (u0, u1, v0, v1, tx, ty, p) => {
+          const m: Affine = [u0 * v0, u1 * v0, u0 * v1, u1 * v1, tx, ty];
+          expect(det(m) === 0).toBe(true);
+          expect(inverseApplyAffine(m, p[0], p[1])).toBeNull();
+        },
+      ),
     );
   });
 });
@@ -188,7 +219,8 @@ describe("affine — composeAffine (properties)", () => {
         const step = applyAffine(inner, x, y);
         const expected = applyAffine(outer, step[0], step[1]);
         const got = applyAffine(composeAffine(outer, inner), x, y);
-        const s = size(outer) * size(inner) * Math.max(1, Math.abs(x), Math.abs(y));
+        const s =
+          size(outer) * size(inner) * Math.max(1, Math.abs(x), Math.abs(y));
         assertVecClose(got, expected, 1e-9 * s);
       }),
     );
@@ -230,7 +262,12 @@ describe("affine — composeAffine (properties)", () => {
   it("multiplies determinants", () => {
     fc.assert(
       fc.property(intAffine, intAffine, (a, b) => {
-        assertClose(det(composeAffine(a, b)), det(a) * det(b), 0, "determinant");
+        assertClose(
+          det(composeAffine(a, b)),
+          det(a) * det(b),
+          0,
+          "determinant",
+        );
       }),
     );
   });
@@ -269,7 +306,14 @@ describe("affine — composeAffine (properties)", () => {
         assertVecClose(
           back!,
           expected,
-          1e-6 * Math.max(1, Math.abs(expected[0]), Math.abs(expected[1]), Math.abs(a[4]), Math.abs(a[5])),
+          1e-6 *
+            Math.max(
+              1,
+              Math.abs(expected[0]),
+              Math.abs(expected[1]),
+              Math.abs(a[4]),
+              Math.abs(a[5]),
+            ),
         );
       }),
     );
@@ -283,9 +327,17 @@ describe("affine — invertAffine (properties)", () => {
         const inv = invertAffine(m);
         assertTrue(inv !== null, "an invertible transform answered null");
         const s = Math.max(1, Math.abs(m[4]), Math.abs(m[5]));
-        for (const product of [composeAffine(inv!, m), composeAffine(m, inv!)]) {
+        for (const product of [
+          composeAffine(inv!, m),
+          composeAffine(m, inv!),
+        ]) {
           for (let i = 0; i < 6; i++) {
-            assertClose(product[i], IDENTITY_AFFINE[i]!, i < 4 ? 1e-9 : 1e-9 * s, `entry ${i}`);
+            assertClose(
+              product[i],
+              IDENTITY_AFFINE[i]!,
+              i < 4 ? 1e-9 : 1e-9 * s,
+              `entry ${i}`,
+            );
           }
         }
       }),
@@ -301,7 +353,14 @@ describe("affine — invertAffine (properties)", () => {
         assertVecClose(
           applyAffine(inv!, x, y),
           back!,
-          1e-7 * Math.max(1, Math.abs(x), Math.abs(y), Math.abs(m[4]), Math.abs(m[5])),
+          1e-7 *
+            Math.max(
+              1,
+              Math.abs(x),
+              Math.abs(y),
+              Math.abs(m[4]),
+              Math.abs(m[5]),
+            ),
         );
       }),
     );
@@ -310,10 +369,18 @@ describe("affine — invertAffine (properties)", () => {
   it("answers null exactly where inverseApplyAffine does (a singular matrix)", () => {
     const small = fc.integer({ min: -9, max: 9 });
     fc.assert(
-      fc.property(small, small, small, small, coord, coord, (u0, u1, v0, v1, tx, ty) => {
-        const m: Affine = [u0 * v0, u1 * v0, u0 * v1, u1 * v1, tx, ty];
-        expect(invertAffine(m)).toBeNull();
-      }),
+      fc.property(
+        small,
+        small,
+        small,
+        small,
+        coord,
+        coord,
+        (u0, u1, v0, v1, tx, ty) => {
+          const m: Affine = [u0 * v0, u1 * v0, u0 * v1, u1 * v1, tx, ty];
+          expect(invertAffine(m)).toBeNull();
+        },
+      ),
     );
   });
 });

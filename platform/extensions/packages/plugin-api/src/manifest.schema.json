@@ -4,12 +4,7 @@
   "$comment": "SINGLE SOURCE OF TRUTH for the closed capability vocabularies (rendering surfaces, asset kinds, clipboard grants, wasm purposes, edit-context scopes/entries, baked fallbacks). The plugin-api TS unions (manifest.ts/assets.ts) and the plugin-cli runtime Sets are PROJECTIONS of these enums; plugin-sdk/test/capability-vocabulary.spec.ts gates them against this file (ADR 019). Change a vocabulary HERE first.",
   "title": "Paged plugin manifest",
   "type": "object",
-  "required": [
-    "id",
-    "name",
-    "version",
-    "apiVersion"
-  ],
+  "required": ["id", "name", "version", "apiVersion"],
   "additionalProperties": false,
   "properties": {
     "id": {
@@ -41,16 +36,10 @@
           "additionalProperties": false,
           "properties": {
             "read": {
-              "enum": [
-                "broad",
-                "scoped"
-              ]
+              "enum": ["broad", "scoped"]
             },
             "write": {
-              "enum": [
-                "broad",
-                "scoped"
-              ]
+              "enum": ["broad", "scoped"]
             },
             "readNative": {
               "type": "boolean",
@@ -65,12 +54,7 @@
         "rendering": {
           "type": "array",
           "items": {
-            "enum": [
-              "sceneLayer",
-              "overlay",
-              "hitTest",
-              "resourceProvider"
-            ]
+            "enum": ["sceneLayer", "overlay", "hitTest", "resourceProvider"]
           }
         },
         "keybindings": {
@@ -87,10 +71,7 @@
           "type": "array",
           "description": "Asset-store reads the bundle uses. \"fonts\" gates host.assets.getFontFace (W-06); \"images\" gates host.assets.getPlacedImage (C-5 / I-04, core v42). See DESIGN.md §13.",
           "items": {
-            "enum": [
-              "fonts",
-              "images"
-            ]
+            "enum": ["fonts", "images"]
           }
         },
         "network": {
@@ -138,19 +119,13 @@
           }
         },
         "clipboard": {
-          "enum": [
-            "none",
-            "vector",
-            "full"
-          ]
+          "enum": ["none", "vector", "full"]
         },
         "workers": {
           "type": "object",
           "description": "Worker spawn + SharedArrayBuffer (K-3 / S-07 / I-02). 'max' is the worker-count ceiling requested (host clamps to min(declared, hardwareConcurrency, 8)); 'sharedMemory' declares SAB use (gates allocateShared); 'maxSharedBytes' requests a per-bundle shared-memory ceiling (host enforces the stricter of it and its 256 MiB default cap). Gates host.workers.",
           "additionalProperties": false,
-          "required": [
-            "max"
-          ],
+          "required": ["max"],
           "properties": {
             "max": {
               "type": "integer",
@@ -171,9 +146,7 @@
           "type": "object",
           "description": "Host credential-store door (D-11; rfc-credential-store). 'sources' grants host.secrets for authenticated DB-attach / remote sources. REFERENCE-ONLY + host-owned: plugins hold credentialRef strings, never secret material; the surface has set/exists/forget and NO get. Gates host.secrets.",
           "additionalProperties": false,
-          "required": [
-            "sources"
-          ],
+          "required": ["sources"],
           "properties": {
             "sources": {
               "type": "boolean"
@@ -197,9 +170,7 @@
           "type": "object",
           "description": "WebGPU usage declaration (I-07 / C-1 Stage B realm-local; ADR-018). DECLARE-ONLY: no GPUDevice is handed to the bundle — it legitimizes the realm-local WebGPU usage the bundle already does in its own JS realm (paged.image Engine-B). realm:\"bundle\" is the only value accepted today; realm:\"shared\" (future host-device-sharing) is reserved and REJECTED until the zero-copy walls lift. No requestGpuDevice surface exists.",
           "additionalProperties": false,
-          "required": [
-            "realm"
-          ],
+          "required": ["realm"],
           "properties": {
             "realm": {
               "const": "bundle"
@@ -211,11 +182,7 @@
           "description": "Declared WebAssembly artifacts the bundle ships and loads at runtime (capability-gated, declared-only, budgeted). See docs/wasm-packaging.md.",
           "items": {
             "type": "object",
-            "required": [
-              "name",
-              "path",
-              "purpose"
-            ],
+            "required": ["name", "path", "purpose"],
             "additionalProperties": false,
             "properties": {
               "name": {
@@ -228,12 +195,7 @@
                 "description": "Bundle-relative path to the .wasm file; no leading slash, no '..' segment."
               },
               "purpose": {
-                "enum": [
-                  "layout",
-                  "codec",
-                  "compute",
-                  "engine"
-                ]
+                "enum": ["layout", "codec", "compute", "engine"]
               },
               "maxBytes": {
                 "type": "integer",
@@ -277,19 +239,14 @@
           "type": "array",
           "items": {
             "type": "object",
-            "required": [
-              "type",
-              "entry"
-            ],
+            "required": ["type", "entry"],
             "additionalProperties": false,
             "properties": {
               "type": {
                 "type": "string"
               },
               "entry": {
-                "enum": [
-                  "doubleClick"
-                ]
+                "enum": ["doubleClick"]
               },
               "priority": {
                 "type": "integer"
@@ -301,21 +258,14 @@
           "type": "array",
           "items": {
             "type": "object",
-            "required": [
-              "type",
-              "bakedFallback"
-            ],
+            "required": ["type", "bakedFallback"],
             "additionalProperties": false,
             "properties": {
               "type": {
                 "type": "string"
               },
               "bakedFallback": {
-                "enum": [
-                  "group",
-                  "rectangle",
-                  "raster"
-                ]
+                "enum": ["group", "rectangle", "raster"]
               }
             }
           }
@@ -335,20 +285,14 @@
         "objectModel": {
           "description": "ADR 323 — the object model contributed through host.contribute.objectModel. schema/args are inline or a bundle-relative path to a JSON file.",
           "type": "object",
-          "required": [
-            "kinds"
-          ],
+          "required": ["kinds"],
           "additionalProperties": false,
           "properties": {
             "kinds": {
               "type": "array",
               "items": {
                 "type": "object",
-                "required": [
-                  "kind",
-                  "title",
-                  "schema"
-                ],
+                "required": ["kind", "title", "schema"],
                 "additionalProperties": false,
                 "properties": {
                   "kind": {
@@ -368,10 +312,7 @@
                         "minItems": 1,
                         "items": {
                           "type": "object",
-                          "required": [
-                            "path",
-                            "type"
-                          ],
+                          "required": ["path", "type"],
                           "properties": {
                             "path": {
                               "type": "string",
@@ -379,9 +320,7 @@
                             },
                             "type": {
                               "type": "object",
-                              "required": [
-                                "kind"
-                              ],
+                              "required": ["kind"],
                               "properties": {
                                 "kind": {
                                   "enum": [
@@ -416,11 +355,7 @@
               "type": "array",
               "items": {
                 "type": "object",
-                "required": [
-                  "id",
-                  "title",
-                  "args"
-                ],
+                "required": ["id", "title", "args"],
                 "additionalProperties": false,
                 "properties": {
                   "id": {
@@ -436,9 +371,7 @@
                       },
                       {
                         "type": "object",
-                        "required": [
-                          "kind"
-                        ],
+                        "required": ["kind"],
                         "properties": {
                           "kind": {
                             "enum": [
@@ -470,9 +403,7 @@
                       },
                       {
                         "type": "object",
-                        "required": [
-                          "kind"
-                        ],
+                        "required": ["kind"],
                         "properties": {
                           "kind": {
                             "enum": [
@@ -506,22 +437,14 @@
           "type": "array",
           "items": {
             "type": "object",
-            "required": [
-              "type",
-              "role",
-              "format"
-            ],
+            "required": ["type", "role", "format"],
             "additionalProperties": false,
             "properties": {
               "type": {
                 "type": "string"
               },
               "role": {
-                "enum": [
-                  "spec",
-                  "source",
-                  "derived"
-                ]
+                "enum": ["spec", "source", "derived"]
               },
               "format": {
                 "type": "string"

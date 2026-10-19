@@ -140,6 +140,12 @@ jobs:
         run: |
           bun run --filter './packages/*' test \
             --reporter=junit --reporter-outfile=junit.bun.xml
+      # The panels as components (`*.dom.test.tsx`, happy-dom), which the
+      # plain run above skips: their own task preloads the DOM.
+      - name: bun test:dom (panel components)
+        env:
+          REQUIRE_REAL_ENGINE: "1"
+        run: bun run --filter './packages/sheet-bundle' test:dom
       # bun's reports, rewritten into the vitest shape the evidence has always
       # had (tooling/js/bun-junit.mjs): the artifact keeps its name and test ids.
       - name: collect junit

@@ -52,21 +52,44 @@ export interface HeaderProps {
 export function Header({ onFile, headerExtras, status }: HeaderProps) {
   return (
     <header style={headerStyle}>
-      <div style={{ display: "flex", alignItems: "center", gap: 12, flexShrink: 0 }}>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 12,
+          flexShrink: 0,
+        }}
+      >
         <Brand />
         <DocumentChip status={status} />
         <span style={zoneDividerStyle} aria-hidden />
         <MenuBar />
       </div>
 
-      <div style={{ flex: 1, minWidth: 36, display: "flex", justifyContent: "center" }}>
+      <div
+        style={{
+          flex: 1,
+          minWidth: 36,
+          display: "flex",
+          justifyContent: "center",
+        }}
+      >
         <CommandTrigger />
       </div>
 
-      <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+      <div
+        style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}
+      >
         <FileDrop onFile={onFile} hidden />
         {headerExtras != null && (
-          <div style={{ display: "flex", maxWidth: 200, minWidth: 0, overflow: "hidden" }}>
+          <div
+            style={{
+              display: "flex",
+              maxWidth: 200,
+              minWidth: 0,
+              overflow: "hidden",
+            }}
+          >
             {headerExtras}
           </div>
         )}
@@ -114,7 +137,13 @@ function DocumentChip({ status }: { status?: string }) {
         fontSize: 13,
       }}
     >
-      <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+      <span
+        style={{
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
+        }}
+      >
         {name}
       </span>
       {(state || !ready) && (
@@ -122,7 +151,9 @@ function DocumentChip({ status }: { status?: string }) {
           // Both hooks the suite and scripts read: the worker state and
           // the save state, now one dot.
           data-shell-status={status}
-          data-save-state={handle && ready ? (meta?.dirty ? "dirty" : "saved") : undefined}
+          data-save-state={
+            handle && ready ? (meta?.dirty ? "dirty" : "saved") : undefined
+          }
           aria-label={state ?? undefined}
           style={{
             width: 7,
@@ -161,12 +192,17 @@ function CommandTrigger() {
   useEffect(() => {
     const el = ref.current?.parentElement;
     if (!el || typeof ResizeObserver === "undefined") return;
-    const ro = new ResizeObserver(([e]) => setCompact(e.contentRect.width < 220));
+    const ro = new ResizeObserver(([e]) =>
+      setCompact(e.contentRect.width < 220),
+    );
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
   return (
-    <div ref={ref} style={{ display: "flex", justifyContent: "center", width: "100%" }}>
+    <div
+      ref={ref}
+      style={{ display: "flex", justifyContent: "center", width: "100%" }}
+    >
       <button
         type="button"
         data-command-trigger

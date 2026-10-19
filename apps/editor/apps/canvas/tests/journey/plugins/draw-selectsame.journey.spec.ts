@@ -75,7 +75,10 @@ async function selectionIds(
       }
     ).__canvas;
     const r = await c.client.executeScript("paged.selection()");
-    return JSON.parse(r.output[0] ?? "[]") as Array<{ kind: string; id: string }>;
+    return JSON.parse(r.output[0] ?? "[]") as Array<{
+      kind: string;
+      id: string;
+    }>;
   });
 }
 
@@ -98,7 +101,9 @@ async function setSelection(
             ) => Promise<Array<{ kind: string; id: string }>>;
           };
           setContentSelection?: (sel: unknown | null) => void;
-          setElementSelection?: (ids: Array<{ kind: string; id: string }>) => void;
+          setElementSelection?: (
+            ids: Array<{ kind: string; id: string }>,
+          ) => void;
         };
       }
     ).__canvas;
@@ -119,22 +124,42 @@ test.describe("journey · paged.draw select-same", () => {
 
     // ── 1. AUTHOR — three rectangles: two black-filled, one red-filled,
     //    plus a shared stroke weight across two of them. ──
-    const black1 = await designer.drawRectangle({ x0: 80, y0: 90, x1: 200, y1: 200 });
-    const black2 = await designer.drawRectangle({ x0: 260, y0: 90, x1: 380, y1: 200 });
-    const red = await designer.drawRectangle({ x0: 440, y0: 90, x1: 560, y1: 200 });
+    const black1 = await designer.drawRectangle({
+      x0: 80,
+      y0: 90,
+      x1: 200,
+      y1: 200,
+    });
+    const black2 = await designer.drawRectangle({
+      x0: 260,
+      y0: 90,
+      x1: 380,
+      y1: 200,
+    });
+    const red = await designer.drawRectangle({
+      x0: 440,
+      y0: 90,
+      x1: 560,
+      y1: 200,
+    });
     for (const id of [black1, black2, red]) {
       expect(id, "drew a rectangle").not.toBe("");
     }
 
     await designer.applyFill("rectangle", black1, "Color/Black");
     await designer.applyFill("rectangle", black2, "Color/Black");
-    const redSwatch = await designer.createSwatch("select-same-red", [220, 20, 20]);
+    const redSwatch = await designer.createSwatch(
+      "select-same-red",
+      [220, 20, 20],
+    );
     await designer.applyFill("rectangle", red, redSwatch);
 
     // ── 2. SELECT-SAME-FILL — select ONE black rect, run the command,
     //    assert the selection grew to the TWO black rects (the red is
     //    excluded — different fill colorRef). ──
-    expect((await setSelection(page, { kind: "rectangle", id: black1 })).length).toBe(1);
+    expect(
+      (await setSelection(page, { kind: "rectangle", id: black1 })).length,
+    ).toBe(1);
 
     await invokeCommand(page, "media.paged.draw.command.selectSameFill");
     await expect
@@ -154,15 +179,21 @@ test.describe("journey · paged.draw select-same", () => {
     await designer.applyStroke("rectangle", red, "Color/Black", 4);
     // black2 keeps no stroke.
 
-    expect((await setSelection(page, { kind: "rectangle", id: black1 })).length).toBe(1);
-    await invokeCommand(page, "media.paged.draw.command.selectSameStrokeWeight");
+    expect(
+      (await setSelection(page, { kind: "rectangle", id: black1 })).length,
+    ).toBe(1);
+    await invokeCommand(
+      page,
+      "media.paged.draw.command.selectSameStrokeWeight",
+    );
     await expect
       .poll(async () => (await selectionIds(page)).length, { timeout: 6_000 })
       .toBe(2);
     const weightMatched = (await selectionIds(page)).map((r) => r.id).sort();
-    expect(weightMatched, "select-same-stroke-weight matched the two 4pt rects").toEqual(
-      [black1, red].sort(),
-    );
+    expect(
+      weightMatched,
+      "select-same-stroke-weight matched the two 4pt rects",
+    ).toEqual([black1, red].sort());
 
     // ── 4. SELECT-SAME-STROKE (colour) — both stroked rects are black
     //    strokes, so the command resolves the same pair (the criterion

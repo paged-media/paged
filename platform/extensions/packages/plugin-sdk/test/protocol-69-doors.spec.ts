@@ -43,7 +43,9 @@ const KEY = "x-paged:media.paged.data";
 
 function host() {
   const fake = makeFakeEditor();
-  const { host: h } = createBundleHost(() => fake.editor, MANIFEST, { console: silent });
+  const { host: h } = createBundleHost(() => fake.editor, MANIFEST, {
+    console: silent,
+  });
   return { host: h, fake };
 }
 
@@ -54,12 +56,19 @@ describe("document.documentMetadata (protocol 69)", () => {
 
   it("setDocumentMetadata writes the derived key, the envelope and the caller", async () => {
     const { host: h, fake } = host();
-    const out = await h.document.setDocumentMetadata({ v: 1, data: { parts: "a1" } });
+    const out = await h.document.setDocumentMetadata({
+      v: 1,
+      data: { parts: "a1" },
+    });
     expect(out.applied).toBe(true);
     expect(fake.mutations).toEqual([
       {
         op: "setDocumentMetadata",
-        args: { key: KEY, value: '{"v":1,"data":{"parts":"a1"}}', caller: "media.paged.data" },
+        args: {
+          key: KEY,
+          value: '{"v":1,"data":{"parts":"a1"}}',
+          caller: "media.paged.data",
+        },
       },
     ]);
   });
@@ -67,7 +76,9 @@ describe("document.documentMetadata (protocol 69)", () => {
   it("setDocumentMetadata(null) clears", async () => {
     const { host: h, fake } = host();
     await h.document.setDocumentMetadata(null);
-    expect((fake.mutations[0] as { args: { value: unknown } }).args.value).toBeNull();
+    expect(
+      (fake.mutations[0] as { args: { value: unknown } }).args.value,
+    ).toBeNull();
   });
 
   it("getDocumentMetadata reads only this plugin's entry", async () => {
@@ -75,11 +86,17 @@ describe("document.documentMetadata (protocol 69)", () => {
     fake.setDocumentMeta({
       pageCount: 1,
       pluginMetadata: [
-        { key: "x-paged:media.paged.web", value: '{"v":1,"data":{"theirs":true}}' },
+        {
+          key: "x-paged:media.paged.web",
+          value: '{"v":1,"data":{"theirs":true}}',
+        },
         { key: KEY, value: '{"v":2,"data":{"mine":true}}' },
       ],
     });
-    expect(await h.document.getDocumentMetadata()).toEqual({ v: 2, data: { mine: true } });
+    expect(await h.document.getDocumentMetadata()).toEqual({
+      v: 2,
+      data: { mine: true },
+    });
   });
 
   it("getDocumentMetadata is null when absent and on a pre-69 engine", async () => {
@@ -91,11 +108,19 @@ describe("document.documentMetadata (protocol 69)", () => {
 
   it("a raw setDocumentMetadata outside the namespace is refused, also in a batch", async () => {
     const { host: h, fake } = host();
-    const foreign = { op: "setDocumentMetadata", args: { key: "x-paged:media.paged.web", value: "{}" } };
+    const foreign = {
+      op: "setDocumentMetadata",
+      args: { key: "x-paged:media.paged.web", value: "{}" },
+    };
     const direct = await h.document.mutate(foreign as never);
     expect(direct.applied).toBe(false);
-    expect(String((direct as { error: unknown }).error)).toMatch(/outside this plugin's namespace/);
-    const batched = await h.document.mutate({ op: "batch", args: { ops: [foreign] } } as never);
+    expect(String((direct as { error: unknown }).error)).toMatch(
+      /outside this plugin's namespace/,
+    );
+    const batched = await h.document.mutate({
+      op: "batch",
+      args: { ops: [foreign] },
+    } as never);
     expect(batched.applied).toBe(false);
     expect(fake.mutations).toHaveLength(0);
   });

@@ -103,7 +103,13 @@ export async function chip(
   const pageId = ctx.pageIds[ctx.pageIndexes.indexOf(pageIndex)];
   let plateId: string;
   if ("name" in swatchIdOrName) {
-    plateId = await plate(ctx, pageIndex, box, swatchIdOrName.name, LAYER.content);
+    plateId = await plate(
+      ctx,
+      pageIndex,
+      box,
+      swatchIdOrName.name,
+      LAYER.content,
+    );
   } else {
     plateId = await doc.rectangle(pageId, box);
     await doc.setProperty("rectangle", plateId, "frameFillColor", {

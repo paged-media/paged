@@ -28,7 +28,14 @@ import type { BundleHost, ToolPreviewShape } from "@paged-media/plugin-api";
 
 import { overlayChannel, releaseOverlayLayers } from "../src/overlay-channel";
 
-const shape = (y: number): ToolPreviewShape => ({ pageId: "p1", points: [[0, y], [10, y]] }) as ToolPreviewShape;
+const shape = (y: number): ToolPreviewShape =>
+  ({
+    pageId: "p1",
+    points: [
+      [0, y],
+      [10, y],
+    ],
+  }) as ToolPreviewShape;
 
 function modelHost(layers: boolean) {
   const created: string[] = [];
@@ -37,7 +44,8 @@ function modelHost(layers: boolean) {
   const host = {
     supports: (f: string) => layers && f === "overlay.layers@1",
     overlay: {
-      setToolPreviews: (s: readonly ToolPreviewShape[] | null) => void previews.push(s),
+      setToolPreviews: (s: readonly ToolPreviewShape[] | null) =>
+        void previews.push(s),
       layer: (id: string) => {
         if (live.has(id)) throw new Error(`layer ${id} is live`);
         created.push(id);

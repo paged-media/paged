@@ -12,12 +12,18 @@ import { preflightHostedWasm } from "../query/duckdb";
 const SRI = "sha384-" + "A".repeat(64);
 
 function host(supports: boolean, modules?: unknown) {
-  return { supports: (f: string) => supports && f === "modules@1", modules } as never;
+  return {
+    supports: (f: string) => supports && f === "modules@1",
+    modules,
+  } as never;
 }
 
 describe("hostWasm", () => {
   it("answers the host's URL + integrity when the door is wired", async () => {
-    const resolve = vi.fn(async (name: string) => ({ url: `https://modules.example/${name}.wasm`, integrity: SRI }));
+    const resolve = vi.fn(async (name: string) => ({
+      url: `https://modules.example/${name}.wasm`,
+      integrity: SRI,
+    }));
     expect(await hostWasm(host(true, { resolve }))("duckdb-engine")).toEqual({
       url: "https://modules.example/duckdb-engine.wasm",
       integrity: SRI,
@@ -27,13 +33,18 @@ describe("hostWasm", () => {
 
   it("is null on a host without a module backend, and the door is not called", async () => {
     const resolve = vi.fn();
-    expect(await hostWasm(host(false, { resolve }))("duckdb-engine")).toBeNull();
+    expect(
+      await hostWasm(host(false, { resolve }))("duckdb-engine"),
+    ).toBeNull();
     expect(resolve).not.toHaveBeenCalled();
   });
 });
 
 describe("initEngineGlue (bootEngine through the door)", () => {
-  async function run(init: (arg?: unknown) => Promise<void>, resolveWasm?: () => Promise<unknown>) {
+  async function run(
+    init: (arg?: unknown) => Promise<void>,
+    resolveWasm?: () => Promise<unknown>,
+  ) {
     const fallbacks: string[] = [];
     const fetchMock = vi.fn(async () => new Response("wasm"));
     stubGlobal("fetch", fetchMock);
@@ -50,24 +61,39 @@ describe("initEngineGlue (bootEngine through the door)", () => {
 
   it("hands the glue the host's copy, fetched with its integrity", async () => {
     const init = vi.fn(async () => {});
-    const { fallbacks, fetchMock } = await run(init, async () => ({ url: "https://m.example/e.wasm", integrity: SRI }));
+    const { fallbacks, fetchMock } = await run(init, async () => ({
+      url: "https://m.example/e.wasm",
+      integrity: SRI,
+    }));
     expect(fallbacks).toEqual([]);
-    expect(fetchMock).toHaveBeenCalledWith("https://m.example/e.wasm", { integrity: SRI });
+    expect(fetchMock).toHaveBeenCalledWith("https://m.example/e.wasm", {
+      integrity: SRI,
+    });
     expect(init).toHaveBeenCalledTimes(1);
-    expect((init.mock.calls[0] as unknown[])[0]).toHaveProperty("module_or_path");
+    expect((init.mock.calls[0] as unknown[])[0]).toHaveProperty(
+      "module_or_path",
+    );
   });
 
   it("passes the URL alone when nobody vouched for the bytes", async () => {
     const init = vi.fn(async () => {});
-    await run(init, async () => ({ url: "https://m.example/e.wasm", integrity: null }));
-    expect(init).toHaveBeenCalledWith({ module_or_path: "https://m.example/e.wasm" });
+    await run(init, async () => ({
+      url: "https://m.example/e.wasm",
+      integrity: null,
+    }));
+    expect(init).toHaveBeenCalledWith({
+      module_or_path: "https://m.example/e.wasm",
+    });
   });
 
   it("falls back to the glue's own copy when the host's fails", async () => {
     const init = vi.fn(async (arg?: unknown) => {
       if (arg) throw new TypeError("Failed to fetch (integrity)");
     });
-    const { fallbacks } = await run(init, async () => ({ url: "https://m.example/e.wasm", integrity: SRI }));
+    const { fallbacks } = await run(init, async () => ({
+      url: "https://m.example/e.wasm",
+      integrity: SRI,
+    }));
     expect(init).toHaveBeenCalledTimes(2);
     expect(init.mock.calls[1]).toEqual([]);
     expect(fallbacks).toHaveLength(1);
@@ -89,16 +115,32 @@ describe("preflightHostedWasm (DuckDB's pre-fetch)", () => {
   it("passes a module that is there, fetched with its integrity", async () => {
     const fetchMock = vi.fn(async () => new Response("wasm"));
     stubGlobal("fetch", fetchMock);
-    expect(await preflightHostedWasm("https://m.example/d.wasm", SRI)).toBeNull();
-    expect(fetchMock).toHaveBeenCalledWith("https://m.example/d.wasm", { integrity: SRI });
-    expect(await preflightHostedWasm("https://m.example/d.wasm", null)).toBeNull();
+    expect(
+      await preflightHostedWasm("https://m.example/d.wasm", SRI),
+    ).toBeNull();
+    expect(fetchMock).toHaveBeenCalledWith("https://m.example/d.wasm", {
+      integrity: SRI,
+    });
+    expect(
+      await preflightHostedWasm("https://m.example/d.wasm", null),
+    ).toBeNull();
     expect(fetchMock).toHaveBeenLastCalledWith("https://m.example/d.wasm");
   });
 
   it("names why a module is not usable: a status, or a refused fetch", async () => {
-    stubGlobal("fetch", vi.fn(async () => new Response("", { status: 404 })));
-    expect(await preflightHostedWasm("https://m.example/d.wasm", null)).toBe("answered HTTP 404");
-    stubGlobal("fetch", vi.fn(async () => Promise.reject(new TypeError("integrity mismatch"))));
-    expect(await preflightHostedWasm("https://m.example/d.wasm", SRI)).toMatch(/with its integrity \(integrity mismatch\)/);
+    stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("", { status: 404 })),
+    );
+    expect(await preflightHostedWasm("https://m.example/d.wasm", null)).toBe(
+      "answered HTTP 404",
+    );
+    stubGlobal(
+      "fetch",
+      vi.fn(async () => Promise.reject(new TypeError("integrity mismatch"))),
+    );
+    expect(await preflightHostedWasm("https://m.example/d.wasm", SRI)).toMatch(
+      /with its integrity \(integrity mismatch\)/,
+    );
   });
 });

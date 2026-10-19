@@ -50,8 +50,8 @@ test.describe("Comments panel (honest stub)", () => {
 
     // No fake data and no dead interactive chrome: the panel offers
     // nothing clickable/typable while the backend does not exist.
-    await expect(
-      panel.locator("button, input, select, textarea"),
-    ).toHaveCount(0);
+    await expect(panel.locator("button, input, select, textarea")).toHaveCount(
+      0,
+    );
   });
 });

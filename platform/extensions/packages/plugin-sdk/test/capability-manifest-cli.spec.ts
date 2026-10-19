@@ -30,7 +30,7 @@ import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it } from "bun:test";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const CLI = resolve(here, "../../plugin-cli/bin/paged-plugin.mjs");
+const CLI = resolve(here, "../bin/paged-plugin.mjs");
 
 let dir: string | null = null;
 afterEach(() => {
@@ -38,7 +38,11 @@ afterEach(() => {
   dir = null;
 });
 
-function validate(manifest: unknown): { code: number; out: string; err: string } {
+function validate(manifest: unknown): {
+  code: number;
+  out: string;
+  err: string;
+} {
   dir = mkdtempSync(join(tmpdir(), "paged-cap-"));
   const path = join(dir, "manifest.json");
   writeFileSync(path, JSON.stringify(manifest));
@@ -86,20 +90,29 @@ describe("plugin-cli validate — capabilities.network (D-03)", () => {
     const r = validate({
       ...base,
       capabilities: {
-        network: { origins: ["https://api.test", "http://localhost:8080"], purpose: "bind" },
+        network: {
+          origins: ["https://api.test", "http://localhost:8080"],
+          purpose: "bind",
+        },
       },
     });
     expect(r.code).toBe(0);
     expect(r.out).toMatch(/valid/);
   });
 
-  it("accepts the \"consent\" wildcard (author-supplied sources)", () => {
-    const r = validate({ ...base, capabilities: { network: { origins: "consent" } } });
+  it('accepts the "consent" wildcard (author-supplied sources)', () => {
+    const r = validate({
+      ...base,
+      capabilities: { network: { origins: "consent" } },
+    });
     expect(r.code).toBe(0);
   });
 
   it("rejects a malformed origin (not scheme://host)", () => {
-    const r = validate({ ...base, capabilities: { network: { origins: ["api.test"] } } });
+    const r = validate({
+      ...base,
+      capabilities: { network: { origins: ["api.test"] } },
+    });
     expect(r.code).toBe(1);
     expect(r.err).toMatch(/capabilities\.network\.origins.*scheme:\/\/host/);
   });
@@ -171,13 +184,18 @@ describe("plugin-cli validate — capabilities.workers (K-3 / S-07)", () => {
   it("accepts a maxSharedBytes ceiling", () => {
     const r = validate({
       ...base,
-      capabilities: { workers: { max: 2, sharedMemory: true, maxSharedBytes: 1048576 } },
+      capabilities: {
+        workers: { max: 2, sharedMemory: true, maxSharedBytes: 1048576 },
+      },
     });
     expect(r.code).toBe(0);
   });
 
   it("rejects a missing max", () => {
-    const r = validate({ ...base, capabilities: { workers: { sharedMemory: true } } });
+    const r = validate({
+      ...base,
+      capabilities: { workers: { sharedMemory: true } },
+    });
     expect(r.code).toBe(1);
     expect(r.err).toMatch(/"capabilities\.workers\.max" must be an integer/);
   });
@@ -185,7 +203,9 @@ describe("plugin-cli validate — capabilities.workers (K-3 / S-07)", () => {
   it("rejects a max over the hard cap (8)", () => {
     const r = validate({ ...base, capabilities: { workers: { max: 16 } } });
     expect(r.code).toBe(1);
-    expect(r.err).toMatch(/"capabilities\.workers\.max" must be an integer 1\.\.8/);
+    expect(r.err).toMatch(
+      /"capabilities\.workers\.max" must be an integer 1\.\.8/,
+    );
   });
 
   it("rejects a non-object workers capability", () => {
@@ -195,7 +215,10 @@ describe("plugin-cli validate — capabilities.workers (K-3 / S-07)", () => {
   });
 
   it("rejects an unknown key in the workers object", () => {
-    const r = validate({ ...base, capabilities: { workers: { max: 2, threads: 4 } } });
+    const r = validate({
+      ...base,
+      capabilities: { workers: { max: 2, threads: 4 } },
+    });
     expect(r.code).toBe(1);
     expect(r.err).toMatch(/"capabilities\.workers" unknown key/);
   });
@@ -212,18 +235,27 @@ describe("plugin-cli validate — capabilities.workers (K-3 / S-07)", () => {
 
 describe("plugin-cli validate — capabilities.secrets (D-11)", () => {
   it("accepts a secrets capability with sources: true", () => {
-    const r = validate({ ...base, capabilities: { secrets: { sources: true } } });
+    const r = validate({
+      ...base,
+      capabilities: { secrets: { sources: true } },
+    });
     expect(r.code).toBe(0);
     expect(r.out).toMatch(/valid/);
   });
 
   it("accepts sources: false (declared-but-off)", () => {
-    const r = validate({ ...base, capabilities: { secrets: { sources: false } } });
+    const r = validate({
+      ...base,
+      capabilities: { secrets: { sources: false } },
+    });
     expect(r.code).toBe(0);
   });
 
   it("rejects a non-boolean sources", () => {
-    const r = validate({ ...base, capabilities: { secrets: { sources: "yes" } } });
+    const r = validate({
+      ...base,
+      capabilities: { secrets: { sources: "yes" } },
+    });
     expect(r.code).toBe(1);
     expect(r.err).toMatch(/"capabilities\.secrets\.sources" must be a boolean/);
   });
@@ -246,7 +278,12 @@ describe("plugin-cli validate — capabilities.secrets (D-11)", () => {
 
 describe("plugin-cli validate — capabilities.documents (D-26)", () => {
   it("accepts export and open, alone or together", () => {
-    for (const documents of [{ export: true }, { open: true }, { export: true, open: false }, {}]) {
+    for (const documents of [
+      { export: true },
+      { open: true },
+      { export: true, open: false },
+      {},
+    ]) {
       const r = validate({ ...base, capabilities: { documents } });
       expect(r.code, JSON.stringify(documents)).toBe(0);
     }
@@ -259,29 +296,37 @@ describe("plugin-cli validate — capabilities.documents (D-26)", () => {
   });
 
   it("rejects a non-boolean grant", () => {
-    const r = validate({ ...base, capabilities: { documents: { open: "yes" } } });
+    const r = validate({
+      ...base,
+      capabilities: { documents: { open: "yes" } },
+    });
     expect(r.code).toBe(1);
     expect(r.err).toMatch(/"capabilities\.documents\.open" must be a boolean/);
   });
 
   it("rejects an unknown key (no silent create/close grant)", () => {
-    const r = validate({ ...base, capabilities: { documents: { open: true, close: true } } });
+    const r = validate({
+      ...base,
+      capabilities: { documents: { open: true, close: true } },
+    });
     expect(r.code).toBe(1);
     expect(r.err).toMatch(/"capabilities\.documents" unknown key/);
   });
 });
 
 describe("plugin-cli validate — capabilities.gpu (I-07 / C-1 Stage B realm-local)", () => {
-  it("accepts realm: \"bundle\" (the realm-local bless-it)", () => {
+  it('accepts realm: "bundle" (the realm-local bless-it)', () => {
     const r = validate({ ...base, capabilities: { gpu: { realm: "bundle" } } });
     expect(r.code).toBe(0);
     expect(r.out).toMatch(/valid/);
   });
 
-  it("rejects realm: \"shared\" as reserved (host-device-sharing deferred, ADR-018)", () => {
+  it('rejects realm: "shared" as reserved (host-device-sharing deferred, ADR-018)', () => {
     const r = validate({ ...base, capabilities: { gpu: { realm: "shared" } } });
     expect(r.code).toBe(1);
-    expect(r.err).toMatch(/"capabilities\.gpu\.realm" value "shared" is reserved/);
+    expect(r.err).toMatch(
+      /"capabilities\.gpu\.realm" value "shared" is reserved/,
+    );
   });
 
   it("rejects an unknown realm value", () => {

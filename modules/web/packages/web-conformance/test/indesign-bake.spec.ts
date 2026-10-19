@@ -28,18 +28,34 @@
 //    (±0.5 pt), carries its text without overset, and every swatch has its
 //    RGB value. Disagreements are pinned in DEFECTS.
 
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "bun:test";
 
 import { engineExtras } from "../../web-bundle/src/engine-loader";
-import { expectedFrom, frameOf, loadInter, recordBake, toPagedScript, type Expected } from "../indesign/bake-lane";
+import {
+  expectedFrom,
+  frameOf,
+  loadInter,
+  recordBake,
+  toPagedScript,
+  type Expected,
+} from "../indesign/bake-lane";
 
 const HERE = fileURLToPath(new URL("../indesign/", import.meta.url));
 const BIN = fileURLToPath(new URL("../../web-bundle/bin/", import.meta.url));
-const FONT = fileURLToPath(new URL("../../web-render/assets/fonts/Inter.ttf", import.meta.url));
-const present = existsSync(BIN + "blitz_web.js") && existsSync(BIN + "blitz_web_bg.wasm");
+const FONT = fileURLToPath(
+  new URL("../../web-render/assets/fonts/Inter.ttf", import.meta.url),
+);
+const present =
+  existsSync(BIN + "blitz_web.js") && existsSync(BIN + "blitz_web_bg.wasm");
 const TOL_PT = 0.5;
 
 /** Pinned disagreements with InDesign: `<fixture>/<check>` -> defect. */
@@ -75,7 +91,9 @@ interface Glue {
 }
 
 async function glue(): Promise<Glue> {
-  const g = (await import(new URL("../../web-bundle/bin/blitz_web.js", import.meta.url).href)) as Glue;
+  const g = (await import(
+    new URL("../../web-bundle/bin/blitz_web.js", import.meta.url).href
+  )) as Glue;
   g.initSync({ module: readFileSync(BIN + "blitz_web_bg.wasm") });
   return g;
 }
@@ -83,30 +101,46 @@ async function glue(): Promise<Glue> {
 if (process.env.REQUIRE_REAL_ENGINE === "1" && !present) {
   describe("indesign lane — REQUIRED engine", () => {
     it("FAILS: REQUIRE_REAL_ENGINE=1 but the engine artifact is missing", () => {
-      throw new Error("build the engine wasm with scripts/build-wasm.sh --engine");
+      throw new Error(
+        "build the engine wasm with scripts/build-wasm.sh --engine",
+      );
     });
   });
 }
 
 describe.skipIf(!present)("InDesign lane: bake -> paged script -> IDML", () => {
-  it.each(fixtures)("%s: the bake produces the committed script @feat:plugin-web.bake-to-native", async (name) => {
-    const doc = readFileSync(join(HERE, "fixtures", `${name}.html`), "utf8");
-    const { widthPt, heightPt } = frameOf(doc);
-    const { html, css } = split(doc);
-    const g = await glue();
-    const ops = await recordBake(html, css, widthPt, heightPt, g.render_web_frame, loadInter(FONT), engineExtras(g as never));
-    const script = toPagedScript(ops, `${name}: ${widthPt}x${heightPt} pt web frame at (36, 36), baked`);
-    const scriptPath = join(HERE, "scripts", `${name}.js`);
-    const expectedPath = join(HERE, "scripts", `${name}.expected.json`);
-    const expected = JSON.stringify(expectedFrom(ops), null, 1) + "\n";
-    if (process.env.UPDATE_INDESIGN_SCRIPTS === "1") {
-      mkdirSync(join(HERE, "scripts"), { recursive: true });
-      writeFileSync(scriptPath, script);
-      writeFileSync(expectedPath, expected);
-    }
-    expect(script).toBe(readFileSync(scriptPath, "utf8"));
-    expect(expected).toBe(readFileSync(expectedPath, "utf8"));
-  });
+  it.each(fixtures)(
+    "%s: the bake produces the committed script @feat:plugin-web.bake-to-native",
+    async (name) => {
+      const doc = readFileSync(join(HERE, "fixtures", `${name}.html`), "utf8");
+      const { widthPt, heightPt } = frameOf(doc);
+      const { html, css } = split(doc);
+      const g = await glue();
+      const ops = await recordBake(
+        html,
+        css,
+        widthPt,
+        heightPt,
+        g.render_web_frame,
+        loadInter(FONT),
+        engineExtras(g as never),
+      );
+      const script = toPagedScript(
+        ops,
+        `${name}: ${widthPt}x${heightPt} pt web frame at (36, 36), baked`,
+      );
+      const scriptPath = join(HERE, "scripts", `${name}.js`);
+      const expectedPath = join(HERE, "scripts", `${name}.expected.json`);
+      const expected = JSON.stringify(expectedFrom(ops), null, 1) + "\n";
+      if (process.env.UPDATE_INDESIGN_SCRIPTS === "1") {
+        mkdirSync(join(HERE, "scripts"), { recursive: true });
+        writeFileSync(scriptPath, script);
+        writeFileSync(expectedPath, expected);
+      }
+      expect(script).toBe(readFileSync(scriptPath, "utf8"));
+      expect(expected).toBe(readFileSync(expectedPath, "utf8"));
+    },
+  );
 });
 
 interface Answer {
@@ -136,7 +170,9 @@ interface Answer {
   swatches: { name: string; space: string; value: number[] }[];
 }
 
-const answered = fixtures.filter((f) => existsSync(join(HERE, "answers", `${f}.json`)));
+const answered = fixtures.filter((f) =>
+  existsSync(join(HERE, "answers", `${f}.json`)),
+);
 
 describe("InDesign lane: InDesign's answer matches the bake", () => {
   it("at least one InDesign answer is committed", () => {
@@ -144,22 +180,44 @@ describe("InDesign lane: InDesign's answer matches the bake", () => {
   });
 
   for (const name of answered) {
-    const exp = JSON.parse(readFileSync(join(HERE, "scripts", `${name}.expected.json`), "utf8")) as Expected;
-    const ans = JSON.parse(readFileSync(join(HERE, "answers", `${name}.json`), "utf8")) as Answer;
+    const exp = JSON.parse(
+      readFileSync(join(HERE, "scripts", `${name}.expected.json`), "utf8"),
+    ) as Expected;
+    const ans = JSON.parse(
+      readFileSync(join(HERE, "answers", `${name}.json`), "utf8"),
+    ) as Answer;
     const check = (what: string, fn: () => void) => {
       const defect = DEFECTS[`${name}/${what}`];
-      if (defect) it.failing(`DEFECT ${defect} — ${name}: ${what} @feat:plugin-web.bake-to-native`, fn);
+      if (defect)
+        it.failing(
+          `DEFECT ${defect} — ${name}: ${what} @feat:plugin-web.bake-to-native`,
+          fn,
+        );
       else it(`${name}: ${what} @feat:plugin-web.bake-to-native`, fn);
     };
 
     check("item count and kinds", () => {
-      expect(ans.items.map((i) => i.type)).toEqual(exp.items.map((i) => ({ rectangle: "Rectangle", polygon: "Polygon", textFrame: "TextFrame" })[i.kind]));
+      expect(ans.items.map((i) => i.type)).toEqual(
+        exp.items.map(
+          (i) =>
+            ({
+              rectangle: "Rectangle",
+              polygon: "Polygon",
+              textFrame: "TextFrame",
+            })[i.kind],
+        ),
+      );
     });
     check("geometry within 0.5 pt", () => {
       exp.items.forEach((e, i) => {
         const a = ans.items[i];
-        const d = Math.max(...e.bounds.map((v, k) => Math.abs(v - a.bounds[k])));
-        expect(d, `item ${i} (${e.kind}) ${JSON.stringify(e.bounds)} vs ${JSON.stringify(a.bounds)}`).toBeLessThanOrEqual(TOL_PT);
+        const d = Math.max(
+          ...e.bounds.map((v, k) => Math.abs(v - a.bounds[k])),
+        );
+        expect(
+          d,
+          `item ${i} (${e.kind}) ${JSON.stringify(e.bounds)} vs ${JSON.stringify(a.bounds)}`,
+        ).toBeLessThanOrEqual(TOL_PT);
       });
     });
     check("fills reference the baked swatches", () => {
@@ -173,14 +231,20 @@ describe("InDesign lane: InDesign's answer matches the bake", () => {
         if (e.kind !== "textFrame") return;
         expect(ans.items[i].contents).toBe(e.text);
         expect(ans.items[i].pointSize).toBe(e.pointSize);
-        expect(ans.items[i].overflows, `text frame ${i} ${JSON.stringify(e.text)} is overset in InDesign`).toBe(false);
+        expect(
+          ans.items[i].overflows,
+          `text frame ${i} ${JSON.stringify(e.text)} is overset in InDesign`,
+        ).toBe(false);
       });
     });
     check("first baseline on the run's baseline within 0.5 pt", () => {
       exp.items.forEach((e, i) => {
         if (e.kind !== "textFrame") return;
         const want = e.bounds[0] + INTER_ASCENT * (e.pointSize ?? 0);
-        expect(Math.abs((ans.items[i].baseline ?? NaN) - want), `${e.text}: ${ans.items[i].baseline} vs ${want}`).toBeLessThanOrEqual(TOL_PT);
+        expect(
+          Math.abs((ans.items[i].baseline ?? NaN) - want),
+          `${e.text}: ${ans.items[i].baseline} vs ${want}`,
+        ).toBeLessThanOrEqual(TOL_PT);
       });
     });
     check("each run in its own face", () => {
@@ -194,12 +258,17 @@ describe("InDesign lane: InDesign's answer matches the bake", () => {
       exp.items.forEach((e, i) => {
         const a = ans.items[i];
         const what = `item ${i} (${e.kind})`;
-        expect(a.stroke, what).toBe((e.stroke ?? "None").replace(/^Swatch\//, ""));
-        if (e.strokeWeight !== undefined) expect(a.strokeWeight, what).toBeCloseTo(e.strokeWeight, 2);
+        expect(a.stroke, what).toBe(
+          (e.stroke ?? "None").replace(/^Swatch\//, ""),
+        );
+        if (e.strokeWeight !== undefined)
+          expect(a.strokeWeight, what).toBeCloseTo(e.strokeWeight, 2);
         expect(a.opacity ?? 100, what).toBeCloseTo(e.opacity ?? 100, 0);
         if (e.shadow) expect(a.shadow, what).toBe("DROP");
-        if (e.shadowOffset) expect(a.shadowOffset, what).toEqual(e.shadowOffset);
-        if (e.shadowSize !== undefined) expect(a.shadowSize, what).toBeCloseTo(e.shadowSize, 2);
+        if (e.shadowOffset)
+          expect(a.shadowOffset, what).toEqual(e.shadowOffset);
+        if (e.shadowSize !== undefined)
+          expect(a.shadowSize, what).toBeCloseTo(e.shadowSize, 2);
         if (e.subpaths) expect(a.paths, what).toBe(e.subpaths);
         if (e.image) expect(a.graphics, what).toBe(1);
       });
@@ -209,11 +278,23 @@ describe("InDesign lane: InDesign's answer matches the bake", () => {
         const a = ans.items[i];
         const what = `item ${i} (${e.kind})`;
         if (e.cornerRadius === undefined) {
-          if (a.cornerOptions) expect(a.cornerOptions, what).toEqual(["NONE", "NONE", "NONE", "NONE"]);
+          if (a.cornerOptions)
+            expect(a.cornerOptions, what).toEqual([
+              "NONE",
+              "NONE",
+              "NONE",
+              "NONE",
+            ]);
           return;
         }
-        expect(a.cornerOptions, what).toEqual(["ROUNDED_CORNER", "ROUNDED_CORNER", "ROUNDED_CORNER", "ROUNDED_CORNER"]);
-        for (const r of a.cornerRadii ?? []) expect(r, what).toBeCloseTo(e.cornerRadius, 2);
+        expect(a.cornerOptions, what).toEqual([
+          "ROUNDED_CORNER",
+          "ROUNDED_CORNER",
+          "ROUNDED_CORNER",
+          "ROUNDED_CORNER",
+        ]);
+        for (const r of a.cornerRadii ?? [])
+          expect(r, what).toBeCloseTo(e.cornerRadius, 2);
       });
     });
     if (INTENT[name]) {

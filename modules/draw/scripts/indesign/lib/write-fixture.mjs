@@ -15,7 +15,8 @@
 // InDesign returned a string. This says whether the string is an answer.
 import fs from "node:fs";
 
-const [raw, out, name, reader, sha, idml, idmlSha, os, pdf, zorderXml] = process.argv.slice(2);
+const [raw, out, name, reader, sha, idml, idmlSha, os, pdf, zorderXml] =
+  process.argv.slice(2);
 const fail = (why) => {
   console.error(`run-roundtrip: NOT A RECORDING — ${why}`);
   process.exit(1);
@@ -26,24 +27,36 @@ try {
 } catch (e) {
   fail(`InDesign's reply is not JSON (${e.message})`);
 }
-if (reply.reader !== "roundtrip") fail(`the reply is not the roundtrip reader's ("${reply.reader}")`);
-if (reply.open_error) fail(`InDesign could not open the IDML: ${reply.open_error}`);
+if (reply.reader !== "roundtrip")
+  fail(`the reply is not the roundtrip reader's ("${reply.reader}")`);
+if (reply.open_error)
+  fail(`InDesign could not open the IDML: ${reply.open_error}`);
 if (reply.error) fail(`the reader failed: ${reply.error}`);
 if (reply.close_error) fail(`the document did not close: ${reply.close_error}`);
 if (reply.units !== "pt") fail(`units are "${reply.units}", not "pt"`);
 if (reply.documents_after !== reply.documents_before) {
-  fail(`${reply.documents_before} document(s) before, ${reply.documents_after} after`);
+  fail(
+    `${reply.documents_before} document(s) before, ${reply.documents_after} after`,
+  );
 }
 if (!Array.isArray(reply.items)) fail("no item list");
 if (reply.items.length === 0) fail("InDesign sees NO page item at all");
 if (!Array.isArray(reply.pages) || reply.pages.length === 0) fail("no pages");
-if (!fs.existsSync(pdf) || fs.statSync(pdf).size === 0) fail(`no PDF was written to ${pdf}`);
+if (!fs.existsSync(pdf) || fs.statSync(pdf).size === 0)
+  fail(`no PDF was written to ${pdf}`);
 if (!reply.exported) fail("the reader did not export InDesign's own IDML");
 
 // THE STACKING ORDER, from InDesign's own export of the opened document:
 // page items are written back to front, each with `Self="u<hex id>"`. The
 // DOM cannot answer it (`pageItems` is grouped by kind — see the reader).
-const PAGE_ITEM = new Set(["Rectangle", "Oval", "Polygon", "GraphicLine", "Group", "TextFrame"]);
+const PAGE_ITEM = new Set([
+  "Rectangle",
+  "Oval",
+  "Polygon",
+  "GraphicLine",
+  "Group",
+  "TextFrame",
+]);
 const stack = []; // open elements: { tag, self }
 const zOf = new Map(); // self -> { z, parent }
 const nextZ = new Map(); // parent self -> next z
@@ -68,15 +81,25 @@ for (const m of xml.matchAll(/<(\/?)([A-Za-z:]+)([^>]*?)(\/?)>/g)) {
 for (const item of reply.items) {
   const self = `u${Number(item.id).toString(16)}`;
   const found = zOf.get(self);
-  if (!found) fail(`item ${item.kind}#${item.id} (${self}) is not in InDesign's own export`);
-  const parentSelf = item.parent === "spread" ? "spread" : `u${Number(item.parent.split("#")[1]).toString(16)}`;
+  if (!found)
+    fail(
+      `item ${item.kind}#${item.id} (${self}) is not in InDesign's own export`,
+    );
+  const parentSelf =
+    item.parent === "spread"
+      ? "spread"
+      : `u${Number(item.parent.split("#")[1]).toString(16)}`;
   if (found.parent !== parentSelf) {
-    fail(`item ${self}: the DOM says parent ${item.parent}, the export says ${found.parent}`);
+    fail(
+      `item ${self}: the DOM says parent ${item.parent}, the export says ${found.parent}`,
+    );
   }
   item.z = found.z;
 }
 if (zOf.size !== reply.items.length) {
-  fail(`InDesign's export holds ${zOf.size} page items, the DOM walk ${reply.items.length}`);
+  fail(
+    `InDesign's export holds ${zOf.size} page items, the DOM walk ${reply.items.length}`,
+  );
 }
 
 const fixture = {
@@ -110,21 +133,30 @@ const compact = (v) => JSON.stringify(v);
 const lines = ["{"];
 const head = Object.keys(fixture).filter((k) => k !== "items");
 for (const key of head) {
-  lines.push(`  ${JSON.stringify(key)}: ${JSON.stringify(fixture[key], null, 2).replace(/\n/g, "\n  ")},`);
+  lines.push(
+    `  ${JSON.stringify(key)}: ${JSON.stringify(fixture[key], null, 2).replace(/\n/g, "\n  ")},`,
+  );
 }
 lines.push('  "items": [');
 fixture.items.forEach((item, i) => {
   const { paths, ...rest } = item;
-  const body = Object.entries(rest).map(([k, v]) => `      ${JSON.stringify(k)}: ${compact(v)}`);
+  const body = Object.entries(rest).map(
+    ([k, v]) => `      ${JSON.stringify(k)}: ${compact(v)}`,
+  );
   if (paths !== undefined) {
     const p = paths.map((path, j) => {
       const { anchors, ...meta } = path;
-      const metaLines = Object.entries(meta).map(([k, v]) => `          ${JSON.stringify(k)}: ${compact(v)},`);
+      const metaLines = Object.entries(meta).map(
+        ([k, v]) => `          ${JSON.stringify(k)}: ${compact(v)},`,
+      );
       return [
         "        {",
         ...metaLines,
         '          "anchors": [',
-        ...anchors.map((a, k) => `            ${compact(a)}${k + 1 < anchors.length ? "," : ""}`),
+        ...anchors.map(
+          (a, k) =>
+            `            ${compact(a)}${k + 1 < anchors.length ? "," : ""}`,
+        ),
         "          ]",
         `        }${j + 1 < paths.length ? "," : ""}`,
       ].join("\n");
@@ -141,7 +173,11 @@ const norm = (v) =>
   Array.isArray(v)
     ? v.map(norm)
     : v && typeof v === "object"
-      ? Object.fromEntries(Object.keys(v).sort().map((k) => [k, norm(v[k])]))
+      ? Object.fromEntries(
+          Object.keys(v)
+            .sort()
+            .map((k) => [k, norm(v[k])]),
+        )
       : v;
 if (JSON.stringify(norm(JSON.parse(text))) !== JSON.stringify(norm(fixture))) {
   fail("internal: the formatted fixture does not round-trip");

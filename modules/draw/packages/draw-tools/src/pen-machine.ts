@@ -227,12 +227,7 @@ export type PenPlan =
   | { kind: "insertPath"; anchors: AnchorTriple[]; open: boolean }
   | {
       kind:
-        | "continue"
-        | "close"
-        | "join"
-        | "extend"
-        | "addAnchor"
-        | "deleteAnchor";
+        "continue" | "close" | "join" | "extend" | "addAnchor" | "deleteAnchor";
       ops: TargetedPathOp[];
     };
 
@@ -372,9 +367,7 @@ const INTENT_RANK: Record<PenIntent, number> = {
 };
 
 function sameElement(a: ElementId, b: ElementId): boolean {
-  return (
-    a.kind === b.kind && JSON.stringify(a.id) === JSON.stringify(b.id)
-  );
+  return a.kind === b.kind && JSON.stringify(a.id) === JSON.stringify(b.id);
 }
 
 function sameTransform(
@@ -406,7 +399,10 @@ function contourCount(table: AnchorTable): number {
  *  anchor is its END (continuing it appends). Exported as
  *  `penEndpointAt` — the test the machine ranks hits with, so a host
  *  drawing endpoint markers asks the same question. */
-export function penEndpointAt(path: PenPath, index: number): PenEndpoint | null {
+export function penEndpointAt(
+  path: PenPath,
+  index: number,
+): PenEndpoint | null {
   return endpointAt(path, index);
 }
 
@@ -472,14 +468,22 @@ function attachRun(
         elementId,
         op: "pathPointInsert",
         index: endpoint.from,
-        anchor: { anchor: clone(a.anchor), left: clone(a.right), right: clone(a.left) },
+        anchor: {
+          anchor: clone(a.anchor),
+          left: clone(a.right),
+          right: clone(a.left),
+        },
       };
     }
     return {
       elementId,
       op: "pathPointInsert",
       index: endpoint.to + j,
-      anchor: { anchor: clone(a.anchor), left: clone(a.left), right: clone(a.right) },
+      anchor: {
+        anchor: clone(a.anchor),
+        left: clone(a.left),
+        right: clone(a.right),
+      },
       ...(needsStarts
         ? {
             prevSubpathStarts: starts.map((s, si) =>
@@ -958,7 +962,6 @@ export class PenMachine {
     };
   }
 }
-
 
 /**
  * Build the in-progress PEN preview as a cubic `ToolPreviewPath`

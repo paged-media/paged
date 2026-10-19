@@ -59,7 +59,10 @@ function makeHost(caps?: PluginManifest["capabilities"]) {
 describe("host.document document metadata — the adapter", () => {
   it("answers null when the stored value is corrupt", async () => {
     const { host, fake } = makeHost();
-    fake.setDocumentMeta({ pageCount: 1, pluginMetadata: [{ key: KEY, value: "{nope" }] });
+    fake.setDocumentMeta({
+      pageCount: 1,
+      pluginMetadata: [{ key: KEY, value: "{nope" }],
+    });
     expect(await host.document.getDocumentMetadata()).toBeNull();
   });
 
@@ -68,7 +71,10 @@ describe("host.document document metadata — the adapter", () => {
     await expect(
       makeHost({}).host.document.getDocumentMetadata(),
     ).rejects.toBeInstanceOf(PluginCapabilityError);
-    const refused = await reader.host.document.setDocumentMetadata({ v: 1, data: {} });
+    const refused = await reader.host.document.setDocumentMetadata({
+      v: 1,
+      data: {},
+    });
     expect(refused.applied).toBe(false);
     expect(reader.fake.mutations).toEqual([]);
   });
@@ -91,7 +97,10 @@ describe("host.document document metadata — against the real engine", () => {
     doc.onDidChange(() => {
       changes += 1;
     });
-    const out = await doc.setDocumentMetadata({ v: 1, data: { values: { title: "A" } } });
+    const out = await doc.setDocumentMetadata({
+      v: 1,
+      data: { values: { title: "A" } },
+    });
     expect(out.applied).toBe(true);
     expect(changes).toBe(1);
     expect(await doc.getDocumentMetadata()).toEqual({
@@ -108,7 +117,9 @@ describe("host.document document metadata — against the real engine", () => {
     await doc.undo();
     expect(await doc.getDocumentMetadata()).toBeNull();
     await doc.redo();
-    expect((await doc.getDocumentMetadata())?.data).toEqual({ values: { title: "A" } });
+    expect((await doc.getDocumentMetadata())?.data).toEqual({
+      values: { title: "A" },
+    });
     expect(changes).toBeGreaterThanOrEqual(5);
   });
 

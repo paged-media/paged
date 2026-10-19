@@ -26,15 +26,23 @@
 
 import { readZipText, zipEntryNames } from "./read-zip";
 
-const ENTITIES: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'" };
+const ENTITIES: Record<string, string> = {
+  amp: "&",
+  lt: "<",
+  gt: ">",
+  quot: '"',
+  apos: "'",
+};
 
 function unescapeXml(s: string): string {
-  return s.replace(/&(amp|lt|gt|quot|apos|#\d+|#x[0-9a-fA-F]+);/g, (_, e: string) =>
-    e.startsWith("#x")
-      ? String.fromCodePoint(Number.parseInt(e.slice(2), 16))
-      : e.startsWith("#")
-        ? String.fromCodePoint(Number.parseInt(e.slice(1), 10))
-        : ENTITIES[e],
+  return s.replace(
+    /&(amp|lt|gt|quot|apos|#\d+|#x[0-9a-fA-F]+);/g,
+    (_, e: string) =>
+      e.startsWith("#x")
+        ? String.fromCodePoint(Number.parseInt(e.slice(2), 16))
+        : e.startsWith("#")
+          ? String.fromCodePoint(Number.parseInt(e.slice(1), 10))
+          : ENTITIES[e],
   );
 }
 
@@ -44,7 +52,9 @@ const attr = (attrs: string, name: string) =>
 /** Every `<TextFrame>` in the package's spreads: its `Self` → `ParentStory`. */
 export function frameStoryIds(idml: Buffer): Map<string, string> {
   const out = new Map<string, string>();
-  for (const name of zipEntryNames(idml).filter((n) => n.startsWith("Spreads/"))) {
+  for (const name of zipEntryNames(idml).filter((n) =>
+    n.startsWith("Spreads/"),
+  )) {
     const xml = readZipText(idml, name) ?? "";
     for (const m of xml.matchAll(/<TextFrame\b([^>]*)>/g)) {
       const self = attr(m[1], "Self");
@@ -58,11 +68,15 @@ export function frameStoryIds(idml: Buffer): Map<string, string> {
 /** Every story's text (its `<Content>` runs, joined), keyed by `Self`. */
 export function storyTexts(idml: Buffer): Map<string, string> {
   const out = new Map<string, string>();
-  for (const name of zipEntryNames(idml).filter((n) => n.startsWith("Stories/"))) {
+  for (const name of zipEntryNames(idml).filter((n) =>
+    n.startsWith("Stories/"),
+  )) {
     const xml = readZipText(idml, name) ?? "";
     const self = attr(/<Story\b([^>]*)>/.exec(xml)?.[1] ?? "", "Self");
     if (!self) continue;
-    const text = [...xml.matchAll(/<Content>([^<]*)<\/Content>/g)].map((m) => unescapeXml(m[1])).join("");
+    const text = [...xml.matchAll(/<Content>([^<]*)<\/Content>/g)]
+      .map((m) => unescapeXml(m[1]))
+      .join("");
     out.set(self, text);
   }
   return out;
@@ -72,9 +86,13 @@ export function storyTexts(idml: Buffer): Map<string, string> {
  *  `Self` is `groupId`, nested groups included, in document order. Empty
  *  when no spread has that group. */
 export function textFramesInGroup(idml: Buffer, groupId: string): string[] {
-  for (const name of zipEntryNames(idml).filter((n) => n.startsWith("Spreads/"))) {
+  for (const name of zipEntryNames(idml).filter((n) =>
+    n.startsWith("Spreads/"),
+  )) {
     const xml = readZipText(idml, name) ?? "";
-    const open = new RegExp(`<Group\\b[^>]*\\bSelf="${groupId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"[^>]*>`).exec(xml);
+    const open = new RegExp(
+      `<Group\\b[^>]*\\bSelf="${groupId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"[^>]*>`,
+    ).exec(xml);
     if (!open) continue;
     // Walk to the matching close tag: groups nest.
     const tags = /<(\/?)Group\b[^>]*?(\/?)>/g;
@@ -99,7 +117,10 @@ export function textFramesInGroup(idml: Buffer, groupId: string): string[] {
  * spreads do not list, or whose story is missing, yields `null` — so a
  * caller can tell "not exported" from "empty".
  */
-export function textOfFrames(idml: Buffer, frameIds: readonly string[]): Array<string | null> {
+export function textOfFrames(
+  idml: Buffer,
+  frameIds: readonly string[],
+): Array<string | null> {
   const frames = frameStoryIds(idml);
   const stories = storyTexts(idml);
   return frameIds.map((id) => {

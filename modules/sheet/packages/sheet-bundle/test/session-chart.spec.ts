@@ -98,7 +98,10 @@ function recordingEngine(opts: { kindsThrow?: boolean } = {}) {
 const silentHost = {
   log: { debug() {}, info() {}, warn() {}, error() {} },
   // The document doors every host has; nothing here fires them.
-  document: { onDidChange: () => ({ dispose() {} }), onDidOpen: () => ({ dispose() {} }) },
+  document: {
+    onDidChange: () => ({ dispose() {} }),
+    onDidOpen: () => ({ dispose() {} }),
+  },
   supports: () => false,
 } as unknown as BundleHost;
 
@@ -136,10 +139,12 @@ describe("sheet_chart_kind_set: the panel reads the engine's vocabulary", () => 
 describe("sheet_chart_series_orientation: transpose reaches the engine", () => {
   it("forwards the chosen orientation and defaults to columns", () => {
     const { session, authored } = booted();
-    expect(session.authorChart("B2:C4", "A2:A4", "radar", "T", "rows")).toEqual({
-      ok: true,
-      index: 0,
-    });
+    expect(session.authorChart("B2:C4", "A2:A4", "radar", "T", "rows")).toEqual(
+      {
+        ok: true,
+        index: 0,
+      },
+    );
     // The transpose control is the LAST argument; the active sheet the first.
     expect(authored[0]).toEqual([0, "B2:C4", "A2:A4", "radar", "T", "rows"]);
 

@@ -365,6 +365,7 @@ histogram so the limit re-thresholds without a re-render); page rows jump the
 canvas.
 
 Two honest seams, both load-bearing:
+
 - `separationAvailable === false` → no CMYK working profile is active, so the
   renderer resolved every swatch to display RGB and no plate exists. Rendered
   distinctly from "this page is all RGB artwork" — both read 0% measured and
@@ -907,8 +908,8 @@ gallery seams; several extend gaps above):
     Anchored Object panel). _(W2.12 (protocol v35, W1.16): LIVE — the ten
     `anchored*` PropertyPaths (`anchoredPosition`/`anchorPoint`/
     `anchoredXOffset`/`anchoredYOffset`/`anchored{Horizontal,Vertical}
-    Reference` incl. the line-ref metrics/`anchored{Horizontal,Vertical}
-    Alignment`/`anchoredSpineRelative`/`anchoredLockPosition`) read +
+Reference` incl. the line-ref metrics/`anchored{Horizontal,Vertical}
+Alignment`/`anchoredSpineRelative`/`anchoredLockPosition`) read +
     write + undo; anchored rendering resolves real line-ref metrics.
     Residual: inline-anchored frames carry NO page-level `elementGeometry`
     (observed only through the host frame), and there is no on-canvas

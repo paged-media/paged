@@ -40,7 +40,12 @@ test.describe("journey · transforms", () => {
     await designer.open();
     await designer.newDocument();
 
-    const id = await designer.drawRectangle({ x0: 110, y0: 130, x1: 270, y1: 250 });
+    const id = await designer.drawRectangle({
+      x0: 110,
+      y0: 130,
+      x1: 270,
+      y1: 250,
+    });
     const ref = { kind: "rectangle", id };
     const { pageIds } = await designer.handle();
     const pageId = pageIds[0];

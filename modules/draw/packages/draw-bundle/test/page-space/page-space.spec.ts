@@ -30,8 +30,15 @@
 
 import { beforeEach, describe, expect, it } from "bun:test";
 
-import type { ElementId, PluginMetadataEnvelope } from "@paged-media/plugin-api";
-import { affineReflect, type Affine, type AnchorTable } from "@paged-media/draw-geometry";
+import type {
+  ElementId,
+  PluginMetadataEnvelope,
+} from "@paged-media/plugin-api";
+import {
+  affineReflect,
+  type Affine,
+  type AnchorTable,
+} from "@paged-media/draw-geometry";
 
 import {
   applyReflect,
@@ -49,9 +56,21 @@ import {
 import { ovalStandInBatchFor } from "../../src/handlers/oval-stand-ins";
 import { shapeBuildBatchFor } from "../../src/commands/shape-build";
 import { knifeBatchFor, knifeTargetOf } from "../../src/commands/knife";
-import { REPEAT_DEFAULTS, repeatBatchFor, repeatPlanFor } from "../../src/commands/repeat";
-import { PATTERN_DEFAULTS, patternBatchFor, patternPlanFor } from "../../src/commands/pattern";
-import { faceTableOf, livePaintArrangement, livePaintBatchFor } from "../../src/commands/live-paint";
+import {
+  REPEAT_DEFAULTS,
+  repeatBatchFor,
+  repeatPlanFor,
+} from "../../src/commands/repeat";
+import {
+  PATTERN_DEFAULTS,
+  patternBatchFor,
+  patternPlanFor,
+} from "../../src/commands/pattern";
+import {
+  faceTableOf,
+  livePaintArrangement,
+  livePaintBatchFor,
+} from "../../src/commands/live-paint";
 import { symbolBatchFor, symbolPlacePlanFor } from "../../src/commands/symbols";
 import {
   bindTraceRegions,
@@ -91,21 +110,34 @@ const square = (n: number, at: Vec = [0, 0]): Vec[] => [
 const RING: Vec[][] = [square(40), square(20, [10, 10]).reverse()];
 
 const mapOutline = (m: Affine, contours: readonly Vec[][]): Vec[][] =>
-  contours.map((c) => c.map(([x, y]) => [m[0] * x + m[2] * y + m[4], m[1] * x + m[3] * y + m[5]] as Vec));
+  contours.map((c) =>
+    c.map(
+      ([x, y]) =>
+        [m[0] * x + m[2] * y + m[4], m[1] * x + m[3] * y + m[5]] as Vec,
+    ),
+  );
 const outlineOf = (t: AnchorTable): Vec[][] => {
   const starts = t.subpathStarts.length > 0 ? t.subpathStarts : [0];
   return starts.map((s, i) =>
-    t.anchors.slice(s, starts[i + 1] ?? t.anchors.length).map((a) => [a.anchor[0], a.anchor[1]] as Vec),
+    t.anchors
+      .slice(s, starts[i + 1] ?? t.anchors.length)
+      .map((a) => [a.anchor[0], a.anchor[1]] as Vec),
   );
 };
 const centreOf = (contours: readonly Vec[][]): Vec => {
   const pts = contours.flat();
   const xs = pts.map((p) => p[0]);
   const ys = pts.map((p) => p[1]);
-  return [(Math.min(...xs) + Math.max(...xs)) / 2, (Math.min(...ys) + Math.max(...ys)) / 2];
+  return [
+    (Math.min(...xs) + Math.max(...xs)) / 2,
+    (Math.min(...ys) + Math.max(...ys)) / 2,
+  ];
 };
 const near = (got: readonly Vec[][], want: readonly Vec[][]) =>
-  expect(outlineDelta(got, want), `got ${JSON.stringify(got)}\nwant ${JSON.stringify(want)}`).toBeLessThan(1e-6);
+  expect(
+    outlineDelta(got, want),
+    `got ${JSON.stringify(got)}\nwant ${JSON.stringify(want)}`,
+  ).toBeLessThan(1e-6);
 const nearPoint = (got: Vec, want: Vec) => {
   expect(got[0]).toBeCloseTo(want[0], 6);
   expect(got[1]).toBeCloseTo(want[1], 6);
@@ -121,8 +153,12 @@ describe("page-origin helpers", () => {
   });
 
   it("stored = translate(pageOrigin) ∘ itemTransform; null stays null at the spread's origin", () => {
-    expect(storedTransformOf([0, 1, -1, 0, 10, 20], [-612, -396])).toEqual([0, 1, -1, 0, -602, -376]);
-    expect(storedTransformOf(null, [-612, -396])).toEqual([1, 0, 0, 1, -612, -396]);
+    expect(storedTransformOf([0, 1, -1, 0, 10, 20], [-612, -396])).toEqual([
+      0, 1, -1, 0, -602, -376,
+    ]);
+    expect(storedTransformOf(null, [-612, -396])).toEqual([
+      1, 0, 0, 1, -612, -396,
+    ]);
     expect(storedTransformOf(null, [0, 0])).toBeNull();
     const m: Affine = [2, 0, 0, 2, 5, 5];
     expect(storedTransformOf(m, [0, 0])).toBe(m);
@@ -134,7 +170,11 @@ describe("page-origin helpers", () => {
       subpathStarts: [0],
     };
     expect(spreadTableOf(t, [0, 0])).toBe(t);
-    expect(spreadTableOf(t, [-10, 5]).anchors[0]).toEqual({ anchor: [-9, 7], left: [-10, 7], right: [-8, 7] });
+    expect(spreadTableOf(t, [-10, 5]).anchors[0]).toEqual({
+      anchor: [-9, 7],
+      left: [-10, 7],
+      right: [-8, 7],
+    });
   });
 });
 
@@ -174,30 +214,54 @@ describe.each(SHAPES)("page space on the %s-space engine", (shape) => {
       const before = engine.pageOutline("tri", VERSO);
       await applyReflect(fakeHost(engine, [poly("tri")]), 90);
       const c = centreOf(before);
-      near(engine.pageOutline("tri", VERSO), mapOutline(affineReflect(90, c), before));
+      near(
+        engine.pageOutline("tri", VERSO),
+        mapOutline(affineReflect(90, c), before),
+      );
     });
 
     it("a selection across the spine mirrors about ONE centre, in spread space", async () => {
       engine.addPath("tri", VERSO, TRI, T(100, 100));
       engine.addPath("sq", RECTO, square(40), T(300, 100));
-      const before = { tri: engine.spreadOutline("tri"), sq: engine.spreadOutline("sq") };
+      const before = {
+        tri: engine.spreadOutline("tri"),
+        sq: engine.spreadOutline("sq"),
+      };
       await applyReflect(fakeHost(engine, [poly("tri"), poly("sq")]), 90);
       const c = centreOf([...before.tri, ...before.sq]);
-      near(engine.spreadOutline("tri"), mapOutline(affineReflect(90, c), before.tri));
-      near(engine.spreadOutline("sq"), mapOutline(affineReflect(90, c), before.sq));
+      near(
+        engine.spreadOutline("tri"),
+        mapOutline(affineReflect(90, c), before.tri),
+      );
+      near(
+        engine.spreadOutline("sq"),
+        mapOutline(affineReflect(90, c), before.sq),
+      );
     });
 
     it("a GROUP (spread-space box and transform) and an item mirror about one centre", async () => {
       engine.addPath("tri", VERSO, TRI, T(100, 100));
       engine.addPath("m", VERSO, square(40), T(300, 400));
       engine.addGroup("g", ["m"]);
-      const before = { tri: engine.spreadOutline("tri"), m: engine.spreadOutline("m") };
+      const before = {
+        tri: engine.spreadOutline("tri"),
+        m: engine.spreadOutline("m"),
+      };
       const group = { kind: "group", id: "g" } as ElementId;
-      const done = await applyReflect(fakeHost(engine, [poly("tri"), group]), 0);
+      const done = await applyReflect(
+        fakeHost(engine, [poly("tri"), group]),
+        0,
+      );
       expect(done.applied).toBe(true);
       const c = centreOf([...before.tri, ...before.m]);
-      near(engine.spreadOutline("tri"), mapOutline(affineReflect(0, c), before.tri));
-      near(engine.spreadOutline("m"), mapOutline(affineReflect(0, c), before.m));
+      near(
+        engine.spreadOutline("tri"),
+        mapOutline(affineReflect(0, c), before.tri),
+      );
+      near(
+        engine.spreadOutline("m"),
+        mapOutline(affineReflect(0, c), before.m),
+      );
     });
 
     it("Transform again repeats it about the NEW selection's centre", async () => {
@@ -207,14 +271,19 @@ describe.each(SHAPES)("page space on the %s-space engine", (shape) => {
       const before = engine.pageOutline("sq", RECTO);
       const again = await applyTransformAgain(fakeHost(engine, [poly("sq")]));
       expect(again.applied).toBe(true);
-      near(engine.pageOutline("sq", RECTO), mapOutline(affineReflect(0, centreOf(before)), before));
+      near(
+        engine.pageOutline("sq", RECTO),
+        mapOutline(affineReflect(0, centreOf(before)), before),
+      );
     });
   });
 
   // ---------------------------------------------------- objects on a path
 
   describe("Objects on a path", () => {
-    const params = (over: Partial<ObjectsOnPathParams> = {}): ObjectsOnPathParams => ({
+    const params = (
+      over: Partial<ObjectsOnPathParams> = {},
+    ): ObjectsOnPathParams => ({
       ...OBJECTS_ON_PATH_DEFAULTS,
       alignToPath: false,
       fitToArtboard: false,
@@ -236,12 +305,18 @@ describe.each(SHAPES)("page space on the %s-space engine", (shape) => {
       engine.addPath("o1", VERSO, square(20), T(50, 50));
       engine.addPath("o2", VERSO, square(20), RT(30, 120, 50));
     };
-    const plan = (over: Partial<ObjectsOnPathParams> = {}, homes: Record<string, Affine> = {}) =>
+    const plan = (
+      over: Partial<ObjectsOnPathParams> = {},
+      homes: Record<string, Affine> = {},
+    ) =>
       objectsOnPathPlanFor(fakeHost(engine), {
         onPath: "op-1",
         params: params(over),
         pathId: poly("spine"),
-        objects: ["o1", "o2"].map((id) => ({ id: poly(id), home: homes[id] ?? null })),
+        objects: ["o1", "o2"].map((id) => ({
+          id: poly(id),
+          home: homes[id] ?? null,
+        })),
         label: "spec",
       });
 
@@ -249,26 +324,44 @@ describe.each(SHAPES)("page space on the %s-space engine", (shape) => {
       seed();
       const p = await plan();
       expect(p).not.toBeNull();
-      expect(engine.mutate(objectsOnPathBatchFor({ plan: p!, envelopes: new Map() })).applied).toBe(true);
+      expect(
+        engine.mutate(objectsOnPathBatchFor({ plan: p!, envelopes: new Map() }))
+          .applied,
+      ).toBe(true);
       nearPoint(centreOf(engine.pageOutline("o1", VERSO)), [100, 300]);
       nearPoint(centreOf(engine.pageOutline("o2", VERSO)), [500, 300]);
     });
 
     it("the HOME it remembers is the STORED matrix — what frameTransform writes back", async () => {
       seed();
-      const stored = { o1: engine.storedTransform("o1")!, o2: engine.storedTransform("o2")! };
+      const stored = {
+        o1: engine.storedTransform("o1")!,
+        o2: engine.storedTransform("o2")!,
+      };
       const p = await plan();
-      const batch = objectsOnPathBatchFor({ plan: p!, envelopes: new Map() }) as {
-        args: { ops: { op: string; args: { elementId: ElementId; value: string | null } }[] };
+      const batch = objectsOnPathBatchFor({
+        plan: p!,
+        envelopes: new Map(),
+      }) as {
+        args: {
+          ops: {
+            op: string;
+            args: { elementId: ElementId; value: string | null };
+          }[];
+        };
       };
       const homes = new Map<string, number[]>();
       for (const op of batch.args.ops) {
         if (op.op !== "setPluginMetadata" || !op.args.value) continue;
-        const ref = onPathObjectOf(JSON.parse(op.args.value) as PluginMetadataEnvelope);
+        const ref = onPathObjectOf(
+          JSON.parse(op.args.value) as PluginMetadataEnvelope,
+        );
         if (ref) homes.set(String(op.args.elementId.id), [...ref.home]);
       }
       for (const id of ["o1", "o2"] as const) {
-        homes.get(id)!.forEach((v, i) => expect(v).toBeCloseTo(stored[id][i]!, 9));
+        homes
+          .get(id)!
+          .forEach((v, i) => expect(v).toBeCloseTo(stored[id][i]!, 9));
       }
     });
 
@@ -278,8 +371,12 @@ describe.each(SHAPES)("page space on the %s-space engine", (shape) => {
       // read: the stored one. The object has since moved onto the path.
       const home = engine.storedTransform("o1")!;
       const before = engine.pageOutline("o1", VERSO);
-      engine.mutate(objectsOnPathBatchFor({ plan: (await plan())!, envelopes: new Map() }));
-      const release = objectsOnPathReleaseBatchFor([{ id: poly("o1"), envelope: null, key: "onPathObject", home }]);
+      engine.mutate(
+        objectsOnPathBatchFor({ plan: (await plan())!, envelopes: new Map() }),
+      );
+      const release = objectsOnPathReleaseBatchFor([
+        { id: poly("o1"), envelope: null, key: "onPathObject", home },
+      ]);
       expect(engine.mutate(release).applied).toBe(true);
       expect(engine.storedTransform("o1")).toEqual(home);
       near(engine.pageOutline("o1", VERSO), before);
@@ -287,10 +384,19 @@ describe.each(SHAPES)("page space on the %s-space engine", (shape) => {
 
     it("UPDATE places from a remembered (stored) home, wherever the object now is", async () => {
       seed();
-      const homes = { o1: engine.storedTransform("o1")!, o2: engine.storedTransform("o2")! };
-      engine.mutate(objectsOnPathBatchFor({ plan: (await plan())!, envelopes: new Map() }));
+      const homes = {
+        o1: engine.storedTransform("o1")!,
+        o2: engine.storedTransform("o2")!,
+      };
+      engine.mutate(
+        objectsOnPathBatchFor({ plan: (await plan())!, envelopes: new Map() }),
+      );
       const update = await plan({ reverseOrder: true }, homes);
-      expect(engine.mutate(objectsOnPathBatchFor({ plan: update!, envelopes: new Map() })).applied).toBe(true);
+      expect(
+        engine.mutate(
+          objectsOnPathBatchFor({ plan: update!, envelopes: new Map() }),
+        ).applied,
+      ).toBe(true);
       nearPoint(centreOf(engine.pageOutline("o1", VERSO)), [500, 300]);
       nearPoint(centreOf(engine.pageOutline("o2", VERSO)), [100, 300]);
     });
@@ -314,7 +420,9 @@ describe.each(SHAPES)("page space on the %s-space engine", (shape) => {
         engine.addPath("o2", VERSO, square(20), T(80, 50));
         const p = await plan({ fitToArtboard: true });
         expect(p!.placements.map((x) => x.skipped)).toEqual([null, "offPage"]);
-        engine.mutate(objectsOnPathBatchFor({ plan: p!, envelopes: new Map() }));
+        engine.mutate(
+          objectsOnPathBatchFor({ plan: p!, envelopes: new Map() }),
+        );
         nearPoint(centreOf(engine.pageOutline("o1", VERSO)), [100, 300]);
       },
     );
@@ -325,23 +433,35 @@ describe.each(SHAPES)("page space on the %s-space engine", (shape) => {
   describe("Shape Builder oval stand-ins", () => {
     it.each([
       ["a rotated oval on the verso", VERSO, RT(30, 200, 300)],
-      ["a scaled oval on the recto", RECTO, [1.5, 0, 0, 0.5, 100, 400] as Affine],
+      [
+        "a scaled oval on the recto",
+        RECTO,
+        [1.5, 0, 0, 0.5, 100, 400] as Affine,
+      ],
       ["an unrotated oval on the verso", VERSO, T(150, 150)],
-    ])("%s gets a stand-in exactly on its curve", async (_name, page, onPage) => {
-      engine.addOval("ov", page, [0, 0, 60, 100], onPage);
-      const geom = engine.elementGeometry([{ kind: "oval", id: "ov" } as ElementId]);
-      const probe = ovalStandInBatchFor(
-        geom.map((g) => ({
-          pageId: g.pageId,
-          bounds: g.bounds,
-          itemTransform: g.itemTransform,
-          pageOrigin: pageOriginOf(g),
-        })),
-      );
-      const out = engine.mutate(probe);
-      expect(out.applied).toBe(true);
-      near(engine.spreadOutline(String(out.minted[0]!.id)), engine.spreadOutline("ov"));
-    });
+    ])(
+      "%s gets a stand-in exactly on its curve",
+      async (_name, page, onPage) => {
+        engine.addOval("ov", page, [0, 0, 60, 100], onPage);
+        const geom = engine.elementGeometry([
+          { kind: "oval", id: "ov" } as ElementId,
+        ]);
+        const probe = ovalStandInBatchFor(
+          geom.map((g) => ({
+            pageId: g.pageId,
+            bounds: g.bounds,
+            itemTransform: g.itemTransform,
+            pageOrigin: pageOriginOf(g),
+          })),
+        );
+        const out = engine.mutate(probe);
+        expect(out.applied).toBe(true);
+        near(
+          engine.spreadOutline(String(out.minted[0]!.id)),
+          engine.spreadOutline("ov"),
+        );
+      },
+    );
   });
 
   // ------------------------------------------------- Shape Builder pieces
@@ -349,7 +469,8 @@ describe.each(SHAPES)("page space on the %s-space engine", (shape) => {
   describe("Shape Builder pieces", () => {
     /** The frontmost input: a rotated 100 pt square on the verso. A face
      *  of the arrangement is RAW space — the inputs' own. */
-    const seed = () => engine.addPath("front", VERSO, square(100), RT(20, 200, 200));
+    const seed = () =>
+      engine.addPath("front", VERSO, square(100), RT(20, 200, 200));
     const TRI_FACE = {
       anchors: (
         [
@@ -361,11 +482,13 @@ describe.each(SHAPES)("page space on the %s-space engine", (shape) => {
       subpathStarts: [0],
     };
     const HOLED_FACE = {
-      anchors: [...square(80, [10, 10]), ...square(20, [40, 40]).reverse()].map((p) => ({
-        anchor: p,
-        left: p,
-        right: p,
-      })),
+      anchors: [...square(80, [10, 10]), ...square(20, [40, 40]).reverse()].map(
+        (p) => ({
+          anchor: p,
+          left: p,
+          right: p,
+        }),
+      ),
       subpathStarts: [0, 4],
     };
     const ctxFor = (faces: Record<string, typeof TRI_FACE>) => {
@@ -383,20 +506,34 @@ describe.each(SHAPES)("page space on the %s-space engine", (shape) => {
     it.each([
       ["a one-contour piece", TRI_FACE],
       ["a holed piece", HOLED_FACE],
-    ])("%s lands where the face is, in the inputs' own space", async (_n, face) => {
-      seed();
-      const batch = shapeBuildBatchFor(
-        { rewrites: [], inserts: [{ face: "f", paintFrom: 0 }], merge: null, deletes: [], untouched: [] },
-        ctxFor({ f: face }),
-      );
-      const out = engine.mutate(batch);
-      expect(out.applied).toBe(true);
-      const piece = String(out.minted[0]!.id);
-      // The piece STORES the raw face and the input's stored transform —
-      // the frame the engine's union of pieces reads.
-      expect(engine.storedTransform(piece)).toEqual(engine.storedTransform("front"));
-      near(engine.spreadOutline(piece), mapOutline(engine.storedTransform("front")!, outlineOf(face)));
-    });
+    ])(
+      "%s lands where the face is, in the inputs' own space",
+      async (_n, face) => {
+        seed();
+        const batch = shapeBuildBatchFor(
+          {
+            rewrites: [],
+            inserts: [{ face: "f", paintFrom: 0 }],
+            merge: null,
+            deletes: [],
+            untouched: [],
+          },
+          ctxFor({ f: face }),
+        );
+        const out = engine.mutate(batch);
+        expect(out.applied).toBe(true);
+        const piece = String(out.minted[0]!.id);
+        // The piece STORES the raw face and the input's stored transform —
+        // the frame the engine's union of pieces reads.
+        expect(engine.storedTransform(piece)).toEqual(
+          engine.storedTransform("front"),
+        );
+        near(
+          engine.spreadOutline(piece),
+          mapOutline(engine.storedTransform("front")!, outlineOf(face)),
+        );
+      },
+    );
   });
 
   // ---------------------------------------------- framePath on a new path
@@ -410,11 +547,17 @@ describe.each(SHAPES)("page space on the %s-space engine", (shape) => {
       const cut: Vec[] = [
         [50, -10],
         [50, 110],
-      ].map(([x, y]) => [m[0] * x! + m[2] * y! + m[4], m[1] * x! + m[3] * y! + m[5]] as Vec);
+      ].map(
+        ([x, y]) =>
+          [m[0] * x! + m[2] * y! + m[4], m[1] * x! + m[3] * y! + m[5]] as Vec,
+      );
       const target = await knifeTargetOf(host, poly("t"), read.pageId!, cut);
       expect("skip" in target).toBe(false);
       const holed: AnchorTable = {
-        anchors: [...square(40, [55, 5]), ...square(10, [70, 20]).reverse()].map((p) => ({
+        anchors: [
+          ...square(40, [55, 5]),
+          ...square(10, [70, 20]).reverse(),
+        ].map((p) => ({
           anchor: p,
           left: p,
           right: p,
@@ -435,7 +578,10 @@ describe.each(SHAPES)("page space on the %s-space engine", (shape) => {
         ]),
       );
       expect(out.applied).toBe(true);
-      near(engine.spreadOutline(String(out.minted[0]!.id)), mapOutline(engine.storedTransform("t")!, outlineOf(holed)));
+      near(
+        engine.spreadOutline(String(out.minted[0]!.id)),
+        mapOutline(engine.storedTransform("t")!, outlineOf(holed)),
+      );
     });
 
     it("Repeat: a compound source's copy keeps its hole and its place", async () => {
@@ -443,16 +589,28 @@ describe.each(SHAPES)("page space on the %s-space engine", (shape) => {
       const host = fakeHost(engine);
       const plan = await repeatPlanFor(host, {
         repeat: "rep-1",
-        params: { ...REPEAT_DEFAULTS, kind: "grid", columns: 2, rows: 1, spacing: [10, 10], fitToArtboard: false },
+        params: {
+          ...REPEAT_DEFAULTS,
+          kind: "grid",
+          columns: 2,
+          rows: 1,
+          spacing: [10, 10],
+          fitToArtboard: false,
+        },
         ids: [poly("ring")],
         label: "spec",
       });
       expect(plan!.placements).toHaveLength(1);
       const [, , , , dx, dy] = plan!.placements[0]!.matrix;
-      const out = engine.mutate(repeatBatchFor({ plan: plan!, sourceEnvelopes: [null] }));
+      const out = engine.mutate(
+        repeatBatchFor({ plan: plan!, sourceEnvelopes: [null] }),
+      );
       expect(out.applied).toBe(true);
       const copy = String(out.minted[0]!.id);
-      near(engine.spreadOutline(copy), mapOutline(T(dx, dy), engine.spreadOutline("ring")));
+      near(
+        engine.spreadOutline(copy),
+        mapOutline(T(dx, dy), engine.spreadOutline("ring")),
+      );
     });
 
     it("Pattern: a compound source's tile keeps its hole and its place", async () => {
@@ -460,18 +618,28 @@ describe.each(SHAPES)("page space on the %s-space engine", (shape) => {
       const host = fakeHost(engine);
       const plan = await patternPlanFor(host, {
         field: "pat-1",
-        params: { ...PATTERN_DEFAULTS, columns: 2, rows: 1, fitToArtboard: false },
+        params: {
+          ...PATTERN_DEFAULTS,
+          columns: 2,
+          rows: 1,
+          fitToArtboard: false,
+        },
         ids: [poly("ring")],
         label: "spec",
       });
       expect(plan).not.toBeNull();
-      const out = engine.mutate(patternBatchFor({ plan: plan!, sourceEnvelopes: [null] }));
+      const out = engine.mutate(
+        patternBatchFor({ plan: plan!, sourceEnvelopes: [null] }),
+      );
       expect(out.applied).toBe(true);
       // The first tile is the source's own position: its copy sits on it.
       const tile = plan!.tiles[0]!;
       near(
         engine.spreadOutline(String(out.minted[0]!.id)),
-        mapOutline(T(tile.offset[0], tile.offset[1]), engine.spreadOutline("ring")),
+        mapOutline(
+          T(tile.offset[0], tile.offset[1]),
+          engine.spreadOutline("ring"),
+        ),
       );
     });
 
@@ -496,7 +664,11 @@ describe.each(SHAPES)("page space on the %s-space engine", (shape) => {
         ],
         faces: [],
       };
-      const arrangement = await livePaintArrangement(fakeHost(engine), group, "spec");
+      const arrangement = await livePaintArrangement(
+        fakeHost(engine),
+        group,
+        "spec",
+      );
       expect(arrangement).not.toBeNull();
       const face = arrangement!.faces[0]!;
       const out = engine.mutate(
@@ -510,7 +682,10 @@ describe.each(SHAPES)("page space on the %s-space engine", (shape) => {
       expect(out.applied).toBe(true);
       near(
         engine.spreadOutline(String(out.minted[0]!.id)),
-        mapOutline(engine.storedTransform("a")!, [raw.slice(0, 4), raw.slice(4)]),
+        mapOutline(engine.storedTransform("a")!, [
+          raw.slice(0, 4),
+          raw.slice(4),
+        ]),
       );
     });
 
@@ -546,79 +721,116 @@ describe.each(SHAPES)("page space on the %s-space engine", (shape) => {
         ...common,
         pageId: g!.pageId!,
         pageOrigin: pageOriginOf(g),
-        pixelToPage: pixelToPageAffine(g!.bounds, (g!.itemTransform ?? null) as Affine | null, 100, 100)!,
+        pixelToPage: pixelToPageAffine(
+          g!.bounds,
+          (g!.itemTransform ?? null) as Affine | null,
+          100,
+          100,
+        )!,
       });
       // Where it belongs: the same trace through the STORED transform.
       const truth = tracePlanFor({
         ...common,
         pageId: g!.pageId!,
-        pixelToPage: pixelToPageAffine(g!.bounds, engine.storedTransform("frame"), 100, 100)!,
+        pixelToPage: pixelToPageAffine(
+          g!.bounds,
+          engine.storedTransform("frame"),
+          100,
+          100,
+        )!,
       });
       const inserted = engine.mutate(traceInsertBatchFor(plan));
       expect(inserted.applied).toBe(true);
       const bindings = bindTraceRegions(plan, inserted.minted)!;
       const finish = engine.mutate(
-        traceFinishBatchFor({ plan, bindings, record: {} as never, sourceEnvelope: null }),
+        traceFinishBatchFor({
+          plan,
+          bindings,
+          record: {} as never,
+          sourceEnvelope: null,
+        }),
       );
       expect(finish.applied).toBe(true);
-      near(engine.spreadOutline(String(bindings[0]!.keep.id)), outlineOf(truth.regions[0]!.table));
+      near(
+        engine.spreadOutline(String(bindings[0]!.keep.id)),
+        outlineOf(truth.regions[0]!.table),
+      );
     });
 
-    it.if(shape === "page")("Create Outlines: a glyph run with a hole lands where the text was", async () => {
-      // The text frame on the verso, and the outlines core answers for it:
-      // PAGE space (its door's contract on either engine), one run, a ring.
-      engine.addPath("tf", VERSO, square(200), T(250, 250));
-      const ring = RING.map((c) => c.map(([x, y]) => [x + 300, y + 300] as Vec));
-      engine.textOutlines.set("tf", {
-        id: { kind: "textFrame", id: "tf" },
-        pageId: VERSO.id,
-        runs: [
-          {
-            rgb: [0, 0, 0],
-            cmyk: null,
-            anchors: ring.flat().map((p) => ({ anchor: p, left: p, right: p })),
-            subpathStarts: [0, 4],
-            glyphs: 1,
-          },
-        ],
-        skippedGlyphs: 0,
-      });
-      const before = new Set(engine.items.keys());
-      const frame = { kind: "textFrame", id: "tf" } as ElementId;
-      expect(await applyCreateOutlines(fakeHost(engine, [frame]))).toEqual([frame]);
-      const made = [...engine.items.keys()].filter((id) => !before.has(id));
-      expect(made).toHaveLength(1);
-      near(engine.pageOutline(made[0]!, VERSO), ring);
-    });
-
-    it.if(shape === "page")("Symbols: a compound piece rebuilt on a verso keeps its hole and its place", () => {
-      // A rebuild plans at the instance's LIVE origin, read in page space,
-      // with that read's page origin.
-      const symbol = {
-        id: "sym-1",
-        name: "Ring",
-        registration: "center" as const,
-        origin: [0, 0] as [number, number],
-        pieces: [
-          {
-            table: {
-              anchors: RING.flat().map((p) => ({ anchor: p, left: p, right: p })),
+    it.if(shape === "page")(
+      "Create Outlines: a glyph run with a hole lands where the text was",
+      async () => {
+        // The text frame on the verso, and the outlines core answers for it:
+        // PAGE space (its door's contract on either engine), one run, a ring.
+        engine.addPath("tf", VERSO, square(200), T(250, 250));
+        const ring = RING.map((c) =>
+          c.map(([x, y]) => [x + 300, y + 300] as Vec),
+        );
+        engine.textOutlines.set("tf", {
+          id: { kind: "textFrame", id: "tf" },
+          pageId: VERSO.id,
+          runs: [
+            {
+              rgb: [0, 0, 0],
+              cmyk: null,
+              anchors: ring
+                .flat()
+                .map((p) => ({ anchor: p, left: p, right: p })),
               subpathStarts: [0, 4],
+              glyphs: 1,
             },
-            paint: { fill: null, stroke: null, weight: null },
-          },
-        ],
-      };
-      const plan = symbolPlacePlanFor({
-        symbol,
-        pageId: VERSO.id,
-        pageOrigin: VERSO.origin,
-        instanceId: "si-1",
-        origin: [300, 300],
-      });
-      const out = engine.mutate(symbolBatchFor([{ plan }]));
-      expect(out.applied).toBe(true);
-      near(engine.pageOutline(String(out.minted[0]!.id), VERSO), mapOutline(T(300, 300), RING));
-    });
+          ],
+          skippedGlyphs: 0,
+        });
+        const before = new Set(engine.items.keys());
+        const frame = { kind: "textFrame", id: "tf" } as ElementId;
+        expect(await applyCreateOutlines(fakeHost(engine, [frame]))).toEqual([
+          frame,
+        ]);
+        const made = [...engine.items.keys()].filter((id) => !before.has(id));
+        expect(made).toHaveLength(1);
+        near(engine.pageOutline(made[0]!, VERSO), ring);
+      },
+    );
+
+    it.if(shape === "page")(
+      "Symbols: a compound piece rebuilt on a verso keeps its hole and its place",
+      () => {
+        // A rebuild plans at the instance's LIVE origin, read in page space,
+        // with that read's page origin.
+        const symbol = {
+          id: "sym-1",
+          name: "Ring",
+          registration: "center" as const,
+          origin: [0, 0] as [number, number],
+          pieces: [
+            {
+              table: {
+                anchors: RING.flat().map((p) => ({
+                  anchor: p,
+                  left: p,
+                  right: p,
+                })),
+                subpathStarts: [0, 4],
+              },
+              paint: { fill: null, stroke: null, weight: null },
+            },
+          ],
+        };
+        const plan = symbolPlacePlanFor({
+          symbol,
+          pageId: VERSO.id,
+          pageOrigin: VERSO.origin,
+          instanceId: "si-1",
+          origin: [300, 300],
+        });
+        const out = engine.mutate(symbolBatchFor([{ plan }]));
+        expect(out.applied).toBe(true);
+        near(
+          engine.pageOutline(String(out.minted[0]!.id), VERSO),
+          mapOutline(T(300, 300), RING),
+        );
+      },
+    );
   });
 });

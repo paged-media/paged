@@ -73,9 +73,9 @@ type CanvasGlobal = {
 const invoke = (page: Page, id: string) =>
   page.evaluate(
     (cmd) =>
-      (globalThis as unknown as CanvasGlobal).__canvas.registries.commands.invoke(
-        cmd,
-      ),
+      (
+        globalThis as unknown as CanvasGlobal
+      ).__canvas.registries.commands.invoke(cmd),
     id,
   );
 
@@ -101,9 +101,9 @@ test.describe("plugin-doc — file entry (File▸Open importer union)", () => {
     page,
   }) => {
     await openCanvas(page);
-    await expect.poll(() => resolveDocx(page), { timeout: 15_000 }).toBe(
-      IMPORTER_ID,
-    );
+    await expect
+      .poll(() => resolveDocx(page), { timeout: 15_000 })
+      .toBe(IMPORTER_ID);
 
     const probe = await page.evaluate(
       ({ importerId, mime }) => {
@@ -151,9 +151,9 @@ test.describe("plugin-doc — file entry (File▸Open importer union)", () => {
       null,
       { timeout: 15_000 },
     );
-    await expect.poll(() => resolveDocx(page), { timeout: 15_000 }).toBe(
-      IMPORTER_ID,
-    );
+    await expect
+      .poll(() => resolveDocx(page), { timeout: 15_000 })
+      .toBe(IMPORTER_ID);
 
     // Drive the ONE File▸Open door. Its pickFile input.click() fires
     // Playwright's filechooser; the command promise resolves only after the

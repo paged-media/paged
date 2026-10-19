@@ -46,11 +46,7 @@ import { bench, group as describe, run } from "mitata";
 
 import type { Vec2 } from "@paged-media/draw-geometry";
 
-import {
-  LivePaintMachine,
-  ShapeBuilderMachine,
-  type RegionFace,
-} from "../src";
+import { LivePaintMachine, ShapeBuilderMachine, type RegionFace } from "../src";
 import {
   faceGrid,
   roundFace,
@@ -109,12 +105,13 @@ describe("ShapeBuilderMachine — resolve a point against 256 faces (one hover m
 });
 
 describe("ShapeBuilderMachine — 1 000 move events through the machine (one drag)", () => {
-  const drag = (
-    faces: RegionFace[] | null,
-    read: boolean,
-  ): number => {
+  const drag = (faces: RegionFace[] | null, read: boolean): number => {
     const machine = hovering(faces);
-    machine.handle({ type: "down", point: DRAG_1000[0], modifiers: { alt: false } });
+    machine.handle({
+      type: "down",
+      point: DRAG_1000[0],
+      modifiers: { alt: false },
+    });
     let seen = 0;
     for (const point of DRAG_1000) {
       const snapshot = machine.handle({ type: "move", point });
@@ -130,9 +127,12 @@ describe("ShapeBuilderMachine — 1 000 move events through the machine (one dra
     drag(null, false);
   });
 
-  bench("no arrangement installed, the handler reading `path` every move", () => {
-    drag(null, true);
-  });
+  bench(
+    "no arrangement installed, the handler reading `path` every move",
+    () => {
+      drag(null, true);
+    },
+  );
 
   bench("256 curved faces installed", () => {
     drag(CURVED, false);

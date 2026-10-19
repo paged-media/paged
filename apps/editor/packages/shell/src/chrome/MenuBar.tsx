@@ -17,7 +17,13 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
+import {
+  useEffect,
+  useMemo,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -119,7 +125,9 @@ export function MenuBar() {
   if (tree.length === 0) return null;
 
   const applies = (leaf: MenuLeaf) =>
-    !leaf.disabled && leaf.kind !== "label" && isEnabled(leaf.when, () => paged);
+    !leaf.disabled &&
+    leaf.kind !== "label" &&
+    isEnabled(leaf.when, () => paged);
 
   // WHEN A CONTEXT MENU SHOWS. A plugin's items cannot say it: the SDK
   // gates every one of them on "a document is open", so with a document
@@ -140,9 +148,10 @@ export function MenuBar() {
     if (ns) framed.add(ns);
   }
   const here = new Set(
-    [nsOfContext(activeContext?.type), nsOfContext(selectionContext?.type)].filter(
-      (n): n is string => n !== null,
-    ),
+    [
+      nsOfContext(activeContext?.type),
+      nsOfContext(selectionContext?.type),
+    ].filter((n): n is string => n !== null),
   );
   const keptByMode = modes.get(mode)?.menus ?? [];
   const showContextMenu = (label: string, nodes: MenuNode[]) => {
@@ -155,7 +164,8 @@ export function MenuBar() {
   };
   const core = tree.filter(([label]) => CORE_MENUS.includes(label));
   const context = tree.filter(
-    ([label, nodes]) => !CORE_MENUS.includes(label) && showContextMenu(label, nodes),
+    ([label, nodes]) =>
+      !CORE_MENUS.includes(label) && showContextMenu(label, nodes),
   );
 
   const ctx: RenderCtx = {
@@ -195,7 +205,10 @@ export function MenuBar() {
 
 // ── model ──────────────────────────────────────────────────────────
 
-interface MenuLeaf {
+// The model is exported for its unit tests (packages/shell/test); the
+// MenuBar is its only product caller.
+
+export interface MenuLeaf {
   type: "leaf";
   label: string;
   command: string;
@@ -212,7 +225,7 @@ interface MenuLeaf {
   kind?: "item" | "label";
 }
 
-interface MenuSubmenu {
+export interface MenuSubmenu {
   type: "submenu";
   label: string;
   children: MenuNode[];
@@ -222,14 +235,14 @@ interface MenuSubmenu {
   groupLabel?: string;
 }
 
-type MenuNode = MenuLeaf | MenuSubmenu;
+export type MenuNode = MenuLeaf | MenuSubmenu;
 
 /** Capitalise a relocated leaf: `Insert spreadsheet…` → `Spreadsheet…`. */
 function capitalise(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
-function buildMenuTree(
+export function buildMenuTree(
   items: MenuItemContribution[],
 ): Array<[string, MenuNode[]]> {
   const tops = new Map<string, MenuNode[]>();
@@ -306,8 +319,15 @@ function buildMenuTree(
     const existing = plugins.find(
       (n): n is MenuSubmenu => n.type === "submenu" && n.label === top,
     );
-    if (existing) existing.children = mergeNodes(cloneNodes(nodes), existing.children);
-    else plugins.push({ type: "submenu", label: top, children: cloneNodes(nodes), order: 0 });
+    if (existing)
+      existing.children = mergeNodes(cloneNodes(nodes), existing.children);
+    else
+      plugins.push({
+        type: "submenu",
+        label: top,
+        children: cloneNodes(nodes),
+        order: 0,
+      });
   }
   // One section, alphabetical (the label tie-break in sortLevel).
   for (const n of plugins) {
@@ -328,7 +348,9 @@ function buildMenuTree(
  *  original top-level menu is still rendered as the context menu. */
 function cloneNodes(nodes: MenuNode[]): MenuNode[] {
   return nodes.map((n) =>
-    n.type === "submenu" ? { ...n, children: cloneNodes(n.children) } : { ...n },
+    n.type === "submenu"
+      ? { ...n, children: cloneNodes(n.children) }
+      : { ...n },
   );
 }
 
@@ -476,8 +498,7 @@ export function prettyKey(combo: string): string {
   const key = parts.pop() ?? "";
   const has = (...names: string[]) => parts.some((p) => names.includes(p));
   const glyph =
-    KEY_GLYPHS[key] ??
-    (key.length === 1 ? key.toUpperCase() : capitalise(key));
+    KEY_GLYPHS[key] ?? (key.length === 1 ? key.toUpperCase() : capitalise(key));
   if (IS_MAC) {
     return (
       (has("ctrl", "control") && !has("cmd", "meta") ? "⌃" : "") +
@@ -533,7 +554,11 @@ function renderNodes(nodes: MenuNode[], ctx: RenderCtx): ReactNode[] {
       out.push(<DropdownMenuSeparator key={`sep-${idx}`} />);
     }
     // E4 — a separator says "these differ"; a heading says how.
-    if (sections > 1 && node.groupLabel && (idx === 0 || node.group !== lastGroup)) {
+    if (
+      sections > 1 &&
+      node.groupLabel &&
+      (idx === 0 || node.group !== lastGroup)
+    ) {
       out.push(
         <div
           key={`grouplabel-${idx}`}
@@ -565,7 +590,11 @@ function renderNodes(nodes: MenuNode[], ctx: RenderCtx): ReactNode[] {
   return out;
 }
 
-function renderLeaf(item: MenuLeaf, ctx: RenderCtx, iconColumn: boolean): ReactNode {
+function renderLeaf(
+  item: MenuLeaf,
+  ctx: RenderCtx,
+  iconColumn: boolean,
+): ReactNode {
   const icon = iconColumn ? ctx.iconFor(item) : null;
   const iconSlot = iconColumn && (
     <span style={iconSlotStyle} aria-hidden>
@@ -578,7 +607,13 @@ function renderLeaf(item: MenuLeaf, ctx: RenderCtx, iconColumn: boolean): ReactN
         key={item.command}
         className="pg-mono-meta"
         data-menu-label={item.command}
-        style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 8px", opacity: 0.55 }}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          padding: "5px 8px",
+          opacity: 0.55,
+        }}
       >
         {iconSlot}
         {displayLabel(item, ctx.state)}
@@ -590,7 +625,9 @@ function renderLeaf(item: MenuLeaf, ctx: RenderCtx, iconColumn: boolean): ReactN
   // "does not apply where you are standing", which promises nothing.
   const inapplicable = !isEnabled(item.when, () => ctx.state);
   const greyed = Boolean(item.disabled) || inapplicable;
-  const accel = ctx.keyFor(item.command) ?? (item.accelerator ? prettyKey(item.accelerator) : null);
+  const accel =
+    ctx.keyFor(item.command) ??
+    (item.accelerator ? prettyKey(item.accelerator) : null);
   return (
     <DropdownMenuItem
       key={item.command}
@@ -606,7 +643,10 @@ function renderLeaf(item: MenuLeaf, ctx: RenderCtx, iconColumn: boolean): ReactN
       {/* E2 — the accelerator column; a seam shows `soon` instead, since
           a blank column beside a greyed item reads as a missing key. */}
       {item.disabled ? (
-        <span className="pg-mono-meta" style={{ marginLeft: "auto", paddingLeft: 16 }}>
+        <span
+          className="pg-mono-meta"
+          style={{ marginLeft: "auto", paddingLeft: 16 }}
+        >
           soon
         </span>
       ) : (

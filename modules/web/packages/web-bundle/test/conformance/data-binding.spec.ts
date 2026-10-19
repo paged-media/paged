@@ -24,7 +24,11 @@
 
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
-import type { BundleHost, DataProviderSnapshot, ElementId } from "@paged-media/plugin-api";
+import type {
+  BundleHost,
+  DataProviderSnapshot,
+  ElementId,
+} from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
 import { DEFAULT_SOURCE, type WebFrameSource } from "@paged-media/web-model";
 
@@ -37,7 +41,14 @@ import {
   writeWebSource,
 } from "../../src/source-part";
 import { W1_EMPTY_PAGE } from "../fixtures/corpus";
-import { blitzPresent, layerText, primeBlitz, recordScene, requireBlitz, type SceneRecord } from "./blitz";
+import {
+  blitzPresent,
+  layerText,
+  primeBlitz,
+  recordScene,
+  requireBlitz,
+  type SceneRecord,
+} from "./blitz";
 import { openHost } from "./host";
 
 requireBlitz("web conformance — data binding");
@@ -58,11 +69,22 @@ function installProvider(h: HeadlessHost) {
   Object.defineProperty(host, "dataProviders", {
     value: {
       register: () => ({ update() {}, dispose() {} }),
-      discover: () => [{ id: "places", category: "dataset", schema: { fields: [{ name: "city", type: "string" }] }, revision }],
+      discover: () => [
+        {
+          id: "places",
+          category: "dataset",
+          schema: { fields: [{ name: "city", type: "string" }] },
+          revision,
+        },
+      ],
       get: async (): Promise<DataProviderSnapshot> => ({
         id: "places",
         revision,
-        records: { schema: { fields: [{ name: "city", type: "string" } as never] }, columns: [[city]], rowCount: 1 },
+        records: {
+          schema: { fields: [{ name: "city", type: "string" } as never] },
+          columns: [[city]],
+          rowCount: 1,
+        },
       }),
       onDidChange: (_id: string, l: (r: string) => void) => {
         listeners.add(l);
@@ -79,90 +101,128 @@ function installProvider(h: HeadlessHost) {
   };
 }
 
-describe.skipIf(!blitzPresent)("web conformance — data binding (real host + real Blitz) @feat:plugin-web.data-binding", () => {
-  let h: HeadlessHost;
-  let host: BundleHost;
-  let rec: SceneRecord;
-  let provider: ReturnType<typeof installProvider>;
+describe.skipIf(!blitzPresent)(
+  "web conformance — data binding (real host + real Blitz) @feat:plugin-web.data-binding",
+  () => {
+    let h: HeadlessHost;
+    let host: BundleHost;
+    let rec: SceneRecord;
+    let provider: ReturnType<typeof installProvider>;
 
-  beforeEach(async () => {
-    h = await openHost();
-    await h.load(W1_EMPTY_PAGE.bytes());
-    rec = recordScene(h);
-    await primeBlitz(h.host as unknown as BundleHost);
-    h.loadBundle(webBundle);
-    // The bundle's own host (built at load) gets the registry.
-    provider = installProvider(h);
-    host = h.host as unknown as BundleHost;
-    await autoRendererFor(host)!.idle();
-  });
-  afterEach(() => h?.dispose());
+    beforeEach(async () => {
+      h = await openHost();
+      await h.load(W1_EMPTY_PAGE.bytes());
+      rec = recordScene(h);
+      await primeBlitz(h.host as unknown as BundleHost);
+      h.loadBundle(webBundle);
+      // The bundle's own host (built at load) gets the registry.
+      provider = installProvider(h);
+      host = h.host as unknown as BundleHost;
+      await autoRendererFor(host)!.idle();
+    });
+    afterEach(() => h?.dispose());
 
-  async function frame(html: string): Promise<ElementId> {
-    const out = await host.document.mutate({
-      op: "insertFrame",
-      args: { pageId: W1_EMPTY_PAGE.pageId, bounds: [60, 60, 180, 400] },
-    } as never);
-    if (!out.applied || !out.createdId) throw new Error("no frame");
-    const id = out.createdId as ElementId;
-    const source: WebFrameSource = { ...DEFAULT_SOURCE, html, css: "body{margin:0}" };
-    expect((await writeWebSource(host, id, source)).applied).toBe(true);
-    await autoRendererFor(host)!.idle();
-    return id;
-  }
+    async function frame(html: string): Promise<ElementId> {
+      const out = await host.document.mutate({
+        op: "insertFrame",
+        args: { pageId: W1_EMPTY_PAGE.pageId, bounds: [60, 60, 180, 400] },
+      } as never);
+      if (!out.applied || !out.createdId) throw new Error("no frame");
+      const id = out.createdId as ElementId;
+      const source: WebFrameSource = {
+        ...DEFAULT_SOURCE,
+        html,
+        css: "body{margin:0}",
+      };
+      expect((await writeWebSource(host, id, source)).applied).toBe(true);
+      await autoRendererFor(host)!.idle();
+      return id;
+    }
 
-  it("frame page, page count, a document value and a provider field reach the canvas", async () => {
-    expect((await writeDocumentValues(host, { edition: "Spring" })).applied).toBe(true);
-    const id = await frame("<p>Page {{frame.page}} of {{doc.pages}}, {{doc.edition}}, {{data.city}}</p>");
-    const text = layerText(rec.layers.get(idOf(id)));
-    expect(text).toContain("Page 1 of 1");
-    expect(text).toContain("Spring");
-    expect(text).toContain("Vienna");
-  });
+    it("frame page, page count, a document value and a provider field reach the canvas", async () => {
+      expect(
+        (await writeDocumentValues(host, { edition: "Spring" })).applied,
+      ).toBe(true);
+      const id = await frame(
+        "<p>Page {{frame.page}} of {{doc.pages}}, {{doc.edition}}, {{data.city}}</p>",
+      );
+      const text = layerText(rec.layers.get(idOf(id)));
+      expect(text).toContain("Page 1 of 1");
+      expect(text).toContain("Spring");
+      expect(text).toContain("Vienna");
+    });
 
-  it("re-renders when a bound value changes, and only then", async () => {
-    const id = await frame("<p>{{data.city}} / {{doc.edition}}</p>");
-    const submits = () => rec.submits.filter((s) => s === idOf(id)).length;
-    const before = submits();
-    await autoRendererFor(host)!.reconcile("change");
-    expect(submits()).toBe(before); // nothing bound changed
-    provider.set("Graz");
-    await autoRendererFor(host)!.idle();
-    expect(layerText(rec.layers.get(idOf(id)))).toContain("Graz");
-    // A document value is a document change: the canvas follows it with no
-    // nudge from the writer.
-    await writeDocumentValues(host, { edition: "Autumn" });
-    await autoRendererFor(host)!.idle();
-    expect(layerText(rec.layers.get(idOf(id)))).toContain("Autumn");
-  });
+    it("re-renders when a bound value changes, and only then", async () => {
+      const id = await frame("<p>{{data.city}} / {{doc.edition}}</p>");
+      const submits = () => rec.submits.filter((s) => s === idOf(id)).length;
+      const before = submits();
+      await autoRendererFor(host)!.reconcile("change");
+      expect(submits()).toBe(before); // nothing bound changed
+      provider.set("Graz");
+      await autoRendererFor(host)!.idle();
+      expect(layerText(rec.layers.get(idOf(id)))).toContain("Graz");
+      // A document value is a document change: the canvas follows it with no
+      // nudge from the writer.
+      await writeDocumentValues(host, { edition: "Autumn" });
+      await autoRendererFor(host)!.idle();
+      expect(layerText(rec.layers.get(idOf(id)))).toContain("Autumn");
+    });
 
-  it("a document value is one undo step: undo restores the previous value on the canvas", async () => {
-    expect((await writeDocumentValues(host, { edition: "Spring" })).applied).toBe(true);
-    const id = await frame("<p>{{doc.edition}}</p>");
-    expect((await writeDocumentValues(host, { edition: "Autumn" })).applied).toBe(true);
-    await autoRendererFor(host)!.idle();
-    expect(layerText(rec.layers.get(idOf(id)))).toContain("Autumn");
-    // The values live in the document's own metadata, not a container part.
-    expect((await host.document.getDocumentMetadata())?.data).toEqual({ documentValues: { edition: "Autumn" } });
-    expect(await host.parts.read(DOCUMENT_VALUES_PART).catch(() => null)).toBeNull();
-    await host.document.undo();
-    await autoRendererFor(host)!.idle();
-    expect(await readDocumentValues(host)).toEqual({ edition: "Spring" });
-    expect(layerText(rec.layers.get(idOf(id)))).toContain("Spring");
-  });
+    it("a document value is one undo step: undo restores the previous value on the canvas", async () => {
+      expect(
+        (await writeDocumentValues(host, { edition: "Spring" })).applied,
+      ).toBe(true);
+      const id = await frame("<p>{{doc.edition}}</p>");
+      expect(
+        (await writeDocumentValues(host, { edition: "Autumn" })).applied,
+      ).toBe(true);
+      await autoRendererFor(host)!.idle();
+      expect(layerText(rec.layers.get(idOf(id)))).toContain("Autumn");
+      // The values live in the document's own metadata, not a container part.
+      expect((await host.document.getDocumentMetadata())?.data).toEqual({
+        documentValues: { edition: "Autumn" },
+      });
+      expect(
+        await host.parts.read(DOCUMENT_VALUES_PART).catch(() => null),
+      ).toBeNull();
+      await host.document.undo();
+      await autoRendererFor(host)!.idle();
+      expect(await readDocumentValues(host)).toEqual({ edition: "Spring" });
+      expect(layerText(rec.layers.get(idOf(id)))).toContain("Spring");
+    });
 
-  it("a document that kept its values in the old part is read once, then the metadata is the truth", async () => {
-    await host.parts.write(DOCUMENT_VALUES_PART, new TextEncoder().encode(JSON.stringify({ edition: "Legacy" })));
-    expect(await readDocumentValues(host)).toEqual({ edition: "Legacy" });
-    expect((await writeDocumentValues(host, { ...(await readDocumentValues(host)), year: "2026" })).applied).toBe(true);
-    expect(await readDocumentValues(host)).toEqual({ edition: "Legacy", year: "2026" });
-    // The part is no longer read once the metadata exists.
-    await host.parts.write(DOCUMENT_VALUES_PART, new TextEncoder().encode(JSON.stringify({ edition: "Stale" })));
-    expect(await readDocumentValues(host)).toEqual({ edition: "Legacy", year: "2026" });
-  });
+    it("a document that kept its values in the old part is read once, then the metadata is the truth", async () => {
+      await host.parts.write(
+        DOCUMENT_VALUES_PART,
+        new TextEncoder().encode(JSON.stringify({ edition: "Legacy" })),
+      );
+      expect(await readDocumentValues(host)).toEqual({ edition: "Legacy" });
+      expect(
+        (
+          await writeDocumentValues(host, {
+            ...(await readDocumentValues(host)),
+            year: "2026",
+          })
+        ).applied,
+      ).toBe(true);
+      expect(await readDocumentValues(host)).toEqual({
+        edition: "Legacy",
+        year: "2026",
+      });
+      // The part is no longer read once the metadata exists.
+      await host.parts.write(
+        DOCUMENT_VALUES_PART,
+        new TextEncoder().encode(JSON.stringify({ edition: "Stale" })),
+      );
+      expect(await readDocumentValues(host)).toEqual({
+        edition: "Legacy",
+        year: "2026",
+      });
+    });
 
-  it("a source that names no bound value keeps its placeholders verbatim", async () => {
-    const id = await frame("<p>{{plain}}</p>");
-    expect(layerText(rec.layers.get(idOf(id)))).toContain("{{plain}}");
-  });
-});
+    it("a source that names no bound value keeps its placeholders verbatim", async () => {
+      const id = await frame("<p>{{plain}}</p>");
+      expect(layerText(rec.layers.get(idOf(id)))).toContain("{{plain}}");
+    });
+  },
+);

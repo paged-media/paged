@@ -101,5 +101,6 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     console.error("usage: stimuli.mjs <out-dir>");
     process.exit(2);
   }
-  for (const [n, p] of Object.entries(writeStimuli(dir))) console.log(`${n} -> ${p}`);
+  for (const [n, p] of Object.entries(writeStimuli(dir)))
+    console.log(`${n} -> ${p}`);
 }

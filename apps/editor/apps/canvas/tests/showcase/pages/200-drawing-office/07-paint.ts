@@ -64,16 +64,23 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   const vermilion = await doc.swatch(SWATCH.vermilion);
   const layerContent = await doc.layerId(LAYER.content);
 
-  const head = await proseFrame(ctx, page, [left, 54, right, 82], [
-    { text: "Paint, three ways", style: STYLE.head1 },
-  ]);
-  const intro = await proseFrame(ctx, page, [left, 86, right, 126], [
-    {
-      text:
-        "Gradient fills minted by command, a pattern that is honestly a field of copies, and the dash presets. Everything is swatches, stops and stroke attributes the document itself owns.",
-      style: STYLE.bodyFirst,
-    },
-  ]);
+  const head = await proseFrame(
+    ctx,
+    page,
+    [left, 54, right, 82],
+    [{ text: "Paint, three ways", style: STYLE.head1 }],
+  );
+  const intro = await proseFrame(
+    ctx,
+    page,
+    [left, 86, right, 126],
+    [
+      {
+        text: "Gradient fills minted by command, a pattern that is honestly a field of copies, and the dash presets. Everything is swatches, stops and stroke attributes the document itself owns.",
+        style: STYLE.bodyFirst,
+      },
+    ],
+  );
   elements.push(head.frameId, intro.frameId);
 
   // ── gradients — the two preset commands ──────────────────────────
@@ -95,10 +102,18 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     .poll(
       async () =>
         String(
-          (await propOf(ctx, { kind: "rectangle", id: linTile }, "frameFillColor"))
-            ?.value ?? "",
+          (
+            await propOf(
+              ctx,
+              { kind: "rectangle", id: linTile },
+              "frameFillColor",
+            )
+          )?.value ?? "",
         ),
-      { message: "the linear preset pointed the fill at a gradient", timeout: 120_000 },
+      {
+        message: "the linear preset pointed the fill at a gradient",
+        timeout: 120_000,
+      },
     )
     .toContain("Gradient/");
   await doc.select("rectangle", radTile);
@@ -107,20 +122,32 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     .poll(
       async () =>
         String(
-          (await propOf(ctx, { kind: "rectangle", id: radTile }, "frameFillColor"))
-            ?.value ?? "",
+          (
+            await propOf(
+              ctx,
+              { kind: "rectangle", id: radTile },
+              "frameFillColor",
+            )
+          )?.value ?? "",
         ),
-      { message: "the radial preset pointed the fill at a gradient", timeout: 120_000 },
+      {
+        message: "the radial preset pointed the fill at a gradient",
+        timeout: 120_000,
+      },
     )
     .toContain("Gradient/");
 
-  const gradCaption = await proseFrame(ctx, page, [left, 250, right, 288], [
-    {
-      text:
-        "Fill: Linear gradient and Fill: Radial gradient. Each invocation created two stop swatches and a real GradientSpec, then pointed the frame's fill reference at it - collection creates return no id on the wire, so the bundle names its swatches up front and refers by name.",
-      style: STYLE.caption,
-    },
-  ]);
+  const gradCaption = await proseFrame(
+    ctx,
+    page,
+    [left, 250, right, 288],
+    [
+      {
+        text: "Fill: Linear gradient and Fill: Radial gradient. Each invocation created two stop swatches and a real GradientSpec, then pointed the frame's fill reference at it - collection creates return no id on the wire, so the bundle names its swatches up front and refers by name.",
+        style: STYLE.caption,
+      },
+    ],
+  );
   elements.push(gradCaption.frameId);
 
   // ── pattern — make a brick field from a motif, then release ──────
@@ -185,13 +212,17 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   );
   expect(releasedField, "release dropped the pattern recipe").toBe(true);
 
-  const patCaption = await proseFrame(ctx, page, [left, 452, right, 508], [
-    {
-      text:
-        `One diamond motif became ${tiles.length} copies in a brick lattice - 4 columns, 2 rows, 6 pt gutters, the copies dimmed to 70% opacity. This is ARTWORK, not a pattern swatch: the engine has no pattern paint type, so the field is a recipe over real elements, re-plannable until Release - which kept every copy you see and dropped only the tracking.`,
-      style: STYLE.caption,
-    },
-  ]);
+  const patCaption = await proseFrame(
+    ctx,
+    page,
+    [left, 452, right, 508],
+    [
+      {
+        text: `One diamond motif became ${tiles.length} copies in a brick lattice - 4 columns, 2 rows, 6 pt gutters, the copies dimmed to 70% opacity. This is ARTWORK, not a pattern swatch: the engine has no pattern paint type, so the field is a recipe over real elements, re-plannable until Release - which kept every copy you see and dropped only the tracking.`,
+        style: STYLE.caption,
+      },
+    ],
+  );
   elements.push(patCaption.frameId);
 
   // ── the four dash presets ────────────────────────────────────────
@@ -249,17 +280,24 @@ export async function build(ctx: PageContext): Promise<PageReport> {
         );
         return v?.type === "lengths" ? (v.value as number[]) : [];
       },
-      { message: "the Dashed preset committed its documented 6/3 run", timeout: 120_000 },
+      {
+        message: "the Dashed preset committed its documented 6/3 run",
+        timeout: 120_000,
+      },
     )
     .toEqual([6, 3]);
 
-  const dashCaption = await proseFrame(ctx, page, [left, 592, right, 622], [
-    {
-      text:
-        "Solid and Dashed (6/3) - the dash-preset command lane over the selected line's real dash-array attribute; both dot-bearing presets are banked in the margin.",
-      style: STYLE.caption,
-    },
-  ]);
+  const dashCaption = await proseFrame(
+    ctx,
+    page,
+    [left, 592, right, 622],
+    [
+      {
+        text: "Solid and Dashed (6/3) - the dash-preset command lane over the selected line's real dash-array attribute; both dot-bearing presets are banked in the margin.",
+        style: STYLE.caption,
+      },
+    ],
+  );
   elements.push(dashCaption.frameId);
 
   elements.push(

@@ -46,7 +46,14 @@
 //    `createdId`, so a flow that inserts several paths reads the whole
 //    scene tree before the batch and again after it, and diffs.
 
-import { afterAll, beforeAll, describe, expect, it, setDefaultTimeout } from "bun:test";
+import {
+  afterAll,
+  beforeAll,
+  describe,
+  expect,
+  it,
+  setDefaultTimeout,
+} from "bun:test";
 
 import { metadataReadsPerLeaf } from "../engine-reads";
 
@@ -87,7 +94,7 @@ import {
   TRACE_DEFAULTS,
   type AppearanceStack,
 } from "../../src";
-import { treeShapeOf } from "../conformance/one-batch";
+import { treeShapeOf } from "../headless/one-batch";
 import { F7_PLACED_IMAGE, ringPixels } from "../fixtures/corpus";
 import {
   BUDGET_TIMEOUT_MS,
@@ -246,7 +253,8 @@ describe("perf budgets — commands over a busy document", () => {
     Walked,
     (host: BundleHost, id?: string) => Promise<ElementId[]>
   > = {
-    blend: (host, id) => applySelectBlendObjects(host, id ? { blendId: id } : {}),
+    blend: (host, id) =>
+      applySelectBlendObjects(host, id ? { blendId: id } : {}),
     repeat: (host, id) =>
       applySelectRepeatInstances(host, id ? { repeatId: id } : {}),
     pattern: (host, id) =>
@@ -269,19 +277,25 @@ describe("perf budgets — commands over a busy document", () => {
       ["pattern", 2],
       ["objectsOnPath", 2],
       ["livePaint", 1],
-    ])("%s, record named by id: 1 403 reads to find %i leaves", async (feature, found) => {
-      const { work, result } = await counted(w, `${feature} select by id`, [], (host) =>
-        SELECT[feature](host, recordOf(feature)),
-      );
-      expect(result).toHaveLength(found);
-      expect(work.mutations).toEqual([]);
-      expect(work.count("document.tree")).toBe(1);
-      // Every leaf in the document: the 500 plain shapes, the 901 the six
-      // features own between them, the fixture's 2 — for a record that
-      // owns 5 at most. TARGET: the record's own leaves; the recipe part
-      // already names them.
-      expect(work.count("document.getMetadata")).toBe(LEAVES * perLeaf);
-    });
+    ])(
+      "%s, record named by id: 1 403 reads to find %i leaves",
+      async (feature, found) => {
+        const { work, result } = await counted(
+          w,
+          `${feature} select by id`,
+          [],
+          (host) => SELECT[feature](host, recordOf(feature)),
+        );
+        expect(result).toHaveLength(found);
+        expect(work.mutations).toEqual([]);
+        expect(work.count("document.tree")).toBe(1);
+        // Every leaf in the document: the 500 plain shapes, the 901 the six
+        // features own between them, the fixture's 2 — for a record that
+        // owns 5 at most. TARGET: the record's own leaves; the recipe part
+        // already names them.
+        expect(work.count("document.getMetadata")).toBe(LEAVES * perLeaf);
+      },
+    );
 
     it.each<[Walked]>([
       ["blend"],
@@ -289,22 +303,25 @@ describe("perf budgets — commands over a busy document", () => {
       ["pattern"],
       ["objectsOnPath"],
       ["livePaint"],
-    ])("%s, record resolved from the selection: the same walk, no extra read", async (feature) => {
-      const { work, result } = await counted(
-        w,
-        `${feature} select from selection`,
-        [handleOf(feature)],
-        (host) => SELECT[feature](host),
-      );
-      expect(result.length).toBeGreaterThan(0);
-      // As found: LEAVES + 1 — the selected leaf's own link names the
-      // record (1 read), and then the whole document was walked anyway,
-      // that leaf included. The link index reads each leaf ONCE per
-      // revision, so the walk skips the one the resolve already read.
-      // TARGET as above.
-      // On a C-65 engine only the selected leaf's own read is left.
-      expect(work.count("document.getMetadata")).toBe(perLeaf ? LEAVES : 1);
-    });
+    ])(
+      "%s, record resolved from the selection: the same walk, no extra read",
+      async (feature) => {
+        const { work, result } = await counted(
+          w,
+          `${feature} select from selection`,
+          [handleOf(feature)],
+          (host) => SELECT[feature](host),
+        );
+        expect(result.length).toBeGreaterThan(0);
+        // As found: LEAVES + 1 — the selected leaf's own link names the
+        // record (1 read), and then the whole document was walked anyway,
+        // that leaf included. The link index reads each leaf ONCE per
+        // revision, so the walk skips the one the resolve already read.
+        // TARGET as above.
+        // On a C-65 engine only the selected leaf's own read is left.
+        expect(work.count("document.getMetadata")).toBe(perLeaf ? LEAVES : 1);
+      },
+    );
 
     it.each<[Walked]>([["blend"], ["repeat"], ["pattern"], ["objectsOnPath"]])(
       "%s, nothing selected: the whole walk, to conclude the request is ambiguous",
@@ -326,8 +343,11 @@ describe("perf budgets — commands over a busy document", () => {
     );
 
     it("livePaint, nothing selected: the one feature that answers from its recipe alone", async () => {
-      const { work, result } = await counted(w, "livePaint select from nothing", [], (host) =>
-        SELECT.livePaint(host),
+      const { work, result } = await counted(
+        w,
+        "livePaint select from nothing",
+        [],
+        (host) => SELECT.livePaint(host),
       );
       expect(result).toEqual([]);
       // The same no-op, for zero document reads. This is the target the
@@ -336,8 +356,11 @@ describe("perf budgets — commands over a busy document", () => {
     });
 
     it("symbols: enumerating 50 instances reads every leaf", async () => {
-      const { work, result } = await counted(w, "symbols instances", [], (host) =>
-        symbolInstances(host, w.linked.symbols!.symbolId),
+      const { work, result } = await counted(
+        w,
+        "symbols instances",
+        [],
+        (host) => symbolInstances(host, w.linked.symbols!.symbolId),
       );
       expect(result).toHaveLength(50);
       expect(work.count("document.tree")).toBe(1);
@@ -371,9 +394,10 @@ describe("perf budgets — commands over a busy document", () => {
         ["objectsOnPath", 2],
         ["livePaint", 1],
       ] as const) {
-        expect(await SELECT[feature](host, recordOf(feature)), feature).toHaveLength(
-          found,
-        );
+        expect(
+          await SELECT[feature](host, recordOf(feature)),
+          feature,
+        ).toHaveLength(found);
       }
       expect(
         await symbolInstances(host, w.linked.symbols!.symbolId),
@@ -406,7 +430,9 @@ describe("perf budgets — commands over a busy document", () => {
       // WARM — another record of the same, unchanged document: no engine
       // round trip at all. As found: another 1 403.
       work.reset();
-      expect(await applySelectBlendObjects(host, { blendId: other })).toHaveLength(2);
+      expect(
+        await applySelectBlendObjects(host, { blendId: other }),
+      ).toHaveLength(2);
       expect(work.reads()).toBe(0);
 
       // WARM — an update reads NOTHING of the document now: the key
@@ -430,7 +456,9 @@ describe("perf budgets — commands over a busy document", () => {
         blendId: other,
         which: "steps",
       });
-      expect(found.map((e) => e.id).sort()).toEqual(steps.map((e) => e.id).sort());
+      expect(found.map((e) => e.id).sort()).toEqual(
+        steps.map((e) => e.id).sort(),
+      );
       expect(work.count("document.tree")).toBe(1);
       expect(work.count("document.getMetadata")).toBe(
         (await leafIds(w.h)).length * perLeaf,
@@ -449,8 +477,11 @@ describe("perf budgets — commands over a busy document", () => {
   // SUSPICION CONFIRMED.
   describe("Select Same — one property read per leaf of the document", () => {
     it("same fill, from one plain shape", async () => {
-      const { work, result } = await counted(w, "select same fill", [], (host) =>
-        selectSameMatches(host, w.plain[0]!, "fill"),
+      const { work, result } = await counted(
+        w,
+        "select same fill",
+        [],
+        (host) => selectSameMatches(host, w.plain[0]!, "fill"),
       );
       // The workload is painted with one swatch, so most of it matches —
       // now ALL of it: a blend between two keys of one colour keeps the
@@ -477,8 +508,11 @@ describe("perf budgets — commands over a busy document", () => {
         })
         .at(0)!;
       expect(group).toBeDefined();
-      const { work, result } = await counted(w, "select same, no paint", [], (host) =>
-        selectSameMatches(host, group, "fill"),
+      const { work, result } = await counted(
+        w,
+        "select same, no paint",
+        [],
+        (host) => selectSameMatches(host, group, "fill"),
       );
       expect(result).toEqual([]);
       expect(work.count("document.elementProperties")).toBe(1);
@@ -500,13 +534,17 @@ describe("perf budgets — commands over a busy document", () => {
       expect(work.reads()).toBe(0);
       report("select same, three more on a warm pass", work.snapshot());
       // The answers are the ones a cold pass gives.
-      expect(again.map((e) => e.id).sort()).toEqual(fill.map((e) => e.id).sort());
+      expect(again.map((e) => e.id).sort()).toEqual(
+        fill.map((e) => e.id).sort(),
+      );
       const cold = countingHost(w.h.host).host;
       expect(stroke.map((e) => e.id)).toEqual(
         (await selectSameMatches(cold, w.plain[0]!, "stroke")).map((e) => e.id),
       );
       expect(weight.map((e) => e.id)).toEqual(
-        (await selectSameMatches(cold, w.plain[0]!, "strokeWeight")).map((e) => e.id),
+        (await selectSameMatches(cold, w.plain[0]!, "strokeWeight")).map(
+          (e) => e.id,
+        ),
       );
 
       // A change to the document, and the next one reads it again — and
@@ -546,7 +584,13 @@ describe("perf budgets — commands over a busy document", () => {
       expect(undoSteps).toBe(1);
       // Four new steps in a new group, the group selected; one undo
       // restores the document.
-      expect(added.sort()).toEqual(["group", "polygon", "polygon", "polygon", "polygon"]);
+      expect(added.sort()).toEqual([
+        "group",
+        "polygon",
+        "polygon",
+        "polygon",
+        "polygon",
+      ]);
       expect(selected.map((s) => s.kind)).toEqual(["group"]);
       expect(restored).toBe(true);
       // The walk, and nothing after it: the key envelopes are the walk's
@@ -584,7 +628,10 @@ describe("perf budgets — commands over a busy document", () => {
     it("pattern, re-plan: one walk, ONE batch, one undo step", async () => {
       const { work, undoSteps, result, selected, added, restored } =
         await countedWrite(w, "pattern replan", [], (host) =>
-          applyEditPattern(host, { patternId: recordOf("pattern"), columns: 4 }),
+          applyEditPattern(host, {
+            patternId: recordOf("pattern"),
+            columns: 4,
+          }),
         );
       expect(result).toHaveLength(3);
       // The three inserts with their names, the old group dissolved and
@@ -668,7 +715,8 @@ describe("perf budgets — commands over a busy document", () => {
         w,
         "live paint regenerate",
         [],
-        (host) => applyRegenerateLivePaint(host, { groupId: recordOf("livePaint") }),
+        (host) =>
+          applyRegenerateLivePaint(host, { groupId: recordOf("livePaint") }),
       );
       expect(result).toEqual({ rebuilt: 1, dropped: [] });
       // insert, bind, the old fill deleted, fill, stroke, face link. As
@@ -792,8 +840,22 @@ describe("perf budgets — commands over a busy document", () => {
         op: "batch",
         args: {
           ops: [
-            { op: "insertPath", args: { pageId: w.pageId, anchors: [at(2), at(4), at(6)], open: true } },
-            { op: "insertPath", args: { pageId: w.pageId, anchors: [at(8), at(10), at(12)], open: true } },
+            {
+              op: "insertPath",
+              args: {
+                pageId: w.pageId,
+                anchors: [at(2), at(4), at(6)],
+                open: true,
+              },
+            },
+            {
+              op: "insertPath",
+              args: {
+                pageId: w.pageId,
+                anchors: [at(8), at(10), at(12)],
+                open: true,
+              },
+            },
           ],
         },
       })) as { kind: string; payload: { minted?: { element: ElementId }[] } };
@@ -804,8 +866,11 @@ describe("perf budgets — commands over a busy document", () => {
 
     it("blend: no tree read — the reply names the steps and the group", async () => {
       const { work, undoSteps, result, added, selected, restored } =
-        await countedWrite(w, "make blend", [w.plain[0]!, w.plain[2]!], (host) =>
-          applyMakeBlend(host, { steps: 3 }),
+        await countedWrite(
+          w,
+          "make blend",
+          [w.plain[0]!, w.plain[2]!],
+          (host) => applyMakeBlend(host, { steps: 3 }),
         );
       expect(result).toHaveLength(3);
       // Was 27 (one swatch minted per step for the shared colour).
@@ -825,7 +890,11 @@ describe("perf budgets — commands over a busy document", () => {
     it("repeat: no tree read", async () => {
       const { work, undoSteps, result, added, selected, restored } =
         await countedWrite(w, "make repeat", [w.plain[0]!], (host) =>
-          applyMakeRepeat(host, "grid", { columns: 3, rows: 1, spacing: [4, 4] }),
+          applyMakeRepeat(host, "grid", {
+            columns: 3,
+            rows: 1,
+            spacing: [4, 4],
+          }),
         );
       expect(result).toHaveLength(2);
       expect(work.mutations).toEqual([{ op: "batch", ops: 14 }]);
@@ -883,7 +952,7 @@ describe("perf budgets — commands over a busy document", () => {
       // conversion left undone: the carrier's bake record names its
       // layers by element id inside its JSON metadata, and a `$h:`
       // handle in text is stored as written, never resolved (measured,
-      // `test/conformance/minted.spec.ts`). The record can only be
+      // `test/headless/minted.spec.ts`). The record can only be
       // written once a first mutation has answered with the ids.
       expect(work.mutations).toEqual([
         { op: "batch", ops: 3 },
@@ -900,16 +969,17 @@ describe("perf budgets — commands over a busy document", () => {
 
     it("compound path, release", async () => {
       const pair = [w.plain[0]!, w.plain[1]!];
-      const { work, undoSteps, result, added, selected, restored } = await countedWrite(
-        w,
-        "compound release",
-        [pair[0]!],
-        (host) => applyReleaseCompoundPath(host),
-        async () => {
-          await w.h.host.selection.set(pair);
-          expect(await applyMakeCompoundPath(w.h.host)).toBe(2);
-        },
-      );
+      const { work, undoSteps, result, added, selected, restored } =
+        await countedWrite(
+          w,
+          "compound release",
+          [pair[0]!],
+          (host) => applyReleaseCompoundPath(host),
+          async () => {
+            await w.h.host.selection.set(pair);
+            expect(await applyMakeCompoundPath(w.h.host)).toBe(2);
+          },
+        );
       expect(result).toHaveLength(1);
       // framePath back to contour 0, the piece inserted and named, its
       // fill, stroke and weight by name. As found: TWO batches (2, then
@@ -976,7 +1046,7 @@ describe("perf budgets — Image Trace over a busy document", () => {
     // STILL two batches, and that is the floor the rules allow: the
     // source's trace record names its regions by element id inside its
     // JSON metadata, and a `$h:` handle in text is stored as written,
-    // never resolved (measured, `test/conformance/minted.spec.ts`).
+    // never resolved (measured, `test/headless/minted.spec.ts`).
     expect(work.mutations.map((m) => m.op)).toEqual(["batch", "batch"]);
     expect(undoSteps).toBe(2);
     expect(restored).toBe(true);

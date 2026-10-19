@@ -74,7 +74,9 @@ async function undo(page: Page) {
 }
 
 test.describe("W2.12 — Document Map", () => {
-  test("AC-DOCMAP-1 — the spread tree + page-meta render @feat:editor-shell.panels.document-map @level:happy", async ({ page }) => {
+  test("AC-DOCMAP-1 — the spread tree + page-meta render @feat:editor-shell.panels.document-map @level:happy", async ({
+    page,
+  }) => {
     await openCanvas(page);
     await loadFixtureReact(page);
     const panel = page.locator("[data-document-map-panel]");
@@ -122,9 +124,7 @@ async function wireMissingLinks(page: Page): Promise<number> {
       globalThis as unknown as {
         __canvas: {
           client: {
-            collection: (
-              n: string,
-            ) => Promise<Array<{ status?: string }>>;
+            collection: (n: string) => Promise<Array<{ status?: string }>>;
           };
         };
       }
@@ -200,8 +200,8 @@ test.describe("W2.7 — Document Map per-page chips", () => {
 
     const missing = await wireMissingLinks(page);
     expect(missing).toBe(0);
-    await expect(
-      panel.locator('[data-page-chip="missing-links"]'),
-    ).toHaveCount(0);
+    await expect(panel.locator('[data-page-chip="missing-links"]')).toHaveCount(
+      0,
+    );
   });
 });

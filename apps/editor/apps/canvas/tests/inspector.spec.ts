@@ -154,13 +154,13 @@ test.describe("Inspector P1 — property panel", () => {
   }) => {
     const before = await fetchProps(page, TEXT_FRAME_ID);
     const fillBefore = entryFor(before, "frameFillColor").value.value as
-      | string
-      | null;
+      string | null;
     expect(fillBefore).not.toBe("Color/Red");
 
     await page.evaluate(
       async ({ id }) => {
-        const c = (globalThis as unknown as { __canvas: CanvasGlobal }).__canvas;
+        const c = (globalThis as unknown as { __canvas: CanvasGlobal })
+          .__canvas;
         await c.client.mutate({
           op: "setElementProperty",
           args: {
@@ -177,7 +177,9 @@ test.describe("Inspector P1 — property panel", () => {
     expect(entryFor(after, "frameFillColor").value.value).toBe("Color/Red");
   });
 
-  test("AC-INS-3 — SetElementProperty on bounds commits @feat:editor-shell.panels.inspector @feat:the-renderer.properties-read @level:happy", async ({ page }) => {
+  test("AC-INS-3 — SetElementProperty on bounds commits @feat:editor-shell.panels.inspector @feat:the-renderer.properties-read @level:happy", async ({
+    page,
+  }) => {
     const before = await fetchProps(page, TEXT_FRAME_ID);
     const boundsBefore = entryFor(before, "frameBounds").value.value as [
       number,
@@ -194,7 +196,8 @@ test.describe("Inspector P1 — property panel", () => {
     ];
     await page.evaluate(
       async ({ id, next }) => {
-        const c = (globalThis as unknown as { __canvas: CanvasGlobal }).__canvas;
+        const c = (globalThis as unknown as { __canvas: CanvasGlobal })
+          .__canvas;
         await c.client.mutate({
           op: "setElementProperty",
           args: {
@@ -211,12 +214,15 @@ test.describe("Inspector P1 — property panel", () => {
     expect(entryFor(after, "frameBounds").value.value).toEqual(next);
   });
 
-  test("AC-INS-4 — Cmd-Z restores the previous value @feat:editor-shell.panels.inspector @feat:the-renderer.properties-read @level:happy", async ({ page }) => {
+  test("AC-INS-4 — Cmd-Z restores the previous value @feat:editor-shell.panels.inspector @feat:the-renderer.properties-read @level:happy", async ({
+    page,
+  }) => {
     const before = await fetchProps(page, TEXT_FRAME_ID);
     const originalOpacity = entryFor(before, "frameOpacity").value.value;
     await page.evaluate(
       async ({ id }) => {
-        const c = (globalThis as unknown as { __canvas: CanvasGlobal }).__canvas;
+        const c = (globalThis as unknown as { __canvas: CanvasGlobal })
+          .__canvas;
         await c.client.mutate({
           op: "setElementProperty",
           args: {
@@ -251,24 +257,25 @@ test.describe("Inspector P1 — property panel", () => {
     const rectId = "ueccee2";
     const before = await page.evaluate(
       async ({ id }) => {
-        const c = (globalThis as unknown as { __canvas: CanvasGlobal }).__canvas;
+        const c = (globalThis as unknown as { __canvas: CanvasGlobal })
+          .__canvas;
         return c.client.elementProperties({ kind: "rectangle", id });
       },
       { id: rectId },
     );
     if (!before) throw new Error("rect properties missing pre-gesture");
-    const boundsBefore = (before.entries.find(
+    const boundsBefore = before.entries.find(
       (e: PropertyEntry) => e.path === "frameBounds",
-    )!.value.value) as [number, number, number, number];
+    )!.value.value as [number, number, number, number];
 
     const delta: [number, number] = [40, 30];
     await page.evaluate(
       async ({ id, delta }) => {
-        const c = (globalThis as unknown as { __canvas: CanvasGlobal }).__canvas;
-        const h = await c.client.beginGesture(
-          [{ kind: "rectangle", id }],
-          { kind: "translate" },
-        );
+        const c = (globalThis as unknown as { __canvas: CanvasGlobal })
+          .__canvas;
+        const h = await c.client.beginGesture([{ kind: "rectangle", id }], {
+          kind: "translate",
+        });
         await c.client.updateGesture(h, delta, { shift: false, alt: false });
         await c.client.commitGesture(h);
       },
@@ -276,15 +283,16 @@ test.describe("Inspector P1 — property panel", () => {
     );
     const after = await page.evaluate(
       async ({ id }) => {
-        const c = (globalThis as unknown as { __canvas: CanvasGlobal }).__canvas;
+        const c = (globalThis as unknown as { __canvas: CanvasGlobal })
+          .__canvas;
         return c.client.elementProperties({ kind: "rectangle", id });
       },
       { id: rectId },
     );
     if (!after) throw new Error("rect properties missing post-gesture");
-    const boundsAfter = (after.entries.find(
+    const boundsAfter = after.entries.find(
       (e: PropertyEntry) => e.path === "frameBounds",
-    )!.value.value) as [number, number, number, number];
+    )!.value.value as [number, number, number, number];
     // Translate via FrameBounds: top/bottom shift dy, left/right shift dx.
     expect(boundsAfter[0]).toBeCloseTo(boundsBefore[0] + delta[1], 1);
     expect(boundsAfter[1]).toBeCloseTo(boundsBefore[1] + delta[0], 1);

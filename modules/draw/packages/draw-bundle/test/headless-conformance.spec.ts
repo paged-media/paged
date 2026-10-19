@@ -54,8 +54,8 @@ import { editValue, type HeadlessHost } from "@paged-media/plugin-sdk";
 import { drawBundle, installStrokePanelBindings } from "../src";
 import { minimalIdml } from "./fixtures/minimal-idml";
 // The shared engine boot (it probes the editor-checkout layouts for the
-// wasm — see conformance/host.ts).
-import { openHost } from "./conformance/host";
+// wasm — see headless/host.ts).
+import { openHost } from "./headless/host";
 
 // The fixture's single rectangle leaf (Self="urect").
 const RECT = { kind: "rectangle", id: "urect" } as const;
@@ -157,7 +157,7 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
         // NO Layers panel — ADR 023 phase D retired it behind the
         // binding-provider seam. Its absence from this log IS the
         // assertion; the replacement's behaviour is pinned in
-        // `conformance/layers-provider.spec.ts`.
+        // `headless/layers-provider.spec.ts`.
         // The APPEARANCE panel (the metadata stack + its one-fill/
         // one-stroke honesty note) — likewise expert-leaf React.
         "panel",
@@ -467,7 +467,10 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
       });
 
       // Clear it again so the doc is pristine for the dispose check below.
-      const clear = await harness.host.document.setMetadata(RECT as never, null);
+      const clear = await harness.host.document.setMetadata(
+        RECT as never,
+        null,
+      );
       expect(clear.applied).toBe(true);
       expect(await harness.host.document.getMetadata(RECT as never)).toBeNull();
     } finally {
@@ -482,7 +485,9 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
       const D = "media.paged.draw";
       const appearance = `plugin:${D}/appearance/rectangle:urect`;
       // The kinds are registered with the bundle — no edit context needed.
-      expect((await objects.kinds()).filter((k) => k.owner === D)).toHaveLength(10);
+      expect((await objects.kinds()).filter((k) => k.owner === D)).toHaveLength(
+        10,
+      );
       // A draw write (the metadata stamp + the bake) and a core write in
       // ONE batch: one engine mutation, one undo step.
       const before = await objects.get("rectangle:urect", "frameFillColor");
@@ -491,14 +496,33 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
           op: "set",
           address: appearance,
           path: "fills",
-          value: [{ color: "Color/Paper", tint: 100, opacity: 100, blendMode: "Normal" }],
+          value: [
+            {
+              color: "Color/Paper",
+              tint: 100,
+              opacity: 100,
+              blendMode: "Normal",
+            },
+          ],
         },
-        { op: "set", address: "rectangle:urect", path: "frameStrokeWeight", value: 5 },
+        {
+          op: "set",
+          address: "rectangle:urect",
+          path: "frameStrokeWeight",
+          value: 5,
+        },
       ]);
       expect(out).toMatchObject({ applied: true, undoSteps: 1 });
       expect(await objects.get(appearance, "fills")).toEqual({
         kind: "value",
-        value: [{ color: "Color/Paper", tint: 100, opacity: 100, blendMode: "Normal" }],
+        value: [
+          {
+            color: "Color/Paper",
+            tint: 100,
+            opacity: 100,
+            blendMode: "Normal",
+          },
+        ],
       });
       expect(await objects.get("rectangle:urect", "frameFillColor")).toEqual({
         kind: "value",
@@ -511,14 +535,23 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
       expect(selected).toEqual(["rectangle:urect"]);
       // ONE undo takes both writes back.
       await harness.host.document.undo();
-      expect(await objects.get(appearance, "fills")).toEqual({ kind: "value", value: [] });
-      expect(await objects.get("rectangle:urect", "frameFillColor")).toEqual(before);
+      expect(await objects.get(appearance, "fills")).toEqual({
+        kind: "value",
+        value: [],
+      });
+      expect(await objects.get("rectangle:urect", "frameFillColor")).toEqual(
+        before,
+      );
       await harness.host.selection.set([]);
     } finally {
       handle.dispose();
     }
     // Disposing the bundle removes its kinds from the shared registry.
-    expect((await harness.objects.kinds()).filter((k) => k.owner === "media.paged.draw")).toEqual([]);
+    expect(
+      (await harness.objects.kinds()).filter(
+        (k) => k.owner === "media.paged.draw",
+      ),
+    ).toEqual([]);
   });
 
   it("ADR 323 §12.8 — the properties panel's list / struct rows edit through planValueEdit (one undo step each)", async () => {
@@ -529,33 +562,96 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
       const path = `plugin:${D}/path/rectangle:urect`;
       const appearance = `plugin:${D}/appearance/rectangle:urect`;
       // The panel's "selection" rows resolve `<item> > path`: that item's path only.
-      expect(await objects.query(`rectangle:urect > plugin:${D}/path`)).toEqual([path]);
+      expect(await objects.query(`rectangle:urect > plugin:${D}/path`)).toEqual(
+        [path],
+      );
       // points: a whole table (a plain rectangle answers none), then an item
       // field edit (the panel's point items, anchor / left / right).
-      const corner = (x: number, y: number) => ({ anchor: [x, y], left: [x, y], right: [x, y] });
-      const square = [corner(0, 0), corner(20, 0), corner(20, 20), corner(0, 20)];
-      expect(await objects.set(path, "points", square)).toMatchObject({ applied: true, undoSteps: 1 });
-      const pts = (await objects.get(path, "points")) as { kind: "value"; value: Array<{ anchor: number[] }> };
-      expect(pts.value).toHaveLength(4);
-      const moved = [pts.value[0]!.anchor[0]! + 3, pts.value[0]!.anchor[1]! + 2];
-      expect(await editValue(objects, [path], "points", { edit: "itemSet", index: 0, field: "anchor", value: moved })).toMatchObject({
+      const corner = (x: number, y: number) => ({
+        anchor: [x, y],
+        left: [x, y],
+        right: [x, y],
+      });
+      const square = [
+        corner(0, 0),
+        corner(20, 0),
+        corner(20, 20),
+        corner(0, 20),
+      ];
+      expect(await objects.set(path, "points", square)).toMatchObject({
         applied: true,
         undoSteps: 1,
       });
-      expect(await objects.get(path, "points[0].anchor")).toEqual({ kind: "value", value: moved });
-      expect(await objects.get(path, "points[1]")).toEqual({ kind: "value", value: pts.value[1] });
+      const pts = (await objects.get(path, "points")) as {
+        kind: "value";
+        value: Array<{ anchor: number[] }>;
+      };
+      expect(pts.value).toHaveLength(4);
+      const moved = [
+        pts.value[0]!.anchor[0]! + 3,
+        pts.value[0]!.anchor[1]! + 2,
+      ];
+      expect(
+        await editValue(objects, [path], "points", {
+          edit: "itemSet",
+          index: 0,
+          field: "anchor",
+          value: moved,
+        }),
+      ).toMatchObject({
+        applied: true,
+        undoSteps: 1,
+      });
+      expect(await objects.get(path, "points[0].anchor")).toEqual({
+        kind: "value",
+        value: moved,
+      });
+      expect(await objects.get(path, "points[1]")).toEqual({
+        kind: "value",
+        value: pts.value[1],
+      });
       // An appearance stack: add (the item type's default), then a field edit, then remove.
-      expect(await editValue(objects, [appearance], "fills", { edit: "add", item: { color: "Color/Paper", tint: 100, opacity: 100, blendMode: "Normal" } })).toMatchObject({ applied: true, undoSteps: 1 });
-      expect(await editValue(objects, [appearance], "fills", { edit: "itemSet", index: 0, field: "opacity", value: 40 })).toMatchObject({ applied: true });
+      expect(
+        await editValue(objects, [appearance], "fills", {
+          edit: "add",
+          item: {
+            color: "Color/Paper",
+            tint: 100,
+            opacity: 100,
+            blendMode: "Normal",
+          },
+        }),
+      ).toMatchObject({ applied: true, undoSteps: 1 });
+      expect(
+        await editValue(objects, [appearance], "fills", {
+          edit: "itemSet",
+          index: 0,
+          field: "opacity",
+          value: 40,
+        }),
+      ).toMatchObject({ applied: true });
       expect(await objects.get(appearance, "fills")).toEqual({
         kind: "value",
-        value: [{ color: "Color/Paper", tint: 100, opacity: 40, blendMode: "Normal" }],
+        value: [
+          { color: "Color/Paper", tint: 100, opacity: 40, blendMode: "Normal" },
+        ],
       });
-      expect(await editValue(objects, [appearance], "fills", { edit: "remove", index: 0 })).toMatchObject({ applied: true });
-      expect(await objects.get(appearance, "fills")).toEqual({ kind: "value", value: [] });
+      expect(
+        await editValue(objects, [appearance], "fills", {
+          edit: "remove",
+          index: 0,
+        }),
+      ).toMatchObject({ applied: true });
+      expect(await objects.get(appearance, "fills")).toEqual({
+        kind: "value",
+        value: [],
+      });
       // Undo walks the edits back one step at a time: the point is restored last.
       for (let i = 0; i < 4; i++) await harness.host.document.undo();
-      expect(await objects.get(path, "points[0].anchor")).toEqual({ kind: "value", value: pts.value[0]!.anchor });
+      expect(await objects.get(path, "points[0].anchor")).toEqual({
+        kind: "value",
+        value: pts.value[0]!.anchor,
+      });
     } finally {
       handle.dispose();
     }

@@ -167,8 +167,8 @@ trace-js 4).
 **ONE SHARED KERNEL, AND ONLY ONE.** §16.2 (blend spines) and §16.3
 (objects on a path) landed together, so the "is there a common placement
 kernel?" question had to be answered with facts. There is, and it is
-`draw-geometry/src/along-path.ts`: BOTH rows need *point + tangent at a
-fraction of a path's ARC LENGTH*, which means flattening, cumulative
+`draw-geometry/src/along-path.ts`: BOTH rows need _point + tangent at a
+fraction of a path's ARC LENGTH_, which means flattening, cumulative
 lengths, a lookup and a tangent — ~150 lines that go wrong twice if
 written twice — plus the same count/spacing distribution rule on top
 (`endpoints: "interior"` keeps a blend's intermediates off its keys;
@@ -237,6 +237,7 @@ a cosmetically-drifted copy; it was a type this bundle could not have
 used. That is the argument against writing the next one.
 
 Two honesty facts these rows carry, and neither may be softened:
+
 - **An opacity mask does NOT render on canvas.** Core honours it in the
   CPU rasterizer and in PDF export, but NOT in the Vello/WebGPU backend
   the editor draws through (`push_layer` takes a shape, not a coverage
@@ -263,17 +264,18 @@ the editor's `2e6f835` ("no more dead rail entries — wire six, stub
 five, retire four", 2026-08-03) RETIRED three inert built-ins and freed
 their keys: `shift+t` (the placeholder Type on a Path), `i` (a dead
 Eyedropper) and `k` (a dead Measure). The current global picture:
+
 - editor built-ins hold `v a u b t \ p n f m l c e r s o g h z` plus
   `shift+p` / `shift+g`, and `w` as the preview toggle;
 - paged.image holds `shift+x y shift+y shift+l shift+w q shift+f shift+e`;
 - paged.draw holds `= -` plus
   `shift+c/u/n/a/m/b/r/j/k/i/d/s/q/o/v/h`.
-So the free registers WERE exactly `shift+t`, `i`, `k` and `shift+z`.
-UPDATE 2026-10-04: `k` now belongs to the Live Paint Bucket, its
-canonical key; the host's working Eyedropper holds `i` and paged.image
-took `shift+t`, so Type on a Path (`shift+h`) and draw's Eyedropper
-(`shift+d`) stay where they are. Free now: `shift+o` and `shift+z`
-(which reads as an undo variant and stays a trap).
+  So the free registers WERE exactly `shift+t`, `i`, `k` and `shift+z`.
+  UPDATE 2026-10-04: `k` now belongs to the Live Paint Bucket, its
+  canonical key; the host's working Eyedropper holds `i` and paged.image
+  took `shift+t`, so Type on a Path (`shift+h`) and draw's Eyedropper
+  (`shift+d`) stay where they are. Free now: `shift+o` and `shift+z`
+  (which reads as an undo variant and stays a trap).
 
 **`.paged` CONTAINER PARTS: there are now SEVEN** — graphic styles,
 symbols, live paint, pattern, repeat, blend (`blend.json`) and objects-on-
@@ -299,6 +301,7 @@ measured against the booted engine (protocol **60** — the local wasm
 carries `LayerSummary.parentId`; the harness booted 60, not the 59 an
 earlier note claimed while correcting a staler 58) and pinned in
 `repeat.spec.ts`:
+
 - the bind must come AFTER its creating child; before it the batch is
   refused BY NAME ("has nothing to name — no creating child ran before
   it in this batch");
@@ -353,7 +356,7 @@ so the two lanes cannot drift). THE TWO-BATCH LANE IS KEPT as the
 fallback for an engine that refuses the one batch, and
 `pattern.spec.ts` runs every bake through both — and through hosts that
 cannot say what a batch created — requiring the SAME document from each
-(`test/conformance/one-batch.ts` has the hosts and the comparison).
+(`test/headless/one-batch.ts` has the hosts and the comparison).
 
 THE APPEARANCE BAKE STAYS TWO BATCHES, and that is the floor the rules
 allow, not a conversion left undone: the carrier's bake record names its
@@ -413,6 +416,7 @@ batch it sent and answers handle → id, and refuses when the two disagree.
 
 **THE `frameTransform` DOOR, and three things measured about it** (the
 §16.3 lane rides it; protocol 60):
+
 - it REPLACES an element's item transform, it does NOT compose with it.
   Writing the same rotation twice leaves the object at 30°, not 60° —
   which is what makes an idempotent Update and an EXACT (not inverse)
@@ -431,13 +435,14 @@ batch it sent and answers handle → id, and refuses when the two disagree.
   transform as it came. The same holds for `framePath` on a path
   `insertPath` just made: `insertPath` adds the page origin, `framePath`
   does not. `test/page-space/` runs every writer against a fake engine in
-  both shapes; `test/conformance/page-space.spec.ts` does it through the
+  both shapes; `test/headless/page-space.spec.ts` does it through the
   real one on InDesign's page placement (`PAGED_ENGINE_FROM` for a local
   build of the other).
 
 **RFI C-23 IS NARROWER THAN "PAGE-KEYED" SUGGESTS, and two plausible
 readings of it are FALSE.** Both were written into `objects-on-path.ts`
 as fact and then deleted when they were measured:
+
 - `getMetadata` is NOT page-keyed, and neither is `document.tree()`. An
   element moved off the page still answers its own link and is still
   listed in the tree. What goes silent is `elementGeometry` /
@@ -460,6 +465,7 @@ as fact and then deleted when they were measured:
 any flow that builds, replaces and groups in ONE batch — the bundle runs
 against whatever wasm the host booted, so the flows keep the order that
 is right on EVERY engine:
+
 - Inserts go FIRST. Up to core 0.71.7 a batch that DELETES and then
   INSERTS is refused — "position N out of range for parent Spread" —
   because the insert's z-position resolves against the spread length the
@@ -499,6 +505,7 @@ by that container's outline; `releaseFrom { childId }` pops it back.
 Repeats' clipping ships on the pair. FOUR consequences, all measured and
 all asserted in `repeat.spec.ts` — read them before building anything
 else on nesting:
+
 1. a nested child CANNOT be grouped ("B-18: a grouped item cannot be
    pasted into a frame (ungroup first)"), so clip and group are
    mutually exclusive;
@@ -513,14 +520,14 @@ else on nesting:
    ORPHANED them (they left the tree and still answered
    `elementGeometry`); 0.65 removes them with it. Delete the children
    first, the container last — right on both engines.
-What is still NOT representable is a clip GROUP — an arbitrary clip path
-over a set of items. The `GroupSpec` has no clip flag and core's parsed
-`Group` has no mask member; that half stays in the RFI.
+   What is still NOT representable is a clip GROUP — an arbitrary clip path
+   over a set of items. The `GroupSpec` has no clip flag and core's parsed
+   `Group` has no mask member; that half stays in the RFI.
 
 ## Hard rules
 
 - **Host-agnostic means host-agnostic.** `draw-geometry` has zero deps;
-  `draw-tools` may import ONLY `draw-geometry` + *types* from
+  `draw-tools` may import ONLY `draw-geometry` + _types_ from
   `@paged-media/plugin-api`. Never import `@paged-media/shell` /
   `@paged-media/client` / React here — that's the editor shim's job. If a
   machine seems to need host state, the missing piece is an event/option

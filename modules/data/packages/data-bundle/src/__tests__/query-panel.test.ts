@@ -19,12 +19,14 @@ const actualReact = await importActual(() => import("react"));
 const slots: unknown[] = [];
 let cursor = 0;
 mock.module("react", () => ({
-    ...actualReact,
+  ...actualReact,
   useState: (init: unknown) => {
     const i = cursor++;
-    if (!(i in slots)) slots[i] = typeof init === "function" ? (init as () => unknown)() : init;
+    if (!(i in slots))
+      slots[i] = typeof init === "function" ? (init as () => unknown)() : init;
     const set = (v: unknown) => {
-      slots[i] = typeof v === "function" ? (v as (p: unknown) => unknown)(slots[i]) : v;
+      slots[i] =
+        typeof v === "function" ? (v as (p: unknown) => unknown)(slots[i]) : v;
     };
     return [slots[i], set];
   },
@@ -32,16 +34,26 @@ mock.module("react", () => ({
   useEffect: () => {},
 }));
 
-type El = { type: unknown; props: Record<string, unknown> & { children?: unknown } };
+type El = {
+  type: unknown;
+  props: Record<string, unknown> & { children?: unknown };
+};
 
 function render(component: () => unknown): El[] {
   cursor = 0;
   const out: El[] = [];
   const walk = (n: unknown): void => {
-    if (n == null || typeof n === "boolean" || typeof n === "string" || typeof n === "number") return;
+    if (
+      n == null ||
+      typeof n === "boolean" ||
+      typeof n === "string" ||
+      typeof n === "number"
+    )
+      return;
     if (Array.isArray(n)) return n.forEach(walk);
     const el = n as El;
-    if (typeof el.type === "function") return walk((el.type as (p: unknown) => unknown)(el.props));
+    if (typeof el.type === "function")
+      return walk((el.type as (p: unknown) => unknown)(el.props));
     out.push(el);
     walk(el.props?.children);
   };
@@ -60,7 +72,10 @@ const text = (n: unknown): string =>
 
 const silent = { debug() {}, info() {}, warn() {}, error() {} };
 
-function stubSession(over: Partial<DataSourceSession>, state?: Partial<SessionState>): DataSourceSession {
+function stubSession(
+  over: Partial<DataSourceSession>,
+  state?: Partial<SessionState>,
+): DataSourceSession {
   const base: SessionState = {
     status: "ready",
     message: "",
@@ -77,7 +92,8 @@ function stubSession(over: Partial<DataSourceSession>, state?: Partial<SessionSt
   };
   return new Proxy(over as DataSourceSession, {
     get(target, key) {
-      if (key in target) return (target as unknown as Record<string | symbol, unknown>)[key];
+      if (key in target)
+        return (target as unknown as Record<string | symbol, unknown>)[key];
       if (key === "getState") return () => base;
       return () => undefined;
     },
@@ -93,7 +109,9 @@ const host = {
 
 const flush = () => new Promise((r) => setTimeout(r, 0));
 const find = (tree: El[], attr: string, value?: unknown) =>
-  tree.find((e) => attr in e.props && (value === undefined || e.props[attr] === value))!;
+  tree.find(
+    (e) => attr in e.props && (value === undefined || e.props[attr] === value),
+  )!;
 const change = (el: El, value: string) =>
   (el.props.onChange as (e: unknown) => void)({ target: { value } });
 const click = (el: El) => (el.props.onClick as () => void)();
@@ -110,7 +128,10 @@ describe("data query panel [data.query.seam]", () => {
         { name: "sku", type: "VARCHAR" },
         { name: "price", type: "DOUBLE" },
       ],
-      rows: [["A-1", "9.99"], ["B-2", null]],
+      rows: [
+        ["A-1", "9.99"],
+        ["B-2", null],
+      ],
       total: 7,
       diagnostic: null,
     };
@@ -127,7 +148,8 @@ describe("data query panel [data.query.seam]", () => {
       },
       { sources: ["products"] },
     );
-    const { makeQueryPanel, PREVIEW_ROWS } = await import("../panels/query-panel");
+    const { makeQueryPanel, PREVIEW_ROWS } =
+      await import("../panels/query-panel");
     const Panel = makeQueryPanel(host, session);
     let tree = render(Panel);
     click(find(tree, "data-data-query-columns"));
@@ -137,12 +159,24 @@ describe("data query panel [data.query.seam]", () => {
     tree = render(Panel);
     // filter: price > 5
     const filterRow = find(tree, "data-data-query-filter", 0);
-    const [colSel] = (filterRow.props.children as El[]).filter((c) => c && c.type === "select");
+    const [colSel] = (filterRow.props.children as El[]).filter(
+      (c) => c && c.type === "select",
+    );
     change(colSel, "price");
     tree = render(Panel);
-    change((find(tree, "data-data-query-filter", 0).props.children as El[]).filter((c) => c && c.type === "select")[1], ">");
+    change(
+      (find(tree, "data-data-query-filter", 0).props.children as El[]).filter(
+        (c) => c && c.type === "select",
+      )[1],
+      ">",
+    );
     tree = render(Panel);
-    change((find(tree, "data-data-query-filter", 0).props.children as El[]).find((c) => c && c.type === "input")!, "5");
+    change(
+      (find(tree, "data-data-query-filter", 0).props.children as El[]).find(
+        (c) => c && c.type === "input",
+      )!,
+      "5",
+    );
     tree = render(Panel);
     click(find(tree, "data-data-query-add-sort"));
     tree = render(Panel);
@@ -155,18 +189,33 @@ describe("data query panel [data.query.seam]", () => {
     click(find(tree, "data-data-query-preview"));
     await flush();
     tree = render(Panel);
-    expect(previews).toEqual([['SELECT *\nFROM "products"\nWHERE "price" > 5\nORDER BY "sku" ASC', PREVIEW_ROWS]]);
+    expect(previews).toEqual([
+      [
+        'SELECT *\nFROM "products"\nWHERE "price" > 5\nORDER BY "sku" ASC',
+        PREVIEW_ROWS,
+      ],
+    ]);
     const grid = find(tree, "data-data-query-grid");
     expect(text(grid)).toContain("2 of 7 row(s)");
     const cells = tree.filter((e) => e.type === "td").map((e) => text(e));
     expect(cells).toEqual(["A-1", "9.99", "B-2", "NULL"]);
-    const heads = tree.filter((e) => e.type === "th").map((e) => [text(e), e.props.title]);
-    expect(heads).toEqual([["sku", "VARCHAR"], ["price", "DOUBLE"]]);
+    const heads = tree
+      .filter((e) => e.type === "th")
+      .map((e) => [text(e), e.props.title]);
+    expect(heads).toEqual([
+      ["sku", "VARCHAR"],
+      ["price", "DOUBLE"],
+    ]);
   });
 
   it("a refused or failing query shows DuckDB's class and position; a good one saves under its id [data.query.seam] [data.query.panel]", async () => {
     const saves: [string, string][] = [];
-    let verdict: unknown = { kind: "Binder", message: 'column "nope" not found', line: 2, column: 3 };
+    let verdict: unknown = {
+      kind: "Binder",
+      message: 'column "nope" not found',
+      line: 2,
+      column: 3,
+    };
     const session = stubSession(
       {
         saveQuery: async (id: string, sql: string) => {
@@ -180,7 +229,10 @@ describe("data query panel [data.query.seam]", () => {
     const { makeQueryPanel } = await import("../panels/query-panel");
     const Panel = makeQueryPanel(host, session);
     let tree = render(Panel);
-    change(find(tree, "data-data-query-sql"), "SELECT sku,\n  nope FROM products");
+    change(
+      find(tree, "data-data-query-sql"),
+      "SELECT sku,\n  nope FROM products",
+    );
     tree = render(Panel);
     click(find(tree, "data-data-query-save"));
     await flush();
@@ -212,7 +264,12 @@ describe("data query panel — the source's rows before any SQL is typed [data.q
         describeSource: async () => [{ name: "name", type: "VARCHAR" }],
         previewQuery: async (sql: string) => {
           previews.push(sql);
-          return { columns: [{ name: "name", type: "VARCHAR" }], rows: [["Linen notebook"]], total: 24, diagnostic: null };
+          return {
+            columns: [{ name: "name", type: "VARCHAR" }],
+            rows: [["Linen notebook"]],
+            total: 24,
+            diagnostic: null,
+          };
         },
       },
       { sources: ["catalogue"] },
@@ -223,7 +280,11 @@ describe("data query panel — the source's rows before any SQL is typed [data.q
     click(find(tree, "data-data-query-columns"));
     await flush();
     tree = render(Panel);
-    expect(text(tree.find((e) => e.type === "span" && text(e).includes("column(s)")))).toContain("1 column(s): name VARCHAR");
+    expect(
+      text(
+        tree.find((e) => e.type === "span" && text(e).includes("column(s)")),
+      ),
+    ).toContain("1 column(s): name VARCHAR");
     // The field is empty; what it shows (its placeholder) is what runs.
     const field = find(tree, "data-data-query-sql");
     expect(field.props.value).toBe("");
@@ -234,7 +295,9 @@ describe("data query panel — the source's rows before any SQL is typed [data.q
     await flush();
     tree = render(Panel);
     expect(previews).toEqual(['SELECT *\nFROM "catalogue"']);
-    expect(text(find(tree, "data-data-query-grid"))).toContain("1 of 24 row(s)");
+    expect(text(find(tree, "data-data-query-grid"))).toContain(
+      "1 of 24 row(s)",
+    );
     expect(find(tree, "data-data-query-save").props.disabled).toBe(false);
   });
 
@@ -263,7 +326,13 @@ describe("sources panel — files, worksheets, refresh policy [data.source.adapt
       {
         sources: ["book", "items"],
         files: [
-          { source: "book", format: "xlsx", fileName: "book.xlsx", sheet: "Products", sheets: ["Products", "Prices"] },
+          {
+            source: "book",
+            format: "xlsx",
+            fileName: "book.xlsx",
+            sheet: "Products",
+            sheets: ["Products", "Prices"],
+          },
           { source: "items", format: "json", fileName: "items.json" },
         ],
       },
@@ -271,22 +340,29 @@ describe("sources panel — files, worksheets, refresh policy [data.source.adapt
     const { makeSourcesPanel } = await import("../panels/sources-panel");
     const Panel = makeSourcesPanel(host, session);
     let tree = render(Panel);
-    expect(text(find(tree, "data-data-source", "items"))).toContain("json · items.json");
+    expect(text(find(tree, "data-data-source", "items"))).toContain(
+      "json · items.json",
+    );
     change(find(tree, "data-data-sheet", "book"), "Prices");
     await flush();
     expect(sheets).toEqual([["book", "Prices"]]);
     const picker = find(tree, "data-data-refresh-policy", "items");
-    const sel = (picker.props.children as El[]).find((c) => c && c.type === "select")!;
+    const sel = (picker.props.children as El[]).find(
+      (c) => c && c.type === "select",
+    )!;
     // A local file offers no interval.
-    expect((sel.props.children as El[]).flat().filter(Boolean).map((o) => (o as El).props.value)).toEqual([
-      "manual",
-      "onOpen",
-      "never",
-    ]);
+    expect(
+      (sel.props.children as El[])
+        .flat()
+        .filter(Boolean)
+        .map((o) => (o as El).props.value),
+    ).toEqual(["manual", "onOpen", "never"]);
     change(sel, "onOpen");
     tree = render(Panel);
     expect(policies).toEqual([["items", { policy: "onOpen" }]]);
-    expect(text(find(tree, "data-data-policy-note"))).toMatch(/cannot be watched/);
+    expect(text(find(tree, "data-data-policy-note"))).toMatch(
+      /cannot be watched/,
+    );
     expect(find(tree, "data-data-import-file")).toBeDefined();
   });
 });

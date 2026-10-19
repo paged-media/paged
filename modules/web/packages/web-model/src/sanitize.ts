@@ -42,9 +42,7 @@
 
 /** A label for one class of removed executable surface. */
 export type SanitizeRemoval =
-  | "<script> element"
-  | "event-handler attribute"
-  | "javascript: URL";
+  "<script> element" | "event-handler attribute" | "javascript: URL";
 
 export interface SanitizeResult {
   /** The sanitized HTML — identical to the input when nothing matched. */

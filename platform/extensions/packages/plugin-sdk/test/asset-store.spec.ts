@@ -149,7 +149,9 @@ describe("host.assets — the capability gate (W-06)", () => {
     const face = await host.assets.getFontFace("Inter");
     expect(face?.family).toBe("Inter"); // proceeded
     expect(warn).toHaveBeenCalledOnce();
-    expect(String(warn.mock.calls[0][0])).toMatch(/assets must include "fonts"/);
+    expect(String(warn.mock.calls[0][0])).toMatch(
+      /assets must include "fonts"/,
+    );
   });
 
   it("does not gate on the SOURCE — undeclared with no source still throws (the gate fires first)", async () => {
@@ -230,7 +232,12 @@ describe("createRecordableAssetSource — the headless fake", () => {
 
   it("honors a style-specific seed (matchStyle) and strips matchStyle from the result", async () => {
     const source = createRecordableAssetSource([
-      { bytes: bytes(8), format: "truetype", family: "Lora", matchStyle: "Bold" },
+      {
+        bytes: bytes(8),
+        format: "truetype",
+        family: "Lora",
+        matchStyle: "Bold",
+      },
     ]);
     expect(await source.getFontFace("Lora")).toBeNull(); // no style → no match
     const bold = await source.getFontFace("Lora", "Bold");

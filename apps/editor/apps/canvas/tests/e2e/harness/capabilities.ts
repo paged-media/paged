@@ -148,7 +148,11 @@ export const CAPABILITIES: Capability[] = [
   { op: "applyStyle", status: "supported" },
   { op: "insertField", status: "supported" },
   // ── frame / page structure ────────────────────────────────────────
-  { op: "moveFrame", status: "supported", note: "live as of the v35 wasm bump (was a notImplemented stub); frame moves also ride the translate gesture, proven in proving.spec AC-E2E-PROVE-2" },
+  {
+    op: "moveFrame",
+    status: "supported",
+    note: "live as of the v35 wasm bump (was a notImplemented stub); frame moves also ride the translate gesture, proven in proving.spec AC-E2E-PROVE-2",
+  },
   { op: "resizeFrame", status: "supported" },
   { op: "linkFrames", status: "supported" },
   { op: "unlinkFrames", status: "supported" },
@@ -256,13 +260,33 @@ export const CAPABILITIES: Capability[] = [
   { op: "setStyleProperty", status: "supported" },
   // ── the v62 re-capture (2026-08-26): the 23 formerly-unclassified ──
   // story-addressed doors
-  { op: "insertTable", status: "supported", note: "standalone story-addressed door (v37+); mints a STRUCTURED ElementId::Table ({story_id, table_id})" },
-  { op: "insertAnchoredFrame", status: "supported", note: "proto 52, the plugin-doc inline-image door; imageUri optional" },
-  { op: "insertHyperlink", status: "supported", note: "proto 53, plugin-doc; contiguous char offsets" },
-  { op: "setFieldValue", status: "supported", note: "v43 D-01; re-resolves a placeholder field at its enumerated offset (the probe inserts one first)" },
+  {
+    op: "insertTable",
+    status: "supported",
+    note: "standalone story-addressed door (v37+); mints a STRUCTURED ElementId::Table ({story_id, table_id})",
+  },
+  {
+    op: "insertAnchoredFrame",
+    status: "supported",
+    note: "proto 52, the plugin-doc inline-image door; imageUri optional",
+  },
+  {
+    op: "insertHyperlink",
+    status: "supported",
+    note: "proto 53, plugin-doc; contiguous char offsets",
+  },
+  {
+    op: "setFieldValue",
+    status: "supported",
+    note: "v43 D-01; re-resolves a placeholder field at its enumerated offset (the probe inserts one first)",
+  },
   // path topology (v57 join/close)
   { op: "closePath", status: "supported", note: "requires an OPEN subpath" },
-  { op: "joinPaths", status: "supported", note: "welds otherId INTO elementId; both must be open paths" },
+  {
+    op: "joinPaths",
+    status: "supported",
+    note: "welds otherId INTO elementId; both must be open paths",
+  },
   // planar region verbs (v57, B-22)
   { op: "pathfinderDivide", status: "supported" },
   { op: "pathfinderTrim", status: "supported" },
@@ -270,72 +294,224 @@ export const CAPABILITIES: Capability[] = [
   { op: "pathfinderCrop", status: "supported" },
   { op: "pathfinderOutline", status: "supported" },
   { op: "pathfinderMinusBack", status: "supported" },
-  { op: "pathfinderFaces", status: "supported", note: "faces are engine-minted ids — read them via requestPlanarRegions, never guess the format" },
+  {
+    op: "pathfinderFaces",
+    status: "supported",
+    note: "faces are engine-minted ids — read them via requestPlanarRegions, never guess the format",
+  },
   // nesting + z-order
   { op: "pasteInto", status: "supported" },
   { op: "releaseFrom", status: "supported" },
-  { op: "reorderElement", status: "supported", note: "ZOrderTarget verb or {index}" },
+  {
+    op: "reorderElement",
+    status: "supported",
+    note: "ZOrderTarget verb or {index}",
+  },
   // opacity mask + text-on-a-path (v58: C-28 / C-29)
-  { op: "applyOpacityMask", status: "supported", note: "lossless only via .paged — .idml export reports the mask as a named loss" },
+  {
+    op: "applyOpacityMask",
+    status: "supported",
+    note: "lossless only via .paged — .idml export reports the mask as a named loss",
+  },
   { op: "releaseOpacityMask", status: "supported" },
-  { op: "attachTextToPath", status: "supported", note: "requires a story flowing into NO frame (a story belongs to exactly one flow)" },
+  {
+    op: "attachTextToPath",
+    status: "supported",
+    note: "requires a story flowing into NO frame (a story belongs to exactly one flow)",
+  },
   { op: "detachTextFromPath", status: "supported" },
   // image content (v43 D-14 / v50 C-1)
-  { op: "placeImage", status: "supported", note: "elementId is the BARE self id; an unreachable uri still applies (link only)" },
-  { op: "replaceImageBytes", status: "supported", note: "bare self id + decoded-on-apply image bytes" },
+  {
+    op: "placeImage",
+    status: "supported",
+    note: "elementId is the BARE self id; an unreachable uri still applies (link only)",
+  },
+  {
+    op: "replaceImageBytes",
+    status: "supported",
+    note: "bare self id + decoded-on-apply image bytes",
+  },
   // batch handle binding (v34)
-  { op: "bindCreated", status: "supported", note: "only meaningful inside a batch — binds the batch's most recent createdId for $h:<handle> refs; probed as insert→bind→write" },
+  {
+    op: "bindCreated",
+    status: "supported",
+    note: "only meaningful inside a batch — binds the batch's most recent createdId for $h:<handle> refs; probed as insert→bind→write",
+  },
   // flow grow rule (v64, plugin-doc ADR 026/029)
-  { op: "setFlowGrowRule", status: "supported", note: "proto 64; generated pages after the story's last frame while it oversets (InDesign Smart Text Reflow); UI = the Stories inspector's Smart text reflow, layout proof in e2e/paragraph-flow-ops.spec.ts AC-E2E-FLOW-smartReflow" },
+  {
+    op: "setFlowGrowRule",
+    status: "supported",
+    note: "proto 64; generated pages after the story's last frame while it oversets (InDesign Smart Text Reflow); UI = the Stories inspector's Smart text reflow, layout proof in e2e/paragraph-flow-ops.spec.ts AC-E2E-FLOW-smartReflow",
+  },
   // whole-element duplicate (v65, core d22bc31 — paged.draw's Reflect ▸ Copy)
-  { op: "duplicateElements", status: "supported", note: "proto 65; a whole clone of each element directly above its source, moved by `offset`; probed on a scratch frame" },
+  {
+    op: "duplicateElements",
+    status: "supported",
+    note: "proto 65; a whole clone of each element directly above its source, moved by `offset`; probed on a scratch frame",
+  },
   // whole-table removal (v66, core f3bfefe + de297f5 — the sheet campaign)
-  { op: "deleteTable", status: "supported", note: "proto 66; {storyId, tableId}; the removal is captured whole so one undo restores every cell; probed on a table the probe mints with insertTable" },
+  {
+    op: "deleteTable",
+    status: "supported",
+    note: "proto 66; {storyId, tableId}; the removal is captured whole so one undo restores every cell; probed on a table the probe mints with insertTable",
+  },
   // the presentation batch (v70, core f6a8c56 — ADR 129/130): page order,
   // page/document plugin labels, master CRUD + master item edits. All seven
   // are WIRE-ONLY in the editor today: no panel, menu or gesture issues them
   // (the Pages panel has no drag-reorder, there is no masters editor).
   // Domain proof lives in core (master_crud.rs, on_master.rs,
   // page_metadata.rs); here they are probed on the geometry fixture.
-  { op: "movePage", status: "supported", note: "proto 70; moves a page's single-page spread after `after` (null = to the front); wire-only, no editor UI" },
-  { op: "setPageMetadata", status: "supported", note: "proto 70; a page's plugin label, read back on the pages collection's pluginMetadata; travels with movePage/duplicatePage; plugin-sdk gates the key namespace; no editor UI" },
-  { op: "setDocumentMetadata", status: "supported", note: "proto 70; the document-scoped plugin label — reached via the plugin host door host.document.setDocumentMetadata (journey plugin-doors-69), no editor UI of its own" },
-  { op: "createMaster", status: "supported", note: "proto 70; a one-page master of widthPt×heightPt, or a fresh-id copy of duplicateOf; master id is the bare MasterSpread self id; wire-only, no editor UI" },
-  { op: "deleteMaster", status: "supported", note: "proto 70; refused while any page applies the master; undo restores it exactly; probed on a scratch master; wire-only, no editor UI" },
-  { op: "renameMaster", status: "supported", note: "proto 70; sets the master's Name (the masterPages collection's label); probed on a scratch master; wire-only, no editor UI" },
+  {
+    op: "movePage",
+    status: "supported",
+    note: "proto 70; moves a page's single-page spread after `after` (null = to the front); wire-only, no editor UI",
+  },
+  {
+    op: "setPageMetadata",
+    status: "supported",
+    note: "proto 70; a page's plugin label, read back on the pages collection's pluginMetadata; travels with movePage/duplicatePage; plugin-sdk gates the key namespace; no editor UI",
+  },
+  {
+    op: "setDocumentMetadata",
+    status: "supported",
+    note: "proto 70; the document-scoped plugin label — reached via the plugin host door host.document.setDocumentMetadata (journey plugin-doors-69), no editor UI of its own",
+  },
+  {
+    op: "createMaster",
+    status: "supported",
+    note: "proto 70; a one-page master of widthPt×heightPt, or a fresh-id copy of duplicateOf; master id is the bare MasterSpread self id; wire-only, no editor UI",
+  },
+  {
+    op: "deleteMaster",
+    status: "supported",
+    note: "proto 70; refused while any page applies the master; undo restores it exactly; probed on a scratch master; wire-only, no editor UI",
+  },
+  {
+    op: "renameMaster",
+    status: "supported",
+    note: "proto 70; sets the master's Name (the masterPages collection's label); probed on a scratch master; wire-only, no editor UI",
+  },
   // the object model (v71, core v0.71 — ADR 131/132): the typed Set every
   // object-model field writes through, and authored text variables (the
   // Text Variables panel).
-  { op: "set", status: "supported", note: "proto 71; {address, path, value} — ADR 132's typed Set over the address grammar; the editor's object-model PropertyFields write through it (host.objects)" },
-  { op: "createTextVariable", status: "supported", note: "proto 71; a custom text variable {name, contents?, textBefore?, textAfter?}; id dTextVariablen<name>; Text Variables panel ▸ New" },
-  { op: "deleteTextVariable", status: "supported", note: "proto 71; {variableId}; probed on a scratch variable; Text Variables panel ▸ Delete" },
-  { op: "onMaster", status: "supported", note: "proto 70; wraps a page-item/style/property mutation to apply to a master's spread (page/spread-list ops are refused inside); probed as an insertGuide on a scratch master; wire-only, no editor UI" },
+  {
+    op: "set",
+    status: "supported",
+    note: "proto 71; {address, path, value} — ADR 132's typed Set over the address grammar; the editor's object-model PropertyFields write through it (host.objects)",
+  },
+  {
+    op: "createTextVariable",
+    status: "supported",
+    note: "proto 71; a custom text variable {name, contents?, textBefore?, textAfter?}; id dTextVariablen<name>; Text Variables panel ▸ New",
+  },
+  {
+    op: "deleteTextVariable",
+    status: "supported",
+    note: "proto 71; {variableId}; probed on a scratch variable; Text Variables panel ▸ Delete",
+  },
+  {
+    op: "onMaster",
+    status: "supported",
+    note: "proto 70; wraps a page-item/style/property mutation to apply to a master's spread (page/spread-list ops are refused inside); probed as an insertGuide on a scratch master; wire-only, no editor UI",
+  },
   // footnotes, hyperlink edits and the TOC over the wire (v73, core
   // 0.71.13 — ADRs 163–165). No editor UI issues any of them (the
   // Hyperlinks panel lists links read-only); reached via paged.* scripts,
   // the wire and the generic core-command picker.
-  { op: "insertFootnote", status: "supported", note: "0.71.13, ADR 163; {storyId, offset, paragraph?, text}; the model mints the note id (footnotes collection); no editor UI" },
-  { op: "deleteFootnote", status: "supported", note: "0.71.13, ADR 163; {storyId, footnoteId} — the note's Self id off the footnotes collection; probed on a scratch note; no editor UI" },
-  { op: "deleteHyperlink", status: "supported", note: "0.71.13, ADR 164; {hyperlinkId} — the Hyperlink's Self id off the hyperlinks collection; probed on a scratch link; the Hyperlinks panel is read-only" },
-  { op: "editHyperlink", status: "supported", note: "0.71.13, ADR 164; {hyperlinkId, name?, url?, page?}; probed renaming and re-pointing a scratch link; the Hyperlinks panel is read-only" },
-  { op: "updateTableOfContents", status: "supported", note: "0.71.13, ADR 165; {storyId} of a story or frame that names a TOC style (refused otherwise); probed on sample.idml's TOC story u28e69; no editor UI" },
+  {
+    op: "insertFootnote",
+    status: "supported",
+    note: "0.71.13, ADR 163; {storyId, offset, paragraph?, text}; the model mints the note id (footnotes collection); no editor UI",
+  },
+  {
+    op: "deleteFootnote",
+    status: "supported",
+    note: "0.71.13, ADR 163; {storyId, footnoteId} — the note's Self id off the footnotes collection; probed on a scratch note; no editor UI",
+  },
+  {
+    op: "deleteHyperlink",
+    status: "supported",
+    note: "0.71.13, ADR 164; {hyperlinkId} — the Hyperlink's Self id off the hyperlinks collection; probed on a scratch link; the Hyperlinks panel is read-only",
+  },
+  {
+    op: "editHyperlink",
+    status: "supported",
+    note: "0.71.13, ADR 164; {hyperlinkId, name?, url?, page?}; probed renaming and re-pointing a scratch link; the Hyperlinks panel is read-only",
+  },
+  {
+    op: "updateTableOfContents",
+    status: "supported",
+    note: "0.71.13, ADR 165; {storyId} of a story or frame that names a TOC style (refused otherwise); probed on sample.idml's TOC story u28e69; no editor UI",
+  },
   // generated text, editorial notes and bookmarks (protocol 72, core
   // 0.72.0 — ADRs 168, 169, 172, 173). No editor UI issues any of them yet.
-  { op: "generateIndex", status: "supported", note: "proto 72, ADR 168; {storyId} — the index replaces the story's text; probed on the text fixture's first story; no editor UI" },
-  { op: "updateCrossReferences", status: "supported", note: "proto 72, ADR 169; {sourceId?} — every source without one; probed on the navigation fixture; the Cross-References panel is read-only" },
-  { op: "insertNote", status: "supported", note: "proto 72, ADR 172; {storyId, offset, paragraph?, text, user?, date?}; the model mints the note id (notes collection, rows carry `id`); no editor UI" },
-  { op: "editNote", status: "supported", note: "proto 72, ADR 172; {noteId, text, date?}; probed on a scratch note; no editor UI" },
-  { op: "deleteNote", status: "supported", note: "proto 72, ADR 172; {noteId}; probed on a scratch note; no editor UI" },
-  { op: "convertNoteToText", status: "supported", note: "proto 72, ADR 172; {noteId}; probed on a scratch note; no editor UI" },
-  { op: "createBookmark", status: "supported", note: "proto 72, ADR 173; {name, page? | destination?, parent?, index?}; probed to the navigation fixture's first page; the Bookmarks panel is read-only" },
-  { op: "renameBookmark", status: "supported", note: "proto 72, ADR 173; {bookmarkId, name}; probed on the navigation fixture's first bookmark; the Bookmarks panel is read-only" },
-  { op: "moveBookmark", status: "supported", note: "proto 72, ADR 173; {bookmarkId, parent?, index?}; probed moving the navigation fixture's first bookmark to the end; the Bookmarks panel is read-only" },
-  { op: "deleteBookmark", status: "supported", note: "proto 72, ADR 173; {bookmarkId}; probed on the navigation fixture's first bookmark; the Bookmarks panel is read-only" },
+  {
+    op: "generateIndex",
+    status: "supported",
+    note: "proto 72, ADR 168; {storyId} — the index replaces the story's text; probed on the text fixture's first story; no editor UI",
+  },
+  {
+    op: "updateCrossReferences",
+    status: "supported",
+    note: "proto 72, ADR 169; {sourceId?} — every source without one; probed on the navigation fixture; the Cross-References panel is read-only",
+  },
+  {
+    op: "insertNote",
+    status: "supported",
+    note: "proto 72, ADR 172; {storyId, offset, paragraph?, text, user?, date?}; the model mints the note id (notes collection, rows carry `id`); no editor UI",
+  },
+  {
+    op: "editNote",
+    status: "supported",
+    note: "proto 72, ADR 172; {noteId, text, date?}; probed on a scratch note; no editor UI",
+  },
+  {
+    op: "deleteNote",
+    status: "supported",
+    note: "proto 72, ADR 172; {noteId}; probed on a scratch note; no editor UI",
+  },
+  {
+    op: "convertNoteToText",
+    status: "supported",
+    note: "proto 72, ADR 172; {noteId}; probed on a scratch note; no editor UI",
+  },
+  {
+    op: "createBookmark",
+    status: "supported",
+    note: "proto 72, ADR 173; {name, page? | destination?, parent?, index?}; probed to the navigation fixture's first page; the Bookmarks panel is read-only",
+  },
+  {
+    op: "renameBookmark",
+    status: "supported",
+    note: "proto 72, ADR 173; {bookmarkId, name}; probed on the navigation fixture's first bookmark; the Bookmarks panel is read-only",
+  },
+  {
+    op: "moveBookmark",
+    status: "supported",
+    note: "proto 72, ADR 173; {bookmarkId, parent?, index?}; probed moving the navigation fixture's first bookmark to the end; the Bookmarks panel is read-only",
+  },
+  {
+    op: "deleteBookmark",
+    status: "supported",
+    note: "proto 72, ADR 173; {bookmarkId}; probed on the navigation fixture's first bookmark; the Bookmarks panel is read-only",
+  },
   // endnotes (protocol 73, core 0.73.0 — ADR 174). No editor UI issues
   // any of them yet.
-  { op: "insertEndnote", status: "supported", note: "proto 73, ADR 174; {storyId, offset, paragraph?, text}; the first endnote also makes the endnote story on a new page; endnotes collection rows carry `id`; no editor UI" },
-  { op: "deleteEndnote", status: "supported", note: "proto 73, ADR 174; {endnoteId}; probed on a scratch endnote; no editor UI" },
-  { op: "convertFootnoteToEndnote", status: "supported", note: "proto 73, ADR 174; {storyId, footnoteId}; the footnote's removal and an endnote of its text, one undo step; probed on a scratch footnote; no editor UI" },
+  {
+    op: "insertEndnote",
+    status: "supported",
+    note: "proto 73, ADR 174; {storyId, offset, paragraph?, text}; the first endnote also makes the endnote story on a new page; endnotes collection rows carry `id`; no editor UI",
+  },
+  {
+    op: "deleteEndnote",
+    status: "supported",
+    note: "proto 73, ADR 174; {endnoteId}; probed on a scratch endnote; no editor UI",
+  },
+  {
+    op: "convertFootnoteToEndnote",
+    status: "supported",
+    note: "proto 73, ADR 174; {storyId, footnoteId}; the footnote's removal and an endnote of its text, one undo step; probed on a scratch footnote; no editor UI",
+  },
 ];
 
 export function expectedStatus(op: string): Capability | undefined {

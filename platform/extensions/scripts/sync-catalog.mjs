@@ -3,7 +3,8 @@
 // sync-wire vendors the engine WIRE TYPES (.d.ts), this vendors the engine
 // CAPABILITY CATALOG (host fns + the settable property paths + id grammar +
 // constraints) — the single generated contract core publishes as
-// `catalog.json` inside @paged-media/introspect-wasm.
+// `introspect/catalog.json` inside @paged-media/canvas-wasm (the
+// `./introspect` entry, which absorbed @paged-media/introspect-wasm, PM-0008).
 //
 //   node scripts/sync-catalog.mjs              # copy from the published pkg
 //   node scripts/sync-catalog.mjs --check      # fail if the copy drifted
@@ -11,11 +12,8 @@
 //
 // SOURCE resolution (in order):
 //   1. --source <path> to a catalog.json, OR
-//   2. @paged-media/introspect-wasm resolved from the editor's node_modules
-//      (Decision B: the editor consumes introspect-wasm). NOTE: the catalog ships
-//      in introspect-wasm from the FIRST release after ADR 019 Phase 2 — until
-//      then `--check` against the published package reports the file missing;
-//      that is the cross-repo release-ordering signal, not a script bug.
+//   2. @paged-media/canvas-wasm resolved from the editor's client package
+//      (which depends on it), reading its `introspect/catalog.json`.
 // If neither resolves the script EXITS NONZERO (the vendored catalog is a
 // contract coupling; a check that can't see its source is not a passing check).
 
@@ -51,12 +49,11 @@ const RESOLVE_FROM =
 const CORE_CANDIDATES = [
   resolve(ROOT, "../../engine/core/crates/paged-introspect/catalog.json"),
 ];
-const CORE_CATALOG =
-  process.env.CORE_REPO
-    ? resolve(process.env.CORE_REPO, "crates/paged-introspect/catalog.json")
-    : CORE_CANDIDATES.find((c) => existsSync(c));
-const PKG = "@paged-media/introspect-wasm";
-const CATALOG_FILE = "catalog.json";
+const CORE_CATALOG = process.env.CORE_REPO
+  ? resolve(process.env.CORE_REPO, "crates/paged-introspect/catalog.json")
+  : CORE_CANDIDATES.find((c) => existsSync(c));
+const PKG = "@paged-media/canvas-wasm";
+const CATALOG_FILE = "introspect/catalog.json";
 
 /**
  * The recorded provenance of the vendored copy.
@@ -78,10 +75,13 @@ export function provenance() {
 /** The claims a provenance record must actually make. */
 export function validateProvenance(p) {
   for (const key of ["source", "targetsProtocol", "aheadOfPublished", "why"]) {
-    if (p[key] === undefined) throw new Error(`sync-catalog: provenance is missing "${key}"`);
+    if (p[key] === undefined)
+      throw new Error(`sync-catalog: provenance is missing "${key}"`);
   }
   if (p.aheadOfPublished && String(p.why).length < 120) {
-    throw new Error("sync-catalog: leading the published engine costs a real explanation, not a phrase");
+    throw new Error(
+      "sync-catalog: leading the published engine costs a real explanation, not a phrase",
+    );
   }
   return p;
 }
@@ -96,7 +96,8 @@ function protocolOf(version) {
 export function resolveSource(opts = {}) {
   if (opts.source) {
     const path = resolve(opts.source);
-    if (!existsSync(path)) throw new Error(`sync-catalog: --source not found: ${path}`);
+    if (!existsSync(path))
+      throw new Error(`sync-catalog: --source not found: ${path}`);
     return { path, version: "unknown" };
   }
   const from = opts.resolveFrom ?? RESOLVE_FROM;
@@ -104,7 +105,9 @@ export function resolveSource(opts = {}) {
   try {
     req = createRequire(pathToFileURL(resolve(from, "package.json")));
   } catch (err) {
-    throw new Error(`sync-catalog: cannot anchor require at ${from} (${String(err)})`);
+    throw new Error(
+      `sync-catalog: cannot anchor require at ${from} (${String(err)})`,
+    );
   }
   let pkgJsonPath;
   try {
@@ -120,7 +123,7 @@ export function resolveSource(opts = {}) {
   if (!existsSync(path)) {
     throw new Error(
       `sync-catalog: ${PKG}@${pkg.version} resolved but ${CATALOG_FILE} is missing — ` +
-        `the catalog ships from the first release after ADR 019 Phase 2. Bump ${PKG}.`,
+        `build the package's introspect entry (engine/core/scripts/build-wasm-packages.sh --workspace introspect).`,
     );
   }
   return { path, version: pkg.version ?? "unknown" };
@@ -158,7 +161,10 @@ export function checkVendored(opts = {}) {
     if (opts.provenance) prov = validateProvenance(opts.provenance);
     else if (vendored) prov = provenance();
   } catch (err) {
-    return { ok: false, reason: String(err.message ?? err).replace(/^sync-catalog:\s*/, "") };
+    return {
+      ok: false,
+      reason: String(err.message ?? err).replace(/^sync-catalog:\s*/, ""),
+    };
   }
 
   // Strictest available comparison: core's own generated catalog, which
@@ -177,14 +183,21 @@ export function checkVendored(opts = {}) {
           "core is the source the published package is built from, so this comparison is the strict one.",
       };
     }
-    return { ok: true, version: `core (protocol ${prov.targetsProtocol})`, against: "core" };
+    return {
+      ok: true,
+      version: `core (protocol ${prov.targetsProtocol})`,
+      against: "core",
+    };
   }
 
   let src;
   try {
     src = resolveSource(opts);
   } catch (err) {
-    return { ok: false, reason: String(err.message ?? err).replace(/^sync-catalog:\s*/, "") };
+    return {
+      ok: false,
+      reason: String(err.message ?? err).replace(/^sync-catalog:\s*/, ""),
+    };
   }
   const fresh = buildVendored(src);
   const publishedProtocol = protocolOf(src.version);
@@ -203,7 +216,11 @@ export function checkVendored(opts = {}) {
     return { ok: true, version: src.version, against: "npm" };
   }
 
-  if (prov?.aheadOfPublished && publishedProtocol !== null && prov.targetsProtocol > publishedProtocol) {
+  if (
+    prov?.aheadOfPublished &&
+    publishedProtocol !== null &&
+    prov.targetsProtocol > publishedProtocol
+  ) {
     return {
       ok: true,
       version: src.version,
@@ -239,7 +256,8 @@ function parseArgs(argv) {
     const a = argv[i];
     if (a === "--check") out.check = true;
     else if (a === "--source") out.source = argv[++i];
-    else if (a.startsWith("--source=")) out.source = a.slice("--source=".length);
+    else if (a.startsWith("--source="))
+      out.source = a.slice("--source=".length);
   }
   return out;
 }

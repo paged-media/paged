@@ -51,7 +51,9 @@ export function RightDock() {
   useEffect(() => {
     const strip = stripRef.current;
     if (!strip || !active) return;
-    const tab = strip.querySelector<HTMLElement>(`[data-dock-tab="${CSS.escape(active)}"]`);
+    const tab = strip.querySelector<HTMLElement>(
+      `[data-dock-tab="${CSS.escape(active)}"]`,
+    );
     tab?.scrollIntoView({ block: "nearest", inline: "nearest" });
   }, [active, rightTabs]);
 

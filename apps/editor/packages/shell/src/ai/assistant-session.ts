@@ -25,7 +25,13 @@
 
 import type { CanvasClient } from "@paged-media/client";
 
-import { describeAiError, plainSummary, runEditorAgent, undoBackTo, undoTop } from "./editor-ai";
+import {
+  describeAiError,
+  plainSummary,
+  runEditorAgent,
+  undoBackTo,
+  undoTop,
+} from "./editor-ai";
 
 export type AssistantView = "ask" | "brief";
 
@@ -36,8 +42,22 @@ export interface AssistantStep {
 
 export type AssistantRun =
   | { phase: "idle" }
-  | { phase: "running"; prompt: string; steps: AssistantStep[]; controller: AbortController }
-  | { phase: "done"; prompt: string; steps: AssistantStep[]; summary: string; stopped: boolean; before: number; after: number; changed: boolean }
+  | {
+      phase: "running";
+      prompt: string;
+      steps: AssistantStep[];
+      controller: AbortController;
+    }
+  | {
+      phase: "done";
+      prompt: string;
+      steps: AssistantStep[];
+      summary: string;
+      stopped: boolean;
+      before: number;
+      after: number;
+      changed: boolean;
+    }
   | { phase: "error"; prompt: string; steps: AssistantStep[]; message: string };
 
 export interface AssistantState {
@@ -49,7 +69,12 @@ export interface AssistantState {
   run: AssistantRun;
 }
 
-let state: AssistantState = { view: "ask", draft: "", autoRun: false, run: { phase: "idle" } };
+let state: AssistantState = {
+  view: "ask",
+  draft: "",
+  autoRun: false,
+  run: { phase: "idle" },
+};
 const listeners = new Set<() => void>();
 let opener: (() => void) | null = null;
 
@@ -73,7 +98,9 @@ export function setAssistantOpener(open: (() => void) | null): void {
 }
 
 /** Show the panel, optionally switching view or pre-filling the request. */
-export function openAssistant(options: { view?: AssistantView; draft?: string; autoRun?: boolean } = {}): void {
+export function openAssistant(
+  options: { view?: AssistantView; draft?: string; autoRun?: boolean } = {},
+): void {
   set({
     ...(options.view ? { view: options.view } : {}),
     ...(options.draft !== undefined ? { draft: options.draft } : {}),
@@ -107,7 +134,11 @@ export function stopAssistantRun(): void {
 
 /** The first comment line of a script names the step, else a generic one. */
 function stepLabel(source: string, n: number): string {
-  const first = source.split("\n").map((l) => l.trim()).find((l) => l.length > 0) ?? "";
+  const first =
+    source
+      .split("\n")
+      .map((l) => l.trim())
+      .find((l) => l.length > 0) ?? "";
   const comment = /^\/\/\s*(.+)$/.exec(first)?.[1];
   return comment ? comment.slice(0, 90) : `Step ${n}: changing the document`;
 }
@@ -127,9 +158,13 @@ export function startAssistantRun(options: StartRunOptions): void {
   const steps: AssistantStep[] = [];
   const push = (step: AssistantStep) => {
     steps.push(step);
-    if (state.run.phase === "running") set({ run: { ...state.run, steps: [...steps] } });
+    if (state.run.phase === "running")
+      set({ run: { ...state.run, steps: [...steps] } });
   };
-  set({ run: { phase: "running", prompt: options.prompt, steps: [], controller }, draft: "" });
+  set({
+    run: { phase: "running", prompt: options.prompt, steps: [], controller },
+    draft: "",
+  });
   void (async () => {
     try {
       if (options.prepare && !(await options.prepare())) {
@@ -143,19 +178,37 @@ export function startAssistantRun(options: StartRunOptions): void {
         prompt: options.prompt,
         signal: controller.signal,
         onEvent: (e) => {
-          if (e.type === "script") push({ label: stepLabel(e.source, ++scripts), state: "info" });
+          if (e.type === "script")
+            push({ label: stepLabel(e.source, ++scripts), state: "info" });
           else if (e.type === "scriptResult") {
             const last = steps[steps.length - 1];
             if (last) last.state = e.run.error ? "failed" : "ok";
-            if (e.run.error) push({ label: `Retrying: ${e.run.error.split("\n")[0]!.slice(0, 80)}`, state: "info" });
-            if (e.overset && e.overset.length > 0) push({ label: `${e.overset.length} ${e.overset.length === 1 ? "story is" : "stories are"} overset`, state: "info" });
-            if (state.run.phase === "running") set({ run: { ...state.run, steps: [...steps] } });
-          } else if (e.type === "render") push({ label: `Checked the look of page ${e.page}`, state: "ok" });
+            if (e.run.error)
+              push({
+                label: `Retrying: ${e.run.error.split("\n")[0]!.slice(0, 80)}`,
+                state: "info",
+              });
+            if (e.overset && e.overset.length > 0)
+              push({
+                label: `${e.overset.length} ${e.overset.length === 1 ? "story is" : "stories are"} overset`,
+                state: "info",
+              });
+            if (state.run.phase === "running")
+              set({ run: { ...state.run, steps: [...steps] } });
+          } else if (e.type === "render")
+            push({ label: `Checked the look of page ${e.page}`, state: "ok" });
         },
       });
       const after = await undoTop(options.client);
       if (result.outcome === "refused") {
-        set({ run: { phase: "error", prompt: options.prompt, steps, message: "Claude declined this request." } });
+        set({
+          run: {
+            phase: "error",
+            prompt: options.prompt,
+            steps,
+            message: "Claude declined this request.",
+          },
+        });
         return;
       }
       set({
@@ -171,7 +224,14 @@ export function startAssistantRun(options: StartRunOptions): void {
         },
       });
     } catch (err) {
-      set({ run: { phase: "error", prompt: options.prompt, steps, message: describeAiError(err) } });
+      set({
+        run: {
+          phase: "error",
+          prompt: options.prompt,
+          steps,
+          message: describeAiError(err),
+        },
+      });
     }
   })();
 }
@@ -184,6 +244,12 @@ export async function undoAssistantRun(client: CanvasClient): Promise<void> {
   set({
     run: ok
       ? { phase: "idle" }
-      : { phase: "error", prompt: run.prompt, steps: run.steps, message: "The document changed after Claude's edit, so it was not undone. Use Edit ▸ Undo instead." },
+      : {
+          phase: "error",
+          prompt: run.prompt,
+          steps: run.steps,
+          message:
+            "The document changed after Claude's edit, so it was not undone. Use Edit ▸ Undo instead.",
+        },
   });
 }

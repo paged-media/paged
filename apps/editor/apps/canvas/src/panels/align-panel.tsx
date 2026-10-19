@@ -32,7 +32,12 @@
 // target's `frameBounds` through `host.objects` and commits ONE batch —
 // one undo step. A script invokes the same command.
 
-import { Icon, useObjectModel, useRegistries, useSelection } from "@paged-media/shell";
+import {
+  Icon,
+  useObjectModel,
+  useRegistries,
+  useSelection,
+} from "@paged-media/shell";
 import { KitSelect } from "@paged-media/ui";
 
 import { ALIGN_COMMAND, type AlignKind } from "../align-plan";
@@ -41,7 +46,11 @@ import { ALIGN_COMMAND, type AlignKind } from "../align-plan";
 // control bar.
 export const ALIGN_H: Array<{ kind: AlignKind; icon: string; hint: string }> = [
   { kind: "left", icon: "ui-obj-align-left", hint: "Align left" },
-  { kind: "centerH", icon: "ui-obj-align-center-h", hint: "Center horizontally" },
+  {
+    kind: "centerH",
+    icon: "ui-obj-align-center-h",
+    hint: "Center horizontally",
+  },
   { kind: "right", icon: "ui-obj-align-right", hint: "Align right" },
 ];
 export const ALIGN_V: Array<{ kind: AlignKind; icon: string; hint: string }> = [

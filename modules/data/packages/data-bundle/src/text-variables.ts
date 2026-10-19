@@ -28,7 +28,8 @@ import { objectsOf } from "./property-lane";
 const detected = new WeakMap<object, Promise<boolean>>();
 
 /** `host.objects` as a property read (no door call). */
-const objectsProp = (host: BundleHost): ObjectsSurface | undefined => (host as { objects?: ObjectsSurface }).objects;
+const objectsProp = (host: BundleHost): ObjectsSurface | undefined =>
+  (host as { objects?: ObjectsSurface }).objects;
 
 /** Whether this host's engine has custom text variables (protocol 71) — the
  *  carrier new variable bindings are placed as. Never throws. Once known for
@@ -42,7 +43,9 @@ export function textVariablesOn(host: BundleHost): Promise<boolean> {
   if (!objects || !known) return Promise.resolve(false);
   const p = (async () => {
     try {
-      return (await objects.kinds()).some((k) => k.owner === "core" && k.kind === "textVariable");
+      return (await objects.kinds()).some(
+        (k) => k.owner === "core" && k.kind === "textVariable",
+      );
     } catch {
       return false;
     }
@@ -54,16 +57,26 @@ export function textVariablesOn(host: BundleHost): Promise<boolean> {
 /** Our text variables: binding key → its `Self`. One query (by name); a
  *  variable whose `Self` is not the one core mints (InDesign re-spelled it on
  *  save) costs one name read. */
-export async function ownTextVariables(host: BundleHost): Promise<Map<string, string>> {
+export async function ownTextVariables(
+  host: BundleHost,
+): Promise<Map<string, string>> {
   const objects = objectsProp(host);
   const out = new Map<string, string>();
   if (!objects) return out;
   for (const address of await objects.query(OWN_TEXT_VARIABLES)) {
     const id = address.slice("textVariable:".length);
-    let key = id.startsWith(`${TEXT_VARIABLE_SELF}paged:`) ? keyOfTextVariable(id) : null;
+    let key = id.startsWith(`${TEXT_VARIABLE_SELF}paged:`)
+      ? keyOfTextVariable(id)
+      : null;
     if (key === null) {
-      const name = (await objects.get(address, "textVariableName")) as { kind?: string; value?: unknown };
-      key = name.kind === "value" && typeof name.value === "string" ? keyOfTextVariable(name.value) : null;
+      const name = (await objects.get(address, "textVariableName")) as {
+        kind?: string;
+        value?: unknown;
+      };
+      key =
+        name.kind === "value" && typeof name.value === "string"
+          ? keyOfTextVariable(name.value)
+          : null;
     }
     if (key !== null && !out.has(key)) out.set(key, id);
   }
@@ -73,14 +86,21 @@ export async function ownTextVariables(host: BundleHost): Promise<Map<string, st
 /** Our text variables as fields (`PlaceholderField` with `variable` set),
  *  each with its current contents: one query plus one read per variable.
  *  Empty when the engine has none (or no text variables at all). */
-export async function readTextVariableFields(host: BundleHost, key?: string): Promise<PlaceholderField[]> {
+export async function readTextVariableFields(
+  host: BundleHost,
+  key?: string,
+): Promise<PlaceholderField[]> {
   if (!(await textVariablesOn(host))) return [];
   const objects = objectsProp(host)!;
   const out: PlaceholderField[] = [];
   for (const [k, id] of await ownTextVariables(host)) {
     if (key !== undefined && k !== key) continue;
-    const v = (await objects.get(`textVariable:${id}`, "textVariableContents")) as { kind?: string; value?: unknown };
-    const contents = v.kind === "value" && typeof v.value === "string" ? v.value : null;
+    const v = (await objects.get(
+      `textVariable:${id}`,
+      "textVariableContents",
+    )) as { kind?: string; value?: unknown };
+    const contents =
+      v.kind === "value" && typeof v.value === "string" ? v.value : null;
     out.push(textVariableField(id, k, contents));
   }
   return out;

@@ -88,7 +88,10 @@ const PDF_FIXTURE = pathResolve(HERE, "../../public/sample.pdf");
 
 /** paged.data's manifest as THE APP RESOLVES it (apps/canvas/node_modules). */
 const DATA_MANIFEST = JSON.parse(
-  readFileSync(pathResolve(HERE, "../../node_modules/@paged-media/data/manifest.json"), "utf8"),
+  readFileSync(
+    pathResolve(HERE, "../../node_modules/@paged-media/data/manifest.json"),
+    "utf8",
+  ),
 ) as {
   contributes: {
     panels: string[];
@@ -138,8 +141,6 @@ const DATA_PART_TYPES = [
   { type: "data-xlsx", role: "source", format: "xlsx" },
 ] as const;
 
-
-
 const DOC_PANEL = "media.paged.doc.panel.outline";
 const DOC_COMMAND = "media.paged.doc.command.placeDoc";
 const DOC_IMPORTER = "media.paged.doc.importer.docx";
@@ -159,12 +160,20 @@ interface CanvasProbe {
     registries: {
       commands: {
         list: () => Array<{ id: string; title: string; category?: string }>;
-        get: (id: string) => { id: string; title: string; category?: string } | undefined;
+        get: (
+          id: string,
+        ) => { id: string; title: string; category?: string } | undefined;
         invoke: (id: string, payload?: unknown) => Promise<unknown>;
       };
-      panels: { list: () => Array<{ id: string; title: string; source?: string }> };
+      panels: {
+        list: () => Array<{ id: string; title: string; source?: string }>;
+      };
       menus: {
-        list: () => Array<{ path: string; command: string; disabled?: boolean }>;
+        list: () => Array<{
+          path: string;
+          command: string;
+          disabled?: boolean;
+        }>;
       };
       editContexts: {
         list: () => Array<{
@@ -222,10 +231,9 @@ interface CanvasProbe {
 const invoke = (page: Page, id: string, payload?: unknown) =>
   page.evaluate(
     ([cmd, p]) =>
-      (globalThis as unknown as CanvasProbe).__canvas.registries.commands.invoke(
-        cmd as string,
-        p,
-      ),
+      (
+        globalThis as unknown as CanvasProbe
+      ).__canvas.registries.commands.invoke(cmd as string, p),
     [id, payload] as const,
   );
 
@@ -282,8 +290,7 @@ async function elementScreenCenter(
               Array<{
                 bounds: [number, number, number, number];
                 itemTransform?:
-                  | [number, number, number, number, number, number]
-                  | null;
+                  [number, number, number, number, number, number] | null;
               }>
             >;
           };
@@ -359,7 +366,9 @@ test.describe("plugin surface · paged.data", () => {
     expect(ctx!.panelIds).toContain("media.paged.data.panel.bindings");
     // Declared EMPTY on purpose: inside a data binding no canvas tool has
     // anything to act on. (paged.doc is the exception — see below.)
-    expect(ctx!.toolIds, "dataBinding restricts the rail to nothing").toEqual([]);
+    expect(ctx!.toolIds, "dataBinding restricts the rail to nothing").toEqual(
+      [],
+    );
 
     // AND THE NEGATIVE HALF — data registers NO object type. That single
     // omission is what loses it the double-click race in D3 below.
@@ -393,7 +402,11 @@ test.describe("plugin surface · paged.data", () => {
           ndjson: r.importers.resolve("events.ndjson")?.id ?? null,
           jsonl: r.importers.resolve("events.jsonl")?.id ?? null,
           parquet: r.importers.resolve("PRODUCTS.PARQUET")?.id ?? null,
-          parquetMime: r.importers.resolve("no-extension", "application/vnd.apache.parquet")?.id ?? null,
+          parquetMime:
+            r.importers.resolve(
+              "no-extension",
+              "application/vnd.apache.parquet",
+            )?.id ?? null,
           csv: r.importers.resolve("table.csv")?.id ?? null,
           xlsx: r.importers.resolve("book.xlsx")?.id ?? null,
         },
@@ -402,7 +415,9 @@ test.describe("plugin surface · paged.data", () => {
       };
     });
     expect(
-      dataIo.importers.filter((i) => i.id.startsWith("media.paged.data")).map((i) => i.id),
+      dataIo.importers
+        .filter((i) => i.id.startsWith("media.paged.data"))
+        .map((i) => i.id),
     ).toEqual([DATA_IMPORTER]);
     const tableImporter = dataIo.importers.find((i) => i.id === DATA_IMPORTER)!;
     expect(tableImporter.extensions).toEqual(
@@ -411,29 +426,40 @@ test.describe("plugin surface · paged.data", () => {
     expect(tableImporter.extensions).not.toContain(".csv");
     expect(tableImporter.extensions).not.toContain(".xlsx");
     expect(tableImporter.mimeTypes).toEqual(
-      expect.arrayContaining(["application/json", "application/vnd.apache.parquet"]),
+      expect.arrayContaining([
+        "application/json",
+        "application/vnd.apache.parquet",
+      ]),
     );
     expect(dataIo.resolved.json).toBe(DATA_IMPORTER);
     expect(dataIo.resolved.ndjson).toBe(DATA_IMPORTER);
     expect(dataIo.resolved.jsonl).toBe(DATA_IMPORTER);
     expect(dataIo.resolved.parquet).toBe(DATA_IMPORTER);
     expect(dataIo.resolved.parquetMime).toBe(DATA_IMPORTER);
-    expect(dataIo.resolved.csv, ".csv stays with paged.sheet").not.toBe(DATA_IMPORTER);
-    expect(dataIo.resolved.xlsx, ".xlsx stays with paged.sheet").not.toBe(DATA_IMPORTER);
-    expect(dataIo.exporters.filter((e) => e.startsWith("media.paged.data"))).toEqual(
-      [],
+    expect(dataIo.resolved.csv, ".csv stays with paged.sheet").not.toBe(
+      DATA_IMPORTER,
     );
+    expect(dataIo.resolved.xlsx, ".xlsx stays with paged.sheet").not.toBe(
+      DATA_IMPORTER,
+    );
+    expect(
+      dataIo.exporters.filter((e) => e.startsWith("media.paged.data")),
+    ).toEqual([]);
 
     // PART TYPES are declaration-only, as for every bundle: the host has
     // no partType registry, so nothing reads them. Pin them to the
     // manifest so a change is noticed. (The bytes behind them are proven
     // by the import-formats / persist-reload journeys, which write
     // `data/<hash>.<format>` parts.)
-    expect((c.partTypes ?? []).map((p) => p.type)).toEqual(DATA_PART_TYPES.map((p) => p.type));
+    expect((c.partTypes ?? []).map((p) => p.type)).toEqual(
+      DATA_PART_TYPES.map((p) => p.type),
+    );
     const registryNames = await page.evaluate(() =>
       Object.keys((globalThis as unknown as CanvasProbe).__canvas.registries),
     );
-    expect(registryNames, "the shell has no partType registry").not.toContain("partTypes");
+    expect(registryNames, "the shell has no partType registry").not.toContain(
+      "partTypes",
+    );
     // THIRD STATE, each written to go red when the exposure improved,
     // and each one did:
     //   · `.toEqual([])` — paged.data reached no menu at all;
@@ -486,7 +512,10 @@ test.describe("plugin surface · paged.data", () => {
         // No source on a fresh document: the bindings panel's body is its
         // empty state, which links to Data sources (2026-10-11).
         "media.paged.data.panel.bindings",
-        (p) => p.locator("[data-data-bind-empty] [data-data-bind-open-sources]").first(),
+        (p) =>
+          p
+            .locator("[data-data-bind-empty] [data-data-bind-open-sources]")
+            .first(),
       ],
       [
         // The query panel: the SQL field the builders write into.
@@ -496,7 +525,11 @@ test.describe("plugin surface · paged.data", () => {
       [
         // Last, so its locale control (asserted below) is the one in view.
         "media.paged.data.panel.dataset",
-        (p) => p.locator("[data-data-dataset-empty]").getByText(/No queries yet/i).first(),
+        (p) =>
+          p
+            .locator("[data-data-dataset-empty]")
+            .getByText(/No queries yet/i)
+            .first(),
       ],
     ];
 
@@ -535,7 +568,9 @@ test.describe("plugin surface · paged.data", () => {
           "media.paged.data.command.importData",
         )?.title ?? null,
     );
-    expect(title, "D1 fixed: importData is titled for what it does").toBe("Data sources…");
+    expect(title, "D1 fixed: importData is titled for what it does").toBe(
+      "Data sources…",
+    );
 
     // Start somewhere else so a raise is observable.
     await openPanel(page, "media.paged.data.panel.bindings");
@@ -551,8 +586,13 @@ test.describe("plugin surface · paged.data", () => {
       .catch(() => "none" as const);
     await invoke(page, "media.paged.data.command.importData");
     const outcome = await chooser;
-    expect(outcome, "'Data sources…' raises a panel; it opens no file picker").toBe("none");
-    expect((await panelState(page)).active).toBe("media.paged.data.panel.sources");
+    expect(
+      outcome,
+      "'Data sources…' raises a panel; it opens no file picker",
+    ).toBe("none");
+    expect((await panelState(page)).active).toBe(
+      "media.paged.data.panel.sources",
+    );
 
     // The import door is the panel's own button, and it does open a picker.
     const realChooser = page.waitForEvent("filechooser", { timeout: 10_000 });
@@ -573,22 +613,39 @@ test.describe("plugin surface · paged.data", () => {
     // never with "no such command". Four of them are pure panel raises;
     // the rest touch the session. None may throw an unknown-command
     // error, and none may hang.
-    const results = await page.evaluate(async (ids) => {
-      const reg = (globalThis as unknown as CanvasProbe).__canvas.registries.commands;
-      const out: Array<{ id: string; settled: string; value?: string; error?: string }> = [];
-      for (const id of ids) {
-        // captureDataSet/applyDataSet read a payload; give the shapes
-        // their handlers document so the no-payload branch is exercised
-        // deliberately rather than by accident.
-        try {
-          const v = await reg.invoke(id);
-          out.push({ id, settled: "resolved", value: JSON.stringify(v ?? null).slice(0, 120) });
-        } catch (err) {
-          out.push({ id, settled: "rejected", error: String(err).slice(0, 200) });
+    const results = await page.evaluate(
+      async (ids) => {
+        const reg = (globalThis as unknown as CanvasProbe).__canvas.registries
+          .commands;
+        const out: Array<{
+          id: string;
+          settled: string;
+          value?: string;
+          error?: string;
+        }> = [];
+        for (const id of ids) {
+          // captureDataSet/applyDataSet read a payload; give the shapes
+          // their handlers document so the no-payload branch is exercised
+          // deliberately rather than by accident.
+          try {
+            const v = await reg.invoke(id);
+            out.push({
+              id,
+              settled: "resolved",
+              value: JSON.stringify(v ?? null).slice(0, 120),
+            });
+          } catch (err) {
+            out.push({
+              id,
+              settled: "rejected",
+              error: String(err).slice(0, 200),
+            });
+          }
         }
-      }
-      return out;
-    }, DATA_COMMANDS as unknown as string[]);
+        return out;
+      },
+      DATA_COMMANDS as unknown as string[],
+    );
 
     expect(results).toHaveLength(DATA_COMMANDS.length);
     for (const r of results) {
@@ -609,7 +666,9 @@ test.describe("plugin surface · paged.data", () => {
       page,
       "media.paged.data.command.applyDataSet",
     )) as { applied?: number } | null;
-    expect(applied?.applied, "applyDataSet with no name applies nothing").toBe(0);
+    expect(applied?.applied, "applyDataSet with no name applies nothing").toBe(
+      0,
+    );
 
     // `mergeRecords` (Data Merge) with no payload merges the session's
     // first query; on a fresh document there is none, and the documented
@@ -621,7 +680,9 @@ test.describe("plugin surface · paged.data", () => {
         (
           await (
             globalThis as unknown as {
-              __canvas: { client: { collection: (n: string) => Promise<unknown[]> } };
+              __canvas: {
+                client: { collection: (n: string) => Promise<unknown[]> };
+              };
             }
           ).__canvas.client.collection("pages")
         ).length,
@@ -633,7 +694,9 @@ test.describe("plugin surface · paged.data", () => {
         (
           await (
             globalThis as unknown as {
-              __canvas: { client: { collection: (n: string) => Promise<unknown[]> } };
+              __canvas: {
+                client: { collection: (n: string) => Promise<unknown[]> };
+              };
             }
           ).__canvas.client.collection("pages")
         ).length,
@@ -642,8 +705,14 @@ test.describe("plugin surface · paged.data", () => {
 
     // The four panel-raising verbs land on the panels they name.
     for (const [cmd, panel] of [
-      ["media.paged.data.command.defineBinding", "media.paged.data.panel.bindings"],
-      ["media.paged.data.command.openDataset", "media.paged.data.panel.dataset"],
+      [
+        "media.paged.data.command.defineBinding",
+        "media.paged.data.panel.bindings",
+      ],
+      [
+        "media.paged.data.command.openDataset",
+        "media.paged.data.panel.dataset",
+      ],
       ["media.paged.data.command.importData", "media.paged.data.panel.sources"],
       ["media.paged.data.command.editQuery", "media.paged.data.panel.query"],
     ] as const) {
@@ -670,7 +739,11 @@ test.describe("plugin surface · paged.data", () => {
       };
     };
     expect(
-      manifest.contributes.partTypes.map(({ type, role, format }) => ({ type, role, format })),
+      manifest.contributes.partTypes.map(({ type, role, format }) => ({
+        type,
+        role,
+        format,
+      })),
     ).toEqual([...DATA_PART_TYPES]);
     expect(manifest.contributes.importers).toEqual([DATA_IMPORTER]);
 
@@ -681,7 +754,8 @@ test.describe("plugin surface · paged.data", () => {
     await designer.open();
     const registryNames = await page.evaluate(() =>
       Object.keys(
-        (globalThis as unknown as { __canvas: { registries: object } }).__canvas.registries,
+        (globalThis as unknown as { __canvas: { registries: object } }).__canvas
+          .registries,
       ),
     );
     expect(registryNames).not.toContain("partTypes");
@@ -697,17 +771,27 @@ test.describe("plugin surface · paged.data", () => {
     const live = await page.evaluate(() => {
       const r = (globalThis as unknown as CanvasProbe).__canvas.registries;
       return {
-        importer: r.importers.list().find((i) => i.id === "media.paged.data.importer.table") ?? null,
+        importer:
+          r.importers
+            .list()
+            .find((i) => i.id === "media.paged.data.importer.table") ?? null,
         json: r.importers.resolve("rows.json")?.id ?? null,
         ndjson: r.importers.resolve("events.NDJSON")?.id ?? null,
         jsonl: r.importers.resolve("events.jsonl")?.id ?? null,
         parquet: r.importers.resolve("products.parquet")?.id ?? null,
-        byMime: r.importers.resolve("no-extension", "application/vnd.apache.parquet")?.id ?? null,
+        byMime:
+          r.importers.resolve("no-extension", "application/vnd.apache.parquet")
+            ?.id ?? null,
         accept: r.importers.acceptExtensions(),
       };
     });
     expect(live.importer, "the table importer is registered").toBeTruthy();
-    expect(live.importer!.extensions).toEqual([".json", ".ndjson", ".jsonl", ".parquet"]);
+    expect(live.importer!.extensions).toEqual([
+      ".json",
+      ".ndjson",
+      ".jsonl",
+      ".parquet",
+    ]);
     for (const [what, id] of [
       [".json", live.json],
       [".NDJSON (case-insensitive)", live.ndjson],
@@ -718,7 +802,9 @@ test.describe("plugin surface · paged.data", () => {
       expect(id, `resolve() claims ${what}`).toBe(DATA_IMPORTER);
     }
     for (const ext of [".json", ".ndjson", ".jsonl", ".parquet"]) {
-      expect(live.accept, `the picker's accept union carries ${ext}`).toContain(ext);
+      expect(live.accept, `the picker's accept union carries ${ext}`).toContain(
+        ext,
+      );
     }
 
     // DRIVE IT with real bytes — the path PagedShell's `onFile` takes for
@@ -726,13 +812,19 @@ test.describe("plugin surface · paged.data", () => {
     // data session and raises the Sources panel, where the source lists.
     await page.evaluate(async () => {
       const r = (globalThis as unknown as CanvasProbe).__canvas.registries;
-      const imp = r.importers.resolve("catalog.json", "application/json") as
-        | { import: (f: { name: string; bytes: Uint8Array; mimeType: string }) => Promise<void> }
-        | null;
+      const imp = r.importers.resolve("catalog.json", "application/json") as {
+        import: (f: {
+          name: string;
+          bytes: Uint8Array;
+          mimeType: string;
+        }) => Promise<void>;
+      } | null;
       if (!imp) throw new Error("no importer resolved for .json");
       await imp.import({
         name: "catalog.json",
-        bytes: new TextEncoder().encode('[{"sku":"A-1","price":9.99},{"sku":"B-2","price":19.5}]'),
+        bytes: new TextEncoder().encode(
+          '[{"sku":"A-1","price":9.99},{"sku":"B-2","price":19.5}]',
+        ),
         mimeType: "application/json",
       });
     });
@@ -747,11 +839,19 @@ test.describe("plugin surface · paged.data", () => {
     try {
       await expect(listed).toContainText("json", { timeout: 45_000 });
     } catch (err) {
-      const got = (await status.getAttribute("data-status").catch(() => null)) ?? "unknown";
-      if (got !== "ready") skipWithoutDuckDB(got, `the JSON import needs DuckDB-WASM (engine status "${got}")`);
+      const got =
+        (await status.getAttribute("data-status").catch(() => null)) ??
+        "unknown";
+      if (got !== "ready")
+        skipWithoutDuckDB(
+          got,
+          `the JSON import needs DuckDB-WASM (engine status "${got}")`,
+        );
       throw err;
     }
-    await expect(page.locator('[data-data-diagnostics] li[data-level="error"]')).toHaveCount(0);
+    await expect(
+      page.locator('[data-data-diagnostics] li[data-level="error"]'),
+    ).toHaveCount(0);
   });
 
   // DELIBERATELY UNTAGGED — a defect characterisation is evidence of the
@@ -772,7 +872,11 @@ test.describe("plugin surface · paged.data", () => {
         globalThis as unknown as CanvasProbe
       ).__canvas.registries.editContexts.get("dataBinding");
       if (!ctx?.matches) return null;
-      const base = { id: { kind: "rectangle", id: "x" }, kind: "rectangle", groupChain: [] };
+      const base = {
+        id: { kind: "rectangle", id: "x" },
+        kind: "rectangle",
+        groupChain: [],
+      };
       return {
         withEnvelope: ctx.matches({ ...base, metadata: { v: 1, data: {} } }),
         withoutEnvelope: ctx.matches({ ...base, metadata: null }),
@@ -785,7 +889,12 @@ test.describe("plugin surface · paged.data", () => {
     // ── 2. THE RACE. Author a rectangle and stamp paged.data's OWN
     //    envelope on it — this is literally what data's lower lane emits
     //    (`bindingMetadata` → setPluginMetadata on `{kind:"rectangle"}`).
-    const id = await designer.drawRectangle({ x0: 170, y0: 170, x1: 440, y1: 360 });
+    const id = await designer.drawRectangle({
+      x0: 170,
+      y0: 170,
+      x1: 440,
+      y1: 360,
+    });
     expect(id, "drew the bound frame").not.toBe("");
     await designer.applyFill("rectangle", id, "Color/Black");
     expect(
@@ -802,11 +911,13 @@ test.describe("plugin surface · paged.data", () => {
     await page.mouse.dblclick(at!.x, at!.y);
 
     const breadcrumb = page.locator("[data-edit-context-breadcrumb]");
-    await expect(breadcrumb, "some edit context entered").toBeVisible({ timeout: 6_000 });
+    await expect(breadcrumb, "some edit context entered").toBeVisible({
+      timeout: 6_000,
+    });
     const entered = await page.evaluate(
       () =>
-        (globalThis as unknown as CanvasProbe).__canvas.debugContext().editContext?.type ??
-        null,
+        (globalThis as unknown as CanvasProbe).__canvas.debugContext()
+          .editContext?.type ?? null,
     );
 
     // KNOWN DEFECT — this SHOULD be "dataBinding". `resolveDoubleClick`
@@ -824,7 +935,9 @@ test.describe("plugin surface · paged.data", () => {
     ).toBe("vectorGraphic");
 
     await page.keyboard.press("Escape");
-    await expect(breadcrumb, "Esc pops the context").toHaveCount(0, { timeout: 6_000 });
+    await expect(breadcrumb, "Esc pops the context").toHaveCount(0, {
+      timeout: 6_000,
+    });
   });
 });
 
@@ -886,7 +999,10 @@ test.describe("plugin surface · paged.doc", () => {
     expect(exp, "the .docx exporter is registered").toBeTruthy();
     expect(exp!.extension).toBe(".docx");
 
-    expect(live.editContext, "the wordDocument context is registered").toBeTruthy();
+    expect(
+      live.editContext,
+      "the wordDocument context is registered",
+    ).toBeTruthy();
     expect(live.editContext!.entry).toBe("doubleClick");
     expect(live.editContext!.metadataKey).toBe("x-paged:media.paged.doc");
     expect(live.editContext!.panelIds).toContain(DOC_PANEL);
@@ -918,7 +1034,8 @@ test.describe("plugin surface · paged.doc", () => {
     // zero. Delete this assertion when a partType registry lands.
     const registryNames = await page.evaluate(() =>
       Object.keys(
-        (globalThis as unknown as { __canvas: { registries: object } }).__canvas.registries,
+        (globalThis as unknown as { __canvas: { registries: object } }).__canvas
+          .registries,
       ),
     );
     expect(
@@ -938,7 +1055,8 @@ test.describe("plugin surface · paged.doc", () => {
 
     // The registry fact.
     const cats = await page.evaluate(() => {
-      const c = (globalThis as unknown as CanvasProbe).__canvas.registries.commands;
+      const c = (globalThis as unknown as CanvasProbe).__canvas.registries
+        .commands;
       return {
         placeDoc: c.get("media.paged.doc.command.placeDoc")?.category ?? null,
         placeImage: c.get("paged.insert.placeImage")?.category ?? null,
@@ -947,7 +1065,9 @@ test.describe("plugin surface · paged.doc", () => {
     // KNOWN DEFECT — flip to "Insert" (or whatever the bundle picks)
     // once placeDoc declares one.
     expect(cats.placeDoc, "D2: placeDoc declares no category").toBeNull();
-    expect(cats.placeImage, "the host's sibling verb declares one").toBe("Insert");
+    expect(cats.placeImage, "the host's sibling verb declares one").toBe(
+      "Insert",
+    );
 
     // The USER-VISIBLE consequence, through the real palette:
     // `groupByCategory` maps `category ?? "Other"`, sorts alphabetically,
@@ -958,9 +1078,9 @@ test.describe("plugin surface · paged.doc", () => {
     await input.fill("place");
 
     const groupWithHeading = (heading: string) =>
-      page
-        .locator("[cmdk-group]")
-        .filter({ has: page.locator("[cmdk-group-heading]", { hasText: heading }) });
+      page.locator("[cmdk-group]").filter({
+        has: page.locator("[cmdk-group-heading]", { hasText: heading }),
+      });
 
     await expect(
       groupWithHeading("Other").getByText("media.paged.doc.command.placeDoc"),
@@ -1020,7 +1140,12 @@ test.describe("plugin surface · paged.doc", () => {
     // by kind in D3 — and doc wins anyway, because an object-type claim
     // is checked BEFORE any kind claim. That contrast is the whole
     // content of the D3 finding.
-    const id = await designer.drawRectangle({ x0: 170, y0: 170, x1: 440, y1: 360 });
+    const id = await designer.drawRectangle({
+      x0: 170,
+      y0: 170,
+      x1: 440,
+      y1: 360,
+    });
     expect(id, "drew the word-document frame").not.toBe("");
     await designer.applyFill("rectangle", id, "Color/Black");
     expect(
@@ -1036,11 +1161,14 @@ test.describe("plugin surface · paged.doc", () => {
     expect(at, "the frame resolves to a screen point").not.toBeNull();
     await page.mouse.dblclick(at!.x, at!.y);
 
-    await expect(breadcrumb, "the edit-context breadcrumb appears").toBeVisible({
-      timeout: 6_000,
-    });
+    await expect(breadcrumb, "the edit-context breadcrumb appears").toBeVisible(
+      {
+        timeout: 6_000,
+      },
+    );
     await designer.expectContext({
-      intent: "Double-click a DOCX-backed frame → wordDocument edit context entered",
+      intent:
+        "Double-click a DOCX-backed frame → wordDocument edit context entered",
       editContext: { type: "wordDocument" },
     });
     // The context names the outline panel, so the cockpit raises it.
@@ -1049,7 +1177,9 @@ test.describe("plugin surface · paged.doc", () => {
       .toEqual(expect.arrayContaining([DOC_PANEL]));
 
     await page.keyboard.press("Escape");
-    await expect(breadcrumb, "Esc pops the context").toHaveCount(0, { timeout: 6_000 });
+    await expect(breadcrumb, "Esc pops the context").toHaveCount(0, {
+      timeout: 6_000,
+    });
     await designer.expectContext({
       intent: "Esc exits the wordDocument context → no edit context",
       editContext: { type: null },
@@ -1071,18 +1201,29 @@ test.describe("plugin surface · paged.pdf", () => {
     const live = await page.evaluate(() => {
       const r = (globalThis as unknown as CanvasProbe).__canvas.registries;
       return {
-        importer: r.importers.list().find((i) => i.id === "media.paged.pdf.importer.pdf") ?? null,
+        importer:
+          r.importers
+            .list()
+            .find((i) => i.id === "media.paged.pdf.importer.pdf") ?? null,
         byName: r.importers.resolve("brochure.pdf")?.id ?? null,
         byUpperName: r.importers.resolve("BROCHURE.PDF")?.id ?? null,
-        byMime: r.importers.resolve("no-extension", "application/pdf")?.id ?? null,
+        byMime:
+          r.importers.resolve("no-extension", "application/pdf")?.id ?? null,
         accept: r.importers.acceptExtensions(),
         openPdf: r.commands.get("paged.file.openPdf") ?? null,
         menu: r.menus.list().filter((m) => m.command === "paged.file.openPdf"),
         pdfOther: {
-          panels: r.panels.list().filter((p) => p.id.startsWith("media.paged.pdf")).length,
-          commands: r.commands.list().filter((c) => c.id.startsWith("media.paged.pdf")).length,
-          exporters: r.exporters.list().filter((e) => e.id.startsWith("media.paged.pdf")).length,
-          editContexts: r.editContexts.list().filter((e) => e.type === "pdf").length,
+          panels: r.panels
+            .list()
+            .filter((p) => p.id.startsWith("media.paged.pdf")).length,
+          commands: r.commands
+            .list()
+            .filter((c) => c.id.startsWith("media.paged.pdf")).length,
+          exporters: r.exporters
+            .list()
+            .filter((e) => e.id.startsWith("media.paged.pdf")).length,
+          editContexts: r.editContexts.list().filter((e) => e.type === "pdf")
+            .length,
         },
       };
     });
@@ -1094,10 +1235,16 @@ test.describe("plugin surface · paged.pdf", () => {
     expect(live.importer!.mimeTypes).toContain("application/pdf");
 
     // REACHABLE through every door the registry offers.
-    expect(live.byName, "resolve() claims a .pdf by extension").toBe(PDF_IMPORTER);
-    expect(live.byUpperName, "extension matching is case-insensitive").toBe(PDF_IMPORTER);
+    expect(live.byName, "resolve() claims a .pdf by extension").toBe(
+      PDF_IMPORTER,
+    );
+    expect(live.byUpperName, "extension matching is case-insensitive").toBe(
+      PDF_IMPORTER,
+    );
     expect(live.byMime, "resolve() also claims it by MIME").toBe(PDF_IMPORTER);
-    expect(live.accept, "the picker's accept union carries .pdf").toContain(".pdf");
+    expect(live.accept, "the picker's accept union carries .pdf").toContain(
+      ".pdf",
+    );
 
     // AND THE ONLY OTHER SURFACE IT HAS IS THE HOST'S. paged.pdf is the
     // one bundle with a File-menu item, and the plugin did not ask for
@@ -1133,10 +1280,18 @@ test.describe("plugin surface · paged.pdf", () => {
     await designer.open();
     await designer.newDocument();
 
-    const rect = await designer.drawRectangle({ x0: 120, y0: 140, x1: 380, y1: 340 });
+    const rect = await designer.drawRectangle({
+      x0: 120,
+      y0: 140,
+      x1: 380,
+      y1: 340,
+    });
     expect(rect, "authored unsaved work").not.toBe("");
     await designer.applyFill("rectangle", rect, "Color/Black");
-    expect(await treeCount(page, "rectangle"), "the work is in the document").toBe(1);
+    expect(
+      await treeCount(page, "rectangle"),
+      "the work is in the document",
+    ).toBe(1);
 
     const chooser = page.waitForEvent("filechooser", { timeout: 15_000 });
     const opened = invoke(page, OPEN_PDF_COMMAND);
@@ -1171,7 +1326,10 @@ test.describe("plugin surface · paged.pdf", () => {
     }
 
     const { pageCount } = await designer.handle();
-    expect(pageCount, "a fresh document from the PDF replaced the old one").toBeGreaterThan(0);
+    expect(
+      pageCount,
+      "a fresh document from the PDF replaced the old one",
+    ).toBeGreaterThan(0);
     // eslint-disable-next-line no-console
     console.log(
       `[plugin-surface] paged.pdf destructive open: authored rectangle gone, pages=${pageCount}`,
@@ -1194,9 +1352,13 @@ test.describe("plugin surface · paged.publish", () => {
       const r = (globalThis as unknown as CanvasProbe).__canvas.registries;
       return {
         importer:
-          r.importers.list().find((i) => i.id === "media.paged.publish.importer.idml") ?? null,
+          r.importers
+            .list()
+            .find((i) => i.id === "media.paged.publish.importer.idml") ?? null,
         exporter:
-          r.exporters.list().find((e) => e.id === "media.paged.publish.exporter.idml") ?? null,
+          r.exporters
+            .list()
+            .find((e) => e.id === "media.paged.publish.exporter.idml") ?? null,
         byName: r.importers.resolve("layout.idml")?.id ?? null,
         byPaged: r.importers.resolve("layout.paged")?.id ?? null,
         accept: r.importers.acceptExtensions(),
@@ -1206,7 +1368,9 @@ test.describe("plugin surface · paged.publish", () => {
         docByName: r.importers.resolve("memo.docx")?.id ?? null,
         pdfByName: r.importers.resolve("brochure.pdf")?.id ?? null,
         publishOther: {
-          panels: r.panels.list().filter((p) => p.id.startsWith("media.paged.publish")).length,
+          panels: r.panels
+            .list()
+            .filter((p) => p.id.startsWith("media.paged.publish")).length,
           commands: r.commands
             .list()
             .filter((c) => c.id.startsWith("media.paged.publish")).length,
@@ -1220,7 +1384,9 @@ test.describe("plugin surface · paged.publish", () => {
     expect(live.exporter!.extension).toBe(".idml");
 
     expect(live.byName, "resolve() claims a .idml").toBe(PUBLISH_IMPORTER);
-    expect(live.accept, "the picker's accept union carries .idml").toContain(".idml");
+    expect(live.accept, "the picker's accept union carries .idml").toContain(
+      ".idml",
+    );
 
     // The importer-registry UNION — the four bundles do not collide.
     expect(live.docByName, ".docx routes to paged.doc").toBe(DOC_IMPORTER);
@@ -1277,7 +1443,9 @@ test.describe("plugin surface · paged.publish", () => {
       };
     }, PUBLISH_EXPORTER);
 
-    expect("reason" in out ? out.reason : "", "the IDML exporter drove").toBe("");
+    expect("reason" in out ? out.reason : "", "the IDML exporter drove").toBe(
+      "",
+    );
     if (!("reason" in out)) {
       expect(out.magic.startsWith("PK"), "IDML is a ZIP (PK…)").toBe(true);
       expect(out.byteLength).toBeGreaterThan(1000);
@@ -1311,7 +1479,11 @@ test.describe("plugin surface · host-hardcoded chrome", () => {
       (globalThis as unknown as CanvasProbe).__canvas.registries.menus
         .list()
         .filter((m) => m.path.startsWith("Data/"))
-        .map((m) => ({ path: m.path, command: m.command, disabled: m.disabled === true })),
+        .map((m) => ({
+          path: m.path,
+          command: m.command,
+          disabled: m.disabled === true,
+        })),
     );
     // The host's three rows are still here and still first. paged.data
     // now MERGES its own verbs into the same menu (F1), so this asserts
@@ -1324,7 +1496,10 @@ test.describe("plugin surface · host-hardcoded chrome", () => {
       "Data/Dataset preview…",
     ];
     for (const row of hostRows) {
-      expect(dataMenu.map((m) => m.path), `${row} survives`).toContain(row);
+      expect(
+        dataMenu.map((m) => m.path),
+        `${row} survives`,
+      ).toContain(row);
     }
     expect(
       dataMenu.length,
@@ -1349,7 +1524,9 @@ test.describe("plugin surface · host-hardcoded chrome", () => {
 
     // Through the real MenuBar. Data is a context menu now (it shows while
     // a binding is selected or entered); Data layout keeps it on the bar.
-    await page.evaluate(() => (globalThis as unknown as CanvasProbe).__canvas.setMode("data"));
+    await page.evaluate(() =>
+      (globalThis as unknown as CanvasProbe).__canvas.setMode("data"),
+    );
     await page
       .locator('nav[aria-label="Main menu"]')
       .getByRole("button", { name: "Data" })
@@ -1366,15 +1543,22 @@ test.describe("plugin surface · host-hardcoded chrome", () => {
     //    carries "Data sources" / "Bindings" / "Dataset preview" — the
     //    panels' own names — and each one RAISES a live paged.data panel.
     //    So the verbs exist; only the menu is dead.
-    await page.evaluate(() => (globalThis as unknown as CanvasProbe).__canvas.setMode("data"));
+    await page.evaluate(() =>
+      (globalThis as unknown as CanvasProbe).__canvas.setMode("data"),
+    );
     for (const [action, panel] of [
       ["data-sources", "media.paged.data.panel.sources"],
       ["data-mapping", "media.paged.data.panel.bindings"],
       ["data-generate", "media.paged.data.panel.dataset"],
     ] as const) {
       const pill = page.locator(`[data-cockpit-action="${action}"]`);
-      await expect(pill, `the ${action} pill is present`).toBeVisible({ timeout: 10_000 });
-      await expect(pill, `the ${action} pill is LIVE, not a soon-stub`).toBeEnabled();
+      await expect(pill, `the ${action} pill is present`).toBeVisible({
+        timeout: 10_000,
+      });
+      await expect(
+        pill,
+        `the ${action} pill is LIVE, not a soon-stub`,
+      ).toBeEnabled();
       await pill.click();
       await expect
         .poll(async () => (await panelState(page)).active, { timeout: 10_000 })
@@ -1386,7 +1570,9 @@ test.describe("plugin surface · host-hardcoded chrome", () => {
     //    requests no such thing: `cockpit-modes.ts` PANEL_RAIL hardcodes
     //    the bindings panel by id, exactly as it hardcodes Data mode's
     //    slots. The contract has no door for either.
-    await page.evaluate(() => (globalThis as unknown as CanvasProbe).__canvas.setMode("design"));
+    await page.evaluate(() =>
+      (globalThis as unknown as CanvasProbe).__canvas.setMode("design"),
+    );
     await expect(
       page.locator('[data-panel-rail-item="media.paged.data.panel.bindings"]'),
       "the host puts data's bindings panel in the rail",
@@ -1395,7 +1581,9 @@ test.describe("plugin surface · host-hardcoded chrome", () => {
     // No OTHER bundle got a rail slot — the asymmetry is the finding.
     const railPluginItems = await page
       .locator('[data-panel-rail-item^="media.paged."]')
-      .evaluateAll((els) => els.map((e) => e.getAttribute("data-panel-rail-item")));
+      .evaluateAll((els) =>
+        els.map((e) => e.getAttribute("data-panel-rail-item")),
+      );
     expect(railPluginItems).toEqual(["media.paged.data.panel.bindings"]);
   });
 });

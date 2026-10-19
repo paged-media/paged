@@ -79,7 +79,12 @@ export function useKeyboardShortcuts(ctx: ShortcutContext) {
         return;
       }
 
-      if (e.key === "PageDown" || e.key === "PageUp" || e.key === "Home" || e.key === "End") {
+      if (
+        e.key === "PageDown" ||
+        e.key === "PageUp" ||
+        e.key === "Home" ||
+        e.key === "End"
+      ) {
         if (rects.length === 0) return;
         // Determine the page closest to viewport centre — used as
         // the "current" page for relative navigation.

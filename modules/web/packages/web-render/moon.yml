@@ -1,22 +1,22 @@
-$schema: '../../../../.moon/cache/schemas/project.json'
+$schema: "../../../../.moon/cache/schemas/project.json"
 
 # web-render: the standalone Cargo workspace inside modules/web that lowers
 # Blitz's paint output to the scene-layer IR. modules/web builds its wasm.
-language: 'rust'
-layer: 'library'
-stack: 'systems'
-tags: ['rust', 'module']
+language: "rust"
+layer: "library"
+stack: "systems"
+tags: ["rust", "module"]
 
 project:
-  title: 'modules/web/packages/web-render'
-  description: 'Blitz display list to scene-layer lowering (paged.web engine).'
+  title: "modules/web/packages/web-render"
+  description: "Blitz display list to scene-layer lowering (paged.web engine)."
 
 tasks:
   rust-fmt:
-    command: 'cargo fmt --check'
+    command: "cargo fmt --check"
 
   rust-lint:
-    description: 'clippy as web-rust runs it: default features, blitz, blitz + perf-counters.'
+    description: "clippy as web-rust runs it: default features, blitz, blitz + perf-counters."
     script: >-
       cargo clippy --all-targets -- -D warnings
       && cargo clippy --all-targets --features blitz -- -D warnings

@@ -36,7 +36,9 @@ const __dirname = dirname(__filename);
 const REPO_ROOT = pathResolve(__dirname, "..", "..", "..");
 const FIXTURE = `${REPO_ROOT}/corpus/idml/generated/text.idml`;
 
-async function seedCaret(page: import("@playwright/test").Page): Promise<boolean> {
+async function seedCaret(
+  page: import("@playwright/test").Page,
+): Promise<boolean> {
   return page.evaluate(async () => {
     const c = (
       globalThis as unknown as {

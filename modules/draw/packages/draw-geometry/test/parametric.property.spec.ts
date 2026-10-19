@@ -51,7 +51,9 @@ const sweep = fc
   .map(([m, neg]) => (neg ? -m : m))
   .filter((s) => {
     const quarters = Math.min(Math.abs(s), TAU) / (Math.PI / 2);
-    return Math.abs(quarters - Math.round(quarters)) > 0.02 || Math.abs(s) > TAU;
+    return (
+      Math.abs(quarters - Math.round(quarters)) > 0.02 || Math.abs(s) > TAU
+    );
   });
 
 const bad = fc.constantFrom(Number.NaN, Infinity, -Infinity);
@@ -59,104 +61,161 @@ const bad = fc.constantFrom(Number.NaN, Infinity, -Infinity);
 describe("parametric — arcPath (properties)", () => {
   it("starts at the start angle, ends a (clamped) sweep later, and every anchor is ON the ellipse", () => {
     fc.assert(
-      fc.property(smallVec2, radius, radius, angleRad, sweep, fc.boolean(), (c, rx, ry, start, sw, closed) => {
-        const t = arcPath(c[0], c[1], rx, ry, start, sw, closed);
-        const clamped = Math.sign(sw) * Math.min(Math.abs(sw), TAU);
-        const at = (th: number): Vec2 => [c[0] + rx * Math.cos(th), c[1] + ry * Math.sin(th)];
-        const tol = 1e-9 * Math.max(1, rx, ry, Math.abs(c[0]), Math.abs(c[1]));
-        expect(t.subpathStarts).toEqual([0]);
-        expect(t.subpathOpen).toEqual([!closed]);
-        expect(t.anchors).toHaveLength(Math.ceil(Math.abs(clamped) / (Math.PI / 2)) + 1);
-        assertVecClose(t.anchors[0].anchor, at(start), tol, "first anchor");
-        assertVecClose(t.anchors[t.anchors.length - 1].anchor, at(start + clamped), tol, "last anchor");
-        for (const a of t.anchors) {
-          assertClose(
-            Math.hypot((a.anchor[0] - c[0]) / rx, (a.anchor[1] - c[1]) / ry),
-            1,
-            1e-9,
-            "anchor radial ratio",
+      fc.property(
+        smallVec2,
+        radius,
+        radius,
+        angleRad,
+        sweep,
+        fc.boolean(),
+        (c, rx, ry, start, sw, closed) => {
+          const t = arcPath(c[0], c[1], rx, ry, start, sw, closed);
+          const clamped = Math.sign(sw) * Math.min(Math.abs(sw), TAU);
+          const at = (th: number): Vec2 => [
+            c[0] + rx * Math.cos(th),
+            c[1] + ry * Math.sin(th),
+          ];
+          const tol =
+            1e-9 * Math.max(1, rx, ry, Math.abs(c[0]), Math.abs(c[1]));
+          expect(t.subpathStarts).toEqual([0]);
+          expect(t.subpathOpen).toEqual([!closed]);
+          expect(t.anchors).toHaveLength(
+            Math.ceil(Math.abs(clamped) / (Math.PI / 2)) + 1,
           );
-        }
-      }),
+          assertVecClose(t.anchors[0].anchor, at(start), tol, "first anchor");
+          assertVecClose(
+            t.anchors[t.anchors.length - 1].anchor,
+            at(start + clamped),
+            tol,
+            "last anchor",
+          );
+          for (const a of t.anchors) {
+            assertClose(
+              Math.hypot((a.anchor[0] - c[0]) / rx, (a.anchor[1] - c[1]) / ry),
+              1,
+              1e-9,
+              "anchor radial ratio",
+            );
+          }
+        },
+      ),
     );
   });
 
   it("follows the ellipse between its anchors (to the κ error) and turns the way the sweep's sign says", () => {
     fc.assert(
-      fc.property(smallVec2, radius, radius, angleRad, sweep, (c, rx, ry, start, sw) => {
-        const t = arcPath(c[0], c[1], rx, ry, start, sw);
-        const clamped = Math.sign(sw) * Math.min(Math.abs(sw), TAU);
-        const n = t.anchors.length - 1;
-        for (const p of flattenAnchorRun(t.anchors, { samplesPerSegment: 8 })) {
-          assertClose(Math.hypot((p[0] - c[0]) / rx, (p[1] - c[1]) / ry), 1, 3e-4, "radial ratio");
-        }
-        // Slice midpoints, against the ellipse at the middle angle.
-        for (let i = 0; i < n; i++) {
-          const a = t.anchors[i];
-          const b = t.anchors[i + 1];
-          const mid: Vec2 = [
-            (a.anchor[0] + 3 * a.right[0] + 3 * b.left[0] + b.anchor[0]) / 8,
-            (a.anchor[1] + 3 * a.right[1] + 3 * b.left[1] + b.anchor[1]) / 8,
-          ];
-          const th = start + ((i + 0.5) * clamped) / n;
-          assertVecClose(
-            mid,
-            [c[0] + rx * Math.cos(th), c[1] + ry * Math.sin(th)],
-            3e-4 * Math.max(rx, ry),
-            `slice ${i} midpoint`,
-          );
-        }
-      }),
+      fc.property(
+        smallVec2,
+        radius,
+        radius,
+        angleRad,
+        sweep,
+        (c, rx, ry, start, sw) => {
+          const t = arcPath(c[0], c[1], rx, ry, start, sw);
+          const clamped = Math.sign(sw) * Math.min(Math.abs(sw), TAU);
+          const n = t.anchors.length - 1;
+          for (const p of flattenAnchorRun(t.anchors, {
+            samplesPerSegment: 8,
+          })) {
+            assertClose(
+              Math.hypot((p[0] - c[0]) / rx, (p[1] - c[1]) / ry),
+              1,
+              3e-4,
+              "radial ratio",
+            );
+          }
+          // Slice midpoints, against the ellipse at the middle angle.
+          for (let i = 0; i < n; i++) {
+            const a = t.anchors[i];
+            const b = t.anchors[i + 1];
+            const mid: Vec2 = [
+              (a.anchor[0] + 3 * a.right[0] + 3 * b.left[0] + b.anchor[0]) / 8,
+              (a.anchor[1] + 3 * a.right[1] + 3 * b.left[1] + b.anchor[1]) / 8,
+            ];
+            const th = start + ((i + 0.5) * clamped) / n;
+            assertVecClose(
+              mid,
+              [c[0] + rx * Math.cos(th), c[1] + ry * Math.sin(th)],
+              3e-4 * Math.max(rx, ry),
+              `slice ${i} midpoint`,
+            );
+          }
+        },
+      ),
     );
   });
 
   it("its two ends are corners outward; its interior anchors are smooth", () => {
     fc.assert(
-      fc.property(smallVec2, radius, radius, angleRad, sweep, (c, rx, ry, start, sw) => {
-        const { anchors } = arcPath(c[0], c[1], rx, ry, start, sw);
-        const last = anchors.length - 1;
-        expect(anchors[0].left).toEqual(anchors[0].anchor);
-        expect(anchors[last].right).toEqual(anchors[last].anchor);
-        const tol = 1e-9 * Math.max(1, rx, ry, Math.abs(c[0]), Math.abs(c[1]));
-        for (let i = 1; i < last; i++) {
-          const a = anchors[i];
-          assertVecClose(
-            a.left,
-            [2 * a.anchor[0] - a.right[0], 2 * a.anchor[1] - a.right[1]],
-            tol,
-            `anchor ${i} handles`,
-          );
-        }
-      }),
+      fc.property(
+        smallVec2,
+        radius,
+        radius,
+        angleRad,
+        sweep,
+        (c, rx, ry, start, sw) => {
+          const { anchors } = arcPath(c[0], c[1], rx, ry, start, sw);
+          const last = anchors.length - 1;
+          expect(anchors[0].left).toEqual(anchors[0].anchor);
+          expect(anchors[last].right).toEqual(anchors[last].anchor);
+          const tol =
+            1e-9 * Math.max(1, rx, ry, Math.abs(c[0]), Math.abs(c[1]));
+          for (let i = 1; i < last; i++) {
+            const a = anchors[i];
+            assertVecClose(
+              a.left,
+              [2 * a.anchor[0] - a.right[0], 2 * a.anchor[1] - a.right[1]],
+              tol,
+              `anchor ${i} handles`,
+            );
+          }
+        },
+      ),
     );
   });
 
   it("a sweep of a full turn or more closes onto its own start", () => {
     fc.assert(
-      fc.property(smallVec2, radius, radius, angleRad, real(TAU, 5 * TAU), fc.boolean(), (c, rx, ry, start, m, neg) => {
-        const { anchors } = arcPath(c[0], c[1], rx, ry, start, neg ? -m : m);
-        expect(anchors).toHaveLength(5);
-        assertVecClose(
-          anchors[4].anchor,
-          anchors[0].anchor,
-          1e-9 * Math.max(1, rx, ry, Math.abs(c[0]), Math.abs(c[1])),
-        );
-      }),
+      fc.property(
+        smallVec2,
+        radius,
+        radius,
+        angleRad,
+        real(TAU, 5 * TAU),
+        fc.boolean(),
+        (c, rx, ry, start, m, neg) => {
+          const { anchors } = arcPath(c[0], c[1], rx, ry, start, neg ? -m : m);
+          expect(anchors).toHaveLength(5);
+          assertVecClose(
+            anchors[4].anchor,
+            anchors[0].anchor,
+            1e-9 * Math.max(1, rx, ry, Math.abs(c[0]), Math.abs(c[1])),
+          );
+        },
+      ),
     );
   });
 
   it("degenerate input is an empty table, never a throw", () => {
     const nonPositive = real(-50, 0);
     fc.assert(
-      fc.property(smallVec2, radius, angleRad, sweep, nonPositive, bad, (c, r, start, sw, zero, nan) => {
-        expect(arcPath(c[0], c[1], zero, r, start, sw)).toEqual(EMPTY);
-        expect(arcPath(c[0], c[1], r, zero, start, sw)).toEqual(EMPTY);
-        expect(arcPath(c[0], c[1], r, r, start, 0)).toEqual(EMPTY);
-        expect(arcPath(nan, c[1], r, r, start, sw)).toEqual(EMPTY);
-        expect(arcPath(c[0], c[1], r, nan, start, sw)).toEqual(EMPTY);
-        expect(arcPath(c[0], c[1], r, r, nan, sw)).toEqual(EMPTY);
-        expect(arcPath(c[0], c[1], r, r, start, nan)).toEqual(EMPTY);
-      }),
+      fc.property(
+        smallVec2,
+        radius,
+        angleRad,
+        sweep,
+        nonPositive,
+        bad,
+        (c, r, start, sw, zero, nan) => {
+          expect(arcPath(c[0], c[1], zero, r, start, sw)).toEqual(EMPTY);
+          expect(arcPath(c[0], c[1], r, zero, start, sw)).toEqual(EMPTY);
+          expect(arcPath(c[0], c[1], r, r, start, 0)).toEqual(EMPTY);
+          expect(arcPath(nan, c[1], r, r, start, sw)).toEqual(EMPTY);
+          expect(arcPath(c[0], c[1], r, nan, start, sw)).toEqual(EMPTY);
+          expect(arcPath(c[0], c[1], r, r, nan, sw)).toEqual(EMPTY);
+          expect(arcPath(c[0], c[1], r, r, start, nan)).toEqual(EMPTY);
+        },
+      ),
     );
   });
 });
@@ -168,54 +227,79 @@ describe("parametric — spiralPath (properties)", () => {
 
   it("puts anchor i at angle i·2π/n and radius r0·decay^(i/n)", () => {
     fc.assert(
-      fc.property(smallVec2, radius, decay, turns, perTurn, (c, r0, d, tn, n) => {
-        const t = spiralPath(c[0], c[1], r0, d, tn, n);
-        expect(t.subpathStarts).toEqual([0]);
-        expect(t.subpathOpen).toEqual([true]);
-        expect(t.anchors).toHaveLength(Math.max(1, Math.round(tn * n)) + 1);
-        t.anchors.forEach((a, i) => {
-          const th = (i * TAU) / n;
-          const r = r0 * Math.pow(d, i / n);
-          assertVecClose(
-            a.anchor,
-            [c[0] + r * Math.cos(th), c[1] + r * Math.sin(th)],
-            1e-9 * Math.max(1, r, Math.abs(c[0]), Math.abs(c[1])),
-            `anchor ${i}`,
-          );
-        });
-      }),
+      fc.property(
+        smallVec2,
+        radius,
+        decay,
+        turns,
+        perTurn,
+        (c, r0, d, tn, n) => {
+          const t = spiralPath(c[0], c[1], r0, d, tn, n);
+          expect(t.subpathStarts).toEqual([0]);
+          expect(t.subpathOpen).toEqual([true]);
+          expect(t.anchors).toHaveLength(Math.max(1, Math.round(tn * n)) + 1);
+          t.anchors.forEach((a, i) => {
+            const th = (i * TAU) / n;
+            const r = r0 * Math.pow(d, i / n);
+            assertVecClose(
+              a.anchor,
+              [c[0] + r * Math.cos(th), c[1] + r * Math.sin(th)],
+              1e-9 * Math.max(1, r, Math.abs(c[0]), Math.abs(c[1])),
+              `anchor ${i}`,
+            );
+          });
+        },
+      ),
     );
   });
 
   it("is smooth through every interior anchor and a corner at both ends", () => {
     fc.assert(
-      fc.property(smallVec2, radius, decay, turns, perTurn, (c, r0, d, tn, n) => {
-        const { anchors } = spiralPath(c[0], c[1], r0, d, tn, n);
-        const last = anchors.length - 1;
-        expect(anchors[0].left).toEqual(anchors[0].anchor);
-        expect(anchors[last].right).toEqual(anchors[last].anchor);
-        for (let i = 1; i < last; i++) {
-          const a = anchors[i];
-          const r = Math.hypot(a.anchor[0] - c[0], a.anchor[1] - c[1]);
-          assertVecClose(
-            a.left,
-            [2 * a.anchor[0] - a.right[0], 2 * a.anchor[1] - a.right[1]],
-            1e-9 * Math.max(1, r, Math.abs(c[0]), Math.abs(c[1])),
-            `anchor ${i} handles`,
-          );
-        }
-      }),
+      fc.property(
+        smallVec2,
+        radius,
+        decay,
+        turns,
+        perTurn,
+        (c, r0, d, tn, n) => {
+          const { anchors } = spiralPath(c[0], c[1], r0, d, tn, n);
+          const last = anchors.length - 1;
+          expect(anchors[0].left).toEqual(anchors[0].anchor);
+          expect(anchors[last].right).toEqual(anchors[last].anchor);
+          for (let i = 1; i < last; i++) {
+            const a = anchors[i];
+            const r = Math.hypot(a.anchor[0] - c[0], a.anchor[1] - c[1]);
+            assertVecClose(
+              a.left,
+              [2 * a.anchor[0] - a.right[0], 2 * a.anchor[1] - a.right[1]],
+              1e-9 * Math.max(1, r, Math.abs(c[0]), Math.abs(c[1])),
+              `anchor ${i} handles`,
+            );
+          }
+        },
+      ),
     );
   });
 
   it("with decay 1 is a circle of radius r0, to the κ error", () => {
     fc.assert(
-      fc.property(smallVec2, radius, turns, fc.integer({ min: 4, max: 24 }), (c, r0, tn, n) => {
-        const { anchors } = spiralPath(c[0], c[1], r0, 1, tn, n);
-        for (const p of flattenAnchorRun(anchors, { samplesPerSegment: 8 })) {
-          assertClose(Math.hypot(p[0] - c[0], p[1] - c[1]) / r0, 1, 3e-4, "radius ratio");
-        }
-      }),
+      fc.property(
+        smallVec2,
+        radius,
+        turns,
+        fc.integer({ min: 4, max: 24 }),
+        (c, r0, tn, n) => {
+          const { anchors } = spiralPath(c[0], c[1], r0, 1, tn, n);
+          for (const p of flattenAnchorRun(anchors, { samplesPerSegment: 8 })) {
+            assertClose(
+              Math.hypot(p[0] - c[0], p[1] - c[1]) / r0,
+              1,
+              3e-4,
+              "radius ratio",
+            );
+          }
+        },
+      ),
     );
   });
 
@@ -240,7 +324,12 @@ describe("parametric — spiralPath (properties)", () => {
             ];
             const th = ((i + 0.5) * TAU) / n;
             const r = r0 * Math.pow(d, (i + 0.5) / n);
-            assertVecClose(mid, [r * Math.cos(th), r * Math.sin(th)], 0.01 * r, `segment ${i}`);
+            assertVecClose(
+              mid,
+              [r * Math.cos(th), r * Math.sin(th)],
+              0.01 * r,
+              `segment ${i}`,
+            );
           }
         },
       ),
@@ -271,7 +360,10 @@ describe("parametric — rectGridPaths (properties)", () => {
       real(1, 400),
       real(1, 400),
     )
-    .map(([top, left, h, w]) => [top, left, top + h, left + w] as [number, number, number, number]);
+    .map(
+      ([top, left, h, w]) =>
+        [top, left, top + h, left + w] as [number, number, number, number],
+    );
   const cells = fc.integer({ min: 1, max: 12 });
 
   it("is rows+1 horizontal lines then cols+1 vertical ones, evenly spaced, border included", () => {
@@ -284,7 +376,8 @@ describe("parametric — rectGridPaths (properties)", () => {
         lines.forEach((line, k) => {
           expect(line.anchors).toHaveLength(2);
           expect(line.subpathOpen).toEqual([true]);
-          for (const a of line.anchors) assertTrue(isCornerAnchor(a), "a grid line has handles");
+          for (const a of line.anchors)
+            assertTrue(isCornerAnchor(a), "a grid line has handles");
           const [p, q] = line.anchors.map((a) => a.anchor);
           if (k <= rows) {
             const y = top + ((bottom - top) * k) / rows;
@@ -338,18 +431,29 @@ describe("parametric — rectGridPaths (properties)", () => {
   // ------------------------------------------------------------------
   it("FIXED DEFECT (minimal counterexample): a fractional row count still closes the border", () => {
     const lines = rectGridPaths([0, 0, 10, 10], 2.5, 2);
-    const horizontals = lines.filter((l) => l.anchors[0].anchor[1] === l.anchors[1].anchor[1]);
-    expect(Math.max(...horizontals.map((l) => l.anchors[0].anchor[1]))).toBe(10);
+    const horizontals = lines.filter(
+      (l) => l.anchors[0].anchor[1] === l.anchors[1].anchor[1],
+    );
+    expect(Math.max(...horizontals.map((l) => l.anchors[0].anchor[1]))).toBe(
+      10,
+    );
     expect(horizontals.map((l) => l.anchors[0].anchor[1])).toEqual([0, 5, 10]);
   });
 
   it("FIXED DEFECT: property — a fractional count is the grid of its floor, border and all", () => {
     fc.assert(
-      fc.property(box, cells, cells, real(0, 0.99), real(0, 0.99), (bounds, rows, cols, dr, dc) => {
-        expect(rectGridPaths(bounds, rows + dr, cols + dc)).toEqual(
-          rectGridPaths(bounds, rows, cols),
-        );
-      }),
+      fc.property(
+        box,
+        cells,
+        cells,
+        real(0, 0.99),
+        real(0, 0.99),
+        (bounds, rows, cols, dr, dc) => {
+          expect(rectGridPaths(bounds, rows + dr, cols + dc)).toEqual(
+            rectGridPaths(bounds, rows, cols),
+          );
+        },
+      ),
     );
   });
 });

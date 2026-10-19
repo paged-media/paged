@@ -24,7 +24,9 @@ import { describe, expect, it } from "bun:test";
 import { movePixels, nudgeFor } from "../src/move-tool";
 import type { ImageSession } from "../src/session";
 
-function sessionWith(selection: { x: number; y: number; w: number; h: number } | null) {
+function sessionWith(
+  selection: { x: number; y: number; w: number; h: number } | null,
+) {
   const calls: string[] = [];
   const session = {
     state: () => ({ selection, source: { width: 10, height: 10 } }),

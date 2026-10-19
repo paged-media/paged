@@ -29,14 +29,25 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import type { BundleHost, ElementId, PageId } from "@paged-media/plugin-api";
-import { createHeadlessHost, defineBundle, type HeadlessHost } from "@paged-media/plugin-sdk";
+import {
+  createHeadlessHost,
+  defineBundle,
+  type HeadlessHost,
+} from "@paged-media/plugin-sdk";
 
 import manifestJson from "../manifest.json";
-import { mergeRecords, pageElements, readMergeTemplate, type RecordsPerPage } from "../src/merge";
+import {
+  mergeRecords,
+  pageElements,
+  readMergeTemplate,
+  type RecordsPerPage,
+} from "../src/merge";
 import { ENGINE_ANCHOR, fixedFrom, REQUIRE_REAL_CORE } from "./real-core";
 import { bootRealEngine, DATA_JS_WASM } from "./real-duckdb";
 
-const LANE = fileURLToPath(new URL("../../../conformance/indesign-merge/", import.meta.url));
+const LANE = fileURLToPath(
+  new URL("../../../conformance/indesign-merge/", import.meta.url),
+);
 const spec = JSON.parse(readFileSync(join(LANE, "fixtures.json"), "utf8"));
 const TODAY = 20613;
 const TOL = 0.5;
@@ -85,9 +96,13 @@ function parseCsv(text: string): string[][] {
 
 /** The CSV as a data-core RecordSet, every field TEXT, an empty field null. */
 function textRecordSet(id: string) {
-  const [header, ...rows] = parseCsv(readFileSync(join(LANE, "csv", `${id}.csv`), "utf8"));
+  const [header, ...rows] = parseCsv(
+    readFileSync(join(LANE, "csv", `${id}.csv`), "utf8"),
+  );
   return {
-    schema: { fields: header.map((name) => ({ name, ty: "text", nullable: true })) },
+    schema: {
+      fields: header.map((name) => ({ name, ty: "text", nullable: true })),
+    },
     columns: header.map((_, c) =>
       rows.map((r) => (r[c] === "" ? { t: "null" } : { t: "text", v: r[c] })),
     ),
@@ -96,13 +111,17 @@ function textRecordSet(id: string) {
 }
 
 const normalise = (s: string) => s.replace(/\r/g, "\n").replace(/\uFEFF/g, "");
-const near = (a: number[], b: number[]) => a.every((v, i) => Math.abs(v - b[i]) <= TOL);
+const near = (a: number[], b: number[]) =>
+  a.every((v, i) => Math.abs(v - b[i]) <= TOL);
 
 /** A host in this plugin's namespace (labels go under x-paged:media.paged.data). */
-async function openTemplate(id: string): Promise<{ h: HeadlessHost; host: BundleHost }> {
-  const h = await createHeadlessHost({ console: silent, resolveFrom: ENGINE_ANCHOR! } as Parameters<
-    typeof createHeadlessHost
-  >[0]);
+async function openTemplate(
+  id: string,
+): Promise<{ h: HeadlessHost; host: BundleHost }> {
+  const h = await createHeadlessHost({
+    console: silent,
+    resolveFrom: ENGINE_ANCHOR!,
+  } as Parameters<typeof createHeadlessHost>[0]);
   await h.load(readFileSync(join(LANE, "templates", `${id}.idml`)));
   let captured: BundleHost | null = null;
   h.loadBundle(
@@ -117,7 +136,10 @@ async function openTemplate(id: string): Promise<{ h: HeadlessHost; host: Bundle
   return { h, host: captured! };
 }
 
-function mergeOptions(fx: any): { recordsPerPage: RecordsPerPage; removeBlankLines: boolean } {
+function mergeOptions(fx: any): {
+  recordsPerPage: RecordsPerPage;
+  removeBlankLines: boolean;
+} {
   const m = fx.merge;
   return {
     recordsPerPage:
@@ -135,7 +157,10 @@ function mergeOptions(fx: any): { recordsPerPage: RecordsPerPage; removeBlankLin
 
 /** The story text of the frame at a page-local point, with its bounds. */
 async function frameAt(host: BundleHost, pageId: PageId, b: number[]) {
-  const hit = await host.document.hitTest(pageId, [(b[1] + b[3]) / 2, (b[0] + b[2]) / 2]);
+  const hit = await host.document.hitTest(pageId, [
+    (b[1] + b[3]) / 2,
+    (b[0] + b[2]) / 2,
+  ]);
   if (!hit?.frameId || !hit.storyId || !hit.frameBounds) return null;
   const content = await host.document.storyContent(hit.storyId);
   const f = hit.frameBounds;
@@ -143,7 +168,11 @@ async function frameAt(host: BundleHost, pageId: PageId, b: number[]) {
     frameId: hit.frameId,
     storyId: hit.storyId,
     bounds: [f.top, f.left, f.bottom, f.right],
-    text: content ? content.paragraphs.map((p) => p.runs.map((r) => r.text).join("")).join("\n") : "",
+    text: content
+      ? content.paragraphs
+          .map((p) => p.runs.map((r) => r.text).join(""))
+          .join("\n")
+      : "",
   };
 }
 
@@ -157,46 +186,80 @@ describe.skipIf(!ready && !REQUIRE_REAL_CORE)(
 
     for (const id of BR_BETWEEN_PLACEHOLDERS) {
       // Fixed in core 0.70 (protocol 70): the break stays between them.
-      fixedFrom(70, it)(`DEFECT core <70: ${id}'s template reads back with its line break inside the next placeholder [data.lower.merge-writer]`, async () => {
-        const fx = (spec.fixtures as any[]).find((f) => f.id === id);
-        const { h, host } = await openTemplate(id);
-        hosts.push(h);
-        const { template } = await readMergeTemplate(host);
-        expect(template!.spec.frames[0].content).toEqual({
-          kind: "text",
-          text: fx.frames.find((f: any) => f.kind === "text").lines.join("\n"),
-        });
-      });
+      fixedFrom(70, it)(
+        `DEFECT core <70: ${id}'s template reads back with its line break inside the next placeholder [data.lower.merge-writer]`,
+        async () => {
+          const fx = (spec.fixtures as any[]).find((f) => f.id === id);
+          const { h, host } = await openTemplate(id);
+          hosts.push(h);
+          const { template } = await readMergeTemplate(host);
+          expect(template!.spec.frames[0].content).toEqual({
+            kind: "text",
+            text: fx.frames
+              .find((f: any) => f.kind === "text")
+              .lines.join("\n"),
+          });
+        },
+      );
     }
 
     for (const fx of spec.fixtures as any[]) {
       it(`${fx.id}: pages, frames, texts, overset and images match InDesign; undo restores the template [data.lower.merge-writer]`, async () => {
-        expect(ready, "real core and the data-js wasm must be available").toBe(true);
-        const rec = JSON.parse(readFileSync(join(LANE, "recorded", `${fx.id}.json`), "utf8"));
+        expect(ready, "real core and the data-js wasm must be available").toBe(
+          true,
+        );
+        const rec = JSON.parse(
+          readFileSync(join(LANE, "recorded", `${fx.id}.json`), "utf8"),
+        );
         const { h, host } = await openTemplate(fx.id);
         hosts.push(h);
         const engine = await bootRealEngine(TODAY);
-        engine.define_query({ id: "q", sql: "", params: [], shape: { shape: "recordStream" } });
+        engine.define_query({
+          id: "q",
+          sql: "",
+          params: [],
+          shape: { shape: "recordStream" },
+        });
         engine.ingest_result("q", textRecordSet(fx.id));
 
         // The template, read off the page, is the one the fixture describes.
         const tree = await host.document.tree();
-        const rects = pageElements(tree, 0).filter((e) => e.kind === "rectangle");
+        const rects = pageElements(tree, 0).filter(
+          (e) => e.kind === "rectangle",
+        );
         const imageFrame = fx.frames.find((f: any) => f.kind === "image");
         const imageFields: Record<string, string> = {};
         if (imageFrame) imageFields[rects[0].id as string] = imageFrame.field;
-        const { template, diagnostics } = await readMergeTemplate(host, { imageFields });
+        const { template, diagnostics } = await readMergeTemplate(host, {
+          imageFields,
+        });
         expect(diagnostics).toEqual([]);
         expect(template).not.toBeNull();
-        expect(template!.spec.frames.map((f) => f.bounds.every((v, i) => Math.abs(v - fx.frames.find((x: any) => x.kind === f.content.kind).bounds[i]) <= TOL))).toEqual(
-          template!.spec.frames.map(() => true),
-        );
-        const textFrame = template!.spec.frames.find((f) => f.content.kind === "text")!;
-        const expected = fx.frames.find((f: any) => f.kind === "text").lines.join("\n");
+        expect(
+          template!.spec.frames.map((f) =>
+            f.bounds.every(
+              (v, i) =>
+                Math.abs(
+                  v -
+                    fx.frames.find((x: any) => x.kind === f.content.kind)
+                      .bounds[i],
+                ) <= TOL,
+            ),
+          ),
+        ).toEqual(template!.spec.frames.map(() => true));
+        const textFrame = template!.spec.frames.find(
+          (f) => f.content.kind === "text",
+        )!;
+        const expected = fx.frames
+          .find((f: any) => f.kind === "text")
+          .lines.join("\n");
         if ((textFrame.content as { text: string }).text !== expected) {
           // Only where the core import defect below is pinned; the writer is
           // then checked on the template text InDesign holds.
-          expect(BR_BETWEEN_PLACEHOLDERS.has(fx.id), `template text of ${fx.id}`).toBe(true);
+          expect(
+            BR_BETWEEN_PLACEHOLDERS.has(fx.id),
+            `template text of ${fx.id}`,
+          ).toBe(true);
           textFrame.content = { kind: "text", text: expected };
         }
 
@@ -210,47 +273,81 @@ describe.skipIf(!ready && !REQUIRE_REAL_CORE)(
           imageBase: join(LANE, "images"),
           pageHandles,
         });
-        expect(result.diagnostics.filter((d) => !d.includes("overset"))).toEqual([]);
+        expect(
+          result.diagnostics.filter((d) => !d.includes("overset")),
+        ).toEqual([]);
         expect(result.ok).toBe(true);
         // One undo step when the merge fits the template page or the engine
         // names the pages it mints in the batch (protocol 69); two otherwise.
-        expect(result.mutateCalls).toBe(rec.merged.page_count > 1 && !pageHandles ? 2 : 1);
+        expect(result.mutateCalls).toBe(
+          rec.merged.page_count > 1 && !pageHandles ? 2 : 1,
+        );
 
         // ── read back, independently of the plan ─────────────────────────
-        const pages = await host.document.collection<{ selfId: string }>("pages");
+        const pages = await host.document.collection<{ selfId: string }>(
+          "pages",
+        );
         expect(pages.length).toBe(rec.merged.page_count);
-        const links = await host.document.collection<{ hostSelfId: string; uri: string }>("links");
+        const links = await host.document.collection<{
+          hostSelfId: string;
+          uri: string;
+        }>("links");
         const after = await host.document.tree();
         const oversetByStory = new Map<string, boolean>();
-        for (const r of result.records) for (const f of r.frames) if (f.storyId) oversetByStory.set(f.storyId, f.overset);
+        for (const r of result.records)
+          for (const f of r.frames)
+            if (f.storyId) oversetByStory.set(f.storyId, f.overset);
 
         for (let p = 0; p < pages.length; p++) {
           const page = rec.merged.pages[p];
           const pageId = pages[p].selfId as PageId;
           const items = pageElements(after, p);
-          expect(items.filter((e) => e.kind === "textFrame").length, `page ${p + 1} text frames`).toBe(page.text_frames.length);
+          expect(
+            items.filter((e) => e.kind === "textFrame").length,
+            `page ${p + 1} text frames`,
+          ).toBe(page.text_frames.length);
           for (const tf of page.text_frames) {
             const ours = await frameAt(host, pageId, tf.bounds);
-            expect(ours, `page ${p + 1}: no frame at ${tf.bounds}`).not.toBeNull();
-            expect(near(ours!.bounds, tf.bounds), `page ${p + 1}: ${ours!.bounds} vs ${tf.bounds}`).toBe(true);
+            expect(
+              ours,
+              `page ${p + 1}: no frame at ${tf.bounds}`,
+            ).not.toBeNull();
+            expect(
+              near(ours!.bounds, tf.bounds),
+              `page ${p + 1}: ${ours!.bounds} vs ${tf.bounds}`,
+            ).toBe(true);
             const theirs = normalise(tf.text);
-            if (tf.overset) expect(ours!.text.startsWith(theirs.trimEnd())).toBe(true);
+            if (tf.overset)
+              expect(ours!.text.startsWith(theirs.trimEnd())).toBe(true);
             else expect(ours!.text).toBe(theirs);
-            expect(oversetByStory.get(ours!.storyId) ?? false, `overset of "${theirs.slice(0, 20)}"`).toBe(tf.overset);
+            expect(
+              oversetByStory.get(ours!.storyId) ?? false,
+              `overset of "${theirs.slice(0, 20)}"`,
+            ).toBe(tf.overset);
           }
-          const rectIds = new Set(items.filter((e) => e.kind === "rectangle").map((e) => e.id as string));
+          const rectIds = new Set(
+            items
+              .filter((e) => e.kind === "rectangle")
+              .map((e) => e.id as string),
+          );
           const names = links
             .filter((l) => rectIds.has(l.hostSelfId))
             .map((l) => l.uri.split("/").pop())
             .sort();
-          const recorded = page.rectangles.map((r: any) => r.graphic?.name).filter(Boolean).sort();
+          const recorded = page.rectangles
+            .map((r: any) => r.graphic?.name)
+            .filter(Boolean)
+            .sort();
           expect(names, `page ${p + 1} images`).toEqual(recorded);
         }
 
         // ── undo restores the template ──────────────────────────────────────
         for (let i = 0; i < result.mutateCalls; i++) await host.document.undo();
         expect((await host.document.collection("pages")).length).toBe(1);
-        const restored = pageElements(await host.document.tree(), 0) as ElementId[];
+        const restored = pageElements(
+          await host.document.tree(),
+          0,
+        ) as ElementId[];
         expect(restored.map((e) => e.id).sort()).toEqual(
           template!.frames.map((f) => f.element.id as string).sort(),
         );
@@ -273,26 +370,39 @@ describe.skipIf(!ready && !REQUIRE_REAL_CORE)(
               };
             }
             if (p === "elementGeometry" && strip) {
-              return async (ids: Parameters<BundleHost["document"]["elementGeometry"]>[0]) =>
+              return async (
+                ids: Parameters<BundleHost["document"]["elementGeometry"]>[0],
+              ) =>
                 (await o.elementGeometry(ids)).map((g) => {
-                  const { pageOrigin: _origin, ...rest } = g as typeof g & { pageOrigin?: unknown };
+                  const { pageOrigin: _origin, ...rest } = g as typeof g & {
+                    pageOrigin?: unknown;
+                  };
                   return rest;
                 });
             }
             return Reflect.get(o, p, r);
           },
         });
-        return new Proxy(host, { get: (o, p, r) => (p === "document" ? doc : Reflect.get(o, p, r)) });
+        return new Proxy(host, {
+          get: (o, p, r) => (p === "document" ? doc : Reflect.get(o, p, r)),
+        });
       };
       const direct = await readMergeTemplate(counted(false));
       expect(direct.template, direct.diagnostics.join("; ")).not.toBeNull();
-      const named = (await host.document.elementGeometry(direct.template!.frames.map((f) => f.element))).some(
-        (g) => (g as { pageOrigin?: unknown }).pageOrigin != null,
-      );
-      if (named) expect(hits, "no probe where the engine names the page's origin").toBe(0);
+      const named = (
+        await host.document.elementGeometry(
+          direct.template!.frames.map((f) => f.element),
+        )
+      ).some((g) => (g as { pageOrigin?: unknown }).pageOrigin != null);
+      if (named)
+        expect(hits, "no probe where the engine names the page's origin").toBe(
+          0,
+        );
       hits = 0;
       const probed = await readMergeTemplate(counted(true));
-      expect(hits, "the probe ran without the page's origin").toBeGreaterThan(0);
+      expect(hits, "the probe ran without the page's origin").toBeGreaterThan(
+        0,
+      );
       expect(probed.template?.spec).toEqual(direct.template!.spec);
     });
   },

@@ -123,7 +123,10 @@ describe("rdp — simplifyRdp / simplifyRdpIndices (properties)", () => {
     fc.assert(
       fc.property(stroke, tolerance, (points, tol) => {
         expect(simplifyRdp(points, tol)).toEqual(
-          simplifyRdpIndices(points, tol).map((i) => [points[i][0], points[i][1]]),
+          simplifyRdpIndices(points, tol).map((i) => [
+            points[i][0],
+            points[i][1],
+          ]),
         );
       }),
     );
@@ -179,7 +182,10 @@ describe("rdp — simplifyRdp / simplifyRdpIndices (properties)", () => {
     fc.assert(
       fc.property(polyline(2, 40), (points) => {
         const m = magnitude(...points);
-        expect(simplifyRdpIndices(points, 4 * m)).toEqual([0, points.length - 1]);
+        expect(simplifyRdpIndices(points, 4 * m)).toEqual([
+          0,
+          points.length - 1,
+        ]);
       }),
     );
   });

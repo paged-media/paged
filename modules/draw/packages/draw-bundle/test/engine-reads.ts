@@ -33,7 +33,9 @@ import type { BundleHost } from "@paged-media/plugin-api";
  *  the tree once (call it on the RAW host, outside any counted span). */
 export async function metadataReadsPerLeaf(host: BundleHost): Promise<0 | 1> {
   let carries = false;
-  const walk = (nodes: readonly { children?: unknown[]; pluginMetadata?: unknown }[]) => {
+  const walk = (
+    nodes: readonly { children?: unknown[]; pluginMetadata?: unknown }[],
+  ) => {
     for (const n of nodes) {
       if (Array.isArray(n.pluginMetadata)) carries = true;
       if (n.children) walk(n.children as never);

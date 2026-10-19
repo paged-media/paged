@@ -64,7 +64,11 @@ import type {
   PropertySchema,
   TypedCommandContribution,
 } from "@paged-media/plugin-api";
-import { escapeLabelValue, fromElementId, parseAddress } from "@paged-media/plugin-sdk";
+import {
+  escapeLabelValue,
+  fromElementId,
+  parseAddress,
+} from "@paged-media/plugin-sdk";
 
 import manifestJson from "../manifest.json" with { type: "json" };
 import { DocEngine } from "./engine.js";
@@ -83,23 +87,41 @@ type KindName = "docxDocument" | "block" | "run" | "mergeField";
 
 /** The schema rows the manifest declares for `kind` (one declaration). */
 export function schemaOf(kind: KindName): readonly PropertySchema[] {
-  const k = manifestJson.contributes.objectModel.kinds.find((x) => x.kind === kind);
-  if (!k) throw new Error(`paged.doc: the manifest declares no object kind "${kind}"`);
+  const k = manifestJson.contributes.objectModel.kinds.find(
+    (x) => x.kind === kind,
+  );
+  if (!k)
+    throw new Error(
+      `paged.doc: the manifest declares no object kind "${kind}"`,
+    );
   return k.schema as unknown as readonly PropertySchema[];
 }
 
 const decl = (id: string) => {
-  const c = manifestJson.contributes.objectModel.commands.find((x) => x.id === id);
-  if (!c) throw new Error(`paged.doc: the manifest declares no typed command "${id}"`);
-  return c as unknown as Pick<TypedCommandContribution, "id" | "title" | "args" | "result">;
+  const c = manifestJson.contributes.objectModel.commands.find(
+    (x) => x.id === id,
+  );
+  if (!c)
+    throw new Error(
+      `paged.doc: the manifest declares no typed command "${id}"`,
+    );
+  return c as unknown as Pick<
+    TypedCommandContribution,
+    "id" | "title" | "args" | "result"
+  >;
 };
 
 /** The address of one of this bundle's objects. */
-export const docAddress = (kind: KindName, id: string): Address => `plugin:${PLUGIN_ID}/${kind}/${id}`;
+export const docAddress = (kind: KindName, id: string): Address =>
+  `plugin:${PLUGIN_ID}/${kind}/${id}`;
 
 /** The schema-driven panel fields (ADR 323 / Wave 4) for the host's shared
  *  `PropertyField`: what the outline panel shows per selection. */
-export const PANEL_FIELDS: ReadonlyArray<{ kind: KindName; path: string; group: string }> = [
+export const PANEL_FIELDS: ReadonlyArray<{
+  kind: KindName;
+  path: string;
+  group: string;
+}> = [
   { kind: "docxDocument", path: "fileName", group: "Document" },
   { kind: "docxDocument", path: "blockCount", group: "Document" },
   { kind: "docxDocument", path: "mergeFieldNames", group: "Mail merge" },
@@ -125,11 +147,24 @@ const SEG = /^(b|i|c|p|r|f)(\d+)$/;
 
 function parseId(address: Address, kind: KindName): DocId | null {
   const a = parseAddress(address);
-  if (!a || a.kind !== "plugin" || a.plugin !== PLUGIN_ID || a.objectKind !== kind) return null;
+  if (
+    !a ||
+    a.kind !== "plugin" ||
+    a.plugin !== PLUGIN_ID ||
+    a.objectKind !== kind
+  )
+    return null;
   const [frame, ...segs] = a.id.split("/");
   if (!frame) return null;
   const id: DocId = { frame };
-  const key = { b: "block", i: "image", c: "cell", p: "para", r: "run", f: "field" } as const;
+  const key = {
+    b: "block",
+    i: "image",
+    c: "cell",
+    p: "para",
+    r: "run",
+    f: "field",
+  } as const;
   for (const s of segs) {
     const m = SEG.exec(s);
     if (!m) return null;
@@ -139,28 +174,51 @@ function parseId(address: Address, kind: KindName): DocId | null {
   }
   const shape: Record<KindName, (d: DocId) => boolean> = {
     docxDocument: () => segs.length === 0,
-    block: (d) => d.block !== undefined && d.cell === undefined && d.run === undefined && d.field === undefined,
-    run: (d) => d.block !== undefined && d.run !== undefined && (d.cell === undefined) === (d.para === undefined),
-    mergeField: (d) => d.block !== undefined && d.field !== undefined && (d.cell === undefined) === (d.para === undefined),
+    block: (d) =>
+      d.block !== undefined &&
+      d.cell === undefined &&
+      d.run === undefined &&
+      d.field === undefined,
+    run: (d) =>
+      d.block !== undefined &&
+      d.run !== undefined &&
+      (d.cell === undefined) === (d.para === undefined),
+    mergeField: (d) =>
+      d.block !== undefined &&
+      d.field !== undefined &&
+      (d.cell === undefined) === (d.para === undefined),
   };
   return shape[kind](id) ? id : null;
 }
 
 const idText = (d: DocId, tail: string) =>
-  [d.frame, `b${d.block}`, ...(d.cell !== undefined ? [`c${d.cell}`, `p${d.para}`] : []), tail].join("/");
+  [
+    d.frame,
+    `b${d.block}`,
+    ...(d.cell !== undefined ? [`c${d.cell}`, `p${d.para}`] : []),
+    tail,
+  ].join("/");
 
 // ----------------------------------------------------- reading helpers
 
 const val = (value: unknown): ObjectValue => ({ kind: "value", value });
-const refuse = (code: "badAddress" | "unknownAddress" | "unknownPath", reason: string): ObjectValue => ({
+const refuse = (
+  code: "badAddress" | "unknownAddress" | "unknownPath",
+  reason: string,
+): ObjectValue => ({
   kind: "refused",
   code,
   reason,
 });
 
 /** A document's state and lowering by frame id (one discovery per call). */
-async function docOf(host: BundleHost, frame: string): Promise<{ state: DocState; ir: LoweredDoc } | null> {
-  const state = (await discoverDocs(host)).find((s) => (s.frame as { id: string }).id === frame);
+async function docOf(
+  host: BundleHost,
+  frame: string,
+): Promise<{ state: DocState; ir: LoweredDoc } | null> {
+  const state = (await discoverDocs(host)).find(
+    (s) => (s.frame as { id: string }).id === frame,
+  );
   if (!state) return null;
   const ir = await readLowered(host, state);
   return ir ? { state, ir } : null;
@@ -176,13 +234,18 @@ function paragraphOf(ir: LoweredDoc, d: DocId): LoweredParagraph | null {
 }
 
 /** Every paragraph with its id prefix: body paragraphs and table cells. */
-function paragraphs(ir: LoweredDoc, frame: string): Array<{ d: DocId; p: LoweredParagraph }> {
+function paragraphs(
+  ir: LoweredDoc,
+  frame: string,
+): Array<{ d: DocId; p: LoweredParagraph }> {
   const out: Array<{ d: DocId; p: LoweredParagraph }> = [];
   ir.story.blocks.forEach((b, block) => {
     if (b.kind === "paragraph") out.push({ d: { frame, block }, p: b });
     else
       b.cells.forEach((c, cell) =>
-        c.paragraphs.forEach((p, para) => out.push({ d: { frame, block, cell, para }, p })),
+        c.paragraphs.forEach((p, para) =>
+          out.push({ d: { frame, block, cell, para }, p }),
+        ),
       );
   });
   return out;
@@ -199,7 +262,8 @@ function fieldsOf(p: LoweredParagraph): Map<number, number[]> {
   return out;
 }
 
-const textOfParagraph = (p: LoweredParagraph) => p.runs.map((r) => r.text).join("");
+const textOfParagraph = (p: LoweredParagraph) =>
+  p.runs.map((r) => r.text).join("");
 
 // ---------------------------------------------------------- writing
 
@@ -218,13 +282,19 @@ interface DocPlan {
 const utf8 = (s: string) => new TextEncoder().encode(s).length;
 
 /** Plan and turn the per-document plans into ONE ObjectWrite. */
-async function commitPlans(host: BundleHost, plans: Map<string, DocPlan>): Promise<ObjectWrite> {
+async function commitPlans(
+  host: BundleHost,
+  plans: Map<string, DocPlan>,
+): Promise<ObjectWrite> {
   const labels: Array<{ frame: ElementId; text: string }> = [];
   const parts: PartChange[] = [];
   const mutations: MutationInput[] = [];
   for (const plan of plans.values()) {
     const bytes = await readDocBytes(host, plan.state);
-    if (!bytes) throw new Rejected(`the .docx part ${plan.state.data.part} is missing — re-link the document`);
+    if (!bytes)
+      throw new Rejected(
+        `the .docx part ${plan.state.data.part} is missing — re-link the document`,
+      );
     // 1. The .docx, patched by the engine, and its new lowering.
     const engine = await DocEngine.boot();
     let saved: Uint8Array;
@@ -233,11 +303,17 @@ async function commitPlans(host: BundleHost, plans: Map<string, DocPlan>): Promi
       engine.setMidPageColumns(plan.state.data.midPageColumns ?? true);
       let out: { bytes: Uint8Array; skips: string[] };
       try {
-        out = engine.saveObjectEdits({ runs: plan.runs, mergeFields: plan.mergeFields });
+        out = engine.saveObjectEdits({
+          runs: plan.runs,
+          mergeFields: plan.mergeFields,
+        });
       } catch (err) {
         throw new Rejected(String(err instanceof Error ? err.message : err));
       }
-      if (out.skips.length > 0) throw new Rejected(`save-back refused the edit: ${out.skips.join("; ")}`);
+      if (out.skips.length > 0)
+        throw new Rejected(
+          `save-back refused the edit: ${out.skips.join("; ")}`,
+        );
       saved = out.bytes;
     } finally {
       engine.dispose();
@@ -253,13 +329,27 @@ async function commitPlans(host: BundleHost, plans: Map<string, DocPlan>): Promi
     }
     // 2. The native text: each edited run's range in the LIVE story, checked.
     const stories = plan.state.data.sections ?? [];
-    const edits: Array<{ story: string; start: number; end: number; text: string }> = [];
-    const contents = new Map<string, Array<{ runs: Array<{ text: string }> }>>();
+    const edits: Array<{
+      story: string;
+      start: number;
+      end: number;
+      text: string;
+    }> = [];
+    const contents = new Map<
+      string,
+      Array<{ runs: Array<{ text: string }> }>
+    >();
     for (const n of plan.native) {
       const at = bodyRunLocation(plan.ir, n.block, n.run);
-      if (!at) throw new Rejected(`block ${n.block} run ${n.run} has no place in a story this document can write`);
+      if (!at)
+        throw new Rejected(
+          `block ${n.block} run ${n.run} has no place in a story this document can write`,
+        );
       const storyId = stories[at.story];
-      if (!storyId) throw new Rejected("the document's label names no story to write (placed by an older version)");
+      if (!storyId)
+        throw new Rejected(
+          "the document's label names no story to write (placed by an older version)",
+        );
       let paras = contents.get(storyId);
       if (!paras) {
         const c = await host.document.storyContent(storyId);
@@ -275,15 +365,31 @@ async function commitPlans(host: BundleHost, plans: Map<string, DocPlan>): Promi
         );
       }
       let start = 0;
-      for (let k = 0; k < at.paragraph; k += 1) start += utf8(paras[k]!.runs.map((r) => r.text).join("")) + 1;
+      for (let k = 0; k < at.paragraph; k += 1)
+        start += utf8(paras[k]!.runs.map((r) => r.text).join("")) + 1;
       start += utf8(at.prefix);
-      edits.push({ story: storyId, start, end: start + utf8(at.text), text: n.text });
+      edits.push({
+        story: storyId,
+        start,
+        end: start + utf8(at.text),
+        text: n.text,
+      });
     }
     // Back to front, so an edit never moves the offsets of the next.
-    edits.sort((a, b) => (a.story === b.story ? b.start - a.start : a.story < b.story ? -1 : 1));
+    edits.sort((a, b) =>
+      a.story === b.story ? b.start - a.start : a.story < b.story ? -1 : 1,
+    );
     for (const e of edits) {
-      if (e.end > e.start) mutations.push({ op: "deleteRange", args: { storyId: e.story, start: e.start, end: e.end } } as MutationInput);
-      if (e.text.length > 0) mutations.push({ op: "insertText", args: { storyId: e.story, offset: e.start, text: e.text } } as MutationInput);
+      if (e.end > e.start)
+        mutations.push({
+          op: "deleteRange",
+          args: { storyId: e.story, start: e.start, end: e.end },
+        } as MutationInput);
+      if (e.text.length > 0)
+        mutations.push({
+          op: "insertText",
+          args: { storyId: e.story, offset: e.start, text: e.text },
+        } as MutationInput);
     }
     // 3. The new state's parts and the label naming them.
     const next = await plannedState(plan.state, saved, ir);
@@ -295,7 +401,12 @@ async function commitPlans(host: BundleHost, plans: Map<string, DocPlan>): Promi
   for (const l of rest) {
     mutations.push({
       op: "setPluginMetadata",
-      args: { elementId: l.frame, key: LABEL_KEY, value: escapeLabelValue(l.text), caller: PLUGIN_ID },
+      args: {
+        elementId: l.frame,
+        key: LABEL_KEY,
+        value: escapeLabelValue(l.text),
+        caller: PLUGIN_ID,
+      },
     } as MutationInput);
   }
   return {
@@ -312,29 +423,46 @@ async function commitPlans(host: BundleHost, plans: Map<string, DocPlan>): Promi
  *  this bundle's kinds, grouped into ONE plan per document — run and merge
  *  field writes on the same document compose into one save-back and one
  *  label — answered as ONE write. */
-async function planDocOps(host: BundleHost, ops: readonly ObjectOp[]): Promise<ObjectWrite> {
+async function planDocOps(
+  host: BundleHost,
+  ops: readonly ObjectOp[],
+): Promise<ObjectWrite> {
   try {
     const plans = new Map<string, DocPlan>();
     const states = await discoverDocs(host);
     for (const op of ops) {
-      if (op.op !== "set") throw new Rejected(`paged.doc objects take set only (${op.op} refused)`);
+      if (op.op !== "set")
+        throw new Rejected(
+          `paged.doc objects take set only (${op.op} refused)`,
+        );
       const a = parseAddress(op.address);
       const kind = a && a.kind === "plugin" ? a.objectKind : "";
       if (kind !== "run" && kind !== "mergeField") {
-        throw new Rejected(`${op.address}: a Word document is written through its runs and merge fields`);
+        throw new Rejected(
+          `${op.address}: a Word document is written through its runs and merge fields`,
+        );
       }
       const d = parseId(op.address, kind);
       if (!d) throw new Rejected(`${op.address} is not a ${kind} address`);
       if (kind === "run" ? op.path !== "text" : op.path !== "value") {
         throw new Rejected(`${kind}.${op.path} is not writable`);
       }
-      if (d.cell !== undefined) throw new Rejected(`${op.address}: table-cell text is not writable through the object model yet`);
+      if (d.cell !== undefined)
+        throw new Rejected(
+          `${op.address}: table-cell text is not writable through the object model yet`,
+        );
       let p = plans.get(d.frame);
       if (!p) {
-        const state = states.find((s) => (s.frame as { id: string }).id === d.frame);
-        if (!state) throw new Rejected(`${op.address}: no Word document on frame ${d.frame}`);
+        const state = states.find(
+          (s) => (s.frame as { id: string }).id === d.frame,
+        );
+        if (!state)
+          throw new Rejected(
+            `${op.address}: no Word document on frame ${d.frame}`,
+          );
         const ir = await readLowered(host, state);
-        if (!ir) throw new Rejected(`${op.address}: the document's parts are missing`);
+        if (!ir)
+          throw new Rejected(`${op.address}: the document's parts are missing`);
         p = { state, ir, runs: [], mergeFields: [], native: [] };
         plans.set(d.frame, p);
       }
@@ -342,19 +470,27 @@ async function planDocOps(host: BundleHost, ops: readonly ObjectOp[]): Promise<O
       if (!para) throw new Rejected(`${op.address}: no such paragraph`);
       const value = op.value as string;
       if (kind === "run") {
-        if (d.run! >= para.runs.length) throw new Rejected(`${op.address}: no such run`);
+        if (d.run! >= para.runs.length)
+          throw new Rejected(`${op.address}: no such run`);
         p.runs.push({ block: d.block!, run: d.run!, text: value });
         p.native.push({ block: d.block!, run: d.run!, text: value });
       } else {
         const runs = fieldsOf(para).get(d.field!);
         if (!runs) throw new Rejected(`${op.address}: no such merge field`);
         p.mergeFields.push({ block: d.block!, occurrence: d.field!, value });
-        runs.forEach((r, k) => p!.native.push({ block: d.block!, run: r, text: k === 0 ? value : "" }));
+        runs.forEach((r, k) =>
+          p!.native.push({
+            block: d.block!,
+            run: r,
+            text: k === 0 ? value : "",
+          }),
+        );
       }
     }
     return await commitPlans(host, plans);
   } catch (err) {
-    if (err instanceof Rejected) return { kind: "rejected", reason: err.message };
+    if (err instanceof Rejected)
+      return { kind: "rejected", reason: err.message };
     throw err;
   }
 }
@@ -363,7 +499,9 @@ async function planDocOps(host: BundleHost, ops: readonly ObjectOp[]): Promise<O
  *  to: one of this bundle's documents or blocks, or the page item hosting a
  *  document (`<frame> > plugin:media.paged.doc/<kind>` — a panel's
  *  selection). `null` = unscoped. */
-function scopeOf(within: string | undefined): { frame: string; block?: number } | null {
+function scopeOf(
+  within: string | undefined,
+): { frame: string; block?: number } | null {
   if (!within) return null;
   const doc = parseId(within, "docxDocument");
   if (doc) return { frame: doc.frame };
@@ -383,7 +521,9 @@ function documentKind(host: BundleHost): ObjectKindContribution {
     schema: schemaOf("docxDocument"),
     content: {
       kind: "blob",
-      mime: ["application/vnd.openxmlformats-officedocument.wordprocessingml.document"],
+      mime: [
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      ],
     },
     hostOf: (address) => {
       const d = parseId(address, "docxDocument");
@@ -398,9 +538,17 @@ function documentKind(host: BundleHost): ObjectKindContribution {
     },
     async get(address, path) {
       const d = parseId(address, "docxDocument");
-      if (!d) return refuse("badAddress", `${address} is not a Word document address`);
+      if (!d)
+        return refuse(
+          "badAddress",
+          `${address} is not a Word document address`,
+        );
       const doc = await docOf(host, d.frame);
-      if (!doc) return refuse("unknownAddress", `${address}: no Word document on frame ${d.frame}`);
+      if (!doc)
+        return refuse(
+          "unknownAddress",
+          `${address}: no Word document on frame ${d.frame}`,
+        );
       const { state, ir } = doc;
       const all = paragraphs(ir, d.frame);
       switch (path) {
@@ -415,21 +563,28 @@ function documentKind(host: BundleHost): ObjectKindContribution {
         case "blockCount":
           return val(ir.story.blocks.length);
         case "paragraphCount":
-          return val(ir.story.blocks.filter((b) => b.kind === "paragraph").length);
+          return val(
+            ir.story.blocks.filter((b) => b.kind === "paragraph").length,
+          );
         case "tableCount":
           return val(ir.story.blocks.filter((b) => b.kind === "table").length);
         case "imageCount":
           return val(all.reduce((n, x) => n + (x.p.images?.length ?? 0), 0));
         case "mergeFieldNames": {
           const names: string[] = [];
-          for (const { p } of all) for (const r of p.runs) if (r.mergeField && !names.includes(r.mergeField.name)) names.push(r.mergeField.name);
+          for (const { p } of all)
+            for (const r of p.runs)
+              if (r.mergeField && !names.includes(r.mergeField.name))
+                names.push(r.mergeField.name);
           return val(names);
         }
         case "diagnostics":
           return val(ir.diagnostics.map((x) => x.message));
         case "content": {
           const bytes = await readDocBytes(host, state);
-          return bytes ? val(bytes) : refuse("unknownAddress", `${address}: the .docx part is missing`);
+          return bytes
+            ? val(bytes)
+            : refuse("unknownAddress", `${address}: the .docx part is missing`);
         }
         default:
           return refuse("unknownPath", `docxDocument has no path "${path}"`);
@@ -456,19 +611,30 @@ function blockKind(host: BundleHost): ObjectKindContribution {
         const ir = await readLowered(host, s);
         ir?.story.blocks.forEach((b, i) => {
           out.push(docAddress("block", `${frame}/b${i}`));
-          if (b.kind === "paragraph") (b.images ?? []).forEach((_, k) => out.push(docAddress("block", `${frame}/b${i}/i${k}`)));
+          if (b.kind === "paragraph")
+            (b.images ?? []).forEach((_, k) =>
+              out.push(docAddress("block", `${frame}/b${i}/i${k}`)),
+            );
         });
       }
       return out;
     },
     async get(address, path) {
       const d = parseId(address, "block");
-      if (!d) return refuse("badAddress", `${address} is not a Word block address`);
+      if (!d)
+        return refuse("badAddress", `${address} is not a Word block address`);
       const doc = await docOf(host, d.frame);
       const b = doc?.ir.story.blocks[d.block!];
-      if (!doc || !b) return refuse("unknownAddress", `${address}: no such block`);
-      const image = d.image !== undefined ? (b.kind === "paragraph" ? b.images?.[d.image] : undefined) : undefined;
-      if (d.image !== undefined && !image) return refuse("unknownAddress", `${address}: no such picture`);
+      if (!doc || !b)
+        return refuse("unknownAddress", `${address}: no such block`);
+      const image =
+        d.image !== undefined
+          ? b.kind === "paragraph"
+            ? b.images?.[d.image]
+            : undefined
+          : undefined;
+      if (d.image !== undefined && !image)
+        return refuse("unknownAddress", `${address}: no such picture`);
       switch (path) {
         case "kind":
           return val(image ? "image" : b.kind);
@@ -479,11 +645,16 @@ function blockKind(host: BundleHost): ObjectKindContribution {
           if (b.kind === "paragraph") return val(textOfParagraph(b));
           return val(
             Array.from({ length: b.rows }, (_, r) =>
-              b.cells.filter((c) => c.row === r).map((c) => c.paragraphs.map(textOfParagraph).join("\n")).join("\t"),
+              b.cells
+                .filter((c) => c.row === r)
+                .map((c) => c.paragraphs.map(textOfParagraph).join("\n"))
+                .join("\t"),
             ).join("\n"),
           );
         case "paragraphStyle":
-          return val(!image && b.kind === "paragraph" ? (b.paraStyleId ?? null) : null);
+          return val(
+            !image && b.kind === "paragraph" ? (b.paraStyleId ?? null) : null,
+          );
         case "runCount":
           return val(!image && b.kind === "paragraph" ? b.runs.length : 0);
         case "rows":
@@ -521,14 +692,17 @@ function runKind(host: BundleHost): ObjectKindContribution {
         const ir = await readLowered(host, s);
         for (const { d, p } of ir ? paragraphs(ir, frame) : []) {
           if (scope?.block !== undefined && scope.block !== d.block) continue;
-          p.runs.forEach((_, j) => out.push(docAddress("run", idText(d, `r${j}`))));
+          p.runs.forEach((_, j) =>
+            out.push(docAddress("run", idText(d, `r${j}`))),
+          );
         }
       }
       return out;
     },
     async get(address, path) {
       const d = parseId(address, "run");
-      if (!d) return refuse("badAddress", `${address} is not a Word run address`);
+      if (!d)
+        return refuse("badAddress", `${address} is not a Word run address`);
       const doc = await docOf(host, d.frame);
       const r = doc ? paragraphOf(doc.ir, d)?.runs[d.run!] : undefined;
       if (!r) return refuse("unknownAddress", `${address}: no such run`);
@@ -568,18 +742,21 @@ function mergeFieldKind(host: BundleHost): ObjectKindContribution {
         const ir = await readLowered(host, s);
         for (const { d, p } of ir ? paragraphs(ir, frame) : []) {
           if (scoped?.block !== undefined && scoped.block !== d.block) continue;
-          for (const o of fieldsOf(p).keys()) out.push(docAddress("mergeField", idText(d, `f${o}`)));
+          for (const o of fieldsOf(p).keys())
+            out.push(docAddress("mergeField", idText(d, `f${o}`)));
         }
       }
       return out;
     },
     async get(address, path) {
       const d = parseId(address, "mergeField");
-      if (!d) return refuse("badAddress", `${address} is not a merge field address`);
+      if (!d)
+        return refuse("badAddress", `${address} is not a merge field address`);
       const doc = await docOf(host, d.frame);
       const p = doc ? paragraphOf(doc.ir, d) : null;
       const runs = p ? fieldsOf(p).get(d.field!) : undefined;
-      if (!p || !runs) return refuse("unknownAddress", `${address}: no such merge field`);
+      if (!p || !runs)
+        return refuse("unknownAddress", `${address}: no such merge field`);
       const f = p.runs[runs[0]!]!.mergeField!;
       switch (path) {
         case "name":
@@ -597,7 +774,10 @@ function mergeFieldKind(host: BundleHost): ObjectKindContribution {
         case "mapped":
           return val(f.mapped ?? false);
         case "writable":
-          return val(d.cell === undefined && (bodyRunLocation(doc!.ir, d.block!, runs[0]!) !== null));
+          return val(
+            d.cell === undefined &&
+              bodyRunLocation(doc!.ir, d.block!, runs[0]!) !== null,
+          );
         case "runs":
           return val(runs.map((i) => docAddress("run", idText(d, `r${i}`))));
         case "block":
@@ -615,55 +795,94 @@ function mergeFieldKind(host: BundleHost): ObjectKindContribution {
 
 function typedCommands(
   host: BundleHost,
-  place: (name: string, bytes: Uint8Array) => Promise<{ frame: ElementId; story: string | null } | null>,
+  place: (
+    name: string,
+    bytes: Uint8Array,
+  ) => Promise<{ frame: ElementId; story: string | null } | null>,
   exportBytes: (state: DocState) => Promise<Uint8Array | null>,
 ): TypedCommandContribution[] {
-  const cmd = <A>(id: string, handler: TypedCommandContribution<A>["handler"]): TypedCommandContribution =>
+  const cmd = <A>(
+    id: string,
+    handler: TypedCommandContribution<A>["handler"],
+  ): TypedCommandContribution =>
     ({ ...decl(id), handler }) as TypedCommandContribution;
   const docArg = async (ref: string): Promise<DocState> => {
     const d = parseId(ref, "docxDocument");
-    const state = d ? (await discoverDocs(host)).find((s) => (s.frame as { id: string }).id === d.frame) : undefined;
-    if (!state) throw new Error(`invalidValue: ${ref} is not a placed Word document`);
+    const state = d
+      ? (await discoverDocs(host)).find(
+          (s) => (s.frame as { id: string }).id === d.frame,
+        )
+      : undefined;
+    if (!state)
+      throw new Error(`invalidValue: ${ref} is not a placed Word document`);
     return state;
   };
   return [
-    cmd<{ bytes: Uint8Array; fileName: string }>("media.paged.doc.command.placeDoc", async (_ctx, args) => {
-      const placed = await place(args.fileName, args.bytes);
-      if (!placed) throw new Error("failed: the document could not be placed (see the log and diagnostics)");
-      const frame = (placed.frame as { id: string }).id;
-      return {
-        document: docAddress("docxDocument", frame),
-        frame: fromElementId(placed.frame),
-        story: placed.story ? `story:${placed.story}` : "",
-      };
-    }),
-    cmd<{ document: string }>("media.paged.doc.command.exportDocx", async (_ctx, args) => {
-      const state = await docArg(args.document);
-      const bytes = await exportBytes(state);
-      if (!bytes) throw new Error(`failed: ${args.document} has no .docx part to export`);
-      return { bytes, fileName: state.data.fileName ?? "document.docx" };
-    }),
+    cmd<{ bytes: Uint8Array; fileName: string }>(
+      "media.paged.doc.command.placeDoc",
+      async (_ctx, args) => {
+        const placed = await place(args.fileName, args.bytes);
+        if (!placed)
+          throw new Error(
+            "failed: the document could not be placed (see the log and diagnostics)",
+          );
+        const frame = (placed.frame as { id: string }).id;
+        return {
+          document: docAddress("docxDocument", frame),
+          frame: fromElementId(placed.frame),
+          story: placed.story ? `story:${placed.story}` : "",
+        };
+      },
+    ),
+    cmd<{ document: string }>(
+      "media.paged.doc.command.exportDocx",
+      async (_ctx, args) => {
+        const state = await docArg(args.document);
+        const bytes = await exportBytes(state);
+        if (!bytes)
+          throw new Error(
+            `failed: ${args.document} has no .docx part to export`,
+          );
+        return { bytes, fileName: state.data.fileName ?? "document.docx" };
+      },
+    ),
     cmd<{ document: string; values: Record<string, string> }>(
       "media.paged.doc.command.fillMergeFields",
       async (ctx, args) => {
         const state = await docArg(args.document);
         const frame = (state.frame as { id: string }).id;
-        const fields = await ctx.objects.query(`plugin:${PLUGIN_ID}/mergeField`);
+        const fields = await ctx.objects.query(
+          `plugin:${PLUGIN_ID}/mergeField`,
+        );
         const ops: ObjectOp[] = [];
         const seen = new Set<string>();
         for (const address of fields) {
-          if (!address.startsWith(docAddress("mergeField", `${frame}/`))) continue;
+          if (!address.startsWith(docAddress("mergeField", `${frame}/`)))
+            continue;
           const name = await ctx.objects.get(address, "name");
           const n = name.kind === "value" ? (name.value as string) : "";
           if (!Object.prototype.hasOwnProperty.call(args.values, n)) continue;
           seen.add(n);
-          ops.push({ op: "set", address, path: "value", value: args.values[n] });
+          ops.push({
+            op: "set",
+            address,
+            path: "value",
+            value: args.values[n],
+          });
         }
         if (ops.length > 0) {
-          const out = await ctx.objects.batch(ops, { label: "Fill merge fields" });
-          if (!out.applied) throw new Error(`failed: ${out.reason ?? "the fields were not written"}`);
+          const out = await ctx.objects.batch(ops, {
+            label: "Fill merge fields",
+          });
+          if (!out.applied)
+            throw new Error(
+              `failed: ${out.reason ?? "the fields were not written"}`,
+            );
         }
-        return { filled: ops.length, unknown: Object.keys(args.values).filter((k) => !seen.has(k)) };
+        return {
+          filled: ops.length,
+          unknown: Object.keys(args.values).filter((k) => !seen.has(k)),
+        };
       },
     ),
   ];
@@ -673,15 +892,26 @@ function typedCommands(
 
 export interface DocObjectModelDeps {
   /** Place a .docx into the current document (the bundle's embedded place). */
-  place(name: string, bytes: Uint8Array): Promise<{ frame: ElementId; story: string | null } | null>;
+  place(
+    name: string,
+    bytes: Uint8Array,
+  ): Promise<{ frame: ElementId; story: string | null } | null>;
   /** A document's bytes for export: its save-back, or the stored part. */
   exportBytes(state: DocState): Promise<Uint8Array | null>;
 }
 
 /** The bundle's object model over `host` (headless). */
-export function createDocObjectModel(host: BundleHost, deps: DocObjectModelDeps): ObjectModelContribution {
+export function createDocObjectModel(
+  host: BundleHost,
+  deps: DocObjectModelDeps,
+): ObjectModelContribution {
   return {
-    kinds: [documentKind(host), blockKind(host), runKind(host), mergeFieldKind(host)],
+    kinds: [
+      documentKind(host),
+      blockKind(host),
+      runKind(host),
+      mergeFieldKind(host),
+    ],
     commands: typedCommands(host, deps.place, deps.exportBytes),
     batch: (ops) => planDocOps(host, ops),
   };
@@ -689,7 +919,10 @@ export function createDocObjectModel(host: BundleHost, deps: DocObjectModelDeps)
 
 /** Register it when the host has the door (plugin-api 0.2.43); `null` on an
  *  older host. */
-export function contributeDocObjectModel(host: BundleHost, deps: DocObjectModelDeps): ObjectModelHandle | null {
+export function contributeDocObjectModel(
+  host: BundleHost,
+  deps: DocObjectModelDeps,
+): ObjectModelHandle | null {
   if (!host.supports("contribute.objectModel@1")) return null;
   return host.contribute.objectModel(createDocObjectModel(host, deps));
 }

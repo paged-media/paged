@@ -46,7 +46,8 @@ export function systemPrompt(mode: AiMode, catalog: ApiCatalog): string {
   if (mode === "complete") return COMPLETE_SYSTEM;
   const parts = [
     AUTHORING_GUIDE.trim(),
-    "# Engine capability catalog\n\nGenerated from the engine. Where it and the text above disagree, the catalog is right.\n\n" + renderCatalog(catalog),
+    "# Engine capability catalog\n\nGenerated from the engine. Where it and the text above disagree, the catalog is right.\n\n" +
+      renderCatalog(catalog),
   ];
   if (MODE_NOTES[mode]) parts.push(MODE_NOTES[mode]);
   return parts.join("\n\n");
@@ -59,7 +60,9 @@ export interface BuildRequestOptions {
   model?: string;
 }
 
-export function buildRequest(options: BuildRequestOptions): Anthropic.MessageCreateParamsNonStreaming {
+export function buildRequest(
+  options: BuildRequestOptions,
+): Anthropic.MessageCreateParamsNonStreaming {
   const spec = MODE_SPECS[options.mode];
   return {
     model: options.model ?? DEFAULT_MODEL,
@@ -68,7 +71,13 @@ export function buildRequest(options: BuildRequestOptions): Anthropic.MessageCre
     // than left at the model's default.
     thinking: { type: "adaptive" },
     output_config: { effort: spec.effort },
-    system: [{ type: "text", text: systemPrompt(options.mode, options.catalog), cache_control: { type: "ephemeral" } }],
+    system: [
+      {
+        type: "text",
+        text: systemPrompt(options.mode, options.catalog),
+        cache_control: { type: "ephemeral" },
+      },
+    ],
     ...(spec.tools ? { tools: SCRIPT_TOOLS } : {}),
     messages: options.messages,
   };

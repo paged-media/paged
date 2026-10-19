@@ -61,22 +61,72 @@ const PLAIN_TABLE = /^[A-Za-z_][A-Za-z0-9_]*$/;
 /** Words that start or belong to a statement other than a SELECT. Refused
  *  anywhere as bare words (a column with such a name is written quoted). */
 const STATEMENT_WORDS = new Set([
-  "ABORT", "ALTER", "ANALYZE", "ATTACH", "BEGIN", "CALL", "CHECKPOINT", "COMMIT", "COPY",
-  "CREATE", "DEALLOCATE", "DELETE", "DESCRIBE", "DETACH", "DROP", "EXECUTE", "EXPLAIN",
-  "EXPORT", "FORCE", "IMPORT", "INSERT", "INSTALL", "LOAD", "MERGE", "PRAGMA", "PREPARE",
-  "RESET", "ROLLBACK", "SET", "SHOW", "SUMMARIZE", "TRUNCATE", "UPDATE", "UPSERT", "USE",
+  "ABORT",
+  "ALTER",
+  "ANALYZE",
+  "ATTACH",
+  "BEGIN",
+  "CALL",
+  "CHECKPOINT",
+  "COMMIT",
+  "COPY",
+  "CREATE",
+  "DEALLOCATE",
+  "DELETE",
+  "DESCRIBE",
+  "DETACH",
+  "DROP",
+  "EXECUTE",
+  "EXPLAIN",
+  "EXPORT",
+  "FORCE",
+  "IMPORT",
+  "INSERT",
+  "INSTALL",
+  "LOAD",
+  "MERGE",
+  "PRAGMA",
+  "PREPARE",
+  "RESET",
+  "ROLLBACK",
+  "SET",
+  "SHOW",
+  "SUMMARIZE",
+  "TRUNCATE",
+  "UPDATE",
+  "UPSERT",
+  "USE",
   "VACUUM",
 ]);
 /** Words that may open a query. */
 const QUERY_STARTS = new Set(["SELECT", "WITH", "FROM", "VALUES"]);
 /** Words that end a FROM list at their nesting level. */
 const FROM_LIST_ENDS = new Set([
-  "WHERE", "GROUP", "HAVING", "QUALIFY", "WINDOW", "ORDER", "LIMIT", "OFFSET", "UNION",
-  "EXCEPT", "INTERSECT", "SELECT", "FETCH", "USING", "RETURNING",
+  "WHERE",
+  "GROUP",
+  "HAVING",
+  "QUALIFY",
+  "WINDOW",
+  "ORDER",
+  "LIMIT",
+  "OFFSET",
+  "UNION",
+  "EXCEPT",
+  "INTERSECT",
+  "SELECT",
+  "FETCH",
+  "USING",
+  "RETURNING",
 ]);
 /** Functions whose argument syntax uses FROM without naming a table
  *  (`EXTRACT(year FROM d)`, `SUBSTRING(s FROM 2)`, `TRIM(BOTH FROM s)`). */
-const FROM_IN_ARGUMENTS = new Set(["extract", "substring", "trim", "overlay", "position"]);
+const FROM_IN_ARGUMENTS = new Set([
+  "extract",
+  "substring",
+  "trim",
+  "overlay",
+  "position",
+]);
 
 type TokenKind = "word" | "qident" | "string" | "number" | "punct";
 interface Token {
@@ -104,7 +154,10 @@ export function trimSql(sql: string): string {
 }
 
 /** 1-based line/column of a 0-based character offset. */
-export function positionOf(text: string, offset: number): { line: number; column: number } {
+export function positionOf(
+  text: string,
+  offset: number,
+): { line: number; column: number } {
   const before = text.slice(0, Math.max(0, Math.min(offset, text.length)));
   const lines = before.split("\n");
   return { line: lines.length, column: lines[lines.length - 1].length + 1 };
@@ -125,7 +178,8 @@ function lex(text: string): Token[] {
     let v = "";
     i++;
     for (;;) {
-      if (i >= text.length) throw new GuardError(`${what} is not terminated`, at);
+      if (i >= text.length)
+        throw new GuardError(`${what} is not terminated`, at);
       if (text[i] === q) {
         if (text[i + 1] === q) {
           v += q;
@@ -149,7 +203,8 @@ function lex(text: string): Token[] {
       const at = i;
       let depth = 0;
       do {
-        if (i >= text.length) throw new GuardError("a comment is not terminated", at);
+        if (i >= text.length)
+          throw new GuardError("a comment is not terminated", at);
         if (text[i] === "/" && text[i + 1] === "*") {
           depth++;
           i += 2;
@@ -160,23 +215,50 @@ function lex(text: string): Token[] {
       } while (depth > 0);
     } else if (c === "'") {
       const prev = out[out.length - 1];
-      if (prev && lastEnd === i && prev.kind === "word" && /^[eE]$/.test(prev.value)) {
-        throw new GuardError("an escape string (E'…') cannot be used in a data query", prev.at);
+      if (
+        prev &&
+        lastEnd === i &&
+        prev.kind === "word" &&
+        /^[eE]$/.test(prev.value)
+      ) {
+        throw new GuardError(
+          "an escape string (E'…') cannot be used in a data query",
+          prev.at,
+        );
       }
-      if (prev && lastEnd === i && prev.kind === "punct" && prev.value === "&") {
-        throw new GuardError("a Unicode escape string (U&'…') cannot be used in a data query", prev.at);
+      if (
+        prev &&
+        lastEnd === i &&
+        prev.kind === "punct" &&
+        prev.value === "&"
+      ) {
+        throw new GuardError(
+          "a Unicode escape string (U&'…') cannot be used in a data query",
+          prev.at,
+        );
       }
       quoted("'", "string", "a string");
     } else if (c === '"') {
       quoted('"', "qident", "a quoted name");
     } else if (c === "$") {
-      throw new GuardError("dollar-quoted strings and $ parameters cannot be used in a data query", i);
-    } else if (/[0-9]/.test(c) || (c === "." && /[0-9]/.test(text[i + 1] ?? ""))) {
-      const m = /^(?:[0-9][0-9_]*(?:\.[0-9_]*)?|\.[0-9][0-9_]*)(?:[eE][+-]?[0-9]+)?/.exec(text.slice(i))!;
+      throw new GuardError(
+        "dollar-quoted strings and $ parameters cannot be used in a data query",
+        i,
+      );
+    } else if (
+      /[0-9]/.test(c) ||
+      (c === "." && /[0-9]/.test(text[i + 1] ?? ""))
+    ) {
+      const m =
+        /^(?:[0-9][0-9_]*(?:\.[0-9_]*)?|\.[0-9][0-9_]*)(?:[eE][+-]?[0-9]+)?/.exec(
+          text.slice(i),
+        )!;
       push("number", m[0], i, i + m[0].length);
       i += m[0].length;
     } else if (/[A-Za-z_\u0080-\uffff]/.test(c)) {
-      const m = /^[A-Za-z_\u0080-\uffff][A-Za-z0-9_$\u0080-\uffff]*/.exec(text.slice(i))!;
+      const m = /^[A-Za-z_\u0080-\uffff][A-Za-z0-9_$\u0080-\uffff]*/.exec(
+        text.slice(i),
+      )!;
       push("word", m[0], i, i + m[0].length);
       i += m[0].length;
     } else {
@@ -187,8 +269,10 @@ function lex(text: string): Token[] {
   return out;
 }
 
-const isWord = (t: Token | undefined, w: string) => t?.kind === "word" && t.value.toUpperCase() === w;
-const isPunct = (t: Token | undefined, p: string) => t?.kind === "punct" && t.value === p;
+const isWord = (t: Token | undefined, w: string) =>
+  t?.kind === "word" && t.value.toUpperCase() === w;
+const isPunct = (t: Token | undefined, p: string) =>
+  t?.kind === "punct" && t.value === p;
 const OPEN: Record<string, string> = { "(": ")", "[": "]", "{": "}" };
 const CLOSE = new Set([")", "]", "}"]);
 
@@ -202,9 +286,16 @@ const notATable = (name: string) =>
 function walk(tokens: Token[]): void {
   if (tokens.length === 0) throw new GuardError("the query is empty");
   const semi = tokens.find((t) => isPunct(t, ";"));
-  if (semi) throw new GuardError("a data query is exactly one SELECT statement", semi.at);
+  if (semi)
+    throw new GuardError(
+      "a data query is exactly one SELECT statement",
+      semi.at,
+    );
   const first = tokens[0];
-  if (!(isPunct(first, "(") || (first.kind === "word" && QUERY_STARTS.has(first.value.toUpperCase())))) {
+  if (!(
+    isPunct(first, "(") ||
+    (first.kind === "word" && QUERY_STARTS.has(first.value.toUpperCase()))
+  )) {
     throw new GuardError("only a SELECT query can be a data query", first.at);
   }
   for (const t of tokens) {
@@ -236,23 +327,32 @@ function walk(tokens: Token[]): void {
       expectTable = false;
       if (isPunct(t, "(")) {
         // A subquery, or a parenthesised join whose first item is a table.
-        const sub = next?.kind === "word" && QUERY_STARTS.has(next.value.toUpperCase());
+        const sub =
+          next?.kind === "word" && QUERY_STARTS.has(next.value.toUpperCase());
         stack.push({ close: ")", fromList: !sub, callee: "" });
         expectTable = !sub;
         continue;
       }
       if (t.kind === "string") throw new GuardError(notATable(t.value), t.at);
-      if (t.kind !== "word" && t.kind !== "qident") throw new GuardError("a FROM item must be a source table", t.at);
+      if (t.kind !== "word" && t.kind !== "qident")
+        throw new GuardError("a FROM item must be a source table", t.at);
       // A (possibly qualified) name: word or "quoted", joined by dots.
       const parts = [t];
       let j = i;
-      while (isPunct(tokens[j + 1], ".") && (tokens[j + 2]?.kind === "word" || tokens[j + 2]?.kind === "qident")) {
+      while (
+        isPunct(tokens[j + 1], ".") &&
+        (tokens[j + 2]?.kind === "word" || tokens[j + 2]?.kind === "qident")
+      ) {
         parts.push(tokens[j + 2]);
         j += 2;
       }
       const name = parts.map((p) => p.value).join(".");
       if (isPunct(tokens[j + 1], "(")) {
-        if (parts.length === 1 && t.kind === "word" && PURE_TABLE_FUNCTIONS.has(t.value.toLowerCase())) {
+        if (
+          parts.length === 1 &&
+          t.kind === "word" &&
+          PURE_TABLE_FUNCTIONS.has(t.value.toLowerCase())
+        ) {
           i = j;
           continue; // its arguments are expressions: the `(` opens a frame below
         }
@@ -260,7 +360,11 @@ function walk(tokens: Token[]): void {
       }
       const table = parts[parts.length - 1].value;
       const schema = parts.length === 2 ? parts[0].value.toLowerCase() : "";
-      if (!PLAIN_TABLE.test(table) || parts.length > 2 || (parts.length === 2 && schema !== "main")) {
+      if (
+        !PLAIN_TABLE.test(table) ||
+        parts.length > 2 ||
+        (parts.length === 2 && schema !== "main")
+      ) {
         throw new GuardError(notATable(name), t.at);
       }
       i = j;
@@ -277,7 +381,10 @@ function walk(tokens: Token[]): void {
     }
     if (t.kind === "punct" && CLOSE.has(t.value)) {
       if (stack.length === 1 || top().close !== t.value) {
-        throw new GuardError(`unbalanced brackets: "${t.value}" closes nothing`, t.at);
+        throw new GuardError(
+          `unbalanced brackets: "${t.value}" closes nothing`,
+          t.at,
+        );
       }
       stack.pop();
       continue;
@@ -291,7 +398,8 @@ function walk(tokens: Token[]): void {
     if (w === "FROM") {
       const p1 = tokens[i - 1];
       const p2 = tokens[i - 2];
-      const distinctFrom = isWord(p1, "DISTINCT") && (isWord(p2, "IS") || isWord(p2, "NOT"));
+      const distinctFrom =
+        isWord(p1, "DISTINCT") && (isWord(p2, "IS") || isWord(p2, "NOT"));
       if (distinctFrom || FROM_IN_ARGUMENTS.has(top().callee)) continue;
       top().fromList = true;
       expectTable = true;
@@ -301,7 +409,8 @@ function walk(tokens: Token[]): void {
       top().fromList = false;
     }
   }
-  if (stack.length !== 1) throw new GuardError(`unbalanced brackets: a "${top().close}" is missing`);
+  if (stack.length !== 1)
+    throw new GuardError(`unbalanced brackets: a "${top().close}" is missing`);
 }
 
 /** Check one query. Returns null when it may run. Pure: asks DuckDB
@@ -334,9 +443,14 @@ export function previewSql(sql: string, limit: number): string {
 
 /** DuckDB error text → a diagnostic. `lineOffset` is how many lines the
  *  executed statement put in front of the user's query (1 for previewSql). */
-export function diagnoseDuckDBError(err: unknown, lineOffset = 0): SqlDiagnostic {
+export function diagnoseDuckDBError(
+  err: unknown,
+  lineOffset = 0,
+): SqlDiagnostic {
   const text = err instanceof Error ? err.message : String(err);
-  const head = /^(?:Error:\s*)?([A-Za-z]+) Error:\s*([\s\S]*)$/.exec(text.trim());
+  const head = /^(?:Error:\s*)?([A-Za-z]+) Error:\s*([\s\S]*)$/.exec(
+    text.trim(),
+  );
   const kind = head ? head[1] : "Error";
   const body = head ? head[2] : text;
   const lines = body.split("\n");

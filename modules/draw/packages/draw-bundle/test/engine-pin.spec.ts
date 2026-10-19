@@ -32,7 +32,7 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "bun:test";
 
-import { openHost } from "./conformance/host";
+import { openHost } from "./headless/host";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
@@ -42,8 +42,14 @@ describe("the headless harness boots the pinned engine", () => {
       readFileSync(resolve(HERE, "../package.json"), "utf8"),
     ) as { devDependencies: Record<string, string> };
     expect(pkg.devDependencies["@paged-media/canvas-wasm"]).toBe("workspace:*");
-    const resolved = realpathSync(resolve(HERE, "../node_modules/@paged-media/canvas-wasm"));
-    const pinned = (JSON.parse(readFileSync(resolve(resolved, "package.json"), "utf8")) as { version: string }).version;
+    const resolved = realpathSync(
+      resolve(HERE, "../node_modules/@paged-media/canvas-wasm"),
+    );
+    const pinned = (
+      JSON.parse(readFileSync(resolve(resolved, "package.json"), "utf8")) as {
+        version: string;
+      }
+    ).version;
     const h = await openHost();
     try {
       expect(h.engineVersion).toBe(pinned);

@@ -41,7 +41,9 @@ import { openCanvas } from "../fidelity/canvas-driver";
 
 const DOCS = (process.env.REAL_DOCX ?? "").split(",").filter(Boolean);
 const OUT = process.env.REAL_OUT ?? "/tmp";
-const FONT_MODE = (process.env.REAL_FONTS ?? "none") + (process.env.REAL_RELOAD === "1" ? "-reload" : "");
+const FONT_MODE =
+  (process.env.REAL_FONTS ?? "none") +
+  (process.env.REAL_RELOAD === "1" ? "-reload" : "");
 const DF = "/Applications/Microsoft Word.app/Contents/Resources/DFonts";
 const SUPP = "/System/Library/Fonts/Supplemental";
 
@@ -98,7 +100,9 @@ for (const DOC of DOCS) {
     page.on("console", (m) => diag.push(`[${m.type()}] ${m.text()}`));
     await openCanvas(page);
     await page.evaluate(() =>
-      (globalThis as unknown as CanvasGlobal).__canvas.registries.commands.invoke("paged.file.new"),
+      (
+        globalThis as unknown as CanvasGlobal
+      ).__canvas.registries.commands.invoke("paged.file.new"),
     );
     await page.waitForFunction(
       () => (globalThis as unknown as CanvasGlobal).__canvas.ready === true,
@@ -110,8 +114,9 @@ for (const DOC of DOCS) {
         () =>
           page.evaluate(
             () =>
-              (globalThis as unknown as CanvasGlobal).__canvas.registries.importers.resolve("x.docx")
-                ?.id ?? null,
+              (
+                globalThis as unknown as CanvasGlobal
+              ).__canvas.registries.importers.resolve("x.docx")?.id ?? null,
           ),
         { timeout: 30_000 },
       )
@@ -122,23 +127,46 @@ for (const DOC of DOCS) {
       const faces = WORD_FACES.filter(([, , f]) => existsSync(f));
       await page.route("**/__word-fonts/*", (route) => {
         const i = Number(route.request().url().split("/__word-fonts/")[1]);
-        return route.fulfill({ status: 200, contentType: "font/ttf", body: readFileSync(faces[i][2]) });
+        return route.fulfill({
+          status: 200,
+          contentType: "font/ttf",
+          body: readFileSync(faces[i][2]),
+        });
       });
-      await page.evaluate(async (list) => {
-        const c = (globalThis as unknown as {
-          __canvas: { client: { registerFont: (f: string, b: Uint8Array, s: string | null) => Promise<void> } };
-        }).__canvas.client;
-        for (let i = 0; i < list.length; i++) {
-          const res = await fetch(`/__word-fonts/${i}`);
-          await c.registerFont(list[i][0], new Uint8Array(await res.arrayBuffer()), list[i][1]);
-        }
-      }, faces.map(([f, s]) => [f, s] as [string, string | null]));
+      await page.evaluate(
+        async (list) => {
+          const c = (
+            globalThis as unknown as {
+              __canvas: {
+                client: {
+                  registerFont: (
+                    f: string,
+                    b: Uint8Array,
+                    s: string | null,
+                  ) => Promise<void>;
+                };
+              };
+            }
+          ).__canvas.client;
+          for (let i = 0; i < list.length; i++) {
+            const res = await fetch(`/__word-fonts/${i}`);
+            await c.registerFont(
+              list[i][0],
+              new Uint8Array(await res.arrayBuffer()),
+              list[i][1],
+            );
+          }
+        },
+        faces.map(([f, s]) => [f, s] as [string, string | null]),
+      );
     };
     await registerWordFonts();
     const t0 = Date.now();
     const chooser = page.waitForEvent("filechooser");
     const opened = page.evaluate(() =>
-      (globalThis as unknown as CanvasGlobal).__canvas.registries.commands.invoke("paged.file.openIdml"),
+      (
+        globalThis as unknown as CanvasGlobal
+      ).__canvas.registries.commands.invoke("paged.file.openIdml"),
     );
     await (await chooser).setFiles(DOC);
     await opened;
@@ -156,8 +184,20 @@ for (const DOC of DOCS) {
     for (let i = 0; i < 300 && stable < 3; i++) {
       await page.waitForTimeout(2000);
       const n = await page.evaluate(async () => {
-        const c = (globalThis as unknown as { __canvas: { client: { executeScript: (s: string) => Promise<{ output: string[] }> } } }).__canvas.client;
-        return (JSON.parse((await c.executeScript("paged.pages()")).output[0] ?? "[]") as unknown[]).length;
+        const c = (
+          globalThis as unknown as {
+            __canvas: {
+              client: {
+                executeScript: (s: string) => Promise<{ output: string[] }>;
+              };
+            };
+          }
+        ).__canvas.client;
+        return (
+          JSON.parse(
+            (await c.executeScript("paged.pages()")).output[0] ?? "[]",
+          ) as unknown[]
+        ).length;
       });
       stable = n === last ? stable + 1 : 0;
       last = n;
@@ -174,10 +214,22 @@ for (const DOC of DOCS) {
         await c.loadDocument(bytes);
       });
       await page.waitForTimeout(5000);
-      let l2 = -1, st2 = 0;
+      let l2 = -1,
+        st2 = 0;
       for (let i = 0; i < 300 && st2 < 3; i++) {
         await page.waitForTimeout(2000);
-        const n = await page.evaluate(async () => (JSON.parse((await (globalThis as any).__canvas.client.executeScript("paged.pages()")).output[0] ?? "[]") as unknown[]).length);
+        const n = await page.evaluate(
+          async () =>
+            (
+              JSON.parse(
+                (
+                  await (globalThis as any).__canvas.client.executeScript(
+                    "paged.pages()",
+                  )
+                ).output[0] ?? "[]",
+              ) as unknown[]
+            ).length,
+        );
         st2 = n === l2 ? st2 + 1 : 0;
         l2 = n;
       }
@@ -185,31 +237,75 @@ for (const DOC of DOCS) {
 
     const result = await page.evaluate(async () => {
       type Rect = { pageId: string; topPt: number; leftPt: number };
-      const c = (globalThis as unknown as {
-        __canvas: {
-          client: {
-            send: (m: unknown) => Promise<{ kind: string; payload?: { content?: { paragraphs?: Array<{ paragraphStyle?: string; runs: Array<{ text: string }> }> } } }>;
-            selectionGeometry: (s: unknown) => Promise<Rect[]>;
-            paragraphBounds: (id: string, o: number) => Promise<{ start: number; end: number } | null>;
-            executeScript: (s: string) => Promise<{ output: string[] }>;
+      const c = (
+        globalThis as unknown as {
+          __canvas: {
+            client: {
+              send: (m: unknown) => Promise<{
+                kind: string;
+                payload?: {
+                  content?: {
+                    paragraphs?: Array<{
+                      paragraphStyle?: string;
+                      runs: Array<{ text: string }>;
+                    }>;
+                  };
+                };
+              }>;
+              selectionGeometry: (s: unknown) => Promise<Rect[]>;
+              paragraphBounds: (
+                id: string,
+                o: number,
+              ) => Promise<{ start: number; end: number } | null>;
+              executeScript: (s: string) => Promise<{ output: string[] }>;
+            };
           };
-        };
-      }).__canvas.client;
-      const pages = JSON.parse((await c.executeScript("paged.pages()")).output[0] ?? "[]") as Array<Record<string, unknown>>;
+        }
+      ).__canvas.client;
+      const pages = JSON.parse(
+        (await c.executeScript("paged.pages()")).output[0] ?? "[]",
+      ) as Array<Record<string, unknown>>;
       const pageIds = pages.map((p) => p.selfId as string);
-      const stories = JSON.parse((await c.executeScript("paged.stories()")).output[0] ?? "[]") as Array<{ selfId: string }>;
-      const out: Array<{ storyId: string; paras: Array<{ text: string; style?: string; start: number; end: number; pages: number[]; top: number | null }> }> = [];
+      const stories = JSON.parse(
+        (await c.executeScript("paged.stories()")).output[0] ?? "[]",
+      ) as Array<{ selfId: string }>;
+      const out: Array<{
+        storyId: string;
+        paras: Array<{
+          text: string;
+          style?: string;
+          start: number;
+          end: number;
+          pages: number[];
+          top: number | null;
+        }>;
+      }> = [];
       for (const { selfId } of stories) {
-        const r = await c.send({ kind: "requestStoryContent", payload: { storyId: selfId } });
+        const r = await c.send({
+          kind: "requestStoryContent",
+          payload: { storyId: selfId },
+        });
         const content = r.payload?.content?.paragraphs ?? [];
-        const paras: Array<{ text: string; style?: string; start: number; end: number; pages: number[]; top: number | null }> = [];
+        const paras: Array<{
+          text: string;
+          style?: string;
+          start: number;
+          end: number;
+          pages: number[];
+          top: number | null;
+        }> = [];
         let off = 0;
         for (let i = 0; i < content.length; i++) {
           const b = await c.paragraphBounds(selfId, off);
           if (!b) break;
           let rects: Rect[] = [];
           try {
-            rects = await c.selectionGeometry({ storyId: selfId, start: b.start, end: Math.max(b.end, b.start), affinity: false });
+            rects = await c.selectionGeometry({
+              storyId: selfId,
+              start: b.start,
+              end: Math.max(b.end, b.start),
+              affinity: false,
+            });
           } catch {
             rects = [];
           }
@@ -221,11 +317,19 @@ for (const DOC of DOCS) {
             end: b.end,
             pages: pg,
             top: rects.length ? rects[0].topPt : null,
-            lines: new Set(rects.map((x) => `${x.pageId}@${Math.round(x.topPt)}`)).size,
+            lines: new Set(
+              rects.map((x) => `${x.pageId}@${Math.round(x.topPt)}`),
+            ).size,
             // One rect per line: [page, top, left, width, height] in pt.
             rects: rects.map((x) => {
               const q = x as unknown as { widthPt: number; heightPt: number };
-              return [pageIds.indexOf(x.pageId), x.topPt, x.leftPt, q.widthPt, q.heightPt].map((v) => Math.round(v * 100) / 100);
+              return [
+                pageIds.indexOf(x.pageId),
+                x.topPt,
+                x.leftPt,
+                q.widthPt,
+                q.heightPt,
+              ].map((v) => Math.round(v * 100) / 100);
             }),
           } as never);
           if (b.end + 1 <= off) break;
@@ -237,16 +341,46 @@ for (const DOC of DOCS) {
     });
     const name = basename(DOC, ".docx");
     const pdf = await page.evaluate(async () => {
-      const c = (globalThis as unknown as { __canvas: { client: { exportPdf: (o: unknown) => Promise<{ bytes: Uint8Array; diagnostics: string[] }> } } }).__canvas.client;
+      const c = (
+        globalThis as unknown as {
+          __canvas: {
+            client: {
+              exportPdf: (
+                o: unknown,
+              ) => Promise<{ bytes: Uint8Array; diagnostics: string[] }>;
+            };
+          };
+        }
+      ).__canvas.client;
       const r = await c.exportPdf({});
-      return { bytes: Array.from(r.bytes), diagnostics: r.diagnostics.slice(0, 50) };
+      return {
+        bytes: Array.from(r.bytes),
+        diagnostics: r.diagnostics.slice(0, 50),
+      };
     });
-    writeFileSync(`${OUT}/${name}.ours.${FONT_MODE}.pdf`, Buffer.from(pdf.bytes));
+    writeFileSync(
+      `${OUT}/${name}.ours.${FONT_MODE}.pdf`,
+      Buffer.from(pdf.bytes),
+    );
     diag.push(...pdf.diagnostics.map((d) => `[pdf] ${d}`));
     writeFileSync(
       `${OUT}/${name}.ours.${FONT_MODE}.json`,
-      JSON.stringify({ doc: DOC, fontMode: FONT_MODE, openMs, ...result, console: diag.filter((d) => /warn|error|diagnos|doc/i.test(d)).slice(0, 400) }, null, 1),
+      JSON.stringify(
+        {
+          doc: DOC,
+          fontMode: FONT_MODE,
+          openMs,
+          ...result,
+          console: diag
+            .filter((d) => /warn|error|diagnos|doc/i.test(d))
+            .slice(0, 400),
+        },
+        null,
+        1,
+      ),
     );
-    console.log(`${name}: ${result.pages.length} pages, ${result.stories.length} stories, open ${openMs} ms`);
+    console.log(
+      `${name}: ${result.pages.length} pages, ${result.stories.length} stories, open ${openMs} ms`,
+    );
   });
 }

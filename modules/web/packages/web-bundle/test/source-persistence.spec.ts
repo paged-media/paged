@@ -62,22 +62,33 @@ function fakeEngine(opts: { parts?: boolean } = {}): FakeEngine {
   const parts = new Map<string, Uint8Array>();
   const undoStack: Array<() => void> = [];
   const sentLabels: number[] = [];
-  const diagnostics = new Map<string, Array<{ severity: string; message: string }>>();
+  const diagnostics = new Map<
+    string,
+    Array<{ severity: string; message: string }>
+  >();
   let nextId = 1;
   const key = (id: ElementId) => String((id as { id: unknown }).id);
 
   /** The engine's setPluginMetadata: capped, undoable. */
-  const setLabel = (id: string, value: string | null): { applied: boolean; error?: string } => {
+  const setLabel = (
+    id: string,
+    value: string | null,
+  ): { applied: boolean; error?: string } => {
     if (value !== null) {
       sentLabels.push(utf8(value));
       if (utf8(value) > LABEL_CAP) {
-        return { applied: false, error: `metadata value is ${utf8(value)} bytes; the cap is ${LABEL_CAP}` };
+        return {
+          applied: false,
+          error: `metadata value is ${utf8(value)} bytes; the cap is ${LABEL_CAP}`,
+        };
       }
     }
     const prev = labels.get(id);
     if (value === null) labels.delete(id);
     else labels.set(id, value);
-    undoStack.push(() => (prev === undefined ? labels.delete(id) : labels.set(id, prev)));
+    undoStack.push(() =>
+      prev === undefined ? labels.delete(id) : labels.set(id, prev),
+    );
     return { applied: true };
   };
 
@@ -93,8 +104,12 @@ function fakeEngine(opts: { parts?: boolean } = {}): FakeEngine {
       meta: async () => ({ activePage: "p1" }),
       collection: async () => [],
       // insertFrame + setPluginMetadata($created) as ONE atomic batch.
-      mutate: async (m: { op: string; args: { ops: Array<{ op: string; args: Record<string, unknown> }> } }) => {
-        if (m.op !== "batch") throw new Error(`fake engine: unexpected op ${m.op}`);
+      mutate: async (m: {
+        op: string;
+        args: { ops: Array<{ op: string; args: Record<string, unknown> }> };
+      }) => {
+        if (m.op !== "batch")
+          throw new Error(`fake engine: unexpected op ${m.op}`);
         const id = `u${nextId++}`;
         const before = undoStack.length;
         for (const op of m.args.ops) {
@@ -123,7 +138,8 @@ function fakeEngine(opts: { parts?: boolean } = {}): FakeEngine {
     shell: { openPanel: () => {} },
     log: { debug() {}, info() {}, warn() {}, error() {} },
     diagnostics: {
-      set: (k: string, d: Array<{ severity: string; message: string }>) => void diagnostics.set(k, d),
+      set: (k: string, d: Array<{ severity: string; message: string }>) =>
+        void diagnostics.set(k, d),
     },
   } as unknown as BundleHost;
 
@@ -139,13 +155,18 @@ function fakeEngine(opts: { parts?: boolean } = {}): FakeEngine {
 const frame: ElementId = { kind: "rectangle", id: "uF1" } as ElementId;
 const src = (html: string): WebFrameSource => ({ ...DEFAULT_SOURCE, html });
 /** A source whose envelope is well over the label cap. */
-const big = (tag: string): WebFrameSource => src(`<p>${tag}</p>` + "<p>lorem ipsum dolor</p>".repeat(5000));
+const big = (tag: string): WebFrameSource =>
+  src(`<p>${tag}</p>` + "<p>lorem ipsum dolor</p>".repeat(5000));
 
 describe("undo of a save is what every reader sees", () => {
   it("small source: save A, save B, undo → A", async () => {
     const e = fakeEngine();
-    expect((await writeWebSource(e.host, frame, src("<p>A</p>"))).applied).toBe(true);
-    expect((await writeWebSource(e.host, frame, src("<p>B</p>"))).applied).toBe(true);
+    expect((await writeWebSource(e.host, frame, src("<p>A</p>"))).applied).toBe(
+      true,
+    );
+    expect((await writeWebSource(e.host, frame, src("<p>B</p>"))).applied).toBe(
+      true,
+    );
     expect((await loadWebSource(e.host, frame))?.html).toBe("<p>B</p>");
     e.undo();
     expect((await loadWebSource(e.host, frame))?.html).toBe("<p>A</p>");
@@ -155,9 +176,13 @@ describe("undo of a save is what every reader sees", () => {
     const e = fakeEngine();
     expect((await writeWebSource(e.host, frame, big("L1"))).applied).toBe(true);
     expect((await writeWebSource(e.host, frame, big("L2"))).applied).toBe(true);
-    expect((await loadWebSource(e.host, frame))?.html.startsWith("<p>L2</p>")).toBe(true);
+    expect(
+      (await loadWebSource(e.host, frame))?.html.startsWith("<p>L2</p>"),
+    ).toBe(true);
     e.undo();
-    expect((await loadWebSource(e.host, frame))?.html.startsWith("<p>L1</p>")).toBe(true);
+    expect(
+      (await loadWebSource(e.host, frame))?.html.startsWith("<p>L1</p>"),
+    ).toBe(true);
   });
 
   it("undo across the size boundary: save small, save large, undo → small", async () => {
@@ -181,7 +206,11 @@ describe("undo of a save is what every reader sees", () => {
     walk(srcDir);
     const offenders = files
       .filter((f) => !f.endsWith("source-part.ts"))
-      .filter((f) => /getMetadata\(|readSourcePart\(|parts\.read\(/.test(readFileSync(f, "utf8")));
+      .filter((f) =>
+        /getMetadata\(|readSourcePart\(|parts\.read\(/.test(
+          readFileSync(f, "utf8"),
+        ),
+      );
     expect(offenders).toEqual([]);
   });
 });
@@ -201,9 +230,11 @@ describe("sources over the 64 KiB label cap", () => {
     const e = fakeEngine();
     const s = big("import");
     let selected: ElementId[] = [];
-    (e.host.selection as unknown as { set: (ids: ElementId[]) => Promise<void> }).set = async (
-      ids,
-    ) => {
+    (
+      e.host.selection as unknown as {
+        set: (ids: ElementId[]) => Promise<void>;
+      }
+    ).set = async (ids) => {
       selected = ids;
     };
     await insertWebFrame(e.host, "panel", s);
@@ -233,14 +264,20 @@ describe("sources over the 64 KiB label cap", () => {
     const e = fakeEngine({ parts: false });
     await insertWebFrame(e.host, "panel", big("refused-import"));
     const all = [...e.diagnostics.values()].flat();
-    expect(all.some((d) => d.severity === "error" && /64 KiB/.test(d.message))).toBe(true);
+    expect(
+      all.some((d) => d.severity === "error" && /64 KiB/.test(d.message)),
+    ).toBe(true);
   });
 });
 
 describe("documents from the earlier writer (label + `<id>/source.json`)", () => {
   /** What the earlier writer stored: the envelope with no single-writer
    *  marker, as a label (when it fit) and as the legacy part. */
-  const legacyEnvelope = (s: WebFrameSource) => ({ v: 1, data: { ...s }, engine: {} });
+  const legacyEnvelope = (s: WebFrameSource) => ({
+    v: 1,
+    data: { ...s },
+    engine: {},
+  });
   const legacyPart = (s: WebFrameSource) =>
     new TextEncoder().encode(JSON.stringify(legacyEnvelope(s)));
   const countParts = (host: BundleHost) => {
@@ -255,9 +292,14 @@ describe("documents from the earlier writer (label + `<id>/source.json`)", () =>
 
   it("a legacy part over the label cap still wins over the older label it outgrew", async () => {
     const e = fakeEngine();
-    await e.host.document.setMetadata(frame, legacyEnvelope(src("<p>small</p>")) as never);
+    await e.host.document.setMetadata(
+      frame,
+      legacyEnvelope(src("<p>small</p>")) as never,
+    );
     await e.host.parts.write("uF1/source.json", legacyPart(big("legacy")));
-    expect((await loadWebSource(e.host, frame))?.html.startsWith("<p>legacy</p>")).toBe(true);
+    expect(
+      (await loadWebSource(e.host, frame))?.html.startsWith("<p>legacy</p>"),
+    ).toBe(true);
   });
 
   it("a label the single writer wrote reads with NO part read", async () => {
@@ -271,11 +313,16 @@ describe("documents from the earlier writer (label + `<id>/source.json`)", () =>
 
   it("undo back to an earlier-writer label reads the legacy part again", async () => {
     const e = fakeEngine();
-    await e.host.document.setMetadata(frame, legacyEnvelope(src("<p>small</p>")) as never);
+    await e.host.document.setMetadata(
+      frame,
+      legacyEnvelope(src("<p>small</p>")) as never,
+    );
     await e.host.parts.write("uF1/source.json", legacyPart(big("legacy")));
     await writeWebSource(e.host, frame, src("<p>new</p>"));
     expect((await loadWebSource(e.host, frame))?.html).toBe("<p>new</p>");
     e.undo();
-    expect((await loadWebSource(e.host, frame))?.html.startsWith("<p>legacy</p>")).toBe(true);
+    expect(
+      (await loadWebSource(e.host, frame))?.html.startsWith("<p>legacy</p>"),
+    ).toBe(true);
   });
 });
