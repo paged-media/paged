@@ -292,17 +292,66 @@ describe("Pencil tool", () => {
     expectNoCommit(fake);
   });
 
-  // A click is not a stroke: the handler keeps the press and the release
-  // as two samples and commits a path whose two anchors coincide.
-  // Found by these tests (GT-2).
-  test.failing(
-    "[GT-2] a click with the Pencil draws nothing @level:gesture",
-    async () => {
+  // A click is not a stroke. The handler used to keep the press and the
+  // release as two samples and commit a path whose two anchors coincide
+  // (GT-2, found by these tests); the shared PencilMachine cancels a
+  // stroke that simplifies to fewer than two anchors.
+  it("[GT-2] a click with the Pencil draws nothing @level:gesture", async () => {
+    const { fake, g } = harness();
+    await g.tool(createPencilHandler).click([100, 100]).settle();
+    expect(fake.mutations()).toEqual([]);
+  });
+
+  it("lifting within the close distance of the start commits ONE closed path; a pen's closed stroke gets no outline @level:gesture", async () => {
+    covers("tool:paged.tool.pencil");
+    for (const device of ["mouse", "pen"] as const) {
       const { fake, g } = harness();
-      await g.tool(createPencilHandler).click([100, 100]).settle();
-      expect(fake.mutations()).toEqual([]);
-    },
-  );
+      const mark = fake.mark();
+      await g
+        .tool(createPencilHandler)
+        .drag({
+          from: [100, 100],
+          to: [103, 102],
+          via: [
+            [200, 100],
+            [200, 200],
+            [100, 200],
+          ],
+          steps: 4,
+          device,
+          pressureAt: (i, n) => i / n,
+        })
+        .settle();
+      expectOneCommit(fake, mark);
+      const m = insertedAnchors(fake)!;
+      expect(m.open).toBe(false);
+      // The coincident tail is dropped: the closing edge returns to the start.
+      expect(m.anchors[0]!.anchor).toEqual([100, 100]);
+      expect(m.anchors.at(-1)!.anchor).not.toEqual([103, 102]);
+      expect(ops(fake)).not.toContain("outlineStrokeVariable");
+      expect(
+        leaves(fake).some(
+          (l) => (l.args as { path?: string }).path === "outlineStrokeVariable",
+        ),
+      ).toBe(false);
+    }
+  });
+
+  it("ending away from the start keeps the path open @level:gesture", async () => {
+    const { fake, g } = harness();
+    await g
+      .tool(createPencilHandler)
+      .drag({
+        from: [100, 100],
+        to: [130, 200],
+        via: [
+          [200, 100],
+          [200, 200],
+        ],
+      })
+      .settle();
+    expect(insertedAnchors(fake)!.open).toBe(true);
+  });
 });
 
 describe("Type tool (the drag)", () => {

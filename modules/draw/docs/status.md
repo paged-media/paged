@@ -13,10 +13,11 @@ canary added is under [Releases](#releases).
   frames and graphic lines. A double-click on one of these enters the `vectorGraphic` edit
   context; on a host with the binding-provider door, the host's Layers panel then lists the
   entered object and its siblings.
-- **Drawing tools.** Curvature and Pencil insert a path. Paintbrush sweeps a calligraphic
+- **Drawing tools.** Curvature inserts a path. (The Pencil is the host's `paged.tool.pencil`,
+  a shim over this repo's `PencilMachine`, ADR 359.) Paintbrush sweeps a calligraphic
   outline, Blob Brush unites the sweep with a selected element of the same fill, Eraser
   subtracts one from the selected paths. Width outlines an open path at a varying width.
-- **The graphic default.** A path drawn with Curvature or Pencil wears the document's
+- **The graphic default.** A path drawn with Curvature wears the document's
   `[Normal Graphics Frame]` object style (fill, stroke colour and stroke weight), or
   InDesign's own values for it (no fill, a 1 pt `Color/Black` stroke) when the document has
   no such style. The paint is written in the insert's batch, so drawing stays one undo step.
@@ -26,7 +27,7 @@ canary added is under [Releases](#releases).
   Builder, Corner Radius (on rotated and transformed shapes too), Eyedropper, Lasso Select
   (by intersection, or by centre), Live Paint Bucket and Live Paint Selection, Type on a
   Path, Repeat, Knife, and Scissors at any point on a path.
-- **Tool options.** Pencil, Paintbrush, Blob Brush, Eraser, Width and Lasso Select publish
+- **Tool options.** Paintbrush, Blob Brush, Eraser, Width and Lasso Select publish
   their settings to the host's tool-options popover.
 - **Snapping.** Curvature asks the engine through `host.document.snapPoint`: the point
   snaps against every visible element's anchors, centres and outlines, the page, ruler

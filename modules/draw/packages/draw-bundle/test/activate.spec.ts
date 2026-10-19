@@ -150,7 +150,6 @@ describe("drawBundle.activate", () => {
       "media.paged.draw.tool.deleteAnchor",
       "media.paged.draw.tool.convertAnchor",
       "media.paged.draw.tool.curvature",
-      "media.paged.draw.tool.pencil",
       "media.paged.draw.tool.gradientAnnotator",
       "media.paged.draw.tool.measure",
       "media.paged.draw.tool.shapeBuilder",
