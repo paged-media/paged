@@ -213,6 +213,9 @@ export interface PanelHarness<S = undefined> {
   /** A table cell selection. */
   enterTable(cell: TableCellSelection | null): Promise<void>;
 
+  /** Register another panel (one the panel under test opens, links to or
+   *  embeds; the cockpit ignores ids the registry does not have). */
+  registerPanel(contribution: PanelContribution): void;
   /** The panel-rail steer (Properties' empty-selection inspector:
    *  "text" / "image" / "page"), as the rail's buttons set it. */
   steer(context: "text" | "image" | "page" | null): Promise<void>;
@@ -283,12 +286,20 @@ function Registered({
   return present ? <>{children}</> : null;
 }
 
-/** Puts the loaded document into the document context once mounted. */
-function SeedDocument({ handle }: { handle: DocumentHandle | null }) {
-  const { setHandle } = useDocument();
+/** Puts the loaded document, and the resolver pass its load ran, into
+ *  the document context once mounted (the chrome routes both). */
+function SeedDocument({
+  handle,
+  resolution,
+}: {
+  handle: DocumentHandle | null;
+  resolution: unknown;
+}) {
+  const { setHandle, setResolution } = useDocument();
   useLayoutEffect(() => {
     if (handle) setHandle(handle);
-  }, [handle, setHandle]);
+    if (resolution) setResolution(resolution as never);
+  }, [handle, resolution, setHandle, setResolution]);
   return null;
 }
 
@@ -296,12 +307,13 @@ function SeedDocument({ handle }: { handle: DocumentHandle | null }) {
  * What PagedShell's chrome does for the document handle (its worker-
  * message subscriber, PagedShell.tsx): after a change that may add, remove,
  * move or resize pages, re-read the page list and rebuild the handle when
- * it differs. Panels that read `handle.pageCount` / `pageSizesPt` see
- * the pages a test adds, as they do in the app.
+ * it differs; and route the resolver's passes into the document context.
+ * Panels that read `handle.pageCount` / `pageSizesPt` or the resolution
+ * (Outline, TOC readers) see what a test changes, as they do in the app.
  */
 function FollowPages() {
   const client = useCanvasClient();
-  const { handle, setHandle } = useDocument();
+  const { handle, setHandle, setResolution } = useDocument();
   const handleRef = useRef(handle);
   useLayoutEffect(() => {
     handleRef.current = handle;
@@ -332,6 +344,9 @@ function FollowPages() {
         .catch(() => undefined);
     };
     return client.subscribe((msg) => {
+      // The resolver's passes (TOC, cross-references, outline) reach the
+      // document context as they do through the chrome.
+      if (msg.kind === "resolutionDone") setResolution(msg.payload);
       if (
         msg.kind === "mutationApplied" ||
         msg.kind === "undoApplied" ||
@@ -341,7 +356,7 @@ function FollowPages() {
         reread();
       }
     });
-  }, [client, setHandle]);
+  }, [client, setHandle, setResolution]);
   return null;
 }
 
@@ -482,7 +497,7 @@ export async function mountPanel<S = undefined>(
     result = render(
       <ShellProviders client={client}>
         <BridgeCapture onBridge={(next) => (bridge.current = next)} />
-        <SeedDocument handle={handle} />
+        <SeedDocument handle={handle} resolution={engine.lastResolution} />
         <FollowPages />
         <Registered contribution={contribution}>
           <PanelHost id={id} />
@@ -637,6 +652,11 @@ export async function mountPanel<S = undefined>(
       await h.act(() =>
         cell ? b().table.selectCell(cell) : b().table.clearCell(),
       );
+    },
+    registerPanel(contribution) {
+      if (!b().registries.panels.get(contribution.id)) {
+        b().registries.panels.register(contribution);
+      }
     },
     async steer(context) {
       await h.act(() => b().cockpit.setInspectorContext(context));

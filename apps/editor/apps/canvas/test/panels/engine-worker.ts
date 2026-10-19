@@ -63,6 +63,8 @@ type Listener = (event: MessageEvent) => void;
 export class EngineWorker {
   /** Every JSON-channel message, in the order the client posted them. */
   readonly sent: WireMessage[] = [];
+  /** The resolver's last pass (TOC, cross-references), as posted. */
+  lastResolution: unknown = null;
   /** Message kinds the engine answered with a dispatch error. */
   readonly errors: Array<{ kind: string; details: string }> = [];
   private readonly listeners = new Map<string, Set<Listener>>();
@@ -218,11 +220,12 @@ export class EngineWorker {
   private resolve(): void {
     const json = this.engine.runResolveJson();
     if (!json) return;
+    this.lastResolution = JSON.parse(json) as unknown;
     this.emit({
       seq: null,
       protocol: this.engine.protocolVersion,
       kind: "resolutionDone",
-      payload: JSON.parse(json) as unknown,
+      payload: this.lastResolution,
     });
   }
 }
