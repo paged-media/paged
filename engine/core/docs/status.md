@@ -15,8 +15,9 @@ rendered. How the parts fit is in [`architecture.md`](architecture.md).
   the extension contract's `@paged-media/plugin-api` and `@paged-media/plugin-sdk`.
 - **Open and create.** `LoadDocument` opens an `.idml` package or a `.paged` container;
   `NewBlankDocument` and `paged new` make an empty document.
-- **Render.** One display list per page, drawn on the CPU (`paged render`, snapshots) or
-  with Vello on WebGPU (`presentFrame` in the editor wasm, `ViewerSession` in the viewer).
+- **Render.** One display list per page, drawn on the CPU (`paged render`, and editor
+  snapshots without WebGPU) or with Vello on WebGPU (`presentFrame` and editor snapshots in
+  the editor wasm, `ViewerSession` in the viewer; [ADR 188](adr/188-snapshots-draw-on-the-worker-gpu.md)).
 - **Edit.** 137 mutation operations over the wire, batches that are atomic and cost one
   rebuild and one undo step, undo and redo, and engine-minted ids reported in the reply.
 - **Locks and deletes follow InDesign.** A locked item, and the content of a locked container,
@@ -198,7 +199,8 @@ rendered. How the parts fit is in [`architecture.md`](architecture.md).
 
 - **WebGPU is required in the browser.** The viewer rejects when `navigator.gpu` is absent
   and has no CPU page rasteriser. In the editor wasm `presentFrame` returns `false` without a
-  GPU surface; what happens then is the host's choice.
+  GPU surface or after a device loss; `recoverGpu` asks for a new device, and the editor
+  falls back to the CPU when none is granted (ADR 188).
 - **No font and no colour profile is bundled.** Text for which neither a registered font
   nor a default font resolves is not shaped. Without a CMYK profile, CMYK is converted by a
   naive formula.

@@ -72,7 +72,7 @@ export interface DoorContext {
   hostFunctions: ReadonlySet<string>;
   /** Editor command ids registered. */
   editorCommands: ReadonlySet<string>;
-  /** Ops `paged ops --json` lists as invokable (null: no binary). */
+  /** Ops the CLI's `invoke` verb takes (from `paged-cli/cli.json`). */
   cliOps: ReadonlySet<string> | null;
 }
 
@@ -304,12 +304,22 @@ export function run(bin: string, args: string[]): { ok: boolean; out: string } {
   return { ok: r.exitCode === 0, out };
 }
 
-/** `paged ops --json`: the ops the CLI's `invoke` verb takes. */
-export function cliOps(bin: string): Set<string> {
-  const r = run(bin, ["ops", "--json"]);
-  if (!r.ok) throw new Error(`paged ops --json failed: ${r.out}`);
-  const rows = JSON.parse(r.out) as Array<{ op: string; invokable?: boolean }>;
-  return new Set(rows.filter((x) => x.invokable !== false).map((x) => x.op));
+/** The ops the CLI's `invoke` verb takes: its OP argument's values in the
+ *  committed command-line surface (`paged-cli/cli.json`, which a Rust test
+ *  keeps equal to the clap tree), so the column's reach is known without
+ *  the binary; only running it needs one. */
+export function cliOps(): Set<string> {
+  const surface = JSON.parse(
+    readFileSync(join(ROOT, "engine/core/crates/paged-cli/cli.json"), "utf8"),
+  ) as {
+    commands: Array<{
+      name: string;
+      args?: Array<{ name: string; possibleValues?: string[] }>;
+    }>;
+  };
+  const invoke = surface.commands.find((c) => c.name === "invoke");
+  const op = invoke?.args?.find((a) => a.name === "op");
+  return new Set(op?.possibleValues ?? []);
 }
 
 export interface CliDoor {
@@ -319,7 +329,119 @@ export interface CliDoor {
   label: string;
   reaches(ctx: DoorContext, c: ParityCase): boolean;
   /** Run on `input` (a saved precondition); resolves to the saved result. */
-  run(bin: string, c: ParityCase, args: Args, input: Uint8Array): Uint8Array;
+  run(
+    bin: string,
+    c: ParityCase,
+    args: Args,
+    input: Uint8Array,
+  ): Uint8Array | Promise<Uint8Array>;
+}
+
+/** The script a named door runs: the case's Boa call, refused loudly. */
+const caseScript = (c: ParityCase, args: Args) =>
+  `const answer = ${c.boa!(args)};\n` +
+  `if (answer === false || answer === null) throw new Error("paged.${c.boaName ?? c.op} answered " + answer);\n`;
+
+/**
+ * `paged mcp` over stdio, as a model would drive it: the precondition is
+ * imported into a library, `open_document`, `run_script` (the case's Boa
+ * call), `save_document`, and `download_link` hands back the saved
+ * version as a file.
+ */
+async function mcpRun(
+  bin: string,
+  c: ParityCase,
+  args: Args,
+  input: Uint8Array,
+): Promise<Uint8Array> {
+  const keep = process.env["PARITY_KEEP"];
+  const dir = mkdtempSync(join(keep || tmpdir(), "paged-parity-mcp-"));
+  try {
+    const file = join(dir, "parity.paged");
+    const library = join(dir, "library");
+    writeFileSync(file, input);
+    const imported = run(bin, [
+      "library",
+      "import",
+      file,
+      "--name",
+      "parity",
+      "--library",
+      library,
+    ]);
+    if (!imported.ok) throw new Error(`paged library import: ${imported.out}`);
+    const child = Bun.spawn(
+      [bin, "mcp", "--library", library, "--no-default-font"],
+      { stdin: "pipe", stdout: "pipe", stderr: "pipe" },
+    );
+    const reader = child.stdout.getReader();
+    const decoder = new TextDecoder();
+    let buffered = "";
+    const line = async (): Promise<string> => {
+      for (;;) {
+        const nl = buffered.indexOf("\n");
+        if (nl >= 0) {
+          const out = buffered.slice(0, nl);
+          buffered = buffered.slice(nl + 1);
+          return out;
+        }
+        const { value, done } = await reader.read();
+        if (done) throw new Error(`paged mcp closed: ${buffered}`);
+        buffered += decoder.decode(value);
+      }
+    };
+    let id = 0;
+    const send = (msg: object) => {
+      child.stdin.write(`${JSON.stringify(msg)}\n`);
+      child.stdin.flush();
+    };
+    const rpc = async (method: string, params: object) => {
+      send({ jsonrpc: "2.0", id: ++id, method, params });
+      return JSON.parse(await line()) as {
+        result?: Record<string, unknown>;
+        error?: unknown;
+      };
+    };
+    const tool = async (name: string, a: object) => {
+      const r = await rpc("tools/call", { name, arguments: a });
+      const res = r.result ?? {};
+      if (r.error || res["isError"] === true)
+        throw new Error(
+          `refused: mcp ${name}: ${JSON.stringify(r.error ?? res).slice(0, 400)}`,
+        );
+      return (res["structuredContent"] ?? res["content"]) as Record<
+        string,
+        unknown
+      >;
+    };
+    const deadline = setTimeout(() => child.kill(), CLI_TIMEOUT_MS);
+    try {
+      await rpc("initialize", {
+        protocolVersion: "2025-06-18",
+        capabilities: {},
+      });
+      send({ jsonrpc: "2.0", method: "notifications/initialized" });
+      await tool("open_document", { document: "parity" });
+      const ran = await tool("run_script", { source: caseScript(c, args) });
+      const result = (ran["result"] ?? ran) as { error?: unknown };
+      if (result.error)
+        throw new Error(
+          `refused: mcp run_script: ${JSON.stringify(result.error)}`,
+        );
+      const saved = await tool("save_document", { message: "parity" });
+      const link = await tool("download_link", {
+        document: "parity",
+        ref: saved["ref"],
+      });
+      const url = String(link["url"] ?? "");
+      return new Uint8Array(readFileSync(fileURLToPath(url)));
+    } finally {
+      clearTimeout(deadline);
+      child.kill();
+    }
+  } finally {
+    if (!keep) rmSync(dir, { recursive: true, force: true });
+  }
 }
 
 function withTemp<T>(f: (dir: string) => T): T {
@@ -373,11 +495,7 @@ export const CLI_DOORS: readonly CliDoor[] = [
         const outPath = join(dir, "out.paged");
         const scriptPath = join(dir, "case.js");
         writeFileSync(inPath, input);
-        writeFileSync(
-          scriptPath,
-          `const answer = ${c.boa!(args)};\n` +
-            `if (answer === false || answer === null) throw new Error("paged.${c.op} answered " + answer);\n`,
-        );
+        writeFileSync(scriptPath, caseScript(c, args));
         const r = run(bin, [
           "script",
           inPath,
@@ -390,5 +508,14 @@ export const CLI_DOORS: readonly CliDoor[] = [
           throw new Error(`refused: paged script: ${r.out.slice(0, 400)}`);
         return new Uint8Array(readFileSync(outPath));
       }),
+  },
+  {
+    id: "mcp.run_script",
+    surface: "mcp",
+    kind: "named",
+    label: "the MCP run_script tool",
+    reaches: (ctx, c) =>
+      !!c.boa && ctx.hostFunctions.has(`paged.${c.boaName ?? c.op}`),
+    run: mcpRun,
   },
 ];

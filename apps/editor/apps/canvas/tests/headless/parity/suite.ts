@@ -128,7 +128,7 @@ export async function parity(): Promise<Suite> {
     typedCommands,
     hostFunctions: new Set(CATALOG.hostFunctions.map((h) => h.name)),
     editorCommands: new Set(ed.registries.commands.list().map((c) => c.id)),
-    cliOps: bin ? cliOps(bin) : null,
+    cliOps: cliOps(),
   };
   suite = {
     traps: [],

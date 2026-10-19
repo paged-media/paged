@@ -119,6 +119,30 @@ describe("covers() reader", () => {
     expect([...r.calls[0].layers].sort()).toEqual(["golden", "rust"]);
   });
 
+  it("does not read a Rust covers! that sits inside a string, a raw string or a comment", () => {
+    const dir = fixture({
+      "crates/c/tests/golden.rs": [
+        "#[test]",
+        "fn every_path() {",
+        '    covers!("cli:paged");',
+        '    let path = "render";',
+        '    let wanted = format!("covers!(\\"cli:{path}\\")");',
+        '    let raw = r#"covers!("cli:raw")',
+        '// covers: cli:inside-raw"#;',
+        '    /* covers!("cli:in-a-block") */',
+        "    let c = '\"';",
+        '    covers!("cli:paged render");',
+        "}",
+      ].join("\n"),
+    });
+    const r = readCovers(dir, ["crates/c/tests/golden.rs"]);
+    expect(r.errors).toEqual([]);
+    expect(r.calls.flatMap((c) => c.ids)).toEqual([
+      "cli:paged",
+      "cli:paged render",
+    ]);
+  });
+
   it("refuses a covers() outside a test file", () => {
     const dir = fixture({
       "src/feature.ts": `covers("command:paged.editor.undo");`,
@@ -198,6 +222,28 @@ describe("layers from the path", () => {
         "await g.tool('r'); gestures(fake)",
       ),
     ).toEqual(["gesture", "unit"]);
+  });
+});
+
+describe("the gesture tag through a shared harness", () => {
+  it("tags a test that drives the DSL through a local helper it imports", () => {
+    const dir = fixture({
+      "pkg/test/support.ts": `export function harness() { return gestures(fake); }`,
+      "pkg/test/rect.test.ts": `import { harness } from "./support";\ncovers("tool:paged.tool.rectangle");`,
+      "pkg/test/plain.test.ts": `import { other } from "./other";\ncovers("tool:paged.tool.line");`,
+      "pkg/test/other.ts": `export const other = 1;`,
+    });
+    const r = readCovers(dir, [
+      "pkg/test/rect.test.ts",
+      "pkg/test/plain.test.ts",
+    ]);
+    const tags = Object.fromEntries(
+      r.calls.map((c) => [c.ids[0], [...c.layers].sort()]),
+    );
+    expect(tags).toEqual({
+      "tool:paged.tool.rectangle": ["gesture", "unit"],
+      "tool:paged.tool.line": ["unit"],
+    });
   });
 });
 

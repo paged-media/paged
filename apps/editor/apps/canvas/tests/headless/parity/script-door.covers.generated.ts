@@ -569,10 +569,28 @@ export function coversDoor(
     case "cli.script":
       covers("cli:paged script");
       return;
+    case "mcp.run_script":
+      covers("cli:paged mcp");
+      return;
     default:
       return;
   }
   switch (command) {
+        case "paged.insert.deletePage":
+          covers("command:paged.insert.deletePage");
+          return;
+        case "paged.insert.ellipse":
+          covers("command:paged.insert.ellipse");
+          return;
+        case "paged.insert.newPage":
+          covers("command:paged.insert.newPage");
+          return;
+        case "paged.insert.rectangle":
+          covers("command:paged.insert.rectangle");
+          return;
+        case "paged.insert.textFrame":
+          covers("command:paged.insert.textFrame");
+          return;
         case "paged.object.bringToFront":
           covers("command:paged.object.bringToFront");
           return;
