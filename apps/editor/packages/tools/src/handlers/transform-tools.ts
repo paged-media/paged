@@ -56,6 +56,8 @@ import type {
   PagedEditor,
 } from "@paged-media/shell";
 
+import { layoutPageRects } from "@paged-media/shell";
+
 import { CLICK_DRAG_THRESHOLD_PX } from "./shared";
 
 /** The matrix-transform gesture arms this factory can drive. All three
@@ -95,6 +97,44 @@ interface TransformDrag {
   /** Commit requested before begin resolved. */
   commitOnResolve: boolean;
   lastModifiers: { shift: boolean; alt: boolean };
+}
+
+/** The anchor a gesture begins with: a page and the press in its space. */
+interface Anchor {
+  pageId: string;
+  pointInPage: [number, number];
+}
+
+/**
+ * The anchor for a press OFF every page (on the pasteboard): the press
+ * named in the space of the page the selection sits on (the first page
+ * when its geometry names none). InDesign's Rotate / Scale / Shear take
+ * the drag anywhere, and the engine measures the drag about the
+ * selection's pivot, so only the page the point is spoken in matters
+ * (GT-4). Pages are laid out as the canvas lays them out
+ * (`layoutPageRects`).
+ */
+async function pasteboardAnchor(
+  paged: PagedEditor,
+  targets: readonly { kind: string; id: unknown }[],
+  docPoint: readonly [number, number],
+): Promise<Anchor | null> {
+  const [geometry, pages] = await Promise.all([
+    paged.client
+      .elementGeometry(targets.slice() as never)
+      .catch(() => [] as { pageId?: string | null }[]),
+    paged.client.collection<{ selfId: string; sizePt: [number, number] }>(
+      "pages",
+    ),
+  ]);
+  const rects = layoutPageRects(pages.map((p) => p.sizePt));
+  const pageId =
+    (geometry as { pageId?: string | null }[]).find((g) => g?.pageId)?.pageId ??
+    pages[0]?.selfId;
+  const i = pages.findIndex((p) => p.selfId === pageId);
+  const rect = rects[i];
+  if (!pageId || !rect) return null;
+  return { pageId, pointInPage: [docPoint[0] - rect.x, docPoint[1] - rect.y] };
 }
 
 export function createTransformGestureHandler(
@@ -185,10 +225,18 @@ export function createTransformGestureHandler(
     },
     onPointerDown(e: CanvasPointerEvent) {
       if (!paged || e.button !== 0) return;
-      const targets = paged.selection.elementSelection;
-      if (targets.length === 0 || !e.pageId || !e.pagePoint) return;
-      down = { pageId: e.pageId, point: [e.pagePoint[0], e.pagePoint[1]] };
-      const set = livePivot(e.pageId);
+      // The selection as it is NOW (the editor handle is live, GM-2),
+      // not the one the tool was picked with.
+      const targets = paged.selection.elementSelection.slice();
+      if (targets.length === 0) return;
+      const onPage: Anchor | null =
+        e.pageId && e.pagePoint
+          ? { pageId: e.pageId, pointInPage: [e.pagePoint[0], e.pagePoint[1]] }
+          : null;
+      // A click sets the pivot only where a page can name it.
+      down = onPage
+        ? { pageId: onPage.pageId, point: onPage.pointInPage }
+        : null;
       const state: TransformDrag = {
         handle: null,
         pendingDelta: [0, 0],
@@ -198,12 +246,21 @@ export function createTransformGestureHandler(
         lastModifiers: { shift: e.modifiers.shift, alt: e.modifiers.alt },
       };
       drag = state;
-      void paged.client
-        .beginGesture(targets.slice(), GESTURE_SPEC[kind], {
-          pageId: e.pageId,
-          pointInPage: e.pagePoint,
-          // Protocol 66 — ahead of the pinned wire type, hence the spread.
-          ...(set ? { pivotInPage: set.point } : {}),
+      const editor = paged;
+      void (
+        onPage
+          ? Promise.resolve(onPage)
+          : pasteboardAnchor(editor, targets, e.docPoint)
+      )
+        .then((anchor) => {
+          if (!anchor) throw new Error("no page to anchor the gesture on");
+          const set = livePivot(anchor.pageId);
+          return editor.client.beginGesture(targets, GESTURE_SPEC[kind], {
+            pageId: anchor.pageId,
+            pointInPage: anchor.pointInPage,
+            // Protocol 66 — ahead of the pinned wire type, hence the spread.
+            ...(set ? { pivotInPage: set.point } : {}),
+          });
         })
         .then((handle) => {
           if (state.abandoned) {

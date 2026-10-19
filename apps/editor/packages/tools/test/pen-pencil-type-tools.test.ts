@@ -409,26 +409,24 @@ describe("Type tool (the drag)", () => {
   });
 
   // The Rectangle handler resolves BOTH corners against the page the drag
-  // started on; the Type handler reads the release point off the page
-  // under the pointer, so a drag released over the pasteboard pulls out
-  // nothing, and one released over another page mixes the two pages'
-  // coordinates. Found by the gesture matrix at 25% (GT-3).
-  test.failing(
-    "[GT-3] a drag released over the pasteboard still pulls out the frame, on the start page @level:gesture",
-    async () => {
-      const { fake, g } = harness();
-      await g
-        .tool(createTypeHandler)
-        .drag({ from: [500, 600], to: [700, 700] })
-        .settle();
-      expect(fake.mutations()).toEqual([
-        {
-          op: "insertTextFrame",
-          args: { pageId: "page-1", bounds: [600, 500, 700, 700] },
-        },
-      ]);
-    },
-  );
+  // started on; the Type handler read the release point off the page
+  // under the pointer, so a drag released over the pasteboard pulled out
+  // nothing, and one released over another page mixed the two pages'
+  // coordinates. Found by the gesture matrix at 25% (GT-3); it now
+  // anchors the drag to its start page too.
+  test("[GT-3] a drag released over the pasteboard still pulls out the frame, on the start page @level:gesture", async () => {
+    const { fake, g } = harness();
+    await g
+      .tool(createTypeHandler)
+      .drag({ from: [500, 600], to: [700, 700] })
+      .settle();
+    expect(fake.mutations()).toEqual([
+      {
+        op: "insertTextFrame",
+        args: { pageId: "page-1", bounds: [600, 500, 700, 700] },
+      },
+    ]);
+  });
 
   it("a frame under 8 pt on either axis is not pulled out @level:gesture", async () => {
     const { fake, g } = harness();

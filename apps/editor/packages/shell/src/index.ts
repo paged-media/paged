@@ -97,6 +97,10 @@ export type {
   DeactivateReason,
 } from "./tools/gesture-handler";
 export { GestureSpine } from "./tools/gesture-spine";
+export {
+  layoutPageRects,
+  type ShellPageRect,
+} from "./cockpit/canvas-frame/page-layout";
 export type {
   ToolOptionsSpec,
   ToolOptionField,

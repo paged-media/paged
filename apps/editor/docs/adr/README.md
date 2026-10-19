@@ -50,6 +50,7 @@ and 024 predate that scheme and keep their numbers. Records 200–217 were writt
 | [232](232-canvas-context-menu.md) | The canvas context menu is made of commands | Accepted 2026-10-19 |
 | [233](233-panel-controls-share-one-kit.md) | Panel controls share one kit: named by their row, refusals in words | Accepted 2026-10-19 |
 | [234](234-keyboard-focus-and-text-input.md) | Keyboard focus belongs to the focused control; text arrives as input | Accepted 2026-10-19 |
+| [235](235-the-selection-tools-pointer-model.md) | The Selection tools follow InDesign's pointer model | Accepted 2026-10-19 |
 | [236](236-a-caret-holds-its-character-style.md) | A caret holds the character style chosen at it | Accepted 2026-10-19 |
 | [237](237-a-document-opens-on-its-first-page.md) | A document opens on its first page | Accepted 2026-10-19 |
 | [238](238-the-default-pdf-is-one-the-document-can-meet.md) | The default PDF is one the document can meet | Accepted 2026-10-19 |

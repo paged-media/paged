@@ -158,17 +158,15 @@ describe("Object/Transform panel: states", () => {
     expect(h.root.querySelector('[data-smart-dial="Rotation"]')).not.toBeNull();
   });
 
-  test("the seams are disabled and send nothing: lock aspect, Flip V", async () => {
+  // Flip V left the seams when it was wired (PN-251).
+  test("the seam is disabled and sends nothing: lock aspect", async () => {
     covers("panel:paged.object-transform");
     const h = await mount();
     await h.select([h.scene.rect]);
     const lock = h.root.querySelector<HTMLButtonElement>("[data-lock-aspect]")!;
-    const flipV = h.root.querySelector<HTMLButtonElement>("[data-flip-v]")!;
     expect(lock.disabled).toBe(true);
-    expect(flipV.disabled).toBe(true);
     const from = h.mark();
     await h.click(lock);
-    await h.click(flipV);
     expect(h.mutations(from)).toEqual([]);
   });
 });
@@ -374,23 +372,25 @@ describe("Object/Transform panel: findings", () => {
     },
   );
 
-  // Flip V is a seam "the editor can set it but cannot read it back", but
-  // the engine reads frameFlipV (a bool on every frame): the seam outlived
-  // its gap.
-  test.failing(
-    "PN-251: Flip V is live, because the engine reads frameFlipV back",
-    async () => {
-      covers("panel:paged.object-transform");
-      const h = await mount();
-      await h.select([h.scene.rect]);
-      expect(await h.get(addr(h.scene.rect), "frameFlipV")).toEqual(
-        bool(false),
-      );
-      expect(
-        h.root.querySelector<HTMLButtonElement>("[data-flip-v]")!.disabled,
-      ).toBe(false);
-    },
-  );
+  // Flip V was a seam "the editor can set it but cannot read it back",
+  // but the engine reads frameFlipV (a bool on every frame, engine ADR
+  // 192): the seam outlived its gap. It is wired now.
+  test("PN-251: Flip V is live, because the engine reads frameFlipV back", async () => {
+    covers("panel:paged.object-transform");
+    const h = await mount();
+    await h.select([h.scene.rect]);
+    expect(await h.get(addr(h.scene.rect), "frameFlipV")).toEqual(bool(false));
+    const flip = h.root.querySelector<HTMLButtonElement>("[data-flip-v]")!;
+    expect(flip.disabled).toBe(false);
+    expect(flip.getAttribute("data-on")).toBe("false");
+    const from = h.mark();
+    await h.click(flip);
+    expect(h.mutations(from)).toEqual([
+      set(addr(h.scene.rect), "frameFlipV", bool(true)),
+    ] as never);
+    expect(await h.get(addr(h.scene.rect), "frameFlipV")).toEqual(bool(true));
+    expect(flip.getAttribute("data-on")).toBe("true");
+  });
 
   // UX audit F-38: geometry reads differently in two places. This panel
   // shows X / Y / W / H; the Object section the Properties panel and the

@@ -354,20 +354,27 @@ describe("Rectangle tool", () => {
   });
 
   // INV-6 (gestures.md §5): click-vs-drag is decided in SCREEN px. The
-  // handler decides it in document pt (≥ 1 pt draws), so at 25% a 3 px
-  // click jitter (12 pt) draws a 12 pt frame where InDesign would open
-  // the size dialog. Found by these tests (GT-1).
-  test.failing(
-    "[GT-1] a click within the screen-px threshold draws nothing at 25% zoom @level:gesture",
-    async () => {
+  // handler used to decide it in document pt (≥ 1 pt drew), so at 25% a
+  // click jitter of 3 × 2 px (12 × 8 pt, 3.6 px of travel, inside the
+  // 4 px threshold) drew a 12 × 8 pt frame where InDesign would open the
+  // size dialog. Found by these tests (GT-1). (A 3 × 3 px jitter is
+  // 4.2 px of travel, past the threshold: a drag.)
+  test("[GT-1] a click within the screen-px threshold draws nothing at 25% zoom @level:gesture", async () => {
+    for (const create of [
+      () => createRectangleHandler({ frame: true }),
+      () => createRectangleHandler(),
+      () => createEllipseHandler(),
+      () => createPolygonHandler(),
+      () => createLineHandler(),
+    ]) {
       const { fake, g } = harness({ zoom: 0.25 });
       await g
-        .tool(() => createRectangleHandler({ frame: true }))
-        .drag({ from: [72, 72], to: [84, 84] })
+        .tool(create)
+        .drag({ from: [72, 72], to: [84, 80] })
         .settle();
       expect(fake.mutations()).toEqual([]);
-    },
-  );
+    }
+  });
 
   it("a click (under 1 pt) draws nothing @level:gesture", async () => {
     const { fake, g } = harness();

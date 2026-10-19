@@ -36,6 +36,12 @@ import { groupByPage, unionAabb } from "./selection-chrome";
  *
  * Each handle carries `data-handle="<name>"`; ViewportCanvas's
  * pointerdown reads the dataset to begin the correct resize gesture.
+ *
+ * Just OUTSIDE each corner lies a rotate band (`data-handle="rotate"`,
+ * a rotate cursor), as in InDesign and Illustrator: a drag there rotates
+ * the selection and keeps its size (F-30). The band lies over the outer
+ * part of the corner's resize hit area, so the corner resizes on its
+ * visible square and just inside it.
  */
 function ResizeHandlesRender(props: OverlayProps) {
   const { placedGeometry: elementGeometry, pathEditMode } = useSelection();
@@ -60,6 +66,7 @@ function renderSingle(item: ElementGeometryItem, props: OverlayProps) {
   const cy = (top + bottom) * 0.5;
   const positions = handlePositions(left, top, right, bottom, cx, cy);
   const inv = 1 / props.camera.scale;
+  const [ccx, ccy] = applyAffine(item.itemTransform, cx, cy);
   return (
     <>
       {positions.map(({ name, local, cursor }) => {
@@ -72,6 +79,7 @@ function renderSingle(item: ElementGeometryItem, props: OverlayProps) {
           inv,
           cursor,
           `${name}`,
+          [wx - ccx, wy - ccy],
         );
       })}
     </>
@@ -110,6 +118,7 @@ function renderUnion(
           inv,
           cursor,
           `${pageId}:${name}`,
+          [local[0] - cx, local[1] - cy],
         ),
       );
     }
@@ -149,12 +158,24 @@ function renderHandle(
   inv: number,
   cursor: string,
   key: string,
+  /** From the selection's centre to this handle, page space: which way
+   *  is OUTSIDE (only its signs are read). */
+  outward: [number, number],
 ) {
   const visiblePx = 8;
   const hitPx = 12;
+  const corner = CORNERS.has(name);
+  // Outward signs; an edge handle's along-edge axis has none.
+  const sx = corner ? Math.sign(outward[0]) : 0;
+  const sy = corner ? Math.sign(outward[1]) : 0;
   // `data-handle-page`: the page whose space the handle's box is in —
   // the canvas names its gesture's anchor and pivot on that page, which
   // is not always the page under the pointer.
+  //
+  // Paint order is hit order: the resize hit area, then a corner's
+  // rotate band over its outer part, then the visible square over both.
+  // So a corner resizes on its square and just inside it, and rotates
+  // just outside it (F-30).
   return (
     <g
       key={key}
@@ -171,6 +192,18 @@ function renderHandle(
         data-handle={name}
         style={{ cursor, pointerEvents: "all" }}
       />
+      {corner ? (
+        <rect
+          x={sx * ROTATE_BAND_OFFSET_PX - ROTATE_BAND_PX / 2}
+          y={sy * ROTATE_BAND_OFFSET_PX - ROTATE_BAND_PX / 2}
+          width={ROTATE_BAND_PX}
+          height={ROTATE_BAND_PX}
+          fill="transparent"
+          data-handle="rotate"
+          data-rotate-band={name}
+          style={{ cursor: ROTATE_CURSOR, pointerEvents: "all" }}
+        />
+      ) : null}
       <rect
         x={-visiblePx / 2}
         y={-visiblePx / 2}
@@ -185,6 +218,28 @@ function renderHandle(
     </g>
   );
 }
+
+const CORNERS: ReadonlySet<ResizeHandle> = new Set([
+  "northWest",
+  "northEast",
+  "southEast",
+  "southWest",
+]);
+
+/** The rotate band outside a corner: a square of this side, screen px,
+ *  centred this far outward from the corner on both axes — it spans
+ *  from the handle's outer edge to 20 px beyond the corner. */
+const ROTATE_BAND_PX = 24;
+const ROTATE_BAND_OFFSET_PX = 8;
+
+/** A curved double arrow (the rotate cursor), hotspot at its centre. */
+const ROTATE_CURSOR = `url("data:image/svg+xml,${encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">' +
+    '<path d="M5 15a8 8 0 0 1 14-8" fill="none" stroke="white" stroke-width="4" stroke-linecap="round"/>' +
+    '<path d="M5 15a8 8 0 0 1 14-8" fill="none" stroke="black" stroke-width="1.5" stroke-linecap="round"/>' +
+    '<path d="M2 12l3 4 4-3M22 10l-3-4-4 3" fill="none" stroke="black" stroke-width="1.5" stroke-linejoin="round"/>' +
+    "</svg>",
+)}") 12 12, alias`;
 
 export const resizeHandlesContribution: OverlayContribution = {
   id: "paged.resize-handles",
