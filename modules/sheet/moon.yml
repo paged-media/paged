@@ -12,11 +12,14 @@ project:
   description: "Spreadsheet module: calc engine, formats, XLSX, charts."
 
 # validate:manifest runs the in-tree paged-plugin bin (plugin-sdk).
+# sheet-format, sheet-fn and sheet-js take platform/shared/fmt by path.
 dependsOn:
   - id: "extensions"
     scope: "development"
   - id: "test-kit"
     scope: "development"
+  - id: "fmt"
+    scope: "production"
 
 fileGroups:
   rust-sources:
@@ -25,6 +28,8 @@ fileGroups:
     - "Cargo.lock"
     - "rust-toolchain*"
     - "/.cargo/*.toml"
+    - "/platform/shared/fmt/src/**/*.rs"
+    - "/platform/shared/fmt/Cargo.toml"
     - "!fuzz/**"
   rust-tests:
     - "**/*"

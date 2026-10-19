@@ -12,11 +12,24 @@ project:
   description: "Database publishing module: DSL, bindings, DuckDB-WASM query engine."
 
 # validate:manifest runs the in-tree paged-plugin bin (plugin-sdk).
+# data-core and data-expr take platform/shared/fmt by path.
 dependsOn:
   - id: "extensions"
     scope: "development"
   - id: "test-kit"
     scope: "development"
+  - id: "fmt"
+    scope: "production"
+
+fileGroups:
+  rust-sources:
+    - "**/*.rs"
+    - "**/Cargo.toml"
+    - "Cargo.lock"
+    - "rust-toolchain*"
+    - "/.cargo/*.toml"
+    - "/platform/shared/fmt/src/**/*.rs"
+    - "/platform/shared/fmt/Cargo.toml"
 
 tasks:
   js-test:

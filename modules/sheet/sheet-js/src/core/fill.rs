@@ -49,6 +49,7 @@
 //!   date series reads as dates. Undo restores the INPUTS (the journal's
 //!   grain); a format a fill brought along stays.
 
+use paged_fmt::locale::{DE_NAMES, EN_NAMES};
 use sheet_core::{CellValue, SheetId, StyleId};
 use sheet_format::sections::SectionKind;
 use sheet_format::serial::{serial_to_ymd, ymd_to_serial};
@@ -106,61 +107,24 @@ struct Src {
 /// A weekday / month name list the fill continues.
 struct NameList(&'static [&'static str]);
 
+/// The fill's German short months say `Mär` for March, where the format
+/// names (paged-fmt, Excel's `mmm`) say `Mrz`. The fill has always read
+/// `Mär`; whether Excel's German fill list does is not recorded.
+const DE_MONTHS_ABBR_FILL: [&str; 12] = {
+    let mut months = DE_NAMES.months_abbr;
+    months[2] = "Mär";
+    months
+};
+
 const NAME_LISTS: &[NameList] = &[
-    NameList(&["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]),
-    NameList(&[
-        "Sunday",
-        "Monday",
-        "Tuesday",
-        "Wednesday",
-        "Thursday",
-        "Friday",
-        "Saturday",
-    ]),
-    NameList(&[
-        "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
-    ]),
-    NameList(&[
-        "January",
-        "February",
-        "March",
-        "April",
-        "May",
-        "June",
-        "July",
-        "August",
-        "September",
-        "October",
-        "November",
-        "December",
-    ]),
-    NameList(&["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"]),
-    NameList(&[
-        "Sonntag",
-        "Montag",
-        "Dienstag",
-        "Mittwoch",
-        "Donnerstag",
-        "Freitag",
-        "Samstag",
-    ]),
-    NameList(&[
-        "Jan", "Feb", "Mär", "Apr", "Mai", "Jun", "Jul", "Aug", "Sep", "Okt", "Nov", "Dez",
-    ]),
-    NameList(&[
-        "Januar",
-        "Februar",
-        "März",
-        "April",
-        "Mai",
-        "Juni",
-        "Juli",
-        "August",
-        "September",
-        "Oktober",
-        "November",
-        "Dezember",
-    ]),
+    NameList(&EN_NAMES.days_abbr),
+    NameList(&EN_NAMES.days_full),
+    NameList(&EN_NAMES.months_abbr),
+    NameList(&EN_NAMES.months_full),
+    NameList(&DE_NAMES.days_abbr),
+    NameList(&DE_NAMES.days_full),
+    NameList(&DE_MONTHS_ABBR_FILL),
+    NameList(&DE_NAMES.months_full),
 ];
 
 impl SheetSession {
