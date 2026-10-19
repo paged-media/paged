@@ -445,5 +445,14 @@ test.describe("ED-4 — saving clears the edited flag", () => {
       )
       .toBe(1);
     expect(dialogs).toEqual([]);
+    // Nor did the shell's replace question appear (the driver answers it
+    // and records each answer).
+    expect(
+      await page.evaluate(
+        () =>
+          (globalThis as unknown as { __answeredReplacePrompts?: string[] })
+            .__answeredReplacePrompts ?? [],
+      ),
+    ).toEqual([]);
   });
 });

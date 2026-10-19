@@ -35,10 +35,37 @@
 
 let pendingImportSource: string | null = null;
 
+// ADR 230 — the import as a whole is ONE replacement, asked about once.
+// An importer may open more than one document on the way (paged.doc opens
+// a skeleton, styles it, and re-opens it when the engine refuses span
+// columns); the second open must not ask about the importer's own
+// half-built document. The session lives from `setPendingImportSource(name)`
+// to `setPendingImportSource(null)`, independent of the single-shot name.
+let session: { name: string; replaceAllowed: boolean } | null = null;
+
 /** Park (or clear, with `null`) the file name of the import being
- *  dispatched to a plugin importer. */
+ *  dispatched to a plugin importer. A name starts the import's session,
+ *  `null` ends it. */
 export function setPendingImportSource(name: string | null): void {
   pendingImportSource = name;
+  session = name === null ? null : { name, replaceAllowed: false };
+}
+
+/** The file of the import in progress (its session's name), or null. */
+export function currentImportName(): string | null {
+  return session?.name ?? null;
+}
+
+/** True once the user agreed to replace the document for the import in
+ *  progress: later opens of the same import do not ask again. */
+export function importReplaceAllowed(): boolean {
+  return session?.replaceAllowed ?? false;
+}
+
+/** Record that the user agreed to replace the document for the import in
+ *  progress (no-op outside an import). */
+export function allowImportReplace(): void {
+  if (session) session.replaceAllowed = true;
 }
 
 /** Single-shot read: returns the parked name and clears the slot. */

@@ -24,8 +24,8 @@
 //   SH-2   (UX F-49)  Tab inside a dialog toggles the chrome; focus is stuck
 //   SH-3   (UX F-36)  text from an input method (insertText) or Option+-
 //                     never reaches the story
-//   SH-10  (UX F-01)  a file dropped on the canvas replaces an edited
-//                     document without the discard prompt
+//   SH-10  (UX F-01)  a file dropped on the canvas replaced an edited
+//                     document without the discard prompt — FIXED (ADR 230)
 //   SH-11             with a text caret in a story, an open menu's arrow
 //                     keys move the caret behind it and never reach the menu
 //   SH-12             Enter that chooses a menu item also reaches the canvas:
@@ -189,7 +189,7 @@ test.describe("SH-3 (UX F-36) — text from an input method", () => {
   });
 });
 
-test.describe("SH-10 (UX F-01) — a drop replaces an edited document", () => {
+test.describe("SH-10 (UX F-01) — a drop on an edited document asks first", () => {
   const drop = (page: Page) =>
     page.evaluate((bytes) => {
       const target = document.querySelector("[data-cockpit-canvas]");
@@ -211,61 +211,66 @@ test.describe("SH-10 (UX F-01) — a drop replaces an edited document", () => {
       }
     }, Array.from(shellFixture()));
 
+  const dirty = (page: Page) =>
+    page.evaluate(() =>
+      (globalThis as unknown as G).__canvas.client
+        .documentMeta()
+        .then((m) => m.dirty),
+    );
+  const prompt = (page: Page) => page.getByTestId("replace-document-dialog");
+
   test("control: File ▸ New on an edited document asks first", async ({
     page,
   }) => {
     covers("command:paged.file.new");
-    await openShell(page, { doc: true });
+    await openShell(page, { doc: true, answerReplacePrompts: false });
     await page.evaluate(() =>
       (globalThis as unknown as G).__canvas.registries.commands.invoke(
         "paged.insert.rectangle",
       ),
     );
-    await expect
-      .poll(() =>
-        page.evaluate(() =>
-          (globalThis as unknown as G).__canvas.client
-            .documentMeta()
-            .then((m) => m.dirty),
-        ),
-      )
-      .toBe(true);
-    const asked: string[] = [];
-    page.on("dialog", (d) => void asked.push(`${d.type()}: ${d.message()}`));
-    await page.evaluate(() =>
+    await expect.poll(() => dirty(page)).toBe(true);
+    void page.evaluate(() =>
       (globalThis as unknown as G).__canvas.registries.commands.invoke(
         "paged.file.new",
       ),
     );
-    await expect.poll(() => asked.length).toBeGreaterThan(0);
-    expect(asked[0]).toContain("unsaved edits");
+    await expect(prompt(page)).toBeVisible();
+    await expect(prompt(page)).toContainText("Creating a new document");
+    await page.getByTestId("replace-document-keep").click();
+    await expect(prompt(page)).toHaveCount(0);
+    expect(await dirty(page)).toBe(true);
   });
 
   test("SH-10: a file dropped on the canvas asks before replacing an edited document", async ({
     page,
   }) => {
-    test.fail();
-    await openShell(page, { doc: true });
+    await openShell(page, { doc: true, answerReplacePrompts: false });
     await page.evaluate(() =>
       (globalThis as unknown as G).__canvas.registries.commands.invoke(
         "paged.insert.rectangle",
       ),
     );
-    await expect
-      .poll(() =>
-        page.evaluate(() =>
-          (globalThis as unknown as G).__canvas.client
-            .documentMeta()
-            .then((m) => m.dirty),
-        ),
-      )
-      .toBe(true);
-    const asked: string[] = [];
-    page.on("dialog", (d) => void asked.push(`${d.type()}: ${d.message()}`));
+    await expect.poll(() => dirty(page)).toBe(true);
+    const before = await itemCount(page);
     await drop(page);
-    await expect
-      .poll(() => asked.length, { timeout: 5_000 })
-      .toBeGreaterThan(0);
+    await expect(prompt(page)).toBeVisible({ timeout: 5_000 });
+    await expect(prompt(page)).toContainText("Opening dropped.idml");
+    // Cancel keeps the document and its edit; Escape is a Cancel too.
+    await page.getByTestId("replace-document-keep").click();
+    await expect(prompt(page)).toHaveCount(0);
+    expect(await dirty(page)).toBe(true);
+    expect(await itemCount(page)).toBe(before);
+    await drop(page);
+    await expect(prompt(page)).toBeVisible({ timeout: 5_000 });
+    await page.keyboard.press("Escape");
+    await expect(prompt(page)).toHaveCount(0);
+    expect(await dirty(page)).toBe(true);
+    // Don't save replaces it with the dropped file.
+    await drop(page);
+    await page.getByTestId("replace-document-discard").click();
+    await expect.poll(() => dirty(page), { timeout: 10_000 }).toBe(false);
+    await expect.poll(() => itemCount(page)).toBe(before - 1);
   });
 });
 

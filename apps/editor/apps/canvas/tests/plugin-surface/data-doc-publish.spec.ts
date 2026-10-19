@@ -1266,18 +1266,16 @@ test.describe("plugin surface · paged.pdf", () => {
     });
   });
 
-  test("File ▸ Open PDF… REPLACES the document with no unsaved-work guard @feat:plugin-pdf.pdf-import @level:edge", async ({
+  test("File ▸ Open PDF… asks before it replaces an edited document @feat:plugin-pdf.pdf-import @level:edge", async ({
     page,
   }) => {
-    // THE POINT OF THIS TEST, since pdf.journey already proves the open
-    // works: the open is DESTRUCTIVE (the importer calls
-    // `host.nativeDocument.open`, not a place) and there is NO guard in
-    // front of it. The editor has no dirty flag, no confirm step and no
-    // `beforeunload` handler anywhere, so a designer who picks a PDF with
-    // unsaved work loses it silently. Author something first and watch it
-    // go.
+    // The open is DESTRUCTIVE (the importer calls
+    // `host.nativeDocument.open`, not a place). It used to replace an
+    // edited document with no question; the native-document backend now
+    // asks the one replace question (ADR 230, finding R8). Author
+    // something, pick a PDF, and Cancel keeps the work; Don't save swaps.
     const designer = new Designer(page);
-    await designer.open();
+    await designer.open({ answerReplacePrompts: false });
     await designer.newDocument();
 
     const rect = await designer.drawRectangle({
@@ -1293,47 +1291,48 @@ test.describe("plugin surface · paged.pdf", () => {
       "the work is in the document",
     ).toBe(1);
 
-    const chooser = page.waitForEvent("filechooser", { timeout: 15_000 });
-    const opened = invoke(page, OPEN_PDF_COMMAND);
-    await (await chooser).setFiles(PDF_FIXTURE);
-    await opened;
+    const pickPdf = async () => {
+      const chooser = page.waitForEvent("filechooser", { timeout: 15_000 });
+      const opened = invoke(page, OPEN_PDF_COMMAND);
+      await (await chooser).setFiles(PDF_FIXTURE);
+      return opened;
+    };
+    const ask = page.getByTestId("replace-document-dialog");
 
-    // No dialog stood between the pick and the swap.
-    await expect(
-      page.getByRole("alertdialog"),
-      "no unsaved-changes dialog appeared",
-    ).toHaveCount(0);
+    // Cancel: the question names the file, and the rectangle stays. The
+    // pdf lane (pdf.js + the wasm mapper) is the slowest importer, and
+    // the question comes only once it has bytes to open; if it never
+    // drives in this realm the honest answer is a skip, not a red.
+    const first = pickPdf();
+    const asked = await ask.waitFor({ state: "visible", timeout: 45_000 }).then(
+      () => true,
+      () => false,
+    );
+    test.skip(
+      !asked,
+      "the paged.pdf import lane did not drive in this realm (pdf.js / wasm mapper " +
+        "unavailable), so the open cannot be observed here. " +
+        "tests/journey/plugins/pdf.journey.spec.ts covers the same lane.",
+    );
+    await expect(ask).toContainText("Opening");
+    await page.getByTestId("replace-document-keep").click();
+    await first;
+    await expect(ask).toHaveCount(0);
+    expect(await treeCount(page, "rectangle"), "Cancel kept the work").toBe(1);
 
-    // The pdf lane (pdf.js + the wasm mapper) is the slowest importer.
-    // Poll for the swap; if it never lands the plugin did not drive and
-    // the honest answer is a skip, not a red.
-    let swapped = false;
-    try {
-      await expect
-        .poll(async () => treeCount(page, "rectangle"), { timeout: 45_000 })
-        .toBe(0);
-      swapped = true;
-    } catch {
-      swapped = false;
-    }
-    if (!swapped) {
-      test.skip(
-        true,
-        "the paged.pdf import lane did not drive in this realm (pdf.js / wasm mapper " +
-          "unavailable), so the destructive-open claim cannot be observed here. " +
-          "tests/journey/plugins/pdf.journey.spec.ts covers the same lane.",
-      );
-    }
-
+    // Don't save: the PDF replaces the document.
+    const second = pickPdf();
+    await expect(ask).toBeVisible({ timeout: 45_000 });
+    await page.getByTestId("replace-document-discard").click();
+    await second;
+    await expect
+      .poll(async () => treeCount(page, "rectangle"), { timeout: 45_000 })
+      .toBe(0);
     const { pageCount } = await designer.handle();
     expect(
       pageCount,
       "a fresh document from the PDF replaced the old one",
     ).toBeGreaterThan(0);
-    // eslint-disable-next-line no-console
-    console.log(
-      `[plugin-surface] paged.pdf destructive open: authored rectangle gone, pages=${pageCount}`,
-    );
   });
 });
 
