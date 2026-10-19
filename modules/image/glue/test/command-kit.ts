@@ -13,13 +13,18 @@ import { expect } from "bun:test";
 
 import { fileURLToPath } from "node:url";
 
-import type { ElementGeometryItem, PagedEditor } from "@paged-media/plugin-api";
+import type {
+  ElementGeometryItem,
+  PagedEditor,
+  ToolContribution,
+} from "@paged-media/plugin-api";
 import {
   createHeadlessHost,
   loadBundle,
   type HeadlessHost,
+  type ToolSettingsBackend,
 } from "@paged-media/plugin-sdk";
-import { waitFor } from "@paged-media/test-kit";
+import { gestures, waitFor } from "@paged-media/test-kit";
 
 import { imageBundle, PANEL_ID } from "../src";
 import { bootEngine, type ImageEngine } from "../src/engine";
@@ -123,6 +128,7 @@ export async function bundleOnFake(
       }) => Promise<boolean>;
     };
     select?: boolean;
+    toolSettings?: ToolSettingsBackend;
   } = {},
 ) {
   const fake = makeFakeEditor();
@@ -143,6 +149,7 @@ export async function bundleOnFake(
     console: silentConsole,
     storage: mapBacking(),
     shell,
+    ...(options.toolSettings ? { toolSettings: options.toolSettings } : {}),
   });
   const session = lastSession();
   const handler = (id: string): Handler => {
@@ -170,7 +177,39 @@ export async function bundleOnFake(
       (m) => (m as { op?: string }).op !== "setPluginMetadata",
     ) as Array<{ op: string; args: Record<string, unknown> }>;
   const dispose = () => loaded.dispose();
-  return { fake, loaded, session, run, ingest, opened, docOps, dispose };
+  /** The gesture DSL over the REGISTERED tools (`g.tool(<tool id>)`
+   *  mounts the contribution's own gesture), on the frame's page `pg1`.
+   *  The frame is 200×100 pt holding 4×2 px: 50 pt per pixel, origin
+   *  (0, 0). */
+  const tools = () =>
+    gestures({
+      editor: fake.editor as PagedEditor,
+      pages: [{ id: "pg1", origin: [0, 0], size: [612, 792] }],
+      tools: () =>
+        fake.tools
+          .ids()
+          .map((id) => fake.tools.get(id) as unknown as ToolContribution),
+    });
+  return { fake, loaded, session, run, ingest, opened, docOps, tools, dispose };
+}
+
+/** Replace session methods with recorders (optionally answering), so a
+ *  tool's gesture can be followed past the GPU gate Node cannot cross:
+ *  `brushBegin` answering true lets the stroke's extend / commit
+ *  sequence run. Returns the call log. */
+export function spyOn(
+  session: ImageSession,
+  answers: Partial<Record<keyof ImageSession, unknown>>,
+): string[] {
+  const calls: string[] = [];
+  const target = session as unknown as Record<string, unknown>;
+  for (const [name, answer] of Object.entries(answers)) {
+    target[name] = (...args: unknown[]) => {
+      calls.push(`${name}(${args.map((a) => JSON.stringify(a)).join(",")})`);
+      return Promise.resolve(answer);
+    };
+  }
+  return calls;
 }
 
 /** What a command must leave alone when it refuses: the source, the
