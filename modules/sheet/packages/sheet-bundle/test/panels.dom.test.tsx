@@ -176,7 +176,7 @@ function ReferenceSchemaRenderer({
 }
 
 describe.skipIf(!ENGINE_BUILT)(
-  "paged.sheet panels (unavailable without the sheet wasm: bash scripts/build-wasm.sh)",
+  `paged.sheet panels${ENGINE_BUILT ? "" : " (unavailable: the sheet wasm, bash scripts/build-wasm.sh)"}`,
   () => {
     setDefaultTimeout(30_000);
     let env: SheetEnv;
