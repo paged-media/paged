@@ -178,14 +178,13 @@ test.describe("journey · paged.draw pro tools", () => {
 
     const collected: string[] = [];
 
-    // ── 1. PENCIL (HARD) — freehand a stroke; the machine RDP-simplifies
-    //    + fits the samples and commits ONE insertPath → a new path. ──
+    // ── 1. PENCIL (HARD) — freehand a stroke with THE Pencil (the host's;
+    //    paged.draw retired its own into it, draw ADR 359): the machine
+    //    RDP-simplifies the samples, the engine fits them, ONE insertPath
+    //    → a new path. ──
     const before = await designer.renderBytes();
     const polysBefore = await designer.count("polygon");
-    await invokeCommand(
-      page,
-      "paged.tool.activate.media.paged.draw.tool.pencil",
-    );
+    await invokeCommand(page, "paged.tool.activate.paged.tool.pencil");
     const arc: Array<{ x: number; y: number }> = [];
     for (let i = 0; i <= 8; i++) {
       const t = i / 8;

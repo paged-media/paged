@@ -273,19 +273,6 @@ describe("paged.draw tools through the gesture DSL — drawing", () => {
     expect(second.r.sent()).toEqual([]);
   });
 
-  it("Pencil: a freehand drag commits one path, as one undo step; Escape mid-stroke commits nothing", async () => {
-    covers("tool:media.paged.draw.tool.pencil");
-    const { r, g } = rig([]);
-    await arm(r, g, `${T}.pencil`);
-    const before = r.picture();
-    await g
-      .drag({ from: [100, 100], to: [300, 220], via: [[200, 120]], steps: 6 })
-      .settle();
-    expect(leafOps(r.leaves())[0]).toBe("insertPath");
-    await oneUndoStep(r, before);
-    await cancelCommitsNothing(`${T}.pencil`, [], [100, 100], [300, 220]);
-  });
-
   it("Paintbrush: a drag commits one variable-width stroke, as one undo step; Escape commits nothing", async () => {
     covers("tool:media.paged.draw.tool.paintbrush");
     const { r, g } = rig([]);

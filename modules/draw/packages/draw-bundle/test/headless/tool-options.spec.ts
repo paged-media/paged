@@ -16,7 +16,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// TOOL OPTIONS conformance — the Pencil, Paintbrush, Blob Brush, Eraser
+// TOOL OPTIONS conformance — the Paintbrush, Blob Brush, Eraser
 // and Width tools read their parameters from the HOST's tool-settings
 // store instead of from constants.
 //
@@ -51,11 +51,7 @@ import type {
   PathAnchorsResult,
 } from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
-import {
-  BrushMachine,
-  PencilMachine,
-  WidthMachine,
-} from "@paged-media/draw-tools";
+import { BrushMachine, WidthMachine } from "@paged-media/draw-tools";
 
 import { drawTools } from "../../src/tools";
 import {
@@ -63,7 +59,6 @@ import {
   createPaintbrushHandler,
   createBlobBrushHandler,
   createEraserBrushHandler,
-  createPencilHandler,
   createWidthHandler,
   insertPathMutationFor,
   outlineStrokeVariableMutationFor,
@@ -74,11 +69,11 @@ import {
   toolOptionsSpecOf,
   toolSettingsDoorOf,
   TOOL_OPTIONS,
-  PENCIL_OPTIONS,
   PAINTBRUSH_OPTIONS,
   BLOB_BRUSH_OPTIONS,
   ERASER_OPTIONS,
   WIDTH_OPTIONS,
+  LASSO_OPTIONS,
   PAINTBRUSH_NIB,
   ERASER_NIB,
   WIDTH_FALLOFF_ANCHORS,
@@ -206,10 +201,9 @@ describe("tool options — the declarations", () => {
   const tools = drawTools({} as never);
   const withOptions = tools.filter((t) => t.options);
 
-  it("the five freehand tools declare options, under their OWN tool id", () => {
+  it("the freehand tools declare options, under their OWN tool id", () => {
     const ids = withOptions.map((t) => t.id);
     for (const id of [
-      "media.paged.draw.tool.pencil",
       "media.paged.draw.tool.paintbrush",
       "media.paged.draw.tool.blobBrush",
       "media.paged.draw.tool.eraserBrush",
@@ -280,7 +274,6 @@ describe("tool options — the declarations", () => {
     const brush = createToolOptionsReader(PAINTBRUSH_OPTIONS);
     const blob = createToolOptionsReader(BLOB_BRUSH_OPTIONS);
     const eraser = createToolOptionsReader(ERASER_OPTIONS);
-    const pencil = createToolOptionsReader(PENCIL_OPTIONS);
     const width = createToolOptionsReader(WIDTH_OPTIONS);
 
     // The literal pre-options nib, and the exported constant it became.
@@ -301,10 +294,6 @@ describe("tool options — the declarations", () => {
     expect(brush.number("fidelity")).toBe(2);
     expect(blob.number("fidelity")).toBe(2);
     expect(eraser.number("fidelity")).toBe(2);
-
-    expect(pencil.number("fidelity")).toBe(2);
-    expect(pencil.number("closeDistance")).toBe(8);
-    expect(pencil.select("smoothing")).toBe("smooth");
 
     expect(width.number("falloff")).toBe(2);
     expect(width.number("gain")).toBe(1);
@@ -341,7 +330,7 @@ describe("tool options — the read door", () => {
     const id = PAINTBRUSH_OPTIONS.toolId;
     const store = settingsStore({
       [id]: { size: 9999, angle: Number.NaN, roundness: "wide", fidelity: -3 },
-      [PENCIL_OPTIONS.toolId]: { smoothing: "wobbly" },
+      [LASSO_OPTIONS.toolId]: { mode: "wobbly" },
     });
     const reader = createToolOptionsReader(PAINTBRUSH_OPTIONS);
     reader.attach(store.paged);
@@ -350,9 +339,9 @@ describe("tool options — the read door", () => {
     expect(reader.number("roundness")).toBe(30); // a string → the default
     expect(reader.number("fidelity")).toBe(0.5); // the field's min
 
-    const pencil = createToolOptionsReader(PENCIL_OPTIONS);
-    pencil.attach(store.paged);
-    expect(pencil.select("smoothing")).toBe("smooth");
+    const lasso = createToolOptionsReader(LASSO_OPTIONS);
+    lasso.attach(store.paged);
+    expect(lasso.select("mode")).toBe("intersect");
   });
 
   it("is keyed by the TOOL — the Blob Brush does not read the Paintbrush's nib", () => {
@@ -606,122 +595,6 @@ describe("tool options — eraser (real engine, F4)", () => {
   it("a bigger eraser cuts a wider gap — the size reaches BOTH the machine and the outline", async () => {
     expect(await gapAfterCut(30)).toBeCloseTo(30, 1);
     expect(await gapAfterCut(2)).toBeCloseTo(2, 1);
-  });
-});
-
-describe("tool options — pencil (real engine, F1)", () => {
-  let h: HeadlessHost;
-
-  beforeAll(async () => {
-    h = await openHost();
-    await h.load(F1_MULTI_SHAPE.bytes());
-    h.loadBundle(drawBundle);
-  });
-  afterAll(() => h?.dispose());
-
-  // A zig-zag whose wobble is 8 pt: it survives a 2 px fidelity and
-  // collapses under a 10 px one.
-  const WOBBLE: [number, number][] = [
-    [420, 60],
-    [440, 68],
-    [460, 60],
-    [480, 68],
-    [500, 60],
-    [520, 68],
-    [540, 60],
-  ];
-  // A loop that ends 5 pt from where it began.
-  const LOOP: [number, number][] = [
-    [450, 150],
-    [520, 150],
-    [520, 220],
-    [450, 220],
-    [453, 154],
-  ];
-
-  it("with no host store the stroke is the one the pencil always made (the literal pre-options commit)", async () => {
-    const handler = createPencilHandler(h.host);
-    handler.onActivate(undefined as never);
-    const { table } = await sweepAndRead(h, handler, WOBBLE);
-
-    const machine = new PencilMachine({
-      tolerance: h.host.viewport.pxToPt(2),
-      closeTolerance: h.host.viewport.pxToPt(8),
-    });
-    machine.handle({ type: "down", point: WOBBLE[0], pressure: 0.5 });
-    for (const p of WOBBLE.slice(1)) {
-      machine.handle({ type: "move", point: p, pressure: 0.5 });
-    }
-    const commit = machine.handle({
-      type: "up",
-      point: WOBBLE[WOBBLE.length - 1],
-      pressure: 0.5,
-    }).commit!;
-    const inserted = await h.host.document.mutate(
-      insertPathMutationFor(PAGE, commit.anchors, commit.open),
-    );
-    if (!inserted.applied || !inserted.createdId) {
-      throw new Error("the reference insert failed");
-    }
-    const reference = await h.host.document.pathAnchors(inserted.createdId);
-    expect(shapeOf(table)).toEqual(shapeOf(reference!));
-    expect(table.anchors).toHaveLength(WOBBLE.length);
-    handler.onDeactivate("switch");
-  });
-
-  it("a coarser FIDELITY keeps fewer anchors of the same stroke", async () => {
-    const id = PENCIL_OPTIONS.toolId;
-    const store = settingsStore();
-    const handler = createPencilHandler(h.host);
-    handler.onActivate(store.paged as never);
-    const fine = (await sweepAndRead(h, handler, WOBBLE)).table;
-    store.paged.toolSettings.set(id, "fidelity", 10);
-    const coarse = (await sweepAndRead(h, handler, WOBBLE)).table;
-    expect(fine.anchors).toHaveLength(WOBBLE.length);
-    expect(coarse.anchors).toHaveLength(2);
-    handler.onDeactivate("switch");
-  });
-
-  it("SMOOTHING: `corners` commits corner anchors, the default fits curves", async () => {
-    const id = PENCIL_OPTIONS.toolId;
-    const store = settingsStore();
-    const handler = createPencilHandler(h.host);
-    handler.onActivate(store.paged as never);
-    const isCorner = (a: {
-      anchor: number[];
-      left: number[];
-      right: number[];
-    }) =>
-      a.left[0] === a.anchor[0] &&
-      a.left[1] === a.anchor[1] &&
-      a.right[0] === a.anchor[0] &&
-      a.right[1] === a.anchor[1];
-
-    const smooth = (await sweepAndRead(h, handler, WOBBLE)).table;
-    expect(smooth.anchors.some((a) => !isCorner(a))).toBe(true);
-
-    store.paged.toolSettings.set(id, "smoothing", "corners");
-    const corners = (await sweepAndRead(h, handler, WOBBLE)).table;
-    expect(corners.anchors.every(isCorner)).toBe(true);
-    // Same samples, same simplification — only the handles differ.
-    expect(corners.anchors.map((a) => a.anchor)).toEqual(
-      smooth.anchors.map((a) => a.anchor),
-    );
-    handler.onDeactivate("switch");
-  });
-
-  it("CLOSE DISTANCE: the default closes a loop lifted 5 pt from its start; 0 never closes", async () => {
-    const id = PENCIL_OPTIONS.toolId;
-    const store = settingsStore();
-    const handler = createPencilHandler(h.host);
-    handler.onActivate(store.paged as never);
-    const closed = (await sweepAndRead(h, handler, LOOP)).table;
-    expect(closed.subpathOpen?.[0]).toBe(false);
-
-    store.paged.toolSettings.set(id, "closeDistance", 0);
-    const open = (await sweepAndRead(h, handler, LOOP)).table;
-    expect(open.subpathOpen?.[0]).toBe(true);
-    handler.onDeactivate("switch");
   });
 });
 

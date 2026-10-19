@@ -33,6 +33,7 @@ import {
   createBundleHost,
   createHeadlessHost,
   type HeadlessHost,
+  silentConsole as silent,
 } from "@paged-media/plugin-sdk";
 import { covers } from "@paged-media/test-kit";
 
@@ -48,7 +49,6 @@ import {
 requireDocx("doc headless — File ▸ Open and File ▸ Export");
 
 const ENGINE_ANCHOR = fileURLToPath(new URL("..", import.meta.url));
-const silent = { debug() {}, info() {}, warn() {}, error() {} };
 const DOCX_MIME =
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 

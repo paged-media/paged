@@ -29,7 +29,12 @@ import { fileURLToPath } from "node:url";
 
 import { inflateRawSync } from "node:zlib";
 
-import { createHeadlessHost, type HeadlessHost } from "@paged-media/plugin-sdk";
+import {
+  createHeadlessHost,
+  type HeadlessHost,
+  mapBacking,
+  silentConsole as silent,
+} from "@paged-media/plugin-sdk";
 import type { BundleHost, ClipboardPayload } from "@paged-media/plugin-api";
 
 import { sheetBundle } from "../../src";
@@ -42,23 +47,6 @@ const BIN = join(PKG, "bin");
 export const WASM = join(BIN, "sheet_js_bg.wasm");
 /** The sheet engine artifact is built (scripts/build-wasm.sh). */
 export const ENGINE_BUILT = existsSync(WASM);
-
-const silent = {
-  debug: () => {},
-  info: () => {},
-  warn: () => {},
-  error: () => {},
-};
-
-const mapBacking = () => {
-  const m = new Map<string, string>();
-  return {
-    getItem: (k: string) => m.get(k) ?? null,
-    setItem: (k: string, v: string) => void m.set(k, v),
-    removeItem: (k: string) => void m.delete(k),
-    keys: () => Array.from(m.keys()),
-  };
-};
 
 /** An in-memory clipboard the paste stream fills before it pastes. */
 export interface TestClipboard {

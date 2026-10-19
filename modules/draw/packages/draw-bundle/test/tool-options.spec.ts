@@ -125,66 +125,6 @@ const arc = (g: GestureDsl) =>
     steps: 24,
   });
 
-/** A loop that ends 4.5 pt from where it began. */
-const loop = (g: GestureDsl) =>
-  g.drag({
-    from: [100, 700],
-    to: [104, 702],
-    via: [
-      [200, 690],
-      [250, 760],
-      [150, 770],
-    ],
-    steps: 24,
-  });
-
-describe("paged.draw tool options, no engine — Pencil", () => {
-  it("fidelity: a coarser tolerance keeps fewer anchors of a wiggly stroke", async () => {
-    covers("setting:media.paged.draw.tool.pencil.fidelity");
-    const fine = await withOptions(
-      `${T}.pencil`,
-      [],
-      { fidelity: 0.5 },
-      wiggle,
-    );
-    const coarse = await withOptions(
-      `${T}.pencil`,
-      [],
-      { fidelity: 20 },
-      wiggle,
-    );
-    expect(inserted(coarse)!.args.anchors.length).toBeLessThan(
-      inserted(fine)!.args.anchors.length,
-    );
-  });
-
-  it("smoothing: Smooth curves (the default) gives the anchors handles; Corner points does not", async () => {
-    covers("setting:media.paged.draw.tool.pencil.smoothing");
-    const handled = (r: UnitRig) =>
-      inserted(r)!.args.anchors.some(
-        (a) => a.left[0] !== a.anchor[0] || a.left[1] !== a.anchor[1],
-      );
-    expect(handled(await withOptions(`${T}.pencil`, [], {}, arc))).toBe(true);
-    expect(
-      handled(
-        await withOptions(`${T}.pencil`, [], { smoothing: "corners" }, arc),
-      ),
-    ).toBe(false);
-  });
-
-  it("closeDistance: a loop ending within it (8 pt by default) closes; a smaller one leaves it open", async () => {
-    covers("setting:media.paged.draw.tool.pencil.closeDistance");
-    expect(
-      inserted(await withOptions(`${T}.pencil`, [], {}, loop))!.args.open,
-    ).toBe(false);
-    expect(
-      inserted(
-        await withOptions(`${T}.pencil`, [], { closeDistance: 1 }, loop),
-      )!.args.open,
-    ).toBe(true);
-  });
-});
-
 describe("paged.draw tool options, no engine — Paintbrush", () => {
   it("size: a bigger nib sweeps wider", async () => {
     covers("setting:media.paged.draw.tool.paintbrush.size");

@@ -25,9 +25,10 @@
 // an open contour splits into two at it. The target is the clicked
 // element (worker hit-test), falling back to the current single
 // selection so a precise click on a hairline path isn't required.
-// v1 cuts at ANCHORS only — mid-segment cuts (de Casteljau split +
-// open) ride the same engine op later via a preceding
-// `pathPointInsert`.
+// This tool cuts at ANCHORS only, and stays that way: the mid-segment
+// cut is a second MODE, paged.draw's "Scissors (any point)" in the same
+// flyout (a de Casteljau `pathPointInsert`, then this `pathOpenAt`, one
+// batch). Two modes, not a duplicate (modules/draw ADR 359).
 
 import type {
   CanvasPointerEvent,

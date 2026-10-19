@@ -40,8 +40,7 @@ import {
 import { inMemoryClipboard } from "../src/harness";
 import { makeFakeEditor } from "./fake-editor";
 
-const silent = { debug() {}, info() {}, warn() {}, error() {} };
-
+import { silentConsole as silent } from "../src/testing";
 const FULL: PluginManifest = {
   id: "media.paged.test",
   name: "test",

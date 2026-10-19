@@ -214,6 +214,65 @@ proptest! {
     }
 }
 
+/// The case proptest found (GPU audit I-1): a blur pulled at two
+/// output regions that clamp to the same input region at the image
+/// edge. With the output region missing from the cache key, the second
+/// pull got the first pull's shorter tiles back, and the next stage
+/// uploaded its full work extent from them (a `write_texture` overrun).
+#[test]
+fn a_blur_pulled_at_two_regions_with_one_clamped_input__feat__image_pipeline_async_sink() {
+    let stages = [Stage::Sharpen(0.1), Stage::Blur(0.5), Stage::Sharpen(0.1)];
+    compare(40, 300, 0, &stages, false).expect("byte-equal");
+}
+
+/// An input shorter than its dispatch extent is a typed error on every
+/// lane that uploads caller bytes, not a wgpu validation panic.
+#[test]
+fn a_short_input_is_an_error_not_a_wgpu_panic__feat__image_pipeline_async_sink() {
+    let Some(ctx) = test_device() else {
+        return;
+    };
+    let params = AdjustExposureParams::new(0.5);
+    let params = params.as_bytes();
+    let (w, h) = (40, 44);
+    let short = vec![0u8; 40 * 24 * 8];
+    let full = vec![0u8; w as usize * h as usize * 8];
+    let input = [image_gpu::TileInput { f16_bytes: &short }];
+    let err = image_gpu::execute_tile_once(ctx, &ADJUST_EXPOSURE, &input, params, None, w, h)
+        .expect_err("a short input is rejected");
+    assert!(err.to_string().contains("input 0"), "{err}");
+    let err = pollster::block_on(image_gpu::execute_tile_once_async(
+        ctx,
+        &ADJUST_EXPOSURE,
+        &input,
+        params,
+        None,
+        w,
+        h,
+    ))
+    .expect_err("a short input is rejected (async)");
+    assert!(err.to_string().contains("input 0"), "{err}");
+    let mask = vec![0u8; 3];
+    let input = [image_gpu::TileInput { f16_bytes: &full }];
+    let err =
+        image_gpu::execute_tile_once(ctx, &ADJUST_EXPOSURE, &input, params, Some(&mask), w, h)
+            .expect_err("a short mask is rejected");
+    assert!(err.to_string().contains("mask"), "{err}");
+    let stages = [image_gpu::chain::ChainStage {
+        def: &ADJUST_EXPOSURE,
+        params,
+    }];
+    let tiles = [image_gpu::chain::ChainTile {
+        inputs: vec![short.as_slice()],
+        mask: None,
+        w,
+        h,
+    }];
+    let err = image_gpu::chain::execute_chain(ctx, &stages, &tiles)
+        .expect_err("a short chain input is rejected");
+    assert!(err.to_string().contains("input 0"), "{err}");
+}
+
 /// The Apply chain the editor runs (exposure, contrast, saturation, hue,
 /// blur, sharpen), with and without a selection.
 #[test]

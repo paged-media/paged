@@ -76,6 +76,37 @@ fn strokes_fills_round_trips_through_parser() {
     );
 }
 
+/// finding GEN-1: the "strokes · overprint" variant writes `StrokeOverprint`, but the
+/// attribute is `OverprintStroke` (InDesign's spelling, the one idml-import reads and
+/// idml-export writes), so the page imports with stroke overprint off and the fixture
+/// exercises nothing. Renaming it changes the generated `strokes-fills` sample, whose
+/// reference PDF is exported from InDesign, so the fixture and its reference move together.
+#[test]
+fn strokes_fills_overprint_variant_reaches_the_importer() {
+    let bytes = paged_gen::write_idml(&paged_gen::samples::strokes_fills::build()).unwrap();
+    let container = idml_import::open_source_archive(&bytes).expect("open_source_archive");
+    let needle = b"StrokeOverprint=\"true\"";
+    let mut written = 0;
+    let mut imported = 0;
+    for (path, xml) in &container.entries {
+        if !path.starts_with("Spreads/") {
+            continue;
+        }
+        if xml.windows(needle.len()).any(|w| w == needle) {
+            written += 1;
+        }
+        let spread = idml_import::parse_spread(xml).expect("Spread::parse");
+        imported += spread
+            .rectangles
+            .iter()
+            .filter(|r| r.overprint_stroke)
+            .count();
+    }
+    assert_eq!(written, 1, "the overprint variant is in the sample");
+    // finding GEN-1: no rectangle imports with stroke overprint on; it should be one.
+    assert_eq!(imported, 0);
+}
+
 #[test]
 fn strokes_fills_emit_is_byte_deterministic() {
     let a = paged_gen::write_idml(&paged_gen::samples::strokes_fills::build()).unwrap();

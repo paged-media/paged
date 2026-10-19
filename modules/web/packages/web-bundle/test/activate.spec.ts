@@ -24,101 +24,22 @@
 import { describe, expect, it, vi } from "bun:test";
 import { covers } from "@paged-media/test-kit";
 
-import type { PagedEditor } from "@paged-media/plugin-api";
-import { loadBundle } from "@paged-media/plugin-sdk";
+import {
+  loadBundle,
+  createFakeEditor,
+  mapBacking,
+  silentConsole as silent,
+} from "@paged-media/plugin-sdk";
 import { DEFAULT_SOURCE, envelopeFor } from "@paged-media/web-model";
 
 import { webBundle } from "../src";
 
-function fakeRegistry() {
-  const byId = new Map<string, { id: string }>();
-  return {
-    ids: () => Array.from(byId.keys()),
-    get: (id: string) => byId.get(id),
-    register(c: { id: string }) {
-      if (byId.has(c.id)) throw new Error(`duplicate id ${c.id}`);
-      byId.set(c.id, c);
-      return {
-        dispose() {
-          byId.delete(c.id);
-        },
-      };
-    },
-  };
-}
-
-// W3.2 — edit-context / object-type registries key off `type`.
-function fakeTypeRegistry() {
-  const byType = new Map<string, { type: string }>();
-  return {
-    types: () => Array.from(byType.keys()),
-    get: (t: string) => byType.get(t),
-    register(c: { type: string }) {
-      byType.set(c.type, c);
-      return {
-        dispose() {
-          byType.delete(c.type);
-        },
-      };
-    },
-  };
-}
-
-function makeFakeEditor() {
-  const panels = fakeRegistry();
-  const commands = fakeRegistry();
-  const editContexts = fakeTypeRegistry();
-  const objectTypes = fakeTypeRegistry();
-  let selection: unknown[] = [];
-  const created = { kind: "rectangle", id: "uWEB1" };
-  const mutations: unknown[] = [];
-  const editor = {
-    registries: { panels, commands, editContexts, objectTypes },
-    selection: {
-      elementSelection: selection,
-      setElementSelection: (ids: unknown[]) => {
-        selection = ids;
-        editor.selection.elementSelection = ids;
-      },
-      setElementGeometry: () => {},
-    },
-    camera: { camera: { scale: 1, tx: 0, ty: 0 } },
-    client: {
-      mutate: async (m: unknown) => {
-        mutations.push(m);
-        return {
-          kind: "mutationApplied",
-          payload: { createdId: created, pageIds: ["pg1"] },
-        };
-      },
-      documentMeta: async () => ({ pageCount: 1, activePage: "pg1" }),
-      collection: async () => [],
-      setElementSelection: async (ids: unknown[]) => ids,
-      elementGeometry: async () => [],
-      subscribe: () => () => {},
-    },
-  };
-  return {
-    editor: editor as unknown as PagedEditor,
-    panels,
-    commands,
-    editContexts,
-    objectTypes,
-    created,
-    mutations,
-  };
-}
-
-const silent = { debug() {}, info() {}, warn() {}, error() {} };
-const mapBacking = () => {
-  const m = new Map<string, string>();
-  return {
-    getItem: (k: string) => m.get(k) ?? null,
-    setItem: (k: string, v: string) => void m.set(k, v),
-    removeItem: (k: string) => void m.delete(k),
-    keys: () => Array.from(m.keys()),
-  };
-};
+/** The SDK's recording editor with one page, `pg1` (the active page a
+ *  web frame is inserted on). */
+const makeFakeEditor = () =>
+  createFakeEditor({
+    pages: [{ id: "pg1", origin: [0, 0], size: [612, 792] }],
+  });
 
 describe("webBundle.activate", () => {
   it("registers the source panel + the insert/render commands (show/hide host-derived per B-15)", () => {
@@ -134,14 +55,14 @@ describe("webBundle.activate", () => {
         },
       },
     });
-    expect(fake.panels.ids()).toEqual([
+    expect(fake.ids("panels")).toEqual([
       "media.paged.web.panel.source",
       "media.paged.web.panel.properties",
     ]);
     // W-01 — the bake-path "Render web frame to canvas" command joins the
     // insert command (the honest not-loaded affordance); ADR-020 rung 2 adds
     // the flow commands (thread a source across frames + render the flow).
-    expect(fake.commands.ids()).toEqual([
+    expect(fake.ids("commands")).toEqual([
       "media.paged.web.command.insertWebFrame",
       "media.paged.web.command.renderWebFrame",
       "media.paged.web.command.renderWebFlow",
@@ -167,13 +88,15 @@ describe("webBundle.activate", () => {
         },
       },
     });
-    const cmd = fake.commands.get(
-      "media.paged.web.command.insertWebFrame",
-    ) as unknown as { handler: () => Promise<void> };
+    const cmd = fake
+      .registered<{ id?: string; type?: string }>("commands")
+      .find(
+        (c) => (c.id ?? c.type) === "media.paged.web.command.insertWebFrame",
+      ) as unknown as { handler: () => Promise<void> };
     await cmd.handler();
     // ONE batch through the one door: frame + source metadata via the
     // v34 batch-created sentinel — a single undo step.
-    expect(fake.mutations).toEqual([
+    expect(fake.mutations()).toEqual([
       {
         op: "batch",
         args: {
@@ -194,7 +117,10 @@ describe("webBundle.activate", () => {
         },
       },
     ]);
-    expect(fake.editor.selection.elementSelection).toEqual([fake.created]);
+    const [applied] = fake.ofChannel("mutation");
+    expect(fake.selection()).toEqual([
+      (applied.reply.payload as { createdId: unknown }).createdId,
+    ]);
     expect(openPanel).toHaveBeenCalledWith("media.paged.web.panel.source");
   });
 
@@ -212,9 +138,11 @@ describe("webBundle.activate", () => {
       },
     });
     // The object type routes a double-click to the source edit context.
-    expect(fake.objectTypes.types()).toEqual(["webFrame"]);
-    expect(fake.editContexts.types()).toEqual(["webFrame"]);
-    const ot = fake.objectTypes.get("webFrame") as unknown as {
+    expect(fake.ids("objectTypes")).toEqual(["webFrame"]);
+    expect(fake.ids("editContexts")).toEqual(["webFrame"]);
+    const ot = fake
+      .registered<{ id?: string; type?: string }>("objectTypes")
+      .find((c) => (c.id ?? c.type) === "webFrame") as unknown as {
       matches: (c: unknown) => boolean;
       editContextType?: string;
       bakedFallback: string;
@@ -235,7 +163,9 @@ describe("webBundle.activate", () => {
     expect(ot.matches(withSource)).toBe(true);
     expect(ot.matches(bare)).toBe(false);
     // The edit context raises the source panel on enter.
-    const ec = fake.editContexts.get("webFrame") as unknown as {
+    const ec = fake
+      .registered<{ id?: string; type?: string }>("editContexts")
+      .find((c) => (c.id ?? c.type) === "webFrame") as unknown as {
       panelIds: string[];
       onEnter?: (ctx: { type: string; id: unknown }) => void;
     };
@@ -268,7 +198,9 @@ describe("webBundle.activate", () => {
         },
       },
     });
-    const ec = fake.editContexts.get("webFrame") as unknown as {
+    const ec = fake
+      .registered<{ id?: string; type?: string }>("editContexts")
+      .find((c) => (c.id ?? c.type) === "webFrame") as unknown as {
       onEnter?: (ctx: { type: string; id: unknown }) => void;
       panelIds?: string[];
       toolIds?: string[];
@@ -304,9 +236,9 @@ describe("webBundle.activate", () => {
       },
     });
     loaded.dispose();
-    expect(fake.panels.ids()).toHaveLength(0);
-    expect(fake.commands.ids()).toHaveLength(0);
-    expect(fake.objectTypes.types()).toHaveLength(0);
-    expect(fake.editContexts.types()).toHaveLength(0);
+    expect(fake.ids("panels")).toHaveLength(0);
+    expect(fake.ids("commands")).toHaveLength(0);
+    expect(fake.ids("objectTypes")).toHaveLength(0);
+    expect(fake.ids("editContexts")).toHaveLength(0);
   });
 });

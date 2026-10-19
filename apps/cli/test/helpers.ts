@@ -21,13 +21,16 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { createHeadlessHost } from "@paged-media/plugin-sdk";
+import {
+  createHeadlessHost,
+  silentConsole as silent,
+} from "@paged-media/plugin-sdk";
 
 import { main } from "../src/main";
 import { engineProtocolOnDisk, packageRoot } from "../src/session";
-import { minimalIdml } from "../../plugin-sdk/test/fixtures/minimal-idml";
+import { minimalIdml } from "../../../platform/extensions/packages/plugin-sdk/test/fixtures/minimal-idml";
 
-export const silent = { debug() {}, info() {}, warn() {}, error() {} };
+export { silent };
 export const FIXTURES = fileURLToPath(new URL("./fixtures/", import.meta.url));
 
 /** Run the CLI in-process; stdout parsed as JSON when it is JSON. */

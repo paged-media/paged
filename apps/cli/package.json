@@ -23,7 +23,7 @@
   "scripts": {
     "typecheck": "bun check -p tsconfig.json",
     "build": "rm -rf dist && bun build src/bin.ts --outdir dist --format esm --target node --external @anthropic-ai/sdk --external @paged-media/canvas-wasm --external @duckdb/duckdb-wasm --external react --external react-dom && chmod +x dist/bin.js",
-    "test": "bun test --timeout 120000 --preload ../../../../tooling/js/bun-test-setup.ts"
+    "test": "bun test --timeout 120000 --preload ../../tooling/js/bun-test-setup.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "0.135.0",

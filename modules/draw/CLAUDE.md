@@ -28,8 +28,9 @@ toolchain.
 
 `draw-bundle` is past "skeleton" — `activate(host)` contributes a full
 toolset via `contributeTool` (the Add/Delete/Convert anchor editors in
-the pen flyout, plus the Curvature/Pencil/Gradient-Annotator/Measure/
-Shape-Builder pro tools), the Stroke + Fill schema panels, the
+the pen flyout, plus the Curvature/Gradient-Annotator/Measure/
+Shape-Builder pro tools; the Pencil is the host's, built on this repo's
+`PencilMachine`, ADR 359), the Stroke + Fill schema panels, the
 Appearance/Dash/Path-Ops/Select-Same/Live-Corners commands, the
 Compound-Path pair (Make / Release), PATTERN EDITING v1 (a re-editable
 tile FIELD — and read this before the feature name: "save as a pattern

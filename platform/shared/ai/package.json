@@ -2,7 +2,7 @@
   "name": "@paged-media/ai",
   "version": "0.1.0-canary.4",
   "private": true,
-  "description": "Claude for paged: the authoring prompt, the script tools, the generate \u2192 run \u2192 verify \u2192 correct loop, and the transports (direct key or the same-origin proxy).",
+  "description": "Claude for paged: the authoring prompt, the script tools, the generate → run → verify → correct loop, and the transports (direct key or the same-origin proxy).",
   "license": "AGPL-3.0-only OR LicenseRef-PMEL",
   "type": "module",
   "main": "./src/index.ts",
@@ -14,10 +14,11 @@
   },
   "scripts": {
     "typecheck": "bun check -p tsconfig.json",
-    "test": "bun test --parallel --preload ../../../../tooling/js/bun-test-setup.ts"
+    "test": "bun test --parallel --preload ../../../tooling/js/bun-test-setup.ts"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "0.135.0"
+    "@anthropic-ai/sdk": "0.135.0",
+    "@paged-media/helpers": "workspace:*"
   },
   "devDependencies": {
     "@paged-media/plugin-api": "workspace:*",

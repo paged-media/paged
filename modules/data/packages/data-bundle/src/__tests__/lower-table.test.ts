@@ -9,8 +9,7 @@ import type { BundleHost, Mutation } from "@paged-media/plugin-api";
 
 import { commitLoweredTable } from "../lower";
 
-const silent = { debug() {}, info() {}, warn() {}, error() {} };
-
+import { silentConsole as silent } from "@paged-media/plugin-sdk";
 const table = {
   kind: "table" as const,
   region: "region",

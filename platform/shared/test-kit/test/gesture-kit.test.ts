@@ -21,7 +21,10 @@
 
 import { describe, expect, it } from "bun:test";
 
-import { createHeadlessHost } from "@paged-media/plugin-sdk";
+import {
+  createHeadlessHost,
+  silentConsole as silent,
+} from "@paged-media/plugin-sdk";
 
 import {
   cellId,
@@ -40,8 +43,6 @@ import {
   type GeometryDigest,
   type GestureMatrix,
 } from "../src/index.ts";
-
-const silent = { debug() {}, info() {}, warn() {}, error() {} };
 
 describe("createFakeShellEditor", () => {
   it("records the typed gesture methods on the gesture channel, with the SAB lane", async () => {

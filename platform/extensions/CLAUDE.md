@@ -6,13 +6,15 @@ like the rest of the repository (ADR PM-0001; it was MPL-2.0 OR PMEL before).
 
 ## What this is
 
-Four packages of the repository's root Bun workspace (see README for the tier table):
-`packages/plugin-api` (the contract, **type-only**), `packages/plugin-sdk`
-(the runtime: in-process `BundleHost` adapter, loader, gesture kit,
-object registry, headless host; and `bin/paged-plugin.mjs`, the zero-dep ESM
-manifest CLI with no build step, which was `packages/plugin-cli`, PM-0008), `packages/cli` (`@paged-media/cli`, bin `paged-node`: the Node
-CLI over the headless host, ADR 324) and `packages/ai` (`@paged-media/ai`,
-ADR 325). **`DESIGN.md` is the deliberation record** — when code and
+Two packages of the repository's root Bun workspace, both public (see README
+for the tier table): `packages/plugin-api` (the contract, **type-only**) and
+`packages/plugin-sdk` (the runtime: in-process `BundleHost` adapter, loader,
+gesture kit, object registry, headless host; and `bin/paged-plugin.mjs`, the
+zero-dep ESM manifest CLI with no build step, which was `packages/plugin-cli`,
+PM-0008). The first-party `@paged-media/cli` (bin `paged-node`, ADR 324) and
+`@paged-media/ai` (ADR 325) lived here until wave C; they are `apps/cli` and
+`platform/shared/ai` now, outside the community-facing tree; their ADRs stay
+in `docs/adr`. **`DESIGN.md` is the deliberation record** — when code and
 DESIGN.md disagree, fix one of them in the same change. Decision records
 are in `docs/adr/`; the object model is ADR 329, though the code still
 cites its proposal number, "ADR 323".
