@@ -25,3 +25,10 @@
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
 
 GlobalRegistrator.register();
+
+// Bun's own confirm(), prompt() and alert() read the terminal, so a test
+// that reached one would wait for a keypress forever. Here they answer
+// "no" at once; a test that means to answer them stubs them itself.
+globalThis.confirm = () => false;
+globalThis.prompt = () => null;
+globalThis.alert = () => {};
