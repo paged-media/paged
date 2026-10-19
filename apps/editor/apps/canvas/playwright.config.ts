@@ -23,6 +23,9 @@ import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, "..", "..");
+// The repository's root tests (/tests, tests/README.md): the cross-component
+// Playwright lanes run on this config's dev server, as projects of their own.
+const ROOT_TESTS = resolve(__dirname, "..", "..", "..", "..", "tests");
 
 // Reuse an already-running Vite dev server when one is up (faster
 // iteration locally); otherwise spawn one. The wasm bundle is built
@@ -231,6 +234,56 @@ export default defineConfig({
                 ],
               }
             : {},
+      },
+    },
+    {
+      // Cross-component round trips (/tests/integration): a module's state
+      // saved into the editor's .paged container and read back on reopen.
+      // The same browser and settings as `journeys`; CI runs it beside the
+      // journeys (editor-tests.yml).
+      name: "integration",
+      testDir: resolve(ROOT_TESTS, "integration"),
+      testMatch: "**/*.spec.ts",
+      snapshotPathTemplate:
+        "{testDir}/__screenshots__/{testFileName}/{arg}-{projectName}-{platform}{ext}",
+      use: {
+        ...devices["Desktop Chrome"],
+        deviceScaleFactor: 1,
+        headless: (process.env.BACKEND ?? "").toLowerCase() !== "gpu",
+        launchOptions:
+          (process.env.BACKEND ?? "").toLowerCase() === "gpu"
+            ? {
+                args: [
+                  "--enable-unsafe-webgpu",
+                  "--use-vulkan",
+                  "--enable-features=Vulkan",
+                ],
+              }
+            : {},
+      },
+    },
+    {
+      // The round trips on the GPU backend, as `journeys-gpu` runs the
+      // journeys (real Chrome, new headless, Metal): paged.image's commit,
+      // undo and reopen are GPU-only. LOCAL, GATING NOTHING, like
+      // journeys-gpu: `bun run --filter paged-canvas test:integration:gpu`.
+      name: "integration-gpu",
+      testDir: resolve(ROOT_TESTS, "integration"),
+      testMatch: "**/*.spec.ts",
+      snapshotPathTemplate:
+        "{testDir}/__screenshots__/{testFileName}/{arg}-{projectName}-{platform}{ext}",
+      use: {
+        ...devices["Desktop Chrome"],
+        channel: "chrome",
+        deviceScaleFactor: 1,
+        headless: false,
+        launchOptions: {
+          args: [
+            "--headless=new",
+            "--enable-unsafe-webgpu",
+            "--use-angle=metal",
+          ],
+        },
       },
     },
     {
