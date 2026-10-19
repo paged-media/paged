@@ -17,7 +17,7 @@
  */
 
 // The typed engine facade. The Rust wasm (slide-js) does all the PPTX work:
-// OPC and PresentationML reading, inheritance, geometry, the IDML package.
+// OPC and PresentationML reading, inheritance, geometry, the native document.
 // This file only boots it and types its JSON report (CLAUDE.md hard rule:
 // no PresentationML semantics in TypeScript).
 //
@@ -104,7 +104,8 @@ export interface ImportReport {
 }
 
 export interface Imported {
-  idml: Uint8Array;
+  /** The `.paged` package of the deck's native document (ADR 708). */
+  paged: Uint8Array;
   report: ImportReport;
   /** The decoded embedded faces, one after the other (see
    *  `EmbeddedFaceReport.offset`). */
@@ -119,7 +120,7 @@ export interface DeckFonts {
 }
 
 interface WasmImported {
-  readonly idml: Uint8Array;
+  readonly paged: Uint8Array;
   readonly report: string;
   readonly fonts: Uint8Array;
   free(): void;
@@ -166,13 +167,13 @@ export async function slideEngine(): Promise<SlideEngine> {
 export class SlideEngine {
   constructor(private readonly mod: SlideWasmModule) {}
 
-  /** Read a `.pptx` into the IDML package of its native slides. Throws with
+  /** Read a `.pptx` into the `.paged` package of its native slides. Throws with
    *  the engine's message when the file is not a presentation. */
   importPptx(bytes: Uint8Array, name: string): Imported {
     const out = this.mod.importPptx(bytes, name);
     try {
       return {
-        idml: out.idml,
+        paged: out.paged,
         report: JSON.parse(out.report) as ImportReport,
         fonts: out.fonts,
       };

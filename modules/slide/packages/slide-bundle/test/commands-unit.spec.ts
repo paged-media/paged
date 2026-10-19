@@ -213,7 +213,7 @@ const PPTX = new Uint8Array(
 );
 
 describe("media.paged.slide.importPptx (unit)", () => {
-  it("opens the deck's IDML package through the native-document door, then writes the deck label as one batch", async () => {
+  it("opens the deck's .paged package through the native-document door, then writes the deck label as one batch", async () => {
     covers("command:media.paged.slide.importPptx");
     const opened: Uint8Array[] = [];
     const parts = new Map<string, number[]>();
@@ -236,6 +236,9 @@ describe("media.paged.slide.importPptx (unit)", () => {
     expect(opened).toHaveLength(1);
     const head = new TextDecoder().decode(opened[0]!.subarray(0, 120));
     expect(head).toContain("application/vnd.adobe.indesign-idml-package");
+    expect(new TextDecoder().decode(opened[0])).toContain(
+      "paged/core/model/document.pgm",
+    );
     // A slide per deck slide, each an address of the slide kind.
     expect(out.slides.length).toBeGreaterThan(5);
     expect(

@@ -80,12 +80,12 @@ import {
 } from "../commands/path-options";
 import { useFollowedDraft, usePanelReload } from "./use-panel-reload";
 import {
+  About,
   humanize,
-  PanelAbout,
-  PanelIntro,
   Refusal,
   useActionFeedback,
-} from "./panel-kit";
+} from "@paged-media/panel-kit";
+import { PanelIntro } from "./panel-parts";
 
 export { PATH_OPTIONS_PANEL_ID };
 
@@ -366,7 +366,7 @@ export function makePathOptionsPanel(host: BundleHost): {
       },
     );
 
-    const { refusal, run } = useActionFeedback(host, reload);
+    const { refusal, run } = useActionFeedback(host, reload, "draw panel");
 
     const numberRow = <S extends PathOptionSection>(
       section: S,
@@ -750,10 +750,7 @@ export function makePathOptionsPanel(host: BundleHost): {
           );
         })}
 
-        <PanelAbout
-          text={PATH_OPTIONS_PANEL_NOTE}
-          attr="data-draw-pathopts-note"
-        />
+        <About attr="data-draw-pathopts-note">{PATH_OPTIONS_PANEL_NOTE}</About>
       </div>
     );
   };

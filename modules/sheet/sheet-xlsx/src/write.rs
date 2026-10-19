@@ -39,11 +39,11 @@
 use crate::error::XlsxError;
 use crate::opc::{ContentTypes, ModeledKind, OpcContainer, PartEntry};
 use crate::sheet_doc::SheetBinding;
+use paged_ooxml::xml::{escape_attr, escape_text};
 use sheet_core::value::CellValue;
 use sheet_core::{col_to_a1, SheetId, SheetModel};
 use std::borrow::Cow;
 use std::collections::{BTreeMap, HashMap};
-use std::io::Write;
 
 /// The `calcChain.xml` part name (always dropped).
 const CALC_CHAIN_PART: &str = "xl/calcChain.xml";
@@ -70,6 +70,20 @@ pub fn part_options() -> zip::write::SimpleFileOptions {
         .system(zip::System::Unix)
         .unix_permissions(0o644)
         .large_file(false)
+}
+
+/// A package of `parts`, in order, each written with [`part_options`]: the
+/// workbooks the engine creates from nothing (a new workbook, a CSV import)
+/// are written as a save writes one, through the one zip writer
+/// (`paged_ooxml::write_zip`).
+pub fn write_package<'a>(parts: impl IntoIterator<Item = (&'a str, &'a [u8])>) -> Vec<u8> {
+    paged_ooxml::write_zip(part_options(), |zip| {
+        for (name, bytes) in parts {
+            zip.file(name, bytes)?;
+        }
+        Ok::<(), zip::result::ZipError>(())
+    })
+    .expect("an in-memory zip write does not fail")
 }
 
 /// The dynamic-array formulas of a save: `anchors` maps each anchor
@@ -112,11 +126,6 @@ pub fn save(
     // save), so re-emitting it verbatim stays correct even when sheets are
     // dirty. The rebuild hook lands when sheet-js writes new strings back.
 
-    let buf = Vec::new();
-    let cursor = std::io::Cursor::new(buf);
-    let mut zip = zip::ZipWriter::new(cursor);
-    let opts = part_options();
-
     // Worksheet part name → binding, once (was a scan per dirty sheet).
     let mut by_part: HashMap<&str, &SheetBinding> = HashMap::with_capacity(bindings.len());
     for b in bindings {
@@ -124,82 +133,77 @@ pub fn save(
         by_part.entry(b.part_name.as_str()).or_insert(b);
     }
 
-    for part in &container.parts {
-        let name = part.name();
+    paged_ooxml::write_zip(part_options(), |zip| {
+        for part in &container.parts {
+            let name = part.name();
 
-        // calcChain is dropped entirely.
-        if drop_calc_chain && name == CALC_CHAIN_PART {
-            continue;
-        }
-
-        // A save-time splice (`structure.rs` — e.g. a changed `<calcPr>`)
-        // supersedes the stored bytes of that one part.
-        if let Some(bytes) = overrides.get(name) {
-            zip.start_file(name, opts)?;
-            zip.write_all(bytes).map_err(zip_io)?;
-            continue;
-        }
-
-        // Untouched parts are BORROWED (lazy-verbatim without a copy); only
-        // re-encoded/rebuilt parts allocate.
-        let bytes: Cow<'_, [u8]> = match part {
-            PartEntry::Opaque { bytes, .. } => Cow::Borrowed(bytes),
-            PartEntry::Modeled {
-                kind,
-                raw,
-                dirty,
-                name,
-            } => {
-                match kind {
-                    ModeledKind::ContentTypes => {
-                        if drop_calc_chain {
-                            Cow::Owned(rebuild_content_types(&container.content_types))
-                        } else {
-                            Cow::Borrowed(raw)
-                        }
-                    }
-                    ModeledKind::WorkbookRels => {
-                        if drop_calc_chain {
-                            Cow::Owned(strip_calc_chain_rel(raw)?)
-                        } else {
-                            Cow::Borrowed(raw)
-                        }
-                    }
-                    ModeledKind::Worksheet => {
-                        if *dirty {
-                            let binding = by_part.get(name.as_str()).copied().ok_or_else(|| {
-                                XlsxError::Structure(format!(
-                                    "dirty worksheet {name} has no binding"
-                                ))
-                            })?;
-                            Cow::Owned(encode_worksheet(
-                                model,
-                                binding,
-                                raw,
-                                formula_texts,
-                                dynamic,
-                            )?)
-                        } else {
-                            Cow::Borrowed(raw)
-                        }
-                    }
-                    // Workbook / SharedStrings / Styles: verbatim in T0
-                    // (the model never mutates them through this writer yet).
-                    _ => Cow::Borrowed(raw),
-                }
+            // calcChain is dropped entirely.
+            if drop_calc_chain && name == CALC_CHAIN_PART {
+                continue;
             }
-        };
 
-        zip.start_file(name, opts)?;
-        zip.write_all(&bytes).map_err(zip_io)?;
-    }
+            // A save-time splice (`structure.rs` — e.g. a changed `<calcPr>`)
+            // supersedes the stored bytes of that one part.
+            if let Some(bytes) = overrides.get(name) {
+                zip.file(name, bytes)?;
+                continue;
+            }
 
-    let cursor = zip.finish()?;
-    Ok(cursor.into_inner())
-}
+            // Untouched parts are BORROWED (lazy-verbatim without a copy); only
+            // re-encoded/rebuilt parts allocate.
+            let bytes: Cow<'_, [u8]> = match part {
+                PartEntry::Opaque { bytes, .. } => Cow::Borrowed(bytes),
+                PartEntry::Modeled {
+                    kind,
+                    raw,
+                    dirty,
+                    name,
+                } => {
+                    match kind {
+                        ModeledKind::ContentTypes => {
+                            if drop_calc_chain {
+                                Cow::Owned(rebuild_content_types(&container.content_types))
+                            } else {
+                                Cow::Borrowed(raw)
+                            }
+                        }
+                        ModeledKind::WorkbookRels => {
+                            if drop_calc_chain {
+                                Cow::Owned(strip_calc_chain_rel(raw)?)
+                            } else {
+                                Cow::Borrowed(raw)
+                            }
+                        }
+                        ModeledKind::Worksheet => {
+                            if *dirty {
+                                let binding =
+                                    by_part.get(name.as_str()).copied().ok_or_else(|| {
+                                        XlsxError::Structure(format!(
+                                            "dirty worksheet {name} has no binding"
+                                        ))
+                                    })?;
+                                Cow::Owned(encode_worksheet(
+                                    model,
+                                    binding,
+                                    raw,
+                                    formula_texts,
+                                    dynamic,
+                                )?)
+                            } else {
+                                Cow::Borrowed(raw)
+                            }
+                        }
+                        // Workbook / SharedStrings / Styles: verbatim in T0
+                        // (the model never mutates them through this writer yet).
+                        _ => Cow::Borrowed(raw),
+                    }
+                }
+            };
 
-fn zip_io(e: std::io::Error) -> XlsxError {
-    XlsxError::Zip(zip::result::ZipError::Io(e))
+            zip.file(name, &bytes)?;
+        }
+        Ok::<(), XlsxError>(())
+    })
 }
 
 /// Rebuild `[Content_Types].xml` from the model, omitting the calcChain
@@ -212,8 +216,8 @@ fn rebuild_content_types(ct: &ContentTypes) -> Vec<u8> {
     for (ext, ty) in &ct.defaults {
         s.push_str(&format!(
             r#"<Default Extension="{}" ContentType="{}"/>"#,
-            xml_attr(ext),
-            xml_attr(ty)
+            escape_attr(ext),
+            escape_attr(ty)
         ));
     }
     for (pn, ty) in &ct.overrides {
@@ -222,8 +226,8 @@ fn rebuild_content_types(ct: &ContentTypes) -> Vec<u8> {
         }
         s.push_str(&format!(
             r#"<Override PartName="{}" ContentType="{}"/>"#,
-            xml_attr(pn),
-            xml_attr(ty)
+            escape_attr(pn),
+            escape_attr(ty)
         ));
     }
     s.push_str("</Types>");
@@ -235,23 +239,23 @@ fn rebuild_content_types(ct: &ContentTypes) -> Vec<u8> {
 /// relationship rows we recognize, which is enough for T0 because workbook
 /// `.rels` is a flat list of `<Relationship>` elements.
 fn strip_calc_chain_rel(raw: &[u8]) -> Result<Vec<u8>, XlsxError> {
-    use crate::rels::{Relationships, REL_CALC_CHAIN};
-    let rels = Relationships::parse(raw)?;
+    use crate::rels::{parse_rels, REL_CALC_CHAIN};
+    let rels = parse_rels(raw)?;
     let mut s = String::new();
     s.push_str(r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>"#);
     s.push('\n');
     s.push_str(
         r#"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">"#,
     );
-    for r in &rels.rels {
+    for r in &rels.items {
         if r.is_type(REL_CALC_CHAIN) {
             continue;
         }
         s.push_str(&format!(
             r#"<Relationship Id="{}" Type="{}" Target="{}"/>"#,
-            xml_attr(&r.id),
-            xml_attr(&r.rel_type),
-            xml_attr(&r.target)
+            escape_attr(&r.id),
+            escape_attr(&r.rel_type),
+            escape_attr(&r.target)
         ));
     }
     s.push_str("</Relationships>");
@@ -503,17 +507,20 @@ fn encode_cell(
         ),
         CellValue::Error(e) => (
             r#" t="e""#.to_owned(),
-            format!("<v>{}</v>", xml_text(stored_error(*e))),
+            format!("<v>{}</v>", escape_text(stored_error(*e))),
         ),
         CellValue::Text(t) => {
             // Formula cells with text results use t="str"; literal text uses
             // an inline string (T0 does not write back into sharedStrings).
             if formula.is_some() {
-                (r#" t="str""#.to_owned(), format!("<v>{}</v>", xml_text(t)))
+                (
+                    r#" t="str""#.to_owned(),
+                    format!("<v>{}</v>", escape_text(t)),
+                )
             } else {
                 (
                     r#" t="inlineStr""#.to_owned(),
-                    format!("<is><t>{}</t></is>", xml_text(t)),
+                    format!("<is><t>{}</t></is>", escape_text(t)),
                 )
             }
         }
@@ -543,9 +550,9 @@ fn encode_cell(
             if let Some(cm) = cm {
                 cm_attr = format!(r#" cm="{cm}""#);
             }
-            format!(r#"<f t="array" ref="{area}">{}</f>"#, xml_text(f))
+            format!(r#"<f t="array" ref="{area}">{}</f>"#, escape_text(f))
         }
-        (Some(f), ArrayForm::None) => format!("<f>{}</f>", xml_text(f)),
+        (Some(f), ArrayForm::None) => format!("<f>{}</f>", escape_text(f)),
         (None, _) => String::new(),
     };
 
@@ -581,35 +588,6 @@ fn fmt_f64(n: f64) -> String {
     }
 }
 
-/// Escape text content for an XML element body.
-fn xml_text(s: &str) -> String {
-    let mut out = String::with_capacity(s.len());
-    for ch in s.chars() {
-        match ch {
-            '&' => out.push_str("&amp;"),
-            '<' => out.push_str("&lt;"),
-            '>' => out.push_str("&gt;"),
-            _ => out.push(ch),
-        }
-    }
-    out
-}
-
-/// Escape an attribute value.
-fn xml_attr(s: &str) -> String {
-    let mut out = String::with_capacity(s.len());
-    for ch in s.chars() {
-        match ch {
-            '&' => out.push_str("&amp;"),
-            '<' => out.push_str("&lt;"),
-            '>' => out.push_str("&gt;"),
-            '"' => out.push_str("&quot;"),
-            _ => out.push(ch),
-        }
-    }
-    out
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -625,7 +603,7 @@ mod tests {
 
     #[test]
     fn xml_escapes() {
-        assert_eq!(xml_text("a & b < c > d"), "a &amp; b &lt; c &gt; d");
-        assert_eq!(xml_attr(r#"x"y&z"#), "x&quot;y&amp;z");
+        assert_eq!(escape_text("a & b < c > d"), "a &amp; b &lt; c &gt; d");
+        assert_eq!(escape_attr(r#"x"y&z"#), "x&quot;y&amp;z");
     }
 }

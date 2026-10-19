@@ -4,11 +4,13 @@ Range 700–749.
 
 | ADR | Title | Status |
 |---|---|---|
-| [700](700-pptx-opens-as-a-generated-idml-package.md) | A PPTX opens as a generated IDML package, with inheritance resolved at import | Accepted 2026-10-05 |
-| [701](701-paged-ooxml-is-vendored.md) | `paged-ooxml` is vendored from the Word plugin until it is published | Accepted 2026-10-05 |
+| [700](700-pptx-opens-as-a-generated-idml-package.md) | A PPTX opens as a generated IDML package, with inheritance resolved at import | Accepted 2026-10-05; amended 2026-10-19 (ADR 708) |
+| [701](701-paged-ooxml-is-vendored.md) | `paged-ooxml` is vendored from the Word plugin until it is published | Superseded 2026-10-19 by doc ADR 607 |
 | [702](702-drawingml-is-read-as-an-element-tree.md) | PresentationML and DrawingML are read as an element tree | Accepted 2026-10-05 |
 | [703](703-slide-data-storage.md) | Where slide-only data lives | Accepted 2026-10-05 |
 | [704](704-pptx-export-regenerates-slides.md) | PPTX export regenerates slides and carries masters, layouts and themes | Accepted 2026-10-05 |
 | [705](705-powerpoint-is-the-oracle.md) | PowerPoint is the oracle | Accepted 2026-10-05 |
 | [706](706-transitions-run-on-webgpu-with-gl-transitions.md) | Slide transitions run on WebGPU, using the gl-transitions shader collection | Accepted 2026-10-05 |
 | [707](707-embedded-fonts-are-decoded-and-given-to-the-document.md) | A deck's embedded fonts are decoded here and given to the document within their licences | Accepted 2026-10-14 |
+| [708](708-a-deck-is-built-as-a-native-document.md) | A deck is built as a native document with the engine's model crates | Accepted 2026-10-19 |
+| [709](709-one-drawingml-chart-reader.md) | One DrawingML chart reader and model for paged.slide and paged.sheet; the layouts stay per module | Accepted 2026-10-19 |

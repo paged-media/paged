@@ -1,0 +1,32 @@
+{
+  "name": "@paged-media/panel-kit",
+  "private": true,
+  "version": "0.0.0",
+  "license": "AGPL-3.0-only OR LicenseRef-PMEL",
+  "description": "Internal: the small controls every panel of the editor and the built-in modules shares, one implementation each: the second-click confirm, the disclosure, the debouncer, the refusal line and its wording, named icon buttons and pressed segments, and the colour and status tokens with one fallback each. Never published (docs/adr/PM-0002).",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "bun check -p tsconfig.json",
+    "test": "bun test --parallel --timeout 30000 --preload ../../../tooling/js/bun-test-setup.ts --preload ./test/happydom.ts",
+    "test:compiled": "bun test --parallel --timeout 30000 --preload ../../../tooling/js/bun-test-setup.ts --preload ./test/happydom.ts --preload ../../../tooling/js/bun-react-compiler.ts"
+  },
+  "peerDependencies": {
+    "@paged-media/plugin-api": "workspace:*",
+    "react": ">=19.3"
+  },
+  "devDependencies": {
+    "@happy-dom/global-registrator": "catalog:",
+    "@paged-media/plugin-api": "workspace:*",
+    "@testing-library/react": "catalog:",
+    "@types/bun": "catalog:",
+    "@types/react": "catalog:",
+    "react": "catalog:",
+    "react-dom": "catalog:",
+    "typescript": "catalog:"
+  }
+}

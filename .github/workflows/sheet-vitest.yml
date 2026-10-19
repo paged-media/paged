@@ -25,6 +25,11 @@ on:
       # The internal shared code the bundle uses (workspace:*).
       - "platform/shared/wasm-boot/**"
       - "platform/shared/helpers/**"
+      - "platform/shared/panel-kit/**"
+      # The shared OOXML foundation the engine wasm builds from.
+      - "platform/shared/ooxml/**"
+      # The shared DrawingML chart reader, a path dependency (slide ADR 709).
+      - "platform/shared/dml-chart/**"
       # The engine wasm packages this workflow builds against (workspace:*),
       # and what builds them, so an engine change re-tests its consumers.
       - "engine/core/crates/**"
@@ -61,6 +66,11 @@ on:
       # The internal shared code the bundle uses (workspace:*).
       - "platform/shared/wasm-boot/**"
       - "platform/shared/helpers/**"
+      - "platform/shared/panel-kit/**"
+      # The shared OOXML foundation the engine wasm builds from.
+      - "platform/shared/ooxml/**"
+      # The shared DrawingML chart reader, a path dependency (slide ADR 709).
+      - "platform/shared/dml-chart/**"
       # The engine wasm packages this workflow builds against (workspace:*),
       # and what builds them, so an engine change re-tests its consumers.
       - "engine/core/crates/**"

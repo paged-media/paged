@@ -1,6 +1,6 @@
 # ADR 701 — `paged-ooxml` is vendored from the Word plugin until it is published
 
-- **Status:** Accepted 2026-10-05.
+- **Status:** Superseded 2026-10-19 by modules/doc ADR 607.
 - **Scope:** `vendor/paged-ooxml`, `scripts/sync-ooxml.sh`
 
 ## Context
@@ -24,3 +24,11 @@ dependency and this record is superseded.
 
 - The two plugins read packages with the same code without depending on each other.
 - A fix in one copy needs a re-sync in the other; the drift check makes a local edit visible.
+
+## Amendment 2026-10-19
+
+Superseded by [ADR 607](../../../doc/docs/adr/607-the-ooxml-foundation-is-shared.md). In the
+monorepo the copy protected no boundary, so `vendor/paged-ooxml`, its `SYNCED` stamp,
+`scripts/sync-ooxml.sh` and the CI and Moon drift checks are gone. This module depends on
+`platform/shared/ooxml` by path, without the `dom` feature.
+

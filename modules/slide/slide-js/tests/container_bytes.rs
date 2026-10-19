@@ -17,7 +17,7 @@
  */
 
 //! The ZIP metadata of everything the engine writes: an edited `.pptx` and
-//! the IDML a deck opens as. It must be a function of the parts alone: no
+//! the `.paged` package a deck opens as. It must be a function of the parts alone: no
 //! wall-clock timestamp, no build-host `version made by`, no extra fields,
 //! data descriptors or ZIP64 records. These are the values every written
 //! file has carried so far; a `zip` upgrade that changes one fails here.
@@ -136,10 +136,10 @@ fn an_edited_deck_is_written_with_fixed_zip_metadata() {
 }
 
 #[test]
-fn the_idml_a_deck_opens_as_is_written_with_fixed_zip_metadata() {
-    let (idml, _, _) = slide_js::import(&fixture("placeholders"), "deck").unwrap();
-    assert_fixed_metadata(&idml, "idml");
-    // The mimetype comes first and stored, as IDML requires.
-    assert_eq!(&idml[30..38], b"mimetype");
-    assert_eq!(u16_at(&idml, 8), 0, "mimetype is stored");
+fn the_package_a_deck_opens_as_is_written_with_fixed_zip_metadata() {
+    let (paged, _, _) = slide_js::import(&fixture("placeholders"), "deck").unwrap();
+    assert_fixed_metadata(&paged, "paged");
+    // The mimetype comes first and stored, as the container requires.
+    assert_eq!(&paged[30..38], b"mimetype");
+    assert_eq!(u16_at(&paged, 8), 0, "mimetype is stored");
 }

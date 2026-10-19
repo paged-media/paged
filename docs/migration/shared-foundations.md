@@ -4,7 +4,7 @@ Wave C moves code that every built-in module had its own copy of into one intern
 implementation under `platform/shared/*` (PM-0002: importable by the built-ins and the
 editor, never by `platform/extensions`), and slims what the public SDK carries. This page
 records the TypeScript items C6–C9, C11 and C12, measured on 2026-10-19, and after them the
-Rust items as they land (C2 and C5 at the end). C10 (`panel-kit`) is separate.
+Rust items as they land (C2, C5 and C4 at the end). C10 (`panel-kit`) is separate.
 
 How it was measured:
 
@@ -28,6 +28,7 @@ How it was measured:
 | C9   | one snapper, one Pencil                                             | snappers 2 → 1 (TS fallbacks 2 → 0); Pencils 2 → 1                                                   |
 | C11  | `platform/shared/helpers`                                           | sha256 5 → 1; base64 13 in 10 files → 1; colour 3 → 1; `asciiJson` 3 → 1; unit tables, see C11      |
 | C12  | `ai` and `cli` leave `platform/extensions`; ADR 331                  | packages in the community-facing tree 4 → 2                                                          |
+| C1   | `platform/shared/ooxml` (Rust): one OPC layer, with a memory budget | `paged-ooxml` copies 2 → 1; package readers 2 → 1 (unguarded 2 modules → 0); see C1                 |
 
 Canvas build, before wave C → after C6, C7, C8, C9, C11 and C12:
 
@@ -417,3 +418,209 @@ moxcms (0.8, held) and ooxmlsdk (0.12, held) are on one version wherever they ar
 The transitive duplicates are third-party crates' own requirements, none of them ours to
 move: in the engine, skrifa 0.42 (subsetter), 0.44 (vello) and 0.46 (hayro), and
 miniz_oxide 0.8 beside 0.9 (png 0.18, also in image's dev graph).
+
+## C4 — doc and slide build native documents (Rust)
+
+paged.doc's standalone-open skeleton and paged.slide's deck are built as
+`paged_scene::Document`s with the engine's model crates and packaged by core's one `.paged`
+writer (`paged_store::package::wrap_document`), as the PDF mapper already did. The
+hand-written IDML writers are gone: `docx-skeleton`'s IDML half (237 lines) and `slide-idml`
+(1,363 lines), 1,600 lines in all. Decisions: doc ADR 606, slide ADR 708 (amending
+doc ADR 603 and slide ADR 700).
+
+### Equivalence
+
+Before the writers were deleted, each module had a test that built the document both ways and
+compared the IDML importer's model of the old package with the new document, serialised as
+the model part (`paged_store::to_bytes`, maps in key order):
+
+| Module | Compared | Result |
+| --- | --- | --- |
+| doc | 30 conformance builders, `annual-report.docx`, `merge-letter.docx`; the docx corpus lane (273 of 292 files import); each with span/split columns on and off | equal; one field differs on one corpus file (below) |
+| slide | the 10 PowerPoint-authored fixtures, the 7 decks of the pptx corpus lane; also the report beside the package (stories, elements, diagnostics) and the package read back as the engine reads it | equal |
+
+The tests are in the history (`docx-skeleton/tests/equivalence.rs`,
+`slide-native/tests/equivalence.rs` at the commits that added the builders). Behaviour tests
+stay: the skeleton's page, margin, frame, story and determinism checks now assert the native
+document read back from the package; slide-idml's baselines test and unit tests moved to
+`slide-native`, beside new package tests (pages, masters, stories, elements, a picture's
+blob, crop transform and the not-a-picture diagnostic, determinism of the model).
+
+### What the old path got wrong, and the new one does not
+
+- **The document name kept its escapes.** idml-import reads the designmap's `Name`
+  attribute raw, so `a&b.docx` opened as a document named `a&amp;b.docx` (one corpus file).
+  The same raw read applies to ids and style names the writers escaped; no slide fixture or
+  corpus deck has one.
+
+### What the new path keeps from the old one
+
+- Lengths to the thousandth of a point (the IDML writers' number format), names without line
+  breaks (XML attribute normalisation), the `20.0` DOM version and the root XML tag, so a
+  document opens as it did.
+
+### Gaps recorded, not changed here
+
+- **The model part is not byte-stable for map fields.** `paged-store` writes the model's
+  `HashMap`s (a spread's labels and item names, master spreads) in iteration order, so two
+  native builds of the same deck are the same document but not always the same bytes (the
+  IDML writer's output was byte-stable). Sorting them is a core change. In wasm the hasher
+  keys are fixed, so the editor's imports are stable.
+- **The grow rule.** The model can carry a story's grow rule; the doc bundle still sets it on
+  the wire after the open.
+
+### wasm (wasm-release, `wasm-bindgen --target web`, `wasm-opt -Oz`)
+
+The plan expected both artifacts to shrink; both grow. A module that produces a native
+document carries the serializer of the whole engine model (the model part is JSON) and the
+content hash of image blobs; the IDML writer it replaces was small string formatting.
+
+| Artifact | Before | After C4 | Change |
+| --- | ---: | ---: | ---: |
+| `docx_js_bg.wasm` | 6,660,701 | 6,834,216 | +173,515 |
+| `slide_js_bg.wasm` | 1,559,562 | 1,808,272 | +248,710 |
+
+- Mitigations in the numbers: the model crates (and slide's builder) build at
+  `opt-level = "z"` (doc −17 KB, slide −23 KB); the derived caches are not rebuilt before
+  writing (doc −19 KB). The first doc build was +209,903.
+- App total: CI measured 98,601,399 B at `3ce59f523`; with C4 that is 99,023,624 B
+  (+422,225), under the 100,000,000 B budget by 976,376 B.
+- The structural fix is one binary for doc, slide and the PDF mapper (each now carries the
+  same serializer; deferred in the plan). The alternative, handing the engine an IR to build
+  the document from, needs a new host door and puts module code in the engine.
+
+## C1 — the OOXML foundation (Rust)
+
+`paged-ooxml` moved from `modules/doc/paged-ooxml` to `platform/shared/ooxml`, a Cargo
+workspace of its own (as `test-resources` is) that doc, slide and sheet take as a path
+dependency. The record is modules/doc ADR 607, which supersedes slide ADR 701.
+
+- **De-vendored.** slide's `vendor/paged-ooxml` (a byte-identical copy), its `SYNCED` stamp,
+  `scripts/sync-ooxml.sh`, the `vendor-check` Moon task and the CI drift step are gone.
+- **sheet's OPC layer folded in, with its budget.** One `read_zip(bytes, budget)` reads every
+  package of the three modules, at 1 GiB uncompressed. It refuses a package whose entries
+  declare more than the budget before inflating anything, never pre-allocates a declared size
+  (at most 8 MiB, and what the compressed bytes could hold), and stops an entry that inflates
+  past the budget still unspent. This is the security fix: doc and slide pre-allocated each
+  entry at its claimed size and inflated without a limit.
+- **Proved at the importers.** `docx-conformance/tests/zip_budget.rs` and
+  `slide-js/tests/zip_budget.rs` feed a 1,100-entry bomb (about 1.1 MB, 1.07 GiB declared) and
+  a streamed entry whose central directory claims 4 GiB for 64 KiB to every entry point (doc:
+  `import_docx`, `import_docx_with_package`, `DocSession::load`; slide: `import_pptx`,
+  `embedded_faces`, `slide_js::import`). Each is refused (or read at its real size), and no single
+  allocation reaches 64 MiB. Against the old reader both tests fail: the 208-byte file made a
+  4,294,967,295-byte allocation, and the bomb inflated in full before the import gave up on a
+  missing main part.
+- **One of each:** content-type table, `.rels` parser (`parse`, tolerant, for doc and slide;
+  `try_parse`, strict, for sheet: each keeps its behaviour), `resolve_target` / `part_dir` /
+  `rels_part_name`, legacy-container sniff, byte splicer, and the zip writer (`write_zip`; each
+  module keeps its own entry options, which decide its container bytes).
+- **The XML helpers** (`paged_ooxml::xml`): `attr` and `attr_raw`, `general_ref`,
+  `local_name`, `prefix_of`, `escape_text`, `escape_attr`, `unescape`. They report quick-xml's
+  own errors, and have `*_as` forms that build the caller's error type where the failure
+  happens, so sheet's errors keep their variants and messages and its call sites carry no
+  conversion.
+- **DrawingML colour** (`paged_ooxml::colour`): HSL, SpreadsheetML's `tint` (`excel_tint`,
+  HSL luminance) and DrawingML's `a:tint` / `a:shade` (`dml_tint`, `dml_shade`, linear
+  light), kept apart.
+- **`ooxmlsdk` behind the `dom` feature**, which only doc enables. slide's lock loses
+  `ooxmlsdk` and zip 8, and with them its three zip-8 advisory ignores. The pins stay: ooxmlsdk
+  0.12, quick-xml 0.41.
+- **zip's deflate backend is the consumer's** (`deflate` for doc and slide, `deflate-flate2`
+  for sheet), so no module's compressed bytes change.
+- **The wasm builds name the shared crate relative to the repository**
+  (`tooling/rust/build-wasm.sh` remaps `platform/shared/`). Cargo names a crate outside the
+  module's workspace by its absolute path, which put the build machine's directory into the
+  wasm's panic locations.
+
+Duplicates before → after:
+
+| What | Before | After |
+| --- | --- | --- |
+| `paged-ooxml` crate | 2 (doc, slide `vendor/`) | 1 |
+| zip package readers | 2 (one with a budget) | 1, with the budget |
+| `[Content_Types].xml` parsers, `.rels` parsers | 2 each | 1 each |
+| `resolve_target`, `part_dir`, rels part name, legacy sniff | 2 each | 1 each |
+| attribute-by-local-name readers | 3 | 1 (+ the raw form) |
+| `local_name` | 2 | 1 |
+| text escapes / attribute escapes | 3 / 4 | 1 / 1 |
+| `rgb_to_hsl`, `hsl_to_rgb` | 2 each | 1 each |
+| zip writer loops | 4 (doc+slide's `OpcPackage::write`, sheet's save, new workbook, CSV import) | 1 |
+| peak-allocation counters in tests | 1 (sheet) | 1, shared by 3 test binaries |
+
+Measured (wasm-release / release, `wasm-opt -Oz`, as CI builds them):
+
+| Artifact | Before | After | Change |
+| --- | ---: | ---: | ---: |
+| `docx_js_bg.wasm` | 6,660,701 | 6,655,977 | −4,724 |
+| `slide_js_bg.wasm` | 1,559,562 | 1,553,462 | −6,100 |
+| `sheet_js_bg.wasm` | 1,695,106 | 1,673,464 | −21,642 |
+| together | 9,915,369 | 9,882,903 | −32,466 |
+
+sheet first grew (+14 KB) from the move alone: a helper returning `XmlError` added a
+conversion at each of about 200 call sites, and a non-generic shared function instantiates its
+own copies of the std generics it uses. The `*_as` forms removed the conversions, and the
+shared zip writer collapsed sheet's three zip-writer instantiations into one, which is the
+−21.6 KB.
+
+Tests (nextest, before → after): doc 176 → 173 (+2 zip-budget, −5 moved to the shared crate),
+slide 67 → 64 (+2, −5), sheet 1,501 → 1,495 (−6 moved: rels 3, splice 2, content types 1),
+`paged-ooxml` 5 → 26. Corpus lanes unchanged (doc 5, slide 5, sheet 5, all pass). Bun suites
+unchanged: doc 44 + 54, slide 69, sheet 193 + 404 (1 skip). A byte-identity harness over the
+private corpus and the modules' fixtures (280 `.docx`, 817 `.xlsx`, 17 `.pptx`) hashed every
+output before and after: doc's verbatim save, lowering and package rewrite; slide's IR, IDML,
+report and package rewrite; sheet's session save, chart list and chart geometry, and
+`XlsxDocument` save, error messages included. All identical.
+
+## C3 — one DrawingML chart reader (Rust)
+
+`platform/shared/dml-chart` (`dml-chart`) reads a chart part, `c:chartSpace`, once for both
+modules that carry one; the record is slide ADR 709.
+
+- **One reader, one model.** `dml_chart::chart(root, props)` reads the plots in file order
+  (with each plot's element name, so a 3-D variant stays visible), the series with their cached
+  names, categories and values and the `c:f` formulas they are bound to, the axes, the title
+  and the legend. It is slide's reader (`pptx-import/src/chart.rs`), made generic over the
+  paint and text types and taught the formulas.
+- **The paints are the module's.** The reader hands every `c:spPr` and `a:rPr` / `a:defRPr` to
+  the module's `Props`, in file order, so slide's diagnostics come out in the order they always
+  did. slide reads them into `ShapeProps` / `RunProps` (`pptx-core::chart` is now type aliases
+  of the shared model); sheet reads them into `()`.
+- **The layout profiles stay in the modules.** `slide-chart` and `sheet-chart` are untouched.
+- **sheet's streaming scanner is gone.** `sheet-xlsx/src/parts/chart.rs` folds the shared
+  model into the frozen `ChartModel` with the rules the scanner had: the last plot of a
+  curated kind decides, a bar plot's own direction and grouping pick the variant, every
+  plot's series bind to their `c:f` ranges, a series' colour is its first `a:srgbClr`, and the
+  title is the first non-empty text run of the first title that has one (the last two read
+  the element tree, as the Excel profile's rules).
+- **The element tree is shared.** slide's `pptx-import/src/xml.rs` moved to `paged_ooxml::tree`
+  (slide ADR 702 amended). Two changes let it read what sheet's scanner read: the chart
+  namespace also matches the strict one, and element text has its line ends normalised as XML
+  1.0 requires (found by the harness: one corpus chart title written with CR LF).
+
+Duplicates before → after: DrawingML chart readers 2 → 1; chart models 2 → 1 shared plus
+sheet's frozen layout model (`ChartModel`, the Excel profile's input, unchanged).
+
+Measured (release / wasm-release, `wasm-opt -Oz`, both builds in the same checkout, since a
+crate outside a module's workspace is named by its absolute path):
+
+| Artifact | Before C3 | After C3 | Change | C1 + C3 |
+| --- | ---: | ---: | ---: | ---: |
+| `slide_js_bg.wasm` | 1,802,264 | 1,796,284 | −5,980 | −12,080 |
+| `sheet_js_bg.wasm` | 1,671,133 | 1,689,487 | +18,354 | −3,288 |
+| `docx_js_bg.wasm` | 6,828,946 | 6,828,821 | 0 (path length only) | −4,724 |
+
+sheet pays for reading charts with the element tree and the full reader (the namespace
+resolver, the tree, the reader's plot and series code: +18.4 KB, after a table-driven namespace
+lookup took 5.3 KB back and sheet's `Props` dropped the caches, axes and labels it never reads,
+another 3.9 KB). Its streaming scanner was smaller because it read almost nothing. C1's
+−21.6 KB covers it: across the two items no module grows. slide is smaller: its reader moved,
+and the namespace table replaced a string `match`.
+
+Tests (nextest, before → after C3): slide 67 → 65 (the element tree's 2 tests moved to
+`paged-ooxml`), sheet 1,496 → 1,497 (+1: the Excel-profile title and colour rules),
+`paged-ooxml` 26 → 29, `dml-chart` 0 → 4; bun suites unchanged (slide 69, sheet 193 + 404, 1
+skip); corpus lanes unchanged (slide 5, sheet 5). The harness compared, over 817 `.xlsx` and
+17 `.pptx`: sheet's chart lists, chart geometry and saves; slide's IR as JSON (without the two
+new fields), the resolved deck with its chart layout, and the report. All identical, after one
+fix the harness found (the line-end normalisation above).

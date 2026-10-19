@@ -82,12 +82,8 @@ import {
 } from "../commands/appearance-bake";
 import { linkIndex } from "../link-index";
 import { usePanelReload } from "./use-panel-reload";
-import {
-  PanelAbout,
-  PanelIntro,
-  Refusal,
-  useActionFeedback,
-} from "./panel-kit";
+import { About, Refusal, useActionFeedback } from "@paged-media/panel-kit";
+import { PanelIntro } from "./panel-parts";
 
 export const APPEARANCE_PANEL_ID = "media.paged.draw.panel.appearance";
 
@@ -232,7 +228,7 @@ export function makeAppearancePanel(host: BundleHost): {
       },
     );
 
-    const { refusal, run } = useActionFeedback(host, reload);
+    const { refusal, run } = useActionFeedback(host, reload, "draw panel");
 
     const edit = (
       commandId: string,
@@ -514,10 +510,7 @@ export function makeAppearancePanel(host: BundleHost): {
           </>
         )}
 
-        <PanelAbout
-          text={APPEARANCE_BAKE_NOTE}
-          attr="data-draw-appearance-note"
-        />
+        <About attr="data-draw-appearance-note">{APPEARANCE_BAKE_NOTE}</About>
       </div>
     );
   };
