@@ -316,8 +316,9 @@ one build move by up to 10 ms between runs on a shared machine, so only the Laye
 differences hold up; the rest are unchanged.
 
 Both builds measured here still had the FPS hook's per-frame state update (fixed afterwards,
-see Coverage): the renders figures include the shell chrome re-rendering on frames whose
-rounded rate changed, in both columns alike.
+see Coverage). In headless Chromium the rounded rate rarely changes from one frame to the next,
+so it cost little there: a build with the fix, measured the same way, renders 510, 5,954, 690,
+2,492 and 268 components per interaction, the figures of the "after" column.
 
 ### Memo census (the "Memo ✨" check)
 
