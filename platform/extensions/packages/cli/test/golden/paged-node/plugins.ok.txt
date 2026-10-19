@@ -1,0 +1,11 @@
+$ paged-node plugins --no-plugins
+# exit 0
+# stdout
+{
+  "engine": "<ENGINE_VERSION>",
+  "protocol": <PROTOCOL>,
+  "plugins": [],
+  "problems": []
+}
+# stderr
+(empty)

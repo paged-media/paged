@@ -11,6 +11,7 @@
     "typecheck": "bun check -p tsconfig.json && bun check -p functions/tsconfig.json && bun check -p test/tsconfig.json",
     "typecheck:tests": "bun check -p tsconfig.tests.json",
     "test:contracts": "bun test --preload ../../../../tooling/js/bun-test-setup.ts ./test/contracts",
+    "test:unit": "bun test --parallel --timeout 30000 --preload ../../../../tooling/js/bun-test-setup.ts ./test/unit",
     "test:fidelity": "playwright test --config=playwright.config.ts",
     "test:journeys": "playwright test --project=journeys",
     "test:journeys:gpu": "playwright test --project=journeys-gpu",

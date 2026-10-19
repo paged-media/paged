@@ -1,0 +1,11 @@
+$ paged-node apply <TMP>/fixture.paged --no-plugins
+# exit 2
+# stdout
+{
+  "error": {
+    "message": "apply needs --data <file> and --bindings <b.json>",
+    "exit": 2
+  }
+}
+# stderr
+(empty)

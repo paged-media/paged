@@ -1,0 +1,18 @@
+$ paged-node get <TMP>/fixture.paged swatch:Black --format text --no-plugins
+# exit 0
+# stdout
+swatch:Black
+  name: Black
+  space: CMYK
+  value: [0,0,0,100]
+  model: Process
+  alternateSpace:
+  alternateValue: []
+  color: {"space":"CMYK","value":[0,0,0,100],"model":"Process","tint":null}
+  tint: null
+  alpha: null
+  convertToProcess: false
+  inkAliasTo:
+  swatchKind: black
+# stderr
+(empty)

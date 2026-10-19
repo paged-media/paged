@@ -1,0 +1,6 @@
+$ paged-plugin validate <TMP>/broken.json
+# exit 1
+# stdout
+(empty)
+# stderr
+error: invalid JSON in <TMP>/broken.json: JSON Parse error: Expected '}'

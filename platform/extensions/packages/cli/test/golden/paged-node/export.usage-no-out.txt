@@ -1,0 +1,11 @@
+$ paged-node export <TMP>/fixture.paged --no-plugins
+# exit 2
+# stdout
+{
+  "error": {
+    "message": "export needs -o <file>",
+    "exit": 2
+  }
+}
+# stderr
+(empty)
