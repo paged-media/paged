@@ -105,6 +105,27 @@ export function isEnabled(
 }
 
 /**
+ * May an entry onto `command` be offered (ADR 249, R11)? Its own `when`
+ * holds, the command is registered, and the COMMAND's `when` holds too.
+ * A menu entry, a palette row or a toolbar button is a door onto a
+ * command; the command already says where it can run (`invoke` refuses
+ * it everywhere else), so an entry that asked only itself was offered
+ * where its click would be refused silently: the Object verbs with
+ * nothing selected, a bundle's workbook verbs with no workbook, an entry
+ * onto a command nobody registered.
+ */
+export function entryApplies(
+  entryWhen: VisibilityPredicate | undefined,
+  command: string,
+  commands: { get(id: string): { when?: VisibilityPredicate } | undefined },
+  getState: (() => unknown) | undefined,
+): boolean {
+  if (!isEnabled(entryWhen, getState)) return false;
+  const cmd = commands.get(command);
+  return cmd !== undefined && isEnabled(cmd.when, getState);
+}
+
+/**
  * ADR 024 — may a panel be OFFERED where the user currently is?
  *
  * `false` only when ANOTHER edit context claims this panel and that

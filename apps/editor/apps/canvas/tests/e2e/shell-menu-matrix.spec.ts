@@ -33,9 +33,9 @@
 //   · the two derived families, Window ▸ … and Plugins ▸ …, member by
 //     member from the live registry.
 //
-// UX F-14 (object commands enabled with nothing selected) is SH-8 and
-// the missing checked state of the View toggles SH-4, both expected
-// failures.
+// UX F-14 (object commands enabled with nothing selected) is SH-8, fixed
+// (ADR 249); the missing checked state of the View toggles is SH-4, an
+// expected failure.
 
 import { expect, test, type Page } from "@playwright/test";
 
@@ -656,13 +656,13 @@ test.describe("the host menu bar", () => {
     ).toEqual([]);
   });
 
-  // Finding SH-8 (UX F-14): with nothing selected every Object verb is
-  // enabled, and choosing one does nothing and says nothing. The items
-  // carry `when: notInsideAnEditContext` and no selection test.
+  // Finding SH-8 (UX F-14), fixed (ADR 249): with nothing selected every
+  // Object verb was enabled, and choosing one did nothing and said
+  // nothing. Each command's `when` now asks for a selection and the menu
+  // reads the command's `when`.
   test("SH-8 (F-14): with nothing selected, the Object verbs that need a selection are disabled", async ({
     page,
   }) => {
-    test.fail();
     covers(
       "menu:Object/Bring to front",
       "menu:Object/Group",

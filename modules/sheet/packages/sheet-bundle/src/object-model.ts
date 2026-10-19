@@ -1627,8 +1627,10 @@ export function contributeObjectModel(
       result: text,
       async handler(_ctx, a) {
         const { bytes, name } = a as { bytes: Uint8Array; name: string };
-        await session.import(bytes, name);
-        if (!bridge.engine()) throw new Error("the workbook did not load");
+        // A failure is answered as one (SHT-1): bytes that are not a
+        // workbook reject, also while another workbook is open.
+        if (!(await session.import(bytes, name)) || !bridge.engine())
+          throw new Error(`${name} is not a workbook (.xlsx) the engine can read`);
         return addressOf("workbook", WORKBOOK_ID);
       },
     },

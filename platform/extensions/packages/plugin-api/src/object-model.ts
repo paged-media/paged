@@ -508,6 +508,8 @@ export interface ObjectCommandInfo {
 
 /** `host.objects` — the one registry over core and every plugin. */
 export interface ObjectsSurface {
+  /** The addresses a selector names; rejects (`invalidSelector`) when the
+   *  selector does not parse, so a typo never reads as "nothing matched". */
   query(selector: Selector, opts?: { limit?: number }): Promise<Address[]>;
   get(address: Address, path: PropertyPathName): Promise<ObjectValue>;
   /** Every schema path of the object, read — except `heavy` rows (and

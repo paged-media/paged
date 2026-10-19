@@ -28,7 +28,7 @@
 import { describe, expect, test } from "bun:test";
 
 import type { ElementId, ElementProperties } from "@paged-media/client";
-import { createCommandRegistry } from "@paged-media/shell";
+import { createCommandRegistry, isEnabled } from "@paged-media/shell";
 import {
   covers,
   expectNoCommit,
@@ -102,7 +102,14 @@ function objects(
   const state: Record<string, unknown> = {
     editContext: doc.editContext ?? null,
     contentSelection: { contentSelection: null },
-    selection: { pathEditMode: false },
+    // The editor's selection slice, as the commands' `when` reads it
+    // (SH-8: a verb needs a selection): the same list the runners read.
+    selection: {
+      pathEditMode: false,
+      get elementSelection() {
+        return selection;
+      },
+    },
   };
   const deps: ObjectCommandDeps = {
     client,
@@ -950,6 +957,30 @@ describe("inside an edit context the object verbs do not apply", () => {
     ]);
   });
 
+  // SH-8 (UX F-14), fixed (ADR 249): with nothing selected every verb was
+  // enabled and did nothing. Each command's own `when` now asks for a
+  // selection, so the menu greys it, the palette hides it and its key is
+  // quiet; the menu reads the command's `when` (entryApplies).
+  test("SH-8 (F-14): with nothing selected no Object verb applies", () => {
+    covers(
+      "command:paged.object.bringToFront",
+      "command:paged.object.group",
+      "command:paged.object.delete",
+      "command:paged.object.nudgeLeft",
+      "command:paged.object.makeClippingMask",
+    );
+    const h = objects({ tree: flat(), selection: [] });
+    const commands = buildObjectCommands({} as never);
+    const state = h.state;
+    expect(
+      commands.filter((c) => isEnabled(c.when, () => state)).map((c) => c.id),
+    ).toEqual([]);
+    const selected = objects({ tree: flat(), selection: [A] });
+    expect(
+      commands.every((c) => isEnabled(c.when, () => selected.state)),
+    ).toBe(true);
+  });
+
   test("a text caret or path-edit mode takes Delete and the nudges, not the arrange verbs", async () => {
     covers(
       "command:paged.object.delete",
@@ -962,7 +993,11 @@ describe("inside an edit context the object verbs do not apply", () => {
         contentSelection: { storyId: "uS", start: 0, end: 0 },
       },
     };
-    const pathEdit = { editContext: null, selection: { pathEditMode: true } };
+    // Path-edit mode is entered on a selected path.
+    const pathEdit = {
+      editContext: null,
+      selection: { pathEditMode: true, elementSelection: [A] },
+    };
     expect(objectVerbApplies(caret)).toBe(false);
     expect(objectVerbApplies(pathEdit)).toBe(false);
     expect(objectVerbApplies({})).toBe(true);

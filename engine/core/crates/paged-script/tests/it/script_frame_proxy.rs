@@ -87,19 +87,19 @@ fn frame_proxy_reads_and_writes_through_set_and_get() {
         "false"
     );
 
-    // finding SCR-12: the proxy's set trap drops `paged.set`'s answer, so a
-    // write the bridge refuses (a path the frame does not have, a frame that
-    // does not exist) runs on as if it landed — `paged.set` says `false`,
-    // the assignment says nothing. It should throw, as a refused write does
-    // in strict mode when the trap reports it.
+    // finding SCR-12 (fixed): the proxy's set trap dropped `paged.set`'s
+    // answer, so a write the bridge refuses (a path the frame does not
+    // have, a frame that does not exist) ran on as if it landed. It throws
+    // now, and the script stops there.
     let before = snapshot(&m);
     for refused in [
         format!("paged.frame({addr:?}).noSuchPath = 1; 'ran on'"),
         "paged.frame('rectangle:nope').frameOpacity = 1; 'ran on'".to_string(),
     ] {
         let r = js(&mut m, &refused);
-        assert!(r.error.is_none(), "finding SCR-12: no error: {:?}", r.error);
-        assert_eq!(r.output.last().map(String::as_str), Some("ran on"));
+        let err = r.error.as_deref().unwrap_or_default();
+        assert!(err.contains("the write was refused"), "SCR-12: {err:?}");
+        assert_ne!(r.output.last().map(String::as_str), Some("ran on"));
     }
     assert!(snapshot(&m) == before, "the refused writes changed nothing");
 }

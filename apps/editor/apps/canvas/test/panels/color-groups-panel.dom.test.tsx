@@ -134,9 +134,9 @@ describe("Color groups panel: controls", () => {
 
 describe("Color groups panel: findings", () => {
   // UX audit F-14 (commands enabled with nothing to act on fail
-  // silently): with no document, New group stays enabled, sends a
-  // mutation the engine refuses, and nothing tells the user.
-  test.failing(
+  // silently): with no document, New group stayed enabled, sent a
+  // mutation the engine refused, and nothing told the user. Fixed (ADR 249).
+  test(
     "PN-157 (UX F-14): with no document, New group is disabled",
     async () => {
       covers("panel:paged.color-groups");

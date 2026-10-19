@@ -189,14 +189,13 @@ describe.skipIf(!ENGINE_BUILT)(
     });
     // Findings: the behaviour the command should have, failing until the
     // product does it (expected failures; fixing them flips these red).
-    it.failing(
+    it(
       "SHT-1 — importXlsx (typed) rejects bytes that are not a workbook, even with one open",
       async () => {
-        // Today it resolves with the workbook address whether or not the
-        // bytes loaded: the load failed (the log says "workbook load
-        // failed"), and the command's only check is that an engine exists.
-        // With a workbook open, that workbook stays and the script is told
-        // the import worked.
+        // Fixed: it resolved with the workbook address whether or not the
+        // bytes loaded (the command's only check was that an engine
+        // existed). Now the load's own answer decides; the open workbook
+        // stays.
         await S.importXlsxRefusesGarbage(env);
       },
     );

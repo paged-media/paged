@@ -267,6 +267,7 @@ export {
   createMenuRegistry,
   createOverlayRegistry,
   createToolRegistry,
+  entryApplies,
   isEnabled,
   panelBelongsHere,
 } from "./registries";

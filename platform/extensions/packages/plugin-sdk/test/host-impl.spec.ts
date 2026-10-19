@@ -929,9 +929,15 @@ describe("capability gate — selection / overlay", () => {
 
 describe("contribute.menu — the menu door", () => {
   const cmd = "media.paged.cap.cmd.x";
-
-  it("registers an entry for a declared command", () => {
+  /** A host with `cmd` declared AND registered (an entry needs both). */
+  const withCommand = (when?: (s: unknown) => boolean) => {
     const h = capHost(baseManifest({ contributes: { commands: [cmd] } }));
+    h.host.contribute.command({ id: cmd, title: "x", when, handler() {} });
+    return h;
+  };
+
+  it("registers an entry for a declared, registered command", () => {
+    const h = withCommand();
     expect(() =>
       h.host.contribute.menu({ path: "Object/Insert thing…", command: cmd }),
     ).not.toThrow();
@@ -951,8 +957,31 @@ describe("contribute.menu — the menu door", () => {
     expect(h.fake.menus.count()).toBe(0);
   });
 
-  it("document scope applies whenever a document is open", () => {
+  it("refuses an entry onto a declared command that is not registered (HOST-7)", () => {
     const h = capHost(baseManifest({ contributes: { commands: [cmd] } }));
+    expect(() =>
+      h.host.contribute.menu({ path: "Object/Insert thing…", command: cmd }),
+    ).toThrow(/must be registered/);
+    expect(h.fake.menus.count()).toBe(0);
+  });
+
+  it("an entry applies only where its command's own when holds (MNU-1)", () => {
+    let open = false;
+    const h = withCommand(() => open);
+    const reg = h.host.contribute.menu({
+      path: "Object/Insert thing…",
+      command: cmd,
+    });
+    const item = h.fake.menus.last() as { when: (s: unknown) => boolean };
+    const doc = { document: { handle: { pageCount: 1 } } };
+    expect(item.when(doc)).toBe(false);
+    open = true;
+    expect(item.when(doc)).toBe(true);
+    reg.dispose();
+  });
+
+  it("document scope applies whenever a document is open", () => {
+    const h = withCommand();
     h.host.contribute.menu({ path: "Object/Insert thing…", command: cmd });
     const item = h.fake.menus.last() as { when: (s: unknown) => boolean };
     expect(item.when({ document: { handle: { pageCount: 1 } } })).toBe(true);
@@ -965,7 +994,7 @@ describe("contribute.menu — the menu door", () => {
     // The half that matters most: inside a plugin's own edit context the
     // menu bar otherwise shows the host's menus, about the document the
     // user stepped out of.
-    const h = capHost(baseManifest({ contributes: { commands: [cmd] } }));
+    const h = withCommand();
     h.host.contribute.menu({
       path: "Sheet/Sort range…",
       command: cmd,
@@ -984,7 +1013,7 @@ describe("contribute.menu — the menu door", () => {
     // A bundle built against a newer contract must still LOAD on an older
     // host, with the contribution simply absent — never throwing on a
     // registry the host has not wired yet.
-    const h = capHost(baseManifest({ contributes: { commands: [cmd] } }));
+    const h = withCommand();
     delete (h.fake.editor.registries as { menus?: unknown }).menus;
     expect(() =>
       h.host.contribute.menu({ path: "Object/Insert thing…", command: cmd }),

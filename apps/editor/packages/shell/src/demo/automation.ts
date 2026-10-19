@@ -129,6 +129,24 @@ export interface AutomationOptions {
   isSilent?: () => boolean;
 }
 
+/** The engine's refusal in words: its own message where it has one,
+ *  else the error's variant name and fields. */
+function describeRefusal(error: unknown): string {
+  if (typeof error === "string") return error;
+  if (error && typeof error === "object") {
+    const [variant, detail] = Object.entries(error)[0] ?? [];
+    if (variant !== undefined) {
+      if (typeof detail === "string") return `${variant}: ${detail}`;
+      if (detail && typeof detail === "object") {
+        const text = Object.values(detail).find((v) => typeof v === "string");
+        if (typeof text === "string") return `${variant}: ${text}`;
+      }
+      return variant;
+    }
+  }
+  return "the engine refused the write";
+}
+
 export function buildAutomation(
   handle: CanvasHandleLike,
   opts: AutomationOptions = {},
@@ -191,13 +209,20 @@ export function buildAutomation(
       }
     },
     pageIds: () => live().handle?.pageIds ?? [],
+    // A refusal is answered as one (AUTO-1, ADR 248): the engine's reason
+    // rejects the call, as `editor.set` does. With nothing selected it
+    // writes nothing.
     async setProperty(path, value) {
       const sel = live().elementSelection ?? [];
       for (const elementId of sel) {
-        await live().client.mutate({
+        const reply = (await live().client.mutate({
           op: "setElementProperty",
           args: { elementId, path, value },
-        });
+        })) as { kind?: string; payload?: { error?: unknown } } | undefined;
+        if (reply?.kind !== "mutationApplied")
+          throw new Error(
+            `editor.setProperty: ${path}: ${describeRefusal(reply?.payload?.error ?? reply?.kind)}`,
+          );
       }
     },
     mutate: (op) => live().client.mutate(op),

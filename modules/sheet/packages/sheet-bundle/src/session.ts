@@ -319,7 +319,9 @@ export interface WorkbookSession {
    *  use, loads the workbook, defaults the active sheet + range, and (when
    *  `host.blob` is wired) PERSISTS the bytes so they survive a reload
    *  (S-08). */
-  import(bytes: Uint8Array, name: string): Promise<void>;
+  /** Load `bytes` as the workbook; `false` when they are not one (the
+   *  open workbook, if any, stays). */
+  import(bytes: Uint8Array, name: string): Promise<boolean>;
   /** Restore the last persisted workbook from `host.blob` (S-08), if any.
    *  A cheap no-op (one blob read) when nothing was persisted or no blob
    *  store is wired — the engine boots ONLY when there are bytes to load.
@@ -2631,6 +2633,14 @@ export function createWorkbookSession(
       emitter.emit();
       return false;
     }
+    // The engine replaces its workbook only on a successful load, so a
+    // failed one leaves the open workbook (if any) as it was; the session
+    // keeps pointing at it rather than at nothing (SHT-1).
+    const before = {
+      fileName: state.fileName,
+      activeSheet: state.activeSheet,
+      selectedRange: state.selectedRange,
+    };
     try {
       state.engine.loadXlsx(bytes);
       loadEpoch += 1;
@@ -2644,9 +2654,9 @@ export function createWorkbookSession(
       defaultRangeForActive();
     } catch (err) {
       host.log.error("workbook load failed", err);
-      state.fileName = null;
-      state.activeSheet = null;
-      state.selectedRange = null;
+      state.fileName = before.fileName;
+      state.activeSheet = before.activeSheet;
+      state.selectedRange = before.selectedRange;
       emitter.emit();
       return false;
     }
@@ -2868,7 +2878,7 @@ export function createWorkbookSession(
     onDidChange: (l) => emitter.on(l),
 
     async import(bytes, name) {
-      await loadWorkbook(bytes, name, true);
+      return loadWorkbook(bytes, name, true);
     },
 
     restore() {
