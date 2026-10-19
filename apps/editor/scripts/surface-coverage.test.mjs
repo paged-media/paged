@@ -29,7 +29,7 @@ import { join } from "node:path";
 
 import { layersOf, normaliseId, readCovers } from "./surface/covers-reader.mjs";
 import { Evaluator, Pattern, force, plain } from "./surface/static-eval.mjs";
-import { loadAcknowledged } from "./surface-coverage.mjs";
+import { loadAcknowledged, reasonProblem } from "./surface-coverage.mjs";
 
 const fixture = (files) => {
   const dir = mkdtempSync(join(tmpdir(), "surface-gate-"));
@@ -332,6 +332,34 @@ describe("the static evaluator", () => {
       "paged.insert.line",
     ]);
   });
+});
+
+describe("acknowledged reasons", () => {
+  it("refuses a short reason and the seeded template, and takes a written one", () => {
+    expect(reasonProblem("too short")).toContain("min 40 characters");
+    expect(reasonProblem(undefined)).toContain("min 40 characters");
+    for (const seeded of [
+      "Seeded 2026-10-19, when covers() became the measure: no headless-editor or Playwright test runs paged.x end to end and asserts the result under covers(); no test file names it at all; declared in apps/editor/x.tsx.",
+      "no Playwright test opens the menu item and asserts it; only mentioned, in 2 test files (e2e: a.spec.ts; e2e: b.spec.ts); declared in x.ts.",
+    ]) {
+      expect(reasonProblem(seeded)).toContain("seeded template");
+    }
+    expect(
+      reasonProblem(
+        "The editor never loads this bundle, so no browser session has the item; it is asserted in a unit test instead.",
+      ),
+    ).toBeNull();
+  });
+
+  it("every entry on record has a written reason", () => {
+    const { entries, problems } = loadAcknowledged();
+    expect(problems).toEqual([]);
+    expect(
+      entries
+        .map((e) => [e.key, reasonProblem(e.reason)])
+        .filter(([, p]) => p !== null),
+    ).toEqual([]);
+  }, 30_000);
 });
 
 describe("acknowledged files", () => {
