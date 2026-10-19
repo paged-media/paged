@@ -29,6 +29,8 @@ on:
       - "engine/core/scripts/build-wasm-packages.sh"
       - "engine/core/packages/**"
       - ".cargo/config.toml"
+      # The shared module wasm build every scripts/build-wasm.sh calls.
+      - "tooling/rust/build-wasm.sh"
       - "tooling/bootstrap.sh"
       - ".github/actions/engine-wasm/**"
       - ".github/actions/wasm-tools/**"
