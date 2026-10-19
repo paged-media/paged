@@ -28,7 +28,7 @@
 // gate fails on: a call it cannot read must not pass as covering nothing.
 
 import { readFileSync } from "node:fs";
-import { basename, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 
 import { parseSource, walkAst } from "./static-eval.mjs";
 
@@ -296,7 +296,38 @@ function readRust(file, text, out) {
   out.calls.push(...found.sort((a, b) => a.line - b.line));
 }
 
+const helperDrives = new Map();
+
+/** Does a test file drive the gesture DSL through a local helper it
+ *  imports (`harness()` in a `test/support.ts` that calls `gestures(…)`)?
+ *  One level of relative imports, which is how the suites share a harness. */
+function drivesGesturesThroughImport(root, file, text) {
+  for (const m of text.matchAll(/\bfrom\s+["'](\.{1,2}\/[^"']+)["']/g)) {
+    const base = join(dirname(join(root, file)), m[1]);
+    const stripped = base.replace(/\.(js|mjs|jsx)$/, "");
+    for (const cand of [
+      base,
+      `${stripped}.ts`,
+      `${stripped}.tsx`,
+      join(base, "index.ts"),
+    ]) {
+      if (!helperDrives.has(cand)) {
+        let drives = false;
+        try {
+          drives = GESTURE_DSL.test(readFileSync(cand, "utf8"));
+        } catch {
+          drives = false;
+        }
+        helperDrives.set(cand, drives);
+      }
+      if (helperDrives.get(cand)) return true;
+    }
+  }
+  return false;
+}
+
 /**
+ * Read `files` (repo-relative)./**
  * Read `files` (repo-relative). Returns `{ calls, errors, testFiles,
  * mentionText }`: each call with its ids and layers; every unreadable or
  * malformed call; the test files read; and their concatenated text for
@@ -358,6 +389,8 @@ export function readCovers(root, files, options = {}) {
     if (isRust) readRust(file, text, out);
     else readTs(file, text, out);
     const layers = layersOf(file, text);
+    if (!layers.has("gesture") && drivesGesturesThroughImport(root, file, text))
+      layers.add("gesture");
     for (let i = before; i < out.calls.length; i++)
       out.calls[i].layers = layers;
   }
