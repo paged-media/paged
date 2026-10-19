@@ -3,8 +3,9 @@
 Wave C moves code that every built-in module had its own copy of into one internal
 implementation under `platform/shared/*` (PM-0002: importable by the built-ins and the
 editor, never by `platform/extensions`), and slims what the public SDK carries. This page
-records the TypeScript items C6–C9, C11 and C12, measured on 2026-10-19. C10 (`panel-kit`) and
-the Rust items C1–C5 are separate.
+records the TypeScript items C6–C9, C11 and C12, measured on 2026-10-19, and the Rust items C1
+(the OOXML foundation) and C3 (the DrawingML chart model) further down. C10 (`panel-kit`), C2, C4
+and C5 are separate.
 
 How it was measured:
 
@@ -28,6 +29,7 @@ How it was measured:
 | C9   | one snapper, one Pencil                                             | snappers 2 → 1 (TS fallbacks 2 → 0); Pencils 2 → 1                                                   |
 | C11  | `platform/shared/helpers`                                           | sha256 5 → 1; base64 13 in 10 files → 1; colour 3 → 1; `asciiJson` 3 → 1; unit tables, see C11      |
 | C12  | `ai` and `cli` leave `platform/extensions`; ADR 331                  | packages in the community-facing tree 4 → 2                                                          |
+| C1   | `platform/shared/ooxml` (Rust): one OPC layer, with a memory budget | `paged-ooxml` copies 2 → 1; package readers 2 → 1 (unguarded 2 modules → 0); see C1                 |
 
 Canvas build, before wave C → after C6, C7, C8, C9, C11 and C12:
 
@@ -254,6 +256,89 @@ main at `4be5f0eba`:
   - `core-objects-v70.ts` is the table the protocol-71 seam delegates to, not only a fallback.
     The pre-71 dispatch (unreachable: the floor is the vendored wire's protocol, 74) stays until
     the seam next changes.
+
+## C1 — the OOXML foundation (Rust)
+
+`paged-ooxml` moved from `modules/doc/paged-ooxml` to `platform/shared/ooxml`, a Cargo
+workspace of its own (as `test-resources` is) that doc, slide and sheet take as a path
+dependency. The record is modules/doc ADR 607, which supersedes slide ADR 701.
+
+- **De-vendored.** slide's `vendor/paged-ooxml` (a byte-identical copy), its `SYNCED` stamp,
+  `scripts/sync-ooxml.sh`, the `vendor-check` Moon task and the CI drift step are gone.
+- **sheet's OPC layer folded in, with its budget.** One `read_zip(bytes, budget)` reads every
+  package of the three modules, at 1 GiB uncompressed. It refuses a package whose entries
+  declare more than the budget before inflating anything, never pre-allocates a declared size
+  (at most 8 MiB, and what the compressed bytes could hold), and stops an entry that inflates
+  past the budget still unspent. This is the security fix: doc and slide pre-allocated each
+  entry at its claimed size and inflated without a limit.
+- **Proved at the importers.** `docx-conformance/tests/zip_budget.rs` and
+  `slide-js/tests/zip_budget.rs` feed a 1,100-entry bomb (about 1.1 MB, 1.07 GiB declared) and
+  a streamed entry whose central directory claims 4 GiB for 64 KiB to every entry point (doc:
+  `import_docx`, `import_docx_with_package`, `DocSession::load`; slide: `import_pptx`,
+  `embedded_faces`, `slide_js::import`). Each is refused (or read at its real size), and no single
+  allocation reaches 64 MiB. Against the old reader both tests fail: the 208-byte file made a
+  4,294,967,295-byte allocation, and the bomb inflated in full before the import gave up on a
+  missing main part.
+- **One of each:** content-type table, `.rels` parser (`parse`, tolerant, for doc and slide;
+  `try_parse`, strict, for sheet: each keeps its behaviour), `resolve_target` / `part_dir` /
+  `rels_part_name`, legacy-container sniff, byte splicer, and the zip writer (`write_zip`; each
+  module keeps its own entry options, which decide its container bytes).
+- **The XML helpers** (`paged_ooxml::xml`): `attr` and `attr_raw`, `general_ref`,
+  `local_name`, `prefix_of`, `escape_text`, `escape_attr`, `unescape`. They report quick-xml's
+  own errors, and have `*_as` forms that build the caller's error type where the failure
+  happens, so sheet's errors keep their variants and messages and its call sites carry no
+  conversion.
+- **DrawingML colour** (`paged_ooxml::colour`): HSL, SpreadsheetML's `tint` (`excel_tint`,
+  HSL luminance) and DrawingML's `a:tint` / `a:shade` (`dml_tint`, `dml_shade`, linear
+  light), kept apart.
+- **`ooxmlsdk` behind the `dom` feature**, which only doc enables. slide's lock loses
+  `ooxmlsdk` and zip 8, and with them its three zip-8 advisory ignores. The pins stay: ooxmlsdk
+  0.12, quick-xml 0.41.
+- **zip's deflate backend is the consumer's** (`deflate` for doc and slide, `deflate-flate2`
+  for sheet), so no module's compressed bytes change.
+- **The wasm builds name the shared crate relative to the repository**
+  (`tooling/rust/build-wasm.sh` remaps `platform/shared/`). Cargo names a crate outside the
+  module's workspace by its absolute path, which put the build machine's directory into the
+  wasm's panic locations.
+
+Duplicates before → after:
+
+| What | Before | After |
+| --- | --- | --- |
+| `paged-ooxml` crate | 2 (doc, slide `vendor/`) | 1 |
+| zip package readers | 2 (one with a budget) | 1, with the budget |
+| `[Content_Types].xml` parsers, `.rels` parsers | 2 each | 1 each |
+| `resolve_target`, `part_dir`, rels part name, legacy sniff | 2 each | 1 each |
+| attribute-by-local-name readers | 3 | 1 (+ the raw form) |
+| `local_name` | 2 | 1 |
+| text escapes / attribute escapes | 3 / 4 | 1 / 1 |
+| `rgb_to_hsl`, `hsl_to_rgb` | 2 each | 1 each |
+| zip writer loops | 4 (doc+slide's `OpcPackage::write`, sheet's save, new workbook, CSV import) | 1 |
+| peak-allocation counters in tests | 1 (sheet) | 1, shared by 3 test binaries |
+
+Measured (wasm-release / release, `wasm-opt -Oz`, as CI builds them):
+
+| Artifact | Before | After | Change |
+| --- | ---: | ---: | ---: |
+| `docx_js_bg.wasm` | 6,660,701 | 6,655,977 | −4,724 |
+| `slide_js_bg.wasm` | 1,559,562 | 1,553,462 | −6,100 |
+| `sheet_js_bg.wasm` | 1,695,106 | 1,673,464 | −21,642 |
+| together | 9,915,369 | 9,882,903 | −32,466 |
+
+sheet first grew (+14 KB) from the move alone: a helper returning `XmlError` added a
+conversion at each of about 200 call sites, and a non-generic shared function instantiates its
+own copies of the std generics it uses. The `*_as` forms removed the conversions, and the
+shared zip writer collapsed sheet's three zip-writer instantiations into one, which is the
+−21.6 KB.
+
+Tests (nextest, before → after): doc 176 → 173 (+2 zip-budget, −5 moved to the shared crate),
+slide 67 → 64 (+2, −5), sheet 1,501 → 1,495 (−6 moved: rels 3, splice 2, content types 1),
+`paged-ooxml` 5 → 26. Corpus lanes unchanged (doc 5, slide 5, sheet 5, all pass). Bun suites
+unchanged: doc 44 + 54, slide 69, sheet 193 + 404 (1 skip). A byte-identity harness over the
+private corpus and the modules' fixtures (280 `.docx`, 817 `.xlsx`, 17 `.pptx`) hashed every
+output before and after: doc's verbatim save, lowering and package rewrite; slide's IR, IDML,
+report and package rewrite; sheet's session save, chart list and chart geometry, and
+`XlsxDocument` save, error messages included. All identical.
 
 ## Left, with reasons
 

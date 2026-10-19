@@ -532,6 +532,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "paged-ooxml"
+version = "0.0.0"
+dependencies = [
+ "quick-xml",
+ "thiserror",
+ "zip",
+]
+
+[[package]]
 name = "paged-test-resources"
 version = "0.0.0"
 
@@ -922,6 +931,7 @@ dependencies = [
 name = "sheet-conformance"
 version = "0.0.0"
 dependencies = [
+ "paged-ooxml",
  "paged-test-resources",
  "proptest",
  "serde",
@@ -1035,6 +1045,7 @@ version = "0.0.0"
 dependencies = [
  "compact_str",
  "flate2",
+ "paged-ooxml",
  "quick-xml",
  "sheet-chart",
  "sheet-core",

@@ -1,0 +1,42 @@
+[package]
+name = "paged-ooxml"
+version = "0.0.0"
+edition = "2021"
+rust-version = "1.99"
+license = "AGPL-3.0-only OR LicenseRef-PMEL"
+publish = false
+description = "The shared ECMA-376 (OOXML) foundation of paged.doc, paged.slide and paged.sheet: the OPC container with its uncompressed-size budget, the _rels graph, content types, byte-splice editing, the XML helpers, DrawingML colour arithmetic, and (feature `dom`) the ooxmlsdk typed part DOM."
+
+# A workspace of its own (as platform/shared/test-resources): this directory
+# is not inside any module's Cargo workspace. doc, slide and sheet take it as
+# a path dependency (docs/adr/PM-0005); Cargo reads their workspace's
+# profiles and lockfile, never this table.
+[workspace]
+
+[features]
+default = []
+# The ooxmlsdk typed part DOM (`dom`). paged.doc reads WordprocessingML
+# through it; slide and sheet never compile it.
+dom = ["dep:ooxmlsdk"]
+# zip's deflate backend is the consuming workspace's choice, because it
+# changes the bytes a save writes (PM-0005). doc and slide take `deflate`
+# (zlib-rs), sheet `deflate-flate2` with flate2's rust_backend.
+deflate = ["zip/deflate"]
+deflate-flate2 = ["zip/deflate-flate2"]
+# The test kit (`testing`): hostile packages and a peak-allocation counter.
+# Enabled only through dev-dependencies.
+testing = []
+
+[dependencies]
+# Held at 0.12 for the app's wasm budget (docs/migration/rust-majors.md).
+ooxmlsdk = { version = "0.12", features = ["mce"], optional = true }
+zip = { version = "9", default-features = false }
+# Held at 0.41 with ooxmlsdk, which requires it (docs/migration/rust-majors.md).
+quick-xml = { version = "0.41", default-features = false }
+thiserror = "2"
+
+[dev-dependencies]
+zip = { version = "9", default-features = false, features = ["deflate"] }
+
+[lints.clippy]
+all = "warn"

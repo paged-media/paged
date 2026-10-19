@@ -47,6 +47,8 @@ serde_norway.workspace = true
 serde_json.workspace = true
 
 [dev-dependencies]
+# The peak-allocation counter (tests/zip_budget.rs), shared with doc and slide.
+paged-ooxml = { path = "../../../platform/shared/ooxml", features = ["testing"] }
 paged-test-resources.workspace = true
 proptest.workspace = true
 # The XLSX round-trip test unzips parts to assert per-part byte identity.

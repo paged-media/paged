@@ -24,6 +24,8 @@ on:
       - "tooling/rust/**"
       # The test-resources dev-dependency (the skip convention).
       - "platform/shared/test-resources/**"
+      # The shared OOXML foundation, a path dependency of the Cargo workspace.
+      - "platform/shared/ooxml/**"
       # Prose under docs/ builds and tests nothing (test inputs are not .md there).
       - "!modules/doc/docs/**/*.md"
   pull_request:
@@ -37,6 +39,8 @@ on:
       - "tooling/rust/**"
       # The test-resources dev-dependency (the skip convention).
       - "platform/shared/test-resources/**"
+      # The shared OOXML foundation, a path dependency of the Cargo workspace.
+      - "platform/shared/ooxml/**"
       # Prose under docs/ builds and tests nothing (test inputs are not .md there).
       - "!modules/doc/docs/**/*.md"
   workflow_dispatch:

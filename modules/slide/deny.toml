@@ -4,26 +4,11 @@
 # This doubles as the SDK-only rule's Rust half: [sources] denies unknown
 # registries/git, so a path/git reach-around into core/editor internals — or
 # into another plugin — cannot land silently. paged.slide has NO core dependency;
-# the only third-party OOXML code is the vendored `ooxmlsdk` (MIT OR Apache-2.0).
+# its OOXML code is first-party (platform/shared/ooxml, without the ooxmlsdk
+# typed DOM, so neither ooxmlsdk nor the zip 8 it pulls in is in this graph).
 
 [advisories]
 version = 2
-ignore = [
-    # zip 8.6.0 reaches this workspace only through `ooxmlsdk` 0.12.0 (its
-    # `parts` feature, which `mce` requires); no ooxmlsdk release has moved to
-    # zip >= 9 yet (0.13.2 still requires zip ^8.6). The workspace's own zip
-    # dependency is zip 9. All three advisories (2026-10-09/10) are about
-    # `ZipArchive::extract` / `ZipStreamReader::extract` writing an archive to
-    # the file system (SUID/SGID bits kept, symlinks escaping the destination,
-    # permissions applied through symlinks). Neither this workspace nor
-    # ooxmlsdk 0.12.0 calls either function: the workspace uses ooxmlsdk only
-    # for its typed part DOM, and ooxmlsdk's own package code reads entries
-    # one by one. Remove these three when ooxmlsdk depends on zip >= 9.
-    # Recorded 2026-10-17.
-    { id = "RUSTSEC-2026-0367", reason = "zip 8 via ooxmlsdk only; extract() is never called" },
-    { id = "RUSTSEC-2026-0368", reason = "zip 8 via ooxmlsdk only; extract() is never called" },
-    { id = "RUSTSEC-2026-0369", reason = "zip 8 via ooxmlsdk only; extract() is never called" },
-]
 
 [licenses]
 version = 2
@@ -32,7 +17,6 @@ confidence-threshold = 0.9
 # permissively licensed (weak copyleft MPL-2.0 at most) so the whole work can
 # be distributed under both: the AGPL and the commercial PMEL. No GPL/AGPL
 # dependency can pass this gate.
-# ooxmlsdk + its deps are MIT / Apache-2.0.
 allow = [
     "MPL-2.0",
     # First-party crates this workspace reaches outside itself (from another

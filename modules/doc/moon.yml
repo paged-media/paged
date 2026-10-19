@@ -1,7 +1,8 @@
 $schema: "../../.moon/cache/schemas/project.json"
 
-# paged.doc: a Cargo workspace (docx-*, paged-ooxml) and JS packages
-# (doc-bundle, doc-host-model). apps/editor builds doc-bundle from source.
+# paged.doc: a Cargo workspace (docx-* crates) and JS packages (doc-bundle,
+# doc-host-model). apps/editor builds doc-bundle from source. The OOXML
+# foundation is the shared platform/shared/ooxml crate (a path dependency).
 language: "rust"
 layer: "library"
 stack: "systems"
@@ -15,6 +16,27 @@ project:
 dependsOn:
   - id: "extensions"
     scope: "development"
+  # paged-ooxml, a path dependency of the Cargo workspace.
+  - id: "ooxml"
+    scope: "production"
+
+fileGroups:
+  # The inherited groups plus the shared crates the workspace compiles.
+  rust-sources:
+    - "**/*.rs"
+    - "**/Cargo.toml"
+    - "Cargo.lock"
+    - "rust-toolchain*"
+    - "/.cargo/*.toml"
+    - "/platform/shared/ooxml/src/**/*.rs"
+    - "/platform/shared/ooxml/Cargo.toml"
+  rust-tests:
+    - "**/*"
+    - "!docs/**"
+    - "!**/*.md"
+    - "/.cargo/*.toml"
+    - "/platform/shared/ooxml/src/**/*.rs"
+    - "/platform/shared/ooxml/Cargo.toml"
 
 tasks:
   wasm:

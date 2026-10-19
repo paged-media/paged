@@ -37,13 +37,14 @@ use sheet_core::{SheetId, SheetModel};
 use crate::error::XlsxError;
 use crate::opc::{ModeledKind, PartEntry, CONTENT_TYPES_PART};
 use crate::preserve::CapturedSubtrees;
-use crate::rels::{part_dir, rels_part_for, resolve_target, Relationships};
+use crate::rels::{parse_rels, part_dir, rels_part_name, resolve_target};
 use crate::sheet_doc::SheetBinding;
 use crate::splice::{
     attr_local, attrs_of, children_of, prefix_of, render_tag, replace_start_tag, root_children,
     set_attr, splice, Span,
 };
 use crate::XlsxDocument;
+use paged_ooxml::xml::escape_text;
 
 /// The worksheet content type (`[Content_Types].xml` override).
 pub const CT_WORKSHEET: &str =
@@ -278,13 +279,6 @@ pub fn rewrite_sheet_refs(text: &str, old: &str, replacement: &str) -> (String, 
     (out, changed)
 }
 
-/// Escape element text.
-fn escape_text(s: &str) -> String {
-    s.replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
-}
-
 impl XlsxDocument {
     /// The current bytes of a part (`None` when absent).
     pub(crate) fn part_bytes(&self, name: &str) -> Option<Vec<u8>> {
@@ -377,9 +371,9 @@ impl XlsxDocument {
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"></Relationships>"#
                 .to_vec()
         });
-        let rels = Relationships::parse(&raw)?;
-        let used: BTreeSet<&str> = rels.rels.iter().map(|r| r.id.as_str()).collect();
-        let mut n = rels.rels.len() + 1;
+        let rels = parse_rels(&raw)?;
+        let used: BTreeSet<&str> = rels.items.iter().map(|r| r.id.as_str()).collect();
+        let mut n = rels.items.len() + 1;
         let id = loop {
             let cand = format!("rId{n}");
             if !used.contains(cand.as_str()) {
@@ -488,7 +482,7 @@ impl XlsxDocument {
         let mut n = 1;
         let (part, target) = loop {
             let target = format!("worksheets/sheet{n}.xml");
-            let part = resolve_target(&wb_dir, &target);
+            let part = resolve_target(wb_dir, &target);
             if self.container.part(&part).is_none() {
                 break (part, target);
             }
@@ -702,8 +696,8 @@ impl XlsxDocument {
             let owner_dir = &name[..dir_end];
             let owner_file = &name[dir_end + "_rels/".len()..name.len() - ".rels".len()];
             let owner = format!("{owner_dir}{owner_file}");
-            let rels = Relationships::parse(p.bytes())?;
-            for r in &rels.rels {
+            let rels = parse_rels(p.bytes())?;
+            for r in &rels.items {
                 edges.push((owner.clone(), resolve_target(owner_dir, &r.target)));
             }
         }
@@ -728,7 +722,7 @@ impl XlsxDocument {
         let mut out: Vec<String> = Vec::new();
         for p in &set {
             out.push(p.clone());
-            let rels = rels_part_for(p);
+            let rels = rels_part_name(p);
             if self.container.part(&rels).is_some() {
                 out.push(rels);
             }
@@ -755,11 +749,11 @@ impl XlsxDocument {
                     }
                 }
             }
-            let rels_part = rels_part_for(&b.part_name);
+            let rels_part = rels_part_name(&b.part_name);
             if let Some(p) = self.container.part(&rels_part) {
-                if let Ok(rels) = Relationships::parse(p.bytes()) {
+                if let Ok(rels) = parse_rels(p.bytes()) {
                     for kind in ["/table", "/drawing", "/comments", "/pivotTable"] {
-                        if rels.rels.iter().any(|r| r.is_type(kind)) {
+                        if rels.items.iter().any(|r| r.is_type(kind)) {
                             out.push(format!("{} part", &kind[1..]));
                         }
                     }

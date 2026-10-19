@@ -1,8 +1,7 @@
 # CLAUDE.md — paged-media/plugin-slide
 
 paged.slide: presentations on the paged engine, a `.pptx` reader and writer, and an editor
-slideshow. Dual-licensed AGPL-3.0-only OR PMEL (And The Next GmbH), `vendor/paged-ooxml`
-included.
+slideshow. Dual-licensed AGPL-3.0-only OR PMEL (And The Next GmbH).
 
 Read first: [docs/concept.md](docs/concept.md), [docs/architecture.md](docs/architecture.md),
 [docs/status.md](docs/status.md), [docs/adr/](docs/adr/README.md) (range 700–749).
@@ -13,8 +12,9 @@ Read first: [docs/concept.md](docs/concept.md), [docs/architecture.md](docs/arch
   packages are glue: bundle lifecycle, panels, file input, slideshow UI.
 - **No engine dependency.** The engine is reached only through the host contract; `deny.toml`
   denies git sources. Never add a path or git dependency on another paged repository.
-- **`vendor/paged-ooxml` is read-only here** (ADR 701). Change it in plugin-doc, then run
-  `scripts/sync-ooxml.sh <plugin-doc>`; CI runs `--check`.
+- **The OOXML foundation is shared** (`platform/shared/ooxml`, doc ADR 607): the package
+  read and its memory budget, rels, the XML helpers and DrawingML colour. Change it there;
+  doc and sheet build and test against the same crate.
 - **PowerPoint is the oracle** (ADR 705). Fixtures are authored and recorded through PowerPoint;
   do not hand-write expected answers.
 - Every source file carries the licence header; copy it from any `.rs` file.
@@ -27,7 +27,6 @@ moon run slide:test     # Rust (nextest + doctests), then wasm + bun test, from 
 cargo fmt --all && cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace  # the Rust tests without Moon
 PAGED_CORPUS_DIR=<corpus root> PAGED_REQUIRE_CORPUS=1 cargo nextest run --profile corpus --run-ignored only
-scripts/sync-ooxml.sh --check
 ```
 
 ## Feature registry

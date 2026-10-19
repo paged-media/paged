@@ -11,6 +11,8 @@ description = "paged.slide: PowerPoint's inheritance rules applied — theme, ma
 workspace = true
 
 [dependencies]
+# DrawingML colour arithmetic (HSL, linear-light tint and shade).
+paged-ooxml.workspace = true
 pptx-core.workspace = true
 slide-geom.workspace = true
 slide-chart.workspace = true

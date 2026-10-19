@@ -1,0 +1,29 @@
+$schema: "../../../.moon/cache/schemas/project.json"
+
+# paged-ooxml: the shared OOXML foundation (OPC container and its memory
+# budget, rels, content types, byte splicing, the XML helpers, DrawingML
+# colour, and the ooxmlsdk typed DOM behind the `dom` feature). A path
+# dependency of modules/doc, modules/slide and modules/sheet, which list its
+# sources in their own rust-sources file group.
+language: "rust"
+layer: "library"
+stack: "systems"
+tags: ["rust", "shared"]
+
+project:
+  title: "platform/shared/ooxml"
+  description: "Shared OOXML foundation of doc, slide and sheet: OPC with a zip-bomb budget, rels, splice, XML helpers, colour."
+
+tasks:
+  # The standalone build takes every feature: `dom` is doc's alone, and a
+  # deflate backend is required (the consumers choose one).
+  rust-check:
+    command: "cargo check --workspace --all-targets --all-features"
+  rust-build:
+    command: "cargo build --workspace --all-features"
+  rust-lint:
+    command: "cargo clippy --workspace --all-targets --all-features -- -D warnings"
+  rust-test:
+    script: >-
+      cargo nextest run --workspace --all-features
+      && cargo test --doc --workspace --all-features

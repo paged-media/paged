@@ -30,8 +30,6 @@
 //! everything else text. A leading `=` stays TEXT (a CSV is data, not
 //! formulas — no formula injection through an import).
 
-use std::io::Write as _;
-
 use sheet_core::{DateSystem, Locale};
 use sheet_format::locale::locale_data;
 use sheet_format::number::parse_number_locale;
@@ -306,17 +304,7 @@ pub fn csv_to_xlsx(text: &str, delim: Option<char>, locale: Locale, sheet_name: 
         ("docProps/app.xml", r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties"><Application>paged.sheet</Application></Properties>"#.to_string()),
     ];
-    let mut buf = Vec::new();
-    {
-        let mut zip = zip::ZipWriter::new(std::io::Cursor::new(&mut buf));
-        let opts = sheet_xlsx::write::part_options();
-        for (name, body) in files.iter() {
-            zip.start_file(*name, opts).expect("in-memory zip");
-            zip.write_all(body.as_bytes()).expect("in-memory zip");
-        }
-        zip.finish().expect("in-memory zip");
-    }
-    buf
+    sheet_xlsx::write::write_package(files.iter().map(|(n, b)| (*n, b.as_bytes())))
 }
 
 impl SheetSession {

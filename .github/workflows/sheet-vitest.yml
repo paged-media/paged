@@ -25,6 +25,8 @@ on:
       # The internal shared code the bundle uses (workspace:*).
       - "platform/shared/wasm-boot/**"
       - "platform/shared/helpers/**"
+      # The shared OOXML foundation the engine wasm builds from.
+      - "platform/shared/ooxml/**"
       # The engine wasm packages this workflow builds against (workspace:*),
       # and what builds them, so an engine change re-tests its consumers.
       - "engine/core/crates/**"
@@ -59,6 +61,8 @@ on:
       # The internal shared code the bundle uses (workspace:*).
       - "platform/shared/wasm-boot/**"
       - "platform/shared/helpers/**"
+      # The shared OOXML foundation the engine wasm builds from.
+      - "platform/shared/ooxml/**"
       # The engine wasm packages this workflow builds against (workspace:*),
       # and what builds them, so an engine change re-tests its consumers.
       - "engine/core/crates/**"

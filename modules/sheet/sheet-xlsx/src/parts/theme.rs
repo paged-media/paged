@@ -105,8 +105,9 @@ fn hex6(v: &str) -> Option<String> {
 
 /// Apply a SpreadsheetML `tint` (−1.0..=1.0) to `#RRGGBB`: the colour's HSL
 /// luminance moves toward black (`tint < 0`: `L·(1+tint)`) or white
-/// (`tint > 0`: `L·(1−tint) + tint`), hue and saturation kept. A tint of 0
-/// (or a malformed colour) returns the input unchanged.
+/// (`tint > 0`: `L·(1−tint) + tint`), hue and saturation kept
+/// (`paged_ooxml::colour::excel_tint`, which is not DrawingML's linear-light
+/// `a:tint`). A tint of 0 (or a malformed colour) returns the input unchanged.
 pub fn apply_tint(hex: &str, tint: f64) -> String {
     let h = hex.trim_start_matches('#');
     if tint == 0.0 || h.len() != 6 || !tint.is_finite() {
@@ -116,69 +117,9 @@ pub fn apply_tint(hex: &str, tint: f64) -> String {
     let (Ok(r), Ok(g), Ok(b)) = (ch(0), ch(2), ch(4)) else {
         return hex.to_string();
     };
-    let (hue, sat, lum) = rgb_to_hsl(r, g, b);
-    let t = tint.clamp(-1.0, 1.0);
-    let lum = if t < 0.0 {
-        lum * (1.0 + t)
-    } else {
-        lum * (1.0 - t) + t
-    };
-    let (r, g, b) = hsl_to_rgb(hue, sat, lum.clamp(0.0, 1.0));
+    let (r, g, b) = paged_ooxml::colour::excel_tint(r, g, b, tint);
     let q = |v: f64| (v * 255.0).round().clamp(0.0, 255.0) as u8;
     format!("#{:02X}{:02X}{:02X}", q(r), q(g), q(b))
-}
-
-fn rgb_to_hsl(r: f64, g: f64, b: f64) -> (f64, f64, f64) {
-    let max = r.max(g).max(b);
-    let min = r.min(g).min(b);
-    let l = (max + min) / 2.0;
-    if max == min {
-        return (0.0, 0.0, l);
-    }
-    let d = max - min;
-    let s = if l > 0.5 {
-        d / (2.0 - max - min)
-    } else {
-        d / (max + min)
-    };
-    let h = if max == r {
-        (g - b) / d + if g < b { 6.0 } else { 0.0 }
-    } else if max == g {
-        (b - r) / d + 2.0
-    } else {
-        (r - g) / d + 4.0
-    };
-    (h / 6.0, s, l)
-}
-
-fn hsl_to_rgb(h: f64, s: f64, l: f64) -> (f64, f64, f64) {
-    if s == 0.0 {
-        return (l, l, l);
-    }
-    let q = if l < 0.5 {
-        l * (1.0 + s)
-    } else {
-        l + s - l * s
-    };
-    let p = 2.0 * l - q;
-    let hue = |mut t: f64| {
-        if t < 0.0 {
-            t += 1.0;
-        }
-        if t > 1.0 {
-            t -= 1.0;
-        }
-        if t < 1.0 / 6.0 {
-            p + (q - p) * 6.0 * t
-        } else if t < 0.5 {
-            q
-        } else if t < 2.0 / 3.0 {
-            p + (q - p) * (2.0 / 3.0 - t) * 6.0
-        } else {
-            p
-        }
-    };
-    (hue(h + 1.0 / 3.0), hue(h), hue(h - 1.0 / 3.0))
 }
 
 #[cfg(test)]
