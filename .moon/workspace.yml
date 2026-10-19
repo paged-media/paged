@@ -26,6 +26,7 @@ projects:
   # Internal shared code of the built-ins (docs/adr/PM-0002)
   ai: "platform/shared/ai"
   fmt: "platform/shared/fmt"
+  dml-chart: "platform/shared/dml-chart"
   helpers: "platform/shared/helpers"
   ooxml: "platform/shared/ooxml"
   react-live: "platform/shared/react-live"

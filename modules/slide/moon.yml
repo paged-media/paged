@@ -25,6 +25,9 @@ dependsOn:
   # paged-ooxml, a path dependency of the Cargo workspace.
   - id: "ooxml"
     scope: "production"
+  # dml-chart, the shared DrawingML chart reader (slide ADR 709).
+  - id: "dml-chart"
+    scope: "production"
 
 # Path dependencies into the engine (docx-skeleton / slide-native build on
 # paged-model, paged-scene, paged-store; ADR 606 / ADR 708) and into
@@ -44,6 +47,8 @@ fileGroups:
     - "/engine/core/crates/**/Cargo.toml"
     - "/platform/shared/ooxml/src/**/*.rs"
     - "/platform/shared/ooxml/Cargo.toml"
+    - "/platform/shared/dml-chart/src/**/*.rs"
+    - "/platform/shared/dml-chart/Cargo.toml"
   rust-tests:
     - "**/*"
     - "!docs/**"
@@ -54,6 +59,8 @@ fileGroups:
     - "/engine/core/crates/**/Cargo.toml"
     - "/platform/shared/ooxml/src/**/*.rs"
     - "/platform/shared/ooxml/Cargo.toml"
+    - "/platform/shared/dml-chart/src/**/*.rs"
+    - "/platform/shared/dml-chart/Cargo.toml"
 
 tasks:
   js-test:
