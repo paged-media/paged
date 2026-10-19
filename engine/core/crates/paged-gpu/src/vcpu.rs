@@ -83,7 +83,7 @@ use vello_cpu::{
 };
 
 use crate::ink_planes::{self, CmykPlanes, Coverage};
-use crate::vello_map::{self, PaintBrush};
+use crate::vello_map::{self, PaintBrush, StrokeGeometry};
 use crate::{PathRasterizer, RasterOptions};
 
 /// `PathRasterizer` backed by `vello_cpu`. No GPU required.
@@ -181,6 +181,9 @@ struct Surface {
     /// Running product of the soft masks on the clip stack, one entry
     /// per `Clip::Mask` — the top is what draws are masked by.
     masks: Vec<Arc<Vec<u8>>>,
+    /// What the buffer starts as: transparent, or the paper on a page
+    /// drawn straight onto it (see [`plain_page`]).
+    ground: vello_cpu::color::AlphaColor<vello_cpu::color::Srgb>,
     id: u64,
 }
 
@@ -201,6 +204,7 @@ impl Surface {
             injected: false,
             clips: Vec::new(),
             masks: Vec::new(),
+            ground: vello_cpu::color::AlphaColor::TRANSPARENT,
             id,
         };
         s.apply_state();
@@ -232,8 +236,10 @@ impl Surface {
             return;
         }
         self.ctx.flush();
-        let init = if self.injected || !self.has_base {
+        let init = if self.injected {
             TargetInit::Clear(vello_cpu::color::AlphaColor::TRANSPARENT)
+        } else if !self.has_base {
+            TargetInit::Clear(self.ground)
         } else {
             TargetInit::SrcOver
         };
@@ -862,6 +868,9 @@ impl Raster<'_> {
             CTransform(m)
         };
 
+        let glyph_fills = vello_map::glyph_fills(list);
+        let mut fills = vello_map::Fills::default();
+
         for (idx, cmd) in list.commands.iter().enumerate() {
             if let Some(feather_idx) = feather_starts.get(&idx).copied() {
                 feather_backdrop = self.feather_snapshot(feather_idx);
@@ -883,10 +892,11 @@ impl Raster<'_> {
                         _ => BlendMode::Normal,
                     };
                     let transform = snap(idx, transform);
-                    let Some(data) = list.paths.get(*path_id) else {
+                    let xform = self.active().xform;
+                    let glyph = glyph_fills.contains(&idx);
+                    let Some(path) = fills.path(list, *path_id, &transform, xform, glyph) else {
                         continue;
                     };
-                    let path = vello_map::path_to_bez(data, &transform);
                     let Some(brush) = vello_map::resolve_paint(paint, list, &transform) else {
                         continue;
                     };
@@ -913,7 +923,23 @@ impl Raster<'_> {
                     let Some(brush) = vello_map::resolve_paint(paint, list, transform) else {
                         continue;
                     };
-                    let ks = vello_map::kurbo_stroke(stroke);
+                    let xform = self.active().xform;
+                    let (path, ks) = match vello_map::stroke_geometry(
+                        path,
+                        vello_map::kurbo_stroke(stroke),
+                        xform,
+                    ) {
+                        StrokeGeometry::Outline(outline) => {
+                            let (surface, res, _) = self.split();
+                            surface.fill(res, &outline, brush.clone(), PenikoBlendMode::default());
+                            self.splat(paint, outline.bounding_box(), 1.0, |ctx| {
+                                set_brush(ctx, brush);
+                                ctx.fill_path(&outline);
+                            });
+                            continue;
+                        }
+                        StrokeGeometry::Stroke(path, ks) => (path, ks),
+                    };
                     self.active().stroke(&path, ks.clone(), brush.clone());
                     let pad = ks.width * 0.5 + 1.0;
                     self.splat(paint, path.bounding_box(), pad, |ctx| {
@@ -927,10 +953,10 @@ impl Raster<'_> {
                     paint,
                     transform,
                 } => {
-                    let Some(data) = list.paths.get(*path_id) else {
+                    let xform = self.active().xform;
+                    let Some(path) = fills.path(list, *path_id, transform, xform, false) else {
                         continue;
                     };
-                    let path = vello_map::path_to_bez(data, transform);
                     self.overprint(paint, transform, &path, None);
                 }
                 DisplayCommand::StrokePathOverprint {
@@ -943,12 +969,15 @@ impl Raster<'_> {
                         continue;
                     };
                     let path = vello_map::path_to_bez(data, transform);
-                    self.overprint(
-                        paint,
-                        transform,
-                        &path,
-                        Some(vello_map::kurbo_stroke(stroke)),
-                    );
+                    let ks = vello_map::kurbo_stroke(stroke);
+                    match vello_map::stroke_geometry(path, ks, self.active().xform) {
+                        StrokeGeometry::Outline(outline) => {
+                            self.overprint(paint, transform, &outline, None)
+                        }
+                        StrokeGeometry::Stroke(path, ks) => {
+                            self.overprint(paint, transform, &path, Some(ks))
+                        }
+                    }
                 }
                 DisplayCommand::DropShadow {
                     path_id,
@@ -2252,6 +2281,23 @@ fn sample_gradient_alpha(stops: &[(f32, f32)], t: f32) -> f32 {
     stops[stops.len() - 1].1
 }
 
+/// Is every command on the page a plain draw — a `Normal` fill or
+/// stroke, an image, a clip? Then nothing reads the page's backdrop, and
+/// drawing straight onto the paper is the isolated page composited over
+/// it (source-over is associative), without a pass over every pixel to
+/// composite it. A sparse page is mostly that pass.
+fn plain_page(list: &DisplayList) -> bool {
+    list.commands.iter().all(|c| match c {
+        DisplayCommand::FillPath { .. }
+        | DisplayCommand::StrokePath { .. }
+        | DisplayCommand::Image { .. }
+        | DisplayCommand::PushClip { .. }
+        | DisplayCommand::PopClip(_) => true,
+        DisplayCommand::FillPathBlend { blend_mode, .. } => *blend_mode == BlendMode::Normal,
+        _ => false,
+    })
+}
+
 fn rasterize_inner(
     list: &DisplayList,
     options: &RasterOptions,
@@ -2260,6 +2306,11 @@ fn rasterize_inner(
     let (px_w, px_h) = options.pixel_size();
     let scale = options.dpi / 72.0;
     let paper = premul_rgba8(options.background);
+    let plain = plain_page(list);
+    let mut page = Surface::new(px_w, px_h, (0, 0), scale, 0);
+    if plain {
+        page.ground = vello_map::linear_to_peniko(options.background);
+    }
     let mut raster = Raster {
         list,
         scale,
@@ -2268,7 +2319,7 @@ fn rasterize_inner(
         paper,
         res: Resources::new(),
         scratch: Scratch { ctx: None },
-        page: Surface::new(px_w, px_h, (0, 0), scale, 0),
+        page,
         frames: Vec::new(),
         planes: None,
         want_planes: want_separation || has_cmyk_overprint(list),
@@ -2282,17 +2333,14 @@ fn rasterize_inner(
         ..
     } = raster;
     page.flush(&mut res);
+    let page_painted = page.has_base;
     let (page_w, page_h) = (page.w, page.h);
     // The page over the paper.
     let mut data = page.px.take_rgba8(ImageAlphaType::AlphaPremultiplied);
-    for px in data.as_chunks_mut::<4>().0 {
-        let inv = 255 - px[3] as u32;
-        if inv == 0 {
-            continue;
-        }
-        for ch in 0..4 {
-            px[ch] = (px[ch] as u32 + (paper[ch] as u32 * inv + 127) / 255).min(255) as u8;
-        }
+    if !plain {
+        composite_over_paper(&mut data, paper);
+    } else if !page_painted {
+        data.as_chunks_mut::<4>().0.fill(paper);
     }
     // The page buffer is at most `u16::MAX` wide; a larger request
     // (never made in practice) is padded with the paper.
@@ -2312,10 +2360,48 @@ fn rasterize_inner(
     (image, planes)
 }
 
+/// `data` (premultiplied RGBA8) over the opaque or translucent `paper`:
+/// `px + paper × (255 − α) / 255` per channel, rounded. Branch-free so
+/// it vectorizes: a sparse page is almost all transparent pixels, and
+/// this pass touches every one of them.
+fn composite_over_paper(data: &mut [u8], paper: [u8; 4]) {
+    for px in data.as_chunks_mut::<4>().0 {
+        let inv = 255 - px[3] as u16;
+        for ch in 0..4 {
+            // (x + 127) / 255 for x ≤ 255², exactly.
+            let x = paper[ch] as u16 * inv + 128;
+            let q = ((x >> 8) + x) >> 8;
+            px[ch] = px[ch].saturating_add(q as u8);
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::rgb_to_naive_cmyk_8bit;
+
+    #[test]
+    fn composite_over_paper_rounds_as_the_division_does() {
+        for paper in [
+            [255u8, 255, 255, 255],
+            [250, 240, 200, 255],
+            [10, 20, 30, 128],
+        ] {
+            for a in 0..=255u8 {
+                for v in [0u8, 1, a / 3, a / 2, a, 255] {
+                    let mut px = [v, v / 2, 0, a];
+                    composite_over_paper(&mut px, paper);
+                    let inv = 255 - a as u32;
+                    for ch in 0..4 {
+                        let src = [v, v / 2, 0, a][ch] as u32;
+                        let want = (src + (paper[ch] as u32 * inv + 127) / 255).min(255) as u8;
+                        assert_eq!(px[ch], want, "paper {paper:?} a {a} v {v} ch {ch}");
+                    }
+                }
+            }
+        }
+    }
 
     fn linear_to_srgb(c: f32) -> f32 {
         if c <= 0.003_130_8 {
@@ -2387,8 +2473,12 @@ mod tests {
         // Off, and for a path that is not a glyph, nothing moves.
         let unsnapped = rasterize(&glyph_list((10.3, 20.6), true), &plain);
         assert_ne!(unsnapped.as_raw(), expected.as_raw());
+        // A square that is not a glyph is stroke-adjusted (`vello_map`)
+        // either way, and the glyph snap leaves it where it is.
         let not_glyph = rasterize(&glyph_list((10.3, 20.6), false), &opts);
-        assert_eq!(not_glyph.as_raw(), unsnapped.as_raw());
+        let not_glyph_plain = rasterize(&glyph_list((10.3, 20.6), false), &plain);
+        assert_eq!(not_glyph.as_raw(), not_glyph_plain.as_raw());
+        assert_ne!(not_glyph.as_raw(), unsnapped.as_raw());
     }
 
     #[test]
@@ -2431,6 +2521,43 @@ mod tests {
         // Sample outside the rect: background white.
         let outside = at(&img, 2, 2);
         assert!(outside[0] > 240 && outside[1] > 240 && outside[2] > 240);
+    }
+
+    // Stroke adjustment: a rule and a rectangle off the pixel grid are
+    // drawn on whole pixels, with no part-covered row or column.
+    #[test]
+    fn rules_and_rectangles_off_the_grid_draw_on_whole_pixels() {
+        let mut list = DisplayList::new();
+        let black = Paint::Solid(Color::rgba(0.0, 0.0, 0.0, 1.0));
+        emit_rect(
+            Rect {
+                x: 5.3,
+                y: 4.6,
+                w: 20.45,
+                h: 3.3,
+            },
+            black,
+            &mut list,
+        );
+        emit_stroke_rect(
+            Rect {
+                x: 3.15,
+                y: 12.1,
+                w: 30.4,
+                h: 10.35,
+            },
+            paged_compose::Stroke::new(0.3),
+            black,
+            &mut list,
+        );
+        let mut opts = RasterOptions::new(40.0, 30.0);
+        opts.dpi = 144.0;
+        let img = rasterize(&list, &opts);
+        let partial = img.pixels().filter(|p| (3..=252).contains(&p.0[0])).count();
+        assert_eq!(partial, 0, "every edge on a pixel boundary");
+        // The 0.3 pt (0.6 px) frame keeps one full pixel.
+        assert_eq!(at(&img, 30, 24)[0], 0, "top edge row");
+        assert_eq!(at(&img, 30, 25)[0], 255, "inside the frame");
     }
 
     #[test]

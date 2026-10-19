@@ -114,7 +114,10 @@ use vello::{AaConfig, AaSupport, RenderParams, Renderer, RendererOptions, Scene}
 use wgpu;
 
 pub(crate) use crate::vello_map::linear_to_peniko;
-use crate::vello_map::{blend_to_peniko, kurbo_stroke, path_to_bez, resolve_paint, PaintBrush};
+use crate::vello_map::{
+    blend_to_peniko, glyph_fills, kurbo_stroke, path_to_bez, resolve_paint, stroke_geometry, Fills,
+    PaintBrush, StrokeGeometry,
+};
 use crate::{PathRasterizer, RasterOptions};
 
 pub struct VelloRasterizer {
@@ -738,6 +741,10 @@ fn build_scene_with_transform_filtered(
     // feather command.
     let feather_runs = paged_compose::mask::feather_run_starts(list);
     let mut feather_layer_open = false;
+    // Glyph fills, which stroke adjustment leaves alone, and the fills'
+    // flattened curves (`vello_map`).
+    let glyphs = glyph_fills(list);
+    let mut fills = Fills::default();
     // Pixels per point, for sizing the mask rasters.
     let px_per_pt = {
         let c = page_to_px.as_coeffs();
@@ -961,10 +968,10 @@ fn build_scene_with_transform_filtered(
                 transform,
             } => {
                 let scene = scene_stack.last_mut().expect("scene_stack underflow");
-                let Some(path_data) = list.paths.get(*path_id) else {
+                let glyph = glyphs.contains(&cmd_idx);
+                let Some(path) = fills.path(list, *path_id, transform, page_to_px, glyph) else {
                     continue;
                 };
-                let path = path_to_bez(path_data, transform);
                 let Some(brush) = resolve_paint(paint, list, transform) else {
                     continue;
                 };
@@ -982,10 +989,10 @@ fn build_scene_with_transform_filtered(
                 // single fill in a peniko blend layer so the
                 // composite still reads the page contents below.
                 let scene = scene_stack.last_mut().expect("scene_stack underflow");
-                let Some(path_data) = list.paths.get(*path_id) else {
+                let glyph = glyphs.contains(&cmd_idx);
+                let Some(path) = fills.path(list, *path_id, transform, page_to_px, glyph) else {
                     continue;
                 };
-                let path = path_to_bez(path_data, transform);
                 let Some(brush) = resolve_paint(paint, list, transform) else {
                     continue;
                 };
@@ -1015,8 +1022,14 @@ fn build_scene_with_transform_filtered(
                 let Some(brush) = resolve_paint(paint, list, transform) else {
                     continue;
                 };
-                let ks = kurbo_stroke(stroke);
-                scene.stroke(&ks, page_to_px, brush_ref(&brush), None, &path);
+                match stroke_geometry(path, kurbo_stroke(stroke), page_to_px) {
+                    StrokeGeometry::Outline(outline) => {
+                        scene.fill(Fill::NonZero, page_to_px, brush_ref(&brush), None, &outline);
+                    }
+                    StrokeGeometry::Stroke(path, ks) => {
+                        scene.stroke(&ks, page_to_px, brush_ref(&brush), None, &path);
+                    }
+                }
             }
             DisplayCommand::FillPathOverprint {
                 path_id,
@@ -1033,10 +1046,9 @@ fn build_scene_with_transform_filtered(
                 // passes `skip_overprints = true` and re-encodes each
                 // overprint batch into a scratch texture.
                 let scene = scene_stack.last_mut().expect("scene_stack underflow");
-                let Some(path_data) = list.paths.get(*path_id) else {
+                let Some(path) = fills.path(list, *path_id, transform, page_to_px, false) else {
                     continue;
                 };
-                let path = path_to_bez(path_data, transform);
                 let Some(brush) = resolve_paint(paint, list, transform) else {
                     continue;
                 };
@@ -1059,8 +1071,14 @@ fn build_scene_with_transform_filtered(
                 let Some(brush) = resolve_paint(paint, list, transform) else {
                     continue;
                 };
-                let ks = kurbo_stroke(stroke);
-                scene.stroke(&ks, page_to_px, brush_ref(&brush), None, &path);
+                match stroke_geometry(path, kurbo_stroke(stroke), page_to_px) {
+                    StrokeGeometry::Outline(outline) => {
+                        scene.fill(Fill::NonZero, page_to_px, brush_ref(&brush), None, &outline);
+                    }
+                    StrokeGeometry::Stroke(path, ks) => {
+                        scene.stroke(&ks, page_to_px, brush_ref(&brush), None, &path);
+                    }
+                }
             }
             DisplayCommand::Image {
                 image_id,
@@ -2568,22 +2586,32 @@ fn build_overprint_batch_scene(
     let page_to_px = kurbo::Affine::scale(scale as f64);
     let mut scene = Scene::new();
     let opaque_white = PenikoColor::from_rgba8(255, 255, 255, 255);
+    let mut fills = Fills::default();
     for path in &batch.paths {
         let Some(path_data) = list.paths.get(path.path_id) else {
             continue;
         };
-        let bez = path_to_bez(path_data, &path.transform);
-        if let Some(stroke) = &path.stroke {
-            let ks = kurbo_stroke(stroke);
-            scene.stroke(&ks, page_to_px, BrushRef::Solid(opaque_white), None, &bez);
-        } else {
-            scene.fill(
-                Fill::NonZero,
+        let white = BrushRef::Solid(opaque_white);
+        match &path.stroke {
+            Some(stroke) => match stroke_geometry(
+                path_to_bez(path_data, &path.transform),
+                kurbo_stroke(stroke),
                 page_to_px,
-                BrushRef::Solid(opaque_white),
-                None,
-                &bez,
-            );
+            ) {
+                StrokeGeometry::Outline(outline) => {
+                    scene.fill(Fill::NonZero, page_to_px, white, None, &outline);
+                }
+                StrokeGeometry::Stroke(bez, ks) => {
+                    scene.stroke(&ks, page_to_px, white, None, &bez);
+                }
+            },
+            None => {
+                let Some(bez) = fills.path(list, path.path_id, &path.transform, page_to_px, false)
+                else {
+                    continue;
+                };
+                scene.fill(Fill::NonZero, page_to_px, white, None, &bez);
+            }
         }
     }
     scene
@@ -3605,6 +3633,55 @@ mod tests {
 
     #[test]
     #[cfg(feature = "cpu")]
+    fn stroke_adjusted_rules_land_on_the_same_pixels_in_both_lanes() {
+        // A 0.3 pt rule and a rectangle, both off the pixel grid: each lane
+        // draws them on whole pixels, the same ones (`vello_map`).
+        let mut list = paged_compose::DisplayList::new();
+        let black = Paint::Solid(ComposeColor::rgba(0.0, 0.0, 0.0, 1.0));
+        paged_compose::emit_rect(
+            paged_compose::Rect {
+                x: 5.3,
+                y: 4.6,
+                w: 20.45,
+                h: 3.3,
+            },
+            black,
+            &mut list,
+        );
+        let rule = list.paths.push_anon(paged_compose::PathData {
+            segments: vec![
+                paged_compose::PathSegment::MoveTo { x: 4.2, y: 20.35 },
+                paged_compose::PathSegment::LineTo { x: 33.7, y: 20.35 },
+            ],
+        });
+        list.commands.push(DisplayCommand::StrokePath {
+            path_id: rule,
+            paint: black,
+            stroke: paged_compose::Stroke::new(0.3),
+            transform: paged_compose::Transform::IDENTITY,
+        });
+        let mut opts = RasterOptions::new(40.0, 30.0);
+        opts.dpi = 144.0;
+        let gpu = VelloRasterizer::new().rasterize(&list, &opts);
+        if !gpu_or_skip(&gpu) {
+            return;
+        }
+        let cpu = crate::CpuRasterizer.rasterize(&list, &opts);
+        let mut partial = 0;
+        for (g, c) in gpu.chunks_exact(4).zip(cpu.chunks_exact(4)) {
+            assert!(
+                (g[0] as i32 - c[0] as i32).abs() <= 2,
+                "GPU {g:?} vs CPU {c:?}"
+            );
+            if (3..=252).contains(&c[0]) {
+                partial += 1;
+            }
+        }
+        assert_eq!(partial, 0, "every edge on a pixel boundary");
+    }
+
+    #[test]
+    #[cfg(feature = "cpu")]
     fn vello_overprint_matches_the_cpu_lane() {
         // A page with two overprints is composited by the GPU's own
         // compute path (it used to be handed to the CPU rasterizer, so
@@ -4326,29 +4403,34 @@ mod tests {
             });
         }
         // Multiply(red, green) is opaque black, so the control's plain
-        // opaque black over the same rect is the SAME image — the two
+        // opaque black cut to the same rect is the SAME image — the two
         // renders differ only in how the rect's edge came to be, which
-        // is the whole point of the comparison.
-        let (paint, transform) = if grouped {
-            (
-                DLColor::rgba(0.0, 1.0, 0.0, 1.0),
-                // Overflows `bounds` on all four sides.
-                Transform([100.0, 0.0, 0.0, 60.0, 0.0, 0.0]),
-            )
+        // is the whole point of the comparison. The control cuts with a
+        // clip: a filled rectangle would be stroke-adjusted onto whole
+        // pixels (`vello_map`), and a clip, like a group's bounds, is not.
+        if !grouped {
+            list.commands.push(DisplayCommand::PushClip {
+                path_id: rect_id,
+                transform: Transform([bounds.w, 0.0, 0.0, bounds.h, bounds.x, bounds.y]),
+            });
+        }
+        let paint = if grouped {
+            DLColor::rgba(0.0, 1.0, 0.0, 1.0)
         } else {
-            (
-                DLColor::rgba(0.0, 0.0, 0.0, 1.0),
-                Transform([bounds.w, 0.0, 0.0, bounds.h, bounds.x, bounds.y]),
-            )
+            DLColor::rgba(0.0, 0.0, 0.0, 1.0)
         };
         list.commands.push(DisplayCommand::FillPath {
             path_id: rect_id,
             paint: Paint::Solid(paint),
-            transform,
+            // Overflows `bounds` on all four sides.
+            transform: Transform([100.0, 0.0, 0.0, 60.0, 0.0, 0.0]),
         });
         if grouped {
             list.commands
                 .push(DisplayCommand::EndBlendGroup(Transform::IDENTITY));
+        } else {
+            list.commands
+                .push(DisplayCommand::PopClip(Transform::IDENTITY));
         }
         list
     }
