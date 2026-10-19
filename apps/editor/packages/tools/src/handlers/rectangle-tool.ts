@@ -180,6 +180,9 @@ export function createRectangleHandler(
       const gridCols = cols;
       const gridRows = rows;
       cancel();
+      // Click versus drag is decided in SCREEN px (INV-6): at 25 % a
+      // 3 px jitter spans 12 pt and must still be a click (GT-1).
+      if (e.maxDelta <= CLICK_DRAG_THRESHOLD_PX) return;
       const [top, left, bottom, right] = bounds;
       // A click (no real drag) creates nothing — InDesign opens an
       // options dialog there; that's a follow-up.

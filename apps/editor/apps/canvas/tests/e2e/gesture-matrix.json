@@ -18,9 +18,7 @@
           "target": "*",
           "expect": {
             "moves": "target"
-          },
-          "known": "F-26",
-          "note": "a press on an unselected object starts a marquee"
+          }
         },
         {
           "mods": "shift",
@@ -28,16 +26,14 @@
           "expect": {
             "moves": "target",
             "constraint": "axis"
-          },
-          "known": "F-26"
+          }
         },
         {
           "mods": "alt",
           "target": "*",
           "expect": {
             "duplicates": "target"
-          },
-          "known": "F-26"
+          }
         },
         {
           "mods": "shift+alt",
@@ -45,8 +41,26 @@
           "expect": {
             "duplicates": "target",
             "constraint": "axis"
+          }
+        },
+        {
+          "mods": "alt",
+          "target": "group",
+          "expect": {
+            "duplicates": "target"
           },
-          "known": "F-26"
+          "known": "GF-2",
+          "note": "the engine cannot clone a group at the gesture's commit"
+        },
+        {
+          "mods": "shift+alt",
+          "target": "group",
+          "expect": {
+            "duplicates": "target",
+            "constraint": "axis"
+          },
+          "known": "GF-2",
+          "note": "the engine cannot clone a group at the gesture's commit"
         },
         {
           "mods": "*",
@@ -81,25 +95,21 @@
           "target": "frame",
           "expect": {
             "moves": "target"
-          },
-          "known": "F-26"
+          }
         },
         {
           "mods": "none",
           "target": "rotated",
           "expect": {
             "moves": "target"
-          },
-          "known": "F-26"
+          }
         },
         {
           "mods": "none",
           "target": "group",
           "expect": {
             "moves": "child"
-          },
-          "known": "F-26, F-29",
-          "note": "a press on an unselected object starts a marquee (F-26); Direct Selection must then reach the leaf, not the group (F-29)"
+          }
         },
         {
           "mods": "none",
@@ -140,9 +150,7 @@
           "expect": {
             "creates": "textFrame",
             "shape": "box"
-          },
-          "known": "GT-3",
-          "note": "at 25% the drag ends on the pasteboard, and the Type tool reads the release point off the page under it"
+          }
         }
       ]
     },
@@ -347,9 +355,7 @@
           "zooms": [0.25],
           "expect": {
             "rotates": "target"
-          },
-          "known": "GT-4",
-          "note": "at 25% the press lands on the pasteboard, and the tool begins nothing off a page"
+          }
         },
         {
           "mods": "none",
@@ -357,9 +363,7 @@
           "zooms": [0.25],
           "expect": {
             "rotates": "target"
-          },
-          "known": "GT-4",
-          "note": "at 25% the press lands on the pasteboard, and the tool begins nothing off a page"
+          }
         },
         {
           "mods": "shift",
@@ -376,9 +380,7 @@
           "expect": {
             "rotates": "target",
             "snap": 15
-          },
-          "known": "GT-4",
-          "note": "at 25% the press lands on the pasteboard, and the tool begins nothing off a page"
+          }
         },
         {
           "mods": "shift",
@@ -387,9 +389,7 @@
           "expect": {
             "rotates": "target",
             "snap": 15
-          },
-          "known": "GT-4",
-          "note": "at 25% the press lands on the pasteboard, and the tool begins nothing off a page"
+          }
         }
       ]
     },
@@ -446,9 +446,7 @@
           "zooms": [0.25],
           "expect": {
             "scales": "target"
-          },
-          "known": "GT-4",
-          "note": "at 25% the press lands on the pasteboard, and the tool begins nothing off a page"
+          }
         },
         {
           "mods": "none",
@@ -456,9 +454,7 @@
           "zooms": [0.25],
           "expect": {
             "scales": "target"
-          },
-          "known": "GT-4",
-          "note": "at 25% the press lands on the pasteboard, and the tool begins nothing off a page"
+          }
         },
         {
           "mods": "shift",
@@ -475,9 +471,7 @@
           "expect": {
             "scales": "target",
             "uniform": true
-          },
-          "known": "GT-4",
-          "note": "at 25% the press lands on the pasteboard, and the tool begins nothing off a page"
+          }
         },
         {
           "mods": "shift",
@@ -486,9 +480,7 @@
           "expect": {
             "scales": "target",
             "uniform": true
-          },
-          "known": "GT-4",
-          "note": "at 25% the press lands on the pasteboard, and the tool begins nothing off a page"
+          }
         }
       ]
     },

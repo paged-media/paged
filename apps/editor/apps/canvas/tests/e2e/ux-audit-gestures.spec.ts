@@ -18,8 +18,9 @@
  */
 
 // The UX audit's canvas-gesture findings (docs/design/ux-audit-2026-10.md)
-// as regression tests that FAIL today: each is an expected failure
-// (`test.fail`), titled with its finding id. When a fix lands the test
+// as regression tests: an open finding is an expected failure
+// (`test.fail`), titled with its finding id; a fixed one is a plain test
+// (F-26, F-29, F-30, GM-2: ADR 235). When a fix lands the test
 // passes, Playwright reports it as an unexpected pass, and the marker
 // comes off in the same change. The behaviour is NOT fixed here.
 //
@@ -80,10 +81,6 @@ test.describe("UX audit 2026-10 — canvas gestures (expected failures until fix
   test("[F-26] a press-drag on an UNSELECTED frame selects it and moves it in one gesture @level:gesture", async ({
     page,
   }) => {
-    test.fail(
-      EXPECTED,
-      "F-26: the press starts a marquee; the frame stays put",
-    );
     const { g } = await gestureEditor(page);
     await g.tool("paged.tool.select").settle();
     await selectElements(page, []);
@@ -100,10 +97,6 @@ test.describe("UX audit 2026-10 — canvas gestures (expected failures until fix
   test("[F-29] a double-click on a shape inside a group selects that shape, not the vector-graphic context @level:gesture", async ({
     page,
   }) => {
-    test.fail(
-      EXPECTED,
-      "F-29: the double-click enters paged.draw's vector-graphic context",
-    );
     const { g } = await gestureEditor(page);
     await g.tool("paged.tool.select").settle().dblclick(T.group.at).settle();
     expect(await editContext(page)).not.toBe("vectorGraphic");
@@ -113,7 +106,6 @@ test.describe("UX audit 2026-10 — canvas gestures (expected failures until fix
   test("[F-29] Direct Selection on a grouped shape selects the shape, not the group @level:gesture", async ({
     page,
   }) => {
-    test.fail(EXPECTED, "F-29: Direct Selection selects the whole group");
     const { g } = await gestureEditor(page);
     await g.tool("paged.tool.directSelect").settle().click(T.group.at).settle();
     expect(await selectedIds(page)).toEqual(["ugA"]);
@@ -122,10 +114,6 @@ test.describe("UX audit 2026-10 — canvas gestures (expected failures until fix
   test("[F-29] a double-click on a placed image does not open the vector-graphic context @level:gesture", async ({
     page,
   }) => {
-    test.fail(
-      EXPECTED,
-      "F-29: the double-click opens paged.draw's vector-graphic context for an image",
-    );
     await openCanvas(page);
     await loadViaReactPath(page, "images");
     const g: GestureDsl = browserGestures(page as unknown as BrowserPage);
@@ -177,13 +165,9 @@ test.describe("UX audit 2026-10 — canvas gestures (expected failures until fix
     expect(await editContext(page)).not.toBe("vectorGraphic");
   });
 
-  test("[F-30] just outside a selected frame's corner, a drag ROTATES it (it resizes today) @level:gesture", async ({
+  test("[F-30] just outside a selected frame's corner, a drag ROTATES it @level:gesture", async ({
     page,
   }) => {
-    test.fail(
-      EXPECTED,
-      "F-30: there is no rotate zone outside the corners; the drag resizes",
-    );
     const { g } = await gestureEditor(page);
     await g.tool("paged.tool.select").settle();
     await selectElements(page, [T.frame.id]);
@@ -323,10 +307,6 @@ test.describe("UX audit 2026-10 — canvas gestures (expected failures until fix
   test("[GM-2] a transform tool acts on the selection made AFTER it was picked (the Layers panel, Select All) @level:gesture", async ({
     page,
   }) => {
-    test.fail(
-      EXPECTED,
-      "GM-2: the Rotate / Scale / Shear handlers read the selection the tool was activated with",
-    );
     const { g } = await gestureEditor(page);
     await g.tool("paged.tool.select").settle();
     await selectElements(page, [T.frame.id]);

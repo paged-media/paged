@@ -17,7 +17,13 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-import { useEffect, useEffectEvent, useMemo, useState } from "react";
+import {
+  useEffect,
+  useEffectEvent,
+  useLayoutEffect,
+  useMemo,
+  useState,
+} from "react";
 
 import {
   GestureSpine,
@@ -64,6 +70,13 @@ export function useGestureSpine(): {
 } {
   const paged = usePaged();
   const [spine] = useState(() => new GestureSpine());
+
+  // Every render's editor reaches the mounted handler (it holds the
+  // spine's live handle, not a snapshot): a handler reads the selection
+  // and camera as they are when the pointer moves (GM-2).
+  useLayoutEffect(() => {
+    spine.setEditor(paged);
+  }, [spine, paged]);
 
   const effectiveTool = paged.tool.effectiveTool;
   const lastReason = paged.tool.lastReason;
