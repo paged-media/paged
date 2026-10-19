@@ -518,49 +518,42 @@ describe("findings: the fuzzer's (GF) and the gesture matrix's (GM)", () => {
     },
   );
 
-  test.failing(
-    "[GF-2] Alt-dragging a group duplicates the group @level:gesture",
-    async () => {
-      const before = (await sceneElementIds(send)).filter(
-        (id) => id.kind === "group",
-      ).length;
-      const reply = await gesture({
-        nodes: [GROUP],
-        gesture: { kind: "translate" },
-        deltas: [[0, 120]],
-        mods: { shift: false, alt: true, disableSnap: true },
-      });
-      expect(reply.kind).toBe("gestureCommitted");
-      expect(
-        (await sceneElementIds(send)).filter((id) => id.kind === "group")
-          .length,
-      ).toBe(before + 1);
-    },
-  );
+  test("[GF-2] Alt-dragging a group duplicates the group @level:gesture", async () => {
+    const before = (await sceneElementIds(send)).filter(
+      (id) => id.kind === "group",
+    ).length;
+    const reply = await gesture({
+      nodes: [GROUP],
+      gesture: { kind: "translate" },
+      deltas: [[0, 120]],
+      mods: { shift: false, alt: true, disableSnap: true },
+    });
+    expect(reply.kind).toBe("gestureCommitted");
+    expect(
+      (await sceneElementIds(send)).filter((id) => id.kind === "group").length,
+    ).toBe(before + 1);
+  });
 
-  test.failing(
-    "[GF-3] Alt pressed, released and pressed again while dragging a grouped item duplicates it @level:gesture",
-    async () => {
-      const before = (await sceneElementIds(send)).length;
-      const alt = (on: boolean) => ({
-        shift: false,
-        alt: on,
-        disableSnap: true,
-      });
-      const reply = await gesture({
-        nodes: [CHILD],
-        gesture: { kind: "translate" },
-        deltas: [
-          [20, 0],
-          [30, 0],
-          [40, 0],
-        ],
-        mods: [alt(true), alt(false), alt(true)],
-      });
-      expect(reply.kind).toBe("gestureCommitted");
-      expect((await sceneElementIds(send)).length).toBe(before + 1);
-    },
-  );
+  test("[GF-3] Alt pressed, released and pressed again while dragging a grouped item duplicates it @level:gesture", async () => {
+    const before = (await sceneElementIds(send)).length;
+    const alt = (on: boolean) => ({
+      shift: false,
+      alt: on,
+      disableSnap: true,
+    });
+    const reply = await gesture({
+      nodes: [CHILD],
+      gesture: { kind: "translate" },
+      deltas: [
+        [20, 0],
+        [30, 0],
+        [40, 0],
+      ],
+      mods: [alt(true), alt(false), alt(true)],
+    });
+    expect(reply.kind).toBe("gestureCommitted");
+    expect((await sceneElementIds(send)).length).toBe(before + 1);
+  });
 
   test.failing(
     "[GF-4] a rotated frame survives IDML save → load to a micro-point @level:gesture",
@@ -665,27 +658,11 @@ describe("findings: the fuzzer's (GF) and the gesture matrix's (GM)", () => {
 
   it("the failing commits are atomic: nothing changes and the next gesture begins @level:gesture", async () => {
     const before = await model.dump();
-    const alt = (on: boolean) => ({ shift: false, alt: on, disableSnap: true });
+    // GF-2 and GF-3 (the Alt-drags) commit now (engine ADR 190).
     await gesture({
       nodes: [GROUP],
       gesture: { kind: "resize", handle: "east" },
       deltas: [[40, 0]],
-    });
-    await gesture({
-      nodes: [GROUP],
-      gesture: { kind: "translate" },
-      deltas: [[0, 120]],
-      mods: alt(true),
-    });
-    await gesture({
-      nodes: [CHILD],
-      gesture: { kind: "translate" },
-      deltas: [
-        [20, 0],
-        [30, 0],
-        [40, 0],
-      ],
-      mods: [alt(true), alt(false), alt(true)],
     });
     expect(await model.dump()).toBe(before);
     expect(

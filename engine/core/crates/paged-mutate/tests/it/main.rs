@@ -14,6 +14,7 @@ mod evidence_mutation_frame_props;
 mod evidence_mutation_typography;
 mod gradient_fill;
 mod group_ops;
+mod item_snippet;
 mod kernel_direction;
 mod kernel_ops;
 mod line_effects;

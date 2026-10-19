@@ -212,6 +212,13 @@ import {
   type ObjectCommandDeps,
 } from "./object-commands";
 import {
+  browserClipboard,
+  buildClipboardCommands,
+  CLIPBOARD_DIAGNOSTIC_SOURCE,
+  CLIPBOARD_KEYBINDINGS,
+  CLIPBOARD_MENU_ITEMS,
+} from "./clipboard-commands";
+import {
   addPage,
   buildInsertCommands,
   INSERT_DIAGNOSTIC_SOURCE,
@@ -1326,9 +1333,20 @@ function CanvasAppIntegration() {
         },
       },
     ];
+    // ADR 231 — the page-item clipboard: Cut, Copy, Paste, Paste in
+    // place, Duplicate. Cut's delete is Object ▸ Delete's own.
+    const clipboardCommands = buildClipboardCommands({
+      report: (severity, message) =>
+        problemsSink.publish(CLIPBOARD_DIAGNOSTIC_SOURCE, "clipboard", [
+          { severity, message, source: "clipboard" },
+        ]),
+      system: browserClipboard(),
+      deleteSelection: () => deleteSelection(objectDeps),
+    });
     const cmdDisposables = [
       ...commands,
       ...aiCommands,
+      ...clipboardCommands,
       ...objectCommands,
       ...insertCommands,
       ...alignCommands,
@@ -1340,6 +1358,7 @@ function CanvasAppIntegration() {
     const menuDisposables = [
       ...APP_MENU_ITEMS,
       SELECT_ALL_MENU_ITEM,
+      ...CLIPBOARD_MENU_ITEMS,
       ...OBJECT_MENU_ITEMS,
       ...INSERT_MENU_ITEMS,
       ...CORE_COMMAND_MENU_ITEMS,
@@ -1356,6 +1375,7 @@ function CanvasAppIntegration() {
     const keyDisposables = [
       ...APP_KEYBINDINGS,
       ...SELECT_ALL_KEYBINDINGS,
+      ...CLIPBOARD_KEYBINDINGS,
       ...OBJECT_KEYBINDINGS,
       ...INSERT_KEYBINDINGS,
     ].map((k) => registries.keybindings.register(k));

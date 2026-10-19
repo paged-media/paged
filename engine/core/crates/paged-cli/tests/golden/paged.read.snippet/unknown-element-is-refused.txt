@@ -1,0 +1,14 @@
+$ paged read snippet doc.paged oval:nope
+--- exit: 0
+--- stdout
+{
+  "kind": "elementsExported",
+  "payload": {
+    "count": 0,
+    "refused": "node not found: Oval(\"nope\")",
+    "snippet": null,
+    "text": ""
+  }
+}
+--- stderr
+(empty)

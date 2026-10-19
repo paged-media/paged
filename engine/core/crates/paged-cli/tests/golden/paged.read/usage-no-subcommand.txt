@@ -18,6 +18,7 @@ Commands:
   color-compute       Resolve arbitrary channel values through the document's profiles
   gradient-detail     A gradient's stops, resolved
   element-properties  Every property of one element — the Inspector's own read
+  snippet             A copy of page items for the clipboard (ADR 190): the snippet JSON `pasteElements` takes back, in this document or another
   element-geometry    Bounds and transform of one or more elements
   group-leaves        The leaf page items inside a group, recursively
   path-anchors        A path element's anchors, with their control handles

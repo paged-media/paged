@@ -146,6 +146,15 @@ pub enum ReadCommand {
         /// `kind:id` address, e.g. `textFrame:u12`.
         id: String,
     },
+    /// A copy of page items for the clipboard (ADR 190): the snippet JSON
+    /// `pasteElements` takes back, in this document or another.
+    Snippet {
+        #[command(flatten)]
+        on: ReadTarget,
+        /// `kind:id` addresses.
+        #[arg(required = true)]
+        ids: Vec<String>,
+    },
     /// Bounds and transform of one or more elements.
     ElementGeometry {
         #[command(flatten)]
@@ -266,6 +275,7 @@ impl ReadCommand {
             | Self::Collection { on, .. }
             | Self::FrameChain { on, .. }
             | Self::StoryContent { on, .. }
+            | Self::Snippet { on, .. }
             | Self::StyleProperties { on, .. }
             | Self::Placeholders { on }
             | Self::ColorPreview { on, .. }
@@ -436,6 +446,12 @@ pub fn run(what: &ReadCommand) -> Result<()> {
         ReadCommand::ElementProperties { id, .. } => {
             let reply =
                 session.send(MainToWorkerKind::RequestElementProperties { id: address(id)? })?;
+            emit(&reply, compact)
+        }
+        ReadCommand::Snippet { ids, .. } => {
+            let reply = session.send(MainToWorkerKind::ExportElements {
+                element_ids: addresses(ids)?,
+            })?;
             emit(&reply, compact)
         }
         ReadCommand::ElementGeometry { ids, .. } => {

@@ -3682,6 +3682,47 @@ pub enum Operation {
         #[serde(default)]
         story_ids: Vec<String>,
     },
+    /// ADR 190 — paste page items: graft the copy `snippet` (the JSON of
+    /// an `ItemSnippet`, what `extract_snippet` took at Copy or Cut) onto
+    /// the spread `spread` (its `Self`), on top of its z-order, translated
+    /// by `(dx, dy)` in spread space. A paste is the whole copy, as
+    /// `DuplicateNodes` clones: every struct verbatim, side-map rows,
+    /// pasted-in children, group members, and copies of the stories under
+    /// fresh ids; the swatches, styles and conditions the items name are
+    /// added where the document lacks them (`added`, `<kind>:<id>`, filled
+    /// by the applier). An item whose layer the document lacks goes to the
+    /// default layer.
+    ///
+    /// `ids` / `story_ids` are the ids the copies take, pre-order per root
+    /// (a group before its members); both empty ⇒ the applier mints.
+    /// Inverse: `RemoveSnippet`.
+    InsertSnippet {
+        snippet: String,
+        spread: String,
+        dx: f32,
+        dy: f32,
+        #[serde(default)]
+        ids: Vec<String>,
+        #[serde(default)]
+        story_ids: Vec<String>,
+        #[serde(default)]
+        added: Vec<String>,
+    },
+    /// ADR 190 — the inverse of `InsertSnippet`: remove exactly the items,
+    /// stories, hyperlinks and resources it added. The other fields ride
+    /// along so ITS inverse is the original paste. Inverse-only.
+    RemoveSnippet {
+        snippet: String,
+        spread: String,
+        dx: f32,
+        dy: f32,
+        #[serde(default)]
+        ids: Vec<String>,
+        #[serde(default)]
+        story_ids: Vec<String>,
+        #[serde(default)]
+        added: Vec<String>,
+    },
     /// W1.20 (groups v2) — move/scale/rotate a group AS A UNIT. Unlike
     /// the v1 `SetProperty(Group, FrameTransform)` arm (which stores
     /// only the group's own `ItemTransform` and relies on the editor to
