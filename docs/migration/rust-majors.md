@@ -237,6 +237,7 @@ own.
   `dims = (40, 300), seed = 0, stages = [Sharpen(0.1), Sharpen(0.1),
   Blur(0.5)], selection = false`: `Queue::write_texture` is handed 7,680 bytes
   for a copy that needs 14,080. Random inputs reach it rarely; it is not caused
-  by any update here.
+  by any update here. It has since been fixed on `main` (090c1c9b9: the
+  requested region is part of a node's cache key).
 - Vello renders on Metal are not bit-identical from run to run: two runs of the
   base differ on 67 of 660 pages, by at most 71 pixels at one level in 255.
