@@ -1,0 +1,11 @@
+$ paged set doc.paged oval:u2 frameFillColor
+--- exit: 2
+--- stdout
+(empty)
+--- stderr
+error: the following required arguments were not provided:
+  <VALUE>
+
+Usage: paged set <DOC> <TARGET> <PATH> <VALUE>
+
+For more information, try '--help'.

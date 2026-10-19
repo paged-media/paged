@@ -1,0 +1,6 @@
+$ paged export doc.paged --format docx -o x.docx
+--- exit: 1
+--- stdout
+(empty)
+--- stderr
+Error: unsupported format "docx" (idml|paged|pdf)

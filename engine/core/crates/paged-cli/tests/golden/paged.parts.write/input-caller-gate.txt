@@ -1,0 +1,6 @@
+$ paged parts write doc.paged paged/tool/data.json data.json --caller other
+--- exit: 1
+--- stdout
+(empty)
+--- stderr
+Error: caller "other" may only write its own subtree "paged/other/", not "paged/tool/data.json"

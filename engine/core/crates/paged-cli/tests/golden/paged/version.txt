@@ -1,0 +1,6 @@
+$ paged --version
+--- exit: 0
+--- stdout
+paged <VERSION>
+--- stderr
+(empty)

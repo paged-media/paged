@@ -1,0 +1,13 @@
+$ paged read color-compute doc.paged RGB --value 0 --value 0 --value 255
+--- exit: 0
+--- stdout
+{
+  "kind": "colorComputeReply",
+  "payload": {
+    "cmyk": null,
+    "outOfGamut": false,
+    "rgbHex": "#0000ff"
+  }
+}
+--- stderr
+(empty)

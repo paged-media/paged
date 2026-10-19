@@ -1,0 +1,37 @@
+$ paged --help
+--- exit: 0
+--- stdout
+Open, author, render, export and verify paged documents.
+
+Usage: paged <COMMAND>
+
+Commands:
+  render        Rasterise a page to PNG
+  inspect       Report what the engine made of a document
+  export        Write the document out as IDML, `.paged`, or PDF
+  script        Author a document by running a `.js` file against it
+  package       Collect the document, its linked files and its fonts into one folder (InDesign's File ▸ Package)
+  new           Mint a blank document
+  gen           Emit the built-in corpus fixtures
+  diff          Compare two PNGs — ΔE2000 and SSIM. Exits 1 when they differ beyond the budget
+  read          Ask the engine one of its diagnostic questions
+  place         Put an image file into a graphic frame
+  set           Set one property of any object (ADR 132, `Mutation::Set`)
+  get           Read one property of any object, as its wire value JSON (`RequestGet`, the read twin of `set`)
+  invoke        Apply one wire operation to a document (`Mutation`, by its tag)
+  ops           List every wire operation and whether `paged invoke` sends it
+  parts         List, read and write a `.paged` container's content parts
+  query         List the objects a selector names, one canonical address per line
+  describe      Print the capability catalog — what this engine can be asked to do
+  digest        Print the document's verification digests
+  session       Speak the headless NDJSON engine protocol on stdin/stdout
+  mcp           Serve the paged MCP tools over stdio, for Claude Desktop or Claude Code: the library's documents, and the engine run here
+  engine-serve  Serve the engine over HTTP for paged.server's headless lane: stateless `POST /run` calls that bring a document and take back the result
+  library       The local library of documents `paged mcp` serves
+  help          Print this message or the help of the given subcommand(s)
+
+Options:
+  -h, --help     Print help
+  -V, --version  Print version
+--- stderr
+(empty)

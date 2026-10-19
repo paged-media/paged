@@ -1,0 +1,12 @@
+$ paged gen emit-all --help
+--- exit: 0
+--- stdout
+Emit every built-in fixture. Prefer this over a copied name list
+
+Usage: paged gen emit-all [OPTIONS]
+
+Options:
+      --out <OUT>  Output directory for the whole set [default: corpus/generated]
+  -h, --help       Print help
+--- stderr
+(empty)

@@ -1,0 +1,19 @@
+$ paged engine-serve --port <PORT>
+--- stderr (first line)
+paged engine on 127.0.0.1:<PORT>
+--- POST /run (blank document, a script)
+200
+{
+  "error": null,
+  "output": [
+    "[log] pages 1"
+  ]
+}
+--- POST /run (no document)
+422
+{
+  "error": "`file` is required"
+}
+--- POST /run (not JSON)
+0
+""

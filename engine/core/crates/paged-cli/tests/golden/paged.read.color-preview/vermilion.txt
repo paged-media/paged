@@ -1,0 +1,30 @@
+$ paged read color-preview doc.paged Color/u1
+--- exit: 0
+--- stdout
+{
+  "kind": "colorPreviewReply",
+  "payload": {
+    "result": {
+      "cmyk": [
+        0.0,
+        100.0,
+        100.0,
+        0.0
+      ],
+      "model": "process",
+      "name": "Vermilion",
+      "outOfGamut": false,
+      "rgbHex": "#ff0000",
+      "selfId": "Color/u1",
+      "space": "CMYK",
+      "value": [
+        0.0,
+        100.0,
+        100.0,
+        0.0
+      ]
+    }
+  }
+}
+--- stderr
+(empty)

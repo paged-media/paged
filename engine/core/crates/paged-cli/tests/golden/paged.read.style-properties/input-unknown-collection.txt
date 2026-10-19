@@ -1,0 +1,6 @@
+$ paged read style-properties doc.paged nope x
+--- exit: 1
+--- stdout
+(empty)
+--- stderr
+Error: "nope" is not a style collection: paragraph | character | object | cell | table

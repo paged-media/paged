@@ -1,0 +1,11 @@
+$ paged new
+--- exit: 2
+--- stdout
+(empty)
+--- stderr
+error: the following required arguments were not provided:
+  --out <OUT>
+
+Usage: paged new --out <OUT>
+
+For more information, try '--help'.

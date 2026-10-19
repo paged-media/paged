@@ -1,0 +1,12 @@
+$ paged read swatch-library
+--- exit: 2
+--- stdout
+(empty)
+--- stderr
+error: the following required arguments were not provided:
+  --out <OUT>
+  <DOC>
+
+Usage: paged read swatch-library --out <OUT> <DOC>
+
+For more information, try '--help'.

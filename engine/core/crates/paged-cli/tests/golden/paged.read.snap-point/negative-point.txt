@@ -1,0 +1,23 @@
+$ paged read snap-point --compact doc.paged usp -5 -5
+--- exit: 0
+--- stdout
+{
+  "kind": "snapPoint",
+  "payload": {
+    "result": {
+      "lines": [],
+      "point": [
+        -5.0,
+        -5.0
+      ],
+      "pointTarget": null,
+      "segmentTarget": null,
+      "snapped": false,
+      "tolerancePt": 4.0,
+      "xTarget": null,
+      "yTarget": null
+    }
+  }
+}
+--- stderr
+(empty)

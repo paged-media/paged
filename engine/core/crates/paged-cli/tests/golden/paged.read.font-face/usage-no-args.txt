@@ -1,0 +1,12 @@
+$ paged read font-face
+--- exit: 2
+--- stdout
+(empty)
+--- stderr
+error: the following required arguments were not provided:
+  <DOC>
+  <FAMILY>
+
+Usage: paged read font-face <DOC> <FAMILY>
+
+For more information, try '--help'.

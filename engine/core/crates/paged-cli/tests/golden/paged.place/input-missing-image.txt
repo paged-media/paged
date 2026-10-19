@@ -1,0 +1,9 @@
+$ paged place doc.paged rectangle:u5 missing.png
+--- exit: 1
+--- stdout
+(empty)
+--- stderr
+Error: read missing.png
+
+Caused by:
+    No such file or directory (os error <N>)

@@ -1,0 +1,29 @@
+$ paged read gradient-detail doc.paged Gradient/u0
+--- exit: 0
+--- stdout
+{
+  "kind": "gradientDetailReply",
+  "payload": {
+    "result": {
+      "kind": "linear",
+      "name": "Dawn",
+      "selfId": "Gradient/u0",
+      "stops": [
+        {
+          "locationPct": 0.0,
+          "midpointPct": null,
+          "resolvedRgbHex": "#000000",
+          "stopColorRef": "Color/Black"
+        },
+        {
+          "locationPct": 100.0,
+          "midpointPct": null,
+          "resolvedRgbHex": "#ff0000",
+          "stopColorRef": "Color/u1"
+        }
+      ]
+    }
+  }
+}
+--- stderr
+(empty)
