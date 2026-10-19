@@ -38,10 +38,16 @@
 //     active segment, pills off — showing `placeholder` text only
 //     in value fields. A seam is never fake-interactive.
 
-import { useState } from "react";
+import { useId, useState } from "react";
 
 import type { LeafProps } from "@paged-media/catalog";
 import type { CollectionName, Value } from "@paged-media/client";
+import {
+  LabelledBy,
+  Segment,
+  useFieldName,
+  useRowLabelId,
+} from "@paged-media/panel-kit";
 import {
   BoundsInput,
   KitSelect,
@@ -120,28 +126,37 @@ function LeafRow({
   adornment?: React.ReactNode;
   children: React.ReactNode;
 }) {
+  // The label names the row's controls (the panel kit's LabelledBy).
+  const labelId = useId();
   if (!label) return <>{children}</>;
   if (stack) {
     return (
       <div className="mb-px">
         <div
+          id={labelId}
           className="text-[11.5px] mb-[5px]"
           style={{ color: "var(--pg-muted-fg)" }}
         >
           {label}
           {adornment}
         </div>
-        {children}
+        <LabelledBy id={labelId}>{children}</LabelledBy>
       </div>
     );
   }
   return (
     <div className="grid grid-cols-[84px_1fr] items-center gap-2">
-      <span className="text-xs" style={{ color: "var(--pg-muted-fg)" }}>
+      <span
+        id={labelId}
+        className="text-xs"
+        style={{ color: "var(--pg-muted-fg)" }}
+      >
         {label}
         {adornment}
       </span>
-      <div className="min-w-0">{children}</div>
+      <div className="min-w-0">
+        <LabelledBy id={labelId}>{children}</LabelledBy>
+      </div>
     </div>
   );
 }
@@ -325,6 +340,30 @@ export function LayoutSectionLeaf({ props }: LeafProps) {
  *  Props: `count` (columns), optional `sublabels` (8.5px centred
  *  labels under each cell), optional `caption` (10.5px muted text
  *  after the grid — "Drop cap"), optional `label` (stacked above). */
+/** One cell of a cluster: its control, named by the row's label and the
+ *  cell's sublabel ("Font Size"), and the sublabel under it. */
+function ClusterCell(props: {
+  id: string;
+  sublabel: string;
+  children: React.ReactNode;
+}) {
+  const row = useRowLabelId();
+  return (
+    <div className="flex min-w-0 flex-col gap-[3px]">
+      <LabelledBy id={row ? `${row} ${props.id}` : props.id}>
+        {props.children}
+      </LabelledBy>
+      <span
+        id={props.id}
+        className="select-none text-center text-[8.5px]"
+        style={{ color: "var(--pg-muted-fg)" }}
+      >
+        {props.sublabel}
+      </span>
+    </div>
+  );
+}
+
 export function LayoutClusterLeaf({ props }: LeafProps) {
   const count =
     typeof props.count === "number" && props.count > 0
@@ -341,6 +380,7 @@ export function LayoutClusterLeaf({ props }: LeafProps) {
     ? childNodes
     : [(props.children as React.ReactNode) ?? null];
 
+  const cellId = useId();
   const grid = (
     <div
       className="grid min-w-0 flex-1 gap-2"
@@ -349,15 +389,13 @@ export function LayoutClusterLeaf({ props }: LeafProps) {
     >
       {sublabels
         ? cells.map((cell, i) => (
-            <div key={i} className="flex min-w-0 flex-col gap-[3px]">
+            <ClusterCell
+              key={i}
+              id={`${cellId}-${i}`}
+              sublabel={sublabels[i] ?? ""}
+            >
               {cell}
-              <span
-                className="select-none text-center text-[8.5px]"
-                style={{ color: "var(--pg-muted-fg)" }}
-              >
-                {sublabels[i] ?? ""}
-              </span>
-            </div>
+            </ClusterCell>
           ))
         : cells}
     </div>
@@ -658,19 +696,24 @@ export function TogglePill({
   mixed,
   onToggle,
   testId,
+  label,
 }: {
   checked: boolean;
   disabled?: boolean;
   mixed?: boolean;
   onToggle?: (next: boolean) => void;
   testId?: string;
+  /** The switch's name, where no row label names it. */
+  label?: string;
 }) {
   const inert = disabled || onToggle == null;
+  const named = useFieldName({ "aria-label": label });
   return (
     <button
       type="button"
       role="switch"
       aria-checked={checked}
+      {...named}
       disabled={inert}
       data-toggle-switch={testId}
       data-on={checked ? "true" : "false"}
@@ -702,6 +745,7 @@ export function TogglePill({
  */
 export function ToggleSwitchLeaf({ value, onCommit, props }: LeafProps) {
   const label = labelFromProps(props) ?? "";
+  const labelId = useId();
   const seam = isSeam(props);
   const on = unwrapBoolValue(value);
   const pill = (
@@ -721,11 +765,15 @@ export function ToggleSwitchLeaf({ value, onCommit, props }: LeafProps) {
         data-check-row={label}
         data-seam={seam ? "true" : undefined}
       >
-        <span className="text-xs" style={{ color: "var(--pg-muted-fg)" }}>
+        <span
+          id={labelId}
+          className="text-xs"
+          style={{ color: "var(--pg-muted-fg)" }}
+        >
           {label}
           {props.labelAdornment as React.ReactNode}
         </span>
-        {pill}
+        <LabelledBy id={labelId}>{pill}</LabelledBy>
       </div>
     );
   }
@@ -735,11 +783,11 @@ export function ToggleSwitchLeaf({ value, onCommit, props }: LeafProps) {
       data-check-row={label}
       data-seam={seam ? "true" : undefined}
     >
-      <span className="text-xs" style={{ color: "var(--pg-fg)" }}>
+      <span id={labelId} className="text-xs" style={{ color: "var(--pg-fg)" }}>
         {label}
         {props.labelAdornment as React.ReactNode}
       </span>
-      {pill}
+      <LabelledBy id={labelId}>{pill}</LabelledBy>
     </label>
   );
 }
@@ -835,12 +883,11 @@ export function ToggleGroupLeaf({ value, onCommit, props }: LeafProps) {
           // Seams stay NEUTRAL — no active segment on a seam.
           const active = !seam && resolved && text === opt.value;
           return (
-            <button
-              type="button"
+            <Segment
               key={opt.value}
+              pressed={active}
               disabled={inert}
               data-option-value={opt.value}
-              data-active={active ? "true" : "false"}
               title={opt.value}
               className="flex h-[28px] cursor-pointer items-center justify-center border-0 text-[11px] disabled:cursor-default"
               style={{
@@ -864,7 +911,7 @@ export function ToggleGroupLeaf({ value, onCommit, props }: LeafProps) {
               }}
             >
               {icons ? <Icon name={opt.label} size={15} /> : opt.label}
-            </button>
+            </Segment>
           );
         })}
       </div>
@@ -1219,6 +1266,9 @@ export function ListLeaf({ props }: LeafProps) {
                       ? `${expanded ? "Collapse" : "Expand"}: ${label}`
                       : undefined
                   }
+                  // A leaf's twisty is an invisible spacer: out of the
+                  // accessibility tree, like it is out of sight.
+                  aria-hidden={expandable ? undefined : true}
                   disabled={!expandable}
                   className="shrink-0 cursor-pointer border-0 bg-transparent disabled:cursor-default"
                   style={{

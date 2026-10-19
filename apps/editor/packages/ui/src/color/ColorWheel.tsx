@@ -37,6 +37,7 @@ import {
   type CSSProperties,
   type PointerEvent as ReactPointerEvent,
 } from "react";
+import { Segment } from "@paged-media/panel-kit";
 import { Icon } from "@paged-media/shell";
 import type { SwatchSpec } from "@paged-media/client";
 
@@ -404,11 +405,10 @@ export function ColorWheel({
             }}
           >
             {(["HEX", "RGB", "CMYK", "HSL"] as FieldModel[]).map((m, i) => (
-              <button
+              <Segment
                 key={m}
-                type="button"
                 data-wheel-model={m}
-                data-active={model === m ? "true" : "false"}
+                pressed={model === m}
                 onClick={() => setModel(m)}
                 style={{
                   flex: 1,
@@ -428,7 +428,7 @@ export function ColorWheel({
                 }}
               >
                 {m}
-              </button>
+              </Segment>
             ))}
           </div>
           <div style={{ display: "flex", gap: 6, alignItems: "flex-start" }}>
@@ -550,11 +550,10 @@ export function ColorWheel({
           }}
         >
           {HARMONY_NAMES.map((k) => (
-            <button
+            <Segment
               key={k}
-              type="button"
               data-wheel-harmony={k}
-              data-active={harmony === k ? "true" : "false"}
+              pressed={harmony === k}
               onClick={() => setHarmony(k)}
               style={{
                 height: 25,
@@ -574,7 +573,7 @@ export function ColorWheel({
               }}
             >
               {k}
-            </button>
+            </Segment>
           ))}
         </div>
         {/* harmony swatch strip */}
@@ -694,6 +693,7 @@ function WheelField({
       }}
     >
       <input
+        aria-label={label}
         defaultValue={value}
         key={value}
         readOnly={readOnly}

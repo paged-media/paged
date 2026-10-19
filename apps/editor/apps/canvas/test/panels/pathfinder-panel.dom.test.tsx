@@ -293,18 +293,17 @@ describe("Pathfinder panel: the path verbs open the typed form", () => {
 });
 
 describe("Pathfinder panel: findings", () => {
-  // A refused shape mode puts the engine's words in the status line; for a
+  // A refused shape mode puts the engine's reason in the status line; for a
   // rectangle and an oval the engine answers notImplemented with the
-  // wire's variant name, and the panel shows "Mutation::PathfinderBoolean".
-  test.failing(
-    "PN-262: a refused shape mode says why in words, not with the wire's variant name",
-    async () => {
-      covers("panel:paged.pathfinder");
-      const h = await mount();
-      await h.select([h.scene.rect, h.scene.oval]);
-      await h.click(kindButton(h, "intersect"));
-      expect(status(h)).not.toBeNull();
-      expect(status(h)).not.toContain("Mutation::");
-    },
-  );
+  // wire's variant name ("Mutation::PathfinderBoolean"), which the panel
+  // kit's refusalText turns into words naming the shape mode.
+  test("PN-262: a refused shape mode says why in words, not with the wire's variant name", async () => {
+    covers("panel:paged.pathfinder");
+    const h = await mount();
+    await h.select([h.scene.rect, h.scene.oval]);
+    await h.click(kindButton(h, "intersect"));
+    expect(status(h)).not.toBeNull();
+    expect(status(h)).not.toContain("Mutation::");
+    expect(status(h)).toBe("Intersect is not available for these objects yet.");
+  });
 });

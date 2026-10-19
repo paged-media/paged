@@ -41,6 +41,7 @@ import {
   CockpitRow,
   useCollection,
 } from "@paged-media/shell";
+import { FieldSelect } from "@paged-media/panel-kit";
 import { formatAddress } from "@paged-media/plugin-sdk";
 import type { PageSummary } from "@paged-media/client";
 
@@ -169,7 +170,7 @@ export function MarginsColumnsPanel() {
       <CockpitPanelHeader title="Margins and Columns" />
       <div className="px-3.5 pb-2">
         <CockpitRow label="Pages">
-          <select
+          <FieldSelect
             data-page-select=""
             className="h-[28px] w-full rounded-[6px] border border-input bg-background px-2 text-[12px]"
             value={chosen}
@@ -181,7 +182,7 @@ export function MarginsColumnsPanel() {
               </option>
             ))}
             {(pages?.length ?? 0) > 1 && <option value={ALL}>All pages</option>}
-          </select>
+          </FieldSelect>
         </CockpitRow>
       </div>
       {targets.length > 0 && (

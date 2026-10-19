@@ -34,6 +34,7 @@
 
 import { useMemo, useState, type CSSProperties } from "react";
 
+import { Segment } from "@paged-media/panel-kit";
 import { NumberInput } from "../inputs/NumberInput";
 
 import {
@@ -67,6 +68,20 @@ export interface ColorMixerProps {
   showTint?: boolean;
   /** Compact layout (popover/foot-cluster embeds). */
   compact?: boolean;
+}
+
+/** A channel's name in words, for its field ("C" reads as "Cyan"). */
+const CHANNEL_NAMES: Readonly<
+  Record<string, Readonly<Record<string, string>>>
+> = {
+  CMYK: { c: "Cyan", m: "Magenta", y: "Yellow", k: "Black" },
+  RGB: { r: "Red", g: "Green", b: "Blue" },
+  LAB: { l: "Lightness", a: "a (green to red)", b: "b (blue to yellow)" },
+  HSB: { h: "Hue", s: "Saturation", b: "Brightness" },
+  Gray: { k: "Gray" },
+};
+function channelName(tab: MixerTab, key: string, label: string): string {
+  return CHANNEL_NAMES[tab]?.[key] ?? label;
 }
 
 export function ColorMixer(props: ColorMixerProps) {
@@ -171,11 +186,10 @@ export function ColorMixer(props: ColorMixerProps) {
       {/* Space tabs */}
       <div style={tabRow}>
         {(["CMYK", "RGB", "LAB", "HSB", "Gray"] as MixerTab[]).map((t) => (
-          <button
+          <Segment
             key={t}
-            type="button"
             data-mixer-space={t}
-            data-active={tab === t ? "true" : "false"}
+            pressed={tab === t}
             onClick={() => setTab(t)}
             style={{
               ...tabBtn,
@@ -188,7 +202,7 @@ export function ColorMixer(props: ColorMixerProps) {
             }}
           >
             {t === "Gray" ? "K" : t}
-          </button>
+          </Segment>
         ))}
         {/* Preview chip + gamut warning */}
         <div
@@ -247,6 +261,7 @@ export function ColorMixer(props: ColorMixerProps) {
             </span>
           ) : (
             <NumberInput
+              aria-label={channelName(tab, ch.key, ch.label)}
               value={displayed[i] ?? 0}
               min={ch.min}
               max={ch.max}
@@ -262,6 +277,7 @@ export function ColorMixer(props: ColorMixerProps) {
       <div style={channelRow}>
         <span style={channelLabel}>#</span>
         <input
+          aria-label="Hex"
           data-mixer-hex
           defaultValue={mixed ? "" : compute.rgbHex.replace("#", "")}
           key={mixed ? "mixed" : compute.rgbHex}
@@ -284,6 +300,7 @@ export function ColorMixer(props: ColorMixerProps) {
             <span style={{ fontSize: 11, opacity: 0.6 }}>—</span>
           ) : (
             <NumberInput
+              aria-label="Tint (%)"
               value={value?.tint ?? 100}
               min={0}
               max={100}

@@ -193,6 +193,7 @@ function FamilySelect() {
         Family
       </div>
       <KitSelect
+        aria-label="Family"
         value={resolved ? current : "__mixed__"}
         soft={!resolved}
         disabled={family.onCommit == null}

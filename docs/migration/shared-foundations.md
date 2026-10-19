@@ -279,7 +279,7 @@ dependency, so it adds one line to each `Cargo.lock`. It has no number-format or
 grammar: each formatter keeps its own and reads its facts from here.
 
 - **Consumers:** sheet-format, sheet-fn and sheet-js; data-core and data-expr; the engine's
-  `paged-renderer` (the date variables).
+  `paged-renderer` (the date variables); slide-chart through sheet-format.
 - **Tests:** 11 of its own. Calendar: both directions for every date from 1600 to 2400, the
   fixed points of the sheet and data epochs, day 0 and day overflow, and the `i32` extremes of
   data's DuckDB range. A weekday test checks it against Sakamoto's formula, which two of the
@@ -302,7 +302,7 @@ name tables, separator tables and digit grouping.
 | leap year, month length | 2 each: sheet-format, sheet-fn | 1 each |
 | locale separator tables | 2: sheet-format (5 rows), data-core (9 rows) | 1 (9 rows) |
 | month and day name arrays | 32: sheet-format 20, the engine 4 (English), sheet-js's fill 8 (English, German) | 20, plus the fill's one German exception |
-| digit grouping | 3: sheet-format `number.rs`, data-expr `format.rs`, slide-chart | 1 (slide-chart: below) |
+| digit grouping | 3: sheet-format `number.rs`, data-expr `format.rs`, slide-chart | 1 (slide-chart through sheet-format, below) |
 
 data-core and sheet-format keep one-line wrappers that convert to their own integer widths
 (`i32` days and years); they hold no arithmetic.
@@ -339,11 +339,20 @@ The outputs are the same, by construction and by test:
 
 ### slide-chart and sheet-format
 
-slide-chart's `format_number` read a subset of Excel's format codes with its own grouping. It
-moves onto sheet-format (the plan's "slide-chart uses sheet-format"), which makes slide depend
-on modules/sheet's sheet-format and sheet-core by path. On its own that grows
-`slide_js_bg.wasm` by 55,234 B (1,559,562 → 1,614,796); with slide's zip move (zopfli leaves,
-C5) the module is smaller than before (1,553,953). So both land together, after C1.
+slide-chart's `format_number` read a subset of Excel's format codes (`General`, `0.0…`,
+`#,##0…`, a trailing `%`, the first section only) with its own grouping and Rust's rounding.
+It is sheet-format's renderer now (slide ADR 710), so slide depends on modules/sheet's
+sheet-format and sheet-core by path, and through them on paged-fmt; the digit-grouping copies
+are 3 → 1.
+
+- **Labels:** over 19 codes and the value grids slide-chart produces, `General` differs only
+  for tiny values (`1E-11`, was `0`) and the 15-significant-digit rule (`1/3`); the other codes
+  now round half away from zero, print no `-0`, and keep their literals, sections, locale
+  tokens and dates. A value-axis tick that is zero up to rounding is labelled `0`. The corpus
+  decks' four charts and the slide fixtures, all `General`, lay out byte for byte as before
+  (every primitive of every chart, at two frame sizes).
+- **wasm:** the format engine costs `slide_js_bg.wasm` 51,812 B. It landed together with
+  slide's zip move (C5, below), which takes 124,223 B out, so the module never grew.
 
 ### The engine and `platform/shared`
 
@@ -377,7 +386,8 @@ Every workspace that reads or writes a package is on zip 9:
 | modules/publish | `deflate-flate2` | `rust_backend` | miniz_oxide |
 | modules/sheet | `deflate-flate2` | `rust_backend` | miniz_oxide |
 | apps/server | `deflate-flate2` | `rust_backend` | miniz_oxide |
-| modules/doc, modules/slide | `deflate` | none | zlib-rs (and zopfli is compiled in) |
+| modules/doc | `deflate-flate2` (was `deflate`) | `rust_backend` | zlib-rs, through ooxmlsdk's zip 8 |
+| modules/slide | `deflate-flate2` (was `deflate`) | `rust_backend` | miniz_oxide (was zlib-rs) |
 | modules/data | through calamine (`deflate`) | none | zlib-rs; data only reads |
 
 - **zlib-rs wins where it is on at all.** flate2 picks zlib-rs over miniz_oxide when both
@@ -386,14 +396,26 @@ Every workspace that reads or writes a package is on zip 9:
   (the canvas wasm, paged-cli, a workspace test run) deflates with zlib-rs; only a build
   without it (`-p idml-export` alone) uses miniz_oxide. hayro arrived on 2026-10-14, before
   the zip 9 change, so zip 9 changed no byte, as recorded; the workspace comment now says so.
-- **zip 8 remains** in doc and slide, through ooxmlsdk 0.12: its `parts` feature, which `mce`
-  needs, depends on zip 8 with `deflate-flate2-zlib-rs`. That is why doc's and slide's
-  packages are deflated by zlib-rs whatever their own zip line says.
-- **doc and slide move to `deflate-flate2`** with C1, which rewrites the same lines (the
-  shared OOXML crate forwards the zip backend as a feature). Measured on the tree before C1:
-  zopfli serves only compression levels above 9, which nothing asks for, so the written bytes
-  stay the same, and it leaves the wasm: `docx_js_bg.wasm` 6,660,701 → 6,585,217 B (−75,484),
-  `slide_js_bg.wasm` about −61 KB.
+- **zip 8 remains** in doc, through ooxmlsdk 0.12: its `parts` feature, which `mce` needs,
+  depends on zip 8 with `deflate-flate2-zlib-rs`. That is why doc's packages are deflated by
+  zlib-rs whatever its own zip line says (slide had the same until C1 took ooxmlsdk out of
+  its graph).
+- **doc and slide moved to `deflate-flate2`** after C1 and C4, on their own zip line and on
+  the shared OOXML crate's feature, whose `deflate-flate2` now carries flate2's
+  `rust_backend` itself (a crate that depends on it builds on its own; flate2 has no default
+  backend under zip). zopfli serves only compression levels above 9, which nothing asks for.
+  - **doc** keeps ooxmlsdk 0.12 (the `dom` feature) and with it zip 8's zlib-rs: its packages
+    are deflated as before, byte for byte.
+  - **slide** no longer compiles ooxmlsdk (C1), so nothing turns zlib-rs on: its packages are
+    deflated by miniz_oxide, as engine/core declares. The parts inside are the same bytes; the
+    deflated streams are not. No test pins deflate payloads (the container tests read zip
+    header fields), and slide's export and corpus lanes pass.
+
+| Artifact (after C1 and C4) | Before | After | Change |
+| --- | ---: | ---: | ---: |
+| `docx_js_bg.wasm` (zip move) | 6,828,821 | 6,748,906 | −79,915 |
+| `slide_js_bg.wasm` (zip move) | 1,802,104 | 1,677,881 | −124,223 |
+| `slide_js_bg.wasm` (zip move and slide-chart, C2) | 1,802,104 | 1,729,693 | −72,411 |
 
 ### harfrust
 

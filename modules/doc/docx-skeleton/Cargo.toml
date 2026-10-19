@@ -21,3 +21,4 @@ paged-store.workspace = true
 docx-conformance = { path = "../docx-conformance" }
 docx-import.workspace = true
 zip.workspace = true
+flate2.workspace = true
