@@ -12,9 +12,10 @@
   },
   "scripts": {
     "typecheck": "bun check -p tsconfig.json",
-    "test": "bun test --parallel --preload ../../../../tooling/js/bun-test-setup.ts --timeout 30000",
+    "test": "bun test --parallel --preload ../../../../tooling/js/bun-test-setup.ts --timeout 30000 --path-ignore-patterns '**/*.dom.test.*'",
     "test:e2e": "bun test --preload ../../../../tooling/js/bun-test-setup.ts --timeout 30000 ./test/pipeline-real.spec.ts ./test/duckdb-real.spec.ts",
-    "test:duckdb": "REQUIRE_REAL_DUCKDB=1 bun test --preload ../../../../tooling/js/bun-test-setup.ts --timeout 30000 ./test/duckdb-real.spec.ts"
+    "test:duckdb": "REQUIRE_REAL_DUCKDB=1 bun test --preload ../../../../tooling/js/bun-test-setup.ts --timeout 30000 ./test/duckdb-real.spec.ts",
+    "test:dom": "bun test --parallel --preload ../../../../tooling/js/bun-test-setup.ts --preload ./test/happydom.ts --timeout 60000 .dom.test."
   },
   "peerDependencies": {
     "@paged-media/plugin-api": "workspace:*",
@@ -33,7 +34,13 @@
     "react": "catalog:",
     "typescript": "catalog:",
     "@paged-media/test-kit": "workspace:*",
-    "@types/bun": "catalog:"
+    "@types/bun": "catalog:",
+    "@happy-dom/global-registrator": "catalog:",
+    "happy-dom": "catalog:",
+    "@testing-library/dom": "catalog:",
+    "@testing-library/react": "catalog:",
+    "react-dom": "catalog:",
+    "@types/react-dom": "catalog:"
   },
   "files": [
     "dist",

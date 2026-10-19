@@ -35,7 +35,7 @@
 //      the whole file back, and a refused contour costs that contour only.
 
 import { describe, expect, it, beforeAll, afterAll } from "bun:test";
-import { waitFor } from "@paged-media/test-kit";
+import { covers, waitFor } from "@paged-media/test-kit";
 
 import type {
   ElementId,
@@ -644,6 +644,7 @@ describe("draw conformance — SVG import/export (Phase 8, K-2)", () => {
   });
 
   it("File ▸ Open — the registered importer — commits the file in one undo step", async () => {
+    covers("importer:media.paged.draw.importer.svg");
     const importer = h
       .importersContributed()
       .find((c) => c.id === SVG_IMPORTER_ID);
@@ -727,6 +728,31 @@ describe("draw conformance — SVG import/export (Phase 8, K-2)", () => {
   it("exportSvg returns null for an empty selection", async () => {
     await h.host.selection.set([]);
     expect(await exportSvg(h.host)).toBeNull();
+  });
+
+  it("File ▸ Export — the registered exporter — writes the selection as an SVG that parses back to the same shapes; nothing selected exports nothing", async () => {
+    covers("exporter:media.paged.draw.exporter.svg");
+    const exporter = h
+      .exportersContributed()
+      .find((c) => c.id === SVG_EXPORTER_ID);
+    expect(exporter).toMatchObject({ extension: ".svg" });
+    const ids = await importSvg(h.host, {
+      name: "out.svg",
+      bytes: enc(FIXTURE_SVG),
+      mimeType: "image/svg+xml",
+    });
+    await h.host.selection.set(ids as never[]);
+    const out = await exporter!.export();
+    expect(out).not.toBeNull();
+    expect(out!.fileName.endsWith(".svg")).toBe(true);
+    const text = new TextDecoder().decode(out!.bytes);
+    expect(text.startsWith("<?xml") || text.startsWith("<svg")).toBe(true);
+    const reparsed = parseSvgDocument(text);
+    expect(reparsed!.shapes).toHaveLength(3);
+    expect(reparsed!.shapes[0]!.style.fill).toBe("#ff8800");
+    await h.host.selection.set([]);
+    expect(await exporter!.export()).toBeNull();
+    await h.host.document.undo();
   });
 
   it("the importer/exporter ids are namespaced under the manifest id", () => {

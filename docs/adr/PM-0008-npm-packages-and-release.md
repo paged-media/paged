@@ -97,8 +97,8 @@ places, and both move with it:
   every built-in bundle's peer move from `^18.3` to `>=19.3`; the editor provides React 19.3.1.
   A lower bound and no upper bound: a later React 19 or 20 is the host's to provide, as the
   contract's own peer range is (ADR 307).
-- **The in-tree counters move together:** `plugin-api` and `plugin-sdk` 0.2.75-canary.0 →
-  0.2.76-canary.0. The next release publishes both at the tag's version (amendment 1).
+- **The in-tree counters move together:** `plugin-api` and `plugin-sdk` 0.2.78-canary.0 →
+  0.2.79-canary.0. The next release publishes both at the tag's version (amendment 1).
 
 What an extension author changes is in
 [platform/extensions/README.md](../../platform/extensions/README.md#react-19).

@@ -17,8 +17,8 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// THE COMMAND INVENTORY: a command the editor registers without a unit or
-// component test fails here.
+// THE COMMAND INVENTORY: what the editor registers, read at run time, must
+// be what the surface gate reads statically.
 //
 // The host commands come from two sources, both read here:
 //
@@ -30,16 +30,16 @@
 //     site in the editor's sources is counted per file against SITES, so a
 //     new site fails until it is listed — and its ids with it.
 //
-// Every id must then be asserted under `covers("command:<id>")` in the
-// editor's unit or component tiers (apps/canvas/test, packages/*/test), or
-// sit in PENDING with the reason it is not yet. PENDING ratchets: an entry
-// that has gained a covers() call fails until it is removed. The derived
-// families count as one id each (`paged.panel.show.*`, …), as the surface
-// gate counts them.
+// Their union must equal the host commands the surface gate enumerates
+// from the source (apps/editor/scripts/surface/enumerate.mjs), so the
+// static reader cannot silently read less than the registry receives, and
+// a command added without a test fails the gate (whose acknowledged lists
+// hold the gaps, with their reasons). The derived families count as one id
+// each (`paged.panel.show.*`, …), as the gate counts them.
 
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { extname, join, relative } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { describe, expect, test } from "bun:test";
 
@@ -72,16 +72,6 @@ const walk = (
 const SOURCES = [
   ...walk(at("packages"), (n) => n === "test"),
   ...walk(at("apps/canvas/src"), () => false),
-];
-const TESTS = [
-  ...walk(at("apps/canvas/test"), () => false),
-  ...readdirSync(at("packages")).flatMap((p) => {
-    try {
-      return walk(at("packages", p, "test"), () => false);
-    } catch {
-      return [];
-    }
-  }),
 ];
 
 const noop = new Proxy({}, { get: () => () => {} }) as never;
@@ -154,96 +144,6 @@ const INLINE_IDS: Record<string, string[]> = {
   ],
 };
 
-/** Host commands not yet asserted in the unit or component tiers, each
- *  with why. A covers() call for one of these fails the run until the
- *  entry goes. */
-const PENDING = new Map<string, string>([
-  [
-    "paged.chrome.toggleAll",
-    "registered inline in PagedShell over its own toggleAll closure (dock + rail visibility state); no unit seam, asserted in the browser (Tab, View menu).",
-  ],
-  [
-    "paged.chrome.togglePanels",
-    "registered inline in PagedShell over its togglePanels closure (dock visibility, rail kept); no unit seam, asserted in the browser (Shift+Tab).",
-  ],
-  [
-    "paged.ai.ask",
-    "registered inline in main.tsx's CanvasAppIntegration (opens the assistant panel with the draft); no importable table, asserted in the browser.",
-  ],
-  [
-    "paged.fillStroke.swap",
-    "registered inside FillStrokeCluster over its live bindings (selection fill/stroke or document defaults); needs the component tier with the shell providers.",
-  ],
-  [
-    "paged.fillStroke.default",
-    "registered inside FillStrokeCluster over its live bindings (selection fill/stroke or document defaults); needs the component tier with the shell providers.",
-  ],
-  [
-    "paged.fillStroke.toggleAffects",
-    "registered inside FillStrokeCluster over the formatting-affects context; needs the component tier with the shell providers.",
-  ],
-  [
-    "paged.actions.record",
-    "registered inside ActionsProvider over its recording state; needs the component tier (RegistriesProvider + CanvasClientProvider + ActionsProvider).",
-  ],
-  [
-    "paged.actions.stop",
-    "registered inside ActionsProvider over its recording state; needs the component tier (RegistriesProvider + CanvasClientProvider + ActionsProvider).",
-  ],
-  [
-    "paged.actions.play",
-    "registered inside ActionsProvider over its action library; needs the component tier (RegistriesProvider + CanvasClientProvider + ActionsProvider).",
-  ],
-  [
-    "paged.sample.hello",
-    "the worker sample bundle's demo command, registered to prove the bundle-worker path; not product surface (the surface gate acknowledges it too).",
-  ],
-  [
-    "paged.layers.reorder",
-    "registered by the Layers panel while it is mounted; asserted with the panel in the panel component tests (test/panels), not landed yet.",
-  ],
-  [
-    "paged.layers.assignSelection",
-    "registered by the Layers panel while it is mounted; asserted with the panel in the panel component tests (test/panels), not landed yet.",
-  ],
-  [
-    "paged.layers.togglePrintable",
-    "registered by the Layers panel while it is mounted; asserted with the panel in the panel component tests (test/panels), not landed yet.",
-  ],
-  [
-    "paged.layers.rename",
-    "registered by the Layers panel while it is mounted; asserted with the panel in the panel component tests (test/panels), not landed yet.",
-  ],
-  [
-    "paged.layers.toggleVisible",
-    "registered by the Layers panel while it is mounted; asserted with the panel in the panel component tests (test/panels), not landed yet.",
-  ],
-  [
-    "paged.layers.toggleLocked",
-    "registered by the Layers panel while it is mounted; asserted with the panel in the panel component tests (test/panels), not landed yet.",
-  ],
-  [
-    "paged.layers.remove",
-    "registered by the Layers panel while it is mounted; asserted with the panel in the panel component tests (test/panels), not landed yet.",
-  ],
-  [
-    "paged.layers.add",
-    "registered by the Layers panel while it is mounted; asserted with the panel in the panel component tests (test/panels), not landed yet.",
-  ],
-  [
-    "paged.demo.applySwatchStroke",
-    "the schema-list demo panel's command, registered while it is mounted; asserted with the panel in the panel component tests (test/panels), not landed yet.",
-  ],
-  [
-    "paged.demo.renameLayer",
-    "the schema-tree demo panel's command, registered while it is mounted; asserted with the panel in the panel component tests (test/panels), not landed yet.",
-  ],
-  [
-    "paged.demo.moveLayer",
-    "the schema-tree demo panel's command, registered while it is mounted; asserted with the panel in the panel component tests (test/panels), not landed yet.",
-  ],
-]);
-
 const rel = (p: string) => relative(EDITOR, p).split("\\").join("/");
 
 function tableIds(): string[] {
@@ -259,19 +159,6 @@ function tableIds(): string[] {
 
 function hostIds(): Set<string> {
   return new Set([...tableIds(), ...Object.values(INLINE_IDS).flat()]);
-}
-
-/** Every `command:` id asserted under covers() in the unit and component
- *  tiers. */
-function coveredIds(): Set<string> {
-  const out = new Set<string>();
-  for (const file of TESTS) {
-    const src = readFileSync(file, "utf8");
-    for (const call of src.matchAll(/\bcovers\(([^)]*)\)/g)) {
-      for (const lit of call[1].matchAll(/"command:([^"]+)"/g)) out.add(lit[1]);
-    }
-  }
-  return out;
 }
 
 describe("the host command inventory", () => {
@@ -344,22 +231,23 @@ describe("the host command inventory", () => {
     ]);
   });
 
-  test("every host command is asserted in the unit or component tier, or pending with a reason", () => {
-    const host = hostIds();
-    expect(host.size).toBeGreaterThanOrEqual(100);
-    const covered = coveredIds();
-    const missing = [...host]
-      .filter((id) => !covered.has(id) && !PENDING.has(id))
+  test("the gate's static enumeration reads exactly the commands the app registers", async () => {
+    const { enumerateSurface } = (await import(
+      pathToFileURL(at("scripts/surface/enumerate.mjs")).href
+    )) as {
+      enumerateSurface(root: string): {
+        items: Array<{ kind: string; id: string; origin: string }>;
+      };
+    };
+    const surface = enumerateSurface(
+      fileURLToPath(new URL("../../../../../../../", import.meta.url)),
+    );
+    const gate = surface.items
+      .filter((i) => i.kind === "command" && i.origin === "host")
+      .map((i) => i.id)
       .sort();
-    expect(missing).toEqual([]);
-  });
-
-  test("PENDING ratchets: no stale entry, no entry that has a test", () => {
-    const host = hostIds();
-    const covered = coveredIds();
-    expect([...PENDING.keys()].filter((id) => !host.has(id))).toEqual([]);
-    expect([...PENDING.keys()].filter((id) => covered.has(id))).toEqual([]);
-    for (const [id, reason] of PENDING)
-      expect({ id, ok: reason.length >= 60 }).toEqual({ id, ok: true });
-  });
+    const host = [...hostIds()].sort();
+    expect(host.length).toBeGreaterThanOrEqual(100);
+    expect(gate).toEqual(host);
+  }, 180_000);
 });

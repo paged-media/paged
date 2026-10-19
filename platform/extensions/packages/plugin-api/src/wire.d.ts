@@ -3414,9 +3414,16 @@ export class CanvasWorker {
      */
     caretGeometryJson(selection_json: string): string | undefined;
     /**
-     * Whether GPU is initialised. The worker checks this each
-     * frame to decide which render path to take. Cheap; just a
-     * pointer-null check.
+     * Why the GPU device was lost (a GPU-process crash, a driver
+     * reset), once it has been; `undefined` while it serves or when
+     * there is no presenter. Every `presentFrame` returns `false`
+     * after a loss — this is how the worker tells a lost device from
+     * a skipped frame.
+     */
+    gpuLostReason(): string | undefined;
+    /**
+     * Whether the GPU can draw: a presenter exists and its device
+     * has not been lost. Cheap.
      */
     gpuReady(): boolean;
     /**
@@ -3526,6 +3533,15 @@ export class CanvasWorker {
      */
     readPagedPartDirect(path: string): Uint8Array | undefined;
     /**
+     * After a loss: request a new adapter and device and rebind the
+     * SAME canvas. Resolves `true` when the GPU draws again (cached
+     * page scenes stay valid), `false` when the browser grants no new
+     * device — the presenter is gone then, `gpuReady` is false, and
+     * the canvas keeps a WebGPU context, so the worker asks the main
+     * thread for a new canvas to draw on with the CPU.
+     */
+    recoverGpu(): Promise<boolean>;
+    /**
      * Sub-phase D — render `page_id` to a PNG via the Vello GPU
      * path (off-surface). Returns `None` if GPU is not
      * initialised, the page id is unknown, or the underlying
@@ -3535,6 +3551,23 @@ export class CanvasWorker {
      * fallback used in CI.
      */
     renderPageVelloPng(page_id: string, dpi: number): Promise<Uint8Array | undefined>;
+    /**
+     * A `RequestSnapshot`, drawn by Vello on this worker's WebGPU
+     * device instead of the CPU rasterizer: the same page, dpi and
+     * PNG as the `handleMessage` reply, and the same scene the
+     * worker presents on screen, so a pixel read off it (the
+     * eyedropper) is the pixel the user sees. `message_json` is the
+     * whole `MainToWorker` envelope.
+     *
+     * Resolves to the reply envelope's JSON — `snapshotReady`, or
+     * `snapshotFailed` for an unknown page or a bad size — and to
+     * `undefined` when there is no GPU, no document, the page
+     * overprints (the screen draws overprint as knockout; a snapshot
+     * composites it per ink, on the CPU), or the message is not a
+     * snapshot request: the worker then answers through
+     * `handleMessage` on the CPU rasterizer.
+     */
+    renderSnapshotGpu(message_json: string): Promise<string | undefined>;
     /**
      * Worker-internal tile rendering. Bypasses the JSON
      * `RequestSnapshot` round-trip — for the render loop that
@@ -3578,6 +3611,12 @@ export class CanvasWorker {
      * when measuring memory behaviour.
      */
     setSceneCacheBudget(max_entries: number): void;
+    /**
+     * Test hook: destroy the GPU device, as a GPU-process crash would
+     * take it. The device's lost callback fires as it does for a real
+     * loss. `false` without a presenter.
+     */
+    simulateGpuLoss(): boolean;
     /**
      * v66 — binary sibling of `SubmitSceneLayer` for the one-image
      * case: the frame's scene layer becomes the RGBA8 image in `rgba`
@@ -3648,6 +3687,7 @@ export interface InitOutput {
     readonly cameraSabBytes: () => number;
     readonly cameraSabLayout: () => any;
     readonly canvasworker_caretGeometryJson: (a: number, b: number, c: number) => [number, number];
+    readonly canvasworker_gpuLostReason: (a: number) => [number, number];
     readonly canvasworker_gpuReady: (a: number) => number;
     readonly canvasworker_handleMessage: (a: number, b: number, c: number) => [number, number];
     readonly canvasworker_initGpu: (a: number, b: any, c: number, d: number) => any;
@@ -3662,13 +3702,16 @@ export interface InitOutput {
     readonly canvasworker_presentFrame: (a: number, b: number, c: number, d: number, e: number) => [number, number, number];
     readonly canvasworker_protocolVersion: (a: number) => number;
     readonly canvasworker_readPagedPartDirect: (a: number, b: number, c: number) => [number, number];
+    readonly canvasworker_recoverGpu: (a: number) => any;
     readonly canvasworker_renderPageVelloPng: (a: number, b: number, c: number, d: number) => any;
+    readonly canvasworker_renderSnapshotGpu: (a: number, b: number, c: number) => any;
     readonly canvasworker_renderTilePng: (a: number, b: number, c: number, d: number) => [number, number];
     readonly canvasworker_resizeGpu: (a: number, b: number, c: number) => void;
     readonly canvasworker_runResolveJson: (a: number) => [number, number];
     readonly canvasworker_sceneCacheSize: (a: number) => number;
     readonly canvasworker_selectionGeometryJson: (a: number, b: number, c: number) => [number, number];
     readonly canvasworker_setSceneCacheBudget: (a: number, b: number) => void;
+    readonly canvasworker_simulateGpuLoss: (a: number) => number;
     readonly canvasworker_submitSceneImageDirect: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: number, n: number) => [number, number];
     readonly canvasworker_submitSceneImageTilesDirect: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number) => [number, number];
     readonly canvasworker_updateGestureRaw: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number];
@@ -3692,8 +3735,9 @@ export interface InitOutput {
     readonly wasm_bindgen_2e35521b6c202407___convert__closures_____invoke___js_sys_f14cd77ae230e8f7___Function_fn_wasm_bindgen_2e35521b6c202407___JsValue_____wasm_bindgen_2e35521b6c202407___sys__Undefined___js_sys_f14cd77ae230e8f7___Function_fn_wasm_bindgen_2e35521b6c202407___JsValue_____wasm_bindgen_2e35521b6c202407___sys__Undefined_______true_: (a: number, b: number, c: any, d: any) => void;
     readonly wasm_bindgen_2e35521b6c202407___convert__closures_____invoke___wasm_bindgen_2e35521b6c202407___JsValue__core_37ee0ce0c4cd57d5___result__Result_____wasm_bindgen_2e35521b6c202407___JsError___true_: (a: number, b: number, c: any) => [number, number];
     readonly wasm_bindgen_2e35521b6c202407___convert__closures_____invoke___wasm_bindgen_2e35521b6c202407___sys__JsNullable_wgpu_70d6da3772b6cba4___backend__webgpu__webgpu_sys__gen_GpuError__GpuError___core_37ee0ce0c4cd57d5___result__Result_____wasm_bindgen_2e35521b6c202407___JsError___true_: (a: number, b: number, c: any) => [number, number];
-    readonly wasm_bindgen_2e35521b6c202407___convert__closures_____invoke___wasm_bindgen_2e35521b6c202407___sys__JsNullable_wgpu_70d6da3772b6cba4___backend__webgpu__webgpu_sys__gen_GpuError__GpuError___core_37ee0ce0c4cd57d5___result__Result_____wasm_bindgen_2e35521b6c202407___JsError___true__34: (a: number, b: number, c: any) => [number, number];
-    readonly wasm_bindgen_2e35521b6c202407___convert__closures_____invoke___wasm_bindgen_2e35521b6c202407___sys__JsNullable_wgpu_70d6da3772b6cba4___backend__webgpu__webgpu_sys__gen_GpuError__GpuError___core_37ee0ce0c4cd57d5___result__Result_____wasm_bindgen_2e35521b6c202407___JsError___true__35: (a: number, b: number, c: any) => [number, number];
+    readonly wasm_bindgen_2e35521b6c202407___convert__closures_____invoke___wasm_bindgen_2e35521b6c202407___sys__JsNullable_wgpu_70d6da3772b6cba4___backend__webgpu__webgpu_sys__gen_GpuError__GpuError___core_37ee0ce0c4cd57d5___result__Result_____wasm_bindgen_2e35521b6c202407___JsError___true__39: (a: number, b: number, c: any) => [number, number];
+    readonly wasm_bindgen_2e35521b6c202407___convert__closures_____invoke___wasm_bindgen_2e35521b6c202407___sys__JsNullable_wgpu_70d6da3772b6cba4___backend__webgpu__webgpu_sys__gen_GpuError__GpuError___core_37ee0ce0c4cd57d5___result__Result_____wasm_bindgen_2e35521b6c202407___JsError___true__40: (a: number, b: number, c: any) => [number, number];
+    readonly wasm_bindgen_2e35521b6c202407___convert__closures_____invoke___wgpu_70d6da3772b6cba4___backend__webgpu__webgpu_sys__gen_GpuDeviceLostInfo__GpuDeviceLostInfo______true_: (a: number, b: number, c: any) => void;
     readonly __wbindgen_malloc: (a: number, b: number) => number;
     readonly __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;
     readonly __wbindgen_exn_store: (a: number) => void;

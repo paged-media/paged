@@ -351,15 +351,6 @@ impl Pipelines {
 pub(crate) static FAIL_PIPELINE_CREATION: std::sync::atomic::AtomicBool =
     std::sync::atomic::AtomicBool::new(false);
 
-/// Test-only knob to force the GPU compute path even when the
-/// overprint count is below the CPU-finisher threshold. Without this,
-/// the focused CMYK overprint tests with small synthetic scenes would
-/// route through the CPU rasterizer and the compute shaders would go
-/// unexercised. Outside tests, the flag is invisible.
-#[cfg(test)]
-pub(crate) static FORCE_COMPUTE_PATH: std::sync::atomic::AtomicBool =
-    std::sync::atomic::AtomicBool::new(false);
-
 /// Build pipelines, honouring the test-only failure hook. Production
 /// callers (the Vello backend) go through this entry-point exclusively
 /// so the failure path stays exercised even when `Pipelines::new`
@@ -370,17 +361,4 @@ pub fn create_pipelines(device: &wgpu::Device) -> Result<Pipelines, String> {
         return Err("test-injected pipeline-creation failure".to_string());
     }
     Pipelines::new(device)
-}
-
-/// Whether the CPU fast-path should defer to the GPU compute path
-/// regardless of overprint count. Always false outside tests.
-pub fn should_force_compute_path() -> bool {
-    #[cfg(test)]
-    {
-        FORCE_COMPUTE_PATH.load(std::sync::atomic::Ordering::SeqCst)
-    }
-    #[cfg(not(test))]
-    {
-        false
-    }
 }

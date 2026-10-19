@@ -104,6 +104,42 @@ describe("load", () => {
   });
 });
 
+describe("GPU device loss", () => {
+  it("a lost device is replaced once and the page presents again", async () => {
+    const { viewer, session } = await makeViewer();
+    await viewer.load(IDML);
+    const seen: ViewerError[] = [];
+    viewer.on("error", (e) => seen.push(e));
+    session.lostPresents = 1;
+    const before = session.presents.length;
+
+    viewer.zoomIn();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(session.recoveries).toBe(1);
+    // The failed present, then the one after recovery.
+    expect(session.presents.length).toBe(before + 2);
+    expect(seen).toHaveLength(0);
+  });
+
+  it("a device the browser will not replace becomes GPU_UNAVAILABLE", async () => {
+    const { viewer, session } = await makeViewer();
+    await viewer.load(IDML);
+    const seen: ViewerError[] = [];
+    viewer.on("error", (e) => seen.push(e));
+    session.lostPresents = 1;
+    session.recoverResult = false;
+
+    viewer.zoomIn();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(session.recoveries).toBe(1);
+    expect(seen.map((e) => e.code)).toEqual(["GPU_UNAVAILABLE"]);
+  });
+});
+
 describe("camera surface", () => {
   it("zoomChanged/scrollChanged fire once per change", async () => {
     const { viewer } = await makeViewer();

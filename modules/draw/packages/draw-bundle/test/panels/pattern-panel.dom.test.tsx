@@ -67,6 +67,7 @@ import {
   PLAIN_LEAVES,
   RECORDS,
 } from "./harness";
+import { covers } from "@paged-media/test-kit";
 
 const PANEL = "[data-draw-pattern-panel]";
 
@@ -138,6 +139,7 @@ describe("Pattern options panel — rendered against the engine", () => {
     afterEach(() => teardownPanels(h));
 
     it("+ From selection bakes, through the engine, what the form holds", async () => {
+      covers("panel:media.paged.draw.panel.pattern");
       const panel = await mountPanel(h, makePatternPanel);
       await drive(() => h.host.selection.set([poly("s0")]), panel.work);
       expect(panel.disabled("[data-draw-pattern-make]")).toBe(false);
@@ -188,6 +190,7 @@ describe("Pattern options panel — rendered against the engine", () => {
     });
 
     it("Re-plan rebuilds the field with the options above it", async () => {
+      covers("panel:media.paged.draw.panel.pattern");
       const panel = await mountPanel(h, makePatternPanel);
       panel.change('[data-draw-pattern-field="columns"]', "3");
       await panel.click("[data-draw-pattern-replan]");
@@ -237,6 +240,7 @@ describe("Pattern options panel — rendered against the engine", () => {
     });
 
     it("Release drops the recipe and the links, and keeps the artwork", async () => {
+      covers("panel:media.paged.draw.panel.pattern");
       await h.host.selection.set([poly("s2")]);
       const tiles = await applyMakePattern(h.host, { columns: 2, rows: 1 });
       expect(tiles).toHaveLength(1);
