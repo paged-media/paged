@@ -363,75 +363,57 @@ describe("Insert table", () => {
     });
   });
 
-  test("without a caret: a text frame, then the table in the story it minted", async () => {
+  test("without a caret: one batch mints a text frame and the table in the story it minted", async () => {
     covers("command:paged.insert.table");
-    const h = inserts({
-      collections: (name, call) =>
-        name === "stories"
-          ? call === 1
-            ? []
-            : [{ selfId: "uNew" }]
-          : undefined,
-    });
+    const h = inserts();
     await h.invoke("paged.insert.table");
     const third = 320 / 3;
     expect(h.fake.mutations()).toEqual([
       {
-        op: "insertTextFrame",
-        args: { pageId: "p1", bounds: [306, 146, 486, 466] },
-      },
-      {
-        op: "insertTable",
+        op: "batch",
         args: {
-          storyId: "uNew",
-          rows: 4,
-          cols: 3,
-          columnWidths: [third, third, third],
-          rowHeights: [20, 20, 20, 20],
+          ops: [
+            {
+              op: "insertTextFrame",
+              args: { pageId: "p1", bounds: [306, 146, 486, 466] },
+            },
+            { op: "bindCreated", args: { handle: "frame" } },
+            {
+              op: "insertTable",
+              args: {
+                storyId: "$h:frame",
+                rows: 4,
+                cols: 3,
+                columnWidths: [third, third, third],
+                rowHeights: [20, 20, 20, 20],
+              },
+            },
+          ],
         },
       },
     ]);
   });
 
-  test("a refused table half rolls the frame back (undo), so nothing is stranded", async () => {
+  test("a refused batch is reported and leaves nothing to undo", async () => {
     covers("command:paged.insert.table");
     const h = inserts({
-      collections: (name, call) =>
-        name === "stories"
-          ? call === 1
-            ? []
-            : [{ selfId: "uNew" }]
-          : undefined,
-      mutate: (m) =>
-        m.op === "insertTable" ? refused("no table here") : undefined,
+      mutate: (m) => (m.op === "batch" ? refused("no table here") : undefined),
     });
     await h.invoke("paged.insert.table");
     expect(h.reports).toEqual([
       ["error", "Insert table refused: no table here"],
     ]);
-    expect(h.fake.ofChannel("history").map((e) => e.action)).toEqual(["undo"]);
     expect(h.fake.undoDepth()).toBe(0);
   });
 
-  // Finding SH-202 (documented engine limitation, insert-commands.ts fact
-  // 3): with no caret, Insert table is TWO mutations — two undo records —
-  // so one Cmd+Z after it leaves an empty text frame on the page.
-  test.failing(
-    "SH-202: Insert table with no caret is ONE undo step",
-    async () => {
-      covers("command:paged.insert.table");
-      const h = inserts({
-        collections: (name, call) =>
-          name === "stories"
-            ? call === 1
-              ? []
-              : [{ selfId: "uNew" }]
-            : undefined,
-      });
-      await h.invoke("paged.insert.table");
-      expectOneCommit(h.fake, 0, "Insert table");
-    },
-  );
+  // SH-202 (fixed): with no caret, Insert table is one batch (the frame's
+  // story addressed through a batch handle), so one undo step.
+  test("SH-202: Insert table with no caret is ONE undo step", async () => {
+    covers("command:paged.insert.table");
+    const h = inserts();
+    await h.invoke("paged.insert.table");
+    expectOneCommit(h.fake, 0, "Insert table");
+  });
 });
 
 describe("Place image", () => {

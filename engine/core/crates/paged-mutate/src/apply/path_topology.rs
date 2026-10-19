@@ -2458,9 +2458,11 @@ pub(super) fn apply_insert_table_row(
     }
 
     // Build the new row + its cells.
+    let mut positions: Vec<usize> = Vec::new();
     let (new_row, new_cells): (paged_model::TableRow, Vec<paged_model::TableCell>) = match restore {
         Some(blob) => {
             let removed = parse_restore_blob(blob, story_id, table_id)?;
+            positions = removed.positions.clone();
             let mut cells: Vec<paged_model::TableCell> =
                 removed.cells.iter().map(TableCellSpec::to_parse).collect();
             // Re-key the restored cells to the insertion row.
@@ -2485,7 +2487,7 @@ pub(super) fn apply_insert_table_row(
     };
 
     table.rows.insert(at as usize, new_row);
-    table.cells.extend(new_cells);
+    put_back_cells(table, new_cells, &positions);
     table.body_row_count = table.body_row_count.saturating_add(1);
     renumber_table_rows(table);
 
@@ -2504,6 +2506,24 @@ pub(super) fn apply_insert_table_row(
         },
         invalidation,
     })
+}
+
+/// Put a restored row's or column's cells back where they stood in the
+/// table's cell list (`positions`, ascending, as the delete captured them);
+/// cells without a position (a fresh insert, an older blob) are appended.
+fn put_back_cells(
+    table: &mut paged_model::Table,
+    cells: Vec<paged_model::TableCell>,
+    positions: &[usize],
+) {
+    let mut cells = cells.into_iter();
+    if positions.len() == cells.len() {
+        for (cell, &at) in cells.by_ref().zip(positions) {
+            let at = at.min(table.cells.len());
+            table.cells.insert(at, cell);
+        }
+    }
+    table.cells.extend(cells);
 }
 
 /// W3.A1 — delete the row at `at`. Captures the row + originating cells
@@ -2540,12 +2560,19 @@ pub(super) fn apply_delete_table_row(
     // Capture the row declaration + every cell originating on it.
     let removed_row = table.rows.remove(at as usize);
     let mut captured_cells: Vec<TableCellSpec> = Vec::new();
-    table.cells.retain(|cell| match cell.coords() {
-        Some((_, r)) if r == at => {
-            captured_cells.push(TableCellSpec::from_parse(cell));
-            false
+    let mut positions: Vec<usize> = Vec::new();
+    let mut index = 0usize;
+    table.cells.retain(|cell| {
+        let at_index = index;
+        index += 1;
+        match cell.coords() {
+            Some((_, r)) if r == at => {
+                captured_cells.push(TableCellSpec::from_parse(cell));
+                positions.push(at_index);
+                false
+            }
+            _ => true,
         }
-        _ => true,
     });
     // Shift cells in rows > `at` up by one.
     for cell in &mut table.cells {
@@ -2562,6 +2589,7 @@ pub(super) fn apply_delete_table_row(
         row: Some(TableRowSpec::from_parse(&removed_row)),
         column: None,
         cells: captured_cells,
+        positions,
     })
     .expect("RemovedTableLine serialises");
 
@@ -2626,10 +2654,12 @@ pub(super) fn apply_insert_table_column(
         }
     }
 
+    let mut positions: Vec<usize> = Vec::new();
     let (new_col, new_cells): (paged_model::TableColumn, Vec<paged_model::TableCell>) =
         match restore {
             Some(blob) => {
                 let removed = parse_restore_blob(blob, story_id, table_id)?;
+                positions = removed.positions.clone();
                 let mut cells: Vec<paged_model::TableCell> =
                     removed.cells.iter().map(TableCellSpec::to_parse).collect();
                 for cell in &mut cells {
@@ -2653,7 +2683,7 @@ pub(super) fn apply_insert_table_column(
         };
 
     table.columns.insert(at as usize, new_col);
-    table.cells.extend(new_cells);
+    put_back_cells(table, new_cells, &positions);
     table.column_count = table.column_count.saturating_add(1);
     renumber_table_columns(table);
 
@@ -2706,12 +2736,19 @@ pub(super) fn apply_delete_table_column(
 
     let removed_col = table.columns.remove(at as usize);
     let mut captured_cells: Vec<TableCellSpec> = Vec::new();
-    table.cells.retain(|cell| match cell.coords() {
-        Some((c, _)) if c == at => {
-            captured_cells.push(TableCellSpec::from_parse(cell));
-            false
+    let mut positions: Vec<usize> = Vec::new();
+    let mut index = 0usize;
+    table.cells.retain(|cell| {
+        let at_index = index;
+        index += 1;
+        match cell.coords() {
+            Some((c, _)) if c == at => {
+                captured_cells.push(TableCellSpec::from_parse(cell));
+                positions.push(at_index);
+                false
+            }
+            _ => true,
         }
-        _ => true,
     });
     for cell in &mut table.cells {
         if let Some((c, r)) = cell.coords() {
@@ -2727,6 +2764,7 @@ pub(super) fn apply_delete_table_column(
         row: None,
         column: Some(TableColumnSpec::from_parse(&removed_col)),
         cells: captured_cells,
+        positions,
     })
     .expect("RemovedTableLine serialises");
 
@@ -2800,9 +2838,11 @@ pub(super) fn apply_insert_band_row(
         }
     }
 
+    let mut positions: Vec<usize> = Vec::new();
     let (new_row, new_cells): (paged_model::TableRow, Vec<paged_model::TableCell>) = match restore {
         Some(blob) => {
             let removed = parse_restore_blob(blob, story_id, table_id)?;
+            positions = removed.positions.clone();
             let mut cells: Vec<paged_model::TableCell> =
                 removed.cells.iter().map(TableCellSpec::to_parse).collect();
             for cell in &mut cells {
@@ -2826,7 +2866,7 @@ pub(super) fn apply_insert_band_row(
     };
 
     table.rows.insert(at as usize, new_row);
-    table.cells.extend(new_cells);
+    put_back_cells(table, new_cells, &positions);
     match band {
         TableBand::Header => {
             table.header_row_count = table.header_row_count.saturating_add(1);
@@ -2911,12 +2951,19 @@ pub(super) fn apply_remove_band_row(
 
     let removed_row = table.rows.remove(at as usize);
     let mut captured_cells: Vec<TableCellSpec> = Vec::new();
-    table.cells.retain(|cell| match cell.coords() {
-        Some((_, r)) if r == at => {
-            captured_cells.push(TableCellSpec::from_parse(cell));
-            false
+    let mut positions: Vec<usize> = Vec::new();
+    let mut index = 0usize;
+    table.cells.retain(|cell| {
+        let at_index = index;
+        index += 1;
+        match cell.coords() {
+            Some((_, r)) if r == at => {
+                captured_cells.push(TableCellSpec::from_parse(cell));
+                positions.push(at_index);
+                false
+            }
+            _ => true,
         }
-        _ => true,
     });
     // Shift cells in rows > `at` up by one.
     for cell in &mut table.cells {
@@ -2940,6 +2987,7 @@ pub(super) fn apply_remove_band_row(
         row: Some(TableRowSpec::from_parse(&removed_row)),
         column: None,
         cells: captured_cells,
+        positions,
     })
     .expect("RemovedTableLine serialises");
 
@@ -3000,6 +3048,22 @@ pub(super) fn apply_set_cell_span(
     };
     let table = find_table_mut(doc, story_id, table_id)
         .ok_or_else(|| OperationError::NodeNotFound(node.clone()))?;
+    // A span stays inside the grid: a cell at column `col` spans at most
+    // the columns to the table's right edge, and likewise for rows
+    // (finding SCR-8: a 9-column span on a 3-column table was stored).
+    let columns = table.column_count.max(table.columns.len() as u32);
+    let rows = (table.header_row_count + table.body_row_count + table.footer_row_count)
+        .max(table.rows.len() as u32);
+    for (start, span, len) in [(col, column_span, columns), (row, row_span, rows)] {
+        let end = start.saturating_add(span.max(1));
+        if end > len {
+            return Err(OperationError::InvalidPosition {
+                parent: node.clone(),
+                position: end as usize,
+                len: len as usize,
+            });
+        }
+    }
     let cell = table
         .cells
         .iter_mut()

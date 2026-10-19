@@ -176,9 +176,12 @@ The exporter `media.paged.doc.exporter.docx` runs `exportDocx` in `activate.ts`
 
 - **In the document:** ordinary native content, plus a metadata envelope on one frame,
   `{ v: 1, data: { part, blocks } }` (and `sections` after a standalone open). The object
-  type `wordDocument` matches a frame whose `data.part` is a string.
+  type `wordDocument` matches a frame whose `data.part` is a string. A placement is one
+  batch (one undo step, finding DOC-1), so its envelope cannot name the story the batch
+  mints; `discoverDocs` reads a placed document's story from its frame.
 - **As a container part:** the original file, written through `host.parts.write` as
-  `<story id>/source.docx` inside the plugin's part namespace. The bundle never reads it
+  `<story id>/source.docx` (a standalone open) or `placed-<unique>/source.docx` (a placement)
+  inside the plugin's part namespace. The bundle never reads it
   back: no `host.parts.read` call exists.
 - **In memory, for the session:** the original bytes, the story ids, the paragraph count
   poured per story and the column flag (`last` in `activate.ts`); the lowering, for the

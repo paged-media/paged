@@ -431,16 +431,13 @@ fn snap_point() {
     .golden("paged read snap-point", "grid");
 }
 
-/// finding CLI-7: the point takes hyphen values (for negative
-/// coordinates), so any flag written AFTER it is read as a third
-/// coordinate — `snap-point doc usp 13 13 --grid` is refused with "2
-/// values required … but 3 were provided". Every other command takes its
-/// flags anywhere; this one should too (or say so in its help).
+/// CLI-7 (fixed): the point's coordinates take negative numbers, not
+/// any hyphen value, so a flag written after the point is a flag, as in
+/// every other command.
 #[test]
-fn snap_point_swallows_a_trailing_flag() {
+fn snap_point_takes_a_trailing_flag() {
     covers!("cli:paged read snap-point");
     let fx = seeded("read-snap-point-flag");
-    // finding CLI-7: a trailing flag is a usage error.
     fx.run(&[
         "read",
         "snap-point",
@@ -450,23 +447,25 @@ fn snap_point_swallows_a_trailing_flag() {
         "13",
         "--grid",
     ])
-    .code(2)
-    .golden("paged read snap-point", "finding-cli-7-trailing-flag");
+    .code(0)
+    .golden("paged read snap-point", "trailing-flag");
 }
 
-/// finding CLI-4: `paged read snap-point <doc> <page>` with no point
-/// panics (index out of bounds in read.rs) instead of a usage error
-/// naming the missing `X Y` — clap accepts zero values for the point.
+/// CLI-4 (fixed): `paged read snap-point <doc> <page>` with no point is a
+/// usage error naming the missing `X` and `Y`, not a panic.
 #[test]
-fn snap_point_without_a_point_panics() {
+fn snap_point_without_a_point_is_a_usage_error() {
     covers!("cli:paged read snap-point");
-    let fx = seeded("read-snap-point-panic");
+    let fx = seeded("read-snap-point-no-point");
     let r = fx
         .run(&["read", "snap-point", "doc.paged", "usp"])
-        .golden("paged read snap-point", "finding-cli-4-no-point");
-    // finding CLI-4: a panic (exit 101), not a usage error (exit 2).
-    assert_eq!(r.code, Some(101), "{}", r.stderr);
-    assert!(r.stderr.contains("index out of bounds"), "{}", r.stderr);
+        .code(2)
+        .golden("paged read snap-point", "usage-no-point");
+    assert!(
+        r.stderr.contains("<X>") && r.stderr.contains("<Y>"),
+        "{}",
+        r.stderr
+    );
 }
 
 #[test]

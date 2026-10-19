@@ -42,19 +42,20 @@ import {
   frameFittingFitComposition,
 } from "./frame-fitting.composition";
 
-// Row-major 3×3 ↔ IDML `FittingAlignment` anchor strings (the same
-// 9-point vocabulary the parser uses for AutoSizingReferencePoint).
+// Row-major 3×3 ↔ IDML `FittingAlignment`, which takes the `AnchorPoint`
+// names InDesign writes (not AutoSizingReferencePoint's `…Point` names;
+// the engine reads and stores these, engine ADR 196).
 // Index 0 = top-left … 8 = bottom-right.
 const ANCHORS = [
-  "TopLeftPoint",
-  "TopCenterPoint",
-  "TopRightPoint",
-  "CenterLeftPoint",
-  "CenterPoint",
-  "CenterRightPoint",
-  "BottomLeftPoint",
-  "BottomCenterPoint",
-  "BottomRightPoint",
+  "TopLeftAnchor",
+  "TopCenterAnchor",
+  "TopRightAnchor",
+  "LeftCenterAnchor",
+  "CenterAnchor",
+  "RightCenterAnchor",
+  "BottomLeftAnchor",
+  "BottomCenterAnchor",
+  "BottomRightAnchor",
 ] as const;
 
 // ADR 323 — the composition fields are migrated `PropertyField`s; the

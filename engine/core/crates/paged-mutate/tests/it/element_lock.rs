@@ -384,6 +384,7 @@ fn a_group_holding_a_locked_member_does_not_move() {
             group: g,
             transform: Some([1.0, 0.0, 0.0, 1.0, 20.0, 0.0]),
             prev: None,
+            leaves: None,
         },
         &b,
         "move the group",

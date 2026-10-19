@@ -197,14 +197,10 @@ fn place_image() {
     assert_eq!(ok(&mut m, &call), "true");
     assert_eq!(fitting(&m)["fitting_on_empty_frame"], "FillProportionally");
     assert_eq!(ok(&mut m, "paged.undo()"), "true");
-    // finding SCR-5: undo leaves an empty fitting option (every field null) on a frame
-    // that had none; it should restore no fitting at all.
-    let left = fitting(&m);
-    assert!(left.is_object(), "{left}");
-    assert!(
-        left.as_object().unwrap().values().all(Value::is_null),
-        "{left}"
-    );
+    // SCR-5 (fixed): undo restores no fitting option at all.
+    assert_eq!(fitting(&m), Value::Null, "no fitting after the undo");
+    assert_eq!(ok(&mut m, "paged.redo()"), "true");
+    assert_eq!(fitting(&m)["fitting_on_empty_frame"], "FillProportionally");
 }
 
 #[test]

@@ -64,14 +64,13 @@ fn create(f: &Family) {
     let unnamed = mints(&mut m, &format!("paged.create{stem}()"), |s| {
         !s.is_empty() && s != "null"
     });
-    // finding SCR-3: a spec that is not an object (here the name alone) is
-    // read as `{}` and mints an unnamed style; it should be refused (null).
-    let from_string = mints(&mut m, &format!("paged.create{stem}('Body')"), |s| {
-        !s.is_empty() && s != "null"
-    });
+    // SCR-3 (fixed): a spec that is not an object (here the name alone) is
+    // refused (null), the document untouched.
+    refuses(&mut m, &format!("paged.create{stem}('Body')"), "null");
+    refuses(&mut m, &format!("paged.create{stem}(42)"), "null");
     assert!(
         !names(&mut m, f).iter().any(|n| n == "Body"),
-        "{stem}: {unnamed} {from_string}"
+        "{stem}: {unnamed}"
     );
     let id = mints(
         &mut m,
@@ -110,9 +109,9 @@ fn rename(f: &Family) {
         &format!("paged.rename{stem}({id:?}, Symbol('n'))"),
         SYMBOL_TO_STRING,
     );
-    // finding SCR-1: a missing name renames the style "undefined"; it should be refused.
-    writes(&mut m, &format!("paged.rename{stem}({id:?})"), "true");
-    assert!(names(&mut m, f).iter().any(|n| n == "undefined"), "{stem}");
+    // SCR-1 (fixed): a missing name is refused.
+    refuses(&mut m, &format!("paged.rename{stem}({id:?})"), "false");
+    assert!(!names(&mut m, f).iter().any(|n| n == "undefined"), "{stem}");
     writes(
         &mut m,
         &format!("paged.rename{stem}({id:?}, 'Text')"),

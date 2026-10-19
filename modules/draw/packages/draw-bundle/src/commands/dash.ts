@@ -106,9 +106,8 @@ export function dashMutationFor(
   };
 }
 
-/** Apply one dash preset to the current selection: commit the
- *  `frameStrokeDashArray` mutation to each selected element through the
- *  document door. No selection ⇒ no-op (a debug log, never a throw). */
+/** Apply one dash preset to the current selection: one batch writing
+ *  `frameStrokeDashArray` to every selected element. No selection ⇒ no-op (a debug log, never a throw). */
 export async function applyDashPreset(
   host: BundleHost,
   preset: DashPreset,
@@ -118,15 +117,14 @@ export async function applyDashPreset(
     host.log.debug(`${preset.id}: no selection — no-op`);
     return;
   }
-  for (const elementId of selection) {
-    const outcome = await host.document.mutate(
-      dashMutationFor(elementId, preset),
+  // ONE batch for the whole selection: one undo step (DRW-3).
+  const outcome = await host.document.mutate(
+    dashBatchFor(selection, preset.lengths),
+  );
+  if (!outcome.applied) {
+    host.log.warn(
+      `${preset.id} rejected by engine: ${JSON.stringify(outcome.error)}`,
     );
-    if (!outcome.applied) {
-      host.log.warn(
-        `${preset.id} rejected by engine: ${JSON.stringify(outcome.error)}`,
-      );
-    }
   }
 }
 
@@ -161,7 +159,7 @@ export function dashArrayFrom(
 }
 
 /** ONE batch writing `lengths` to every element — one undo step for the
- *  whole selection (the presets above write one mutation per element). */
+ *  whole selection (the presets and the editor both commit through it). */
 export function dashBatchFor(
   elementIds: readonly ElementId[],
   lengths: readonly number[],

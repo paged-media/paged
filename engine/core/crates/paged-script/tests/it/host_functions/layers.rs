@@ -52,14 +52,8 @@ fn layer_insert() {
         "paged.layerInsert(0, Symbol('n'))",
         SYMBOL_TO_STRING,
     );
-    // finding SCR-1: a missing name inserts a layer named "undefined"; it should be refused.
-    writes(&mut m, "paged.layerInsert(0)", "true");
-    assert!(layers(&mut m)
-        .as_array()
-        .unwrap()
-        .iter()
-        .any(|l| l["name"] == "undefined"));
-    ok(&mut m, "paged.undo()");
+    // SCR-1 (fixed): a missing name is refused, no layer is added.
+    refuses(&mut m, "paged.layerInsert(0)", "false");
     writes(&mut m, "paged.layerInsert(0, 'Art')", "true");
     let after = layers(&mut m);
     assert_eq!(after.as_array().map(Vec::len), Some(n + 1));
@@ -147,9 +141,9 @@ fn layer_set_name() {
         "paged.layerSetName('no-such-layer', 'Ink')",
         "false",
     );
-    // finding SCR-1: a missing name renames the layer "undefined"; it should be refused.
-    writes(&mut m, &format!("paged.layerSetName({id:?})"), "true");
-    assert_eq!(layers(&mut m)[0]["name"], "undefined");
+    // SCR-1 (fixed): a missing name is refused.
+    refuses(&mut m, &format!("paged.layerSetName({id:?})"), "false");
+    assert_ne!(layers(&mut m)[0]["name"], "undefined");
     throws(
         &mut m,
         &format!("paged.layerSetName({id:?}, Symbol('n'))"),

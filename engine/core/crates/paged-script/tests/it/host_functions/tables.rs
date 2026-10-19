@@ -146,29 +146,22 @@ fn cell_count(m: &CanvasModel) -> usize {
 
 /// A delete of one row or column of the 3 × 3 table, then its undo.
 ///
-/// finding SCR-7: the undo brings every cell back, but not in the order the
-/// table held them (the cell list is reordered, so the table does not equal
-/// its before-state); it should restore the table exactly. Asserts the
-/// CURRENT behaviour: the same cells, sorted by name, in a different order.
+/// SCR-7 (fixed): the undo restores the table exactly — the same cells in
+/// the same order — and the redo deletes the line again.
 fn delete_then_undo(m: &mut CanvasModel, call: &str) {
-    let by_name = |t: &Value| {
-        let mut cells = t["cells"].as_array().cloned().unwrap_or_default();
-        cells.sort_by_key(|c| c["name"].as_str().unwrap_or_default().to_string());
-        cells
-    };
     let before = table_json(m);
     assert_eq!(ok(m, call), "true", "{call}");
     assert_eq!(cell_count(m), 6, "{call}: three cells go");
+    let deleted = table_json(m);
     assert_eq!(ok(m, "paged.undo()"), "true");
-    let undone = table_json(m);
     assert_eq!(
-        by_name(&undone),
-        by_name(&before),
-        "{call}: every cell is back"
+        table_json(m),
+        before,
+        "{call}: the table is restored exactly"
     );
-    assert_ne!(undone["cells"], before["cells"], "{call}: in another order");
     assert_eq!(ok(m, "paged.redo()"), "true");
     assert_eq!(cell_count(m), 6);
+    assert_eq!(table_json(m), deleted, "{call}: redo deletes it again");
 }
 
 #[test]
@@ -383,12 +376,22 @@ fn set_cell_span() {
         "true",
     );
     assert_eq!(table_json(&m)["cells"][0]["column_span"], 2);
-    // finding SCR-8: a span past the table's edge (9 columns of a 3-column table) is
-    // stored; it should be refused.
-    writes(
+    // SCR-8 (fixed): a span past the table's edge (9 columns of a 3-column
+    // table, or 2 columns from the last one) is refused.
+    refuses(
         &mut m,
         &format!("paged.setCellSpan({sid:?}, {tid:?}, 0, 0, 1, 9)"),
-        "true",
+        "false",
     );
-    assert_eq!(table_json(&m)["cells"][0]["column_span"], 9);
+    refuses(
+        &mut m,
+        &format!("paged.setCellSpan({sid:?}, {tid:?}, 0, 2, 1, 2)"),
+        "false",
+    );
+    refuses(
+        &mut m,
+        &format!("paged.setCellSpan({sid:?}, {tid:?}, 0, 0, 99, 1)"),
+        "false",
+    );
+    assert_eq!(table_json(&m)["cells"][0]["column_span"], 2);
 }

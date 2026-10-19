@@ -22,11 +22,10 @@ The findings the command contract found are committed as `it.failing` tests name
 their id, each rethrowing only the invariant it breaks (`brokenInvariant` in
 `command-kit.ts`), so a fix turns them red and asks for the flip:
 
-- DRW-1: the gradient fill presets take four undo steps.
-- DRW-2: a live-corner preset takes two (the geometry batch, then the marker).
-- DRW-3: dash presets, Outline stroke, Offset path, Simplify, Close path and a style
-  redefine commit one undo step per selected (or linked) element.
-- DRW-4: Add fill, Add stroke and Move layer take two (the stack, then its paint).
+- DRW-1 to DRW-4 (fixed 2026-10-19, `1c0e48a4e`): the gradient presets, the live-corner
+  presets, the dash presets, Outline stroke, Offset path, Simplify, Close path, the style
+  verbs and the appearance edits each send one batch (`oneBatchFor`); their tests now assert
+  one undo step.
 - DRW-5: a bake takes two ([ADR 354](adr/354-multi-paint-bakes-to-a-group.md) names the
   cost).
 - DRW-6: Image Trace takes two (the module header states it).

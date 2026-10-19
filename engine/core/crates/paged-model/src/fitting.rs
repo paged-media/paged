@@ -84,19 +84,41 @@ impl FitMode {
     }
 }
 
+/// IDML's `FittingAlignment` takes the `AnchorPoint` enumeration
+/// (`TopLeftAnchor` … `BottomRightAnchor`), which InDesign writes. The
+/// engine once spoke the `AnchorPoint`-less `…Point` names of
+/// `AutoSizingReferencePoint` here, so those are read too, in both of
+/// their centre-edge orders (`CenterLeftPoint` and `LeftCenterPoint`).
+/// The canonical `AnchorPoint` name of a fitting alignment in either
+/// spelling, or `None` for a value that names no point.
+pub fn fitting_anchor_name(point: &str) -> Option<&'static str> {
+    Some(match point {
+        "TopLeftAnchor" | "TopLeftPoint" => "TopLeftAnchor",
+        "TopCenterAnchor" | "TopCenterPoint" => "TopCenterAnchor",
+        "TopRightAnchor" | "TopRightPoint" => "TopRightAnchor",
+        "LeftCenterAnchor" | "LeftCenterPoint" | "CenterLeftPoint" => "LeftCenterAnchor",
+        "CenterAnchor" | "CenterPoint" => "CenterAnchor",
+        "RightCenterAnchor" | "RightCenterPoint" | "CenterRightPoint" => "RightCenterAnchor",
+        "BottomLeftAnchor" | "BottomLeftPoint" => "BottomLeftAnchor",
+        "BottomCenterAnchor" | "BottomCenterPoint" => "BottomCenterAnchor",
+        "BottomRightAnchor" | "BottomRightPoint" => "BottomRightAnchor",
+        _ => return None,
+    })
+}
+
 /// The `(x, y)` fraction of the frame's free space a fitting reference
 /// point (`FittingAlignment`) pins the content to: `0` left/top, `0.5`
 /// centre, `1` right/bottom. `None` and unknown values are the centre.
 pub fn reference_point_fraction(point: Option<&str>) -> (f32, f32) {
-    match point.unwrap_or("CenterPoint") {
-        "TopLeftPoint" => (0.0, 0.0),
-        "TopCenterPoint" => (0.5, 0.0),
-        "TopRightPoint" => (1.0, 0.0),
-        "LeftCenterPoint" => (0.0, 0.5),
-        "RightCenterPoint" => (1.0, 0.5),
-        "BottomLeftPoint" => (0.0, 1.0),
-        "BottomCenterPoint" => (0.5, 1.0),
-        "BottomRightPoint" => (1.0, 1.0),
+    match point.and_then(fitting_anchor_name) {
+        Some("TopLeftAnchor") => (0.0, 0.0),
+        Some("TopCenterAnchor") => (0.5, 0.0),
+        Some("TopRightAnchor") => (1.0, 0.0),
+        Some("LeftCenterAnchor") => (0.0, 0.5),
+        Some("RightCenterAnchor") => (1.0, 0.5),
+        Some("BottomLeftAnchor") => (0.0, 1.0),
+        Some("BottomCenterAnchor") => (0.5, 1.0),
+        Some("BottomRightAnchor") => (1.0, 1.0),
         _ => (0.5, 0.5),
     }
 }
@@ -217,6 +239,37 @@ mod tests {
         )
         .unwrap();
         assert!(close(br[5] + br[3] * H, 10.0 + 186.9));
+    }
+
+    /// InDesign writes `FittingAlignment` in IDML's `AnchorPoint` names;
+    /// a non-centre anchor pins the content as its `…Point` spelling does
+    /// (it was read as the centre before).
+    #[test]
+    fn the_anchor_point_names_are_read() {
+        for (anchor, point) in [
+            ("TopLeftAnchor", "TopLeftPoint"),
+            ("TopCenterAnchor", "TopCenterPoint"),
+            ("TopRightAnchor", "TopRightPoint"),
+            ("LeftCenterAnchor", "CenterLeftPoint"),
+            ("CenterAnchor", "CenterPoint"),
+            ("RightCenterAnchor", "CenterRightPoint"),
+            ("BottomLeftAnchor", "BottomLeftPoint"),
+            ("BottomCenterAnchor", "BottomCenterPoint"),
+            ("BottomRightAnchor", "BottomRightPoint"),
+        ] {
+            assert_eq!(fitting_anchor_name(point), Some(anchor));
+            assert_eq!(
+                reference_point_fraction(Some(anchor)),
+                reference_point_fraction(Some(point)),
+                "{anchor}"
+            );
+        }
+        assert_eq!(reference_point_fraction(Some("TopLeftAnchor")), (0.0, 0.0));
+        assert_eq!(
+            reference_point_fraction(Some("BottomRightAnchor")),
+            (1.0, 1.0)
+        );
+        assert_eq!(reference_point_fraction(Some("Nowhere")), (0.5, 0.5));
     }
 
     #[test]

@@ -737,7 +737,7 @@ property_paths! {
         TextFrameAutoSizing => "textFrameAutoSizing" : enum_(AUTO_SIZING).default_text("Off").idml(idml![attr(TextFramePreference, AutoSizingType)]),
         TextFrameFirstBaseline => "textFrameFirstBaseline" : enum_(FIRST_BASELINE).default_text("AscentOffset").idml(idml![attr(TextFramePreference, FirstBaselineOffset)]),
         TextWrapInvert => "frameTextWrapInvert" : bool_().default_bool(false).idml(idml![attr(TextWrapPreference, Inverse)]),
-        FrameFittingReferencePoint => "frameFittingReferencePoint" : enum_open(REFERENCE_POINTS).default_text("TopLeftPoint").idml(idml![attr(FrameFittingOption, FittingAlignment)]),
+        FrameFittingReferencePoint => "frameFittingReferencePoint" : enum_open(ANCHOR_POINTS).default_text("CenterAnchor").idml(idml![attr(FrameFittingOption, FittingAlignment)]),
         FrameAutoFit => "frameAutoFit" : bool_().default_bool(false).idml(idml![attr(FrameFittingOption, AutoFit)]),
         FrameStrokeType => "frameStrokeType" : enum_open(STROKE_TYPES).idml(idml![attr(TextFrame | Rectangle | Oval | GraphicLine | Polygon, StrokeType)]),
         FrameStrokeJoin => "frameStrokeJoin" : enum_open(END_JOINS).default_text("MiterEndJoin").idml(idml![attr(Rectangle | GraphicLine | Polygon, EndJoin)]),

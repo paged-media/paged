@@ -67,6 +67,7 @@ import type {
 import type { AnchorTable, Vec2 } from "@paged-media/draw-geometry";
 
 import { registerCommand } from "../command-registry";
+import { batchMutationFor } from "./batch-handles";
 export const JOIN_AVERAGE_COMMAND_CATEGORY = "Path";
 
 export const JOIN_COMMAND_ID = "media.paged.draw.command.joinEndpoints";
@@ -395,10 +396,12 @@ export async function applyJoin(host: BundleHost): Promise<void> {
 }
 
 /** **Close path** — the explicit 1-op door onto `closePath`, over EVERY
- *  path-bearing element in the selection (one mutation each = one undo
- *  step each; a batch would make one element's honest refusal abort the
- *  others). On an engine without the op the selection degrades to the
- *  coincide fallback, which only MOVES the endpoints together. */
+ *  path-bearing element in the selection, as ONE batch: one undo step
+ *  for the whole selection (DRW-3). When the engine refuses that batch
+ *  (one element it cannot close aborts all of them), each element is
+ *  closed on its own, so one honest refusal never blocks the others. On
+ *  an engine without the op the selection degrades to the coincide
+ *  fallback, which only MOVES the endpoints together. */
 export async function applyClosePath(host: BundleHost): Promise<void> {
   const selection = host.selection.get();
   if (selection.length === 0) {
@@ -406,16 +409,21 @@ export async function applyClosePath(host: BundleHost): Promise<void> {
     return;
   }
   if (await supportsPathWeld(host)) {
-    let unsupported = false;
-    for (const id of selection) {
-      const result = await commitWeld(
-        host,
-        CLOSE_PATH_COMMAND_ID,
-        closePathMutationFor(id),
-      );
-      if (result === "unsupported") {
-        unsupported = true;
-        break;
+    const ops = selection.map((id) => closePathMutationFor(id));
+    const together = await commitWeld(
+      host,
+      CLOSE_PATH_COMMAND_ID,
+      ops.length === 1 ? ops[0]! : batchMutationFor(ops),
+    );
+    if (together === "applied") return;
+    let unsupported = together === "unsupported" && ops.length === 1;
+    if (ops.length > 1) {
+      for (const op of ops) {
+        const result = await commitWeld(host, CLOSE_PATH_COMMAND_ID, op);
+        if (result === "unsupported") {
+          unsupported = true;
+          break;
+        }
       }
     }
     if (!unsupported) return;

@@ -122,7 +122,7 @@ describe("the shape inserts", () => {
     await expectOneUndoStep(e, before);
   });
 
-  test("table without a caret: a text frame holding a 4 × 3 table, two undo steps (SH-202)", async () => {
+  test("table without a caret: a text frame holding a 4 × 3 table, one undo step (SH-202)", async () => {
     covers("command:paged.insert.table");
     const e = await blank();
     const { before, after, outcome } = await run(e, "paged.insert.table");
@@ -140,10 +140,7 @@ describe("the shape inserts", () => {
       end: 0,
       cell: { tableId: table.id.table_id, row: 0, col: 0 },
     });
-    await e.invoke("paged.editor.undo");
-    await e.invoke("paged.editor.undo");
-    await e.idle();
-    expect(dumpDiff(before, await e.dump())).toEqual([]);
+    await expectOneUndoStep(e, before);
   });
 });
 

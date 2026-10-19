@@ -2876,11 +2876,20 @@ pub(super) fn apply_set_property(
                 .ok_or_else(|| OperationError::NodeNotFound(node.clone()))?;
             let ff = rect.frame_fitting.get_or_insert_with(Default::default);
             let prev = ff.reference_point.clone().unwrap_or_default();
+            // Stored in IDML's `AnchorPoint` names, which InDesign writes
+            // for `FittingAlignment`; the older `…Point` spellings are
+            // read as their anchors. An open value is kept as given.
             ff.reference_point = if new_val.is_empty() {
                 None
             } else {
-                Some(new_val.clone())
+                Some(
+                    paged_model::fitting::fitting_anchor_name(&new_val)
+                        .map_or_else(|| new_val.clone(), str::to_string),
+                )
             };
+            if ff.is_empty() {
+                rect.frame_fitting = None;
+            }
             (
                 Value::Text(prev),
                 InvalidationHint {

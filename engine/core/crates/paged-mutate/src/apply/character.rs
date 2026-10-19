@@ -78,6 +78,10 @@ pub(super) fn apply_character_property_in(
         });
     }
 
+    // The exact inverse: the touched paragraphs as they are now, run
+    // boundaries included. The per-run restorations below put the values
+    // back but keep the splits (findings SCR-10, SH-204).
+    let restore = super::story::capture_range_paragraphs(doc, story_id, cell, start, end);
     let story_idx = doc
         .stories
         .iter()
@@ -289,10 +293,10 @@ pub(super) fn apply_character_property_in(
     // node/path/value. The inverse is a Batch of per-run restorations
     // — even if there's only one affected run, wrapping in Batch keeps
     // the inverse shape stable across the cardinality of the range.
-    let inverse = if inverse_ops.len() == 1 {
-        inverse_ops.into_iter().next().unwrap()
-    } else {
-        Operation::Batch { ops: inverse_ops }
+    let inverse = match restore {
+        Some(restore) => restore,
+        None if inverse_ops.len() == 1 => inverse_ops.into_iter().next().unwrap(),
+        None => Operation::Batch { ops: inverse_ops },
     };
 
     Ok(AppliedOperation {

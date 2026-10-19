@@ -60,6 +60,7 @@ import type {
   CanvasClient,
   ElementId,
   ElementProperties,
+  Mutation,
   PropertyPath,
   Value,
 } from "@paged-media/client";
@@ -106,6 +107,10 @@ export type BindingState = "value" | "mixed" | "absent" | "none";
 export interface ResolvedBinding {
   value: Value | null;
   onCommit?: (next: Value) => void;
+  /** The mutations `onCommit(next)` would send, for a caller that joins
+   *  several commits into ONE batch, one undo step (Swap fill and
+   *  stroke, SH-205). Present wherever `onCommit` writes through core. */
+  plan?: (next: Value) => Mutation[];
   /** Concept 2 — disambiguates `value: null`: `true` means a
    *  heterogeneous MULTI-selection (the values disagree), as
    *  opposed to "uniformly null" (e.g. every fill is None) or "no
@@ -428,14 +433,13 @@ function buildResolved(
         return props?.entries.find((e) => e.path === sb.path)?.value ?? null;
       });
       const collapsed = collapseValues(values);
-      // Write fan-out: commit to every selected id. The apply
-      // layer treats the writes as a Batch implicitly (each id
-      // gets its own SetProperty); a future polish can wrap them
-      // in an explicit Operation::Batch for one undo entry.
+      // Write fan-out: commit to every selected id, as ONE batch, so
+      // one undo takes the whole multi-write back (R4).
       const mixed = valuesAreMixed(values);
       out[name] = {
         value: collapsed,
         onCommit: makeOnCommitMany(client, addr.ids, sb.path),
+        plan: (next) => planElementWrites(addr.ids, sb.path, next),
         mixed,
         state: mixed ? "mixed" : collapsed === null ? "none" : "value",
         provider: null,
@@ -459,6 +463,12 @@ function buildResolved(
       out[name] = {
         value: entry?.value ?? null,
         onCommit: makeOnCommit(client, addr.id, sb.path),
+        plan: (next) => [
+          {
+            op: "setElementProperty",
+            args: { elementId: addr.id, path: sb.path as never, value: next },
+          },
+        ],
         mixed,
         state: mixed ? "mixed" : entry == null ? "none" : "value",
         provider: null,
@@ -559,21 +569,33 @@ function makeOnCommit(
   };
 }
 
-/** Multi-target write — fan one Value out to every selected id.
- *  Each id receives its own SetProperty mutation. Future polish:
- *  wrap in an Operation::Batch so a single undo restores the
- *  whole multi-write. For now the user undoes once per id. */
+/** One SetProperty per selected id. */
+function planElementWrites(
+  ids: ElementId[],
+  path: string,
+  next: Value,
+): Mutation[] {
+  return ids.map((id) => ({
+    op: "setElementProperty",
+    args: { elementId: id, path: path as never, value: next },
+  }));
+}
+
+/** Send planned writes as one mutation: the write itself, or a batch —
+ *  one undo step for the whole multi-write (R4). */
+export function sendAsOne(client: CanvasClient, ops: Mutation[]): void {
+  if (ops.length === 0) return;
+  void client.mutate(
+    ops.length === 1 ? ops[0]! : { op: "batch", args: { ops } },
+  );
+}
+
+/** Multi-target write — fan one Value out to every selected id, in one
+ *  batch, so a single undo restores the whole multi-write. */
 function makeOnCommitMany(
   client: CanvasClient,
   ids: ElementId[],
   path: string,
 ): (next: Value) => void {
-  return (next) => {
-    for (const id of ids) {
-      void client.mutate({
-        op: "setElementProperty",
-        args: { elementId: id, path: path as never, value: next },
-      });
-    }
-  };
+  return (next) => sendAsOne(client, planElementWrites(ids, path, next));
 }

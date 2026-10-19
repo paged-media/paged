@@ -29,6 +29,7 @@
 import { useCallback, useEffect, useEffectEvent, useRef } from "react";
 
 import {
+  canvasKeyYields,
   useCanvasClient,
   useCamera,
   useContentSelection,
@@ -234,26 +235,51 @@ export function CanvasPanel(_props: PanelProps) {
     return () => ro.disconnect();
   }, [loaded, setViewportSize]);
 
-  // Track L — Escape exits the active group (matches InDesign's
-  // group-escape UX). Skips when an editable element has focus so
-  // typing in the command palette / inspector doesn't accidentally
-  // pop the group.
+  // The group chain (outermost first) of the item selected inside the
+  // active group, from the click or double-click that selected it: what
+  // Escape climbs.
+  const groupChainRef = useRef<readonly string[]>([]);
+
+  // Track L, F-29 — Escape climbs out of an entered group ONE LEVEL at a
+  // time, as in InDesign (editor ADR 250): a member selects its innermost
+  // group, a nested group the group holding it, and the outermost group
+  // leaves the group (it stays selected). The key is the canvas's only
+  // where the key-ownership rule says so (ADR 234), and path-edit mode
+  // owns its own Escape.
+  const climbOut = useEffectEvent(() => {
+    if (activeGroup === null) return;
+    const chain = groupChainRef.current;
+    const selected = elementSelection.length === 1 ? elementSelection[0] : null;
+    const at =
+      selected?.kind === "group" ? chain.indexOf(selected.id as string) : -1;
+    // A member selects its innermost group; a group the one above it.
+    const level =
+      selected && selected.kind !== "group" ? chain.length - 1 : at - 1;
+    if (level < 0 || !chain.includes(activeGroup)) {
+      setActiveGroup(null);
+      return;
+    }
+    const group = chain[level]!;
+    if (level === 0) setActiveGroup(null);
+    void client
+      .setElementSelection([{ kind: "group", id: group } as never], "replace")
+      .then(async (ids) => {
+        setElementSelection(ids);
+        setElementGeometry(await client.elementGeometry(ids));
+      })
+      .catch(() => {});
+  });
   useEffect(() => {
     if (activeGroup === null) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
-      const t = e.target;
-      if (t instanceof HTMLElement) {
-        const tag = t.tagName;
-        if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
-        if (t.isContentEditable) return;
-      }
+      if (canvasKeyYields(e) || pathEditMode) return;
       e.preventDefault();
-      setActiveGroup(null);
+      climbOut();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [activeGroup, setActiveGroup]);
+  }, [activeGroup, pathEditMode]);
 
   // eslint-disable-next-line no-restricted-syntax -- handed to a component that compares it (ADR 229)
   const onHit = useCallback(
@@ -305,6 +331,7 @@ export function CanvasPanel(_props: PanelProps) {
             }
           }
           if (nextActive !== activeGroup) setActiveGroup(nextActive);
+          groupChainRef.current = chain;
           setContentSelection(null);
           // Resolves to the selection made, which a press-drag then
           // moves (F-26).
@@ -471,6 +498,7 @@ export function CanvasPanel(_props: PanelProps) {
     (
       groupId: string,
       hitElement: import("@paged-media/client").ElementId | null,
+      chain: readonly string[] = [groupId],
     ) => {
       // Track L — double-click enters the group: set
       // `activeGroup` AND select the leaf the user clicked.
@@ -478,6 +506,7 @@ export function CanvasPanel(_props: PanelProps) {
       // members via `onHit`'s activeGroup branch; Escape (and
       // empty-pasteboard clicks) exit.
       setActiveGroup(groupId);
+      groupChainRef.current = chain;
       const target = hitElement;
       if (!target) return;
       void client

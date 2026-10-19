@@ -3105,10 +3105,9 @@ export function createSession(
           applies.filter((a) => a.kind !== "property"),
           targets,
         );
-        const result = await commitDataSet(host, plan);
         // ADR 558: the property rows — any property of any object — in ONE
-        // host.objects batch (a data set over both lanes is two steps until
-        // field writes have an object-model address).
+        // host.objects batch, and the field and visibility writes in that
+        // same batch as typed core commands: one undo step (DAT-2).
         const propertyRows = applies.filter(
           (a) =>
             a.kind === "property" &&
@@ -3118,6 +3117,8 @@ export function createSession(
           variable: string;
           property: import("../../data-host-model/src").LoweredProperty;
         }[];
+        let result = { applied: 0, skipped: { ...plan.skipped } };
+        let fieldsWritten = false;
         if (propertyRows.length > 0) {
           const { commitProperties } = await import("./property-lane");
           const r = await commitProperties(
@@ -3128,9 +3129,23 @@ export function createSession(
             })),
             Object.fromEntries(hostOids),
             `Apply data set "${name}"`,
+            plan.ops,
           );
+          if (r.alongside === "applied") {
+            fieldsWritten = true;
+            result.applied += plan.ops.length;
+          }
           result.applied += Object.keys(r.written).length;
           Object.assign(result.skipped, r.skipped);
+        }
+        if (!fieldsWritten && plan.ops.length > 0) {
+          // No batch carried the field writes (no property row wrote, or
+          // the host has no typed core commands): their own one batch.
+          const fields = await commitDataSet(host, plan);
+          result = {
+            applied: result.applied + fields.applied,
+            skipped: { ...result.skipped, ...fields.skipped },
+          };
         }
         state.status = "ready";
         const skippedCount = Object.keys(result.skipped).length;

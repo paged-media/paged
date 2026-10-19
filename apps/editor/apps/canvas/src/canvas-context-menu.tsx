@@ -26,9 +26,8 @@
 // and the context-menu key open it from the keyboard (the command
 // `paged.edit.contextMenu`), at the selection's centre or the view's.
 //
-// The rows are commands — the clipboard, Arrange, Group, Delete, Select
-// all — each greyed by its own `when`. Lock and Hide are not there because
-// page items have no object lock yet (F-41).
+// The rows are commands — the clipboard, Arrange, Group, Lock and Hide
+// (F-41), Delete, Select all — each greyed by its own `when`.
 
 import { useEffect, useLayoutEffect, useRef } from "react";
 
@@ -55,6 +54,8 @@ import {
   PAGED_OBJECT_BRING_TO_FRONT,
   PAGED_OBJECT_DELETE,
   PAGED_OBJECT_GROUP,
+  PAGED_OBJECT_HIDE,
+  PAGED_OBJECT_LOCK,
   PAGED_OBJECT_SEND_BACKWARD,
   PAGED_OBJECT_SEND_TO_BACK,
   PAGED_OBJECT_UNGROUP,
@@ -77,6 +78,8 @@ export const CANVAS_CONTEXT_MENU: readonly ContextMenuEntry[] = [
   { command: PAGED_OBJECT_SEND_TO_BACK, group: "arrange" },
   { command: PAGED_OBJECT_GROUP, group: "group" },
   { command: PAGED_OBJECT_UNGROUP, group: "group" },
+  { command: PAGED_OBJECT_LOCK, group: "lock" },
+  { command: PAGED_OBJECT_HIDE, group: "lock" },
   { command: PAGED_OBJECT_DELETE, group: "delete" },
   { command: PAGED_EDIT_SELECT_ALL, group: "select" },
 ];

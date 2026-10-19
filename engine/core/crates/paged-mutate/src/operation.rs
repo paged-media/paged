@@ -2365,6 +2365,12 @@ pub struct RemovedTableLine {
     pub row: Option<TableRowSpec>,
     pub column: Option<TableColumnSpec>,
     pub cells: Vec<TableCellSpec>,
+    /// Where each of `cells` stood in the table's cell list, ascending:
+    /// the restore puts each one back at its index, so the table equals
+    /// its before-state, order included (finding SCR-7). Empty in a blob
+    /// written before it existed; the cells are then appended.
+    #[serde(default)]
+    pub positions: Vec<usize>,
 }
 
 /// Typed payload for a `SetProperty` Op. Each variant carries a value
@@ -3424,6 +3430,20 @@ pub enum Operation {
         story_id: String,
         paragraphs_json: String,
     },
+    /// Inverse-only (internal) — replace paragraphs `[first, first +
+    /// count)` of story `story_id` (of `cell`'s paragraph stream when
+    /// set) with `paragraphs_json` (a JSON `Vec<Paragraph>`). The inverse
+    /// of a range edit that splits runs (a character property or style, a
+    /// hyperlink): undo puts the touched paragraphs back as they were, run
+    /// boundaries included, so the model equals its before-state (findings
+    /// SCR-10, SH-204). Its own inverse carries the paragraphs it replaced.
+    RestoreParagraphs {
+        story_id: String,
+        cell: Option<CellAddr>,
+        first: u32,
+        count: u32,
+        paragraphs_json: String,
+    },
     /// Editor-ops (Page tool) — insert a new SINGLE-PAGE SPREAD
     /// immediately after the spread hosting `after_page_id` (or at
     /// the end when `None`). Page size clones the reference page
@@ -3749,6 +3769,13 @@ pub enum Operation {
         /// inverse so undo restores the prior geometry exactly.
         #[serde(default)]
         prev: Option<[f32; 6]>,
+        /// Inverse-only: every descendant leaf's stored `ItemTransform`
+        /// as it was before the op this one undoes, in walk order. Put
+        /// back verbatim instead of rebased, so an undo restores the model
+        /// exactly — an explicit identity stays explicit, and no rounding
+        /// creeps in (finding SH-203). Wire callers omit it.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        leaves: Option<Vec<Option<[f32; 6]>>>,
     },
     CreateGradient {
         spec: GradientSpec,

@@ -25,11 +25,12 @@
 
 import type { LoweredDoc } from "@paged-media/doc-host-model";
 import { buildStory, buildStyleMutations } from "@paged-media/doc-host-model";
-import { applyStyleOps, pourSteps } from "./pour.js";
+import { applyStyleOps, pourBatchOps, pourSteps } from "./pour.js";
 import type {
   BundleHost,
   Diagnostic,
   ElementId,
+  Mutation,
   PageId,
 } from "@paged-media/plugin-api";
 
@@ -93,6 +94,18 @@ export async function placeEmbedded(
     s.pageWidthPt - s.marginRightPt,
   ];
 
+  const placed = await placeInOneBatch(
+    host,
+    ir,
+    source,
+    pageId,
+    bounds,
+    fileName,
+  );
+  if (placed) return placed;
+
+  // The sequential lane, for an engine that refuses the one batch (no batch
+  // handles, a style property it cannot set): several undo steps.
   const frameOutcome = await host.document.mutate({
     op: "insertTextFrame",
     args: { pageId, bounds },
@@ -143,12 +156,119 @@ export async function placeEmbedded(
     host.log.warn(`paged.doc: could not persist source part: ${String(err)}`);
   }
 
-  // Surface honest diagnostics from the lowering (ADR-007).
+  publishDiagnostics(host, ir);
+  return { frameId, storyId };
+}
+
+/** Surface honest diagnostics from the lowering (ADR-007). */
+function publishDiagnostics(host: BundleHost, ir: LoweredDoc): void {
   const diags: Diagnostic[] = ir.diagnostics.map((d) => ({
     severity: d.severity,
     message: `paged.doc: ${d.message}`,
   }));
   host.diagnostics.set(DIAGNOSTICS_KEY, diags);
+}
 
-  return { frameId, storyId };
+/** A part folder no other placement uses (the story id is not known until
+ *  the batch has run). */
+function placementFolder(): string {
+  const rand = Math.random().toString(36).slice(2, 8);
+  return `placed-${Date.now().toString(36)}${rand}`;
+}
+
+/**
+ * The whole placement — frame, style catalog, pour and label — as ONE batch,
+ * one undo step (finding DOC-1). The frame is a batch handle: the pour's
+ * `storyId` positions take the story it minted and the label its id. The
+ * label names no story (`sections` is resolved from the frame when read,
+ * `discoverDocs`). `null` when the engine refuses the batch: nothing landed,
+ * and the caller takes the sequential lane.
+ */
+async function placeInOneBatch(
+  host: BundleHost,
+  ir: LoweredDoc,
+  source: Uint8Array,
+  pageId: PageId,
+  bounds: [number, number, number, number],
+  fileName: string | undefined,
+): Promise<PlacedDoc | null> {
+  const FRAME = "$h:docFrame";
+  const frameRef = { kind: "textFrame", id: FRAME } as unknown as ElementId;
+  const partPath = `${placementFolder()}/source.docx`;
+  const label = {
+    v: 1,
+    data: {
+      part: partPath,
+      blocks: ir.story.blocks.length,
+      ...(fileName ? { fileName } : {}),
+      midPageColumns: true,
+    },
+  };
+  const ops: Mutation[] = [
+    { op: "insertTextFrame", args: { pageId, bounds } },
+    { op: "bindCreated", args: { handle: "docFrame" } },
+    ...(await newStyleOps(host, buildStyleMutations(ir))),
+    ...pourBatchOps(buildStory(ir, FRAME)),
+    {
+      op: "setPluginMetadata",
+      args: {
+        elementId: frameRef,
+        key: BINDING_KEY,
+        value: JSON.stringify(label),
+        caller: "media.paged.doc",
+      },
+    },
+  ];
+  const outcome = await host.document.mutate({ op: "batch", args: { ops } });
+  if (!outcome.applied) return null;
+  const minted = outcome.minted?.find((m) => m.handle === "docFrame");
+  const frameId = minted?.element ?? null;
+  if (!frameId) {
+    host.log.warn("paged.doc: the placement batch named no frame");
+    return null;
+  }
+  try {
+    await host.parts.write(partPath, source);
+  } catch (err) {
+    host.log.warn(`paged.doc: could not persist source part: ${String(err)}`);
+  }
+  publishDiagnostics(host, ir);
+  return { frameId, storyId: minted?.storyId ?? null };
+}
+
+/** The style catalog without the creates of styles and swatches the
+ *  document already has (a second placement of the same document): in one
+ *  batch a duplicate id would refuse the whole placement. */
+async function newStyleOps(
+  host: BundleHost,
+  ops: readonly Mutation[],
+): Promise<Mutation[]> {
+  const have = new Set<string>();
+  for (const name of [
+    "paragraphStyles",
+    "characterStyles",
+    "swatches",
+  ] as const) {
+    try {
+      for (const row of await host.document.collection<{ selfId: string }>(
+        name,
+      ))
+        have.add(row.selfId);
+    } catch {
+      /* an unreadable collection: keep its creates */
+    }
+  }
+  return ops.filter((op) => {
+    const args = op.args as {
+      selfId?: string | null;
+      spec?: { selfId?: string | null };
+    };
+    const id =
+      op.op === "createSwatch"
+        ? args.spec?.selfId
+        : op.op === "createParagraphStyle" || op.op === "createCharacterStyle"
+          ? args.selfId
+          : null;
+    return !(id && have.has(id));
+  });
 }

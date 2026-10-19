@@ -206,6 +206,10 @@ pub(super) fn apply_insert_hyperlink(
         }
     }
 
+    // The touched paragraphs as they are now: the undo puts back the one
+    // run the link split, not three runs with identical attributes
+    // (findings SCR-10, SH-204).
+    let restore = super::story::capture_range_paragraphs(doc, story_id, None, start, end);
     tag_source_over_range(&mut doc.stories[story_idx].story, start, end, source_id);
 
     doc.designmap
@@ -236,15 +240,23 @@ pub(super) fn apply_insert_hyperlink(
             hyperlink_id: hyperlink_id.to_string(),
             page: page.map(str::to_string),
         },
-        inverse: Operation::RemoveHyperlink {
-            story_id: story_id.to_string(),
-            start,
-            end,
-            url: url.to_string(),
-            source_id: source_id.to_string(),
-            dest_id: dest_id.to_string(),
-            hyperlink_id: hyperlink_id.to_string(),
-            page: page.map(str::to_string),
+        inverse: {
+            let remove = Operation::RemoveHyperlink {
+                story_id: story_id.to_string(),
+                start,
+                end,
+                url: url.to_string(),
+                source_id: source_id.to_string(),
+                dest_id: dest_id.to_string(),
+                hyperlink_id: hyperlink_id.to_string(),
+                page: page.map(str::to_string),
+            };
+            match restore {
+                Some(restore) => Operation::Batch {
+                    ops: vec![remove, restore],
+                },
+                None => remove,
+            }
         },
         invalidation,
     })
