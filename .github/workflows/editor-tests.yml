@@ -27,8 +27,9 @@ concurrency:
 # `corpus/idml` LFS packs, their InDesign reference PDFs, poppler's
 # `pdftoppm`, and the `paged-diff` Rust binary built from a `core`
 # checkout — none of which the package-boundary runner carries. It stays
-# a local / core-CI concern; `PAGED_CI_LEAN=1` drops `fidelity.spec.ts`
-# + `extensive-corpus.spec.ts` from collection (both read the envato
+# a local / core-CI concern: the per-pack sweep is the root
+# tests/fidelity project, which no CI step selects, and `PAGED_CI_LEAN=1`
+# drops `extensive-corpus.spec.ts` from collection (it reads the envato
 # manifest at import time). The lean surface (~412 tests) still needs the
 # small license-clear `corpus/idml/generated` fixtures + `corpus/fonts`, which
 # the harness loads — those come from a sparse LFS checkout of the
