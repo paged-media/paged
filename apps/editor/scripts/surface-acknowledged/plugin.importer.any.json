@@ -1,3 +1,1 @@
-{
-  "importer:media.paged.web.importer.html": "Seeded 2026-10-19, when covers() became the measure: no test imports a file through media.paged.web.importer.html and asserts the document it produces; only mentioned, in 2 test files (e2e: apps/editor/apps/canvas/tests/plugin-surface/web.spec.ts; unit: modules/web/packages/web-bundle/test/conformance/persistence.spec.ts); declared in modules/web/packages/web-bundle/manifest.json."
-}
+{}
