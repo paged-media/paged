@@ -29,6 +29,8 @@ on:
     branches: [main]
     paths:
       - "platform/extensions/**"
+      # The TypeScript base every package's tsconfig extends.
+      - "tsconfig.base.json"
       # Prose under docs/ builds and tests nothing (test inputs are not .md there).
       - "!platform/extensions/docs/**/*.md"
       - "platform/shared/test-kit/**"
@@ -50,6 +52,8 @@ on:
   pull_request:
     paths:
       - "platform/extensions/**"
+      # The TypeScript base every package's tsconfig extends.
+      - "tsconfig.base.json"
       # Prose under docs/ builds and tests nothing (test inputs are not .md there).
       - "!platform/extensions/docs/**/*.md"
       - "platform/shared/test-kit/**"

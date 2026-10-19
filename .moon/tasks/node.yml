@@ -15,6 +15,7 @@ fileGroups:
     - "**/*.{ts,tsx,mts,cts,js,jsx,mjs,cjs}"
     - "**/*.{json,css,html,svg}"
     - "/package.json"
+    - "/tsconfig.base.json"
     - "/bunfig.toml"
     - "/bun.lock"
     - "!docs/**"

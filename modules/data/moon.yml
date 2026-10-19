@@ -42,7 +42,7 @@ tasks:
     inputs:
       - "@group(rust-sources)"
       - "scripts/build-wasm.sh"
-      - "scripts/source-hash.mjs"
+      - "/tooling/js/source-hash.mjs"
       - "packages/data-bundle/manifest.json"
     outputs:
       - "packages/data-bundle/bin/data_js*"
