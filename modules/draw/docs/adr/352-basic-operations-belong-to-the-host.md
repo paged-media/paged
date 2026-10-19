@@ -78,7 +78,8 @@ The division is not complete, and some files lag behind it:
 - The bundle still contributes tools that author new paths (Curvature and Pencil,
   `packages/draw-bundle/src/tools.ts:156-157`), and a Pencil exists on both sides
   (`packages/draw-bundle/manifest.json:38`; `editor: packages/tools/src/built-in-tools.ts:190`).
-  The repository does not record why.
+  The repository does not record why. (Resolved 2026-10-19 by
+  [ADR 359](359-the-host-owns-the-pencil.md): the Pencil is the host's, over `PencilMachine`.)
 - `PenMachine` stays in `draw-tools` with no consumer except its own test, and
   `panels/layers.panel.json` stays in the repo root as a prototype of the retired panel.
 - The provider's types come from the contract (`@paged-media/plugin-api`); the module that

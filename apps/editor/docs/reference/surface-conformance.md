@@ -21,6 +21,11 @@ bun scripts/surface-coverage.mjs --json-out r.json --md-out r.md   # the report
 `--prune` and `--list` skip the secondary "mentioned" column, so they read only the files
 `git grep` finds a covers form in: use them on a slow disk.
 
+The bugs the programme's tests found are expected failures, indexed in
+[conformance-findings-2026-10.md](../../../../docs/development/conformance-findings-2026-10.md):
+one table, the shared root causes and suggested fix waves. Where the programme stands is the
+last section of this page, [State](#state-2026-10-19).
+
 CI runs the gate in the `surface` job of `.github/workflows/editor-tests.yml`. It needs no wasm,
 no browser and no secrets. The job uploads the report as the artifact `surface-conformance` and
 writes the tables to the job summary. Moon runs it as `editor:surface-conformance`.
@@ -133,16 +138,16 @@ that the gate's lists for that bundle are equal to it.
 The gate reads the layer from the test file's path, never from the call. Each file has one
 **tier** and any number of **tags**:
 
-| Layer       | Kind | Files                                                                                                                                                                                                 |
-| ----------- | ---- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `unit`      | tier | every TypeScript test file not matched below                                                                                                                                                          |
-| `component` | tier | `*.dom.test.ts(x)` (happy-dom), see [testing-panels.md](testing-panels.md)                                                                                                                            |
-| `headless`  | tier | a `headless/` directory or `*.headless.test.ts`, the headless editor ([surface-parity.md](../../../../docs/development/surface-parity.md))                                                            |
-| `e2e`       | tier | Playwright: `apps/editor/apps/canvas/tests/**` outside `headless/`, or an `e2e/` directory, see [testing-shell.md](testing-shell.md)                                                                  |
-| `rust`      | tier | a Rust test                                                                                                                                                                                           |
-| `golden`    | tag  | a path segment containing `golden`: output compared with a committed expectation ([testing-cli-and-scripting.md](../../../../docs/development/testing-cli-and-scripting.md))                          |
-| `script`    | tag  | a path segment with the word `script`, `scripts` or `scripting` (`paged-script/tests/…`, `script-console.spec.ts`)                                                                                    |
-| `gesture`   | tag  | a file that drives the gesture DSL (`gestures(…)`, `browserGestures(…)`, `unitBackend(…)`), itself or through a local helper it imports (a `test/support.ts` harness), see [gestures.md](gestures.md) |
+| Layer       | Kind | Files                                                                                                                                                                                                                                                |
+| ----------- | ---- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `unit`      | tier | every TypeScript test file not matched below                                                                                                                                                                                                         |
+| `component` | tier | `*.dom.test.ts(x)` (happy-dom), see [testing-panels.md](testing-panels.md)                                                                                                                                                                           |
+| `headless`  | tier | a `headless/` directory or `*.headless.test.ts`, the headless editor ([surface-parity.md](../../../../docs/development/surface-parity.md))                                                                                                           |
+| `e2e`       | tier | Playwright: `apps/editor/apps/canvas/tests/**` outside `headless/`, or an `e2e/` directory, see [testing-shell.md](testing-shell.md)                                                                                                                 |
+| `rust`      | tier | a Rust test                                                                                                                                                                                                                                          |
+| `golden`    | tag  | a path segment containing `golden`: output compared with a committed expectation ([testing-cli-and-scripting.md](../../../../docs/development/testing-cli-and-scripting.md))                                                                         |
+| `script`    | tag  | a path segment with the word `script`, `scripts` or `scripting` (`paged-script/tests/…`, `script-console.spec.ts`)                                                                                                                                   |
+| `gesture`   | tag  | a file that drives the gesture DSL (`gestures(…)`, `browserGestures(…)`, `unitBackend(…)`, or `createGestureDsl(…)` over another backend), itself or through a local helper it imports (a `test/support.ts` harness), see [gestures.md](gestures.md) |
 
 Plugin contributions are tested in the module that owns them
 ([testing-plugins.md](../../../../platform/extensions/docs/testing-plugins.md)).
@@ -181,9 +186,12 @@ The parts of the entry:
 - **origin** is `host` for the editor, the CLIs and the script surface, and `plugin` for a
   bundle's contribution.
 - **One line per entry**, so parallel work merges cleanly.
-- **The reason** says what is missing and why, in at least 40 characters. The entries seeded
-  when the gate started (2026-10-19) say what no test asserts yet and where the id is only
-  mentioned. Replace a seeded reason with a real one when you decide to leave a gap open.
+- **The reason** says why no test is possible or sensible today and what would make one
+  possible, in at least 40 characters. The gate started (2026-10-19) with a seeded entry for
+  every gap, each with a template reason; at the close-out every gap that could be tested was,
+  and the four left have written reasons. The gate refuses the seeded template
+  (`reasonProblem` in `scripts/surface-coverage.mjs`, tested in `surface-coverage.test.mjs`),
+  so an entry has to say something specific.
 
 **When you cover an id**, run `--prune`. CI fails while a covered entry is still listed.
 
@@ -240,3 +248,73 @@ A test may carry both, and most behaviour tests should: `@feat` for the registry
 
 The JSON report is uploaded with a stable schema (`schema: 1`), so the registry can pull it
 the way it pulls `playwright-results`.
+
+## State (2026-10-19)
+
+The programme is closed. Its six layers have their tests, the gate is a ratchet in CI, and
+the bugs the tests found are indexed in
+[conformance-findings-2026-10.md](../../../../docs/development/conformance-findings-2026-10.md)
+(201 findings: 4 blockers, 30 major, 142 minor, 25 polish).
+
+**1,148 of 1,150 surface ids are asserted.** Per kind and layer (an id counts in every layer
+it has an asserting test in; the clauses are in [What each kind requires](#what-each-kind-requires)):
+
+| Kind       |   Ids | Unit | Component | Headless | e2e | Rust | Golden | Script | Gesture | Clauses met                |
+| ---------- | ----: | ---: | --------: | -------: | --: | ---: | -----: | -----: | ------: | -------------------------- |
+| command    |   318 |  298 |        36 |      277 |  41 |    0 |      0 |     41 |      78 | unit 317, integration 317  |
+| panel      |   120 |    0 |       120 |        0 |   4 |    0 |      0 |      1 |       6 | component 120              |
+| tool       |    68 |   64 |         4 |        0 |   0 |    0 |      0 |      0 |      68 | gesture 68                 |
+| menu       |   241 |    0 |         0 |        0 | 240 |    0 |      0 |      0 |      89 | e2e 240                    |
+| keybinding |    57 |   51 |         0 |        0 |  47 |    0 |      0 |      0 |      47 | any 57                     |
+| setting    |    53 |   42 |        11 |        0 |   0 |    0 |      0 |      0 |      34 | unit 52                    |
+| cli        |    74 |   22 |         0 |        7 |   0 |   52 |     74 |      7 |       0 | golden 74                  |
+| script     |   201 |    0 |         0 |      178 |   0 |  182 |      0 |    201 |       0 | script 201                 |
+| importer   |    10 |    6 |         0 |        6 |   0 |    0 |      0 |      0 |       1 | any 10                     |
+| exporter   |     8 |    3 |         0 |        6 |   0 |    0 |      0 |      0 |       3 | any 8                      |
+| **all**    | 1,150 |      |           |          |     |      |        |        |         | 1,148 ids asserted in full |
+
+The six families (`command:paged.panel.show.*` and the others) are asserted member by member.
+
+**Four (id, clause) pairs are acknowledged**, each with a written reason in
+`scripts/surface-acknowledged/`:
+
+- `command:paged.sample.hello` (integration) and `menu:Tools/Sample bundle hello` (e2e): the
+  editor never loads the shell's sample worker bundle, so no editor session has them. The
+  command, its key binding and the menu registration are asserted through the shell's loader
+  in a unit test.
+- `command:paged.ai.ask` (unit) and `setting:paged.library` (unit): both live in
+  `apps/canvas/src/main.tsx`, which boots the editor when imported. A unit test needs the
+  code moved into an importable module. `paged.ai.ask` is asserted in the browser.
+
+**What CI runs.** Everything below runs on every push to main, needs no secret and no private
+corpus, and is required:
+
+- `editor / tests`, job `checks`: the tool handlers (`test:tools`), the shell registries,
+  stores, settings and loader (`test:shell`, `test:shell-dom`), the command handlers
+  (`test:canvas-unit`), the DOM lane (`test:dom`: every panel, the mounted shell, the four
+  handler-less tools on a mounted canvas), the bundle contracts, and the headless editor
+  (`test:headless`: commands on the real engine, the BundleHost contract, the automation
+  layer, cross-surface parity, engine memory).
+- `editor / tests`, job `surface`: the gate's own tests and the gate.
+- The modules' workflows (`<module> / bun test`, `<module> / rust`): each bundle's commands,
+  tools, panels, importers and exporters against its real wasm.
+- `core / ci`: the engine's Rust tests, the `paged` command line's golden transcripts and the
+  Boa host functions among them; the extensions workflow: plugin-sdk (the `paged-plugin`
+  specs among them), the `paged-node` goldens and the test kit.
+
+**What has only run locally.** The editor's Playwright lane (`editor / tests`, job
+`playwright`) is red in CI and has been since the monorepo moved: it checks out the private
+corpus before it runs, which needs the `STATE_DISPATCH_TOKEN` repository secret, and the
+secret is not set. So the browser tier has run only on a developer machine: the menu enablement
+matrix and menu dispatch (`shell-menu-matrix.spec.ts`), the keybindings
+(`shell-keybindings.spec.ts`), the browser-side commands and the derived families
+(`shell-commands.spec.ts`), the browser findings (`shell-findings.spec.ts`), the panels'
+browser flows (`panels-browser.spec.ts`, the Layers commands' integration clause among them),
+the schema demos, the plugin menus (`tests/plugin-surface/menus-*.spec.ts`), the gesture
+browser, matrix and fuzz specs, and `worker-boot.spec.ts`. The gate counts their `covers()`
+calls, because it reads the files; CI does not execute them. Every e2e-only clause (240 menu
+items, and the e2e half of the command and keybinding clauses) therefore rests on local runs
+until the secret is set or the lane stops needing the corpus. Two parity columns are local
+too: the `paged` CLI and MCP doors need the `paged` binary, which the editor job does not
+build (they report `unavailable` there). The WebGPU path runs only in the local
+`journeys-gpu` project and the macOS showcase nightly.

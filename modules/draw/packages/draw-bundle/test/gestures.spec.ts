@@ -26,7 +26,11 @@
 import { describe, expect, it } from "bun:test";
 
 import type { ElementId } from "@paged-media/plugin-api";
-import { loadBundle } from "@paged-media/plugin-sdk";
+import {
+  loadBundle,
+  mapBacking,
+  silentConsole as silent,
+} from "@paged-media/plugin-sdk";
 import {
   commitsSince,
   createFakeEditor,
@@ -37,17 +41,6 @@ import {
 } from "@paged-media/test-kit";
 
 import { drawBundle } from "../src";
-
-const silent = { debug() {}, info() {}, warn() {}, error() {} };
-const mapBacking = () => {
-  const m = new Map<string, string>();
-  return {
-    getItem: (k: string) => m.get(k) ?? null,
-    setItem: (k: string, v: string) => void m.set(k, v),
-    removeItem: (k: string) => void m.delete(k),
-    keys: () => Array.from(m.keys()),
-  };
-};
 
 const PATH = { kind: "polygon", id: "p1" } as ElementId;
 const SQUARE = {
@@ -142,34 +135,12 @@ describe("paged.draw tools through the gesture DSL", () => {
     expect(fake.mutations()).toEqual([]);
   });
 
-  it("Pencil: a freehand drag commits ONE path; Escape mid-stroke commits nothing @level:gesture", async () => {
-    const { fake, g } = drawHarness({ hitTest: () => null, selection: [] });
-    let mark = fake.mark();
-    await g
-      .tool("media.paged.draw.tool.pencil")
-      .drag({ from: [100, 100], to: [300, 220], via: [[200, 120]], steps: 6 })
-      .settle();
-    const s = commitsSince(fake, mark);
-    expect(s.applied).toHaveLength(1);
-    expect(
-      flattenMutation(s.applied[0].mutation).some((m) => m.op === "insertPath"),
-    ).toBe(true);
-    mark = fake.mark();
-    await g
-      .drag({ from: [100, 100], to: [300, 220], release: false })
-      .cancel()
-      .up()
-      .settle();
-    expectNoCommit(fake, mark);
-  });
-
   const warn = console.warn;
   for (const id of [
     "addAnchor",
     "deleteAnchor",
     "convertAnchor",
     "curvature",
-    "pencil",
     "gradientAnnotator",
     "measure",
     "shapeBuilder",

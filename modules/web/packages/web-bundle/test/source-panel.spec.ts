@@ -36,7 +36,11 @@ import type {
   PagedEditor,
   WidgetSurface,
 } from "@paged-media/plugin-api";
-import { createBundleHost } from "@paged-media/plugin-sdk";
+import {
+  createBundleHost,
+  mapBacking,
+  silentConsole as silent,
+} from "@paged-media/plugin-sdk";
 import {
   DEFAULT_SOURCE,
   envelopeFor,
@@ -56,16 +60,6 @@ import {
 import { loadWebSource } from "../src/source-part";
 
 const manifest = webBundle.manifest;
-const silent = { debug() {}, info() {}, warn() {}, error() {} };
-const mapBacking = () => {
-  const m = new Map<string, string>();
-  return {
-    getItem: (k: string) => m.get(k) ?? null,
-    setItem: (k: string, v: string) => void m.set(k, v),
-    removeItem: (k: string) => void m.delete(k),
-    keys: () => Array.from(m.keys()),
-  };
-};
 const fakeEditor = {} as unknown as PagedEditor;
 
 // A recognizable host widget — identity is the assertion.

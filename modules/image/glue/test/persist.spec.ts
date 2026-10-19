@@ -28,7 +28,8 @@ import type { PluginManifest } from "@paged-media/plugin-api";
 import manifestJson from "@paged-media/image-manifest/manifest.json";
 
 import { createImageSession } from "../src/session";
-import { collectGarbage, recordPath, sha256Hex } from "../src/session-store";
+import { sha256Hex } from "@paged-media/helpers";
+import { collectGarbage, recordPath } from "../src/session-store";
 import {
   layeredPsdBytes,
   makeFakeEditor,

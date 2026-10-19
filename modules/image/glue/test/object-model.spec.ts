@@ -20,6 +20,7 @@ import {
   createHeadlessHost,
   defineBundle,
   type HeadlessHost,
+  silentConsole as silent,
 } from "@paged-media/plugin-sdk";
 import type { BundleHost, PluginManifest } from "@paged-media/plugin-api";
 import { covers } from "@paged-media/test-kit";
@@ -38,7 +39,7 @@ import {
 import { readPgil, writePgil } from "../src/object-model/pgil";
 import { readAdjust } from "../src/object-model/adjust";
 import { IMAGE_PANEL_FIELDS } from "../src/panels/properties-panel";
-import { sha256Hex } from "../src/session-store";
+import { sha256Hex } from "@paged-media/helpers";
 import { minimalIdml } from "./fixtures/minimal-idml";
 
 // The engine is this package's own @paged-media/canvas-wasm devDependency.
@@ -58,7 +59,6 @@ const lane = built ? describe : describe.skip;
 
 const P = "plugin:media.paged.image";
 const FRAME = "urect";
-const silent = { debug() {}, info() {}, warn() {}, error() {} };
 const value = (v: unknown) => ({ kind: "value", value: v });
 
 let engine: ImageEngine;

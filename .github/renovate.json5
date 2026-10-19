@@ -1,0 +1,461 @@
+// Renovate: dependency updates for the monorepo (docs/migration/renovate.md).
+//
+// Shape: runtime dependencies in one group per Moon project and language
+// (`rust: <project>`, `js: <project>`); patch and minor updates of
+// development tooling in one group per language (`js: dev tooling`,
+// `rust: dev tooling`), the only PRs that merge themselves; toolchains and
+// the byte-sensitive families in their own groups; majors (and 0.x minors)
+// one per dependency, opened only on approval from the dependency
+// dashboard; a weekly schedule. Automerge waits for EVERY check on the
+// branch, moon ci included: main takes direct pushes and has no required
+// checks, so Renovate does the waiting itself (platformAutomerge is off).
+{
+  $schema: "https://docs.renovatebot.com/renovate-schema.json",
+  extends: ["config:recommended"],
+  timezone: "Europe/Vienna",
+  schedule: ["before 7am on monday"],
+  dependencyDashboard: true,
+  dependencyDashboardTitle: "Dependency dashboard",
+  labels: ["dependencies"],
+  prConcurrentLimit: 8,
+  prHourlyLimit: 4,
+  branchConcurrentLimit: 12,
+  // A release must be this old before Renovate proposes it (yanked and
+  // compromised releases are usually withdrawn within days).
+  minimumReleaseAge: "3 days",
+  // No PR merges itself unless a rule below says so, and then only after
+  // every status check on the branch passed (Renovate checks, not GitHub).
+  automerge: false,
+  platformAutomerge: false,
+  automergeType: "pr",
+  ignoreTests: false,
+  rebaseWhen: "auto",
+  // Security fixes skip the schedule and the release-age wait.
+  vulnerabilityAlerts: {
+    enabled: true,
+    labels: ["security"],
+    schedule: ["at any time"],
+    minimumReleaseAge: null,
+  },
+  osvVulnerabilityAlerts: true,
+  lockFileMaintenance: {
+    enabled: true,
+    schedule: ["before 7am on the first day of the month"],
+    commitMessageAction: "Refresh",
+  },
+  ignorePaths: [
+    "**/node_modules/**",
+    "**/target/**",
+    // The W0 Blitz spike: kept for reference, never shipped.
+    "engine/core/spikes/**",
+    // How the repository was assembled; history, not code.
+    "tooling/import/**",
+    "corpus/**",
+  ],
+
+  customManagers: [
+    {
+      // The Bun catalog (root package.json `workspaces.catalog`). Renovate
+      // reads pnpm and Yarn catalogs, not Bun's, so this manager reports
+      // the entries; it cannot regenerate bun.lock for them
+      // (docs/migration/renovate.md, "Catalog").
+      customType: "jsonata",
+      fileFormat: "json",
+      managerFilePatterns: ["/^package\\.json$/"],
+      matchStrings: [
+        'workspaces.catalog.$each(function($v, $k) { { "depName": $k, "currentValue": $v } })',
+      ],
+      datasourceTemplate: "npm",
+      depTypeTemplate: "catalog",
+    },
+    {
+      // The wasm-bindgen CLI pin; it must equal the wasm-bindgen crate in
+      // every Cargo.lock, so it moves in the `wasm-bindgen` group below.
+      customType: "regex",
+      managerFilePatterns: ["/^tooling/bootstrap\\.sh$/"],
+      matchStrings: ["WASM_BINDGEN=(?<currentValue>\\d+\\.\\d+\\.\\d+)"],
+      depNameTemplate: "wasm-bindgen",
+      datasourceTemplate: "crate",
+    },
+    {
+      // binaryen's wasm-opt: bootstrap.sh and the CI download URLs.
+      customType: "regex",
+      managerFilePatterns: [
+        "/^tooling/bootstrap\\.sh$/",
+        "/^\\.github/(workflows|actions)/.+\\.ya?ml$/",
+      ],
+      matchStrings: [
+        "BINARYEN=(?<currentValue>\\d+)",
+        "download/version_(?<currentValue>\\d+)/",
+        "binaryen-version_(?<currentValue>\\d+)",
+      ],
+      depNameTemplate: "binaryen",
+      packageNameTemplate: "WebAssembly/binaryen",
+      datasourceTemplate: "github-releases",
+      extractVersionTemplate: "^version_(?<version>\\d+)$",
+      versioningTemplate: "regex:^(?<major>\\d+)$",
+    },
+    {
+      // Cargo tools installed in CI at a pinned version
+      // (`taiki-e/install-action` `tool: cargo-deny@x.y.z,…`).
+      customType: "regex",
+      managerFilePatterns: ["/^\\.github/(workflows|actions)/.+\\.ya?ml$/"],
+      matchStrings: [
+        "(?<depName>cargo-(?:deny|audit|nextest))@(?<currentValue>\\d+\\.\\d+\\.\\d+)",
+      ],
+      datasourceTemplate: "crate",
+    },
+    {
+      // proto, which installs everything in /.prototools in CI.
+      customType: "regex",
+      managerFilePatterns: ["/^\\.github/(workflows|actions)/.+\\.ya?ml$/"],
+      matchStrings: ['proto-version: "(?<currentValue>\\d+\\.\\d+\\.\\d+)"'],
+      depNameTemplate: "proto",
+      packageNameTemplate: "moonrepo/proto",
+      datasourceTemplate: "github-releases",
+      extractVersionTemplate: "^v(?<version>.+)$",
+    },
+    {
+      // The Rust toolchain named in workflows; it moves with every
+      // rust-toolchain.toml in the `rust toolchain` group.
+      customType: "regex",
+      managerFilePatterns: ["/^\\.github/(workflows|actions)/.+\\.ya?ml$/"],
+      matchStrings: ["toolchain: (?<currentValue>\\d+\\.\\d+\\.\\d+)"],
+      depNameTemplate: "rust",
+      datasourceTemplate: "rust-version",
+    },
+  ],
+
+  packageRules: [
+    // ---- What Renovate leaves alone -------------------------------------
+    {
+      description: "First-party packages resolve through the workspace (workspace:), never from npm.",
+      matchPackageNames: ["@paged-media/**", "paged-*"],
+      enabled: false,
+    },
+    {
+      description: "Peer ranges are the public contract of the bundles (PM-0008); they change by decision, not by bot.",
+      matchDepTypes: ["peerDependencies", "engines"],
+      enabled: false,
+    },
+    {
+      description: "@types/node follows the Node runtime in /.prototools (24), not the latest typings.",
+      matchPackageNames: ["@types/node"],
+      allowedVersions: "<25",
+    },
+    {
+      description: "DuckDB-WASM (and the Arrow range it fixes) moves only with a re-recorded SQL oracle (docs/migration/npm-latest.md).",
+      matchPackageNames: ["@duckdb/duckdb-wasm", "apache-arrow"],
+      dependencyDashboardApproval: true,
+    },
+
+    // ---- Ranges ---------------------------------------------------------
+    {
+      description: "JS: bump the declared range with the lockfile, so package.json says what is installed.",
+      matchManagers: ["bun"],
+      rangeStrategy: "bump",
+    },
+
+    // ---- One group per Moon project, Rust and JS apart ------------------
+    {
+      matchManagers: ["cargo"],
+      matchFileNames: ["engine/core/**"],
+      groupName: "rust: core",
+    },
+    {
+      matchManagers: ["cargo"],
+      matchFileNames: ["modules/publish/**"],
+      groupName: "rust: publish",
+    },
+    {
+      matchManagers: ["cargo"],
+      matchFileNames: ["modules/image/**"],
+      groupName: "rust: image",
+    },
+    {
+      matchManagers: ["cargo"],
+      matchFileNames: ["modules/draw/**"],
+      groupName: "rust: draw",
+    },
+    {
+      matchManagers: ["cargo"],
+      matchFileNames: ["modules/sheet/**"],
+      groupName: "rust: sheet",
+    },
+    {
+      matchManagers: ["cargo"],
+      matchFileNames: ["modules/data/**"],
+      groupName: "rust: data",
+    },
+    {
+      matchManagers: ["cargo"],
+      matchFileNames: ["modules/doc/**"],
+      groupName: "rust: doc",
+    },
+    {
+      matchManagers: ["cargo"],
+      matchFileNames: ["modules/slide/**"],
+      groupName: "rust: slide",
+    },
+    {
+      matchManagers: ["cargo"],
+      matchFileNames: ["modules/web/packages/web-render/**"],
+      groupName: "rust: web-render",
+    },
+    {
+      matchManagers: ["cargo"],
+      matchFileNames: ["platform/shared/test-resources/**"],
+      groupName: "rust: test-resources",
+    },
+    {
+      matchManagers: ["cargo"],
+      matchFileNames: ["apps/server/**"],
+      groupName: "rust: server",
+    },
+
+    {
+      matchManagers: ["bun", "custom.jsonata"],
+      matchFileNames: ["package.json"],
+      groupName: "js: root and catalog",
+    },
+    {
+      matchManagers: ["bun"],
+      matchFileNames: ["engine/core/**"],
+      groupName: "js: core",
+    },
+    {
+      matchManagers: ["bun"],
+      matchFileNames: ["engine/core/web/idml-viewer/**"],
+      groupName: "js: core-idml-viewer",
+    },
+    {
+      matchManagers: ["bun"],
+      matchFileNames: ["modules/publish/**"],
+      groupName: "js: publish",
+    },
+    {
+      matchManagers: ["bun"],
+      matchFileNames: ["modules/image/**"],
+      groupName: "js: image",
+    },
+    {
+      matchManagers: ["bun"],
+      matchFileNames: ["modules/draw/**"],
+      groupName: "js: draw",
+    },
+    {
+      matchManagers: ["bun"],
+      matchFileNames: ["modules/sheet/**"],
+      groupName: "js: sheet",
+    },
+    {
+      matchManagers: ["bun"],
+      matchFileNames: ["modules/data/**"],
+      groupName: "js: data",
+    },
+    {
+      matchManagers: ["bun"],
+      matchFileNames: ["modules/doc/**"],
+      groupName: "js: doc",
+    },
+    {
+      matchManagers: ["bun"],
+      matchFileNames: ["modules/slide/**"],
+      groupName: "js: slide",
+    },
+    {
+      matchManagers: ["bun"],
+      matchFileNames: ["modules/web/**"],
+      groupName: "js: web",
+    },
+    {
+      matchManagers: ["bun"],
+      matchFileNames: ["platform/shared/**"],
+      groupName: "js: platform-shared",
+    },
+    {
+      matchManagers: ["bun"],
+      matchFileNames: ["platform/extensions/**"],
+      groupName: "js: extensions",
+    },
+    {
+      matchManagers: ["bun"],
+      matchFileNames: ["apps/editor/**"],
+      groupName: "js: editor",
+    },
+
+    // ---- Development tooling: one group per language ----------------
+    // Patch and minor updates of dev-dependencies leave their project's
+    // group for one per language, the PRs that may merge themselves: a
+    // runtime update in the same project cannot hold them back.
+    {
+      matchManagers: ["bun"],
+      matchDepTypes: ["devDependencies"],
+      matchUpdateTypes: ["patch", "minor"],
+      groupName: "js: dev tooling",
+    },
+    {
+      matchManagers: ["cargo"],
+      matchDepTypes: ["dev-dependencies"],
+      matchUpdateTypes: ["patch", "minor"],
+      groupName: "rust: dev tooling",
+    },
+
+    // ---- Toolchains: one PR each, every pin of the tool together --------
+    {
+      description: "Every rust-toolchain.toml and the workflow pins move together (U1); new clippy lints land in that PR.",
+      matchManagers: ["rust-toolchain", "custom.regex"],
+      matchPackageNames: ["rust"],
+      groupName: "rust toolchain",
+    },
+    {
+      description: "Bun: /.prototools, packageManager and @types/bun are one version.",
+      matchPackageNames: ["bun", "oven-sh/bun", "@types/bun"],
+      groupName: "bun",
+    },
+    {
+      description: "proto and the tools it pins in /.prototools (moon, node) and in CI.",
+      matchManagers: ["proto", "custom.regex"],
+      matchPackageNames: [
+        "moon",
+        "moonrepo/moon",
+        "node",
+        "proto",
+        "moonrepo/proto",
+      ],
+      groupName: "proto toolchain",
+    },
+    {
+      description: "The wasm-bindgen crates in every Cargo.lock and the CLI pin in tooling/bootstrap.sh move together.",
+      matchPackageNames: [
+        "wasm-bindgen",
+        "wasm-bindgen-*",
+        "js-sys",
+        "web-sys",
+      ],
+      groupName: "wasm-bindgen",
+    },
+    {
+      description: "binaryen's wasm-opt: bootstrap and every CI download.",
+      matchPackageNames: ["binaryen"],
+      groupName: "binaryen",
+    },
+    {
+      description: "CI scanners and runners installed at a pinned version.",
+      matchManagers: ["custom.regex"],
+      matchPackageNames: ["cargo-deny", "cargo-audit", "cargo-nextest"],
+      groupName: "ci cargo tools",
+    },
+    {
+      description: "GitHub Actions: one PR a month, pinned as today (major tags).",
+      matchManagers: ["github-actions"],
+      groupName: "github actions",
+      schedule: ["before 7am on the first day of the month"],
+    },
+
+    // ---- Byte- and pixel-sensitive families ---------------------------
+    {
+      description: "Render, text, zip and image crates need the core fidelity, export-diff and text-diff gates (U3); never automerged.",
+      matchManagers: ["cargo"],
+      matchPackageNames: [
+        "vello",
+        "vello_*",
+        "wgpu",
+        "wgpu-*",
+        "peniko",
+        "kurbo",
+        "harfrust",
+        "skrifa",
+        "read-fonts",
+        "font-types",
+        "zip",
+        "flate2",
+        "image",
+        "png",
+        "zune-*",
+        "tiny-skia",
+        "resvg",
+        "usvg",
+      ],
+      labels: ["dependencies", "fidelity-gates"],
+      automerge: false,
+    },
+    {
+      description: "The Blitz alpha line is pinned exactly; it moves only when a newer alpha lands, reviewed with web-render's parity tests.",
+      matchManagers: ["cargo"],
+      matchPackageNames: [
+        "blitz-*",
+        "anyrender",
+        "anyrender_*",
+        "stylo",
+        "stylo_*",
+      ],
+      groupName: "rust: web-render (blitz)",
+      dependencyDashboardApproval: true,
+    },
+    {
+      description: "The extension contract's own dependencies ship to extension authors (plugin-api, plugin-sdk).",
+      matchFileNames: [
+        "platform/extensions/packages/plugin-api/**",
+        "platform/extensions/packages/plugin-sdk/**",
+      ],
+      labels: ["dependencies", "contract"],
+      automerge: false,
+    },
+
+    // ---- Majors: one per dependency, opened from the dashboard ----------
+    {
+      description: "Majors are one PR per dependency (U3, U4), opened only when approved on the dependency dashboard.",
+      matchUpdateTypes: ["major"],
+      groupName: null,
+      dependencyDashboardApproval: true,
+      labels: ["dependencies", "major"],
+    },
+    {
+      description: "0.x minors break like majors (semver); treat them the same.",
+      matchUpdateTypes: ["minor"],
+      matchCurrentVersion: "/^v?0\\./",
+      matchManagers: ["cargo", "bun"],
+      groupName: null,
+      dependencyDashboardApproval: true,
+      labels: ["dependencies", "major"],
+    },
+
+    // ---- Automerge: patch and minor of development tooling --------------
+    {
+      description: "Development tooling: patch and minor merge themselves once every check on the branch, moon ci included, is green.",
+      matchDepTypes: ["devDependencies", "dev-dependencies"],
+      matchUpdateTypes: ["patch", "minor"],
+      matchCurrentVersion: "!/^v?0\\./",
+      automerge: true,
+      minimumReleaseAge: "7 days",
+    },
+    {
+      description: "0.x development tooling: patch only.",
+      matchDepTypes: ["devDependencies", "dev-dependencies"],
+      matchUpdateTypes: ["patch"],
+      matchCurrentVersion: "/^v?0\\./",
+      automerge: true,
+      minimumReleaseAge: "7 days",
+    },
+    {
+      description: "The byte/pixel-sensitive families stay manual even as dev-dependencies.",
+      matchPackageNames: [
+        "vello",
+        "vello_*",
+        "wgpu",
+        "wgpu-*",
+        "harfrust",
+        "skrifa",
+        "read-fonts",
+        "zip",
+        "flate2",
+        "image",
+        "png",
+        "zune-*",
+        "tiny-skia",
+      ],
+      automerge: false,
+    },
+  ],
+}

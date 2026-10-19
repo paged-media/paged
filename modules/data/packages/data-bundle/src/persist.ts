@@ -41,6 +41,11 @@
 // against the session (see `session.ts` `restore`).
 
 import type { ElementId } from "@paged-media/plugin-api";
+import {
+  bytesToBase64,
+  base64ToBytes,
+  sha256HexPrefix,
+} from "@paged-media/helpers";
 
 import type {
   IdmlFit,
@@ -136,15 +141,10 @@ const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
 /** Hex SHA-256 of `bytes`, shortened to 32 hex chars (128 bits) — a content
- *  address, not a security boundary. */
-export async function contentHash(bytes: Uint8Array): Promise<string> {
-  const digest = await globalThis.crypto.subtle.digest(
-    "SHA-256",
-    bytes as BufferSource,
-  );
-  return Array.from(new Uint8Array(digest).slice(0, 16), (b) =>
-    b.toString(16).padStart(2, "0"),
-  ).join("");
+ *  address, not a security boundary. Documents persist it: it stays the
+ *  prefix of the full digest. */
+export function contentHash(bytes: Uint8Array): Promise<string> {
+  return sha256HexPrefix(bytes, 32);
 }
 
 /** The part a stored file is written to (`data/<hash>.<ext>`). */
@@ -158,21 +158,6 @@ export function dataPartPath(
 /** The part path a persisted entry points at, or null when it is inline. */
 export function dataPartOf(d: PersistedData): string | null {
   return "ref" in d ? dataPartPath(d.ref.hash, d.format) : null;
-}
-
-function toBase64(bytes: Uint8Array): string {
-  let bin = "";
-  for (let i = 0; i < bytes.length; i += 0x8000) {
-    bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
-  }
-  return btoa(bin);
-}
-
-function fromBase64(text: string): Uint8Array {
-  const bin = atob(text);
-  const out = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
-  return out;
 }
 
 /** Store one imported binary file (JSON, Parquet, XLSX): inline as base64
@@ -193,7 +178,7 @@ export async function storeFile(
     ...(sheet !== undefined ? { sheet } : {}),
   };
   if (bytes.length <= INLINE_DATA_MAX_BYTES)
-    return { ...head, base64: toBase64(bytes) };
+    return { ...head, base64: bytesToBase64(bytes) };
   const hash = await contentHash(bytes);
   const path = dataPartPath(hash, format);
   if (!known.has(path)) {
@@ -208,7 +193,7 @@ export async function loadFile(
   d: PersistedData,
   readPart: (path: string) => Promise<Uint8Array | null>,
 ): Promise<Uint8Array | null> {
-  if ("base64" in d) return fromBase64(d.base64);
+  if ("base64" in d) return base64ToBytes(d.base64);
   if ("text" in d) return encoder.encode(d.text);
   return readPart(dataPartPath(d.ref.hash, d.format));
 }

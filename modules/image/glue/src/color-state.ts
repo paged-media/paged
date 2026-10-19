@@ -8,6 +8,8 @@
 // Pure functions over straight RGBA in [0,1]; the session owns the
 // state and wires it to the brush.
 
+import { hexToRgb, rgbToHex } from "@paged-media/helpers";
+
 import type { Rgba01 } from "./engine";
 
 export interface ColorPair {
@@ -59,18 +61,11 @@ export function averageRgba8(px: Uint8Array): Rgba01 | null {
 
 /** `#rrggbb` for a colour (alpha dropped — the hex field is RGB). */
 export function toHex(c: Rgba01): string {
-  const h = (v: number) =>
-    Math.round(Math.min(1, Math.max(0, v)) * 255)
-      .toString(16)
-      .padStart(2, "0");
-  return `#${h(c[0])}${h(c[1])}${h(c[2])}`;
+  return rgbToHex([c[0] * 255, c[1] * 255, c[2] * 255]);
 }
 
 /** Parse `#rgb` / `#rrggbb` (opaque), or null. */
 export function fromHex(s: string): Rgba01 | null {
-  const m = /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(s.trim());
-  if (!m) return null;
-  const hex = m[1].length === 3 ? m[1].replace(/./g, (ch) => ch + ch) : m[1];
-  const v = (i: number) => parseInt(hex.slice(i, i + 2), 16) / 255;
-  return [v(0), v(2), v(4), 1];
+  const rgb = hexToRgb(s);
+  return rgb ? [rgb[0] / 255, rgb[1] / 255, rgb[2] / 255, 1] : null;
 }

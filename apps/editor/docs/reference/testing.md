@@ -153,3 +153,35 @@ errors to hard assertions once a pack is known clean.
   a render panic surfaces in the report.
 - Don't loosen a budget or a threshold to hide a regression — fix it,
   then tighten.
+
+## Flakes and the quarantine
+
+[ADR 228](../adr/228-flaky-tests-are-quarantined.md). In CI a test that fails and then passes
+on its retry fails the run (`failOnFlakyTests`); locally it prints as `flaky`.
+
+- **Wait for the render, never for time.** Assert a page change with
+  `designer.expectRenderChangesFrom(before)`: it snapshots again whenever the engine reports a
+  change and at least once a second, for up to 30 s. A `waitForTimeout` followed by one
+  `renderBytes()` is the flake this suite has had most.
+- **Quarantine a flake you cannot fix now**: add `{ tag: "@quarantine" }` to the test and an
+  entry to `apps/canvas/tests/quarantine.json`:
+
+  ```json
+  {
+    "id": "e2e/x.spec.ts › describe › title",
+    "owner": "@your-handle",
+    "added": "2026-10-19",
+    "expires": "2026-11-18",
+    "reason": "what flakes, what the fix is, where it is tracked"
+  }
+  ```
+
+  `id` is the line Playwright prints without the project; `expires` is at most 30 days after
+  `added`. `bun run test:quarantine` (apps/editor) checks the list, the expiry and that the
+  list and the tags name the same tests. CI runs quarantined tests apart, with retries, and
+  never gates on them.
+
+- **Measure.** `bun scripts/flake-rate.mjs <report.json>...` (apps/editor) prints the flake
+  rate of any Playwright JSON report. For a local measurement run the suite with
+  `--repeat-each=3 --retries=0 --reporter=json`; repeats that disagree count as flaky. CI
+  writes the number of every run to the `playwright-flake-rate` artifact.

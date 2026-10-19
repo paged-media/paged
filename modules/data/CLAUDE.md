@@ -213,7 +213,7 @@ cargo deny check
 
 # wasm artifact (100 MB app wasm budget; lands in packages/data-bundle/bin/).
 # Rebuild after ANY Rust change: test/wasm-fresh.spec.ts fails on a wasm built
-# from other sources (scripts/source-hash.mjs, stamped as bin/SOURCE_HASH).
+# from other sources (tooling/js/source-hash.mjs, stamped as bin/SOURCE_HASH).
 bash scripts/vendor-duckdb.sh   # the MIT DuckDB-WASM artifact; stages bin/duckdb-engine.wasm
 bash scripts/build-wasm.sh
 

@@ -29,7 +29,11 @@ import type {
   MainToWorkerKind,
   WorkerToMain,
 } from "@paged-media/plugin-api";
-import { createHeadlessHost, type HeadlessHost } from "@paged-media/plugin-sdk";
+import {
+  createHeadlessHost,
+  type HeadlessHost,
+  silentConsole as silent,
+} from "@paged-media/plugin-sdk";
 
 import {
   checkCancel,
@@ -45,7 +49,6 @@ import {
 
 type Send = (m: MainToWorkerKind) => Promise<WorkerToMain>;
 type Pt = [number, number];
-const silent = { debug() {}, info() {}, warn() {}, error() {} };
 const NO_SNAP = { shift: false, alt: false, disableSnap: true };
 
 let h: HeadlessHost;

@@ -41,6 +41,7 @@ import {
   createBundleHost,
   createDataProviderRegistry,
   createHeadlessHost,
+  mapBacking,
 } from "@paged-media/plugin-sdk";
 import type {
   DataProviderBackend,
@@ -145,16 +146,6 @@ const consoleInto = (logs: LogLine[]) => {
     info: line("info"),
     warn: line("warn"),
     error: line("error"),
-  };
-};
-
-const mapBacking = () => {
-  const m = new Map<string, string>();
-  return {
-    getItem: (k: string) => m.get(k) ?? null,
-    setItem: (k: string, v: string) => void m.set(k, v),
-    removeItem: (k: string) => void m.delete(k),
-    keys: () => Array.from(m.keys()),
   };
 };
 

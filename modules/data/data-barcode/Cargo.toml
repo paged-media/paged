@@ -18,4 +18,4 @@ thiserror.workspace = true
 [dev-dependencies]
 # An independent QR decoder for the version × mask sweep (MIT OR Apache-2.0,
 # test-only — the crate itself stays dependency-free).
-rqrr = "0.10"
+rqrr = "0.11"

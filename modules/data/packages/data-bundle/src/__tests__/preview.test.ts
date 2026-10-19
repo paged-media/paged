@@ -30,13 +30,12 @@ import type { BundleHost, Mutation } from "@paged-media/plugin-api";
 
 import type { DataEngineLike } from "../engine";
 
+import { silentConsole as silent } from "@paged-media/plugin-sdk";
 // bun:test hoists no vi.mock and has no vi.doMock / vi.resetModules: the
 // real exports are taken once, before anything is mocked, and mock.module
 // patches the loaded module in place (every importer sees the change).
 const actualEngine = await importActual(() => import("../engine"));
 const actualDuckdb = await importActual(() => import("../query/duckdb"));
-
-const silent = { debug() {}, info() {}, warn() {}, error() {} };
 
 /** A batch the fake host understands the way core does for what these tests
  *  send: a batch that names what it mints has each child applied in order, `bindCreated` naming the frame the

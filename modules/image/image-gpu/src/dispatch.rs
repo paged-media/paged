@@ -30,6 +30,7 @@
 
 use image_kernels::abi;
 
+use crate::resident::{check_texels, TexFormat};
 use crate::{GpuContext, GpuError, KernelPipeline, TileInput};
 
 const BYTES_PER_PIXEL: u32 = 8; // rgba16float
@@ -168,6 +169,26 @@ impl<'p> DispatchBatch<'p> {
                 });
             }
             let (w, h) = (tile.w, tile.h);
+            for (i, t) in tile.inputs.iter().enumerate() {
+                check_texels(
+                    def.id,
+                    &format!("tile {ti} input {i}"),
+                    t.f16_bytes,
+                    w,
+                    h,
+                    TexFormat::Rgba16Float,
+                )?;
+            }
+            if let Some(m) = tile.mask {
+                check_texels(
+                    def.id,
+                    &format!("tile {ti} mask"),
+                    m,
+                    w,
+                    h,
+                    TexFormat::R16Float,
+                )?;
+            }
 
             // Inputs.
             let in_textures: Vec<wgpu::Texture> = tile

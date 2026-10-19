@@ -188,10 +188,10 @@ export function createPenHandler(): GestureHandler {
   let unsubscribe: (() => void) | null = null;
 
   const ptPerPx = () => (paged ? pxToPt(paged, 1) : 1);
-  // Snapping (RFI C-68): a press or hover over EMPTY space snaps to the
-  // page's edges and centre and to this run's own anchors. A hit on a
-  // path (continue / join / add / delete) is never moved by a snap — the
-  // machine decides those on the raw pointer.
+  // Snapping (RFI C-68): a press or hover over EMPTY space snaps through
+  // the engine — to every visible element, the page, the guides and this
+  // run's own anchors. A hit on a path (continue / join / add / delete) is
+  // never moved by a snap — the machine decides those on the raw pointer.
   const snapper = createHostSnapper(() => paged);
   const snapIfEmpty = async (
     pageId: string,
@@ -423,7 +423,6 @@ export function createPenHandler(): GestureHandler {
     }
     const raw = endLocalFor(page, e);
     const hit = await resolveHit(page.pageId, raw);
-    await snapper.prepare(page.pageId);
     const point = await snapIfEmpty(page.pageId, raw, hit, e);
     feed({
       type: "down",
@@ -463,7 +462,6 @@ export function createPenHandler(): GestureHandler {
       return;
     }
     const hit = await resolveHit(at.pageId, at.point);
-    await snapper.prepare(at.pageId);
     const point = await snapIfEmpty(at.pageId, at.point, hit, e);
     feed({ type: "move", point, modifiers: modifiers(e), hit });
     repaint();

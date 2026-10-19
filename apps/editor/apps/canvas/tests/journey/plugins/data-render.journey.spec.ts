@@ -150,12 +150,10 @@ test.describe("journey · paged.data render output", () => {
     await addBindingThroughPanel(page, "variable", "name");
     await addBindingThroughPanel(page, "table", "name, role");
     await page.getByRole("button", { name: /lower to document/i }).click();
-    // The lower lane refreshes data (a DuckDB query) + commits the Mutations;
-    // give the worker + the render pipeline a beat to settle.
-    await page.waitForTimeout(1200);
-    const afterLower = await designer.renderBytes();
 
-    // ── 3. RENDER ASSERTION (HARD) — the bound content visibly reached the page. ──
-    await designer.expectRenderChanged(beforeLower, afterLower);
+    // ── 3. RENDER ASSERTION (HARD) — the bound content visibly reached the
+    //    page. The lower lane refreshes data (a DuckDB query) and then
+    //    commits the Mutations: polled until the commit lands (ADR 228). ──
+    await designer.expectRenderChangesFrom(beforeLower);
   });
 });

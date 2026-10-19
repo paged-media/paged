@@ -29,17 +29,7 @@ import type { PluginManifest } from "@paged-media/plugin-api";
 import { createBundleHost } from "../src";
 import { makeFakeEditor } from "./fake-editor";
 
-const silent = { debug() {}, info() {}, warn() {}, error() {} };
-const mapBacking = () => {
-  const m = new Map<string, string>();
-  return {
-    getItem: (k: string) => m.get(k) ?? null,
-    setItem: (k: string, v: string) => void m.set(k, v),
-    removeItem: (k: string) => void m.delete(k),
-    keys: () => Array.from(m.keys()),
-  };
-};
-
+import { mapBacking, silentConsole as silent } from "../src/testing";
 const manifest = (
   capabilities: PluginManifest["capabilities"] = {},
 ): PluginManifest => ({

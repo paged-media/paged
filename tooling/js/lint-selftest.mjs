@@ -272,7 +272,6 @@ for (const path of EXTENSIONS) {
     "@paged-media/plugin-sdk/harness",
     "@paged-media/canvas-wasm",
     "@paged-media/idml-viewer",
-    "@paged-media/ai",
     "react",
     "node:fs",
     "./sibling",
@@ -290,6 +289,9 @@ for (const path of EXTENSIONS) {
     "@paged-media/draw-geometry",
     "@paged-media/sheet",
     "@paged-media/web-model",
+    // First-party apps and shared code that lived here until wave C
+    // (platform/shared/ai is also covered by the shared-package loop).
+    "@paged-media/cli",
   ]) {
     add(
       `extensions (${path.split("/").slice(2, 4).join("/")}): imports ${spec}`,

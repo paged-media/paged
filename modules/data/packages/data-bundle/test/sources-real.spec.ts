@@ -26,6 +26,7 @@ import {
   servedExtensionUrls,
 } from "./duckdb-node-ext";
 
+import { silentConsole as silent } from "@paged-media/plugin-sdk";
 // bun:test hoists no vi.mock and has no vi.doMock / vi.resetModules: the
 // real exports are taken once, before anything is mocked, and mock.module
 // patches the loaded module in place (every importer sees the change).
@@ -56,7 +57,6 @@ async function loadSessionModule() {
   return import("../src/session");
 }
 
-const silent = { debug() {}, info() {}, warn() {}, error() {} };
 const stubHost = {
   log: silent,
   supports: () => false,

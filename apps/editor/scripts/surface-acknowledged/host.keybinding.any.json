@@ -1,3 +1,1 @@
-{
-  "keybinding:cmd+shift+h→paged.sample.hello": "Seeded 2026-10-19, when covers() became the measure: no test presses cmd+shift+h and asserts that it runs paged.sample.hello; no test file names it at all; declared in apps/editor/packages/shell/src/bundles/sample-bundle.worker.ts."
-}
+{}

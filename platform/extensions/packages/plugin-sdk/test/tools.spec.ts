@@ -24,6 +24,7 @@ import { createBundleHost } from "../src/host-impl";
 import { contributeTool } from "../src/tools";
 import { makeFakeEditor } from "./fake-editor";
 
+import { silentConsole as silent } from "../src/testing";
 const MANIFEST: PluginManifest = {
   id: "media.paged.test",
   name: "test",
@@ -33,8 +34,6 @@ const MANIFEST: PluginManifest = {
   // on by default (trust-line W0.11); the manifest must list it.
   contributes: { tools: ["media.paged.test.tool.pen"] },
 };
-
-const silent = { debug() {}, info() {}, warn() {}, error() {} };
 
 const TOOL: ToolContribution = {
   id: "media.paged.test.tool.pen",

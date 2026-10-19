@@ -117,6 +117,7 @@ import {
   type WillSaveBackend,
 } from "./host-impl.js";
 import { satisfiesApiVersion, API_VERSION } from "./version.js";
+import { mapBacking } from "./testing.js";
 import { createCoreObjects } from "./core-objects.js";
 import { documentChangeOf } from "./document-change.js";
 import {
@@ -1003,6 +1004,10 @@ export async function createHeadlessHost(
   // handle always exposes the in-memory pair it can drive.
   const willSave = inMemoryWillSave();
   const toolSettings = inMemoryToolSettings();
+  // One storage for the harness's hosts, private to it: without one the
+  // adapter falls back to `localStorage`, which a browser-like realm
+  // (happy-dom) shares between tests.
+  const storage = options.storage ?? mapBacking();
 
   const buildHost = (
     manifest: PluginManifest,
@@ -1010,7 +1015,7 @@ export async function createHeadlessHost(
   ) =>
     createBundleHost(() => editor, manifest, {
       console: options.console,
-      storage: options.storage,
+      storage,
       blobStore,
       clipboard,
       secrets,

@@ -35,6 +35,8 @@ on:
       - "package.json"
       # The root Cargo config and its linker/wrapper scripts apply to every build.
       - ".cargo/config.toml"
+      # The source hash the wasm is stamped with and its wasm-fresh spec checks.
+      - "tooling/js/source-hash.mjs"
       - "tooling/rust/**"
       # The test-resources dev-dependency (the skip convention).
       - "platform/shared/test-resources/**"

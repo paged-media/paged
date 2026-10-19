@@ -541,10 +541,6 @@
       "unspecified": "module tool: covered by its handler tests (modules/draw/packages/draw-bundle/test/gestures.spec.ts); matrix rows are the follow-up"
     },
     {
-      "tool": "media.paged.draw.tool.pencil",
-      "unspecified": "module tool: covered by its handler tests (modules/draw/packages/draw-bundle/test/gestures.spec.ts); matrix rows are the follow-up"
-    },
-    {
       "tool": "media.paged.draw.tool.gradientAnnotator",
       "unspecified": "module tool: covered by its handler tests (modules/draw/packages/draw-bundle/test/gestures.spec.ts); matrix rows are the follow-up"
     },

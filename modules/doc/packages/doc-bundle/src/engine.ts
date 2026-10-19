@@ -24,12 +24,16 @@
 // BOOT. The artifact is the wasm-bindgen `--target web` glue (bin/docx_js.js +
 // bin/docx_js_bg.wasm, produced by scripts/build-wasm.sh). We DON'T use the
 // host's loadBundleWasm (it instantiates a RAW module — no wbindgen imports); we
-// load the glue in the bundle realm exactly like @paged-media/canvas-wasm does,
-// branching browser vs Node like plugin-sdk's wasm-loader.ts. Until the artifact
-// exists the dynamic import REJECTS — bootEngine surfaces that honestly.
+// load the glue in the bundle realm through @paged-media/wasm-boot: once per
+// realm (every boot path shares the one instantiation), browser vs Node. Until
+// the artifact exists the dynamic import REJECTS — boot surfaces that honestly.
 
 import type { LoweredDoc } from "@paged-media/doc-host-model";
 import { parseLoweredDoc } from "@paged-media/doc-host-model";
+import {
+  wasmBindgenModule,
+  type WasmBindgenGlue,
+} from "@paged-media/wasm-boot";
 
 const ENGINE_NOT_BUILT =
   "paged.doc engine wasm not built — run scripts/build-wasm.sh";
@@ -51,11 +55,7 @@ interface WasmDocEngine {
 }
 
 /** The `--target web` glue module shape. */
-interface DocWasmModule {
-  default(init: {
-    module_or_path: string | URL | BufferSource | WebAssembly.Module;
-  }): Promise<unknown>;
-  initSync(module: { module: BufferSource | WebAssembly.Module }): unknown;
+interface DocWasmModule extends WasmBindgenGlue {
   DocEngine: new () => WasmDocEngine;
 }
 
@@ -161,42 +161,12 @@ export class DocEngine {
   }
 }
 
-function isNode(): boolean {
-  return (
-    typeof process !== "undefined" &&
-    process.versions != null &&
-    process.versions.node != null
-  );
-}
-
-async function loadModule(): Promise<DocWasmModule> {
-  let mod: DocWasmModule;
-  try {
-    // @ts-ignore — the artifact (bin/docx_js.js, the wasm-bindgen --target web
-    // glue) is produced by scripts/build-wasm.sh and is intentionally absent
-    // from the source tree; the dynamic import resolves at runtime once built.
-    mod = (await import("../bin/docx_js.js")) as DocWasmModule;
-  } catch (cause) {
-    throw new Error(ENGINE_NOT_BUILT, { cause });
-  }
-
-  if (isNode()) {
-    const { readFile } = await import("node:fs/promises");
-    const { fileURLToPath } = await import("node:url");
-    const wasmPath = fileURLToPath(
-      new URL("../bin/docx_js_bg.wasm", import.meta.url),
-    );
-    const bytes = await readFile(wasmPath);
-    mod.initSync({
-      module: new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength),
-    });
-  } else {
-    // @ts-ignore — `?url` is a bundler affordance, untyped (the editor's
-    // wasm-loading convention; Vite resolves `?url`).
-    const wasmUrl = (await import("../bin/docx_js_bg.wasm?url")) as {
-      default: string;
-    };
-    await mod.default({ module_or_path: wasmUrl.default });
-  }
-  return mod;
-}
+/** The one instantiation per realm (wasm-boot's single flight). */
+const loadModule = wasmBindgenModule<DocWasmModule>({
+  // @ts-ignore: bin/docx_js.js is built by scripts/build-wasm.sh, absent from the source tree.
+  glue: () => import("../bin/docx_js.js"),
+  // @ts-ignore: `?url` is a bundler affordance (Vite resolves it), untyped.
+  wasmUrl: () => import("../bin/docx_js_bg.wasm?url"),
+  wasmFile: () => new URL("../bin/docx_js_bg.wasm", import.meta.url),
+  notBuilt: ENGINE_NOT_BUILT,
+});
