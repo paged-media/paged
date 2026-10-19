@@ -26,11 +26,10 @@ import { afterEach, describe, expect, test } from "bun:test";
 
 import {
   covers,
-  dumpDiff,
-  elementKey,
   gestureFixture,
   GESTURE_TARGETS as T,
 } from "@paged-media/test-kit";
+import { dumpDiff, elementKey } from "@paged-media/test-kit/headless";
 
 import { createHeadlessEditor, type HeadlessEditor } from "./harness";
 
