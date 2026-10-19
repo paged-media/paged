@@ -239,7 +239,7 @@ for the C-15 handles and the B-18 nesting pair).
   `crates/` changes. The manifest caps the module at 2,097,152 bytes; the script's own size
   check is set to 100,000,000 bytes. The committed module is 173,402 bytes.
 - `pnpm test` runs the import lint, then `bun test` in the three packages (draw-bundle's rendered panel specs, `*.dom.test.tsx`, in a separate task with happy-dom). `draw-geometry` and
-  `draw-tools` are unit tests. In `draw-bundle`, `test/conformance/` holds 42 spec files; 40 of them
+  `draw-tools` are unit tests. In `draw-bundle`, `test/headless/` holds 42 spec files; 40 of them
   boot the published engine wasm in Node with `createHeadlessHost` from `@paged-media/plugin-sdk`
   and drive the bundle through its real document door; `@paged-media/canvas-wasm` is a devDependency
   for that purpose. The specs call the same exported builder functions the live code calls.

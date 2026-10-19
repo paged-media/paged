@@ -93,10 +93,10 @@ tasks:
       && bun run test:repository
       && bun run test:tools
       && bun run test:shell
+      && bun run test:shell-dom
       && bun run test:canvas-unit
       && bun run test:thresholds
       && bun run test:wasm-budget
-      && bun run test:surface-coverage
       && bun run test:bundle-contracts
       && bun run test:seam-guard
       && bun run test:applicability
@@ -135,6 +135,25 @@ tasks:
         filter: ["packages/*/**/*"]
       - project: "web"
         filter: ["packages/web-bundle/**/*", "packages/web-model/**/*"]
+
+  # The surface-conformance gate (docs/reference/surface-conformance.md).
+  # Its own task, because it reads every test file in the repository (the
+  # covers() calls) and the declarations of every surface, not just the
+  # editor's sources: the inputs say so, so a cached run is never stale.
+  surface-conformance:
+    description: "Every surface id asserted under covers() in its required layers, or acknowledged (scripts/surface-coverage.mjs)."
+    script: "bun test ./scripts/surface-coverage.test.mjs && bun scripts/surface-coverage.mjs --quiet"
+    inputs:
+      - "scripts/surface-coverage.mjs"
+      - "scripts/surface-coverage.test.mjs"
+      - "scripts/surface/**/*"
+      - "scripts/surface-acknowledged/**/*"
+      - "scripts/settings-inventory.json"
+      - "/apps/**/*.{ts,tsx,mts,mjs,js}"
+      - "/modules/**/*.{ts,tsx,mts,mjs,rs,json}"
+      - "/platform/**/*.{ts,tsx,mts,mjs,js,rs,json}"
+      - "/engine/core/crates/**/*.{rs,json}"
+      - "/package.json"
 
   js-build:
     description: "vite build of apps/* (needs the engine wasm and the bundles' engine wasm)."

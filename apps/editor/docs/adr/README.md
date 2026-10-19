@@ -31,7 +31,7 @@ and 024 predate that scheme and keep their numbers. Records 200–217 were writt
 | [213](213-solo-mode.md) | Solo mode is a filter over the same app | Accepted, recorded retroactively 2026-10-02 |
 | [214](214-operation-sandwich.md) | Every operation is proven by one invariant: model, pixels, byte-identical undo | Accepted, recorded retroactively 2026-10-02 |
 | [215](215-measured-capability-table.md) | The capability table is measured, not declared | Accepted, recorded retroactively 2026-10-02 |
-| [216](216-test-tiers.md) | Test tiers, and where each one gates | Accepted, recorded retroactively 2026-10-02 |
+| [216](216-test-tiers.md) | Test tiers, and where each one gates | Accepted, recorded retroactively 2026-10-02 (amended 2026-10-19) |
 | [217](217-showcase-reference-document.md) | The showcase: one reference document built through the real editor | Accepted, recorded retroactively 2026-10-02 |
 | [218](218-network-wall-build-time-data-origins.md) | The network wall admits exact data origins listed at build time | Accepted, 2026-10-05 |
 | [219](219-plugin-documents-door.md) | A plugin may replace the open document, and the editor asks first | Accepted, 2026-10-06 |
@@ -42,6 +42,7 @@ and 024 predate that scheme and keep their numbers. Records 200–217 were writt
 | [224](224-films-are-recorded-by-the-editor.md) | The paged.media films are recorded by the editor's own test runner | Accepted 2026-10-12 |
 | [225](225-the-local-library.md) | The local library: open is an import, save is a version | Proposed 2026-10-17 |
 | [226](226-contribution-types-have-one-definition.md) | Contribution types have one definition: the contract, extended by the shell | Accepted 2026-10-18 |
+| [227](227-surface-conformance.md) | Surface conformance: a surface counts as tested when a test asserts it under covers() | Accepted 2026-10-19 |
 
 Decisions made in other repositories that this editor's code rests on are listed in
 [`../README.md`](../README.md). Comments in the source also cite ADR 025 (the journal) and

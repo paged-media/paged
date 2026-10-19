@@ -45,7 +45,7 @@ import {
   REFLECT_SECTION_NOTE,
 } from "../../src";
 import { pathItem } from "../fixtures/build-idml";
-import { openHost } from "../conformance/host";
+import { openHost } from "../headless/host";
 import {
   drive,
   mountPanel,

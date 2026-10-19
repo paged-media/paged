@@ -41,7 +41,7 @@ import type { HeadlessHost } from "@paged-media/plugin-sdk";
 
 import { createShapeBuilderHandler, drawBundle } from "../../src";
 import { F4_OVERLAP } from "../fixtures/corpus";
-import { openHost } from "../conformance/host";
+import { openHost } from "../headless/host";
 import { countingHost, type WorkLog } from "./counting-host";
 import {
   drive,
