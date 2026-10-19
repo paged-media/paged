@@ -19,10 +19,13 @@ default = []
 # through it; slide and sheet never compile it.
 dom = ["dep:ooxmlsdk"]
 # zip's deflate backend is the consuming workspace's choice, because it
-# changes the bytes a save writes (PM-0005). doc and slide take `deflate`
-# (zlib-rs), sheet `deflate-flate2` with flate2's rust_backend.
+# changes the bytes a save writes (PM-0005). `deflate-flate2` is the one doc,
+# slide and sheet take: zip through flate2, with flate2's rust_backend named
+# here, so a crate that depends on this one builds on its own (flate2 has no
+# default backend once a dependent turns its default features off).
+# `deflate` (zip's zlib-rs plus zopfli) stays for this crate's own tests.
 deflate = ["zip/deflate"]
-deflate-flate2 = ["zip/deflate-flate2"]
+deflate-flate2 = ["zip/deflate-flate2", "dep:flate2"]
 # The test kit (`testing`): hostile packages and a peak-allocation counter.
 # Enabled only through dev-dependencies.
 testing = []
@@ -31,6 +34,7 @@ testing = []
 # Held at 0.12 for the app's wasm budget (docs/migration/rust-majors.md).
 ooxmlsdk = { version = "0.12", features = ["mce"], optional = true }
 zip = { version = "9", default-features = false }
+flate2 = { version = "1.1", default-features = false, features = ["rust_backend"], optional = true }
 # Held at 0.41 with ooxmlsdk, which requires it (docs/migration/rust-majors.md).
 quick-xml = { version = "0.41", default-features = false }
 thiserror = "2"

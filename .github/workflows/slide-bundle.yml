@@ -13,6 +13,13 @@ on:
     branches: [main]
     paths:
       - "modules/slide/**"
+      # slide-chart labels through paged.sheet's number-format engine (ADR 710):
+      # path dependencies on sheet-format and sheet-core (whose build reads the
+      # function registry); platform/shared/fmt is listed with the engine below.
+      - "modules/sheet/Cargo.toml"
+      - "modules/sheet/sheet-core/**"
+      - "modules/sheet/sheet-format/**"
+      - "modules/sheet/registry/functions/**"
       # The TypeScript base every package's tsconfig extends.
       - "tsconfig.base.json"
       # The extension contract the bundle builds against (workspace:*).
@@ -23,6 +30,8 @@ on:
       - "platform/shared/helpers/**"
       # The shared OOXML foundation the engine wasm builds from.
       - "platform/shared/ooxml/**"
+      # The shared DrawingML chart reader, a path dependency (slide ADR 709).
+      - "platform/shared/dml-chart/**"
       # The engine wasm packages this workflow builds against (workspace:*),
       # and what builds them, so an engine change re-tests its consumers.
       - "engine/core/crates/**"
@@ -47,6 +56,13 @@ on:
   pull_request:
     paths:
       - "modules/slide/**"
+      # slide-chart labels through paged.sheet's number-format engine (ADR 710):
+      # path dependencies on sheet-format and sheet-core (whose build reads the
+      # function registry); platform/shared/fmt is listed with the engine below.
+      - "modules/sheet/Cargo.toml"
+      - "modules/sheet/sheet-core/**"
+      - "modules/sheet/sheet-format/**"
+      - "modules/sheet/registry/functions/**"
       # The TypeScript base every package's tsconfig extends.
       - "tsconfig.base.json"
       # The extension contract the bundle builds against (workspace:*).
@@ -57,6 +73,8 @@ on:
       - "platform/shared/helpers/**"
       # The shared OOXML foundation the engine wasm builds from.
       - "platform/shared/ooxml/**"
+      # The shared DrawingML chart reader, a path dependency (slide ADR 709).
+      - "platform/shared/dml-chart/**"
       # The engine wasm packages this workflow builds against (workspace:*),
       # and what builds them, so an engine change re-tests its consumers.
       - "engine/core/crates/**"

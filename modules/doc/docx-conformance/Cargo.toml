@@ -16,6 +16,7 @@ docx-import.workspace = true
 docx-lower.workspace = true
 paged-ooxml.workspace = true
 zip.workspace = true
+flate2.workspace = true
 
 [dev-dependencies]
 # The zip-bomb builders and the peak-allocation counter (tests/zip_budget.rs).

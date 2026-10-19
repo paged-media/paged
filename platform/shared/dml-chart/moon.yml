@@ -1,0 +1,32 @@
+$schema: "../../../.moon/cache/schemas/project.json"
+
+# dml-chart: the DrawingML chart model and reader shared by paged.sheet and
+# paged.slide (their layout profiles stay in the modules). A path dependency
+# of modules/sheet and modules/slide, which list its sources in their own
+# rust-sources file group.
+language: "rust"
+layer: "library"
+stack: "systems"
+tags: ["rust", "shared"]
+
+project:
+  title: "platform/shared/dml-chart"
+  description: "Shared DrawingML chart model and reader of sheet and slide."
+
+dependsOn:
+  - id: "ooxml"
+    scope: "production"
+
+tasks:
+  # The standalone build takes every feature (paged-ooxml needs a zip
+  # backend, which `standalone` supplies here and the modules supply there).
+  rust-check:
+    command: "cargo check --workspace --all-targets --all-features"
+  rust-build:
+    command: "cargo build --workspace --all-features"
+  rust-lint:
+    command: "cargo clippy --workspace --all-targets --all-features -- -D warnings"
+  rust-test:
+    script: >-
+      cargo nextest run --workspace --all-features
+      && cargo test --doc --workspace --all-features

@@ -23,6 +23,9 @@ dependsOn:
     scope: "production"
   - id: "ooxml"
     scope: "production"
+  # dml-chart, the shared DrawingML chart reader (slide ADR 709).
+  - id: "dml-chart"
+    scope: "production"
 
 fileGroups:
   rust-sources:
@@ -35,6 +38,8 @@ fileGroups:
     - "/platform/shared/fmt/Cargo.toml"
     - "/platform/shared/ooxml/src/**/*.rs"
     - "/platform/shared/ooxml/Cargo.toml"
+    - "/platform/shared/dml-chart/src/**/*.rs"
+    - "/platform/shared/dml-chart/Cargo.toml"
     - "!fuzz/**"
   rust-tests:
     - "**/*"
@@ -44,6 +49,8 @@ fileGroups:
     - "/.cargo/*.toml"
     - "/platform/shared/ooxml/src/**/*.rs"
     - "/platform/shared/ooxml/Cargo.toml"
+    - "/platform/shared/dml-chart/src/**/*.rs"
+    - "/platform/shared/dml-chart/Cargo.toml"
 
 tasks:
   js-test:

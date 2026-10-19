@@ -21,8 +21,8 @@ native document ── slide-host-model (read model) ── pptx-export ──�
 | Crate / package             | Role                                                                                             | Status                            |
 | --------------------------- | ------------------------------------------------------------------------------------------------ | --------------------------------- |
 | `paged-ooxml` (shared)      | OPC container with its memory budget, relationships, colour (platform/shared/ooxml, doc ADR 607) | in place                          |
-| `pptx-core`                 | format-level IR                                                                                  | in place                          |
-| `pptx-import`               | `.pptx` → IR                                                                                     | in place: reads every corpus deck |
+| `pptx-core`                 | format-level IR; its chart model is the shared `dml-chart` one (ADR 709)                         | in place                          |
+| `pptx-import`               | `.pptx` → IR; charts through the shared `dml-chart` reader (ADR 709)                             | in place: reads every corpus deck |
 | `pptx-fonts`                | embedded faces: Embedded OpenType, MicroType Express, embedding permissions (ADR 707)            | in place                          |
 | `slide-resolve`             | inheritance resolution                                                                           | M1                                |
 | `slide-geom`                | preset geometry evaluator                                                                        | M1                                |
