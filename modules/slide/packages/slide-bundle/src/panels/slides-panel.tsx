@@ -58,7 +58,7 @@ export function makeSlidesPanel(
 
   const Thumb: React.FC<{ slide: Slide }> = ({ slide }) => {
     // Its own view of the store: a thumbnail landing re-renders this
-    // thumbnail, not the list (react-live, editor ADR 228).
+    // thumbnail, not the list (react-live, editor ADR 229).
     const url = useLive(store, subscribeOf).thumbnail(slide.pageId);
     const [w, h] = slide.sizePt;
     return (
@@ -141,7 +141,7 @@ export function makeSlidesPanel(
   };
 
   const Component: React.FC<PanelProps> = () => {
-    // The store as a render value (react-live, editor ADR 228): a new view
+    // The store as a render value (react-live, editor ADR 229): a new view
     // after every change, so the list and the active slide are read again.
     const live = useLive(store, subscribeOf);
     const [dragging, setDragging] = React.useState<string | null>(null);

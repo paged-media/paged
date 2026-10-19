@@ -16,7 +16,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// A mutable source as a render value (apps/editor/docs/adr/228-react-compiler.md).
+// A mutable source as a render value (apps/editor/docs/adr/229-react-compiler.md).
 //
 // The editor's registries, a bundle's published bindings, a module's panel
 // store and the BundleHost surfaces are long-lived objects whose CONTENTS

@@ -112,7 +112,7 @@ export function demoHighlight(selector: string | null): void {
 // The box and the spotlight read module state, so they subscribe to it:
 // `useSyncExternalStore` hands the render the value itself. A component
 // that re-rendered through a counter and then read the module variable
-// would, compiled, keep what it derived from it the first time (ADR 228).
+// would, compiled, keep what it derived from it the first time (ADR 229).
 const subscribeSpotlight = (onChange: () => void) => {
   spotlightSubs.add(onChange);
   return () => {

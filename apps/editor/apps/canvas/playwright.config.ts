@@ -263,7 +263,7 @@ export default defineConfig({
       },
     },
     {
-      // The React Compiler's latency probe (ADR 228): five heavy panels,
+      // The React Compiler's latency probe (ADR 229): five heavy panels,
       // the same interactions, latency and render counts per interaction.
       // On demand only, and meant for the production build: `vite build
       // --mode demo`, served by `vite preview` (docs/migration/

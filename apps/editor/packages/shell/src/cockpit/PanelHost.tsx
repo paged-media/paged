@@ -30,7 +30,7 @@ import { useRegistryView } from "../state/live";
 
 export function PanelHost({ id }: { id: string }) {
   const paged = usePaged();
-  // A view (state/live.ts, ADR 228): the panel a mode slot names may
+  // A view (state/live.ts, ADR 229): the panel a mode slot names may
   // register after this host first rendered.
   const panels = useRegistryView(useRegistries().panels);
   const contribution = panels.get(id);

@@ -114,7 +114,7 @@ function rowToNode(row: PanelSchemaWidgetRow): CompositionNode {
 }
 
 /** The bundle's published bindings as a value that changes with them
- *  (state/live.ts, ADR 228). Every gate below reads through it, so a
+ *  (state/live.ts, ADR 229). Every gate below reads through it, so a
  *  publish re-renders the rows that read the binding: the sections get a
  *  new `bindings` prop, and a memoized gate recomputes. */
 const listenToBindings: Listen<BindingsSurface> = (bindings, onChange) => {

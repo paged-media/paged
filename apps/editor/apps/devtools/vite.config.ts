@@ -26,6 +26,6 @@ import { reactCompiler } from "../../../../tooling/js/react-compiler.mjs";
 // pre-bundled): its dynamic import and `?url` wasm asset resolve through the
 // module graph without an optimizeDeps exclude.
 export default defineConfig({
-  // The React Compiler, configured once for every app (editor ADR 228).
+  // The React Compiler, configured once for every app (editor ADR 229).
   plugins: [react(), ...reactCompiler({ reactCompilerPreset, babel })],
 });

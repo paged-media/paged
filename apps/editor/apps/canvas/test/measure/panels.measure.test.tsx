@@ -18,7 +18,7 @@
  */
 
 // Re-render counts of four heavy panels in the DOM lane, over the real
-// engine: the React Compiler measurement (ADR 228,
+// engine: the React Compiler measurement (ADR 229,
 // docs/migration/react-compiler.md). `bun run test:render-counts` runs this
 // file twice, as written and compiled (tooling/js/bun-react-compiler.ts),
 // and compares. Each scenario mounts the panel on the panel lane's harness,

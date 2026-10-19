@@ -39,7 +39,7 @@ export function RightDock() {
 
   // Resolve tabs against the registry — a disposed plugin panel
   // simply drops out of the strip (read through a view that changes with
-  // the registry, state/live.ts, ADR 228).
+  // the registry, state/live.ts, ADR 229).
   const tabs = rightTabs
     .map((id) => panels.get(id))
     .filter((c): c is NonNullable<typeof c> => c != null);

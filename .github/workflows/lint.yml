@@ -104,7 +104,7 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
-  # The React Compiler's coverage ratchet (apps/editor ADR 228): the
+  # The React Compiler's coverage ratchet (apps/editor ADR 229): the
   # compiler, with the builds' own options (tooling/js/react-compiler.mjs),
   # over every first-party React source. Each package's
   # compiler-coverage.json lists the components and hooks it leaves

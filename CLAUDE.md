@@ -60,7 +60,7 @@ shared packages (`ai`, `helpers`, `test-kit`, `test-resources`, `wasm-boot`).
 - Every first-party React source ships compiled by the React Compiler: the editor's
   build compiles the editor and every module bundle from source, plugin-sdk compiles
   ahead of time. One configuration, `tooling/js/react-compiler.mjs`
-  (apps/editor/docs/adr/228-react-compiler.md).
+  (apps/editor/docs/adr/229-react-compiler.md).
 - Read a registry, store, session or host surface during render through a view
   (`@paged-media/react-live`'s `useLive`, the shell's `useRegistryView`) or a
   `useSyncExternalStore` snapshot, never on the object itself.

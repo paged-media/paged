@@ -17,7 +17,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// The React Compiler's interaction-latency probe (ADR 228,
+// The React Compiler's interaction-latency probe (ADR 229,
 // docs/migration/react-compiler.md). Five heavy panels (Layers, Pages,
 // Properties, Swatches, Image adjustments), each driven through the same
 // interactions, measuring for every one:

@@ -39,7 +39,7 @@ export function App() {
   // The scene tree is read where it changes (a file opened, a mutation
   // applied) and kept in state. Read from `client` during render, it would
   // be computed once per client: the client object stays the same while
-  // its document changes (ADR 228).
+  // its document changes (ADR 229).
   const [tree, setTree] = useState<ReturnType<InspectorClient["tree"]> | null>(
     null,
   );

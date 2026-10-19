@@ -84,7 +84,7 @@ const subscribe = (cb: () => void) => journal.subscribe(cb);
 // array identical and would otherwise never reach the screen. It is the
 // snapshot itself that the store returns, not the revision: a value read
 // beside a revision that only triggers the render is a value the React
-// Compiler keeps (ADR 228).
+// Compiler keeps (ADR 229).
 interface JournalView {
   entries: ReturnType<typeof journal.entries>;
   ledger: ReturnType<typeof journal.getLedger>;

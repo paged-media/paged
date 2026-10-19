@@ -159,7 +159,7 @@ describe("Outputs nav", () => {
   });
 
   // PN-308 (fixed): the nav reads the exporters through a view of the
-  // registry that changes with it (ADR 228), so a bundle that registers its
+  // registry that changes with it (ADR 229), so a bundle that registers its
   // exporter after the panel is on screen (bundles load after boot) is
   // listed at once.
   test("PN-308: an exporter registered while the nav is open appears in it", async () => {

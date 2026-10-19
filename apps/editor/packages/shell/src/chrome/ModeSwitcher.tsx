@@ -41,7 +41,7 @@ export interface ModeSwitcherProps {
 
 export function ModeSwitcher({ right }: ModeSwitcherProps) {
   const { mode, setMode } = useWorkflowMode();
-  // A view of the registry (state/live.ts, ADR 228): a bundle that
+  // A view of the registry (state/live.ts, ADR 229): a bundle that
   // registers a mode after the first render shows up.
   const modes = useRegistryView(useRegistries().modes);
   const list = modes.list();

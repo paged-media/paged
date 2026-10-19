@@ -293,7 +293,7 @@ jobs:
       - name: panels and components, DOM lane (apps/canvas)
         run: bun run test:dom
 
-      # The same two DOM lanes on COMPILED code (ADR 228): the shell's and
+      # The same two DOM lanes on COMPILED code (ADR 229): the shell's and
       # the canvas's sources through the React Compiler, with the build's
       # own options (tooling/js/bun-react-compiler.ts). `bun test` above runs
       # the sources as written; the app ships them compiled, and a component
@@ -307,7 +307,7 @@ jobs:
       - name: panels and components, DOM lane, compiled (React Compiler)
         run: bun run --filter ./apps/canvas test:dom:compiled
 
-      # The production build, with the React Compiler (ADR 228). Its check
+      # The production build, with the React Compiler (ADR 229). Its check
       # (tooling/js/react-compiler.mjs) fails the build unless every module
       # the compiler memoized imports react/compiler-runtime, there is one
       # copy of it, and every chunk with compiled code reaches it; the

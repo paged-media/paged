@@ -123,7 +123,7 @@ const crossOriginIsolation = {
   },
   // `vite preview` serves the production build with the same headers, so
   // a built app boots locally (the React Compiler's latency probe runs
-  // against it, ADR 228).
+  // against it, ADR 229).
   configurePreviewServer(server: import("vite").PreviewServer) {
     server.middlewares.use(isolate);
   },
@@ -693,7 +693,7 @@ export default defineConfig({
   root: resolve(__dirname),
   plugins: [
     react(),
-    // The React Compiler (ADR 228) over every first-party package, the
+    // The React Compiler (ADR 229) over every first-party package, the
     // module bundles included: they resolve to their sources, so this build
     // compiles them. `PAGED_REACT_COMPILER=0` turns it off.
     ...reactCompiler({ reactCompilerPreset, babel }),

@@ -3,7 +3,7 @@
 Every first-party React source now ships compiled by the React Compiler. This page records how
 it is set up, what the first compiled runs found and how it was fixed, the coverage ratchet, how
 the code is tested both ways, and the measurements. The decision record is
-[apps/editor ADR 228](../../apps/editor/docs/adr/228-react-compiler.md).
+[apps/editor ADR 229](../../apps/editor/docs/adr/229-react-compiler.md).
 
 ## Commands
 

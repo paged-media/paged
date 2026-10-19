@@ -94,7 +94,7 @@ in the same checkout: `moon run core:wasm-pkg`, or
   bare loader default (it resolves relative to node_modules and
   breaks worker chunks).
 
-### The React Compiler compiles everything (ADR 228)
+### The React Compiler compiles everything (ADR 229)
 
 The app, its packages and every module bundle ship compiled
 (`tooling/js/react-compiler.mjs`). The compiler memoizes what a

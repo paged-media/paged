@@ -18,7 +18,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// The React Compiler's re-render measurement in the DOM lane (ADR 228):
+// The React Compiler's re-render measurement in the DOM lane (ADR 229):
 // runs test/measure/panels.measure.test.tsx twice, on the sources as
 // written and compiled by the build's compiler configuration
 // (tooling/js/bun-react-compiler.ts), and prints both side by side.

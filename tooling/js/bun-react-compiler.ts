@@ -1,6 +1,6 @@
 // A bun test preload that runs the code under test COMPILED by the React
 // Compiler, with the build's own options (tooling/js/react-compiler.mjs,
-// apps/editor ADR 228):
+// apps/editor ADR 229):
 //
 //   bun test --preload <…the lane's own preloads…> \
 //            --preload <repo>/tooling/js/bun-react-compiler.ts …

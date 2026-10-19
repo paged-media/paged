@@ -118,7 +118,7 @@ const AD_HOC: { key: string; what: string; where: string }[] = [
 ];
 
 export function KeyboardShortcutsPanel(_props: PanelProps) {
-  // Views of the registries (ADR 228): the table follows what bundles
+  // Views of the registries (ADR 229): the table follows what bundles
   // register after it first rendered.
   const registries = useRegistries();
   const keybindings = useRegistryView(registries.keybindings);

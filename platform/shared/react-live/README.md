@@ -1,7 +1,7 @@
 # @paged-media/react-live
 
 Internal, never published: a mutable source as a React render value
-(apps/editor ADR 228).
+(apps/editor ADR 229).
 
 The editor's registries, a bundle's published bindings, a module's panel
 store and the BundleHost surfaces keep their identity while their contents

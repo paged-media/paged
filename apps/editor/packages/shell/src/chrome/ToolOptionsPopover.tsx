@@ -51,7 +51,7 @@ function Field({ toolId, field }: { toolId: string; field: ToolOptionField }) {
   const settings = useToolSettings();
   // The store's accessors are stable while its values change, so the value
   // is read through a subscription: a field shows what was last written,
-  // and a memo over it (the React Compiler's, ADR 228) follows.
+  // and a memo over it (the React Compiler's, ADR 229) follows.
   const current = useSyncExternalStore(
     (onChange) => settings.subscribe(toolId, onChange),
     () => settings.getValue(toolId, field.key),

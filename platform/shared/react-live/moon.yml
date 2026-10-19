@@ -1,7 +1,7 @@
 $schema: "../../../.moon/cache/schemas/project.json"
 
 # @paged-media/react-live: a mutable source as a React render value, for the
-# editor and the built-in modules (docs/adr/PM-0002, apps/editor ADR 228), a
+# editor and the built-in modules (docs/adr/PM-0002, apps/editor ADR 229), a
 # private package of the root Bun workspace. js-check and js-test are the
 # inherited `bun run typecheck` and `bun run test`.
 language: "typescript"

@@ -257,7 +257,7 @@ export function ToolRail({
   // Re-derive when the tool or edit-context registry changes (bundles
   // add/remove tools; a context's `toolIds` decide undeclared clusters):
   // both are read through views that change with their contents
-  // (state/live.ts, ADR 228).
+  // (state/live.ts, ADR 229).
   const tools = useRegistryView(registries.tools);
   const contextRegistry = useRegistryView(registries.editContexts);
 

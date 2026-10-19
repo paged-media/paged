@@ -105,7 +105,7 @@ export interface CommandRegistry extends Api.CommandRegistry {
   observe(observer: CommandObserver): Disposable;
   /** Called after a command is registered or unregistered, as the other
    *  registries do: a component that lists commands during render reads
-   *  them through `useRegistryView` (state/live.ts, ADR 228). */
+   *  them through `useRegistryView` (state/live.ts, ADR 229). */
   onChange(handler: () => void): Disposable;
 }
 

@@ -17,7 +17,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// The shell's registries as render values (apps/editor ADR 228). The
+// The shell's registries as render values (apps/editor ADR 229). The
 // mechanism is @paged-media/react-live's `useLive`, shared with the modules;
 // this file names the shell's two uses of it.
 

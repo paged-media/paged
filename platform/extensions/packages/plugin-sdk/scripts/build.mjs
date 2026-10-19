@@ -21,7 +21,7 @@
 // `bun build`, the React Compiler run ahead of time over the sources first
 // (the compiler's library guidance: compile before publishing, `target:
 // "19"`, the build's one configuration in tooling/js/react-compiler.mjs;
-// apps/editor ADR 228). The package's `build` script then runs tsc for the
+// apps/editor ADR 229). The package's `build` script then runs tsc for the
 // declarations.
 //
 // React is an OPTIONAL peer, and must stay optional at RUNTIME
