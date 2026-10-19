@@ -17,24 +17,36 @@
  */
 
 // A minimal SCHEMA-PANEL RENDERER for the component tests: what the
-// editor's renderer does with a property row, reduced to an input per row,
-// so a test can mount the schema panel the bundle contributes and assert
-// what the panel shows and what an edit in it writes.
+// editor's renderer does with a schema panel, reduced to an input per
+// property row and a list per list row, so a test can mount the schema
+// panel the bundle contributes and assert what it shows and what an edit
+// in it writes. (The same file is in the doc, slide and web bundles' tests;
+// a module may not import another module's tests.)
 //
-// For every property row: resolve the row's targets the way the editor
-// does (a selector is queried; `"selection"` scoped to a kind is
-// `<selected element> > <kind>` for each selected element), read the path
-// of the first target through `host.objects`, and render it — a checkbox
-// for a boolean, a number input for a number, a text input for a string,
-// read-only JSON for anything else. A change writes the value back through
-// `host.objects.set` (one undo step); the refusal, if any, is shown. Every
-// object change and selection change re-reads. The editor's own renderer
-// (widgets, bindings, mixed values) is the editor's to test.
+// A PROPERTY ROW resolves its targets the way the editor does: a selector
+// is queried; `"selection"` scoped to a kind is `<selected element> >
+// <kind>` for each selected element; `{ bind }` is the address the bundle
+// published under that name. It reads the path of the first target through
+// `host.objects` and renders it: a checkbox for a boolean, a number input
+// for a number, a text input for a string, JSON for anything else; a row
+// the kind's schema declares `readOnly` or `derived` is a readout
+// (`data-readonly`). A change writes back through `host.objects.set` (one
+// undo step) and shows the refusal, if any.
+//
+// A `paged.list` ROW lists the rows published under `items.bind` (one
+// button per row, `data-list-item` = its address) and a click publishes the
+// row's address back under `selectionBinding`, as the editor's list does.
+// Any other catalog widget renders its `props.text`, if any.
+//
+// Every object, selection and binding change re-reads. The editor's own
+// renderer (widgets, "Bind to data…", mixed values) is the editor's to test.
 
 import type {
+  BindingsSurface,
   BundleHost,
   ObjectValue,
   PanelSchemaPropertyRow,
+  PanelSchemaRow,
   SchemaPanelContribution,
   SchemaPanelRenderer,
 } from "@paged-media/plugin-api";
@@ -45,11 +57,27 @@ import {
 } from "@paged-media/plugin-sdk";
 import * as React from "react";
 
-type PropertyRow = PanelSchemaPropertyRow;
+/** Re-render on every object, selection and binding change. */
+function useTick(host: BundleHost, bindings: BindingsSurface): number {
+  const [tick, setTick] = React.useState(0);
+  React.useEffect(() => {
+    const bump = () => setTick((n) => n + 1);
+    const subs = [
+      host.objects.onDidChange(bump),
+      host.selection.onDidChange(bump),
+      bindings.onDidChange(bump),
+    ];
+    return () => {
+      for (const s of subs) s.dispose();
+    };
+  }, [host, bindings]);
+  return tick;
+}
 
 async function targetsOf(
   host: BundleHost,
-  row: PropertyRow,
+  bindings: BindingsSurface,
+  row: PanelSchemaPropertyRow,
 ): Promise<string[]> {
   const { address, kind } = row;
   if (typeof address === "string" && address !== "selection")
@@ -66,31 +94,37 @@ async function targetsOf(
     }
     return out;
   }
+  if (typeof address === "object" && "bind" in address) {
+    const v = bindings.get(address.bind);
+    if (typeof v === "string") return [v];
+    return Array.isArray(v)
+      ? v.filter((x): x is string => typeof x === "string")
+      : [];
+  }
   if (typeof address === "object" && "addresses" in address)
     return [...address.addresses];
   return [];
 }
 
-function Row({ host, row }: { host: BundleHost; row: PropertyRow }) {
-  const [tick, setTick] = React.useState(0);
+function PropertyRow({
+  host,
+  bindings,
+  row,
+}: {
+  host: BundleHost;
+  bindings: BindingsSurface;
+  row: PanelSchemaPropertyRow;
+}) {
+  const tick = useTick(host, bindings);
   const [target, setTarget] = React.useState<string | null>(null);
   const [value, setValue] = React.useState<ObjectValue | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [draft, setDraft] = React.useState<string | null>(null);
   const [readOnly, setReadOnly] = React.useState(false);
   React.useEffect(() => {
-    const bump = () => setTick((n) => n + 1);
-    const a = host.objects.onDidChange(bump);
-    const b = host.selection.onDidChange(bump);
-    return () => {
-      a.dispose();
-      b.dispose();
-    };
-  }, [host]);
-  React.useEffect(() => {
     let live = true;
     void (async () => {
-      const [first] = await targetsOf(host, row);
+      const [first] = await targetsOf(host, bindings, row);
       const v = first ? await host.objects.get(first, row.path) : null;
       const schema = first ? await host.objects.schema(first) : [];
       const access = schema.find((r) => r.path === row.path)?.access;
@@ -103,7 +137,7 @@ function Row({ host, row }: { host: BundleHost; row: PropertyRow }) {
     return () => {
       live = false;
     };
-  }, [host, row, tick]);
+  }, [host, bindings, row, tick]);
 
   const write = async (next: unknown) => {
     if (!target) return;
@@ -165,15 +199,89 @@ function Row({ host, row }: { host: BundleHost; row: PropertyRow }) {
   );
 }
 
+interface ListSpec {
+  items?: { kind?: string; bind?: string };
+  labelField?: string;
+  secondaryField?: string;
+  selectionBinding?: string;
+}
+
+function ListRow({
+  host,
+  bindings,
+  spec,
+}: {
+  host: BundleHost;
+  bindings: BindingsSurface;
+  spec: ListSpec;
+}) {
+  useTick(host, bindings);
+  const bind = spec.items?.bind ?? "";
+  const raw = bindings.get(bind);
+  const rows = Array.isArray(raw)
+    ? (raw as Array<Record<string, unknown>>)
+    : [];
+  const selected = spec.selectionBinding
+    ? bindings.get(spec.selectionBinding)
+    : undefined;
+  return (
+    <ul data-list={bind}>
+      {rows.map((r, i) => {
+        const id = String(r.selfId ?? r.id ?? i);
+        return (
+          <li key={id}>
+            <button
+              type="button"
+              data-list-item={id}
+              aria-pressed={id === selected}
+              onClick={() => {
+                if (spec.selectionBinding)
+                  bindings.publish(spec.selectionBinding, id);
+              }}
+            >
+              {String(r[spec.labelField ?? "name"] ?? id)}
+            </button>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+function Row({
+  host,
+  bindings,
+  row,
+}: {
+  host: BundleHost;
+  bindings: BindingsSurface;
+  row: PanelSchemaRow;
+}) {
+  if (isPropertyRow(row))
+    return <PropertyRow host={host} bindings={bindings} row={row} />;
+  const widget = row as {
+    widget?: string;
+    list?: ListSpec;
+    props?: { text?: unknown };
+  };
+  if (widget.widget === "paged.list" && widget.list)
+    return <ListRow host={host} bindings={bindings} spec={widget.list} />;
+  return (
+    <div data-widget={widget.widget}>
+      {typeof widget.props?.text === "string" ? widget.props.text : null}
+    </div>
+  );
+}
+
 /** A renderer over `host` (the bundle's own host: its object model). */
 export function testSchemaRenderer(host: BundleHost): SchemaPanelRenderer {
-  return function TestSchemaRenderer({ schema }) {
+  return function TestSchemaRenderer({ schema, bindings }) {
     return (
       <div data-schema-panel={schema.id}>
         {schema.sections.map((section, i) => (
-          <section key={i}>
-            {section.rows.filter(isPropertyRow).map((row) => (
-              <Row key={row.path} host={host} row={row} />
+          <section key={i} data-section={section.title ?? ""}>
+            {section.rows.map((row, j) => (
+              <Row key={j} host={host} bindings={bindings} row={row} />
             ))}
           </section>
         ))}
