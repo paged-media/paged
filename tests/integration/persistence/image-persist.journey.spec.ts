@@ -46,8 +46,11 @@ import { readFileSync } from "node:fs";
 
 import { expect, test, type Page } from "@playwright/test";
 
-import { readZipText, zipEntryNames } from "../../e2e/harness/read-zip";
-import { Designer } from "../driver/designer";
+import {
+  readZipText,
+  zipEntryNames,
+} from "../../../apps/editor/apps/canvas/tests/e2e/harness/read-zip";
+import { Designer } from "../../../apps/editor/apps/canvas/tests/journey/driver/designer";
 
 const ADJ_PANEL = "media.paged.image.panel.adjustments";
 const MARKER_KEY = "x-paged:media.paged.image";
@@ -318,7 +321,7 @@ test.describe("journey · paged.image persistence", () => {
     if (!(await designer.gpuActive())) {
       test.skip(
         true,
-        "a commit bakes the GPU composite and every pixel edit is a WGSL dispatch (no CPU path). Ingest, the marker and the edit-context entry ran on this lane; run `pnpm --filter paged-canvas test:journeys:gpu` for commit / undo / will-save / reopen",
+        "a commit bakes the GPU composite and every pixel edit is a WGSL dispatch (no CPU path). Ingest, the marker and the edit-context entry ran on this lane; run `bun run --filter paged-canvas test:integration:gpu` for commit / undo / will-save / reopen",
       );
     }
 

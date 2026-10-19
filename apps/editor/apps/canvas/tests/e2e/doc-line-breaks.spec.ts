@@ -36,11 +36,9 @@
 // deviation). Wire v65 lets applyStyle NAME its paragraph (core c9ad14a), and
 // plugin-doc's pour sends that address for every blank-line caret (plugin-doc
 // c3fc04e), so from protocol 65 each blank line keeps its own pitch and the
-// whole map is Word's. Engines before protocol 64 have neither contract, so
-// the spec skips there.
+// whole map is Word's.
 import { test, expect } from "@playwright/test";
 import { readFileSync } from "node:fs";
-import { createRequire } from "node:module";
 import { inflateRawSync } from "node:zlib";
 import { dirname, resolve as pathResolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -57,19 +55,6 @@ const FIXTURE = pathResolve(
 const OPEN_COMMAND = "paged.file.openIdml";
 const IMPORTER_ID = "media.paged.doc.importer.docx";
 const EXPORTER_ID = "media.paged.doc.exporter.docx";
-
-/** The engine's wire protocol (canvas-wasm `0.<protocol>.<patch>`; a
- *  sync-wasm.sh build is `0.<protocol>.0-local`). */
-function engineProtocol(): number {
-  const require = createRequire(import.meta.url);
-  const pkg = JSON.parse(
-    readFileSync(
-      require.resolve("@paged-media/canvas-wasm/package.json"),
-      "utf8",
-    ),
-  ) as { version: string };
-  return Number(pkg.version.split(/[.-]/)[1]);
-}
 
 /** Word's line map (line-breaks.word.json): per page, each visible line's
  *  label (first word) and its top in 12 pt grid lines below the page's first
@@ -99,16 +84,9 @@ const WORD_MAP: Array<Array<[string, number]>> = [
 /** What the engine can do. From protocol 65 (core c9ad14a: applyStyle names
  *  its paragraph; plugin-doc c3fc04e sends it) every blank line keeps its
  *  own style, so this is Word's map exactly — measured on canvas-wasm 0.66.0,
- *  L10 on Word's line 4. On protocol 64 blank lines at one offset shared one
- *  style — B04 and B05 both took B05's 12 pt, so L10 sat one line higher. */
-const ENGINE_MAP =
-  engineProtocol() >= 65
-    ? WORD_MAP
-    : WORD_MAP.map((p, i) =>
-        i === 1
-          ? p.map(([l, n]): [string, number] => (l === "L10" ? [l, 3] : [l, n]))
-          : p,
-      );
+ *  L10 on Word's line 4. (On protocol 64 blank lines at one offset shared one
+ *  style, so L10 sat one line higher.) */
+const ENGINE_MAP = WORD_MAP;
 
 type Registries = {
   commands: { invoke: (id: string) => Promise<unknown> };
@@ -303,10 +281,6 @@ const labels = (m: Array<Array<[string, number]>>) =>
 
 test.describe("plugin-doc — Word's line breaks and blank lines", () => {
   test.setTimeout(120_000);
-  test.skip(
-    engineProtocol() < 64,
-    "U+2028 line breaks and caret paragraph styles need a protocol-64 engine",
-  );
 
   test("AC-DOCLB-1 — plain line breaks stay inside their paragraph on Word's lines, blank lines are styled without a refused op, and a zero-edit save is Word's own bytes @feat:plugin-doc.file-entry @level:gesture", async ({
     page,

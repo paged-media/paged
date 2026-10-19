@@ -57,23 +57,24 @@ import {
   silentConsole as silent,
 } from "@paged-media/plugin-sdk";
 
-import type { EditorHostOptions } from "../../../src/plugin-host-options";
-import type { EditorConsent } from "../../../src/plugin-consent";
-import type { EditorSecretStore } from "../../../src/plugin-secret-store";
-import type { createEditorDocuments } from "../../../src/plugin-documents";
-import type { WillSaveRegistry } from "../../../src/plugin-will-save";
-import type { ProblemEntry } from "../../../src/panels/problems-store";
-import { resetProblems } from "../../../src/panels/problems-store";
-import type { ModuleManifest } from "../../../src/plugin-modules";
-import type { BundleWorkerModuleResolver } from "../../../src/plugin-worker";
+import type { EditorHostOptions } from "../../../apps/editor/apps/canvas/src/plugin-host-options";
+import type { EditorConsent } from "../../../apps/editor/apps/canvas/src/plugin-consent";
+import type { EditorSecretStore } from "../../../apps/editor/apps/canvas/src/plugin-secret-store";
+import type { createEditorDocuments } from "../../../apps/editor/apps/canvas/src/plugin-documents";
+import type { WillSaveRegistry } from "../../../apps/editor/apps/canvas/src/plugin-will-save";
+import type { ProblemEntry } from "../../../apps/editor/apps/canvas/src/panels/problems-store";
+import { resetProblems } from "../../../apps/editor/apps/canvas/src/panels/problems-store";
+import type { ModuleManifest } from "../../../apps/editor/apps/canvas/src/plugin-modules";
+import type { BundleWorkerModuleResolver } from "../../../apps/editor/apps/canvas/src/plugin-worker";
 
-import { createHeadlessEditor, type HeadlessEditor } from "../harness";
+import {
+  createHeadlessEditor,
+  type HeadlessEditor,
+} from "../../../apps/editor/apps/canvas/tests/headless/harness";
 import { fakeOpfs, fakeSystemClipboard, fakeLocalStorage } from "./platform";
 
-/** The engine is this app's own @paged-media/canvas-wasm dependency. */
-export const ENGINE_ANCHOR = fileURLToPath(
-  new URL("../../..", import.meta.url),
-);
+/** The engine is this package's own @paged-media/canvas-wasm dependency. */
+export const ENGINE_ANCHOR = fileURLToPath(new URL("../..", import.meta.url));
 
 export { silent };
 

@@ -4,7 +4,7 @@ The **core test suite** of the editor: every operation, end-to-end,
 proven to land in the IDML document rendered on the canvas. Lives in
 `apps/canvas/tests/e2e/`. Complements the existing per-panel behaviour
 specs (`apps/canvas/tests/*.spec.ts`) and the InDesign-reference
-**fidelity** gate (`apps/canvas/tests/fidelity.spec.ts`).
+**fidelity** gate (`/tests/fidelity/editor-packs.spec.ts`, Playwright project `fidelity`).
 
 The central question every test answers: **was the operation
 successfully applied to the IDML document on the canvas?** — not just

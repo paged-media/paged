@@ -41,6 +41,14 @@ the machine's speed, lost under load.
    a change (a mutation, undo or redo, a committed gesture, a scene layer, a font) and at
    least once a second otherwise, instead of sleeping and sampling once.
 
+## Evidence
+
+Measured before and after, under load, with retries off:
+[`docs/migration/flakes.md`](../../../../docs/migration/flakes.md). The one flake source it
+found was the plugin menu driver (`tests/plugin-surface/menu-driver.ts`), which addressed the
+open menu as `last()` and so lost its submenu trigger once the hover had opened the submenu:
+6 hangs in 289 attempts before the fix, none in 595 after.
+
 ## Consequences
 
 - An unknown flake turns CI red, once, and is then either fixed or quarantined by a person

@@ -51,7 +51,8 @@ is the gate spec — captured by `npm run test:fidelity:capture`.
 
 - `playwright.config.ts` — single-worker chromium project, Vite as
   `webServer` on port 5180.
-- `tests/fidelity.spec.ts` — one `test()` per pack; generates the
+- `/tests/fidelity/editor-packs.spec.ts` (the repository's root tests,
+  Playwright project `fidelity`) — one `test()` per pack; generates the
   tests at module load from the manifest.
 - `tests/fidelity/canvas-driver.ts` — `openCanvas`, `loadIdml`,
   `snapshotPagePng`. Bypasses the React file-input path so the test

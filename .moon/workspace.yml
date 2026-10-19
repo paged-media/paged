@@ -36,6 +36,7 @@ projects:
   cli: "apps/cli"
   editor: "apps/editor"
   server: "apps/server/server"
+  tests: "tests"
 
 vcs:
   client: "git"

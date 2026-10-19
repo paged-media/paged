@@ -22,8 +22,9 @@
 // (@paged-media/data, the workspace bundle): the real data-js engine, DuckDB in-process
 // (Node blocking build + the bundle's shipped engine wasm) and real core.
 // The merge is compared with InDesign's own Data Merge recording of the
-// long-record-set fixture (vendored from plugin-data
-// conformance/indesign-merge): 57 records, 2 columns, columns first, 3 pages.
+// long-record-set fixture, read from paged.data's lane
+// (modules/data/conformance/indesign-merge): 57 records, 2 columns, columns
+// first, 3 pages.
 
 import { readFileSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
@@ -32,9 +33,14 @@ import { dirname, join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 
 import { openSession } from "../src/session";
-import { cli, FIXTURES, tempDir, writeFixture } from "./helpers";
+import {
+  cli,
+  FIXTURES,
+  LONG_RECORD_SET,
+  tempDir,
+  writeFixture,
+} from "./helpers";
 
-const LANE = join(FIXTURES, "indesign-merge");
 const DATA = "--plugins=@paged-media/data";
 // The version of the @paged-media/data this package resolves (the
 // workspace bundle), read beside its exported manifest.
@@ -66,15 +72,13 @@ const normalise = (s: string) => s.replace(/\r/g, "\n").replace(/\uFEFF/g, "");
 
 describe("paged merge — InDesign Data Merge oracle (long-record-set)", () => {
   it("57 records over 3 pages; every frame's text matches the recording", async () => {
-    const rec = JSON.parse(
-      readFileSync(join(LANE, "long-record-set.json"), "utf8"),
-    );
+    const rec = JSON.parse(readFileSync(LONG_RECORD_SET.recorded, "utf8"));
     const out = join(tmp.dir, "merged");
     const r = await cli([
       "merge",
-      join(LANE, "long-record-set.idml"),
+      LONG_RECORD_SET.idml,
       "--data",
-      join(LANE, "long-record-set.csv"),
+      LONG_RECORD_SET.csv,
       "--out",
       out,
       "--format",
@@ -136,7 +140,7 @@ describe("paged merge — InDesign Data Merge oracle (long-record-set)", () => {
     const csv = join(tmp.dir, "three.csv");
     writeFileSync(
       csv,
-      readFileSync(join(LANE, "long-record-set.csv"), "utf8")
+      readFileSync(LONG_RECORD_SET.csv, "utf8")
         .split("\n")
         .slice(0, 4)
         .join("\n") + "\n",
@@ -144,7 +148,7 @@ describe("paged merge — InDesign Data Merge oracle (long-record-set)", () => {
     const out = join(tmp.dir, "per-record");
     const r = await cli([
       "merge",
-      join(LANE, "long-record-set.idml"),
+      LONG_RECORD_SET.idml,
       "--data",
       csv,
       "--out",
@@ -173,9 +177,9 @@ describe("paged merge — InDesign Data Merge oracle (long-record-set)", () => {
   it("merge without the data bundle is a usage error naming what to install", async () => {
     const r = await cli([
       "merge",
-      join(LANE, "long-record-set.idml"),
+      LONG_RECORD_SET.idml,
       "--data",
-      join(LANE, "long-record-set.csv"),
+      LONG_RECORD_SET.csv,
       "--out",
       tmp.dir,
       "--no-plugins",

@@ -27,8 +27,9 @@ concurrency:
 # `corpus/idml` LFS packs, their InDesign reference PDFs, poppler's
 # `pdftoppm`, and the `paged-diff` Rust binary built from a `core`
 # checkout — none of which the package-boundary runner carries. It stays
-# a local / core-CI concern; `PAGED_CI_LEAN=1` drops `fidelity.spec.ts`
-# + `extensive-corpus.spec.ts` from collection (both read the envato
+# a local / core-CI concern: the per-pack sweep is the root
+# tests/fidelity project, which no CI step selects, and `PAGED_CI_LEAN=1`
+# drops `extensive-corpus.spec.ts` from collection (it reads the envato
 # manifest at import time). The lean surface (~412 tests) still needs the
 # small license-clear `corpus/idml/generated` fixtures + `corpus/fonts`, which
 # the harness loads — those come from a sparse LFS checkout of the
@@ -95,6 +96,7 @@ on:
       - ".github/actions/module-wasm/**"
       - ".github/actions/wasm-tools/**"
       - ".github/workflows/editor-tests.yml"
+      - "tests/integration/**"
       - "bun.lock"
       - "bunfig.toml"
       - "package.json"
@@ -134,6 +136,7 @@ on:
       - ".github/actions/module-wasm/**"
       - ".github/actions/wasm-tools/**"
       - ".github/workflows/editor-tests.yml"
+      - "tests/integration/**"
       - "bun.lock"
       - "bunfig.toml"
       - "package.json"
@@ -358,12 +361,9 @@ jobs:
           retention-days: 90
       # The surface-conformance gate runs in its own job (`surface`, below):
       # it is static and needs none of the wasm this job builds.
-      # The two-way manifest check (ADR 226): every bundle in the editor's
-      # table, activated against the headless engine, registers what its
-      # manifest declares — and, in 'warn' mode, nothing it does not. The
-      # host adapter only ever refused the second kind.
-      - name: bundle manifests match their registrations
-        run: bun run test:bundle-contracts
+      # The two-way manifest check (ADR 226), the BundleHost contract and the
+      # nine built-ins in the headless editor are the repository's root tests
+      # (tests/contracts, tests/system): the `tests` workflow runs them.
       # The headless editor (apps/canvas/tests/headless): the shell, the
       # client and the real engine under bun test, no browser. Commands,
       # editor.* automation, Boa scripts and plugin hosts asserted against
@@ -722,7 +722,8 @@ jobs:
       # THREE features red on state.paged.media (command-palette,
       # context-toolbars, panels.properties — the latter two attached only
       # because the ingest test-map unions them onto every journey spec).
-      # Naming the two real gating projects fixes all of it.
+      # Naming the real gating projects fixes all of it (`integration`,
+      # the root tests/integration round trips, joined them in T1).
       - name: playwright (lean surface, shard ${{ matrix.shard }})
         working-directory: apps/editor/apps/canvas
         env:
@@ -732,6 +733,7 @@ jobs:
           npx playwright test \
             --project=chromium \
             --project=journeys \
+            --project=integration \
             --grep-invert @quarantine \
             --shard=${{ matrix.shard }}/${{ env.SHARDS }} \
             --reporter=blob
@@ -753,6 +755,7 @@ jobs:
           npx playwright test \
             --project=chromium \
             --project=journeys \
+            --project=integration \
             --grep @quarantine \
             --retries=2 \
             --pass-with-no-tests \

@@ -1,4 +1,4 @@
-$ paged-node merge <CLI>/test/fixtures/indesign-merge/long-record-set.idml --data <CLI>/test/fixtures/indesign-merge/long-record-set.csv --out <TMP>/merged --format idml --records-per-page multiple --arrange columns --row-spacing 6 --column-spacing 12 --plugins=@paged-media/data
+$ paged-node merge <REPO>/modules/data/conformance/indesign-merge/templates/long-record-set.idml --data <REPO>/modules/data/conformance/indesign-merge/csv/long-record-set.csv --out <TMP>/merged --format idml --records-per-page multiple --arrange columns --row-spacing 6 --column-spacing 12 --plugins=@paged-media/data
 # exit 0
 # stdout
 {
