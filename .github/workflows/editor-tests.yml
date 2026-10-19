@@ -266,35 +266,40 @@ jobs:
       - name: pasteboard placement (spread pages)
         run: bun run test:spread-pages
 
+      # Where the bun test lanes below write their JUnit (bun does not
+      # create the directory); collected at the end of the job.
+      - name: JUnit report directory
+        run: mkdir -p "$RUNNER_TEMP/editor-junit/compiled"
+
       # The local library (ADR 225) against the repository wasm of this
       # revision: import, versions, restore, history in and out. Its
       # server tests (remote.test.ts) skip without PAGED_SERVER_URL.
       - name: local library (packages/repository)
-        run: bun run test:repository
+        run: bun run test:repository --reporter=junit --reporter-outfile="$RUNNER_TEMP/editor-junit/repository.bun.xml"
 
       # The built-in tools' gesture handlers, driven through the gesture
       # DSL against the test kit's recording fake editor (no engine, no
       # browser): previews, modifier semantics, the exact mutation, the
       # one-gesture-one-commit and cancel invariants.
       - name: tool gesture handlers (packages/tools)
-        run: bun run test:tools
+        run: bun run test:tools --reporter=junit --reporter-outfile="$RUNNER_TEMP/editor-junit/tools.bun.xml"
 
       # The shell's registries, stores and settings (packages/shell) and
       # the canvas app's built-in command handlers (apps/canvas/test/unit):
       # the command layer, against the test kit's fake editor.
       - name: shell registries and stores (packages/shell)
-        run: bun run test:shell
+        run: bun run test:shell --reporter=junit --reporter-outfile="$RUNNER_TEMP/editor-junit/shell.bun.xml"
       - name: shell stores and settings, DOM lane (packages/shell)
-        run: bun run test:shell-dom
+        run: bun run test:shell-dom --reporter=junit --reporter-outfile="$RUNNER_TEMP/editor-junit/shell-dom.bun.xml"
       - name: built-in command handlers (apps/canvas unit)
-        run: bun run test:canvas-unit
+        run: bun run test:canvas-unit --reporter=junit --reporter-outfile="$RUNNER_TEMP/editor-junit/canvas-unit.bun.xml"
 
       # The canvas app's DOM lane (every *.dom.test.tsx under apps/canvas):
       # each built-in panel rendered in happy-dom over the real engine wasm
       # (docs/reference/testing-panels.md), its states, the exact mutation
       # each control sends, and the basics of keyboard and name reach.
       - name: panels and components, DOM lane (apps/canvas)
-        run: bun run test:dom
+        run: bun run test:dom --reporter=junit --reporter-outfile="$RUNNER_TEMP/editor-junit/canvas-dom.bun.xml"
 
       # The same two DOM lanes on COMPILED code (ADR 229): the shell's and
       # the canvas's sources through the React Compiler, with the build's
@@ -306,9 +311,9 @@ jobs:
         working-directory: platform/shared/react-live
         run: bun run test
       - name: shell DOM lane, compiled (React Compiler)
-        run: bun run --filter ./packages/shell test:dom:compiled
+        run: bun run --filter ./packages/shell test:dom:compiled --reporter=junit --reporter-outfile="$RUNNER_TEMP/editor-junit/compiled/shell-dom.bun.xml"
       - name: panels and components, DOM lane, compiled (React Compiler)
-        run: bun run --filter ./apps/canvas test:dom:compiled
+        run: bun run --filter ./apps/canvas test:dom:compiled --reporter=junit --reporter-outfile="$RUNNER_TEMP/editor-junit/compiled/canvas-dom.bun.xml"
 
       # The production build, with the React Compiler (ADR 229). Its check
       # (tooling/js/react-compiler.mjs) fails the build unless every module
@@ -369,7 +374,7 @@ jobs:
       # editor.* automation, Boa scripts and plugin hosts asserted against
       # the canonical model dump, and the cross-surface parity suite.
       - name: headless editor
-        run: bun run test:headless
+        run: bun run test:headless --reporter=junit --reporter-outfile="$RUNNER_TEMP/editor-junit/headless.bun.xml"
       # A seam may not outlive the gap it names: a capability lands and
       # the UI still says it is missing, which is the same lie as
       # claiming an unbuilt feature works, only harder to notice.
@@ -413,6 +418,51 @@ jobs:
       # comment to generate a summary from.
       - name: client SDK catalog is current
         run: bun run test:client-catalog
+
+      # The bun test lanes above as evidence: bun's reports, rewritten into
+      # the vitest shape (tooling/js/bun-junit.mjs) with each spec path made
+      # repository-relative (--prefix), since the lanes span five packages.
+      # The compiled DOM lanes run the same specs as the plain ones, so they
+      # are a second artifact rather than duplicate test ids in the first.
+      # Uploaded from a red run too: a failing lane's report is the one that
+      # names what failed.
+      - name: collect the bun test JUnit
+        if: ${{ !cancelled() }}
+        working-directory: .
+        run: |
+          set -uo pipefail
+          in="$RUNNER_TEMP/editor-junit"
+          out="$RUNNER_TEMP/editor-junit-out"
+          mkdir -p "$out/plain" "$out/compiled"
+          convert() { # <report, without .bun.xml> <package dir> <out dir>
+            [ -s "$in/$1.bun.xml" ] || { echo "no report: $1"; return 0; }
+            bun tooling/js/bun-junit.mjs --prefix "$2" --out "$3/$(basename "$1").xml" "$in/$1.bun.xml"
+          }
+          convert repository apps/editor/packages/repository "$out/plain"
+          convert tools apps/editor/packages/tools "$out/plain"
+          convert shell apps/editor/packages/shell "$out/plain"
+          convert shell-dom apps/editor/packages/shell "$out/plain"
+          convert canvas-unit apps/editor/apps/canvas "$out/plain"
+          convert canvas-dom apps/editor/apps/canvas "$out/plain"
+          convert headless apps/editor/apps/canvas "$out/plain"
+          convert compiled/shell-dom apps/editor/packages/shell "$out/compiled"
+          convert compiled/canvas-dom apps/editor/apps/canvas "$out/compiled"
+      - name: upload the bun test JUnit
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: editor-checks-junit
+          path: ${{ runner.temp }}/editor-junit-out/plain/*.xml
+          if-no-files-found: error
+          retention-days: 14
+      - name: upload the compiled DOM lanes' JUnit
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: editor-checks-compiled-junit
+          path: ${{ runner.temp }}/editor-junit-out/compiled/*.xml
+          if-no-files-found: error
+          retention-days: 14
 
   # THE SURFACE-CONFORMANCE GATE (apps/editor/docs/reference/
   # surface-conformance.md): every command, panel, tool, menu item,
