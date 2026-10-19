@@ -1,0 +1,23 @@
+$ paged read snap-point doc.paged usp 13 13 --grid
+--- exit: 0
+--- stdout
+{
+  "kind": "snapPoint",
+  "payload": {
+    "result": {
+      "lines": [],
+      "point": [
+        13.0,
+        13.0
+      ],
+      "pointTarget": null,
+      "segmentTarget": null,
+      "snapped": false,
+      "tolerancePt": 4.0,
+      "xTarget": null,
+      "yTarget": null
+    }
+  }
+}
+--- stderr
+(empty)

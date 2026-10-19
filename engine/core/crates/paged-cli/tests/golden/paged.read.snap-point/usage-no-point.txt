@@ -1,0 +1,12 @@
+$ paged read snap-point doc.paged usp
+--- exit: 2
+--- stdout
+(empty)
+--- stderr
+error: the following required arguments were not provided:
+  <X>
+  <Y>
+
+Usage: paged read snap-point <DOC> <PAGE> <X> <Y>
+
+For more information, try '--help'.

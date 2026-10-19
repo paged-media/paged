@@ -3,7 +3,7 @@ $ paged read snap-point --help
 --- stdout
 Snap a page point to the anchors, alignment lines, guides and outlines around it — what the Pen or a dragged anchor would land on
 
-Usage: paged read snap-point [OPTIONS] <DOC> <PAGE> [X] [Y]...
+Usage: paged read snap-point [OPTIONS] <DOC> <PAGE> <X> <Y>
 
 Arguments:
   <DOC>
@@ -12,8 +12,11 @@ Arguments:
   <PAGE>
           The page's `Self` id
 
-  [X] [Y]...
-          The point, page-local pt
+  <X>
+          The point's x, page-local pt (negative values are numbers, not flags)
+
+  <Y>
+          The point's y, page-local pt
 
 Options:
       --compact

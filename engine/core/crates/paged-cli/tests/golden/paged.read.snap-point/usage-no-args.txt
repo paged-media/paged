@@ -6,7 +6,9 @@ $ paged read snap-point
 error: the following required arguments were not provided:
   <DOC>
   <PAGE>
+  <X>
+  <Y>
 
-Usage: paged read snap-point <DOC> <PAGE> [X] [Y]...
+Usage: paged read snap-point <DOC> <PAGE> <X> <Y>
 
 For more information, try '--help'.

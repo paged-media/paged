@@ -383,12 +383,22 @@ fn set_cell_span() {
         "true",
     );
     assert_eq!(table_json(&m)["cells"][0]["column_span"], 2);
-    // finding SCR-8: a span past the table's edge (9 columns of a 3-column table) is
-    // stored; it should be refused.
-    writes(
+    // SCR-8 (fixed): a span past the table's edge (9 columns of a 3-column
+    // table, or 2 columns from the last one) is refused.
+    refuses(
         &mut m,
         &format!("paged.setCellSpan({sid:?}, {tid:?}, 0, 0, 1, 9)"),
-        "true",
+        "false",
     );
-    assert_eq!(table_json(&m)["cells"][0]["column_span"], 9);
+    refuses(
+        &mut m,
+        &format!("paged.setCellSpan({sid:?}, {tid:?}, 0, 2, 1, 2)"),
+        "false",
+    );
+    refuses(
+        &mut m,
+        &format!("paged.setCellSpan({sid:?}, {tid:?}, 0, 0, 99, 1)"),
+        "false",
+    );
+    assert_eq!(table_json(&m)["cells"][0]["column_span"], 2);
 }
