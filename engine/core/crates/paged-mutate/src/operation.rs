@@ -2170,6 +2170,19 @@ impl TabStopSpec {
 /// delete; the apply layer fills it on the inverse.
 pub type TableLineRestoreJson = String;
 
+// `Operation`'s Tsify names two types it cannot declare: the alias above
+// (Tsify declares no aliases) and `paged_model::FlowGrowRule` (paged-model
+// has no Tsify). Both are declared here so the wire declarations are closed.
+#[wasm_bindgen::prelude::wasm_bindgen(typescript_custom_section)]
+const TS_OPERATION_REFS: &'static str = r#"
+export type TableLineRestoreJson = string;
+
+export interface FlowGrowRule {
+    max_pages?: number | null;
+    copy_frame_options?: boolean;
+}
+"#;
+
 /// W3.A1 — `Deserialize`-able mirror of the round-trippable fields of a
 /// `paged_model::TableCell`, used inside the `DeleteTable{Row,Column}`
 /// restore blob. Captures the cell's structure + style (spans, insets,
@@ -4716,11 +4729,10 @@ pub enum Operation {
     },
 }
 
-/// W0.5 — character- vs paragraph-level style application for
 /// v55 — a table-cell address for cell-qualified range ops. Mirrors
 /// `paged_canvas::selection::TextCellAddr` (which paged-mutate cannot depend on:
 /// paged-canvas depends on THIS crate, not the other way round).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Tsify)]
 #[serde(rename_all = "camelCase")]
 pub struct CellAddr {
     /// The hosting `<Table>`'s `Self` id.
@@ -4729,6 +4741,7 @@ pub struct CellAddr {
     pub col: u32,
 }
 
+/// W0.5 — character- vs paragraph-level style application for
 /// [`Operation::ApplyStyle`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Tsify)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]

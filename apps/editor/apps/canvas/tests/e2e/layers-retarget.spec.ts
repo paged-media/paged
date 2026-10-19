@@ -149,7 +149,10 @@ async function addLayer(page: Page, name: string): Promise<void> {
         __canvas: { client: { mutate: (m: unknown) => Promise<unknown> } };
       }
     ).__canvas;
-    await c.client.mutate({ op: "layerInsert", args: { position: 0, name: n } });
+    await c.client.mutate({
+      op: "layerInsert",
+      args: { position: 0, name: n },
+    });
   }, name);
 }
 
@@ -217,8 +220,7 @@ async function elementScreenCenter(
               Array<{
                 bounds: [number, number, number, number];
                 itemTransform?:
-                  | [number, number, number, number, number, number]
-                  | null;
+                  [number, number, number, number, number, number] | null;
               }>
             >;
           };
@@ -461,7 +463,9 @@ test.describe("E2E layers-retarget (ADR 023 — one panel, many providers)", () 
       0,
     );
     await page.locator(`[data-dock-tab="${PANEL_ID}"]`).click();
-    await expect(page.locator(`[data-schema-panel="${PANEL_ID}"]`)).toBeVisible();
+    await expect(
+      page.locator(`[data-schema-panel="${PANEL_ID}"]`),
+    ).toBeVisible();
     await expect(list(page)).toHaveAttribute(
       "data-list-provider",
       DRAW_PLUGIN,

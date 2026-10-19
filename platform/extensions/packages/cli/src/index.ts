@@ -20,8 +20,20 @@
 // (an agent or a build script can open a session and call host.objects).
 
 export { main, helpText, verbHelp, type MainIO } from "./main";
-export { VERBS, GLOBAL_OPTIONS, type Verb, type VerbResult, type VerbContext } from "./verbs";
-export { openSession, cliVersion, type CliSession, type SessionOptions, type LoadedPlugin } from "./session";
+export {
+  VERBS,
+  GLOBAL_OPTIONS,
+  type Verb,
+  type VerbResult,
+  type VerbContext,
+} from "./verbs";
+export {
+  openSession,
+  cliVersion,
+  type CliSession,
+  type SessionOptions,
+  type LoadedPlugin,
+} from "./session";
 export { parseCliValue, describeType } from "./values";
 export { BIN, CliError, EXIT, type ExitCode } from "./errors";
 export { FIRST_PARTY_BUNDLES } from "./plugins";

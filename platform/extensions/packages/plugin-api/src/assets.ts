@@ -39,8 +39,8 @@
 // face is laid out and drawn in it. It fills a gap and never replaces a
 // face the document has (DESIGN.md §13.7).
 
-import type { Disposable } from "./host";
-import type { PageId } from "./wire";
+import type { Disposable } from "./host.js";
+import type { PageId } from "./wire.js";
 
 /** What `host.assets` can serve. `"fonts"` gates `getFontFace` (W-06);
  *  `"images"` gates `getPlacedImage` (C-5 / I-04 — OPEN since core v42:

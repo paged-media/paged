@@ -123,7 +123,8 @@ export const MULTI_SELECT: ExpectedContext = {
  *  Transform + **Frame Fitting** + Stroke. The Frame-Fitting section is
  *  what distinguishes it from a plain frame. */
 export const IMAGE_FRAME: ExpectedContext = {
-  intent: "An image frame selected → Image context: Transform + Frame Fitting + Stroke",
+  intent:
+    "An image frame selected → Image context: Transform + Frame Fitting + Stroke",
   inspectorKind: "image",
   sectionsPresent: ["object", "fitting", "stroke"],
   sectionsAbsent: ["character", "paragraph"],

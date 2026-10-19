@@ -70,7 +70,11 @@ const invoke = (page: Page, id: string) =>
     (c) =>
       (
         globalThis as unknown as {
-          __canvas: { registries: { commands: { invoke: (i: string) => Promise<unknown> } } };
+          __canvas: {
+            registries: {
+              commands: { invoke: (i: string) => Promise<unknown> };
+            };
+          };
         }
       ).__canvas.registries.commands.invoke(c),
     id,
@@ -94,9 +98,13 @@ async function importCsv(page: Page): Promise<boolean> {
   const status = page.locator("[data-status]").last();
   try {
     await expect
-      .poll(async () => (await status.getAttribute("data-status").catch(() => null)) ?? "?", {
-        timeout: 45_000,
-      })
+      .poll(
+        async () =>
+          (await status.getAttribute("data-status").catch(() => null)) ?? "?",
+        {
+          timeout: 45_000,
+        },
+      )
       .toBe("ready");
     return true;
   } catch {
@@ -123,8 +131,11 @@ test.describe("journey · paged.data binding engine + expression DSL", () => {
     const ready = await importCsv(page);
     if (!ready) {
       const got =
-        (await page.locator("[data-status]").last().getAttribute("data-status").catch(() => null)) ??
-        "unknown";
+        (await page
+          .locator("[data-status]")
+          .last()
+          .getAttribute("data-status")
+          .catch(() => null)) ?? "unknown";
       skipWithoutDuckDB(
         got,
         `paged.data binding render needs DuckDB-WASM to boot (engine status "${got}"). On the ` +
@@ -133,7 +144,9 @@ test.describe("journey · paged.data binding engine + expression DSL", () => {
           "context is not cross-origin isolated.",
       );
     }
-    await expect(page.getByText(/data_people/).first()).toBeVisible({ timeout: 6_000 });
+    await expect(page.getByText(/data_people/).first()).toBeVisible({
+      timeout: 6_000,
+    });
 
     // ── 2. BIND ENGINE — open the bindings panel and DEFINE bindings against
     //    the imported source. The authoring row defines a variable binding
@@ -141,14 +154,20 @@ test.describe("journey · paged.data binding engine + expression DSL", () => {
     //    that query on first use) on the Rust ResolutionEngine
     //    (data.bind.engine). ──
     await openPanel(page, BINDINGS_PANEL);
-    await expect(page.locator("[data-data-bind-author]")).toBeVisible({ timeout: 10_000 });
-    await expect(page.locator("[data-data-bind-query-pick]")).toHaveValue("s:data_people");
+    await expect(page.locator("[data-data-bind-author]")).toBeVisible({
+      timeout: 10_000,
+    });
+    await expect(page.locator("[data-data-bind-query-pick]")).toHaveValue(
+      "s:data_people",
+    );
 
     await addBindingThroughPanel(page, "variable", "name");
     await addBindingThroughPanel(page, "table", "name, role");
     // The panel's snapshot now lists the wired bindings (the engine accepted
     // the define_binding calls — the resolution graph has nodes).
-    await expect(page.getByText(/bindings:\s*(?!none)/i).first()).toBeVisible({ timeout: 6_000 });
+    await expect(page.getByText(/bindings:\s*(?!none)/i).first()).toBeVisible({
+      timeout: 6_000,
+    });
 
     // ── 3. EXPRESSION DSL — run the field-mapping wizard so the Rust engine
     //    computes column → variable-binding suggestions, each carrying an
@@ -160,9 +179,15 @@ test.describe("journey · paged.data binding engine + expression DSL", () => {
     await expect(wizardColumns).toBeVisible({ timeout: 10_000 });
     // The CSV columns (name, role) are bare DSL identifiers → mappable, so the
     // engine suggested a real DSL expression for each (rendered in a <code>).
-    await expect(wizardColumns.locator("code").first()).toBeVisible({ timeout: 6_000 });
-    const suggestedExpr = (await wizardColumns.locator("code").first().textContent())?.trim() ?? "";
-    expect(suggestedExpr, "the engine computed a DSL expression for a mappable column").not.toBe("");
+    await expect(wizardColumns.locator("code").first()).toBeVisible({
+      timeout: 6_000,
+    });
+    const suggestedExpr =
+      (await wizardColumns.locator("code").first().textContent())?.trim() ?? "";
+    expect(
+      suggestedExpr,
+      "the engine computed a DSL expression for a mappable column",
+    ).not.toBe("");
     await page.getByTestId("wizard-confirm").click();
     await page.waitForTimeout(300);
 

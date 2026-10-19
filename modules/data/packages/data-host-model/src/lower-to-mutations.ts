@@ -101,7 +101,10 @@ export function tableToMutations(
  *  M0 there is no tagged-placeholder content model — BREAKAGE D-01 — so a
  *  variable binding records its envelope on its anchor element; in-run text
  *  replacement lands with D-01). */
-export function bindingMetadata(element: ElementId, bindingJson: string): Mutation {
+export function bindingMetadata(
+  element: ElementId,
+  bindingJson: string,
+): Mutation {
   return {
     op: "setPluginMetadata",
     args: { elementId: element, key: BINDING_KEY, value: bindingJson },
@@ -143,7 +146,10 @@ export function tableInsertSpec(table: LoweredTable): TableInsertSpec {
 }
 
 /** The `insertTable` mutation for a story (phase 2 of the native commit). */
-export function tableInsertMutation(storyId: string, spec: TableInsertSpec): Mutation {
+export function tableInsertMutation(
+  storyId: string,
+  spec: TableInsertSpec,
+): Mutation {
   return {
     op: "insertTable",
     args: {

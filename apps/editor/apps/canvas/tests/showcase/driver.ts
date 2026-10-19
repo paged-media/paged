@@ -120,7 +120,8 @@ function rewriteRefs(
   key?: string,
 ): unknown {
   if (isRef(value)) return resolve(value, positionOf(key)) ?? value;
-  if (Array.isArray(value)) return value.map((v) => rewriteRefs(v, resolve, key));
+  if (Array.isArray(value))
+    return value.map((v) => rewriteRefs(v, resolve, key));
   if (value && typeof value === "object") {
     const out: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
@@ -200,7 +201,9 @@ export class ShowcaseDoc {
    */
   private hookPageReads(page: Page): void {
     for (const name of ["evaluate", "evaluateHandle"] as const) {
-      const raw = page[name].bind(page) as (...a: unknown[]) => Promise<unknown>;
+      const raw = page[name].bind(page) as (
+        ...a: unknown[]
+      ) => Promise<unknown>;
       (page as unknown as Record<string, unknown>)[name] = async (
         ...args: unknown[]
       ) => {
@@ -249,12 +252,24 @@ export class ShowcaseDoc {
    * flushes often shows many writes; one slow because each rebuild is
    * expensive shows a high rebuild share.
    */
-  readonly stats = { writes: 0, writeMs: 0, rebuildMs: 0, pageCalls: 0, pageMs: 0 };
+  readonly stats = {
+    writes: 0,
+    writeMs: 0,
+    rebuildMs: 0,
+    pageCalls: 0,
+    pageMs: 0,
+  };
   private sending = 0;
 
   takeStats(): ShowcaseDoc["stats"] {
     const out = { ...this.stats };
-    Object.assign(this.stats, { writes: 0, writeMs: 0, rebuildMs: 0, pageCalls: 0, pageMs: 0 });
+    Object.assign(this.stats, {
+      writes: 0,
+      writeMs: 0,
+      rebuildMs: 0,
+      pageCalls: 0,
+      pageMs: 0,
+    });
     return out;
   }
 
@@ -391,7 +406,11 @@ export class ShowcaseDoc {
       const c = (
         globalThis as unknown as {
           __canvas: {
-            client: { sceneTree: () => Promise<Array<{ kind: string; id: string; children?: unknown[] }>> };
+            client: {
+              sceneTree: () => Promise<
+                Array<{ kind: string; id: string; children?: unknown[] }>
+              >;
+            };
           };
         }
       ).__canvas;
@@ -401,11 +420,15 @@ export class ShowcaseDoc {
         children?: Array<{ kind: string; id: string }>;
       }>;
       const out: string[] = [];
-      const walk = (nodes: Array<{ kind: string; id: string; children?: unknown }>) => {
+      const walk = (
+        nodes: Array<{ kind: string; id: string; children?: unknown }>,
+      ) => {
         for (const n of nodes) {
           if (n.kind === k) out.push(n.id);
           if (Array.isArray((n as { children?: unknown[] }).children)) {
-            walk((n as { children: Array<{ kind: string; id: string }> }).children);
+            walk(
+              (n as { children: Array<{ kind: string; id: string }> }).children,
+            );
           }
         }
       };
@@ -473,7 +496,9 @@ export class ShowcaseDoc {
     if (op === "insertText") {
       const a = args as { storyId?: string };
       if (typeof a?.storyId === "string") {
-        this.preInsertChars = await this.storyChars(a.storyId).catch(() => null);
+        this.preInsertChars = await this.storyChars(a.storyId).catch(
+          () => null,
+        );
       }
     }
     if (process.env.ANNUAL_TRACE) {
@@ -509,7 +534,10 @@ export class ShowcaseDoc {
     const tSend = Date.now();
     this.sending += 1;
     const raced = await Promise.race([
-      rawMutate(this.page, { op, args }).then((r) => ({ kind: "reply" as const, r })),
+      rawMutate(this.page, { op, args }).then((r) => ({
+        kind: "reply" as const,
+        r,
+      })),
       new Promise<{ kind: "stall" }>((resolve) =>
         setTimeout(() => resolve({ kind: "stall" }), stallMs),
       ),
@@ -608,10 +636,13 @@ export class ShowcaseDoc {
     // Every id a batch minted, in mint order (core reports it beside
     // `createdId`, which can only ever name the LAST). {@link flush}
     // reads it to give each queued handle its real id.
-    this.lastMinted = (reply.payload as { minted?: MintedElement[] })?.minted ?? [];
+    this.lastMinted =
+      (reply.payload as { minted?: MintedElement[] })?.minted ?? [];
     if (process.env.ANNUAL_TRACE) {
       // eslint-disable-next-line no-console
-      console.log(`[trace-reply] ${op} ${JSON.stringify(reply.payload)?.slice(0, 1200)}`);
+      console.log(
+        `[trace-reply] ${op} ${JSON.stringify(reply.payload)?.slice(0, 1200)}`,
+      );
     }
     return reply.payload?.createdId?.id ?? null;
   }
@@ -1499,7 +1530,8 @@ export class ShowcaseDoc {
       const flag = (
         globalThis as unknown as { __canvas?: { gpuActive?: unknown } }
       ).__canvas?.gpuActive;
-      if (!nav.gpu) return { flag, adapter: false, why: "navigator.gpu absent" };
+      if (!nav.gpu)
+        return { flag, adapter: false, why: "navigator.gpu absent" };
       try {
         const a = await nav.gpu.requestAdapter();
         return {
@@ -1508,7 +1540,11 @@ export class ShowcaseDoc {
           why: a ? "requestAdapter() resolved" : "requestAdapter() -> null",
         };
       } catch (e) {
-        return { flag, adapter: false, why: `requestAdapter() threw: ${String(e)}` };
+        return {
+          flag,
+          adapter: false,
+          why: `requestAdapter() threw: ${String(e)}`,
+        };
       }
     });
     if (!probe.adapter) {

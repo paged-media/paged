@@ -1,19 +1,19 @@
 # Design — C-6 renderer resource provider (pyramid tiles · I-06)
 
-*Status note (2026-10-02): this design is built (`crates/paged-renderer/src/resource_provider.rs`, wire protocol 44); [ADR 108](../adr/108-plugin-raster-tiles.md) records the decision and what the code does today.*
+_Status note (2026-10-02): this design is built (`crates/paged-renderer/src/resource_provider.rs`, wire protocol 44); [ADR 108](../adr/108-plugin-raster-tiles.md) records the decision and what the code does today._
 
 **2026-06-12 · design note · status: FROZEN for the v44 wire batch.**
 Companion to an internal note on the scene-layer texture and placed-asset
 doors (Stage A/C-5 landed v41/v42; Stage B deferred to the v45 batch, see
 [ADR 018](../adr/018-stage-b-gpu-texture-defer-record-only.md)). One
-shared-device contract, two uses: this note is the *tile* use; Stage B is
-the *viewport texture* use.
+shared-device contract, two uses: this note is the _tile_ use; Stage B is
+the _viewport texture_ use.
 
 ## The gap (restated from the internal gap register)
 
 The renderer's image lane is whole-image: `DisplayCommand::Image` over a
 `DecodedImage` pushed into the display list, decoded once, no
-level-of-detail. paged.image's Engine B holds a *tiled mip pyramid*
+level-of-detail. paged.image's Engine B holds a _tiled mip pyramid_
 (image-graph: NodeCache + Damage + mip-aware evaluation) that can serve
 any `(level, x, y)` window of a 100+ MP composition — but core has no
 seam to ASK for tiles, so the plugin must flatten to one RGBA buffer
@@ -24,7 +24,7 @@ caps quality and wastes memory exactly when the document is large.
 
 **A pull seam, renderer→plugin, keyed by image id — not a push channel.**
 The renderer knows the visible rect + scale at composite time; the plugin
-knows the pixels. So the provider is a *callback contract the host wires*,
+knows the pixels. So the provider is a _callback contract the host wires_,
 not a plugin-initiated submit (push would re-invent damage tracking on the
 wrong side of the wire).
 
@@ -49,7 +49,7 @@ pub struct ProviderTile {
 ```
 
 - `PipelineOptions` gains `resource_providers: HashMap<String, …>` keyed by
-  the *provider-claimed* image id (`x-paged-image:<frame>` namespace), the
+  the _provider-claimed_ image id (`x-paged-image:<frame>` namespace), the
   same injection pattern as `scene_layers`.
 - The renderer's image emit path checks the map first: claimed id → tile
   assembly at the level matching the current scale (mip pick =
@@ -65,16 +65,16 @@ the pull crosses the channel as a request/reply pair plus a claim message:
 
 - `ClaimImageResource { image_id, levels, tile_size, revision }` /
   `ReleaseImageResource { image_id }` (main→worker): registers the claim in
-  `CanvasModel` (the worker never *pulls* what nobody claimed).
+  `CanvasModel` (the worker never _pulls_ what nobody claimed).
 - `ResourceTilesNeeded { image_id, level, tiles: Vec<[u32;2]>, generation }`
   (worker→main): emitted during compose when a claimed image lacks tiles at
   the chosen level (compose proceeds with the best cached level — never
   blocks).
 - `SubmitResourceTiles { image_id, level, tiles: Vec<ProviderTileWire>,
-  generation }` (main→worker): fills the worker-side tile cache (LRU,
+generation }` (main→worker): fills the worker-side tile cache (LRU,
   budgeted) and dirties the page.
 
-This is an *async fill* pattern: first paint uses Stage A's whole-image
+This is an _async fill_ pattern: first paint uses Stage A's whole-image
 fallback (or a coarse level), tiles sharpen it. Deterministic for tests:
 the headless harness drives `ResourceTilesNeeded` → `SubmitResourceTiles`
 synchronously.
@@ -87,6 +87,7 @@ claimImageResource(elementId: string, opts: { levels: number; tileSize: number;
   source: (level: number, x: number, y: number) => Promise<TileBytes | null>;
   revision: () => number }): Disposable;
 ```
+
 `supports("rendering.resourceProvider@1")` probes it. The SDK owns the
 needed→fetch→submit plumbing; the bundle supplies only the `source`
 callback (paged.image points it at image-graph's evaluated tiles).

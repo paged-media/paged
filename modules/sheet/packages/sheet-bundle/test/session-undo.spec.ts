@@ -94,7 +94,10 @@ function statefulEngine() {
 const silentHost = {
   log: { debug() {}, info() {}, warn() {}, error() {} },
   // The document doors every host has; nothing here fires them.
-  document: { onDidChange: () => ({ dispose() {} }), onDidOpen: () => ({ dispose() {} }) },
+  document: {
+    onDidChange: () => ({ dispose() {} }),
+    onDidOpen: () => ({ dispose() {} }),
+  },
   supports: () => false,
 } as unknown as BundleHost;
 

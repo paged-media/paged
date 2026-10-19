@@ -211,7 +211,9 @@ async function snapOff(page: Page): Promise<void> {
   await page.evaluate(() =>
     (
       globalThis as unknown as {
-        __canvas: { registries: { commands: { invoke: (c: string) => Promise<unknown> } } };
+        __canvas: {
+          registries: { commands: { invoke: (c: string) => Promise<unknown> } };
+        };
       }
     ).__canvas.registries.commands.invoke("paged.view.toggleSnapToPoints"),
   );
@@ -241,7 +243,10 @@ async function loadPathEditFixture(page: Page): Promise<void> {
         page.evaluate((pageId) => {
           const c = (
             globalThis as unknown as {
-              __canvas: { ready: boolean; handle?: { pageIds: string[] } | null };
+              __canvas: {
+                ready: boolean;
+                handle?: { pageIds: string[] } | null;
+              };
             }
           ).__canvas;
           if (!c.ready || c.handle?.pageIds[0] !== pageId) return 0;
@@ -835,7 +840,9 @@ test.describe("E2E path editing — a rotated path", () => {
     const from = toPage([100, 0]);
     await drag(page, from, [from[0] + 20, from[1] - 10]);
     await expect
-      .poll(async () => (await mustTable(page, FX.rotated)).anchors[1].anchor[0])
+      .poll(
+        async () => (await mustTable(page, FX.rotated)).anchors[1].anchor[0],
+      )
       .toBeGreaterThan(105);
     const after = await mustTable(page, FX.rotated);
     const moved = deltaToInner([20, -10]);
@@ -861,7 +868,9 @@ test.describe("E2E path editing — a rotated path", () => {
     const from = toPage([100, 0]);
     await drag(page, from, [from[0] + 40, from[1] + 3], { hold: "Shift" });
     await expect
-      .poll(async () => (await mustTable(page, FX.rotated)).anchors[1].anchor[0])
+      .poll(
+        async () => (await mustTable(page, FX.rotated)).anchors[1].anchor[0],
+      )
       .toBeGreaterThan(120);
     const constrained = deltaToInner([Math.hypot(40, 3), 0]);
     expectPoint(
@@ -1088,9 +1097,7 @@ test.describe("E2E path editing — the Pen on existing paths", () => {
     expect(joined.anchors[4].anchor).toEqual([380, 620]);
     expect(joined.anchors[5].anchor).toEqual([520, 700]);
     expect(joined.subpathOpen).toEqual([true]);
-    expect(await elementKeys(page)).toEqual(
-      elements.filter((k) => k !== keyB),
-    );
+    expect(await elementKeys(page)).toEqual(elements.filter((k) => k !== keyB));
     expect(await tableOf(page, FX.openB)).toBeNull();
 
     // ONE undo: both elements, both tables.
@@ -1127,9 +1134,9 @@ test.describe("E2E path editing — the Pen on existing paths", () => {
     await expect
       .poll(async () => (await mustTable(page, FX.quad)).anchors.length)
       .toBe(4);
-    expect((await mustTable(page, FX.quad)).anchors.map((t) => t.anchor)).toEqual(
-      before.anchors.map((t) => t.anchor),
-    );
+    expect(
+      (await mustTable(page, FX.quad)).anchors.map((t) => t.anchor),
+    ).toEqual(before.anchors.map((t) => t.anchor));
 
     // Each was its own step.
     await undo(page);
@@ -1143,9 +1150,9 @@ test.describe("E2E path editing — the Pen on existing paths", () => {
     await penClick(page, [520, 420]);
     await penClick(page, [470, 500]);
     await page.keyboard.press("Enter");
-    await expect.poll(async () => (await elementKeys(page)).length).toBe(
-      elements.length + 1,
-    );
+    await expect
+      .poll(async () => (await elementKeys(page)).length)
+      .toBe(elements.length + 1);
     expect(await mustTable(page, FX.quad)).toEqual(before);
     await undo(page);
     await expect.poll(() => elementKeys(page)).toEqual(elements);
@@ -1169,7 +1176,9 @@ test.describe("E2E path editing — snapping", () => {
     // Anchor 0 (100,100) dragged to just above the bottom edge's y = 300
     // (anchors 2 and 3): it lands ON the line, and x is the pointer's.
     await drag(page, [100, 100], [150, 299.4]);
-    await expect.poll(async () => (await mustTable(page, FX.quad)).anchors[0].anchor[1]).toBe(300);
+    await expect
+      .poll(async () => (await mustTable(page, FX.quad)).anchors[0].anchor[1])
+      .toBe(300);
     const snapped = await mustTable(page, FX.quad);
     expect(Math.abs(snapped.anchors[0].anchor[0] - 150)).toBeLessThan(0.75);
     expectUntouched(snapped, before, [1, 2, 3]);
@@ -1193,14 +1202,26 @@ test.describe("E2E path editing — snapping", () => {
     // knows this path's own anchors, and (200, 700) is openA's. Skips on
     // an older engine; PAGED_REQUIRE_V67=1 makes that a failure.
     const v67 = await page.evaluate(async (pageId) => {
-      const c = (globalThis as unknown as { __canvas: { client: { send: (m: unknown) => Promise<{ kind: string }> } } }).__canvas;
+      const c = (
+        globalThis as unknown as {
+          __canvas: {
+            client: { send: (m: unknown) => Promise<{ kind: string }> };
+          };
+        }
+      ).__canvas;
       const r = await c.client
-        .send({ kind: "requestSnapPoint", payload: { query: { pageId, point: [1, 1], cameraScale: 1 } } })
+        .send({
+          kind: "requestSnapPoint",
+          payload: { query: { pageId, point: [1, 1], cameraScale: 1 } },
+        })
         .catch(() => ({ kind: "none" }));
       return r.kind === "snapPoint";
     }, FX.pageId);
     if (!v67) {
-      if (process.env.PAGED_REQUIRE_V67 === "1") throw new Error("PAGED_REQUIRE_V67=1 but the engine does not answer requestSnapPoint");
+      if (process.env.PAGED_REQUIRE_V67 === "1")
+        throw new Error(
+          "PAGED_REQUIRE_V67=1 but the engine does not answer requestSnapPoint",
+        );
       test.skip();
     }
     const before = await mustTable(page, FX.quad);
@@ -1208,7 +1229,9 @@ test.describe("E2E path editing — snapping", () => {
     // Anchor 0 (100,100) dragged to a fraction of a point off openA's
     // middle anchor (200,700): no line of the quad's own runs there.
     await drag(page, [100, 100], [200.4, 699.6]);
-    await expect.poll(async () => (await mustTable(page, FX.quad)).anchors[0].anchor).toEqual([200, 700]);
+    await expect
+      .poll(async () => (await mustTable(page, FX.quad)).anchors[0].anchor)
+      .toEqual([200, 700]);
     expectUntouched(await mustTable(page, FX.quad), before, [1, 2, 3]);
     await expectOneUndoRestores(page, FX.quad, before);
   });
@@ -1223,7 +1246,9 @@ test.describe("E2E path editing — snapping", () => {
     await penClick(page, [0.4, 480]);
     await penClick(page, [250, 480.4]);
     await page.keyboard.press("Enter");
-    await expect.poll(async () => (await elementKeys(page)).length).toBe(elements.length + 1);
+    await expect
+      .poll(async () => (await elementKeys(page)).length)
+      .toBe(elements.length + 1);
     const added = (await elementKeys(page)).find((k) => !elements.includes(k))!;
     const [kind, id] = added.split(":");
     const table = await mustTable(page, { kind, id });

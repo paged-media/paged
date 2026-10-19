@@ -232,7 +232,9 @@ export function orientForNonZeroHoles(table: AnchorTable): AnchorTable {
     const contour = table.anchors.slice(from, to);
     const want = depths[i] % 2 === 0 ? base : -base;
     const have = Math.sign(areas[i]);
-    anchors.push(...(have !== 0 && have !== want ? reverseContour(contour) : contour));
+    anchors.push(
+      ...(have !== 0 && have !== want ? reverseContour(contour) : contour),
+    );
   });
   return { anchors, subpathStarts, subpathOpen };
 }
@@ -336,7 +338,10 @@ export function mergeCompound(tables: readonly AnchorTable[]): AnchorTable {
   const subpathStarts: number[] = [];
   const subpathOpen: boolean[] = [];
   for (const table of tables) {
-    for (const span of contourSpans(table.anchors.length, table.subpathStarts)) {
+    for (const span of contourSpans(
+      table.anchors.length,
+      table.subpathStarts,
+    )) {
       subpathStarts.push(anchors.length);
       subpathOpen.push(openFlagOf(table, span));
       anchors.push(...table.anchors.slice(span.from, span.to));
@@ -351,9 +356,7 @@ export function mergeCompound(tables: readonly AnchorTable[]): AnchorTable {
  *  This is Image Trace's lowering of a traced region. Make Compound Path
  *  does NOT use it: user objects have a paint order, and Illustrator
  *  orients by it — `mergeCompound` + {@link orientByPaintOrder}. */
-export function makeCompoundTable(
-  tables: readonly AnchorTable[],
-): AnchorTable {
+export function makeCompoundTable(tables: readonly AnchorTable[]): AnchorTable {
   return orientForNonZeroHoles(mergeCompound(tables));
 }
 

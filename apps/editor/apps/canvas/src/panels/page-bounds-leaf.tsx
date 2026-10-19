@@ -52,7 +52,10 @@ export function pageBoundsEntry(
         }
       : null;
     return (
-      <span className="contents" data-page-bounds={edgeLeaf ? "edges" : "readout"}>
+      <span
+        className="contents"
+        data-page-bounds={edgeLeaf ? "edges" : "readout"}
+      >
         <BoundsLeaf
           value={value}
           props={props}
@@ -79,7 +82,11 @@ export function pageBoundsEntry(
       seam: "boolean",
     },
     bindings: {
-      reads: ["selection", "selectionProperty:frameBounds", "selectionProperty:frameTransform"],
+      reads: [
+        "selection",
+        "selectionProperty:frameBounds",
+        "selectionProperty:frameTransform",
+      ],
       writes: ["geometry", "selectionProperty:frameBounds"],
     },
     leaf: PageBoundsLeaf,

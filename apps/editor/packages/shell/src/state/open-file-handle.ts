@@ -54,7 +54,9 @@ export interface WritableFileHandle {
     close(): Promise<void>;
   }>;
   queryPermission?(d: { mode: "read" | "readwrite" }): Promise<PermissionState>;
-  requestPermission?(d: { mode: "read" | "readwrite" }): Promise<PermissionState>;
+  requestPermission?(d: {
+    mode: "read" | "readwrite";
+  }): Promise<PermissionState>;
 }
 
 let current: WritableFileHandle | null = null;
@@ -72,8 +74,10 @@ export function getOpenFileHandle(): WritableFileHandle | null {
 
 /** True when the platform can hand out real file handles at all. */
 export function supportsFileHandles(): boolean {
-  return typeof (globalThis as { showOpenFilePicker?: unknown })
-    .showOpenFilePicker === "function";
+  return (
+    typeof (globalThis as { showOpenFilePicker?: unknown })
+      .showOpenFilePicker === "function"
+  );
 }
 
 /** Write bytes back to the opened file.

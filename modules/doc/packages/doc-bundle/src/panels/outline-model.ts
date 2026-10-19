@@ -75,7 +75,12 @@ export function outlineEntries(ir: LoweredDoc): OutlineEntry[] {
   ir.story.blocks.forEach((block, blockIndex) => {
     if (out.length >= OUTLINE_CAP) return;
     if (block.kind === "table") {
-      out.push({ kind: "table", rows: block.rows, cols: block.cols, blockIndex });
+      out.push({
+        kind: "table",
+        rows: block.rows,
+        cols: block.cols,
+        blockIndex,
+      });
       return;
     }
     const level = headingLevel(block.paraStyleId, names);
@@ -215,7 +220,10 @@ export function paragraphRange(
 
 /** How many earlier outline headings carry the same text — the occurrence
  *  index `paragraphRange` needs to tell repeated headings apart. */
-export function headingOccurrence(entries: readonly OutlineEntry[], index: number): number {
+export function headingOccurrence(
+  entries: readonly OutlineEntry[],
+  index: number,
+): number {
   const target = entries[index];
   if (!target || target.kind !== "heading") return 0;
   let n = 0;

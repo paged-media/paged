@@ -45,10 +45,7 @@ interface CanvasGlobal {
     executeScript: (
       source: string,
     ) => Promise<{ output: string[]; error: string | null }>;
-    elementProperties: (id: {
-      kind: string;
-      id: string;
-    }) => Promise<{
+    elementProperties: (id: { kind: string; id: string }) => Promise<{
       entries: { path: string; value: { type: string; value: unknown } }[];
     } | null>;
   };

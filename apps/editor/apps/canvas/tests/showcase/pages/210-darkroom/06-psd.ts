@@ -93,21 +93,29 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   const gpu = await doc.gpuActive();
   const psdFileBytes = statSync(PSD).size;
 
-  const head = await proseFrame(ctx, page, [48, 58, 480, 88], [
-    { text: "PSD — the file that must survive", style: STYLE.head2 },
-  ]);
-  const intro = await proseFrame(ctx, page, [48, 92, 480, 156], [
-    {
-      text:
-        "A PSD is somebody's working file, so the rule is preservation " +
-        "first: the reader retains every block it parses, unknown blocks " +
-        "opaquely, and a zero-edit save is byte-identical — an invariant " +
-        "proven in the plugin's own gates over a synthesized corpus and a " +
-        "64-case property test, PSB included. What follows is the annual's " +
-        "own three-layer fixture through that machinery.",
-      style: STYLE.bodySmall,
-    },
-  ]);
+  const head = await proseFrame(
+    ctx,
+    page,
+    [48, 58, 480, 88],
+    [{ text: "PSD — the file that must survive", style: STYLE.head2 }],
+  );
+  const intro = await proseFrame(
+    ctx,
+    page,
+    [48, 92, 480, 156],
+    [
+      {
+        text:
+          "A PSD is somebody's working file, so the rule is preservation " +
+          "first: the reader retains every block it parses, unknown blocks " +
+          "opaquely, and a zero-edit save is byte-identical — an invariant " +
+          "proven in the plugin's own gates over a synthesized corpus and a " +
+          "64-case property test, PSB included. What follows is the annual's " +
+          "own three-layer fixture through that machinery.",
+        style: STYLE.bodySmall,
+      },
+    ],
+  );
   elements.push(head.frameId, intro.frameId);
 
   const frame = await doc.rectangle(pg, FRAME);
@@ -174,18 +182,23 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   }
 
   // ── captions and the roster, from the measured records ───────────
-  const cap = await proseFrame(ctx, page, [48, 348, 288, 404], [
-    {
-      text:
-        committed !== null
-          ? `annual-layers.psd · ${psdFileBytes.toLocaleString("en-US")} B ` +
-            `on disk · composite committed as ` +
-            `${committed.toLocaleString("en-US")} B of inline PNG`
-          : `annual-layers.psd · ${psdFileBytes.toLocaleString("en-US")} B ` +
-            "on disk · composite not committed on this lane",
-      style: STYLE.specLabel,
-    },
-  ]);
+  const cap = await proseFrame(
+    ctx,
+    page,
+    [48, 348, 288, 404],
+    [
+      {
+        text:
+          committed !== null
+            ? `annual-layers.psd · ${psdFileBytes.toLocaleString("en-US")} B ` +
+              `on disk · composite committed as ` +
+              `${committed.toLocaleString("en-US")} B of inline PNG`
+            : `annual-layers.psd · ${psdFileBytes.toLocaleString("en-US")} B ` +
+              "on disk · composite not committed on this lane",
+        style: STYLE.specLabel,
+      },
+    ],
+  );
   elements.push(cap.frameId);
 
   const rosterParas =
@@ -229,19 +242,24 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   const roster = await proseFrame(ctx, page, [300, 164, 480, 428], rosterParas);
   elements.push(roster.frameId);
 
-  const invariant = await proseFrame(ctx, page, [48, 440, 480, 540], [
-    {
-      text:
-        "Three layers — Backdrop (normal), Plate (multiply), Signal " +
-        "(screen) — assembled by the crate's own spec builders, mask-free " +
-        "by the layer-import tier's documented envelope. The preservation " +
-        "claim on this page is a citation, not a re-run: byte-identity at " +
-        "zero edits is the gate image-psd holds in its own test suite, " +
-        "and what this page adds is the editor reach — list, edit, " +
-        "export, through the panel a designer actually touches.",
-      style: STYLE.bodySmall,
-    },
-  ]);
+  const invariant = await proseFrame(
+    ctx,
+    page,
+    [48, 440, 480, 540],
+    [
+      {
+        text:
+          "Three layers — Backdrop (normal), Plate (multiply), Signal " +
+          "(screen) — assembled by the crate's own spec builders, mask-free " +
+          "by the layer-import tier's documented envelope. The preservation " +
+          "claim on this page is a citation, not a re-run: byte-identity at " +
+          "zero edits is the gate image-psd holds in its own test suite, " +
+          "and what this page adds is the editor reach — list, edit, " +
+          "export, through the panel a designer actually touches.",
+        style: STYLE.bodySmall,
+      },
+    ],
+  );
   elements.push(invariant.frameId);
 
   await marginNote(

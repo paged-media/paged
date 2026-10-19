@@ -58,7 +58,10 @@ const until = async (ok: () => boolean, ms = 5000) => {
 describe("slide state", () => {
   it("round-trips through the envelope and drops what is empty", () => {
     const value = encodeState({ notes: "one\ntwo", hidden: true });
-    expect(parseState([{ key: SLIDE_KEY, value: value! }])).toEqual({ notes: "one\ntwo", hidden: true });
+    expect(parseState([{ key: SLIDE_KEY, value: value! }])).toEqual({
+      notes: "one\ntwo",
+      hidden: true,
+    });
     expect(encodeState({ notes: "  ", hidden: false })).toBeNull();
     expect(parseState([{ key: SLIDE_KEY, value: "not json" }])).toEqual({});
     expect(parseState([{ key: "x-paged:other", value: value! }])).toEqual({});
@@ -66,8 +69,14 @@ describe("slide state", () => {
 
   it("moves a slide to a position, or not at all", () => {
     const order = ["a", "b", "c", "d"];
-    expect(moveMutation(order, "c", 0)).toEqual({ op: "movePage", args: { page: "c", after: null } });
-    expect(moveMutation(order, "a", 3)).toEqual({ op: "movePage", args: { page: "a", after: "d" } });
+    expect(moveMutation(order, "c", 0)).toEqual({
+      op: "movePage",
+      args: { page: "c", after: null },
+    });
+    expect(moveMutation(order, "a", 3)).toEqual({
+      op: "movePage",
+      args: { page: "a", after: "d" },
+    });
     expect(moveMutation(order, "b", 1)).toBeNull();
     expect(moveMutation(order, "zz", 0)).toBeNull();
   });
@@ -76,7 +85,12 @@ describe("slide state", () => {
 describe("the slides store on the engine", () => {
   async function open(name: string) {
     const bytes = new Uint8Array(
-      readFileSync(new URL(`../../../slide-conformance/fixtures/${name}.pptx`, import.meta.url)),
+      readFileSync(
+        new URL(
+          `../../../slide-conformance/fixtures/${name}.pptx`,
+          import.meta.url,
+        ),
+      ),
     );
     const { idml } = (await slideEngine()).importPptx(bytes, name);
     const h = await createHeadlessHost({ resolveFrom: ENGINE_ANCHOR });
@@ -135,10 +149,17 @@ describe("the slides store on the engine", () => {
 
       const first = store.list()[0];
       await host.document.mutate(
-        setStateMutation(first.pageId, { ...first.state, notes: "Say hello\nthen go", hidden: true }),
+        setStateMutation(first.pageId, {
+          ...first.state,
+          notes: "Say hello\nthen go",
+          hidden: true,
+        }),
       );
       await store.refresh();
-      expect(store.list()[0].state).toMatchObject({ notes: "Say hello\nthen go", hidden: true });
+      expect(store.list()[0].state).toMatchObject({
+        notes: "Say hello\nthen go",
+        hidden: true,
+      });
       // The transition the import wrote is kept beside the new notes.
       expect(store.list()[0].state.transition).toEqual(first.state.transition);
 
@@ -160,7 +181,9 @@ describe("the slides store on the engine", () => {
       const id = store.list()[0].pageId;
       expect(store.thumbnail(id)).toBeNull();
       await until(() => store.thumbnail(id) !== null);
-      expect(Array.from(shots[0].slice(0, 4))).toEqual([0x89, 0x50, 0x4e, 0x47]);
+      expect(Array.from(shots[0].slice(0, 4))).toEqual([
+        0x89, 0x50, 0x4e, 0x47,
+      ]);
     } finally {
       store.dispose();
       h.dispose();
@@ -171,7 +194,12 @@ describe("the slides store on the engine", () => {
 describe("a new slide from a layout", () => {
   async function open(name: string) {
     const bytes = new Uint8Array(
-      readFileSync(new URL(`../../../slide-conformance/fixtures/${name}.pptx`, import.meta.url)),
+      readFileSync(
+        new URL(
+          `../../../slide-conformance/fixtures/${name}.pptx`,
+          import.meta.url,
+        ),
+      ),
     );
     const { idml } = (await slideEngine()).importPptx(bytes, name);
     const h = await createHeadlessHost({ resolveFrom: ENGINE_ANCHOR });
@@ -190,19 +218,29 @@ describe("a new slide from a layout", () => {
         return { dispose() {} };
       },
     });
-    const store = new SlidesStore(host, () => "blob:x", () => {});
+    const store = new SlidesStore(
+      host,
+      () => "blob:x",
+      () => {},
+    );
     await store.refresh();
     return { h, host, store };
   }
 
-  type Node = { id?: { id: string } | null; children?: Node[]; pluginMetadata?: { key: string; value: string }[] };
+  type Node = {
+    id?: { id: string } | null;
+    children?: Node[];
+    pluginMetadata?: { key: string; value: string }[];
+  };
 
   it("offers the deck's layouts by name, each with a slide to copy", async () => {
     const { h, host, store } = await open("placeholders");
     try {
       const ls = await layouts(host, store.list());
       expect(ls.length).toBeGreaterThan(1);
-      expect(ls.every((l) => l.name.length > 0 && l.templatePageId.length > 0)).toBe(true);
+      expect(
+        ls.every((l) => l.name.length > 0 && l.templatePageId.length > 0),
+      ).toBe(true);
     } finally {
       store.dispose();
       h.dispose();
@@ -230,18 +268,35 @@ describe("a new slide from a layout", () => {
       // The copied slide had more than its placeholders: they were removed.
       const at = after.findIndex((s) => s.pageId === layout.templatePageId);
       const templateItems = tree[at].children?.[0]?.children ?? [];
-      expect(templateItems.length, "the template carries art beside its placeholders").toBeGreaterThan(items.length);
+      expect(
+        templateItems.length,
+        "the template carries art beside its placeholders",
+      ).toBeGreaterThan(items.length);
       for (const n of items) {
         expect(
-          n.pluginMetadata?.some((m) => m.key === "x-paged:media.paged.slide" && m.value.includes("placeholder")),
+          n.pluginMetadata?.some(
+            (m) =>
+              m.key === "x-paged:media.paged.slide" &&
+              m.value.includes("placeholder"),
+          ),
           "only placeholders remain",
         ).toBe(true);
       }
-      const stories = await host.document.collection<{ selfId: string; characterCount: number }>("stories");
+      const stories = await host.document.collection<{
+        selfId: string;
+        characterCount: number;
+      }>("stories");
       for (const n of items) {
-        const chain = await Promise.all(stories.map(async (s) => [s, await host.document.frameChain(s.selfId)] as const));
-        const own = chain.find(([, links]) => links.some((l) => l.frameId === n.id?.id));
-        if (own) expect(own[0].characterCount, "an emptied placeholder").toBe(0);
+        const chain = await Promise.all(
+          stories.map(
+            async (s) => [s, await host.document.frameChain(s.selfId)] as const,
+          ),
+        );
+        const own = chain.find(([, links]) =>
+          links.some((l) => l.frameId === n.id?.id),
+        );
+        if (own)
+          expect(own[0].characterCount, "an emptied placeholder").toBe(0);
       }
     } finally {
       store.dispose();
@@ -269,7 +324,8 @@ describe("a new slide from a layout", () => {
           }) as typeof doc.collection,
           mutate: async (m) => {
             const outcome = await doc.mutate(m);
-            if (outcome.applied && m.op === "duplicatePage") reported = outcome.createdPages;
+            if (outcome.applied && m.op === "duplicatePage")
+              reported = outcome.createdPages;
             return outcome;
           },
         },
@@ -277,7 +333,10 @@ describe("a new slide from a layout", () => {
       const id = await newSlide(counted, layout, before[0].pageId);
       expect(reported, "the engine named the copy").toHaveLength(1);
       expect(id).toBe(reported![0]);
-      expect(pageReads, "one read, for where the copy landed; no before/after diff").toBe(1);
+      expect(
+        pageReads,
+        "one read, for where the copy landed; no before/after diff",
+      ).toBe(1);
       await store.refresh();
       expect(store.list()[1].pageId).toBe(id);
     } finally {

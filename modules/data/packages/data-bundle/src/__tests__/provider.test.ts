@@ -48,16 +48,31 @@ vi.mock("../engine", () => ({
 
 import { createSession } from "../session";
 
-function fakeHost(
-  supportsRegistry = false,
-): BundleHost & { logs: string[]; registered: { id: string; category: string }[] } {
+function fakeHost(supportsRegistry = false): BundleHost & {
+  logs: string[];
+  registered: { id: string; category: string }[];
+} {
   const logs: string[] = [];
   const registered: { id: string; category: string }[] = [];
   return {
-    manifest: { id: "media.paged.data", name: "d", version: "0.0.1", apiVersion: "^0.2" },
-    log: { debug() {}, info: (m: string) => logs.push(m), warn() {}, error() {} },
+    manifest: {
+      id: "media.paged.data",
+      name: "d",
+      version: "0.0.1",
+      apiVersion: "^0.2",
+    },
+    log: {
+      debug() {},
+      info: (m: string) => logs.push(m),
+      warn() {},
+      error() {},
+    },
     // The document doors every host has; nothing here fires them.
-    document: { onWillSave: () => ({ dispose() {} }), onDidChange: () => ({ dispose() {} }), onDidOpen: () => ({ dispose() {} }) },
+    document: {
+      onWillSave: () => ({ dispose() {} }),
+      onDidChange: () => ({ dispose() {} }),
+      onDidOpen: () => ({ dispose() {} }),
+    },
     supports: (f: string) => supportsRegistry && f === "dataProviders@1",
     dataProviders: {
       register: (reg: { id: string; category: string }) => {
@@ -79,7 +94,11 @@ function fakeHost(
 describe("session.publishProvider (D-09, §7.1)", () => {
   it("returns the engine's publication payload", async () => {
     const session = createSession(fakeHost(), 0);
-    const pub = await session.publishProvider("q1", "pricing-dataset", "dataset");
+    const pub = await session.publishProvider(
+      "q1",
+      "pricing-dataset",
+      "dataset",
+    );
     expect(pub.id).toBe("pricing-dataset");
     expect(pub.category).toBe("dataset");
     expect(pub.revision).toBe("00000000deadbeef");
@@ -102,6 +121,9 @@ describe("session.publishProvider (D-09, §7.1)", () => {
     expect(host.logs.some((m) => m.includes("nothing registered"))).toBe(false);
     expect(session.isProviderRegistered("pricing-dataset")).toBe(true);
     expect(host.registered).toHaveLength(1);
-    expect(host.registered[0]).toMatchObject({ id: "pricing-dataset", category: "dataset" });
+    expect(host.registered[0]).toMatchObject({
+      id: "pricing-dataset",
+      category: "dataset",
+    });
   });
 });

@@ -65,7 +65,13 @@ describe("contributePanel", () => {
     const fake = makeFakeEditor();
     const { host } = createBundleHost(() => fake.editor, MANIFEST, {
       console: silent,
-      shell: { openPanel() {}, closePanel() {}, async pickFile() { return []; } },
+      shell: {
+        openPanel() {},
+        closePanel() {},
+        async pickFile() {
+          return [];
+        },
+      },
     });
     // Even a bundle-authored `source` is overwritten — the field is
     // trustworthy only because the host owns it.
@@ -91,7 +97,13 @@ describe("contributePanel", () => {
     const fake = makeFakeEditor();
     const { host } = createBundleHost(() => fake.editor, MANIFEST, {
       console: silent,
-      shell: { openPanel() {}, closePanel() {}, async pickFile() { return []; } },
+      shell: {
+        openPanel() {},
+        closePanel() {},
+        async pickFile() {
+          return [];
+        },
+      },
     });
     const d = contributePanel(host, PANEL);
     d.dispose();

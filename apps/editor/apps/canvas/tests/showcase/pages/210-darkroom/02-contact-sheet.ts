@@ -215,34 +215,47 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   }
 
   // ── furniture first, so no tile branch can leave the spread bare ──
-  const head = await proseFrame(ctx, p(88), [60, 58, 492, 88], [
-    { text: "The kernel contact sheet", style: STYLE.head1 },
-  ]);
-  const intro = await proseFrame(ctx, p(88), [60, 92, 492, 150], [
-    {
-      text:
-        "One photograph, ten tiles, ten kernel families. Every tile was " +
-        "ingested through the raster importer, resampled to 480 × 320 " +
-        "through the panel's lanczos3 resize, given exactly one family's " +
-        "representative kernel, exported through the bundle's own encoder " +
-        "and committed back as inline bytes. The apples are Tom Swinnen's " +
-        "(Pexels); the differences are the registry's.",
-      style: STYLE.bodySmall,
-    },
-  ]);
+  const head = await proseFrame(
+    ctx,
+    p(88),
+    [60, 58, 492, 88],
+    [{ text: "The kernel contact sheet", style: STYLE.head1 }],
+  );
+  const intro = await proseFrame(
+    ctx,
+    p(88),
+    [60, 92, 492, 150],
+    [
+      {
+        text:
+          "One photograph, ten tiles, ten kernel families. Every tile was " +
+          "ingested through the raster importer, resampled to 480 × 320 " +
+          "through the panel's lanczos3 resize, given exactly one family's " +
+          "representative kernel, exported through the bundle's own encoder " +
+          "and committed back as inline bytes. The apples are Tom Swinnen's " +
+          "(Pexels); the differences are the registry's.",
+        style: STYLE.bodySmall,
+      },
+    ],
+  );
   elements.push(head.frameId, intro.frameId);
 
-  const rectoIntro = await proseFrame(ctx, p(89), [48, 92, 480, 150], [
-    {
-      text:
-        "Each caption names the family, the dispatch id from the kernel " +
-        "registry, the panel setting, and the byte count of the committed " +
-        "export — the number that proves the tile you are looking at is " +
-        "document data, not a live preview. Kernels run once, in the " +
-        "session; what persists is what came back through the loop.",
-      style: STYLE.bodySmall,
-    },
-  ]);
+  const rectoIntro = await proseFrame(
+    ctx,
+    p(89),
+    [48, 92, 480, 150],
+    [
+      {
+        text:
+          "Each caption names the family, the dispatch id from the kernel " +
+          "registry, the panel setting, and the byte count of the committed " +
+          "export — the number that proves the tile you are looking at is " +
+          "document data, not a live preview. Kernels run once, in the " +
+          "session; what persists is what came back through the loop.",
+        style: STYLE.bodySmall,
+      },
+    ],
+  );
   elements.push(rectoIntro.frameId);
 
   if (gpu) await openAdjustments(ctx);
@@ -256,7 +269,12 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     x0: number,
     y0: number,
   ): Promise<void> => {
-    const frame = await doc.rectangle(pageId, [x0, y0, x0 + TILE_W, y0 + TILE_H]);
+    const frame = await doc.rectangle(pageId, [
+      x0,
+      y0,
+      x0 + TILE_W,
+      y0 + TILE_H,
+    ]);
     await assignLayer(ctx, "rectangle", frame, LAYER.content);
     await doc.mutate("placeImage", {
       elementId: frame,
@@ -344,38 +362,47 @@ export async function build(ctx: PageContext): Promise<PageReport> {
 
   // p88 — six tiles on a 3 × 2 grid (x 60 / 211 / 362, y 158 / 304).
   // p89 — four: three across the top row, one anchoring the second.
-  const slots: Array<{ pageIndex: number; pageId: string; x: number; y: number }> =
-    [
-      { pageIndex: p(88), pageId: pgVerso, x: 60, y: 158 },
-      { pageIndex: p(88), pageId: pgVerso, x: 211, y: 158 },
-      { pageIndex: p(88), pageId: pgVerso, x: 362, y: 158 },
-      { pageIndex: p(88), pageId: pgVerso, x: 60, y: 304 },
-      { pageIndex: p(88), pageId: pgVerso, x: 211, y: 304 },
-      { pageIndex: p(88), pageId: pgVerso, x: 362, y: 304 },
-      { pageIndex: p(89), pageId: pgRecto, x: 48, y: 158 },
-      { pageIndex: p(89), pageId: pgRecto, x: 199, y: 158 },
-      { pageIndex: p(89), pageId: pgRecto, x: 350, y: 158 },
-      { pageIndex: p(89), pageId: pgRecto, x: 48, y: 304 },
-    ];
+  const slots: Array<{
+    pageIndex: number;
+    pageId: string;
+    x: number;
+    y: number;
+  }> = [
+    { pageIndex: p(88), pageId: pgVerso, x: 60, y: 158 },
+    { pageIndex: p(88), pageId: pgVerso, x: 211, y: 158 },
+    { pageIndex: p(88), pageId: pgVerso, x: 362, y: 158 },
+    { pageIndex: p(88), pageId: pgVerso, x: 60, y: 304 },
+    { pageIndex: p(88), pageId: pgVerso, x: 211, y: 304 },
+    { pageIndex: p(88), pageId: pgVerso, x: 362, y: 304 },
+    { pageIndex: p(89), pageId: pgRecto, x: 48, y: 158 },
+    { pageIndex: p(89), pageId: pgRecto, x: 199, y: 158 },
+    { pageIndex: p(89), pageId: pgRecto, x: 350, y: 158 },
+    { pageIndex: p(89), pageId: pgRecto, x: 48, y: 304 },
+  ];
   for (const [i, spec] of TILES.entries()) {
     const slot = slots[i];
     await buildTile(spec, i, slot.pageIndex, slot.pageId, slot.x, slot.y);
   }
 
   // The slot beside the last tile explains the sheet's one asymmetry.
-  const asymmetry = await proseFrame(ctx, p(89), [199, 304, 480, 434], [
-    {
-      text:
-        "Eight tiles are parameter kernels — the slider writes a value, " +
-        "the export runs the chain, nothing touches the session source " +
-        "until the loop commits. The edge-detection and halftone tiles " +
-        "are effect kernels: their buttons apply destructively into the " +
-        "engine-held source, journaled in the plugin's own undo. Both " +
-        "kinds leave the document untouched until replaceImageBytes — " +
-        "which is why the loop, not the kernel, is this chapter's law.",
-      style: STYLE.bodySmall,
-    },
-  ]);
+  const asymmetry = await proseFrame(
+    ctx,
+    p(89),
+    [199, 304, 480, 434],
+    [
+      {
+        text:
+          "Eight tiles are parameter kernels — the slider writes a value, " +
+          "the export runs the chain, nothing touches the session source " +
+          "until the loop commits. The edge-detection and halftone tiles " +
+          "are effect kernels: their buttons apply destructively into the " +
+          "engine-held source, journaled in the plugin's own undo. Both " +
+          "kinds leave the document untouched until replaceImageBytes — " +
+          "which is why the loop, not the kernel, is this chapter's law.",
+        style: STYLE.bodySmall,
+      },
+    ],
+  );
   elements.push(asymmetry.frameId);
 
   if (gpu) {
@@ -425,7 +452,8 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     ];
     const families = [...roster.families.keys()].sort(
       (a, b) =>
-        (order.indexOf(a) + 100 * Number(order.indexOf(a) < 0)) -
+        order.indexOf(a) +
+        100 * Number(order.indexOf(a) < 0) -
         (order.indexOf(b) + 100 * Number(order.indexOf(b) < 0)),
     );
     const paragraphs = families.map((fam) => {
@@ -433,15 +461,20 @@ export async function build(ctx: PageContext): Promise<PageReport> {
       return `${fam} (${names.length})  ${names.join(" ")}`;
     });
     const { first, second } = splitRoster(paragraphs, 12);
-    const title88 = await proseFrame(ctx, p(88), [60, 444, 492, 470], [
-      {
-        text:
-          `THE ROSTER — every registered kernel, ${roster.total} ids in ` +
-          `${families.length} families, read from registry/kernels.yaml ` +
-          "at build time",
-        style: STYLE.specLabel,
-      },
-    ]);
+    const title88 = await proseFrame(
+      ctx,
+      p(88),
+      [60, 444, 492, 470],
+      [
+        {
+          text:
+            `THE ROSTER — every registered kernel, ${roster.total} ids in ` +
+            `${families.length} families, read from registry/kernels.yaml ` +
+            "at build time",
+          style: STYLE.specLabel,
+        },
+      ],
+    );
     const roster88 = await proseFrame(
       ctx,
       p(88),

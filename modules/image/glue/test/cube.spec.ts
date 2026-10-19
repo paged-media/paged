@@ -23,11 +23,16 @@ import { describe, expect, it } from "bun:test";
 import { KERNEL_EDGE, parseCube, toKernelCube } from "../src/cube";
 
 /** An N³ cube text whose entry is f(r, g, b) on the 0–1 lattice. */
-function cubeText(n: number, f: (r: number, g: number, b: number) => number[], extra = ""): string {
+function cubeText(
+  n: number,
+  f: (r: number, g: number, b: number) => number[],
+  extra = "",
+): string {
   const lines = [`TITLE "test"`, `LUT_3D_SIZE ${n}`, extra];
   for (let b = 0; b < n; b++)
     for (let g = 0; g < n; g++)
-      for (let r = 0; r < n; r++) lines.push(f(r / (n - 1), g / (n - 1), b / (n - 1)).join(" "));
+      for (let r = 0; r < n; r++)
+        lines.push(f(r / (n - 1), g / (n - 1), b / (n - 1)).join(" "));
   return lines.join("\n");
 }
 
@@ -53,7 +58,9 @@ describe(".cube", () => {
 
   it("a DOMAIN maps the input range onto the lattice", () => {
     // Domain 0–2: an input of 1 sits halfway along the file's lattice.
-    const c = parseCube(cubeText(2, (r) => [r, 0, 0], "DOMAIN_MIN 0 0 0\nDOMAIN_MAX 2 2 2"));
+    const c = parseCube(
+      cubeText(2, (r) => [r, 0, 0], "DOMAIN_MIN 0 0 0\nDOMAIN_MAX 2 2 2"),
+    );
     const k = toKernelCube(c);
     expect(k[(KERNEL_EDGE - 1) * 3]).toBeCloseTo(0.5, 6); // input r = 1 → half
   });

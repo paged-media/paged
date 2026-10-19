@@ -45,7 +45,13 @@
 // chapter without rebuilding the world. CI never sets it.
 
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readdirSync, unlinkSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { dirname, join, resolve as pathResolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, test, type Page } from "@playwright/test";
@@ -367,14 +373,14 @@ export async function runChapter(
   // painting after passing through another save/load generation. Cheap
   // (four renders), and it catches "survived the container but stopped
   // painting" the moment it happens instead of at assembly.
-  const finalCount = await doc
-    .refreshPages()
-    .then((pages) => pages.length);
+  const finalCount = await doc.refreshPages().then((pages) => pages.length);
   const owned = new Set(spec.modules.flatMap((m) => m.pages));
   const earlier = isSolo(spec)
     ? []
     : [...Array(finalCount).keys()].filter((i) => !owned.has(i));
-  const samples = earlier.filter((_, k) => k % Math.ceil(earlier.length / 4 || 1) === 0).slice(0, 4);
+  const samples = earlier
+    .filter((_, k) => k % Math.ceil(earlier.length / 4 || 1) === 0)
+    .slice(0, 4);
   for (const i of samples) {
     const png = await doc.renderPage(i, 612);
     // A uniform empty page compresses to a few hundred bytes; content

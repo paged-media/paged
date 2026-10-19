@@ -48,7 +48,11 @@
 import { expect, test, type Page } from "@playwright/test";
 
 import { openCanvas, openPanel } from "../fidelity/canvas-driver";
-import { activateTool, loadViaReactPath, screenPoint } from "./harness/viewport";
+import {
+  activateTool,
+  loadViaReactPath,
+  screenPoint,
+} from "./harness/viewport";
 
 interface CellAddr {
   storyId: string;
@@ -90,7 +94,11 @@ async function findCell(
         for (let gx = 0.04; gx < 0.97; gx += 0.03) {
           const reply = await c.client.send({
             kind: "hitTest",
-            payload: { pageId, docPoint: [widthPt * gx, heightPt * gy], filter: "any" },
+            payload: {
+              pageId,
+              docPoint: [widthPt * gx, heightPt * gy],
+              filter: "any",
+            },
           });
           const p = reply.payload;
           if (reply.kind === "hitResult" && p?.tableContext && p.storyId) {
@@ -114,20 +122,29 @@ async function findCell(
 }
 
 /** Read the Table NodeId's `tableRowCount` (integer-as-Length). */
-async function tableRowCount(page: Page, addr: CellAddr): Promise<number | null> {
+async function tableRowCount(
+  page: Page,
+  addr: CellAddr,
+): Promise<number | null> {
   return page.evaluate(async (a) => {
     const c = (
       globalThis as unknown as {
         __canvas: {
           client: {
             elementProperties: (id: unknown) => Promise<{
-              entries: Array<{ path: string; value: { type: string; value: unknown } }>;
+              entries: Array<{
+                path: string;
+                value: { type: string; value: unknown };
+              }>;
             } | null>;
           };
         };
       }
     ).__canvas;
-    const id = { kind: "table", id: { story_id: a.storyId, table_id: a.tableId } };
+    const id = {
+      kind: "table",
+      id: { story_id: a.storyId, table_id: a.tableId },
+    };
     const props = await c.client.elementProperties(id);
     const v = props?.entries.find((e) => e.path === "tableRowCount")?.value;
     return v && v.type === "length" && v.value != null
@@ -149,7 +166,10 @@ async function cellProp(
           __canvas: {
             client: {
               elementProperties: (id: unknown) => Promise<{
-                entries: Array<{ path: string; value: { type: string; value: unknown } }>;
+                entries: Array<{
+                  path: string;
+                  value: { type: string; value: unknown };
+                }>;
               } | null>;
             };
           };
@@ -157,7 +177,12 @@ async function cellProp(
       ).__canvas;
       const id = {
         kind: "tableCell",
-        id: { story_id: a.storyId, table_id: a.tableId, row: a.row, col: a.col },
+        id: {
+          story_id: a.storyId,
+          table_id: a.tableId,
+          row: a.row,
+          col: a.col,
+        },
       };
       const props = await c.client.elementProperties(id);
       return props?.entries.find((e) => e.path === path)?.value ?? null;
@@ -180,7 +205,8 @@ async function cellRect(
             elementGeometry: (ids: unknown[]) => Promise<
               Array<{
                 bounds: [number, number, number, number];
-                itemTransform: [number, number, number, number, number, number] | null;
+                itemTransform:
+                  [number, number, number, number, number, number] | null;
               }>
             >;
           };
@@ -211,7 +237,9 @@ async function cellRect(
 async function undo(page: Page): Promise<void> {
   await page.evaluate(async () => {
     await (
-      globalThis as unknown as { __canvas: { client: { undo: () => Promise<unknown> } } }
+      globalThis as unknown as {
+        __canvas: { client: { undo: () => Promise<unknown> } };
+      }
     ).__canvas.client.undo();
   });
 }
@@ -221,12 +249,18 @@ async function firstSwatchId(page: Page): Promise<string | null> {
     const c = (
       globalThis as unknown as {
         __canvas: {
-          client: { collection: (n: string) => Promise<Array<{ selfId: string }>> };
+          client: {
+            collection: (n: string) => Promise<Array<{ selfId: string }>>;
+          };
         };
       }
     ).__canvas;
     const sw = await c.client.collection("swatches");
-    return sw.find((s) => !/none|paper/i.test(s.selfId))?.selfId ?? sw[0]?.selfId ?? null;
+    return (
+      sw.find((s) => !/none|paper/i.test(s.selfId))?.selfId ??
+      sw[0]?.selfId ??
+      null
+    );
   });
 }
 
@@ -243,13 +277,23 @@ async function loadAndSelectCell(page: Page): Promise<{
   const fx = await loadViaReactPath(page, "tables");
   const p0 = fx.pages[0];
   const found = await findCell(page, p0.pageId, p0.widthPt, p0.heightPt);
-  expect(found, "no table cell found in the tables fixture page 0").not.toBeNull();
+  expect(
+    found,
+    "no table cell found in the tables fixture page 0",
+  ).not.toBeNull();
   const { addr, gx, gy } = found as { addr: CellAddr; gx: number; gy: number };
   const pt = await screenPoint(page, p0.widthPt * gx, p0.heightPt * gy);
   await page.mouse.click(pt.x, pt.y);
   await openPanel(page, "paged.table");
   await expect(page.locator('[data-table-panel="ready"]')).toBeVisible();
-  return { addr, gx, gy, pageId: p0.pageId, widthPt: p0.widthPt, heightPt: p0.heightPt };
+  return {
+    addr,
+    gx,
+    gy,
+    pageId: p0.pageId,
+    widthPt: p0.widthPt,
+    heightPt: p0.heightPt,
+  };
 }
 
 test.describe("W2.11 — Table panel v2 op sandwiches", () => {
@@ -295,7 +339,9 @@ test.describe("W2.11 — Table panel v2 op sandwiches", () => {
           if (!r) return 0;
           const w = r[3] - r[1];
           const h = r[2] - r[0];
-          return Math.abs(w - wBefore) < 0.5 && Math.abs(h - hBefore) < 0.5 ? 1 : 0;
+          return Math.abs(w - wBefore) < 0.5 && Math.abs(h - hBefore) < 0.5
+            ? 1
+            : 0;
         },
         { timeout: 6_000 },
       )
@@ -349,10 +395,13 @@ test.describe("W2.11 — Table panel v2 op sandwiches", () => {
       .locator('[data-edge-color-select="top"]')
       .selectOption(swatch as string);
     await expect
-      .poll(async () => {
-        const v = await cellProp(page, addr, "cellTopEdgeStrokeColor");
-        return v && v.type === "colorRef" ? (v.value as string | null) : null;
-      }, { timeout: 5_000 })
+      .poll(
+        async () => {
+          const v = await cellProp(page, addr, "cellTopEdgeStrokeColor");
+          return v && v.type === "colorRef" ? (v.value as string | null) : null;
+        },
+        { timeout: 5_000 },
+      )
       .toBe(swatch);
 
     // Set the top-edge weight via the panel input (Enter commits).
@@ -360,10 +409,13 @@ test.describe("W2.11 — Table panel v2 op sandwiches", () => {
     await weightInput.fill("3");
     await weightInput.press("Enter");
     await expect
-      .poll(async () => {
-        const v = await cellProp(page, addr, "cellTopEdgeStrokeWeight");
-        return v && v.type === "length" ? (v.value as number | null) : null;
-      }, { timeout: 5_000 })
+      .poll(
+        async () => {
+          const v = await cellProp(page, addr, "cellTopEdgeStrokeWeight");
+          return v && v.type === "length" ? (v.value as number | null) : null;
+        },
+        { timeout: 5_000 },
+      )
       .toBe(3);
 
     // Set the top-edge tint.
@@ -371,19 +423,25 @@ test.describe("W2.11 — Table panel v2 op sandwiches", () => {
     await tintInput.fill("40");
     await tintInput.press("Enter");
     await expect
-      .poll(async () => {
-        const v = await cellProp(page, addr, "cellTopEdgeStrokeTint");
-        return v && v.type === "length" ? (v.value as number | null) : null;
-      }, { timeout: 5_000 })
+      .poll(
+        async () => {
+          const v = await cellProp(page, addr, "cellTopEdgeStrokeTint");
+          return v && v.type === "length" ? (v.value as number | null) : null;
+        },
+        { timeout: 5_000 },
+      )
       .toBe(40);
 
     // Undo the tint commit — read-back restores to the prior tint.
     await undo(page);
     await expect
-      .poll(async () => {
-        const v = await cellProp(page, addr, "cellTopEdgeStrokeWeight");
-        return v && v.type === "length" ? (v.value as number | null) : null;
-      }, { timeout: 5_000 })
+      .poll(
+        async () => {
+          const v = await cellProp(page, addr, "cellTopEdgeStrokeWeight");
+          return v && v.type === "length" ? (v.value as number | null) : null;
+        },
+        { timeout: 5_000 },
+      )
       .toBe(3);
 
     void colorBefore;
@@ -415,20 +473,23 @@ test.describe("W2.11 — Table panel v2 op sandwiches", () => {
     await expect
       .poll(
         async () =>
-          page.evaluate(
-            () =>
-              JSON.stringify(
-                (
-                  globalThis as unknown as {
-                    __canvas: {
-                      contentSelection: {
-                        storyId: string;
-                        cell?: { tableId: string; row: number; col: number } | null;
+          page.evaluate(() =>
+            JSON.stringify(
+              (
+                globalThis as unknown as {
+                  __canvas: {
+                    contentSelection: {
+                      storyId: string;
+                      cell?: {
+                        tableId: string;
+                        row: number;
+                        col: number;
                       } | null;
-                    };
-                  }
-                ).__canvas.contentSelection?.cell ?? null,
-              ),
+                    } | null;
+                  };
+                }
+              ).__canvas.contentSelection?.cell ?? null,
+            ),
           ),
         { timeout: 6_000 },
       )
@@ -456,8 +517,15 @@ test.describe("W2.11 — Table panel v2 op sandwiches", () => {
       const c = (
         globalThis as unknown as {
           __canvas: {
-            contentSelection: { storyId: string; start: number; end: number; cell?: unknown } | null;
-            client: { caretGeometry: (s: unknown) => Promise<{ xPt: number } | null> };
+            contentSelection: {
+              storyId: string;
+              start: number;
+              end: number;
+              cell?: unknown;
+            } | null;
+            client: {
+              caretGeometry: (s: unknown) => Promise<{ xPt: number } | null>;
+            };
           };
         }
       ).__canvas;
@@ -488,45 +556,74 @@ test.describe("W2.11 — Table panel v2 op sandwiches", () => {
       )
       .toBe(1);
     await expect
-      .poll(async () => {
-        const x = await page.evaluate(async () => {
-          const c = (
-            globalThis as unknown as {
-              __canvas: {
-                contentSelection: unknown;
-                client: { caretGeometry: (s: unknown) => Promise<{ xPt: number } | null> };
-              };
-            }
-          ).__canvas;
-          const g = await c.client.caretGeometry(c.contentSelection);
-          return g?.xPt ?? null;
-        });
-        return x != null && caretXBefore != null && x > caretXBefore + 0.1 ? 1 : 0;
-      }, { timeout: 6_000 })
+      .poll(
+        async () => {
+          const x = await page.evaluate(async () => {
+            const c = (
+              globalThis as unknown as {
+                __canvas: {
+                  contentSelection: unknown;
+                  client: {
+                    caretGeometry: (
+                      s: unknown,
+                    ) => Promise<{ xPt: number } | null>;
+                  };
+                };
+              }
+            ).__canvas;
+            const g = await c.client.caretGeometry(c.contentSelection);
+            return g?.xPt ?? null;
+          });
+          return x != null && caretXBefore != null && x > caretXBefore + 0.1
+            ? 1
+            : 0;
+        },
+        { timeout: 6_000 },
+      )
       .toBe(1);
 
     // Undo removes the inserted character — the cell stream is restored.
     await undo(page);
     await expect
-      .poll(async () => {
-        const x = await page.evaluate(async () => {
-          const c = (
-            globalThis as unknown as {
-              __canvas: {
-                contentSelection: { storyId: string; start: number; end: number; cell?: unknown } | null;
-                client: { caretGeometry: (s: unknown) => Promise<{ xPt: number } | null> };
-              };
-            }
-          ).__canvas;
-          // Re-resolve the caret at offset 0 in the cell (the insert
-          // origin) — it should match the pre-typing x within slop.
-          const sel = c.contentSelection;
-          if (!sel) return null;
-          const g = await c.client.caretGeometry({ ...sel, start: 0, end: 0 });
-          return g?.xPt ?? null;
-        });
-        return x != null && caretXBefore != null && Math.abs(x - caretXBefore) < 1.5 ? 1 : 0;
-      }, { timeout: 6_000 })
+      .poll(
+        async () => {
+          const x = await page.evaluate(async () => {
+            const c = (
+              globalThis as unknown as {
+                __canvas: {
+                  contentSelection: {
+                    storyId: string;
+                    start: number;
+                    end: number;
+                    cell?: unknown;
+                  } | null;
+                  client: {
+                    caretGeometry: (
+                      s: unknown,
+                    ) => Promise<{ xPt: number } | null>;
+                  };
+                };
+              }
+            ).__canvas;
+            // Re-resolve the caret at offset 0 in the cell (the insert
+            // origin) — it should match the pre-typing x within slop.
+            const sel = c.contentSelection;
+            if (!sel) return null;
+            const g = await c.client.caretGeometry({
+              ...sel,
+              start: 0,
+              end: 0,
+            });
+            return g?.xPt ?? null;
+          });
+          return x != null &&
+            caretXBefore != null &&
+            Math.abs(x - caretXBefore) < 1.5
+            ? 1
+            : 0;
+        },
+        { timeout: 6_000 },
+      )
       .toBe(1);
   });
 });

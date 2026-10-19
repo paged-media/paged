@@ -25,7 +25,14 @@
 // pages.
 
 import { plate, proseFrame, specLabel } from "../../annual-support";
-import { LAYER, STYLE, SWATCH, TRIM_H_PT, TRIM_W_PT, p } from "../../names-annual";
+import {
+  LAYER,
+  STYLE,
+  SWATCH,
+  TRIM_H_PT,
+  TRIM_W_PT,
+  p,
+} from "../../names-annual";
 import type { PageContext, PageReport } from "../../types";
 
 export async function build(ctx: PageContext): Promise<PageReport> {
@@ -52,20 +59,29 @@ export async function build(ctx: PageContext): Promise<PageReport> {
 
   // Two paragraphs, not one: at Part Title size the single line breaks
   // as "Stu-dios", and a hyphenated part title is not a divider.
-  const title = await proseFrame(ctx, p(75), [60, 300, 480, 470], [
-    { text: "Part II —", style: STYLE.partTitle },
-    { text: "The Studios", style: STYLE.partTitle },
-  ]);
+  const title = await proseFrame(
+    ctx,
+    p(75),
+    [60, 300, 480, 470],
+    [
+      { text: "Part II —", style: STYLE.partTitle },
+      { text: "The Studios", style: STYLE.partTitle },
+    ],
+  );
   elements.push(title.frameId);
 
   // Verso p76 — the epigraph, in the annual's own voice.
-  const epigraph = await proseFrame(ctx, p(76), [60, 280, 480, 460], [
-    {
-      text:
-        "Part I set type on a page the editor owns end to end. Part II walks the studios that rent space inside it: a drawing office, a darkroom, a ledger room — each a plugin speaking to the same engine through the same wire, minting the same native objects a hand would. The next chapter belongs to paged.draw, and everything it leaves on these pages is anchors, swatches and strokes; nothing is a picture of a drawing.",
-      style: STYLE.deck,
-    },
-  ]);
+  const epigraph = await proseFrame(
+    ctx,
+    p(76),
+    [60, 280, 480, 460],
+    [
+      {
+        text: "Part I set type on a page the editor owns end to end. Part II walks the studios that rent space inside it: a drawing office, a darkroom, a ledger room — each a plugin speaking to the same engine through the same wire, minting the same native objects a hand would. The next chapter belongs to paged.draw, and everything it leaves on these pages is anchors, swatches and strokes; nothing is a picture of a drawing.",
+        style: STYLE.deck,
+      },
+    ],
+  );
   elements.push(epigraph.frameId);
 
   elements.push(

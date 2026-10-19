@@ -72,10 +72,16 @@ import {
   handleElementId,
 } from "./batch-handles";
 import { rawTextOutlines, type TextOutlinesWire } from "../raw-wire";
-import { pageOriginOf, SPREAD_ORIGIN, spreadTableOf, type PageOrigin } from "../page-origin";
+import {
+  pageOriginOf,
+  SPREAD_ORIGIN,
+  spreadTableOf,
+  type PageOrigin,
+} from "../page-origin";
 
 import { registerCommand } from "../command-registry";
-export const CREATE_OUTLINES_COMMAND_ID = "media.paged.draw.command.createOutlines";
+export const CREATE_OUTLINES_COMMAND_ID =
+  "media.paged.draw.command.createOutlines";
 export const CREATE_OUTLINES_COMMAND_IDS = [CREATE_OUTLINES_COMMAND_ID];
 
 /** The handle run `i` of frame `f` is bound to inside the batch —
@@ -87,7 +93,8 @@ let swatchSeq = 0;
 const mintSwatchId = (): string =>
   `Color/udrawoutl${Date.now().toString(16)}${(swatchSeq++).toString(16)}`;
 
-const to255 = (v: number): number => Math.max(0, Math.min(255, Math.round(v * 255)));
+const to255 = (v: number): number =>
+  Math.max(0, Math.min(255, Math.round(v * 255)));
 
 /** The swatch a run is painted with: an existing swatch NAMED with the
  *  run's hex (the `io/svg.ts` naming convention, so a second outline of
@@ -96,32 +103,45 @@ const to255 = (v: number): number => Math.max(0, Math.min(255, Math.round(v * 25
  *  hex. */
 export interface OutlineSwatchPlan {
   ref: string;
-  create: { selfId: string; name: string; rgb: [number, number, number] } | null;
+  create: {
+    selfId: string;
+    name: string;
+    rgb: [number, number, number];
+  } | null;
 }
 
 export function outlineSwatchFor(
   run: TextOutlinesWire["runs"][number],
   existing: ReadonlyMap<string, string>,
 ): OutlineSwatchPlan {
-  const rgb: [number, number, number] = [to255(run.rgb[0]), to255(run.rgb[1]), to255(run.rgb[2])];
+  const rgb: [number, number, number] = [
+    to255(run.rgb[0]),
+    to255(run.rgb[1]),
+    to255(run.rgb[2]),
+  ];
   const isProcessBlack =
     run.cmyk != null &&
     run.cmyk[0] === 0 &&
     run.cmyk[1] === 0 &&
     run.cmyk[2] === 0 &&
     run.cmyk[3] === 1;
-  if (isProcessBlack && existing.has("Color/Black")) return { ref: "Color/Black", create: null };
+  if (isProcessBlack && existing.has("Color/Black"))
+    return { ref: "Color/Black", create: null };
   const hex = rgbToHex(rgb);
   // Hex case differs between writers (this repo writes lower case,
   // a hand-named swatch is often upper), so match either.
   const known =
-    existing.get(hex) ?? existing.get(hex.toLowerCase()) ?? existing.get(hex.toUpperCase());
+    existing.get(hex) ??
+    existing.get(hex.toLowerCase()) ??
+    existing.get(hex.toUpperCase());
   if (known !== undefined) return { ref: known, create: null };
   return { ref: "", create: { selfId: mintSwatchId(), name: hex, rgb } };
 }
 
 /** A run's anchors as a draw-geometry table. */
-export function outlineTableOf(run: TextOutlinesWire["runs"][number]): AnchorTable {
+export function outlineTableOf(
+  run: TextOutlinesWire["runs"][number],
+): AnchorTable {
   return {
     anchors: run.anchors.map((a) => ({
       anchor: [a.anchor[0], a.anchor[1]],
@@ -145,7 +165,9 @@ export function createOutlinesBatchFor(args: {
   pageOrigin?: PageOrigin;
 }): MutationInput | null {
   const f = args.frameIndex ?? 0;
-  const runs = args.result.runs.filter((r) => r.anchors.length > 0 && r.subpathStarts.length > 0);
+  const runs = args.result.runs.filter(
+    (r) => r.anchors.length > 0 && r.subpathStarts.length > 0,
+  );
   if (runs.length === 0) return null;
   const ops: MutationInput[] = [];
   const palette = new Map(args.existing);
@@ -157,27 +179,51 @@ export function createOutlinesBatchFor(args: {
       const { selfId, name, rgb } = swatch.create;
       ops.push({
         op: "createSwatch",
-        args: { spec: { selfId, name, space: "RGB", value: [rgb[0], rgb[1], rgb[2]] } },
+        args: {
+          spec: { selfId, name, space: "RGB", value: [rgb[0], rgb[1], rgb[2]] },
+        },
       });
       palette.set(name, selfId);
       ref = selfId;
     }
     const table = outlineTableOf(run);
-    const firstEnd = table.subpathStarts.length > 1 ? table.subpathStarts[1] : table.anchors.length;
-    ops.push(insertPathMutationFor(args.result.pageId, table.anchors.slice(0, firstEnd), false));
+    const firstEnd =
+      table.subpathStarts.length > 1
+        ? table.subpathStarts[1]
+        : table.anchors.length;
+    ops.push(
+      insertPathMutationFor(
+        args.result.pageId,
+        table.anchors.slice(0, firstEnd),
+        false,
+      ),
+    );
     ops.push(bindCreatedMutationFor(outlineHandle(f, i)));
     const id = handleElementId(outlineHandle(f, i));
     handles.push(id);
     if (table.subpathStarts.length > 1) {
-      ops.push(framePathMutationFor(id, spreadTableOf(table, args.pageOrigin ?? SPREAD_ORIGIN)));
+      ops.push(
+        framePathMutationFor(
+          id,
+          spreadTableOf(table, args.pageOrigin ?? SPREAD_ORIGIN),
+        ),
+      );
     }
     ops.push({
       op: "setElementProperty",
-      args: { elementId: id, path: "frameFillColor", value: { type: "colorRef", value: ref } },
+      args: {
+        elementId: id,
+        path: "frameFillColor",
+        value: { type: "colorRef", value: ref },
+      },
     });
     ops.push({
       op: "setElementProperty",
-      args: { elementId: id, path: "frameStrokeColor", value: { type: "colorRef", value: null } },
+      args: {
+        elementId: id,
+        path: "frameStrokeColor",
+        value: { type: "colorRef", value: null },
+      },
     });
   });
   if (handles.length >= 2) ops.push(groupMutationFor(handles));
@@ -186,7 +232,9 @@ export function createOutlinesBatchFor(args: {
 }
 
 /** Swatch name → id, plus `Color/Black` when the document carries it. */
-async function existingSwatches(host: BundleHost): Promise<Map<string, string>> {
+async function existingSwatches(
+  host: BundleHost,
+): Promise<Map<string, string>> {
   const out = new Map<string, string>();
   try {
     const swatches = (await host.document.collection("swatches")) as readonly {
@@ -204,16 +252,25 @@ async function existingSwatches(host: BundleHost): Promise<Map<string, string>> 
 }
 
 /** Outline every selected text frame. Answers the frames replaced. */
-export async function applyCreateOutlines(host: BundleHost): Promise<ElementId[]> {
+export async function applyCreateOutlines(
+  host: BundleHost,
+): Promise<ElementId[]> {
   const frames = host.selection.get().filter((id) => id.kind === "textFrame");
   if (frames.length === 0) {
-    host.log.debug(`${CREATE_OUTLINES_COMMAND_ID}: no text frame selected — no-op`);
+    host.log.debug(
+      `${CREATE_OUTLINES_COMMAND_ID}: no text frame selected — no-op`,
+    );
     return [];
   }
   const existing = await existingSwatches(host);
   // Each frame's page origin, from ONE geometry read (see the header).
-  const origins = new Map<string, { pageId: string | null | undefined; origin: PageOrigin }>();
-  for (const g of await host.document.elementGeometry([...frames]).catch(() => [])) {
+  const origins = new Map<
+    string,
+    { pageId: string | null | undefined; origin: PageOrigin }
+  >();
+  for (const g of await host.document
+    .elementGeometry([...frames])
+    .catch(() => [])) {
     origins.set(String(g.id.id), { pageId: g.pageId, origin: pageOriginOf(g) });
   }
   const ops: MutationInput[] = [];
@@ -239,10 +296,14 @@ export async function applyCreateOutlines(host: BundleHost): Promise<ElementId[]
       result,
       existing,
       frameIndex: done.length,
-      ...(read && read.pageId === result.pageId ? { pageOrigin: read.origin } : {}),
+      ...(read && read.pageId === result.pageId
+        ? { pageOrigin: read.origin }
+        : {}),
     });
     if (!batch) {
-      host.log.debug(`${CREATE_OUTLINES_COMMAND_ID}: ${String(frame.id)} shows no glyphs — left alone`);
+      host.log.debug(
+        `${CREATE_OUTLINES_COMMAND_ID}: ${String(frame.id)} shows no glyphs — left alone`,
+      );
       continue;
     }
     const frameOps = (batch.args as { ops: MutationInput[] }).ops;

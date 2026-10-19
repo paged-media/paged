@@ -43,7 +43,8 @@ import {
 } from "./web-kit";
 
 const HTML = "<p>Hello world</p>";
-const CSS = "p { margin: 0; font: 32px/40px Inter, sans-serif; color: #101820; }";
+const CSS =
+  "p { margin: 0; font: 32px/40px Inter, sans-serif; color: #101820; }";
 const BREADCRUMB = "[data-edit-context-breadcrumb]";
 /** The caret the session draws: a tool-preview polyline. */
 const CARET = 'svg polyline[stroke="var(--overlay-snap)"]';
@@ -62,7 +63,8 @@ async function clickIntoText(page: Page, frame: ElementRef): Promise<void> {
   await expect
     .poll(async () => {
       const next = await screenPointInFrame(page, frame, 40, 15);
-      const still = Math.abs(next.x - at.x) < 0.5 && Math.abs(next.y - at.y) < 0.5;
+      const still =
+        Math.abs(next.x - at.x) < 0.5 && Math.abs(next.y - at.y) < 0.5;
       at = next;
       return still;
     })
@@ -70,7 +72,10 @@ async function clickIntoText(page: Page, frame: ElementRef): Promise<void> {
   await page.mouse.click(at.x, at.y);
   // A vertical line has no width, so Playwright calls it hidden — count it.
   await expect
-    .poll(() => page.locator(CARET).count(), { timeout: 10_000, message: "the caret is drawn" })
+    .poll(() => page.locator(CARET).count(), {
+      timeout: 10_000,
+      message: "the caret is drawn",
+    })
     .toBeGreaterThan(0);
 }
 
@@ -90,45 +95,75 @@ test.describe("journey · paged.web in-frame text editing", () => {
     await tapSceneLayers(page);
 
     const frame = await insertWebFrameWith(page, HTML, CSS);
-    await expect.poll(() => sceneText(page, frame.id), { timeout: 15_000 }).toBe("Hello world");
+    await expect
+      .poll(() => sceneText(page, frame.id), { timeout: 15_000 })
+      .toBe("Hello world");
     const original = await designer.renderBytes();
 
     // ── 1–2. Click, type, Enter. ──
     await clickIntoText(page, frame);
     await page.keyboard.type("ZQ");
     await expect
-      .poll(() => sceneText(page, frame.id), { timeout: 10_000, message: "the canvas shows the typing live" })
+      .poll(() => sceneText(page, frame.id), {
+        timeout: 10_000,
+        message: "the canvas shows the typing live",
+      })
       .toContain("ZQ");
-    expect(await sourceText(page, frame), "typing alone does not write the document").toBe("Hello world");
+    expect(
+      await sourceText(page, frame),
+      "typing alone does not write the document",
+    ).toBe("Hello world");
     await page.keyboard.press("Enter");
-    await expect.poll(() => sourceText(page, frame), { timeout: 10_000 }).toContain("ZQ");
+    await expect
+      .poll(() => sourceText(page, frame), { timeout: 10_000 })
+      .toContain("ZQ");
     const committed = await sourceText(page, frame);
-    expect(committed.replace("ZQ", ""), "only the typed text changed").toBe("Hello world");
-    expect((await webSource(page, frame))?.html, "the markup around the text node is kept").toBe(
-      `<p>${committed}</p>`,
+    expect(committed.replace("ZQ", ""), "only the typed text changed").toBe(
+      "Hello world",
     );
-    await expect.poll(() => sceneText(page, frame.id), { timeout: 10_000 }).toBe(committed);
+    expect(
+      (await webSource(page, frame))?.html,
+      "the markup around the text node is kept",
+    ).toBe(`<p>${committed}</p>`);
+    await expect
+      .poll(() => sceneText(page, frame.id), { timeout: 10_000 })
+      .toBe(committed);
     await designer.expectRenderChangesFrom(original);
 
     // ── 3. One document undo step. ──
     await page.keyboard.press("Escape"); // leave the context (no edit open)
     await expect(page.locator(BREADCRUMB)).toHaveCount(0, { timeout: 10_000 });
     await undo(page);
-    await expect.poll(() => sourceText(page, frame), { timeout: 10_000 }).toBe("Hello world");
-    await expect.poll(() => sceneText(page, frame.id), { timeout: 15_000 }).toBe("Hello world");
+    await expect
+      .poll(() => sourceText(page, frame), { timeout: 10_000 })
+      .toBe("Hello world");
+    await expect
+      .poll(() => sceneText(page, frame.id), { timeout: 15_000 })
+      .toBe("Hello world");
 
     // ── 4. Esc cancels: the canvas returns, the document never moved. ──
     await clickIntoText(page, frame);
     await page.keyboard.type("XY");
-    await expect.poll(() => sceneText(page, frame.id), { timeout: 10_000 }).toContain("XY");
-    await page.keyboard.press("Escape");
-    await expect.poll(() => sceneText(page, frame.id), { timeout: 10_000 }).toBe("Hello world");
-    expect(await sourceText(page, frame), "a cancelled edit writes nothing").toBe("Hello world");
     await expect
-      .poll(async () => designer.renderDiffPixels(original, await designer.renderBytes()), {
-        timeout: 15_000,
-        message: "after Esc the frame renders as before the edit",
-      })
+      .poll(() => sceneText(page, frame.id), { timeout: 10_000 })
+      .toContain("XY");
+    await page.keyboard.press("Escape");
+    await expect
+      .poll(() => sceneText(page, frame.id), { timeout: 10_000 })
+      .toBe("Hello world");
+    expect(
+      await sourceText(page, frame),
+      "a cancelled edit writes nothing",
+    ).toBe("Hello world");
+    await expect
+      .poll(
+        async () =>
+          designer.renderDiffPixels(original, await designer.renderBytes()),
+        {
+          timeout: 15_000,
+          message: "after Esc the frame renders as before the edit",
+        },
+      )
       .toBeLessThanOrEqual(16);
   });
 });

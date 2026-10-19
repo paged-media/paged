@@ -27,7 +27,11 @@ import { describe, expect, it, beforeAll, afterAll } from "bun:test";
 
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
 
-import { F1_MULTI_SHAPE, F2_CLOSED_QUAD, F3_CURVED_OPEN } from "../fixtures/corpus";
+import {
+  F1_MULTI_SHAPE,
+  F2_CLOSED_QUAD,
+  F3_CURVED_OPEN,
+} from "../fixtures/corpus";
 import { replayGesture, liveTable, planFor, type GesturePlan } from "../replay";
 import { openHost } from "./host";
 
@@ -104,7 +108,11 @@ describe("draw conformance — gesture-plan replay", () => {
     it("replay removes the clicked anchor; undo restores", async () => {
       const el = poly(F1_MULTI_SHAPE.ids.polygon!);
       // Click on the middle anchor [250,600].
-      const g: GesturePlan = { tool: "delete", click: [250, 600], tolerance: 10 };
+      const g: GesturePlan = {
+        tool: "delete",
+        click: [250, 600],
+        tolerance: 10,
+      };
       const r = await replayGesture(h.host, el, g);
       expect(r.plan).toEqual({ kind: "remove", index: 1 });
       expect(r.after).toBe(r.before - 1);
@@ -139,9 +147,17 @@ describe("draw conformance — gesture-plan replay", () => {
       const el = poly(F1_MULTI_SHAPE.ids.polygon!);
       // F1's anchors are corners (handles collapsed) → convert plans smooth.
       const t = await liveTable(h.host, el);
-      const plan = planFor(t, { tool: "convert", click: [250, 600], tolerance: 10 });
+      const plan = planFor(t, {
+        tool: "convert",
+        click: [250, 600],
+        tolerance: 10,
+      });
       expect(plan).toEqual({ kind: "convert", index: 1, smooth: true });
-      const r = await replayGesture(h.host, el, { tool: "convert", click: [250, 600], tolerance: 10 });
+      const r = await replayGesture(h.host, el, {
+        tool: "convert",
+        click: [250, 600],
+        tolerance: 10,
+      });
       // Count is unchanged by a convert; undo restores the (already-equal)
       // count, and the toggle is reversible.
       expect(r.after).toBe(r.before);

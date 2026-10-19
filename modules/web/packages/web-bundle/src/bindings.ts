@@ -34,8 +34,16 @@
 // re-renders a frame when it changes, and re-runs when a provider announces
 // a new revision.
 
-import type { BundleHost, Disposable, ElementId } from "@paged-media/plugin-api";
-import { referencesBoundData, type TemplateVars, type WebFrameSource } from "../../web-model/src";
+import type {
+  BundleHost,
+  Disposable,
+  ElementId,
+} from "@paged-media/plugin-api";
+import {
+  referencesBoundData,
+  type TemplateVars,
+  type WebFrameSource,
+} from "../../web-model/src";
 
 import { readDocumentValues } from "./source-part";
 
@@ -120,7 +128,10 @@ export async function resolveBindings(
     const [geo] = await host.document.elementGeometry([id]);
     const pageId = geo?.pageId ?? null;
     if (pageId) {
-      const pages = await host.document.collection<{ selfId: string; index: number }>("pages");
+      const pages = await host.document.collection<{
+        selfId: string;
+        index: number;
+      }>("pages");
       const page = pages.find((p) => p.selfId === pageId);
       if (page) vars["frame.page"] = String(page.index);
     }
@@ -133,7 +144,10 @@ export async function resolveBindings(
 
 /** Follow the `dataset` providers: `onChange` fires when one announces a new
  *  revision (or the set of providers changes, checked on `refresh`). */
-export function watchProviders(host: BundleHost, onChange: () => void): {
+export function watchProviders(
+  host: BundleHost,
+  onChange: () => void,
+): {
   refresh(): void;
   dispose(): void;
 } {
@@ -149,7 +163,10 @@ export function watchProviders(host: BundleHost, onChange: () => void): {
     for (const id of ids) {
       if (subs.has(id)) continue;
       try {
-        subs.set(id, host.dataProviders.onDidChange(id, () => onChange()));
+        subs.set(
+          id,
+          host.dataProviders.onDidChange(id, () => onChange()),
+        );
       } catch {
         // not granted
       }

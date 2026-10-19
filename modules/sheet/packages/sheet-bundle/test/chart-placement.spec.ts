@@ -29,8 +29,17 @@ import { chartBoxOnPage, type ChartPage } from "../src/lower-chart";
 import { selectionIsInView } from "../src/lower";
 
 // A Letter page with 36 pt margins: the margin box is 36..576 × 36..756.
-const LETTER: ChartPage = { width: 612, height: 792, margins: [36, 36, 36, 36] };
-const sel = (top: number, left: number, bottom: number, right: number) => ({ top, left, bottom, right });
+const LETTER: ChartPage = {
+  width: 612,
+  height: 792,
+  margins: [36, 36, 36, 36],
+};
+const sel = (top: number, left: number, bottom: number, right: number) => ({
+  top,
+  left,
+  bottom,
+  right,
+});
 
 describe("chartBoxOnPage [sheet.chart.engine]", () => {
   it("below the selection when there is room, at the chart's size", () => {
@@ -44,7 +53,12 @@ describe("chartBoxOnPage [sheet.chart.engine]", () => {
 
   it("above it when the foot of the page has no room", () => {
     const at = chartBoxOnPage(LETTER, sel(600, 60, 700, 300));
-    expect(at).toEqual({ top: 600 - 12 - 240, left: 60, width: 360, height: 240 });
+    expect(at).toEqual({
+      top: 600 - 12 - 240,
+      left: 60,
+      width: 360,
+      height: 240,
+    });
   });
 
   it("slid inside the right margin when the selection sits far right", () => {
@@ -59,7 +73,12 @@ describe("chartBoxOnPage [sheet.chart.engine]", () => {
     expect(right).toEqual({ top: 36, left: 162, width: 360, height: 240 });
     // …on the right: left of it.
     const left = chartBoxOnPage(LETTER, sel(36, 450, 756, 576));
-    expect(left).toEqual({ top: 36, left: 450 - 12 - 360, width: 360, height: 240 });
+    expect(left).toEqual({
+      top: 36,
+      left: 450 - 12 - 360,
+      width: 360,
+      height: 240,
+    });
   });
 
   it("inside the margins when no side has room, never off the page", () => {
@@ -70,16 +89,29 @@ describe("chartBoxOnPage [sheet.chart.engine]", () => {
   });
 
   it("shrunk proportionally only when the margin box cannot hold 360 × 240", () => {
-    const small: ChartPage = { width: 300, height: 400, margins: [20, 20, 20, 20] };
+    const small: ChartPage = {
+      width: 300,
+      height: 400,
+      margins: [20, 20, 20, 20],
+    };
     const at = chartBoxOnPage(small, null);
     expect(at.width).toBeCloseTo(260);
     expect(at.height).toBeCloseTo(260 * (240 / 360));
     expect([at.top, at.left]).toEqual([20, 20]);
-    expect(chartBoxOnPage(LETTER, null)).toEqual({ top: 36, left: 36, width: 360, height: 240 });
+    expect(chartBoxOnPage(LETTER, null)).toEqual({
+      top: 36,
+      left: 36,
+      width: 360,
+      height: 240,
+    });
   });
 
   it("uses the page's edges when the margins leave no room", () => {
-    const tight: ChartPage = { width: 400, height: 300, margins: [200, 0, 200, 0] };
+    const tight: ChartPage = {
+      width: 400,
+      height: 300,
+      margins: [200, 0, 200, 0],
+    };
     const at = chartBoxOnPage(tight, null);
     expect([at.top, at.left]).toEqual([0, 0]);
     expect(at.top + at.height).toBeLessThanOrEqual(300);
@@ -112,6 +144,8 @@ describe("selectionIsInView [sheet.chart.engine]", () => {
   });
 
   it("counts the selection when a page carries no spread to compare", () => {
-    expect(selectionIsInView([{ selfId: "p12" }, { selfId: "p40" }], "p12", "p40")).toBe(true);
+    expect(
+      selectionIsInView([{ selfId: "p12" }, { selfId: "p40" }], "p12", "p40"),
+    ).toBe(true);
   });
 });

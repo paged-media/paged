@@ -156,13 +156,7 @@
     "path": "vAlign",
     "type": {
       "kind": "enum",
-      "members": [
-        "top",
-        "center",
-        "bottom",
-        "justify",
-        "distributed"
-      ]
+      "members": ["top", "center", "bottom", "justify", "distributed"]
     },
     "title": "Vertical alignment",
     "default": "bottom"

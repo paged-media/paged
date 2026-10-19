@@ -209,11 +209,7 @@ export interface MarqueeRect {
 }
 
 export type DirectSelectPlanKind =
-  | "move"
-  | "handle"
-  | "segment"
-  | "nudge"
-  | "delete";
+  "move" | "handle" | "segment" | "nudge" | "delete";
 
 /** The two ops a Direct Selection plan is ever made of. */
 export type DirectSelectOp = Extract<
@@ -302,7 +298,12 @@ interface GestureBase {
 
 type Gesture = GestureBase &
   (
-    | { kind: "anchors"; index: number; wasSelected: boolean; indices: number[] }
+    | {
+        kind: "anchors";
+        index: number;
+        wasSelected: boolean;
+        indices: number[];
+      }
     | { kind: "handle"; index: number; side: "left" | "right"; smooth: boolean }
     | { kind: "segment"; segStart: number; segEnd: number; t: number }
     | { kind: "marquee" }
@@ -333,7 +334,12 @@ const RIGID_EPS = 1e-9;
 
 function isIdentity(m: Affine): boolean {
   return (
-    m[0] === 1 && m[1] === 0 && m[2] === 0 && m[3] === 1 && m[4] === 0 && m[5] === 0
+    m[0] === 1 &&
+    m[1] === 0 &&
+    m[2] === 0 &&
+    m[3] === 1 &&
+    m[4] === 0 &&
+    m[5] === 0
   );
 }
 
@@ -358,7 +364,13 @@ function same(a: Vec2, b: Vec2): boolean {
 }
 
 function near(a: Vec2, b: Vec2): boolean {
-  const scale = Math.max(1, Math.abs(a[0]), Math.abs(a[1]), Math.abs(b[0]), Math.abs(b[1]));
+  const scale = Math.max(
+    1,
+    Math.abs(a[0]),
+    Math.abs(a[1]),
+    Math.abs(b[0]),
+    Math.abs(b[1]),
+  );
   return (
     Math.abs(a[0] - b[0]) <= RIGID_EPS * scale &&
     Math.abs(a[1] - b[1]) <= RIGID_EPS * scale
@@ -706,7 +718,8 @@ export class DirectSelectMachine {
       target,
       point: clone(g.down),
       time:
-        typeof timing.timeStamp === "number" && Number.isFinite(timing.timeStamp)
+        typeof timing.timeStamp === "number" &&
+        Number.isFinite(timing.timeStamp)
           ? timing.timeStamp
           : null,
       count,
@@ -874,9 +887,7 @@ export class DirectSelectMachine {
       subpathStarts: this.base.subpathStarts.map(
         (s) => s - doomed.filter((i) => i < s).length,
       ),
-      ...(this.base.subpathOpen
-        ? { subpathOpen: this.base.subpathOpen }
-        : {}),
+      ...(this.base.subpathOpen ? { subpathOpen: this.base.subpathOpen } : {}),
     };
     this.selection = new Set();
     return this.snap({ commit: { kind: "delete", ops } });
@@ -908,7 +919,10 @@ export class DirectSelectMachine {
       if (a === b) continue;
       const moved = !same(a.anchor, b.anchor);
       if (moved) set(i, "anchor", a.anchor);
-      const delta: Vec2 = [a.anchor[0] - b.anchor[0], a.anchor[1] - b.anchor[1]];
+      const delta: Vec2 = [
+        a.anchor[0] - b.anchor[0],
+        a.anchor[1] - b.anchor[1],
+      ];
       for (const side of ["left", "right"] as const) {
         const rode = moved
           ? near(a[side], shifted(b[side], delta))
@@ -997,9 +1011,7 @@ export class DirectSelectMachine {
     return out;
   }
 
-  private withAnchors(
-    f: (a: AnchorTriple, i: number) => AnchorTriple,
-  ): Table {
+  private withAnchors(f: (a: AnchorTriple, i: number) => AnchorTriple): Table {
     return { ...this.base, anchors: this.base.anchors.map(f) };
   }
 

@@ -18,7 +18,13 @@
 
 import { describe, expect, it } from "bun:test";
 
-import { boxesForOutline, caretAt, hitText, outlineIndexAt, parseInspected } from "../src/inspect";
+import {
+  boxesForOutline,
+  caretAt,
+  hitText,
+  outlineIndexAt,
+  parseInspected,
+} from "../src/inspect";
 import { tagOutline } from "../src/outline";
 
 describe("hitText / caretAt @feat:plugin-web.in-frame-edit", () => {
@@ -53,8 +59,16 @@ describe("hitText / caretAt @feat:plugin-web.in-frame-edit", () => {
   });
 
   it("draws the caret at the start of the character at the offset, or after the last", () => {
-    expect(caretAt(m, { node: 1, offset: 1 })).toEqual({ x: 23, top: 0, bottom: 12 });
-    expect(caretAt(m, { node: 1, offset: 3 })).toEqual({ x: 35, top: 0, bottom: 12 });
+    expect(caretAt(m, { node: 1, offset: 1 })).toEqual({
+      x: 23,
+      top: 0,
+      bottom: 12,
+    });
+    expect(caretAt(m, { node: 1, offset: 3 })).toEqual({
+      x: 35,
+      top: 0,
+      bottom: 12,
+    });
     expect(caretAt(m, { node: 7, offset: 0 })).toBeNull();
   });
 
@@ -86,7 +100,15 @@ describe("outline ↔ boxes @feat:plugin-web.outline-canvas", () => {
 
 describe("parseInspected @feat:plugin-web.in-frame-edit", () => {
   it("reads malformed JSON as an empty render", () => {
-    expect(parseInspected("nope")).toEqual({ layer: { items: [] }, text: { nodes: [], lines: [] }, boxes: [] });
-    expect(parseInspected('{"layer":{"items":[]},"text":{"nodes":[],"lines":[{"c":[]}]},"boxes":[]}').text.lines).toHaveLength(1);
+    expect(parseInspected("nope")).toEqual({
+      layer: { items: [] },
+      text: { nodes: [], lines: [] },
+      boxes: [],
+    });
+    expect(
+      parseInspected(
+        '{"layer":{"items":[]},"text":{"nodes":[],"lines":[{"c":[]}]},"boxes":[]}',
+      ).text.lines,
+    ).toHaveLength(1);
   });
 });

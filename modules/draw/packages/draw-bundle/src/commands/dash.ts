@@ -119,7 +119,9 @@ export async function applyDashPreset(
     return;
   }
   for (const elementId of selection) {
-    const outcome = await host.document.mutate(dashMutationFor(elementId, preset));
+    const outcome = await host.document.mutate(
+      dashMutationFor(elementId, preset),
+    );
     if (!outcome.applied) {
       host.log.warn(
         `${preset.id} rejected by engine: ${JSON.stringify(outcome.error)}`,
@@ -142,24 +144,37 @@ export const MAX_DASH_PAIRS = 3;
  *  answers `{ type: "lengths", value: [] }` for a solid stroke). Null
  *  when the entry is absent. Pure. */
 export function dashArrayFrom(
-  entries: readonly { path: string; value?: { type: string; value?: unknown } | null }[],
+  entries: readonly {
+    path: string;
+    value?: { type: string; value?: unknown } | null;
+  }[],
 ): number[] | null {
   for (const e of entries) {
-    if (e.path !== DASH_PATH || !e.value || e.value.type !== "lengths") continue;
+    if (e.path !== DASH_PATH || !e.value || e.value.type !== "lengths")
+      continue;
     const v = e.value.value;
-    return Array.isArray(v) ? v.filter((n): n is number => typeof n === "number") : [];
+    return Array.isArray(v)
+      ? v.filter((n): n is number => typeof n === "number")
+      : [];
   }
   return null;
 }
 
 /** ONE batch writing `lengths` to every element — one undo step for the
  *  whole selection (the presets above write one mutation per element). */
-export function dashBatchFor(elementIds: readonly ElementId[], lengths: readonly number[]): Mutation {
+export function dashBatchFor(
+  elementIds: readonly ElementId[],
+  lengths: readonly number[],
+): Mutation {
   return {
     op: "batch",
     args: {
       ops: elementIds.map((elementId) =>
-        dashMutationFor(elementId, { id: "", title: "", lengths: [...lengths] }),
+        dashMutationFor(elementId, {
+          id: "",
+          title: "",
+          lengths: [...lengths],
+        }),
       ),
     },
   };
@@ -178,7 +193,9 @@ export async function applyDashArray(
   }
   const outcome = await host.document.mutate(dashBatchFor(targets, lengths));
   if (!outcome.applied) {
-    host.log.warn(`stroke dashes rejected by engine: ${JSON.stringify(outcome.error)}`);
+    host.log.warn(
+      `stroke dashes rejected by engine: ${JSON.stringify(outcome.error)}`,
+    );
     return [];
   }
   return [...targets];

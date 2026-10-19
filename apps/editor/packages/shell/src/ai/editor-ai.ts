@@ -68,7 +68,9 @@ export function canvasScriptEngine(client: CanvasClient): ScriptEngine {
 }
 
 export function editorAiTransport(): AiTransport {
-  return createProxyTransport({ baseURL: new URL(AI_PROXY_PATH, window.location.origin).href });
+  return createProxyTransport({
+    baseURL: new URL(AI_PROXY_PATH, window.location.origin).href,
+  });
 }
 
 export interface EditorAgentRequest {
@@ -79,7 +81,10 @@ export interface EditorAgentRequest {
 }
 
 /** Run the agent on the open document. */
-export async function runEditorAgent(client: CanvasClient, request: EditorAgentRequest): Promise<AgentResult> {
+export async function runEditorAgent(
+  client: CanvasClient,
+  request: EditorAgentRequest,
+): Promise<AgentResult> {
   return runAgent({
     transport: editorAiTransport(),
     engine: canvasScriptEngine(client),
@@ -92,8 +97,15 @@ export async function runEditorAgent(client: CanvasClient, request: EditorAgentR
 }
 
 /** One plain-text answer, for a script's paged.ai.complete(). */
-export async function completeText(prompt: string, signal?: AbortSignal): Promise<string> {
-  const answer = await complete(editorAiTransport(), prompt, signal ? { signal } : undefined);
+export async function completeText(
+  prompt: string,
+  signal?: AbortSignal,
+): Promise<string> {
+  const answer = await complete(
+    editorAiTransport(),
+    prompt,
+    signal ? { signal } : undefined,
+  );
   if (answer.refusal) throw new Error("Claude declined this request");
   return answer.text;
 }
@@ -114,13 +126,22 @@ export function plainSummary(text: string): string {
 
 /** A human sentence for an error the proxy or the SDK raised. */
 export function describeAiError(err: unknown): string {
-  const e = err as { status?: number; error?: { error?: { type?: string; message?: string } }; name?: string; message?: string };
-  if (e?.name === "AbortError" || e?.name === "APIUserAbortError") return "Stopped.";
+  const e = err as {
+    status?: number;
+    error?: { error?: { type?: string; message?: string } };
+    name?: string;
+    message?: string;
+  };
+  if (e?.name === "AbortError" || e?.name === "APIUserAbortError")
+    return "Stopped.";
   const type = e?.error?.error?.type;
   const message = e?.error?.error?.message;
-  if (e?.status === 503 || type === "ai_unavailable") return message ?? "The AI service is not available on this deployment.";
-  if (e?.status === 429) return message ?? "Too many AI requests right now. Try again shortly.";
-  if (e?.status === 529) return "Claude is overloaded right now. Try again shortly.";
+  if (e?.status === 503 || type === "ai_unavailable")
+    return message ?? "The AI service is not available on this deployment.";
+  if (e?.status === 429)
+    return message ?? "Too many AI requests right now. Try again shortly.";
+  if (e?.status === 529)
+    return "Claude is overloaded right now. Try again shortly.";
   if (e?.status === 404) return "This deployment has no AI service.";
   return message ?? e?.message ?? String(err);
 }
@@ -129,8 +150,15 @@ export function describeAiError(err: unknown): string {
  *  none. The engine has no read for it, so this undoes and immediately
  *  redoes — the document ends exactly as it was. */
 export async function undoTop(client: CanvasClient): Promise<number> {
-  const undone = (await client.undo()) as { kind: string; payload?: { undoneSeq?: number } };
-  if (undone.kind !== "undoApplied" || typeof undone.payload?.undoneSeq !== "number") return 0;
+  const undone = (await client.undo()) as {
+    kind: string;
+    payload?: { undoneSeq?: number };
+  };
+  if (
+    undone.kind !== "undoApplied" ||
+    typeof undone.payload?.undoneSeq !== "number"
+  )
+    return 0;
   await client.redo();
   return undone.payload.undoneSeq;
 }
@@ -138,11 +166,22 @@ export async function undoTop(client: CanvasClient): Promise<number> {
 /** Undo every mutation newer than `seq`, as long as the newest one is
  *  still `expectTop` — i.e. nothing was edited after Claude finished.
  *  Returns false (and changes nothing) when something was. */
-export async function undoBackTo(client: CanvasClient, seq: number, expectTop: number): Promise<boolean> {
+export async function undoBackTo(
+  client: CanvasClient,
+  seq: number,
+  expectTop: number,
+): Promise<boolean> {
   if ((await undoTop(client)) !== expectTop) return false;
   for (;;) {
-    const undone = (await client.undo()) as { kind: string; payload?: { undoneSeq?: number } };
-    if (undone.kind !== "undoApplied" || typeof undone.payload?.undoneSeq !== "number") return true;
+    const undone = (await client.undo()) as {
+      kind: string;
+      payload?: { undoneSeq?: number };
+    };
+    if (
+      undone.kind !== "undoApplied" ||
+      typeof undone.payload?.undoneSeq !== "number"
+    )
+      return true;
     if (undone.payload.undoneSeq <= seq) {
       await client.redo(); // one too far: that step predates Claude's run
       return true;

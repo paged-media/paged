@@ -97,7 +97,8 @@ const DEFAULT_MIN_LENGTH = 1;
 /** Summed segment length of a polyline. */
 function lengthOf(points: readonly Vec2[]): number {
   let total = 0;
-  for (let i = 1; i < points.length; i++) total += dist(points[i - 1], points[i]);
+  for (let i = 1; i < points.length; i++)
+    total += dist(points[i - 1], points[i]);
   return total;
 }
 
@@ -134,7 +135,9 @@ export class KnifeMachine {
   private track(point: Vec2, modifiers: KnifeModifiers | undefined): void {
     if (modifiers?.alt) {
       const start = this.samples[0];
-      this.straightEnd = modifiers.shift ? constrainAngle(start, point) : clone(point);
+      this.straightEnd = modifiers.shift
+        ? constrainAngle(start, point)
+        : clone(point);
       return;
     }
     this.straightEnd = null;
@@ -143,7 +146,10 @@ export class KnifeMachine {
     if (dist(point, last) >= floor) this.samples.push(clone(point));
   }
 
-  private onUp(point: Vec2, modifiers: KnifeModifiers | undefined): KnifeSnapshot {
+  private onUp(
+    point: Vec2,
+    modifiers: KnifeModifiers | undefined,
+  ): KnifeSnapshot {
     if (!this.drawing) return this.snapshot(null);
     this.drawing = false;
     this.done = true;

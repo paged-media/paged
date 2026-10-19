@@ -40,7 +40,12 @@
 import { describe, expect, it, setDefaultTimeout } from "bun:test";
 
 import { ingestColumnBatch } from "../../src/engine";
-import { bootCountedDuck, bootCountedEngine, HAVE_DUCK, HAVE_ENGINE } from "./harness";
+import {
+  bootCountedDuck,
+  bootCountedEngine,
+  HAVE_DUCK,
+  HAVE_ENGINE,
+} from "./harness";
 
 const RUN = process.env.PERF_DUCKDB_1M === "1";
 const ROWS = Number(process.env.PERF_DUCKDB_ROWS ?? 1_000_000);
@@ -50,75 +55,99 @@ setDefaultTimeout(600_000);
 function csv(n: number): string {
   const parts: string[] = ["sku,name,price,cat\n"];
   for (let i = 0; i < n; i++) {
-    parts.push(`SKU-${(i * 7919) % n},item ${i},${(i % 10_000) * 0.25},cat-${i % 100}\n`);
+    parts.push(
+      `SKU-${(i * 7919) % n},item ${i},${(i % 10_000) * 0.25},cat-${i % 100}\n`,
+    );
   }
   return parts.join("");
 }
 
-describe.skipIf(!RUN || !HAVE_DUCK || !HAVE_ENGINE)("DuckDB 1M-row lane (trended) [data.perf.gates]", () => {
-  it(`ingests ${ROWS} rows, groups them, and materialises them across the boundary [data.perf.gates]`, async () => {
-    const duck = await bootCountedDuck();
-    const text = csv(ROWS);
-    const mb = (text.length / 1e6).toFixed(1);
+describe.skipIf(!RUN || !HAVE_DUCK || !HAVE_ENGINE)(
+  "DuckDB 1M-row lane (trended) [data.perf.gates]",
+  () => {
+    it(`ingests ${ROWS} rows, groups them, and materialises them across the boundary [data.perf.gates]`, async () => {
+      const duck = await bootCountedDuck();
+      const text = csv(ROWS);
+      const mb = (text.length / 1e6).toFixed(1);
 
-    let t = performance.now();
-    await duck.handle.registerCsv("big", text);
-    const ingestMs = performance.now() - t;
+      let t = performance.now();
+      await duck.handle.registerCsv("big", text);
+      const ingestMs = performance.now() - t;
 
-    t = performance.now();
-    const grouped = await duck.handle.query(
-      "SELECT cat, count(*) AS n, sum(price) AS total FROM big GROUP BY cat ORDER BY cat",
-    );
-    const groupMs = performance.now() - t;
-    expect(grouped.row_count).toBe(100);
-    expect(grouped.columns[1]!.reduce((s, v) => s + Number((v as { v: number }).v), 0)).toBe(ROWS);
+      t = performance.now();
+      const grouped = await duck.handle.query(
+        "SELECT cat, count(*) AS n, sum(price) AS total FROM big GROUP BY cat ORDER BY cat",
+      );
+      const groupMs = performance.now() - t;
+      expect(grouped.row_count).toBe(100);
+      expect(
+        grouped.columns[1]!.reduce(
+          (s, v) => s + Number((v as { v: number }).v),
+          0,
+        ),
+      ).toBe(ROWS);
 
-    t = performance.now();
-    const all = await duck.handle.query("SELECT * FROM big");
-    const materialiseMs = performance.now() - t;
-    expect(all.row_count).toBe(ROWS);
+      t = performance.now();
+      const all = await duck.handle.query("SELECT * FROM big");
+      const materialiseMs = performance.now() - t;
+      expect(all.row_count).toBe(ROWS);
 
-    const engine = await bootCountedEngine();
-    engine.engine.define_query({ id: "q", sql: "", params: [], shape: { shape: "recordStream" } });
-    t = performance.now();
-    engine.engine.ingest_result("q", all);
-    const engineIngestMs = performance.now() - t;
-    expect(engine.counters().ingest_cells).toBe(ROWS * 4);
+      const engine = await bootCountedEngine();
+      engine.engine.define_query({
+        id: "q",
+        sql: "",
+        params: [],
+        shape: { shape: "recordStream" },
+      });
+      t = performance.now();
+      engine.engine.ingest_result("q", all);
+      const engineIngestMs = performance.now() - t;
+      expect(engine.counters().ingest_cells).toBe(ROWS * 4);
 
-    t = performance.now();
-    const batch = await duck.handle.queryColumns("SELECT * FROM big");
-    const columnsMs = performance.now() - t;
-    const doorEngine = await bootCountedEngine();
-    doorEngine.engine.define_query({ id: "q", sql: "", params: [], shape: { shape: "recordStream" } });
-    doorEngine.reset();
-    t = performance.now();
-    expect(ingestColumnBatch(doorEngine.engine, "q", batch)).toBe("changed");
-    const doorIngestMs = performance.now() - t;
-    expect(doorEngine.counters().ingest_cells).toBe(ROWS * 4);
-    // The same data both ways.
-    expect(doorEngine.engine.result_token!("q")).toBe(engine.engine.result_token!("q"));
-    doorEngine.reset();
-    t = performance.now();
-    expect(ingestColumnBatch(doorEngine.engine, "q", batch)).toBe("unchanged");
-    const doorUnchangedMs = performance.now() - t;
-    expect(doorEngine.counters().ingest_cells).toBe(0);
+      t = performance.now();
+      const batch = await duck.handle.queryColumns("SELECT * FROM big");
+      const columnsMs = performance.now() - t;
+      const doorEngine = await bootCountedEngine();
+      doorEngine.engine.define_query({
+        id: "q",
+        sql: "",
+        params: [],
+        shape: { shape: "recordStream" },
+      });
+      doorEngine.reset();
+      t = performance.now();
+      expect(ingestColumnBatch(doorEngine.engine, "q", batch)).toBe("changed");
+      const doorIngestMs = performance.now() - t;
+      expect(doorEngine.counters().ingest_cells).toBe(ROWS * 4);
+      // The same data both ways.
+      expect(doorEngine.engine.result_token!("q")).toBe(
+        engine.engine.result_token!("q"),
+      );
+      doorEngine.reset();
+      t = performance.now();
+      expect(ingestColumnBatch(doorEngine.engine, "q", batch)).toBe(
+        "unchanged",
+      );
+      const doorUnchangedMs = performance.now() - t;
+      expect(doorEngine.counters().ingest_cells).toBe(0);
 
-    // eslint-disable-next-line no-console
-    console.log(
-      `PERF duckdb-${ROWS} ${JSON.stringify({
-        csvMB: Number(mb),
-        ingestMs: Math.round(ingestMs),
-        groupedQueryMs: Math.round(groupMs),
-        materialiseMs: Math.round(materialiseMs),
-        engineIngestMs: Math.round(engineIngestMs),
-        columnsMaterialiseMs: Math.round(columnsMs),
-        columnDoorIngestMs: Math.round(doorIngestMs),
-        columnDoorUnchangedMs: Math.round(doorUnchangedMs),
-        boundaryMs: Math.round(materialiseMs + engineIngestMs),
-        columnBoundaryMs: Math.round(columnsMs + doorIngestMs),
-        groupedTotalMs: Math.round(ingestMs + groupMs),
-      })}`,
-    );
-    await duck.handle.close();
-  });
-});
+      // eslint-disable-next-line no-console
+      console.log(
+        `PERF duckdb-${ROWS} ${JSON.stringify({
+          csvMB: Number(mb),
+          ingestMs: Math.round(ingestMs),
+          groupedQueryMs: Math.round(groupMs),
+          materialiseMs: Math.round(materialiseMs),
+          engineIngestMs: Math.round(engineIngestMs),
+          columnsMaterialiseMs: Math.round(columnsMs),
+          columnDoorIngestMs: Math.round(doorIngestMs),
+          columnDoorUnchangedMs: Math.round(doorUnchangedMs),
+          boundaryMs: Math.round(materialiseMs + engineIngestMs),
+          columnBoundaryMs: Math.round(columnsMs + doorIngestMs),
+          groupedTotalMs: Math.round(ingestMs + groupMs),
+        })}`,
+      );
+      await duck.handle.close();
+    });
+  },
+);

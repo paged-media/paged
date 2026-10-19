@@ -51,9 +51,9 @@ describe("interpolateAnchors", () => {
   });
 
   it("mismatched anchor counts answer [] (the honest-diagnostic cue)", () => {
-    expect(interpolateAnchors([corner(0, 0)], [corner(0, 0), corner(1, 1)], 0.5)).toEqual(
-      [],
-    );
+    expect(
+      interpolateAnchors([corner(0, 0)], [corner(0, 0), corner(1, 1)], 0.5),
+    ).toEqual([]);
   });
 });
 

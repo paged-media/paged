@@ -112,8 +112,8 @@ test.describe("U5/A7 — the default-font invariant (unresolvable fonts still re
       .poll(() =>
         page.evaluate(
           () =>
-            (globalThis as unknown as { __canvas: { ready: boolean } })
-              .__canvas.ready,
+            (globalThis as unknown as { __canvas: { ready: boolean } }).__canvas
+              .ready,
         ),
       )
       .toBe(true);
@@ -129,8 +129,8 @@ test.describe("U5/A7 — the default-font invariant (unresolvable fonts still re
       .poll(() =>
         page.evaluate(
           () =>
-            (globalThis as unknown as { __canvas: { ready: boolean } })
-              .__canvas.ready,
+            (globalThis as unknown as { __canvas: { ready: boolean } }).__canvas
+              .ready,
         ),
       )
       .toBe(true);
@@ -151,9 +151,7 @@ test.describe("U5/A7 — the default-font invariant (unresolvable fonts still re
         globalThis as unknown as {
           __canvas: {
             client: {
-              loadDocument: (
-                b: Uint8Array,
-              ) => Promise<{ pageIds: string[] }>;
+              loadDocument: (b: Uint8Array) => Promise<{ pageIds: string[] }>;
             };
           };
         }

@@ -33,7 +33,12 @@
 
 import { expect } from "@playwright/test";
 
-import { assignLayer, marginNote, proseFrame, specLabel } from "../../annual-support";
+import {
+  assignLayer,
+  marginNote,
+  proseFrame,
+  specLabel,
+} from "../../annual-support";
 import { INDEX_TOPICS, LAYER, STYLE, p } from "../../names-annual";
 import type { PageContext, PageReport } from "../../types";
 import { folioOf, resolveIndexRefs } from "./00-support";
@@ -75,18 +80,25 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   ).toBeGreaterThan(0);
 
   // ── A·5: the index proper, two columns ───────────────────────────
-  const head = await proseFrame(ctx, p(131), [48, 54, 480, 88], [
-    { text: "Appendix A — The Index", style: STYLE.head1 },
-  ]);
+  const head = await proseFrame(
+    ctx,
+    p(131),
+    [48, 54, 480, 88],
+    [{ text: "Appendix A — The Index", style: STYLE.head1 }],
+  );
   elements.push(head.frameId);
 
-  const intro = await proseFrame(ctx, p(131), [48, 96, 480, 178], [
-    {
-      text:
-        "An index is apparatus that accumulated. Six slim tabs rode the fore-edge of verso pages through this book, and with the two apparatus exhibits of Chapter 7 they filed PageReference markers under the ten topics the document declares. Here the filing resolves: topic by topic, with the folios the markers earned.",
-      style: STYLE.bodyFirst,
-    },
-  ]);
+  const intro = await proseFrame(
+    ctx,
+    p(131),
+    [48, 96, 480, 178],
+    [
+      {
+        text: "An index is apparatus that accumulated. Six slim tabs rode the fore-edge of verso pages through this book, and with the two apparatus exhibits of Chapter 7 they filed PageReference markers under the ten topics the document declares. Here the filing resolves: topic by topic, with the folios the markers earned.",
+        style: STYLE.bodyFirst,
+      },
+    ],
+  );
   elements.push(intro.frameId);
 
   // Ten topics, alphabetical, split across two columns; each entry is
@@ -94,7 +106,10 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   // line naming the carrier stories.
   const names = [...INDEX_TOPICS].sort((a, b) => a.localeCompare(b));
   const half = Math.ceil(names.length / 2);
-  const columns: Array<{ box: [number, number, number, number]; names: string[] }> = [
+  const columns: Array<{
+    box: [number, number, number, number];
+    names: string[];
+  }> = [
     { box: [48, 196, 258, 600], names: names.slice(0, half) },
     { box: [270, 196, 480, 600], names: names.slice(half) },
   ];
@@ -103,9 +118,7 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     for (const name of col.names) {
       const r = byName.get(name);
       const folios =
-        r && r.physicals.length > 0
-          ? r.physicals.map(folioOf).join(", ")
-          : "—";
+        r && r.physicals.length > 0 ? r.physicals.map(folioOf).join(", ") : "—";
       paras.push({ text: `${name}\t${folios}`, style: STYLE.indexEntry });
       const carriers =
         r && r.physicals.length > 0
@@ -168,19 +181,22 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   );
 
   // ── A·6: how it resolved, and the honest boundary ────────────────
-  const method = await proseFrame(ctx, p(132), [60, 64, 492, 300], [
-    { text: "How the index resolved", style: STYLE.head2 },
-    {
-      text:
-        "Nothing opposite was typed from a plan. The topics are the live indexTopics collection; the folio lists come from the document itself — this module exported its own IDML, found every PageReference marker in the stories, walked each marker's story to its text frame and each frame to its page through the spreads' own transforms, and converted physical pages to folios by the sections math the front matter authored (body folio = physical − 10). The tab pages and the Chapter 7 exhibits are simply where the markers turned out to be.",
-      style: STYLE.bodyFirst,
-    },
-    {
-      text:
-        `The arithmetic, printed so it can be checked: ${totalMarkers} marker pages across ${refs.length} of the ${topics.length} declared topics, every one carried by a fore-edge tab or an apparatus exhibit. A topic no marker feeds would print an em dash — an index reports its markers, not its wishes.`,
-      style: STYLE.body,
-    },
-  ]);
+  const method = await proseFrame(
+    ctx,
+    p(132),
+    [60, 64, 492, 300],
+    [
+      { text: "How the index resolved", style: STYLE.head2 },
+      {
+        text: "Nothing opposite was typed from a plan. The topics are the live indexTopics collection; the folio lists come from the document itself — this module exported its own IDML, found every PageReference marker in the stories, walked each marker's story to its text frame and each frame to its page through the spreads' own transforms, and converted physical pages to folios by the sections math the front matter authored (body folio = physical − 10). The tab pages and the Chapter 7 exhibits are simply where the markers turned out to be.",
+        style: STYLE.bodyFirst,
+      },
+      {
+        text: `The arithmetic, printed so it can be checked: ${totalMarkers} marker pages across ${refs.length} of the ${topics.length} declared topics, every one carried by a fore-edge tab or an apparatus exhibit. A topic no marker feeds would print an em dash — an index reports its markers, not its wishes.`,
+        style: STYLE.body,
+      },
+    ],
+  );
   elements.push(method.frameId);
 
   elements.push(

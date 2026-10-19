@@ -105,35 +105,51 @@ export async function build(ctx: PageContext): Promise<PageReport> {
 
   const gpu = await doc.gpuActive();
 
-  const head = await proseFrame(ctx, page, [48, 58, 480, 88], [
-    { text: "Retouch — painting from the image", style: STYLE.head2 },
-  ]);
-  const intro = await proseFrame(ctx, page, [48, 92, 480, 148], [
-    {
-      text:
-        "The clone stamp and the healing brush are the brush with a " +
-        "different paint layer: the clone copies a window of the image " +
-        "from an alt-clicked anchor; the heal runs the same stroke and " +
-        "then tone-matches it in the gradient domain, so the patch takes " +
-        "on the destination's light. Content-aware fill synthesises a " +
-        "marqueed region from the rest of the picture, coarse to fine, " +
-        "every written pixel copied — never averaged.",
-      style: STYLE.bodySmall,
-    },
-  ]);
+  const head = await proseFrame(
+    ctx,
+    page,
+    [48, 58, 480, 88],
+    [{ text: "Retouch — painting from the image", style: STYLE.head2 }],
+  );
+  const intro = await proseFrame(
+    ctx,
+    page,
+    [48, 92, 480, 148],
+    [
+      {
+        text:
+          "The clone stamp and the healing brush are the brush with a " +
+          "different paint layer: the clone copies a window of the image " +
+          "from an alt-clicked anchor; the heal runs the same stroke and " +
+          "then tone-matches it in the gradient domain, so the patch takes " +
+          "on the destination's light. Content-aware fill synthesises a " +
+          "marqueed region from the rest of the picture, coarse to fine, " +
+          "every written pixel copied — never averaged.",
+        style: STYLE.bodySmall,
+      },
+    ],
+  );
   elements.push(head.frameId, intro.frameId);
 
   // ── BEFORE: the file as shot ─────────────────────────────────────
   const before = await doc.rectangle(pg, BEFORE);
   await assignLayer(ctx, "rectangle", before, LAYER.content);
-  await doc.mutate("placeImage", { elementId: before, uri: PUPPIES_URI, fit: null });
+  await doc.mutate("placeImage", {
+    elementId: before,
+    uri: PUPPIES_URI,
+    fit: null,
+  });
   const beforeBytes = await replaceBytesFromFile(ctx, before, PUPPIES);
   elements.push(before);
 
   // ── AFTER: the session copy the tools work on ────────────────────
   const after = await doc.rectangle(pg, AFTER);
   await assignLayer(ctx, "rectangle", after, LAYER.content);
-  await doc.mutate("placeImage", { elementId: after, uri: PUPPIES_URI, fit: null });
+  await doc.mutate("placeImage", {
+    elementId: after,
+    uri: PUPPIES_URI,
+    fit: null,
+  });
   await replaceBytesFromFile(ctx, after, PUPPIES);
   elements.push(after);
 
@@ -182,7 +198,12 @@ export async function build(ctx: PageContext): Promise<PageReport> {
         [362, 192],
         [388, 186],
       ]);
-      cloneLanded = await statusLanded(ctx, /Painted \d+ dab/, 20_000, preClone);
+      cloneLanded = await statusLanded(
+        ctx,
+        /Painted \d+ dab/,
+        20_000,
+        preClone,
+      );
 
       // ── healing brush: new anchor, stroke elsewhere ──────────────
       // RESET the status line first (deselect writes its own text):
@@ -275,44 +296,59 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   }
 
   // ── captions from the measured outcome ───────────────────────────
-  const beforeCap = await proseFrame(ctx, page, [48, 312, 248, 356], [
-    {
-      text:
-        `BEFORE · as shot · ${beforeBytes.toLocaleString("en-US")} B inline · ` +
-        "two retriever puppies, Chevanon Photography, Pexels",
-      style: STYLE.specLabel,
-    },
-  ]);
-  const afterCap = await proseFrame(ctx, page, [264, 312, 464, 356], [
-    {
-      text:
-        committed !== null && changed
-          ? `AFTER · clone + heal transplant flowered turf into the upper ` +
-            `meadow; content-aware fill lifts a flower cluster from the ` +
-            `lower right · ${committed.toLocaleString("en-US")} B committed`
-          : "AFTER · the retouch did not land on this lane — this frame " +
-            "carries the photograph as shot",
-      style: STYLE.specLabel,
-    },
-  ]);
+  const beforeCap = await proseFrame(
+    ctx,
+    page,
+    [48, 312, 248, 356],
+    [
+      {
+        text:
+          `BEFORE · as shot · ${beforeBytes.toLocaleString("en-US")} B inline · ` +
+          "two retriever puppies, Chevanon Photography, Pexels",
+        style: STYLE.specLabel,
+      },
+    ],
+  );
+  const afterCap = await proseFrame(
+    ctx,
+    page,
+    [264, 312, 464, 356],
+    [
+      {
+        text:
+          committed !== null && changed
+            ? `AFTER · clone + heal transplant flowered turf into the upper ` +
+              `meadow; content-aware fill lifts a flower cluster from the ` +
+              `lower right · ${committed.toLocaleString("en-US")} B committed`
+            : "AFTER · the retouch did not land on this lane — this frame " +
+              "carries the photograph as shot",
+        style: STYLE.specLabel,
+      },
+    ],
+  );
   elements.push(beforeCap.frameId, afterCap.frameId);
 
-  const method = await proseFrame(ctx, page, [48, 372, 480, 470], [
-    {
-      text:
-        "The anchor click is a separate interaction from the stroke — " +
-        "alt-click sets the source and deposits nothing, because painting " +
-        "the anchor is the one thing a retoucher never wants. The heal's " +
-        "correction is the membrane field matching the source–destination " +
-        "mismatch on the dab's boundary; where the window runs off the " +
-        "image it falls back to a plain clone and says so in the panel. " +
-        "Attribution on this page is measured twice: each landing is read " +
-        "from the panel's status line, and the committed export is " +
-        "byte-compared against an identity baseline taken before the " +
-        "first stroke.",
-      style: STYLE.bodySmall,
-    },
-  ]);
+  const method = await proseFrame(
+    ctx,
+    page,
+    [48, 372, 480, 470],
+    [
+      {
+        text:
+          "The anchor click is a separate interaction from the stroke — " +
+          "alt-click sets the source and deposits nothing, because painting " +
+          "the anchor is the one thing a retoucher never wants. The heal's " +
+          "correction is the membrane field matching the source–destination " +
+          "mismatch on the dab's boundary; where the window runs off the " +
+          "image it falls back to a plain clone and says so in the panel. " +
+          "Attribution on this page is measured twice: each landing is read " +
+          "from the panel's status line, and the committed export is " +
+          "byte-compared against an identity baseline taken before the " +
+          "first stroke.",
+        style: STYLE.bodySmall,
+      },
+    ],
+  );
   elements.push(method.frameId);
 
   await marginNote(

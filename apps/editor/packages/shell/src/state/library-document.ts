@@ -88,7 +88,9 @@ export function rememberOpenedFile(bytes: Uint8Array, name: string): void {
     .then((entry) => {
       if (opening === run) current = entry;
     })
-    .catch((err: unknown) => console.warn(`library: could not keep ${name}:`, err))
+    .catch((err: unknown) =>
+      console.warn(`library: could not keep ${name}:`, err),
+    )
     .finally(() => {
       if (opening === run) opening = null;
       changed();

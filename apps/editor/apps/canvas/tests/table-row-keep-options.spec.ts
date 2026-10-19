@@ -35,22 +35,43 @@ interface CellAddr {
 }
 
 /** Sweep page 0 for the first table cell (a hit test with a table context). */
-async function findCell(page: Page, pageId: string, widthPt: number, heightPt: number) {
+async function findCell(
+  page: Page,
+  pageId: string,
+  widthPt: number,
+  heightPt: number,
+) {
   return page.evaluate(
     async ({ pageId, widthPt, heightPt }) => {
-      const c = (globalThis as unknown as {
-        __canvas: {
-          client: {
-            send(m: unknown): Promise<{
-              kind: string;
-              payload?: { storyId?: string | null; tableContext?: { tableId: string; row: number; col: number } | null };
-            }>;
+      const c = (
+        globalThis as unknown as {
+          __canvas: {
+            client: {
+              send(m: unknown): Promise<{
+                kind: string;
+                payload?: {
+                  storyId?: string | null;
+                  tableContext?: {
+                    tableId: string;
+                    row: number;
+                    col: number;
+                  } | null;
+                };
+              }>;
+            };
           };
-        };
-      }).__canvas;
+        }
+      ).__canvas;
       for (let gy = 0.04; gy < 0.97; gy += 0.03) {
         for (let gx = 0.04; gx < 0.97; gx += 0.03) {
-          const r = await c.client.send({ kind: "hitTest", payload: { pageId, docPoint: [widthPt * gx, heightPt * gy], filter: "any" } });
+          const r = await c.client.send({
+            kind: "hitTest",
+            payload: {
+              pageId,
+              docPoint: [widthPt * gx, heightPt * gy],
+              filter: "any",
+            },
+          });
           const p = r.payload;
           if (r.kind === "hitResult" && p?.tableContext && p.storyId) {
             const { tableId, row, col } = p.tableContext;
@@ -68,12 +89,25 @@ async function findCell(page: Page, pageId: string, widthPt: number, heightPt: n
 function cellRead(page: Page, a: CellAddr, path: string): Promise<unknown> {
   return page.evaluate(
     async ({ a, path }) => {
-      const c = (globalThis as unknown as {
-        __canvas: { client: { elementProperties(id: unknown): Promise<{ entries: { path: string; value: { value: unknown } | null }[] } | null> } };
-      }).__canvas;
+      const c = (
+        globalThis as unknown as {
+          __canvas: {
+            client: {
+              elementProperties(id: unknown): Promise<{
+                entries: { path: string; value: { value: unknown } | null }[];
+              } | null>;
+            };
+          };
+        }
+      ).__canvas;
       const props = await c.client.elementProperties({
         kind: "tableCell",
-        id: { story_id: a.storyId, table_id: a.tableId, row: a.row, col: a.col },
+        id: {
+          story_id: a.storyId,
+          table_id: a.tableId,
+          row: a.row,
+          col: a.col,
+        },
       });
       const e = props?.entries.find((x) => x.path === path);
       return e ? (e.value?.value ?? null) : "absent";
@@ -106,17 +140,25 @@ test.describe("Table row keep options (engine 0.73.1)", () => {
     const start = fieldOf(panel, "rowStartRow");
     await expect(start).toHaveAttribute("data-value-type", "enum");
     await start.locator("select").first().selectOption("NextFrame");
-    await expect.poll(() => cellRead(page, addr, "rowStartRow")).toBe("NextFrame");
+    await expect
+      .poll(() => cellRead(page, addr, "rowStartRow"))
+      .toBe("NextFrame");
     await undoOnce(page);
-    await expect.poll(() => cellRead(page, addr, "rowStartRow")).toBe("Anywhere");
+    await expect
+      .poll(() => cellRead(page, addr, "rowStartRow"))
+      .toBe("Anywhere");
 
     // Keep with next row.
     const keep = fieldOf(panel, "rowKeepWithNext");
     await expect(keep).toHaveAttribute("data-value-type", "bool");
     const before = await cellRead(page, addr, "rowKeepWithNext");
     await keep.locator('[role="switch"]').click();
-    await expect.poll(() => cellRead(page, addr, "rowKeepWithNext")).toBe(before !== true);
+    await expect
+      .poll(() => cellRead(page, addr, "rowKeepWithNext"))
+      .toBe(before !== true);
     await undoOnce(page);
-    await expect.poll(() => cellRead(page, addr, "rowKeepWithNext")).toEqual(before);
+    await expect
+      .poll(() => cellRead(page, addr, "rowKeepWithNext"))
+      .toEqual(before);
   });
 });

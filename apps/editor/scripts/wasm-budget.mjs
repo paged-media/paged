@@ -39,11 +39,29 @@
 // engine wasm (doc, slide, sheet, data, web) and the engine's packages are
 // build outputs, so CI builds them before this runs.
 //
+// And only what the page LOADS counts: a wasm file that only entries the page
+// does not import lead to is left out. Since PM-0008,
+// @paged-media/canvas-wasm ships three engines behind three entries (`.`,
+// `./repo` and `./introspect`); the editor page loads the first two and the
+// devtools page the third. An entry leads to a `.wasm` it names directly, or
+// that its JavaScript names (the wasm-bindgen glue's
+// `new URL("<stem>_bg.wasm", import.meta.url)`, which is what the bundler
+// emits for it). The page's imports are read from the canvas app's `src/` and
+// the `src/` of every workspace package it links; type-only imports load
+// nothing and are skipped. A package whose entries name no wasm (the bundles,
+// whose entries are TypeScript source) counts everything it ships.
+//
 // Usage:  node scripts/wasm-budget.mjs [--json]
 // Exit 1 when over budget; prints the full inventory either way.
 
-import { readdirSync, readFileSync, statSync, realpathSync, writeFileSync } from "node:fs";
-import { join, dirname, relative } from "node:path";
+import {
+  readdirSync,
+  readFileSync,
+  statSync,
+  realpathSync,
+  writeFileSync,
+} from "node:fs";
+import { join, dirname, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -87,7 +105,9 @@ function wasmFilesUnder(dir, depth = 0, out = []) {
 function shippedPaths(pkgDir) {
   let files;
   try {
-    files = JSON.parse(readFileSync(join(pkgDir, "package.json"), "utf8")).files;
+    files = JSON.parse(
+      readFileSync(join(pkgDir, "package.json"), "utf8"),
+    ).files;
   } catch {
     files = undefined;
   }
@@ -110,6 +130,144 @@ function shippedWasm(pkgDir) {
   return out;
 }
 
+/** The import specifiers of `@paged-media` packages in the JS/TS sources
+ *  under `dir` (value imports only: `import type` loads nothing). */
+function pagedSpecifiers(dir, out = new Set(), depth = 0) {
+  if (depth > 12) return out;
+  let entries;
+  try {
+    entries = readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return out;
+  }
+  for (const e of entries) {
+    const p = join(dir, e.name);
+    if (e.isDirectory()) {
+      if (e.name === "node_modules" || e.name === "dist") continue;
+      pagedSpecifiers(p, out, depth + 1);
+      continue;
+    }
+    if (!/\.(m?[jt]sx?)$/.test(e.name) || e.name.endsWith(".d.ts")) continue;
+    const text = readFileSync(p, "utf8");
+    const re =
+      /\b(import|export)(\s+type\b)?[^'"`;]*?\bfrom\s*['"](@paged-media\/[^'"]+)['"]|\bimport\s*\(\s*['"](@paged-media\/[^'"]+)['"]|\bimport\s*['"](@paged-media\/[^'"]+)['"]/g;
+    for (const m of text.matchAll(re)) {
+      if (m[2]) continue; // `import type` / `export type`
+      const spec = m[3] ?? m[4] ?? m[5];
+      if (spec) out.add(spec.replace(/\?.*$/, ""));
+    }
+  }
+  return out;
+}
+
+/** `exports` target of `subpath` ("." or "./x"), for a browser bundle. */
+function exportTarget(exportsField, subpath) {
+  const pick = (v) => {
+    if (typeof v === "string") return v;
+    if (v && typeof v === "object") {
+      for (const c of ["browser", "import", "default"]) {
+        const t = pick(v[c]);
+        if (t) return t;
+      }
+    }
+    return null;
+  };
+  const subpaths =
+    exportsField &&
+    typeof exportsField === "object" &&
+    Object.keys(exportsField).some((k) => k.startsWith("."));
+  if (!subpaths) return subpath === "." ? pick(exportsField) : null;
+  if (subpath in exportsField) return pick(exportsField[subpath]);
+  for (const [key, value] of Object.entries(exportsField)) {
+    const star = key.indexOf("*");
+    if (star === -1) continue;
+    const head = key.slice(0, star);
+    const tail = key.slice(star + 1);
+    if (subpath.startsWith(head) && subpath.endsWith(tail)) {
+      const t = pick(value);
+      const middle = subpath.slice(head.length, subpath.length - tail.length);
+      return t ? t.replace("*", middle) : null;
+    }
+  }
+  return null;
+}
+
+/** The wasm one imported entry of a package reaches. */
+function entryWasm(pkgDir, target) {
+  const file = resolve(pkgDir, target);
+  if (file.endsWith(".wasm")) return [file];
+  if (!/\.m?js$/.test(file)) return [];
+  let text;
+  try {
+    text = readFileSync(file, "utf8");
+  } catch {
+    return []; // an entry that is not built
+  }
+  const out = [];
+  for (const m of text.matchAll(/['"`]([^'"`\s]+\.wasm)['"`]/g)) {
+    const wasm = resolve(dirname(file), m[1]);
+    try {
+      if (statSync(wasm).isFile()) out.push(wasm);
+    } catch {
+      /* named but absent */
+    }
+  }
+  return out;
+}
+
+/** Every `.wasm` of a package the page loads: what it ships, less the wasm
+ *  that only entries the page does not import lead to. A package without an
+ *  `exports` map, or whose entries name no wasm (the bundles, whose entries
+ *  are TypeScript source), counts everything it ships. */
+function loadedWasm(pkgDir, name, specifiers) {
+  const shipped = shippedWasm(pkgDir).map((f) => resolve(f));
+  let manifest;
+  try {
+    manifest = JSON.parse(readFileSync(join(pkgDir, "package.json"), "utf8"));
+  } catch {
+    return shipped;
+  }
+  const exp = manifest.exports;
+  if (!exp || typeof exp !== "object") return shipped;
+  const keys = Object.keys(exp).filter(
+    (k) => k.startsWith(".") && !k.includes("*"),
+  );
+  if (keys.length === 0) return shipped;
+  const imported = new Set(
+    [...specifiers]
+      .filter((s) => s === name || s.startsWith(`${name}/`))
+      .map((s) => (s === name ? "." : `.${s.slice(name.length)}`)),
+  );
+  // wasm file -> whether an imported entry reaches it
+  const reached = new Map();
+  for (const key of keys) {
+    const target = exportTarget(exp, key);
+    if (!target) continue;
+    for (const f of entryWasm(pkgDir, target)) {
+      reached.set(f, reached.get(f) === true || imported.has(key));
+    }
+  }
+  return shipped.filter((f) => reached.get(f) !== false);
+}
+
+/** The source trees of the page: the app's `src/` and the `src/` of every
+ *  workspace package it links (a linked package resolves into the
+ *  repository, not into the package store). */
+function pageSourceDirs(scope, pkgs) {
+  const dirs = [join(APP, "src")];
+  for (const pkg of pkgs) {
+    let real;
+    try {
+      real = realpathSync(join(scope, pkg));
+    } catch {
+      continue;
+    }
+    if (real.includes("/node_modules/")) continue;
+    dirs.push(join(real, "src"));
+  }
+  return dirs;
+}
+
 export function collect() {
   const scope = join(APP, "node_modules/@paged-media");
   let pkgs;
@@ -120,12 +278,16 @@ export function collect() {
       `no ${relative(ROOT, scope)} — run \`bun install\` before the wasm budget check`,
     );
   }
+  const specifiers = new Set();
+  for (const dir of pageSourceDirs(scope, pkgs))
+    pagedSpecifiers(dir, specifiers);
 
   // realpath -> {bytes, owners[]}. One physical artifact, however many
   // packages link to it, is one download.
   const byReal = new Map();
   for (const pkg of pkgs.sort()) {
-    for (const f of shippedWasm(join(scope, pkg))) {
+    const name = `@paged-media/${pkg}`;
+    for (const f of loadedWasm(join(scope, pkg), name, specifiers)) {
       let real;
       try {
         real = realpathSync(f);
@@ -143,7 +305,9 @@ export function collect() {
 
   const artifacts = [...byReal.entries()]
     .map(([real, v]) => ({
-      file: real.includes("/node_modules/") ? real.replace(/^.*\/node_modules\//, "") : relative(REPO, real),
+      file: real.includes("/node_modules/")
+        ? real.replace(/^.*\/node_modules\//, "")
+        : relative(REPO, real),
       bytes: v.bytes,
       owners: v.owners,
     }))
@@ -182,9 +346,14 @@ function main() {
       lane: "wasm-budget",
       commit: process.env.GITHUB_SHA ?? "unknown",
       branch: process.env.GITHUB_REF_NAME ?? "main",
-      ...(process.env.GITHUB_RUN_ID ? { run_id: String(process.env.GITHUB_RUN_ID) } : {}),
+      ...(process.env.GITHUB_RUN_ID
+        ? { run_id: String(process.env.GITHUB_RUN_ID) }
+        : {}),
       finished_at: new Date().toISOString(),
-      environment: { os: process.env.RUNNER_OS ?? process.platform, arch: process.arch },
+      environment: {
+        os: process.env.RUNNER_OS ?? process.platform,
+        arch: process.arch,
+      },
       // AGGREGATES ONLY, and one of them deliberately.
       //
       // A row per artifact would key the series on a FILE PATH — an

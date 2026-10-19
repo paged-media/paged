@@ -102,7 +102,9 @@ describe("draw conformance — gradient fill assignment (B-03)", () => {
       },
     } as never);
     expect(created.applied).toBe(true);
-    expect(JSON.stringify(await h.host.document.collection("gradients"))).toContain(gid);
+    expect(
+      JSON.stringify(await h.host.document.collection("gradients")),
+    ).toContain(gid);
 
     // The B-03 crux: `setElementProperty{frameFillColor, colorRef}` with
     // a gradient id is a plain ref assignment (gradients share the

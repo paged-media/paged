@@ -5192,7 +5192,7 @@
       ]
     },
     "StyleScope": {
-      "description": "[`Operation::ApplyStyle`].",
+      "description": "W0.5 — character- vs paragraph-level style application for\n[`Operation::ApplyStyle`].",
       "type": "string",
       "enum": [
         "paragraph",

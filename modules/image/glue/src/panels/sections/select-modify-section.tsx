@@ -63,7 +63,9 @@ export function SelectModifySection({
           max={255}
           step={1}
           value={wand.tolerance}
-          onChange={(e) => session.setWandOptions({ tolerance: Number(e.target.value) })}
+          onChange={(e) =>
+            session.setWandOptions({ tolerance: Number(e.target.value) })
+          }
         />
         <span style={mono}>{wand.tolerance}</span>
       </div>
@@ -73,7 +75,9 @@ export function SelectModifySection({
           id="pg-image-wand-contiguous"
           type="checkbox"
           checked={wand.contiguous}
-          onChange={(e) => session.setWandOptions({ contiguous: e.target.checked })}
+          onChange={(e) =>
+            session.setWandOptions({ contiguous: e.target.checked })
+          }
         />
       </div>
       <div style={note}>

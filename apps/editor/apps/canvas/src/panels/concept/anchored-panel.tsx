@@ -260,21 +260,21 @@ function EnumRow({
   return (
     <Row label={label}>
       <ObjectFieldFrame field={field} className="relative w-full">
-      <KitSelect
-        data-anchored-select={testId}
-        value={value}
-        disabled={disabled}
-        onChange={(e) => onCommit(e.target.value)}
-      >
-        {/* An unset / unknown value still needs a slot so the native
+        <KitSelect
+          data-anchored-select={testId}
+          value={value}
+          disabled={disabled}
+          onChange={(e) => onCommit(e.target.value)}
+        >
+          {/* An unset / unknown value still needs a slot so the native
             select shows it rather than silently snapping to option 0. */}
-        {value === "" && <option value="">—</option>}
-        {options.map(([v, l]) => (
-          <option key={v} value={v}>
-            {l}
-          </option>
-        ))}
-      </KitSelect>
+          {value === "" && <option value="">—</option>}
+          {options.map(([v, l]) => (
+            <option key={v} value={v}>
+              {l}
+            </option>
+          ))}
+        </KitSelect>
       </ObjectFieldFrame>
     </Row>
   );
@@ -301,31 +301,31 @@ function BoolRow({
   return (
     <Row label={label}>
       <ObjectFieldFrame field={field} className="relative">
-      <button
-        type="button"
-        role="switch"
-        aria-checked={on}
-        data-anchored-toggle={testId}
-        disabled={disabled}
-        onClick={() => onCommit(!on)}
-        className="relative h-[17px] w-[30px] rounded-full border-0 disabled:opacity-45"
-        style={{
-          background: on ? "var(--pg-primary)" : "var(--chrome-divider)",
-        }}
-      >
-        {icon && (
-          <Icon
-            name={icon}
-            size={10}
-            className="pointer-events-none absolute left-[3px] top-1/2 -translate-y-1/2"
-            style={{ color: on ? "white" : "var(--pg-muted-fg)" }}
+        <button
+          type="button"
+          role="switch"
+          aria-checked={on}
+          data-anchored-toggle={testId}
+          disabled={disabled}
+          onClick={() => onCommit(!on)}
+          className="relative h-[17px] w-[30px] rounded-full border-0 disabled:opacity-45"
+          style={{
+            background: on ? "var(--pg-primary)" : "var(--chrome-divider)",
+          }}
+        >
+          {icon && (
+            <Icon
+              name={icon}
+              size={10}
+              className="pointer-events-none absolute left-[3px] top-1/2 -translate-y-1/2"
+              style={{ color: on ? "white" : "var(--pg-muted-fg)" }}
+            />
+          )}
+          <span
+            className="absolute top-[2px] h-[13px] w-[13px] rounded-full bg-white shadow"
+            style={{ left: on ? 15 : 2 }}
           />
-        )}
-        <span
-          className="absolute top-[2px] h-[13px] w-[13px] rounded-full bg-white shadow"
-          style={{ left: on ? 15 : 2 }}
-        />
-      </button>
+        </button>
       </ObjectFieldFrame>
     </Row>
   );
@@ -386,10 +386,7 @@ export function AnchoredPanel() {
       </div>
 
       {!anchored ? (
-        <div
-          className="text-xs text-muted-foreground"
-          data-anchored-empty
-        >
+        <div className="text-xs text-muted-foreground" data-anchored-empty>
           {id
             ? "This object lives on the page, not anchored into text. Anchor it by cutting and pasting it into a text story (the InDesign inline / anchored flow)."
             : "Select an object anchored into a text story to edit its anchored position."}
@@ -433,29 +430,35 @@ export function AnchoredPanel() {
             </div>
           )}
           <Row label="X offset">
-            <ObjectFieldFrame field={fields.anchoredXOffset} className="relative w-full">
-            <span data-anchored-num="x-offset" className="block w-full">
-              <LengthInput
-                aria-label="x-offset"
-                valuePt={unwrapLength(values.anchoredXOffset)}
-                disabled={!custom}
-                onChangePt={() => {}}
-                onCommitPt={(n) => setLength("anchoredXOffset", n)}
-              />
-            </span>
+            <ObjectFieldFrame
+              field={fields.anchoredXOffset}
+              className="relative w-full"
+            >
+              <span data-anchored-num="x-offset" className="block w-full">
+                <LengthInput
+                  aria-label="x-offset"
+                  valuePt={unwrapLength(values.anchoredXOffset)}
+                  disabled={!custom}
+                  onChangePt={() => {}}
+                  onCommitPt={(n) => setLength("anchoredXOffset", n)}
+                />
+              </span>
             </ObjectFieldFrame>
           </Row>
           <Row label="Y offset">
-            <ObjectFieldFrame field={fields.anchoredYOffset} className="relative w-full">
-            <span data-anchored-num="y-offset" className="block w-full">
-              <LengthInput
-                aria-label="y-offset"
-                valuePt={unwrapLength(values.anchoredYOffset)}
-                disabled={!custom}
-                onChangePt={() => {}}
-                onCommitPt={(n) => setLength("anchoredYOffset", n)}
-              />
-            </span>
+            <ObjectFieldFrame
+              field={fields.anchoredYOffset}
+              className="relative w-full"
+            >
+              <span data-anchored-num="y-offset" className="block w-full">
+                <LengthInput
+                  aria-label="y-offset"
+                  valuePt={unwrapLength(values.anchoredYOffset)}
+                  disabled={!custom}
+                  onChangePt={() => {}}
+                  onCommitPt={(n) => setLength("anchoredYOffset", n)}
+                />
+              </span>
             </ObjectFieldFrame>
           </Row>
           <EnumRow

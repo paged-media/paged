@@ -29,17 +29,30 @@ import type {
 import { DocEngine } from "./engine.js";
 import { contributeMenu } from "./menu";
 import { createDocStore, paragraphRange } from "./panels/outline-model.js";
-import { INSERT_LABEL, NO_PICKER_REASON, makeOutlinePanel } from "./panels/outline-panel.js";
+import {
+  INSERT_LABEL,
+  NO_PICKER_REASON,
+  makeOutlinePanel,
+} from "./panels/outline-panel.js";
 import { placeEmbedded } from "./place.js";
 import { openStandalone } from "./open.js";
-import { discoverDocs, readDocBytes, readLowered, type DocState } from "./doc-state.js";
+import {
+  discoverDocs,
+  readDocBytes,
+  readLowered,
+  type DocState,
+} from "./doc-state.js";
 import { contributeDocObjectModel } from "./object-model.js";
 import {
   DOC_PROPERTIES_PANEL,
   PROPERTIES_PANEL_ID,
   publishPropertyLists,
 } from "./panels/properties-panel.js";
-import { mergeSectionContents, pouredParagraphCount, sectionBlocks } from "@paged-media/doc-host-model";
+import {
+  mergeSectionContents,
+  pouredParagraphCount,
+  sectionBlocks,
+} from "@paged-media/doc-host-model";
 import type { StoryContentLike } from "@paged-media/doc-host-model";
 
 const PANEL_ID = "media.paged.doc.panel.outline";
@@ -134,7 +147,9 @@ export function activate(host: BundleHost): BundleHandle {
         }
       }
       host.shell.openPanel(PANEL_ID);
-      return last.frameId ? { frame: last.frameId, story: last.storyIds[0] ?? null } : null;
+      return last.frameId
+        ? { frame: last.frameId, story: last.storyIds[0] ?? null }
+        : null;
     } finally {
       engine.dispose();
     }
@@ -150,17 +165,24 @@ export function activate(host: BundleHost): BundleHandle {
     const source = await readDocBytes(host, state);
     if (!source) return null;
     const sections = state.data.sections ?? [];
-    if (!host.supports("document.readStory@1") || sections.length === 0) return source;
+    if (!host.supports("document.readStory@1") || sections.length === 0)
+      return source;
     const ir = await readLowered(host, state);
     if (!ir) return source;
     const readStory = host.document.storyContent;
     const contents: StoryContentLike[] = [];
     for (const id of sections) {
-      const c = (await readStory.call(host.document, id)) as StoryContentLike | null;
+      const c = (await readStory.call(
+        host.document,
+        id,
+      )) as StoryContentLike | null;
       if (!c) return source;
       contents.push(c);
     }
-    const content = mergeSectionContents(contents, sectionBlocks(ir).map(pouredParagraphCount));
+    const content = mergeSectionContents(
+      contents,
+      sectionBlocks(ir).map(pouredParagraphCount),
+    );
     const engine = await DocEngine.boot();
     try {
       engine.loadDocx(source);
@@ -168,7 +190,9 @@ export function activate(host: BundleHost): BundleHandle {
       const bytes = engine.saveEditedFromContent(content);
       host.diagnostics.set(
         "media.paged.doc/save-back",
-        engine.lastSaveSkips().map((message) => ({ severity: "warning" as const, message })),
+        engine
+          .lastSaveSkips()
+          .map((message) => ({ severity: "warning" as const, message })),
       );
       return bytes;
     } finally {
@@ -195,13 +219,19 @@ export function activate(host: BundleHost): BundleHandle {
     const verbatim = { bytes: last.source, fileName: last.fileName };
     // The persisted state wins: object-model writes advance the label's .docx.
     const frame = last.frameId ? (last.frameId as { id: string }).id : null;
-    const state = frame ? (await discoverDocs(host)).find((d) => (d.frame as { id: string }).id === frame) : undefined;
+    const state = frame
+      ? (await discoverDocs(host)).find(
+          (d) => (d.frame as { id: string }).id === frame,
+        )
+      : undefined;
     if (state) {
       try {
         const bytes = await exportState(state);
         if (bytes) return { bytes, fileName: last.fileName };
       } catch (err) {
-        host.log.warn(`paged.doc: edited save-back failed, exporting the unedited source: ${String(err)}`);
+        host.log.warn(
+          `paged.doc: edited save-back failed, exporting the unedited source: ${String(err)}`,
+        );
         return verbatim;
       }
     }
@@ -217,7 +247,10 @@ export function activate(host: BundleHost): BundleHandle {
       // baseline is (a standalone document has a story per Word section).
       const contents: StoryContentLike[] = [];
       for (const id of last.storyIds) {
-        const c = (await readStory.call(host.document, id)) as StoryContentLike | null;
+        const c = (await readStory.call(
+          host.document,
+          id,
+        )) as StoryContentLike | null;
         if (!c) return verbatim;
         contents.push(c);
       }
@@ -279,21 +312,29 @@ export function activate(host: BundleHost): BundleHandle {
       ...makeOutlinePanel(docStore, {
         insert: () => void pickAndIngest(),
         canInsert: () => host.supports("shell.pickFile@1"),
-        selectFrame: (frameId) => void host.selection.set([frameId as ElementId]),
+        selectFrame: (frameId) =>
+          void host.selection.set([frameId as ElementId]),
         readiness: () => ({ readStory: host.supports("document.readStory@1") }),
         // A heading click goes to the heading's text in the placed story.
         // `revealText` is newer than the plugin-api this bundle builds
         // against, so it is reached through the probe, not the type.
-        ...(host.supports("viewport.revealText@1") && host.supports("document.readStory@1")
+        ...(host.supports("viewport.revealText@1") &&
+        host.supports("document.readStory@1")
           ? {
               revealHeading: async (text: string, occurrence: number) => {
                 const storyId = docStore.get()?.storyId;
                 if (!storyId) return false;
                 const content = await host.document.storyContent(storyId);
-                const range = content ? paragraphRange(content.paragraphs, text, occurrence) : null;
+                const range = content
+                  ? paragraphRange(content.paragraphs, text, occurrence)
+                  : null;
                 if (!range) return false;
                 const viewport = host.viewport as typeof host.viewport & {
-                  revealText(r: { storyId: string; start: number; end: number }): Promise<boolean>;
+                  revealText(r: {
+                    storyId: string;
+                    start: number;
+                    end: number;
+                  }): Promise<boolean>;
                 };
                 return viewport.revealText({ storyId, ...range });
               },

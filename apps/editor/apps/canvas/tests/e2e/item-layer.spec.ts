@@ -46,14 +46,20 @@
 import { expect, test, type Page } from "@playwright/test";
 
 import { openCanvas } from "../fidelity/canvas-driver";
-import { loadFixture, type ElementRef, type LoadedFixture } from "./harness/fixtures";
+import {
+  loadFixture,
+  type ElementRef,
+  type LoadedFixture,
+} from "./harness/fixtures";
 import { mutate, script } from "./harness/ui";
 
 async function openPanel(page: Page, id: string): Promise<void> {
   await page.evaluate(
     (panelId) =>
       (
-        globalThis as unknown as { __canvas: { openPanel: (i: string) => void } }
+        globalThis as unknown as {
+          __canvas: { openPanel: (i: string) => void };
+        }
       ).__canvas.openPanel(panelId),
     id,
   );
@@ -63,15 +69,18 @@ function refStr(ref: ElementRef): string {
   return `${ref.kind}:${ref.id}`;
 }
 
-async function readItemLayer(page: Page, ref: ElementRef): Promise<string | null> {
+async function readItemLayer(
+  page: Page,
+  ref: ElementRef,
+): Promise<string | null> {
   return page.evaluate(async (id) => {
     const c = (
       globalThis as unknown as {
         __canvas: {
           client: {
-            elementProperties: (
-              id: unknown,
-            ) => Promise<{ entries: Array<{ path: string; value: unknown }> } | null>;
+            elementProperties: (id: unknown) => Promise<{
+              entries: Array<{ path: string; value: unknown }>;
+            } | null>;
           };
         };
       }
@@ -96,13 +105,14 @@ async function readItemLayer(page: Page, ref: ElementRef): Promise<string | null
  *  read surfaces over one collection disagree about the shape of an id
  *  that a third surface consumes, and only one combination works. */
 async function layerIds(page: Page): Promise<string[]> {
-  const layers = await page.evaluate(
-    () =>
-      (
-        globalThis as unknown as {
-          __canvas: { client: { layers: () => Promise<Array<{ selfId: string }>> } };
-        }
-      ).__canvas.client.layers(),
+  const layers = await page.evaluate(() =>
+    (
+      globalThis as unknown as {
+        __canvas: {
+          client: { layers: () => Promise<Array<{ selfId: string }>> };
+        };
+      }
+    ).__canvas.client.layers(),
   );
   return layers.map((l) => l.selfId);
 }
@@ -129,14 +139,23 @@ test.describe("itemLayer — protocol 62 layer assignment", () => {
   }) => {
     // A second layer to move onto. `layerInsert` positions from the BACK.
     const before = await layerIds(page);
-    await mutate(page, { op: "layerInsert", args: { position: 0, name: "Sweep target" } });
+    await mutate(page, {
+      op: "layerInsert",
+      args: { position: 0, name: "Sweep target" },
+    });
     const after = await layerIds(page);
-    expect(after.length, "layerInsert added no layer").toBeGreaterThan(before.length);
+    expect(after.length, "layerInsert added no layer").toBeGreaterThan(
+      before.length,
+    );
     const target = after.find((id) => !before.includes(id))!;
 
     await mutate(page, {
       op: "setElementProperty",
-      args: { elementId: rect, path: "itemLayer", value: { type: "text", value: target } },
+      args: {
+        elementId: rect,
+        path: "itemLayer",
+        value: { type: "text", value: target },
+      },
     });
 
     expect(
@@ -149,12 +168,19 @@ test.describe("itemLayer — protocol 62 layer assignment", () => {
     page,
   }) => {
     const before = await layerIds(page);
-    await mutate(page, { op: "layerInsert", args: { position: 0, name: "Temporary" } });
+    await mutate(page, {
+      op: "layerInsert",
+      args: { position: 0, name: "Temporary" },
+    });
     const target = (await layerIds(page)).find((id) => !before.includes(id))!;
 
     await mutate(page, {
       op: "setElementProperty",
-      args: { elementId: rect, path: "itemLayer", value: { type: "text", value: target } },
+      args: {
+        elementId: rect,
+        path: "itemLayer",
+        value: { type: "text", value: target },
+      },
     });
     expect(await readItemLayer(page, rect)).toBe(target);
 
@@ -162,7 +188,11 @@ test.describe("itemLayer — protocol 62 layer assignment", () => {
     // so "no layer" has to be expressible as a Text value.
     await mutate(page, {
       op: "setElementProperty",
-      args: { elementId: rect, path: "itemLayer", value: { type: "text", value: "" } },
+      args: {
+        elementId: rect,
+        path: "itemLayer",
+        value: { type: "text", value: "" },
+      },
     });
     const cleared = await readItemLayer(page, rect);
     expect(cleared === null || cleared === "").toBe(true);
@@ -177,14 +207,19 @@ test.describe("itemLayer — protocol 62 layer assignment", () => {
     // taking the read back out of that seam. A per-layer "move the
     // selection here" is the verb a designer reaches for anyway.
     const before = await layerIds(page);
-    await mutate(page, { op: "layerInsert", args: { position: 0, name: "Destination" } });
+    await mutate(page, {
+      op: "layerInsert",
+      args: { position: 0, name: "Destination" },
+    });
     const target = (await layerIds(page)).find((id) => !before.includes(id))!;
 
     await page.evaluate(
       (el) =>
         (
           globalThis as unknown as {
-            __canvas: { setElementSelection: (ids: unknown[], mode: string) => void };
+            __canvas: {
+              setElementSelection: (ids: unknown[], mode: string) => void;
+            };
           }
         ).__canvas.setElementSelection([el], "replace"),
       rect,
@@ -195,7 +230,9 @@ test.describe("itemLayer — protocol 62 layer assignment", () => {
     await expect(row).toBeVisible();
     // The action's DOM key is the command id — `schema-panel-renderer`
     // uses `a.action.command` as the key, not the label.
-    const move = row.locator('[data-list-action="paged.layers.assignSelection"]');
+    const move = row.locator(
+      '[data-list-action="paged.layers.assignSelection"]',
+    );
     await expect(move).toBeEnabled();
     await move.click();
 
@@ -213,7 +250,10 @@ test.describe("itemLayer — protocol 62 layer assignment", () => {
     // locked layer was indistinguishable from an unlocked one until a
     // click failed. Fixed in the WIDGET tier (schema type -> renderer ->
     // leaf) rather than this panel, so every list panel gains it.
-    await mutate(page, { op: "layerInsert", args: { position: 0, name: "Stateful" } });
+    await mutate(page, {
+      op: "layerInsert",
+      args: { position: 0, name: "Stateful" },
+    });
     await openPanel(page, "paged.layers");
 
     const before = await layerIds(page);
@@ -258,14 +298,20 @@ test.describe("itemLayer — protocol 62 layer assignment", () => {
     // is string-valued — the conversion between parse and apply had no
     // arm for it. Fixed in core at a806321, shipped in 0.63.0.
     const before = await layerIds(page);
-    await mutate(page, { op: "layerInsert", args: { position: 0, name: "Script target" } });
+    await mutate(page, {
+      op: "layerInsert",
+      args: { position: 0, name: "Script target" },
+    });
     const target = (await layerIds(page)).find((id) => !before.includes(id))!;
 
     const out = await script(
       page,
       `paged.set(${JSON.stringify(refStr(rect))}, "itemLayer", ${JSON.stringify(target)});`,
     );
-    expect(out[0], "paged.set(itemLayer) returned false — the pin may have moved back").toBe("true");
+    expect(
+      out[0],
+      "paged.set(itemLayer) returned false — the pin may have moved back",
+    ).toBe("true");
     expect(await readItemLayer(page, rect)).toBe(target);
   });
 });

@@ -54,8 +54,18 @@ import {
   ToggleGroupLeaf,
   ToggleSwitchLeaf,
 } from "./leaves";
-import { Badges, ObjectFieldFrame, useObjectField, type BindScopeOf } from "./object-field";
-import type { ShellObjectWriteResult, ShellPropertySchema, ShellValueEdit, ShellValueType } from "./object-model-types";
+import {
+  Badges,
+  ObjectFieldFrame,
+  useObjectField,
+  type BindScopeOf,
+} from "./object-field";
+import type {
+  ShellObjectWriteResult,
+  ShellPropertySchema,
+  ShellValueEdit,
+  ShellValueType,
+} from "./object-model-types";
 import {
   formatValue,
   itemTitle,
@@ -144,12 +154,20 @@ function useReported(
       .send({ kind: "requestGet", payload: { address, path } } as never)
       .then(
         (reply) => {
-          const r = reply as { kind: string; payload?: { code?: string | null } };
+          const r = reply as {
+            kind: string;
+            payload?: { code?: string | null };
+          };
           if (r.kind !== "propertyValue") return;
           const code = r.payload?.code ?? null;
           // No document, or an address that names nothing: no answer
           // about the path.
-          if (code === "notFound" || code === "noDocument" || code === "badAddress") return;
+          if (
+            code === "notFound" ||
+            code === "noDocument" ||
+            code === "badAddress"
+          )
+            return;
           engineReads.set(key, code !== "noSuchPath");
           if (!cancelled) setReads(code !== "noSuchPath");
         },
@@ -165,7 +183,11 @@ function useReported(
 
 const UNIT_SUFFIX: Record<string, string> = { percent: "%", deg: "°" };
 
-function leafValue(type: ShellValueType, widget: string, value: unknown): Value | null {
+function leafValue(
+  type: ShellValueType,
+  widget: string,
+  value: unknown,
+): Value | null {
   if (value === undefined) return null;
   // A definite NULL is a value, not "mixed": an unset length
   // (`Value::Length(None)`) or "no colour" — the same wire shapes the
@@ -179,9 +201,11 @@ function leafValue(type: ShellValueType, widget: string, value: unknown): Value 
       case "color":
         return { type: "colorRef", value: null } as Value;
       case "collection":
-        return (type.kind === "color"
-          ? { type: "colorRef", value: null }
-          : { type: "text", value: "" }) as Value;
+        return (
+          type.kind === "color"
+            ? { type: "colorRef", value: null }
+            : { type: "text", value: "" }
+        ) as Value;
       default:
         return null;
     }
@@ -193,9 +217,11 @@ function leafValue(type: ShellValueType, widget: string, value: unknown): Value 
     case "color":
       return { type: "colorRef", value } as Value;
     case "collection":
-      return (type.kind === "color"
-        ? { type: "colorRef", value }
-        : { type: "text", value: String(value) }) as Value;
+      return (
+        type.kind === "color"
+          ? { type: "colorRef", value }
+          : { type: "text", value: String(value) }
+      ) as Value;
     case "toggle":
       return { type: "bool", value } as Value;
     case "bounds":
@@ -251,7 +277,9 @@ function TypedTextField({
         disabled={disabled}
         rows={4}
         placeholder={state.state === "mixed" ? "—" : (placeholder ?? "")}
-        data-mixed={state.state === "mixed" || state.state === "none" ? "" : undefined}
+        data-mixed={
+          state.state === "mixed" || state.state === "none" ? "" : undefined
+        }
         data-invalid={invalid ? "" : undefined}
         aria-invalid={invalid ? true : undefined}
         title={invalid ?? undefined}
@@ -270,7 +298,9 @@ function TypedTextField({
       value={draft}
       disabled={disabled}
       placeholder={state.state === "mixed" ? "—" : (placeholder ?? "")}
-      data-mixed={state.state === "mixed" || state.state === "none" ? "" : undefined}
+      data-mixed={
+        state.state === "mixed" || state.state === "none" ? "" : undefined
+      }
       data-invalid={invalid ? "" : undefined}
       aria-invalid={invalid ? true : undefined}
       title={invalid ?? undefined}
@@ -309,18 +339,26 @@ function ValueControl({
     ...(chromeProps ?? {}),
     ...(label ? { label, labelPosition: "left" } : {}),
   };
-  if (widget === "number" && type.kind === "number" && type.unit && !chrome.suffix) {
+  if (
+    widget === "number" &&
+    type.kind === "number" &&
+    type.unit &&
+    !chrome.suffix
+  ) {
     const suffix = UNIT_SUFFIX[type.unit];
     if (suffix) chrome.suffix = suffix;
   }
-  if (widget === "select" || widget === "segments") chrome.options = optionsFor(type, presentation);
+  if (widget === "select" || widget === "segments")
+    chrome.options = optionsFor(type, presentation);
   if (widget === "collection") {
     chrome.collectionName = presentation.collection;
     chrome.valueType = type.kind === "color" ? "colorRef" : "text";
   }
   const leafProps: LeafProps = {
     value: leafValue(type, widget, value),
-    onCommit: onCommit ? (v: Value) => onCommit((v as { value?: unknown }).value ?? null) : undefined,
+    onCommit: onCommit
+      ? (v: Value) => onCommit((v as { value?: unknown }).value ?? null)
+      : undefined,
     props: chrome,
   };
   switch (widget) {
@@ -346,7 +384,11 @@ function ValueControl({
           <TypedTextField
             type={type}
             row={null}
-            state={value === undefined ? { state: "none" } : { state: "value", value }}
+            state={
+              value === undefined
+                ? { state: "none" }
+                : { state: "value", value }
+            }
             onCommit={onCommit}
             disabled={!onCommit}
           />
@@ -369,7 +411,10 @@ function StructFields({
   fields?: readonly (string | SubFieldPresentation)[];
   onField: ((field: string, v: unknown) => void) | null;
 }) {
-  const rec = value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
+  const rec =
+    value && typeof value === "object" && !Array.isArray(value)
+      ? (value as Record<string, unknown>)
+      : {};
   return (
     <div className="flex flex-col gap-1">
       {subFieldsOf(type, fields, value).map((f) => (
@@ -412,10 +457,20 @@ function ItemsField({
   adornment: React.ReactNode;
 }) {
   const of: ShellValueType = type.kind === "list" ? type.of : { kind: "text" };
-  const value = state.state === "value" ? state.value : state.state === "absent" ? [] : null;
+  const value =
+    state.state === "value"
+      ? state.value
+      : state.state === "absent"
+        ? []
+        : null;
   const shown = value === null ? [] : listItems(value, items);
   const length = Array.isArray(value) ? value.length : 0;
-  const can = listAffordances(type, length, edit !== null && value !== null, items);
+  const can = listAffordances(
+    type,
+    length,
+    edit !== null && value !== null,
+    items,
+  );
   const run = (e: ShellValueEdit) => {
     if (edit) void edit(e);
   };
@@ -424,7 +479,9 @@ function ItemsField({
       className="flex flex-col gap-1"
       data-property-list={path}
       data-list-length={value === null ? undefined : length}
-      data-mixed={state.state === "mixed" || state.state === "none" ? "" : undefined}
+      data-mixed={
+        state.state === "mixed" || state.state === "none" ? "" : undefined
+      }
     >
       <div className="flex items-center justify-between gap-2">
         <span className="text-xs" style={{ color: "var(--pg-muted-fg)" }}>
@@ -437,7 +494,14 @@ function ItemsField({
             className={iconButton}
             data-list-add=""
             title="Add an item"
-            onClick={() => run({ edit: "add", ...(items?.newItem !== undefined ? { item: structuredClone(items.newItem) } : {}) })}
+            onClick={() =>
+              run({
+                edit: "add",
+                ...(items?.newItem !== undefined
+                  ? { item: structuredClone(items.newItem) }
+                  : {}),
+              })
+            }
           >
             +
           </button>
@@ -448,7 +512,11 @@ function ItemsField({
           —
         </span>
       ) : shown.length === 0 ? (
-        <span className="text-xs" style={{ color: "var(--pg-muted-fg)" }} data-list-empty="">
+        <span
+          className="text-xs"
+          style={{ color: "var(--pg-muted-fg)" }}
+          data-list-empty=""
+        >
           No items
         </span>
       ) : (
@@ -462,7 +530,10 @@ function ItemsField({
               className="flex flex-col gap-1 rounded-[6px] border border-input p-1"
             >
               <div className="flex items-center justify-between gap-1">
-                <span className="text-[11px] font-medium" data-list-item-title="">
+                <span
+                  className="text-[11px] font-medium"
+                  data-list-item-title=""
+                >
                   {itemTitle(item, index, items)}
                 </span>
                 <span className="flex gap-1">
@@ -474,7 +545,10 @@ function ItemsField({
                         data-list-move-up=""
                         title="Move up"
                         disabled={above === null}
-                        onClick={() => above !== null && run({ edit: "move", from: index, to: above })}
+                        onClick={() =>
+                          above !== null &&
+                          run({ edit: "move", from: index, to: above })
+                        }
                       >
                         ↑
                       </button>
@@ -484,7 +558,10 @@ function ItemsField({
                         data-list-move-down=""
                         title="Move down"
                         disabled={below === null}
-                        onClick={() => below !== null && run({ edit: "move", from: index, to: below })}
+                        onClick={() =>
+                          below !== null &&
+                          run({ edit: "move", from: index, to: below })
+                        }
                       >
                         ↓
                       </button>
@@ -508,14 +585,23 @@ function ItemsField({
                   type={of}
                   value={item}
                   fields={items?.fields}
-                  onField={edit ? (field, v) => run({ edit: "itemSet", index, field, value: v }) : null}
+                  onField={
+                    edit
+                      ? (field, v) =>
+                          run({ edit: "itemSet", index, field, value: v })
+                      : null
+                  }
                 />
               ) : (
                 <ValueControl
                   type={of}
                   presentation={{}}
                   value={item}
-                  onCommit={edit ? (v) => run({ edit: "itemSet", index, value: v }) : null}
+                  onCommit={
+                    edit
+                      ? (v) => run({ edit: "itemSet", index, value: v })
+                      : null
+                  }
                 />
               )}
             </div>
@@ -538,7 +624,12 @@ export function PropertyField(props: PropertyFieldProps) {
   });
 
   const row = field.row;
-  const reported = useReported(props.hideUnreported === true, path, row, field.addresses[0]);
+  const reported = useReported(
+    props.hideUnreported === true,
+    path,
+    row,
+    field.addresses[0],
+  );
   if (!reported) return null;
   // No row yet (schema loading, or no model): render as the field's
   // nominal widget, disabled — never a guessed type that might write.
@@ -551,7 +642,9 @@ export function PropertyField(props: PropertyFieldProps) {
   // so. Core answering `absent` means "this kind carries no such entry"
   // (a text frame has no end cap): that reads as the em-dash, like the
   // selection binding always showed it, not as a disabled seam.
-  const seam = state.state === "refused" || (state.state === "absent" && field.provider !== null);
+  const seam =
+    state.state === "refused" ||
+    (state.state === "absent" && field.provider !== null);
   const write = row && field.commit && !seam ? field.commit : null;
   const commitLeaf = write
     ? (v: Value) => {
@@ -559,14 +652,17 @@ export function PropertyField(props: PropertyFieldProps) {
         // A select's option: the clear option of a nullable row writes
         // null, a number row's numeric option the number.
         void write(
-          (widget === "select" || widget === "segments") && typeof raw === "string"
+          (widget === "select" || widget === "segments") &&
+            typeof raw === "string"
             ? optionValue(type, raw, row?.nullable === true)
             : raw,
         );
       }
     : undefined;
 
-  const label = props.label ?? (props.autoLabel ? (row?.title ?? humanizePath(path)) : undefined);
+  const label =
+    props.label ??
+    (props.autoLabel ? (row?.title ?? humanizePath(path)) : undefined);
   const adornment = <Badges bound={field.bound} inferred={field.inferred} />;
   const chrome: Record<string, unknown> = {
     ...(props.chrome ?? {}),
@@ -575,7 +671,12 @@ export function PropertyField(props: PropertyFieldProps) {
     ...(label ? { labelAdornment: adornment } : {}),
     ...(seam ? { seam: true } : {}),
   };
-  if (widget === "number" && type.kind === "number" && type.unit && !chrome.suffix) {
+  if (
+    widget === "number" &&
+    type.kind === "number" &&
+    type.unit &&
+    !chrome.suffix
+  ) {
     const suffix = UNIT_SUFFIX[type.unit];
     if (suffix) chrome.suffix = suffix;
   }
@@ -594,7 +695,8 @@ export function PropertyField(props: PropertyFieldProps) {
           // default — an untouched frame's opacity is 100 % (the length
           // leaf drew the null as "0 %"), an unset arrowhead is "None".
           // An enum core reports unset as "" (no member) reads the same.
-          (state.value === null || (state.value === "" && type.kind === "enum")) &&
+          (state.value === null ||
+            (state.value === "" && type.kind === "enum")) &&
             row?.default !== undefined &&
             row.default !== null
             ? row.default
@@ -650,7 +752,9 @@ export function PropertyField(props: PropertyFieldProps) {
         <LabelledRow label={label} adornment={adornment}>
           <div
             data-property-struct={path}
-            data-mixed={state.state === "mixed" || state.state === "none" ? "" : undefined}
+            data-mixed={
+              state.state === "mixed" || state.state === "none" ? "" : undefined
+            }
           >
             <StructFields
               type={type}
@@ -658,7 +762,8 @@ export function PropertyField(props: PropertyFieldProps) {
               fields={props.fields}
               onField={
                 write && field.edit && state.state !== "mixed"
-                  ? (f, v) => void field.edit!({ edit: "fieldSet", field: f, value: v })
+                  ? (f, v) =>
+                      void field.edit!({ edit: "fieldSet", field: f, value: v })
                   : null
               }
             />
@@ -675,7 +780,11 @@ export function PropertyField(props: PropertyFieldProps) {
             state={state}
             onCommit={write ? (v) => void write(v) : null}
             disabled={!write}
-            placeholder={typeof props.chrome?.placeholder === "string" ? props.chrome.placeholder : undefined}
+            placeholder={
+              typeof props.chrome?.placeholder === "string"
+                ? props.chrome.placeholder
+                : undefined
+            }
           />
         </LabelledRow>
       );
@@ -736,7 +845,10 @@ export function PropertyFieldLeaf({ props }: LeafProps) {
   } = props as Record<string, unknown>;
   if (typeof path !== "string") {
     return (
-      <span className="text-xs text-destructive" data-catalog-invalid="paged.input.property">
+      <span
+        className="text-xs text-destructive"
+        data-catalog-invalid="paged.input.property"
+      >
         paged.input.property needs a path
       </span>
     );
@@ -745,18 +857,38 @@ export function PropertyFieldLeaf({ props }: LeafProps) {
     <PropertyField
       path={path}
       label={typeof label === "string" ? label : undefined}
-      labelPosition={labelPosition === "stack" || labelPosition === "left" ? labelPosition : undefined}
+      labelPosition={
+        labelPosition === "stack" || labelPosition === "left"
+          ? labelPosition
+          : undefined
+      }
       scope={scope === "content" ? "content" : "element"}
       targets={Array.isArray(targets) ? (targets as string[]) : undefined}
       schemaKind={typeof schemaKind === "string" ? schemaKind : undefined}
-      options={Array.isArray(options) ? (options as FieldPresentation["options"]) : undefined}
-      style={
-        style === "segments" || style === "select" || style === "collection" ? style : undefined
+      options={
+        Array.isArray(options)
+          ? (options as FieldPresentation["options"])
+          : undefined
       }
-      collection={typeof collectionName === "string" ? collectionName : undefined}
+      style={
+        style === "segments" || style === "select" || style === "collection"
+          ? style
+          : undefined
+      }
+      collection={
+        typeof collectionName === "string" ? collectionName : undefined
+      }
       bindable={typeof bindable === "boolean" ? bindable : undefined}
-      fields={Array.isArray(fields) ? (fields as FieldPresentation["fields"]) : undefined}
-      items={items && typeof items === "object" ? (items as ListPresentation) : undefined}
+      fields={
+        Array.isArray(fields)
+          ? (fields as FieldPresentation["fields"])
+          : undefined
+      }
+      items={
+        items && typeof items === "object"
+          ? (items as ListPresentation)
+          : undefined
+      }
       hideUnreported={hideUnreported === true}
       chrome={chrome}
     />
@@ -767,7 +899,11 @@ export function PropertyFieldLeaf({ props }: LeafProps) {
  *  title: the path, read as words. Plugin panels declared this way showed
  *  the raw keys — "fileName", "recordCount", "radiusPt", "blendMode". */
 export function humanizePath(path: string): string {
-  const last = path.split(/[./]/).filter((p) => p && p !== "[]").pop() ?? path;
+  const last =
+    path
+      .split(/[./]/)
+      .filter((p) => p && p !== "[]")
+      .pop() ?? path;
   const key = last.replace(/\[\]$/, "");
   const unit = key.match(/(Pt|Deg|Px|Pct)$/);
   const base = unit ? key.slice(0, -unit[1].length) : key;
@@ -783,5 +919,23 @@ export function humanizePath(path: string): string {
   return suffix ? `${text} (${suffix})` : text;
 }
 
-const ACRONYMS = new Set(["url", "sql", "id", "css", "html", "rgb", "cmyk", "pdf", "csv", "json", "xml", "ui"]);
-const PATH_UNIT_SUFFIX: Record<string, string> = { Pt: "pt", Deg: "°", Px: "px", Pct: "%" };
+const ACRONYMS = new Set([
+  "url",
+  "sql",
+  "id",
+  "css",
+  "html",
+  "rgb",
+  "cmyk",
+  "pdf",
+  "csv",
+  "json",
+  "xml",
+  "ui",
+]);
+const PATH_UNIT_SUFFIX: Record<string, string> = {
+  Pt: "pt",
+  Deg: "°",
+  Px: "px",
+  Pct: "%",
+};

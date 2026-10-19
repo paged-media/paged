@@ -8,8 +8,8 @@
     "./wasm/*": "./wasm/*"
   },
   "scripts": {
-    "typecheck": "bun ../../../platform/extensions/packages/plugin-cli/bin/paged-plugin.mjs validate manifest.json",
-    "test": "bun ../../../platform/extensions/packages/plugin-cli/bin/paged-plugin.mjs validate manifest.json"
+    "typecheck": "bun ../../../platform/extensions/packages/plugin-sdk/bin/paged-plugin.mjs validate manifest.json",
+    "test": "bun ../../../platform/extensions/packages/plugin-sdk/bin/paged-plugin.mjs validate manifest.json"
   },
   "files": [
     "manifest.json",

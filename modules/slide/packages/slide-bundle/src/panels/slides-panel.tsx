@@ -37,7 +37,12 @@ import {
   type SlidesStore,
 } from "../slides-model.js";
 
-const list: React.CSSProperties = { display: "flex", flexDirection: "column", gap: 10, padding: 10 };
+const list: React.CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  gap: 10,
+  padding: 10,
+};
 const tools: React.CSSProperties = { display: "flex", gap: 4, marginTop: 4 };
 const small: React.CSSProperties = { fontSize: 11, padding: "1px 6px" };
 
@@ -46,7 +51,9 @@ export function makeSlidesPanel(
   store: SlidesStore,
 ): React.ComponentType<PanelProps> {
   const mutate = (m: Parameters<BundleHost["document"]["mutate"]>[0]) =>
-    void host.document.mutate(m).catch((e) => host.log.warn(`paged.slide: ${String(e)}`));
+    void host.document
+      .mutate(m)
+      .catch((e) => host.log.warn(`paged.slide: ${String(e)}`));
 
   const Thumb: React.FC<{ slide: Slide }> = ({ slide }) => {
     const url = store.thumbnail(slide.pageId);
@@ -61,7 +68,14 @@ export function makeSlidesPanel(
           opacity: slide.state.hidden ? 0.4 : 1,
         }}
       >
-        {url && <img src={url} alt="" draggable={false} style={{ width: "100%", height: "100%", display: "block" }} />}
+        {url && (
+          <img
+            src={url}
+            alt=""
+            draggable={false}
+            style={{ width: "100%", height: "100%", display: "block" }}
+          />
+        )}
       </div>
     );
   };
@@ -71,13 +85,17 @@ export function makeSlidesPanel(
     const [options, setOptions] = React.useState<Layout[]>([]);
     const [chosen, setChosen] = React.useState<string>("");
     const [busy, setBusy] = React.useState(false);
-    const key = slides.map((s) => `${s.pageId}:${s.state.layout ?? ""}`).join(",");
+    const key = slides
+      .map((s) => `${s.pageId}:${s.state.layout ?? ""}`)
+      .join(",");
     React.useEffect(() => {
       let live = true;
       void layouts(host, slides).then((ls) => {
         if (!live) return;
         setOptions(ls);
-        setChosen((c) => (ls.some((l) => l.masterId === c) ? c : (ls[0]?.masterId ?? "")));
+        setChosen((c) =>
+          ls.some((l) => l.masterId === c) ? c : (ls[0]?.masterId ?? ""),
+        );
       });
       return () => {
         live = false;
@@ -86,7 +104,10 @@ export function makeSlidesPanel(
     if (options.length === 0) return null;
     const layout = options.find((l) => l.masterId === chosen) ?? options[0];
     return (
-      <div style={{ display: "flex", gap: 6, alignItems: "center" }} data-new-slide>
+      <div
+        style={{ display: "flex", gap: 6, alignItems: "center" }}
+        data-new-slide
+      >
         <select
           aria-label="Layout"
           value={layout.masterId}
@@ -127,7 +148,10 @@ export function makeSlidesPanel(
 
     if (slides.length === 0) {
       return (
-        <div style={{ padding: 12, fontSize: 13, opacity: 0.7 }} data-slides-panel="empty">
+        <div
+          style={{ padding: 12, fontSize: 13, opacity: 0.7 }}
+          data-slides-panel="empty"
+        >
           No slides. Open a PowerPoint deck with File ▸ Open.
         </div>
       );
@@ -169,10 +193,21 @@ export function makeSlidesPanel(
               display: "flex",
               gap: 8,
               alignItems: "flex-start",
-              borderTop: over === i && dragging ? "2px solid var(--overlay-selection, #e0218a)" : "2px solid transparent",
+              borderTop:
+                over === i && dragging
+                  ? "2px solid var(--overlay-selection, #e0218a)"
+                  : "2px solid transparent",
             }}
           >
-            <div style={{ width: 18, fontSize: 11, opacity: 0.7, textAlign: "right", paddingTop: 2 }}>
+            <div
+              style={{
+                width: 18,
+                fontSize: 11,
+                opacity: 0.7,
+                textAlign: "right",
+                paddingTop: 2,
+              }}
+            >
               {slide.number}
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
@@ -184,7 +219,10 @@ export function makeSlidesPanel(
                   display: "block",
                   width: "100%",
                   padding: 0,
-                  border: slide.pageId === active ? "2px solid var(--overlay-selection, #e0218a)" : "2px solid transparent",
+                  border:
+                    slide.pageId === active
+                      ? "2px solid var(--overlay-selection, #e0218a)"
+                      : "2px solid transparent",
                   background: "none",
                   cursor: "pointer",
                 }}
@@ -192,7 +230,12 @@ export function makeSlidesPanel(
                 <Thumb slide={slide} />
               </button>
               <div style={tools}>
-                <button type="button" style={small} title="Duplicate slide" onClick={() => mutate(duplicateMutation(slide.pageId))}>
+                <button
+                  type="button"
+                  style={small}
+                  title="Duplicate slide"
+                  onClick={() => mutate(duplicateMutation(slide.pageId))}
+                >
                   Duplicate
                 </button>
                 <button
@@ -208,8 +251,19 @@ export function makeSlidesPanel(
                   type="button"
                   style={small}
                   aria-pressed={!!slide.state.hidden}
-                  title={slide.state.hidden ? "Show in slideshow" : "Hide from slideshow"}
-                  onClick={() => mutate(setStateMutation(slide.pageId, { ...slide.state, hidden: !slide.state.hidden }))}
+                  title={
+                    slide.state.hidden
+                      ? "Show in slideshow"
+                      : "Hide from slideshow"
+                  }
+                  onClick={() =>
+                    mutate(
+                      setStateMutation(slide.pageId, {
+                        ...slide.state,
+                        hidden: !slide.state.hidden,
+                      }),
+                    )
+                  }
                 >
                   {slide.state.hidden ? "Unhide" : "Hide"}
                 </button>

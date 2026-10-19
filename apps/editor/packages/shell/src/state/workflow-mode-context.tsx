@@ -36,12 +36,7 @@ import { scopedChromeKey } from "./chrome-storage-scope";
 // switching modes writes NOTHING to the document.
 
 export type WorkflowMode =
-  | "design"
-  | "content"
-  | "prepress"
-  | "data"
-  | "review"
-  | "export";
+  "design" | "content" | "prepress" | "data" | "review" | "export";
 
 const STORAGE_KEY_BASE = "paged.workflowMode";
 /** Scoped per workspace — see `chrome-storage-scope.ts`. Solo must not

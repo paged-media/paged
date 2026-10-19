@@ -726,7 +726,8 @@ export function patternSourceOf(
   if (typeof r.pattern !== "string") return null;
   return {
     pattern: r.pattern,
-    index: typeof r.index === "number" && Number.isFinite(r.index) ? r.index : 0,
+    index:
+      typeof r.index === "number" && Number.isFinite(r.index) ? r.index : 0,
   };
 }
 
@@ -915,7 +916,9 @@ export function patternFinishBatchFor(args: {
     ops.push(colorRef(binding.keep, "frameFillColor", source.paint.fill));
     ops.push(colorRef(binding.keep, "frameStrokeColor", source.paint.stroke));
     if (typeof source.paint.weight === "number") {
-      ops.push(lengthProp(binding.keep, "frameStrokeWeight", source.paint.weight));
+      ops.push(
+        lengthProp(binding.keep, "frameStrokeWeight", source.paint.weight),
+      );
     }
     if (plan.params.dim !== 100) {
       ops.push(lengthProp(binding.keep, "frameOpacity", plan.params.dim));
@@ -1028,7 +1031,10 @@ export function patternReleaseBatchFor(
     op: "batch",
     args: {
       ops: leaves.map((leaf) =>
-        stampDrawMetadata(leaf.id, withPatternKey(leaf.envelope, leaf.key, null)),
+        stampDrawMetadata(
+          leaf.id,
+          withPatternKey(leaf.envelope, leaf.key, null),
+        ),
       ),
     },
   };
@@ -1102,7 +1108,11 @@ export async function writePatternLibrary(
 ): Promise<boolean> {
   if (!host.supports(PATTERN_FEATURE)) return false;
   try {
-    await writeRecipeBytes(host, PATTERN_PART, serializePatternLibrary(library));
+    await writeRecipeBytes(
+      host,
+      PATTERN_PART,
+      serializePatternLibrary(library),
+    );
     // A part write is not a document event: without this an open panel
     // misses every recipe change made AFTER a command's last mutation.
     announceRecipeChange(host);
@@ -1217,7 +1227,9 @@ export async function patternGroupOf(
 ): Promise<ElementId | null> {
   const roots = await host.document.tree().catch(() => []);
   let found: ElementId | null = null;
-  const walk = (nodes: readonly { id?: ElementId | null; children?: unknown }[]) => {
+  const walk = (
+    nodes: readonly { id?: ElementId | null; children?: unknown }[],
+  ) => {
     for (const node of nodes) {
       const children = (node.children ?? []) as {
         id?: ElementId | null;
@@ -1437,7 +1449,9 @@ async function emitPatternField(
         "reading them back by their links",
     );
     keep = (await patternLinks(host, plan.field)).tiles.map((t) => t.id);
-    group = keep[0] ? groupHolding(await linkIndex(host).tree(), keep[0]) : null;
+    group = keep[0]
+      ? groupHolding(await linkIndex(host).tree(), keep[0])
+      : null;
   }
   const tiles = keep.filter((id): id is ElementId => id !== undefined);
   await host.selection.set(
@@ -1550,7 +1564,10 @@ export async function applyMakePattern(
       id: field,
       name,
       params,
-      sources: plan.sources.map((s) => ({ kind: s.id.kind, id: String(s.id.id) })),
+      sources: plan.sources.map((s) => ({
+        kind: s.id.kind,
+        id: String(s.id.id),
+      })),
     }),
   );
   const tiles = await emitPatternField(host, { plan, label });
@@ -1646,7 +1663,10 @@ export async function applyEditPattern(
       id: field,
       name,
       params,
-      sources: plan.sources.map((s) => ({ kind: s.id.kind, id: String(s.id.id) })),
+      sources: plan.sources.map((s) => ({
+        kind: s.id.kind,
+        id: String(s.id.id),
+      })),
     }),
   );
   host.log.info(
@@ -1723,7 +1743,11 @@ export async function applyDeletePatternTiles(
   const anchor = links.sources[0]?.id ?? links.tiles[0]?.id ?? null;
   const group = anchor ? groupHolding(await index.tree(), anchor) : null;
   const outcome = await host.document.mutate(
-    patternDeleteBatchFor({ group, tiles: links.tiles.map((t) => t.id), sources }),
+    patternDeleteBatchFor({
+      group,
+      tiles: links.tiles.map((t) => t.id),
+      sources,
+    }),
   );
   if (!outcome.applied) {
     host.log.warn(

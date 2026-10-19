@@ -341,7 +341,12 @@ export function contributeSelectSameCommands(host: BundleHost): Disposable {
       title: "Select same: Fill",
       category: SELECT_SAME_COMMAND_CATEGORY,
       handler: async (_paged, payload) => {
-        await applySelectSame(host, SELECT_SAME_FILL_COMMAND_ID, "fill", payload);
+        await applySelectSame(
+          host,
+          SELECT_SAME_FILL_COMMAND_ID,
+          "fill",
+          payload,
+        );
       },
     }),
     registerCommand(host, {

@@ -16,13 +16,13 @@ bash scripts/photoshop/run-probe.sh scripts/photoshop/probes/vector-masks.jsx
 PAGED_PHOTOSHOP_LEDGER=write cargo test -p image-conformance --test it oracle_photoshop::
 ```
 
-| file | role |
-| --- | --- |
-| `run-probe.sh` | consent check, launch, ping, run under a timeout, judge, record |
-| `lib/probe-lib.jsx` | ExtendScript helpers prepended to every probe (JSON, open/save, one case per duplicate, ActionManager) |
-| `lib/stimuli.mjs` | the deterministic 128×128 16-bit untagged PNG stimuli |
+| file                    | role                                                                                                          |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `run-probe.sh`          | consent check, launch, ping, run under a timeout, judge, record                                               |
+| `lib/probe-lib.jsx`     | ExtendScript helpers prepended to every probe (JSON, open/save, one case per duplicate, ActionManager)        |
+| `lib/stimuli.mjs`       | the deterministic 128×128 16-bit untagged PNG stimuli                                                         |
 | `lib/write-fixture.mjs` | judges the reply and the files, then copies them into `image-conformance/fixtures/photoshop/` with provenance |
-| `probes/*.jsx` | one probe per family |
+| `probes/*.jsx`          | one probe per family                                                                                          |
 
 Replays: `image-conformance/tests/it/oracle_photoshop.rs` (blend modes,
 adjustments, filters → `fixtures/photoshop/ledger.json`, every case

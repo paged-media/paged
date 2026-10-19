@@ -40,7 +40,12 @@ import { expect } from "@playwright/test";
 import { dirname, resolve as pathResolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { assignLayer, marginNote, proseFrame, specLabel } from "../../annual-support";
+import {
+  assignLayer,
+  marginNote,
+  proseFrame,
+  specLabel,
+} from "../../annual-support";
 import { LAYER, STYLE, SWATCH, p } from "../../names-annual";
 import { ConsoleTap, settle } from "../../plugin-support";
 import type { PageContext, PageReport } from "../../types";
@@ -70,19 +75,27 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   ];
   const elements: string[] = [];
 
-  const head = await proseFrame(ctx, p(106), [60, 96, 492, 124], [
-    { text: "The fragmentation ladder", style: STYLE.head1 },
-  ]);
-  const intro = await proseFrame(ctx, p(106), [60, 128, 492, 156], [
-    {
-      text:
-        "Two sources, two rungs: a forty-row fares table split between " +
-        "body rows with its two-row header repeating, and a card column " +
-        "split between a card's own blocks — except the image, which " +
-        "moves whole.",
-      style: STYLE.bodySmall,
-    },
-  ]);
+  const head = await proseFrame(
+    ctx,
+    p(106),
+    [60, 96, 492, 124],
+    [{ text: "The fragmentation ladder", style: STYLE.head1 }],
+  );
+  const intro = await proseFrame(
+    ctx,
+    p(106),
+    [60, 128, 492, 156],
+    [
+      {
+        text:
+          "Two sources, two rungs: a forty-row fares table split between " +
+          "body rows with its two-row header repeating, and a card column " +
+          "split between a card's own blocks — except the image, which " +
+          "moves whole.",
+        style: STYLE.bodySmall,
+      },
+    ],
+  );
   elements.push(head.frameId, intro.frameId);
 
   // ── exhibit 1: the fares table across three frames ───────────────
@@ -96,14 +109,24 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     await assignLayer(ctx, "rectangle", id, LAYER.content);
   }
   elements.push(f0, f1, f2);
-  await setWebSource(doc, f0, splitHtmlAsset(pathResolve(ASSETS, "fares-table.html")));
-  await runOnSelection(ctx, [ref(f0), ref(f1), ref(f2)], `${WEB_CMD}.threadWebFlow`);
+  await setWebSource(
+    doc,
+    f0,
+    splitHtmlAsset(pathResolve(ASSETS, "fares-table.html")),
+  );
+  await runOnSelection(
+    ctx,
+    [ref(f0), ref(f1), ref(f2)],
+    `${WEB_CMD}.threadWebFlow`,
+  );
   const faresThreaded = await settle(
     page,
     async () => ((await persistedRecipients(doc, f0)) ?? []).length === 2,
     10_000,
   );
-  expect(faresThreaded, "the fares chain persisted (source + 2 frames)").toBe(true);
+  expect(faresThreaded, "the fares chain persisted (source + 2 frames)").toBe(
+    true,
+  );
 
   // ── exhibit 2: the nested cards across two frames ────────────────
   const n0 = await doc.rectangle(pg106, [60, 496, 268, 610]);
@@ -113,14 +136,20 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     await assignLayer(ctx, "rectangle", id, LAYER.content);
   }
   elements.push(n0, n1);
-  await setWebSource(doc, n0, splitHtmlAsset(pathResolve(ASSETS, "nested-cards.html")));
+  await setWebSource(
+    doc,
+    n0,
+    splitHtmlAsset(pathResolve(ASSETS, "nested-cards.html")),
+  );
   await runOnSelection(ctx, [ref(n0), ref(n1)], `${WEB_CMD}.threadWebFlow`);
   const cardsThreaded = await settle(
     page,
     async () => ((await persistedRecipients(doc, n0)) ?? []).length === 1,
     10_000,
   );
-  expect(cardsThreaded, "the card chain persisted (source + 1 frame)").toBe(true);
+  expect(cardsThreaded, "the card chain persisted (source + 1 frame)").toBe(
+    true,
+  );
 
   // ── render both chains ───────────────────────────────────────────
   // GUARDED: on the first pass of this chapter the fares chain's
@@ -185,39 +214,49 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   );
 
   // ── captions pointing at the mechanism ───────────────────────────
-  const capFares = await proseFrame(ctx, p(106), [280, 330, 492, 484], [
-    {
-      text:
-        faresFrames >= 2
-          ? "Carriage fares, one source, three frames (reading order: top " +
-            "left, top right, lower left). The split falls BETWEEN body " +
-            "rows only, and both header rows — the blue route line and " +
-            "the orange units line — say themselves again at the top of " +
-            "each continuation. Column widths may re-resolve per frame: " +
-            "the documented v0 caveat, content-loss-free; rows past the " +
-            "last frame are reported overset, never dropped silently."
-          : "Carriage fares, one source, three frames — threaded and " +
-            "persisted, but the engine refused this chain's scene layers " +
-            "on this build; the refusal is recorded in the chapter notes " +
-            "rather than painted over.",
-      style: STYLE.caption,
-    },
-  ]);
-  const capCards = await proseFrame(ctx, p(106), [60, 614, 492, 638], [
-    {
-      text:
-        cardFrames >= 2
-          ? "Route cards, one source, two frames: a straddling card splits " +
-            "between its own blocks, recursively — the pressmark image is " +
-            "atomic and moves whole rather than tearing."
-          : "Route cards, one source, two frames — threaded and persisted, " +
-            "but the engine REFUSED this chain's scene layers on this build " +
-            "(the image-bearing fragment's message carries a null where the " +
-            "wire wants a number). The frames above are the honest empties; " +
-            "the finding is recorded, not painted over.",
-      style: STYLE.caption,
-    },
-  ]);
+  const capFares = await proseFrame(
+    ctx,
+    p(106),
+    [280, 330, 492, 484],
+    [
+      {
+        text:
+          faresFrames >= 2
+            ? "Carriage fares, one source, three frames (reading order: top " +
+              "left, top right, lower left). The split falls BETWEEN body " +
+              "rows only, and both header rows — the blue route line and " +
+              "the orange units line — say themselves again at the top of " +
+              "each continuation. Column widths may re-resolve per frame: " +
+              "the documented v0 caveat, content-loss-free; rows past the " +
+              "last frame are reported overset, never dropped silently."
+            : "Carriage fares, one source, three frames — threaded and " +
+              "persisted, but the engine refused this chain's scene layers " +
+              "on this build; the refusal is recorded in the chapter notes " +
+              "rather than painted over.",
+        style: STYLE.caption,
+      },
+    ],
+  );
+  const capCards = await proseFrame(
+    ctx,
+    p(106),
+    [60, 614, 492, 638],
+    [
+      {
+        text:
+          cardFrames >= 2
+            ? "Route cards, one source, two frames: a straddling card splits " +
+              "between its own blocks, recursively — the pressmark image is " +
+              "atomic and moves whole rather than tearing."
+            : "Route cards, one source, two frames — threaded and persisted, " +
+              "but the engine REFUSED this chain's scene layers on this build " +
+              "(the image-bearing fragment's message carries a null where the " +
+              "wire wants a number). The frames above are the honest empties; " +
+              "the finding is recorded, not painted over.",
+        style: STYLE.caption,
+      },
+    ],
+  );
   elements.push(capFares.frameId, capCards.frameId);
 
   elements.push(

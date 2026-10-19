@@ -41,7 +41,9 @@ const INSERT_CMD = "media.paged.web.command.insertWebFrame";
 async function leafCount(h: HeadlessHost): Promise<number> {
   const roots = await h.host.document.tree();
   let n = 0;
-  const walk = (nodes: { id?: { id?: string } | null; children?: unknown[] }[]) => {
+  const walk = (
+    nodes: { id?: { id?: string } | null; children?: unknown[] }[],
+  ) => {
     for (const node of nodes) {
       if (node.id?.id) n++;
       if (node.children) walk(node.children as never);

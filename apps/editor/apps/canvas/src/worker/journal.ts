@@ -17,7 +17,6 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-
 // The render worker's journal buffer (ADR 025 §2).
 //
 // A SECOND ring, in a second realm. The worker cannot share the shell's buffer

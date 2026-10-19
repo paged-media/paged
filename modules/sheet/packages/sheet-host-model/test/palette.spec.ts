@@ -61,7 +61,13 @@ function mintedSpecs(batch: Mutation): SwatchSpec[] {
 function content(over: Partial<LoweredContent> = {}): LoweredContent {
   return {
     cols: [{ index: 0, widthPt: 60 }],
-    rows: [{ index: 0, heightPt: 14, cells: [{ col: 0, text: "1", align: "right" }] }],
+    rows: [
+      {
+        index: 0,
+        heightPt: 14,
+        cells: [{ col: 0, text: "1", align: "right" }],
+      },
+    ],
     rules: { h: [], v: [] },
     merges: [],
     ...over,
@@ -135,9 +141,35 @@ describe("sheet_plugin_swatch_palette: facets are distinct swatches", () => {
 describe("sheet_plugin_swatch_palette: distinct colours, in order", () => {
   it("collects chart fills + strokes in first-appearance order, deduped", () => {
     const geom = chartGeom([
-      { kind: "rect", x: 0, y: 0, w: 10, h: 10, fill: "#4E79A7", stroke: null, strokeW: 0 },
-      { kind: "rect", x: 0, y: 0, w: 10, h: 10, fill: "#4e79a7", stroke: "#333", strokeW: 1 },
-      { kind: "line", pts: [[0, 0], [1, 1]], stroke: "#F28E2B", strokeW: 1 },
+      {
+        kind: "rect",
+        x: 0,
+        y: 0,
+        w: 10,
+        h: 10,
+        fill: "#4E79A7",
+        stroke: null,
+        strokeW: 0,
+      },
+      {
+        kind: "rect",
+        x: 0,
+        y: 0,
+        w: 10,
+        h: 10,
+        fill: "#4e79a7",
+        stroke: "#333",
+        strokeW: 1,
+      },
+      {
+        kind: "line",
+        pts: [
+          [0, 0],
+          [1, 1],
+        ],
+        stroke: "#F28E2B",
+        strokeW: 1,
+      },
     ]);
     expect(distinctChartHexes(geom)).toEqual(["4E79A7", "333333", "F28E2B"]);
   });
@@ -145,8 +177,26 @@ describe("sheet_plugin_swatch_palette: distinct colours, in order", () => {
   it("collects data-bar fills the same way", () => {
     const c = content({
       databars: [
-        { row: 0, col: 0, x: 0, y: 0, w: 5, h: 5, fillFraction: 0.5, fill: "#638EC6" },
-        { row: 1, col: 0, x: 0, y: 0, w: 5, h: 5, fillFraction: 0.5, fill: "#638ec6" },
+        {
+          row: 0,
+          col: 0,
+          x: 0,
+          y: 0,
+          w: 5,
+          h: 5,
+          fillFraction: 0.5,
+          fill: "#638EC6",
+        },
+        {
+          row: 1,
+          col: 0,
+          x: 0,
+          y: 0,
+          w: 5,
+          h: 5,
+          fillFraction: 0.5,
+          fill: "#638ec6",
+        },
       ],
     });
     expect(distinctDataBarHexes(c)).toEqual(["638EC6"]);
@@ -156,13 +206,31 @@ describe("sheet_plugin_swatch_palette: distinct colours, in order", () => {
     const palette = workbookPalette({
       charts: [
         chartGeom([
-          { kind: "rect", x: 0, y: 0, w: 1, h: 1, fill: "#4E79A7", stroke: null, strokeW: 0 },
+          {
+            kind: "rect",
+            x: 0,
+            y: 0,
+            w: 1,
+            h: 1,
+            fill: "#4E79A7",
+            stroke: null,
+            strokeW: 0,
+          },
         ]),
       ],
       regions: [
         content({
           databars: [
-            { row: 0, col: 0, x: 0, y: 0, w: 5, h: 5, fillFraction: 1, fill: "#4E79A7" },
+            {
+              row: 0,
+              col: 0,
+              x: 0,
+              y: 0,
+              w: 5,
+              h: 5,
+              fillFraction: 1,
+              fill: "#4E79A7",
+            },
           ],
         }),
       ],
@@ -195,8 +263,25 @@ describe("sheet_plugin_swatch_palette: distinct colours, in order", () => {
 describe("sheet_plugin_swatch_palette: the panel's ids ARE the lowering's ids", () => {
   it("chart lowering mints exactly the chart palette's swatch specs", () => {
     const geom = chartGeom([
-      { kind: "rect", x: 0, y: 0, w: 10, h: 10, fill: "#4E79A7", stroke: "#333333", strokeW: 1 },
-      { kind: "line", pts: [[0, 0], [5, 5]], stroke: "#F28E2B", strokeW: 1 },
+      {
+        kind: "rect",
+        x: 0,
+        y: 0,
+        w: 10,
+        h: 10,
+        fill: "#4E79A7",
+        stroke: "#333333",
+        strokeW: 1,
+      },
+      {
+        kind: "line",
+        pts: [
+          [0, 0],
+          [5, 5],
+        ],
+        stroke: "#F28E2B",
+        strokeW: 1,
+      },
     ]);
     const { batch } = chartGeometryToMutations(
       geom,
@@ -205,15 +290,35 @@ describe("sheet_plugin_swatch_palette: the panel's ids ARE the lowering's ids", 
     );
     const minted = mintedSpecs(batch);
 
-    const expected = workbookPalette({ charts: [geom] }).map(paletteEntryToSpec);
+    const expected = workbookPalette({ charts: [geom] }).map(
+      paletteEntryToSpec,
+    );
     expect(minted).toEqual(expected);
   });
 
   it("data-bar lowering mints exactly the data-bar palette's swatch specs", () => {
     const c = content({
       databars: [
-        { row: 0, col: 0, x: 0, y: 0, w: 20, h: 10, fillFraction: 0.8, fill: "#638EC6" },
-        { row: 0, col: 0, x: 0, y: 0, w: 10, h: 10, fillFraction: 0.4, fill: "#FF0000" },
+        {
+          row: 0,
+          col: 0,
+          x: 0,
+          y: 0,
+          w: 20,
+          h: 10,
+          fillFraction: 0.8,
+          fill: "#638EC6",
+        },
+        {
+          row: 0,
+          col: 0,
+          x: 0,
+          y: 0,
+          w: 10,
+          h: 10,
+          fillFraction: 0.4,
+          fill: "#FF0000",
+        },
       ],
     });
     const { batch } = lowerToMutations(
@@ -350,11 +455,29 @@ describe("sheet_lower_swatch_mint_dedupe: mint only what is absent", () => {
 
 describe("sheet_lower_swatch_mint_dedupe: every minting lane honours it", () => {
   const GEOM = chartGeom([
-    { kind: "rect", x: 0, y: 0, w: 10, h: 10, fill: "#4E79A7", stroke: "#888888", strokeW: 1 },
+    {
+      kind: "rect",
+      x: 0,
+      y: 0,
+      w: 10,
+      h: 10,
+      fill: "#4E79A7",
+      stroke: "#888888",
+      strokeW: 1,
+    },
   ]);
   const BARS = content({
     databars: [
-      { row: 0, col: 0, x: 0, y: 0, w: 20, h: 10, fillFraction: 0.8, fill: "#638EC6" },
+      {
+        row: 0,
+        col: 0,
+        x: 0,
+        y: 0,
+        w: 20,
+        h: 10,
+        fillFraction: 0.8,
+        fill: "#638EC6",
+      },
     ],
   });
   const CELLS = content({
@@ -427,7 +550,16 @@ describe("sheet_lower_swatch_mint_dedupe: every minting lane honours it", () => 
     // The real failure was not the literal re-lower: two different charts
     // share the axis grey, so a workbook's second chart never landed.
     const other = chartGeom([
-      { kind: "rect", x: 0, y: 0, w: 10, h: 10, fill: "#3366CC", stroke: "#888888", strokeW: 1 },
+      {
+        kind: "rect",
+        x: 0,
+        y: 0,
+        w: 10,
+        h: 10,
+        fill: "#3366CC",
+        stroke: "#888888",
+        strokeW: 1,
+      },
     ]);
     const known = new Set([
       "Color/uPagedSheetChart4E79A7",

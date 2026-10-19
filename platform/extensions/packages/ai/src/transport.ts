@@ -68,11 +68,23 @@ export interface DirectTransportOptions {
   model?: string;
 }
 
-export function createDirectTransport(options: DirectTransportOptions): AiTransport {
-  const client = options.client ?? new Anthropic(options.apiKey ? { apiKey: options.apiKey } : {});
+export function createDirectTransport(
+  options: DirectTransportOptions,
+): AiTransport {
+  const client =
+    options.client ??
+    new Anthropic(options.apiKey ? { apiKey: options.apiKey } : {});
   return {
     turn: (request, hooks) =>
-      streamTurn(client, buildRequest({ ...request, catalog: options.catalog, model: options.model }), hooks),
+      streamTurn(
+        client,
+        buildRequest({
+          ...request,
+          catalog: options.catalog,
+          model: options.model,
+        }),
+        hooks,
+      ),
   };
 }
 
@@ -87,7 +99,9 @@ export interface ProxyTransportOptions {
   fetch?: typeof fetch;
 }
 
-export function createProxyTransport(options: ProxyTransportOptions): AiTransport {
+export function createProxyTransport(
+  options: ProxyTransportOptions,
+): AiTransport {
   return {
     async turn(request, hooks) {
       const client = new Anthropic({
@@ -99,13 +113,20 @@ export function createProxyTransport(options: ProxyTransportOptions): AiTranspor
         // double-count against the rate limit.
         maxRetries: 0,
         ...(options.fetch ? { fetch: options.fetch } : {}),
-        defaultHeaders: { [MODE_HEADER]: request.mode, ...(options.headers ? await options.headers() : {}) },
+        defaultHeaders: {
+          [MODE_HEADER]: request.mode,
+          ...(options.headers ? await options.headers() : {}),
+        },
       });
       // Only model, max_tokens and messages matter here: the proxy rebuilds
       // the rest from the mode.
       return streamTurn(
         client,
-        { model: DEFAULT_MODEL, max_tokens: MODE_SPECS[request.mode].maxTokens, messages: request.messages },
+        {
+          model: DEFAULT_MODEL,
+          max_tokens: MODE_SPECS[request.mode].maxTokens,
+          messages: request.messages,
+        },
         hooks,
       );
     },

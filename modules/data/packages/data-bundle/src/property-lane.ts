@@ -12,7 +12,12 @@
 // a core object, so the swatch goes in one `createSwatch` mutate before the
 // apply (a second undo step, first use only, one more call).
 
-import type { BundleHost, Mutation, ObjectOp, ObjectsSurface } from "@paged-media/plugin-api";
+import type {
+  BundleHost,
+  Mutation,
+  ObjectOp,
+  ObjectsSurface,
+} from "@paged-media/plugin-api";
 
 import {
   planProperties,
@@ -53,7 +58,13 @@ export async function commitProperties(
   hostOids: Readonly<Record<string, string>> = {},
   label = "Apply data",
 ): Promise<PropertyLaneResult> {
-  const result: PropertyLaneResult = { applied: 0, undoSteps: 0, skipped: {}, written: {}, calls: 0 };
+  const result: PropertyLaneResult = {
+    applied: 0,
+    undoSteps: 0,
+    skipped: {},
+    written: {},
+    calls: 0,
+  };
   const objects = objectsOf(host);
   if (!objects) {
     for (const a of applies) result.skipped[a.binding] = NO_OBJECT_MODEL;
@@ -69,12 +80,17 @@ export async function commitProperties(
     try {
       targets.set(sel, await objects.query(sel));
     } catch (err) {
-      result.skipped[a.binding] = `the target ${sel} could not be resolved: ${String(err)}`;
+      result.skipped[a.binding] =
+        `the target ${sel} could not be resolved: ${String(err)}`;
     }
   }
   // 2. The swatches, once, when a value is a colour.
   let swatches: SwatchRow[] = [];
-  if (writes.some((a) => a.property.outcome.outcome === "write" && a.property.outcome.color)) {
+  if (
+    writes.some(
+      (a) => a.property.outcome.outcome === "write" && a.property.outcome.color,
+    )
+  ) {
     result.calls++;
     try {
       swatches = [...(await host.document.collection<SwatchRow>("swatches"))];
@@ -92,10 +108,15 @@ export async function commitProperties(
   } else if (plan.mint.length > 0) {
     result.calls++;
     const minted = await host.document.mutate(
-      plan.mint.length === 1 ? plan.mint[0]! : ({ op: "batch", args: { ops: plan.mint } } as Mutation),
+      plan.mint.length === 1
+        ? plan.mint[0]!
+        : ({ op: "batch", args: { ops: plan.mint } } as Mutation),
     );
     if (minted.applied) result.undoSteps++;
-    else host.log.warn(`property bindings: the new swatches were refused (${String(minted.error)})`);
+    else
+      host.log.warn(
+        `property bindings: the new swatches were refused (${String(minted.error)})`,
+      );
   }
   // 4. ONE batch. A refused op names its index: that binding is reported and
   // the batch is sent again without it (nothing landed — it is all or nothing).
@@ -107,16 +128,20 @@ export async function commitProperties(
     if (out.applied) {
       result.undoSteps += out.undoSteps;
       result.applied = ops.length;
-      for (const b of bindings) result.written[b] = (result.written[b] ?? 0) + 1;
+      for (const b of bindings)
+        result.written[b] = (result.written[b] ?? 0) + 1;
       break;
     }
     const at = out.index !== undefined ? out.index - creates.length : undefined;
     const failed = at !== undefined && at >= 0 ? bindings[at] : undefined;
     if (failed === undefined) {
-      for (const b of new Set(bindings)) result.skipped[b] = `the host refused the apply: ${out.reason ?? out.code ?? "unknown"}`;
+      for (const b of new Set(bindings))
+        result.skipped[b] =
+          `the host refused the apply: ${out.reason ?? out.code ?? "unknown"}`;
       break;
     }
-    result.skipped[failed] = `the host refused ${ops[at!]!.op === "set" ? (ops[at!] as { path: string }).path : "the write"}: ${out.reason ?? out.code}`;
+    result.skipped[failed] =
+      `the host refused ${ops[at!]!.op === "set" ? (ops[at!] as { path: string }).path : "the write"}: ${out.reason ?? out.code}`;
     const keep = bindings.map((b) => b !== failed);
     ops = ops.filter((_, i) => keep[i]);
     bindings = bindings.filter((_, i) => keep[i]);
@@ -126,10 +151,26 @@ export async function commitProperties(
 
 /** A `createSwatch` mutation as a `host.objects` create op (protocol 71). */
 function createSwatchOp(m: Mutation): ObjectOp {
-  const spec = (m.args as { spec: { name: string; space: string; value: number[]; model?: string | null } }).spec;
+  const spec = (
+    m.args as {
+      spec: {
+        name: string;
+        space: string;
+        value: number[];
+        model?: string | null;
+      };
+    }
+  ).spec;
   return {
     op: "create",
     kind: "swatch",
-    props: { name: spec.name, color: { space: spec.space, value: spec.value, model: spec.model ?? "Process" } },
+    props: {
+      name: spec.name,
+      color: {
+        space: spec.space,
+        value: spec.value,
+        model: spec.model ?? "Process",
+      },
+    },
   };
 }

@@ -36,7 +36,10 @@ export function ZoomField() {
   const percent = Math.round(camera.scale * 100);
 
   const apply = (nextPercent: number) => {
-    const clamped = Math.max(MIN_ZOOM_PERCENT, Math.min(MAX_ZOOM_PERCENT, nextPercent));
+    const clamped = Math.max(
+      MIN_ZOOM_PERCENT,
+      Math.min(MAX_ZOOM_PERCENT, nextPercent),
+    );
     setCamera({ ...camera, scale: clamped / 100 });
   };
 

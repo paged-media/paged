@@ -210,13 +210,26 @@ describe("per-channel curves", () => {
     const handle = makeHost(fake);
     const session = createImageSession(handle.host);
     expect(await session.importBytes("c.psd", psdBytes())).toBe(true);
-    session.setCurvePoints([[0, 0], [0.5, 0.8], [1, 1]], "g");
+    session.setCurvePoints(
+      [
+        [0, 0],
+        [0.5, 0.8],
+        [1, 1],
+      ],
+      "g",
+    );
     const rgb = session.state().params.curveLutRgb;
     expect(rgb[0]).toBeNull();
     expect(rgb[1]?.[128]).toBeGreaterThan(160);
     expect(session.state().params.curveLut).toBeNull();
     // Back to the identity curve clears that channel.
-    session.setCurvePoints([[0, 0], [1, 1]], "g");
+    session.setCurvePoints(
+      [
+        [0, 0],
+        [1, 1],
+      ],
+      "g",
+    );
     expect(session.state().params.curveLutRgb[1]).toBeNull();
     session.dispose();
     handle.dispose();
@@ -233,9 +246,13 @@ describe("Hue/Saturation in the extended block", () => {
     expect(isIdentity(p)).toBe(false);
     const e = packAdjustExt(p);
     expect(e).toHaveLength(72);
-    expect(Array.from(e.slice(47, 50)).map((n) => Math.round(n * 10) / 10)).toEqual([10, 0.2, -0.1]);
+    expect(
+      Array.from(e.slice(47, 50)).map((n) => Math.round(n * 10) / 10),
+    ).toEqual([10, 0.2, -0.1]);
     expect(Array.from(e.slice(62, 65))).toEqual([30, -0.5, 0]);
-    expect(Array.from(e.slice(68, 72)).map((n) => Math.round(n * 10) / 10)).toEqual([1, 200, 0.6, 0.1]);
+    expect(
+      Array.from(e.slice(68, 72)).map((n) => Math.round(n * 10) / 10),
+    ).toEqual([1, 200, 0.6, 0.1]);
   });
 
   it("a fresh identity does not share its hue/sat arrays", () => {
@@ -367,7 +384,10 @@ describe("the save-back lane (real engine wasm)", () => {
     // Reading it back: two layer records, by name.
     const round = createImageSession(handle.host);
     expect(await round.importBytes("again.psd", exported!.bytes)).toBe(true);
-    expect(round.state().psd?.layers.map((l) => l.name)).toEqual(["Background", "Notes"]);
+    expect(round.state().psd?.layers.map((l) => l.name)).toEqual([
+      "Background",
+      "Notes",
+    ]);
     round.dispose();
     session.dispose();
     handle.dispose();
@@ -415,7 +435,11 @@ describe("the save-back lane (real engine wasm)", () => {
     expect(session.state().ptPerPx).toBeNull();
 
     // A record edit, then the PSD exporter: every layer, the edit kept.
-    expect(session.state().psd?.layers.map((l) => l.name)).toEqual(["Background", "Plate", "Signal"]);
+    expect(session.state().psd?.layers.map((l) => l.name)).toEqual([
+      "Background",
+      "Plate",
+      "Signal",
+    ]);
     expect(session.psdSetLayerOpacity(2, 64)).toBe(true);
     const exported = await session.psdExportBytes();
     expect(exported).not.toBeNull();
@@ -437,13 +461,17 @@ describe("the save-back lane (real engine wasm)", () => {
   // when the export flattens a layered file to one layer.
   it("the PSD layers note says when the export will flatten the layers", () => {
     const adjusted = { ...freshIdentityParams(), temp: -0.04 };
-    expect(psdLayersNote(freshIdentityParams(), 3)).toMatch(/Edits land in the exported PSD/);
+    expect(psdLayersNote(freshIdentityParams(), 3)).toMatch(
+      /Edits land in the exported PSD/,
+    );
     const flat = psdLayersNote(adjusted, 3);
     expect(flat).not.toMatch(/Edits land in the exported PSD/);
     expect(flat).toMatch(/one layer/);
     expect(flat).toMatch(/Reset/);
     // One layer has nothing to lose: the adjusted pixels replace it.
-    expect(psdLayersNote(adjusted, 1)).toMatch(/Edits land in the exported PSD/);
+    expect(psdLayersNote(adjusted, 1)).toMatch(
+      /Edits land in the exported PSD/,
+    );
   });
 
   it("an edit the PSD save-back cannot write is refused, not exported as the original", async () => {

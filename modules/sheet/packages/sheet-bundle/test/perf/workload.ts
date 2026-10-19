@@ -43,7 +43,12 @@ export const WASM = join(BIN, "sheet_js_bg.wasm");
 /** The sheet engine artifact is built (scripts/build-wasm.sh). */
 export const ENGINE_BUILT = existsSync(WASM);
 
-const silent = { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} };
+const silent = {
+  debug: () => {},
+  info: () => {},
+  warn: () => {},
+  error: () => {},
+};
 
 const mapBacking = () => {
   const m = new Map<string, string>();
@@ -74,7 +79,9 @@ export function testClipboard(): TestClipboard {
 }
 
 /** Boot a real headless host (silent console, in-memory storage). */
-export async function openHost(clipboard?: TestClipboard): Promise<HeadlessHost> {
+export async function openHost(
+  clipboard?: TestClipboard,
+): Promise<HeadlessHost> {
   return createHeadlessHost({
     console: silent,
     storage: mapBacking(),
@@ -194,13 +201,25 @@ export const settle = async (): Promise<void> => {
  *  every zip entry's text, by path. How a scenario reads back what a
  *  placement actually wrote — table cell text included, which no plugin
  *  read door returns. */
-export async function exportedIdmlParts(h: HeadlessHost): Promise<Map<string, string>> {
-  const client = (h.host as unknown as {
-    editor: { client: { send(m: unknown): Promise<{ kind: string; payload: { idmlBytes?: number[] } }> } };
-  }).editor.client;
+export async function exportedIdmlParts(
+  h: HeadlessHost,
+): Promise<Map<string, string>> {
+  const client = (
+    h.host as unknown as {
+      editor: {
+        client: {
+          send(
+            m: unknown,
+          ): Promise<{ kind: string; payload: { idmlBytes?: number[] } }>;
+        };
+      };
+    }
+  ).editor.client;
   const reply = await client.send({ kind: "exportIdml", payload: {} });
   if (reply.kind !== "idmlExported" || !reply.payload.idmlBytes) {
-    throw new Error(`exportIdml failed: ${JSON.stringify(reply).slice(0, 200)}`);
+    throw new Error(
+      `exportIdml failed: ${JSON.stringify(reply).slice(0, 200)}`,
+    );
   }
   const zip = Buffer.from(reply.payload.idmlBytes);
   // The end-of-central-directory record, then each central entry.
@@ -219,8 +238,14 @@ export async function exportedIdmlParts(h: HeadlessHost): Promise<Map<string, st
     const name = zip.subarray(p + 46, p + 46 + nameLen).toString("utf8");
     const lName = zip.readUInt16LE(local + 26);
     const lExtra = zip.readUInt16LE(local + 28);
-    const data = zip.subarray(local + 30 + lName + lExtra, local + 30 + lName + lExtra + size);
-    out.set(name, (method === 8 ? inflateRawSync(data) : data).toString("utf8"));
+    const data = zip.subarray(
+      local + 30 + lName + lExtra,
+      local + 30 + lName + lExtra + size,
+    );
+    out.set(
+      name,
+      (method === 8 ? inflateRawSync(data) : data).toString("utf8"),
+    );
     p += 46 + nameLen + extraLen + commentLen;
   }
   return out;
@@ -228,15 +253,21 @@ export async function exportedIdmlParts(h: HeadlessHost): Promise<Map<string, st
 
 /** The text of every `<Cell>` in the exported document's stories, in
  *  document order, keyed `row:col` per table (`Name="col:row"` in IDML). */
-export async function exportedTableCells(h: HeadlessHost): Promise<Map<string, string>[]> {
+export async function exportedTableCells(
+  h: HeadlessHost,
+): Promise<Map<string, string>[]> {
   const parts = await exportedIdmlParts(h);
   const tables: Map<string, string>[] = [];
   for (const [name, xml] of parts) {
     if (!name.startsWith("Stories/")) continue;
     for (const t of xml.matchAll(/<Table\b[\s\S]*?<\/Table>/g)) {
       const cells = new Map<string, string>();
-      for (const c of t[0].matchAll(/<Cell\b[^>]*\bName="(\d+):(\d+)"[^>]*>([\s\S]*?)<\/Cell>/g)) {
-        const text = [...c[3].matchAll(/<Content>([\s\S]*?)<\/Content>/g)].map((m) => m[1]).join("");
+      for (const c of t[0].matchAll(
+        /<Cell\b[^>]*\bName="(\d+):(\d+)"[^>]*>([\s\S]*?)<\/Cell>/g,
+      )) {
+        const text = [...c[3].matchAll(/<Content>([\s\S]*?)<\/Content>/g)]
+          .map((m) => m[1])
+          .join("");
         cells.set(`${c[2]}:${c[1]}`, text);
       }
       tables.push(cells);
@@ -251,11 +282,13 @@ export async function exportedTableCells(h: HeadlessHost): Promise<Map<string, s
 export async function exportedTableRows(
   h: HeadlessHost,
 ): Promise<{ self: string; rows: number; header: number; footer: number }[]> {
-  const out: { self: string; rows: number; header: number; footer: number }[] = [];
+  const out: { self: string; rows: number; header: number; footer: number }[] =
+    [];
   for (const [name, xml] of await exportedIdmlParts(h)) {
     if (!name.startsWith("Stories/")) continue;
     for (const t of xml.matchAll(/<Table\b([^>]*)>([\s\S]*?)<\/Table>/g)) {
-      const attr = (n: string) => new RegExp(`\\b${n}="([^"]*)"`).exec(t[1])?.[1];
+      const attr = (n: string) =>
+        new RegExp(`\\b${n}="([^"]*)"`).exec(t[1])?.[1];
       out.push({
         self: attr("Self") ?? "",
         rows: [...t[2].matchAll(/<Row\b/g)].length,
@@ -277,13 +310,17 @@ export async function resizeByHandle(
   handle: "north" | "south" | "east" | "west",
   delta: [number, number],
 ): Promise<{ kind: string; payload: Record<string, unknown> }> {
-  const client = (h.host as unknown as {
-    editor: {
-      client: {
-        send(m: unknown): Promise<{ kind: string; payload: Record<string, unknown> }>;
+  const client = (
+    h.host as unknown as {
+      editor: {
+        client: {
+          send(
+            m: unknown,
+          ): Promise<{ kind: string; payload: Record<string, unknown> }>;
+        };
       };
-    };
-  }).editor.client;
+    }
+  ).editor.client;
   const begun = await client.send({
     kind: "beginGesture",
     payload: {
@@ -291,14 +328,23 @@ export async function resizeByHandle(
       gesture: { kind: "resize", handle },
     },
   });
-  if (begun.kind !== "gestureBegun") throw new Error(`beginGesture: ${JSON.stringify(begun)}`);
+  if (begun.kind !== "gestureBegun")
+    throw new Error(`beginGesture: ${JSON.stringify(begun)}`);
   const gesture = begun.payload.handle;
   const moved = await client.send({
     kind: "updateGesture",
-    payload: { handle: gesture, delta, modifiers: { shift: false, alt: false, disableSnap: true } },
+    payload: {
+      handle: gesture,
+      delta,
+      modifiers: { shift: false, alt: false, disableSnap: true },
+    },
   });
-  if (moved.kind !== "gestureUpdated") throw new Error(`updateGesture: ${JSON.stringify(moved)}`);
-  const committed = await client.send({ kind: "commitGesture", payload: { handle: gesture } });
+  if (moved.kind !== "gestureUpdated")
+    throw new Error(`updateGesture: ${JSON.stringify(moved)}`);
+  const committed = await client.send({
+    kind: "commitGesture",
+    payload: { handle: gesture },
+  });
   if (committed.kind !== "gestureCommitted") {
     throw new Error(`commitGesture: ${JSON.stringify(committed)}`);
   }
@@ -343,13 +389,20 @@ export function refusingTableHandles(host: BundleHost): BundleHost {
   const raw = host.document;
   const namesTableHandle = (v: unknown): boolean =>
     v === "$h:t" ||
-    (Array.isArray(v) ? v.some(namesTableHandle) : !!v && typeof v === "object" && Object.values(v).some(namesTableHandle));
+    (Array.isArray(v)
+      ? v.some(namesTableHandle)
+      : !!v &&
+        typeof v === "object" &&
+        Object.values(v).some(namesTableHandle));
   const document = new Proxy(raw, {
     get(o, p, r) {
       if (p === "mutate") {
         return async (m: Parameters<typeof raw.mutate>[0]) =>
           namesTableHandle(m)
-            ? { applied: false as const, error: "unresolved handle $h:t (pre-66 core)" }
+            ? {
+                applied: false as const,
+                error: "unresolved handle $h:t (pre-66 core)",
+              }
             : raw.mutate(m);
       }
       return Reflect.get(o, p, r);

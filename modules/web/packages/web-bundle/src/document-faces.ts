@@ -49,13 +49,26 @@ import type { WebDiagnostic } from "../../web-model/src";
 import { onDocumentOpened } from "./document-opened";
 import { heldFaces } from "./engine-inputs";
 import type { WebEngine } from "./engine-loader";
-import { keepFace, keptFaceFamily, keptFacePaths, readKeptFace, type KeptFace } from "./source-part";
+import {
+  keepFace,
+  keptFaceFamily,
+  keptFacePaths,
+  readKeptFace,
+  type KeptFace,
+} from "./source-part";
 
-const problem = (message: string): WebDiagnostic => ({ severity: "warning", message, source: "render" });
+const problem = (message: string): WebDiagnostic => ({
+  severity: "warning",
+  message,
+  source: "render",
+});
 
 /** Whether the document's font registry holds a face of `family` (null: the
  *  host cannot say). */
-async function documentHolds(host: BundleHost, family: string): Promise<boolean | null> {
+async function documentHolds(
+  host: BundleHost,
+  family: string,
+): Promise<boolean | null> {
   try {
     return (await host.assets.getFontFace(family)) !== null;
   } catch {
@@ -98,16 +111,32 @@ export async function provideDocumentFaces(
     if (faces.length === 0 || !door) {
       // Only a family the document is known to lack is a problem.
       if (holds === false) {
-        out.push(problem(`baked text is set in “${family}”, a face the document does not have: it is drawn in a substitute`));
+        out.push(
+          problem(
+            `baked text is set in “${family}”, a face the document does not have: it is drawn in a substitute`,
+          ),
+        );
       }
       continue;
     }
     for (const face of faces) {
-      const outcome = await host.assets.registerDocumentFont(face.bytes, family, face.style);
+      const outcome = await host.assets.registerDocumentFont(
+        face.bytes,
+        family,
+        face.style,
+      );
       if (outcome.status === "refused") {
-        out.push(problem(`the document did not take the face “${family}${face.style ? ` ${face.style}` : ""}” (${outcome.reason})`));
+        out.push(
+          problem(
+            `the document did not take the face “${family}${face.style ? ` ${face.style}` : ""}” (${outcome.reason})`,
+          ),
+        );
       } else {
-        given.push({ family, ...(face.style ? { style: face.style } : {}), bytes: face.bytes });
+        given.push({
+          family,
+          ...(face.style ? { style: face.style } : {}),
+          bytes: face.bytes,
+        });
       }
     }
   }
@@ -117,7 +146,10 @@ export async function provideDocumentFaces(
 /** Keep the faces a bake gave the document with the document, so they come
  *  back when it opens again. Answers the problems: a face the document could
  *  not keep (its text is drawn in a substitute once the document reopens). */
-export async function keepDocumentFaces(host: BundleHost, given: readonly KeptFace[]): Promise<WebDiagnostic[]> {
+export async function keepDocumentFaces(
+  host: BundleHost,
+  given: readonly KeptFace[],
+): Promise<WebDiagnostic[]> {
   const out: WebDiagnostic[] = [];
   for (const face of given) {
     if (await keepFace(host, face)) continue;
@@ -138,14 +170,19 @@ export const FACE_DIAG_KEY = "media.paged.web#faces";
  *  its text names and has no face for. Reads no part when nothing is
  *  missing. Answers the problems (a face the document would not take back);
  *  never throws. */
-export async function giveBackDocumentFaces(host: BundleHost): Promise<WebDiagnostic[]> {
+export async function giveBackDocumentFaces(
+  host: BundleHost,
+): Promise<WebDiagnostic[]> {
   const problems: WebDiagnostic[] = [];
   if (!host.supports("assets.documentFont@1")) return problems;
   const paths = await keptFacePaths(host);
   if (paths.length === 0) return problems;
   let missing: Set<string>;
   try {
-    const rows = await host.document.collection<{ family?: unknown; isMissing?: unknown }>("fonts");
+    const rows = await host.document.collection<{
+      family?: unknown;
+      isMissing?: unknown;
+    }>("fonts");
     missing = new Set(
       rows
         .filter((r) => r.isMissing === true && typeof r.family === "string")
@@ -160,7 +197,11 @@ export async function giveBackDocumentFaces(host: BundleHost): Promise<WebDiagno
     if (!family || !missing.has(family.toLowerCase())) continue;
     const face = await readKeptFace(host, path);
     if (!face) continue;
-    const outcome = await host.assets.registerDocumentFont(face.bytes, face.family, face.style);
+    const outcome = await host.assets.registerDocumentFont(
+      face.bytes,
+      face.family,
+      face.style,
+    );
     if (outcome.status === "refused") {
       problems.push(
         problem(
@@ -183,7 +224,8 @@ export function startDocumentFaces(host: BundleHost): Disposable {
     pass = pass
       .then(async () => {
         const problems = await giveBackDocumentFaces(host);
-        if (problems.length > 0 || reported) host.diagnostics.set(FACE_DIAG_KEY, problems);
+        if (problems.length > 0 || reported)
+          host.diagnostics.set(FACE_DIAG_KEY, problems);
         reported = problems.length > 0;
       })
       .catch((err: unknown) => {

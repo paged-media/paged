@@ -107,7 +107,8 @@ export function awaitPlacementPoint(
       settled = true;
       armed = false;
       root.removeAttribute(ARMED_ATTR);
-      if (previous) root.style.setProperty("cursor", previous, previousPriority);
+      if (previous)
+        root.style.setProperty("cursor", previous, previousPriority);
       else root.style.removeProperty("cursor");
       window.removeEventListener("pointerdown", onDown, true);
       window.removeEventListener("pointermove", onMove, true);
@@ -157,7 +158,8 @@ export function awaitPlacementPoint(
       dragging ||=
         Math.hypot(e.clientX - pressed.clientX, e.clientY - pressed.clientY) >
         DRAG_THRESHOLD_PX;
-      if (dragging) options.onDrag?.(pressed, { clientX: e.clientX, clientY: e.clientY });
+      if (dragging)
+        options.onDrag?.(pressed, { clientX: e.clientX, clientY: e.clientY });
     };
 
     const onUp = (e: PointerEvent) => {

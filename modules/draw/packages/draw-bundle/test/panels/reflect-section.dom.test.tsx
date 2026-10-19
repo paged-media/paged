@@ -16,14 +16,21 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-
 // The REFLECT section of the Path Options panel, rendered against the
 // real engine: the ANGLE typed is the axis the selection is mirrored
 // across (read back as page anchors), Apply is one undo step and is what
 // Transform again repeats, and Copy is OFFERED only where the engine has
 // `duplicateElements` — on this engine (0.64) it is disabled and says why.
 
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "bun:test";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+} from "bun:test";
 import { waitFor } from "@paged-media/test-kit";
 
 import type { ElementId, PathAnchorsResult } from "@paged-media/plugin-api";
@@ -39,7 +46,13 @@ import {
 } from "../../src";
 import { pathItem } from "../fixtures/build-idml";
 import { openHost } from "../conformance/host";
-import { drive, mountPanel, panelDocument, poly, teardownPanels } from "./harness";
+import {
+  drive,
+  mountPanel,
+  panelDocument,
+  poly,
+  teardownPanels,
+} from "./harness";
 
 const TRI = poly("rtri");
 const SEEDS = pathItem("Polygon", "rtri", "100 100 160 200", false, [
@@ -52,7 +65,10 @@ const field = (name: string) => `[data-draw-pathopts-field="${name}"]`;
 const HEADER = `[data-draw-pathopts-header="reflect"]`;
 const APPLY = `[data-draw-pathopts-apply="reflect"]`;
 
-async function firstAnchor(h: HeadlessHost, id: ElementId): Promise<[number, number]> {
+async function firstAnchor(
+  h: HeadlessHost,
+  id: ElementId,
+): Promise<[number, number]> {
   const t = (await h.host.document.pathAnchors(id)) as PathAnchorsResult;
   const m = t.itemTransform ?? [1, 0, 0, 1, 0, 0];
   const [x, y] = t.anchors[0]!.anchor;
@@ -76,19 +92,27 @@ describe("the Reflect section — rendered against the engine", () => {
   it("the ANGLE typed is the axis: 0° mirrors top ↔ bottom, in ONE undo step, and Transform again remembers it", async () => {
     const panel = await mountPanel(h, makePathOptionsPanel);
     await panel.click(HEADER);
-    expect(panel.get("[data-draw-pathopts-reflect-note]").textContent).toBe(REFLECT_SECTION_NOTE);
+    expect(panel.get("[data-draw-pathopts-reflect-note]").textContent).toBe(
+      REFLECT_SECTION_NOTE,
+    );
     expect(panel.disabled(APPLY)).toBe(true);
     await drive(() => h.host.selection.set([TRI]), panel.work);
     expect(panel.get(APPLY).textContent).toBe("Reflect 1 object");
     panel.change(field("reflect.angleDeg"), "0");
     panel.reset();
     await panel.click(APPLY);
-    expect(panel.work.mutations.filter((m) => m.op === "batch")).toEqual([{ op: "batch", ops: 1 }]);
+    expect(panel.work.mutations.filter((m) => m.op === "batch")).toEqual([
+      { op: "batch", ops: 1 },
+    ]);
     // Centre y = 130: the first anchor (100, 100) lands at (100, 160).
     const p = await firstAnchor(h, TRI);
     expect(p[0]).toBeCloseTo(100, 3);
     expect(p[1]).toBeCloseTo(160, 3);
-    expect(lastSelectionTransform()).toEqual({ kind: "reflect", angleDeg: 0, copy: false });
+    expect(lastSelectionTransform()).toEqual({
+      kind: "reflect",
+      angleDeg: 0,
+      copy: false,
+    });
     await drive(() => h.host.document.undo(), panel.work);
     const back = await firstAnchor(h, TRI);
     expect(back[1]).toBeCloseTo(100, 3);
@@ -99,7 +123,11 @@ describe("the Reflect section — rendered against the engine", () => {
     await panel.click(HEADER);
     // vitest's expect.poll (bun:test has none): the kit's waitFor, same defaults.
     await waitFor(() =>
-      expect(panel.get<HTMLInputElement>(`[data-draw-pathopts-toggle="reflect.copy"]`).disabled).toBe(false),
+      expect(
+        panel.get<HTMLInputElement>(
+          `[data-draw-pathopts-toggle="reflect.copy"]`,
+        ).disabled,
+      ).toBe(false),
     );
     expect(panel.count("[data-draw-pathopts-reflect-copy-note]")).toBe(0);
     // The note an older engine is shown names the version, not an op.

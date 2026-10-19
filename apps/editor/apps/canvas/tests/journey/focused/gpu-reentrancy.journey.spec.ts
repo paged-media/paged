@@ -65,8 +65,8 @@ async function gpuActive(page: Page): Promise<boolean> {
   return page
     .waitForFunction(
       () => {
-        const v = (globalThis as unknown as { __canvas?: CanvasHandle }).__canvas
-          ?.gpuActive;
+        const v = (globalThis as unknown as { __canvas?: CanvasHandle })
+          .__canvas?.gpuActive;
         return v === true || v === false ? { v } : null;
       },
       null,
@@ -78,13 +78,19 @@ async function gpuActive(page: Page): Promise<boolean> {
 /** Prepend `shim` to the canvas worker module (Vite serves it as
  *  `/src/worker/worker.ts?worker_file…`). The returned probe reports
  *  whether the shimmed module was served. */
-async function shimWorker(context: BrowserContext, shim: string): Promise<() => boolean> {
+async function shimWorker(
+  context: BrowserContext,
+  shim: string,
+): Promise<() => boolean> {
   let served = false;
-  await context.route(/\/src\/worker\/worker\.ts\?worker_file/, async (route) => {
-    const response = await route.fetch();
-    served = true;
-    await route.fulfill({ response, body: shim + (await response.text()) });
-  });
+  await context.route(
+    /\/src\/worker\/worker\.ts\?worker_file/,
+    async (route) => {
+      const response = await route.fetch();
+      served = true;
+      await route.fulfill({ response, body: shim + (await response.text()) });
+    },
+  );
   return () => served;
 }
 
@@ -123,7 +129,9 @@ test.describe("journey · GPU re-entrancy", () => {
     expect(served(), "the slow-adapter shim reached the worker").toBe(true);
     expect(failures, "no worker failure while initGpu waited").toEqual([]);
     expect(exported, "the worker still answers").toBeGreaterThan(0);
-    expect(active, "the WebGPU backend engaged once the adapter answered").toBe(true);
+    expect(active, "the WebGPU backend engaged once the adapter answered").toBe(
+      true,
+    );
   });
 
   test("a GPU readback leaves the render loop free to present @feat:the-renderer.gpu-backend @level:edge", async ({
@@ -134,7 +142,9 @@ test.describe("journey · GPU re-entrancy", () => {
     const designer = new Designer(page);
     await designer.open();
     await designer.newDocument();
-    expect(await gpuActive(page), "this lane needs the WebGPU backend").toBe(true);
+    expect(await gpuActive(page), "this lane needs the WebGPU backend").toBe(
+      true,
+    );
 
     // Keep the camera moving so every render tick presents, and read pages
     // back through the GPU meanwhile: each readback waits on `mapAsync`.
@@ -145,7 +155,11 @@ test.describe("journey · GPU re-entrancy", () => {
       let n = 0;
       const pan = setInterval(() => {
         n++;
-        c.client.camera.write({ ...base, tx: base.tx + (n % 7), ty: base.ty + (n % 5) });
+        c.client.camera.write({
+          ...base,
+          tx: base.tx + (n % 7),
+          ty: base.ty + (n % 5),
+        });
       }, 2);
       const pngs: Array<number[] | null> = [];
       try {
@@ -153,7 +167,8 @@ test.describe("journey · GPU re-entrancy", () => {
           const batch = await Promise.all(
             [150, 300].map((dpi) => c.client.requestVelloPng(pageId, dpi)),
           );
-          for (const png of batch) pngs.push(png ? Array.from(png.slice(0, 4)) : null);
+          for (const png of batch)
+            pngs.push(png ? Array.from(png.slice(0, 4)) : null);
         }
       } finally {
         clearInterval(pan);
@@ -164,7 +179,9 @@ test.describe("journey · GPU re-entrancy", () => {
     expect(failures, "no worker failure while readbacks waited").toEqual([]);
     expect(out.exported, "the worker still answers").toBeGreaterThan(0);
     for (const head of out.pngs) {
-      expect(head, "every readback returned a PNG").toEqual([0x89, 0x50, 0x4e, 0x47]);
+      expect(head, "every readback returned a PNG").toEqual([
+        0x89, 0x50, 0x4e, 0x47,
+      ]);
     }
   });
 });

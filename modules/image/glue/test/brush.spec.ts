@@ -684,7 +684,9 @@ describe("the panel's Brush section", () => {
     // What did NOT change: paint still covers what is under it in ITS
     // layer. (Layer structure IS journaled now — removing a layer is
     // undoable — so the note must not claim otherwise.)
-    expect(BRUSH_SCOPE_NOTE).toContain("replaces what it covers in its own layer");
+    expect(BRUSH_SCOPE_NOTE).toContain(
+      "replaces what it covers in its own layer",
+    );
     expect(BRUSH_SCOPE_NOTE).toContain("what it covered is gone");
     expect(BRUSH_SCOPE_NOTE).not.toContain("is not journaled");
     // …and the document is still never touched.

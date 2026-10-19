@@ -69,9 +69,15 @@ const withNormalGraphicsFrame = (attrs: string): Uint8Array =>
   });
 
 /** Filled and 4 pt: every value differs from what an insert gets alone. */
-const HEAVY_STYLE = 'FillColor="Color/Black" StrokeColor="Color/Black" StrokeWeight="4"';
+const HEAVY_STYLE =
+  'FillColor="Color/Black" StrokeColor="Color/Black" StrokeWeight="4"';
 
-function pointer(pageId: string, point: Pt, pressure = 0.5, maxDelta = 0): CanvasPointerEvent {
+function pointer(
+  pageId: string,
+  point: Pt,
+  pressure = 0.5,
+  maxDelta = 0,
+): CanvasPointerEvent {
   return {
     pageId,
     pagePoint: point,
@@ -107,7 +113,8 @@ interface Paint {
 
 async function paintOf(h: HeadlessHost, id: ElementId): Promise<Paint> {
   const props = await h.host.document.elementProperties(id);
-  const value = (path: string) => props?.entries.find((e) => e.path === path)?.value?.value ?? null;
+  const value = (path: string) =>
+    props?.entries.find((e) => e.path === path)?.value?.value ?? null;
   return {
     fill: value("frameFillColor"),
     stroke: value("frameStrokeColor"),
@@ -126,9 +133,12 @@ async function drawn(
   const handler = make(h.host);
   handler.onActivate(undefined as never);
   await gesture(handler);
-  for (let i = 0; i < 50 && (await leafIds(h)).length === before.length; i++) await settle();
+  for (let i = 0; i < 50 && (await leafIds(h)).length === before.length; i++)
+    await settle();
   handler.onDeactivate("switch");
-  const added = (await leafIds(h)).filter((e) => !before.some((b) => b.id === e.id));
+  const added = (await leafIds(h)).filter(
+    (e) => !before.some((b) => b.id === e.id),
+  );
   expect(added, "the gesture drew exactly one shape").toHaveLength(1);
   const id = added[0]!;
   const paint = await paintOf(h, id);
@@ -157,18 +167,23 @@ const curvature = (page: string) => async (handler: GestureHandler) => {
 
 /** A pencil stroke; `pen` makes the pressures vary (the variable-width
  *  outline lane), otherwise a mouse's constant pressure. */
-const pencil = (page: string, pen: boolean) => async (handler: GestureHandler) => {
-  const points: Pt[] = [];
-  for (let x = 100; x <= 400; x += 20) points.push([x, 300 + (x % 40 === 0 ? 30 : 0)]);
-  const pressure = (i: number) => (pen ? 0.2 + (0.7 * i) / (points.length - 1) : 0.5);
-  handler.onPointerDown(pointer(page, points[0]!, pressure(0)));
-  for (let i = 1; i < points.length; i++) {
-    handler.onPointerMove(pointer(page, points[i]!, pressure(i), 20 * i));
-  }
-  const last = points.length - 1;
-  handler.onPointerUp(pointer(page, points[last]!, pressure(last), 20 * last));
-  await settle();
-};
+const pencil =
+  (page: string, pen: boolean) => async (handler: GestureHandler) => {
+    const points: Pt[] = [];
+    for (let x = 100; x <= 400; x += 20)
+      points.push([x, 300 + (x % 40 === 0 ? 30 : 0)]);
+    const pressure = (i: number) =>
+      pen ? 0.2 + (0.7 * i) / (points.length - 1) : 0.5;
+    handler.onPointerDown(pointer(page, points[0]!, pressure(0)));
+    for (let i = 1; i < points.length; i++) {
+      handler.onPointerMove(pointer(page, points[i]!, pressure(i), 20 * i));
+    }
+    const last = points.length - 1;
+    handler.onPointerUp(
+      pointer(page, points[last]!, pressure(last), 20 * last),
+    );
+    await settle();
+  };
 
 const paintbrush = (page: string) => async (handler: GestureHandler) => {
   handler.onPointerDown(pointer(page, [300, 500]));
@@ -227,8 +242,12 @@ describe("draw conformance — the drawing tools paint their shape with the grap
     });
     expect(setDefaults.applied).toBe(true);
     const expected: Paint = { fill: null, stroke: "Color/Black", weight: 2 };
-    expect((await drawn(h, createCurvatureHandler, curvature(page!))).paint).toEqual(expected);
-    expect((await drawn(h, createPencilHandler, pencil(page!, false))).paint).toEqual(expected);
+    expect(
+      (await drawn(h, createCurvatureHandler, curvature(page!))).paint,
+    ).toEqual(expected);
+    expect(
+      (await drawn(h, createPencilHandler, pencil(page!, false))).paint,
+    ).toEqual(expected);
   });
 
   it("left alone: a Paintbrush stroke is already a visible, filled shape in a File ▸ New document", async () => {

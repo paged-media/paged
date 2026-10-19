@@ -61,7 +61,11 @@ const host = {
   },
 } as unknown as BundleHost;
 
-const template = { pageId: "p1", frames: [{ element: { id: "f1" } }], spec: { marginBox: [0, 0, 1, 1], frames: [] } };
+const template = {
+  pageId: "p1",
+  frames: [{ element: { id: "f1" } }],
+  spec: { marginBox: [0, 0, 1, 1], frames: [] },
+};
 
 /** A session whose template reader answers `onPage()` in turn and whose
  *  writer records what it was asked to do. */
@@ -75,11 +79,29 @@ async function session(onPage: (() => typeof template | null)[]) {
     ...actualMerge,
     readMergeTemplate: async () => {
       const t = onPage.shift()?.() ?? null;
-      return { template: t, diagnostics: t ? [] : ["merge: no text frame with a <<field>> on the template page"] };
+      return {
+        template: t,
+        diagnostics: t
+          ? []
+          : ["merge: no text frame with a <<field>> on the template page"],
+      };
     },
-    mergeRecords: async (_h: unknown, _e: unknown, t: unknown, o: { templatePresent?: boolean }) => {
+    mergeRecords: async (
+      _h: unknown,
+      _e: unknown,
+      t: unknown,
+      o: { templatePresent?: boolean },
+    ) => {
       writes.push({ template: t, templatePresent: o.templatePresent });
-      return { ok: true, plan: null, pages: [], records: [], overset: [], mutateCalls: 1, diagnostics: [] };
+      return {
+        ok: true,
+        plan: null,
+        pages: [],
+        records: [],
+        overset: [],
+        mutateCalls: 1,
+        diagnostics: [],
+      };
     },
   }));
   const { createSession } = await import("../session");
@@ -91,8 +113,12 @@ async function session(onPage: (() => typeof template | null)[]) {
 describe("a consumed template merged again [data.lower.merge-writer]", () => {
   it("over its own output: the stored template, nothing of it left to remove", async () => {
     const { s, writes } = await session([() => template, () => null]);
-    expect((await s.mergeRecords({ query: "q", template: "consume" })).ok).toBe(true);
-    expect((await s.mergeRecords({ query: "q", template: "consume" })).ok).toBe(true);
+    expect((await s.mergeRecords({ query: "q", template: "consume" })).ok).toBe(
+      true,
+    );
+    expect((await s.mergeRecords({ query: "q", template: "consume" })).ok).toBe(
+      true,
+    );
     expect(writes.map((w) => w.templatePresent)).toEqual([true, false]);
     expect(writes[1]!.template).toBe(template);
   });

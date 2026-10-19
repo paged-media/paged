@@ -38,7 +38,8 @@ import { expect, test, type Page } from "@playwright/test";
 import { openCanvas } from "../fidelity/canvas-driver";
 import { fixturePath } from "./harness/fixtures";
 
-type OpenResult = { opened: true; pageIds: string[] } | { opened: false; reason: "declined" };
+type OpenResult =
+  { opened: true; pageIds: string[] } | { opened: false; reason: "declined" };
 
 type DocWindow = {
   __documents: {
@@ -61,7 +62,9 @@ type DocWindow = {
         style: string | null,
         texts: string[],
         sizePt: number,
-      ): Promise<Array<{ advance: number; ascender: number; descender: number }>>;
+      ): Promise<
+        Array<{ advance: number; ascender: number; descender: number }>
+      >;
     };
   };
   __template?: Uint8Array;
@@ -72,15 +75,26 @@ async function loadText(page: Page): Promise<void> {
   await openCanvas(page);
   await page.setInputFiles('input[type="file"]', fixturePath("text"));
   await expect
-    .poll(() => page.evaluate(() => (globalThis as unknown as DocWindow).__canvas.ready), {
-      timeout: 30_000,
-    })
+    .poll(
+      () =>
+        page.evaluate(
+          () => (globalThis as unknown as DocWindow).__canvas.ready,
+        ),
+      {
+        timeout: 30_000,
+      },
+    )
     .toBe(true);
 }
 
 const dirty = (page: Page) =>
-  page.evaluate(async () =>
-    (await (globalThis as unknown as DocWindow).__canvas.client.documentMeta()).dirty,
+  page.evaluate(
+    async () =>
+      (
+        await (
+          globalThis as unknown as DocWindow
+        ).__canvas.client.documentMeta()
+      ).dirty,
   );
 
 /** Export the open document into `__template`; returns its first bytes. */
@@ -151,10 +165,17 @@ test.describe("D-26 — host.documents, the editor backend", () => {
     await startOpen(page, "Catalog (merged)");
     const dialog = page.getByTestId("replace-document-dialog");
     await expect(dialog).toBeVisible();
-    await expect(page.getByTestId("replace-document-requester")).toHaveText("Test plugin");
-    await expect(page.getByTestId("replace-document-name")).toHaveText("Catalog (merged)");
+    await expect(page.getByTestId("replace-document-requester")).toHaveText(
+      "Test plugin",
+    );
+    await expect(page.getByTestId("replace-document-name")).toHaveText(
+      "Catalog (merged)",
+    );
     await page.getByTestId("replace-document-keep").click();
-    expect(await openResult(page)).toEqual({ opened: false, reason: "declined" });
+    expect(await openResult(page)).toEqual({
+      opened: false,
+      reason: "declined",
+    });
     await expect(dialog).toHaveCount(0);
     expect(await dirty(page)).toBe(true);
 
@@ -162,7 +183,10 @@ test.describe("D-26 — host.documents, the editor backend", () => {
     await startOpen(page, "Catalog (merged)");
     await expect(dialog).toBeVisible();
     await page.keyboard.press("Escape");
-    expect(await openResult(page)).toEqual({ opened: false, reason: "declined" });
+    expect(await openResult(page)).toEqual({
+      opened: false,
+      reason: "declined",
+    });
     expect(await dirty(page)).toBe(true);
 
     // Discard: the copy opens clean.
@@ -178,7 +202,10 @@ test.describe("D-26 — host.documents, the editor backend", () => {
   }) => {
     const err = await page.evaluate(async () => {
       try {
-        await (globalThis as unknown as DocWindow).__documents.open(new Uint8Array([1, 2, 3, 4]), "x");
+        await (globalThis as unknown as DocWindow).__documents.open(
+          new Uint8Array([1, 2, 3, 4]),
+          "x",
+        );
         return null;
       } catch (e) {
         return String(e);
@@ -199,7 +226,8 @@ test.describe("D-27 — the batched measure", () => {
       const c = (globalThis as unknown as DocWindow).__canvas.client;
       const batch = await c.measureTexts("Open Sans", null, ws, 12);
       const single = [];
-      for (const w of ws) single.push(await c.measureText("Open Sans", null, w, 12));
+      for (const w of ws)
+        single.push(await c.measureText("Open Sans", null, w, 12));
       return { batch, single };
     }, words);
     expect(batch).toEqual(single);
@@ -207,7 +235,12 @@ test.describe("D-27 — the batched measure", () => {
     expect(batch[1].advance).toBeGreaterThan(batch[2].advance); // W wider than i
     expect(
       await page.evaluate(() =>
-        (globalThis as unknown as DocWindow).__canvas.client.measureTexts("Open Sans", null, [], 12),
+        (globalThis as unknown as DocWindow).__canvas.client.measureTexts(
+          "Open Sans",
+          null,
+          [],
+          12,
+        ),
       ),
     ).toEqual([]);
   });

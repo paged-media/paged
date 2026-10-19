@@ -133,15 +133,18 @@ export function GuideDragController() {
    *  wire map we approximate by page order (one-spread-per-page is the
    *  common multi-spread shape); single-spread docs always return the
    *  first spread. Part of the documented wire gap. */
-  const spreadForPageId = useCallback((pageId: PageId | null): string | null => {
-    const ids = spreadIdsRef.current;
-    if (ids.length === 0) return null;
-    if (ids.length === 1 || !pageId) return ids[0];
-    const pages = handleRef.current?.pageIds ?? [];
-    const pageIdx = pages.indexOf(pageId);
-    if (pageIdx < 0) return ids[0];
-    return ids[Math.min(pageIdx, ids.length - 1)];
-  }, []);
+  const spreadForPageId = useCallback(
+    (pageId: PageId | null): string | null => {
+      const ids = spreadIdsRef.current;
+      if (ids.length === 0) return null;
+      if (ids.length === 1 || !pageId) return ids[0];
+      const pages = handleRef.current?.pageIds ?? [];
+      const pageIdx = pages.indexOf(pageId);
+      if (pageIdx < 0) return ids[0];
+      return ids[Math.min(pageIdx, ids.length - 1)];
+    },
+    [],
+  );
 
   // ── engine-truth re-sync from `collection("spreads")` (W3.A2) ─────
   // Rebuild the mirror from each spread's live `guides` set. `pageIndex`
@@ -364,7 +367,9 @@ export function GuideDragController() {
     const onMove = (e: PointerEvent) => {
       const d = dragRef.current;
       if (!d) return;
-      updateDrag(resolvePreviewRef.current(d.orientation, e.clientX, e.clientY));
+      updateDrag(
+        resolvePreviewRef.current(d.orientation, e.clientX, e.clientY),
+      );
     };
 
     const onUp = (e: PointerEvent) => {

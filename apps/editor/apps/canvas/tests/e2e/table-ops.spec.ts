@@ -120,7 +120,10 @@ async function cellFill(page: Page, addr: CellAddr): Promise<string | null> {
         __canvas: {
           client: {
             elementProperties: (id: unknown) => Promise<{
-              entries: Array<{ path: string; value: { type: string; value: unknown } }>;
+              entries: Array<{
+                path: string;
+                value: { type: string; value: unknown };
+              }>;
             } | null>;
           };
         };
@@ -162,26 +165,45 @@ async function firstSwatchId(page: Page): Promise<string | null> {
     const sw = await c.client.collection("swatches");
     // skip None/Paper-style pseudo-swatches by preferring a non-empty
     // colour name; fall back to the first.
-    return sw.find((s) => !/none|paper/i.test(s.selfId))?.selfId ?? sw[0]?.selfId ?? null;
+    return (
+      sw.find((s) => !/none|paper/i.test(s.selfId))?.selfId ??
+      sw[0]?.selfId ??
+      null
+    );
   });
 }
 
 /** Load the tables fixture, fit, and click into its first cell so the
  *  Table panel addresses it. Returns the cell address + the click pt. */
-async function loadAndSelectCell(
-  page: Page,
-): Promise<{ addr: CellAddr; gx: number; gy: number; pageId: string; widthPt: number; heightPt: number }> {
+async function loadAndSelectCell(page: Page): Promise<{
+  addr: CellAddr;
+  gx: number;
+  gy: number;
+  pageId: string;
+  widthPt: number;
+  heightPt: number;
+}> {
   const fx = await loadViaReactPath(page, "tables");
   const p0 = fx.pages[0];
   const found = await findCell(page, p0.pageId, p0.widthPt, p0.heightPt);
-  expect(found, "no table cell found in the tables fixture page 0").not.toBeNull();
+  expect(
+    found,
+    "no table cell found in the tables fixture page 0",
+  ).not.toBeNull();
   const { addr, gx, gy } = found as { addr: CellAddr; gx: number; gy: number };
   // Click the cell on the real canvas → onHit → table selection.
   const pt = await screenPoint(page, p0.widthPt * gx, p0.heightPt * gy);
   await page.mouse.click(pt.x, pt.y);
   await openPanel(page, "paged.table");
   await expect(page.locator('[data-table-panel="ready"]')).toBeVisible();
-  return { addr, gx, gy, pageId: p0.pageId, widthPt: p0.widthPt, heightPt: p0.heightPt };
+  return {
+    addr,
+    gx,
+    gy,
+    pageId: p0.pageId,
+    widthPt: p0.widthPt,
+    heightPt: p0.heightPt,
+  };
 }
 
 test.describe("W3.A2 — Table panel op sandwiches", () => {
@@ -240,7 +262,11 @@ test.describe("W3.A2 — Table panel op sandwiches", () => {
           for (let gx = 0.04; gx < 0.97; gx += 0.06) {
             const r = await c.client.send({
               kind: "hitTest",
-              payload: { pageId, docPoint: [widthPt * gx, heightPt * gy], filter: "any" },
+              payload: {
+                pageId,
+                docPoint: [widthPt * gx, heightPt * gy],
+                filter: "any",
+              },
             });
             const row = r.payload?.tableContext?.row;
             if (typeof row === "number") maxRow = Math.max(maxRow, row);
@@ -252,7 +278,9 @@ test.describe("W3.A2 — Table panel op sandwiches", () => {
     );
 
     // Insert a row via the panel button (at the selected row index).
-    await page.locator('[data-table-panel="ready"] button:has-text("+ Row")').click();
+    await page
+      .locator('[data-table-panel="ready"] button:has-text("+ Row")')
+      .click();
 
     // The table grew: the max row index hit on the page increased.
     await expect
@@ -277,7 +305,11 @@ test.describe("W3.A2 — Table panel op sandwiches", () => {
                 for (let gx = 0.04; gx < 0.97; gx += 0.06) {
                   const r = await c.client.send({
                     kind: "hitTest",
-                    payload: { pageId, docPoint: [widthPt * gx, heightPt * gy], filter: "any" },
+                    payload: {
+                      pageId,
+                      docPoint: [widthPt * gx, heightPt * gy],
+                      filter: "any",
+                    },
                   });
                   const row = r.payload?.tableContext?.row;
                   if (typeof row === "number") maxRow = Math.max(maxRow, row);
@@ -315,7 +347,11 @@ test.describe("W3.A2 — Table panel op sandwiches", () => {
                 for (let gx = 0.04; gx < 0.97; gx += 0.06) {
                   const r = await c.client.send({
                     kind: "hitTest",
-                    payload: { pageId, docPoint: [widthPt * gx, heightPt * gy], filter: "any" },
+                    payload: {
+                      pageId,
+                      docPoint: [widthPt * gx, heightPt * gy],
+                      filter: "any",
+                    },
                   });
                   const row = r.payload?.tableContext?.row;
                   if (typeof row === "number") maxRow = Math.max(maxRow, row);
@@ -342,12 +378,12 @@ test.describe("W3.A2 — Table panel op sandwiches", () => {
     const replies: string[] = [];
     await page.exposeFunction("__recordReply", (k: string) => replies.push(k));
     await page.evaluate(() => {
-      const c = (
-        globalThis as unknown as {
-          __canvas: { client: { subscribe: (f: (m: { kind: string }) => void) => void } };
-          __recordReply: (k: string) => void;
-        }
-      );
+      const c = globalThis as unknown as {
+        __canvas: {
+          client: { subscribe: (f: (m: { kind: string }) => void) => void };
+        };
+        __recordReply: (k: string) => void;
+      };
       c.__canvas.client.subscribe((m) => {
         if (m.kind === "mutationApplied" || m.kind === "undoApplied") {
           c.__recordReply(m.kind);
@@ -358,17 +394,23 @@ test.describe("W3.A2 — Table panel op sandwiches", () => {
     // Type a row height into the panel's indexed field (`rows[i].height`
     // on the table address, ADR 323) + commit (Enter).
     const input = page
-      .locator('[data-table-panel="ready"] [data-property-field^="rows["] input')
+      .locator(
+        '[data-table-panel="ready"] [data-property-field^="rows["] input',
+      )
       .first();
     await input.click({ clickCount: 3 });
     await input.press("ControlOrMeta+a");
     await input.pressSequentially("42");
     await input.press("Enter");
 
-    await expect.poll(() => replies.filter((r) => r === "mutationApplied").length).toBeGreaterThan(0);
+    await expect
+      .poll(() => replies.filter((r) => r === "mutationApplied").length)
+      .toBeGreaterThan(0);
 
     await undo(page);
-    await expect.poll(() => replies.filter((r) => r === "undoApplied").length).toBeGreaterThan(0);
+    await expect
+      .poll(() => replies.filter((r) => r === "undoApplied").length)
+      .toBeGreaterThan(0);
   });
 
   test("AC-TABLE-DIMS: panel shows row × column totals; cell overlay is tighter than the table frame @feat:editor-shell.panels.table @feat:tables.model @level:happy", async ({

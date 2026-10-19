@@ -147,21 +147,25 @@ export function makeRepeatPanel(host: BundleHost): {
     // once per document REVISION, tallied for every record in one pass.
     // It used to walk the whole document — and re-read the recipe — once
     // per RECORD, on every event.
-    const reload = usePanelReload(host, "repeat", async ({ live, selection }) => {
-      const library = await readRepeatLibrary(host);
-      if (!live()) return;
-      const id = await resolveRepeat(host, undefined, library);
-      if (!live()) return;
-      const tally = await repeatInstanceCounts(host, library);
-      if (!live()) return;
-      setPortable(host.supports(REPEAT_FEATURE));
-      setRecords(library.repeats);
-      setHasSelection(selection.length > 0);
-      setActive(id);
-      setPlaced(tally);
-      const saved = library.repeats.find((r) => r.id === id);
-      if (saved) followDraft(saved.id, saved.params);
-    });
+    const reload = usePanelReload(
+      host,
+      "repeat",
+      async ({ live, selection }) => {
+        const library = await readRepeatLibrary(host);
+        if (!live()) return;
+        const id = await resolveRepeat(host, undefined, library);
+        if (!live()) return;
+        const tally = await repeatInstanceCounts(host, library);
+        if (!live()) return;
+        setPortable(host.supports(REPEAT_FEATURE));
+        setRecords(library.repeats);
+        setHasSelection(selection.length > 0);
+        setActive(id);
+        setPlaced(tally);
+        const saved = library.repeats.find((r) => r.id === id);
+        if (saved) followDraft(saved.id, saved.params);
+      },
+    );
 
     const { refusal, run } = useActionFeedback(host, reload);
 
@@ -380,8 +384,8 @@ export function makeRepeatPanel(host: BundleHost): {
 
         {records.length === 0 ? (
           <div style={mutedStyle}>
-            No repeats yet. Select artwork and choose + Radial, + Grid or
-            + Mirror.
+            No repeats yet. Select artwork and choose + Radial, + Grid or +
+            Mirror.
           </div>
         ) : (
           records.map((record) => (
@@ -405,7 +409,11 @@ export function makeRepeatPanel(host: BundleHost): {
                   title="Rebuild the copies with the settings above and the original's current shape"
                   data-draw-repeat-update
                   onClick={() =>
-                    void run(() => applyUpdateRepeat(host, { repeatId: record.id, ...draft }),
+                    void run(() =>
+                      applyUpdateRepeat(host, {
+                        repeatId: record.id,
+                        ...draft,
+                      }),
                     )
                   }
                 >
@@ -417,7 +425,8 @@ export function makeRepeatPanel(host: BundleHost): {
                   title="Select this repeat's copies"
                   data-draw-repeat-select
                   onClick={() =>
-                    void run(() => applySelectRepeatInstances(host, { repeatId: record.id }),
+                    void run(() =>
+                      applySelectRepeatInstances(host, { repeatId: record.id }),
                     )
                   }
                 >
@@ -429,7 +438,9 @@ export function makeRepeatPanel(host: BundleHost): {
                   title="Stop tracking and keep every copy as ordinary artwork"
                   data-draw-repeat-expand
                   onClick={() =>
-                    void run(() => applyExpandRepeat(host, { repeatId: record.id }))
+                    void run(() =>
+                      applyExpandRepeat(host, { repeatId: record.id }),
+                    )
                   }
                 >
                   Expand
@@ -440,7 +451,9 @@ export function makeRepeatPanel(host: BundleHost): {
                   title="Remove every copy and keep the original"
                   data-draw-repeat-release
                   onClick={() =>
-                    void run(() => applyReleaseRepeat(host, { repeatId: record.id }))
+                    void run(() =>
+                      applyReleaseRepeat(host, { repeatId: record.id }),
+                    )
                   }
                 >
                   Release

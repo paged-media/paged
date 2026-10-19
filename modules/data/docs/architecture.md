@@ -21,21 +21,21 @@ except that `src/…` is short for `packages/data-bundle/src/…`.
 
 ## Rust crates
 
-| Crate | What it owns | Workspace crates it depends on |
-|---|---|---|
-| `data-core` | The shared types: `Value`, `DataSource`, `Query`, `RecordSet`, the seven `Binding` kinds, the sync types, the `Expr` syntax tree. Its `build.rs` generates the function table from the registry. | none |
-| `data-expr` | The binding language: lexer, Pratt parser, evaluator, and the function kernels in five families (format, logic, math, temporal, text). Its `build.rs` generates the dispatch. | `data-core` |
-| `data-query` | Reshaping a result by its declared shape, a deterministic row order (`stabilize`), FNV-1a content hashes and the resolve stamp. | `data-core` |
-| `data-sources` | One adapter per source kind, the capability check `authorize`, the source manifest, credential redaction, validation of a remote descriptor and its invalidation key, column metadata for governed data sets, `attach_plan`. | `data-core` |
-| `data-barcode` | Encoders for EAN-13, UPC-A, Code-128 and QR. Output is a list of rectangles in a unit box. | `data-core` |
-| `data-dataset` | Variables, data sets and the variable-library XML codec (uses `quick-xml`). | `data-core` |
-| `data-lower` | Resolved content to the lowered form: variable, table, image, barcode, visibility; and `paginate_flow` for record flow. | `data-core`, `data-barcode` |
-| `data-bind` | `ResolutionEngine`: resolves a binding against a delivered result, keeps a sync state per binding, evaluates rules, and holds the keyed row diff, the change report and the column-mapping suggestions. | `data-core`, `data-expr`, `data-query` |
-| `data-automation` | `plan_batch`: splits a result into generation units (per record, per group, one catalog). | `data-core`, `data-query` |
-| `data-js` | `DataSession`, which joins the crates above, and the wasm class `DataEngine`. | `data-core`, `data-sources`, `data-bind`, `data-lower`, `data-barcode`, `data-dataset`, `data-query`, `data-automation` |
-| `data-script` | A Boa (`boa_engine` 0.21.1) context that evaluates a script to a `{ locale?, params?, build? }` value. | `data-core`, `data-automation`, `data-js` |
-| `data-cli` | The library function `run_job` and the binary `paged-data-batch`. | `data-core`, `data-lower`, `data-automation`, `data-js`, `data-script` |
-| `data-conformance` | 27 integration test files and the `coverage-gate` binary. Test only. | every crate except `data-cli` and `data-script` |
+| Crate              | What it owns                                                                                                                                                                                                                 | Workspace crates it depends on                                                                                          |
+| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `data-core`        | The shared types: `Value`, `DataSource`, `Query`, `RecordSet`, the seven `Binding` kinds, the sync types, the `Expr` syntax tree. Its `build.rs` generates the function table from the registry.                             | none                                                                                                                    |
+| `data-expr`        | The binding language: lexer, Pratt parser, evaluator, and the function kernels in five families (format, logic, math, temporal, text). Its `build.rs` generates the dispatch.                                                | `data-core`                                                                                                             |
+| `data-query`       | Reshaping a result by its declared shape, a deterministic row order (`stabilize`), FNV-1a content hashes and the resolve stamp.                                                                                              | `data-core`                                                                                                             |
+| `data-sources`     | One adapter per source kind, the capability check `authorize`, the source manifest, credential redaction, validation of a remote descriptor and its invalidation key, column metadata for governed data sets, `attach_plan`. | `data-core`                                                                                                             |
+| `data-barcode`     | Encoders for EAN-13, UPC-A, Code-128 and QR. Output is a list of rectangles in a unit box.                                                                                                                                   | `data-core`                                                                                                             |
+| `data-dataset`     | Variables, data sets and the variable-library XML codec (uses `quick-xml`).                                                                                                                                                  | `data-core`                                                                                                             |
+| `data-lower`       | Resolved content to the lowered form: variable, table, image, barcode, visibility; and `paginate_flow` for record flow.                                                                                                      | `data-core`, `data-barcode`                                                                                             |
+| `data-bind`        | `ResolutionEngine`: resolves a binding against a delivered result, keeps a sync state per binding, evaluates rules, and holds the keyed row diff, the change report and the column-mapping suggestions.                      | `data-core`, `data-expr`, `data-query`                                                                                  |
+| `data-automation`  | `plan_batch`: splits a result into generation units (per record, per group, one catalog).                                                                                                                                    | `data-core`, `data-query`                                                                                               |
+| `data-js`          | `DataSession`, which joins the crates above, and the wasm class `DataEngine`.                                                                                                                                                | `data-core`, `data-sources`, `data-bind`, `data-lower`, `data-barcode`, `data-dataset`, `data-query`, `data-automation` |
+| `data-script`      | A Boa (`boa_engine` 0.21.1) context that evaluates a script to a `{ locale?, params?, build? }` value.                                                                                                                       | `data-core`, `data-automation`, `data-js`                                                                               |
+| `data-cli`         | The library function `run_job` and the binary `paged-data-batch`.                                                                                                                                                            | `data-core`, `data-lower`, `data-automation`, `data-js`, `data-script`                                                  |
+| `data-conformance` | 27 integration test files and the `coverage-gate` binary. Test only.                                                                                                                                                         | every crate except `data-cli` and `data-script`                                                                         |
 
 - **One wasm module, two layers.** `data-js` builds as `cdylib` and `rlib`. `DataSession`
   (`data-js/src/core.rs`) is plain Rust. `DataEngine` (`data-js/src/lib.rs`) is compiled only
@@ -157,14 +157,14 @@ binding of the current session, and writes `setFieldValue` only where the value 
 
 ## Where data is stored
 
-| Data | Where it lives |
-|---|---|
-| Imported and fetched rows | DuckDB's memory, in the worker. Gone on reload. |
-| Sources, queries, binding definitions, sync states, data sets | The wasm session and maps in `src/session.ts`. Gone on reload. |
-| Resolved values | The document, as ordinary content: fields, tables, images, paths, element visibility, applied styles. |
-| The link from a text field to its binding | The field's own tag `{ plugin: "media.paged.data", key: <binding id> }`. From engine protocol 71: the custom text variable named `paged:<binding id>` (ADR 559), whose contents is the value; found by name, because an InDesign save re-spells its `Self`. |
-| A mark on the table frames and barcode paths the plugin created | Plugin metadata under the key `x-paged:media.paged.data`, an envelope `{ v, data }`. For a table `data` is `{ kind, region }`; for a barcode `{ kind, target, symbology }`. |
-| The definition of every binding that targets one page item (ADR 559, proposed) | That item's label, same key: `data.oid`, `data.bind`, `data.queries`, `data.sources`, `data.extra`. InDesign keeps it; the `session` part is a cache. |
+| Data                                                                           | Where it lives                                                                                                                                                                                                                                              |
+| ------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Imported and fetched rows                                                      | DuckDB's memory, in the worker. Gone on reload.                                                                                                                                                                                                             |
+| Sources, queries, binding definitions, sync states, data sets                  | The wasm session and maps in `src/session.ts`. Gone on reload.                                                                                                                                                                                              |
+| Resolved values                                                                | The document, as ordinary content: fields, tables, images, paths, element visibility, applied styles.                                                                                                                                                       |
+| The link from a text field to its binding                                      | The field's own tag `{ plugin: "media.paged.data", key: <binding id> }`. From engine protocol 71: the custom text variable named `paged:<binding id>` (ADR 559), whose contents is the value; found by name, because an InDesign save re-spells its `Self`. |
+| A mark on the table frames and barcode paths the plugin created                | Plugin metadata under the key `x-paged:media.paged.data`, an envelope `{ v, data }`. For a table `data` is `{ kind, region }`; for a barcode `{ kind, target, symbology }`.                                                                                 |
+| The definition of every binding that targets one page item (ADR 559, proposed) | That item's label, same key: `data.oid`, `data.bind`, `data.queries`, `data.sources`, `data.extra`. InDesign keeps it; the `session` part is a cache.                                                                                                       |
 
 `DataSession::payload()` can serialise the whole recipe with credentials redacted, and
 `from_payload()` can rebuild a session. The bundle calls neither, and the wasm class has no
@@ -232,19 +232,19 @@ write `scoped`; `rendering: ["hitTest"]`; `network: { origins: "consent" }`; `cl
 `bin/duckdb-ext/v1.1.1/wasm_eh/` (purpose `engine`). It contributes three
 panels, seven commands and one edit context, `dataBinding`.
 
-| Door | What the plugin uses it for |
-|---|---|
-| `contributePanel`, `host.contribute.command`, `host.contribute.menu` | three panels, seven commands, seven menu entries (the menu door is probed and skipped when absent) |
-| `host.contribute.editContext` | double-click on an element that carries this plugin's metadata; no canvas tools, the Bindings panel |
-| `host.document.mutate` | every write; thirteen operations are used, none of them a delete |
-| `host.document.meta`, `collection("pages")`, `hitTest`, `elementGeometry`, `tree` | the active page; the story of a frame just created; frame bounds; the kind of an element |
-| `host.document.placeholders` | list this plugin's fields before a refresh or a data-set apply |
-| `host.document.frameChain`, `onDidChange` | read a thread of frames; paginate again when a change has `reflow` set |
-| `host.selection.get` / `set`, `host.text.caret` | where a new field or binding goes; select a created frame |
-| `host.network.requestConsent`, `consentedOrigins` | per-origin consent before a fetch |
-| `host.dataProviders.register` | publish a query result to other plugins |
-| `host.shell.pickFile`, `saveFile`, `openPanel` | import CSV and XML, export XML, open a panel |
-| `host.supports`, `host.log` | probe optional doors; logging |
+| Door                                                                              | What the plugin uses it for                                                                         |
+| --------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| `contributePanel`, `host.contribute.command`, `host.contribute.menu`              | three panels, seven commands, seven menu entries (the menu door is probed and skipped when absent)  |
+| `host.contribute.editContext`                                                     | double-click on an element that carries this plugin's metadata; no canvas tools, the Bindings panel |
+| `host.document.mutate`                                                            | every write; thirteen operations are used, none of them a delete                                    |
+| `host.document.meta`, `collection("pages")`, `hitTest`, `elementGeometry`, `tree` | the active page; the story of a frame just created; frame bounds; the kind of an element            |
+| `host.document.placeholders`                                                      | list this plugin's fields before a refresh or a data-set apply                                      |
+| `host.document.frameChain`, `onDidChange`                                         | read a thread of frames; paginate again when a change has `reflow` set                              |
+| `host.selection.get` / `set`, `host.text.caret`                                   | where a new field or binding goes; select a created frame                                           |
+| `host.network.requestConsent`, `consentedOrigins`                                 | per-origin consent before a fetch                                                                   |
+| `host.dataProviders.register`                                                     | publish a query result to other plugins                                                             |
+| `host.shell.pickFile`, `saveFile`, `openPanel`                                    | import CSV and XML, export XML, open a panel                                                        |
+| `host.supports`, `host.log`                                                       | probe optional doors; logging                                                                       |
 
 Neither wasm file goes through a host loader, but both are first asked of the host's module
 door (plugin-sdk ADR 326; `hostWasm` in `packages/data-bundle/src/bin-url.ts`, which asks
@@ -277,7 +277,7 @@ exports of `@paged-media/data`, among them `createSession`, `bootEngine` and `bo
   unit tests use hand-written fake hosts and fake engines. `test/engine-real.spec.ts` loads
   the built wasm; when the file is absent it is skipped, or fails if `REQUIRE_REAL_ENGINE=1`.
   `test/pipeline-real.spec.ts` and `test/duckdb-real.spec.ts` (`pnpm --filter @paged-media/data
-  test:e2e`) drive the real wasm and the real DuckDB (Node build over the shipped engine); they
+test:e2e`) drive the real wasm and the real DuckDB (Node build over the shipped engine); they
   fail instead of skipping under `REQUIRE_REAL_DUCKDB=1`.
 - CI (`.github/workflows/`), on pushes to `main`: `rust.yml` runs format, clippy with
   warnings as errors, the two `cargo tree` checks, `cargo-deny`, the tests, the coverage gate

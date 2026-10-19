@@ -133,7 +133,9 @@ export async function decodeRasterBytes(
     throw new Error(RASTER_DECODER_UNAVAILABLE);
   }
   const view = new Uint8Array(bytes);
-  const blob = mimeType ? new Blob([view], { type: mimeType }) : new Blob([view]);
+  const blob = mimeType
+    ? new Blob([view], { type: mimeType })
+    : new Blob([view]);
   let bitmap: ImageBitmap;
   try {
     bitmap = await createImageBitmap(blob);

@@ -50,7 +50,10 @@ const LINE = {
   kind: "graphicLine",
   id: F1_MULTI_SHAPE.ids.graphicLine!,
 } as ElementId;
-const RECT = { kind: "rectangle", id: F1_MULTI_SHAPE.ids.rectangle! } as ElementId;
+const RECT = {
+  kind: "rectangle",
+  id: F1_MULTI_SHAPE.ids.rectangle!,
+} as ElementId;
 
 const setArrowhead = (
   elementId: ElementId,

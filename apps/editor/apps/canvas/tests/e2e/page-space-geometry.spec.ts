@@ -57,7 +57,12 @@ async function elementOnPage(page: Page, index: number): Promise<Hit> {
             send: (m: unknown) => Promise<{
               payload?: {
                 element?: { kind: string; id: string } | null;
-                frameBounds?: { left: number; top: number; right: number; bottom: number } | null;
+                frameBounds?: {
+                  left: number;
+                  top: number;
+                  right: number;
+                  bottom: number;
+                } | null;
               };
             }>;
           };
@@ -85,7 +90,9 @@ async function elementOnPage(page: Page, index: number): Promise<Hit> {
 }
 
 async function controlValue(page: Page, field: string): Promise<number> {
-  const raw = await page.locator(`[data-control-field="${field}"] input`).inputValue();
+  const raw = await page
+    .locator(`[data-control-field="${field}"] input`)
+    .inputValue();
   return Number.parseFloat(raw);
 }
 
@@ -97,16 +104,23 @@ test.describe("ED-9 — selection geometry in page space", () => {
       await openCanvas(page);
       await page.setInputFiles('input[type="file"]', sampleFixture("sample"));
       await page.waitForFunction(
-        () => (globalThis as unknown as { __canvas?: { ready?: boolean } }).__canvas?.ready === true,
+        () =>
+          (globalThis as unknown as { __canvas?: { ready?: boolean } }).__canvas
+            ?.ready === true,
         null,
         { timeout: 60_000 },
       );
       const hit = await elementOnPage(page, index);
       await selectElements(page, [hit.element]);
 
-      await expect.poll(() => controlValue(page, "x")).toBeCloseTo(hit.frame.left, 0);
+      await expect
+        .poll(() => controlValue(page, "x"))
+        .toBeCloseTo(hit.frame.left, 0);
       expect(await controlValue(page, "y")).toBeCloseTo(hit.frame.top, 0);
-      expect(await controlValue(page, "w")).toBeCloseTo(hit.frame.right - hit.frame.left, 0);
+      expect(await controlValue(page, "w")).toBeCloseTo(
+        hit.frame.right - hit.frame.left,
+        0,
+      );
     });
   }
 
@@ -116,14 +130,18 @@ test.describe("ED-9 — selection geometry in page space", () => {
     await openCanvas(page);
     await page.setInputFiles('input[type="file"]', sampleFixture("sample"));
     await page.waitForFunction(
-      () => (globalThis as unknown as { __canvas?: { ready?: boolean } }).__canvas?.ready === true,
+      () =>
+        (globalThis as unknown as { __canvas?: { ready?: boolean } }).__canvas
+          ?.ready === true,
       null,
       { timeout: 60_000 },
     );
     await page.keyboard.press("Home");
     const hit = await elementOnPage(page, 0);
     await selectElements(page, [hit.element]);
-    const chrome = page.locator('polygon[stroke="var(--overlay-selection)"]').first();
+    const chrome = page
+      .locator('polygon[stroke="var(--overlay-selection)"]')
+      .first();
     await expect(chrome).toBeAttached();
     const expected = await screenPoint(page, hit.frame.left, hit.frame.top);
     await expect
@@ -132,7 +150,10 @@ test.describe("ED-9 — selection geometry in page space", () => {
           const r = el.getBoundingClientRect();
           return [r.left, r.top];
         });
-        return Math.max(Math.abs(box[0] - expected.x), Math.abs(box[1] - expected.y));
+        return Math.max(
+          Math.abs(box[0] - expected.x),
+          Math.abs(box[1] - expected.y),
+        );
       })
       .toBeLessThan(3);
   });

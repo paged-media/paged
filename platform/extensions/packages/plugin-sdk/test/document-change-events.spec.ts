@@ -71,13 +71,27 @@ describe("document.onDidChange reports every committed change", () => {
     host.document.onDidChange((e) => seen.push(e));
     // A gesture in flight, a cancelled one and a failed one change nothing.
     fake.emit({ kind: "gestureBegun", payload: { handle: 1 } });
-    fake.emit({ kind: "gestureUpdated", payload: { handle: 1, pageIds: ["p1"] } });
-    fake.emit({ kind: "gestureCancelled", payload: { handle: 1, pageIds: ["p1"] } });
-    fake.emit({ kind: "gestureFailed", payload: { error: { kind: "noDocument" } } });
+    fake.emit({
+      kind: "gestureUpdated",
+      payload: { handle: 1, pageIds: ["p1"] },
+    });
+    fake.emit({
+      kind: "gestureCancelled",
+      payload: { handle: 1, pageIds: ["p1"] },
+    });
+    fake.emit({
+      kind: "gestureFailed",
+      payload: { error: { kind: "noDocument" } },
+    });
     expect(seen).toEqual([]);
     fake.emit({
       kind: "gestureCommitted",
-      payload: { handle: 2, appliedSeq: 7, pageIds: ["p1", "p2"], cacheStats: {} },
+      payload: {
+        handle: 2,
+        appliedSeq: 7,
+        pageIds: ["p1", "p2"],
+        cacheStats: {},
+      },
     });
     expect(seen).toEqual([{ kind: "gestureCommitted", pageIds: ["p1", "p2"] }]);
   });
@@ -87,10 +101,15 @@ describe("document.onDidChange reports every committed change", () => {
     const seen: DocumentChangeEvent[] = [];
     host.document.onDidChange((e) => seen.push(e));
     // A script suspended on the host's objects has not finished.
-    fake.emit({ kind: "requestHostObjects", payload: { session: 1, calls: [] } });
+    fake.emit({
+      kind: "requestHostObjects",
+      payload: { session: 1, calls: [] },
+    });
     expect(seen).toEqual([]);
     fake.emit({ kind: "scriptResult", payload: { output: [], error: null } });
-    expect(seen).toEqual([{ kind: "scriptResult", pageIds: [], pagesUnknown: true }]);
+    expect(seen).toEqual([
+      { kind: "scriptResult", pageIds: [], pagesUnknown: true },
+    ]);
   });
 
   // Core ADR 159 (engine 0.71.13): the gesture reply carries a one-frame
@@ -112,7 +131,11 @@ describe("document.onDidChange reports every committed change", () => {
       },
     });
     expect(seen).toEqual([
-      { kind: "gestureCommitted", pageIds: ["p1"], reflow: { frameId: "f1", contentBox: [10, 10, 110, 250] } },
+      {
+        kind: "gestureCommitted",
+        pageIds: ["p1"],
+        reflow: { frameId: "f1", contentBox: [10, 10, 110, 250] },
+      },
     ]);
   });
 
@@ -124,10 +147,14 @@ describe("document.onDidChange reports every committed change", () => {
     // does not drop it.
     const r1 = { kind: "rectangle", id: "r1" } as ElementId;
     fake.setSceneTree([{ id: r1, kind: "rectangle", label: "R" }]);
-    const reads = () => fake.sent.filter((m) => m.kind === "requestSceneTree").length;
+    const reads = () =>
+      fake.sent.filter((m) => m.kind === "requestSceneTree").length;
     await host.document.parentOf(r1);
     expect(reads()).toBe(1);
-    fake.emit({ kind: "scriptResult", payload: { output: ["42"], error: null, writes: 0, pageIds: [] } });
+    fake.emit({
+      kind: "scriptResult",
+      payload: { output: ["42"], error: null, writes: 0, pageIds: [] },
+    });
     expect(seen).toEqual([]);
     await host.document.parentOf(r1);
     expect(reads()).toBe(1);
@@ -137,9 +164,15 @@ describe("document.onDidChange reports every committed change", () => {
     const { fake, host } = fakeHost();
     const seen: DocumentChangeEvent[] = [];
     host.document.onDidChange((e) => seen.push(e));
-    fake.emit({ kind: "scriptResult", payload: { output: [], error: null, writes: 2, pageIds: ["p2"] } });
+    fake.emit({
+      kind: "scriptResult",
+      payload: { output: [], error: null, writes: 2, pageIds: ["p2"] },
+    });
     // A write that changes nothing a page draws still changed the document.
-    fake.emit({ kind: "scriptResult", payload: { output: [], error: null, writes: 1, pageIds: [] } });
+    fake.emit({
+      kind: "scriptResult",
+      payload: { output: [], error: null, writes: 1, pageIds: [] },
+    });
     expect(seen).toEqual([
       { kind: "scriptResult", pageIds: ["p2"] },
       { kind: "scriptResult", pageIds: [] },
@@ -150,8 +183,13 @@ describe("document.onDidChange reports every committed change", () => {
     const { fake, host } = fakeHost();
     const seen: DocumentChangeEvent[] = [];
     host.document.onDidChange((e) => seen.push(e));
-    fake.emit({ kind: "scriptResult", payload: { output: [], error: null, writes: 1 } });
-    expect(seen).toEqual([{ kind: "scriptResult", pageIds: [], pagesUnknown: true }]);
+    fake.emit({
+      kind: "scriptResult",
+      payload: { output: [], error: null, writes: 1 },
+    });
+    expect(seen).toEqual([
+      { kind: "scriptResult", pageIds: [], pagesUnknown: true },
+    ]);
   });
 
   it("mutations, undo and redo keep their events, reflow included", () => {
@@ -193,8 +231,16 @@ describe("document.onDidChange reports every committed change", () => {
     const { fake, host } = fakeHost();
     const r1 = { kind: "rectangle", id: "r1" } as ElementId;
     const g1 = { kind: "group", id: "g1" } as ElementId;
-    fake.setSceneTree([{ id: g1, kind: "group", label: "G", children: [{ id: r1, kind: "rectangle", label: "R" }] }]);
-    const reads = () => fake.sent.filter((m) => m.kind === "requestSceneTree").length;
+    fake.setSceneTree([
+      {
+        id: g1,
+        kind: "group",
+        label: "G",
+        children: [{ id: r1, kind: "rectangle", label: "R" }],
+      },
+    ]);
+    const reads = () =>
+      fake.sent.filter((m) => m.kind === "requestSceneTree").length;
     expect(await host.document.parentOf(r1)).toEqual(g1);
     expect(await host.document.parentOf(r1)).toEqual(g1);
     expect(reads()).toBe(1);
@@ -203,7 +249,10 @@ describe("document.onDidChange reports every committed change", () => {
     fake.emit({ kind: "scriptResult", payload: { output: [], error: null } });
     expect(await host.document.parentOf(r1)).toBeNull();
     expect(reads()).toBe(2);
-    fake.emit({ kind: "gestureCommitted", payload: { handle: 1, appliedSeq: 2, pageIds: [], cacheStats: {} } });
+    fake.emit({
+      kind: "gestureCommitted",
+      payload: { handle: 1, appliedSeq: 2, pageIds: [], cacheStats: {} },
+    });
     await host.document.parentOf(r1);
     expect(reads()).toBe(3);
   });
@@ -216,9 +265,13 @@ describe("document.onDidChange on the real engine (headless harness)", () => {
     h = null;
   });
 
-  type Send = (m: { kind: string; payload?: unknown }) => Promise<{ kind: string; payload?: any }>;
+  type Send = (m: {
+    kind: string;
+    payload?: unknown;
+  }) => Promise<{ kind: string; payload?: any }>;
   const sendOf = (live: HeadlessHost): Send => {
-    const client = (live.host.editor as unknown as { client: { send: Send } }).client;
+    const client = (live.host.editor as unknown as { client: { send: Send } })
+      .client;
     return client.send.bind(client);
   };
 
@@ -237,19 +290,30 @@ describe("document.onDidChange on the real engine (headless harness)", () => {
 
     const begun = await send({
       kind: "beginGesture",
-      payload: { nodes: [rect], gesture: { kind: "resize", handle: "south" }, anchor: null },
+      payload: {
+        nodes: [rect],
+        gesture: { kind: "resize", handle: "south" },
+        anchor: null,
+      },
     });
     expect(begun.kind).toBe("gestureBegun");
     const handle = begun.payload.handle as number;
     await send({
       kind: "updateGesture",
-      payload: { handle, delta: [0, 40], modifiers: { shift: false, alt: false, disableSnap: true } },
+      payload: {
+        handle,
+        delta: [0, 40],
+        modifiers: { shift: false, alt: false, disableSnap: true },
+      },
     });
     expect(seen).toEqual([]); // in flight: nothing committed yet
     const done = await send({ kind: "commitGesture", payload: { handle } });
     expect(done.kind).toBe("gestureCommitted");
     const [after] = await h.host.document.elementGeometry([rect]);
-    expect(after.bounds[2] - after.bounds[0]).not.toBeCloseTo(before.bounds[2] - before.bounds[0], 1);
+    expect(after.bounds[2] - after.bounds[0]).not.toBeCloseTo(
+      before.bounds[2] - before.bounds[0],
+      1,
+    );
 
     expect(seen.map((e) => e.kind)).toEqual(["gestureCommitted"]);
     expect(seen[0].pageIds).toEqual(done.payload.pageIds);
@@ -257,20 +321,36 @@ describe("document.onDidChange on the real engine (headless harness)", () => {
     // reports the frame's committed content box, as a `resizeFrame` does.
     expect(done.payload.reflow).toMatchObject({ frameId: "urect" });
     expect(seen[0].reflow).toEqual(done.payload.reflow);
-    expect(seen[0].reflow!.contentBox[2] - seen[0].reflow!.contentBox[0]).toBeCloseTo(after.bounds[2] - after.bounds[0], 6);
+    expect(
+      seen[0].reflow!.contentBox[2] - seen[0].reflow!.contentBox[0],
+    ).toBeCloseTo(after.bounds[2] - after.bounds[0], 6);
     expect(objectChanges).toBe(1);
     await h.host.document.undo();
-    expect(seen.map((e) => e.kind)).toEqual(["gestureCommitted", "undoApplied"]);
+    expect(seen.map((e) => e.kind)).toEqual([
+      "gestureCommitted",
+      "undoApplied",
+    ]);
 
     // A move by the handles is display geometry only: no reflow.
-    const moved = await send({ kind: "beginGesture", payload: { nodes: [rect], gesture: { kind: "translate" }, anchor: null } });
+    const moved = await send({
+      kind: "beginGesture",
+      payload: { nodes: [rect], gesture: { kind: "translate" }, anchor: null },
+    });
     const moveHandle = moved.payload.handle as number;
     await send({
       kind: "updateGesture",
-      payload: { handle: moveHandle, delta: [15, 15], modifiers: { shift: false, alt: false, disableSnap: true } },
+      payload: {
+        handle: moveHandle,
+        delta: [15, 15],
+        modifiers: { shift: false, alt: false, disableSnap: true },
+      },
     });
     await send({ kind: "commitGesture", payload: { handle: moveHandle } });
-    expect(seen.map((e) => e.kind)).toEqual(["gestureCommitted", "undoApplied", "gestureCommitted"]);
+    expect(seen.map((e) => e.kind)).toEqual([
+      "gestureCommitted",
+      "undoApplied",
+      "gestureCommitted",
+    ]);
     expect(seen[2].reflow).toBeUndefined();
   });
 
@@ -282,7 +362,9 @@ describe("document.onDidChange on the real engine (headless harness)", () => {
     let objectChanges = 0;
     h.objects.onDidChange(() => objectChanges++);
     const framesBefore = (await h.objects.query("frame")).length;
-    const run = await h.runScript(`paged.insertTextFrame(${JSON.stringify(pageId)}, [300, 300, 400, 400]);`);
+    const run = await h.runScript(
+      `paged.insertTextFrame(${JSON.stringify(pageId)}, [300, 300, 400, 400]);`,
+    );
     expect(run.error).toBeNull();
     // Engine 0.71.13 names the pages the script's writes changed (a frame
     // write: every page), so the event is no longer `pagesUnknown`.

@@ -47,7 +47,12 @@ import {
   planAnchorAdd,
   type AnchorEditPlan,
 } from "./anchor-machine";
-import { anchorEditOps, lowerPathOp, type PathEditWireOp, type WireOp } from "./path-edit-ops";
+import {
+  anchorEditOps,
+  lowerPathOp,
+  type PathEditWireOp,
+  type WireOp,
+} from "./path-edit-ops";
 
 /** Where a scissors click cuts. `index` is the flat index `pathOpenAt`
  *  receives — of the existing anchor, or of the anchor the insert lands. */
@@ -76,7 +81,9 @@ function isOpenEndpoint(table: AnchorTable, index: number): boolean {
     const from = starts[s]!;
     const to = s + 1 < starts.length ? starts[s + 1]! : n;
     if (index < from || index >= to) continue;
-    return (table.subpathOpen?.[s] ?? false) && (index === from || index === to - 1);
+    return (
+      (table.subpathOpen?.[s] ?? false) && (index === from || index === to - 1)
+    );
   }
   return false;
 }
@@ -93,7 +100,9 @@ export function planScissorsAt(
 ): ScissorsPlan | null {
   const onAnchor = nearestAnchorIndex(table, click, tolerance);
   if (onAnchor >= 0) {
-    return isOpenEndpoint(table, onAnchor) ? null : { kind: "anchor", index: onAnchor };
+    return isOpenEndpoint(table, onAnchor)
+      ? null
+      : { kind: "anchor", index: onAnchor };
   }
   const insert = planAnchorAdd(table, click, tolerance);
   if (!insert || insert.kind !== "insert") return null;

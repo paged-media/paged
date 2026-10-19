@@ -236,9 +236,7 @@ export function DocumentMapPanel(_props: PanelProps) {
   // to a page over the current wire, so a single SEAM chip per page
   // honestly marks "this risk exists somewhere in the document" when
   // the document-level count is non-zero — it is NOT a per-page claim.
-  const oversetStories = stories
-    ? stories.filter((s) => s.overset).length
-    : 0;
+  const oversetStories = stories ? stories.filter((s) => s.overset).length : 0;
   const missingFonts = fonts ? fonts.filter((f) => f.isMissing).length : 0;
 
   // Margin/column readout per page index, keyed for the spread rows.

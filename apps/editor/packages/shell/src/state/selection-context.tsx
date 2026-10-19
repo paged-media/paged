@@ -28,16 +28,9 @@ import {
   type PropsWithChildren,
 } from "react";
 
-import type {
-  ElementGeometryItem,
-  ElementId,
-} from "@paged-media/client";
+import type { ElementGeometryItem, ElementId } from "@paged-media/client";
 
-import {
-  useOptionalTool,
-  SELECT_TOOL_ID,
-  TEXT_TOOL_ID,
-} from "./tool-context";
+import { useOptionalTool, SELECT_TOOL_ID, TEXT_TOOL_ID } from "./tool-context";
 import { useOptionalCanvasClient } from "./canvas-client-context";
 import { useOptionalDocument } from "./document-context";
 import { followScriptSelection } from "./script-selection";
@@ -161,7 +154,10 @@ export function SelectionProvider({ children }: PropsWithChildren) {
   // the way a click's does — see script-selection.ts.
   useEffect(() => {
     if (!client) return;
-    return followScriptSelection(client, { setElementSelection, setElementGeometry });
+    return followScriptSelection(client, {
+      setElementSelection,
+      setElementGeometry,
+    });
   }, [client]);
   const placedGeometry = usePlacedGeometry(client, elementGeometry);
   // `activeTool` derives from the ToolContext when present. The
@@ -170,7 +166,9 @@ export function SelectionProvider({ children }: PropsWithChildren) {
   const tool = useOptionalTool();
   const [legacyToolFallback, setLegacyToolFallback] =
     useState<ActiveTool>("select");
-  const activeTool = tool ? legacyToolFor(tool.effectiveTool) : legacyToolFallback;
+  const activeTool = tool
+    ? legacyToolFor(tool.effectiveTool)
+    : legacyToolFallback;
   const setActiveTool = useCallback(
     (t: ActiveTool) => {
       if (tool) tool.setBaseTool(toolIdForLegacy(t));
@@ -179,9 +177,8 @@ export function SelectionProvider({ children }: PropsWithChildren) {
     [tool],
   );
   const [pathEditMode, setPathEditMode] = useState<boolean>(false);
-  const [selectedAnchors, setSelectedAnchorsState] = useState<
-    readonly number[]
-  >(NO_ANCHORS);
+  const [selectedAnchors, setSelectedAnchorsState] =
+    useState<readonly number[]>(NO_ANCHORS);
   // Keep the array IDENTITY when its contents did not change: this
   // value sits in a context half the panels read, and a marquee writes
   // the selection on every pointer sample.
@@ -261,7 +258,10 @@ function usePlacedGeometry(
     pages: NO_SPREAD_PAGES,
   });
   const base = learned.key === pagesKey ? learned.pages : NO_SPREAD_PAGES;
-  const known = useMemo(() => learnSpreadPages(base, geometry), [base, geometry]);
+  const known = useMemo(
+    () => learnSpreadPages(base, geometry),
+    [base, geometry],
+  );
   useEffect(() => {
     if (known !== base || learned.key !== pagesKey) {
       setLearned({ key: pagesKey, pages: known });

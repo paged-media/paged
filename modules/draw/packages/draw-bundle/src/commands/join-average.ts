@@ -95,7 +95,10 @@ interface Endpoint {
 
 /** The two canonical endpoints of a SINGLE-subpath OPEN path, or null
  *  (closed, compound, or too short). */
-function endpointsOf(table: AnchorTable, ti: number): [Endpoint, Endpoint] | null {
+function endpointsOf(
+  table: AnchorTable,
+  ti: number,
+): [Endpoint, Endpoint] | null {
   const n = table.anchors.length;
   if (n < 2) return null;
   const starts = table.subpathStarts.length > 0 ? table.subpathStarts : [0];
@@ -335,7 +338,9 @@ async function applyEndpointPlan(
   for (const id of selection) {
     const r = await host.document.pathAnchors(id).catch(() => null);
     if (!r) {
-      host.log.debug(`${commandId}: ${id.kind} exposes no anchor table — no-op`);
+      host.log.debug(
+        `${commandId}: ${id.kind} exposes no anchor table — no-op`,
+      );
       return;
     }
     tables.push({

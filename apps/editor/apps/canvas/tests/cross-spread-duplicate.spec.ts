@@ -142,7 +142,12 @@ async function pickFrame(
           })) as {
             payload: {
               element: ElementId | null;
-              frameBounds: { top: number; left: number; bottom: number; right: number } | null;
+              frameBounds: {
+                top: number;
+                left: number;
+                bottom: number;
+                right: number;
+              } | null;
               itemTransform: number[] | null;
             };
           };
@@ -229,7 +234,8 @@ test.describe("Track K — cross-spread Alt-duplicate", () => {
     const delta: [number, number] = [12, 18];
     await page.evaluate(
       async ({ id, delta }) => {
-        const c = (globalThis as unknown as { __canvas: CanvasGlobal }).__canvas;
+        const c = (globalThis as unknown as { __canvas: CanvasGlobal })
+          .__canvas;
         const h = await c.client.beginGesture([id], { kind: "translate" });
         await c.client.updateGesture(h, delta, { shift: false, alt: true });
         await c.client.commitGesture(h);
@@ -244,7 +250,8 @@ test.describe("Track K — cross-spread Alt-duplicate", () => {
     // Source still present.
     const srcGeom = await page.evaluate(
       async ({ id }) => {
-        const c = (globalThis as unknown as { __canvas: CanvasGlobal }).__canvas;
+        const c = (globalThis as unknown as { __canvas: CanvasGlobal })
+          .__canvas;
         return c.client.elementGeometry([id]);
       },
       { id: src.id },
@@ -299,7 +306,8 @@ test.describe("Track K — cross-spread Alt-duplicate", () => {
     ];
     await page.evaluate(
       async ({ id, delta, pageAId, anchorPoint }) => {
-        const c = (globalThis as unknown as { __canvas: CanvasGlobal }).__canvas;
+        const c = (globalThis as unknown as { __canvas: CanvasGlobal })
+          .__canvas;
         const h = await c.client.beginGesture(
           [id],
           { kind: "translate" },
@@ -339,7 +347,8 @@ test.describe("Track K — cross-spread Alt-duplicate", () => {
     // Source unchanged on its original page.
     const srcGeom = await page.evaluate(
       async ({ id }) => {
-        const c = (globalThis as unknown as { __canvas: CanvasGlobal }).__canvas;
+        const c = (globalThis as unknown as { __canvas: CanvasGlobal })
+          .__canvas;
         return c.client.elementGeometry([id]);
       },
       { id: src.id },
@@ -365,7 +374,8 @@ test.describe("Track K — cross-spread Alt-duplicate", () => {
     ];
     await page.evaluate(
       async ({ id, delta, pageAId, anchorPoint }) => {
-        const c = (globalThis as unknown as { __canvas: CanvasGlobal }).__canvas;
+        const c = (globalThis as unknown as { __canvas: CanvasGlobal })
+          .__canvas;
         const h = await c.client.beginGesture(
           [id],
           { kind: "translate" },
@@ -390,7 +400,8 @@ test.describe("Track K — cross-spread Alt-duplicate", () => {
     // Source still on page A.
     const srcGeom = await page.evaluate(
       async ({ id }) => {
-        const c = (globalThis as unknown as { __canvas: CanvasGlobal }).__canvas;
+        const c = (globalThis as unknown as { __canvas: CanvasGlobal })
+          .__canvas;
         return c.client.elementGeometry([id]);
       },
       { id: src.id },

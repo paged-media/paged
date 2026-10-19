@@ -69,27 +69,38 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   const top = y0;
 
   // ── prose ───────────────────────────────────────────────────────
-  const head = await proseFrame(ctx, p(16), [left, top, right, top + 30], [
-    { text: "Seven masters, one transient page", style: STYLE.head1 },
-  ]);
+  const head = await proseFrame(
+    ctx,
+    p(16),
+    [left, top, right, top + 30],
+    [{ text: "Seven masters, one transient page", style: STYLE.head1 }],
+  );
   elements.push(head.frameId);
 
-  const prose = await proseFrame(ctx, p(16), [left, top + 38, right, top + 240], [
-    {
-      text: "A master spread stamps furniture — running heads, folios, rules — onto every page that applies it. This page applies E-Data, which is why the fine twelve-column furniture is here without this chapter drawing it. The seven-master set below is the whole cast of this book.",
-      style: STYLE.bodyFirst,
-    },
-    {
-      text: "While this page was being set, an eighth page briefly existed. It was inserted after page 134, given the B-Body master (the render changed: the head and folio appeared on a page nothing had drawn on), re-assigned to D-Plate (the same op, to the master that stamps nothing), duplicated, resized to half height, and then deleted along with its twin. The count you can check at the foot of this book never moved.",
-      style: STYLE.body,
-    },
-  ]);
+  const prose = await proseFrame(
+    ctx,
+    p(16),
+    [left, top + 38, right, top + 240],
+    [
+      {
+        text: "A master spread stamps furniture — running heads, folios, rules — onto every page that applies it. This page applies E-Data, which is why the fine twelve-column furniture is here without this chapter drawing it. The seven-master set below is the whole cast of this book.",
+        style: STYLE.bodyFirst,
+      },
+      {
+        text: "While this page was being set, an eighth page briefly existed. It was inserted after page 134, given the B-Body master (the render changed: the head and folio appeared on a page nothing had drawn on), re-assigned to D-Plate (the same op, to the master that stamps nothing), duplicated, resized to half height, and then deleted along with its twin. The count you can check at the foot of this book never moved.",
+        style: STYLE.body,
+      },
+    ],
+  );
   elements.push(prose.frameId);
 
   // ── the seven-master diagram ────────────────────────────────────
-  const caption = await proseFrame(ctx, p(16), [left, top + 252, right, top + 276], [
-    { text: "The master set, as this file defines it", style: STYLE.head2 },
-  ]);
+  const caption = await proseFrame(
+    ctx,
+    p(16),
+    [left, top + 252, right, top + 276],
+    [{ text: "The master set, as this file defines it", style: STYLE.head2 }],
+  );
   elements.push(caption.frameId);
 
   const tileW = (right - left - 3 * 12) / 4;

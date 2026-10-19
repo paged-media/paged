@@ -171,17 +171,27 @@ export function polygonCorners(table: AnchorTable): PolygonCorner[] {
       const prev = table.anchors[from + ((k - 1 + len) % len)]!;
       const cur = table.anchors[from + k]!;
       const next = table.anchors[from + ((k + 1) % len)]!;
-      const straightIn = near(prev.right, prev.anchor) && near(cur.left, cur.anchor);
-      const straightOut = near(cur.right, cur.anchor) && near(next.left, next.anchor);
+      const straightIn =
+        near(prev.right, prev.anchor) && near(cur.left, cur.anchor);
+      const straightOut =
+        near(cur.right, cur.anchor) && near(next.left, next.anchor);
       if (!straightIn || !straightOut) continue;
-      const vi: Vec2 = [prev.anchor[0] - cur.anchor[0], prev.anchor[1] - cur.anchor[1]];
-      const vo: Vec2 = [next.anchor[0] - cur.anchor[0], next.anchor[1] - cur.anchor[1]];
+      const vi: Vec2 = [
+        prev.anchor[0] - cur.anchor[0],
+        prev.anchor[1] - cur.anchor[1],
+      ];
+      const vo: Vec2 = [
+        next.anchor[0] - cur.anchor[0],
+        next.anchor[1] - cur.anchor[1],
+      ];
       const li = Math.hypot(vi[0], vi[1]);
       const lo = Math.hypot(vo[0], vo[1]);
       if (li < 1e-4 || lo < 1e-4) continue;
       const ui: Vec2 = [vi[0] / li, vi[1] / li];
       const uo: Vec2 = [vo[0] / lo, vo[1] / lo];
-      const theta = Math.acos(Math.min(1, Math.max(-1, ui[0] * uo[0] + ui[1] * uo[1])));
+      const theta = Math.acos(
+        Math.min(1, Math.max(-1, ui[0] * uo[0] + ui[1] * uo[1])),
+      );
       if (theta < 1e-3 || theta > Math.PI - 1e-3) continue;
       out.push({
         index: from + k,
@@ -218,7 +228,10 @@ export function polygonCornerAt(
 /** The TANGENT distance a drag to `point` reads at `corner`: the smaller
  *  of its projections onto the two edges, clamped to [0, half of the
  *  shorter edge] (the renderer's own clamp). */
-export function polygonTangentFromDrag(corner: PolygonCorner, point: Vec2): number {
+export function polygonTangentFromDrag(
+  corner: PolygonCorner,
+  point: Vec2,
+): number {
   const dx = point[0] - corner.point[0];
   const dy = point[1] - corner.point[1];
   const alongIn = dx * corner.inDir[0] + dy * corner.inDir[1];
@@ -228,13 +241,19 @@ export function polygonTangentFromDrag(corner: PolygonCorner, point: Vec2): numb
 }
 
 /** The radius a drag to `point` implies at `corner`: `d · tan(θ/2)`. */
-export function polygonRadiusFromDrag(corner: PolygonCorner, point: Vec2): number {
+export function polygonRadiusFromDrag(
+  corner: PolygonCorner,
+  point: Vec2,
+): number {
   return polygonTangentFromDrag(corner, point) * Math.tan(corner.halfAngle);
 }
 
 /** The preview for a polygon corner at `radius`: the two tangent points
  *  through the vertex (the box preview's idea, on real edges). */
-export function polygonCornerPreview(corner: PolygonCorner, radius: number): Vec2[] {
+export function polygonCornerPreview(
+  corner: PolygonCorner,
+  radius: number,
+): Vec2[] {
   const t = Math.tan(corner.halfAngle);
   const d = t > 0 ? radius / t : 0;
   const [cx, cy] = corner.point;

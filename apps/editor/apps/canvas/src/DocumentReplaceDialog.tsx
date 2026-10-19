@@ -84,19 +84,31 @@ function ReplacePrompt({ pending }: { pending: PendingReplace }) {
           boxShadow: "0 16px 48px rgba(0,0,0,0.5)",
         }}
       >
-        <h2 id="replace-document-title" style={{ margin: "0 0 4px", fontSize: 15 }}>
+        <h2
+          id="replace-document-title"
+          style={{ margin: "0 0 4px", fontSize: 15 }}
+        >
           Discard unsaved edits?
         </h2>
-        <p id="replace-document-body" style={{ margin: "0 0 16px", color: "var(--muted-fg, #9a9a9a)" }}>
-          <strong data-testid="replace-document-requester" style={{ color: "var(--fg, #e7e7e7)" }}>
+        <p
+          id="replace-document-body"
+          style={{ margin: "0 0 16px", color: "var(--muted-fg, #9a9a9a)" }}
+        >
+          <strong
+            data-testid="replace-document-requester"
+            style={{ color: "var(--fg, #e7e7e7)" }}
+          >
             {pending.requester}
           </strong>{" "}
           wants to open{" "}
-          <strong data-testid="replace-document-name" style={{ color: "var(--fg, #e7e7e7)" }}>
+          <strong
+            data-testid="replace-document-name"
+            style={{ color: "var(--fg, #e7e7e7)" }}
+          >
             {pending.documentName}
           </strong>{" "}
-          in place of the open document. The open document has unsaved edits, and opening
-          will discard them. Save with Cmd+S first to keep them.
+          in place of the open document. The open document has unsaved edits,
+          and opening will discard them. Save with Cmd+S first to keep them.
         </p>
         <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
           <button

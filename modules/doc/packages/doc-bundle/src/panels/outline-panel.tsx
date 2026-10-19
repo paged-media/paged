@@ -115,7 +115,10 @@ const clamp3: React.CSSProperties = {
   overflowWrap: "anywhere",
 };
 
-const SEVERITY: Record<DocPanelNotice["severity"], { color: string; label: string }> = {
+const SEVERITY: Record<
+  DocPanelNotice["severity"],
+  { color: string; label: string }
+> = {
   error: { color: "var(--status-error)", label: "Error" },
   warning: { color: "var(--status-review)", label: "Warning" },
   info: { color: "var(--status-info)", label: "Note" },
@@ -157,7 +160,13 @@ function Notice({ notice }: { notice: DocPanelNotice }) {
   );
 }
 
-function InsertButton({ actions, style }: { actions: OutlinePanelActions; style?: React.CSSProperties }) {
+function InsertButton({
+  actions,
+  style,
+}: {
+  actions: OutlinePanelActions;
+  style?: React.CSSProperties;
+}) {
   const can = actions.canInsert();
   return (
     <button
@@ -165,7 +174,9 @@ function InsertButton({ actions, style }: { actions: OutlinePanelActions; style?
       data-doc-insert
       style={style}
       disabled={!can}
-      title={can ? "Pick a .docx and insert it into this document" : NO_PICKER_REASON}
+      title={
+        can ? "Pick a .docx and insert it into this document" : NO_PICKER_REASON
+      }
       onClick={() => actions.insert()}
     >
       {INSERT_LABEL}
@@ -205,12 +216,17 @@ function CappedList<T>({
 }
 
 function readinessLine(live: boolean, readStory: boolean): string {
-  if (live) return "Your edits are written back into the .docx when you export it.";
-  if (readStory) return "Export writes the original .docx unchanged: this document's text was not captured.";
+  if (live)
+    return "Your edits are written back into the .docx when you export it.";
+  if (readStory)
+    return "Export writes the original .docx unchanged: this document's text was not captured.";
   return "Export writes the original .docx unchanged: this editor cannot read edited text back.";
 }
 
-export function makeOutlinePanel(store: DocStore, actions: OutlinePanelActions): PanelDescriptor {
+export function makeOutlinePanel(
+  store: DocStore,
+  actions: OutlinePanelActions,
+): PanelDescriptor {
   const Component: React.FC<PanelProps> = () => {
     const [, force] = React.useReducer((n: number) => n + 1, 0);
     React.useEffect(() => store.subscribe(force), []);
@@ -243,7 +259,10 @@ export function makeOutlinePanel(store: DocStore, actions: OutlinePanelActions):
     ].filter(Boolean);
 
     return (
-      <div style={{ padding: 12, fontSize: 13, lineHeight: 1.5 }} data-doc-panel="ready">
+      <div
+        style={{ padding: 12, fontSize: 13, lineHeight: 1.5 }}
+        data-doc-panel="ready"
+      >
         {notice && <Notice notice={notice} />}
         {/* Document */}
         <div style={rowStyle}>
@@ -279,7 +298,8 @@ export function makeOutlinePanel(store: DocStore, actions: OutlinePanelActions):
                 data-doc-outline-entry={entry.kind}
                 style={{
                   ...rowStyle,
-                  paddingLeft: entry.kind === "heading" ? (entry.level - 1) * 12 : 0,
+                  paddingLeft:
+                    entry.kind === "heading" ? (entry.level - 1) * 12 : 0,
                   fontSize: 12,
                 }}
               >
@@ -290,14 +310,16 @@ export function makeOutlinePanel(store: DocStore, actions: OutlinePanelActions):
                     title={`Go to “${entry.text}”`}
                     onClick={() => {
                       const occurrence = headingOccurrence(outline, i);
-                      void actions.revealHeading!(entry.text, occurrence).then((ok) => {
-                        if (!ok) {
-                          store.setNotice({
-                            severity: "info",
-                            message: `“${entry.text}” isn't on the page — the heading was edited, or it is in overset text.`,
-                          });
-                        }
-                      });
+                      void actions.revealHeading!(entry.text, occurrence).then(
+                        (ok) => {
+                          if (!ok) {
+                            store.setNotice({
+                              severity: "info",
+                              message: `“${entry.text}” isn't on the page — the heading was edited, or it is in overset text.`,
+                            });
+                          }
+                        },
+                      );
                     }}
                     style={{
                       ...ellipsis,
@@ -320,14 +342,17 @@ export function makeOutlinePanel(store: DocStore, actions: OutlinePanelActions):
                   </span>
                 ) : (
                   <span style={{ color: muted }}>
-                    Table, {plural(entry.rows, "row")} × {plural(entry.cols, "column")}
+                    Table, {plural(entry.rows, "row")} ×{" "}
+                    {plural(entry.cols, "column")}
                   </span>
                 )}
               </div>
             ))
           )}
           {outline.length >= OUTLINE_CAP && (
-            <p style={{ ...note, marginTop: 4 }}>Showing the first {OUTLINE_CAP} entries.</p>
+            <p style={{ ...note, marginTop: 4 }}>
+              Showing the first {OUTLINE_CAP} entries.
+            </p>
           )}
         </div>
 
@@ -341,11 +366,23 @@ export function makeOutlinePanel(store: DocStore, actions: OutlinePanelActions):
             items={ir.styles}
             noun="styles"
             render={(s) => (
-              <div key={s.id} data-doc-style-row style={{ ...rowStyle, fontSize: 12 }}>
+              <div
+                key={s.id}
+                data-doc-style-row
+                style={{ ...rowStyle, fontSize: 12 }}
+              >
                 <span style={{ ...ellipsis, flex: 1 }} title={s.name}>
                   {s.name}
                 </span>
-                <span style={{ ...ellipsis, flex: "none", maxWidth: "50%", color: muted, fontSize: 11 }}>
+                <span
+                  style={{
+                    ...ellipsis,
+                    flex: "none",
+                    maxWidth: "50%",
+                    color: muted,
+                    fontSize: 11,
+                  }}
+                >
                   {s.collection === "paragraph" ? "Paragraph" : "Character"}
                   {s.basedOn ? `, based on ${s.basedOn.split("/").pop()}` : ""}
                 </span>
@@ -396,7 +433,10 @@ export function makeOutlinePanel(store: DocStore, actions: OutlinePanelActions):
         </div>
 
         {/* Save-back readiness */}
-        <div style={section} data-doc-readiness={saveBackLive ? "live" : "verbatim"}>
+        <div
+          style={section}
+          data-doc-readiness={saveBackLive ? "live" : "verbatim"}
+        >
           <h4 style={h4}>Saving back to Word</h4>
           <p style={note}>{readinessLine(saveBackLive, ready.readStory)}</p>
         </div>
@@ -405,5 +445,10 @@ export function makeOutlinePanel(store: DocStore, actions: OutlinePanelActions):
   };
   // U9 — the tab says what the panel IS ("Document outline"); the owning
   // bundle ("paged.doc") is carried by the host-stamped `source` provenance.
-  return { title: "Document outline", component: Component, defaultDock: "right", icon: "panel-outline" };
+  return {
+    title: "Document outline",
+    component: Component,
+    defaultDock: "right",
+    icon: "panel-outline",
+  };
 }

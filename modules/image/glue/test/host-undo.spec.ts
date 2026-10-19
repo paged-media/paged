@@ -26,7 +26,12 @@ import { describe, expect, it } from "bun:test";
 import { loadBundle } from "@paged-media/plugin-sdk";
 
 import { imageBundle } from "../src/index";
-import { makeFakeEditor, mapBacking, shellStub, silentConsole } from "./helpers";
+import {
+  makeFakeEditor,
+  mapBacking,
+  shellStub,
+  silentConsole,
+} from "./helpers";
 
 interface Hooks {
   type: string;
@@ -57,7 +62,12 @@ describe("host Cmd+Z inside a raster image", () => {
     const { loaded, contexts } = load();
     const ctx = contexts.find((c) => c.type === "rasterImage");
     expect(ctx).toBeDefined();
-    for (const hook of ["onUndo", "onRedo", "onCanUndo", "onCanRedo"] as const) {
+    for (const hook of [
+      "onUndo",
+      "onRedo",
+      "onCanUndo",
+      "onCanRedo",
+    ] as const) {
       expect(typeof ctx![hook], hook).toBe("function");
     }
     loaded.dispose();

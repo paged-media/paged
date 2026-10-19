@@ -113,7 +113,8 @@ export function countingHost(
     const name = String(args[0]);
     result.then(
       (rows) => {
-        if (Array.isArray(rows)) rowsRead[name] = (rowsRead[name] ?? 0) + rows.length;
+        if (Array.isArray(rows))
+          rowsRead[name] = (rowsRead[name] ?? 0) + rows.length;
       },
       () => {
         /* a refused read carried nothing */
@@ -183,7 +184,8 @@ export function countingHost(
     reads: () =>
       Object.entries(state.calls())
         .filter(
-          ([k]) => k.startsWith("document.") && !k.includes(":") && !NOT_A_READ.has(k),
+          ([k]) =>
+            k.startsWith("document.") && !k.includes(":") && !NOT_A_READ.has(k),
         )
         .reduce((n, [, v]) => n + v, 0),
     total: () =>
@@ -239,7 +241,8 @@ export const BUDGET_TIMEOUT_MS = 120_000;
  *  budget names. */
 export function workSummary(work: WorkLog): Record<string, unknown> {
   const calls: Record<string, number> = {};
-  for (const door of Object.keys(work.calls).sort()) calls[door] = work.calls[door]!;
+  for (const door of Object.keys(work.calls).sort())
+    calls[door] = work.calls[door]!;
   const ops: Record<string, number> = {};
   for (const m of work.mutations) {
     const k = m.op === "batch" ? `batch(${m.ops})` : m.op;
@@ -266,7 +269,9 @@ export function report(
 ): WorkLog {
   if (process.env.PERF_SHOW) {
     // eslint-disable-next-line no-console
-    console.log(`PERF ${scenario} ${JSON.stringify({ ...workSummary(work), ...extra })}`);
+    console.log(
+      `PERF ${scenario} ${JSON.stringify({ ...workSummary(work), ...extra })}`,
+    );
   }
   return work;
 }

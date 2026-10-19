@@ -65,14 +65,19 @@ interface CanvasGlobal {
       d: [number, number],
       mods: { shift: boolean; alt: boolean; disableSnap?: boolean },
     ) => Promise<{ pageIds: string[]; snapLines: SnapLine[] }>;
-    commitGesture: (h: number) => Promise<{ appliedSeq: number; pageIds: string[] }>;
+    commitGesture: (
+      h: number,
+    ) => Promise<{ appliedSeq: number; pageIds: string[] }>;
     cancelGesture: (h: number) => Promise<string[]>;
     undo: () => Promise<unknown>;
     marqueeHits: (
       pageId: string,
       rect: [number, number, number, number],
     ) => Promise<ElementId[]>;
-    setElementSelection: (ids: ElementId[], mode: string) => Promise<ElementId[]>;
+    setElementSelection: (
+      ids: ElementId[],
+      mode: string,
+    ) => Promise<ElementId[]>;
   };
 }
 
@@ -111,7 +116,12 @@ async function findMultipleUnrotatedFrames(
         })) as {
           payload: {
             element: ElementId | null;
-            frameBounds: { top: number; left: number; bottom: number; right: number } | null;
+            frameBounds: {
+              top: number;
+              left: number;
+              bottom: number;
+              right: number;
+            } | null;
             itemTransform: number[] | null;
           };
         };
@@ -120,7 +130,8 @@ async function findMultipleUnrotatedFrames(
         const tr = reply.payload.itemTransform;
         if (!el || !fb) continue;
         if (tr) {
-          if (Math.abs(tr[0] - 1) > 1e-3 || Math.abs(tr[3] - 1) > 1e-3) continue;
+          if (Math.abs(tr[0] - 1) > 1e-3 || Math.abs(tr[3] - 1) > 1e-3)
+            continue;
           if (Math.abs(tr[1]) > 1e-3 || Math.abs(tr[2]) > 1e-3) continue;
         }
         const key = `${el.kind}:${el.id}`;
@@ -133,7 +144,9 @@ async function findMultipleUnrotatedFrames(
         if (out.length >= count) break;
       }
       if (out.length < count) {
-        throw new Error(`only ${out.length} un-rotated frames found (needed ${count})`);
+        throw new Error(
+          `only ${out.length} un-rotated frames found (needed ${count})`,
+        );
       }
       return out;
     },
@@ -159,7 +172,12 @@ async function hitFrameBoundsAt(
         payload: { pageId, docPoint: [x, y], filter: "any" },
       })) as {
         payload: {
-          frameBounds: { top: number; left: number; bottom: number; right: number } | null;
+          frameBounds: {
+            top: number;
+            left: number;
+            bottom: number;
+            right: number;
+          } | null;
         };
       };
       const fb = hit.payload.frameBounds;
@@ -191,7 +209,13 @@ test.describe("Phase E — multi-select, snap, modifiers", () => {
   test("AC-E-16 — multi-select translate moves all rigidly, one undo entry @feat:editor-tools.move.translate @feat:the-renderer.snapping @level:happy", async ({
     page,
   }) => {
-    const items = await findMultipleUnrotatedFrames(page, pageId, pageW, pageH, 2);
+    const items = await findMultipleUnrotatedFrames(
+      page,
+      pageId,
+      pageW,
+      pageH,
+      2,
+    );
     const before = items.map((it) => it.pageBounds);
 
     // Translate by a large delta — much larger than the 4pt snap
@@ -202,7 +226,8 @@ test.describe("Phase E — multi-select, snap, modifiers", () => {
     const delta: [number, number] = [137, 87];
     const reply = await page.evaluate(
       async ({ ids, delta }) => {
-        const c = (globalThis as unknown as { __canvas: CanvasGlobal }).__canvas;
+        const c = (globalThis as unknown as { __canvas: CanvasGlobal })
+          .__canvas;
         const h = await c.client.beginGesture(ids, { kind: "translate" });
         const upd = await c.client.updateGesture(h, delta, {
           shift: false,
@@ -238,10 +263,7 @@ test.describe("Phase E — multi-select, snap, modifiers", () => {
         if (after) break;
       }
       expect(after, `member ${i} after translate`).not.toBeNull();
-      observedDeltas.push([
-        after![1] - before[i][1],
-        after![0] - before[i][0],
-      ]);
+      observedDeltas.push([after![1] - before[i][1], after![0] - before[i][0]]);
     }
     // Rigidity: every member moved by the same delta within 0.1pt.
     for (let i = 1; i < observedDeltas.length; i++) {
@@ -270,7 +292,13 @@ test.describe("Phase E — multi-select, snap, modifiers", () => {
   test("snap-to-page-left-edge surfaces a SnapLine and aligns the moved bbox @feat:editor-tools.move.translate @feat:the-renderer.snapping @level:edge", async ({
     page,
   }) => {
-    const items = await findMultipleUnrotatedFrames(page, pageId, pageW, pageH, 1);
+    const items = await findMultipleUnrotatedFrames(
+      page,
+      pageId,
+      pageW,
+      pageH,
+      1,
+    );
     const it = items[0];
     const before = it.pageBounds;
 
@@ -282,7 +310,8 @@ test.describe("Phase E — multi-select, snap, modifiers", () => {
     const dy = 0;
     const reply = await page.evaluate(
       async ({ id, dx, dy }) => {
-        const c = (globalThis as unknown as { __canvas: CanvasGlobal }).__canvas;
+        const c = (globalThis as unknown as { __canvas: CanvasGlobal })
+          .__canvas;
         const h = await c.client.beginGesture([id], { kind: "translate" });
         const r = await c.client.updateGesture(h, [dx, dy], {
           shift: false,
@@ -315,13 +344,20 @@ test.describe("Phase E — multi-select, snap, modifiers", () => {
     // assertion is intentionally loose ("more than one line for at
     // least one gesture") because the snap winner is a guide line
     // too; smart guides ADD to that set, not replace it.
-    const items = await findMultipleUnrotatedFrames(page, pageId, pageW, pageH, 1);
+    const items = await findMultipleUnrotatedFrames(
+      page,
+      pageId,
+      pageW,
+      pageH,
+      1,
+    );
     const it = items[0];
     const before = it.pageBounds;
     const dx = -(before[1] - 2); // snap left edge to 0
     const reply = await page.evaluate(
       async ({ id, dx }) => {
-        const c = (globalThis as unknown as { __canvas: CanvasGlobal }).__canvas;
+        const c = (globalThis as unknown as { __canvas: CanvasGlobal })
+          .__canvas;
         const h = await c.client.beginGesture([id], { kind: "translate" });
         const r = await c.client.updateGesture(h, [dx, 0], {
           shift: false,
@@ -344,18 +380,27 @@ test.describe("Phase E — multi-select, snap, modifiers", () => {
     }
   });
 
-  test("disableSnap (Ctrl) bypasses the snap pass @feat:editor-tools.move.translate @feat:the-renderer.snapping @level:happy", async ({ page }) => {
+  test("disableSnap (Ctrl) bypasses the snap pass @feat:editor-tools.move.translate @feat:the-renderer.snapping @level:happy", async ({
+    page,
+  }) => {
     // Plan-2 §8.4. Same setup as the snap-to-page-left-edge test
     // (dragging just short of the page edge would normally snap),
     // but with the disable-snap modifier set: the delta passes
     // through unmodified and no snap lines fire.
-    const items = await findMultipleUnrotatedFrames(page, pageId, pageW, pageH, 1);
+    const items = await findMultipleUnrotatedFrames(
+      page,
+      pageId,
+      pageW,
+      pageH,
+      1,
+    );
     const it = items[0];
     const before = it.pageBounds;
     const dx = -(before[1] - 2);
     const reply = await page.evaluate(
       async ({ id, dx }) => {
-        const c = (globalThis as unknown as { __canvas: CanvasGlobal }).__canvas;
+        const c = (globalThis as unknown as { __canvas: CanvasGlobal })
+          .__canvas;
         const h = await c.client.beginGesture([id], { kind: "translate" });
         const r = await c.client.updateGesture(h, [dx, 0], {
           shift: false,
@@ -373,8 +418,16 @@ test.describe("Phase E — multi-select, snap, modifiers", () => {
     ).toBe(0);
   });
 
-  test("Shift-constrain locks translate to the dominant axis @feat:editor-tools.move.translate @feat:the-renderer.snapping @level:happy", async ({ page }) => {
-    const items = await findMultipleUnrotatedFrames(page, pageId, pageW, pageH, 1);
+  test("Shift-constrain locks translate to the dominant axis @feat:editor-tools.move.translate @feat:the-renderer.snapping @level:happy", async ({
+    page,
+  }) => {
+    const items = await findMultipleUnrotatedFrames(
+      page,
+      pageId,
+      pageW,
+      pageH,
+      1,
+    );
     const it = items[0];
     const before = it.pageBounds;
     const cx = (before[1] + before[3]) / 2;
@@ -383,7 +436,8 @@ test.describe("Phase E — multi-select, snap, modifiers", () => {
     // |dx| > |dy| with Shift → y delta drops to 0.
     await page.evaluate(
       async ({ id }) => {
-        const c = (globalThis as unknown as { __canvas: CanvasGlobal }).__canvas;
+        const c = (globalThis as unknown as { __canvas: CanvasGlobal })
+          .__canvas;
         const h = await c.client.beginGesture([id], { kind: "translate" });
         await c.client.updateGesture(h, [40, 5], { shift: true, alt: false });
         await c.client.commitGesture(h);

@@ -55,14 +55,22 @@ export interface IdmlExpectation {
   foreign_entries: string[];
 }
 
-const IDML_PREFIXES = ["META-INF/", "Resources/", "XML/", "MasterSpreads/", "Spreads/", "Stories/"];
+const IDML_PREFIXES = [
+  "META-INF/",
+  "Resources/",
+  "XML/",
+  "MasterSpreads/",
+  "Spreads/",
+  "Stories/",
+];
 
 function count(re: RegExp, xml: string): number {
   return (xml.match(re) ?? []).length;
 }
 
 function itemCounts(xml: string): ItemCounts {
-  const tag = (name: string): number => count(new RegExp(`<${name}(?=[ />])`, "g"), xml);
+  const tag = (name: string): number =>
+    count(new RegExp(`<${name}(?=[ />])`, "g"), xml);
   return {
     textFrame: tag("TextFrame"),
     rectangle: tag("Rectangle"),
@@ -82,7 +90,14 @@ function add(a: ItemCounts, b: ItemCounts): ItemCounts {
 }
 
 const EMPTY: ItemCounts = {
-  textFrame: 0, rectangle: 0, oval: 0, polygon: 0, graphicLine: 0, group: 0, image: 0, other: 0,
+  textFrame: 0,
+  rectangle: 0,
+  oval: 0,
+  polygon: 0,
+  graphicLine: 0,
+  group: 0,
+  image: 0,
+  other: 0,
 };
 
 export function idmlExpectation(bytes: Buffer): IdmlExpectation {
@@ -134,7 +149,9 @@ export function idmlExpectation(bytes: Buffer): IdmlExpectation {
   }
 
   const colorNames = new Map<string, string>();
-  for (const m of graphic.matchAll(/<Color\b[^>]*\bSelf="([^"]+)"[^>]*\bName="([^"]+)"/g)) {
+  for (const m of graphic.matchAll(
+    /<Color\b[^>]*\bSelf="([^"]+)"[^>]*\bName="([^"]+)"/g,
+  )) {
     colorNames.set(m[1], m[2]);
   }
   const tints: IdmlExpectation["tint_swatches"] = [];
@@ -143,13 +160,15 @@ export function idmlExpectation(bytes: Buffer): IdmlExpectation {
     const name = /\bName="([^"]+)"/.exec(a)?.[1];
     const base = /\bBaseColor="([^"]+)"/.exec(a)?.[1];
     const tint = Number(/\bTintValue="([^"]+)"/.exec(a)?.[1]);
-    if (name && base) tints.push({ name, base: colorNames.get(base) ?? base, tint });
+    if (name && base)
+      tints.push({ name, base: colorNames.get(base) ?? base, tint });
   }
 
   // Conditions live in designmap.xml (Adobe) or Styles.xml (our older
   // spelling); count both, never twice.
   const conditions =
-    count(/<Condition(?=[ />])/g, designmap) + count(/<Condition(?=[ />])/g, styles);
+    count(/<Condition(?=[ />])/g, designmap) +
+    count(/<Condition(?=[ />])/g, styles);
 
   return {
     pages,
@@ -171,7 +190,12 @@ export function idmlExpectation(bytes: Buffer): IdmlExpectation {
     root_paragraph_style_groups: count(/<RootParagraphStyleGroup>/g, styles),
     links,
     foreign_entries: names.filter(
-      (n) => !(n === "mimetype" || n === "designmap.xml" || IDML_PREFIXES.some((p) => n.startsWith(p))),
+      (n) =>
+        !(
+          n === "mimetype" ||
+          n === "designmap.xml" ||
+          IDML_PREFIXES.some((p) => n.startsWith(p))
+        ),
     ),
   };
 }

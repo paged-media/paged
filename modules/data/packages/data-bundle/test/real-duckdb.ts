@@ -9,14 +9,26 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { DUCKDB_ARTIFACTS, duckdbHandle, type DuckDBHandle } from "../src/query/duckdb";
+import {
+  DUCKDB_ARTIFACTS,
+  duckdbHandle,
+  type DuckDBHandle,
+} from "../src/query/duckdb";
 import { nodeBootSql } from "./duckdb-node-ext";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const PKG = join(HERE, "..");
 export const BIN = join(PKG, "bin");
 const ENGINE_WASM = join(BIN, DUCKDB_ARTIFACTS.module);
-const NODE_API = join(PKG, "..", "..", "vendor", "duckdb-wasm", "dist", "duckdb-node-blocking.cjs");
+const NODE_API = join(
+  PKG,
+  "..",
+  "..",
+  "vendor",
+  "duckdb-wasm",
+  "dist",
+  "duckdb-node-blocking.cjs",
+);
 export const DATA_JS_WASM = join(BIN, "data_js_bg.wasm");
 export const REQUIRE_REAL_DUCKDB = process.env.REQUIRE_REAL_DUCKDB === "1";
 
@@ -28,16 +40,24 @@ function requireNodeDuckDB(): any {
 }
 
 /** Boot one real DuckDB over the shipped EH engine. */
-export async function bootRealDuckDB(): Promise<{ handle?: DuckDBHandle; error?: string }> {
+export async function bootRealDuckDB(): Promise<{
+  handle?: DuckDBHandle;
+  error?: string;
+}> {
   if (!existsSync(ENGINE_WASM))
-    return { error: `${ENGINE_WASM} is missing — run scripts/vendor-duckdb.sh` };
+    return {
+      error: `${ENGINE_WASM} is missing — run scripts/vendor-duckdb.sh`,
+    };
   if (!existsSync(NODE_API))
     return { error: `${NODE_API} is missing — run scripts/vendor-duckdb.sh` };
   try {
     const duckdb = requireNodeDuckDB();
     const db = await duckdb.createDuckDB(
       {
-        mvp: { mainModule: join(BIN, "duckdb-mvp.NOT-SHIPPED.wasm"), mainWorker: "" },
+        mvp: {
+          mainModule: join(BIN, "duckdb-mvp.NOT-SHIPPED.wasm"),
+          mainWorker: "",
+        },
         eh: { mainModule: ENGINE_WASM, mainWorker: "" },
       },
       new duckdb.VoidLogger(),
@@ -48,7 +68,9 @@ export async function bootRealDuckDB(): Promise<{ handle?: DuckDBHandle; error?:
     for (const s of nodeBootSql()) conn.query(s); // as bootDuckDB does
     return { handle: duckdbHandle(db, conn, () => db.reset?.()) };
   } catch (err) {
-    return { error: `DuckDB failed to boot: ${err instanceof Error ? err.message : String(err)}` };
+    return {
+      error: `DuckDB failed to boot: ${err instanceof Error ? err.message : String(err)}`,
+    };
   }
 }
 

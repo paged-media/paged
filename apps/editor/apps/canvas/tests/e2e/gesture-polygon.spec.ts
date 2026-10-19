@@ -152,12 +152,18 @@ async function undo(page: Page): Promise<void> {
 
 /** Greatest distance between any anchor and the bounds centroid — the
  *  outer radius. Used to assert a star's inner ring is shorter. */
-function radii(snap: PathAnchorsResult): { cx: number; cy: number; rs: number[] } {
+function radii(snap: PathAnchorsResult): {
+  cx: number;
+  cy: number;
+  rs: number[];
+} {
   const xs = snap.anchors.map((a) => a.anchor[0]);
   const ys = snap.anchors.map((a) => a.anchor[1]);
   const cx = (Math.min(...xs) + Math.max(...xs)) / 2;
   const cy = (Math.min(...ys) + Math.max(...ys)) / 2;
-  const rs = snap.anchors.map((a) => Math.hypot(a.anchor[0] - cx, a.anchor[1] - cy));
+  const rs = snap.anchors.map((a) =>
+    Math.hypot(a.anchor[0] - cx, a.anchor[1] - cy),
+  );
   return { cx, cy, rs };
 }
 
@@ -267,7 +273,9 @@ test.describe("gestures.md DR-01/DR-02 — built-in Polygon tool", () => {
     await expect.poll(() => treeCount(page, "polygon")).toBe(before);
   });
 
-  test("DR-01/INV-1 — Escape mid-drag creates nothing @feat:editor-tools.draw.rectangle @feat:frames-paths.shape-tools @level:gesture", async ({ page }) => {
+  test("DR-01/INV-1 — Escape mid-drag creates nothing @feat:editor-tools.draw.rectangle @feat:frames-paths.shape-tools @level:gesture", async ({
+    page,
+  }) => {
     const before = await treeCount(page, "polygon");
     await activatePolygon(page);
     const start = await screenPoint(page, 120, 120);

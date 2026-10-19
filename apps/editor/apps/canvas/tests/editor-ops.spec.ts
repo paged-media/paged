@@ -57,18 +57,22 @@ interface MutationReply {
 /** Run a mutation in the page and return the worker reply. */
 async function mutate(page: Page, mutation: unknown): Promise<MutationReply> {
   return page.evaluate(async (m) => {
-    const c = (globalThis as unknown as {
-      __canvas: { client: { mutate: (x: unknown) => Promise<unknown> } };
-    }).__canvas;
+    const c = (
+      globalThis as unknown as {
+        __canvas: { client: { mutate: (x: unknown) => Promise<unknown> } };
+      }
+    ).__canvas;
     return (await c.client.mutate(m)) as never;
   }, mutation);
 }
 
 async function firstPageId(page: Page): Promise<string> {
   return page.evaluate(() => {
-    const c = (globalThis as unknown as {
-      __canvas: { handle: { pageIds: string[] } };
-    }).__canvas;
+    const c = (
+      globalThis as unknown as {
+        __canvas: { handle: { pageIds: string[] } };
+      }
+    ).__canvas;
     return c.handle.pageIds[0];
   });
 }
@@ -80,15 +84,17 @@ async function propertyValue(
 ): Promise<unknown> {
   return page.evaluate(
     async ({ id, path }) => {
-      const c = (globalThis as unknown as {
-        __canvas: {
-          client: {
-            elementProperties: (
-              id: unknown,
-            ) => Promise<{ entries: { path: string; value?: unknown }[] } | null>;
+      const c = (
+        globalThis as unknown as {
+          __canvas: {
+            client: {
+              elementProperties: (id: unknown) => Promise<{
+                entries: { path: string; value?: unknown }[];
+              } | null>;
+            };
           };
-        };
-      }).__canvas;
+        }
+      ).__canvas;
       const props = await c.client.elementProperties(id);
       return props?.entries.find((e) => e.path === path)?.value ?? null;
     },
@@ -105,9 +111,13 @@ async function pathAnchors(
   subpathOpen: boolean[];
 } | null> {
   return page.evaluate(async (target) => {
-    const c = (globalThis as unknown as {
-      __canvas: { client: { pathAnchors: (id: unknown) => Promise<unknown> } };
-    }).__canvas;
+    const c = (
+      globalThis as unknown as {
+        __canvas: {
+          client: { pathAnchors: (id: unknown) => Promise<unknown> };
+        };
+      }
+    ).__canvas;
     return (await c.client.pathAnchors(target)) as never;
   }, id);
 }
@@ -149,17 +159,21 @@ test.describe("Editor-ops — protocol v24 engine operations", () => {
     expect(bounds?.type).toBe("bounds");
     // Undo → the element is gone.
     await page.evaluate(async () => {
-      const c = (globalThis as unknown as {
-        __canvas: { client: { undo: () => Promise<unknown> } };
-      }).__canvas;
+      const c = (
+        globalThis as unknown as {
+          __canvas: { client: { undo: () => Promise<unknown> } };
+        }
+      ).__canvas;
       await c.client.undo();
     });
     const after = await page.evaluate(async (id) => {
-      const c = (globalThis as unknown as {
-        __canvas: {
-          client: { elementProperties: (id: unknown) => Promise<unknown> };
-        };
-      }).__canvas;
+      const c = (
+        globalThis as unknown as {
+          __canvas: {
+            client: { elementProperties: (id: unknown) => Promise<unknown> };
+          };
+        }
+      ).__canvas;
       return c.client.elementProperties(id);
     }, created);
     expect(after).toBeNull();
@@ -212,13 +226,17 @@ test.describe("Editor-ops — protocol v24 engine operations", () => {
     const pageId = await firstPageId(page);
     // Pick a real swatch so the fill ref resolves.
     const swatchId = await page.evaluate(async () => {
-      const c = (globalThis as unknown as {
-        __canvas: {
-          client: {
-            collection: (n: string) => Promise<{ selfId: string; name: string }[]>;
+      const c = (
+        globalThis as unknown as {
+          __canvas: {
+            client: {
+              collection: (
+                n: string,
+              ) => Promise<{ selfId: string; name: string }[]>;
+            };
           };
-        };
-      }).__canvas;
+        }
+      ).__canvas;
       const swatches = await c.client.collection("swatches");
       return swatches.find((s) => !/none|paper/i.test(s.name))!.selfId;
     });
@@ -228,16 +246,18 @@ test.describe("Editor-ops — protocol v24 engine operations", () => {
     });
     expect(set.kind).toBe("mutationApplied");
     const meta = await page.evaluate(async () => {
-      const c = (globalThis as unknown as {
-        __canvas: {
-          client: {
-            documentMeta: () => Promise<{
-              defaultFillColor?: string | null;
-              defaultStrokeWeight?: number | null;
-            }>;
+      const c = (
+        globalThis as unknown as {
+          __canvas: {
+            client: {
+              documentMeta: () => Promise<{
+                defaultFillColor?: string | null;
+                defaultStrokeWeight?: number | null;
+              }>;
+            };
           };
-        };
-      }).__canvas;
+        }
+      ).__canvas;
       return c.client.documentMeta();
     });
     expect(meta.defaultFillColor).toBe(swatchId);
@@ -283,7 +303,9 @@ test.describe("Editor-ops — protocol v24 engine operations", () => {
     expect(after!.anchors.length).toBe(square.length + 1);
   });
 
-  test("shear worker gesture commits a skewed transform @feat:color-swatches.document-defaults @feat:frames-paths.frame.insert @feat:frames-paths.line.insert @feat:frames-paths.path.insert @level:gesture", async ({ page }) => {
+  test("shear worker gesture commits a skewed transform @feat:color-swatches.document-defaults @feat:frames-paths.frame.insert @feat:frames-paths.line.insert @feat:frames-paths.path.insert @level:gesture", async ({
+    page,
+  }) => {
     const pageId = await firstPageId(page);
     const insert = await mutate(page, {
       op: "insertFrame",
@@ -292,26 +314,28 @@ test.describe("Editor-ops — protocol v24 engine operations", () => {
     const created = insert.payload.createdId!;
     const transform = await page.evaluate(
       async ({ created, pageId }) => {
-        const c = (globalThis as unknown as {
-          __canvas: {
-            client: {
-              beginGesture: (
-                nodes: unknown[],
-                gesture: unknown,
-                anchor: unknown,
-              ) => Promise<number>;
-              updateGesture: (
-                handle: number,
-                delta: [number, number],
-                modifiers: { shift: boolean; alt: boolean },
-              ) => Promise<unknown>;
-              commitGesture: (handle: number) => Promise<unknown>;
-              elementProperties: (
-                id: unknown,
-              ) => Promise<{ entries: { path: string; value?: unknown }[] } | null>;
+        const c = (
+          globalThis as unknown as {
+            __canvas: {
+              client: {
+                beginGesture: (
+                  nodes: unknown[],
+                  gesture: unknown,
+                  anchor: unknown,
+                ) => Promise<number>;
+                updateGesture: (
+                  handle: number,
+                  delta: [number, number],
+                  modifiers: { shift: boolean; alt: boolean },
+                ) => Promise<unknown>;
+                commitGesture: (handle: number) => Promise<unknown>;
+                elementProperties: (id: unknown) => Promise<{
+                  entries: { path: string; value?: unknown }[];
+                } | null>;
+              };
             };
-          };
-        }).__canvas;
+          }
+        ).__canvas;
         // Anchor on the frame's top edge — well off the centroid
         // pivot so the shear factor k = dx / (anchor.y − pivot.y)
         // is defined.
@@ -326,7 +350,8 @@ test.describe("Editor-ops — protocol v24 engine operations", () => {
         });
         await c.client.commitGesture(handle);
         const props = await c.client.elementProperties(created);
-        return props?.entries.find((e) => e.path === "frameTransform")?.value as {
+        return props?.entries.find((e) => e.path === "frameTransform")
+          ?.value as {
           type: string;
           value: number[] | null;
         };
@@ -395,8 +420,18 @@ test.describe("Editor-ops — protocol v24 engine operations", () => {
             gradientType: "Linear",
             angleDeg: 30,
             stops: [
-              { stopColor: null, locationPct: 0, alphaPct: 100, midpointPct: 50 },
-              { stopColor: null, locationPct: 100, alphaPct: 0, midpointPct: 50 },
+              {
+                stopColor: null,
+                locationPct: 0,
+                alphaPct: 100,
+                midpointPct: 50,
+              },
+              {
+                stopColor: null,
+                locationPct: 100,
+                alphaPct: 0,
+                midpointPct: 50,
+              },
             ],
           },
         },
@@ -442,16 +477,18 @@ test.describe("Editor-ops — protocol v24 engine operations", () => {
     await expect
       .poll(async () =>
         page.evaluate(async () => {
-          const c = (globalThis as unknown as {
-            __canvas: {
-              client: {
-                documentMeta: () => Promise<{
-                  defaultFillColor?: string | null;
-                  defaultStrokeColor?: string | null;
-                }>;
+          const c = (
+            globalThis as unknown as {
+              __canvas: {
+                client: {
+                  documentMeta: () => Promise<{
+                    defaultFillColor?: string | null;
+                    defaultStrokeColor?: string | null;
+                  }>;
+                };
               };
-            };
-          }).__canvas;
+            }
+          ).__canvas;
           const m = await c.client.documentMeta();
           return `${m.defaultFillColor ?? "null"}|${m.defaultStrokeColor ?? "null"}`;
         }),
@@ -483,8 +520,11 @@ test.describe("Editor-ops — protocol v24 engine operations", () => {
     const pageId = await firstPageId(page);
     const initial = await page.evaluate(
       () =>
-        (globalThis as unknown as { __canvas: { handle: { pageIds: string[] } } })
-          .__canvas.handle.pageIds.length,
+        (
+          globalThis as unknown as {
+            __canvas: { handle: { pageIds: string[] } };
+          }
+        ).__canvas.handle.pageIds.length,
     );
     // Insert — the reply carries the full refreshed grid.
     const insert = await mutate(page, {
@@ -501,9 +541,11 @@ test.describe("Editor-ops — protocol v24 engine operations", () => {
       .poll(() =>
         page.evaluate(
           () =>
-            (globalThis as unknown as {
-              __canvas: { handle: { pageIds: string[] } };
-            }).__canvas.handle.pageIds.length,
+            (
+              globalThis as unknown as {
+                __canvas: { handle: { pageIds: string[] } };
+              }
+            ).__canvas.handle.pageIds.length,
         ),
       )
       .toBe(initial + 1);
@@ -528,9 +570,11 @@ test.describe("Editor-ops — protocol v24 engine operations", () => {
     // Undo the delete — the UNDO reply must also carry the grid
     // refresh (the v24 undo/redo contract).
     const undo = (await page.evaluate(async () => {
-      const c = (globalThis as unknown as {
-        __canvas: { client: { undo: () => Promise<unknown> } };
-      }).__canvas;
+      const c = (
+        globalThis as unknown as {
+          __canvas: { client: { undo: () => Promise<unknown> } };
+        }
+      ).__canvas;
       return c.client.undo();
     })) as { kind: string; payload: { pageStructureChanged?: boolean } };
     expect(undo.kind).toBe("undoApplied");
@@ -539,18 +583,22 @@ test.describe("Editor-ops — protocol v24 engine operations", () => {
       .poll(() =>
         page.evaluate(
           () =>
-            (globalThis as unknown as {
-              __canvas: { handle: { pageIds: string[] } };
-            }).__canvas.handle.pageIds.length,
+            (
+              globalThis as unknown as {
+                __canvas: { handle: { pageIds: string[] } };
+              }
+            ).__canvas.handle.pageIds.length,
         ),
       )
       .toBe(initial + 1);
     // Deleting the ONLY remaining page after removing the extra one
     // is rejected engine-side (guard).
     await page.evaluate(async () => {
-      const c = (globalThis as unknown as {
-        __canvas: { client: { redo: () => Promise<unknown> } };
-      }).__canvas;
+      const c = (
+        globalThis as unknown as {
+          __canvas: { client: { redo: () => Promise<unknown> } };
+        }
+      ).__canvas;
       await c.client.redo(); // re-delete the extra page
     });
     if (initial === 1) {

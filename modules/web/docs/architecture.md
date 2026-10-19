@@ -179,29 +179,29 @@ back on every open to the families the document's text names and lacks (`documen
 
 ## Host doors
 
-| Door | What the plugin uses it for |
-|---|---|
-| `contributePanel`, `host.contribute.command`, `host.contribute.menu` | the "Web source" panel, seven commands, seven menu entries |
-| `contributeObjectType`, `contributeEditContext` | the `webFrame` type and its double-click edit context, which declares no canvas tools |
-| `host.contribute.importer` | `.html` and `.htm` files become the source of a new web frame |
-| `host.contribute.sceneLayer()` | submit one layer per frame |
-| `host.document.mutate` | insert a frame with its metadata in one batch; every flatten operation |
-| `host.document.getMetadata` / `setMetadata`, `host.parts.read` / `write` / `list` | the source label, the content-addressed part of a large source, and the kept faces of a bake |
-| `host.document.elementGeometry`, `meta`, `collection(...)` | frame bounds and page; active page for insert; new story of a flattened text frame; registered font families |
-| `host.document.onDidChange`, `host.selection.get` / `set` / `onDidChange` | the panel follows the selection and re-reads after undo or redo; the auto renderer and the preview size follow every committed change, a resize by the frame's handles (a gesture commit) and a script run included; commands act on the selection |
-| `host.diagnostics.set` | lint, render and flow findings |
-| `host.assets.getFontFace` | font bytes for the panel preview; whether the document holds a face for a family a bake writes |
-| `host.assets.registerDocumentFont` (`assets.documentFont@1`) | give the document the faces baked text names when it has none; it never replaces a face the document holds (`document-faces.ts`) |
-| edit context `onContentPointerDown`, `onContentKey`, `isDirty`, `onCommit`, `onCancel`, `onUndo`/`onRedo` | in-frame text editing (`in-frame-edit.ts`) |
-| `host.overlay.layer` (`overlay.layers@1`), else `host.overlay.setToolPreviews` | the in-frame caret and the outline highlight, each on its own layer (`overlay-channel.ts`) |
-| edit context `onEnter` with `contentPoint` (`editContext.enterPoint@1`) | the entering double-click places the caret |
-| `host.document.onDidOpen` (`document.onDidOpen@1`), else the editor client's `documentLoaded` | re-render and re-mark source parts when another document opens (`document-opened.ts`) |
-| `host.dataProviders.discover` / `get` / `onDidChange`, `host.document.meta` | bound data for templates (`bindings.ts`) |
-| `host.clipboard.read` | paste HTML into the panel, sanitised first |
-| `host.widgets.CodeEditor` | the HTML and CSS editors, with a plain textarea as fallback |
-| `host.text.measureString` | size the text frames of a flatten; estimated when absent |
-| `host.storage` | one-time migration of sources saved by early versions |
-| `host.shell.openPanel`, `host.log`, `host.supports` | open the panel after insert; logging; probing optional doors |
+| Door                                                                                                      | What the plugin uses it for                                                                                                                                                                                                                        |
+| --------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `contributePanel`, `host.contribute.command`, `host.contribute.menu`                                      | the "Web source" panel, seven commands, seven menu entries                                                                                                                                                                                         |
+| `contributeObjectType`, `contributeEditContext`                                                           | the `webFrame` type and its double-click edit context, which declares no canvas tools                                                                                                                                                              |
+| `host.contribute.importer`                                                                                | `.html` and `.htm` files become the source of a new web frame                                                                                                                                                                                      |
+| `host.contribute.sceneLayer()`                                                                            | submit one layer per frame                                                                                                                                                                                                                         |
+| `host.document.mutate`                                                                                    | insert a frame with its metadata in one batch; every flatten operation                                                                                                                                                                             |
+| `host.document.getMetadata` / `setMetadata`, `host.parts.read` / `write` / `list`                         | the source label, the content-addressed part of a large source, and the kept faces of a bake                                                                                                                                                       |
+| `host.document.elementGeometry`, `meta`, `collection(...)`                                                | frame bounds and page; active page for insert; new story of a flattened text frame; registered font families                                                                                                                                       |
+| `host.document.onDidChange`, `host.selection.get` / `set` / `onDidChange`                                 | the panel follows the selection and re-reads after undo or redo; the auto renderer and the preview size follow every committed change, a resize by the frame's handles (a gesture commit) and a script run included; commands act on the selection |
+| `host.diagnostics.set`                                                                                    | lint, render and flow findings                                                                                                                                                                                                                     |
+| `host.assets.getFontFace`                                                                                 | font bytes for the panel preview; whether the document holds a face for a family a bake writes                                                                                                                                                     |
+| `host.assets.registerDocumentFont` (`assets.documentFont@1`)                                              | give the document the faces baked text names when it has none; it never replaces a face the document holds (`document-faces.ts`)                                                                                                                   |
+| edit context `onContentPointerDown`, `onContentKey`, `isDirty`, `onCommit`, `onCancel`, `onUndo`/`onRedo` | in-frame text editing (`in-frame-edit.ts`)                                                                                                                                                                                                         |
+| `host.overlay.layer` (`overlay.layers@1`), else `host.overlay.setToolPreviews`                            | the in-frame caret and the outline highlight, each on its own layer (`overlay-channel.ts`)                                                                                                                                                         |
+| edit context `onEnter` with `contentPoint` (`editContext.enterPoint@1`)                                   | the entering double-click places the caret                                                                                                                                                                                                         |
+| `host.document.onDidOpen` (`document.onDidOpen@1`), else the editor client's `documentLoaded`             | re-render and re-mark source parts when another document opens (`document-opened.ts`)                                                                                                                                                              |
+| `host.dataProviders.discover` / `get` / `onDidChange`, `host.document.meta`                               | bound data for templates (`bindings.ts`)                                                                                                                                                                                                           |
+| `host.clipboard.read`                                                                                     | paste HTML into the panel, sanitised first                                                                                                                                                                                                         |
+| `host.widgets.CodeEditor`                                                                                 | the HTML and CSS editors, with a plain textarea as fallback                                                                                                                                                                                        |
+| `host.text.measureString`                                                                                 | size the text frames of a flatten; estimated when absent                                                                                                                                                                                           |
+| `host.storage`                                                                                            | one-time migration of sources saved by early versions                                                                                                                                                                                              |
+| `host.shell.openPanel`, `host.log`, `host.supports`                                                       | open the panel after insert; logging; probing optional doors                                                                                                                                                                                       |
 
 The manifest declares the matching capabilities: `document` (read `broad`, write `scoped`),
 `rendering` (`sceneLayer`, `overlay`), `dataProviders` (consume `dataset`), `editContext` (`webFrame`), `assets` (`fonts`), `clipboard`
@@ -215,8 +215,8 @@ The manifest declares the matching capabilities: `document` (read `broad`, write
   writes `packages/web-bundle/bin/` (gitignored). It fails if the wasm exceeds the manifest's
   `maxBytes` for it.
   Without `--engine` the crate is built without the engine and has neither export.
-  The bundle has no build step of its own; `.github/workflows/web-publish.yml` stays,
-  dispatch-only, until the npm deprecation.
+  The bundle has no build step of its own; the dispatch-only `web-publish.yml` was deleted
+  with the npm deprecation (PM-0008).
 - TypeScript lane: `pnpm test` runs the import lint, then `bun test` in both packages. The
   engine tests in `web-bundle` replay a captured engine output through a stub loader and,
   when `bin/` is built, also load the real wasm in Node. With `REQUIRE_REAL_ENGINE=1`, set

@@ -46,24 +46,35 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   const page = p(71);
   const elements: string[] = [];
 
-  const number = await proseFrame(ctx, page, [48, 96, 220, 186], [
-    { text: "13", style: STYLE.chapterNumber },
-  ]);
-  const title = await proseFrame(ctx, page, [48, 190, 480, 242], [
-    { text: "The Picture", style: STYLE.chapterTitle },
-  ]);
-  const deck = await proseFrame(ctx, page, [48, 254, 448, 338], [
-    {
-      text:
-        "A photograph enters a document twice: once as pixels the engine " +
-        "must decode, and once as a claim about where those pixels came " +
-        "from. This chapter places the same image through six codecs, " +
-        "keeps an EPS honestly undecoded, and works the fitting model — " +
-        "then shows the inline lane that carries every one of these " +
-        "pictures through the container round trip.",
-      style: STYLE.deck,
-    },
-  ]);
+  const number = await proseFrame(
+    ctx,
+    page,
+    [48, 96, 220, 186],
+    [{ text: "13", style: STYLE.chapterNumber }],
+  );
+  const title = await proseFrame(
+    ctx,
+    page,
+    [48, 190, 480, 242],
+    [{ text: "The Picture", style: STYLE.chapterTitle }],
+  );
+  const deck = await proseFrame(
+    ctx,
+    page,
+    [48, 254, 448, 338],
+    [
+      {
+        text:
+          "A photograph enters a document twice: once as pixels the engine " +
+          "must decode, and once as a claim about where those pixels came " +
+          "from. This chapter places the same image through six codecs, " +
+          "keeps an EPS honestly undecoded, and works the fitting model — " +
+          "then shows the inline lane that carries every one of these " +
+          "pictures through the container round trip.",
+        style: STYLE.deck,
+      },
+    ],
+  );
   elements.push(number.frameId, title.frameId, deck.frameId);
 
   // ── the hero ─────────────────────────────────────────────────────
@@ -101,16 +112,21 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     value: plateFrame.selfId,
   });
 
-  const credit = await proseFrame(ctx, page, [48, 342, 480, 360], [
-    {
-      text:
-        `Alpine sunburst at sunrise · Sagui Andrea, Pexels · ${HERO_W} × ` +
-        `${HERO_H} px, ${statSync(HERO).size.toLocaleString("en-US")} bytes ` +
-        `of baseline JPEG, inline · frame cut to the image's own 3:2 · ` +
-        `keyline: Plate Frame (appliedObjectStyle)`,
-      style: STYLE.specValue,
-    },
-  ]);
+  const credit = await proseFrame(
+    ctx,
+    page,
+    [48, 342, 480, 360],
+    [
+      {
+        text:
+          `Alpine sunburst at sunrise · Sagui Andrea, Pexels · ${HERO_W} × ` +
+          `${HERO_H} px, ${statSync(HERO).size.toLocaleString("en-US")} bytes ` +
+          `of baseline JPEG, inline · frame cut to the image's own 3:2 · ` +
+          `keyline: Plate Frame (appliedObjectStyle)`,
+        style: STYLE.specValue,
+      },
+    ],
+  );
   elements.push(credit.frameId);
   void heroBytes;
 

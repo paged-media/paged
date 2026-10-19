@@ -39,7 +39,11 @@ import type { BundleHost } from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
 import type { SceneLayer } from "@paged-media/web-model";
 
-import { _resetWebEngineCache, loadWebEngine, type WebEngine } from "../../src/engine-loader";
+import {
+  _resetWebEngineCache,
+  loadWebEngine,
+  type WebEngine,
+} from "../../src/engine-loader";
 
 const binDir = fileURLToPath(new URL("../../bin/", import.meta.url));
 const gluePath = binDir + "blitz_web.js";
@@ -65,7 +69,9 @@ export function requireBlitz(suite: string): void {
 /** Load the real engine into the bundle's memoized loader. */
 export async function primeBlitz(host: BundleHost): Promise<WebEngine> {
   _resetWebEngineCache();
-  const glue = (await import(new URL("../../bin/blitz_web.js", import.meta.url).href)) as {
+  const glue = (await import(
+    new URL("../../bin/blitz_web.js", import.meta.url).href
+  )) as {
     initSync: (m: { module: Uint8Array }) => unknown;
   };
   glue.initSync({ module: readFileSync(wasmPath) });
@@ -114,6 +120,7 @@ export function layerText(layer: SceneLayer | null | undefined): string {
 /** The lowest painted y (points) of a layer's text runs. */
 export function maxTextY(layer: SceneLayer | null | undefined): number {
   let y = 0;
-  for (const i of layer?.items ?? []) if (i.kind === "text") y = Math.max(y, (i as { y: number }).y);
+  for (const i of layer?.items ?? [])
+    if (i.kind === "text") y = Math.max(y, (i as { y: number }).y);
   return y;
 }

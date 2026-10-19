@@ -23,7 +23,7 @@
 // curation rule as contributions.ts: a type joins this list when a
 // bundle actually uses it.
 
-import type { Mutation } from "./wire";
+import type { Mutation } from "./wire.js";
 
 export type {
   // Identity + addressing.
@@ -76,7 +76,7 @@ export type {
   // ADR 323 — the object registry's core seam reads pages and stories.
   PageSummary,
   StorySummary,
-} from "./wire";
+} from "./wire.js";
 
 // ------------------------------------------------- protocol-ahead ops
 //
@@ -176,28 +176,46 @@ export type ReleaseFromMutation = Extract<Mutation, { op: "releaseFrom" }>;
 
 /** v57 (B-22) — every face of the arrangement becomes its own object,
  *  keeping the attributes of the topmost input covering it. */
-export type PathfinderDivideMutation = Extract<Mutation, { op: "pathfinderDivide" }>;
+export type PathfinderDivideMutation = Extract<
+  Mutation,
+  { op: "pathfinderDivide" }
+>;
 
 /** v57 (B-22) — each input is clipped to the part nothing above it
  *  covers, and loses its stroke. Inputs entirely hidden are deleted. */
-export type PathfinderTrimMutation = Extract<Mutation, { op: "pathfinderTrim" }>;
+export type PathfinderTrimMutation = Extract<
+  Mutation,
+  { op: "pathfinderTrim" }
+>;
 
 /** v57 (B-22) — Trim, then coalesce: inputs that share a fill colour
  *  merge into one object. */
-export type PathfinderMergeMutation = Extract<Mutation, { op: "pathfinderMerge" }>;
+export type PathfinderMergeMutation = Extract<
+  Mutation,
+  { op: "pathfinderMerge" }
+>;
 
 /** v57 (B-22) — keep only what falls inside the TOPMOST input, coloured
  *  by the objects beneath it; the topmost input is consumed as the
  *  cookie cutter and disappears. */
-export type PathfinderCropMutation = Extract<Mutation, { op: "pathfinderCrop" }>;
+export type PathfinderCropMutation = Extract<
+  Mutation,
+  { op: "pathfinderCrop" }
+>;
 
 /** v57 (B-22) — fills become strokes: every arrangement edge (split at
  *  each crossing) becomes an open `GraphicLine` stroked with the fill of
  *  the input that contributed it. All inputs are consumed. */
-export type PathfinderOutlineMutation = Extract<Mutation, { op: "pathfinderOutline" }>;
+export type PathfinderOutlineMutation = Extract<
+  Mutation,
+  { op: "pathfinderOutline" }
+>;
 
 /** v57 (B-22) — the BACKMOST object minus every object in front of it. */
-export type PathfinderMinusBackMutation = Extract<Mutation, { op: "pathfinderMinusBack" }>;
+export type PathfinderMinusBackMutation = Extract<
+  Mutation,
+  { op: "pathfinderMinusBack" }
+>;
 
 /** v57 (B-22) — whether `pathfinderFaces` KEEPS the named faces or
  *  REMOVES them (Shape Builder's drag vs alt-drag). */
@@ -209,7 +227,10 @@ export type FaceSelectMode = "keep" | "remove";
  *  `elementIds` (ids are only stable per input set); `mode` picks
  *  whether they are the faces kept or the faces removed. An unknown id
  *  is REFUSED, not ignored — a stale face set fails loudly. */
-export type PathfinderFacesMutation = Extract<Mutation, { op: "pathfinderFaces" }>;
+export type PathfinderFacesMutation = Extract<
+  Mutation,
+  { op: "pathfinderFaces" }
+>;
 
 /** v58 (C-28) — how the mask artwork's coverage is read. `luminosity`
  *  is Illustrator's default and PDF's `/S /Luminosity`; `alpha` reads
@@ -235,12 +256,18 @@ export type OpacityMaskType = "luminosity" | "alpha";
  *  Vello output is now byte-identical to the CPU rasterizer across
  *  luminosity, alpha and both inverted forms. Safe to build WYSIWYG UI
  *  over. */
-export type ApplyOpacityMaskMutation = Extract<Mutation, { op: "applyOpacityMask" }>;
+export type ApplyOpacityMaskMutation = Extract<
+  Mutation,
+  { op: "applyOpacityMask" }
+>;
 
 /** v58 (C-28) — drop the mask relation; the artwork returns to top level
  *  with its geometry untouched. One undo re-applies the mask with its
  *  original mode/invert at the same z slot. */
-export type ReleaseOpacityMaskMutation = Extract<Mutation, { op: "releaseOpacityMask" }>;
+export type ReleaseOpacityMaskMutation = Extract<
+  Mutation,
+  { op: "releaseOpacityMask" }
+>;
 
 /** v58 (C-29) — **Type on a Path**: flow an existing story along an
  *  existing path element. The engine could already RENDER type on a path
@@ -252,10 +279,16 @@ export type ReleaseOpacityMaskMutation = Extract<Mutation, { op: "releaseOpacity
  *  Center honoured), `flipPathEffect` and the `startBracket`/`endBracket`
  *  range are all live. `PathEffect` is deliberately NOT exposed — only
  *  `RainbowPathEffect` actually renders. */
-export type AttachTextToPathMutation = Extract<Mutation, { op: "attachTextToPath" }>;
+export type AttachTextToPathMutation = Extract<
+  Mutation,
+  { op: "attachTextToPath" }
+>;
 
 /** v58 (C-29) — unlink the text from the path; the exact inverse. */
-export type DetachTextFromPathMutation = Extract<Mutation, { op: "detachTextFromPath" }>;
+export type DetachTextFromPathMutation = Extract<
+  Mutation,
+  { op: "detachTextFromPath" }
+>;
 
 /** v59 (Arrange) — where `reorderElement` puts its target inside the
  *  sibling list it already belongs to. `0` is the BACKMOST slot (painted
@@ -265,11 +298,7 @@ export type DetachTextFromPathMutation = Extract<Mutation, { op: "detachTextFrom
  *  therefore CAN go stale — an out-of-range index is refused with an
  *  honest error, never clamped. */
 export type ZOrderTarget =
-  | "front"
-  | "back"
-  | "forward"
-  | "backward"
-  | { index: number };
+  "front" | "back" | "forward" | "backward" | { index: number };
 
 /** v59 (Arrange) — **the z-order door**: restack an element within the
  *  sibling list it already belongs to. Nothing on the wire could change
@@ -305,7 +334,10 @@ export type ZOrderTarget =
  *  existing source elements byte-for-byte and only places new ones, so a
  *  reorder reverts on an export/reopen round trip. Do not present
  *  Arrange as durable across IDML interchange yet. */
-export type ReorderElementMutation = Extract<Mutation, { op: "reorderElement" }>;
+export type ReorderElementMutation = Extract<
+  Mutation,
+  { op: "reorderElement" }
+>;
 
 /** The protocol-ahead ops, as one union.
  *

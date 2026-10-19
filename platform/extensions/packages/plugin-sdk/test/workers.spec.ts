@@ -92,7 +92,10 @@ function makeMockWorkerBackend() {
   return { backend, spawned };
 }
 
-function makeHost(workers: WorkersCapability | undefined, withBackend: boolean) {
+function makeHost(
+  workers: WorkersCapability | undefined,
+  withBackend: boolean,
+) {
   const mock = makeMockWorkerBackend();
   const handle = createBundleHost(
     () => ({}) as unknown as PagedEditor,

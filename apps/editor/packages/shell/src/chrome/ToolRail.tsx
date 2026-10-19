@@ -403,8 +403,7 @@ export function ToolRail({
     const ids = new Set<string>();
     if (!hostToolIds) return ids;
     for (const ctx of contextRegistry.list())
-      for (const id of ctx.toolIds ?? [])
-        if (!hostToolIds.has(id)) ids.add(id);
+      for (const id of ctx.toolIds ?? []) if (!hostToolIds.has(id)) ids.add(id);
     return ids;
     // `version` bumps when a bundle registers or drops a context.
   }, [hostToolIds, contextRegistry, version]);
@@ -443,41 +442,41 @@ export function ToolRail({
        *  proof, screen mode) stays pinned below them, never scrolled
        *  out of reach. */}
       <div style={railToolsStyle} onScroll={tooltip.hide}>
-      {visibleClusters.map((c, i) => (
-        <div
-          key={c.cluster}
-          role="group"
-          aria-label={c.label}
-          data-tool-cluster={c.cluster}
-        >
-          {i > 0 && <div style={dividerStyle} aria-hidden />}
-          <div style={clusterStyle}>
-            {c.slots.map((slot) => (
-              <ToolSlot
-                key={slot.group}
-                slot={slot}
-                face={faceToolOf(slot)}
-                activeGroup={groupOf.get(effectiveTool)}
-                effectiveTool={effectiveTool}
-                restricted={restrictedTools}
-                onPick={pick}
-                onTearOff={tearOff}
-                onHint={(tool, anchor) =>
-                  tooltip.show({
-                    tool,
-                    cluster: clusterOf.get(slot.group),
-                    more: slot.members.filter(
-                      (m) => m.id !== tool.id && !isPlanned(m),
-                    ).length,
-                    anchor,
-                  })
-                }
-                onUnhint={tooltip.hide}
-              />
-            ))}
+        {visibleClusters.map((c, i) => (
+          <div
+            key={c.cluster}
+            role="group"
+            aria-label={c.label}
+            data-tool-cluster={c.cluster}
+          >
+            {i > 0 && <div style={dividerStyle} aria-hidden />}
+            <div style={clusterStyle}>
+              {c.slots.map((slot) => (
+                <ToolSlot
+                  key={slot.group}
+                  slot={slot}
+                  face={faceToolOf(slot)}
+                  activeGroup={groupOf.get(effectiveTool)}
+                  effectiveTool={effectiveTool}
+                  restricted={restrictedTools}
+                  onPick={pick}
+                  onTearOff={tearOff}
+                  onHint={(tool, anchor) =>
+                    tooltip.show({
+                      tool,
+                      cluster: clusterOf.get(slot.group),
+                      more: slot.members.filter(
+                        (m) => m.id !== tool.id && !isPlanned(m),
+                      ).length,
+                      anchor,
+                    })
+                  }
+                  onUnhint={tooltip.hide}
+                />
+              ))}
+            </div>
           </div>
-        </div>
-      ))}
+        ))}
       </div>
       {tooltip.node}
       {foot != null && (
@@ -554,7 +553,10 @@ function FloatingToolPalette({
       data-tool-palette={slot.group}
     >
       <div style={paletteGripStyle} onPointerDown={onGripDown}>
-        <span style={{ flex: 1, cursor: "grab", userSelect: "none" }} aria-hidden>
+        <span
+          style={{ flex: 1, cursor: "grab", userSelect: "none" }}
+          aria-hidden
+        >
           ⠿
         </span>
         <button
@@ -619,14 +621,16 @@ function ToolSlot({
   // Flyout is portalled to <body> so it escapes the rail's overflow
   // clip (overflow-y:auto forces overflow-x to compute as auto too).
   // Position is captured from the slot rect at open time.
-  const [flyoutPos, setFlyoutPos] = useState<{ left: number; top: number } | null>(
-    null,
-  );
+  const [flyoutPos, setFlyoutPos] = useState<{
+    left: number;
+    top: number;
+  } | null>(null);
   // Double-click tool-options popover (T8), same portal treatment.
   const [optionsOpen, setOptionsOpen] = useState(false);
-  const [optionsPos, setOptionsPos] = useState<{ left: number; top: number } | null>(
-    null,
-  );
+  const [optionsPos, setOptionsPos] = useState<{
+    left: number;
+    top: number;
+  } | null>(null);
   const longPressRef = useRef<number | null>(null);
   const openedByHold = useRef(false);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -821,50 +825,52 @@ function ToolSlot({
               </button>
             )}
             {slot.members.map((member) => {
-            const memberActive = member.id === effectiveTool;
-            const memberDimmed = restricted ? !restricted.has(member.id) : false;
-            const memberPlanned = isPlanned(member);
-            return (
-              <button
-                key={member.id}
-                type="button"
-                role="menuitem"
-                title={tooltipFor(member)}
-                data-tool={member.id}
-                data-tool-status={memberPlanned ? "planned" : undefined}
-                aria-disabled={memberPlanned ? true : undefined}
-                data-context-dimmed={memberDimmed ? "true" : undefined}
-              data-applies={applicabilityOf({
-                exists: true,
-                appliesHere: !memberDimmed,
-                id: member.id,
-              })}
-                onClick={() => {
-                  if (memberPlanned) return;
-                  setFlyoutOpen(false);
-                  onPick(member);
-                }}
-                style={{
-                  ...(memberActive
-                    ? { ...flyoutItemStyle, ...slotActiveStyle }
-                    : flyoutItemStyle),
-                  ...(memberDimmed ? { opacity: 0.35 } : null),
-                  ...(memberPlanned ? plannedStyle : null),
-                }}
-              >
-                <SlotGlyph tool={member} />
-                <span style={flyoutLabelStyle}>{member.title}</span>
-                {memberPlanned ? (
-                  <span style={flyoutShortcutStyle}>Coming soon</span>
-                ) : (
-                  member.shortcut && (
-                    <span style={flyoutShortcutStyle}>
-                      {formatShortcut(member.shortcut)}
-                    </span>
-                  )
-                )}
-              </button>
-            );
+              const memberActive = member.id === effectiveTool;
+              const memberDimmed = restricted
+                ? !restricted.has(member.id)
+                : false;
+              const memberPlanned = isPlanned(member);
+              return (
+                <button
+                  key={member.id}
+                  type="button"
+                  role="menuitem"
+                  title={tooltipFor(member)}
+                  data-tool={member.id}
+                  data-tool-status={memberPlanned ? "planned" : undefined}
+                  aria-disabled={memberPlanned ? true : undefined}
+                  data-context-dimmed={memberDimmed ? "true" : undefined}
+                  data-applies={applicabilityOf({
+                    exists: true,
+                    appliesHere: !memberDimmed,
+                    id: member.id,
+                  })}
+                  onClick={() => {
+                    if (memberPlanned) return;
+                    setFlyoutOpen(false);
+                    onPick(member);
+                  }}
+                  style={{
+                    ...(memberActive
+                      ? { ...flyoutItemStyle, ...slotActiveStyle }
+                      : flyoutItemStyle),
+                    ...(memberDimmed ? { opacity: 0.35 } : null),
+                    ...(memberPlanned ? plannedStyle : null),
+                  }}
+                >
+                  <SlotGlyph tool={member} />
+                  <span style={flyoutLabelStyle}>{member.title}</span>
+                  {memberPlanned ? (
+                    <span style={flyoutShortcutStyle}>Coming soon</span>
+                  ) : (
+                    member.shortcut && (
+                      <span style={flyoutShortcutStyle}>
+                        {formatShortcut(member.shortcut)}
+                      </span>
+                    )
+                  )}
+                </button>
+              );
             })}
           </div>,
           document.body,
@@ -955,14 +961,17 @@ function useRailTooltip() {
 
   const hide = useCallback(() => {
     clear();
-    if (visible.current) warmUntil.current = performance.now() + TOOLTIP_WARM_MS;
+    if (visible.current)
+      warmUntil.current = performance.now() + TOOLTIP_WARM_MS;
     visible.current = false;
     setHint(null);
   }, []);
 
   useEffect(() => clear, []);
 
-  const node = hint ? createPortal(<RailTooltip hint={hint} />, document.body) : null;
+  const node = hint
+    ? createPortal(<RailTooltip hint={hint} />, document.body)
+    : null;
   return { show, hide, node };
 }
 
@@ -989,7 +998,9 @@ function RailTooltip({ hint }: { hint: RailHint }) {
       {planned ? (
         <div style={tooltipBodyStyle}>Coming soon</div>
       ) : (
-        tool.description && <div style={tooltipBodyStyle}>{tool.description}</div>
+        tool.description && (
+          <div style={tooltipBodyStyle}>{tool.description}</div>
+        )
       )}
       {more > 0 && (
         <div style={tooltipMoreStyle}>
@@ -1004,7 +1015,10 @@ function RailTooltip({ hint }: { hint: RailHint }) {
 function SlotGlyph({ tool }: { tool: ToolContribution }) {
   if (hasIcon(tool.icon)) return <Icon name={tool.icon} size={18} />;
   const letter = tool.shortcut
-    ? tool.shortcut.replace(/^shift\+/, "").slice(0, 1).toUpperCase()
+    ? tool.shortcut
+        .replace(/^shift\+/, "")
+        .slice(0, 1)
+        .toUpperCase()
     : tool.title.slice(0, 1).toUpperCase();
   return <span style={{ fontSize: 12, fontWeight: 600 }}>{letter}</span>;
 }
@@ -1014,11 +1028,7 @@ function formatShortcut(s: string): string {
   return s
     .split("+")
     .map((part) =>
-      part === "shift"
-        ? "⇧"
-        : part.length === 1
-          ? part.toUpperCase()
-          : part,
+      part === "shift" ? "⇧" : part.length === 1 ? part.toUpperCase() : part,
     )
     .join("");
 }

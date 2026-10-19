@@ -39,7 +39,8 @@ export function createDraftStore(): DraftStore {
   return {
     get: (key) => drafts.get(key),
     track(key, draft, persisted) {
-      if (JSON.stringify(draft) === JSON.stringify(persisted)) drafts.delete(key);
+      if (JSON.stringify(draft) === JSON.stringify(persisted))
+        drafts.delete(key);
       else drafts.set(key, draft);
     },
   };
@@ -59,7 +60,8 @@ interface History {
   lastAt: number;
 }
 
-const same = (a: WebFrameSource, b: WebFrameSource) => JSON.stringify(a) === JSON.stringify(b);
+const same = (a: WebFrameSource, b: WebFrameSource) =>
+  JSON.stringify(a) === JSON.stringify(b);
 
 /** The panel's drafts plus their undo history, shared by the panel and the
  *  web frame's edit context: while the context is active the host routes
@@ -78,7 +80,9 @@ export interface DraftSession {
   onApply(listener: (key: string, draft: WebFrameSource) => void): () => void;
 }
 
-export function createDraftSession(opts: { now?: () => number } = {}): DraftSession {
+export function createDraftSession(
+  opts: { now?: () => number } = {},
+): DraftSession {
   const now = opts.now ?? (() => Date.now());
   const histories = new Map<string, History>();
   const listeners = new Set<(key: string, draft: WebFrameSource) => void>();

@@ -235,7 +235,11 @@ function boundaryIndex(bounds: number[], at: number): number | null {
 
 /** Table positions whose `[bounds[i], bounds[i+1]]` extent overlaps
  *  `[from, to]` by more than RULE_EPS. */
-function coveredPositions(bounds: number[], from: number, to: number): number[] {
+function coveredPositions(
+  bounds: number[],
+  from: number,
+  to: number,
+): number[] {
   const out: number[] = [];
   for (let i = 0; i + 1 < bounds.length; i++) {
     const overlap = Math.min(bounds[i + 1], to) - Math.max(bounds[i], from);
@@ -285,8 +289,16 @@ export function cellFillSwatchOps(
   // Wave 6: border colours are cell decor too — their swatches mint in the
   // same pass (a `cell*EdgeStrokeColor` names one).
   return [
-    ...swatchMintOps("cellFill", distinctCellFillHexes(content), knownSwatchIds),
-    ...swatchMintOps("cellStroke", distinctCellStrokeHexes(content), knownSwatchIds),
+    ...swatchMintOps(
+      "cellFill",
+      distinctCellFillHexes(content),
+      knownSwatchIds,
+    ),
+    ...swatchMintOps(
+      "cellStroke",
+      distinctCellStrokeHexes(content),
+      knownSwatchIds,
+    ),
   ];
 }
 
@@ -339,8 +351,16 @@ export function tableDecorOps(
   // (2 + 3) Fills and edges. Edge ops dedupe per (row, col, edge): grid
   // rules first, style borders overwrite (same weight — pure dedupe).
   const edges = new Map<string, Mutation>();
-  const putEdge = (row: number, col: number, path: PropertyPath, weight?: number) => {
-    edges.set(`${row}:${col}:${path}`, edgeOp(storyId, tableId, row, col, path, weight));
+  const putEdge = (
+    row: number,
+    col: number,
+    path: PropertyPath,
+    weight?: number,
+  ) => {
+    edges.set(
+      `${row}:${col}:${path}`,
+      edgeOp(storyId, tableId, row, col, path, weight),
+    );
   };
   const cellProps: Mutation[] = [];
 
@@ -392,7 +412,8 @@ export function tableDecorOps(
       // same either way, and a table of them carries no per-cell op).
       const vj = style?.vAlign
         ? V_JUSTIFICATION[style.vAlign]
-        : cell.text.length > 0 && row.heightPt > 1.5 * lineHeightPt(style?.fontSizePt)
+        : cell.text.length > 0 &&
+            row.heightPt > 1.5 * lineHeightPt(style?.fontSizePt)
           ? "BottomAlign"
           : undefined;
       if (vj) {
@@ -442,7 +463,10 @@ export function tableDecorOps(
             args: {
               elementId: cellId(storyId, tableId, r, c),
               path: colorPath,
-              value: { type: "colorRef", value: paletteSwatchId("cellStroke", hex) },
+              value: {
+                type: "colorRef",
+                value: paletteSwatchId("cellStroke", hex),
+              },
             },
           });
         }

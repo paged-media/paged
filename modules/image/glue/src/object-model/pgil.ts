@@ -103,7 +103,9 @@ class Reader {
   str = () => {
     const n = this.u32();
     const at = this.need(n);
-    return new TextDecoder("utf-8", { fatal: true }).decode(this.b.subarray(at, at + n));
+    return new TextDecoder("utf-8", { fatal: true }).decode(
+      this.b.subarray(at, at + n),
+    );
   };
   bytes = (n: number) => {
     const at = this.need(n);
@@ -123,7 +125,10 @@ class Writer {
   u8 = (v: number) => this.chunks.push(v & 0xff);
   u32 = (v: number) => (this.scratch.setUint32(0, v, true), this.push(4));
   i32 = (v: number) => (this.scratch.setInt32(0, v, true), this.push(4));
-  i64 = (v: number) => (this.scratch.setBigInt64(0, BigInt(v), true), this.push(8));
+  i64 = (v: number) => (
+    this.scratch.setBigInt64(0, BigInt(v), true),
+    this.push(8)
+  );
   f32 = (v: number) => (this.scratch.setFloat32(0, v, true), this.push(4));
   str = (s: string) => {
     const b = new TextEncoder().encode(s);
@@ -135,12 +140,18 @@ class Writer {
 
 /** Decode a manifest and resolve its slots against `buffers`. Throws a
  *  reason (never a half-read stack). */
-export function readPgil(manifest: Uint8Array, buffers: readonly Uint8Array[]): PgilStack {
+export function readPgil(
+  manifest: Uint8Array,
+  buffers: readonly Uint8Array[],
+): PgilStack {
   const r = new Reader(manifest);
-  for (const m of MAGIC) if (r.u8() !== m) throw new Error("not a layer manifest");
+  for (const m of MAGIC)
+    if (r.u8() !== m) throw new Error("not a layer manifest");
   const version = r.u32();
   if (version < 1 || version > PGIL_VERSION) {
-    throw new Error(`layer manifest version ${version} (this reader reads 1–${PGIL_VERSION})`);
+    throw new Error(
+      `layer manifest version ${version} (this reader reads 1–${PGIL_VERSION})`,
+    );
   }
   const width = r.u32();
   const height = r.u32();
@@ -168,7 +179,17 @@ export function readPgil(manifest: Uint8Array, buffers: readonly Uint8Array[]): 
       const slot = opt(r.i64());
       mask = slot === null ? null : buf(slot);
     }
-    groups.push({ id, name, visible, opacity, blend, passThrough, parent, maskEnabled, mask });
+    groups.push({
+      id,
+      name,
+      visible,
+      opacity,
+      blend,
+      passThrough,
+      parent,
+      maskEnabled,
+      mask,
+    });
   }
   const layers: PgilLayer[] = [];
   for (let n = r.u32(), i = 0; i < n; i++) {
@@ -183,19 +204,27 @@ export function readPgil(manifest: Uint8Array, buffers: readonly Uint8Array[]): 
     const maskEnabled = r.u8() !== 0;
     const kindCode = r.u8();
     const depth = r.u8();
-    if (depth !== 8 && depth !== 16) throw new Error(`layer manifest: depth ${depth}`);
+    if (depth !== 8 && depth !== 16)
+      throw new Error(`layer manifest: depth ${depth}`);
     const pixels = buf(r.u32());
     let rect: PgilRect | null = null;
     let blendGamma = 0;
     if (version >= 3) {
-      const x = r.i32(), y = r.i32(), w = r.u32(), h = r.u32();
+      const x = r.i32(),
+        y = r.i32(),
+        w = r.u32(),
+        h = r.u32();
       rect = x >= 0 ? { x, y, w, h } : null;
       blendGamma = r.f32();
     }
     const maskSlot = opt(r.i64());
     let maskRect: PgilLayer["maskRect"] = null;
     if (version >= 3) {
-      const x = r.i32(), y = r.i32(), w = r.u32(), h = r.u32(), outside = r.u8();
+      const x = r.i32(),
+        y = r.i32(),
+        w = r.u32(),
+        h = r.u32(),
+        outside = r.u8();
       maskRect = x >= 0 ? { x, y, w, h, outside } : null;
     }
     const mask = maskSlot === null ? null : buf(maskSlot);
@@ -210,12 +239,30 @@ export function readPgil(manifest: Uint8Array, buffers: readonly Uint8Array[]): 
       for (let k = 0; k < count; k++) adjust[k] = r.f32();
     } else if (kindCode === 2) {
       kind = "smart";
-      const sw = r.u32(), sh = r.u32(), scale = r.f32();
+      const sw = r.u32(),
+        sh = r.u32(),
+        scale = r.f32();
       smart = { width: sw, height: sh, scale, source: buf(r.u32()) };
     } else throw new Error(`layer manifest: layer kind ${kindCode}`);
     layers.push({
-      id, name, visible, locked, opacity, blend, clipped, group, maskEnabled, kind,
-      depth, pixels, rect, blendGamma, mask, maskRect, adjust, smart,
+      id,
+      name,
+      visible,
+      locked,
+      opacity,
+      blend,
+      clipped,
+      group,
+      maskEnabled,
+      kind,
+      depth,
+      pixels,
+      rect,
+      blendGamma,
+      mask,
+      maskRect,
+      adjust,
+      smart,
     });
   }
   return { version, width, height, active, nextId, groups, layers };
@@ -319,7 +366,11 @@ export function clonePgil(s: PgilStack): PgilStack {
 
 /** The engine's one-layer stack over an image (`LayerStack::from_image`):
  *  layer id 1, "Background", next id 2. */
-export function stackFromImage(width: number, height: number, rgba: Uint8Array): PgilStack {
+export function stackFromImage(
+  width: number,
+  height: number,
+  rgba: Uint8Array,
+): PgilStack {
   return {
     version: PGIL_VERSION,
     width,
@@ -329,10 +380,24 @@ export function stackFromImage(width: number, height: number, rgba: Uint8Array):
     groups: [],
     layers: [
       {
-        id: 1, name: "Background", visible: true, locked: false, opacity: 1,
-        blend: "compose.normal", clipped: false, group: null, maskEnabled: true,
-        kind: "pixels", depth: 8, pixels: rgba, rect: null, blendGamma: 0,
-        mask: null, maskRect: null, adjust: null, smart: null,
+        id: 1,
+        name: "Background",
+        visible: true,
+        locked: false,
+        opacity: 1,
+        blend: "compose.normal",
+        clipped: false,
+        group: null,
+        maskEnabled: true,
+        kind: "pixels",
+        depth: 8,
+        pixels: rgba,
+        rect: null,
+        blendGamma: 0,
+        mask: null,
+        maskRect: null,
+        adjust: null,
+        smart: null,
       },
     ],
   };

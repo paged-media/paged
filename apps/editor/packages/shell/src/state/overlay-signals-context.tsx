@@ -27,11 +27,7 @@ import {
   type PropsWithChildren,
 } from "react";
 
-import type {
-  HitResult,
-  PageId,
-  SnapLine,
-} from "@paged-media/client";
+import type { HitResult, PageId, SnapLine } from "@paged-media/client";
 
 /**
  * Result of a click hit-test, kept for the overlay's click-marker

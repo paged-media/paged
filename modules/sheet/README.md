@@ -37,19 +37,19 @@ already-computed output into committed host mutations.
 
 ## Packages
 
-| Package | Contents |
-|---|---|
-| `sheet-core` | frozen types: `CellValue`, `CellRef`/`RangeRef`, `SheetModel`, the canonical AST, interners; registry codegen (name→id) |
-| `sheet-parser` | Excel-dialect formula lexer + Pratt parser → canonical AST; printer; reference extraction; structural rewrite |
-| `sheet-calc` | dependency graph, dirty propagation, topological recalc, cycle detection, volatility, deterministic RNG |
-| `sheet-fn` | registry-driven function dispatch; pure `fn(&[Arg], &EvalCtx) -> CellValue` kernels; coercion machinery |
-| `sheet-format` | ECMA-376 number-format engine (T0 core), General semantics, 1900/1904 date serials (leap-bug ruling) |
-| `sheet-xlsx` | OPC/zip + SpreadsheetML parse, preservation model, writer — zero-edit round-trip byte-identical |
-| `sheet-lower` | pure range → `LoweredContent` IR (formatted text, widths, rules) for the page surface |
-| `sheet-js` | wasm-bindgen surface consumed by the bundle (`SheetHandle`: load/save xlsx, set_cell, get_range_lowered, …) |
-| `sheet-conformance` | TEST-ONLY: golden corpora, property tests, the Excel differential oracle (recorded Excel values), the coverage gate |
-| `@paged-media/sheet-host-model` | pure TS: `LoweredContent` → `Mutation[]` translation (no spreadsheet semantics) |
-| `@paged-media/sheet-bundle` | manifest (`media.paged.sheet`) + `activate(host)` + workbook panel + engine boot |
+| Package                         | Contents                                                                                                                |
+| ------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `sheet-core`                    | frozen types: `CellValue`, `CellRef`/`RangeRef`, `SheetModel`, the canonical AST, interners; registry codegen (name→id) |
+| `sheet-parser`                  | Excel-dialect formula lexer + Pratt parser → canonical AST; printer; reference extraction; structural rewrite           |
+| `sheet-calc`                    | dependency graph, dirty propagation, topological recalc, cycle detection, volatility, deterministic RNG                 |
+| `sheet-fn`                      | registry-driven function dispatch; pure `fn(&[Arg], &EvalCtx) -> CellValue` kernels; coercion machinery                 |
+| `sheet-format`                  | ECMA-376 number-format engine (T0 core), General semantics, 1900/1904 date serials (leap-bug ruling)                    |
+| `sheet-xlsx`                    | OPC/zip + SpreadsheetML parse, preservation model, writer — zero-edit round-trip byte-identical                         |
+| `sheet-lower`                   | pure range → `LoweredContent` IR (formatted text, widths, rules) for the page surface                                   |
+| `sheet-js`                      | wasm-bindgen surface consumed by the bundle (`SheetHandle`: load/save xlsx, set_cell, get_range_lowered, …)             |
+| `sheet-conformance`             | TEST-ONLY: golden corpora, property tests, the Excel differential oracle (recorded Excel values), the coverage gate     |
+| `@paged-media/sheet-host-model` | pure TS: `LoweredContent` → `Mutation[]` translation (no spreadsheet semantics)                                         |
+| `@paged-media/sheet-bundle`     | manifest (`media.paged.sheet`) + `activate(host)` + workbook panel + engine boot                                        |
 
 ## Setup
 
@@ -108,7 +108,7 @@ All four milestones are implemented; the registry coverage gate is at
 **Honest deferrals** (registry `planned`, SDK/spec-gated, never faked):
 in-frame sheets mode (S-01/S-02 SDK surface), conditional-formatting
 data-bar drawn geometry, the "new style from selection" document-style
-group (S-04), and full external-reference *evaluation* (needs a frozen-AST
+group (S-04), and full external-reference _evaluation_ (needs a frozen-AST
 amendment). The interim panel grid stands in for in-frame sheets mode;
 page lowering is native-table (S-03 resolved; the tab-text degradation
 is the retained fallback lane). SDK gaps are tracked in the cross-repo

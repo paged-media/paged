@@ -72,7 +72,10 @@ const tf: fc.Arbitrary<Tf> = fc.oneof(
     deg: turnDeg,
     about: fc.option(smallVec2 as fc.Arbitrary<Vec2>, { nil: null }),
   }),
-  fc.record({ fn: fc.constantFrom("skewX" as const, "skewY" as const), deg: tiltDeg }),
+  fc.record({
+    fn: fc.constantFrom("skewX" as const, "skewY" as const),
+    deg: tiltDeg,
+  }),
   fc.record({
     fn: fc.constant("matrix" as const),
     m: fc.tuple(tiny, tiny, tiny, tiny, tiny, tiny),
@@ -134,14 +137,13 @@ const applyList = (list: readonly Tf[], p: Vec2): Vec2 =>
 const colour = fc.oneof(
   fc.constantFrom("red", "#ff8000", "#abc", "rgb(1, 2, 3)", "black"),
   fc
-    .array(fc.constantFrom(..."0123456789abcdef"), { minLength: 6, maxLength: 6 })
+    .array(fc.constantFrom(..."0123456789abcdef"), {
+      minLength: 6,
+      maxLength: 6,
+    })
     .map((d) => `#${d.join("")}`),
 );
-const paint = fc.oneof(
-  fc.constant(undefined),
-  fc.constant(null),
-  colour,
-);
+const paint = fc.oneof(fc.constant(undefined), fc.constant(null), colour);
 
 const style: fc.Arbitrary<SvgStyle> = fc
   .record({
@@ -151,7 +153,11 @@ const style: fc.Arbitrary<SvgStyle> = fc
       fc.integer({ min: 0, max: 400 }).map((n) => n / 8),
       { nil: undefined },
     ),
-    fillRule: fc.constantFrom(undefined, "nonzero" as const, "evenodd" as const),
+    fillRule: fc.constantFrom(
+      undefined,
+      "nonzero" as const,
+      "evenodd" as const,
+    ),
   })
   .map((s) => {
     // Drop the keys that are `undefined`, the way the reader reports a
@@ -164,15 +170,27 @@ const style: fc.Arbitrary<SvgStyle> = fc
     return out;
   });
 
-const shape: fc.Arbitrary<DrawShape> = fc.record({ anchors: canonicalTable, style });
+const shape: fc.Arbitrary<DrawShape> = fc.record({
+  anchors: canonicalTable,
+  style,
+});
 
 describe("svg-doc — parseTransform (properties)", () => {
   it("each function does to a point what the SVG definition says", () => {
     fc.assert(
-      fc.property(tf, smallVec2, fc.constantFrom(" ", ",", ", ", "  "), (t, p, sep) => {
-        const m = parseTransform(renderTf(t, sep));
-        assertVecClose(applyAffine(m, p[0], p[1]), applyTf(t, p), 1e-9 * 1000);
-      }),
+      fc.property(
+        tf,
+        smallVec2,
+        fc.constantFrom(" ", ",", ", ", "  "),
+        (t, p, sep) => {
+          const m = parseTransform(renderTf(t, sep));
+          assertVecClose(
+            applyAffine(m, p[0], p[1]),
+            applyTf(t, p),
+            1e-9 * 1000,
+          );
+        },
+      ),
     );
   });
 
@@ -183,9 +201,15 @@ describe("svg-doc — parseTransform (properties)", () => {
         smallVec2,
         fc.constantFrom(" ", "", ", ", "\n"),
         (list, p, between) => {
-          const m = parseTransform(list.map((t) => renderTf(t, " ")).join(between));
+          const m = parseTransform(
+            list.map((t) => renderTf(t, " ")).join(between),
+          );
           const expected = applyList(list, p);
-          const size = Math.max(1, Math.abs(expected[0]), Math.abs(expected[1]));
+          const size = Math.max(
+            1,
+            Math.abs(expected[0]),
+            Math.abs(expected[1]),
+          );
           assertVecClose(applyAffine(m, p[0], p[1]), expected, 1e-6 * size);
         },
       ),
@@ -204,7 +228,14 @@ describe("svg-doc — parseTransform (properties)", () => {
   it("nothing recognisable is the identity", () => {
     fc.assert(
       fc.property(
-        fc.constantFrom("", "   ", "none", "frobnicate(1 2 3)", "matrix(1 2 3)", "42"),
+        fc.constantFrom(
+          "",
+          "   ",
+          "none",
+          "frobnicate(1 2 3)",
+          "matrix(1 2 3)",
+          "42",
+        ),
         smallVec2,
         (text, p) => {
           assertVecClose(applyAffine(parseTransform(text), p[0], p[1]), p, 0);
@@ -246,7 +277,9 @@ describe("svg-doc — parseTransform (properties)", () => {
   });
 
   it("FIXED DEFECT (minimal counterexample): a polygon's points may be separated by a sign alone", () => {
-    const doc = parseSvgDocument('<svg><polygon points="0,0 10-5 20,0"/></svg>');
+    const doc = parseSvgDocument(
+      '<svg><polygon points="0,0 10-5 20,0"/></svg>',
+    );
     expect(doc!.shapes[0].anchors.anchors.map((a) => a.anchor)).toEqual([
       [0, 0],
       [10, -5],
@@ -267,10 +300,15 @@ describe("svg-doc — parseTransform (properties)", () => {
   it("FIXED DEFECT: property — a matrix written in the tightest legal form is the spaced matrix", () => {
     // Every separator a minifier may drop: none before a sign, none
     // before a dot-led number that follows one with a fraction.
-    const num = fc.oneof(tiny, fc.integer({ min: -99, max: 99 }).map((n) => n / 10));
+    const num = fc.oneof(
+      tiny,
+      fc.integer({ min: -99, max: 99 }).map((n) => n / 10),
+    );
     const compact = (n: number): string => {
       const text = String(n);
-      return text.startsWith("0.") ? text.slice(1) : text.replace(/^-0\./, "-.");
+      return text.startsWith("0.")
+        ? text.slice(1)
+        : text.replace(/^-0\./, "-.");
     };
     fc.assert(
       fc.property(fc.tuple(num, num, num, num, num, num), (m) => {
@@ -279,7 +317,9 @@ describe("svg-doc — parseTransform (properties)", () => {
           const right = compact(n);
           const left = i > 0 ? compact(m[i - 1]) : "";
           const fuses =
-            i > 0 && right[0] !== "-" && !(right[0] === "." && left.includes("."));
+            i > 0 &&
+            right[0] !== "-" &&
+            !(right[0] === "." && left.includes("."));
           tight += (fuses ? " " : "") + right;
         });
         expect(parseTransform(`matrix(${tight})`)).toEqual(
@@ -290,21 +330,27 @@ describe("svg-doc — parseTransform (properties)", () => {
   });
 
   it("FIXED DEFECT: a viewBox with negative origin needs no separators either", () => {
-    const doc = parseSvgDocument('<svg viewBox="-10-20 100 50"><path d="M0 0L1 1"/></svg>')!;
+    const doc = parseSvgDocument(
+      '<svg viewBox="-10-20 100 50"><path d="M0 0L1 1"/></svg>',
+    )!;
     expect(doc.viewBox).toEqual([-10, -20, 100, 50]);
   });
 
   it("what a number list ignored before, it still ignores", () => {
     // A unit suffix after a number is dropped; a piece that does not
     // start with a number is not a number, and drops out of `points`.
-    const doc = parseSvgDocument('<svg><polyline points="0,0 10px,5 x 20,0"/></svg>')!;
+    const doc = parseSvgDocument(
+      '<svg><polyline points="0,0 10px,5 x 20,0"/></svg>',
+    )!;
     expect(doc.shapes[0].anchors.anchors.map((a) => a.anchor)).toEqual([
       [0, 0],
       [10, 5],
       [20, 0],
     ]);
     // An exponent is part of its number, sign and all.
-    expect(parseTransform("translate(1e1-5e-1)")).toEqual([1, 0, 0, 1, 10, -0.5]);
+    expect(parseTransform("translate(1e1-5e-1)")).toEqual([
+      1, 0, 0, 1, 10, -0.5,
+    ]);
   });
 });
 
@@ -355,7 +401,9 @@ describe("svg-doc — write → read round trip (properties)", () => {
         fc.option(dim, { nil: undefined }),
         (shapes, width, height) => {
           const derived = parseSvgDocument(serializeSvgDocument(shapes))!;
-          const doc = parseSvgDocument(serializeSvgDocument(shapes, { width, height }))!;
+          const doc = parseSvgDocument(
+            serializeSvgDocument(shapes, { width, height }),
+          )!;
           const w = width ?? derived.width;
           const h = height ?? derived.height;
           expect([doc.width, doc.height]).toEqual([w, h]);
@@ -372,15 +420,36 @@ describe("svg-doc — write → read round trip (properties)", () => {
       .oneof(
         fc.string({ unit: "grapheme-ascii", minLength: 1, maxLength: 20 }),
         fc
-          .array(fc.constantFrom("&amp;", "&lt;", "&gt;", "&quot;", "&#38;", "&", "<", ">", '"', "'", "a", "#"), {
-            minLength: 1,
-            maxLength: 6,
-          })
+          .array(
+            fc.constantFrom(
+              "&amp;",
+              "&lt;",
+              "&gt;",
+              "&quot;",
+              "&#38;",
+              "&",
+              "<",
+              ">",
+              '"',
+              "'",
+              "a",
+              "#",
+            ),
+            {
+              minLength: 1,
+              maxLength: 6,
+            },
+          )
           .map((parts) => parts.join("")),
       )
       .filter((s) => {
         const t = s.trim().toLowerCase();
-        return t === s.toLowerCase() && t !== "" && t !== "none" && t !== "transparent";
+        return (
+          t === s.toLowerCase() &&
+          t !== "" &&
+          t !== "none" &&
+          t !== "transparent"
+        );
       });
     fc.assert(
       fc.property(canonicalTable, text, text, (anchors, fill, stroke) => {
@@ -398,20 +467,31 @@ describe("svg-doc — reading (properties)", () => {
   it("nested <g> transforms are flattened into the anchors, outermost applied last", () => {
     fc.assert(
       fc.property(
-        fc.array(fc.array(tf, { minLength: 1, maxLength: 2 }), { maxLength: 3 }),
+        fc.array(fc.array(tf, { minLength: 1, maxLength: 2 }), {
+          maxLength: 3,
+        }),
         fc.array(smallVec2, { minLength: 2, maxLength: 5 }),
         (groups, pts) => {
           const d = `M ${pts.map((p) => `${p[0]} ${p[1]}`).join(" L ")}`;
           const open = groups
-            .map((g) => `<g transform="${g.map((t) => renderTf(t, " ")).join(" ")}">`)
+            .map(
+              (g) =>
+                `<g transform="${g.map((t) => renderTf(t, " ")).join(" ")}">`,
+            )
             .join("");
           const close = groups.map(() => "</g>").join("");
-          const doc = parseSvgDocument(`<svg>${open}<path d="${d}"/>${close}</svg>`)!;
+          const doc = parseSvgDocument(
+            `<svg>${open}<path d="${d}"/>${close}</svg>`,
+          )!;
           expect(doc.shapes).toHaveLength(1);
           const all = groups.flat();
           doc.shapes[0].anchors.anchors.forEach((a, i) => {
             const expected = applyList(all, pts[i]);
-            const size = Math.max(1, Math.abs(expected[0]), Math.abs(expected[1]));
+            const size = Math.max(
+              1,
+              Math.abs(expected[0]),
+              Math.abs(expected[1]),
+            );
             assertVecClose(a.anchor, expected, 1e-6 * size, `anchor ${i}`);
           });
         },
@@ -419,7 +499,7 @@ describe("svg-doc — reading (properties)", () => {
     );
   });
 
-  it("style inherits down the tree; the nearest declaration wins; `style=\"\"` beats the attribute", () => {
+  it('style inherits down the tree; the nearest declaration wins; `style=""` beats the attribute', () => {
     fc.assert(
       fc.property(
         fc.option(colour, { nil: undefined }),
@@ -434,14 +514,19 @@ describe("svg-doc — reading (properties)", () => {
               `${onPathStyle === undefined ? "" : ` style="fill: ${onPathStyle}"`}/>` +
               `</g></svg>`,
           )!;
-          expect(doc.shapes[0].style.fill).toBe(onPathStyle ?? onPathAttr ?? onGroup);
+          expect(doc.shapes[0].style.fill).toBe(
+            onPathStyle ?? onPathAttr ?? onGroup,
+          );
         },
       ),
     );
   });
 
   it("a path, rect, circle or ellipse that lowers to no geometry yields no shape — never an empty one", () => {
-    const junk = fc.string({ unit: fc.constantFrom(..."xyz,; -"), maxLength: 8 });
+    const junk = fc.string({
+      unit: fc.constantFrom(..."xyz,; -"),
+      maxLength: 8,
+    });
     fc.assert(
       fc.property(junk, smallVec2, (d, p) => {
         const doc = parseSvgDocument(
@@ -482,7 +567,9 @@ describe("svg-doc — reading (properties)", () => {
   // the other four.
   // ------------------------------------------------------------------
   it("FIXED DEFECT (minimal counterexample): a one-point polygon is not a shape", () => {
-    expect(parseSvgDocument('<svg><polygon points="5,5"/></svg>')!.shapes).toEqual([]);
+    expect(
+      parseSvgDocument('<svg><polygon points="5,5"/></svg>')!.shapes,
+    ).toEqual([]);
   });
 
   it("FIXED DEFECT: a polyline with no points is not a shape", () => {
@@ -500,7 +587,10 @@ describe("svg-doc — reading (properties)", () => {
         if (!/<\s*([a-z]+:)?svg/i.test(text)) expect(doc).toBeNull();
         if (doc !== null) {
           for (const s of doc.shapes) {
-            assertTrue(s.anchors.anchors.length > 0, "an empty shape was emitted");
+            assertTrue(
+              s.anchors.anchors.length > 0,
+              "an empty shape was emitted",
+            );
           }
         }
       }),

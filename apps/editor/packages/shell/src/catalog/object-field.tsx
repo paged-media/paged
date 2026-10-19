@@ -183,7 +183,13 @@ export function useObjectBindings<K extends string>(
   return out;
 }
 
-export function Badges({ bound, inferred }: { bound: boolean; inferred: boolean }) {
+export function Badges({
+  bound,
+  inferred,
+}: {
+  bound: boolean;
+  inferred: boolean;
+}) {
   if (!bound && !inferred) return null;
   return (
     <span className="ml-1 inline-flex items-center gap-[3px] align-middle">
@@ -252,9 +258,11 @@ export function useBindToData(
     const address = field.addresses[0];
     if (!address) return;
     const typed = await model.objects.commands().catch(() => []);
-    const plain = BIND_PROPERTY_COMMAND_IDS.find((id) => commands.get(id)) ?? null;
+    const plain =
+      BIND_PROPERTY_COMMAND_IDS.find((id) => commands.get(id)) ?? null;
     const typedId =
-      BIND_PROPERTY_COMMAND_IDS.find((id) => typed.some((c) => c.id === id)) ?? null;
+      BIND_PROPERTY_COMMAND_IDS.find((id) => typed.some((c) => c.id === id)) ??
+      null;
     const command = plain ?? typedId;
     const depsFor = (element: ElementId | null) => ({
       objects: model.objects,
@@ -276,7 +284,11 @@ export function useBindToData(
     const target =
       (scope
         ? await scopedBindTarget(model.objects, address, scope, (host) =>
-            resolveBindTarget(depsFor(host.element as ElementId | null), host.address, { write: command !== null }),
+            resolveBindTarget(
+              depsFor(host.element as ElementId | null),
+              host.address,
+              { write: command !== null },
+            ),
           )
         : null) ??
       (
@@ -305,7 +317,13 @@ export function useBindToData(
   return { open, notice, close: () => setNotice(null) };
 }
 
-export function BindNoticeDialog({ notice, onClose }: { notice: BindNotice | null; onClose: () => void }) {
+export function BindNoticeDialog({
+  notice,
+  onClose,
+}: {
+  notice: BindNotice | null;
+  onClose: () => void;
+}) {
   return (
     <Dialog open={notice !== null} onOpenChange={(o) => !o && onClose()}>
       <DialogContent data-bind-to-data="" className="max-w-md">
@@ -320,7 +338,10 @@ export function BindNoticeDialog({ notice, onClose }: { notice: BindNotice | nul
         {notice && (
           <dl className="grid grid-cols-[72px_1fr] gap-x-2 gap-y-1 text-xs">
             <dt style={{ color: "var(--pg-muted-fg)" }}>Target</dt>
-            <dd className="font-mono break-all" data-bind-selector={notice.selector}>
+            <dd
+              className="font-mono break-all"
+              data-bind-selector={notice.selector}
+            >
               {notice.selector}
             </dd>
             <dt style={{ color: "var(--pg-muted-fg)" }}>Property</dt>
@@ -391,11 +412,13 @@ export function FieldMenu({
   );
 }
 
-
 // ------------------------------------------------- the frame
 
 /** Can this field offer "Bind to data…"? */
-export function canBindField(field: ObjectProperty, bindable?: boolean): boolean {
+export function canBindField(
+  field: ObjectProperty,
+  bindable?: boolean,
+): boolean {
   const row = field.row;
   return (
     (bindable ?? true) &&
@@ -469,7 +492,11 @@ export function ObjectFieldFrame({
         </div>
       ) : null}
       {menu && (
-        <FieldMenu at={menu} onBind={() => void bind.open()} onClose={() => setMenu(null)} />
+        <FieldMenu
+          at={menu}
+          onBind={() => void bind.open()}
+          onClose={() => setMenu(null)}
+        />
       )}
       <BindNoticeDialog notice={bind.notice} onClose={bind.close} />
     </div>

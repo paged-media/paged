@@ -27,13 +27,13 @@ packages/draw-bundle/test/
 Recorded with **Adobe Illustrator 30.1.0** (build 136R, de_DE, macOS
 26.4) on 2026-10-02. Each fixture's `produced_by` is the authority.
 
-| Probe | Cases | What Illustrator said |
-|---|---|---|
-| `offset-path` | 17 | Exactly the closed-form miter / bevel / inward geometry. Miter limit is the stroke rule (mitered while `1/sin(angle/2) <= limit`, bevelled past it). Round joins are cubic arcs, one per 90 degrees or less, so areas bulge by about +0.001 %. Every result is clockwise whatever the input. |
-| `outline-stroke` | 11 | Exactly the stroke's closed form for all nine cap × join pairs, same miter-limit rule. One SIMPLE clockwise outline that does not overlap itself. |
-| `pathfinder-boolean` | 8 | The set operation, exactly on rectangles and within 0.1 pt² on a circle. Subtract is back minus front. Exclude is two separate paths, not a compound path. Every result is COUNTER-clockwise — the opposite of the two probes above. |
-| `pathfinder-region` | 9 | Divide: one piece per face, the overlap in the FRONT fill. Trim: front whole (with the crossing points inserted), back minus front. Merge: Trim, unless the fills are equal. Crop: back clipped to front, in the BACK fill. Outline: open zero-weight strokes cut at the crossings. Minus Back: FRONT minus back. |
-| `compound-path` | 9 | Make Compound Path keeps the fill rule NON-ZERO and rewrites direction by PAINT ORDER: the backmost path clockwise, every other counter-clockwise, whatever the inputs were. So overlaps are knocked out, and a shape nested three levels deep is solid again (31600, where even-odd would give 31200). |
+| Probe                | Cases | What Illustrator said                                                                                                                                                                                                                                                                                             |
+| -------------------- | ----- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `offset-path`        | 17    | Exactly the closed-form miter / bevel / inward geometry. Miter limit is the stroke rule (mitered while `1/sin(angle/2) <= limit`, bevelled past it). Round joins are cubic arcs, one per 90 degrees or less, so areas bulge by about +0.001 %. Every result is clockwise whatever the input.                      |
+| `outline-stroke`     | 11    | Exactly the stroke's closed form for all nine cap × join pairs, same miter-limit rule. One SIMPLE clockwise outline that does not overlap itself.                                                                                                                                                                 |
+| `pathfinder-boolean` | 8     | The set operation, exactly on rectangles and within 0.1 pt² on a circle. Subtract is back minus front. Exclude is two separate paths, not a compound path. Every result is COUNTER-clockwise — the opposite of the two probes above.                                                                              |
+| `pathfinder-region`  | 9     | Divide: one piece per face, the overlap in the FRONT fill. Trim: front whole (with the crossing points inserted), back minus front. Merge: Trim, unless the fills are equal. Crop: back clipped to front, in the BACK fill. Outline: open zero-weight strokes cut at the crossings. Minus Back: FRONT minus back. |
+| `compound-path`      | 9     | Make Compound Path keeps the fill rule NON-ZERO and rewrites direction by PAINT ORDER: the backmost path clockwise, every other counter-clockwise, whatever the inputs were. So overlaps are knocked out, and a shape nested three levels deep is solid again (31600, where even-odd would give 31200).           |
 
 Each fixture's `script_sha256` identifies the exact text (library + probe)
 that produced it. The library has grown since the first recording (stroke,
@@ -51,9 +51,9 @@ bash scripts/illustrator/run-probe.sh \
 ```
 
 The first run from a new terminal or IDE raises a macOS consent prompt
-(*„<your terminal>“ möchte Zugriffsrechte, um „Adobe Illustrator“ zu
-steuern* / *wants access to control Adobe Illustrator*). Answer
-*Erlauben* / *Allow* while the runner waits — `PAGED_PROBE_PING_TIMEOUT=300`
+(_„<your terminal>“ möchte Zugriffsrechte, um „Adobe Illustrator“ zu
+steuern_ / _wants access to control Adobe Illustrator_). Answer
+_Erlauben_ / _Allow_ while the runner waits — `PAGED_PROBE_PING_TIMEOUT=300`
 gives you five minutes instead of one.
 
 Re-record **one probe at a time** and read the diff: a fixture is baked
@@ -82,13 +82,13 @@ header of the spec that pins it.
 
 ## How Illustrator is asked
 
-| Operation | Mechanism | Confirmed by |
-|---|---|---|
-| Offset path | `PageItem.applyEffect('<LiveEffect name="Adobe Offset Path"><Dict data="R mlim 4 R ofst 10 I jntp 2 "/></LiveEffect>')` then `app.executeMenuCommand("expandStyle")` | Recorded. `jntp` is 0 round / 1 bevel / 2 miter (in no dictionary; settled by the recording). `expandStyle` leaves one plain path. |
-| Outline stroke | stroke set on the `PathItem` (`strokeWidth`, `strokeCap`, `strokeJoin`, `strokeMiterLimit`), then `app.executeMenuCommand("OffsetPath v22")` | Recorded. No dialog. The live effect `Adobe Outline Stroke` + `expandStyle` returns the identical path. |
-| Unite / Minus Front / Intersect / Exclude | group the inputs (`groupItems.add` + `move`), `app.executeMenuCommand("Live Pathfinder Add" \| "… Subtract" \| "… Intersect" \| "… Exclude")` on the group, then `expandStyle` | Recorded. No dialog (only Soft Mix and Trap have one). The Pathfinder PANEL's buttons have no script entry point; these are the same operations as Effect › Pathfinder. |
-| Divide / Trim / Merge / Crop / Outline / Minus Back | the same, with `"Live Pathfinder Divide"` … `"Live Pathfinder Minus Back"` | Recorded. No dialog. Inputs carry explicit fills (`fill: [r, g, b]`) because Merge, Divide and Crop answer in paint; every measured path records `filled`, `stroked`, `fill`, `stroke`, `strokeWidth`. |
-| Make Compound Path | all inputs selected, `app.executeMenuCommand("compoundPath")` | Recorded. No dialog. Make leaves the anchors where they were, so these cases set `allowUnchanged` and the probe checks instead that exactly one `CompoundPathItem` exists. Every subpath records `evenodd`. |
+| Operation                                           | Mechanism                                                                                                                                                                      | Confirmed by                                                                                                                                                                                                |
+| --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Offset path                                         | `PageItem.applyEffect('<LiveEffect name="Adobe Offset Path"><Dict data="R mlim 4 R ofst 10 I jntp 2 "/></LiveEffect>')` then `app.executeMenuCommand("expandStyle")`           | Recorded. `jntp` is 0 round / 1 bevel / 2 miter (in no dictionary; settled by the recording). `expandStyle` leaves one plain path.                                                                          |
+| Outline stroke                                      | stroke set on the `PathItem` (`strokeWidth`, `strokeCap`, `strokeJoin`, `strokeMiterLimit`), then `app.executeMenuCommand("OffsetPath v22")`                                   | Recorded. No dialog. The live effect `Adobe Outline Stroke` + `expandStyle` returns the identical path.                                                                                                     |
+| Unite / Minus Front / Intersect / Exclude           | group the inputs (`groupItems.add` + `move`), `app.executeMenuCommand("Live Pathfinder Add" \| "… Subtract" \| "… Intersect" \| "… Exclude")` on the group, then `expandStyle` | Recorded. No dialog (only Soft Mix and Trap have one). The Pathfinder PANEL's buttons have no script entry point; these are the same operations as Effect › Pathfinder.                                     |
+| Divide / Trim / Merge / Crop / Outline / Minus Back | the same, with `"Live Pathfinder Divide"` … `"Live Pathfinder Minus Back"`                                                                                                     | Recorded. No dialog. Inputs carry explicit fills (`fill: [r, g, b]`) because Merge, Divide and Crop answer in paint; every measured path records `filled`, `stroked`, `fill`, `stroke`, `strokeWidth`.      |
+| Make Compound Path                                  | all inputs selected, `app.executeMenuCommand("compoundPath")`                                                                                                                  | Recorded. No dialog. Make leaves the anchors where they were, so these cases set `allowUnchanged` and the probe checks instead that exactly one `CompoundPathItem` exists. Every subpath records `evenodd`. |
 
 The menu versions of Offset Path (Object › Path = `OffsetPath v23`, and
 Effect › Path = `Live Offset Path`) open a dialog that `executeMenuCommand`
@@ -96,15 +96,16 @@ cannot fill in, so they are unusable with alerts suppressed. Never guess
 at a menu command string: one that opens a dialog leaves it open.
 
 Where to look, since `sdef` needs full Xcode:
+
 - the AppleScript dictionary:
   `Adobe Illustrator.app/Contents/Resources/Adobe Illustrator.sdef`;
 - the ExtendScript object model: `/Library/Application Support/Adobe/
-  Scripting Dictionaries CC/Illustrator 2026/omv.xml`;
+Scripting Dictionaries CC/Illustrator 2026/omv.xml`;
 - which menu item a command string IS: the map in
   `Adobe Illustrator.app/Contents/Required/UXP/extensions/
-  com.adobe.unifiedpanel/js/143.js` (`"Object-Path-Outline_Stroke":
-  "OffsetPath v22"`). The keys of `Presets.localized/<locale>/
-  Tastaturbefehle/*.kys` list the strings but not what they do.
+com.adobe.unifiedpanel/js/143.js` (`"Object-Path-Outline_Stroke":
+"OffsetPath v22"`). The keys of `Presets.localized/<locale>/
+Tastaturbefehle/*.kys` list the strings but not what they do.
 
 ## Traps
 

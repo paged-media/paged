@@ -246,7 +246,7 @@ describe("the panel's Retouch section", () => {
     // leaving it would be a different kind of lie. What remains is the
     // real edge case: no boundary, no correction.
     const text = render();
-        expect(text).toContain("follows a ramp");
+    expect(text).toContain("follows a ramp");
     expect(text).toContain("falls back to a plain clone");
     expect(text).not.toContain("still shows a seam");
   });

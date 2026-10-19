@@ -35,11 +35,16 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     "itself: the cascade, live creation and deletion, nested styles, " +
     "numbered lists, and the rules and tab stops a paragraph can carry.";
 
-  const title = await proseFrame(ctx, p(27), [48, 140, 440, 470], [
-    { text: "4", style: STYLE.chapterNumber },
-    { text: "The Style", style: STYLE.chapterTitle },
-    { text: deck, style: STYLE.deck },
-  ]);
+  const title = await proseFrame(
+    ctx,
+    p(27),
+    [48, 140, 440, 470],
+    [
+      { text: "4", style: STYLE.chapterNumber },
+      { text: "The Style", style: STYLE.chapterTitle },
+      { text: deck, style: STYLE.deck },
+    ],
+  );
   elements.push(title.frameId);
 
   elements.push(

@@ -24,7 +24,9 @@ import { afterEach, describe, expect, it } from "bun:test";
 import { AUTHORING_GUIDE } from "../src";
 import { headlessEngine } from "./engine-fixture";
 
-const examples = [...AUTHORING_GUIDE.matchAll(/```js\n([\s\S]*?)```/g)].map((m) => m[1]!);
+const examples = [...AUTHORING_GUIDE.matchAll(/```js\n([\s\S]*?)```/g)].map(
+  (m) => m[1]!,
+);
 let dispose: (() => void) | null = null;
 afterEach(() => {
   dispose?.();
@@ -34,13 +36,22 @@ afterEach(() => {
 describe("authoring guide examples", () => {
   it("has examples", () => expect(examples.length).toBeGreaterThanOrEqual(2));
 
-  it.each(examples.map((src, i) => [i, src] as const))("example %i runs clean", async (_i, src) => {
-    const { engine, host } = await headlessEngine();
-    dispose = () => host.dispose();
-    const run = await engine.runScript(src);
-    expect(run.error).toBeNull();
-    expect(JSON.parse((await engine.runScript("console.log(paged.stories())")).output[0]!.replace(/^\[log\] /, ""))).toHaveLength(1);
-  });
+  it.each(examples.map((src, i) => [i, src] as const))(
+    "example %i runs clean",
+    async (_i, src) => {
+      const { engine, host } = await headlessEngine();
+      dispose = () => host.dispose();
+      const run = await engine.runScript(src);
+      expect(run.error).toBeNull();
+      expect(
+        JSON.parse(
+          (
+            await engine.runScript("console.log(paged.stories())")
+          ).output[0]!.replace(/^\[log\] /, ""),
+        ),
+      ).toHaveLength(1);
+    },
+  );
 });
 
 describe("authoring guide colours", () => {
@@ -49,20 +60,41 @@ describe("authoring guide colours", () => {
     dispose = () => host.dispose();
     const run = await engine.runScript(examples[1]!);
     expect(run.error).toBeNull();
-    const page = JSON.parse((await engine.runScript("console.log(paged.pages())")).output[0]!.replace(/^\[\w+\] /, ""))[0].selfId;
+    const page = JSON.parse(
+      (await engine.runScript("console.log(paged.pages())")).output[0]!.replace(
+        /^\[\w+\] /,
+        "",
+      ),
+    )[0].selfId;
     const shot = await host.host.render.snapshot(page, { widthPx: 200 });
     expect(shot).not.toBeNull();
     // The band runs across the top of the page: find a strongly red pixel there.
     const { inflateSync } = await import("node:zlib");
     const png = shot!.png;
     // Decode just enough of the PNG to read the first rows (8-bit RGB/RGBA, filter bytes).
-    let off = 8, width = 0, height = 0, channels = 4;
+    let off = 8,
+      width = 0,
+      height = 0,
+      channels = 4;
     const idat: Buffer[] = [];
     while (off < png.length) {
-      const len = (png[off]! << 24) | (png[off + 1]! << 16) | (png[off + 2]! << 8) | png[off + 3]!;
-      const type = String.fromCharCode(png[off + 4]!, png[off + 5]!, png[off + 6]!, png[off + 7]!);
+      const len =
+        (png[off]! << 24) |
+        (png[off + 1]! << 16) |
+        (png[off + 2]! << 8) |
+        png[off + 3]!;
+      const type = String.fromCharCode(
+        png[off + 4]!,
+        png[off + 5]!,
+        png[off + 6]!,
+        png[off + 7]!,
+      );
       const data = Buffer.from(png.subarray(off + 8, off + 8 + len));
-      if (type === "IHDR") { width = data.readUInt32BE(0); height = data.readUInt32BE(4); channels = data[9] === 2 ? 3 : 4; }
+      if (type === "IHDR") {
+        width = data.readUInt32BE(0);
+        height = data.readUInt32BE(4);
+        channels = data[9] === 2 ? 3 : 4;
+      }
       if (type === "IDAT") idat.push(data);
       off += 12 + len;
     }
@@ -79,8 +111,23 @@ describe("authoring guide colours", () => {
         const left = i >= channels ? out[i - channels]! : 0;
         const ul = i >= channels ? up[i - channels]! : 0;
         const p = left + up[i]! - ul;
-        const pa = Math.abs(p - left), pb = Math.abs(p - up[i]!), pc = Math.abs(p - ul);
-        const pred = f === 0 ? 0 : f === 1 ? left : f === 2 ? up[i]! : f === 3 ? (left + up[i]!) >> 1 : pa <= pb && pa <= pc ? left : pb <= pc ? up[i]! : ul;
+        const pa = Math.abs(p - left),
+          pb = Math.abs(p - up[i]!),
+          pc = Math.abs(p - ul);
+        const pred =
+          f === 0
+            ? 0
+            : f === 1
+              ? left
+              : f === 2
+                ? up[i]!
+                : f === 3
+                  ? (left + up[i]!) >> 1
+                  : pa <= pb && pa <= pc
+                    ? left
+                    : pb <= pc
+                      ? up[i]!
+                      : ul;
         out[i] = (src[i]! + pred) & 0xff;
       }
       rows.push(out);

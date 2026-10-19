@@ -4,15 +4,15 @@ June 2026. Concept paper. Sections describe intent; where the implementation dif
 
 Sections not relevant outside the original planning context have been removed; numbering is unchanged.
 
-*Status note (2026-10-02): source comments in this repository cite this document as "Concept 2" and [pdf-export.md](pdf-export.md) as "Concept 3", with the decision ids (C1 to C8) and the numbered acceptance criteria used below. "Concept 1" is a toolbar concept for the editor and is not in this repository. The decisions that came out of this concept are recorded in [ADR 003](../adr/003-lcms2-color.md) (the colour-management engine) and [ADR 106](../adr/106-colour-resolved-at-build-time.md) (how colour is resolved).*
+_Status note (2026-10-02): source comments in this repository cite this document as "Concept 2" and [pdf-export.md](pdf-export.md) as "Concept 3", with the decision ids (C1 to C8) and the numbered acceptance criteria used below. "Concept 1" is a toolbar concept for the editor and is not in this repository. The decisions that came out of this concept are recorded in [ADR 003](../adr/003-lcms2-color.md) (the colour-management engine) and [ADR 106](../adr/106-colour-resolved-at-build-time.md) (how colour is resolved)._
 
-*Subtitle: an IDML-faithful colour model, a colour-management engine, and the freieFarbe open library.*
+_Subtitle: an IDML-faithful colour model, a colour-management engine, and the freieFarbe open library._
 
 ---
 
 ## Scope
 
-This concept covers the colour substrate beneath three catalogued panels (`paged.swatches`, `paged.color`, `paged.gradient`) plus the Ink Manager and proof-setup surfaces they imply. The panels' *binding* behaviour is already settled by the panel catalogue (an internal design note); what is unspecified — and what this concept defines — is the **colour model** and the **colour-management engine (CMM)** that resolves colour to screen and to print.
+This concept covers the colour substrate beneath three catalogued panels (`paged.swatches`, `paged.color`, `paged.gradient`) plus the Ink Manager and proof-setup surfaces they imply. The panels' _binding_ behaviour is already settled by the panel catalogue (an internal design note); what is unspecified — and what this concept defines — is the **colour model** and the **colour-management engine (CMM)** that resolves colour to screen and to print.
 
 In scope:
 
@@ -25,13 +25,13 @@ In scope:
 
 Out of scope:
 
-- The PDF colour-space *encoding* (DeviceN/Separation/ICCBased/Lab objects) — Concept 3, which *consumes* this engine's export-convert mode.
+- The PDF colour-space _encoding_ (DeviceN/Separation/ICCBased/Lab objects) — Concept 3, which _consumes_ this engine's export-convert mode.
 - Image colour management for placed assets at export time — Concept 3 (the engine is shared; the policy lives with export).
 - Transparency/blend (opacity, blend modes, effects) — that is `paged.effects`, a separate composition; colour and transparency are orthogonal axes.
 
 ## Position in the architecture
 
-*Status note (2026-10-02): this section predates the implementation; `crates/paged-color` holds the colour-management engine (`cmm.rs`), the Lab conversion (`lab.rs`) and the `.ase` codec (`ase.rs`), but not the colour model, and there is no `crates/paged-color/src/model.rs`. The model stayed the IDML colour model (`ColorEntry`, `ColorSpace`, `ReservedSwatch` in `crates/paged-model/src/lib.rs`); the engine works on `WorkingColor`, an adapter over its resolved channels (`crates/paged-color/src/cmm.rs`).*
+_Status note (2026-10-02): this section predates the implementation; `crates/paged-color` holds the colour-management engine (`cmm.rs`), the Lab conversion (`lab.rs`) and the `.ase` codec (`ase.rs`), but not the colour model, and there is no `crates/paged-color/src/model.rs`. The model stayed the IDML colour model (`ColorEntry`, `ColorSpace`, `ReservedSwatch` in `crates/paged-model/src/lib.rs`); the engine works on `WorkingColor`, an adapter over its resolved channels (`crates/paged-color/src/cmm.rs`)._
 
 The colour model is Rust-side source of truth via tsify, like everything crossing the WASM boundary. It lives in a new `crates/paged-color` crate, consumed by the renderer (display resolution feeds Vello), by the panels (the model is read via `documentCollection:swatches` / `documentCollection:gradients` / `documentCollection:colorGroups`), and — in Concept 3 — by the PDF backend (export conversion). The CMM is a single crate behind a narrow trait so the implementation is swappable and never leaks into the panels or the exporter.
 
@@ -52,7 +52,7 @@ The colour model is Rust-side source of truth via tsify, like everything crossin
 
 ## The Rust colour model = the IDML colour model
 
-*Status note (2026-10-02): the types sketched below were not built as a new type system; see the note under "Position in the architecture".*
+_Status note (2026-10-02): the types sketched below were not built as a new type system; see the note under "Position in the architecture"._
 
 IDML represents colour as `<Color>` elements carrying a colour `Space` (`CMYK` | `RGB` | `LAB`), a `ColorValue` (the components), and a `Model` (`Process` | `Spot` | `Registration` | `Mixed`), plus reserved swatches (`[None]`, `[Paper]`, `[Black]`, `[Registration]`). Tints reference a base colour with a tint percentage; gradients carry stops; mixed inks reference spot colourants via a mixed-ink group. To round-trip IDML losslessly, the model represents all of this natively. Converting everything to RGB on import destroys print intent — the canonical data-loss bug is a 100%-K text black silently becoming a four-colour rich black.
 
@@ -144,21 +144,21 @@ Two modelling subtleties worth pinning:
 
 ### IDML round-trip table
 
-| IDML construct | Model representation | Round-trip note |
-| -------------- | -------------------- | --------------- |
-| `Space=CMYK Model=Process` | `Cmyk` + `Process` | values preserved verbatim; never auto-converted on import |
-| `Space=RGB` | `Rgb` (working-space tagged) | the document RGB working space matters for display |
-| `Space=LAB` | `Lab` (D50) | device-independent; the clean import target (see freieFarbe) |
-| `Model=Spot` | `Spot` + `spot_alternate` | spot name is the colourant identity; alternate is preview/export-only |
-| `Tint` | `Tint` over a base swatch | 50% of a spot stays 50% of *one ink*, not 50% opacity |
-| `Gradient` | `Linear`/`Radial` + stops (swatch refs + midpoints) | stops reference swatches; midpoints preserved |
-| `MixedInk` / `MixedInkGroup` | `MixedInk{components}` + group | multi-spot; full fidelity can be v2 (see C5) |
-| `ColorGroup` | `ColorGroup` membership on swatches | panel grouping; preserved |
-| `[None]/[Paper]/[Black]/[Registration]` | `ReservedSwatch` | never editable/deletable; `Registration` prints on all plates |
+| IDML construct                          | Model representation                                | Round-trip note                                                       |
+| --------------------------------------- | --------------------------------------------------- | --------------------------------------------------------------------- |
+| `Space=CMYK Model=Process`              | `Cmyk` + `Process`                                  | values preserved verbatim; never auto-converted on import             |
+| `Space=RGB`                             | `Rgb` (working-space tagged)                        | the document RGB working space matters for display                    |
+| `Space=LAB`                             | `Lab` (D50)                                         | device-independent; the clean import target (see freieFarbe)          |
+| `Model=Spot`                            | `Spot` + `spot_alternate`                           | spot name is the colourant identity; alternate is preview/export-only |
+| `Tint`                                  | `Tint` over a base swatch                           | 50% of a spot stays 50% of _one ink_, not 50% opacity                 |
+| `Gradient`                              | `Linear`/`Radial` + stops (swatch refs + midpoints) | stops reference swatches; midpoints preserved                         |
+| `MixedInk` / `MixedInkGroup`            | `MixedInk{components}` + group                      | multi-spot; full fidelity can be v2 (see C5)                          |
+| `ColorGroup`                            | `ColorGroup` membership on swatches                 | panel grouping; preserved                                             |
+| `[None]/[Paper]/[Black]/[Registration]` | `ReservedSwatch`                                    | never editable/deletable; `Registration` prints on all plates         |
 
 ## The colour engine (the shared spine with Concept 3)
 
-*Status note (2026-10-02): this section predates the implementation; the `Cmm` trait in `crates/paged-color/src/cmm.rs` has `resolve_display`, `check_gamut` and `convert_for_export`, and takes rendering intent and black-point compensation as constructor state, not per call. Soft-proofing and the document colour settings are the wire operations `SetProofSetup` and `SetColorSettings` (`crates/paged-wire/src/lib.rs`). See [ADR 003](../adr/003-lcms2-color.md) and [ADR 106](../adr/106-colour-resolved-at-build-time.md).*
+_Status note (2026-10-02): this section predates the implementation; the `Cmm` trait in `crates/paged-color/src/cmm.rs` has `resolve_display`, `check_gamut` and `convert_for_export`, and takes rendering intent and black-point compensation as constructor state, not per call. Soft-proofing and the document colour settings are the wire operations `SetProofSetup` and `SetColorSettings` (`crates/paged-wire/src/lib.rs`). See [ADR 003](../adr/003-lcms2-color.md) and [ADR 106](../adr/106-colour-resolved-at-build-time.md)._
 
 This is the part that does not exist yet and that both this concept and PDF export need. The CMM in `paged-color` does four jobs behind a narrow trait:
 
@@ -181,21 +181,21 @@ pub trait Cmm {
 
 1. **Display resolution.** Convert any `ColorValue` to the surface display space for Vello. The trap to avoid: treating CMYK as a naive `1 − x` RGB approximation. CMYK and Lab must go through a real ICC transform via the document's working-space profiles. Be explicit about the linear-vs-gamma boundary: Vello expects a defined space; resolve to sRGB (or Display-P3 if the surface advertises it) and hand premultiplied values, so blending happens in the space the renderer assumes rather than silently mixing encodings.
 2. **Gamut check.** Flag out-of-gamut colours for the `paged.color` mixer's warning triangle — a derived read against the destination profile, never a binding kind.
-3. **Soft-proofing.** Simulate the output condition on screen (InDesign's *Proof Colors* / *Proof Setup*), optionally simulating paper white and black ink. This is what lets a designer see, on a screen, roughly what FOGRA-coated stock will do to a vivid RGB. It reuses the same transforms as export but renders to the display.
-4. **Export conversion.** The same machinery, but *preserving* native spaces per policy rather than collapsing to display. Concept 3 consumes this.
+3. **Soft-proofing.** Simulate the output condition on screen (InDesign's _Proof Colors_ / _Proof Setup_), optionally simulating paper white and black ink. This is what lets a designer see, on a screen, roughly what FOGRA-coated stock will do to a vivid RGB. It reuses the same transforms as export but renders to the display.
+4. **Export conversion.** The same machinery, but _preserving_ native spaces per policy rather than collapsing to display. Concept 3 consumes this.
 
 ### Document colour settings
 
-The document carries colour management state mirroring InDesign's *Color Settings*, read declaratively as `documentMeta`:
+The document carries colour management state mirroring InDesign's _Color Settings_, read declaratively as `documentMeta`:
 
 - **RGB working space** (e.g. sRGB, Adobe RGB, Display-P3) and **CMYK working space** (e.g. ISO Coated v2 / FOGRA39, PSO Uncoated v3, GRACoL 2006).
-- **Default rendering intent** — one of *perceptual*, *relative colorimetric*, *saturation*, *absolute colorimetric*. Display typically uses relative-colorimetric + black-point compensation; images often perceptual; proofing absolute. Carry it per-document with per-object override room later.
+- **Default rendering intent** — one of _perceptual_, _relative colorimetric_, _saturation_, _absolute colorimetric_. Display typically uses relative-colorimetric + black-point compensation; images often perceptual; proofing absolute. Carry it per-document with per-object override room later.
 - **Black-point compensation** on/off.
 - **Assign/convert policy on open** — preserve embedded numbers, convert to working space, or colour-management-off; and how to treat missing/mismatched profiles. This is the policy the importer applies when an IDML (or placed asset) arrives tagged or untagged.
 
 ### CMM library choice — the WASM caveat, stated honestly
 
-*Status note (2026-10-02): decided: lcms2 natively and qcms on wasm32; see [ADR 003](../adr/003-lcms2-color.md). The measurement is `crates/paged-color/tests/parity.rs`.*
+_Status note (2026-10-02): decided: lcms2 natively and qcms on wasm32; see [ADR 003](../adr/003-lcms2-color.md). The measurement is `crates/paged-color/tests/parity.rs`._
 
 - **`lcms2`** (the `rust-lcms2` bindings over Little CMS) is the mature, production-proven engine — stable for years, full ICC v2/v4 support, the de-facto reference CMM. The wrinkle: it is a C library via FFI, and compiling Little CMS for `wasm32-unknown-unknown` (the renderer target) is not free — you either build the C to WASM separately or accept an Emscripten-flavoured toolchain. Worth a spike before committing.
 - **A pure-Rust CMM** (e.g. `moxcms` and peers emerging in the imaging ecosystem) sidesteps the C-in-WASM build entirely. Newer; verify ICC v4 coverage, all four rendering intents, and accuracy against known measurement patches before trusting it for print. Lower build friction for a `wasm32` target.
@@ -204,13 +204,13 @@ Recommend a short **bake-off** behind the `Cmm` trait: lcms2 (proven, build-heav
 
 ### Profile sourcing
 
-*Status note (2026-10-02): this section predates the implementation; no profile ships with the engine, and the host registers profile bytes. See [ADR 109](../adr/109-engine-does-no-io.md).*
+_Status note (2026-10-02): this section predates the implementation; no profile ships with the engine, and the host registers profile bytes. See [ADR 109](../adr/109-engine-does-no-io.md)._
 
 Ship a small set of common, redistributable ICC profiles (sRGB, and the freely redistributable ECI/FOGRA and IDEAlliance/GRACoL profiles where licensing permits), and allow the user to add their own. Profiles are versioned alongside the document's colour settings so a re-open is deterministic. Do not bake profiles into the WASM binary; load them as assets.
 
 ## freieFarbe / HLC as a bundled open swatch library
 
-*Status note (2026-10-02): this section predates the implementation; the `.ase` parser and writer are `crates/paged-color/src/ase.rs`, reached through the wire operation `ImportSwatchLibrary`. This repository bundles no swatch library ([ADR 109](../adr/109-engine-does-no-io.md)).*
+_Status note (2026-10-02): this section predates the implementation; the `.ase` parser and writer are `crates/paged-color/src/ase.rs`, reached through the wire operation `ImportSwatchLibrary`. This repository bundles no swatch library ([ADR 109](../adr/109-engine-does-no-io.md))._
 
 The freieFarbe e.V. **CIELAB HLC Colour Atlas** is a strong fit and a genuine differentiator, for a precise technical reason: it is **defined in CIELAB**, and IDML has native `Space=LAB` swatches. An HLC colour imports as a `Lab` swatch and **round-trips to InDesign losslessly** — no gamut-dependent conversion, no "which CMYK profile did you assume" ambiguity. It is the cleanest possible import target in the model above, and it pairs naturally with soft-proofing: a device-independent colour the CMM can render into any output condition.
 
@@ -218,15 +218,15 @@ What freieFarbe publishes (free, under Creative Commons): the atlas at **2,040 c
 
 ### The `.ase` import path
 
-ASE is a documented (community-reverse-engineered, stable) binary format: a `ASEF` signature, a version, a block count, then blocks of three kinds — *group start* (`0xC001`), *colour entry* (`0x0001`), *group end* (`0xC002`). Each colour entry carries a UTF-16 name, a four-byte colour-model tag (`"RGB "`, `"CMYK"`, `"LAB "`, `"Gray"`), big-endian float components, and a colour type (`0` global, `1` spot, `2` process/normal). The mapping to the model is direct: model tag → `ColorValue` variant, type → `ColorModel`, group blocks → `ColorGroup`. A `~200-line` parser covers it. For HLC specifically, every entry is `"LAB "` + `Lab` + (global/process), so it lands as `Lab`/`Process` swatches in an "HLC" colour group, names preserved.
+ASE is a documented (community-reverse-engineered, stable) binary format: a `ASEF` signature, a version, a block count, then blocks of three kinds — _group start_ (`0xC001`), _colour entry_ (`0x0001`), _group end_ (`0xC002`). Each colour entry carries a UTF-16 name, a four-byte colour-model tag (`"RGB "`, `"CMYK"`, `"LAB "`, `"Gray"`), big-endian float components, and a colour type (`0` global, `1` spot, `2` process/normal). The mapping to the model is direct: model tag → `ColorValue` variant, type → `ColorModel`, group blocks → `ColorGroup`. A `~200-line` parser covers it. For HLC specifically, every entry is `"LAB "` + `Lab` + (global/process), so it lands as `Lab`/`Process` swatches in an "HLC" colour group, names preserved.
 
 Support the same parser for arbitrary user `.ase` libraries (the format is the lingua franca of swatch exchange), and offer **load/save `.ase`** from the Swatches panel so Paged interoperates with the wider design toolchain. Importing directly from another IDML's swatch list is the other interop path and falls out of the model for free.
 
-The **CxF spectral data** is out of v1 scope but worth noting for the roadmap: spectral definitions enable *real* spot-colour proofing (predicting how an HLC spot prints on a given stock under a given illuminant), which is a high-end differentiator the device-independent model is already positioned for.
+The **CxF spectral data** is out of v1 scope but worth noting for the roadmap: spectral definitions enable _real_ spot-colour proofing (predicting how an HLC spot prints on a given stock under a given illuminant), which is a high-end differentiator the device-independent model is already positioned for.
 
 ## The Ink Manager (the bridge to output)
 
-*Status note (2026-10-02): the output-time ink settings are the wire operations `SetInkSetting` and `SetUseStandardLabForSpots` (`crates/paged-wire/src/lib.rs`); the panel is in the editor repository.*
+_Status note (2026-10-02): the output-time ink settings are the wire operations `SetInkSetting` and `SetUseStandardLabForSpots` (`crates/paged-wire/src/lib.rs`); the panel is in the editor repository._
 
 The Ink Manager is the production surface that sits between swatches and export, and it deserves to exist in this concept because it operates on the colour model, not the document geometry:
 
@@ -239,7 +239,7 @@ The Ink Manager is a hybrid panel (composition chrome over the ink list, with th
 
 ## Panel shapes (recap + the `"mixed"` sentinel)
 
-*Status note (2026-10-02): the panels described here belong to the editor repository, not to this one.*
+_Status note (2026-10-02): the panels described here belong to the editor repository, not to this one._
 
 - **`paged.swatches`** (hybrid): composition chrome + an expert swatch-grid child + a new-swatch popover (the CMYK/RGB/Lab mixer, which is `paged.color` reused). Apply-on-click is the `selectionProperty` write of the swatch ref; create/edit/delete/rename/merge/group is `paged.mutate(Operation::CreateSwatch{…})` etc. from the expert child. The grid rows carry type/mode badges (CMYK/RGB/Lab, process/spot, none/paper/registration) and a tint slider.
 - **`paged.color`** (composition): a live mixer of bound sliders (CMYK/RGB/Lab/HSB), a tint slider, a hex input, the out-of-gamut warning (CMM-derived read), and add-to-swatches. The mixer is the new-swatch popover reused.
@@ -281,18 +281,18 @@ The **`"mixed"` sentinel** handles heterogeneous selection: when two selected fr
 
 ## Decisions register
 
-*Status note (2026-10-02): the statuses in the table are those of the draft. C3 was decided in [ADR 003](../adr/003-lcms2-color.md). C6 ended differently: no profile ships with the engine ([ADR 109](../adr/109-engine-does-no-io.md)). C1 was built differently, see the note under "Position in the architecture".*
+_Status note (2026-10-02): the statuses in the table are those of the draft. C3 was decided in [ADR 003](../adr/003-lcms2-color.md). C6 ended differently: no profile ships with the engine ([ADR 109](../adr/109-engine-does-no-io.md)). C1 was built differently, see the note under "Position in the architecture"._
 
-| # | Decision | Status |
-| - | -------- | ------ |
-| C1 | `ColorValue`/`Swatch`/`Tint`/`Gradient`/`MixedInk`/`ColorGroup`/specials live in a `paged-color` Rust crate, tsify'd. IDML round-trips natively; never auto-convert on import. | Proposed |
-| C2 | Stand up a CMM behind a `Cmm` trait with display-resolve, gamut-check, soft-proof, and export-convert. Document carries RGB+CMYK working spaces, intent, and BPC as `documentMeta`. | Proposed |
-| C3 | CMM library bake-off: `lcms2` (proven, heavy WASM build) vs a pure-Rust CMM (lighter build, verify accuracy). Decide behind the trait. **The one genuine unknown — do it first.** | Open |
-| C4 | Bundle the freieFarbe HLC atlas as a built-in Lab swatch group via an `.ase` parser. Ship the original files with attribution. | Proposed |
-| C5 | MixedInk fidelity is v2; v1 may approximate via the resolved alternate while preserving the data on round-trip. | Open |
-| C6 | Ship redistributable ICC profiles as versioned assets, not baked into the WASM binary; users may add their own. | Proposed |
-| C7 | Gradient stops reference swatches (not inline colours); `[Paper]`/`[Registration]` modelled as knockout/all-plates, never white/black ink. | Proposed |
-| C8 | The Ink Manager (spot→process, aliasing, standard-Lab-for-spots) is a hybrid panel writing `documentMeta` ink settings, consumed by Concept 3 at export. | Proposed |
+| #   | Decision                                                                                                                                                                            | Status   |
+| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
+| C1  | `ColorValue`/`Swatch`/`Tint`/`Gradient`/`MixedInk`/`ColorGroup`/specials live in a `paged-color` Rust crate, tsify'd. IDML round-trips natively; never auto-convert on import.      | Proposed |
+| C2  | Stand up a CMM behind a `Cmm` trait with display-resolve, gamut-check, soft-proof, and export-convert. Document carries RGB+CMYK working spaces, intent, and BPC as `documentMeta`. | Proposed |
+| C3  | CMM library bake-off: `lcms2` (proven, heavy WASM build) vs a pure-Rust CMM (lighter build, verify accuracy). Decide behind the trait. **The one genuine unknown — do it first.**   | Open     |
+| C4  | Bundle the freieFarbe HLC atlas as a built-in Lab swatch group via an `.ase` parser. Ship the original files with attribution.                                                      | Proposed |
+| C5  | MixedInk fidelity is v2; v1 may approximate via the resolved alternate while preserving the data on round-trip.                                                                     | Open     |
+| C6  | Ship redistributable ICC profiles as versioned assets, not baked into the WASM binary; users may add their own.                                                                     | Proposed |
+| C7  | Gradient stops reference swatches (not inline colours); `[Paper]`/`[Registration]` modelled as knockout/all-plates, never white/black ink.                                          | Proposed |
+| C8  | The Ink Manager (spot→process, aliasing, standard-Lab-for-spots) is a hybrid panel writing `documentMeta` ink settings, consumed by Concept 3 at export.                            | Proposed |
 
 ## Prior art / reference implementations
 

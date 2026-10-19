@@ -65,22 +65,30 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   const elements: string[] = [];
   const covers: string[] = [];
 
-  const head = await proseFrame(ctx, pg, [48, 54, 480, 84], [
-    { text: "Data sets and the refresh", style: STYLE.head1 },
-  ]);
-  const intro = await proseFrame(ctx, pg, [48, 90, 480, 192], [
-    {
-      text:
-        "A binding is live in both directions: the record card three pages " +
-        "back can be re-resolved against any record, and the values it " +
-        "shows at a moment can be captured as a named data set and applied " +
-        "back later — many fields, one undo step. The ledger below is this " +
-        "page's lab notebook: each line was read from the document's own " +
-        "field records at that step of the drive, and the card was left " +
-        "as the chapter found it.",
-      style: STYLE.bodySmall,
-    },
-  ]);
+  const head = await proseFrame(
+    ctx,
+    pg,
+    [48, 54, 480, 84],
+    [{ text: "Data sets and the refresh", style: STYLE.head1 }],
+  );
+  const intro = await proseFrame(
+    ctx,
+    pg,
+    [48, 90, 480, 192],
+    [
+      {
+        text:
+          "A binding is live in both directions: the record card three pages " +
+          "back can be re-resolved against any record, and the values it " +
+          "shows at a moment can be captured as a named data set and applied " +
+          "back later — many fields, one undo step. The ledger below is this " +
+          "page's lab notebook: each line was read from the document's own " +
+          "field records at that step of the drive, and the card was left " +
+          "as the chapter found it.",
+        style: STYLE.bodySmall,
+      },
+    ],
+  );
   elements.push(head.frameId, intro.frameId);
 
   const ledger: string[] = [];
@@ -268,9 +276,12 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     }
   }
 
-  const stepper = await proseFrame(ctx, pg, [48, 204, 480, 262], [
-    { text: stepperLine, style: STYLE.bodySmall },
-  ]);
+  const stepper = await proseFrame(
+    ctx,
+    pg,
+    [48, 204, 480, 262],
+    [{ text: stepperLine, style: STYLE.bodySmall }],
+  );
   elements.push(stepper.frameId);
 
   if (ledger.length > 0) {
@@ -283,15 +294,21 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     elements.push(ledgerFrame.frameId);
   }
   if (changeLine) {
-    const change = await proseFrame(ctx, pg, [48, 464, 480, 520], [
-      { text: changeLine, style: STYLE.bodySmall },
-    ]);
+    const change = await proseFrame(
+      ctx,
+      pg,
+      [48, 464, 480, 520],
+      [{ text: changeLine, style: STYLE.bodySmall }],
+    );
     elements.push(change.frameId);
   }
   if (localeLine) {
-    const locale = await proseFrame(ctx, pg, [48, 530, 480, 596], [
-      { text: localeLine, style: STYLE.bodySmall },
-    ]);
+    const locale = await proseFrame(
+      ctx,
+      pg,
+      [48, 530, 480, 596],
+      [{ text: localeLine, style: STYLE.bodySmall }],
+    );
     elements.push(locale.frameId);
   }
 

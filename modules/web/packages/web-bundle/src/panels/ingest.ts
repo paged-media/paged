@@ -55,7 +55,9 @@ export function ingestHtml(html: string): IngestResult {
  * status note. `null` when nothing was removed (the caller shows a
  * "pasted, nothing to clean" affordance instead).
  */
-export function describeRemoval(removed: readonly SanitizeRemoval[]): string | null {
+export function describeRemoval(
+  removed: readonly SanitizeRemoval[],
+): string | null {
   if (removed.length === 0) return null;
   // Pluralize the class labels into a readable clause.
   const parts = removed.map((r) => {

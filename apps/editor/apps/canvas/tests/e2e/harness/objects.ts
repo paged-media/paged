@@ -29,7 +29,10 @@ import { expect, type Locator, type Page } from "@playwright/test";
 interface ObjectsGlobal {
   __canvas: {
     objects: {
-      get(address: string, path: string): Promise<{ kind: string; value?: unknown }>;
+      get(
+        address: string,
+        path: string,
+      ): Promise<{ kind: string; value?: unknown }>;
       query(selector: string): Promise<string[]>;
     } | null;
     client: { undo(): Promise<unknown> };
@@ -38,7 +41,11 @@ interface ObjectsGlobal {
 
 /** One read through `host.objects`: the value, or the read's kind
  *  (`mixed` / `absent` / `refused`). */
-export function objGet(page: Page, address: string, path: string): Promise<unknown> {
+export function objGet(
+  page: Page,
+  address: string,
+  path: string,
+): Promise<unknown> {
   return page.evaluate(
     async ({ address, path }) => {
       const o = (globalThis as unknown as ObjectsGlobal).__canvas.objects;
@@ -59,7 +66,9 @@ export function objQuery(page: Page, selector: string): Promise<string[]> {
 
 /** ONE undo step. */
 export async function undoOnce(page: Page): Promise<void> {
-  await page.evaluate(() => (globalThis as unknown as ObjectsGlobal).__canvas.client.undo());
+  await page.evaluate(() =>
+    (globalThis as unknown as ObjectsGlobal).__canvas.client.undo(),
+  );
 }
 
 /** The `[data-property-field]` wrapper every object-model field renders
@@ -93,7 +102,8 @@ export async function bindToData(
     return { selector, routed: true };
   }
   await expect(dialog.locator("[data-bind-path]")).toHaveText(path);
-  const selector = (await dialog.locator("[data-bind-selector]").textContent()) ?? "";
+  const selector =
+    (await dialog.locator("[data-bind-selector]").textContent()) ?? "";
   await page.keyboard.press("Escape");
   await expect(dialog).toHaveCount(0);
   return { selector, routed: false };
@@ -101,8 +111,14 @@ export async function bindToData(
 
 /** The panel specs' family check: Bind to data… on `field` reaches
  *  paged.data's real command (the data bundle is loaded in the editor). */
-export async function bindDryRun(page: Page, field: Locator, path: string): Promise<string> {
+export async function bindDryRun(
+  page: Page,
+  field: Locator,
+  path: string,
+): Promise<string> {
   const r = await bindToData(page, field, path);
-  expect(r.routed, "Bind to data… reached paged.data's bindProperty").toBe(true);
+  expect(r.routed, "Bind to data… reached paged.data's bindProperty").toBe(
+    true,
+  );
   return r.selector;
 }

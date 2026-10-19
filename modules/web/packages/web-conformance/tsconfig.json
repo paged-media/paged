@@ -1,5 +1,9 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": { "types": ["node", "bun"] },
-  "include": ["test", "indesign", "../../../../tooling/js/bun-test-matchers.d.ts"]
+  "include": [
+    "test",
+    "indesign",
+    "../../../../tooling/js/bun-test-matchers.d.ts"
+  ]
 }

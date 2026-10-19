@@ -158,7 +158,10 @@ export function shapesFromSvgBytes(bytes: Uint8Array): DrawShape[] {
 function decodeUtf8(bytes: Uint8Array): string {
   // Strip a UTF-8 BOM if present.
   const view =
-    bytes.length >= 3 && bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf
+    bytes.length >= 3 &&
+    bytes[0] === 0xef &&
+    bytes[1] === 0xbb &&
+    bytes[2] === 0xbf
       ? bytes.subarray(3)
       : bytes;
   return new TextDecoder("utf-8").decode(view);
@@ -314,8 +317,10 @@ function createRgbSwatch(
  * baseline that shows imported SVG), so it is not taken in passing.
  * `svg-io.spec.ts` pins the current value.
  */
-export const SVG_IMPORT_UNSTROKED: { color: string | null; weight: number } =
-  { color: "Color/Black", weight: 1 };
+export const SVG_IMPORT_UNSTROKED: { color: string | null; weight: number } = {
+  color: "Color/Black",
+  weight: 1,
+};
 
 /** The three writes that paint `target` — ALL three, always: the insert
  *  inherited whatever creation defaults the user happens to have, and an
@@ -362,7 +367,9 @@ function paintMutationsFor(
  *  headless / no-focus fallback). Returns null when the document has no
  *  pages. Exported for the wave-2 insert-shape commands (the same
  *  no-second-copy rule as the mutation builders). */
-export async function resolveTargetPage(host: BundleHost): Promise<string | null> {
+export async function resolveTargetPage(
+  host: BundleHost,
+): Promise<string | null> {
   const meta = await host.document.meta();
   if (meta.activePage) return meta.activePage;
   try {
@@ -429,7 +436,10 @@ export function svgImportOpsFor(
     for (const insert of unit.inserts) {
       const handle = svgImportHandle(contour++);
       ops.push(insert, bindCreatedMutationFor(handle));
-      for (const write of paintMutationsFor(handleElementId(handle), defaults)) {
+      for (const write of paintMutationsFor(
+        handleElementId(handle),
+        defaults,
+      )) {
         ops.push(write);
       }
     }

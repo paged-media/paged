@@ -49,7 +49,13 @@ import { Designer } from "./driver/designer";
 import { screenPointInFrame, select } from "./plugins/web-kit";
 
 const BUNDLE_ID = "media.paged.journeydoors";
-const REPO_ROOT = pathResolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "..");
+const REPO_ROOT = pathResolve(
+  dirname(fileURLToPath(import.meta.url)),
+  "..",
+  "..",
+  "..",
+  "..",
+);
 /** A generated fixture with a run pinned to "Phantom Display", a family no
  *  font provides — `FontSummary.isMissing` is true by design. */
 const PREFLIGHT_IDML = `${REPO_ROOT}/corpus/idml/generated/preflight.idml`;
@@ -81,27 +87,44 @@ interface Doors {
  *  doors see on `globalThis.__doors69`. */
 async function loadDoorsBundle(page: Page): Promise<Doors["supports"]> {
   await page.waitForFunction(
-    () => typeof (globalThis as unknown as { __loadTestBundle?: unknown }).__loadTestBundle === "function",
+    () =>
+      typeof (globalThis as unknown as { __loadTestBundle?: unknown })
+        .__loadTestBundle === "function",
   );
   return page.evaluate((id) => {
     type Host = {
       supports(f: string): boolean;
-      contribute: { editContext(c: unknown): unknown; objectType(c: unknown): unknown };
+      contribute: {
+        editContext(c: unknown): unknown;
+        objectType(c: unknown): unknown;
+      };
       document: {
         onDidOpen(l: (e: unknown) => void): unknown;
         onDidChange(l: (e: { kind: string }) => void): unknown;
       };
       overlay: {
-        layer(id?: string): { set(s: unknown[]): void; clear(): void; dispose(): void };
+        layer(id?: string): {
+          set(s: unknown[]): void;
+          clear(): void;
+          dispose(): void;
+        };
         setToolPreviews(s: unknown[] | null): void;
       };
     };
     const g = globalThis as unknown as {
-      __doors69: Doors & { host?: Host; layers?: Record<string, ReturnType<Host["overlay"]["layer"]>> };
+      __doors69: Doors & {
+        host?: Host;
+        layers?: Record<string, ReturnType<Host["overlay"]["layer"]>>;
+      };
       __doors69Dispose?: { dispose(): void };
       __loadTestBundle: (b: unknown) => { dispose(): void };
     };
-    const doors = { enters: [], opens: [], changes: [], supports: {} } as Doors & {
+    const doors = {
+      enters: [],
+      opens: [],
+      changes: [],
+      supports: {},
+    } as Doors & {
       host?: Host;
     };
     g.__doors69 = doors;
@@ -135,7 +158,8 @@ async function loadDoorsBundle(page: Page): Promise<Doors["supports"]> {
         host.contribute.editContext({
           type: "journeyFrame",
           entry: "doubleClick",
-          onEnter: (ctx: Entered) => doors.enters.push(JSON.parse(JSON.stringify(ctx))),
+          onEnter: (ctx: Entered) =>
+            doors.enters.push(JSON.parse(JSON.stringify(ctx))),
         });
         // Claimed by this bundle's own metadata on the frame (the way a
         // web frame is), so draw's kind-claimed vectorGraphic does not
@@ -165,7 +189,8 @@ const doors = (page: Page): Promise<Omit<Doors, "supports">> =>
  *  return its JSON result. */
 async function hostCall<T>(page: Page, body: string): Promise<T> {
   return page.evaluate(async (src) => {
-    const d = (globalThis as unknown as { __doors69: { host: unknown } }).__doors69;
+    const d = (globalThis as unknown as { __doors69: { host: unknown } })
+      .__doors69;
     // eslint-disable-next-line no-new-func
     const fn = new Function("host", `return (async () => { ${src} })();`);
     return JSON.parse(JSON.stringify((await fn(d.host)) ?? null));
@@ -175,7 +200,11 @@ async function hostCall<T>(page: Page, body: string): Promise<T> {
 /** Run `body` against the bundle's live host inside the page. */
 async function withHost(page: Page, body: string): Promise<void> {
   await page.evaluate((src) => {
-    const d = (globalThis as unknown as { __doors69: { host: unknown; layers?: unknown } }).__doors69;
+    const d = (
+      globalThis as unknown as {
+        __doors69: { host: unknown; layers?: unknown };
+      }
+    ).__doors69;
     // eslint-disable-next-line no-new-func
     new Function("host", "doors", src)(d.host, d);
   }, body);
@@ -192,9 +221,17 @@ test.describe("journey · plugin doors: entering point, overlay layers, document
     await designer.open();
     await designer.newDocument();
     const supports = await loadDoorsBundle(page);
-    expect(supports["editContext.enterPoint@1"], "the editor vouches for the point").toBe(true);
+    expect(
+      supports["editContext.enterPoint@1"],
+      "the editor vouches for the point",
+    ).toBe(true);
 
-    const id = await designer.drawRectangle({ x0: 100, y0: 150, x1: 320, y1: 280 });
+    const id = await designer.drawRectangle({
+      x0: 100,
+      y0: 150,
+      x1: 320,
+      y1: 280,
+    });
     expect(id, "drew a target frame").not.toBe("");
     await designer.applyFill("rectangle", id);
     await designer.activate("select");
@@ -206,7 +243,10 @@ test.describe("journey · plugin doors: entering point, overlay layers, document
           __doors69: {
             host: {
               document: {
-                setMetadata(e: unknown, v: unknown): Promise<{ applied: boolean }>;
+                setMetadata(
+                  e: unknown,
+                  v: unknown,
+                ): Promise<{ applied: boolean }>;
               };
             };
           };
@@ -226,17 +266,23 @@ test.describe("journey · plugin doors: entering point, overlay layers, document
       async ({ id, dx, dy }) => {
         const c = (
           globalThis as unknown as {
-            __canvas: { client: { elementGeometry(ids: unknown[]): Promise<unknown[]> } };
+            __canvas: {
+              client: { elementGeometry(ids: unknown[]): Promise<unknown[]> };
+            };
           }
         ).__canvas.client;
         const g = (await c.elementGeometry([{ kind: "rectangle", id }]))[0] as {
           bounds: [number, number, number, number];
-          itemTransform?: [number, number, number, number, number, number] | null;
+          itemTransform?:
+            [number, number, number, number, number, number] | null;
         };
         const [a, b, cc, d, tx, ty] = g.itemTransform ?? [1, 0, 0, 1, 0, 0];
         const px = g.bounds[1] + dx;
         const py = g.bounds[0] + dy;
-        return [a * px + cc * py + tx, b * px + d * py + ty] as [number, number];
+        return [a * px + cc * py + tx, b * px + d * py + ty] as [
+          number,
+          number,
+        ];
       },
       { id, dx: DX, dy: DY },
     );
@@ -244,7 +290,9 @@ test.describe("journey · plugin doors: entering point, overlay layers, document
     await page.mouse.dblclick(at.x, at.y);
     await expect(page.locator(BREADCRUMB)).toBeVisible({ timeout: 10_000 });
 
-    await expect.poll(async () => (await doors(page)).enters.length, { timeout: 10_000 }).toBe(1);
+    await expect
+      .poll(async () => (await doors(page)).enters.length, { timeout: 10_000 })
+      .toBe(1);
     const [entered] = (await doors(page)).enters;
     expect(entered.type).toBe("journeyFrame");
     expect(entered.id).toEqual(frame);
@@ -261,8 +309,14 @@ test.describe("journey · plugin doors: entering point, overlay layers, document
         ).__canvas.client.camera.read().scale,
     );
     const tol = 1.5 / scale;
-    expect(near(entered.pagePoint, expectedPage, tol), `pagePoint ${entered.pagePoint} ≈ ${expectedPage}`).toBe(true);
-    expect(near(entered.contentPoint, [DX, DY], tol), `contentPoint ${entered.contentPoint} ≈ ${DX},${DY}`).toBe(true);
+    expect(
+      near(entered.pagePoint, expectedPage, tol),
+      `pagePoint ${entered.pagePoint} ≈ ${expectedPage}`,
+    ).toBe(true);
+    expect(
+      near(entered.contentPoint, [DX, DY], tol),
+      `contentPoint ${entered.contentPoint} ≈ ${DX},${DY}`,
+    ).toBe(true);
     // ...but the two must describe the SAME point: the frame is not
     // rotated or scaled, so content = page − (aimed page − aimed content).
     expect(
@@ -277,7 +331,9 @@ test.describe("journey · plugin doors: entering point, overlay layers, document
       "pagePoint and contentPoint are one point",
     ).toBe(true);
     // eslint-disable-next-line no-console
-    console.log(`[doors] entered at page ${entered.pagePoint}, content ${entered.contentPoint}`);
+    console.log(
+      `[doors] entered at page ${entered.pagePoint}, content ${entered.contentPoint}`,
+    );
 
     await page.keyboard.press("Escape");
     await expect(page.locator(BREADCRUMB)).toHaveCount(0, { timeout: 10_000 });
@@ -308,11 +364,10 @@ test.describe("journey · plugin doors: entering point, overlay layers, document
     await expect(layerB.locator("rect")).toHaveCount(1);
     await expect(preview).toHaveCount(1);
     // Stack order is creation order: a below b.
-    const order = await page.evaluate(
-      () =>
-        Array.from(document.querySelectorAll("[data-overlay-layer]")).map((n) =>
-          n.getAttribute("data-overlay-layer"),
-        ),
+    const order = await page.evaluate(() =>
+      Array.from(document.querySelectorAll("[data-overlay-layer]")).map((n) =>
+        n.getAttribute("data-overlay-layer"),
+      ),
     );
     expect(order).toEqual([`${BUNDLE_ID}/a`, `${BUNDLE_ID}/b`]);
 
@@ -334,7 +389,9 @@ test.describe("journey · plugin doors: entering point, overlay layers, document
 
     // Disposing the bundle takes its layers with it.
     await page.evaluate(() =>
-      (globalThis as unknown as { __doors69Dispose: { dispose(): void } }).__doors69Dispose.dispose(),
+      (
+        globalThis as unknown as { __doors69Dispose: { dispose(): void } }
+      ).__doors69Dispose.dispose(),
     );
     await expect(page.locator("[data-overlay-layer]")).toHaveCount(0);
   });
@@ -347,11 +404,16 @@ test.describe("journey · plugin doors: entering point, overlay layers, document
     await designer.newDocument();
     const supports = await loadDoorsBundle(page);
     expect(supports["document.onDidOpen@1"]).toBe(true);
-    expect((await doors(page)).opens, "an already-open document is not replayed").toEqual([]);
+    expect(
+      (await doors(page)).opens,
+      "an already-open document is not replayed",
+    ).toEqual([]);
 
     // File ▸ New.
     await designer.newDocument();
-    await expect.poll(async () => (await doors(page)).opens.length, { timeout: 10_000 }).toBe(1);
+    await expect
+      .poll(async () => (await doors(page)).opens.length, { timeout: 10_000 })
+      .toBe(1);
     const fresh = await designer.handle();
     const [onNew] = (await doors(page)).opens;
     expect(onNew.pageIds).toEqual(fresh.pageIds);
@@ -369,7 +431,10 @@ test.describe("journey · plugin doors: entering point, overlay layers, document
             registries: {
               importers: {
                 resolve(name: string): {
-                  import(f: { name: string; bytes: Uint8Array }): Promise<void> | void;
+                  import(f: {
+                    name: string;
+                    bytes: Uint8Array;
+                  }): Promise<void> | void;
                 } | null;
               };
             };
@@ -383,7 +448,9 @@ test.describe("journey · plugin doors: entering point, overlay layers, document
       return "";
     });
     expect(result).toBe("");
-    await expect.poll(async () => (await doors(page)).opens.length, { timeout: 15_000 }).toBe(2);
+    await expect
+      .poll(async () => (await doors(page)).opens.length, { timeout: 15_000 })
+      .toBe(2);
     const onOpen = (await doors(page)).opens[1];
     expect(onOpen.pageCount).toBe(2);
     expect(onOpen.pageIds).toHaveLength(2);
@@ -397,7 +464,10 @@ test.describe("journey · plugin doors: entering point, overlay layers, document
     const loaded = await loadIdml(page, PREFLIGHT_IDML);
     const pageId = loaded.pages[0].pageId;
     const supports = await loadDoorsBundle(page);
-    expect(supports["assets.registerFont@1"], "the editor's asset source registers scene faces").toBe(true);
+    expect(
+      supports["assets.registerFont@1"],
+      "the editor's asset source registers scene faces",
+    ).toBe(true);
 
     const missing = (): Promise<boolean | null> =>
       hostCall<boolean | null>(
@@ -406,7 +476,10 @@ test.describe("journey · plugin doors: entering point, overlay layers, document
          const f = fonts.find((x) => x.family === ${JSON.stringify(MISSING_FAMILY)});
          return f ? Boolean(f.isMissing) : null;`,
       );
-    expect(await missing(), "the fixture's family is missing to begin with").toBe(true);
+    expect(
+      await missing(),
+      "the fixture's family is missing to begin with",
+    ).toBe(true);
 
     // A frame for the plugin's scene text, and one text run naming the family.
     const frameId = await hostCall<string>(
@@ -425,7 +498,10 @@ test.describe("journey · plugin doors: entering point, overlay layers, document
          });
          return [...r.fontFallbacks];`,
       );
-    expect(await submitScene(), "unregistered: the scene run falls back").toEqual([MISSING_FAMILY]);
+    expect(
+      await submitScene(),
+      "unregistered: the scene run falls back",
+    ).toEqual([MISSING_FAMILY]);
 
     // Register a face under that family through the plugin door.
     await hostCall(
@@ -435,21 +511,31 @@ test.describe("journey · plugin doors: entering point, overlay layers, document
        globalThis.__doorsFace = await host.assets.registerFont(
          new Uint8Array(await resp.arrayBuffer()), ${JSON.stringify(MISSING_FAMILY)});`,
     );
-    expect(await submitScene(), "the scene run resolves the plugin's face").toEqual([]);
+    expect(
+      await submitScene(),
+      "the scene run resolves the plugin's face",
+    ).toEqual([]);
 
     // ...and the DOCUMENT does not: the family is still missing, in the
     // collection and in the Fonts panel (opened after the registration, so
     // it reads fresh).
-    expect(await missing(), "the document still reports the family missing").toBe(true);
+    expect(
+      await missing(),
+      "the document still reports the family missing",
+    ).toBe(true);
     await openPanel(page, "paged.fonts");
     await expect(page.locator('[data-fonts-panel="ready"]')).toBeVisible();
-    const row = page.locator("[data-font-list] [data-list-row]", { hasText: MISSING_FAMILY });
+    const row = page.locator("[data-font-list] [data-list-row]", {
+      hasText: MISSING_FAMILY,
+    });
     await expect(row).toHaveCount(1);
     await expect(row.locator('[data-row-badge="missing"]')).toBeVisible();
 
     // Disposing the face takes it out of the scene table again.
     await hostCall(page, `globalThis.__doorsFace.dispose();`);
-    await expect.poll(submitScene, { timeout: 10_000 }).toEqual([MISSING_FAMILY]);
+    await expect
+      .poll(submitScene, { timeout: 10_000 })
+      .toEqual([MISSING_FAMILY]);
   });
 
   test("document metadata is one undoable edit that fires onDidChange @feat:plugin-platform.document-metadata @level:happy", async ({
@@ -473,7 +559,9 @@ test.describe("journey · plugin doors: entering point, overlay layers, document
 
     expect(await read(), "a new document carries none").toBeNull();
     expect((await write("A")).applied).toBe(true);
-    await expect.poll(async () => (await doors(page)).changes).toEqual(["mutationApplied"]);
+    await expect
+      .poll(async () => (await doors(page)).changes)
+      .toEqual(["mutationApplied"]);
     expect(await read()).toEqual(A);
     expect((await write("B")).applied).toBe(true);
     expect(await read()).toEqual(B);
@@ -502,7 +590,10 @@ test.describe("journey · plugin doors: entering point, overlay layers, document
             registries: {
               importers: {
                 resolve(name: string): {
-                  import(f: { name: string; bytes: Uint8Array }): Promise<void> | void;
+                  import(f: {
+                    name: string;
+                    bytes: Uint8Array;
+                  }): Promise<void> | void;
                 } | null;
               };
             };
@@ -516,8 +607,9 @@ test.describe("journey · plugin doors: entering point, overlay layers, document
       return "";
     });
     expect(reopened).toBe("");
-    await expect.poll(async () => (await doors(page)).opens.length, { timeout: 15_000 }).toBe(1);
+    await expect
+      .poll(async () => (await doors(page)).opens.length, { timeout: 15_000 })
+      .toBe(1);
     expect(await read(), "the label survives an IDML round trip").toEqual(A);
   });
 });
-

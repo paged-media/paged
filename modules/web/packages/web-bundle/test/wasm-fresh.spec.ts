@@ -63,7 +63,9 @@ describe.skipIf(!present && !required)(
     });
 
     it("SOURCE_HASH equals the hash of the checkout's sources", () => {
-      const stamped = existsSync(STAMP) ? readFileSync(STAMP, "utf8").trim() : "(none)";
+      const stamped = existsSync(STAMP)
+        ? readFileSync(STAMP, "utf8").trim()
+        : "(none)";
       expect(
         stamped,
         `the wasm was built from different sources than this checkout — ${REBUILD}`,
@@ -71,7 +73,9 @@ describe.skipIf(!present && !required)(
     });
 
     it("the wasm itself carries the same hash (the stamp file was not edited by hand)", async () => {
-      const glue = (await import(/* @vite-ignore */ join(BIN, "blitz_web.js"))) as {
+      const glue = (await import(
+        /* @vite-ignore */ join(BIN, "blitz_web.js")
+      )) as {
         initSync(o: { module: Buffer }): unknown;
         engine_source_hash?: () => string;
       };
@@ -80,7 +84,9 @@ describe.skipIf(!present && !required)(
         typeof glue.engine_source_hash,
         `the wasm exports no engine_source_hash — it predates the stamp; ${REBUILD}`,
       ).toBe("function");
-      const stamped = existsSync(STAMP) ? readFileSync(STAMP, "utf8").trim() : "(none)";
+      const stamped = existsSync(STAMP)
+        ? readFileSync(STAMP, "utf8").trim()
+        : "(none)";
       expect(glue.engine_source_hash!()).toBe(stamped);
     });
   },

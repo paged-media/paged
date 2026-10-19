@@ -32,7 +32,6 @@ import { p } from "../names-annual";
 import { build as chain } from "../pages/220-ledger/05-chain";
 import { build as roundtrip } from "../pages/220-ledger/06-roundtrip";
 
-
 // Continuation of 220-ledger - split for the in-chain per-op cost;
 // the checkpoint chain absorbs splits with zero logic change.
 

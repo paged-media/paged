@@ -25,7 +25,12 @@
 // A PDF has no editable model of its own once opened (it becomes a native
 // document), so the plugin contributes no object kinds.
 
-import type { BundleHost, ObjectModelHandle, TypedCommandContribution, ValueType } from "@paged-media/plugin-api";
+import type {
+  BundleHost,
+  ObjectModelHandle,
+  TypedCommandContribution,
+  ValueType,
+} from "@paged-media/plugin-api";
 
 import importPdfArgs from "../schema/import-pdf.args.json";
 import importPdfResult from "../schema/import-pdf.result.json";
@@ -45,20 +50,30 @@ export interface PdfImportArgs extends PdfImportOptions {
 
 /** The door that replaces the active document: the native one (the
  *  editor), else the documents door (headless hosts, the Node CLI). */
-function openDoor(host: BundleHost, name: string): ((bytes: Uint8Array) => Promise<void>) | null {
-  if (host.supports("document.openNative@1")) return (bytes) => host.nativeDocument.open(bytes);
+function openDoor(
+  host: BundleHost,
+  name: string,
+): ((bytes: Uint8Array) => Promise<void>) | null {
+  if (host.supports("document.openNative@1"))
+    return (bytes) => host.nativeDocument.open(bytes);
   if (host.supports("documents.open@1")) {
     return async (bytes) => {
       const r = await host.documents.open(bytes, { name });
-      if (!r.opened) throw new Error(`failed: the host declined to open ${name}`);
+      if (!r.opened)
+        throw new Error(`failed: the host declined to open ${name}`);
     };
   }
   return null;
 }
 
-export function contributePdfCommands(host: BundleHost): ObjectModelHandle | null {
+export function contributePdfCommands(
+  host: BundleHost,
+): ObjectModelHandle | null {
   if (!host.supports("contribute.objectModel@1")) return null;
-  const importPdf: TypedCommandContribution<PdfImportArgs, { mode: "editable" | "image"; pageCount: number }> = {
+  const importPdf: TypedCommandContribution<
+    PdfImportArgs,
+    { mode: "editable" | "image"; pageCount: number }
+  > = {
     id: IMPORT_PDF_COMMAND,
     title: "Open PDF",
     args: IMPORT_PDF_ARGS_TYPE,
@@ -71,5 +86,8 @@ export function contributePdfCommands(host: BundleHost): ObjectModelHandle | nul
       return openPdf(host, args.bytes, options, open);
     },
   };
-  return host.contribute.objectModel({ kinds: [], commands: [importPdf as TypedCommandContribution] });
+  return host.contribute.objectModel({
+    kinds: [],
+    commands: [importPdf as TypedCommandContribution],
+  });
 }

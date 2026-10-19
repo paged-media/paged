@@ -110,15 +110,23 @@ test.describe("journey · paged.sheet persistence", () => {
     expect(frame.kind, "the lowered element is a frame").toBe("textFrame");
     await page.waitForTimeout(400);
     const framesBefore = await designer.count("textFrame");
-    expect(framesBefore, "the document carries the lowered sheet frame").toBeGreaterThan(0);
+    expect(
+      framesBefore,
+      "the document carries the lowered sheet frame",
+    ).toBeGreaterThan(0);
 
     // ── 2. EXPORT → RELOAD (HARD) — round-trip the document through IDML; the
     //    sheet frame's binding envelope (x-paged:media.paged.sheet via
     //    setPluginMetadata) rides the IDML, so the reloaded document keeps its
     //    page and the lowered frame (persistence, S-08). ──
     const reload = await designer.exportAndReload();
-    expect(reload.byteLength, "the exported IDML is non-empty").toBeGreaterThan(0);
-    expect(reload.pageCount, "the reloaded document kept its page").toBeGreaterThan(0);
+    expect(reload.byteLength, "the exported IDML is non-empty").toBeGreaterThan(
+      0,
+    );
+    expect(
+      reload.pageCount,
+      "the reloaded document kept its page",
+    ).toBeGreaterThan(0);
 
     // The lowered frame survives the round-trip (the sheet content persists in
     // the document, not just the in-memory session).

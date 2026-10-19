@@ -23,7 +23,11 @@
 
 import { describe, expect, it, vi } from "bun:test";
 
-import type { BundleHost, Mutation, SwatchSummary } from "@paged-media/plugin-api";
+import type {
+  BundleHost,
+  Mutation,
+  SwatchSummary,
+} from "@paged-media/plugin-api";
 import { paletteEntry } from "../../sheet-host-model/src";
 
 import { sheetBundle } from "../src";
@@ -304,7 +308,10 @@ describe("sheet_plugin_swatch_provider: the honest door", () => {
       manifest: sheetBundle.manifest,
       log: { debug() {}, info() {}, warn() {}, error() {} },
       // The document doors every host has; nothing here fires them.
-      document: { onDidChange: () => ({ dispose() {} }), onDidOpen: () => ({ dispose() {} }) },
+      document: {
+        onDidChange: () => ({ dispose() {} }),
+        onDidOpen: () => ({ dispose() {} }),
+      },
       supports: (f: string) =>
         f === "contribute.objectType@1" ||
         f === "contribute.editContext@1" ||
@@ -348,7 +355,10 @@ describe("sheet_plugin_swatch_provider: the honest door", () => {
       manifest: sheetBundle.manifest,
       log: { debug() {}, info() {}, warn() {}, error() {} },
       // The document doors every host has; nothing here fires them.
-      document: { onDidChange: () => ({ dispose() {} }), onDidOpen: () => ({ dispose() {} }) },
+      document: {
+        onDidChange: () => ({ dispose() {} }),
+        onDidOpen: () => ({ dispose() {} }),
+      },
       supports: (f: string) =>
         f === "contribute.objectType@1" || f === "contribute.editContext@1",
       contribute: {

@@ -33,7 +33,9 @@ const CRC_TABLE = (() => {
 
 function crc32(parts: Uint8Array[]): number {
   let c = 0xffffffff;
-  for (const p of parts) for (let i = 0; i < p.length; i += 1) c = CRC_TABLE[(c ^ p[i]) & 0xff] ^ (c >>> 8);
+  for (const p of parts)
+    for (let i = 0; i < p.length; i += 1)
+      c = CRC_TABLE[(c ^ p[i]) & 0xff] ^ (c >>> 8);
   return (c ^ 0xffffffff) >>> 0;
 }
 
@@ -47,7 +49,13 @@ function adler32(data: Uint8Array): number {
   return ((b << 16) | a) >>> 0;
 }
 
-const u32 = (v: number) => new Uint8Array([(v >>> 24) & 255, (v >>> 16) & 255, (v >>> 8) & 255, v & 255]);
+const u32 = (v: number) =>
+  new Uint8Array([
+    (v >>> 24) & 255,
+    (v >>> 16) & 255,
+    (v >>> 8) & 255,
+    v & 255,
+  ]);
 
 function chunk(type: string, data: Uint8Array): Uint8Array[] {
   const t = new TextEncoder().encode(type);
@@ -82,11 +90,18 @@ const COMPRESS_FROM = 64 * 1024;
 
 async function zlib(data: Uint8Array): Promise<Uint8Array> {
   if (data.length < COMPRESS_FROM) return zlibStored(data);
-  const CS = (globalThis as { CompressionStream?: new (f: string) => TransformStream<Uint8Array, Uint8Array> })
-    .CompressionStream;
+  const CS = (
+    globalThis as {
+      CompressionStream?: new (
+        f: string,
+      ) => TransformStream<Uint8Array, Uint8Array>;
+    }
+  ).CompressionStream;
   if (!CS) return zlibStored(data);
   try {
-    const stream = new Blob([data as unknown as BlobPart]).stream().pipeThrough(new CS("deflate"));
+    const stream = new Blob([data as unknown as BlobPart])
+      .stream()
+      .pipeThrough(new CS("deflate"));
     return new Uint8Array(await new Response(stream).arrayBuffer());
   } catch {
     return zlibStored(data);
@@ -103,7 +118,8 @@ export async function encodePng(
   const raw = new Uint8Array((row + 1) * height);
   for (let y = 0; y < height; y += 1) {
     raw[y * (row + 1)] = 0; // filter: none
-    for (let i = 0; i < row; i += 1) raw[y * (row + 1) + 1 + i] = rgba[y * row + i];
+    for (let i = 0; i < row; i += 1)
+      raw[y * (row + 1) + 1 + i] = rgba[y * row + i];
   }
   const ihdr = new Uint8Array(13);
   ihdr.set(u32(width), 0);

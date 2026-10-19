@@ -48,8 +48,18 @@ test.describe("journey · group", () => {
     await designer.open();
     await designer.newDocument();
 
-    const a = await designer.drawRectangle({ x0: 70, y0: 90, x1: 240, y1: 230 });
-    const b = await designer.drawRectangle({ x0: 300, y0: 90, x1: 470, y1: 230 });
+    const a = await designer.drawRectangle({
+      x0: 70,
+      y0: 90,
+      x1: 240,
+      y1: 230,
+    });
+    const b = await designer.drawRectangle({
+      x0: 300,
+      y0: 90,
+      x1: 470,
+      y1: 230,
+    });
     expect(a).toBeTruthy();
     expect(b).toBeTruthy();
 
@@ -76,8 +86,8 @@ test.describe("journey · group", () => {
     await expect
       .poll(() => designer.count("group"), { timeout: 6000 })
       .toBe(groupsBefore);
-    expect(
-      (await designer.elementSelection()).map((s) => s.id).sort(),
-    ).toEqual([a, b].sort());
+    expect((await designer.elementSelection()).map((s) => s.id).sort()).toEqual(
+      [a, b].sort(),
+    );
   });
 });

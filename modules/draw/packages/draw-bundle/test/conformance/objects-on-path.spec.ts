@@ -38,7 +38,14 @@
 //   (4) The two distribution modes, align, pivot, offset and order.
 //   (5) EXPAND ≠ RELEASE on the same document.
 
-import { describe, expect, it, beforeAll, afterAll, beforeEach } from "bun:test";
+import {
+  describe,
+  expect,
+  it,
+  beforeAll,
+  afterAll,
+  beforeEach,
+} from "bun:test";
 
 import type {
   CommandContribution,
@@ -1038,7 +1045,9 @@ describe("draw conformance — OBJECTS ON A PATH (§16.3)", () => {
         "This moves the objects you selected; it does not copy them",
       );
       expect(OBJECTS_ON_PATH_PANEL_NOTE).toContain("Text frames work too");
-      expect(OBJECTS_ON_PATH_PANEL_NOTE).toContain("Objects are kept on the page");
+      expect(OBJECTS_ON_PATH_PANEL_NOTE).toContain(
+        "Objects are kept on the page",
+      );
       // (1) It MOVES rather than copies — the opposite of every other row.
       expect(OBJECTS_ON_PATH_NOTE).toContain("THIS MOVES YOUR OBJECTS");
       expect(OBJECTS_ON_PATH_NOTE).toContain("IT CREATES NONE");
@@ -1046,7 +1055,9 @@ describe("draw conformance — OBJECTS ON A PATH (§16.3)", () => {
       // (2) The C-23 wording, which must stay the MEASURED one: the
       // geometry doors go silent, the metadata and the tree do not.
       expect(OBJECTS_ON_PATH_NOTE).toContain("keeps its metadata");
-      expect(OBJECTS_ON_PATH_NOTE).toContain("stops answering for its geometry");
+      expect(OBJECTS_ON_PATH_NOTE).toContain(
+        "stops answering for its geometry",
+      );
       expect(OBJECTS_ON_PATH_NOTE).not.toMatch(/RFI|\b[A-Z]-\d+\b/);
       expect(OBJECTS_ON_PATH_NOTE).toContain("STRICTER rule");
       // …and the undo arithmetic.

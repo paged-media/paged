@@ -53,9 +53,12 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   const notes: string[] = [];
   const page = p(31);
 
-  const head = await proseFrame(ctx, page, [48, 58, 480, 92], [
-    { text: "Bullets and numbering", style: STYLE.head1 },
-  ]);
+  const head = await proseFrame(
+    ctx,
+    page,
+    [48, 58, 480, 92],
+    [{ text: "Bullets and numbering", style: STYLE.head1 }],
+  );
   elements.push(head.frameId);
 
   // ── the list resource: create (visible), edit (visible), delete ──
@@ -107,14 +110,19 @@ export async function build(ctx: PageContext): Promise<PageReport> {
       value: "-",
     });
   }
-  const bulletCap = await proseFrame(ctx, page, [48, 256, 252, 300], [
-    {
-      text:
-        "Bullet List (style) · paragraphListType = BulletList + " +
-        "paragraphBulletCharacter (live)",
-      style: STYLE.caption,
-    },
-  ]);
+  const bulletCap = await proseFrame(
+    ctx,
+    page,
+    [48, 256, 252, 300],
+    [
+      {
+        text:
+          "Bullet List (style) · paragraphListType = BulletList + " +
+          "paragraphBulletCharacter (live)",
+        style: STYLE.caption,
+      },
+    ],
+  );
   elements.push(bulletCap.frameId);
 
   // ── the numbered frames, bound to the Annual Steps list ──────────
@@ -125,10 +133,15 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     let offset = 0;
     for (const [i, text] of texts.entries()) {
       const range = doc.storyRangeId(storyId, offset, offset + text.length);
-      await doc.setProperty("storyRange", range, "paragraphAppliedNumberingList", {
-        type: "text",
-        value: LIST_ID,
-      });
+      await doc.setProperty(
+        "storyRange",
+        range,
+        "paragraphAppliedNumberingList",
+        {
+          type: "text",
+          value: LIST_ID,
+        },
+      );
       offset += text.length + (i === texts.length - 1 ? 0 : 1);
     }
   };
@@ -161,14 +174,19 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     );
     subOffset += text.length + (i === STEPS_SUB.length - 1 ? 0 : 1);
   }
-  const capA = await proseFrame(ctx, page, [276, 228, 480, 276], [
-    {
-      text:
-        "Numbered 1 + appliedNumberingList = Annual Steps · sub-level " +
-        "Numbered 2, paragraphNumberingFormat = a, b, c",
-      style: STYLE.caption,
-    },
-  ]);
+  const capA = await proseFrame(
+    ctx,
+    page,
+    [276, 228, 480, 276],
+    [
+      {
+        text:
+          "Numbered 1 + appliedNumberingList = Annual Steps · sub-level " +
+          "Numbered 2, paragraphNumberingFormat = a, b, c",
+        style: STYLE.caption,
+      },
+    ],
+  );
   elements.push(capA.frameId);
 
   const frameB = await proseFrame(
@@ -205,43 +223,53 @@ export async function build(ctx: PageContext): Promise<PageReport> {
         "honoured on this run",
     );
   }
-  const capB = await proseFrame(ctx, page, [276, 370, 480, 430], [
-    {
-      text: editMovedPixels
-        ? "The same list in a second story: born restarting at 1, it " +
-          "continues at 4 since editNumberingList set " +
-          "ContinueNumbersAcrossStories"
-        : "The same list in a second story; editNumberingList set " +
-          "ContinueNumbersAcrossStories, measured without pixel effect " +
-          "on this run",
-      style: STYLE.caption,
-    },
-  ]);
+  const capB = await proseFrame(
+    ctx,
+    page,
+    [276, 370, 480, 430],
+    [
+      {
+        text: editMovedPixels
+          ? "The same list in a second story: born restarting at 1, it " +
+            "continues at 4 since editNumberingList set " +
+            "ContinueNumbersAcrossStories"
+          : "The same list in a second story; editNumberingList set " +
+            "ContinueNumbersAcrossStories, measured without pixel effect " +
+            "on this run",
+        style: STYLE.caption,
+      },
+    ],
+  );
   elements.push(capB.frameId);
 
   // ── narration ────────────────────────────────────────────────────
-  const prose = await proseFrame(ctx, page, [48, 320, 252, 560], [
-    {
-      text:
-        "Three ops govern the list resources. createNumberingList " +
-        "minted Annual Steps, the list both numbered frames opposite " +
-        "are bound to through paragraphAppliedNumberingList. It was " +
-        "born story-scoped, so the lower frame - a separate story - " +
-        "restarted at one; editNumberingList then set " +
-        "ContinueNumbersAcrossStories and the lower frame carries on " +
-        "from the upper. A third list, Scratch List, was created and " +
-        "deleted again: demonstrated, not resident.",
-      style: STYLE.bodyFirst,
-    },
-    {
-      text:
-        "The lettered entries restart because they live in their own " +
-        "story. An explicit start-at is not a property path on the " +
-        "wire, so a sub-level restarts by story scope here; the margin " +
-        "note records the boundary.",
-      style: STYLE.body,
-    },
-  ]);
+  const prose = await proseFrame(
+    ctx,
+    page,
+    [48, 320, 252, 560],
+    [
+      {
+        text:
+          "Three ops govern the list resources. createNumberingList " +
+          "minted Annual Steps, the list both numbered frames opposite " +
+          "are bound to through paragraphAppliedNumberingList. It was " +
+          "born story-scoped, so the lower frame - a separate story - " +
+          "restarted at one; editNumberingList then set " +
+          "ContinueNumbersAcrossStories and the lower frame carries on " +
+          "from the upper. A third list, Scratch List, was created and " +
+          "deleted again: demonstrated, not resident.",
+        style: STYLE.bodyFirst,
+      },
+      {
+        text:
+          "The lettered entries restart because they live in their own " +
+          "story. An explicit start-at is not a property path on the " +
+          "wire, so a sub-level restarts by story scope here; the margin " +
+          "note records the boundary.",
+        style: STYLE.body,
+      },
+    ],
+  );
   elements.push(prose.frameId);
 
   await marginNote(

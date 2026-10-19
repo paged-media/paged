@@ -100,7 +100,10 @@ import { ConceptShell, Kicker, Row, SeamNum, SeamSelect } from "./concept-kit";
 const TEXT_BINDINGS = {
   bullet: { scope: "content" as const, path: "paragraphBulletCharacter" },
   format: { scope: "content" as const, path: "paragraphNumberingFormat" },
-  expression: { scope: "content" as const, path: "paragraphNumberingExpression" },
+  expression: {
+    scope: "content" as const,
+    path: "paragraphNumberingExpression",
+  },
   textAfter: { scope: "content" as const, path: "paragraphBulletsTextAfter" },
   startAt: { scope: "content" as const, path: "paragraphNumberingStartAt" },
 };
@@ -359,7 +362,10 @@ function ListDefinitions() {
       .catch(() => {});
   };
 
-  const onEdit = (list: NumberingListSummary, patch: Partial<NumberingListSummary>) => {
+  const onEdit = (
+    list: NumberingListSummary,
+    patch: Partial<NumberingListSummary>,
+  ) => {
     void client
       .mutate({
         op: "editNumberingList",
@@ -396,9 +402,7 @@ function ListDefinitions() {
     <div data-list-definitions={lists === null ? "loading" : "ready"}>
       <Kicker>List definitions</Kicker>
       {lists === null ? (
-        <div className="py-2 text-xs text-muted-foreground">
-          Loading lists…
-        </div>
+        <div className="py-2 text-xs text-muted-foreground">Loading lists…</div>
       ) : lists.length === 0 ? (
         <div
           className="py-1 text-xs text-muted-foreground"
@@ -444,7 +448,8 @@ function ListDefinitions() {
         className="mt-[6px] text-[10.5px] italic opacity-70"
         style={{ color: "var(--pg-muted-fg)" }}
       >
-        The list applied to each paragraph is not shown yet: the editor can set it but cannot read it back.
+        The list applied to each paragraph is not shown yet: the editor can set
+        it but cannot read it back.
       </div>
     </div>
   );
@@ -483,42 +488,42 @@ export function BulletsPanel() {
           {/* LIVE — paragraphNumberingFormat, the counter style
               ("1, 2, 3, 4…" / "i, ii, iii, iv…"). */}
           <ObjectFieldFrame field={text.format}>
-          <KitSelect
-            data-bullets-field="numbering-format"
-            aria-label="numbering-format"
-            value={format}
-            disabled={text.format.onCommit == null}
-            onChange={(e) =>
-              text.format.onCommit?.({
-                type: "text",
-                value: e.target.value,
-              } as Value)
-            }
-          >
-            <option value="">[Style default]</option>
-            {NUMBERING_FORMATS.map((f) => (
-              <option key={f} value={f}>
-                {f}
-              </option>
-            ))}
-            {format !== "" && !NUMBERING_FORMATS.includes(format) ? (
-              <option value={format}>{format}</option>
-            ) : null}
-          </KitSelect>
+            <KitSelect
+              data-bullets-field="numbering-format"
+              aria-label="numbering-format"
+              value={format}
+              disabled={text.format.onCommit == null}
+              onChange={(e) =>
+                text.format.onCommit?.({
+                  type: "text",
+                  value: e.target.value,
+                } as Value)
+              }
+            >
+              <option value="">[Style default]</option>
+              {NUMBERING_FORMATS.map((f) => (
+                <option key={f} value={f}>
+                  {f}
+                </option>
+              ))}
+              {format !== "" && !NUMBERING_FORMATS.includes(format) ? (
+                <option value={format}>{format}</option>
+              ) : null}
+            </KitSelect>
           </ObjectFieldFrame>
         </Row>
         <Row label="Number">
           {/* LIVE (v64) — paragraphNumberingExpression, the marker
               template ("^#.^t", "(^#)"). */}
           <ObjectFieldFrame field={text.expression}>
-          <TextField
-            testId="numbering-expression"
-            value={expression}
-            placeholder="^#.^t"
-            mono
-            disabled={text.expression.onCommit == null}
-            onCommit={text.expression.onCommit ?? undefined}
-          />
+            <TextField
+              testId="numbering-expression"
+              value={expression}
+              placeholder="^#.^t"
+              mono
+              disabled={text.expression.onCommit == null}
+              onCommit={text.expression.onCommit ?? undefined}
+            />
           </ObjectFieldFrame>
         </Row>
         <Row label="Char style">
@@ -555,20 +560,20 @@ export function BulletsPanel() {
           {/* LIVE (v64) — paragraphNumberingStartAt, a whole number
               >= 1. Read when the count restarts (Mode = Start at). */}
           <ObjectFieldFrame field={text.startAt}>
-          <NumberInput
-            value={startAt}
-            min={1}
-            precision={0}
-            disabled={text.startAt.onCommit == null}
-            onChange={() => {}}
-            onCommit={(next) =>
-              text.startAt.onCommit?.({
-                type: "length",
-                value: Math.max(1, Math.round(next)),
-              } as Value)
-            }
-            aria-label="numbering-start-at"
-          />
+            <NumberInput
+              value={startAt}
+              min={1}
+              precision={0}
+              disabled={text.startAt.onCommit == null}
+              onChange={() => {}}
+              onCommit={(next) =>
+                text.startAt.onCommit?.({
+                  type: "length",
+                  value: Math.max(1, Math.round(next)),
+                } as Value)
+              }
+              aria-label="numbering-start-at"
+            />
           </ObjectFieldFrame>
         </Row>
         <Row label="Restart">
@@ -579,27 +584,27 @@ export function BulletsPanel() {
         <Row label="Glyph">
           {/* LIVE — paragraphBulletCharacter (the glyph itself). */}
           <ObjectFieldFrame field={text.bullet}>
-          <TextField
-            testId="bullet-character"
-            value={bullet}
-            placeholder="•"
-            disabled={text.bullet.onCommit == null}
-            onCommit={text.bullet.onCommit ?? undefined}
-          />
+            <TextField
+              testId="bullet-character"
+              value={bullet}
+              placeholder="•"
+              disabled={text.bullet.onCommit == null}
+              onCommit={text.bullet.onCommit ?? undefined}
+            />
           </ObjectFieldFrame>
         </Row>
         <Row label="Text after">
           {/* LIVE (v64) — paragraphBulletsTextAfter, IDML spelling
               ("^t" is a tab). */}
           <ObjectFieldFrame field={text.textAfter}>
-          <TextField
-            testId="bullets-text-after"
-            value={textAfter}
-            placeholder="^t"
-            mono
-            disabled={text.textAfter.onCommit == null}
-            onCommit={text.textAfter.onCommit ?? undefined}
-          />
+            <TextField
+              testId="bullets-text-after"
+              value={textAfter}
+              placeholder="^t"
+              mono
+              disabled={text.textAfter.onCommit == null}
+              onCommit={text.textAfter.onCommit ?? undefined}
+            />
           </ObjectFieldFrame>
         </Row>
         <Row label="Char style">

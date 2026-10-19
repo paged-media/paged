@@ -38,9 +38,20 @@ film("sample", async (k) => {
     const slot = k.page.locator('[data-tool-slot="shape"]');
     const box = await slot.boundingBox();
     if (!box) throw new Error("no shape tool slot");
-    await k.pointer.click({ x: box.x + box.width / 2, y: box.y + box.height / 2 }, { targetWidth: box.width });
-    await k.pointer.drag(await screenPoint(k.page, 90, 260), await screenPoint(k.page, 520, 560));
-    const { storyId } = await k.designer.addTextFrame({ x0: 90, y0: 90, x1: 520, y1: 220 });
+    await k.pointer.click(
+      { x: box.x + box.width / 2, y: box.y + box.height / 2 },
+      { targetWidth: box.width },
+    );
+    await k.pointer.drag(
+      await screenPoint(k.page, 90, 260),
+      await screenPoint(k.page, 520, 560),
+    );
+    const { storyId } = await k.designer.addTextFrame({
+      x0: 90,
+      y0: 90,
+      x1: 520,
+      y1: 220,
+    });
     expect(storyId).toBeTruthy();
     await k.designer.placeCaret(storyId!, 0);
     await k.pointer.moveTo(await screenPoint(k.page, 300, 150));

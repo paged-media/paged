@@ -27,13 +27,14 @@ import { dirname, resolve } from "node:path";
 import { describe, expect, it } from "bun:test";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const CLI = resolve(
-  here,
-  "../../plugin-cli/bin/paged-plugin.mjs",
-);
+const CLI = resolve(here, "../bin/paged-plugin.mjs");
 const FIX = (name: string) => resolve(here, "fixtures/wasm-manifests", name);
 
-function validate(manifest: string): { code: number; out: string; err: string } {
+function validate(manifest: string): {
+  code: number;
+  out: string;
+  err: string;
+} {
   const r = spawnSync(process.execPath, [CLI, "validate", FIX(manifest)], {
     encoding: "utf8",
   });

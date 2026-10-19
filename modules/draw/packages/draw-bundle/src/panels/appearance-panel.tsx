@@ -52,7 +52,11 @@
 // that behind a convincing stack would be the exact fiction this repo
 // refuses.
 
-import type { BundleHost, ElementId, PanelProps } from "@paged-media/plugin-api";
+import type {
+  BundleHost,
+  ElementId,
+  PanelProps,
+} from "@paged-media/plugin-api";
 import * as React from "react";
 
 import {
@@ -78,7 +82,12 @@ import {
 } from "../commands/appearance-bake";
 import { linkIndex } from "../link-index";
 import { usePanelReload } from "./use-panel-reload";
-import { PanelAbout, PanelIntro, Refusal, useActionFeedback } from "./panel-kit";
+import {
+  PanelAbout,
+  PanelIntro,
+  Refusal,
+  useActionFeedback,
+} from "./panel-kit";
 
 export const APPEARANCE_PANEL_ID = "media.paged.draw.panel.appearance";
 
@@ -328,7 +337,10 @@ export function makeAppearancePanel(host: BundleHost): {
         data-draw-appearance-panel={total}
         data-draw-appearance-baked={baked ? "true" : "false"}
       >
-        <PanelIntro summary={APPEARANCE_SUMMARY} attr="data-draw-appearance-intro" />
+        <PanelIntro
+          summary={APPEARANCE_SUMMARY}
+          attr="data-draw-appearance-intro"
+        />
         <div style={{ ...rowStyle, justifyContent: "space-between" }}>
           <span style={{ ...sectionStyle, paddingTop: 0 }}>
             Appearance ({total})
@@ -345,7 +357,8 @@ export function makeAppearancePanel(host: BundleHost): {
               data-draw-appearance-add-fill
               disabled={!target}
               onClick={() =>
-                void run(() => applyAppearanceCommand(
+                void run(() =>
+                  applyAppearanceCommand(
                     host,
                     APPEARANCE_ADD_FILL_COMMAND_ID,
                     "fill",
@@ -366,7 +379,8 @@ export function makeAppearancePanel(host: BundleHost): {
               data-draw-appearance-add-stroke
               disabled={!target}
               onClick={() =>
-                void run(() => applyAppearanceCommand(
+                void run(() =>
+                  applyAppearanceCommand(
                     host,
                     APPEARANCE_ADD_STROKE_COMMAND_ID,
                     "stroke",
@@ -389,7 +403,8 @@ export function makeAppearancePanel(host: BundleHost): {
               data-draw-appearance-clear
               disabled={!target || total === 0}
               onClick={() =>
-                void run(() => applyAppearanceCommand(
+                void run(() =>
+                  applyAppearanceCommand(
                     host,
                     APPEARANCE_CLEAR_COMMAND_ID,
                     "clear",
@@ -418,7 +433,8 @@ export function makeAppearancePanel(host: BundleHost): {
             data-draw-appearance-bake
             disabled={!target || baked || total === 0}
             onClick={() =>
-              void run(() => bakeAppearance(host, target!).then(() => undefined),
+              void run(() =>
+                bakeAppearance(host, target!).then(() => undefined),
               )
             }
           >
@@ -437,7 +453,8 @@ export function makeAppearancePanel(host: BundleHost): {
             data-draw-appearance-release
             disabled={!target || !baked}
             onClick={() =>
-              void run(() => releaseAppearance(host, target!).then(() => undefined),
+              void run(() =>
+                releaseAppearance(host, target!).then(() => undefined),
               )
             }
           >
@@ -448,7 +465,9 @@ export function makeAppearancePanel(host: BundleHost): {
         <Refusal text={refusal} />
 
         {!target && (
-          <div style={{ opacity: 0.6, font: "12px var(--font-sans, sans-serif)" }}>
+          <div
+            style={{ opacity: 0.6, font: "12px var(--font-sans, sans-serif)" }}
+          >
             Select an object to see its appearance stack.
           </div>
         )}
@@ -456,14 +475,24 @@ export function makeAppearancePanel(host: BundleHost): {
         {target && (
           <>
             {extra > 0 && (
-              <div style={{ opacity: 0.6, font: "11px var(--font-sans, sans-serif)" }}>
+              <div
+                style={{
+                  opacity: 0.6,
+                  font: "11px var(--font-sans, sans-serif)",
+                }}
+              >
                 Showing the first of {extra + 1} selected objects; edits apply
                 to all of them.
               </div>
             )}
             <div style={sectionStyle}>Fills</div>
             {stack.fills.length === 0 ? (
-              <div style={{ opacity: 0.6, font: "12px var(--font-sans, sans-serif)" }}>
+              <div
+                style={{
+                  opacity: 0.6,
+                  font: "12px var(--font-sans, sans-serif)",
+                }}
+              >
                 No extra fill layers — the frame's own fill is what renders.
               </div>
             ) : (
@@ -471,7 +500,12 @@ export function makeAppearancePanel(host: BundleHost): {
             )}
             <div style={sectionStyle}>Strokes</div>
             {stack.strokes.length === 0 ? (
-              <div style={{ opacity: 0.6, font: "12px var(--font-sans, sans-serif)" }}>
+              <div
+                style={{
+                  opacity: 0.6,
+                  font: "12px var(--font-sans, sans-serif)",
+                }}
+              >
                 No extra stroke layers — the frame's own stroke is what renders.
               </div>
             ) : (
@@ -480,7 +514,10 @@ export function makeAppearancePanel(host: BundleHost): {
           </>
         )}
 
-        <PanelAbout text={APPEARANCE_BAKE_NOTE} attr="data-draw-appearance-note" />
+        <PanelAbout
+          text={APPEARANCE_BAKE_NOTE}
+          attr="data-draw-appearance-note"
+        />
       </div>
     );
   };

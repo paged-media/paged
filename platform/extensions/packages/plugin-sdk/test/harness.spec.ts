@@ -204,9 +204,15 @@ describe("headless document doors — real engine round-trip", () => {
     await live.load(minimalIdml());
     live.loadBundle(bundleFor("media.paged.data"));
     expect(await live.host.document.getDocumentMetadata()).toBeNull();
-    const set = await live.host.document.setDocumentMetadata({ v: 1, data: { parts: "a1" } });
+    const set = await live.host.document.setDocumentMetadata({
+      v: 1,
+      data: { parts: "a1" },
+    });
     expect(set.applied).toBe(true);
-    expect(await live.host.document.getDocumentMetadata()).toEqual({ v: 1, data: { parts: "a1" } });
+    expect(await live.host.document.getDocumentMetadata()).toEqual({
+      v: 1,
+      data: { parts: "a1" },
+    });
     await live.host.document.undo();
     expect(await live.host.document.getDocumentMetadata()).toBeNull();
   });
@@ -255,7 +261,9 @@ describe("contribution recording + dispose honesty", () => {
   it("records SCHEMA panels verbatim (W3.1 — the schema, not React)", async () => {
     live = await open();
     const host = (await loaded()).host;
-    host.contribute.schemaPanel(schemaPanelC("media.paged.harness.panel.stroke"));
+    host.contribute.schemaPanel(
+      schemaPanelC("media.paged.harness.panel.stroke"),
+    );
     // The schema panel is recorded as its OWN kind, carrying the schema
     // (not the synthesized React component the registry saw).
     const recorded = live!.schemaPanelsContributed();
@@ -263,9 +271,7 @@ describe("contribution recording + dispose honesty", () => {
       "media.paged.harness.panel.stroke",
     ]);
     expect(recorded[0].schema.sections).toHaveLength(1);
-    expect(recorded[0].schema.sections[0].rows[0].widget).toBe(
-      "paged.readout",
-    );
+    expect(recorded[0].schema.sections[0].rows[0].widget).toBe("paged.readout");
     // It also lands in the registry as a panel (the synthesized one).
     expect(live!.panelsContributed().map((p) => p.id)).toContain(
       "media.paged.harness.panel.stroke",
@@ -329,7 +335,14 @@ describe("contribution recording + dispose honesty", () => {
     expect(ecs.map((c) => c.type)).toEqual(["vectorGraphic"]);
     expect(ecs[0].toolIds).toEqual(["media.paged.harness.tool.addAnchor"]);
     // The matcher survives verbatim — the shell calls it at hit time.
-    expect(ecs[0].matches?.({ id: {} as never, kind: "polygon", groupChain: [], metadata: null })).toBe(true);
+    expect(
+      ecs[0].matches?.({
+        id: {} as never,
+        kind: "polygon",
+        groupChain: [],
+        metadata: null,
+      }),
+    ).toBe(true);
     expect(ots.map((c) => c.type)).toEqual(["webFrame"]);
     expect(ots[0].editContextType).toBe("webFrame");
     // Both also land in the unified contribution log under their kinds.
@@ -347,7 +360,8 @@ describe("contribution recording + dispose honesty", () => {
     host.contribute.editContext({
       type: "vectorGraphic",
       entry: "doubleClick",
-      onContentPointerDown: (e) => seen.push(`down@${e.contentPoint.join(",")}`),
+      onContentPointerDown: (e) =>
+        seen.push(`down@${e.contentPoint.join(",")}`),
       onContentPointerMove: () => seen.push("move"),
       onContentPointerUp: () => seen.push("up"),
       onContentKey: (e) => seen.push(`key:${e.key}`),
@@ -393,12 +407,20 @@ describe("contribution recording + dispose honesty", () => {
     });
     const imps = live!.importersContributed();
     const exps = live!.exportersContributed();
-    expect(imps.map((i) => i.id)).toEqual(["media.paged.harness.importer.xlsx"]);
+    expect(imps.map((i) => i.id)).toEqual([
+      "media.paged.harness.importer.xlsx",
+    ]);
     expect(imps[0].extensions).toEqual([".xlsx"]);
     // The import callback survives verbatim — the host calls it at open time.
-    imps[0].import({ name: "budget.xlsx", bytes: new Uint8Array(), mimeType: "" });
+    imps[0].import({
+      name: "budget.xlsx",
+      bytes: new Uint8Array(),
+      mimeType: "",
+    });
     expect(seen).toEqual(["budget.xlsx"]);
-    expect(exps.map((e) => e.id)).toEqual(["media.paged.harness.exporter.xlsx"]);
+    expect(exps.map((e) => e.id)).toEqual([
+      "media.paged.harness.exporter.xlsx",
+    ]);
     expect(host.supports("contribute.importer@1")).toBe(true);
     expect(host.supports("contribute.exporter@1")).toBe(true);
     expect(live!.contributions.map((c) => c.kind)).toEqual([
@@ -441,7 +463,9 @@ describe("contribution recording + dispose honesty", () => {
       // Protocol 68 — submit reports text-face fallbacks; with no channel
       // there is no engine to report, so the list is empty.
     ).resolves.toEqual({ fontFallbacks: [] });
-    await expect(surface.clear("media.paged.sheet.grid.f1")).resolves.toBeUndefined();
+    await expect(
+      surface.clear("media.paged.sheet.grid.f1"),
+    ).resolves.toBeUndefined();
     expect(() => surface.dispose()).not.toThrow();
   });
 
@@ -498,8 +522,16 @@ describe("contribution recording + dispose honesty", () => {
     const preview = {
       pageId: "p1",
       anchors: [
-        { anchor: [10, 10] as [number, number], left: [10, 10] as [number, number], right: [30, 10] as [number, number] },
-        { anchor: [50, 10] as [number, number], left: [40, 30] as [number, number], right: [50, 10] as [number, number] },
+        {
+          anchor: [10, 10] as [number, number],
+          left: [10, 10] as [number, number],
+          right: [30, 10] as [number, number],
+        },
+        {
+          anchor: [50, 10] as [number, number],
+          left: [40, 30] as [number, number],
+          right: [50, 10] as [number, number],
+        },
       ],
       close: false,
     };
@@ -540,10 +572,7 @@ describe("contribution recording + dispose honesty", () => {
     const shapes = [
       {
         pageId: "p1",
-        points: [
-          [10, 10] as [number, number],
-          [80, 45] as [number, number],
-        ],
+        points: [[10, 10] as [number, number], [80, 45] as [number, number]],
       },
       {
         kind: "text" as const,
@@ -704,9 +733,7 @@ const schemaPanelC = (id: string) =>
     schema: {
       id,
       title: "S",
-      sections: [
-        { rows: [{ widget: "paged.readout", props: { text: "—" } }] },
-      ],
+      sections: [{ rows: [{ widget: "paged.readout", props: { text: "—" } }] }],
     },
   }) as never;
 /** Schema v1.1 (§12.6) — a schema panel whose single row is a LIST:

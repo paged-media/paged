@@ -28,7 +28,14 @@
 //       too, and the commit says so;
 //   (5) a host without the raw hatch shows the bare axis, as before.
 
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "bun:test";
+import {
+  afterAll,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+} from "bun:test";
 
 import type {
   BundleHost,
@@ -62,9 +69,39 @@ const GRAD = "Gradient/ustops";
  *  both squares; the axis 0° and 100 pt from sq's centre (150, 150). */
 async function seed(h: HeadlessHost): Promise<void> {
   const ops: Mutation[] = [
-    { op: "createSwatch", args: { spec: { selfId: "Color/us0", name: "s0", space: "RGB", value: [0, 0, 0] } } },
-    { op: "createSwatch", args: { spec: { selfId: "Color/us1", name: "s1", space: "RGB", value: [128, 128, 128] } } },
-    { op: "createSwatch", args: { spec: { selfId: "Color/us2", name: "s2", space: "RGB", value: [255, 255, 255] } } },
+    {
+      op: "createSwatch",
+      args: {
+        spec: {
+          selfId: "Color/us0",
+          name: "s0",
+          space: "RGB",
+          value: [0, 0, 0],
+        },
+      },
+    },
+    {
+      op: "createSwatch",
+      args: {
+        spec: {
+          selfId: "Color/us1",
+          name: "s1",
+          space: "RGB",
+          value: [128, 128, 128],
+        },
+      },
+    },
+    {
+      op: "createSwatch",
+      args: {
+        spec: {
+          selfId: "Color/us2",
+          name: "s2",
+          space: "RGB",
+          value: [255, 255, 255],
+        },
+      },
+    },
     {
       op: "createGradient",
       args: {
@@ -80,22 +117,27 @@ async function seed(h: HeadlessHost): Promise<void> {
         },
       },
     },
-    ...[SQ, TWIN].map(
-      (elementId): Mutation => ({
-        op: "setElementProperty",
-        args: { elementId, path: "frameFillColor", value: { type: "colorRef", value: GRAD } },
-      }),
-    ),
+    ...[SQ, TWIN].map((elementId): Mutation => ({
+      op: "setElementProperty",
+      args: {
+        elementId,
+        path: "frameFillColor",
+        value: { type: "colorRef", value: GRAD },
+      },
+    })),
     gradientAxisMutationFor([SQ], 0, 100),
   ];
   for (const m of ops) {
     const out = await h.host.document.mutate(m);
-    if (!out.applied) throw new Error(`seed refused at ${m.op}: ${JSON.stringify(out.error)}`);
+    if (!out.applied)
+      throw new Error(`seed refused at ${m.op}: ${JSON.stringify(out.error)}`);
   }
 }
 
 const locationsOf = async (host: BundleHost): Promise<number[]> =>
-  ((await rawGradientDetail(host, GRAD))?.stops ?? []).map((s) => s.locationPct);
+  ((await rawGradientDetail(host, GRAD))?.stops ?? []).map(
+    (s) => s.locationPct,
+  );
 
 describe("draw conformance — on-canvas gradient stops", () => {
   let h: HeadlessHost;
@@ -106,7 +148,11 @@ describe("draw conformance — on-canvas gradient stops", () => {
   });
   afterAll(() => h?.dispose());
   beforeEach(async () => {
-    await h.load(packageWithSpread(rectItem("gsq", 100, 100, 100) + rectItem("gtwin", 300, 100, 60)));
+    await h.load(
+      packageWithSpread(
+        rectItem("gsq", 100, 100, 100) + rectItem("gtwin", 300, 100, 60),
+      ),
+    );
     await seed(h);
     await h.host.selection.set([SQ]);
   });
@@ -117,8 +163,18 @@ describe("draw conformance — on-canvas gradient stops", () => {
       name: "Stops",
       kind: "radial",
       stops: [
-        { stopColorRef: "Color/a", resolvedRgbHex: "#000000", locationPct: 0, midpointPct: null },
-        { stopColorRef: "Color/b", resolvedRgbHex: "#ffffff", locationPct: 100, midpointPct: 40 },
+        {
+          stopColorRef: "Color/a",
+          resolvedRgbHex: "#000000",
+          locationPct: 0,
+          midpointPct: null,
+        },
+        {
+          stopColorRef: "Color/b",
+          resolvedRgbHex: "#ffffff",
+          locationPct: 100,
+          midpointPct: 40,
+        },
       ],
     };
     expect(gradientSpecWithStop(detail, 0, 12.5)).toEqual({
@@ -130,7 +186,9 @@ describe("draw conformance — on-canvas gradient stops", () => {
         { stopColor: "Color/b", locationPct: 100, midpointPct: 40 },
       ],
     });
-    expect(gradientSpecWithStop({ ...detail, kind: "unknown" }, 0, 10)).toBeNull();
+    expect(
+      gradientSpecWithStop({ ...detail, kind: "unknown" }, 0, 10),
+    ).toBeNull();
     expect(gradientSpecWithStop(detail, 5, 10)).toBeNull();
   });
 
@@ -146,7 +204,10 @@ describe("draw conformance — on-canvas gradient stops", () => {
     ]);
     const centres = shapes.slice(1).map((m) => {
       const xs = m.points.map((p) => p[0]);
-      return [(Math.min(...xs) + Math.max(...xs)) / 2, m.points[0]![1] + (m.points[2]![1] - m.points[0]![1]) / 2];
+      return [
+        (Math.min(...xs) + Math.max(...xs)) / 2,
+        m.points[0]![1] + (m.points[2]![1] - m.points[0]![1]) / 2,
+      ];
     });
     expect(centres).toEqual([
       [150, 150],
@@ -160,7 +221,9 @@ describe("draw conformance — on-canvas gradient stops", () => {
   it("a drag on a marker moves THAT stop — ONE editGradient, ONE undo step; the rest untouched", async () => {
     const { host, work } = countingHost(h.host);
     let applied: boolean | null = null;
-    const handler = createGradientAnnotatorHandler(host, { onStopCommit: (a) => (applied = a) });
+    const handler = createGradientAnnotatorHandler(host, {
+      onStopCommit: (a) => (applied = a),
+    });
     handler.onActivate(undefined as never);
     await settle();
     work.reset();
@@ -172,7 +235,11 @@ describe("draw conformance — on-canvas gradient stops", () => {
     expect(work.mutations).toEqual([{ op: "editGradient", ops: 1 }]);
     const detail = (await rawGradientDetail(h.host, GRAD))!;
     expect(detail.stops.map((s) => s.locationPct)).toEqual([0, 80, 100]);
-    expect(detail.stops.map((s) => s.stopColorRef)).toEqual(["Color/us0", "Color/us1", "Color/us2"]);
+    expect(detail.stops.map((s) => s.stopColorRef)).toEqual([
+      "Color/us0",
+      "Color/us1",
+      "Color/us2",
+    ]);
     expect(detail.stops[1]!.midpointPct).toBe(30);
     // The markers follow what was written.
     const shapes = h.lastToolPreviews() as ToolPreviewPolyline[];
@@ -227,7 +294,8 @@ describe("draw conformance — on-canvas gradient stops", () => {
     const infos: string[] = [];
     const host = new Proxy(h.host, {
       get(target, prop, receiver) {
-        if (prop === "log") return { ...target.log, info: (m: string) => void infos.push(m) };
+        if (prop === "log")
+          return { ...target.log, info: (m: string) => void infos.push(m) };
         return Reflect.get(target, prop, receiver) as unknown;
       },
     }) as BundleHost;
@@ -238,8 +306,9 @@ describe("draw conformance — on-canvas gradient stops", () => {
     handler.onPointerUp(pointerAt(PAGE_ID, [180, 150]));
     await settle();
     const fillOf = async (id: ElementId) =>
-      (await h.host.document.elementProperties(id))?.entries.find((e) => e.path === "frameFillColor")
-        ?.value?.value;
+      (await h.host.document.elementProperties(id))?.entries.find(
+        (e) => e.path === "frameFillColor",
+      )?.value?.value;
     expect(await fillOf(SQ)).toBe(GRAD);
     expect(await fillOf(TWIN)).toBe(GRAD);
     expect(await locationsOf(h.host)).toEqual([0, 30, 100]);

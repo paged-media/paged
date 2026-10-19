@@ -16,6 +16,15 @@ export type WorkerToMain = WorkerToMainKind & {
 };
 
 
+
+export type TableLineRestoreJson = string;
+
+export interface FlowGrowRule {
+    max_pages?: number | null;
+    copy_frame_options?: boolean;
+}
+
+
 /**
  * A bezier path segment in frame-content coordinates (points).
  */
@@ -2456,6 +2465,12 @@ export interface TabStopSpec {
 }
 
 /**
+ * W0.5 — character- vs paragraph-level style application for
+ * [`Operation::ApplyStyle`].
+ */
+export type StyleScope = "paragraph" | "character";
+
+/**
  * W0.5 — the kind of field marker inserted by
  * [`Operation::InsertField`]. v1 implemented the two page-number
  * built-ins (single private-use marker chars the renderer
@@ -2780,11 +2795,6 @@ export interface SwatchSpec {
 export type GestureFailure = { kind: "noDocument" } | { kind: "unsupportedGesture"; details: { reason: string } } | { kind: "alreadyActive"; details: { handle: GestureHandle } } | { kind: "handleMismatch" } | { kind: "elementNotFound"; details: { id: ElementId } } | { kind: "rotatedFrameUnsupported" } | { kind: "emptySelection" } | { kind: "missingAnchor" } | { kind: "unknownAnchorPage"; details: { page_id: PageId } } | { kind: "locked"; details: { id: ElementId } } | { kind: "other"; details: { message: string } };
 
 /**
- * [`Operation::ApplyStyle`].
- */
-export type StyleScope = "paragraph" | "character";
-
-/**
  * `RequestLineBounds` reply payload.
  */
 export interface LineBounds {
@@ -2991,6 +3001,20 @@ export interface ProviderTileWire {
      * Tightly packed RGBA8, row-major. Length must be `width*height*4`.
      */
     rgba: number[];
+}
+
+/**
+ * v55 — a table-cell address for cell-qualified range ops. Mirrors
+ * `paged_canvas::selection::TextCellAddr` (which paged-mutate cannot depend on:
+ * paged-canvas depends on THIS crate, not the other way round).
+ */
+export interface CellAddr {
+    /**
+     * The hosting `<Table>`\'s `Self` id.
+     */
+    tableId: string;
+    row: number;
+    col: number;
 }
 
 /**
@@ -3665,11 +3689,11 @@ export interface InitOutput {
     readonly qcms_transform_data_rgba_out_lut_precache: (a: number, b: number, c: number, d: number) => void;
     readonly qcms_transform_release: (a: number) => void;
     readonly qcms_white_point_sRGB: (a: number) => void;
-    readonly wasm_bindgen_cb391a3e032f37a7___convert__closures_____invoke___js_sys_2c0234b0fce240e5___Function_fn_wasm_bindgen_cb391a3e032f37a7___JsValue_____wasm_bindgen_cb391a3e032f37a7___sys__Undefined___js_sys_2c0234b0fce240e5___Function_fn_wasm_bindgen_cb391a3e032f37a7___JsValue_____wasm_bindgen_cb391a3e032f37a7___sys__Undefined_______true_: (a: number, b: number, c: any, d: any) => void;
-    readonly wasm_bindgen_cb391a3e032f37a7___convert__closures_____invoke___wasm_bindgen_cb391a3e032f37a7___JsValue__core_37ee0ce0c4cd57d5___result__Result_____wasm_bindgen_cb391a3e032f37a7___JsError___true_: (a: number, b: number, c: any) => [number, number];
-    readonly wasm_bindgen_cb391a3e032f37a7___convert__closures_____invoke___wasm_bindgen_cb391a3e032f37a7___sys__JsNullable_wgpu_122cae86a0002fa8___backend__webgpu__webgpu_sys__gen_GpuError__GpuError___core_37ee0ce0c4cd57d5___result__Result_____wasm_bindgen_cb391a3e032f37a7___JsError___true_: (a: number, b: number, c: any) => [number, number];
-    readonly wasm_bindgen_cb391a3e032f37a7___convert__closures_____invoke___wasm_bindgen_cb391a3e032f37a7___sys__JsNullable_wgpu_122cae86a0002fa8___backend__webgpu__webgpu_sys__gen_GpuError__GpuError___core_37ee0ce0c4cd57d5___result__Result_____wasm_bindgen_cb391a3e032f37a7___JsError___true__34: (a: number, b: number, c: any) => [number, number];
-    readonly wasm_bindgen_cb391a3e032f37a7___convert__closures_____invoke___wasm_bindgen_cb391a3e032f37a7___sys__JsNullable_wgpu_122cae86a0002fa8___backend__webgpu__webgpu_sys__gen_GpuError__GpuError___core_37ee0ce0c4cd57d5___result__Result_____wasm_bindgen_cb391a3e032f37a7___JsError___true__35: (a: number, b: number, c: any) => [number, number];
+    readonly wasm_bindgen_2e35521b6c202407___convert__closures_____invoke___js_sys_f14cd77ae230e8f7___Function_fn_wasm_bindgen_2e35521b6c202407___JsValue_____wasm_bindgen_2e35521b6c202407___sys__Undefined___js_sys_f14cd77ae230e8f7___Function_fn_wasm_bindgen_2e35521b6c202407___JsValue_____wasm_bindgen_2e35521b6c202407___sys__Undefined_______true_: (a: number, b: number, c: any, d: any) => void;
+    readonly wasm_bindgen_2e35521b6c202407___convert__closures_____invoke___wasm_bindgen_2e35521b6c202407___JsValue__core_37ee0ce0c4cd57d5___result__Result_____wasm_bindgen_2e35521b6c202407___JsError___true_: (a: number, b: number, c: any) => [number, number];
+    readonly wasm_bindgen_2e35521b6c202407___convert__closures_____invoke___wasm_bindgen_2e35521b6c202407___sys__JsNullable_wgpu_70d6da3772b6cba4___backend__webgpu__webgpu_sys__gen_GpuError__GpuError___core_37ee0ce0c4cd57d5___result__Result_____wasm_bindgen_2e35521b6c202407___JsError___true_: (a: number, b: number, c: any) => [number, number];
+    readonly wasm_bindgen_2e35521b6c202407___convert__closures_____invoke___wasm_bindgen_2e35521b6c202407___sys__JsNullable_wgpu_70d6da3772b6cba4___backend__webgpu__webgpu_sys__gen_GpuError__GpuError___core_37ee0ce0c4cd57d5___result__Result_____wasm_bindgen_2e35521b6c202407___JsError___true__34: (a: number, b: number, c: any) => [number, number];
+    readonly wasm_bindgen_2e35521b6c202407___convert__closures_____invoke___wasm_bindgen_2e35521b6c202407___sys__JsNullable_wgpu_70d6da3772b6cba4___backend__webgpu__webgpu_sys__gen_GpuError__GpuError___core_37ee0ce0c4cd57d5___result__Result_____wasm_bindgen_2e35521b6c202407___JsError___true__35: (a: number, b: number, c: any) => [number, number];
     readonly __wbindgen_malloc: (a: number, b: number) => number;
     readonly __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;
     readonly __wbindgen_exn_store: (a: number) => void;

@@ -51,7 +51,12 @@ import { openPanel } from "../../../fidelity/canvas-driver";
 import { withActivePage } from "../../active-page";
 import { proseFrame, specLabel } from "../../annual-support";
 import { STYLE, p } from "../../names-annual";
-import { clearSelection, geometryOf, partitionByPage, removeRefs } from "../../plugin-support";
+import {
+  clearSelection,
+  geometryOf,
+  partitionByPage,
+  removeRefs,
+} from "../../plugin-support";
 import type { PageContext, PageReport } from "../../types";
 import {
   SHEET_CMD,
@@ -67,7 +72,13 @@ import {
 } from "./00-support";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const WORKBOOK = pathResolve(__dirname, "..", "..", "assets", "annual-charts.xlsx");
+const WORKBOOK = pathResolve(
+  __dirname,
+  "..",
+  "..",
+  "assets",
+  "annual-charts.xlsx",
+);
 
 /** Chart scale on the wall: ten specimens on two pages. */
 const S = 0.52;
@@ -91,8 +102,12 @@ async function contentCorner(
   const boxes = (await geometryOf(page, els))
     .map((g) => g.bounds)
     .filter((b): b is [number, number, number, number] => b !== null);
-  if (boxes.length === 0) throw new Error("a lowered chart answered no geometry");
-  return [Math.min(...boxes.map((b) => b[1])), Math.min(...boxes.map((b) => b[0]))];
+  if (boxes.length === 0)
+    throw new Error("a lowered chart answered no geometry");
+  return [
+    Math.min(...boxes.map((b) => b[1])),
+    Math.min(...boxes.map((b) => b[0])),
+  ];
 }
 
 export async function build(ctx: PageContext): Promise<PageReport> {
@@ -104,19 +119,27 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   const elements: string[] = [];
 
   // ── furniture first, so no later branch leaves the spread bare ───
-  const head = await proseFrame(ctx, p(96), [60, 96, 492, 124], [
-    { text: "The chart wall", style: STYLE.head1 },
-  ]);
-  const intro = await proseFrame(ctx, p(96), [60, 128, 492, 170], [
-    {
-      text:
-        "One workbook, ten charts — the engine's whole kind set, lowered " +
-        "one by one. Every bar, wedge, ring and spoke on this spread is a " +
-        "native path, and every axis number is a text frame; there is no " +
-        "picture of a chart anywhere in this document.",
-      style: STYLE.bodySmall,
-    },
-  ]);
+  const head = await proseFrame(
+    ctx,
+    p(96),
+    [60, 96, 492, 124],
+    [{ text: "The chart wall", style: STYLE.head1 }],
+  );
+  const intro = await proseFrame(
+    ctx,
+    p(96),
+    [60, 128, 492, 170],
+    [
+      {
+        text:
+          "One workbook, ten charts — the engine's whole kind set, lowered " +
+          "one by one. Every bar, wedge, ring and spoke on this spread is a " +
+          "native path, and every axis number is a text frame; there is no " +
+          "picture of a chart anywhere in this document.",
+        style: STYLE.bodySmall,
+      },
+    ],
+  );
   elements.push(head.frameId, intro.frameId);
 
   // ── import the workbook through the K-5 host file picker ─────────
@@ -151,12 +174,19 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   });
   // Each row: "<title> · <Kind>, N series" or "<Kind> chart · N series",
   // and its "Place on page" button carries the chart's index.
-  const rows = await page.locator("[data-sheet-chart-list] > div").evaluateAll((els) =>
-    els.map((el) => ({
-      index: el.querySelector("[data-sheet-chart-lower]")?.getAttribute("data-sheet-chart-lower") ?? "",
-      text: (el.querySelector("span")?.textContent ?? "").replace(/\s+/g, " ").trim(),
-    })),
-  );
+  const rows = await page
+    .locator("[data-sheet-chart-list] > div")
+    .evaluateAll((els) =>
+      els.map((el) => ({
+        index:
+          el
+            .querySelector("[data-sheet-chart-lower]")
+            ?.getAttribute("data-sheet-chart-lower") ?? "",
+        text: (el.querySelector("span")?.textContent ?? "")
+          .replace(/\s+/g, " ")
+          .trim(),
+      })),
+    );
   const charts: ChartRow[] = [];
   for (const r of rows) {
     const titled = /·\s*([^,·]+),\s*\d+ series$/.exec(r.text);
@@ -164,7 +194,10 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     const label = titled?.[1]?.trim() ?? untitled?.[1];
     if (r.index !== "" && label) {
       // The panel shows the engine's kind in sentence case.
-      charts.push({ index: Number(r.index), kind: label[0].toLowerCase() + label.slice(1) });
+      charts.push({
+        index: Number(r.index),
+        kind: label[0].toLowerCase() + label.slice(1),
+      });
     }
   }
   expect(
@@ -198,7 +231,9 @@ export async function build(ctx: PageContext): Promise<PageReport> {
       } else {
         // The per-chart "Place on page" button, in the Charts section
         // (re-opened if the panel re-mounted it collapsed).
-        if (!(await chartsSection.evaluate((d) => (d as HTMLDetailsElement).open))) {
+        if (
+          !(await chartsSection.evaluate((d) => (d as HTMLDetailsElement).open))
+        ) {
           await chartsSection.locator(":scope > summary").click();
         }
         await page.locator(`[data-sheet-chart-lower="${chart.index}"]`).click();
@@ -261,7 +296,8 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     );
 
     const paths = here.filter(
-      (e) => e.kind === "polygon" || e.kind === "graphicLine" || e.kind === "oval",
+      (e) =>
+        e.kind === "polygon" || e.kind === "graphicLine" || e.kind === "oval",
     ).length;
     const labels = here.filter((e) => e.kind === "textFrame").length;
     totalPaths += paths;
@@ -327,5 +363,10 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     ]),
   );
 
-  return { title: "The chart wall — ten kinds, all native", covers, elements, notes };
+  return {
+    title: "The chart wall — ten kinds, all native",
+    covers,
+    elements,
+    notes,
+  };
 }

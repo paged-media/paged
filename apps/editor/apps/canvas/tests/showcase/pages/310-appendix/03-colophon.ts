@@ -37,7 +37,12 @@ import { PROTOCOL_VERSION } from "@paged-media/client";
 
 import { proseFrame, specLabel } from "../../annual-support";
 import { APP_ROOT, CORE, LEDGER_DIR } from "../../chapter";
-import { mergeFragments, opUniverse, propertyPathUniverse, readFragments } from "../../ledger";
+import {
+  mergeFragments,
+  opUniverse,
+  propertyPathUniverse,
+  readFragments,
+} from "../../ledger";
 import { STYLE, p } from "../../names-annual";
 import type { PageContext, PageReport } from "../../types";
 import { listParts } from "./00-support";
@@ -73,7 +78,13 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   const parts = await listParts(ctx.page, "paged/");
   const wasm = JSON.parse(
     readFileSync(
-      join(APP_ROOT, "node_modules", "@paged-media", "canvas-wasm", "package.json"),
+      join(
+        APP_ROOT,
+        "node_modules",
+        "@paged-media",
+        "canvas-wasm",
+        "package.json",
+      ),
       "utf8",
     ),
   ) as { version: string };
@@ -91,17 +102,19 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   );
 
   // ── A·7: the colophon ────────────────────────────────────────────
-  const head = await proseFrame(ctx, p(133), [48, 54, 480, 88], [
-    { text: "Colophon", style: STYLE.head1 },
-  ]);
+  const head = await proseFrame(
+    ctx,
+    p(133),
+    [48, 54, 480, 88],
+    [{ text: "Colophon", style: STYLE.head1 }],
+  );
   elements.push(head.frameId);
 
   const ledgerLines: Array<{ text: string; style: string }> =
     fragments.length === 0
       ? [
           {
-            text:
-              "Chapters built — none recorded at this build: the ledger directory holds no chapter fragments (a solo run builds one chapter against the base fixture and writes its fragment only at its own close). The counts below that depend on fragments print as absent rather than invented.",
+            text: "Chapters built — none recorded at this build: the ledger directory holds no chapter fragments (a solo run builds one chapter against the base fixture and writes its fragment only at its own close). The counts below that depend on fragments print as absent rather than invented.",
             style: STYLE.colophon,
           },
         ]
@@ -124,36 +137,38 @@ export async function build(ctx: PageContext): Promise<PageReport> {
           },
         ];
 
-  const body = await proseFrame(ctx, p(133), [48, 100, 480, 560], [
-    {
-      text:
-        "This annual was set by the engine it describes. Its numbers below are read at build time from the campaign's own records — the per-chapter ledger fragments, the capability table, the introspect catalog, the container itself — and none of them is typed from memory.",
-      style: STYLE.bodyFirst,
-    },
-    ...ledgerLines,
-    {
-      text: `Container parts — ${parts.length} riding in this document's paged/ namespace as it stands on this page.`,
-      style: STYLE.colophon,
-    },
-    {
-      text: `The faces — seven families: ${FACES}.`,
-      style: STYLE.colophon,
-    },
-    {
-      text:
-        "The measure — 540 × 720 pt trim, facing pages; a six-column body grid with 12 pt gutters on a 432 pt measure, twelve columns on the data pages, and a 13 pt baseline rhythm every leading in the style battery is a multiple of.",
-      style: STYLE.colophon,
-    },
-    {
-      text: `The toolchain — the paged engine at wire protocol ${protocol}, @paged-media/canvas-wasm ${wasm.version}, driven end to end through the editor's own mutation wire; no page in this book was drawn by anything else.`,
-      style: STYLE.colophon,
-    },
-    {
-      text:
-        "As of this chapter's build; the assembly ledger is definitive.",
-      style: STYLE.footnote,
-    },
-  ]);
+  const body = await proseFrame(
+    ctx,
+    p(133),
+    [48, 100, 480, 560],
+    [
+      {
+        text: "This annual was set by the engine it describes. Its numbers below are read at build time from the campaign's own records — the per-chapter ledger fragments, the capability table, the introspect catalog, the container itself — and none of them is typed from memory.",
+        style: STYLE.bodyFirst,
+      },
+      ...ledgerLines,
+      {
+        text: `Container parts — ${parts.length} riding in this document's paged/ namespace as it stands on this page.`,
+        style: STYLE.colophon,
+      },
+      {
+        text: `The faces — seven families: ${FACES}.`,
+        style: STYLE.colophon,
+      },
+      {
+        text: "The measure — 540 × 720 pt trim, facing pages; a six-column body grid with 12 pt gutters on a 432 pt measure, twelve columns on the data pages, and a 13 pt baseline rhythm every leading in the style battery is a multiple of.",
+        style: STYLE.colophon,
+      },
+      {
+        text: `The toolchain — the paged engine at wire protocol ${protocol}, @paged-media/canvas-wasm ${wasm.version}, driven end to end through the editor's own mutation wire; no page in this book was drawn by anything else.`,
+        style: STYLE.colophon,
+      },
+      {
+        text: "As of this chapter's build; the assembly ledger is definitive.",
+        style: STYLE.footnote,
+      },
+    ],
+  );
   elements.push(body.frameId);
 
   elements.push(
@@ -165,9 +180,12 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   );
 
   // ── A·8: the last page — one line, alone, centered ───────────────
-  const last = await proseFrame(ctx, p(134), [60, 336, 492, 384], [
-    { text: "Set entirely by the engine it describes.", style: STYLE.deck },
-  ]);
+  const last = await proseFrame(
+    ctx,
+    p(134),
+    [60, 336, 492, 384],
+    [{ text: "Set entirely by the engine it describes.", style: STYLE.deck }],
+  );
   await doc.setProperty(
     "storyRange",
     doc.storyRangeId(

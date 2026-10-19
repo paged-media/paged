@@ -36,7 +36,11 @@ import {
 const FORMATTED: LoweredContent = {
   cols: [{ index: 0, widthPt: 60 }],
   rows: [
-    { index: 0, heightPt: 30, cells: [{ col: 0, text: "Head", align: "center", styleKey: 1 }] },
+    {
+      index: 0,
+      heightPt: 30,
+      cells: [{ col: 0, text: "Head", align: "center", styleKey: 1 }],
+    },
   ],
   rules: { h: [], v: [] },
   merges: [],
@@ -69,10 +73,15 @@ const FORMATTED: LoweredContent = {
   ],
 };
 
-type Loose = { op: string; args: { path?: string; value?: unknown; elementId?: { id: unknown } } };
+type Loose = {
+  op: string;
+  args: { path?: string; value?: unknown; elementId?: { id: unknown } };
+};
 const loose = (ops: Mutation[]) => ops as unknown as Loose[];
 const byPath = (ops: Mutation[], path: string) =>
-  loose(ops).filter((o) => o.op === "setElementProperty" && o.args.path === path);
+  loose(ops).filter(
+    (o) => o.op === "setElementProperty" && o.args.path === path,
+  );
 
 describe("Wave 6 cell decor: border lines, colours, vertical alignment [sheet.format.cell-style]", () => {
   it("each border carries its own weight; a coloured edge names a minted swatch", () => {
@@ -91,9 +100,11 @@ describe("Wave 6 cell decor: border lines, colours, vertical alignment [sheet.fo
     });
     expect(byPath(ops, "cellBottomEdgeStrokeColor")).toHaveLength(0);
     const mints = loose(cellFillSwatchOps(FORMATTED));
-    expect(mints.some((m) => JSON.stringify(m).includes("Color/uPagedSheetCellStrokeFF0000"))).toBe(
-      true,
-    );
+    expect(
+      mints.some((m) =>
+        JSON.stringify(m).includes("Color/uPagedSheetCellStrokeFF0000"),
+      ),
+    ).toBe(true);
   });
 
   it("vertical alignment becomes cellVerticalJustification", () => {
@@ -106,13 +117,19 @@ describe("Wave 6 cell decor: border lines, colours, vertical alignment [sheet.fo
 
   it("underline is a character facet", () => {
     const props = styleProps(FORMATTED.styles![1]);
-    expect(props).toContainEqual({ path: "characterUnderline", value: { type: "bool", value: true } });
+    expect(props).toContainEqual({
+      path: "characterUnderline",
+      value: { type: "bool", value: true },
+    });
   });
 
   it("a border without a line record keeps the hairline (older IR)", () => {
     const old: LoweredContent = {
       ...FORMATTED,
-      styles: [FORMATTED.styles![0], { ...FORMATTED.styles![1], borderLines: undefined, vAlign: null }],
+      styles: [
+        FORMATTED.styles![0],
+        { ...FORMATTED.styles![1], borderLines: undefined, vAlign: null },
+      ],
     };
     const { ops } = tableDecorOps(old, "Story/u1", "t1");
     expect(byPath(ops, "cellTopEdgeStrokeWeight")[0].args.value).toEqual({
@@ -130,17 +147,39 @@ describe("Wave 6 cell decor: border lines, colours, vertical alignment [sheet.fo
   it("a row near its line height carries no vertical op (top and bottom look alike) [sheet.lower.page]", () => {
     const fits: LoweredContent = {
       ...FORMATTED,
-      rows: [{ index: 0, heightPt: 15, cells: [{ col: 0, text: "x", align: "left", styleKey: 0 }] }],
+      rows: [
+        {
+          index: 0,
+          heightPt: 15,
+          cells: [{ col: 0, text: "x", align: "left", styleKey: 0 }],
+        },
+      ],
     };
-    expect(byPath(tableDecorOps(fits, "Story/u1", "t1").ops, "cellVerticalJustification")).toHaveLength(0);
+    expect(
+      byPath(
+        tableDecorOps(fits, "Story/u1", "t1").ops,
+        "cellVerticalJustification",
+      ),
+    ).toHaveLength(0);
     const tall = { ...fits, rows: [{ ...fits.rows[0], heightPt: 22 }] };
-    expect(byPath(tableDecorOps(tall, "Story/u1", "t1").ops, "cellVerticalJustification")).toHaveLength(1);
+    expect(
+      byPath(
+        tableDecorOps(tall, "Story/u1", "t1").ops,
+        "cellVerticalJustification",
+      ),
+    ).toHaveLength(1);
   });
 
   it("a refresh that drops the facets resets colour and justification", () => {
     const plain: LoweredContent = {
       ...FORMATTED,
-      rows: [{ index: 0, heightPt: 30, cells: [{ col: 0, text: "Head", align: "left", styleKey: 0 }] }],
+      rows: [
+        {
+          index: 0,
+          heightPt: 30,
+          cells: [{ col: 0, text: "Head", align: "left", styleKey: 0 }],
+        },
+      ],
     };
     const r = tableRefreshOps(FORMATTED, plain, "Story/u1", "t1", [60], [60]);
     expect(byPath(r.decor, "cellTopEdgeStrokeColor")[0].args.value).toEqual({
@@ -148,8 +187,8 @@ describe("Wave 6 cell decor: border lines, colours, vertical alignment [sheet.fo
       value: null,
     });
     // Centre gone: the 30 pt row falls back to xlsx's bottom (Wave 9).
-    expect(byPath(r.decor, "cellVerticalJustification").map((o) => o.args.value)).toEqual([
-      { type: "text", value: "BottomAlign" },
-    ]);
+    expect(
+      byPath(r.decor, "cellVerticalJustification").map((o) => o.args.value),
+    ).toEqual([{ type: "text", value: "BottomAlign" }]);
   });
 });

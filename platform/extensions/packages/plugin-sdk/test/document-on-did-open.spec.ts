@@ -25,7 +25,10 @@
 
 import { describe, expect, it } from "bun:test";
 
-import type { DocumentOpenedEvent, PluginManifest } from "@paged-media/plugin-api";
+import type {
+  DocumentOpenedEvent,
+  PluginManifest,
+} from "@paged-media/plugin-api";
 
 import { createBundleHost, PluginCapabilityError } from "../src";
 import { createHeadlessHost } from "../src/harness";
@@ -35,7 +38,9 @@ import { minimalIdml } from "./fixtures/minimal-idml";
 const silent = { debug() {}, info() {}, warn() {}, error() {} };
 
 const manifest = (
-  capabilities: PluginManifest["capabilities"] = { document: { read: "broad" } },
+  capabilities: PluginManifest["capabilities"] = {
+    document: { read: "broad" },
+  },
 ): PluginManifest => ({
   id: "media.paged.test",
   name: "test",
@@ -126,7 +131,9 @@ describe("host.document.onDidOpen (W-22)", () => {
       console: silent,
       capabilityMode: "enforce",
     });
-    expect(() => host.document.onDidOpen(() => {})).toThrow(PluginCapabilityError);
+    expect(() => host.document.onDidOpen(() => {})).toThrow(
+      PluginCapabilityError,
+    );
     expect(host.supports("document.onDidOpen@1")).toBe(true);
   });
 

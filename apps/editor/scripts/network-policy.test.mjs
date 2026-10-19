@@ -28,19 +28,29 @@ const {
 test("no configured origins: the floor, exactly", () => {
   assert.deepEqual(parseDataOrigins(undefined), []);
   assert.deepEqual(parseDataOrigins("  "), []);
-  assert.equal(connectSrc([]), "connect-src 'self' blob: data: https://modules.paged.media");
+  assert.equal(
+    connectSrc([]),
+    "connect-src 'self' blob: data: https://modules.paged.media",
+  );
   assert.equal(connectSrc([]), CONNECT_SRC_FLOOR);
 });
 
 test("exact https origins are admitted, deduplicated, in order", () => {
-  const o = parseDataOrigins("https://data.example.com, https://api.example.org:8443 https://data.example.com/");
-  assert.deepEqual(o, ["https://data.example.com", "https://api.example.org:8443"]);
+  const o = parseDataOrigins(
+    "https://data.example.com, https://api.example.org:8443 https://data.example.com/",
+  );
+  assert.deepEqual(o, [
+    "https://data.example.com",
+    "https://api.example.org:8443",
+  ]);
   assert.equal(
     connectSrc(o),
     "connect-src 'self' blob: data: https://modules.paged.media https://data.example.com https://api.example.org:8443",
   );
   // Local development may list a loopback http origin.
-  assert.deepEqual(parseDataOrigins("http://127.0.0.1:8765"), ["http://127.0.0.1:8765"]);
+  assert.deepEqual(parseDataOrigins("http://127.0.0.1:8765"), [
+    "http://127.0.0.1:8765",
+  ]);
 });
 
 test("anything wider than an exact origin fails the build", () => {
@@ -60,26 +70,41 @@ test("anything wider than an exact origin fails the build", () => {
 });
 
 test("the _headers rewrite replaces the policy line and refuses a file without one", () => {
-  const before = "/*\n  X-Other: 1\n  Content-Security-Policy: connect-src 'self' blob: data: https://modules.paged.media\n";
-  const after = rewriteHeadersCsp(before, connectSrc(["https://data.example.com"]));
+  const before =
+    "/*\n  X-Other: 1\n  Content-Security-Policy: connect-src 'self' blob: data: https://modules.paged.media\n";
+  const after = rewriteHeadersCsp(
+    before,
+    connectSrc(["https://data.example.com"]),
+  );
   assert.equal(
     after,
     "/*\n  X-Other: 1\n  Content-Security-Policy: connect-src 'self' blob: data: https://modules.paged.media https://data.example.com\n",
   );
-  assert.throws(() => rewriteHeadersCsp("/*\n  X-Other: 1\n", CONNECT_SRC_FLOOR), /no Content-Security-Policy/);
+  assert.throws(
+    () => rewriteHeadersCsp("/*\n  X-Other: 1\n", CONNECT_SRC_FLOOR),
+    /no Content-Security-Policy/,
+  );
 });
 
 test("wallAdmits: self and listed origins only", () => {
   assert.equal(wallAdmits("https://a.test", [], "https://editor.test"), false);
-  assert.equal(wallAdmits("https://editor.test", [], "https://editor.test"), true);
+  assert.equal(
+    wallAdmits("https://editor.test", [], "https://editor.test"),
+    true,
+  );
   assert.equal(wallAdmits("https://a.test", ["https://a.test"]), true);
 });
 
 test("lock-step: the committed public/_headers ships the floor; vite builds from the module", () => {
   const headers = readFileSync(resolve(canvas, "public", "_headers"), "utf8");
-  const line = headers.split("\n").find((l) => /^\s*Content-Security-Policy:/.test(l));
+  const line = headers
+    .split("\n")
+    .find((l) => /^\s*Content-Security-Policy:/.test(l));
   assert.ok(line, "public/_headers must carry a Content-Security-Policy line");
-  assert.equal(line.replace(/^\s*Content-Security-Policy:\s*/, ""), CONNECT_SRC_FLOOR);
+  assert.equal(
+    line.replace(/^\s*Content-Security-Policy:\s*/, ""),
+    CONNECT_SRC_FLOOR,
+  );
   const vite = readFileSync(resolve(canvas, "vite.config.ts"), "utf8");
   assert.match(vite, /parseDataOrigins\(process\.env\[DATA_ORIGINS_ENV\]\)/);
   assert.doesNotMatch(vite, /connect-src 'self' blob: data: https:/);
