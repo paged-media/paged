@@ -14,7 +14,11 @@ WebGPU device, the Vello renderer, and a per-page Vello scene cache
 render-loop tick (`setTimeout`, 16 ms cadence) and the scene cache is
 composed onto the surface via `Scene::append`. When WebGPU isn't
 available the worker silently falls back to a tiny-skia CPU path
-backed by a 2D `OffscreenCanvasRenderingContext2D`. Full architecture
+backed by a 2D `OffscreenCanvasRenderingContext2D`. Snapshots
+(`requestSnapshot`: the eyedropper, PNG export, AI page images, thumbnails)
+follow the same rule — Vello on the worker's WebGPU device when it has one,
+the CPU rasterizer otherwise — and `client.setSnapshotBackend("gpu" | "cpu")`
+forces either. Full architecture
 spec lives at `core: docs/design/canvas.md`.
 
 ## Setup
