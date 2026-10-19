@@ -31,12 +31,14 @@
 //!
 //! ## Where the values come from
 //!
-//! The values are facts from the Unicode CLDR (common/main/<locale>.xml, v45):
-//! `numbers/symbols[numberSystem=latn]` `decimal` and `group`,
-//! `numbers/minimumGroupingDigits`, `currencyFormats[latn]/standard` (the `¤`
-//! position and the space beside it), the currency the region uses
-//! (supplementalData `currencyData`), and the `dateFormats` order, written with
-//! this DSL's `DD`/`MM`/`YYYY` tokens and a four-digit year.
+//! Each row is a row of the built-ins' shared locale table
+//! (`paged_fmt::locale`, platform/shared/fmt), which holds the tag, the picker
+//! name, the decimal and group separators and the minimum grouping digits
+//! (Unicode CLDR v45), plus what only these kernels read, also from CLDR v45:
+//! `currencyFormats[latn]/standard` (the `¤` position and the space beside
+//! it), the currency the region uses (supplementalData `currencyData`), and
+//! the `dateFormats` order, written with this DSL's `DD`/`MM`/`YYYY` tokens and
+//! a four-digit year.
 //!
 //! Two rows deliberately keep the behaviour documents were made with before the
 //! table existed, and say so:
@@ -49,22 +51,14 @@
 
 use std::fmt;
 
+use paged_fmt::locale::{self as shared, LocaleFacts};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 /// One locale's formatting facts — a row of [`LOCALES`].
 #[derive(Debug, PartialEq, Eq)]
 pub struct LocaleDef {
-    /// The BCP 47 tag (the serialized form).
-    pub tag: &'static str,
-    /// The display name for a picker, in the locale's own language.
-    pub name: &'static str,
-    /// CLDR `decimal`.
-    pub decimal: char,
-    /// CLDR `group`.
-    pub group: char,
-    /// CLDR `minimumGroupingDigits`: the integer part is grouped only when it
-    /// has at least `3 + min_grouping` digits (es: `1234` but `12.345`).
-    pub min_grouping: u8,
+    /// The shared row: tag, picker name, separators, minimum grouping digits.
+    pub facts: &'static LocaleFacts,
     /// The currency symbol `CURRENCY` uses when the caller names none.
     pub currency_symbol: &'static str,
     /// CLDR `currencyFormats/standard`, reduced to placement: `¤` is the symbol,
@@ -75,114 +69,69 @@ pub struct LocaleDef {
     pub date_pattern: &'static str,
 }
 
-/// U+00A0 NO-BREAK SPACE, U+202F NARROW NO-BREAK SPACE, U+2019 RIGHT SINGLE
-/// QUOTATION MARK — named so the table reads.
-const NBSP: char = '\u{a0}';
-const NNBSP: char = '\u{202f}';
-const APOS: char = '\u{2019}';
-
 /// Every locale the display kernels know, in picker order. See the module
 /// documentation for the source of each value.
 pub static LOCALES: &[LocaleDef] = &[
-    // en (en-US): decimal ".", group ",", "¤#,##0.00", USD. Date: ISO, kept
-    // (see the module docs).
+    // en (en-US): "¤#,##0.00", USD. Date: ISO, kept (see the module docs).
     LocaleDef {
-        tag: "en",
-        name: "English",
-        decimal: '.',
-        group: ',',
-        min_grouping: 1,
+        facts: &shared::EN,
         currency_symbol: "$",
         currency_pattern: "¤#",
         date_pattern: "YYYY-MM-DD",
     },
-    // de: decimal ",", group ".", "#,##0.00 ¤", EUR, dd.MM.y. The space before
-    // the symbol is ASCII, kept (see the module docs).
+    // de: "#,##0.00 ¤", EUR, dd.MM.y. The space before the symbol is ASCII,
+    // kept (see the module docs).
     LocaleDef {
-        tag: "de",
-        name: "Deutsch",
-        decimal: ',',
-        group: '.',
-        min_grouping: 1,
+        facts: &shared::DE,
         currency_symbol: "€",
         currency_pattern: "# ¤",
         date_pattern: "DD.MM.YYYY",
     },
-    // en-GB: decimal ".", group ",", "¤#,##0.00", GBP, dd/MM/y.
+    // en-GB: "¤#,##0.00", GBP, dd/MM/y.
     LocaleDef {
-        tag: "en-GB",
-        name: "English (UK)",
-        decimal: '.',
-        group: ',',
-        min_grouping: 1,
+        facts: &shared::EN_GB,
         currency_symbol: "£",
         currency_pattern: "¤#",
         date_pattern: "DD/MM/YYYY",
     },
-    // de-AT: decimal ",", group U+00A0, "¤ #,##0.00" (symbol leads, U+00A0),
-    // EUR, dd.MM.y.
+    // de-AT: "¤ #,##0.00" (symbol leads, U+00A0), EUR, dd.MM.y.
     LocaleDef {
-        tag: "de-AT",
-        name: "Deutsch (Österreich)",
-        decimal: ',',
-        group: NBSP,
-        min_grouping: 1,
+        facts: &shared::DE_AT,
         currency_symbol: "€",
         currency_pattern: "¤\u{a0}#",
         date_pattern: "DD.MM.YYYY",
     },
-    // de-CH: decimal ".", group U+2019, "¤ #,##0.00" (U+00A0), CHF, dd.MM.y.
+    // de-CH: "¤ #,##0.00" (U+00A0), CHF, dd.MM.y.
     LocaleDef {
-        tag: "de-CH",
-        name: "Deutsch (Schweiz)",
-        decimal: '.',
-        group: APOS,
-        min_grouping: 1,
+        facts: &shared::DE_CH,
         currency_symbol: "CHF",
         currency_pattern: "¤\u{a0}#",
         date_pattern: "DD.MM.YYYY",
     },
-    // fr: decimal ",", group U+202F, "#,##0.00 ¤" (U+00A0), EUR, dd/MM/y.
+    // fr: "#,##0.00 ¤" (U+00A0), EUR, dd/MM/y.
     LocaleDef {
-        tag: "fr",
-        name: "Français",
-        decimal: ',',
-        group: NNBSP,
-        min_grouping: 1,
+        facts: &shared::FR,
         currency_symbol: "€",
         currency_pattern: "#\u{a0}¤",
         date_pattern: "DD/MM/YYYY",
     },
-    // it: decimal ",", group ".", "#,##0.00 ¤" (U+00A0), EUR, dd/MM/y.
+    // it: "#,##0.00 ¤" (U+00A0), EUR, dd/MM/y.
     LocaleDef {
-        tag: "it",
-        name: "Italiano",
-        decimal: ',',
-        group: '.',
-        min_grouping: 1,
+        facts: &shared::IT,
         currency_symbol: "€",
         currency_pattern: "#\u{a0}¤",
         date_pattern: "DD/MM/YYYY",
     },
-    // es: decimal ",", group ".", minimumGroupingDigits 2, "#,##0.00 ¤"
-    // (U+00A0), EUR, dd/MM/y.
+    // es: "#,##0.00 ¤" (U+00A0), EUR, dd/MM/y.
     LocaleDef {
-        tag: "es",
-        name: "Español",
-        decimal: ',',
-        group: '.',
-        min_grouping: 2,
+        facts: &shared::ES,
         currency_symbol: "€",
         currency_pattern: "#\u{a0}¤",
         date_pattern: "DD/MM/YYYY",
     },
-    // nl: decimal ",", group ".", "¤ #,##0.00" (U+00A0), EUR, dd-MM-y.
+    // nl: "¤ #,##0.00" (U+00A0), EUR, dd-MM-y.
     LocaleDef {
-        tag: "nl",
-        name: "Nederlands",
-        decimal: ',',
-        group: '.',
-        min_grouping: 1,
+        facts: &shared::NL,
         currency_symbol: "€",
         currency_pattern: "¤\u{a0}#",
         date_pattern: "DD-MM-YYYY",
@@ -203,10 +152,10 @@ impl Locale {
     /// The locale for a tag, matched case-insensitively (`"en-gb"` is
     /// `en-GB`; `_` is accepted for `-`). `None` for a tag the table lacks.
     pub fn from_tag(tag: &str) -> Option<Locale> {
-        let want = tag.replace('_', "-");
+        let facts = shared::by_tag(tag)?;
         LOCALES
             .iter()
-            .find(|d| d.tag.eq_ignore_ascii_case(&want))
+            .find(|d| d.facts.tag == facts.tag)
             .map(Locale)
     }
 
@@ -221,19 +170,23 @@ impl Locale {
     }
     /// The BCP 47 tag.
     pub fn tag(self) -> &'static str {
-        self.0.tag
+        self.0.facts.tag
+    }
+    /// The display name for a picker, in the locale's own language.
+    pub fn name(self) -> &'static str {
+        self.0.facts.name
     }
     /// The decimal separator.
-    pub fn decimal_sep(self) -> char {
-        self.0.decimal
+    pub fn decimal_sep(self) -> &'static str {
+        self.0.facts.decimal
     }
     /// The thousands-grouping separator.
-    pub fn group_sep(self) -> char {
-        self.0.group
+    pub fn group_sep(self) -> &'static str {
+        self.0.facts.group
     }
     /// CLDR `minimumGroupingDigits`.
     pub fn min_grouping(self) -> usize {
-        self.0.min_grouping as usize
+        self.0.facts.min_grouping as usize
     }
     /// The default currency symbol.
     pub fn currency_symbol(self) -> &'static str {
@@ -266,19 +219,19 @@ impl Default for Locale {
 
 impl fmt::Debug for Locale {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Locale({})", self.0.tag)
+        write!(f, "Locale({})", self.0.facts.tag)
     }
 }
 
 impl fmt::Display for Locale {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(self.0.tag)
+        f.write_str(self.0.facts.tag)
     }
 }
 
 impl Serialize for Locale {
     fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
-        s.serialize_str(self.0.tag)
+        s.serialize_str(self.0.facts.tag)
     }
 }
 
@@ -288,7 +241,11 @@ impl<'de> Deserialize<'de> for Locale {
         Locale::from_tag(&tag).ok_or_else(|| {
             serde::de::Error::custom(format!(
                 "unknown locale '{tag}' (known: {})",
-                LOCALES.iter().map(|l| l.tag).collect::<Vec<_>>().join(", ")
+                LOCALES
+                    .iter()
+                    .map(|l| l.facts.tag)
+                    .collect::<Vec<_>>()
+                    .join(", ")
             ))
         })
     }
