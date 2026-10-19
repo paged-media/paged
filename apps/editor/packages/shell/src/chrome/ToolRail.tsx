@@ -38,6 +38,7 @@ import { VIEW_TOOL_IDS, useTool } from "../state/tool-context";
 import { Icon, hasIcon } from "../icons";
 import { ToolOptionsPopover } from "./ToolOptionsPopover";
 import { useRovingFocus } from "../focus/roving-focus";
+import { isRecord, parseStored } from "../lib/stored-settings";
 import { focusCanvasViewport } from "../focus/canvas-surface";
 import {
   BUILT_IN_TOOL_CLUSTERS,
@@ -246,13 +247,22 @@ function deriveSections(
 /** The persisted "last used" faces (a module function: the React Compiler
  *  does not compile a component with a conditional inside a `try`). */
 function readLastUsed(): Record<ToolGroupId, string> {
+  let raw: string | null = null;
   try {
-    return JSON.parse(
-      window.localStorage.getItem(LAST_USED_STORAGE_KEY) ?? "{}",
-    ) as Record<ToolGroupId, string>;
+    raw = window.localStorage.getItem(LAST_USED_STORAGE_KEY);
   } catch {
     return {};
   }
+  // Shape-checked (SH-104, ADR 247): valid JSON that is not an object
+  // (`null`, a number) or a face that is not a tool id reads as unset,
+  // so the group shows its default face instead of breaking the rail.
+  const stored = parseStored(raw);
+  if (!isRecord(stored)) return {};
+  const out: Record<string, string> = {};
+  for (const [group, tool] of Object.entries(stored)) {
+    if (typeof tool === "string") out[group] = tool;
+  }
+  return out as Record<ToolGroupId, string>;
 }
 export function ToolRail({
   foot,

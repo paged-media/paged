@@ -166,13 +166,13 @@ describe("setting paged.cockpit.v1 in the cockpit", () => {
     expect(result.current.cockpit.rightTabs).toEqual(["p.props", "p.swatches"]);
   });
 
-  // Finding SH-101: `loadCockpitStore` checks only that the blob is an
+  // Finding SH-101 (fixed, ADR 247): `loadCockpitStore` checks only that the blob is an
   // object; a mode entry of the wrong shape is handed to the cockpit as
   // is, so `rightTabs` becomes whatever was stored (a number here) and the
   // first `includes`/`map` over it throws — the right dock (and every
   // openPanel, the Window menu's panel commands) breaks on a stale or
   // hand-edited value instead of falling back to the mode's seed.
-  test.failing(
+  test(
     "SH-101: a mode entry of the wrong shape falls back to the slot seed",
     () => {
       covers("setting:paged.cockpit.v1");

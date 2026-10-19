@@ -358,10 +358,10 @@ describe("the tables as a whole", () => {
     );
   });
 
-  // Finding SH-9 (UX F-16): Cmd+0 (Fit document) and Cmd+1 (Zoom to 100%)
-  // work, but through a canvas hook, not the registry, so the View menu
-  // shows no chord for them and a plugin cannot see or rebind them.
-  test.failing(
+  // Finding SH-9 (UX F-16), fixed: Cmd+0 (Fit document) and Cmd+1 (Zoom
+  // to 100%) worked through a canvas hook, not the registry, so the View
+  // menu showed no chord for them and a plugin could not see or rebind them.
+  test(
     "SH-9 (F-16): Fit document and Zoom to 100% are registry bindings",
     () => {
       covers("command:paged.view.zoomFit", "command:paged.view.zoom100");

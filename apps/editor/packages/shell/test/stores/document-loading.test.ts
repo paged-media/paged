@@ -201,12 +201,12 @@ describe("loading a file", () => {
     expect(currentLibraryDocument()).toBe(entry);
   });
 
-  // Finding SH-105: nothing ties a snapshot pass to the load that started
-  // it. A second file opened while the first is still snapshotting resets
+  // Finding SH-105 (fixed, ADR 248): nothing tied a snapshot pass to the
+  // load that started it. A second file opened while the first is still snapshotting resets
   // the document state, but the first pass keeps going: its pages' thumbnails
   // land in the NEW document's map, and its closing "loaded N pages" status
   // and snapshotsReady=true arrive after the new document's reset.
-  test.failing(
+  test(
     "SH-105: a newer load stops the older load's snapshot pass",
     async () => {
       serveFont(TRUETYPE);

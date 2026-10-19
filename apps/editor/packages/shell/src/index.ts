@@ -34,6 +34,20 @@ export {
   useCamera,
   type ViewportSize,
 } from "./state/camera-context";
+export {
+  isRecord,
+  isStringArray,
+  oneOf,
+  parseStored,
+  readStoredShape,
+  type FieldCheck,
+} from "./lib/stored-settings";
+export {
+  clampCamera,
+  clampScale,
+  ZOOM_MAX_SCALE,
+  ZOOM_MIN_SCALE,
+} from "./state/zoom-range";
 
 export {
   DocumentProvider,

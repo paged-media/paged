@@ -37,7 +37,12 @@
 
 import { useSyncExternalStore } from "react";
 import type { CanvasClient } from "@paged-media/client";
-import type { ExporterContribution } from "@paged-media/shell";
+import {
+  oneOf,
+  parseStored,
+  readStoredShape,
+  type ExporterContribution,
+} from "@paged-media/shell";
 
 import { downloadBytes } from "../../shell-file-saver";
 
@@ -222,17 +227,22 @@ const IMAGE_DEFAULTS: ImageSettings = {
 let imageSettings: ImageSettings = loadImageSettings();
 const imageListeners = new Set<() => void>();
 
+/** The stored settings, field by field: a value the panel never offers
+ *  (a DPI of "huge" or 100000, an unknown scope) reads as the default
+ *  (SH-102, ADR 247). */
 function loadImageSettings(): ImageSettings {
+  let raw: string | null = null;
   try {
-    const raw = localStorage.getItem(IMAGE_KEY);
-    if (!raw) return IMAGE_DEFAULTS;
-    return {
-      ...IMAGE_DEFAULTS,
-      ...(JSON.parse(raw) as Partial<ImageSettings>),
-    };
+    raw = localStorage.getItem(IMAGE_KEY);
   } catch {
     return IMAGE_DEFAULTS;
   }
+  return readStoredShape(parseStored(raw), IMAGE_DEFAULTS, {
+    dpi: oneOf(72, 150, 300),
+    scope: oneOf("all", "current", "range"),
+    format: oneOf("png", "jpeg"),
+    quality: (q) => typeof q === "number" && q > 0 && q <= 1,
+  });
 }
 
 export function setImageSettings(patch: Partial<ImageSettings>): void {

@@ -20,10 +20,9 @@
 // Keyboard shortcuts for the canvas.
 //
 // Window-level keydown listener. Behaviours mirror common viewer
-// conventions:
+// conventions (Cmd/Ctrl+0 and Cmd/Ctrl+1 are registry bindings onto
+// paged.view.zoomFit / zoom100 now, APP_KEYBINDINGS, F-16 / SH-9):
 //
-//   Cmd/Ctrl + 0  → fit-to-document (animated)
-//   Cmd/Ctrl + 1  → 100% zoom centred on the viewport
 //   Page Down     → next page (fit-to-page animated)
 //   Page Up       → previous page (fit-to-page animated)
 //   Home          → first page
@@ -36,7 +35,7 @@
 import { useEffect } from "react";
 import type { Camera } from "@paged-media/client";
 import { canvasKeyYields } from "@paged-media/shell";
-import { documentBounds, fitCamera, layoutPages } from "./layout";
+import { fitCamera, layoutPages } from "./layout";
 import type { PageId } from "@paged-media/client";
 
 export interface ShortcutContext {
@@ -51,34 +50,10 @@ export function useKeyboardShortcuts(ctx: ShortcutContext) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (canvasKeyYields(e)) return;
-      const cmd = e.metaKey || e.ctrlKey;
       const [vw, vh] = ctx.viewportSize;
       if (vw < 10 || vh < 10) return;
 
       const rects = layoutPages(ctx.pageSizesPt);
-
-      if (cmd && e.key === "0") {
-        e.preventDefault();
-        if (rects.length === 0) return;
-        ctx.animateCamera(fitCamera(vw, vh, documentBounds(rects)));
-        return;
-      }
-
-      if (cmd && e.key === "1") {
-        e.preventDefault();
-        // Zoom to 100% centred on whatever's currently at the
-        // viewport centre.
-        const cx = vw / 2;
-        const cy = vh / 2;
-        const docX = (cx - ctx.camera.tx) / ctx.camera.scale;
-        const docY = (cy - ctx.camera.ty) / ctx.camera.scale;
-        ctx.animateCamera({
-          scale: 1,
-          tx: cx - docX,
-          ty: cy - docY,
-        });
-        return;
-      }
 
       if (
         e.key === "PageDown" ||

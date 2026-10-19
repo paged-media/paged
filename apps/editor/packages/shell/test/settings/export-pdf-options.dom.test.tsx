@@ -244,12 +244,12 @@ describe("setting paged.exportPdf.options.v1", () => {
     expect(localStorage.getItem(KEY)).toBeNull();
   });
 
-  // Finding SH-103: the stored form is spread over the defaults without a
+  // Finding SH-103 (fixed, ADR 247): the stored form is spread over the defaults without a
   // check, so a value the dialog never offers survives a load and is
   // exported: `standard: "bogus"` reaches `client.exportPdf` as the PDF
   // standard (the comment above OPTIONS_KEY promises "schema drift falls
   // back to defaults").
-  test.failing(
+  test(
     "SH-103: a stored standard the dialog does not offer falls back to the default",
     async () => {
       covers("setting:paged.exportPdf.options.v1");

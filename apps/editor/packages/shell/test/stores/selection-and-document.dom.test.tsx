@@ -288,12 +288,12 @@ describe("content selection", () => {
     expect(result.current.selectionRects).toEqual([]);
   });
 
-  // Finding SH-106: the caret answer is applied whenever it arrives,
+  // Finding SH-106 (fixed, ADR 248): the caret answer was applied whenever it arrives,
   // without checking it still belongs to the current selection. Clear the
   // selection (Escape) while the caret request is in flight and the late
   // answer puts a caret back with no selection behind it — a blinking
   // caret in a story the user has left.
-  test.failing(
+  test(
     "SH-106: a late caret answer for a superseded selection is dropped",
     async () => {
       const c = contentClient();

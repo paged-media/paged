@@ -41,6 +41,7 @@ import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { useCanvasClient } from "../state/canvas-client-context";
 import { useDocument } from "../state/document-context";
+import { oneOf, parseStored, readStoredShape } from "../lib/stored-settings";
 
 type DialogAction = "open" | "close";
 const listeners = new Set<(action: DialogAction) => void>();
@@ -87,14 +88,21 @@ const DEFAULTS: FormState = {
   tagged: false,
 };
 
+/** The stored form, field by field: a value the dialog does not offer
+ *  (`standard: "bogus"`) reads as the default rather than reaching the
+ *  export (SH-103, ADR 247). */
 function loadSaved(): FormState {
+  let raw: string | null = null;
   try {
-    const raw = localStorage.getItem(OPTIONS_KEY);
-    if (!raw) return DEFAULTS;
-    return { ...DEFAULTS, ...(JSON.parse(raw) as Partial<FormState>) };
+    raw = localStorage.getItem(OPTIONS_KEY);
   } catch {
     return DEFAULTS;
   }
+  return readStoredShape(parseStored(raw), DEFAULTS, {
+    standard: oneOf("pdf17", "pdfx4"),
+    colorPolicy: oneOf("preserveNumbers", "convertToDestination"),
+    downsample: oneOf("off", "300", "150"),
+  });
 }
 
 type Phase =

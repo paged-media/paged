@@ -23,11 +23,12 @@
 // shell (changing zoom is non-destructive). Drag the leading "%"
 // chip horizontally to scrub; native keyboard editing still works.
 
-import { useCamera } from "@paged-media/shell";
+import { useCamera, ZOOM_MAX_SCALE, ZOOM_MIN_SCALE } from "@paged-media/shell";
 import { NumberInput } from "@paged-media/ui";
 
-const MIN_ZOOM_PERCENT = 5;
-const MAX_ZOOM_PERCENT = 1600;
+// The one zoom range (ADR 246), in percent.
+const MIN_ZOOM_PERCENT = ZOOM_MIN_SCALE * 100;
+const MAX_ZOOM_PERCENT = ZOOM_MAX_SCALE * 100;
 /** Horizontal pixels per percent of zoom change when dragging. */
 const ZOOM_STEP = 0.5;
 

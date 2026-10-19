@@ -391,6 +391,12 @@ export const APP_KEYBINDINGS: KeybindingContribution[] = [
   { key: "ctrl+=", command: PAGED_VIEW_ZOOM_IN },
   { key: "cmd+-", command: PAGED_VIEW_ZOOM_OUT },
   { key: "ctrl+-", command: PAGED_VIEW_ZOOM_OUT },
+  // Fit and 100 % (F-16, SH-9). They lived in a canvas hook, so the View
+  // menu showed no chord and a bundle could neither see nor rebind them.
+  { key: "cmd+0", command: PAGED_VIEW_ZOOM_FIT },
+  { key: "ctrl+0", command: PAGED_VIEW_ZOOM_FIT },
+  { key: "cmd+1", command: PAGED_VIEW_ZOOM_100 },
+  { key: "ctrl+1", command: PAGED_VIEW_ZOOM_100 },
   // Save. Both commands shipped without a key, so the single most
   // reflexive gesture in any editor did nothing at all — and the app has
   // no autosave, so the reflex failing is not a small matter. Cmd+S is

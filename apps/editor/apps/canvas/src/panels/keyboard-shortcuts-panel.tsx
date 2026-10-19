@@ -65,16 +65,6 @@ export const KEYBOARD_SHORTCUTS_PANEL_ID = "paged.keyboard-shortcuts";
 const AD_HOC: { key: string; what: string; where: string }[] = [
   { key: prettyKey("cmd+z"), what: "Undo", where: "useTextEditing" },
   { key: prettyKey("cmd+shift+z"), what: "Redo", where: "useTextEditing" },
-  {
-    key: prettyKey("cmd+0"),
-    what: "Fit document",
-    where: "useKeyboardShortcuts",
-  },
-  {
-    key: prettyKey("cmd+1"),
-    what: "Zoom to 100%",
-    where: "useKeyboardShortcuts",
-  },
   { key: "Home", what: "First page", where: "useKeyboardShortcuts" },
   { key: "End", what: "Last page", where: "useKeyboardShortcuts" },
   { key: "PageUp", what: "Previous page", where: "useKeyboardShortcuts" },
