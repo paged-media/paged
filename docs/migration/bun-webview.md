@@ -9,9 +9,9 @@ spec (`apps/editor/apps/canvas/tests/e2e/wasm-boot-parity.spec.ts`).
 
 **Outcome.** Both drivers run the checks reliably. The Playwright library (playwright-core's
 `chromium.launch`, not Playwright's test runner) is the lane's driver: it is as reliable,
-within about 10% in speed unless the machine is saturated, and it brings what `Bun.WebView` leaves to hand-written
-DevTools-protocol calls (network interception, tracing, the browser's own log) and a WebGPU
-adapter by default. `Bun.WebView` stays selectable (`PAGED_WASM_BOOT_DRIVER=webview`) and the
+10–17% slower per process (more under heavy load), and it brings what `Bun.WebView` leaves to hand-written
+DevTools-protocol calls (network interception, tracing, the browser's own log) and, on a Mac,
+a WebGPU adapter by default. `Bun.WebView` stays selectable (`PAGED_WASM_BOOT_DRIVER=webview`) and the
 trial stays runnable, so the comparison can be repeated when it leaves experimental.
 
 ## The checks
@@ -75,10 +75,26 @@ icon, and the WebView driver subscribes to the protocol's `Log.entryAdded` (and
 `Runtime.exceptionThrown` for uncaught errors), after which both drivers observe the same
 errors (a deliberate 404 shows in both). Run 2 is after that fix.
 
-Speed: in run 1 the two are within about 10% (median 1.26 s against 1.41 s for the whole
+Speed: in run 1 `Bun.WebView` is about 10% faster (median 1.26 s against 1.41 s for the whole
 process). Under heavy load `Bun.WebView` degrades less (median 3.0 s against 7.3 s):
 playwright-core is a large JavaScript client that runs its protocol handling in the test
 process, and `Bun.WebView` is native.
+
+### In CI
+
+The `tests / contracts + system` workflow runs five runs per driver as an advisory step on every
+push (Ubuntu runner, its preinstalled Google Chrome as `PAGED_CHROMIUM`, artifact `t7-trial`).
+The first two pushes (`0d05666e1`, `3c97631f6`):
+
+| Push | Driver | Green runs | Wall time min / median / max |
+| --- | --- | --- | --- |
+| `0d05666e1` | Playwright library | 5 / 5 | 2.08 / 2.16 / 2.25 s |
+| `0d05666e1` | Bun.WebView (Chrome) | 5 / 5 | 1.77 / 1.79 / 1.96 s |
+| `3c97631f6` | Playwright library | 5 / 5 | 2.10 / 2.11 / 2.16 s |
+| `3c97631f6` | Bun.WebView (Chrome) | 5 / 5 | 1.79 / 1.79 / 1.86 s |
+
+`Bun.WebView` is 15–17% faster per process there, and neither driver gets a WebGPU adapter
+from the runner's Chrome.
 
 ### What else each one does
 
@@ -93,7 +109,8 @@ Probed once per driver by the trial script (same binary, same page):
 | Network interception | yes (`page.route`, fulfil a request) | works, hand-written: `Fetch.enable`, `Fetch.requestPaused`, `Fetch.fulfillRequest` |
 | Tracing | yes (`context.tracing`, a trace-viewer zip) | raw trace events only (`Tracing.start` / `dataCollected` / `end`); no trace file, no viewer |
 | Screenshot | yes | yes |
-| WebGPU adapter (headless) | yes, by default | no by default (`--disable-gpu`); a SwiftShader adapter with `--enable-unsafe-webgpu --use-angle=swiftshader --enable-unsafe-swiftshader` |
+| WebGPU adapter (headless, macOS) | yes, by default | no by default (`--disable-gpu`); a SwiftShader adapter with `--enable-unsafe-webgpu --use-angle=swiftshader --enable-unsafe-swiftshader` |
+| WebGPU adapter (headless, the Linux CI runner's Chrome) | no | no |
 | Locators, auto-waiting, assertions | yes | `click(selector)` waits for actionability; nothing else |
 | Stability of the API | stable, versioned with its browser | experimental |
 
@@ -107,13 +124,14 @@ Playwright already has, tested.
 ## Decision
 
 - **The lane's driver is the Playwright library.** Equal reliability (50 / 50 each once the
-  harness was fixed, and it was Playwright that exposed the harness's defect), speed within
-  about 10% where the machine is not saturated (a CI runner runs one job), WebGPU by default, and first-class
-  interception, tracing and logging if the checks grow. It is the same library, browser
-  revision and cache as the editor's Playwright suite.
+  harness was fixed, and it was Playwright that exposed the harness's defect), a speed cost of
+  10–17% per process (about 0.15–0.35 s for this lane), WebGPU by default on a Mac, and first-class
+  interception, tracing and logging if the checks grow. It is the library the editor's
+  Playwright suite already depends on.
 - **`Bun.WebView` does not grow yet.** Of the plan's conditions for growing it (cross-origin
   isolation, WebGPU, stability across 50 CI runs, comparable wall time) it meets isolation and
-  wall time, meets WebGPU only with SwiftShader flags, and has 50 local runs, not CI ones.
+  wall time, meets WebGPU only with SwiftShader flags, and has 50 local runs and, so far, 10
+  CI runs.
   The trial runs in CI as an advisory step (`tests / contracts + system`, five runs per driver
   per push, artifact `t7-trial`), so the CI count accumulates.
 - **Revisit** when `Bun.WebView` leaves experimental: if its Chrome backend then logs what the
