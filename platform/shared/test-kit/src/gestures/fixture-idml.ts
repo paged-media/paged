@@ -190,6 +190,29 @@ export const line = (self: string, a: Pt, b: Pt): string => {
   );
 };
 
+/** A text frame threading `storyId` (a story of the spec's `stories`). */
+export const textFrame = (
+  self: string,
+  [t, l, b, r]: Box,
+  storyId: string,
+  o: ItemOptions = {},
+): string =>
+  `<TextFrame Self="${self}" ParentStory="${storyId}" ContentType="TextType" ` +
+  `GeometricBounds="${t} ${l} ${b} ${r}" ${attrs({ fill: "Swatch/None", ...o })}>` +
+  geometry(
+    [
+      [l, t],
+      [r, t],
+      [r, b],
+      [l, b],
+    ],
+    false,
+  ) +
+  `</TextFrame>`;
+
+const escapeXml = (text: string) =>
+  text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
 export const group = (
   self: string,
   children: readonly string[],
@@ -213,6 +236,8 @@ export interface FixtureSpec {
   pages: readonly FixturePageSpec[];
   /** Items of the master every page applies. */
   masterItems?: readonly string[];
+  /** Stories, each a list of paragraphs (a text frame names one by id). */
+  stories?: ReadonlyArray<{ id: string; paragraphs: readonly string[] }>;
 }
 
 /** Package a fixture spec as an IDML document. */
@@ -236,15 +261,35 @@ export function buildFixtureIdml(spec: FixtureSpec): Uint8Array {
   const designmap =
     XML +
     `<?aid style="50" type="document" readerVersion="6.0" featureSet="257" product="20.0(32)"?>\n` +
-    `<Document ${NS} Self="d" StoryList="" Name="${spec.name}.indd">\n` +
+    `<Document ${NS} Self="d" StoryList="${(spec.stories ?? []).map((st) => st.id).join(" ")}" Name="${spec.name}.indd">\n` +
     `<idPkg:Graphic src="Resources/Graphic.xml"/>\n<idPkg:Fonts src="Resources/Fonts.xml"/>\n` +
     `<idPkg:Styles src="Resources/Styles.xml"/>\n<idPkg:Preferences src="Resources/Preferences.xml"/>\n` +
     `<idPkg:MasterSpread src="MasterSpreads/MasterSpread_um.xml"/>\n` +
     spec.pages
       .map((p) => `<idPkg:Spread src="Spreads/Spread_${p.id}.xml"/>\n`)
       .join("") +
+    (spec.stories ?? [])
+      .map((st) => `<idPkg:Story src="Stories/Story_${st.id}.xml"/>\n`)
+      .join("") +
     `<idPkg:BackingStory src="XML/BackingStory.xml"/>\n</Document>`;
   const empty = (tag: string) => `${XML}<idPkg:${tag} ${NS}/>`;
+  const stories = (spec.stories ?? []).map((story) => ({
+    name: `Stories/Story_${story.id}.xml`,
+    data:
+      XML +
+      `<idPkg:Story ${NS}><Story Self="${story.id}">` +
+      story.paragraphs
+        .map(
+          (text, i) =>
+            `<ParagraphStyleRange AppliedParagraphStyle="ParagraphStyle/$ID/[No paragraph style]">` +
+            `<CharacterStyleRange AppliedCharacterStyle="CharacterStyle/$ID/[No character style]">` +
+            `<Content>${escapeXml(text)}</Content>` +
+            (i < story.paragraphs.length - 1 ? "<Br/>" : "") +
+            `</CharacterStyleRange></ParagraphStyleRange>`,
+        )
+        .join("") +
+      `</Story></idPkg:Story>`,
+  }));
   return storedZip([
     { name: "mimetype", data: "application/vnd.adobe.indesign-idml-package" },
     { name: "designmap.xml", data: designmap },
@@ -281,6 +326,7 @@ export function buildFixtureIdml(spec: FixtureSpec): Uint8Array {
       name: `Spreads/Spread_${p.id}.xml`,
       data: spreads[i],
     })),
+    ...stories,
     {
       name: "XML/BackingStory.xml",
       data: `${XML}<idPkg:BackingStory ${NS}><XmlStory Self="backing"/></idPkg:BackingStory>`,

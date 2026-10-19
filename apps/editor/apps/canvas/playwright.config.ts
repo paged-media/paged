@@ -62,9 +62,12 @@ const LEAN_DROP = LEAN_CI
   ? ["fidelity.spec.ts", "e2e/extensive-corpus.spec.ts"]
   : [];
 
+// tests/headless is the headless editor's `bun test` tier, not Playwright's.
+const HEADLESS = "headless/**";
+
 export default defineConfig({
   testDir: "./tests",
-  testIgnore: LEAN_DROP,
+  testIgnore: [...LEAN_DROP, HEADLESS],
   // Single worker keeps the snapshot tier deterministic (worker pool
   // contention can race the layout cache across packs). Re-enable
   // parallelism once we've confirmed perf isn't bottlenecked by it.
@@ -113,7 +116,13 @@ export default defineConfig({
       // behaviour-surface suite so each runs once. The showcase is its
       // own project too — it builds a sixteen-page document and takes
       // minutes, so it must not ride the behaviour suite.
-      testIgnore: [...LEAN_DROP, "journey/**", "showcase/**", "films/**"],
+      testIgnore: [
+        ...LEAN_DROP,
+        HEADLESS,
+        "journey/**",
+        "showcase/**",
+        "films/**",
+      ],
       use: {
         ...devices["Desktop Chrome"],
         // WebGPU lights up when BACKEND=gpu — but headless Chromium
