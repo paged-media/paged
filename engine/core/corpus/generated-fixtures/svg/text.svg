@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="240" height="100" viewBox="0 0 240 100">
+  <!-- Text: neither the engine nor the resvg build before it had fonts for SVG text, so only the rectangles draw. -->
+  <filter id="shadow"><feDropShadow dx="2" dy="2" stdDeviation="1.5" flood-opacity="0.5"/></filter>
+  <rect x="5" y="5" width="230" height="90" fill="#f4f0e8" stroke="#998" stroke-width="2"/>
+  <text x="20" y="45" font-family="Open Sans, sans-serif" font-size="28" fill="#203060">Placed SVG</text>
+  <text x="20" y="80" font-family="serif" font-size="20" fill="#802020" filter="url(#shadow)">with a shadow</text>
+  <rect x="190" y="60" width="30" height="25" fill="#2a7" filter="url(#shadow)"/>
+</svg>

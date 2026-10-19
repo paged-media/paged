@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="240" height="160" viewBox="0 0 240 160">
+  <filter id="turb" x="0" y="0" width="1" height="1"><feTurbulence type="turbulence" baseFrequency="0.05" numOctaves="2" seed="3"/></filter>
+  <filter id="fractal" x="0" y="0" width="1" height="1"><feTurbulence type="fractalNoise" baseFrequency="0.02 0.08" numOctaves="3" seed="7"/></filter>
+  <filter id="coarse" x="0" y="0" width="1" height="1"><feTurbulence type="turbulence" baseFrequency="0.015" numOctaves="4" seed="-2"/></filter>
+  <!-- Noise clipped to the shape and its alpha taken from it: a paper grain. -->
+  <filter id="grain" x="0" y="0" width="1" height="1">
+    <feTurbulence type="fractalNoise" baseFrequency="0.6" numOctaves="2" seed="11" result="noise"/>
+    <feColorMatrix in="noise" type="saturate" values="0" result="grey"/>
+    <feComposite in="grey" in2="SourceGraphic" operator="arithmetic" k1="0.6" k2="0" k3="0.7" k4="0" result="mix"/>
+    <feComposite in="mix" in2="SourceAlpha" operator="in"/>
+  </filter>
+  <!-- Marbling: the noise's red channel as the alpha of a colour. -->
+  <filter id="marble" x="0" y="0" width="1" height="1" color-interpolation-filters="sRGB">
+    <feTurbulence type="turbulence" baseFrequency="0.03 0.1" numOctaves="3" seed="4" result="t"/>
+    <feColorMatrix in="t" type="matrix" values="0 0 0 0 0.1  0 0 0 0 0.2  0 0 0 0 0.5  2 0 0 0 0" result="veins"/>
+    <feFlood flood-color="#f0ece0"/>
+    <feMerge><feMergeNode/><feMergeNode in="veins"/></feMerge>
+  </filter>
+  <rect x="5" y="5" width="70" height="70" fill="#000" filter="url(#turb)"/>
+  <rect x="85" y="5" width="70" height="70" fill="#000" filter="url(#fractal)"/>
+  <rect x="165" y="5" width="70" height="70" fill="#000" filter="url(#coarse)"/>
+  <circle cx="45" cy="120" r="33" fill="#a0522d" filter="url(#grain)"/>
+  <rect x="95" y="90" width="140" height="65" fill="#000" filter="url(#marble)"/>
+</svg>

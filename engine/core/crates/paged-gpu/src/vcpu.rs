@@ -82,6 +82,7 @@ use vello_cpu::{
     RenderMode, RenderSettings, Resources, TargetInit,
 };
 
+use crate::blur::{gaussian_blur_mask, gaussian_blur_premul, gaussian_kernel};
 use crate::ink_planes::{self, CmykPlanes, Coverage};
 use crate::vello_map::{self, PaintBrush, StrokeGeometry};
 use crate::{PathRasterizer, RasterOptions};
@@ -1994,101 +1995,6 @@ fn shape_shadow_alpha(stamp: &mut [u8], w: u32, spread: f32, noise: f32, scale: 
         px[1] = scale_c(px[1]).min(na);
         px[2] = scale_c(px[2]).min(na);
         px[3] = na;
-    }
-}
-
-/// 1-D Gaussian kernel sampled at integer pixel offsets, truncated at
-/// 3σ on each side and normalised to sum to 1.
-fn gaussian_kernel(sigma: f32) -> Vec<f32> {
-    let radius = (3.0 * sigma).ceil().max(1.0) as i32;
-    let two_sigma_sq = 2.0 * sigma * sigma;
-    let mut k = Vec::with_capacity(2 * radius as usize + 1);
-    let mut sum = 0.0f32;
-    for i in -radius..=radius {
-        let v = (-(i as f32) * (i as f32) / two_sigma_sq).exp();
-        k.push(v);
-        sum += v;
-    }
-    if sum > 0.0 {
-        for v in &mut k {
-            *v /= sum;
-        }
-    }
-    k
-}
-
-/// Separable Gaussian over a premultiplied RGBA8 buffer, edges clamped
-/// (the caller pads by 3σ, so the clamp reads the empty margin).
-fn gaussian_blur_premul(data: &mut [u8], width: u32, height: u32, kernel: &[f32]) {
-    if kernel.len() < 2 || width == 0 || height == 0 {
-        return;
-    }
-    let (w, h) = (width as usize, height as usize);
-    let radius = (kernel.len() / 2) as isize;
-    let mut tmp = vec![0u8; data.len()];
-    for y in 0..h {
-        let row = y * w * 4;
-        for x in 0..w {
-            let mut acc = [0.0f32; 4];
-            for (k, &coeff) in kernel.iter().enumerate() {
-                let sx = (x as isize + k as isize - radius).clamp(0, w as isize - 1) as usize;
-                let p = row + sx * 4;
-                for c in 0..4 {
-                    acc[c] += data[p + c] as f32 * coeff;
-                }
-            }
-            let q = row + x * 4;
-            for c in 0..4 {
-                tmp[q + c] = acc[c].round().clamp(0.0, 255.0) as u8;
-            }
-        }
-    }
-    for y in 0..h {
-        for x in 0..w {
-            let mut acc = [0.0f32; 4];
-            for (k, &coeff) in kernel.iter().enumerate() {
-                let sy = (y as isize + k as isize - radius).clamp(0, h as isize - 1) as usize;
-                let p = (sy * w + x) * 4;
-                for c in 0..4 {
-                    acc[c] += tmp[p + c] as f32 * coeff;
-                }
-            }
-            let q = (y * w + x) * 4;
-            for c in 0..4 {
-                data[q + c] = acc[c].round().clamp(0.0, 255.0) as u8;
-            }
-        }
-    }
-}
-
-/// Separable Gaussian over a single-channel mask, edges clamped.
-fn gaussian_blur_mask(mask: &mut [u8], width: u32, height: u32, kernel: &[f32]) {
-    if kernel.len() < 2 || width == 0 || height == 0 {
-        return;
-    }
-    let (w, h) = (width as usize, height as usize);
-    let radius = (kernel.len() / 2) as isize;
-    let mut tmp = vec![0u8; mask.len()];
-    for y in 0..h {
-        let row = y * w;
-        for x in 0..w {
-            let mut acc = 0.0f32;
-            for (k, &coeff) in kernel.iter().enumerate() {
-                let sx = (x as isize + k as isize - radius).clamp(0, w as isize - 1) as usize;
-                acc += mask[row + sx] as f32 * coeff;
-            }
-            tmp[row + x] = acc.round().clamp(0.0, 255.0) as u8;
-        }
-    }
-    for y in 0..h {
-        for x in 0..w {
-            let mut acc = 0.0f32;
-            for (k, &coeff) in kernel.iter().enumerate() {
-                let sy = (y as isize + k as isize - radius).clamp(0, h as isize - 1) as usize;
-                acc += tmp[sy * w + x] as f32 * coeff;
-            }
-            mask[y * w + x] = acc.round().clamp(0.0, 255.0) as u8;
-        }
     }
 }
 

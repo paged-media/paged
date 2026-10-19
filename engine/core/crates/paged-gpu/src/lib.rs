@@ -81,6 +81,8 @@ pub(crate) fn rgb_to_naive_cmyk_8bit(r: u8, g: u8, b: u8) -> (u8, u8, u8, u8) {
     (calc(r), calc(g), calc(b), k)
 }
 
+#[cfg(any(feature = "cpu", feature = "svg"))]
+pub(crate) mod blur;
 #[cfg(feature = "vello-backend")]
 pub mod cmyk_compute;
 #[cfg(feature = "cpu")]
@@ -95,6 +97,8 @@ pub mod separations;
 pub mod surface;
 #[cfg(feature = "svg")]
 pub mod svg;
+#[cfg(feature = "svg")]
+mod svg_filter;
 #[cfg(feature = "cpu")]
 pub mod vcpu;
 #[cfg(any(feature = "cpu", feature = "vello-backend"))]
