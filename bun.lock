@@ -53,6 +53,7 @@
         "@types/react-dom": "catalog:",
         "@vitejs/plugin-react": "^4.7.0",
         "autoprefixer": "^10.5.5",
+        "dom-accessibility-api": "^0.5.16",
         "happy-dom": "catalog:",
         "pngjs": "^7.0.0",
         "postcss": "^8.5.28",
