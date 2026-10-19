@@ -16,18 +16,19 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-//! GPU backend.
+//! The rasterizers.
 //!
-//! Owns the `PathRasterizer` trait — the abstraction that lets the
-//! pipeline swap between rasterizer implementations (Vello, forked
-//! Vello, or a custom tile-based pipeline) without changing callers.
-//! The choice is driven by Spike A in `spikes/vello-eval`.
+//! Owns the `PathRasterizer` trait and the two lanes that draw a
+//! display list. Both draw ONE rendering model — Vello's: the display
+//! list becomes kurbo paths, peniko paints, strokes and blend modes
+//! through [`vello_map`], whichever lane draws it.
 //!
-//! Two impls live behind feature flags:
-//!  - `cpu` (default): tiny-skia. Always-works backend used by tests
-//!    and the fidelity harness.
-//!  - `vello-backend`: Vello-via-wgpu. Currently a stub — real
-//!    integration lands as a follow-up batch.
+//!  - `cpu` (default): `vello_cpu` ([`vcpu`]). No GPU required; the path
+//!    of record for the fidelity gate, the command line, the renderer's
+//!    pixel tests, ink separations and the editor's CPU snapshots.
+//!  - `vello-backend`: Vello on wgpu ([`vello_rs`]), offscreen with a
+//!    readback natively and presented to a canvas in the browser
+//!    (`surface`, wasm32 only).
 
 use paged_compose::{Color, DisplayList};
 
@@ -60,14 +61,11 @@ pub fn cmyk_unit_to_linear_rgb(c: f32, m: f32, y: f32, k: f32) -> Color {
 /// chromatic channels relative to the remaining range).
 ///
 /// Gated because a build with NEITHER rasterizer has no caller and the
-/// workspace's denied `dead_code` fails on it. It used to say `cpu`
-/// alone, on the reasoning that the Vello path mirrors this math in
-/// WGSL (`cmyk_compute/shaders/splat_or_overprint.wgsl`) and so never
-/// needs the Rust form. That stopped being true: `vello_rs`'s
-/// overprint orchestrator calls it on the non-CMYK-paint fallback
-/// path, so a `vello-backend` build WITHOUT `cpu` — which is exactly
-/// what the wasm publish builds — failed to compile. It did not show
-/// up in `cargo test`, because the workspace default enables `cpu`.
+/// workspace's denied `dead_code` fails on it. Both lanes call it: the
+/// CPU lane's overprint composite (`ink_planes`) and `vello_rs`'s
+/// overprint orchestrator on the non-CMYK-paint fallback path, which a
+/// `vello-backend` build WITHOUT `cpu` — exactly what the wasm publish
+/// builds — compiles too.
 #[cfg(any(feature = "cpu", feature = "vello-backend"))]
 pub(crate) fn rgb_to_naive_cmyk_8bit(r: u8, g: u8, b: u8) -> (u8, u8, u8, u8) {
     let max_rgb = r.max(g).max(b);
@@ -86,7 +84,11 @@ pub(crate) fn rgb_to_naive_cmyk_8bit(r: u8, g: u8, b: u8) -> (u8, u8, u8, u8) {
 #[cfg(feature = "vello-backend")]
 pub mod cmyk_compute;
 #[cfg(feature = "cpu")]
-pub mod cpu;
+pub(crate) mod ink_planes;
+#[cfg(feature = "cpu")]
+pub mod vcpu;
+#[cfg(any(feature = "cpu", feature = "vello-backend"))]
+pub(crate) mod vello_map;
 /// Ink separations + total-area-coverage readings off the CPU
 /// rasterizer's plane state. CPU-only: the Vello backend keeps plane
 /// state per overprint batch, not per page, so it has no separation to
@@ -99,11 +101,11 @@ pub mod surface;
 pub mod vello_rs;
 
 #[cfg(feature = "cpu")]
-pub use cpu::rasterize;
+pub use vcpu::rasterize;
 #[cfg(feature = "cpu")]
-pub use cpu::rasterize_with_separation;
+pub use vcpu::rasterize_with_separation;
 #[cfg(feature = "cpu")]
-pub use cpu::CpuRasterizer;
+pub use vcpu::CpuRasterizer;
 #[cfg(feature = "cpu")]
 pub use separations::{
     InkChannel, InkCoverageReport, InkPlate, PlateCoverage, Separation, TAC_BUCKETS, TAC_BUCKET_PCT,

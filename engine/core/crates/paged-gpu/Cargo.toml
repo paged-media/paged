@@ -12,18 +12,18 @@ workspace = true
 
 [features]
 default = ["cpu"]
-# Selects the active rasterizer. Only one may be enabled at a time; the
-# default (none) means the crate exposes only the trait surface. The
-# concrete choice is made after Spike A concludes.
+# The GPU lane: Vello on wgpu. Builds with or without `cpu`; the native
+# `paged-inspect --backend vello` and the published wasm (`gpu`) enable it.
 vello-backend = ["dep:vello", "dep:wgpu", "dep:image"]
-# CPU rasterizer via tiny-skia — always buildable, exercises the full
-# pipeline in environments without a GPU. Primarily used by tests and
-# the fidelity harness.
-cpu = ["dep:tiny-skia", "dep:image"]
+# CPU rasterizer on vello_cpu — the same rendering model as the GPU
+# lane (Vello), no GPU required. The path of record: the fidelity gates,
+# the CLI, the renderer's pixel tests and the editor's CPU snapshots run
+# it.
+cpu = ["dep:vello_cpu", "dep:image"]
 
 [dependencies]
 paged-compose = { path = "../paged-compose" }
-# vello 0.11 / tiny-skia 0.12 / wgpu 30 — current Chrome ships the
+# vello 0.11 / vello_cpu 0.3 / wgpu 30 — current Chrome ships the
 # post-2024 WebGPU spec and rejects wgpu < 24's
 # `maxInterStageShaderComponents` limit. wgpu is direct-deps so its
 # version is explicit; we still use vello for the path rasterizer.
@@ -36,7 +36,11 @@ thiserror = { workspace = true }
 tracing = { workspace = true }
 
 vello = { version = "0.11.0", optional = true, default-features = false, features = ["wgpu"] }
-tiny-skia = { version = "0.12", optional = true }
+# vello_cpu shares vello 0.11's release train: the same peniko 0.6 and
+# kurbo 0.13, so one mapping (`vello_map`) feeds both lanes. The u8
+# pipeline only (speed, and the smallest wasm); no PNG, no text — the
+# display list carries glyphs as outlines.
+vello_cpu = { version = "0.3.0", optional = true, default-features = false, features = ["std", "u8_pipeline"] }
 image = { workspace = true, optional = true }
 wgpu = { version = "30.0.1", optional = true }
 
