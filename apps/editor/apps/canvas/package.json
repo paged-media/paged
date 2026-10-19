@@ -49,7 +49,11 @@
     "react-dom": "catalog:"
   },
   "devDependencies": {
+    "@happy-dom/global-registrator": "catalog:",
     "@playwright/test": "^1.63.0",
+    "@testing-library/dom": "catalog:",
+    "@testing-library/react": "catalog:",
+    "@testing-library/user-event": "catalog:",
     "@types/bun": "catalog:",
     "@types/node": "catalog:node25",
     "@types/pngjs": "^6.0.5",
@@ -57,6 +61,7 @@
     "@types/react-dom": "catalog:",
     "@vitejs/plugin-react": "^4.7.0",
     "autoprefixer": "^10.5.5",
+    "happy-dom": "catalog:",
     "pngjs": "^7.0.0",
     "postcss": "^8.5.28",
     "tailwindcss": "^3.4.19",
