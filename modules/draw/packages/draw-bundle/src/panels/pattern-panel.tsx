@@ -53,12 +53,12 @@ import {
 } from "../commands/pattern";
 import { useFollowedDraft, usePanelReload } from "./use-panel-reload";
 import {
+  About,
   humanize,
-  PanelAbout,
-  PanelIntro,
   Refusal,
   useActionFeedback,
-} from "./panel-kit";
+} from "@paged-media/panel-kit";
+import { PanelIntro } from "./panel-parts";
 
 export const PATTERN_PANEL_ID = "media.paged.draw.panel.pattern";
 
@@ -165,7 +165,7 @@ export function makePatternPanel(host: BundleHost): {
       },
     );
 
-    const { refusal, run } = useActionFeedback(host, reload);
+    const { refusal, run } = useActionFeedback(host, reload, "draw panel");
 
     const numberRow = (
       label: string,
@@ -423,7 +423,7 @@ export function makePatternPanel(host: BundleHost): {
           </div>
         )}
 
-        <PanelAbout text={PATTERN_PANEL_NOTE} attr="data-draw-pattern-note" />
+        <About attr="data-draw-pattern-note">{PATTERN_PANEL_NOTE}</About>
       </div>
     );
   };
