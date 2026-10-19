@@ -36,27 +36,40 @@
 //!
 //! ```text
 //! structured := table-name? "[" spec "]"
-//! spec       := simple-column            ; Table1[Col]
+//! spec       := ""                       ; Table1[]       (the data body)
+//!             | simple-column            ; Table1[Col]
 //!             | area-keyword             ; Table1[#Totals]
-//!             | "@" inner-col            ; Table1[@Col]   (ThisRow shorthand)
-//!             | item ("," item)*         ; Table1[[#Headers],[Col]] etc.
-//! item       := "[" area-keyword "]"     ; [#All] [#Data] [#Headers] [#Totals]
-//!             | "[" "#This Row" "]"      ; ThisRow
-//!             | "@"                      ; ThisRow marker inside a list
-//!             | "[" col-name "]"         ; a column, possibly a span endpoint
-//!             | "[" col "]" ":" "[" col "]"  ; a column span
+//!             | "@" this-row             ; Table1[@Col]   (ThisRow shorthand)
+//!             | items                    ; Table1[[#Headers],[Col]] etc.
+//! this-row   := ""                       ; Table1[@]
+//!             | simple-column            ; Table1[@Col]
+//!             | "[" col "]"              ; Table1[@[Col Name]]
+//!             | "[" col "]" ":" "[" col "]"  ; Table1[@[Jan]:[Mar]]
+//! items      := (keyword ",")* keyword
+//!             | (keyword ",")* "[" col "]" (":" "[" col "]")?
+//! keyword    := "[" area-keyword "]"     ; [#All] [#Data] [#Headers] [#Totals]
+//!             | "[" "#This Row" "]"      ; ThisRow (Excel 2007's spelling of `@`)
 //! ```
+//!
+//! Spaces are allowed after a `[`, before a `]` and around `,` and `:`.
 //!
 //! ## Rulings (documented Excel-compat decisions, constitution §3)
 //!
-//! - **Column names may contain spaces and most punctuation.** Inside a `[ ]`
-//!   column token, the special characters `[ ] # ' @` are escaped with a
-//!   leading `'` (ECMA-376 §18.17.2.4); we un-escape on lex. A *simple* column
-//!   (no inner brackets, e.g. `Table1[Col]`) runs to the closing `]` and may
-//!   NOT itself contain `[`/`]`.
-//! - **`#This Row` and the `@` marker both mean [`TableArea::ThisRow`].** The
-//!   bare-name `[@Col]` form (empty table name) is the in-table shorthand the
-//!   printer round-trips; with a table name and `@` we keep the table name.
+//! - **Column names may contain spaces and most punctuation.** In any column
+//!   token the special characters `[ ] # ' @` are escaped with a leading `'`
+//!   (ECMA-376 §18.17.2.4; Microsoft's structured-reference syntax rules); we
+//!   un-escape on lex, and an unescaped one is a parse error. A *simple*
+//!   column (no inner brackets, e.g. `Table1[Col]`) runs to the closing `]`.
+//! - **A column is never empty.** `Table1[]` is the data body, but `[]` as a
+//!   column (`Table1[[]]`, `[@[]]`, `[[A]:[]]`) is a parse error: Excel table
+//!   headers are never empty.
+//! - **`#This Row` and the `@` shorthand both mean [`TableArea::ThisRow`].**
+//!   `@` only ever LEADS the spec (`[@Col]`, `[@[A]:[B]]`, `[@]`); it is not
+//!   an item of a list. The bare-name `[@Col]` form (empty table name) is the
+//!   in-table shorthand the printer round-trips; with a table name and `@` we
+//!   keep the table name.
+//! - **Items are comma-separated, the `#` specifiers first.** `[[#Headers],
+//!   [Col]]`, never `[[Col],[#Headers]]` or `[[#Headers][Col]]`.
 //! - **At most one column span.** Excel permits exactly one `[Col1]:[Col2]`
 //!   span (plus an optional area keyword). More than two columns, or a span
 //!   mixed with a third column, is a parse error.
@@ -165,49 +178,43 @@ fn parse_spec(
     Ok(StructuredRef {
         table: table.into(),
         area: TableArea::Data,
-        col_start: Some(unescape_col(trimmed)),
+        col_start: Some(column_name(trimmed, &span)?),
         col_end: None,
     })
 }
 
 /// Parse the `@…` ThisRow shorthand body (text after the leading `@`). `rest`
-/// may be a bare column (`@Col`), a bracketed column (`@[Col Name]`), or empty
-/// (`@`).
+/// may be a bare column (`@Col`), a bracketed column (`@[Col Name]`), a
+/// bracketed column span (`@[Jan]:[Mar]` — Excel's this-row column range),
+/// or empty (`@`).
 fn parse_thisrow_shorthand(
     rest: &str,
     table: &str,
     span: std::ops::Range<usize>,
 ) -> Result<StructuredRef, ParseError> {
     let rest = rest.trim();
-    let col = if rest.is_empty() {
-        None
+    let (col_start, col_end) = if rest.is_empty() {
+        (None, None)
     } else if rest.starts_with('[') {
-        // `@[Col Name]` — exactly one bracketed column.
-        let items = split_items(rest, &span)?;
-        if items.len() != 1 {
-            return Err(ParseError::new(
-                "structured reference `@` accepts a single column",
-                span,
-            ));
-        }
-        match &items[0] {
-            Item::Column(c) => Some(c.clone()),
-            _ => {
-                return Err(ParseError::new(
-                    "structured reference `@` must name a column",
-                    span,
-                ))
-            }
-        }
+        // `@[Col Name]`, or the span `@[Col1]:[Col2]`.
+        let (first, second) = match split_span(rest) {
+            Some((l, r)) => (l, Some(r)),
+            None => (rest, None),
+        };
+        let c0 = one_column(split_items(first, &span)?, "`@`", &span)?;
+        let c1 = second
+            .map(|r| one_column(split_items(r, &span)?, "a span's right side", &span))
+            .transpose()?;
+        (Some(c0), c1)
     } else {
         // `@Col` — a bare simple column.
-        Some(unescape_col(rest))
+        (Some(column_name(rest, &span)?), None)
     };
     Ok(StructuredRef {
         table: table.into(),
         area: TableArea::ThisRow,
-        col_start: col,
-        col_end: None,
+        col_start,
+        col_end,
     })
 }
 
@@ -217,9 +224,6 @@ enum Item {
     Area(TableArea),
     /// A column name (un-escaped).
     Column(CompactString),
-    /// The bare `@` ThisRow marker inside a list (`[@],[Col]` is rare but
-    /// Excel does emit `[#This Row]` for it on print; we accept `@` too).
-    ThisRow,
 }
 
 /// Parse a bracketed item list `[..],[..]` (optionally with one `:` span) into
@@ -237,7 +241,7 @@ fn parse_item_list(
         // The left side may carry an optional leading area keyword; the right
         // side must be exactly one column.
         let (area, c0) = take_area_and_one_col(left, &span)?;
-        let c1 = take_one_col(right, &span)?;
+        let c1 = one_column(right, "a span's right side", &span)?;
         return Ok(StructuredRef {
             table: table.into(),
             area,
@@ -263,8 +267,8 @@ fn fold_items(
     let mut col: Option<CompactString> = None;
     for it in items {
         match it {
+            Item::Area(_) if col.is_some() => return Err(keyword_after_column(&span)),
             Item::Area(a) => set_area(&mut area, a, &span)?,
-            Item::ThisRow => set_area(&mut area, TableArea::ThisRow, &span)?,
             Item::Column(c) => {
                 if col.is_some() {
                     return Err(ParseError::new(
@@ -324,8 +328,8 @@ fn take_area_and_one_col(
     let mut col: Option<CompactString> = None;
     for it in items {
         match it {
+            Item::Area(_) if col.is_some() => return Err(keyword_after_column(span)),
             Item::Area(a) => set_area(&mut area, a, span)?,
-            Item::ThisRow => set_area(&mut area, TableArea::ThisRow, span)?,
             Item::Column(c) => {
                 if col.is_some() {
                     return Err(ParseError::new(
@@ -346,53 +350,55 @@ fn take_area_and_one_col(
     }
 }
 
-/// From the RIGHT side of a span: exactly one column, no area keyword.
-fn take_one_col(
+/// A `#` specifier after a column: Excel lists the specifiers first.
+fn keyword_after_column(span: &std::ops::Range<usize>) -> ParseError {
+    ParseError::new(
+        "structured reference lists its #-specifiers before its columns",
+        span.clone(),
+    )
+}
+
+/// Exactly one column, no area keyword: the right side of a span, or what
+/// follows `@`. `what` names the position for the error.
+fn one_column(
     items: Vec<Item>,
+    what: &str,
     span: &std::ops::Range<usize>,
 ) -> Result<CompactString, ParseError> {
-    if items.len() != 1 {
-        return Err(ParseError::new(
-            "structured reference span right side must be a single column",
-            span.clone(),
-        ));
-    }
-    match items.into_iter().next() {
-        Some(Item::Column(c)) => Ok(c),
+    let mut items = items.into_iter();
+    match (items.next(), items.next()) {
+        (Some(Item::Column(c)), None) => Ok(c),
         _ => Err(ParseError::new(
-            "structured reference span right side must be a column",
+            format!("structured reference: {what} must be a single column"),
             span.clone(),
         )),
     }
 }
 
-/// Split a bracketed-item body into individual [`Item`]s on top-level `,`
-/// separators. Each item is a `[ ... ]` group (or a bare `@` marker).
+/// Split a bracketed-item body into its [`Item`]s: `[ ... ]` groups
+/// separated by single commas, with optional spaces around them. An empty
+/// body yields no items (the caller decides whether that is allowed).
 fn split_items(body: &str, span: &std::ops::Range<usize>) -> Result<Vec<Item>, ParseError> {
     let bytes = body.as_bytes();
+    let skip_ws = |mut i: usize| {
+        while i < bytes.len() && bytes[i].is_ascii_whitespace() {
+            i += 1;
+        }
+        i
+    };
     let mut items = Vec::new();
-    let mut i = 0;
-    while i < bytes.len() {
-        // Skip separators / whitespace between items.
-        while i < bytes.len() && (bytes[i] == b',' || bytes[i].is_ascii_whitespace()) {
-            i += 1;
-        }
-        if i >= bytes.len() {
-            break;
-        }
-        if bytes[i] == b'@' {
-            items.push(Item::ThisRow);
-            i += 1;
-            continue;
-        }
-        if bytes[i] != b'[' {
+    let mut i = skip_ws(0);
+    if i >= bytes.len() {
+        return Ok(items);
+    }
+    loop {
+        if bytes.get(i) != Some(&b'[') {
             return Err(ParseError::new(
                 "expected `[` to start a structured-reference item",
                 span.clone(),
             ));
         }
         // Consume one `[ ... ]` group, honoring `'`-escapes.
-        let group_start = i;
         i += 1;
         let inner_start = i;
         while i < bytes.len() {
@@ -412,22 +418,29 @@ fn split_items(body: &str, span: &std::ops::Range<usize>) -> Result<Vec<Item>, P
                 span.clone(),
             ));
         }
-        let inner = &body[inner_start..i];
-        i += 1; // past ']'
-        let _ = group_start;
-        items.push(parse_item(inner)?);
+        items.push(parse_item(&body[inner_start..i], span)?);
+        i = skip_ws(i + 1);
+        if i >= bytes.len() {
+            return Ok(items);
+        }
+        if bytes[i] != b',' {
+            return Err(ParseError::new(
+                "expected `,` between structured-reference items",
+                span.clone(),
+            ));
+        }
+        i = skip_ws(i + 1);
     }
-    Ok(items)
 }
 
 /// Parse one bracketed item's inner text (already without its `[ ]`).
-fn parse_item(inner: &str) -> Result<Item, ParseError> {
+fn parse_item(inner: &str, span: &std::ops::Range<usize>) -> Result<Item, ParseError> {
     let t = inner.trim();
     if let Some(area) = area_keyword(t) {
         // `#This Row` is its own ThisRow area; the others map directly.
         return Ok(Item::Area(area));
     }
-    Ok(Item::Column(unescape_col(t)))
+    Ok(Item::Column(column_name(t, span)?))
 }
 
 /// Find a TOP-LEVEL `:` span separator (between two bracketed groups), if any.
@@ -489,24 +502,41 @@ fn is_this_row(body: &str) -> bool {
     collapsed.eq_ignore_ascii_case("This Row")
 }
 
-/// Un-escape a structured-ref column token: a `'` escapes the next character
-/// (`'[`, `']`, `'#`, `'\''`, `'@`). Surrounding whitespace is trimmed; INNER
-/// spaces are preserved (column names may contain spaces).
-fn unescape_col(s: &str) -> CompactString {
-    let s = s.trim();
-    if !s.contains('\'') {
-        return CompactString::new(s);
-    }
+/// A structured-ref column name from its token text: a `'` escapes the next
+/// character (`'[`, `']`, `'#`, `''`, `'@`), and those five characters are
+/// errors unescaped (Microsoft's structured-reference syntax rules).
+/// Surrounding whitespace is trimmed; INNER spaces are preserved (column
+/// names may contain spaces). An empty name is an error: a table header is
+/// never empty.
+fn column_name(s: &str, span: &std::ops::Range<usize>) -> Result<CompactString, ParseError> {
     let mut out = String::with_capacity(s.len());
-    let mut chars = s.chars();
+    let mut chars = s.trim().chars();
     while let Some(c) = chars.next() {
-        if c == '\'' {
-            if let Some(n) = chars.next() {
-                out.push(n);
+        match c {
+            '\'' => match chars.next() {
+                Some(n) => out.push(n),
+                None => {
+                    return Err(ParseError::new(
+                        "a `'` in a column name escapes the character after it",
+                        span.clone(),
+                    ))
+                }
+            },
+            '[' | ']' | '#' | '@' => {
+                return Err(ParseError::new(
+                    format!("`{c}` in a column name needs a `'` before it"),
+                    span.clone(),
+                ))
             }
-        } else {
-            out.push(c);
+            _ => out.push(c),
         }
     }
-    CompactString::new(out.trim())
+    let name = out.trim();
+    if name.is_empty() {
+        return Err(ParseError::new(
+            "a structured reference names an empty column",
+            span.clone(),
+        ));
+    }
+    Ok(CompactString::new(name))
 }

@@ -210,16 +210,19 @@ impl Printer<'_> {
     fn structured_ref(&self, s: &StructuredRef, out: &mut String) {
         // ThisRow with an empty table name is the in-table `[@Col]` shorthand.
         // A plain column prints `[@Col]`; a column that needs escaping prints
-        // the bracketed `[@[Col Name]]` form Excel emits (the `@` shorthand
-        // takes a single bracketed column, ECMA-376 §18.17.2.4).
+        // the bracketed `[@[Col Name]]` form Excel emits, and a column span
+        // `[@[Jan]:[Mar]]` brackets both ends (a simple first column would
+        // read back as one column named `Jan:[Mar`).
         if s.area == TableArea::ThisRow && s.table.is_empty() {
             out.push_str("[@");
-            if let Some(c) = &s.col_start {
-                push_column(out, c);
-            }
-            if let Some(c) = &s.col_end {
-                out.push(':');
-                push_bracketed_col(out, c);
+            match (&s.col_start, &s.col_end) {
+                (Some(c0), Some(c1)) => {
+                    push_bracketed_col(out, c0);
+                    out.push(':');
+                    push_bracketed_col(out, c1);
+                }
+                (Some(c), None) => push_column(out, c),
+                (None, _) => {}
             }
             out.push(']');
             return;
@@ -486,17 +489,40 @@ fn push_bracketed_col(out: &mut String, name: &str) {
 }
 
 /// A column name needs the bracketed form (`[[Col]]` rather than `[Col]`) when
-/// a *simple* (run-to-`]`) token would re-parse differently: it contains a
-/// space or any structural character (`[ ] # ' @ : ,`), is empty, or would be
-/// read as an `#`-area keyword. Excel emits the bracketed form for exactly
-/// these (the parse-print fixpoint then recovers the same AST).
+/// it is empty, contains whitespace, or contains one of the special
+/// characters Microsoft's structured-reference syntax rules list as needing
+/// the extra brackets (`, : . [ ] # ' " { } $ ^ & * + = - > < /`, plus `@`,
+/// which a simple column after `[` would read as the this-row shorthand).
+/// Excel reads the bracketed form for every name, so erring towards it is
+/// safe; the parse-print fixpoint then recovers the same AST.
 fn col_needs_brackets(name: &str) -> bool {
     name.is_empty()
-        || name.starts_with('#')
-        || name.starts_with('@')
-        || name
-            .chars()
-            .any(|c| c.is_whitespace() || matches!(c, '[' | ']' | '#' | '\'' | '@' | ':' | ','))
+        || name.chars().any(|c| {
+            c.is_whitespace()
+                || matches!(
+                    c,
+                    ',' | ':'
+                        | '.'
+                        | '['
+                        | ']'
+                        | '#'
+                        | '\''
+                        | '"'
+                        | '{'
+                        | '}'
+                        | '$'
+                        | '^'
+                        | '&'
+                        | '*'
+                        | '+'
+                        | '='
+                        | '-'
+                        | '>'
+                        | '<'
+                        | '/'
+                        | '@'
+                )
+        })
 }
 
 /// The printing precedence of an expression node.
