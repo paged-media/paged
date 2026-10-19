@@ -4,7 +4,7 @@ Wave C moves code that every built-in module had its own copy of into one intern
 implementation under `platform/shared/*` (PM-0002: importable by the built-ins and the
 editor, never by `platform/extensions`), and slims what the public SDK carries. This page
 records the TypeScript items C6–C9, C11 and C12, measured on 2026-10-19, and after them the
-Rust items as they land (C2, C5 and C4 at the end). C10 (`panel-kit`) is separate.
+Rust items as they land (C2, C5, C4, C1 and C3), and C10 (`panel-kit`) last.
 
 How it was measured:
 
@@ -29,6 +29,7 @@ How it was measured:
 | C11  | `platform/shared/helpers`                                           | sha256 5 → 1; base64 13 in 10 files → 1; colour 3 → 1; `asciiJson` 3 → 1; unit tables, see C11      |
 | C12  | `ai` and `cli` leave `platform/extensions`; ADR 331                  | packages in the community-facing tree 4 → 2                                                          |
 | C1   | `platform/shared/ooxml` (Rust): one OPC layer, with a memory budget | `paged-ooxml` copies 2 → 1; package readers 2 → 1 (unguarded 2 modules → 0); see C1                 |
+| C10  | `platform/shared/panel-kit`: the panels' shared controls and tokens | confirms 2 → 1; `<details>` disclosures 11 → 0 (kit); debouncers 4 → 0 (kit); fallback spellings 74 → 6; see C10 |
 
 Canvas build, before wave C → after C6, C7, C8, C9, C11 and C12:
 
@@ -646,3 +647,130 @@ skip); corpus lanes unchanged (slide 5, sheet 5). The harness compared, over 817
 17 `.pptx`: sheet's chart lists, chart geometry and saves; slide's IR as JSON (without the two
 new fields), the resolved deck with its chart layout, and the report. All identical, after one
 fix the harness found (the line-end normalisation above).
+
+## C10 — `platform/shared/panel-kit`
+
+`@paged-media/panel-kit` holds the small controls every panel of the editor and the built-in
+modules had its own copy of, one implementation each, and the colour, status and type tokens
+with one fallback each. It is internal (PM-0002): the editor and the built-ins import it, and
+`bun lint` refuses it in `platform/extensions`. The decision record is editor ADR 233.
+
+- **Commits:**
+  - `2185da811` the package, and paged.draw's local kit moved into it: +1754 / −532 (the
+    package and its tests are +1,250; the lockfile and the CI, Moon and lint lists the rest);
+  - `1a1f0fa57` sheet, image and web: +78 / −200;
+  - `f6c7836c1` the editor: field naming, segments and tabs, refusal wording, 18 findings:
+    +638 / −321;
+  - `5fd899bce` the tokens across 41 files, glyph buttons, refusals, two debouncers:
+    +879 / −691;
+  - `de5d66798` the editor's section headers, colour groups and journal: +27 / −24;
+  - the docs commit with this record: the page-strip arrows, ADR 233 and the docs.
+- **What it holds:**
+
+  | Export | Replaces |
+  | --- | --- |
+  | `ConfirmButton`, `useConfirm` (keyed), `CONFIRM_MS` | draw's ConfirmButton, sheet's `useConfirm` |
+  | `Disclosure` (native `<details>`), `About` | draw's PanelAbout, image's Section and About, sheet's sections, web's About, the journal's blind spots |
+  | `useDisclosure` | the catalog's collapsible section, the cockpit kit's Section, the colour group rows |
+  | `createDebouncer` (injectable timers, `flush`), `useDebouncedValue` | web's debouncer and hook, the page-thumbnail settle, the cockpit store's write |
+  | `StatusLine`, `Refusal`, `useActionFeedback`, `refusalText` | draw's refusal line and log tap, pathfinder's `refusalOf`, the `code: reason` strings of the field, label and core-command errors, web's `describeRefusal` JSON, doc's diagnostics JSON, image's `String(error)` |
+  | `LabelledBy`, `NamedAs`, `useFieldName`, `FieldSelect` / `FieldInput` / `FieldTextarea` | nothing: controls had no name |
+  | `IconButton`, `Segment`, `Tab` | glyph buttons named by their glyph, toggle rows with no state |
+  | `color`, `status`, `font`, `space`, `radius`, `chrome` | 479 `var(--token, fallback)` spellings |
+  | `humanize` | draw's copy |
+
+### Duplicates found, before → after
+
+The search covered every non-test TypeScript source of `apps/editor` and `modules/*`.
+
+| What | Before | After |
+| --- | ---: | ---: |
+| second-click confirm implementations | 2 (draw, sheet) | 1 |
+| hand-written `<details>` disclosures | 11 in 7 files | 0 |
+| self-drawn disclosure headers without the kit | 3 | 0 (draw's Path Options accordion keeps its one-open state and has `aria-expanded`) |
+| debounce helpers in panel code | 4 (web's debouncer and hook, page thumbnails, cockpit store) | 0 |
+| refusal formatters a user reads | 8 | 1 (`refusalText`) |
+| `var(--token, fallback)` uses | 479 | 9 |
+| distinct fallback spellings | 74 | 6 |
+| status tokens with a fallback | 27 uses, 13 spellings, 3 names with no token | 0 |
+| names with no theme token behind them (dark hex in both themes) | 12 | 0 |
+| shadcn HSL channels used as colours (no border, no field background in 5 dialogs) | 3 | 0 |
+| buttons named only by a glyph (✕, ⧉, ↑, ⇄ …) | 27 | 1 (the Glyphs panel's, where the glyph is the name); 27 `IconButton` call sites |
+| toggle rows without a state | 28 of 38 groups | 15 (13 are `Segment`s, a `Tab` row or carry `aria-pressed`) |
+| built-in panels with a reach problem (`registry.dom.test.tsx`) | 42 | 0 |
+
+- **The tokens.** Each kit token names a theme token and falls back to the light theme's value
+  (`theme.css` `:root`); `packages/shell/test/styles/panel-kit-tokens.test.ts` holds every
+  fallback equal to it and every name defined there. An error colour was spelled seven ways
+  (four reds and `currentColor` behind `--status-error`, `--status-error-fg`'s pink,
+  `--pg-danger`'s red) and `--pg-muted-fg` seven; `--pg-danger`, `--warn` and
+  `--status-warn-fg` were names with no token, as were the dialogs' `--fg` and `--muted-fg`
+  (12 such names in all: their dark hex rendered in both themes), and `--border`,
+  `--background` and `--accent` are HSL channels, so `1px solid var(--border, #2a2a2a)` drew
+  no border at all. (The commit message of `5fd899bce` lists `--status-error-fg` among the
+  missing names; it is one of theme.css's aliases.) The 9 uses left name tokens the kit does not carry: `--font-serif` (no
+  theme token), `--overlay-selection` (a canvas cue), `--canvas-surround`, `--chrome-bg` and
+  `--shadow-md`.
+- **Kept:** the module sessions' own timers (data's persist; sheet's persist, refresh and chain
+  reflow; web's auto-render and in-frame edit), which flush on save and dispose and take the
+  host's timers; the colour mixer's request debounce, an effect with a stale-reply guard;
+  draw's reloader, a zero-delay coalescer with tickets (its own ADR); the command logs, which
+  keep the engine's JSON for whoever reads the log; the 124 `var(--status-*)` uses without a
+  fallback, which already agree.
+
+### Findings closed
+
+The panel conformance findings the shared controls held (conformance-findings-2026-10.md),
+each an ordinary test now:
+
+| Finding | What | Root | Status | Commit | Test |
+| --- | --- | --- | --- | --- | --- |
+| PN-5 … PN-16 | unnamed controls, by primitive (number, select, text, switch, apply list, target picker, row toggle, radio cell, hex, swatch name, gradient stop, one-offs) | R22 | fixed | `f6c7836c1` | `apps/canvas/test/panels/registry.dom.test.tsx` (the reach table is empty; every panel's ratchet asserts none) |
+| PN-2 | Stroke's End Cap segments without `aria-pressed` | R22 | fixed | `f6c7836c1` | `stroke-panel.dom.test.tsx` |
+| PN-213 | Export Tagging's scope segments without a state | R22 | fixed | `f6c7836c1` | `export-tagging-panel.dom.test.tsx` |
+| PN-162 | Style Options' family row: a tablist without tabs | R22 | fixed | `f6c7836c1` | `style-options-panel.dom.test.tsx` |
+| PN-155 | a swatch's delete button named "✕" | R22 | fixed | `f6c7836c1` | `swatches-panel.dom.test.tsx` |
+| PN-262 | a refused shape mode shows `Mutation::PathfinderBoolean` | R13 | fixed | `f6c7836c1` | `pathfinder-panel.dom.test.tsx` |
+| PN-4 | a refused write shows the wire's JSON | R2 (the display half) | fixed | `f6c7836c1` | `stroke-panel.dom.test.tsx` |
+| F-50 (UX audit) | ARIA structure of the window | R22 | partly: names on icon buttons and the page-strip arrows; menubar, tablist, landmarks and headings stay | `5fd899bce`, this record | — |
+
+PN-3 (the field stays live on an oval) and R2's other members stay open: they need the
+not-applicable state, not wording.
+
+### Tests
+
+Both ways, at the end, every lane (counts before are at `3322d5189`, the tree C10 started from):
+
+| Lane | Before | After | Why |
+| --- | ---: | ---: | --- |
+| panel-kit (new) | — | 29 | the kit's own; draw's 7 kit tests are among them |
+| canvas DOM | 1,094 | 1,052 | the 42 generated reach expected-failures went with the table; 6 expected failures are ordinary tests |
+| canvas unit / headless | 122 / 1,458 | 122 / 1,458 | |
+| shell / shell DOM | 200 / 95 | 250 / 95 | the token test: one per kit token, name and fallback |
+| draw-bundle (+ DOM) | 1,799 (168) | 1,799 (163) | the kit's tests moved to the kit; 2 for draw's own parts |
+| sheet / image / web / data / doc / slide (+ DOM) | 405 (7) / 477 (5) / 346 (5) / 438 (5) / 54 (6) / 69 (13) | the same | |
+
+The plain and the compiled run give the same counts in every lane. The sheet and web
+`SOURCE_HASH` checks fail locally both before and after (wasm built from an earlier tree), as in
+C6. The surface gate stays at 1147/1149, and the React Compiler ratchet records no new bailout:
+the kit compiles 19 of 19.
+
+### Bundle
+
+`vite build` of `apps/editor/apps/canvas`, against the same tree with the five C10 commits
+reverted:
+
+- **JS, raw:** 5,592,513 → 5,592,823 B (+310 B).
+- **JS, gzip:** 1,621,335 → 1,625,026 B (+3,691 B). The token constants replace string
+  literals that gzip well, and the naming hooks and the kit's chunk add code.
+- **Chunks:** 433 → 433. **wasm:** unchanged.
+
+### Left, with reasons
+
+- **Glyph buttons and toggle rows not converted:** the tool rail's palette and flyout members,
+  the breadcrumb, the thumbnail and slide strips, the image layer and brush rows, the web
+  outline chips and the gradient ramp's stops are selections in a list, not segments; they
+  want listbox or option semantics, which is the window-level part of F-50.
+- **R22's other cases:** PN-306, PN-307 (clickable rows that are not controls) and PN-357
+  (rename only by double-click).
+- **Module session debounces** keep their timers (above).
