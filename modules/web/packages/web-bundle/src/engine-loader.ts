@@ -51,6 +51,11 @@
 // fail with "expected magic word 00 61 73 6d, found 3c …").
 
 import type { BundleHost } from "@paged-media/plugin-api";
+import {
+  instantiateWasmBindgen,
+  isNodeRealm,
+  singleFlight,
+} from "@paged-media/wasm-boot";
 
 import {
   parseInspected,
@@ -216,13 +221,6 @@ export interface LoadEngineOptions {
 
 /** True when running under Node (bun test / headless conformance), false in
  *  the browser (the editor). Branches the glue's wasm-instantiation path. */
-function isNode(): boolean {
-  return (
-    typeof process !== "undefined" &&
-    !!(process as { versions?: { node?: string } }).versions?.node
-  );
-}
-
 /** The default glue importer: the bundle-relative wasm-bindgen ESM. The
  *  relative `import()` keeps the glue its own module (so its
  *  `import.meta.url` is its own when Vite builds the editor) while the type
@@ -237,22 +235,21 @@ function isNode(): boolean {
  *  Node, caught as the not-loaded diagnostic (the conformance suite asserts
  *  this). */
 async function importBundledGlue(): Promise<BlitzGlue> {
-  // @ts-ignore — the artifact (bin/blitz_web.js, the wasm-bindgen glue) is
-  // gitignored generated output, intentionally absent from the source tree;
-  // the dynamic import resolves at runtime once built. Typed via BlitzGlue.
-  const glue = (await import("../bin/blitz_web.js")) as unknown as BlitzGlue;
-  if (isNode()) return glue;
-  // @ts-ignore — `?url` is a bundler affordance (untyped); Vite resolves it
-  // to a served asset URL.
-  const wasmUrl = (await import("../bin/blitz_web_bg.wasm?url")) as {
-    default: string;
-  };
-  await glue.default({ module_or_path: wasmUrl.default });
-  return glue;
+  // The artifact (bin/blitz_web.js, the wasm-bindgen glue) is gitignored
+  // generated output, intentionally absent from the source tree; the dynamic
+  // import resolves at runtime once built. Typed via BlitzGlue.
+  // @ts-ignore — absent until built.
+  const glue = () => import("../bin/blitz_web.js");
+  if (isNodeRealm()) return (await glue()) as BlitzGlue;
+  return instantiateWasmBindgen<BlitzGlue>({
+    glue,
+    // @ts-ignore — `?url` is a bundler affordance (untyped); Vite resolves it
+    // to a served asset URL.
+    wasmUrl: () => import("../bin/blitz_web_bg.wasm?url"),
+    wasmFile: () => new URL("../bin/blitz_web_bg.wasm", import.meta.url),
+    notBuilt: "the paged.web engine wasm is not built (scripts/build-wasm.sh)",
+  });
 }
-
-/** Cache one loaded engine per bundle process — booting the wasm once. */
-let cached: Promise<WebEngine | null> | undefined;
 
 /**
  * Load the Blitz/WASM engine, or `null` when it cannot be loaded (no
@@ -262,12 +259,19 @@ let cached: Promise<WebEngine | null> | undefined;
  * through the host) so the bake path stays on the honest not-loaded
  * diagnostic instead of crashing the command.
  */
-export async function loadWebEngine(
+export function loadWebEngine(
   host: BundleHost,
   options: LoadEngineOptions = {},
 ): Promise<WebEngine | null> {
-  if (cached) return cached;
-  cached = (async (): Promise<WebEngine | null> => {
+  return engineOnce(host, options);
+}
+
+/** One loaded engine per bundle process — booting the wasm once. */
+const engineOnce = singleFlight(
+  async (
+    host: BundleHost,
+    options: LoadEngineOptions,
+  ): Promise<WebEngine | null> => {
     try {
       const glue = await (options.importGlue ?? importBundledGlue)();
       // Ensure the wasm is instantiated. `default` (== `__wbg_init`) is
@@ -327,13 +331,12 @@ export async function loadWebEngine(
       );
       return null;
     }
-  })();
-  return cached;
-}
+  },
+);
 
 /** Reset the memoized engine — for tests (each test loads fresh). */
 export function _resetWebEngineCache(): void {
-  cached = undefined;
+  engineOnce.reset();
 }
 
 /** Parse the engine's JSON output into a {@link SceneLayer}, defensively:

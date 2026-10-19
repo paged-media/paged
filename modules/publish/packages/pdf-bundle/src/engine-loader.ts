@@ -29,12 +29,14 @@
 // only turns the reading-ordered Document IR this bundle produced into the
 // native model, so a load failure loses editable text, never correctness.
 //
-// The import mechanics mirror plugin-web's engine-loader (relative `import()`
-// so the glue stays its own module with its own `import.meta.url` when Vite
+// The import mechanics are @paged-media/wasm-boot's (relative `import()` so
+// the glue stays its own module with its own `import.meta.url` when Vite
 // builds the editor, plus the `_bg.wasm?url` asset hand-off — the
-// bare-relative wasm-bindgen fetch 404s under the editor's Vite SPA fallback).
+// bare-relative wasm-bindgen fetch 404s under the editor's Vite SPA
+// fallback), and so is the single flight: every load shares one boot.
 
 import type { BundleHost } from "@paged-media/plugin-api";
+import { instantiateWasmBindgen, singleFlight } from "@paged-media/wasm-boot";
 
 import type { DocumentIr } from "./ir";
 
@@ -60,59 +62,41 @@ export interface LoadMapperOptions {
   importGlue?: () => Promise<PdfMapperGlue>;
 }
 
-/** True under Node or Bun (the unit tests; Bun sets `process.versions.node`), false in the browser (the editor). */
-function isNode(): boolean {
-  return (
-    typeof process !== "undefined" &&
-    !!(process as { versions?: { node?: string } }).versions?.node
-  );
+/** The default glue importer: the bundle-relative wasm-bindgen ESM,
+ *  instantiated from the bundler's `?url` asset URL in a browser and from the
+ *  bytes beside the glue under Node (the headless host, the Node CLI). */
+function importBundledGlue(): Promise<PdfMapperGlue> {
+  return instantiateWasmBindgen<PdfMapperGlue>({
+    // bin/pdf_import.js is the wasm-bindgen glue (build output of
+    // scripts/build-wasm.sh from crates/pdf-import), its own module in the
+    // editor's build; typed via PdfMapperGlue.
+    // @ts-ignore — absent until built.
+    glue: () => import("../bin/pdf_import.js"),
+    // @ts-ignore — `?url` is a bundler affordance (untyped); Vite resolves it
+    // to a served asset URL.
+    wasmUrl: () => import("../bin/pdf_import_bg.wasm?url"),
+    wasmFile: () => new URL("../bin/pdf_import_bg.wasm", import.meta.url),
+    notBuilt: "the pdf-import wasm is not built (scripts/build-wasm.sh)",
+  });
 }
-
-/** The default glue importer: the bundle-relative wasm-bindgen ESM. BROWSER:
- *  instantiate from the bundler's `?url` asset URL. NODE: instantiate from
- *  the wasm bytes read beside the glue. */
-async function importBundledGlue(): Promise<PdfMapperGlue> {
-  // @ts-ignore — bin/pdf_import.js is the wasm-bindgen glue (build output of
-  // scripts/build-wasm.sh from crates/pdf-import), its own module in the
-  // editor's build. The type checker doesn't check the JS — typed via PdfMapperGlue.
-  // The import stays on one line of its own, so this directive covers it.
-  const mod = await import("../bin/pdf_import.js");
-  const glue = mod as unknown as PdfMapperGlue;
-  if (isNode()) {
-    // NODE (the headless host, the Node CLI): instantiate from the bytes
-    // beside the glue — wasm-bindgen's own fetch of a file: URL fails here.
-    const { readFile } = await import("node:fs/promises");
-    const { fileURLToPath } = await import("node:url");
-    const b = await readFile(
-      fileURLToPath(new URL("../bin/pdf_import_bg.wasm", import.meta.url)),
-    );
-    await glue.default({
-      module_or_path: new Uint8Array(b.buffer, b.byteOffset, b.byteLength),
-    });
-    return glue;
-  }
-  // @ts-ignore — `?url` is a bundler affordance (untyped); Vite resolves it
-  // to a served asset URL.
-  const wasmUrl = (await import("../bin/pdf_import_bg.wasm?url")) as {
-    default: string;
-  };
-  await glue.default({ module_or_path: wasmUrl.default });
-  return glue;
-}
-
-let cached: Promise<PdfMapper | null> | undefined;
 
 /**
  * Load the `pdf-import` wasm mapper, or `null` when it cannot be loaded.
  * Idempotent + memoized; never throws — a load failure resolves to `null`
  * (logged through the host) so the importer stays on the Phase 0 image path.
  */
-export async function loadPdfMapper(
+export function loadPdfMapper(
   host: BundleHost,
   options: LoadMapperOptions = {},
 ): Promise<PdfMapper | null> {
-  if (cached) return cached;
-  cached = (async (): Promise<PdfMapper | null> => {
+  return mapperOnce(host, options);
+}
+
+const mapperOnce = singleFlight(
+  async (
+    host: BundleHost,
+    options: LoadMapperOptions,
+  ): Promise<PdfMapper | null> => {
     try {
       const glue = await (options.importGlue ?? importBundledGlue)();
       // Idempotent boot (a no-op if the glue arrived pre-instantiated).
@@ -135,13 +119,12 @@ export async function loadPdfMapper(
       );
       return null;
     }
-  })();
-  return cached;
-}
+  },
+);
 
 /** Reset the memoized mapper — for tests (each loads fresh). */
 export function _resetPdfMapperCache(): void {
-  cached = undefined;
+  mapperOnce.reset();
 }
 
 function stringifyErr(err: unknown): string {
