@@ -23,6 +23,12 @@
 //! it) or the native engine (`paged mcp`). Writes by a model are an agent's:
 //! they land on `agent/<run>/…` branches and reach `main` only through a change
 //! request a human approves, unless the workspace's policy says otherwise.
+//!
+//! The Node CLI's `paged mcp` (`apps/cli/src/mcp/tools.ts`, the `paged` bin of
+//! `@paged-media/paged`) serves the same tools; its `test/mcp-parity.spec.ts`
+//! compares them with `paged-cli`'s recorded `tools-list.txt` and
+//! `tool-catalog.txt`, so a change here regenerates those goldens and moves the
+//! TypeScript table with it.
 
 use serde_json::{json, Value};
 

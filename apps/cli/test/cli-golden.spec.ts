@@ -208,6 +208,8 @@ interface Case {
   check?: (r: Run) => Promise<void> | void;
   /** Spawn src/bin.ts with this environment instead of running in-process. */
   spawnEnv?: () => Record<string, string>;
+  /** Its standard input, when it is spawned. */
+  input?: () => string;
   /** A resource the case needs; it runs in its own test, skipped honestly. */
   needs?: "data-engine";
   /** Runs inside the case (an upstream to stand up, env to set). */
@@ -887,6 +889,65 @@ const CASES: Record<string, Case[]> = {
       exit: 0,
     },
   ],
+  mcp: [
+    { name: "help", argv: () => ["mcp", "--help"], exit: 0 },
+    { name: "usage", argv: () => ["mcp", "extra"], exit: 2 },
+    {
+      name: "input-library-not-a-directory",
+      argv: () => ["mcp", "--library", T("notes.txt")],
+      exit: 2,
+    },
+    // A session over stdin: initialize, the tool names, an empty library.
+    {
+      name: "ok",
+      argv: () => ["mcp", "--library", T("mcp-library"), NP],
+      exit: 0,
+      spawnEnv: () => ({ PATH: process.env["PATH"] ?? "" }),
+      input: () =>
+        [
+          {
+            id: 1,
+            method: "initialize",
+            params: { protocolVersion: "2025-06-18" },
+          },
+          { method: "notifications/initialized" },
+          { id: 2, method: "tools/list" },
+          {
+            id: 3,
+            method: "tools/call",
+            params: { name: "list_documents", arguments: {} },
+          },
+        ]
+          .map((m) => JSON.stringify({ jsonrpc: "2.0", ...m }))
+          .join("\n") + "\n",
+      project: (r) =>
+        json(
+          r.out
+            .trim()
+            .split("\n")
+            .map((l) => JSON.parse(l))
+            .map((m) =>
+              m.id === 1
+                ? {
+                    id: 1,
+                    protocolVersion: m.result.protocolVersion,
+                    serverInfo: m.result.serverInfo.name,
+                  }
+                : m.id === 2
+                  ? {
+                      id: 2,
+                      tools: m.result.tools.map(
+                        (t: { name: string }) => t.name,
+                      ),
+                    }
+                  : {
+                      id: m.id,
+                      documents: m.result.structuredContent.documents,
+                    },
+            ),
+        ),
+    },
+  ],
   describe: [
     { name: "help", argv: () => ["describe", "--help"], exit: 0 },
     { name: "usage", argv: () => ["describe", "a.paged", "b.paged"], exit: 2 },
@@ -934,6 +995,7 @@ async function execute(c: Case): Promise<Run> {
       encoding: "utf8",
       cwd: CLI_ROOT,
       env: c.spawnEnv(),
+      ...(c.input ? { input: c.input() } : {}),
     });
     let parsed: unknown = null;
     try {
@@ -1063,6 +1125,10 @@ describe("paged-node golden transcripts", () => {
   it("export (structure: ZIP entries, the PDF header and page count)", async () => {
     covers("cli:paged-node export");
     await runVerb("export");
+  });
+  it("mcp (a stdio session: initialize, the tools, an empty library)", async () => {
+    covers("cli:paged-node mcp");
+    await runVerb("mcp");
   });
   it("apply: argument and input errors", async () => {
     covers("cli:paged-node apply");
