@@ -66,7 +66,24 @@ jobs:
       - run: cargo clippy --all-targets --all-features -- -D warnings
       - name: clippy (wasm32, the target the modules ship)
         run: cargo clippy --all-features --target wasm32-unknown-unknown -- -D warnings
-      - run: cargo nextest run --all-features --no-tests=fail
+      # JUnit from the `ci` profile (.config/nextest.toml); a red run still
+      # uploads its report, and the gate after the upload fails the job.
+      - name: nextest (junit; red results still upload)
+        run: |
+          cargo nextest run --all-features --profile ci --no-tests=fail \
+            || echo "RUST_FAILED=1" >> "$GITHUB_ENV"
+          test -s target/nextest/ci/junit.xml
+      - name: upload nextest JUnit artifact
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: nextest-junit-${{ matrix.crate }}
+          path: platform/shared/${{ matrix.crate }}/target/nextest/ci/junit.xml
+          if-no-files-found: error
+          retention-days: 14
+      - name: tests failed
+        if: ${{ env.RUST_FAILED == '1' }}
+        run: exit 1
       - run: cargo test --doc --all-features
       - uses: EmbarkStudios/cargo-deny-action@v2
         with:
