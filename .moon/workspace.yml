@@ -27,6 +27,7 @@ projects:
   ai: "platform/shared/ai"
   fmt: "platform/shared/fmt"
   helpers: "platform/shared/helpers"
+  panel-kit: "platform/shared/panel-kit"
   react-live: "platform/shared/react-live"
   test-kit: "platform/shared/test-kit"
   test-resources: "platform/shared/test-resources"
