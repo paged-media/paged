@@ -1,0 +1,220 @@
+{
+  "version": 1,
+  "name": "rectangle-frame-gridify-3x2",
+  "fixture": "gesture fixture: targets",
+  "coords": "doc",
+  "viewport": {
+    "zoom": 1
+  },
+  "samples": [
+    {
+      "t": 0,
+      "type": "tool",
+      "tool": "paged.tool.rectangleFrame"
+    },
+    {
+      "t": 50,
+      "type": "pointerdown",
+      "pos": [72, 560],
+      "button": 0,
+      "buttons": 1,
+      "mods": [],
+      "device": "mouse",
+      "pointerId": 1,
+      "pressure": 0.5,
+      "tiltX": 0,
+      "tiltY": 0
+    },
+    {
+      "t": 66,
+      "type": "pointermove",
+      "pos": [102.0, 574.0],
+      "button": -1,
+      "buttons": 1,
+      "mods": [],
+      "device": "mouse",
+      "pointerId": 1,
+      "pressure": 0.5,
+      "tiltX": 0,
+      "tiltY": 0
+    },
+    {
+      "t": 82,
+      "type": "pointermove",
+      "pos": [132.0, 588.0],
+      "button": -1,
+      "buttons": 1,
+      "mods": [],
+      "device": "mouse",
+      "pointerId": 1,
+      "pressure": 0.5,
+      "tiltX": 0,
+      "tiltY": 0
+    },
+    {
+      "t": 98,
+      "type": "pointermove",
+      "pos": [162.0, 602.0],
+      "button": -1,
+      "buttons": 1,
+      "mods": [],
+      "device": "mouse",
+      "pointerId": 1,
+      "pressure": 0.5,
+      "tiltX": 0,
+      "tiltY": 0
+    },
+    {
+      "t": 114,
+      "type": "pointermove",
+      "pos": [192.0, 616.0],
+      "button": -1,
+      "buttons": 1,
+      "mods": [],
+      "device": "mouse",
+      "pointerId": 1,
+      "pressure": 0.5,
+      "tiltX": 0,
+      "tiltY": 0
+    },
+    {
+      "t": 114,
+      "type": "keydown",
+      "key": "ArrowRight",
+      "mods": []
+    },
+    {
+      "t": 114,
+      "type": "keyup",
+      "key": "ArrowRight",
+      "mods": []
+    },
+    {
+      "t": 130,
+      "type": "pointermove",
+      "pos": [222.0, 630.0],
+      "button": -1,
+      "buttons": 1,
+      "mods": [],
+      "device": "mouse",
+      "pointerId": 1,
+      "pressure": 0.5,
+      "tiltX": 0,
+      "tiltY": 0
+    },
+    {
+      "t": 146,
+      "type": "pointermove",
+      "pos": [252.0, 644.0],
+      "button": -1,
+      "buttons": 1,
+      "mods": [],
+      "device": "mouse",
+      "pointerId": 1,
+      "pressure": 0.5,
+      "tiltX": 0,
+      "tiltY": 0
+    },
+    {
+      "t": 146,
+      "type": "keydown",
+      "key": "ArrowRight",
+      "mods": []
+    },
+    {
+      "t": 146,
+      "type": "keyup",
+      "key": "ArrowRight",
+      "mods": []
+    },
+    {
+      "t": 162,
+      "type": "pointermove",
+      "pos": [282.0, 658.0],
+      "button": -1,
+      "buttons": 1,
+      "mods": [],
+      "device": "mouse",
+      "pointerId": 1,
+      "pressure": 0.5,
+      "tiltX": 0,
+      "tiltY": 0
+    },
+    {
+      "t": 178,
+      "type": "pointermove",
+      "pos": [312.0, 672.0],
+      "button": -1,
+      "buttons": 1,
+      "mods": [],
+      "device": "mouse",
+      "pointerId": 1,
+      "pressure": 0.5,
+      "tiltX": 0,
+      "tiltY": 0
+    },
+    {
+      "t": 178,
+      "type": "keydown",
+      "key": "ArrowUp",
+      "mods": []
+    },
+    {
+      "t": 178,
+      "type": "keyup",
+      "key": "ArrowUp",
+      "mods": []
+    },
+    {
+      "t": 194,
+      "type": "pointermove",
+      "pos": [342.0, 686.0],
+      "button": -1,
+      "buttons": 1,
+      "mods": [],
+      "device": "mouse",
+      "pointerId": 1,
+      "pressure": 0.5,
+      "tiltX": 0,
+      "tiltY": 0
+    },
+    {
+      "t": 210,
+      "type": "pointermove",
+      "pos": [372.0, 700.0],
+      "button": -1,
+      "buttons": 1,
+      "mods": [],
+      "device": "mouse",
+      "pointerId": 1,
+      "pressure": 0.5,
+      "tiltX": 0,
+      "tiltY": 0,
+      "coalesced": [
+        {
+          "t": 202,
+          "pos": [357.0, 693.0],
+          "pressure": 0.5
+        }
+      ]
+    },
+    {
+      "t": 226,
+      "type": "pointerup",
+      "pos": [372, 700],
+      "button": 0,
+      "buttons": 0,
+      "mods": [],
+      "device": "mouse",
+      "pointerId": 1,
+      "pressure": 0,
+      "tiltX": 0,
+      "tiltY": 0
+    }
+  ],
+  "expect": {
+    "committed": true,
+    "undoSteps": 1,
+    "rectangles": 6
+  }
+}

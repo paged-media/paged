@@ -127,8 +127,10 @@ export const cellId = (
   c: Pick<MatrixCell, "tool" | "mods" | "zoom" | "target">,
 ) => `${c.tool} ${c.mods} @${c.zoom * 100}% on ${c.target}`;
 
-/** The row that covers a cell: an exact modifier + target match beats a
- *  wildcard on one axis, which beats a double wildcard. */
+/** The row that covers a cell: an exact target beats an exact modifier
+ *  set (what is under the pointer decides first: a locked frame refuses
+ *  whatever is held), which beats a wildcard on both; at equal rank a row
+ *  restricted to some zooms beats one that holds at every zoom. */
 function rowFor(
   rows: readonly MatrixRow[],
   mods: MatrixModifier,
@@ -140,7 +142,10 @@ function rowFor(
     if (row.mods !== "*" && row.mods !== mods) continue;
     if (row.target !== "*" && row.target !== target) continue;
     if (row.zooms && !row.zooms.includes(zoom)) continue;
-    const score = (row.mods === "*" ? 0 : 2) + (row.target === "*" ? 0 : 1);
+    const score =
+      (row.target === "*" ? 0 : 2) +
+      (row.mods === "*" ? 0 : 1) +
+      (row.zooms ? 0.5 : 0);
     if (!best || score > best.score) best = { row, score };
   }
   return best?.row ?? null;

@@ -62,6 +62,7 @@
     "tailwindcss": "^3.4.19",
     "tsx": "^4.23.15",
     "typescript": "catalog:",
-    "vite": "catalog:"
+    "vite": "catalog:",
+    "@paged-media/test-kit": "workspace:*"
   }
 }

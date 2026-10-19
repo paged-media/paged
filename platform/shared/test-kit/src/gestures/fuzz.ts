@@ -41,7 +41,10 @@ import type {
   MainToWorkerKind,
   WorkerToMain,
 } from "@paged-media/plugin-api";
-import { engineModelChannel, firstDifference } from "@paged-media/plugin-sdk";
+import {
+  engineModelChannel,
+  firstDifference,
+} from "@paged-media/plugin-sdk/gesture-kit";
 
 type Send = (message: MainToWorkerKind) => Promise<WorkerToMain>;
 
@@ -615,6 +618,32 @@ export async function runGestureFuzz(
   }
   return report;
 }
+
+/** The engine findings this fuzzer made, each owned by an expected-
+ *  failure regression test (test-kit's engine-gestures.test.ts). Their
+ *  instances are counted and printed, not failed, so the fuzzer keeps
+ *  hunting for NEW breakage. Remove an entry when its test flips.
+ *
+ *   GF-1 a group resized by a handle fails at commit;
+ *   GF-2 Alt-dragging a group (duplicate) fails at commit;
+ *   GF-3 Alt pressed again during the drag of a grouped item or a path
+ *        fails at commit (duplicate self_id);
+ *   GF-4 the IDML writer prints 4 decimals, so a turned item drifts by
+ *        up to ~1e-4 × its numbers per save → load. */
+export const GESTURE_FUZZ_KNOWN: readonly KnownFinding[] = [
+  {
+    id: "GF-1",
+    invariant: "no-error",
+    match: /property FrameBounds is not supported on Group/,
+  },
+  { id: "GF-2", invariant: "no-error", match: /node not found: Group/ },
+  {
+    id: "GF-3",
+    invariant: "no-error",
+    match: /duplicate self_id \W*[A-Za-z0-9]+_dup_\d+_\d+/,
+  },
+  { id: "GF-4", invariant: "round-trip", match: /^precision:/ },
+];
 
 /** How many sequences per fixture: `PAGED_GESTURE_FUZZ_N`, else `ci`. */
 export function fuzzSequenceCount(

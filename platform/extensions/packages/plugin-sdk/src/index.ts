@@ -208,74 +208,9 @@ export {
 } from "./gestures.js";
 // The gesture TEST kit (gestures.md "how gestures are tested"): a
 // recording fake editor, the gesture DSL with its unit backend, the
-// pointer-tape format and the universal invariants. Runner-agnostic.
-export {
-  createFakeEditor,
-  flattenMutation,
-  mintedKindOf,
-  nextMacrotask,
-  type FakeEditor,
-  type FakeEditorEvent,
-  type FakeEditorOptions,
-  type FakeEvent,
-  type FakePage,
-  type FakeRegistryName,
-  type GestureChannelMessage,
-  type WorkerToMainKindLike,
-} from "./fake-editor.js";
-export {
-  createGestureDsl,
-  gestures,
-  INLINE_TOOL,
-  keyboardEventLike,
-  resolveToolId,
-  unitBackend,
-  type GestureBackend,
-  type GestureDragOptions,
-  type GestureDsl,
-  type GesturePoint,
-  type GesturePointerOptions,
-  type GestureWheelOptions,
-  type ToolRef,
-  type UnitBackendOptions,
-} from "./gesture-driver.js";
-export {
-  MODIFIER_NAMES,
-  parseTape,
-  replayTape,
-  serializeTape,
-  TapeFormatError,
-  validateTape,
-  type DblclickTapeSample,
-  type KeyTapeSample,
-  type ModifierName,
-  type PointerDevice,
-  type PointerTape,
-  type PointerTapeSample,
-  type ReplayOptions,
-  type TapeReplayTarget,
-  type TapeSample,
-  type ToolTapeSample,
-  type WheelTapeSample,
-  type ZoomTapeSample,
-} from "./pointer-tape.js";
-export {
-  checkCancel,
-  checkUndoRedo,
-  commitsSince,
-  engineModelChannel,
-  expectNoCommit,
-  expectOneCommit,
-  expectOneUndoStep,
-  firstDifference,
-  InvariantError,
-  stableJson,
-  type CommitSummary,
-  type EngineModelChannelOptions,
-  type InvariantId,
-  type ModelChannel,
-  type UndoRedoReport,
-} from "./gesture-invariants.js";
+// pointer-tape format and the universal invariants. Runner-agnostic; also
+// its own entry point, `@paged-media/plugin-sdk/gesture-kit`.
+export * from "./gesture-kit.js";
 export { contributeTool } from "./tools.js";
 export { contributePanel, contributeSchemaPanel } from "./panels.js";
 export {
