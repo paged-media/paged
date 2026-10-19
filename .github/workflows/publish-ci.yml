@@ -31,6 +31,8 @@ on:
       - ".github/actions/module-wasm/**"
       - "platform/extensions/packages/plugin-api/**"
       - "platform/extensions/packages/plugin-sdk/**"
+      # The internal shared code the bundle boots its wasm with (workspace:*).
+      - "platform/shared/wasm-boot/**"
       - ".github/workflows/publish-ci.yml"
       - "bun.lock"
       - "bunfig.toml"
@@ -61,6 +63,8 @@ on:
       - ".github/actions/module-wasm/**"
       - "platform/extensions/packages/plugin-api/**"
       - "platform/extensions/packages/plugin-sdk/**"
+      # The internal shared code the bundle boots its wasm with (workspace:*).
+      - "platform/shared/wasm-boot/**"
       - ".github/workflows/publish-ci.yml"
       - "bun.lock"
       - "bunfig.toml"

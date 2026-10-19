@@ -30,10 +30,12 @@
 // RAW module with no wbindgen imports and no ambient authority — no
 // navigator.gpu); we load the glue in the BUNDLE REALM exactly like
 // @paged-media/canvas-wasm does, where WebGPU is reachable and
-// `initGpu()` can request the device. Browser vs Node branches mirror
-// plugin-sheets' engine.ts. Until the artifact is built the dynamic
+// `initGpu()` can request the device. The boot is @paged-media/wasm-boot's:
+// once per realm, browser or Node. Until the artifact is built the dynamic
 // import REJECTS — bootEngine surfaces that honestly so the panel can
 // say "engine wasm not built".
+
+import { isNodeRealm, wasmBindgenModule } from "@paged-media/wasm-boot";
 
 /** Levels (the panel's black/white/gamma + output range), composite over
  *  all channels. Identity: in 0/1, gamma 1, out 0/1. */
@@ -3094,57 +3096,29 @@ export const ENGINE_NOT_BUILT =
   "paged.image engine wasm not built — run scripts/build-wasm.sh " +
   "(manifest/wasm/image_js.js missing)";
 
-function isNode(): boolean {
-  return (
-    typeof process !== "undefined" &&
-    process.versions?.node != null &&
-    typeof (globalThis as { window?: unknown }).window === "undefined"
-  );
-}
-
-/** Load + instantiate the engine wasm (the glue + the `_bg.wasm`),
- *  branching browser vs Node exactly like plugin-sheets' loadModule.
+/** Load + instantiate the engine wasm (the glue + the `_bg.wasm`), once per
+ *  realm: every boot shares the one instantiation (wasm-boot's single
+ *  flight). A realm with a `window` (happy-dom) boots the browser way.
  *  Rejects with ENGINE_NOT_BUILT-flavoured detail when absent. */
-async function loadModule(): Promise<ImageWasmModule> {
-  let mod: ImageWasmModule;
-  try {
-    // @ts-ignore — the artifact (manifest/wasm/image_js.js, wasm-bindgen
-    // --target web glue) is produced by scripts/build-wasm.sh and is
-    // intentionally absent from the source tree; the dynamic import
-    // resolves at runtime once built. Typed via ImageWasmModule.
-    mod = (await import("../wasm/image_js.js")) as ImageWasmModule;
-  } catch (cause) {
-    throw new Error(ENGINE_NOT_BUILT, { cause });
-  }
-
-  if (isNode()) {
-    const { readFile } = await import("node:fs/promises");
-    const { fileURLToPath } = await import("node:url");
+const loadModule = wasmBindgenModule<ImageWasmModule>({
+  // The artifact (wasm-bindgen --target web glue) is produced by
+  // scripts/build-wasm.sh and absent from the source tree; typed via
+  // ImageWasmModule.
+  // @ts-ignore — absent until built.
+  glue: () => import("../wasm/image_js.js"),
+  // @ts-ignore — `?url` is a bundler affordance, untyped.
+  wasmUrl: () => import("../wasm/image_js_bg.wasm?url"),
+  // Resolved by require (realpath), as the artifact lives in a sibling
+  // workspace package, unlike sheets' ../bin.
+  wasmFile: async () => {
     const { createRequire } = await import("node:module");
-    // Resolve through the manifest package's exports map (the artifact
-    // lives in a SIBLING workspace package, unlike sheets' ../bin).
-    const require = createRequire(import.meta.url);
-    const wasmPath = require.resolve("../wasm/image_js_bg.wasm");
-    const bytes = await readFile(
-      wasmPath.startsWith("file:") ? fileURLToPath(wasmPath) : wasmPath,
-    );
-    mod.initSync({
-      module: new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength),
-    });
-  } else {
-    // Browser path: resolve the artifact through the bundler's explicit
-    // `?url` import (the editor's wasm-loading convention; a bare
-    // relative URL would resolve against the served module path and get
-    // the dev server's HTML fallback — the "expected magic word" trap).
-    // @ts-ignore — `?url` is a bundler affordance, untyped.
-    const wasmUrl = (await import(
-      // @ts-ignore — see above.
-      "../wasm/image_js_bg.wasm?url"
-    )) as { default: string };
-    await mod.default({ module_or_path: wasmUrl.default });
-  }
-  return mod;
-}
+    return createRequire(import.meta.url).resolve("../wasm/image_js_bg.wasm");
+  },
+  isNode: () =>
+    isNodeRealm() &&
+    typeof (globalThis as { window?: unknown }).window === "undefined",
+  notBuilt: ENGINE_NOT_BUILT,
+});
 
 /** Load + boot the engine wasm, returning the facade. Rejects with
  *  ENGINE_NOT_BUILT-flavoured detail when the artifact is missing so

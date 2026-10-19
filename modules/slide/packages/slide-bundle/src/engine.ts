@@ -23,9 +23,14 @@
 //
 // Boot: the artifact is the wasm-bindgen `--target web` glue
 // (bin/slide_js.js + bin/slide_js_bg.wasm, built by scripts/build-wasm.sh).
-// It is loaded in the bundle's realm like @paged-media/canvas-wasm, branching
-// browser and Node like plugin-sdk's wasm-loader; until it is built the
-// dynamic import rejects and boot says so.
+// It is loaded in the bundle's realm through @paged-media/wasm-boot, once per
+// realm, browser or Node; until it is built the dynamic import rejects and
+// boot says so.
+
+import {
+  wasmBindgenModule,
+  type WasmBindgenGlue,
+} from "@paged-media/wasm-boot";
 
 const ENGINE_NOT_BUILT =
   "paged.slide engine wasm not built: run scripts/build-wasm.sh";
@@ -146,27 +151,16 @@ export interface SlidePlan {
   contentEdited: boolean;
 }
 
-interface SlideWasmModule {
-  default(init: {
-    module_or_path: string | URL | BufferSource | WebAssembly.Module;
-  }): Promise<unknown>;
-  initSync(module: { module: BufferSource | WebAssembly.Module }): unknown;
+interface SlideWasmModule extends WasmBindgenGlue {
   importPptx(bytes: Uint8Array, name: string): WasmImported;
   embeddedFonts(bytes: Uint8Array): WasmDeckFonts;
   exportPptx(original: Uint8Array, plan: string): WasmExported;
 }
 
-let booted: Promise<SlideWasmModule> | null = null;
-
-/** The engine, booted once per realm. */
+/** The engine, booted once per realm (a failed boot is retried by the next
+ *  call). */
 export async function slideEngine(): Promise<SlideEngine> {
-  booted ??= loadModule();
-  try {
-    return new SlideEngine(await booted);
-  } catch (err) {
-    booted = null;
-    throw err;
-  }
+  return new SlideEngine(await loadModule());
 }
 
 export class SlideEngine {
@@ -217,33 +211,12 @@ export class SlideEngine {
   }
 }
 
-function isNode(): boolean {
-  return typeof process !== "undefined" && process.versions?.node != null;
-}
-
-async function loadModule(): Promise<SlideWasmModule> {
-  let mod: SlideWasmModule;
-  try {
-    // @ts-ignore: built by scripts/build-wasm.sh, absent from the source tree.
-    mod = (await import("../bin/slide_js.js")) as SlideWasmModule;
-  } catch (cause) {
-    throw new Error(ENGINE_NOT_BUILT, { cause });
-  }
-  if (isNode()) {
-    const { readFile } = await import("node:fs/promises");
-    const { fileURLToPath } = await import("node:url");
-    const bytes = await readFile(
-      fileURLToPath(new URL("../bin/slide_js_bg.wasm", import.meta.url)),
-    );
-    mod.initSync({
-      module: new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength),
-    });
-  } else {
-    // @ts-ignore: `?url` is a bundler affordance (the editor's wasm convention).
-    const wasmUrl = (await import("../bin/slide_js_bg.wasm?url")) as {
-      default: string;
-    };
-    await mod.default({ module_or_path: wasmUrl.default });
-  }
-  return mod;
-}
+/** The one instantiation per realm (wasm-boot's single flight). */
+const loadModule = wasmBindgenModule<SlideWasmModule>({
+  // @ts-ignore: built by scripts/build-wasm.sh, absent from the source tree.
+  glue: () => import("../bin/slide_js.js"),
+  // @ts-ignore: `?url` is a bundler affordance (the editor's wasm convention).
+  wasmUrl: () => import("../bin/slide_js_bg.wasm?url"),
+  wasmFile: () => new URL("../bin/slide_js_bg.wasm", import.meta.url),
+  notBuilt: ENGINE_NOT_BUILT,
+});
