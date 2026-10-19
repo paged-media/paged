@@ -1660,7 +1660,7 @@ export interface ImageWasmModule {
   initSync(module: { module: BufferSource | WebAssembly.Module }): unknown;
   abi_version(): number;
   kernel_count(): number;
-  /** The source hash this wasm was built from (scripts/source-hash.mjs);
+  /** The source hash this wasm was built from (tooling/js/source-hash.mjs);
    *  "unstamped" outside scripts/build-wasm.sh. Read by wasm-fresh.spec.ts. */
   engine_source_hash(): string;
   perf_counters(): string;

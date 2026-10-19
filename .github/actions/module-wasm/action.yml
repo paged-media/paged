@@ -25,8 +25,9 @@ description: >-
 # The cache key hashes the module's tracked files except its JS packages and docs
 # (git's blob ids, so it costs no reads) plus web's Rust crate under
 # packages/web-render, the engine crates publish's pdf-import builds against,
-# .cargo/config.toml, the wasm-bindgen/binaryen pins and, for data, the
-# apache-arrow resolution in bun.lock.
+# .cargo/config.toml, the shared build script and source hash under
+# tooling/, the wasm-bindgen/binaryen pins and, for data, the apache-arrow
+# resolution in bun.lock.
 
 inputs:
   module:
@@ -79,6 +80,8 @@ runs:
           # pdf-import's path dependencies into the engine.
           if [ "$M" = publish ]; then git ls-files -s -- engine/core/crates engine/core/Cargo.toml engine/core/Cargo.lock; fi
           git ls-files -s -- .cargo/config.toml
+          # The shared build script and the source hash it stamps (tooling/).
+          git ls-files -s -- tooling/rust/build-wasm.sh tooling/js/source-hash.mjs
           grep -E '^(WASM_BINDGEN|BINARYEN)=' tooling/bootstrap.sh
           if [ "$M" = data ]; then grep -E '"apache-arrow"' bun.lock; fi
           echo "$BUILD_ARGS $TOOLCHAIN"
