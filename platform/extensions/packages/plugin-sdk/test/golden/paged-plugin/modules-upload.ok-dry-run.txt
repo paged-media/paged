@@ -1,0 +1,7 @@
+$ paged-plugin modules-upload <TMP>/upload --dry-run
+# exit 0
+# stdout
+http://127.0.0.1:9/@paged-media/test-bundle/0.0.1-test.0/bin/engine.wasm · would upload
+modules: 1 declared, 1 not hosted
+# stderr
+(empty)

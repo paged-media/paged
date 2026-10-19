@@ -1,0 +1,26 @@
+$ paged-node batch <TMP>/fixture.paged <TMP>/ops.json -o <TMP>/batch.paged --no-plugins
+# exit 0
+# stdout
+{
+  "ops": 1,
+  "result": {
+    "applied": true,
+    "undoSteps": 1,
+    "outcome": {
+      "applied": true,
+      "createdId": null,
+      "pageIds": [
+        "usp"
+      ],
+      "minted": [],
+      "appliedSeq": 1
+    }
+  },
+  "saved": {
+    "path": "<TMP>/batch.paged",
+    "format": "paged",
+    "bytes": <N>
+  }
+}
+# stderr
+(empty)

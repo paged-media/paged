@@ -31,6 +31,7 @@ on:
       - "platform/extensions/**"
       # Prose under docs/ builds and tests nothing (test inputs are not .md there).
       - "!platform/extensions/docs/**/*.md"
+      - "platform/shared/test-kit/**"
       - ".github/workflows/extensions-vitest.yml"
       - "bun.lock"
       - "bunfig.toml"
@@ -51,6 +52,7 @@ on:
       - "platform/extensions/**"
       # Prose under docs/ builds and tests nothing (test inputs are not .md there).
       - "!platform/extensions/docs/**/*.md"
+      - "platform/shared/test-kit/**"
       - ".github/workflows/extensions-vitest.yml"
       - "bun.lock"
       - "bunfig.toml"
@@ -149,6 +151,22 @@ jobs:
       # engine, with the model replaced by canned turns (no key, no network).
       - name: ai package suite
         run: ( cd packages/ai && bun run test ) || echo "TESTS_FAILED=1" >> "$GITHUB_ENV"
+
+      # paged-node (packages/cli): its golden transcripts, every verb against
+      # the engine built above (the model of `ai` is a local fake). The data
+      # verbs' successes need the paged.data engine wasm, which this job does
+      # not build: they report `unavailable` and are skipped. The package's
+      # other specs need it too, so only the goldens run here.
+      - name: paged-node golden tests
+        run: ( cd packages/cli && bun run test test/cli-golden.spec.ts ) || echo "TESTS_FAILED=1" >> "$GITHUB_ENV"
+
+      # The shared test kit (platform/shared/test-kit): the gesture kit's
+      # editor half, the engine's transform maths as properties, the gesture
+      # invariants per kind and the gesture fuzzer (25 seeded sequences a
+      # fixture), all against the real engine this job built. Its public
+      # half is plugin-sdk's, so it rides this job.
+      - name: shared test kit suite
+        run: ( cd ../shared/test-kit && bun run test ) || echo "TESTS_FAILED=1" >> "$GITHUB_ENV"
 
       - name: upload JUnit results artifact
         if: ${{ !cancelled() }}

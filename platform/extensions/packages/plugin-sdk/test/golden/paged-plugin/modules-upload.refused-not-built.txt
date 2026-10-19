@@ -1,0 +1,6 @@
+$ paged-plugin modules-upload <TMP>/unbuilt
+# exit 1
+# stdout
+(empty)
+# stderr
+::error::engine: "bin/engine.wasm" is not built

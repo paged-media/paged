@@ -23,6 +23,7 @@
 import { readFileSync } from "node:fs";
 
 import { describe, expect, it } from "bun:test";
+import { covers } from "@paged-media/test-kit";
 
 import type { BundleHost, ExporterContribution } from "@paged-media/plugin-api";
 import { createHeadlessHost } from "@paged-media/plugin-sdk";
@@ -89,6 +90,7 @@ async function pages(host: BundleHost) {
 
 describe("PPTX export", () => {
   it("writes the original bytes back when nothing changed", async () => {
+    covers("exporter:media.paged.slide.exporter.pptx");
     const { h, bytes, exporter } = await withDeck("placeholders");
     try {
       const out = await exporter.export();
@@ -101,6 +103,7 @@ describe("PPTX export", () => {
   }, 60_000);
 
   it("carries reorder, duplicate, delete, hide and notes into the deck", async () => {
+    covers("exporter:media.paged.slide.exporter.pptx");
     const { h, host, exporter } = await withDeck("text");
     try {
       const before = await pages(host);
@@ -160,6 +163,7 @@ describe("PPTX export", () => {
   }, 60_000);
 
   it("marks only the slide whose content changed as edited", async () => {
+    covers("exporter:media.paged.slide.exporter.pptx");
     const { h, host } = await withDeck("geometry");
     try {
       const prints = JSON.parse(

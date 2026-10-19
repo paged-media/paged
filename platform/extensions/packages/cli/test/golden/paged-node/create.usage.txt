@@ -1,0 +1,11 @@
+$ paged-node create <TMP>/fixture.paged
+# exit 2
+# stdout
+{
+  "error": {
+    "message": "usage: paged-node create <doc> <kind> [props.json|{json}]",
+    "exit": 2
+  }
+}
+# stderr
+(empty)

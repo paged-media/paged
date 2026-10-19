@@ -327,6 +327,26 @@ macro_rules! skip {
     }};
 }
 
+/// Marks the surface ids the enclosing test asserts, for the
+/// surface-conformance gate (`apps/editor/docs/reference/surface-conformance.md`).
+///
+/// It expands to nothing. The gate reads the call statically, so the ids
+/// are string literals of the form `<kind>:<id>`:
+///
+/// ```
+/// # use paged_test_resources::covers;
+/// // inside a `#[test]` function, next to the assertions it vouches for
+/// covers!("cli:paged export-pdf");
+/// ```
+///
+/// A crate that does not depend on this one writes the same call against a
+/// local no-op (`macro_rules! covers { ($($id:literal),+ $(,)?) => {}; }`),
+/// or a `// covers: cli:paged export-pdf` line directly above the assertion.
+#[macro_export]
+macro_rules! covers {
+    ($($id:literal),+ $(,)?) => {};
+}
+
 /// The repository root. This crate sits at `platform/shared/test-resources`.
 #[must_use]
 pub fn repo_root() -> PathBuf {

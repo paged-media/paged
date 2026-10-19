@@ -1,0 +1,11 @@
+$ paged-node ai --new a4 'a flyer' --no-plugins
+# exit 2
+# stdout
+{
+  "error": {
+    "message": "with --new, say where to save with -o",
+    "exit": 2
+  }
+}
+# stderr
+(empty)

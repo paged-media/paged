@@ -25,7 +25,7 @@
 // raw client's reply or a scene-tree diff; see docs/migration/seams.md.)
 //
 // WHAT `minted` IS — measured against the booted engine and pinned in
-// `test/conformance/minted.spec.ts`, because every flow below depends on
+// `test/headless/minted.spec.ts`, because every flow below depends on
 // it:
 //   · a SINGLE mutation answers `minted: []` and names its one creation
 //     in `createdId`; this module folds that into a one-element list;

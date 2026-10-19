@@ -22,12 +22,13 @@
     "@paged-media/plugin-sdk": "workspace:*"
   },
   "devDependencies": {
-    "@types/node": "catalog:",
-    "typescript": "catalog:",
-    "@types/bun": "catalog:",
+    "@paged-media/canvas-wasm": "workspace:*",
     "@paged-media/plugin-api": "workspace:*",
     "@paged-media/plugin-sdk": "workspace:*",
-    "@paged-media/canvas-wasm": "workspace:*"
+    "@paged-media/test-kit": "workspace:*",
+    "@types/bun": "catalog:",
+    "@types/node": "catalog:",
+    "typescript": "catalog:"
   },
   "files": [
     "bin",

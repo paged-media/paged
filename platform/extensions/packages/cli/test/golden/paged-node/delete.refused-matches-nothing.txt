@@ -1,0 +1,11 @@
+$ paged-node delete <TMP>/fixture.paged 'swatch[name=Nope]' --no-save --no-plugins
+# exit 1
+# stdout
+{
+  "error": {
+    "message": "\"swatch[name=Nope]\" matches nothing",
+    "exit": 1
+  }
+}
+# stderr
+(empty)

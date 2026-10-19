@@ -1,0 +1,17 @@
+$ paged-node schema <TMP>/fixture.paged swatch --format text --no-plugins
+# exit 0
+# stdout
+name                             text
+space                            enum (CMYK | RGB | LAB | Gray)
+value                            list of length (pt; or with a unit: 3mm, 0.5in, 12pt) (JSON)
+model                            enum (Process | Spot)
+alternateSpace                   enum (CMYK | RGB | LAB | Gray)
+alternateValue                   list of length (pt; or with a unit: 3mm, 0.5in, 12pt) (JSON)
+color                            record {  } (JSON)
+tint                             number (percent)
+alpha                            number (percent)
+convertToProcess                 bool
+inkAliasTo                       ref to swatch
+swatchKind                       text [readOnly]
+# stderr
+(empty)

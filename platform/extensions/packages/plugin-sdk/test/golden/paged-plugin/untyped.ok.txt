@@ -1,0 +1,13 @@
+$ paged-plugin untyped <TMP>/untyped.json <TMP>/ok.json
+# exit 0
+# stdout
+{
+  "adr": "323",
+  "plugins": {
+    "media.paged.test": [
+      "media.paged.test.go"
+    ]
+  }
+}
+# stderr
+(empty)
