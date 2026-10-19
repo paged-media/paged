@@ -67,6 +67,7 @@ import {
   PLAIN_LEAVES,
   RECORDS,
 } from "./harness";
+import { covers } from "@paged-media/test-kit";
 
 /** `count` trios: two objects `o<i>` / `q<i>` and, 100 pt below them, the
  *  60 pt open path `l<i>` they are put on. */
@@ -169,6 +170,7 @@ describe("Objects on path panel — rendered against the engine", () => {
     });
 
     it("+ On path MOVES the selected objects onto the path, through the engine", async () => {
+      covers("panel:media.paged.draw.panel.objectsOnPath");
       const panel = await mountPanel(h, makeObjectsOnPathPanel);
       await drive(() => h.host.selection.set(trio(0)), panel.work);
       // The panel names which selected object is the path: the last one.
@@ -211,6 +213,7 @@ describe("Objects on path panel — rendered against the engine", () => {
     });
 
     it("Update re-distributes with the options above it", async () => {
+      covers("panel:media.paged.draw.panel.objectsOnPath");
       const panel = await mountPanel(h, makeObjectsOnPathPanel);
       const before = await transformOf(poly("o0"));
       panel.change('[data-draw-onpath-field="startOffsetPt"]', "10");
@@ -247,6 +250,7 @@ describe("Objects on path panel — rendered against the engine", () => {
     });
 
     it("Release puts every object back EXACTLY where it was", async () => {
+      covers("panel:media.paged.draw.panel.objectsOnPath");
       const panel = await mountPanel(h, makeObjectsOnPathPanel);
       await panel.click("[data-draw-onpath-release]");
 
