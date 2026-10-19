@@ -240,8 +240,13 @@ describe("Color panel: controls", () => {
   test("hex: typing ff0000 makes the mixed colour RGB red, and Add to Swatches carries it", async () => {
     covers("panel:paged.color");
     const h = await mount();
+    // The hex field is keyed by the computed colour, so it is replaced
+    // when the mixer's debounced preview answers: let that land first, or
+    // the typing goes into a field that is no longer on screen.
+    await settleTimers(h);
     const hex = h.root.querySelector<HTMLInputElement>("[data-mixer-hex]")!;
     await h.typeInto(hex, "ff0000");
+    await settleTimers(h);
     const from = h.mark();
     await h.click(h.root.querySelector("[data-mixer-add-swatch]")!);
     const sent = h.mutations(from) as unknown as Array<{
