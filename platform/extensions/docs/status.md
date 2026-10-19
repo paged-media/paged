@@ -132,6 +132,9 @@ vendored from `@paged-media/canvas-wasm` and `@paged-media/introspect-wasm` 0.73
   `gestures()` with its unit backend (a tool's handler driven in document points, against the
   fake or the headless engine), pointer tapes (`parseTape` / `replayTape`) and the invariants
   (`expectOneCommit`, `expectNoCommit`, `checkUndoRedo`, `checkCancel`, `engineModelChannel`).
+- **Test doubles beside the harness (0.2.80-canary.0, ADR 331):** `mapBacking()` and
+  `silentConsole` for a host under test, and `createFakeEditor().ids(registry)`; the harness's
+  hosts share one in-memory `host.storage` unless `storage` is given (finding HOST-1 fixed).
 - **For bundle authors:** `DisposableStore`, the page-drag gesture helpers, the wasm
   fallbacks `resolveWasm` / `fetchWasm`, the object-model helpers (`applyDefaults`,
   `findRow`, `rowPathOf`, `ROW_PATH`), and `createHeadlessHost`, which runs bundles in Node
@@ -152,7 +155,7 @@ vendored from `@paged-media/canvas-wasm` and `@paged-media/introspect-wasm` 0.73
   serves, with Subresource Integrity; `resolveWasm` / `fetchWasm` fall back to the
   bundle-relative URL on a host without it (`modules@1`,
   [ADR 326](adr/326-wasm-resolved-through-the-host.md)).
-- **The Node CLI** (`packages/cli`, bin `paged-node`,
+- **The Node CLI** (`apps/cli` since wave C, bin `paged-node`,
   [ADR 324](adr/324-node-cli-over-the-headless-host.md), DESIGN.md §22). A host over
   `createHeadlessHost` on the canvas-wasm it finds (protocol 70 or later), with its own
   driver bundle and every discovered plugin bundle. Verbs from one table: `get`, `set`,
@@ -160,7 +163,7 @@ vendored from `@paged-media/canvas-wasm` and `@paged-media/introspect-wasm` 0.73
   `apply`, `merge`, `plugins`, `ai` and `describe`. Values are typed by their schema row
   before they are sent; `export --format pdf` prefers a typed exporter command. The bin is
   `paged-node`, not `paged`, which core's Rust CLI installs (ADR 324, amended 2026-10-16).
-- **The model package** (`packages/ai`,
+- **The model package** (`platform/shared/ai` since wave C,
   [ADR 325](adr/325-claude-agent-package.md)): the model and a per-mode table, the system
   prompt (an authoring guide and the engine catalog), the tools `run_script`, `lookup_api`
   and `render_page`, the loop, a direct and a proxy transport, the proxy's server half, the

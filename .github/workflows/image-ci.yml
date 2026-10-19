@@ -25,8 +25,9 @@ on:
       # The extension contract the bundle builds against (workspace:*).
       - "platform/extensions/packages/plugin-api/**"
       - "platform/extensions/packages/plugin-sdk/**"
-      # The internal shared code the bundle boots its wasm with (workspace:*).
+      # The internal shared code the bundle uses (workspace:*).
       - "platform/shared/wasm-boot/**"
+      - "platform/shared/helpers/**"
       # The engine wasm packages this workflow builds against (workspace:*),
       # and what builds them, so an engine change re-tests its consumers.
       - "engine/core/crates/**"
@@ -63,8 +64,9 @@ on:
       # The extension contract the bundle builds against (workspace:*).
       - "platform/extensions/packages/plugin-api/**"
       - "platform/extensions/packages/plugin-sdk/**"
-      # The internal shared code the bundle boots its wasm with (workspace:*).
+      # The internal shared code the bundle uses (workspace:*).
       - "platform/shared/wasm-boot/**"
+      - "platform/shared/helpers/**"
       # The engine wasm packages this workflow builds against (workspace:*),
       # and what builds them, so an engine change re-tests its consumers.
       - "engine/core/crates/**"

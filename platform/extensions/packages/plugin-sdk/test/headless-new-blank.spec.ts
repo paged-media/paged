@@ -26,6 +26,7 @@ import { afterEach, describe, expect, it } from "bun:test";
 
 import { createHeadlessHost, type HeadlessHost } from "../src/harness";
 
+import { silentConsole as silent } from "../src/testing";
 const FONT = new Uint8Array(
   readFileSync(
     fileURLToPath(
@@ -33,12 +34,6 @@ const FONT = new Uint8Array(
     ),
   ),
 );
-const silent = {
-  debug() {},
-  info() {},
-  warn() {},
-  error() {},
-} as unknown as Console;
 let live: HeadlessHost | null = null;
 afterEach(() => {
   live?.dispose();

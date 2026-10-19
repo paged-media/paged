@@ -51,6 +51,7 @@
 // dependency), same as schema-list-panel.spec.ts.
 
 import { expect, test, type Locator, type Page } from "@playwright/test";
+import { covers } from "@paged-media/test-kit";
 
 import { openCanvas, openPanel } from "../fidelity/canvas-driver";
 import { buildRectAndPolygonIdmlBase64 } from "./harness/build-min-idml";
@@ -288,6 +289,7 @@ test.describe("E2E schema-tree-panel (v1.2 tree rows / drag-reorder / inline ren
   test("AC-REN-1 — double-click renames a layer through the declared command", async ({
     page,
   }) => {
+    covers("command:paged.demo.renameLayer");
     const section = page.locator('[data-schema-section="Layers"]');
     await addLayer(page, "Demo layer");
     await expect.poll(() => layers(page).then((l) => l.length)).toBe(1);
@@ -341,6 +343,7 @@ test.describe("E2E schema-tree-panel (v1.2 tree rows / drag-reorder / inline ren
   test("AC-MOVE-1 — a layer drag dispatches the reorder COMMAND (layerMove)", async ({
     page,
   }) => {
+    covers("command:paged.demo.moveLayer");
     const section = page.locator('[data-schema-section="Layers"]');
     // A layer is not an element, so this list declares a command
     // reorder. Two layers are needed for a drag to mean anything.
@@ -362,5 +365,10 @@ test.describe("E2E schema-tree-panel (v1.2 tree rows / drag-reorder / inline ren
       ...rowIds.slice(0, rowIds.length - 1),
     ];
     await expect.poll(() => renderedRowIds(section)).toEqual(expected);
+    // The engine's layer order moved, not only the rows: with two layers
+    // any move is a swap.
+    await expect
+      .poll(() => layers(page).then((l) => l.map((x) => x.selfId)))
+      .toEqual(before.map((x) => x.selfId).reverse());
   });
 });

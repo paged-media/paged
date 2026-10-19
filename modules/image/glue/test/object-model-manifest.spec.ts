@@ -11,7 +11,11 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { afterEach, describe, expect, it } from "bun:test";
-import { createHeadlessHost, type HeadlessHost } from "@paged-media/plugin-sdk";
+import {
+  createHeadlessHost,
+  type HeadlessHost,
+  silentConsole as silent,
+} from "@paged-media/plugin-sdk";
 
 import { imageBundle } from "../src/index";
 import { manifestObjectModel } from "../src/object-model/contribute";
@@ -28,8 +32,6 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "..", "..");
 const MANIFESTS = [join(ROOT, "manifest"), join(ROOT, "glue")];
 const UPDATE = process.env.UPDATE_OBJECT_MODEL === "1";
-const silent = { debug() {}, info() {}, warn() {}, error() {} };
-
 let live: HeadlessHost | null = null;
 afterEach(() => {
   live?.dispose();

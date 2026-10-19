@@ -29,6 +29,7 @@ import type { PluginManifest } from "@paged-media/plugin-api";
 import {
   createBundleHost,
   type CreateBundleHostOptions,
+  silentConsole as silent,
 } from "@paged-media/plugin-sdk";
 import { covers, createFakeEditor } from "@paged-media/test-kit";
 
@@ -38,7 +39,6 @@ import { IMPORT_PDF_COMMAND } from "../src/commands";
 import { _resetPdfMapperCache } from "../src/engine-loader";
 import { tinyPdf } from "./fixtures/tiny-pdf";
 
-const silent = { debug() {}, info() {}, warn() {}, error() {} };
 const PDF = tinyPdf([["Hello PDF"], ["Page two", "a second line"]]);
 
 /** Every byte array the native-document door was handed. */

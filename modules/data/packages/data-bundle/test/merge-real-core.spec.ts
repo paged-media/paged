@@ -33,6 +33,7 @@ import {
   createHeadlessHost,
   defineBundle,
   type HeadlessHost,
+  silentConsole as silent,
 } from "@paged-media/plugin-sdk";
 
 import manifestJson from "../manifest.json";
@@ -60,8 +61,6 @@ const TOL = 0.5;
 const BR_BETWEEN_PLACEHOLDERS = new Set(["empty-field-lines", "overset"]);
 
 const ready = ENGINE_ANCHOR !== null && existsSync(DATA_JS_WASM);
-const silent = { debug() {}, info() {}, warn() {}, error() {} };
-
 /** RFC 4180, enough for the fixtures (quotes, doubled quotes). */
 function parseCsv(text: string): string[][] {
   const rows: string[][] = [];

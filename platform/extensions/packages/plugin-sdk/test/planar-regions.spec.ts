@@ -48,8 +48,7 @@ import type {
 import { createBundleHost, PluginCapabilityError } from "../src";
 import { makeFakeEditor } from "./fake-editor";
 
-const silent = { debug() {}, info() {}, warn() {}, error() {} };
-
+import { silentConsole as silent } from "../src/testing";
 const manifest = (
   capabilities: PluginManifest["capabilities"] = {
     document: { read: "broad", write: "broad" },

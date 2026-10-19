@@ -50,6 +50,7 @@
 // dependency), same as draw-schema-panel.spec.ts.
 
 import { expect, test, type Page } from "@playwright/test";
+import { covers } from "@paged-media/test-kit";
 
 import { openCanvas, openPanel } from "../fidelity/canvas-driver";
 import { buildRectAndPolygonIdmlBase64 } from "./harness/build-min-idml";
@@ -218,6 +219,7 @@ test.describe("E2E schema-list-panel (B-01 list widget + G3 applyEntity)", () =>
   test("AC-LIST-4 — the Stroke action dispatches the command with the row id payload", async ({
     page,
   }) => {
+    covers("command:paged.demo.applySwatchStroke");
     const panel = page.locator(`[data-schema-panel="${PANEL_ID}"]`);
     const { id } = await createDemoSwatch(page);
     const demoRow = panel.locator(`[data-list-row="${id}"]`);

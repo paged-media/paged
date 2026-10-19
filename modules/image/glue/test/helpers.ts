@@ -26,6 +26,7 @@
 import { vi } from "bun:test";
 
 import type { ElementGeometryItem, PagedEditor } from "@paged-media/plugin-api";
+import { mapBacking, silentConsole } from "@paged-media/plugin-sdk";
 
 export function fakeRegistry() {
   const byId = new Map<string, { id: string }>();
@@ -376,17 +377,7 @@ export function makeFakeEditor() {
   };
 }
 
-export const silentConsole = { debug() {}, info() {}, warn() {}, error() {} };
-
-export const mapBacking = () => {
-  const m = new Map<string, string>();
-  return {
-    getItem: (k: string) => m.get(k) ?? null,
-    setItem: (k: string, v: string) => void m.set(k, v),
-    removeItem: (k: string) => void m.delete(k),
-    keys: () => Array.from(m.keys()),
-  };
-};
+export { mapBacking, silentConsole };
 
 export const shellStub = (openPanel: (id: string) => void = () => {}) => ({
   openPanel,

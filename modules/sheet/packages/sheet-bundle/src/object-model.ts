@@ -83,6 +83,7 @@ import type {
   TypedCommandContribution,
   ValueType,
 } from "@paged-media/plugin-api";
+import { labelKey, sha256HexPrefix } from "@paged-media/helpers";
 
 import manifest from "../manifest.json";
 
@@ -111,10 +112,10 @@ export type SheetKind = (typeof SHEET_KINDS)[number];
 
 /** The plugin's ONE label per host (core's rule: exactly `x-paged:<id>`,
  *  envelope `{v, data}`); on `doc` it names the live workbook version. */
-export const VERSION_LABEL_KEY = `x-paged:${PLUGIN_ID}`;
+export const VERSION_LABEL_KEY = labelKey(PLUGIN_ID);
 /** The sub-key a `state` write sets: the registry merges it into
  *  `data.wb` of the document envelope. */
-export const VERSION_SUB_KEY = `${VERSION_LABEL_KEY}.wb`;
+export const VERSION_SUB_KEY = labelKey(PLUGIN_ID, "wb");
 const VERSIONS = "versions/";
 const WORKBOOK_ID = "main";
 
@@ -449,16 +450,6 @@ interface VersionMeta {
   v: 1;
   name: string;
   chartOps: ChartOp[];
-}
-
-async function sha256Hex(bytes: Uint8Array): Promise<string> {
-  const d = await globalThis.crypto.subtle.digest(
-    "SHA-256",
-    bytes as Uint8Array<ArrayBuffer>,
-  );
-  return Array.from(new Uint8Array(d), (b) =>
-    b.toString(16).padStart(2, "0"),
-  ).join("");
 }
 
 // ------------------------------------------------------------ the model
@@ -1218,7 +1209,7 @@ export function contributeObjectModel(
     const all = new Uint8Array(bytes.length + 1 + metaBytes.length);
     all.set(bytes, 0);
     all.set(metaBytes, bytes.length + 1);
-    const hash = (await sha256Hex(all)).slice(0, 32);
+    const hash = await sha256HexPrefix(all, 32);
     return {
       hash,
       parts: [

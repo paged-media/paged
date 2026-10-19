@@ -54,6 +54,7 @@ import {
   createBundleHost,
   createHeadlessHost,
   type HeadlessHost,
+  silentConsole as silent,
 } from "@paged-media/plugin-sdk";
 
 import type { EditorHostOptions } from "../../../src/plugin-host-options";
@@ -74,12 +75,7 @@ export const ENGINE_ANCHOR = fileURLToPath(
   new URL("../../..", import.meta.url),
 );
 
-export const silent = {
-  debug: () => {},
-  info: () => {},
-  warn: () => {},
-  error: () => {},
-};
+export { silent };
 
 /** The probe bundle's id and its sibling's (for the namespacing cases). */
 export const PROBE_ID = "media.paged.probe";

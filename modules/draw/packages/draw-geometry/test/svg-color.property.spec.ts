@@ -227,7 +227,10 @@ describe("svg-color — cmykToRgb (properties)", () => {
     const any = real(-300, 300);
     fc.assert(
       fc.property(any, any, any, any, (c, m, y, k) => {
-        assertTrue(isWellFormed(cmykToRgb(c, m, y, k)), "not an 8-bit triple");
+        assertTrue(
+          isWellFormed(cmykToRgb([c, m, y, k])),
+          "not an 8-bit triple",
+        );
       }),
     );
   });
@@ -245,8 +248,8 @@ describe("svg-color — cmykToRgb (properties)", () => {
           const a: [number, number, number, number] = [c, m, y, k];
           const b: [number, number, number, number] = [c, m, y, k];
           b[which] = Math.max(a[which], more);
-          const lighter = cmykToRgb(...a);
-          const darker = cmykToRgb(...b);
+          const lighter = cmykToRgb(a);
+          const darker = cmykToRgb(b);
           for (let i = 0; i < 3; i++) {
             assertTrue(
               darker[i] <= lighter[i],
@@ -261,11 +264,11 @@ describe("svg-color — cmykToRgb (properties)", () => {
   it("C, M and Y each touch exactly their own complement; K touches all three alike", () => {
     fc.assert(
       fc.property(ink, ink, (amount, k) => {
-        const [r, g, b] = cmykToRgb(amount, 0, 0, 0);
+        const [r, g, b] = cmykToRgb([amount, 0, 0, 0]);
         expect([g, b]).toEqual([255, 255]);
-        expect(cmykToRgb(0, amount, 0, 0)).toEqual([255, r, 255]);
-        expect(cmykToRgb(0, 0, amount, 0)).toEqual([255, 255, r]);
-        const gray = cmykToRgb(0, 0, 0, k);
+        expect(cmykToRgb([0, amount, 0, 0])).toEqual([255, r, 255]);
+        expect(cmykToRgb([0, 0, amount, 0])).toEqual([255, 255, r]);
+        const gray = cmykToRgb([0, 0, 0, k]);
         expect(gray[0]).toBe(gray[1]);
         expect(gray[1]).toBe(gray[2]);
       }),
@@ -275,7 +278,7 @@ describe("svg-color — cmykToRgb (properties)", () => {
   it("is the product of the ink and black coverages, to the rounding", () => {
     fc.assert(
       fc.property(ink, ink, ink, ink, (c, m, y, k) => {
-        const out = cmykToRgb(c, m, y, k);
+        const out = cmykToRgb([c, m, y, k]);
         [c, m, y].forEach((v, i) => {
           const exact = 255 * (1 - v / 100) * (1 - k / 100);
           assertTrue(

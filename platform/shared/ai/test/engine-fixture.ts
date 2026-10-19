@@ -26,26 +26,21 @@ import { fileURLToPath } from "node:url";
 import {
   createHeadlessHost,
   type HeadlessHost,
-} from "../../plugin-sdk/src/harness";
-import { minimalIdml } from "../../plugin-sdk/test/fixtures/minimal-idml";
+} from "../../../extensions/packages/plugin-sdk/src/harness";
+import { minimalIdml } from "../../../extensions/packages/plugin-sdk/test/fixtures/minimal-idml";
 import type { ScriptEngine } from "../src";
 
+import { silentConsole as silent } from "../../../extensions/packages/plugin-sdk/src/testing";
 const FONT = new Uint8Array(
   readFileSync(
     fileURLToPath(
       new URL(
-        "../../plugin-sdk/test/fixtures/fonts/SpaceGrotesk-VF.ttf",
+        "../../../extensions/packages/plugin-sdk/test/fixtures/fonts/SpaceGrotesk-VF.ttf",
         import.meta.url,
       ),
     ),
   ),
 );
-const silent = {
-  debug() {},
-  info() {},
-  warn() {},
-  error() {},
-} as unknown as Console;
 
 export async function headlessEngine(): Promise<{
   engine: ScriptEngine;

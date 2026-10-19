@@ -35,6 +35,7 @@
 import { useCallback } from "react";
 
 import type { ElementId, PageId } from "@paged-media/client";
+import { decodeEnvelope } from "@paged-media/helpers";
 
 import { useCanvasClient } from "./canvas-client-context";
 import { useSelection } from "./selection-context";
@@ -83,11 +84,7 @@ export function readEnvelope(
       v.value?.key === key &&
       typeof v.value.value === "string"
     ) {
-      try {
-        return JSON.parse(v.value.value) as MetaEnvelope;
-      } catch {
-        return null;
-      }
+      return decodeEnvelope(v.value.value) as MetaEnvelope | null;
     }
   }
   return null;
