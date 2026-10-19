@@ -49,21 +49,17 @@
 //     they wear the drawing tools' graphic default (no fill, 1 pt black
 //     stroke) rather than appearing invisible in a new document.
 //
-//  3. COMPOUND INSERTS ARE SEQUENTIAL, MEASURED NOT CHOSEN. "Insert
-//     table" with no caret mints a text frame AND its table; "Place
-//     image" mints a frame AND fills it. The intended shape was ONE
-//     `batch` with the `$created` sentinel binding the child to the
-//     minted parent (one undo step, the pencil tool's v34 precedent) —
-//     but on wire v61 the engine substitutes `$created` only into
-//     `ElementId`-typed fields, never a `storyId` string (probe:
-//     `node not found: Story("$created")`), and its batch executor
-//     does not dispatch `PlaceImage`/`ReplaceImageBytes` children at
-//     all (`Mutation::Batch child 1 (ReplaceImageBytes):
-//     NotImplemented`) although both apply fine standalone. So the
-//     compounds run as TWO mutations — two undo records — and a
-//     failing second step ROLLS BACK the first via `undo()`, so a
-//     refusal never strands an empty frame. A story-handle door in
-//     the batch executor is the RFI that would restore atomicity.
+//  3. COMPOUND INSERTS. "Insert table" with no caret mints a text frame
+//     AND its table in ONE batch: `bindCreated` names the frame and the
+//     table's `storyId` is `$h:frame`, which the engine's batch handles
+//     (C-15) resolve to the story the frame minted — one undo step, and
+//     a refused table half rolls the batch back whole (SH-202). "Place
+//     image" mints a frame AND fills it; on wire v61 the batch executor
+//     did not dispatch `PlaceImage`/`ReplaceImageBytes` children
+//     (`Mutation::Batch child 1 (ReplaceImageBytes): NotImplemented`)
+//     although both apply fine standalone, so Place still runs as TWO
+//     mutations, and a failing second step ROLLS BACK the first via
+//     `undo()`, so a refusal never strands an empty frame.
 //
 //  4. PLACE IS THE INLINE-BYTES LANE. `placeImage(uri)` has no
 //     resolver door in the editor (nothing serves a picked file back
@@ -544,11 +540,9 @@ function enterFirstCell(paged: PagedEditor, outcome: InsertOutcome): void {
  * Insert a `TABLE_ROWS × TABLE_COLS` table with even column widths.
  *
  * Caret in a story → the table lands AT THE STORY the caret is in
- * (columns split the hosting frame's width evenly). No caret → mint a
- * text frame, resolve the story it minted (the stories collection
- * grows by exactly that story), and insert the table there. Two
- * mutations — see fact 3 for why this cannot be one batch on wire
- * v61 — with the frame rolled back if the table half refuses.
+ * (columns split the hosting frame's width evenly). No caret → one batch
+ * that mints a text frame and inserts the table in the story it minted
+ * (fact 3): one undo step, nothing stranded if the table half refuses.
  */
 export async function insertTable(
   paged: PagedEditor,
@@ -589,59 +583,38 @@ export async function insertTable(
   );
   const frameWidth = bounds[3] - bounds[1];
 
-  // The minted story has no readable pointer from the frame (no
-  // parentStory property on the wire), so diff the stories collection
-  // around the create — single-user editor, nothing else mints
-  // stories between the two reads.
-  const storiesBefore = new Set(
-    (await paged.client.collection<{ selfId: string }>("stories")).map(
-      (s) => s.selfId,
-    ),
-  );
-  const frameReply = await mutateAndSelect(
-    paged,
-    { op: "insertTextFrame", args: { pageId: target.pageId, bounds } },
-    "insertTable(frame)",
-    refusedTap(report, "Insert table"),
-  );
-  const frame = outcomeOf(frameReply);
-  if (!frame.applied) return REFUSED;
-  const minted = (
-    await paged.client.collection<{ selfId: string }>("stories")
-  ).filter((s) => !storiesBefore.has(s.selfId));
-  const storyId = minted[0]?.selfId ?? null;
-  if (!storyId) {
-    report(
-      "error",
-      "Insert table: the new text frame reported no story to put the table in.",
-    );
-    await rollBackFirstStep(paged);
-    return REFUSED;
-  }
-  const tableReply = await mutateAndSelect(
+  // One batch, one undo step (SH-202): the frame's minted story is
+  // addressed through a batch handle (`$h:frame` in the `storyId`
+  // position takes the story the insert minted), and a refused table
+  // half rolls the whole batch back, so nothing is stranded.
+  const reply = await mutateAndSelect(
     paged,
     {
-      op: "insertTable",
+      op: "batch",
       args: {
-        storyId,
-        rows: TABLE_ROWS,
-        cols: TABLE_COLS,
-        columnWidths: evenColumnWidths(frameWidth, TABLE_COLS),
-        rowHeights: newRowHeights(),
+        ops: [
+          { op: "insertTextFrame", args: { pageId: target.pageId, bounds } },
+          { op: "bindCreated", args: { handle: "frame" } },
+          {
+            op: "insertTable",
+            args: {
+              storyId: "$h:frame",
+              rows: TABLE_ROWS,
+              cols: TABLE_COLS,
+              columnWidths: evenColumnWidths(frameWidth, TABLE_COLS),
+              rowHeights: newRowHeights(),
+            },
+          },
+        ],
       },
     },
     "insertTable",
     refusedTap(report, "Insert table"),
   );
-  const table = outcomeOf(tableReply);
-  if (!table.applied) {
-    await rollBackFirstStep(paged);
-    return REFUSED;
-  }
+  const table = outcomeOf(reply);
+  if (!table.applied) return REFUSED;
   enterFirstCell(paged, table);
-  // Report the TABLE as the creation (the verb's object); the frame
-  // is its host and the fallback if the reply carried no table id.
-  return { applied: true, createdId: table.createdId ?? frame.createdId };
+  return table;
 }
 
 /** Natural pixel size of picked image bytes, via `createImageBitmap`

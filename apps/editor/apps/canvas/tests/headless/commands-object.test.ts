@@ -271,21 +271,72 @@ describe("Nudge", () => {
     }
   });
 
-  // Finding SH-203 (engine): undoing a setGroupTransform (the group nudge;
-  // the Transform panel's X / Y on a group) does not restore the model byte
-  // for byte: each member's explicit identity ItemTransform comes back
-  // ABSENT. Rendering is the same; an IDML saved after the undo differs
-  // from one saved before the edit.
-  test.failing(
-    "SH-203: one undo of a group nudge restores the model byte for byte",
-    async () => {
-      covers("command:paged.object.nudgeRight");
-      const e = await open();
-      await e.select([T.group.id]);
-      const { before } = await run(e, "paged.object.nudgeRight");
-      await expectOneUndoStep(e, before);
-    },
-  );
+  // SH-203 (fixed, engine): undoing a setGroupTransform (the group nudge;
+  // the Transform panel's X / Y on a group) puts the members' stored
+  // transforms back verbatim, explicit identities included.
+  test("SH-203: one undo of a group nudge restores the model byte for byte", async () => {
+    covers("command:paged.object.nudgeRight");
+    const e = await open();
+    await e.select([T.group.id]);
+    const { before } = await run(e, "paged.object.nudgeRight");
+    await expectOneUndoStep(e, before);
+  });
+});
+
+describe("Lock and hide (F-41)", () => {
+  const hitAt = async (e: HeadlessEditor, at: readonly [number, number]) => {
+    const reply = (await e.send({
+      kind: "hitTest",
+      payload: { pageId: T.pageId, docPoint: [at[0], at[1]], filter: "any" },
+    } as never)) as { kind: string; payload?: { element?: unknown } };
+    return reply.payload?.element ?? null;
+  };
+
+  test("Cmd+L locks the frame: the engine then refuses to move it; one undo unlocks", async () => {
+    covers("command:paged.object.lock", "command:paged.editor.undo");
+    const e = await open();
+    await e.select([T.frame.id]);
+    const before = await e.dump();
+    expect(await e.press("cmd+l")).toBe(true);
+    await e.idle();
+    expect(e.problems()).toEqual([]);
+    const locked = await e.dump();
+    expect(dumpDiff(before, locked)).not.toEqual([]);
+    // A locked item does not move: the nudge is refused, nothing changes.
+    await e.invoke("paged.object.nudgeRight");
+    await e.idle();
+    expect(dumpDiff(locked, await e.dump())).toEqual([]);
+    await expectOneUndoStep(e, before);
+  });
+
+  test("Hide: the frame is no longer hit and leaves the selection; Show all on spread brings it back", async () => {
+    covers(
+      "command:paged.object.hide",
+      "command:paged.object.showAllOnSpread",
+    );
+    const e = await open();
+    expect(await hitAt(e, T.frame.at)).toEqual(T.frame.id);
+    await e.select([T.frame.id]);
+    const before = await e.dump();
+    await run(e, "paged.object.hide");
+    expect(e.problems()).toEqual([]);
+    expect(e.state.selection.elementSelection).toEqual([]);
+    expect(await hitAt(e, T.frame.at)).not.toEqual(T.frame.id);
+    await e.select([T.path.id]);
+    await run(e, "paged.object.showAllOnSpread");
+    expect(await hitAt(e, T.frame.at)).toEqual(T.frame.id);
+    expect(dumpDiff(before, await e.dump())).toEqual([]);
+  });
+
+  test("Unlock all on spread unlocks the fixture's locked frame in one undo step", async () => {
+    covers("command:paged.object.unlockAllOnSpread");
+    const e = await open();
+    await e.select([T.frame.id]);
+    const { before, after } = await run(e, "paged.object.unlockAllOnSpread");
+    expect(e.problems()).toEqual([]);
+    expect(dumpDiff(before, after)).not.toEqual([]);
+    await expectOneUndoStep(e, before);
+  });
 });
 
 describe("Clipping masks", () => {

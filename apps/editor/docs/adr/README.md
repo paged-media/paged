@@ -56,6 +56,9 @@ and 024 predate that scheme and keep their numbers. Records 200–217 were writt
 | [238](238-the-default-pdf-is-one-the-document-can-meet.md) | The default PDF is one the document can meet | Accepted 2026-10-19 |
 | [240](240-react-19-features.md) | The editor uses React 19's effect events, Activity, view transitions, Fragment refs and Trusted Types | Accepted 2026-10-19 |
 | [245](245-one-document-unit.md) | One document unit for every length | Accepted 2026-10-19 |
+| [250](250-escape-climbs-out-of-a-group.md) | Escape climbs out of a group one level at a time | Accepted 2026-10-19 |
+| [251](251-object-lock-and-hide.md) | Object lock and hide | Accepted 2026-10-19 |
+| [252](252-ask-affordances-know-the-ai-service.md) | The ask affordances know whether there is an AI service | Accepted 2026-10-19 |
 
 Decisions made in other repositories that this editor's code rests on are listed in
 [`../README.md`](../README.md). Comments in the source also cite ADR 025 (the journal) and

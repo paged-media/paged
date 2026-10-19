@@ -35,7 +35,7 @@ import type {
 
 import { useCanvasClient } from "../state/canvas-client-context";
 import { rampCss, type RampStop } from "../color/GradientRamp";
-import { useBindings } from "../catalog/binding-hook";
+import { sendAsOne, useBindings } from "../catalog/binding-hook";
 import { useRegistries } from "../state/registries-context";
 import {
   useFormattingAffects,
@@ -264,12 +264,25 @@ export function FillStrokeCluster() {
     if (id) apply(id);
   };
 
+  // Fill and stroke written together are one undo step (SH-205): both
+  // halves go out as one batch when both bindings can plan their writes.
+  const commitPair = (fillNext: Value | null, strokeNext: Value | null) => {
+    if (fill.plan && stroke.plan) {
+      sendAsOne(client, [
+        ...(fillNext ? fill.plan(fillNext) : []),
+        ...(strokeNext ? stroke.plan(strokeNext) : []),
+      ]);
+      return;
+    }
+    if (fillNext) fill.onCommit?.(fillNext);
+    if (strokeNext) stroke.onCommit?.(strokeNext);
+  };
+
   const swap = () => {
     if (fill.onCommit && stroke.onCommit) {
       const fv = fill.value ?? NONE;
       const sv = stroke.value ?? NONE;
-      fill.onCommit(sv);
-      stroke.onCommit(fv);
+      commitPair(sv, fv);
       return;
     }
     // No selection — swap the document defaults (single write).
@@ -317,8 +330,10 @@ export function FillStrokeCluster() {
   const applyDefault = () => {
     void resolveBlack().then((black) => {
       if (fill.onCommit || stroke.onCommit) {
-        fill.onCommit?.(NONE);
-        if (black) stroke.onCommit?.(colorRef(black));
+        commitPair(
+          fill.onCommit ? NONE : null,
+          black && stroke.onCommit ? colorRef(black) : null,
+        );
         return;
       }
       // No selection — one whole-triple defaults write (two

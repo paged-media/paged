@@ -197,21 +197,29 @@ describe("Swap fill and stroke (paged.fillStroke.swap)", () => {
     const sent = h.fake
       .since(mark)
       .flatMap((e) => (e.channel === "mutation" ? [e.mutation] : []));
+    // One batch: one undo step (SH-205).
     expect(sent).toEqual([
       {
-        op: "setElementProperty",
+        op: "batch",
         args: {
-          elementId: RECT,
-          path: "frameFillColor",
-          value: color("Color/Blue"),
-        },
-      },
-      {
-        op: "setElementProperty",
-        args: {
-          elementId: RECT,
-          path: "frameStrokeColor",
-          value: color("Color/Red"),
+          ops: [
+            {
+              op: "setElementProperty",
+              args: {
+                elementId: RECT,
+                path: "frameFillColor",
+                value: color("Color/Blue"),
+              },
+            },
+            {
+              op: "setElementProperty",
+              args: {
+                elementId: RECT,
+                path: "frameStrokeColor",
+                value: color("Color/Red"),
+              },
+            },
+          ],
         },
       },
     ]);
@@ -233,22 +241,29 @@ describe("Swap fill and stroke (paged.fillStroke.swap)", () => {
     });
   });
 
-  // Finding SH-205: Swap (and Default) on a selection write the fill and
-  // the stroke as SEPARATE mutations (and once per selected object), so
-  // one Cmd+Z leaves the object half swapped — fill restored, stroke not.
-  test.failing(
-    "SH-205: Swap fill and stroke on a selection is ONE undo step",
-    async () => {
-      covers("command:paged.fillStroke.swap");
-      const h = await mount({ fill: "Color/Red", stroke: "Color/Blue" });
-      await h.select([RECT, OVAL]);
-      await expectOneUndoStep(
-        h.fake,
-        () => h.invoke("paged.fillStroke.swap"),
-        "swap",
-      );
-    },
-  );
+  // SH-205 (fixed): Swap (and Default) on a selection write the fill and
+  // the stroke of every selected object in ONE batch, one undo step.
+  test("SH-205: Swap fill and stroke on a selection is ONE undo step", async () => {
+    covers("command:paged.fillStroke.swap");
+    const h = await mount({ fill: "Color/Red", stroke: "Color/Blue" });
+    await h.select([RECT, OVAL]);
+    await expectOneUndoStep(
+      h.fake,
+      () => h.invoke("paged.fillStroke.swap"),
+      "swap",
+    );
+  });
+
+  test("SH-205: Default fill and stroke on a selection is ONE undo step", async () => {
+    covers("command:paged.fillStroke.default");
+    const h = await mount({ fill: "Color/Red", stroke: "Color/Blue" });
+    await h.select([RECT, OVAL]);
+    await expectOneUndoStep(
+      h.fake,
+      () => h.invoke("paged.fillStroke.default"),
+      "default",
+    );
+  });
 });
 
 describe("Default fill and stroke (paged.fillStroke.default)", () => {
@@ -261,17 +276,29 @@ describe("Default fill and stroke (paged.fillStroke.default)", () => {
     const sent = h.fake
       .since(mark)
       .flatMap((e) => (e.channel === "mutation" ? [e.mutation] : []));
+    // One batch: one undo step (SH-205).
     expect(sent).toEqual([
       {
-        op: "setElementProperty",
-        args: { elementId: RECT, path: "frameFillColor", value: color(null) },
-      },
-      {
-        op: "setElementProperty",
+        op: "batch",
         args: {
-          elementId: RECT,
-          path: "frameStrokeColor",
-          value: color("Color/Black"),
+          ops: [
+            {
+              op: "setElementProperty",
+              args: {
+                elementId: RECT,
+                path: "frameFillColor",
+                value: color(null),
+              },
+            },
+            {
+              op: "setElementProperty",
+              args: {
+                elementId: RECT,
+                path: "frameStrokeColor",
+                value: color("Color/Black"),
+              },
+            },
+          ],
         },
       },
     ]);

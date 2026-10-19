@@ -159,22 +159,19 @@ describe("Swatch list (schema), paged.schema-list-demo", () => {
     expect(h.mutations(from)).toEqual([]);
   });
 
-  // Every other panel write over a multi-selection is one batch (one undo
-  // step); the demo command sends one mutation per frame.
-  test.failing(
-    "PN-356: Stroke over two frames is one batch, one undo step",
-    async () => {
-      covers(
-        "panel:paged.schema-list-demo",
-        "command:paged.demo.applySwatchStroke",
-      );
-      const h = await listMount();
-      await h.select([h.scene.rect, h.scene.groupA]);
-      const from = h.mark();
-      await h.click(h.view.getByRole("button", { name: "Stroke: Red" }));
-      expect(h.mutations(from)).toHaveLength(1);
-    },
-  );
+  // Every panel write over a multi-selection is one batch (one undo step),
+  // the demo command's too.
+  test("PN-356: Stroke over two frames is one batch, one undo step", async () => {
+    covers(
+      "panel:paged.schema-list-demo",
+      "command:paged.demo.applySwatchStroke",
+    );
+    const h = await listMount();
+    await h.select([h.scene.rect, h.scene.groupA]);
+    const from = h.mark();
+    await h.click(h.view.getByRole("button", { name: "Stroke: Red" }));
+    expect(h.mutations(from)).toHaveLength(1);
+  });
 });
 
 const treeMount = () =>

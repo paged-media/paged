@@ -339,20 +339,15 @@ describe("text doors (the caret)", () => {
     expect(text(undone)).toEqual(text(before));
   });
 
-  // Finding SH-204 (engine): undoing insertHyperlink leaves the story's run
-  // split at the link's boundary ("Hello world" comes back as "Hello" +
-  // " world"): same text, a different model — an IDML saved after the
-  // undo has two character ranges where the original had one.
-  test.failing(
-    "SH-204: one undo of Insert hyperlink restores the story byte for byte",
-    async () => {
-      covers("command:paged.core.insertHyperlink");
-      const { e } = await withStory(0, 5);
-      await expectAppliedOnce(e, "insertHyperlink", {
-        url: "https://paged.media/",
-      });
-    },
-  );
+  // SH-204 (fixed, engine): undoing insertHyperlink puts back the run the
+  // link split, so the story equals its before-state.
+  test("SH-204: one undo of Insert hyperlink restores the story byte for byte", async () => {
+    covers("command:paged.core.insertHyperlink");
+    const { e } = await withStory(0, 5);
+    await expectAppliedOnce(e, "insertHyperlink", {
+      url: "https://paged.media/",
+    });
+  });
 
   test("set field value with no placeholder at the caret is refused in the engine's words", async () => {
     covers("command:paged.core.setFieldValue");

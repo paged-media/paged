@@ -113,11 +113,15 @@ import {
   buildObjectCommands,
   deleteSelection,
   groupSelection,
+  hideSelection,
+  lockSelection,
   makeClippingMask,
   nudgeSelection,
   releaseClippingMask,
   selectParentGroup,
+  showAllOnSpread,
   ungroupSelection,
+  unlockAllOnSpread,
   OBJECT_DIAGNOSTIC_SOURCE,
   OBJECT_KEYBINDINGS,
   OBJECT_MENU_ITEMS,
@@ -918,6 +922,10 @@ export async function createHeadlessEditor(
       fresh(() => nudgeSelection(objectDeps, direction, large))(),
     makeClippingMask: fresh(() => makeClippingMask(objectDeps)),
     releaseClippingMask: fresh(() => releaseClippingMask(objectDeps)),
+    lock: fresh(() => lockSelection(objectDeps)),
+    unlockAllOnSpread: fresh(() => unlockAllOnSpread(objectDeps)),
+    hide: fresh(() => hideSelection(objectDeps)),
+    showAllOnSpread: fresh(() => showAllOnSpread(objectDeps)),
   });
   const insertReport: InsertReport = (severity, message) =>
     problemsSink.publish(INSERT_DIAGNOSTIC_SOURCE, "insert", [

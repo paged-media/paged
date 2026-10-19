@@ -124,6 +124,8 @@ is not written yet.
 | [193](193-page-item-snippets.md) | Page-item snippets: what Copy takes and Paste puts back | Accepted 2026-10-19 |
 | [194](194-deleting-a-style-moves-its-text-to-the-root-style.md) | Deleting a style moves its text to the root style | Accepted 2026-10-19 |
 | [195](195-the-state-hash-covers-the-whole-model.md) | The state hash covers the whole model | Accepted 2026-10-19 |
+| [196](196-fitting-alignment-takes-idml-anchor-names.md) | Fitting alignment takes IDML's anchor point names | Accepted 2026-10-19 |
+| [197](197-undo-restores-the-model-exactly.md) | Undo restores the model exactly | Accepted 2026-10-19 |
 
 Decisions made in other repositories that this engine's code rests on are listed in
 [`../README.md`](../README.md).

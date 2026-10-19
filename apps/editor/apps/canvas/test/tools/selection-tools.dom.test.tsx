@@ -222,6 +222,29 @@ describe("Selection (paged.tool.select)", () => {
       .settle();
     expect(m.state.elementSelection).toEqual([T.group.childA]);
   });
+
+  // F-29 (editor ADR 250): Escape climbs out of an entered group one
+  // level at a time: the member's group is selected, and the group is
+  // left (a click on another member selects the group again).
+  test("F-29: Escape after entering a group selects the group, one level up", async () => {
+    covers("tool:paged.tool.select");
+    const m = await targets();
+    await m.g
+      .tool("paged.tool.select")
+      .click(on(T.group.at))
+      .settle()
+      .dblclick(on(T.group.at))
+      .settle();
+    expect(m.state.elementSelection).toEqual([T.group.childA]);
+    await m.g.key("Escape").settle();
+    expect(m.state.elementSelection).toEqual([T.group.id]);
+    // Out of the group: a click on its member selects the group again.
+    await m.g.click(on(T.group.at)).settle();
+    expect(m.state.elementSelection).toEqual([T.group.id]);
+    // A second Escape at the top level changes nothing.
+    await m.g.key("Escape").settle();
+    expect(m.state.elementSelection).toEqual([T.group.id]);
+  });
 });
 
 describe("Direct Selection (paged.tool.directSelect)", () => {

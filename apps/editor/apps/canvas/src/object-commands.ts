@@ -210,6 +210,10 @@ export const PAGED_OBJECT_NUDGE_RIGHT_LARGE = "paged.object.nudgeRightLarge";
 export const PAGED_OBJECT_NUDGE_UP_LARGE = "paged.object.nudgeUpLarge";
 export const PAGED_OBJECT_NUDGE_DOWN_LARGE = "paged.object.nudgeDownLarge";
 export const PAGED_OBJECT_MAKE_CLIPPING_MASK = "paged.object.makeClippingMask";
+export const PAGED_OBJECT_LOCK = "paged.object.lock";
+export const PAGED_OBJECT_UNLOCK_ALL_ON_SPREAD = "paged.object.unlockAllOnSpread";
+export const PAGED_OBJECT_HIDE = "paged.object.hide";
+export const PAGED_OBJECT_SHOW_ALL_ON_SPREAD = "paged.object.showAllOnSpread";
 export const PAGED_OBJECT_RELEASE_CLIPPING_MASK =
   "paged.object.releaseClippingMask";
 
@@ -252,6 +256,9 @@ export interface ObjectCommandDeps {
     | "layers"
     | "elementProperties"
   >;
+  /** The page in view (the viewport's centre), for the "on spread"
+   *  verbs when nothing is selected. Absent: only the selection's spread. */
+  pageInView?: () => string | null;
   /** The LIVE element selection (read through a ref, never captured). */
   getSelection: () => readonly ElementId[];
   /** Replace the selection — worker first, then the main-thread mirror
@@ -321,6 +328,10 @@ export interface ObjectCommandHandlers {
   nudge: (direction: NudgeDirection, large: boolean) => void | Promise<void>;
   makeClippingMask: () => void | Promise<void>;
   releaseClippingMask: () => void | Promise<void>;
+  lock: () => void | Promise<void>;
+  unlockAllOnSpread: () => void | Promise<void>;
+  hide: () => void | Promise<void>;
+  showAllOnSpread: () => void | Promise<void>;
 }
 
 // ---------------------------------------------------------------- pure
@@ -1325,6 +1336,177 @@ export async function deleteSelection(deps: ObjectCommandDeps): Promise<void> {
   await deps.setSelection([]);
 }
 
+// --------------------------------------------- lock and hide (F-41)
+//
+// InDesign's object lock and hide (editor ADR 251): Lock (Cmd+L) and Hide
+// act on the selection; Unlock all on spread and Show all on spread on
+// the spread the selection is on, else the spread in view. A group is
+// locked or hidden through its members (the engine keeps `Locked` and
+// `Visible` on page items, as IDML does). Each verb is ONE batch, one
+// undo step. A locked item stays selectable and keeps its attributes
+// editable; the engine refuses to move, reshape, restack or remove it.
+// A hidden item is not drawn, cannot be clicked, and leaves the selection.
+
+/** Every page item at or under `ids` in the tree: a group by its leaves. */
+export function leavesOf(
+  roots: readonly SceneTreeNode[],
+  ids: readonly ElementId[],
+): PageItemId[] {
+  const wanted = new Set(ids.map(elementKey));
+  const out: PageItemId[] = [];
+  const seen = new Set<string>();
+  const walk = (nodes: readonly SceneTreeNode[], inside: boolean): void => {
+    for (const node of nodes) {
+      const id = node.id ?? null;
+      const here = inside || (id != null && wanted.has(elementKey(id)));
+      if (id && id.kind === "group") {
+        walk(node.children ?? [], here);
+        continue;
+      }
+      if (id && here && isPageItem(id) && !seen.has(elementKey(id))) {
+        seen.add(elementKey(id));
+        out.push(id);
+      }
+      if (node.children) walk(node.children, here);
+    }
+  };
+  walk(roots, false);
+  return out;
+}
+
+/** Every page item in the tree (the spread / page rows hold them). */
+function allLeaves(roots: readonly SceneTreeNode[]): PageItemId[] {
+  const out: PageItemId[] = [];
+  const walk = (nodes: readonly SceneTreeNode[]): void => {
+    for (const node of nodes) {
+      const id = node.id ?? null;
+      if (id && id.kind !== "group" && isPageItem(id)) out.push(id);
+      if (node.children) walk(node.children);
+    }
+  };
+  walk(roots);
+  return out;
+}
+
+function setFlag(
+  ids: readonly PageItemId[],
+  path: "elementLocked" | "elementVisible",
+  value: boolean,
+): Mutation[] {
+  return ids.map((elementId) => ({
+    op: "setElementProperty" as const,
+    args: { elementId, path, value: { type: "bool", value } as never },
+  }));
+}
+
+async function readTree(
+  deps: ObjectCommandDeps,
+  verb: string,
+): Promise<SceneTreeNode[] | null> {
+  try {
+    return await deps.client.sceneTree();
+  } catch {
+    deps.report(
+      "error",
+      `${verb} refused: the document structure could not be read.`,
+    );
+    return null;
+  }
+}
+
+/** Lock (Cmd+L) or hide the selection, in one batch. */
+async function flagSelection(
+  deps: ObjectCommandDeps,
+  verb: "Lock" | "Hide",
+): Promise<void> {
+  if (blockedByEditContext(deps, verb)) return;
+  const selection = [...deps.getSelection()];
+  if (selection.length === 0) return;
+  const roots = await readTree(deps, verb);
+  if (!roots) return;
+  const leaves = leavesOf(roots, selection);
+  if (leaves.length === 0) return;
+  const ops =
+    verb === "Lock"
+      ? setFlag(leaves, "elementLocked", true)
+      : setFlag(leaves, "elementVisible", false);
+  const refusal = refusalOf(await deps.client.mutate(asOneMutation(ops)));
+  if (refusal) {
+    deps.report("error", `${verb} refused: ${refusal}`);
+    return;
+  }
+  // A hidden item is gone from the page: nothing of it stays selected.
+  if (verb === "Hide") await deps.setSelection([]);
+}
+
+export const lockSelection = (deps: ObjectCommandDeps) =>
+  flagSelection(deps, "Lock");
+export const hideSelection = (deps: ObjectCommandDeps) =>
+  flagSelection(deps, "Hide");
+
+/** The spread the "on spread" verbs act on: the selection's, else the
+ *  page-in-view's, read off the geometry of the items in the tree. */
+async function targetSpread(
+  deps: ObjectCommandDeps,
+  leaves: readonly PageItemId[],
+): Promise<{ spread: string | null; geometry: Map<string, string | null> }> {
+  const items = leaves.length > 0 ? await deps.client.elementGeometry([...leaves]) : [];
+  const geometry = new Map<string, string | null>();
+  const pageSpread = new Map<string, string>();
+  for (const item of items) {
+    geometry.set(elementKey(item.id), item.spreadId ?? null);
+    if (item.pageId && item.spreadId) pageSpread.set(item.pageId, item.spreadId);
+  }
+  const selected = deps.getSelection();
+  if (selected.length > 0) {
+    const roots = await deps.client.sceneTree();
+    for (const leaf of leavesOf(roots, selected)) {
+      const spread = geometry.get(elementKey(leaf));
+      if (spread) return { spread, geometry };
+    }
+  }
+  const page = deps.pageInView?.() ?? null;
+  return { spread: page ? (pageSpread.get(page) ?? null) : null, geometry };
+}
+
+/** Unlock all on spread / Show all on spread: every locked (hidden) item
+ *  of the target spread, in one batch. Nothing to change is no step. */
+async function clearFlagOnSpread(
+  deps: ObjectCommandDeps,
+  verb: "Unlock all on spread" | "Show all on spread",
+): Promise<void> {
+  if (blockedByEditContext(deps, verb)) return;
+  const roots = await readTree(deps, verb);
+  if (!roots) return;
+  const leaves = allLeaves(roots);
+  const { spread, geometry } = await targetSpread(deps, leaves);
+  if (!spread) return;
+  const path = verb === "Unlock all on spread" ? "elementLocked" : "elementVisible";
+  const flagged: PageItemId[] = [];
+  for (const leaf of leaves) {
+    if (geometry.get(elementKey(leaf)) !== spread) continue;
+    const props = await deps.client.elementProperties(leaf);
+    const entry = props?.entries.find((e) => e.path === path)?.value;
+    const on =
+      entry && typeof entry === "object" && "value" in entry
+        ? (entry as { value: unknown }).value === true
+        : false;
+    if (path === "elementLocked" ? on : !on && entry != null) flagged.push(leaf);
+  }
+  if (flagged.length === 0) return;
+  const ops =
+    path === "elementLocked"
+      ? setFlag(flagged, "elementLocked", false)
+      : setFlag(flagged, "elementVisible", true);
+  const refusal = refusalOf(await deps.client.mutate(asOneMutation(ops)));
+  if (refusal) deps.report("error", `${verb} refused: ${refusal}`);
+}
+
+export const unlockAllOnSpread = (deps: ObjectCommandDeps) =>
+  clearFlagOnSpread(deps, "Unlock all on spread");
+export const showAllOnSpread = (deps: ObjectCommandDeps) =>
+  clearFlagOnSpread(deps, "Show all on spread");
+
 /** One selection's worth of pending movement. */
 interface PendingNudge {
   deps: ObjectCommandDeps;
@@ -2074,6 +2256,34 @@ export function buildObjectCommands(
       when: notInsideAnEditContext,
       handler: () => handlers.releaseClippingMask(),
     },
+    {
+      id: PAGED_OBJECT_LOCK,
+      title: "Lock",
+      category: "Object",
+      when: objectVerbApplies,
+      handler: () => handlers.lock(),
+    },
+    {
+      id: PAGED_OBJECT_UNLOCK_ALL_ON_SPREAD,
+      title: "Unlock all on spread",
+      category: "Object",
+      when: notInsideAnEditContext,
+      handler: () => handlers.unlockAllOnSpread(),
+    },
+    {
+      id: PAGED_OBJECT_HIDE,
+      title: "Hide",
+      category: "Object",
+      when: objectVerbApplies,
+      handler: () => handlers.hide(),
+    },
+    {
+      id: PAGED_OBJECT_SHOW_ALL_ON_SPREAD,
+      title: "Show all on spread",
+      category: "Object",
+      when: notInsideAnEditContext,
+      handler: () => handlers.showAllOnSpread(),
+    },
   ];
 }
 
@@ -2211,6 +2421,36 @@ export const OBJECT_MENU_ITEMS: MenuItemContribution[] = [
     group: "clip",
     when: notInsideAnEditContext,
   },
+  // F-41 — InDesign's lock and hide band. Fractional orders: every whole
+  // number from 11 to 33 is taken on this menu (see the nudge note).
+  {
+    path: "Object/Lock",
+    command: PAGED_OBJECT_LOCK,
+    order: 29.1,
+    group: "lock",
+    when: objectVerbApplies,
+  },
+  {
+    path: "Object/Unlock all on spread",
+    command: PAGED_OBJECT_UNLOCK_ALL_ON_SPREAD,
+    order: 29.2,
+    group: "lock",
+    when: notInsideAnEditContext,
+  },
+  {
+    path: "Object/Hide",
+    command: PAGED_OBJECT_HIDE,
+    order: 29.3,
+    group: "lock",
+    when: objectVerbApplies,
+  },
+  {
+    path: "Object/Show all on spread",
+    command: PAGED_OBJECT_SHOW_ALL_ON_SPREAD,
+    order: 29.4,
+    group: "lock",
+    when: notInsideAnEditContext,
+  },
 ];
 
 /** Both `cmd` (macOS) and `ctrl` (Linux/Windows) variants register, the
@@ -2243,6 +2483,12 @@ export const OBJECT_KEYBINDINGS: KeybindingContribution[] = [
   { key: "ctrl+shift+[", command: PAGED_OBJECT_SEND_TO_BACK },
   { key: "cmd+shift+{", command: PAGED_OBJECT_SEND_TO_BACK },
   { key: "ctrl+shift+{", command: PAGED_OBJECT_SEND_TO_BACK },
+  // F-41 — Lock is InDesign's Cmd+L. Unlock all (Cmd+Alt+L), Hide
+  // (Cmd+3) and Show all (Cmd+Alt+3) stay menu-only: Option rewrites
+  // `event.key` to a layout glyph, and Cmd+3 is the browser's tab switch
+  // (the clipping-mask note above; editor ADR 251).
+  { key: "cmd+l", command: PAGED_OBJECT_LOCK, when: objectVerbApplies },
+  { key: "ctrl+l", command: PAGED_OBJECT_LOCK, when: objectVerbApplies },
   { key: "cmd+g", command: PAGED_OBJECT_GROUP },
   { key: "ctrl+g", command: PAGED_OBJECT_GROUP },
   { key: "cmd+shift+g", command: PAGED_OBJECT_UNGROUP },
