@@ -8,8 +8,8 @@ engine** (`paged-media/core`).
 
 Pixel-faithful Adobe IDML renderer in Rust. 22-crate workspace, parses
 IDML packages, lays out text with InDesign-calibrated Knuth-Plass, emits a
-versioned display list, rasterises through tiny-skia (CPU, default) or
-Vello (wgpu/GPU). Public APIs target both native and WASM.
+versioned display list, rasterises through Vello: `vello_cpu` on the CPU
+(default) or Vello on wgpu (GPU), from one mapping. Public APIs target both native and WASM.
 
 ```
 idml-import → paged-scene → paged-text → paged-compose → paged-gpu
@@ -87,8 +87,8 @@ docs/reference/idml-coverage.json`; its tests fail when the committed file
   hyphenation. `apply_tab_stops`.
 - `crates/paged-compose/` — display list, `Transform::for_rect_in`, glyph
   cache, gradient/image pools.
-- `crates/paged-gpu/` — `PathRasterizer` trait. CPU (tiny-skia, default) +
-  Vello backend (FillPath / StrokePath / Image / LinearGradient).
+- `crates/paged-gpu/` — `PathRasterizer` trait. CPU (`vello_cpu`, default) +
+  Vello on wgpu, sharing `vello_map.rs` (paths, paints, blends, strokes).
 - `crates/paged-renderer/` — top-level `pipeline::build` / `render`.
   `StoryEmitter` per-story state. `paged-inspect` CLI.
 - `crates/paged-color/` — lcms2 wrapper (native); naive fallback on wasm32.
@@ -140,8 +140,8 @@ crates/paged-wire/schema/mutation.schema.json`; `cargo test -p paged-wire
   per-fixture thresholds in `corpus/generated/fidelity-thresholds.json` are
   sized to current measurements + ~15–25% headroom. If a regression trips
   them, fix the regression. Tighten _after_ fixing, never before.
-- **CPU backend for headless / CI.** Vello requires a GPU; the CI fidelity
-  gate uses tiny-skia.
+- **CPU backend for headless / CI.** Vello on wgpu requires a GPU; the CI
+  fidelity gate uses `vello_cpu`.
 - **Reference PDFs are baked.** If a fixture's reference PDF was exported on
   a host without the IDML's declared font, InDesign falls back to its
   bundled serif and the PDF carries that serif baked in. Either re-export on

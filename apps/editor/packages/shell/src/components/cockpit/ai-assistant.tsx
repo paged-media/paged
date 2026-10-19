@@ -160,6 +160,7 @@ export function AIAssistant() {
         ? "text"
         : "frame";
 
+  // eslint-disable-next-line no-restricted-syntax -- a computed block, not a single expression (ADR 229)
   const diagnosis = useMemo(() => {
     const issues: string[] = [];
     const overset = stats?.overset_stories ?? 0;
@@ -187,6 +188,7 @@ export function AIAssistant() {
     return issues;
   }, [stats, links, fonts]);
 
+  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
   const context = useCallback((): string => {
     const lines: string[] = [];
     const ids = elementSelection
@@ -209,6 +211,7 @@ export function AIAssistant() {
     return lines.join("\n");
   }, [elementSelection, contentSelection, diagnosis]);
 
+  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
   const ask = useCallback(
     (request: string) => {
       const text = request.trim();
@@ -231,28 +234,25 @@ export function AIAssistant() {
     ],
   );
 
-  const build = useCallback(
-    (brief: string, sizeId: string) => {
-      const text = brief.trim();
-      if (!text || running || !editor) return;
-      const size = SIZES.find((s) => s.id === sizeId) ?? SIZES[0]!;
-      startAssistantRun({
-        client,
-        mode: "document",
-        prompt: `${text}\n\nPage size: ${size.label} (${size.pt[0]} × ${size.pt[1]} pt). The document is open with one blank page of that size.`,
-        prepare: async () => {
-          if (!(await confirmDiscard(editor, "Creating a new document")))
-            return false;
-          await mintBlankDocument(editor, size.pt, {
-            setStatus: () => {},
-            pushWarning: () => {},
-          });
-          return true;
-        },
-      });
-    },
-    [client, editor, running],
-  );
+  const build = (brief: string, sizeId: string) => {
+    const text = brief.trim();
+    if (!text || running || !editor) return;
+    const size = SIZES.find((s) => s.id === sizeId) ?? SIZES[0]!;
+    startAssistantRun({
+      client,
+      mode: "document",
+      prompt: `${text}\n\nPage size: ${size.label} (${size.pt[0]} × ${size.pt[1]} pt). The document is open with one blank page of that size.`,
+      prepare: async () => {
+        if (!(await confirmDiscard(editor, "Creating a new document")))
+          return false;
+        await mintBlankDocument(editor, size.pt, {
+          setStatus: () => {},
+          pushWarning: () => {},
+        });
+        return true;
+      },
+    });
+  };
 
   // The palette's "Ask Claude" opens this panel with a request to run.
   useEffect(() => {

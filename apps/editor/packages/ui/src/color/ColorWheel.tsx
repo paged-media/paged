@@ -32,7 +32,6 @@
 // a leaked pair would double-fire after a StrictMode remount).
 
 import {
-  useCallback,
   useRef,
   useState,
   type CSSProperties,
@@ -130,19 +129,16 @@ export function ColorWheel({
     tint: 100,
   });
 
-  const update = useCallback(
-    (next: Hsv, phase: "change" | "commit") => {
-      setHsv(next);
-      const mixer: MixerValue = {
-        space: "RGB",
-        value: hsbToRgb([next.h, next.s, next.v]),
-        tint: 100,
-      };
-      onChange?.(mixer);
-      if (phase === "commit") onCommit?.(mixer);
-    },
-    [onChange, onCommit],
-  );
+  const update = (next: Hsv, phase: "change" | "commit") => {
+    setHsv(next);
+    const mixer: MixerValue = {
+      space: "RGB",
+      value: hsbToRgb([next.h, next.s, next.v]),
+      tint: 100,
+    };
+    onChange?.(mixer);
+    if (phase === "commit") onCommit?.(mixer);
+  };
 
   // ── harmony set ───────────────────────────────────────────────
   const harm = harmonySet([hsv.h, hsv.s, hsv.v], harmony);

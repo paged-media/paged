@@ -70,6 +70,82 @@ import { NumberInput } from "@paged-media/ui";
 import { layoutPages, fitCamera } from "../../ui/layout";
 import { useAnimatedCamera } from "../../ui/useAnimatedCamera";
 
+/** What `revealStoryFrame` acts through: the panel's hooks, handed over. */
+interface RevealDeps {
+  client: ReturnType<typeof useCanvasClient>;
+  handle: ReturnType<typeof useDocument>["handle"];
+  viewportSize: ReturnType<typeof useCamera>["viewportSize"];
+  setElementSelection: ReturnType<typeof useSelection>["setElementSelection"];
+  setElementGeometry: ReturnType<typeof useSelection>["setElementGeometry"];
+  animateCamera: ReturnType<typeof useAnimatedCamera>;
+}
+
+/** U6's reveal, outside the component: the React Compiler does not compile
+ *  a component with a conditional inside a `try` (ADR 229). */
+async function revealStoryFrame(
+  {
+    client,
+    handle,
+    viewportSize,
+    setElementSelection,
+    setElementGeometry,
+    animateCamera,
+  }: RevealDeps,
+  storyId: string,
+): Promise<void> {
+  try {
+    const links = await client.frameChain(storyId);
+    const first = links[0];
+    if (!first) return;
+    const id: ElementId = { kind: "textFrame", id: first.frameId };
+    const applied = await client.setElementSelection([id], "replace");
+    setElementSelection(applied);
+    const geoms = await client.elementGeometry(applied);
+    setElementGeometry(geoms);
+    // The frame's box on its page: its bounds through its transform.
+    const g = geoms[0];
+    if (!g || !g.pageId || !handle) return;
+    const pageIndex = handle.pageIds.indexOf(g.pageId);
+    if (pageIndex < 0) return;
+    const pageRect = layoutPages(handle.pageSizesPt)[pageIndex];
+    if (!pageRect) return;
+    const [a, b, c, d, tx, ty] = g.itemTransform ?? [1, 0, 0, 1, 0, 0];
+    const corners = [
+      [g.bounds[1], g.bounds[0]],
+      [g.bounds[3], g.bounds[0]],
+      [g.bounds[1], g.bounds[2]],
+      [g.bounds[3], g.bounds[2]],
+    ].map(([x, y]) => [a * x + c * y + tx, b * x + d * y + ty]);
+    const top = Math.min(...corners.map((p) => p[1]));
+    const left = Math.min(...corners.map((p) => p[0]));
+    const bottom = Math.max(...corners.map((p) => p[1]));
+    const right = Math.max(...corners.map((p) => p[0]));
+    const frameRect = {
+      x: pageRect.x + left,
+      y: pageRect.y + top,
+      w: Math.max(right - left, 1),
+      h: Math.max(bottom - top, 1),
+    };
+    const [vw, vh] = viewportSize;
+    if (vw <= 0 || vh <= 0) return;
+    const fit = fitCamera(vw, vh, frameRect);
+    // A small frame would fit at an absurd zoom — cap at 200% and
+    // keep the frame centred (same centring arithmetic as fitCamera).
+    const scale = Math.min(fit.scale, 2);
+    animateCamera(
+      scale === fit.scale
+        ? fit
+        : {
+            scale,
+            tx: (vw - frameRect.w * scale) / 2 - frameRect.x * scale,
+            ty: (vh - frameRect.h * scale) / 2 - frameRect.y * scale,
+          },
+    );
+  } catch {
+    // Select/reveal is additive — swallow and keep the caret click.
+  }
+}
+
 export function StoriesPanel() {
   const client = useCanvasClient();
   const { handle } = useDocument();
@@ -86,59 +162,18 @@ export function StoriesPanel() {
   // (page rect from the same vertical-stack layout math the canvas
   // uses + the frame's page-local bounds). Best-effort: a wire
   // failure must not break the caret-at-head row click.
-  const revealFirstFrame = async (storyId: string) => {
-    try {
-      const links = await client.frameChain(storyId);
-      const first = links[0];
-      if (!first) return;
-      const id: ElementId = { kind: "textFrame", id: first.frameId };
-      const applied = await client.setElementSelection([id], "replace");
-      setElementSelection(applied);
-      const geoms = await client.elementGeometry(applied);
-      setElementGeometry(geoms);
-      // The frame's box on its page: its bounds through its transform.
-      const g = geoms[0];
-      if (!g || !g.pageId || !handle) return;
-      const pageIndex = handle.pageIds.indexOf(g.pageId);
-      if (pageIndex < 0) return;
-      const pageRect = layoutPages(handle.pageSizesPt)[pageIndex];
-      if (!pageRect) return;
-      const [a, b, c, d, tx, ty] = g.itemTransform ?? [1, 0, 0, 1, 0, 0];
-      const corners = [
-        [g.bounds[1], g.bounds[0]],
-        [g.bounds[3], g.bounds[0]],
-        [g.bounds[1], g.bounds[2]],
-        [g.bounds[3], g.bounds[2]],
-      ].map(([x, y]) => [a * x + c * y + tx, b * x + d * y + ty]);
-      const top = Math.min(...corners.map((p) => p[1]));
-      const left = Math.min(...corners.map((p) => p[0]));
-      const bottom = Math.max(...corners.map((p) => p[1]));
-      const right = Math.max(...corners.map((p) => p[0]));
-      const frameRect = {
-        x: pageRect.x + left,
-        y: pageRect.y + top,
-        w: Math.max(right - left, 1),
-        h: Math.max(bottom - top, 1),
-      };
-      const [vw, vh] = viewportSize;
-      if (vw <= 0 || vh <= 0) return;
-      const fit = fitCamera(vw, vh, frameRect);
-      // A small frame would fit at an absurd zoom — cap at 200% and
-      // keep the frame centred (same centring arithmetic as fitCamera).
-      const scale = Math.min(fit.scale, 2);
-      animateCamera(
-        scale === fit.scale
-          ? fit
-          : {
-              scale,
-              tx: (vw - frameRect.w * scale) / 2 - frameRect.x * scale,
-              ty: (vh - frameRect.h * scale) / 2 - frameRect.y * scale,
-            },
-      );
-    } catch {
-      // Select/reveal is additive — swallow and keep the caret click.
-    }
-  };
+  const revealFirstFrame = (storyId: string) =>
+    revealStoryFrame(
+      {
+        client,
+        handle,
+        viewportSize,
+        setElementSelection,
+        setElementGeometry,
+        animateCamera,
+      },
+      storyId,
+    );
 
   // The inspector targets a story by id. Seed from / follow the content
   // selection so the canvas caret and the inspector agree, but keep a

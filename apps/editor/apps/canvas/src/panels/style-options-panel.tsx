@@ -425,6 +425,7 @@ export function StyleOptionsPanel() {
   // `[No … style]` roots are not editable in InDesign either).
   const [picked, setPicked] = useState<string | null>(current.selfId);
   useEffect(() => setPicked(current.selfId), [current]);
+  // eslint-disable-next-line no-restricted-syntax -- a computed block, not a single expression (ADR 229)
   const selfId = useMemo(() => {
     if (!styles) return null;
     if (picked && styles.some((s) => s.selfId === picked)) return picked;
@@ -435,7 +436,7 @@ export function StyleOptionsPanel() {
   }, [styles, picked]);
   const row = styles?.find((s) => s.selfId === selfId) ?? null;
   const address = selfId ? styleAddress(family, selfId) : null;
-  const targets = useMemo(() => (address ? [address] : []), [address]);
+  const targets = address ? [address] : [];
   const basedOn = row?.basedOn
     ? styles?.find((s) => s.selfId === row.basedOn)
     : null;

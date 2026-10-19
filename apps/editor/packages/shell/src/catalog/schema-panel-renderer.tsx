@@ -243,6 +243,7 @@ function SchemaListRow({
 
   // Flatten once per items/spec change — depth-first, orphans as
   // roots, cycles surfaced rather than dropped (see schema-tree.ts).
+  // eslint-disable-next-line no-restricted-syntax -- a computed block, not a single expression (ADR 229)
   const treeRows: SchemaTreeRow<unknown>[] = useMemo(() => {
     const idOf = (r: unknown, i: number) => rowKeyOf(r, idField, i);
     const opts = { reverseSiblings };

@@ -222,11 +222,12 @@ function LabelsSection() {
   const { elementSelection } = useSelection();
   const model = useObjectModel();
   const first = elementSelection.length === 1 ? elementSelection[0] : null;
+  // eslint-disable-next-line no-restricted-syntax -- handed to a component that may compare it (ADR 229)
   const address = useMemo(
     () => (first ? addressOfElement(first) : null),
     [first],
   );
-  const targets = useMemo(() => (address ? [address] : []), [address]);
+  const targets = address ? [address] : [];
   const map = useObjectField({
     path: "labels",
     targets,

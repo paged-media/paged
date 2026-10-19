@@ -21,6 +21,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -56,17 +57,22 @@ export function ToolSettingsProvider({ children }: PropsWithChildren) {
   // (the polygon `sides` edit never reached the draw → DEFAULT_SIDES).
   const [store, setStore] = useState<Record<string, ToolSettings>>({});
   const storeRef = useRef(store);
-  storeRef.current = store;
+  useLayoutEffect(() => {
+    storeRef.current = store;
+  });
 
+  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
   const get = useCallback(
     (toolId: string): ToolSettings => storeRef.current[toolId] ?? {},
     [],
   );
+  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
   const getValue = useCallback(
     (toolId: string, key: string) => storeRef.current[toolId]?.[key],
     [],
   );
   const listenersRef = useRef(new Map<string, Set<() => void>>());
+  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
   const set = useCallback(
     (toolId: string, key: string, value: ToolSettingValue) => {
       // The ref moves with the write, not the next render, so a listener
@@ -87,6 +93,7 @@ export function ToolSettingsProvider({ children }: PropsWithChildren) {
     },
     [],
   );
+  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
   const subscribe = useCallback((toolId: string, listener: () => void) => {
     const map = listenersRef.current;
     let set = map.get(toolId);
@@ -97,6 +104,7 @@ export function ToolSettingsProvider({ children }: PropsWithChildren) {
     };
   }, []);
 
+  // eslint-disable-next-line no-restricted-syntax -- its type argument types the value (ADR 229)
   const value = useMemo<ToolSettingsValue>(
     () => ({ get, getValue, set, subscribe }),
     [get, getValue, set, subscribe],

@@ -62,6 +62,7 @@ export function useAnimatedCamera(
     };
   }, []);
 
+  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
   const animateTo = useCallback((target: Camera, opts: AnimateOptions = {}) => {
     const duration = opts.durationMs ?? DEFAULT_DURATION_MS;
     if (rafRef.current !== null) {
