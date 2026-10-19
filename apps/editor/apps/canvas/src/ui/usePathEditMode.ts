@@ -59,7 +59,7 @@
 // their `when` (`objectVerbApplies`), and this listener prevents the
 // default so the keybinding registry's widget-key guard agrees.
 
-import { useEffect, useRef } from "react";
+import { useEffect, useEffectEvent, useRef } from "react";
 
 import {
   DIRECT_SELECT_TOOL_ID,
@@ -111,11 +111,12 @@ export function usePathEditMode() {
   // a stale one (the `paged.object.*` discipline).
   const reportedRef = useRef(false);
 
-  // The session — one per target, for as long as it is the target.
-  const targetRef = useRef(target);
-  targetRef.current = target;
+  // The session — one per target, for as long as it is the target. The
+  // target is read as it is when the session opens and when its path
+  // changes (`latestTarget`), not as it was when the effect was created.
+  const latestTarget = useEffectEvent(() => target);
   useEffect(() => {
-    const element = targetRef.current;
+    const element = latestTarget();
     if (!element) return;
     const session = new DirectSelectSession({
       client: {
@@ -136,7 +137,7 @@ export function usePathEditMode() {
         void client
           .elementGeometry([element])
           .then((items) => {
-            if (targetRef.current === element) setElementGeometry(items);
+            if (latestTarget() === element) setElementGeometry(items);
           })
           .catch(() => {
             /* geometry is chrome — its absence never blocks the edit */
@@ -159,8 +160,14 @@ export function usePathEditMode() {
     };
     // Keyed on the target's IDENTITY: a re-selection of the same element
     // hands back a new array and must not tear the session down.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [client, targetKind, targetId]);
+  }, [
+    client,
+    targetKind,
+    targetId,
+    setSelectedAnchors,
+    setElementGeometry,
+    setPathEditSession,
+  ]);
 
   // Escape with Direct Selection in hand leaves the mode for THIS
   // selection only; the same selection array must not re-enter it on

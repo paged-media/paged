@@ -17,17 +17,14 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { useMemo, type CSSProperties } from "react";
 
 import type { Camera } from "@paged-media/client";
 import type { PageId } from "@paged-media/client";
 
-import type {
-  OverlayContribution,
-  OverlayPageRect,
-  OverlayProps,
-} from "../registries/overlay";
+import type { OverlayPageRect, OverlayProps } from "../registries/overlay";
 import { useRegistries } from "../state/registries-context";
+import { useRegistryView } from "../state/live";
 import { useOptionalPaged } from "../state/paged-editor";
 
 export interface OverlayHostProps {
@@ -54,25 +51,16 @@ export interface OverlayHostProps {
  *   - the standard `OverlayProps` (paged, camera, pageRects Map)
  */
 export function OverlayHost(props: OverlayHostProps) {
-  const registries = useRegistries();
+  // A view of the overlay registry (state/live.ts): the sort follows a
+  // contribution coming or going.
+  const overlays = useRegistryView(useRegistries().overlays);
   const paged = useOptionalPaged();
-  const [version, setVersion] = useState(0);
+  const sorted = overlays
+    .list()
+    .slice()
+    .sort((a, b) => (a.z ?? 100) - (b.z ?? 100));
 
-  useEffect(() => {
-    const off = registries.overlays.onChange(() => setVersion((v) => v + 1));
-    return () => off.dispose();
-  }, [registries.overlays]);
-
-  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
-  const sorted = useMemo<OverlayContribution[]>(() => {
-    const list = registries.overlays.list().slice();
-    list.sort((a, b) => (a.z ?? 100) - (b.z ?? 100));
-    return list;
-    // version triggers the resort whenever a contribution comes or goes.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [registries.overlays, version]);
-
-  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
+  // eslint-disable-next-line no-restricted-syntax -- handed to components that compare it (ADR 229)
   const pageRects = useMemo<ReadonlyMap<PageId, OverlayPageRect>>(() => {
     const map = new Map<PageId, OverlayPageRect>();
     const n = Math.min(props.pageIds.length, props.pageRects.length);

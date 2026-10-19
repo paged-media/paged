@@ -26,7 +26,12 @@
 // `hostOptions.consent`), so the prompt does too, styled with the brand tokens
 // the rest of the app uses rather than reaching across into shell-internal UI.
 
-import { useEffect, useState, useSyncExternalStore } from "react";
+import {
+  useEffect,
+  useEffectEvent,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import type { CSSProperties } from "react";
 import {
   reachableOrigin,
@@ -57,14 +62,14 @@ function ConsentPrompt({ pending }: { pending: PendingConsent }) {
   const allow = (): void => pending.decide({ granted: [...checked], remember });
 
   // Esc denies (the safe default for an un-acknowledged prompt).
+  const onEscape = useEffectEvent(() => deny());
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
-      if (e.key === "Escape") deny();
+      if (e.key === "Escape") onEscape();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pending.id]);
+  }, []);
 
   const toggle = (origin: string): void =>
     setChecked((prev) => {

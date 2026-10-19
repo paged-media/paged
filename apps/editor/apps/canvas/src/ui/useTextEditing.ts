@@ -73,7 +73,7 @@
 // byte-identical to before. Undo is correct because the engine's
 // inverse op carries the same `cell` (proven by the cell-text probe).
 
-import { useEffect, useRef } from "react";
+import { useEffect, useEffectEvent, useLayoutEffect, useRef } from "react";
 import type {
   CanvasClient,
   CaretDirection,
@@ -120,28 +120,27 @@ export function useTextEditing(ctx: TextEditingContext) {
   // end moves. Reset to the caret offset on any non-extending move so a
   // fresh Shift+arrow grows from the current caret, not a stale anchor.
   const anchorRef = useRef<number | null>(null);
-  const ctxRef = useRef(ctx);
-  ctxRef.current = ctx;
+  // The context of the latest render, read by the listeners when a key
+  // arrives (they are attached once, below).
+  const latest = useEffectEvent(() => ctx);
 
   // The selection as the last key left it. Synced from the prop only
   // when the prop CHANGES, so a render that has not caught up with this
   // handler's own writes cannot roll it back.
   const selRef = useRef<ContentSelection | null>(ctx.selection);
-  const seenRef = useRef<ContentSelection | null>(ctx.selection);
   // Set by Escape until the queued exit runs, so keys pressed in between
   // (the "v" after Escape) are not typed into the text being left.
   const leavingRef = useRef(false);
-  if (seenRef.current !== ctx.selection) {
-    seenRef.current = ctx.selection;
+  useLayoutEffect(() => {
     selRef.current = ctx.selection;
     leavingRef.current = false;
-  }
+  }, [ctx.selection]);
   const queueRef = useRef<Promise<void>>(Promise.resolve());
 
   useEffect(() => {
     const setSel = (s: ContentSelection | null) => {
       selRef.current = s;
-      ctxRef.current.setSelection(s);
+      latest().setSelection(s);
     };
     const after = (work: () => unknown) => {
       queueRef.current = queueRef.current.then(async () => {
@@ -155,7 +154,7 @@ export function useTextEditing(ctx: TextEditingContext) {
     const enqueue = (task: Task) =>
       after(async () => {
         const sel = selRef.current;
-        const client = ctxRef.current.client;
+        const client = latest().client;
         if (!sel || !client) return;
         await task(sel, client);
       });
@@ -165,7 +164,7 @@ export function useTextEditing(ctx: TextEditingContext) {
 
     const onKey = (e: KeyboardEvent) => {
       if (isEditableTarget(e.target)) return;
-      const ctx = ctxRef.current;
+      const ctx = latest();
       const client = ctx.client;
       if (!client) return;
 
@@ -201,7 +200,7 @@ export function useTextEditing(ctx: TextEditingContext) {
         enqueue((left) => {
           leavingRef.current = false;
           setSel(null);
-          ctxRef.current.onLeaveText?.(left);
+          latest().onLeaveText?.(left);
         });
         return;
       }
@@ -412,8 +411,7 @@ export function useTextEditing(ctx: TextEditingContext) {
     // is replaced in ONE batch, so one undo takes the whole paste back.
     const onPaste = (e: ClipboardEvent) => {
       if (isEditableTarget(e.target)) return;
-      if (!selRef.current || leavingRef.current || !ctxRef.current.client)
-        return;
+      if (!selRef.current || leavingRef.current || !latest().client) return;
       const raw = e.clipboardData?.getData("text/plain") ?? "";
       if (!raw) return;
       e.preventDefault();
