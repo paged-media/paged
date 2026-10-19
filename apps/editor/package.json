@@ -14,6 +14,7 @@
     "test:repository": "bun run --filter ./packages/repository test",
     "test:tools": "bun run --filter ./packages/tools test",
     "test:shell": "bun run --filter ./packages/shell test",
+    "test:shell-dom": "bun run --filter ./packages/shell test:dom",
     "test:canvas-unit": "bun run --filter ./apps/canvas test:unit",
     "test:thresholds": "bun test ./scripts/fidelity-thresholds-schema.test.mjs",
     "test:journal": "bun test ./scripts/journal.test.mjs",
