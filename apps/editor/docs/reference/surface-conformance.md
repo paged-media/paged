@@ -133,16 +133,16 @@ that the gate's lists for that bundle are equal to it.
 The gate reads the layer from the test file's path, never from the call. Each file has one
 **tier** and any number of **tags**:
 
-| Layer       | Kind | Files                                                                                                                                                                        |
-| ----------- | ---- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `unit`      | tier | every TypeScript test file not matched below                                                                                                                                 |
-| `component` | tier | `*.dom.test.ts(x)` (happy-dom), see [testing-panels.md](testing-panels.md)                                                                                                   |
-| `headless`  | tier | a `headless/` directory or `*.headless.test.ts`, the headless editor ([surface-parity.md](../../../../docs/development/surface-parity.md))                                   |
-| `e2e`       | tier | Playwright: `apps/editor/apps/canvas/tests/**` outside `headless/`, or an `e2e/` directory, see [testing-shell.md](testing-shell.md)                                         |
-| `rust`      | tier | a Rust test                                                                                                                                                                  |
-| `golden`    | tag  | a path segment containing `golden`: output compared with a committed expectation ([testing-cli-and-scripting.md](../../../../docs/development/testing-cli-and-scripting.md)) |
-| `script`    | tag  | a path segment with the word `script`, `scripts` or `scripting` (`paged-script/tests/…`, `script-console.spec.ts`)                                                           |
-| `gesture`   | tag  | a file that drives the gesture DSL (`gestures(…)`, `browserGestures(…)`, `unitBackend(…)`), see [gestures.md](gestures.md)                                                   |
+| Layer       | Kind | Files                                                                                                                                                                                                 |
+| ----------- | ---- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `unit`      | tier | every TypeScript test file not matched below                                                                                                                                                          |
+| `component` | tier | `*.dom.test.ts(x)` (happy-dom), see [testing-panels.md](testing-panels.md)                                                                                                                            |
+| `headless`  | tier | a `headless/` directory or `*.headless.test.ts`, the headless editor ([surface-parity.md](../../../../docs/development/surface-parity.md))                                                            |
+| `e2e`       | tier | Playwright: `apps/editor/apps/canvas/tests/**` outside `headless/`, or an `e2e/` directory, see [testing-shell.md](testing-shell.md)                                                                  |
+| `rust`      | tier | a Rust test                                                                                                                                                                                           |
+| `golden`    | tag  | a path segment containing `golden`: output compared with a committed expectation ([testing-cli-and-scripting.md](../../../../docs/development/testing-cli-and-scripting.md))                          |
+| `script`    | tag  | a path segment with the word `script`, `scripts` or `scripting` (`paged-script/tests/…`, `script-console.spec.ts`)                                                                                    |
+| `gesture`   | tag  | a file that drives the gesture DSL (`gestures(…)`, `browserGestures(…)`, `unitBackend(…)`), itself or through a local helper it imports (a `test/support.ts` harness), see [gestures.md](gestures.md) |
 
 Plugin contributions are tested in the module that owns them
 ([testing-plugins.md](../../../../platform/extensions/docs/testing-plugins.md)).

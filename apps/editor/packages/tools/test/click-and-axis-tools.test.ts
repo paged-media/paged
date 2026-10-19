@@ -26,6 +26,7 @@ import { afterEach, describe, expect, it } from "bun:test";
 
 import type { ElementId } from "@paged-media/client";
 import {
+  covers,
   expectOneCommit,
   stubGlobal,
   unstubAllGlobals,
@@ -60,6 +61,7 @@ const SQUARE = {
 
 describe("Scissors tool", () => {
   it("a click on an anchor opens the path there (pathOpenAt, the clicked element by hit test) @level:gesture", async () => {
+    covers("tool:paged.tool.scissors");
     const { fake, g } = harness({
       hitTest: () => PATH,
       pathAnchors: () => SQUARE as never,
@@ -103,6 +105,7 @@ describe("Scissors tool", () => {
 
 describe("Smooth tool", () => {
   it("a click simplifies the hit path with the tool's tolerance (default 1.5 pt) @level:gesture", async () => {
+    covers("tool:paged.tool.smooth");
     const { fake, g } = harness({ hitTest: () => PATH });
     await g.tool(createSmoothHandler).click([150, 150]).settle();
     expect(fake.mutations()).toEqual([
@@ -137,6 +140,7 @@ describe("Gradient Swatch tool", () => {
   const T2 = { kind: "oval", id: "o1" } as ElementId;
 
   it("a drag sets each selected element's gradient axis (angle + length) as ONE batch @level:gesture", async () => {
+    covers("tool:paged.tool.gradientSwatch");
     const { fake, g } = harness({ selection: [T1, T2] });
     const mark = fake.mark();
     await g
@@ -192,6 +196,7 @@ describe("Gradient Feather tool", () => {
   const T1 = { kind: "rectangle", id: "r1" } as ElementId;
 
   it("a drag writes a linear opaque→transparent feather along the drag axis @level:gesture", async () => {
+    covers("tool:paged.tool.gradientFeather");
     const { fake, g } = harness({ selection: [T1] });
     await g
       .tool(createGradientFeatherHandler)
@@ -269,6 +274,7 @@ describe("Eyedropper (host)", () => {
   };
 
   it("a click samples the composited pixel: find-or-create its swatch, make it the default fill and the selection's fill, as ONE batch @level:gesture", async () => {
+    covers("tool:paged.tool.eyedropper");
     imaging([12, 34, 56]);
     let swatches: Array<{ selfId: string; name: string }> = [];
     const target = { kind: "rectangle", id: "r1" } as ElementId;

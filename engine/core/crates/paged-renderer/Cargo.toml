@@ -72,12 +72,16 @@ clap = { version = "4", features = ["derive"] }
 ttf-parser = "0.25"
 # A line's drop shadow is cast by its stroke OUTLINE: kurbo strokes the
 # centreline into the band the shadow stamps (same version paged-mutate uses).
-# hayro (below) and resvg speak the same kurbo.
-kurbo = "0.13"
+# Held at 0.11: kurbo 0.12 rewrote the stroker and the curve offsetter, which
+# moves the outline-stroke and offset-path geometry paged-mutate writes (the
+# draw oracle against Illustrator and the recorded InDesign round trips) and
+# the shadow bands drawn here (docs/migration/rust-majors.md).
+kurbo = "0.11.3"
 # A placed PDF (or Illustrator `.ai`) is interpreted into the display
-# list (ADR 154). Its embedded base-14 fonts and CMaps are native-only
-# (below).
+# list (ADR 154). hayro speaks kurbo 0.13; ours stays on 0.11 (above). Its
+# embedded base-14 fonts and CMaps are native-only (below).
 hayro-interpret = { version = "0.8", default-features = false }
+kurbo13 = { package = "kurbo", version = "0.13" }
 serde = { workspace = true }
 serde_json = "1"
 tsify-next = { workspace = true }
