@@ -129,7 +129,7 @@ export const GLOBAL_OPTIONS: readonly OptionSpec[] = [
   {
     name: "engine-from",
     value: "dir",
-    help: "resolve @paged-media/canvas-wasm from this directory",
+    help: "resolve the engine (@paged-media/paged) from this directory",
   },
   { name: "text", help: "human-readable output instead of JSON" },
   { name: "help", short: "h", help: "show help" },
@@ -1223,7 +1223,7 @@ const plugins: Verb = {
         problems: s.pluginProblems,
       },
       text: [
-        `engine @paged-media/canvas-wasm@${s.engineVersion} (protocol ${s.protocol})`,
+        `engine ${s.engineVersion} (protocol ${s.protocol})`,
         ...list.map(
           (p) =>
             `${p.id} ${p.version ?? ""} (${p.source})${p.kinds.length ? ` kinds: ${p.kinds.join(", ")}` : ""}`,

@@ -26,6 +26,8 @@ const SHELLS = join(CORE, "packages");
 const PACKAGES = {
   "packages/canvas-wasm": "@paged-media/canvas-wasm",
   "web/idml-viewer": "@paged-media/viewer",
+  // The engine on npm, assembled from canvas-wasm (PM-0008, amendment 3).
+  "../../packages/paged": "@paged-media/paged",
 };
 const write = process.argv.includes("--write");
 
