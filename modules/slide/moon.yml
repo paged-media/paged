@@ -15,11 +15,39 @@ project:
 # validate:manifest runs the in-tree paged-plugin bin (plugin-sdk). vendor/paged-ooxml is a
 # stamped copy of modules/doc's crate, checked against its own stamp
 # (scripts/sync-ooxml.sh --check), so it is not a build edge to doc.
+#
+# slide-native builds on the engine's model crates (ADR 708).
 dependsOn:
+  - id: "core"
+    scope: "production"
   - id: "extensions"
     scope: "development"
   - id: "test-kit"
     scope: "development"
+
+# Path dependencies into the engine (docx-skeleton / slide-native build on
+# paged-model, paged-scene, paged-store; ADR 606 / ADR 708): its crates are
+# inputs here too, so `moon ci` re-runs this project when an engine crate it
+# builds changes. (Project file groups replace the workspace ones, so the
+# defaults are restated.)
+fileGroups:
+  rust-sources:
+    - "**/*.rs"
+    - "**/Cargo.toml"
+    - "Cargo.lock"
+    - "rust-toolchain*"
+    - "/.cargo/*.toml"
+    - "/engine/core/Cargo.toml"
+    - "/engine/core/crates/**/*.rs"
+    - "/engine/core/crates/**/Cargo.toml"
+  rust-tests:
+    - "**/*"
+    - "!docs/**"
+    - "!**/*.md"
+    - "/.cargo/*.toml"
+    - "/engine/core/Cargo.toml"
+    - "/engine/core/crates/**/*.rs"
+    - "/engine/core/crates/**/Cargo.toml"
 
 tasks:
   js-test:

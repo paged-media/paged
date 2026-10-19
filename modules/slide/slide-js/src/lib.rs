@@ -20,7 +20,7 @@
 //! export; the TypeScript bundle never interprets PresentationML itself.
 //!
 //! Import (ADR 700): `importPptx` reads the deck, resolves its inheritance
-//! and writes the complete IDML package the host opens, plus a JSON report
+//! and builds the native document the host opens (ADR 708), plus a JSON report
 //! of what the bundle stores beside it (per-slide notes, transitions and
 //! hidden flags by page id), the font families the deck uses and every
 //! diagnostic.
@@ -39,17 +39,17 @@ pub fn read_pptx(bytes: &[u8]) -> Result<String, JsError> {
 /// embedded faces.
 #[wasm_bindgen]
 pub struct Imported {
-    idml: Vec<u8>,
+    paged: Vec<u8>,
     report: String,
     fonts: Vec<u8>,
 }
 
 #[wasm_bindgen]
 impl Imported {
-    /// The IDML package for `host.nativeDocument.open`.
+    /// The `.paged` package for `host.nativeDocument.open`.
     #[wasm_bindgen(getter)]
-    pub fn idml(&self) -> Vec<u8> {
-        self.idml.clone()
+    pub fn paged(&self) -> Vec<u8> {
+        self.paged.clone()
     }
 
     /// [`Report`] as JSON.
@@ -205,12 +205,12 @@ pub struct ItemReport {
     pub placeholder: Option<(String, Option<u32>)>,
 }
 
-/// Read a `.pptx` into the IDML package of its native slides.
+/// Read a `.pptx` into the `.paged` package of its native slides.
 #[wasm_bindgen(js_name = importPptx)]
 pub fn import_pptx(bytes: &[u8], name: &str) -> Result<Imported, JsError> {
-    let (idml, report, fonts) = import(bytes, name).map_err(|e| JsError::new(&e))?;
+    let (paged, report, fonts) = import(bytes, name).map_err(|e| JsError::new(&e))?;
     Ok(Imported {
-        idml,
+        paged,
         report: serde_json::to_string(&report).map_err(|e| JsError::new(&e.to_string()))?,
         fonts,
     })
@@ -225,7 +225,7 @@ pub fn import(bytes: &[u8], name: &str) -> Result<(Vec<u8>, Report, Vec<u8>), St
     let (embedded_fonts, fonts, font_diagnostics) =
         face_reports(pptx_import::fonts::faces(&pkg, &deck.embedded_fonts));
     let images = |part: &str| pkg.part(part).map(|b| b.to_vec());
-    let written = slide_idml::write(&resolved, &images, name)?;
+    let written = slide_native::write(&resolved, &images, name)?;
     let report = Report {
         width: resolved.width,
         height: resolved.height,
@@ -267,7 +267,7 @@ pub fn import(bytes: &[u8], name: &str) -> Result<(Vec<u8>, Report, Vec<u8>), St
             .cloned()
             .collect(),
     };
-    Ok((written.idml, report, fonts))
+    Ok((written.paged, report, fonts))
 }
 
 /// Page-space bounds of an item's drawn outline (a group: its members').

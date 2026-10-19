@@ -73,10 +73,10 @@ describe.each(FIXTURES)("fixture %s in the engine", (name) => {
         ),
       ),
     );
-    const { idml, report } = (await slideEngine()).importPptx(bytes, name);
+    const { paged, report } = (await slideEngine()).importPptx(bytes, name);
     const h = await createHeadlessHost({ resolveFrom: ENGINE_ANCHOR });
     try {
-      const pageIds = await h.load(idml);
+      const pageIds = await h.load(paged);
       expect(pageIds).toEqual(report.slides.map((s) => s.pageId));
 
       // Text frames grow to their text (the engine composes them), so only
@@ -134,10 +134,10 @@ describe("slide state rides the pages", () => {
           ),
         ),
       );
-      const { idml, report } = (await slideEngine()).importPptx(bytes, name);
+      const { paged, report } = (await slideEngine()).importPptx(bytes, name);
       const h = await createHeadlessHost({ resolveFrom: ENGINE_ANCHOR });
       try {
-        await h.load(idml);
+        await h.load(paged);
         const pages = await h.host.document.collection<{
           selfId: string;
           pluginMetadata?: { key: string; value: string }[];
@@ -196,7 +196,7 @@ describe("a deck's embedded fonts", () => {
           ),
         ),
       );
-      const { idml, report, fonts } = (await slideEngine()).importPptx(
+      const { paged, report, fonts } = (await slideEngine()).importPptx(
         bytes,
         name,
       );
@@ -215,7 +215,7 @@ describe("a deck's embedded fonts", () => {
         const client = (
           h.host as unknown as { editor: { client: EngineClient } }
         ).editor.client;
-        const [page] = await h.load(idml);
+        const [page] = await h.load(paged);
         const families = [
           ...new Set(report.embeddedFonts.map((f) => f.family)),
         ].sort();

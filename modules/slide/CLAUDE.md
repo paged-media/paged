@@ -11,8 +11,10 @@ Read first: [docs/concept.md](docs/concept.md), [docs/architecture.md](docs/arch
 
 - **All PPTX semantics live in Rust** (`pptx-*`, `slide-*` crates, one wasm module). TypeScript
   packages are glue: bundle lifecycle, panels, file input, slideshow UI.
-- **No engine dependency.** The engine is reached only through the host contract; `deny.toml`
-  denies git sources. Never add a path or git dependency on another paged repository.
+- **The engine at runtime only through the host contract.** One crate builds on the engine's
+  model: `slide-native` (`paged-model`, `paged-scene`, `paged-store`, path dependencies on
+  `engine/core/crates` at the same commit, ADR 708). No other engine crate, no other module,
+  no git dependency; `deny.toml` denies git sources.
 - **`vendor/paged-ooxml` is read-only here** (ADR 701). Change it in plugin-doc, then run
   `scripts/sync-ooxml.sh <plugin-doc>`; CI runs `--check`.
 - **PowerPoint is the oracle** (ADR 705). Fixtures are authored and recorded through PowerPoint;

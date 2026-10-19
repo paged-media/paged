@@ -185,22 +185,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ed5909b6e89a2db4456e54cd5f673791d7eca6732202bbf2a9cc504fe2f9b84a"
 
 [[package]]
-name = "idml-import"
-version = "0.0.0"
-dependencies = [
- "base64",
- "bytes",
- "flate2",
- "paged-model",
- "paged-scene",
- "quick-xml",
- "serde",
- "thiserror",
- "tracing",
- "zip 9.0.5",
-]
-
-[[package]]
 name = "indexmap"
 version = "2.14.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -445,7 +429,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e660451e55124f798a69a5af3f49ccfbefbd41910eefd25caf2393e1f3473ec1"
 dependencies = [
  "memchr",
- "serde",
 ]
 
 [[package]]
@@ -559,19 +542,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "slide-idml"
-version = "0.0.0"
-dependencies = [
- "base64",
- "paged-ooxml",
- "pptx-import",
- "serde_json",
- "slide-geom",
- "slide-resolve",
- "zip 9.0.5",
-]
-
-[[package]]
 name = "slide-js"
 version = "0.0.0"
 dependencies = [
@@ -581,7 +551,7 @@ dependencies = [
  "pptx-import",
  "serde",
  "serde_json",
- "slide-idml",
+ "slide-native",
  "slide-resolve",
  "wasm-bindgen",
 ]
@@ -590,16 +560,13 @@ dependencies = [
 name = "slide-native"
 version = "0.0.0"
 dependencies = [
- "idml-import",
  "paged-model",
  "paged-ooxml",
  "paged-scene",
  "paged-store",
- "paged-test-resources",
  "pptx-import",
  "serde_json",
  "slide-geom",
- "slide-idml",
  "slide-resolve",
  "zip 9.0.5",
 ]
