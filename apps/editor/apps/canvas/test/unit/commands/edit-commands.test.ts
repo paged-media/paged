@@ -397,6 +397,18 @@ describe("SH-201 (UX audit F-28): Cut, Copy, Paste and Duplicate for page items"
 
   test("the host registers Cut, Copy, Paste, Paste in place and Duplicate", () => {
     covers(
+      "keybinding:cmd+x→paged.edit.cut",
+      "keybinding:cmd+c→paged.edit.copy",
+      "keybinding:cmd+v→paged.edit.paste",
+      "keybinding:cmd+alt+shift+v→paged.edit.pasteInPlace",
+      "keybinding:cmd+alt+shift+d→paged.edit.duplicate",
+      "keybinding:ctrl+x→paged.edit.cut",
+      "keybinding:ctrl+c→paged.edit.copy",
+      "keybinding:ctrl+v→paged.edit.paste",
+      "keybinding:ctrl+alt+shift+v→paged.edit.pasteInPlace",
+      "keybinding:ctrl+alt+shift+d→paged.edit.duplicate",
+    );
+    covers(
       "command:paged.edit.cut",
       "command:paged.edit.copy",
       "command:paged.edit.paste",

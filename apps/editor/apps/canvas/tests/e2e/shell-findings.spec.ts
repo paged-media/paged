@@ -457,11 +457,18 @@ test.describe("SH-201 (UX F-28) — Cut, Copy, Paste, Duplicate", () => {
       "menu:Edit/Cut",
       "menu:Edit/Copy",
       "menu:Edit/Paste",
+      "menu:Edit/Paste in place",
       "menu:Edit/Duplicate",
     );
     await openShell(page, { doc: true });
     await page.locator('[data-menu-trigger="Edit"]').click();
-    for (const name of ["Cut", "Copy", "Paste", "Duplicate"]) {
+    for (const name of [
+      "Cut",
+      "Copy",
+      "Paste",
+      "Paste in place",
+      "Duplicate",
+    ]) {
       await expect(
         page.getByRole("menuitem", { name: new RegExp(`^${name}`) }),
       ).toBeVisible({ timeout: 2_000 });
