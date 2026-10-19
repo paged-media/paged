@@ -93,3 +93,11 @@ still lists standalone open as future work.
 - [ADR 017](https://github.com/paged-media/plugin-sdk/blob/main/docs/adr/017-importer-exporter-door-shape.md), [ADR 305](https://github.com/paged-media/plugin-sdk/blob/main/docs/adr/305-doors-always-present.md), [ADR 311](https://github.com/paged-media/plugin-sdk/blob/main/docs/adr/311-plugin-state-under-own-id.md), [ADR 315](https://github.com/paged-media/plugin-sdk/blob/main/docs/adr/315-isolation-contract.md) — the importer door; probing a door and falling back; parts and metadata under the plugin's id; isolation
 - [ADR 026](https://github.com/paged-media/core/blob/main/docs/adr/026-auto-growing-region-chains.md), [ADR 028](https://github.com/paged-media/core/blob/main/docs/adr/028-pagination-rules-are-engine-owned.md), [ADR 118](https://github.com/paged-media/core/blob/main/docs/adr/118-paged-file-is-a-valid-idml-package.md) — page growth and break rules in the engine; the container the source part travels in
 - ADR 029, ADR 033 — proposals, not published, that concern standalone open and headers and footers
+
+## Amendment 2026-10-19 — the skeleton is a native document
+
+The skeleton is no longer IDML written with string templates: `docx-skeleton` builds it with
+the engine's model crates and packages it as `.paged`, and the bundle opens those bytes
+([ADR 606](606-skeleton-is-a-native-document.md)). The pages, frames, stories and ids are the
+same; what this record says about the IDML package and the crate having no engine dependency
+describes the code before that change.

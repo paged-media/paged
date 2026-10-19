@@ -26,8 +26,10 @@ Read from the code on 2026-10-14.
   the native cascade differs. A table without a known style is drawn as No Style, Table Grid.
 - **SmartArt.** Each diagram's drawing (the shapes PowerPoint laid out) becomes a group of
   native shapes; text boxes and style text colours as PowerPoint draws them.
-- **IDML writing** (`slide-idml`, ADR 700). A flattened master spread per used layout, a page per
-  slide, every item, story and picture; tables; text frames that grow from their anchored edge;
+- **The native document** (`slide-native`, ADR 700, ADR 708). Built with the engine's model
+  crates and opened as `.paged`, the same document the IDML package of before opened to. A
+  flattened master spread per used layout, a page per slide, every item, story and picture
+  (pictures as image blobs); tables; text frames that grow from their anchored edge;
   PowerPoint's first baseline for percentage line spacing; unwrapped text; gradient feathers for
   translucent gradients; radial gradients centred where `a:fillToRect` puts them; slide numbers as
   page-number markers.

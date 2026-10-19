@@ -21,7 +21,4 @@ serde_json.workspace = true
 [dev-dependencies]
 pptx-import.workspace = true
 paged-ooxml.workspace = true
-slide-idml.workspace = true
-idml-import.workspace = true
-paged-test-resources.workspace = true
 zip.workspace = true

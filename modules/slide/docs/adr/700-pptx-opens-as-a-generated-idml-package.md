@@ -48,3 +48,13 @@ The plugin writes a **complete** IDML package for the deck and opens it with
   is a flattened copy. Export merges them back through the layout map (ADR 704).
 - The IDML writer must emit every construct a deck uses; anything it cannot is reported as a
   diagnostic and, where possible, kept as a preserved part.
+
+## Amendment 2026-10-19 — the package is a native document
+
+The deck is no longer written as IDML: `slide-native` builds the same masters, spreads, items,
+stories, swatches and styles with the engine's model crates and packages them as `.paged`,
+which `host.nativeDocument.open` reads with no IDML parse ([ADR 708](708-a-deck-is-built-as-a-native-document.md)).
+The decision above stands (one package, opened atomically, inheritance resolved at import);
+`slide-idml` and "the IDML writer" now read `slide-native` and the builder. The route this
+record rejected, building with the engine's crates, became possible when the module moved
+into the same repository as the engine (PM-0002, PM-0005).

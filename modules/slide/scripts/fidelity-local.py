@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Local fidelity check (maintainer tool, not CI): every corpus deck through
-pptx2idml and the engine's CPU renderer, each slide against PowerPoint's own
+pptx2paged and the engine's CPU renderer, each slide against PowerPoint's own
 PDF (ADR 705), scored with the engine's paged-diff (SSIM, mean ΔE2000).
 
   python3 scripts/fidelity-local.py [--core <core checkout with release
@@ -55,8 +55,8 @@ for d in FONT_DIRS:
 def face(fam, style):
     return fonts.get((fam, style)) or fonts.get((fam, {"Bold": "Bold", "Italic": "Italic"}.get(style, style)))
 
-subprocess.run(["cargo", "build", "-q", "-p", "slide-idml", "--example", "pptx2idml"], cwd=ROOT, check=True)
-conv = os.path.join(ROOT, "target/debug/examples/pptx2idml")
+subprocess.run(["cargo", "build", "-q", "-p", "slide-native", "--example", "pptx2paged"], cwd=ROOT, check=True)
+conv = os.path.join(ROOT, "target/debug/examples/pptx2paged")
 summary = {}
 if a.fixtures:
     decks = [(os.path.basename(f)[:-5], f, f[:-5] + ".ppt.pdf")
@@ -73,9 +73,9 @@ for pack, deck, oracle in decks:
     d = os.path.join(out, pack)
     os.makedirs(d + "/ours", exist_ok=True)
     os.makedirs(d + "/ppt", exist_ok=True)
-    r = subprocess.run([conv, deck, d + "/deck.idml"], capture_output=True, text=True)
+    r = subprocess.run([conv, deck, d + "/deck.paged"], capture_output=True, text=True)
     fams = json.loads(re.search(r"fonts (\[.*\])", r.stderr).group(1).replace("'", '"')) if "fonts [" in r.stderr else []
-    args = [inspect, d + "/deck.idml", "--render", d + "/ours/page.png", "--dpi", a.dpi]
+    args = [inspect, d + "/deck.paged", "--render", d + "/ours/page.png", "--dpi", a.dpi]
     for fam in fams:
         for style in ["Regular", "Bold", "Italic", "Bold Italic"]:
             p = face(fam, style) or face("Calibri", style)

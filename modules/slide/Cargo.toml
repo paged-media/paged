@@ -13,7 +13,6 @@ members = [
     "slide-geom",
     "slide-chart",
     "slide-resolve",
-    "slide-idml",
     "slide-native",
     "pptx-export",
     "slide-js",
@@ -50,7 +49,6 @@ pptx-fonts = { path = "pptx-fonts" }
 slide-geom = { path = "slide-geom" }
 slide-chart = { path = "slide-chart" }
 slide-resolve = { path = "slide-resolve" }
-slide-idml = { path = "slide-idml" }
 slide-native = { path = "slide-native" }
 slide-js = { path = "slide-js" }
 # Optional test resources (docs/development/testing.md): dev-dependency only.
@@ -61,8 +59,6 @@ paged-test-resources = { path = "../../platform/shared/test-resources" }
 paged-model = { path = "../../engine/core/crates/paged-model" }
 paged-scene = { path = "../../engine/core/crates/paged-scene" }
 paged-store = { path = "../../engine/core/crates/paged-store" }
-# The IDML reader, for the equivalence test (dev-dependency only).
-idml-import = { path = "../../engine/core/crates/idml-import" }
 
 [workspace.lints.clippy]
 all = "warn"
@@ -71,3 +67,18 @@ all = "warn"
 opt-level = "s"
 lto = true
 codegen-units = 1
+
+# The native deck's model serializer (ADR 708): size-first codegen for the
+# engine's model crates and the builder, which build and write a deck once
+# per open. The wasm is built with this profile (scripts/build-wasm.sh).
+[profile.release.package.paged-model]
+opt-level = "z"
+
+[profile.release.package.paged-scene]
+opt-level = "z"
+
+[profile.release.package.paged-store]
+opt-level = "z"
+
+[profile.release.package.slide-native]
+opt-level = "z"

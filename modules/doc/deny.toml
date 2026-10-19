@@ -3,8 +3,10 @@
 #
 # This doubles as the SDK-only rule's Rust half: [sources] denies unknown
 # registries/git, so a path/git reach-around into core/editor internals — or
-# into another plugin — cannot land silently. paged.doc has NO core dependency;
-# the only third-party OOXML code is the vendored `ooxmlsdk` (MIT OR Apache-2.0).
+# into another plugin — cannot land silently. Its one engine dependency is the
+# model crates `docx-skeleton` builds the skeleton with (path dependencies on
+# engine/core/crates at the same commit, ADR 606); the only third-party OOXML
+# code is the vendored `ooxmlsdk` (MIT OR Apache-2.0).
 
 [advisories]
 version = 2
