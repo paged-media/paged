@@ -636,6 +636,7 @@ name = "data-core"
 version = "0.0.0"
 dependencies = [
  "compact_str",
+ "paged-fmt",
  "serde",
  "serde_json",
  "serde_norway",
@@ -659,6 +660,7 @@ version = "0.0.0"
 dependencies = [
  "compact_str",
  "data-core",
+ "paged-fmt",
  "serde",
  "serde_norway",
  "smallvec",
@@ -1357,6 +1359,10 @@ dependencies = [
  "libc",
  "winapi",
 ]
+
+[[package]]
+name = "paged-fmt"
+version = "0.0.0"
 
 [[package]]
 name = "parking"
