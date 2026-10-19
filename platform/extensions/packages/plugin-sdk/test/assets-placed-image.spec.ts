@@ -33,17 +33,7 @@ import { createHeadlessHost, type HeadlessHost } from "../src/harness";
 import { defineBundle } from "../src/define-bundle";
 import { minimalIdml } from "./fixtures/minimal-idml";
 
-const silent = { debug() {}, info() {}, warn() {}, error() {} };
-const mapBacking = () => {
-  const m = new Map<string, string>();
-  return {
-    getItem: (k: string) => m.get(k) ?? null,
-    setItem: (k: string, v: string) => void m.set(k, v),
-    removeItem: (k: string) => void m.delete(k),
-    keys: () => Array.from(m.keys()),
-  };
-};
-
+import { mapBacking, silentConsole as silent } from "../src/testing";
 let live: HeadlessHost | null = null;
 afterEach(() => {
   live?.dispose();

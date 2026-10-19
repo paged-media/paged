@@ -20,6 +20,7 @@ import {
   createHeadlessHost,
   defineBundle,
   type HeadlessHost,
+  silentConsole as silent,
 } from "@paged-media/plugin-sdk";
 import type { BundleHost, PluginManifest } from "@paged-media/plugin-api";
 import { covers } from "@paged-media/test-kit";
@@ -58,7 +59,6 @@ const lane = built ? describe : describe.skip;
 
 const P = "plugin:media.paged.image";
 const FRAME = "urect";
-const silent = { debug() {}, info() {}, warn() {}, error() {} };
 const value = (v: unknown) => ({ kind: "value", value: v });
 
 let engine: ImageEngine;

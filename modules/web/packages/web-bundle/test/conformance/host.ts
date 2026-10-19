@@ -20,7 +20,12 @@
 // One wasm boot per SUITE FILE (in `beforeAll`), reused across the
 // file's tests — booting per test would dominate the runtime.
 
-import { createHeadlessHost, type HeadlessHost } from "@paged-media/plugin-sdk";
+import {
+  createHeadlessHost,
+  type HeadlessHost,
+  mapBacking,
+  silentConsole as silent,
+} from "@paged-media/plugin-sdk";
 import { fileURLToPath } from "node:url";
 
 // The engine is this package's own @paged-media/canvas-wasm devDependency.
@@ -29,22 +34,7 @@ import { fileURLToPath } from "node:url";
 // store hoists, not the one this package pins.
 const ENGINE_ANCHOR = fileURLToPath(new URL(".", import.meta.url));
 
-export const silent = {
-  debug: () => {},
-  info: () => {},
-  warn: () => {},
-  error: () => {},
-};
-
-export const mapBacking = () => {
-  const m = new Map<string, string>();
-  return {
-    getItem: (k: string) => m.get(k) ?? null,
-    setItem: (k: string, v: string) => void m.set(k, v),
-    removeItem: (k: string) => void m.delete(k),
-    keys: () => Array.from(m.keys()),
-  };
-};
+export { mapBacking, silent };
 
 export const openHost = (): Promise<HeadlessHost> =>
   createHeadlessHost({

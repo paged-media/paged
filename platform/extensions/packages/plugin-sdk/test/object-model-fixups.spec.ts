@@ -51,7 +51,7 @@ import {
 } from "./fixtures/board-bundle";
 import { minimalIdml } from "./fixtures/minimal-idml";
 
-const silent = { debug() {}, info() {}, warn() {}, error() {} };
+import { silentConsole as silent } from "../src/testing";
 const value = (v: unknown) => ({ kind: "value", value: v });
 
 let live: HeadlessHost | null = null;

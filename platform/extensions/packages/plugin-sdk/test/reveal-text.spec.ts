@@ -27,8 +27,7 @@ import type { PluginManifest } from "@paged-media/plugin-api";
 import { createBundleHost, type TextRevealBackend } from "../src";
 import { makeFakeEditor } from "./fake-editor";
 
-const silent = { debug() {}, info() {}, warn() {}, error() {} };
-
+import { silentConsole as silent } from "../src/testing";
 const manifest = (): PluginManifest => ({
   id: "media.paged.test",
   name: "test",

@@ -34,7 +34,7 @@ import { createHeadlessHost, type HeadlessHost } from "../src/harness";
 import { minimalIdml } from "./fixtures/minimal-idml";
 import { makeNotesBundle, NOTES_ID } from "./fixtures/notes-bundle";
 
-const silent = { debug() {}, info() {}, warn() {}, error() {} };
+import { silentConsole as silent } from "../src/testing";
 const value = (v: unknown) => ({ kind: "value", value: v });
 
 let live: HeadlessHost | null = null;

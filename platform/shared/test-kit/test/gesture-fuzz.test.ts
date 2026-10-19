@@ -27,7 +27,11 @@
 import { afterAll, describe, expect, it } from "bun:test";
 
 import type { MainToWorkerKind, WorkerToMain } from "@paged-media/plugin-api";
-import { createHeadlessHost, type HeadlessHost } from "@paged-media/plugin-sdk";
+import {
+  createHeadlessHost,
+  type HeadlessHost,
+  silentConsole as silent,
+} from "@paged-media/plugin-sdk";
 
 import {
   fuzzSequenceCount,
@@ -39,7 +43,6 @@ import {
   GESTURE_FUZZ_KNOWN,
 } from "../src/index.ts";
 
-const silent = { debug() {}, info() {}, warn() {}, error() {} };
 const env = process.env;
 const N = fuzzSequenceCount(env);
 const ONE = env.PAGED_GESTURE_FUZZ_SEED

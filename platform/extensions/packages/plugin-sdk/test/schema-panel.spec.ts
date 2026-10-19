@@ -41,8 +41,7 @@ import { contributeSchemaPanel } from "../src/panels";
 import { resolveGate } from "../src/schema-panel";
 import { makeFakeEditor } from "./fake-editor";
 
-const silent = { debug() {}, info() {}, warn() {}, error() {} };
-
+import { silentConsole as silent } from "../src/testing";
 const PANEL_ID = "media.paged.test.panel.stroke";
 
 const MANIFEST: PluginManifest = {

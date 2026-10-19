@@ -56,9 +56,8 @@ import {
 // fills + one text run carrying recovered DOM text.
 import engineFixture from "./fixtures/engine-scene-layer.json";
 
+import { silentConsole as silent } from "@paged-media/plugin-sdk";
 const WEB_ID: ElementId = { kind: "rectangle", id: "uWEB1" } as ElementId;
-const silent = { debug() {}, info() {}, warn() {}, error() {} };
-
 function makeHost(opts: { supportsSceneLayer?: boolean }): {
   host: BundleHost;
   submit: ReturnType<typeof vi.fn>;
