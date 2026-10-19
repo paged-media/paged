@@ -3668,7 +3668,7 @@ mod tests {
         }
         let cpu = crate::CpuRasterizer.rasterize(&list, &opts);
         let mut partial = 0;
-        for (g, c) in gpu.chunks_exact(4).zip(cpu.chunks_exact(4)) {
+        for (g, c) in gpu.as_chunks::<4>().0.iter().zip(cpu.as_chunks::<4>().0) {
             assert!(
                 (g[0] as i32 - c[0] as i32).abs() <= 2,
                 "GPU {g:?} vs CPU {c:?}"
