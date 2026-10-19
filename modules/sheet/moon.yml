@@ -45,6 +45,7 @@ tasks:
     inputs:
       - "@group(rust-sources)"
       - "scripts/build-wasm.sh"
+      - "/tooling/rust/build-wasm.sh"
       - "/tooling/js/source-hash.mjs"
       - "packages/sheet-bundle/manifest.json"
     outputs:
@@ -62,6 +63,7 @@ tasks:
     inputs:
       - "@group(rust-sources)"
       - "scripts/build-wasm-perf.sh"
+      - "/tooling/rust/build-wasm.sh"
     options:
       cache: false
       runInCI: false

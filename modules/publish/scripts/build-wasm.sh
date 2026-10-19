@@ -6,68 +6,21 @@
 # emitted by the pdf-bundle's pdf.js reconstruction) → paged_scene::Document →
 # native `.paged` OCF bytes. This script compiles it to wasm32 and runs
 # wasm-bindgen `--target web`, producing the glue + module the bundle's
-# `engine-loader.ts` imports.
+# `engine-loader.ts` imports. The mapper is tiny (serde + zip + the paged
+# model, no PDF stack); the size it prints flags an accidental heavy dep.
+#
+# Built from the workspace root so the shared git-dep lock is reused; -p
+# selects just the mapper (idml-import/-export are not needed for the bundle).
+# The steps, the pin check, wasm-opt and the size gate are the shared
+# tooling/rust/build-wasm.sh.
 #
 # Output: packages/pdf-bundle/bin/pdf_import.js + pdf_import_bg.wasm
 # (manifest `capabilities.wasm`; gitignored build output, built by
 # `moon run publish:wasm` and in CI by .github/actions/module-wasm).
 set -euo pipefail
+cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
-HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-CRATE="$HERE/crates/pdf-import"
-OUT="$HERE/packages/pdf-bundle/bin"
-TARGET="wasm32-unknown-unknown"
-
-echo "build-wasm: crate=$CRATE"
-
-if ! rustup target list --installed 2>/dev/null | grep -q "$TARGET"; then
-  echo "build-wasm: installing $TARGET target" >&2
-  rustup target add "$TARGET"
-fi
-
-# Build from the workspace root so the shared git-dep lock is reused; -p
-# selects just the mapper (idml-import/-export are not needed for the bundle).
-( cd "$HERE" && cargo build --release --target "$TARGET" -p pdf-import )
-
-# Pin check: wasm-bindgen-cli must match the Cargo.lock wasm-bindgen, or the
-# generated glue does not match the module.
-if command -v wasm-bindgen >/dev/null 2>&1; then
-  LOCKED=$(grep -A1 '^name = "wasm-bindgen"$' "$HERE/Cargo.lock" | grep version | head -1 | cut -d'"' -f2)
-  CLI=$(wasm-bindgen --version | awk '{print $2}')
-  if [[ "$LOCKED" != "$CLI" ]]; then
-    echo "build-wasm: wasm-bindgen-cli $CLI != Cargo.lock wasm-bindgen $LOCKED" >&2
-    echo "            cargo install wasm-bindgen-cli --version $LOCKED" >&2
-    exit 1
-  fi
-fi
-
-WASM_IN="$HERE/target/$TARGET/release/pdf_import.wasm"
-if [[ ! -f "$WASM_IN" ]]; then
-  echo "build-wasm: expected $WASM_IN — build produced no cdylib" >&2
-  exit 1
-fi
-
-mkdir -p "$OUT"
-if command -v wasm-bindgen >/dev/null 2>&1; then
-  wasm-bindgen "$WASM_IN" --target web --out-dir "$OUT" --out-name pdf_import
-else
-  echo "build-wasm: wasm-bindgen not found — install with: cargo install wasm-bindgen-cli" >&2
-  exit 1
-fi
-
-# Optional size pass.
-if command -v wasm-opt >/dev/null 2>&1 && [[ -f "$OUT/pdf_import_bg.wasm" ]]; then
-  wasm-opt -Oz "$OUT/pdf_import_bg.wasm" -o "$OUT/pdf_import_bg.wasm"
-fi
-
-echo "build-wasm: wrote artifact(s) to $OUT"
-ls -la "$OUT"
-
-# The mapper is tiny (serde + zip + the paged model, no PDF stack); a size
-# regression here would signal an accidental heavy dep.
-BG="$OUT/pdf_import_bg.wasm"
-if [[ -f "$BG" ]]; then
-  RAW_BYTES=$(wc -c < "$BG" | tr -d ' ')
-  printf 'build-wasm: artifact %s = %d bytes (%.2f MiB)\n' \
-    "$(basename "$BG")" "$RAW_BYTES" "$(echo "$RAW_BYTES" | awk '{print $1/1048576}')"
-fi
+exec bash ../../tooling/rust/build-wasm.sh \
+  --package pdf-import --artifact pdf_import \
+  --out packages/pdf-bundle/bin \
+  --ensure-target
