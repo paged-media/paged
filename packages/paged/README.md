@@ -40,6 +40,29 @@ scripts, and export (`.paged`, `.idml`, `.pdf`). It is the program the repositor
 third-party code it uses (`dist/THIRD-PARTY-NOTICES.md`), so it needs nothing but this
 package: Node 22 or later, or Bun. Its engine is this package's wasm.
 
+### `paged mcp`: the engine for agents
+
+`paged mcp` is an MCP server over stdio (one JSON-RPC message per line), for Claude Desktop,
+Claude Code or any MCP client, with nothing deployed:
+
+```json
+{
+  "mcpServers": {
+    "paged": { "command": "npx", "args": ["-y", "@paged-media/paged", "mcp"] }
+  }
+}
+```
+
+It serves the tools of the engine's Rust `paged mcp`, with the same names and schemas: a
+library of documents on disk (`--library <dir>`, default `$PAGED_LIBRARY`, else
+`~/.paged/library`, the layout the Rust `paged library` writes), each a repository of
+versions and branches (`list_documents`, `describe_document`, `read_part`, `history`,
+`diff`, `create_branch`, `commit_parts`, `propose_change`, `list_changes`,
+`download_link`); the engine run here (`open_document`, `run_script` with `paged.*`
+scripts, `render_page` as a PNG, `save_document`); and `lookup_api` over the capability
+catalog. An agent's writes land on `agent/<run>/…` branches with provenance, for the
+library's owner to merge.
+
 Plugin bundles are found where the command runs: `--plugins <a,b>` loads those, otherwise
 every installed dependency of the current directory's `package.json` that declares a paged
 manifest. The built-in modules (sheet, draw, image, data, …) are part of the editor and are
