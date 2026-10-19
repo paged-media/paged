@@ -65,7 +65,6 @@ const TOOLS = [
   "media.paged.draw.tool.deleteAnchor",
   "media.paged.draw.tool.convertAnchor",
   "media.paged.draw.tool.curvature",
-  "media.paged.draw.tool.pencil",
   "media.paged.draw.tool.gradientAnnotator",
   "media.paged.draw.tool.measure",
   "media.paged.draw.tool.shapeBuilder",
@@ -250,7 +249,6 @@ const TOOL_SLOT: Record<string, string> = {
   "media.paged.draw.tool.deleteAnchor": "pen",
   "media.paged.draw.tool.convertAnchor": "pen",
   "media.paged.draw.tool.curvature": "pen",
-  "media.paged.draw.tool.pencil": "pen",
   "media.paged.draw.tool.paintbrush": "pen",
   "media.paged.draw.tool.blobBrush": "pen",
   "media.paged.draw.tool.eraserBrush": "pen",
@@ -590,7 +588,8 @@ test.describe("plugin surface · paged.draw", () => {
     ).toEqual([]);
 
     // And the totals the campaign quotes, so a silent shrink is loud.
-    expect(TOOLS).toHaveLength(21);
+    // 20 since the Pencil became the host's alone (draw ADR 359).
+    expect(TOOLS).toHaveLength(20);
     expect(PANELS).toHaveLength(10);
     expect(COMMANDS).toHaveLength(107);
   });

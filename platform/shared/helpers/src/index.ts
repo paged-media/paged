@@ -16,8 +16,27 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// The SDK's reference object-model bundle (state in content-addressed parts +
-// a label hash), as a module the CLI loads with `--plugins <path>`.
-import { makeNotesBundle } from "../../../plugin-sdk/test/fixtures/notes-bundle";
+// The small helpers of the built-ins and the editor (docs/adr/PM-0002):
+// one implementation each, where every module had its own. Internal; the
+// extension contract's own copies (plugin-sdk's `parseLength`, its
+// `data:` URI encoding) stay in the public SDK, which cannot import this.
 
-export default makeNotesBundle();
+export { hex, sha256Hex, sha256HexPrefix } from "./hash.ts";
+export {
+  base64ToBytes,
+  bytesToBase64,
+  bytesToBase64Url,
+  dataUrl,
+  dataUrlBytes,
+} from "./base64.ts";
+export { PT_PER_PX, PT_PER_UNIT, PX_PER_PT, parseLength } from "./units.ts";
+export { cmykToRgb, hexToRgb, rgbToCmyk, rgbToHex } from "./colour.ts";
+export {
+  LABEL_PREFIX,
+  asciiEscape,
+  asciiJson,
+  decodeEnvelope,
+  encodeEnvelope,
+  labelKey,
+  type LabelEnvelope,
+} from "./label.ts";

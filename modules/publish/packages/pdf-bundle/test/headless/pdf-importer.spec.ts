@@ -40,6 +40,7 @@ import {
   createBundleHost,
   createHeadlessHost,
   type HeadlessHost,
+  silentConsole as silent,
 } from "@paged-media/plugin-sdk";
 import { covers } from "@paged-media/test-kit";
 
@@ -50,8 +51,6 @@ import { PDF_IMPORTER_ID } from "../../src/io/pdf";
 import { tinyPdf } from "../fixtures/tiny-pdf";
 
 const ENGINE_ANCHOR = fileURLToPath(new URL("..", import.meta.url));
-const silent = { debug() {}, info() {}, warn() {}, error() {} };
-
 let h: HeadlessHost;
 let importer: ImporterContribution;
 const errors: string[] = [];

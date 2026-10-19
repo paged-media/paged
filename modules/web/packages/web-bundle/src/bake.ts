@@ -38,6 +38,7 @@ import type {
   SceneLayerSubmitResult,
   SceneLayerSurface,
 } from "@paged-media/plugin-api";
+import { PX_PER_PT } from "@paged-media/helpers";
 import {
   asFrameTarget,
   composeSrcdoc,
@@ -72,11 +73,11 @@ import { describeRefusal, loadWebSource } from "./source-part";
  *  resolution. */
 const DEFAULT_DPI = 300;
 
-/** CSS px per point. 1 pt = 1/72 in, 1 px = 1/96 in → px = pt × 96/72.
- *  The frame's content box is in points; the engine lays out in CSS px and
- *  the capture converts px→pt internally, so feeding the px-equivalent
- *  size brings the lowered geometry back into frame-content points. */
-const PX_PER_PT = 96 / 72;
+// PX_PER_PT (@paged-media/helpers): 1 pt = 1/72 in, 1 px = 1/96 in → px =
+// pt × 96/72. The frame's content box is in points; the engine lays out in
+// CSS px and the capture converts px→pt internally, so feeding the
+// px-equivalent size brings the lowered geometry back into frame-content
+// points.
 
 /** The bundle's PERSISTENT scene-layer surface, memoized per host.
  *

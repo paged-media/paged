@@ -137,6 +137,7 @@ import { DisposableStore, toDisposable } from "./disposables.js";
 import { documentChangeOf } from "./document-change.js";
 import { FALLBACK_WIDGETS } from "./widgets-fallback.js";
 import { makeSchemaPanelComponent } from "./schema-panel.js";
+import { mapBacking } from "./testing.js";
 
 /** The reply envelope `client.mutate` resolves with. */
 type MutateReply = Awaited<ReturnType<PagedEditor["client"]["mutate"]>>;
@@ -386,13 +387,7 @@ function defaultStorageBacking(): StorageBacking {
       },
     };
   }
-  const map = new Map<string, string>();
-  return {
-    getItem: (k) => map.get(k) ?? null,
-    setItem: (k, v) => void map.set(k, v),
-    removeItem: (k) => void map.delete(k),
-    keys: () => Array.from(map.keys()),
-  };
+  return mapBacking();
 }
 
 /**

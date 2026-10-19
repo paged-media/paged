@@ -313,33 +313,6 @@ export const ERASER_OPTIONS = defineToolOptions({
   ],
 });
 
-export const PENCIL_OPTIONS = defineToolOptions({
-  toolId: "media.paged.draw.tool.pencil",
-  fields: [
-    { ...FIDELITY, default: 2 },
-    {
-      kind: "select",
-      key: "smoothing",
-      label: "Smoothing",
-      options: [
-        { value: "smooth", label: "Smooth curves" },
-        { value: "corners", label: "Corner points" },
-      ],
-      default: "smooth",
-    },
-    {
-      kind: "number",
-      key: "closeDistance",
-      label: "Close within",
-      min: 0,
-      max: 50,
-      step: 1,
-      unit: "px",
-      default: 8,
-    },
-  ],
-});
-
 export const WIDTH_OPTIONS = defineToolOptions({
   toolId: "media.paged.draw.tool.width",
   fields: [
@@ -397,7 +370,6 @@ export const LASSO_OPTIONS = defineToolOptions({
 /** Every tool that declares options, by tool id — what `tools.ts`
  *  attaches to the contribution and what the spec walks. */
 export const TOOL_OPTIONS: readonly ToolOptionsDef[] = [
-  PENCIL_OPTIONS,
   PAINTBRUSH_OPTIONS,
   BLOB_BRUSH_OPTIONS,
   ERASER_OPTIONS,

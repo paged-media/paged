@@ -39,8 +39,7 @@ import type { ElementId, PluginManifest } from "@paged-media/plugin-api";
 import { createBundleHost } from "../src";
 import { makeFakeEditor } from "./fake-editor";
 
-const silent = { debug() {}, info() {}, warn() {}, error() {} };
-
+import { silentConsole as silent } from "../src/testing";
 const manifest = (
   capabilities: PluginManifest["capabilities"] = {
     document: { read: "broad" },

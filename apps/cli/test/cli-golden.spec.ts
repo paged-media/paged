@@ -58,7 +58,7 @@ import {
   zipEntries,
   type Rule,
   UPDATE_GOLDEN,
-} from "../../plugin-sdk/test/golden-kit";
+} from "../../../platform/extensions/packages/plugin-sdk/test/golden-kit";
 import { cli, FIXTURES, tempDir, writeFixture } from "./helpers";
 
 // The surface-conformance marker (a no-op; the gate reads it statically).

@@ -23,7 +23,7 @@
 // separate entry point: the editor loads it on the first AI request, not at
 // boot.
 
-import catalog from "../../plugin-api/src/catalog.json";
+import catalog from "../../../extensions/packages/plugin-api/src/catalog.json";
 
 import type { ApiCatalog } from "./catalog";
 

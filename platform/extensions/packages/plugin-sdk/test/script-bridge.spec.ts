@@ -33,7 +33,7 @@ import { createObjectRegistry } from "../src/object-registry";
 import { minimalIdml } from "./fixtures/minimal-idml";
 import { makeNotesBundle, NOTES_ID } from "./fixtures/notes-bundle";
 
-const silent = { debug() {}, info() {}, warn() {}, error() {} };
+import { silentConsole as silent } from "../src/testing";
 const NOTE = `plugin:${NOTES_ID}/note`;
 const value = (v: unknown) => ({ kind: "value", value: v });
 

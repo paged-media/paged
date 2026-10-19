@@ -15,7 +15,9 @@ next to the code you change. This file holds only what crosses components.
   workspace package (the editor's exact canary pins resolve from npm).
 - `platform/extensions` — the public extension contract (`plugin-api`) and SDK.
   Built-in-only code must not leak into it: community extensions consume it.
-- `apps/editor`, `apps/server` — applications.
+- `apps/editor`, `apps/server`, `apps/cli` (`paged-node`) — applications.
+- `platform/shared/*` — internal code of the built-ins and the editor (PM-0002):
+  `ai`, `helpers`, `test-kit`, `test-resources`, `wasm-boot`.
 - `tooling/import` — how this repository was assembled; do not edit history-related files by hand.
 
 ## Tasks (Moon)
@@ -23,7 +25,8 @@ next to the code you change. This file holds only what crosses components.
 Moon (`.moon/`, version pinned in `.prototools`) runs every component's tasks
 from anywhere in the repository. One project per Cargo workspace and JS component root:
 `core`, `core-idml-viewer`, `publish`, `image`, `draw`, `sheet`, `data`, `doc`,
-`slide`, `web`, `web-render`, `extensions`, `editor`, `server`.
+`slide`, `web`, `web-render`, `extensions`, `editor`, `server`, `cli`, and the
+shared packages (`ai`, `helpers`, `test-kit`, `test-resources`, `wasm-boot`).
 
 - `moon run <project>:test` — also `:fmt`, `:check`, `:lint`, `:build`, and
   `:wasm` where the component ships a wasm artifact. `moon run :lint` runs it

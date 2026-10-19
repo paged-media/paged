@@ -47,8 +47,7 @@ import {
 import { propertyRow, validatePanelSchema } from "../src/panel-schema-check";
 import { minimalIdml } from "./fixtures/minimal-idml";
 
-const silent = { debug() {}, info() {}, warn() {}, error() {} };
-
+import { silentConsole as silent } from "../src/testing";
 const STOP: ValueType = {
   kind: "struct",
   fields: {

@@ -38,6 +38,7 @@ import type {
 import {
   createBundleHost,
   type CreateBundleHostOptions,
+  silentConsole as silent,
 } from "@paged-media/plugin-sdk";
 import {
   covers,
@@ -51,8 +52,6 @@ import {
   LABEL_KEY,
   NEW_SLIDE_COMMAND,
 } from "../src/object-model";
-
-const silent = { debug() {}, info() {}, warn() {}, error() {} };
 
 const DECK_LABEL = {
   key: LABEL_KEY,

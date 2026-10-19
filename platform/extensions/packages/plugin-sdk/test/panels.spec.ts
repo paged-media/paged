@@ -27,6 +27,7 @@ import { createBundleHost } from "../src/host-impl";
 import { contributePanel } from "../src/panels";
 import { makeFakeEditor } from "./fake-editor";
 
+import { silentConsole as silent } from "../src/testing";
 const MANIFEST: PluginManifest = {
   id: "media.paged.test",
   name: "test",
@@ -36,8 +37,6 @@ const MANIFEST: PluginManifest = {
   // on by default (trust-line W0.11); the manifest must list it.
   contributes: { panels: ["media.paged.test.panel.source"] },
 };
-
-const silent = { debug() {}, info() {}, warn() {}, error() {} };
 
 const PANEL: PanelContribution = {
   id: "media.paged.test.panel.source",

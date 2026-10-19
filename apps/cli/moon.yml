@@ -1,0 +1,31 @@
+$schema: "../../.moon/cache/schemas/project.json"
+
+# paged-node (@paged-media/cli): the Node command line over the headless host
+# and every installed plugin bundle (ADR 324 in platform/extensions/docs/adr),
+# a private application of the root Bun workspace. js-check and js-test are
+# the inherited `bun run typecheck` and `bun run test`; the suite boots the
+# engine, and bin.spec.ts runs the built `dist/bin.js`.
+language: "typescript"
+layer: "application"
+stack: "frontend"
+tags: ["node"]
+
+project:
+  title: "apps/cli"
+  description: "paged-node, the Node CLI over the headless host; never published."
+
+dependsOn:
+  - id: "core"
+    scope: "development"
+
+tasks:
+  js-build:
+    description: "bun build src/bin.ts to dist/bin.js (the paged-node bin)."
+    command: "bun run build"
+    inputs:
+      - "@group(js-sources)"
+    outputs:
+      - "dist/**/*"
+
+  js-test:
+    deps: ["~:js-build"]

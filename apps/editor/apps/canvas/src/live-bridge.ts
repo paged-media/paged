@@ -43,6 +43,7 @@ import {
   type ToolResult,
 } from "@paged-media/repository";
 import type { CanvasClient } from "@paged-media/client";
+import { bytesToBase64 } from "@paged-media/helpers";
 
 export interface LiveEntry {
   id: string;
@@ -122,13 +123,6 @@ const text = (t: string, isError = false): ToolResult => ({
   isError,
 });
 
-function b64(bytes: Uint8Array): string {
-  let s = "";
-  for (let i = 0; i < bytes.length; i += 0x8000)
-    s += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
-  return btoa(s);
-}
-
 async function handle(
   client: CanvasClient,
   call: LiveCall,
@@ -189,7 +183,11 @@ async function handle(
         result = png
           ? {
               content: [
-                { type: "image", data: b64(png), mimeType: "image/png" },
+                {
+                  type: "image",
+                  data: bytesToBase64(png),
+                  mimeType: "image/png",
+                },
               ],
               isError: false,
             }

@@ -46,8 +46,10 @@
 // BINDING PROVIDER, so paged.draw now resolves what the HOST's one
 // Layers panel binds to instead of shipping a second one.
 //
-// Phase 4c adds the PRO TOOLSET: four tools (Curvature + Pencil — pure
-// machines over draw-geometry committing one insertPath; Gradient
+// Phase 4c adds the PRO TOOLSET: four tools, three of them still here
+// (Curvature — a pure machine over draw-geometry committing one
+// insertPath; the Pencil beside it was retired into the host's, ADR 359;
+// Gradient
 // Annotator — axis display + drag steering the B-03 angle/length lane;
 // Measure — read-only, with named honest subsets in handlers/measure.ts),
 // nine commands (Outline stroke / Offset path / Simplify — the v30

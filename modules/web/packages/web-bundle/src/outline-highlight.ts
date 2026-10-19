@@ -37,6 +37,7 @@ import type {
   ElementGeometryItem,
   ElementId,
 } from "@paged-media/plugin-api";
+import { PX_PER_PT } from "@paged-media/helpers";
 import {
   boxesForOutline,
   tagOutline,
@@ -48,8 +49,6 @@ import { resolveBindings } from "./bindings";
 import { engineDocument } from "./engine-document";
 import { loadWebEngine, type WebEngine } from "./engine-loader";
 import { overlayChannel } from "./overlay-channel";
-
-const PX_PER_PT = 96 / 72;
 
 /** Frame-content point → page-local point. */
 export function contentToPage(
