@@ -184,10 +184,14 @@ jobs:
       # the engine built above (the model of `ai` is a local fake). The data
       # verbs' successes need the paged.data engine wasm, which this job does
       # not build: they report `unavailable` and are skipped. The package's
-      # other specs need it too, so only the goldens run here.
-      - name: paged-node golden tests
+      # other specs need it too, so only the goldens run here, with the two
+      # that need only the engine: `paged mcp` against the Rust CLI's tool
+      # list (mcp-parity), and the npm bundle of the CLI under Node
+      # (npm-bundle, the `paged` bin of @paged-media/paged).
+      - name: paged-node golden tests, paged mcp parity, the npm bundle
         run: |
-          ( cd ../../apps/cli && bun run test test/cli-golden.spec.ts --reporter=junit --reporter-outfile=junit.bun.xml ) \
+          ( cd ../../apps/cli && bun run test test/cli-golden.spec.ts test/mcp-parity.spec.ts test/npm-bundle.spec.ts \
+              --reporter=junit --reporter-outfile=junit.bun.xml ) \
             || echo "TESTS_FAILED=1" >> "$GITHUB_ENV"
 
       # The shared test kit (platform/shared/test-kit): the gesture kit's
