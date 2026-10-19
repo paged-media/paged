@@ -29,6 +29,12 @@ import type { ReactNode } from "react";
 import { Icon, PanelTarget, StatusBadge } from "@paged-media/shell";
 import { KitSelect } from "@paged-media/ui";
 
+/** `{ "data-<testId>": "ready" }`, the attribute specs wait for. Built
+ *  outside the component: the React Compiler does not lower a computed
+ *  template-literal key (ADR 228). */
+function readyProbe(testId: string): Record<string, string> {
+  return { [`data-${testId}`]: "ready" };
+}
 export function ConceptShell({
   testId,
   target,
@@ -43,7 +49,7 @@ export function ConceptShell({
   live?: boolean;
   children: ReactNode;
 }) {
-  const probe = { [`data-${testId}`]: "ready" };
+  const probe = readyProbe(testId);
   return (
     <div {...probe} className="flex flex-col h-full min-h-0">
       <div className="flex justify-end px-3 pt-2">

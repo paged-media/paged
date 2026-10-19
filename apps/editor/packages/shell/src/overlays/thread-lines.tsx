@@ -83,6 +83,60 @@ interface StorySummaryLite {
   overset?: boolean;
 }
 
+/** The chains to draw and their frames' geometry, read through the
+ *  client. "superseded" when a newer refresh started meanwhile; nothing
+ *  to draw when a read fails (a story that vanished mid-refresh, a script
+ *  budget, a closed document: a diagnostic overlay must never take the
+ *  canvas down, it draws nothing and tries again on the next push).
+ *  Outside the component: the React Compiler does not compile a
+ *  conditional inside a `try` (ADR 228). */
+async function readChains(
+  client: ReturnType<typeof useCanvasClient>,
+  current: () => boolean,
+): Promise<
+  | "superseded"
+  | {
+      chains: { frames: string[]; overset: boolean }[];
+      geometry: Map<string, ElementGeometryItem>;
+    }
+> {
+  const nothing = () =>
+    current()
+      ? { chains: [], geometry: new Map<string, ElementGeometryItem>() }
+      : ("superseded" as const);
+  try {
+    // A collection read, not a `paged.stories()` script: a script run
+    // reads as a document change to every listener (plugins' onDidChange
+    // fires on scriptResult), and this runs after every edit.
+    const stories = await client.collection<StorySummaryLite>("stories");
+    if (!current()) return "superseded";
+
+    const built: { frames: string[]; overset: boolean }[] = [];
+    const wanted: ElementId[] = [];
+    for (const story of stories) {
+      const links = await client.frameChain(story.selfId);
+      if (!current()) return "superseded";
+      // A single-frame story has no hop to draw, and asking for its
+      // geometry would be traffic spent on nothing.
+      if (links.length < 2 && !story.overset) continue;
+      const frames = links.map((l) => l.frameId);
+      built.push({ frames, overset: story.overset === true });
+      for (const id of frames) wanted.push({ kind: "textFrame", id });
+    }
+
+    if (wanted.length === 0) return nothing();
+    const items = await client.elementGeometry(wanted);
+    if (!current()) return "superseded";
+    const byId = new Map<string, ElementGeometryItem>();
+    for (const item of items) {
+      if (item.id.kind === "textFrame") byId.set(item.id.id as string, item);
+    }
+    return { chains: built, geometry: byId };
+  } catch {
+    return nothing();
+  }
+}
+
 /** One drawn hop: from frame A's out corner to frame B's in corner. */
 interface Hop {
   key: string;
@@ -122,48 +176,10 @@ function ThreadLinesRender(props: OverlayProps) {
 
   const refresh = useCallback(async () => {
     const run = ++runRef.current;
-    try {
-      // A collection read, not a `paged.stories()` script: a script run
-      // reads as a document change to every listener (plugins' onDidChange
-      // fires on scriptResult), and this runs after every edit.
-      const stories = await client.collection<StorySummaryLite>("stories");
-      if (run !== runRef.current) return;
-
-      const built: { frames: string[]; overset: boolean }[] = [];
-      const wanted: ElementId[] = [];
-      for (const story of stories) {
-        const links = await client.frameChain(story.selfId);
-        if (run !== runRef.current) return;
-        // A single-frame story has no hop to draw, and asking for its
-        // geometry would be traffic spent on nothing.
-        if (links.length < 2 && !story.overset) continue;
-        const frames = links.map((l) => l.frameId);
-        built.push({ frames, overset: story.overset === true });
-        for (const id of frames) wanted.push({ kind: "textFrame", id });
-      }
-
-      if (wanted.length === 0) {
-        setChains([]);
-        setGeometry(new Map());
-        return;
-      }
-      const items = await client.elementGeometry(wanted);
-      if (run !== runRef.current) return;
-      const byId = new Map<string, ElementGeometryItem>();
-      for (const item of items) {
-        if (item.id.kind === "textFrame") byId.set(item.id.id as string, item);
-      }
-      setChains(built);
-      setGeometry(byId);
-    } catch {
-      // A story that vanished mid-refresh, a script budget, a closed
-      // document. A diagnostic overlay must never take the canvas down
-      // — it draws nothing and tries again on the next push.
-      if (run === runRef.current) {
-        setChains([]);
-        setGeometry(new Map());
-      }
-    }
+    const read = await readChains(client, () => run === runRef.current);
+    if (read === "superseded") return;
+    setChains(read.chains);
+    setGeometry(read.geometry);
   }, [client]);
 
   useEffect(() => {

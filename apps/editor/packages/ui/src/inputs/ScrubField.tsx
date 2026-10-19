@@ -45,7 +45,9 @@ export interface ScrubFieldProps extends Omit<
 export function ScrubField(props: ScrubFieldProps) {
   const { children, className, onUpdate, onCommit, onCancel, ...gestureOpts } =
     props;
-  const scrub = useScrubGesture({
+  // Destructured: the compiler would take the whole result for a ref, as
+  // its `bind` is one, and refuse to read `value` during render (ADR 228).
+  const { bind, value, isScrubbing } = useScrubGesture({
     ...gestureOpts,
     onUpdate,
     onCommit,
@@ -53,16 +55,16 @@ export function ScrubField(props: ScrubFieldProps) {
   });
   return (
     <div
-      ref={scrub.bind}
+      ref={bind}
       className={className}
       role="slider"
       aria-label={props["aria-label"]}
-      aria-valuenow={scrub.value}
+      aria-valuenow={value}
       aria-valuemin={props.min}
       aria-valuemax={props.max}
       style={{ touchAction: "none", cursor: "ew-resize" }}
     >
-      {children({ value: scrub.value, isScrubbing: scrub.isScrubbing })}
+      {children({ value, isScrubbing })}
     </div>
   );
 }

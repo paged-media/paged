@@ -90,47 +90,49 @@ export function ScriptEditorPanel(_: PanelProps) {
         scrollLog();
       };
       append({ source: "", output: [], error: null, note: `You: ${prompt}` });
-      try {
-        const result = await runEditorAgent(client, {
-          mode: "script",
-          prompt,
-          signal: controller.signal,
-          onEvent: (event) => {
-            if (event.type === "script") setSource(event.source);
-            else if (event.type === "scriptResult")
-              append({
-                source: event.source,
-                output: event.run.output,
-                error: event.run.error,
-              });
-          },
-        });
-        if (result.outcome === "refused")
-          append({
-            source: "",
-            output: [],
-            error: "Claude declined this request.",
-          });
-        else {
-          const stopped =
-            result.outcome === "turnLimit"
-              ? " (stopped at the turn limit)"
-              : result.outcome === "truncated"
-                ? " (the reply was cut off)"
-                : "";
-          append({
-            source: "",
-            output: [],
-            error: null,
-            note: `Claude: ${plainSummary(result.summary) || "Done."}${stopped}`,
-          });
-        }
-        setAsk("");
-      } catch (err) {
-        append({ source: "", output: [], error: describeAiError(err) });
-      } finally {
-        setAsking(null);
-      }
+      // A promise chain rather than try/finally: the React Compiler does
+      // not compile a component with a `finally` in it (ADR 228).
+      await runEditorAgent(client, {
+        mode: "script",
+        prompt,
+        signal: controller.signal,
+        onEvent: (event) => {
+          if (event.type === "script") setSource(event.source);
+          else if (event.type === "scriptResult")
+            append({
+              source: event.source,
+              output: event.run.output,
+              error: event.run.error,
+            });
+        },
+      })
+        .then((result) => {
+          if (result.outcome === "refused")
+            append({
+              source: "",
+              output: [],
+              error: "Claude declined this request.",
+            });
+          else {
+            const stopped =
+              result.outcome === "turnLimit"
+                ? " (stopped at the turn limit)"
+                : result.outcome === "truncated"
+                  ? " (the reply was cut off)"
+                  : "";
+            append({
+              source: "",
+              output: [],
+              error: null,
+              note: `Claude: ${plainSummary(result.summary) || "Done."}${stopped}`,
+            });
+          }
+          setAsk("");
+        })
+        .catch((err: unknown) => {
+          append({ source: "", output: [], error: describeAiError(err) });
+        })
+        .finally(() => setAsking(null));
     },
     [ask, asking, running, client, scrollLog],
   );
@@ -138,30 +140,31 @@ export function ScriptEditorPanel(_: PanelProps) {
   const run = useCallback(async () => {
     if (running) return;
     setRunning(true);
-    try {
-      const result = await client.executeScript(source);
-      setLog((prev) => [
-        ...prev,
-        { source, output: result.output, error: result.error },
-      ]);
-      requestAnimationFrame(() => {
-        logRef.current?.scrollTo({
-          top: logRef.current.scrollHeight,
-          behavior: "smooth",
+    await client
+      .executeScript(source)
+      .then((result) => {
+        setLog((prev) => [
+          ...prev,
+          { source, output: result.output, error: result.error },
+        ]);
+        requestAnimationFrame(() => {
+          logRef.current?.scrollTo({
+            top: logRef.current.scrollHeight,
+            behavior: "smooth",
+          });
         });
-      });
-    } catch (err) {
-      setLog((prev) => [
-        ...prev,
-        {
-          source,
-          output: [],
-          error: `dispatch failed: ${(err as Error).message}`,
-        },
-      ]);
-    } finally {
-      setRunning(false);
-    }
+      })
+      .catch((err: unknown) => {
+        setLog((prev) => [
+          ...prev,
+          {
+            source,
+            output: [],
+            error: `dispatch failed: ${(err as Error).message}`,
+          },
+        ]);
+      })
+      .finally(() => setRunning(false));
   }, [client, source, running]);
 
   return (

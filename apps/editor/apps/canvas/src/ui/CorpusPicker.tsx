@@ -76,7 +76,9 @@ export function CorpusPicker() {
     async (id: string) => {
       if (!id) return;
       setBusy(true);
-      try {
+      // An async block and `.finally`, not try/finally: the React Compiler
+      // does not compile a component with a `finally` in it (ADR 228).
+      await (async () => {
         // id is "<group>/<name>"; don't encode the slash separator.
         const path = id.split("/").map(encodeURIComponent).join("/");
         const resp = await fetch(`/corpus/idml/file/${path}`);
@@ -99,9 +101,7 @@ export function CorpusPicker() {
           resetForNewDocument: doc.resetForNewDocument,
           pushWarning: (w) => console.warn("[corpus]", w),
         });
-      } finally {
-        setBusy(false);
-      }
+      })().finally(() => setBusy(false));
     },
     [client, doc],
   );

@@ -21,6 +21,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -56,7 +57,9 @@ export function ToolSettingsProvider({ children }: PropsWithChildren) {
   // (the polygon `sides` edit never reached the draw → DEFAULT_SIDES).
   const [store, setStore] = useState<Record<string, ToolSettings>>({});
   const storeRef = useRef(store);
-  storeRef.current = store;
+  useLayoutEffect(() => {
+    storeRef.current = store;
+  });
 
   const get = useCallback(
     (toolId: string): ToolSettings => storeRef.current[toolId] ?? {},

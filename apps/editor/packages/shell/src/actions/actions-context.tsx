@@ -42,6 +42,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -118,6 +119,26 @@ export interface ActionsApi {
 
 const Context = createContext<ActionsApi | null>(null);
 
+/** Run a replay's steps in order through the command registry; a step
+ *  that throws is recorded with its message and the replay goes on.
+ *  Outside the provider: the React Compiler does not compile a component
+ *  with a `try` it cannot lower (ADR 228). */
+async function replaySteps(
+  commands: { invoke(id: string, payload?: unknown): Promise<unknown> },
+  steps: ReturnType<typeof planReplay>["run"],
+): Promise<ReplayStepResult[]> {
+  const ran: ReplayStepResult[] = [];
+  for (const { index, step } of steps) {
+    let error: string | null = null;
+    try {
+      await commands.invoke(step.command, step.payload);
+    } catch (err) {
+      error = err instanceof Error ? err.message : String(err);
+    }
+    ran.push({ index, command: step.command, title: step.title, error });
+  }
+  return ran;
+}
 export function ActionsProvider({ children }: PropsWithChildren) {
   const registries = useRegistries();
   const client = useCanvasClient();
@@ -283,26 +304,12 @@ export function ActionsProvider({ children }: PropsWithChildren) {
       setLastReport(null);
       replayingRef.current = true;
       replayMutations.current = 0;
-      const ran: ReplayStepResult[] = [];
-      try {
-        for (const { index, step } of plan.run) {
-          let error: string | null = null;
-          try {
-            await registries.commands.invoke(step.command, step.payload);
-          } catch (err) {
-            error = err instanceof Error ? err.message : String(err);
-          }
-          ran.push({
-            index,
-            command: step.command,
-            title: step.title,
-            error,
-          });
-        }
-      } finally {
-        replayingRef.current = false;
-        setPlayingId(null);
-      }
+      const ran = await replaySteps(registries.commands, plan.run).finally(
+        () => {
+          replayingRef.current = false;
+          setPlayingId(null);
+        },
+      );
       const report: ReplayReport = {
         actionId,
         actionName: action.name,
@@ -391,7 +398,11 @@ export function ActionsProvider({ children }: PropsWithChildren) {
   // without it, invoking `paged.actions.play` while recording would
   // record the act of replaying.
   const apiRef = useRef<ActionsApi | null>(null);
-  apiRef.current = api;
+  // Kept current after each commit (a ref written during render keeps the
+  // provider uncompiled, ADR 228).
+  useLayoutEffect(() => {
+    apiRef.current = api;
+  });
   useEffect(() => {
     const disposers = [
       registries.commands.register({

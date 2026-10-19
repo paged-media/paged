@@ -35,7 +35,7 @@
 // single-threaded, so a burst of requests would only queue in front of
 // the user's next edit.
 
-import { useEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef } from "react";
 
 import type { PageId, WorkerToMain } from "@paged-media/client";
 
@@ -69,6 +69,105 @@ function changedPages(msg: WorkerToMain): readonly PageId[] | null {
   }
 }
 
+/** The drain: pages a reply names are queued, and after SETTLE_MS each
+ *  gets a fresh thumbnail, unless the document moved on meanwhile. It runs
+ *  outside the hook (the React Compiler does not compile a `try …
+ *  finally`, ADR 228) and reads the document through `live`. Returns the
+ *  cleanup. */
+function startThumbnailQueue(
+  client: ReturnType<typeof useCanvasClient>,
+  setSnapshots: ReturnType<typeof useDocument>["setSnapshots"],
+  live: {
+    readonly current: {
+      handle: ReturnType<typeof useDocument>["handle"];
+      snapshots: ReturnType<typeof useDocument>["snapshots"];
+      snapshotsReady: boolean;
+    };
+  },
+  queue: { current: ThumbnailQueue | null },
+): () => void {
+  const pending = new Set<PageId>();
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  let draining = false;
+  let disposed = false;
+
+  const drain = async (): Promise<void> => {
+    if (draining || disposed) return;
+    draining = true;
+    // A load pass is running (or there is no document): it takes every
+    // page itself, and the page-list effect re-schedules when it ends.
+    let waiting = false;
+    try {
+      while (pending.size > 0 && !disposed) {
+        const { handle: h, snapshotsReady: ready } = live.current;
+        if (!h || !ready) {
+          waiting = true;
+          return;
+        }
+        // Document order, and only pages the handle knows: a reply can
+        // name a page the handle has not caught up with yet, and the
+        // page-list effect queues that one when it does.
+        const order = h.pageIds.filter((id) => pending.has(id));
+        pending.clear();
+        for (const pageId of order) {
+          let url: string;
+          try {
+            url = await requestPageThumbnail(client, pageId);
+          } catch {
+            continue; // deleted meanwhile; nothing to show
+          }
+          const now = live.current;
+          if (
+            disposed ||
+            !now.snapshotsReady ||
+            now.handle?.docId !== h.docId ||
+            !now.handle.pageIds.includes(pageId)
+          ) {
+            // The document was replaced (or the page removed) while
+            // the request was out: this picture belongs to nothing.
+            URL.revokeObjectURL(url);
+            continue;
+          }
+          setSnapshots((prev) => {
+            const next = new Map(prev);
+            const old = next.get(pageId);
+            if (old && old !== url) URL.revokeObjectURL(old);
+            next.set(pageId, url);
+            return next;
+          });
+        }
+      }
+    } finally {
+      draining = false;
+      // Pages queued while the last request was out.
+      if (!waiting && !disposed && pending.size > 0) schedule();
+    }
+  };
+
+  const schedule = (): void => {
+    if (disposed) return;
+    if (timer != null) clearTimeout(timer);
+    timer = setTimeout(() => {
+      timer = null;
+      void drain();
+    }, SETTLE_MS);
+  };
+
+  queue.current = { pending, schedule };
+
+  const off = client.subscribe((msg) => {
+    const pages = changedPages(msg);
+    if (!pages || pages.length === 0) return;
+    for (const id of pages) pending.add(id);
+    schedule();
+  });
+  return () => {
+    disposed = true;
+    off();
+    if (timer != null) clearTimeout(timer);
+    queue.current = null;
+  };
+}
 export function usePageThumbnails(): void {
   const client = useCanvasClient();
   const { handle, snapshots, snapshotsReady, setSnapshots } = useDocument();
@@ -76,93 +175,16 @@ export function usePageThumbnails(): void {
   // The drain is async and outlives renders; it reads the document
   // through this ref, never through a closure over one render.
   const live = useRef({ handle, snapshots, snapshotsReady });
-  live.current = { handle, snapshots, snapshotsReady };
+  useLayoutEffect(() => {
+    live.current = { handle, snapshots, snapshotsReady };
+  });
 
   const queue = useRef<ThumbnailQueue | null>(null);
 
-  useEffect(() => {
-    const pending = new Set<PageId>();
-    let timer: ReturnType<typeof setTimeout> | null = null;
-    let draining = false;
-    let disposed = false;
-
-    const drain = async (): Promise<void> => {
-      if (draining || disposed) return;
-      draining = true;
-      // A load pass is running (or there is no document): it takes every
-      // page itself, and the page-list effect re-schedules when it ends.
-      let waiting = false;
-      try {
-        while (pending.size > 0 && !disposed) {
-          const { handle: h, snapshotsReady: ready } = live.current;
-          if (!h || !ready) {
-            waiting = true;
-            return;
-          }
-          // Document order, and only pages the handle knows: a reply can
-          // name a page the handle has not caught up with yet, and the
-          // page-list effect queues that one when it does.
-          const order = h.pageIds.filter((id) => pending.has(id));
-          pending.clear();
-          for (const pageId of order) {
-            let url: string;
-            try {
-              url = await requestPageThumbnail(client, pageId);
-            } catch {
-              continue; // deleted meanwhile; nothing to show
-            }
-            const now = live.current;
-            if (
-              disposed ||
-              !now.snapshotsReady ||
-              now.handle?.docId !== h.docId ||
-              !now.handle.pageIds.includes(pageId)
-            ) {
-              // The document was replaced (or the page removed) while
-              // the request was out: this picture belongs to nothing.
-              URL.revokeObjectURL(url);
-              continue;
-            }
-            setSnapshots((prev) => {
-              const next = new Map(prev);
-              const old = next.get(pageId);
-              if (old && old !== url) URL.revokeObjectURL(old);
-              next.set(pageId, url);
-              return next;
-            });
-          }
-        }
-      } finally {
-        draining = false;
-        // Pages queued while the last request was out.
-        if (!waiting && !disposed && pending.size > 0) schedule();
-      }
-    };
-
-    const schedule = (): void => {
-      if (disposed) return;
-      if (timer != null) clearTimeout(timer);
-      timer = setTimeout(() => {
-        timer = null;
-        void drain();
-      }, SETTLE_MS);
-    };
-
-    queue.current = { pending, schedule };
-
-    const off = client.subscribe((msg) => {
-      const pages = changedPages(msg);
-      if (!pages || pages.length === 0) return;
-      for (const id of pages) pending.add(id);
-      schedule();
-    });
-    return () => {
-      disposed = true;
-      off();
-      if (timer != null) clearTimeout(timer);
-      queue.current = null;
-    };
-  }, [client, setSnapshots]);
+  useEffect(
+    () => startThumbnailQueue(client, setSnapshots, live, queue),
+    [client, setSnapshots],
+  );
 
   // The page list: thumbnails for pages that have none, none for pages
   // that are gone. Waits for the load pass (`snapshotsReady`), which

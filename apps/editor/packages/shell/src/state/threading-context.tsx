@@ -58,6 +58,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -133,7 +134,9 @@ export function ThreadingProvider({ children }: PropsWithChildren) {
   // listeners (bound once per loaded session) read the freshest value
   // without re-subscribing.
   const loadedRef = useRef<LoadedCursor | null>(null);
-  loadedRef.current = loaded;
+  useLayoutEffect(() => {
+    loadedRef.current = loaded;
+  });
 
   const loadCursor = useCallback((cursor: LoadedCursor) => {
     loadedRef.current = cursor;

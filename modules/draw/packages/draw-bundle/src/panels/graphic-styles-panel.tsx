@@ -161,6 +161,29 @@ const NO_LINK: SelectionLink = {
   baked: false,
 };
 
+/** The style link of the selected object. A baked stack can be selected as
+ *  its group or as one of its derived layers — both resolve to the carrier
+ *  that owns the appearance (and therefore the style link). Outside the
+ *  panel: the React Compiler does not compile a conditional inside a `try`
+ *  (editor ADR 228). */
+async function selectionLinkOf(
+  host: BundleHost,
+  first: NonNullable<Parameters<typeof resolveAppearanceCarrier>[1]>,
+): Promise<SelectionLink> {
+  try {
+    const target = await resolveAppearanceCarrier(host, first);
+    const read = await graphicAppearanceOf(host, target);
+    const ref = graphicStyleRefOf(read.envelope);
+    return {
+      target,
+      ref,
+      overridden: ref ? graphicStyleOverridden(ref, read.appearance) : false,
+      baked: graphicStyleRefusalOf(read.envelope) === "baked",
+    };
+  } catch {
+    return { ...NO_LINK, target: first };
+  }
+}
 export function makeGraphicStylesPanel(host: BundleHost): {
   title: string;
   component: React.ComponentType<PanelProps>;
@@ -190,24 +213,7 @@ export function makeGraphicStylesPanel(host: BundleHost): {
         const first = selection[0] ?? null;
         let next: SelectionLink = NO_LINK;
         if (first) {
-          try {
-            // A baked stack can be selected as its group or as one of its
-            // derived layers — both resolve to the carrier that owns the
-            // appearance (and therefore the style link).
-            const target = await resolveAppearanceCarrier(host, first);
-            const read = await graphicAppearanceOf(host, target);
-            const ref = graphicStyleRefOf(read.envelope);
-            next = {
-              target,
-              ref,
-              overridden: ref
-                ? graphicStyleOverridden(ref, read.appearance)
-                : false,
-              baked: graphicStyleRefusalOf(read.envelope) === "baked",
-            };
-          } catch {
-            next = { ...NO_LINK, target: first };
-          }
+          next = await selectionLinkOf(host, first);
           if (!live()) return;
         }
         setPortable(host.supports(GRAPHIC_STYLES_FEATURE));
