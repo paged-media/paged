@@ -113,6 +113,24 @@ The DSL is a thenable: `await g.drag(…)` runs the queue. An async function
 must not return it bare (the `await` of its caller would run it and get
 `undefined`); return it inside an object, as `gestureEditor` does.
 
+## The headless editor's engine half
+
+`headlessEngineModule()` boots the editor's canvas-wasm once per process
+(through the plugin SDK's Node loader, which refuses a protocol skew) and
+hands out a fresh engine per editor. `createEngineWorker(engine)` is the
+render worker in process: a `Worker`-shaped object the real `CanvasClient`
+drives through `workerFactory`, mirroring `apps/canvas/src/worker/worker.ts`
+(the JSON channel, the binary load and v66 doors, the measure shortcuts, the
+gesture SAB drain, the resolver), with painting off. `modelDump(send)` is
+the canonical model dump (meta, scene tree, every element's properties, the
+document collections, every story's content), `canonicalJson` its stable
+serialisation and `dumpDiff(a, b)` a readable difference. The editor itself
+is `apps/editor/apps/canvas/tests/headless/harness.ts`
+(`createHeadlessEditor`).
+
+The fixture builder takes `stories` (paragraph lists) and a `textFrame`
+helper for documents with text.
+
 ## Where it runs
 
 - Unit, no engine: `apps/editor/packages/tools/test` (every built-in tool),
