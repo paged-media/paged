@@ -677,6 +677,13 @@
         "typescript": "catalog:",
       },
     },
+    "packages/paged": {
+      "name": "@paged-media/paged",
+      "version": "0.74.0-dev",
+      "bin": {
+        "paged": "./dist/paged.js",
+      },
+    },
     "platform/extensions": {
       "name": "paged-media-sdk",
       "version": "0.0.0",
@@ -686,7 +693,7 @@
     },
     "platform/extensions/packages/plugin-api": {
       "name": "@paged-media/plugin-api",
-      "version": "0.2.82-canary.0",
+      "version": "0.2.83-canary.0",
       "dependencies": {
         "@types/react": "catalog:",
       },
@@ -696,7 +703,7 @@
     },
     "platform/extensions/packages/plugin-sdk": {
       "name": "@paged-media/plugin-sdk",
-      "version": "0.2.82-canary.0",
+      "version": "0.2.83-canary.0",
       "bin": {
         "paged-plugin": "./bin/paged-plugin.mjs",
       },
@@ -1007,6 +1014,8 @@
     "@paged-media/image": ["@paged-media/image@workspace:modules/image/glue"],
 
     "@paged-media/image-manifest": ["@paged-media/image-manifest@workspace:modules/image/manifest"],
+
+    "@paged-media/paged": ["@paged-media/paged@workspace:packages/paged"],
 
     "@paged-media/panel-kit": ["@paged-media/panel-kit@workspace:platform/shared/panel-kit"],
 

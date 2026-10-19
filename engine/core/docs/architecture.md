@@ -260,6 +260,12 @@ the introspection (`introspect/`, with `catalog.json`) and repository (`repo/`) 
 `@paged-media/repo-wasm` and `@paged-media/sdk` are no longer packages. `.github/workflows/release.yml`
 publishes both at the tag's version, with `@paged-media/plugin-api` and `@paged-media/plugin-sdk`._
 
+_Amendment (2026-10-19, PM-0008 amendment 3): on npm the engine is `@paged-media/paged`, assembled
+in `packages/paged` from `packages/canvas-wasm` (now a private workspace package, imported under
+its own name inside the repository) with the Node CLI bundled as its `paged` bin; the viewer is
+`@paged-media/viewer`. `paged-repo-wasm` gained `tree`, `branchAgent` and `commitParts` for the
+CLI's `paged mcp`, which serves `paged-mcp`'s tools over this wasm._
+
 ## Build and test
 
 - Locally: `cargo build --workspace`, `cargo test --workspace`, clippy with `-D warnings`,

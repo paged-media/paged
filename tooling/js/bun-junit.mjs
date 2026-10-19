@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 // bun test's JUnit report, in the shape vitest's had.
 //
-//   bun tooling/js/bun-junit.mjs [--out FILE] <junit.xml>...
+//   bun tooling/js/bun-junit.mjs [--out FILE] [--prefix DIR] <junit.xml>...
 //
 // The CI lanes upload their unit-test JUnit as evidence, and the feature
 // registry maps tests by the vitest shape: one <testsuite> per spec file,
@@ -15,19 +15,28 @@
 //
 // Each input becomes one XML document; several are concatenated (the
 // lanes' `junit-all.xml` always was). Exits 1 if an input has no testcase.
+//
+// `--prefix DIR` puts DIR in front of every spec path, for a report that
+// gathers several packages' runs: each package's paths are relative to
+// that package, so two packages' `test/x.test.ts` would otherwise share
+// one classname.
 
 import { readFileSync, writeFileSync } from "node:fs";
 import { hostname } from "node:os";
 
 const args = process.argv.slice(2);
 let out;
+let prefix = "";
 const inputs = [];
 for (let i = 0; i < args.length; i++) {
   if (args[i] === "--out") out = args[++i];
+  else if (args[i] === "--prefix") prefix = args[++i].replace(/\/*$/, "/");
   else inputs.push(args[i]);
 }
 if (inputs.length === 0) {
-  console.error("usage: bun-junit.mjs [--out FILE] <junit.xml>...");
+  console.error(
+    "usage: bun-junit.mjs [--out FILE] [--prefix DIR] <junit.xml>...",
+  );
   process.exit(2);
 }
 
@@ -80,7 +89,7 @@ function parse(xml) {
       const a = attrs(m[3] ?? m[4]);
       const fileSuite = stack[0] ?? {};
       cases.push({
-        file: a.file ?? fileSuite.file ?? fileSuite.name ?? "",
+        file: prefix + (a.file ?? fileSuite.file ?? fileSuite.name ?? ""),
         chain: stack.slice(1).map((s) => s.name),
         name: a.name ?? "",
         time: a.time ?? "0",

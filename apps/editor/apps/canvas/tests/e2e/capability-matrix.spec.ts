@@ -34,7 +34,8 @@
 // e2e/capability-matrix` prints the observed table (and writes
 // /tmp/paged-e2e-capabilities.json) instead of asserting.
 
-import { readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname } from "node:path";
 import { createRequire } from "node:module";
 import { test, expect, type Page } from "@playwright/test";
 
@@ -44,7 +45,13 @@ import {
   expectedStatus,
   type CapabilityStatus,
 } from "./harness/capabilities";
-import { loadFixture, type LoadedFixture } from "./harness/fixtures";
+import { buildZip } from "./harness/build-min-idml";
+import {
+  fixturePath,
+  loadFixture,
+  type LoadedFixture,
+} from "./harness/fixtures";
+import { readZipText, zipEntries } from "./harness/read-zip";
 
 const CAPTURE = process.env.E2E_CAPS === "capture";
 
@@ -2766,6 +2773,84 @@ const NAVIGATION_PROBES: Probe[] = [
   },
 ];
 
+// ── probes on a tracked-changes copy of the `text` fixture ──────
+// protocol 74 (core ADR 184): Accept / Reject of a tracked deletion,
+// addressed by its place, as the `trackedChanges` collection lists it.
+// No generated fixture carries a tracked change and no Mutation op makes
+// one, so the probe repackages `text.idml` with one `<Change
+// ChangeType="DeletedText">` after the first story's first `<Content>`,
+// the way InDesign 20.0.1 writes a deletion inside a character range.
+// No editor UI issues either op yet.
+
+/** `text.idml` with one tracked deletion ("gamma ") in its first story,
+ *  written to `out`. Every other part is copied unchanged. */
+function writeTrackedTextFixture(out: string): void {
+  const src = readFileSync(fixturePath("text"));
+  const names = zipEntries(src)
+    .sort((a, b) => a.localHeaderOffset - b.localHeaderOffset)
+    .map((e) => e.name);
+  const story = names.find((n) => n.startsWith("Stories/"));
+  let injected = false;
+  const entries = names.map((name) => {
+    let data = readZipText(src, name) ?? "";
+    if (name === story) {
+      const at = data.indexOf("</Content>");
+      if (at >= 0) {
+        const end = at + "</Content>".length;
+        data =
+          data.slice(0, end) +
+          '<Change ChangeType="DeletedText" UserName="Probe" Date="2026-10-19T00:00:00"><Content>gamma </Content></Change>' +
+          data.slice(end);
+        injected = true;
+      }
+    }
+    return { name, data, store: name === "mimetype" };
+  });
+  if (!injected) throw new Error("text.idml: no story <Content> to track");
+  mkdirSync(dirname(out), { recursive: true });
+  writeFileSync(out, buildZip(entries));
+}
+
+/** The first row of the trackedChanges collection: its story and place. */
+async function firstTrackedChange(
+  page: Page,
+): Promise<{ storyId: string; offset: number } | null> {
+  return page.evaluate(async () => {
+    const c = (
+      globalThis as unknown as {
+        __canvas: {
+          client: {
+            collection: (
+              n: string,
+            ) => Promise<Array<{ storyId: string; offset: number }>>;
+          };
+        };
+      }
+    ).__canvas;
+    const rows = await c.client.collection("trackedChanges");
+    return rows[0]
+      ? { storyId: rows[0].storyId, offset: rows[0].offset }
+      : null;
+  });
+}
+
+const TRACKED_PROBES: Probe[] = [
+  {
+    op: "acceptTrackedChange",
+    build: async ({ page }) => {
+      const at = await firstTrackedChange(page);
+      return at ? { op: "acceptTrackedChange", args: at } : null;
+    },
+  },
+  {
+    op: "rejectTrackedChange",
+    build: async ({ page }) => {
+      const at = await firstTrackedChange(page);
+      return at ? { op: "rejectTrackedChange", args: at } : null;
+    },
+  },
+];
+
 async function runProbes(
   page: Page,
   probes: Probe[],
@@ -2849,6 +2934,14 @@ test("AC-E2E-CAPS — every wire op's engine support matches the table", async (
 
   const navFx = await loadFixture(page, "navigation");
   await runProbes(page, NAVIGATION_PROBES, navFx, results);
+
+  const trackedPath = test.info().outputPath("text-tracked.idml");
+  writeTrackedTextFixture(trackedPath);
+  const trackedFx = await loadFixture(page, {
+    label: "text-tracked",
+    absPath: trackedPath,
+  });
+  await runProbes(page, TRACKED_PROBES, trackedFx, results);
 
   // ── report ────────────────────────────────────────────────────
   const table = results

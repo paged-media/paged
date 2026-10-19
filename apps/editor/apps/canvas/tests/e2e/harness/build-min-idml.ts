@@ -30,7 +30,7 @@
 
 import { deflateRawSync } from "node:zlib";
 
-interface Entry {
+export interface ZipWriteEntry {
   name: string;
   data: string;
   store?: boolean;
@@ -45,7 +45,9 @@ function crc32(buf: Uint8Array): number {
   return ~c >>> 0;
 }
 
-function buildZip(entries: Entry[]): Uint8Array {
+/** A store-mimetype-first / deflate-rest ZIP of `entries`, in order.
+ *  Also used to repackage a corpus fixture with one part edited. */
+export function buildZip(entries: ZipWriteEntry[]): Uint8Array {
   const enc = new TextEncoder();
   const chunks: Uint8Array[] = [];
   const central: {

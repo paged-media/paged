@@ -336,18 +336,16 @@ describe("Object Options: findings", () => {
     },
   );
 
-  // The write lands (the transform turns to [1 0 0 -1 0 0]) but
-  // frameFlipV reads back false, so the switch snaps back to off.
-  test.failing(
-    "PN-202: after Flip V is turned on, the switch reads on",
-    async () => {
-      covers("panel:paged.object-options");
-      const h = await mount();
-      await h.select([h.scene.rect]);
-      await h.click(h.field("frameFlipV").querySelector('[role="switch"]')!);
-      expect(shown(h, "frameFlipV")).toBe("true");
-    },
-  );
+  // PN-202 (fixed, R1, engine ADR 192): the write landed (the transform
+  // turns to [1 0 0 -1 0 0]) but frameFlipV read back false, the matrix
+  // read as a horizontal flip turned 180°, so the switch snapped off.
+  test("PN-202: after Flip V is turned on, the switch reads on", async () => {
+    covers("panel:paged.object-options");
+    const h = await mount();
+    await h.select([h.scene.rect]);
+    await h.click(h.field("frameFlipV").querySelector('[role="switch"]')!);
+    expect(shown(h, "frameFlipV")).toBe("true");
+  });
 
   // UX audit F-22: internal identifiers shown to users. The Stroke panel
   // names the same arrowheads ("Simple", "Triangle"); here the options

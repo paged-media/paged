@@ -4,12 +4,13 @@ name: release
 # by what triggered the run:
 #
 #   npm     A tag v0.<protocol>.<patch>[-prerelease] (pushed, or a dispatch
-#           on the tag's ref): the four public npm packages at the tag's
-#           version — @paged-media/canvas-wasm, @paged-media/viewer,
-#           @paged-media/plugin-api and @paged-media/plugin-sdk. It builds the
-#           engine wasm fresh, runs the checks, packs the packages with the
-#           workspace resolved, installs the tarballs in a clean room, and
-#           publishes them with provenance through npm trusted publishing.
+#           on the tag's ref): the three public npm packages at the tag's
+#           version (PM-0008, amendment 3) — @paged-media/paged (the engine
+#           and the `paged` bin), @paged-media/viewer and
+#           @paged-media/plugin-sdk (with the contract as ./api). It builds
+#           the engine wasm fresh, runs the checks, assembles and packs the
+#           packages with the workspace resolved, installs the tarballs in a
+#           clean room, and publishes them with provenance.
 #   deploy  A push to main that changes what the editor consumes, a dispatch
 #           on main, or the engine-updated repository_dispatch: the editor
 #           playground (apps/canvas `demo` build) to Cloudflare Pages
@@ -18,13 +19,15 @@ name: release
 # TRUSTED PUBLISHING is keyed on this file's NAME: npm matches the OIDC claims
 # (repository paged-media/paged, workflow release.yml, no environment) against
 # each package's Trusted Publisher entry. Renaming this file, or publishing the
-# packages from another workflow, breaks it. Until all four entries exist, the
-# NPM_TOKEN secret authorizes the publish (the auth gate below needs one of the
-# two); once the first OIDC publish has gone through, the owner deletes the
+# packages from another workflow, breaks it. npm takes a Trusted Publisher
+# entry only for a package that exists, so the FIRST release of the two new
+# names (paged, viewer) goes through the NPM_TOKEN secret: the auth gate below
+# needs trusted publishing ready for all three, or a token that authenticates.
+# After that publish the owner registers the three entries and deletes the
 # secret (docs/migration/npm-release-runbook.md).
 #
-# Versions: the tag is the version of all four packages. Its minor must be the
-# engine's protocol (canvas-wasm's committed 0.<protocol>.0-dev); the release
+# Versions: the tag is the version of all three packages. Its minor must be the
+# engine's protocol (packages/paged's committed 0.<protocol>.0-dev); the release
 # version exists only in this run's checkout, never in a commit. A `-suffix`
 # publishes under the `next` dist-tag, anything else under `latest`. Check the
 # remote's tags and npm before naming a version: two releases have raced.
@@ -76,7 +79,7 @@ permissions:
 
 jobs:
   npm:
-    name: npm (the four public packages)
+    name: npm (the three public packages)
     if: github.ref_type == 'tag'
     runs-on: ubuntu-latest
     permissions:
@@ -117,7 +120,7 @@ jobs:
           auto-install: true
           proto-version: "0.63.1"
 
-      # The tag's minor against canvas-wasm's committed 0.<protocol>.0-dev
+      # The tag's minor against packages/paged's committed 0.<protocol>.0-dev
       # (tooling/release/stage.mjs checks it again when it stages), and the
       # committed versions against PROTOCOL_VERSION.
       - name: the tag carries the engine's protocol
@@ -140,7 +143,7 @@ jobs:
           set -euo pipefail
           V="${{ steps.ver.outputs.version }}"
           MISSING=0
-          for PKG in canvas-wasm viewer plugin-api plugin-sdk; do
+          for PKG in paged viewer plugin-sdk; do
             if npm view "@paged-media/$PKG@$V" version >/dev/null 2>&1; then
               echo "already on npm: @paged-media/$PKG@$V"
             else
@@ -150,7 +153,7 @@ jobs:
           done
           echo "missing=$MISSING" >> "$GITHUB_OUTPUT"
           if [ "$MISSING" = 0 ]; then
-            echo "::notice::all four packages are on npm at $V — nothing to publish."
+            echo "::notice::all three packages are on npm at $V — nothing to publish."
           fi
 
       # OIDC trusted publishing needs npm >= 11.5.1. The Node of /.prototools
@@ -174,7 +177,7 @@ jobs:
       # token), which once made "trusted publishing never happened" read as
       # npm's E404-on-PUT, "package missing". The claims it prints are the
       # values the npmjs.com form must match. Claims only, never the token.
-      - name: trusted publishing — readiness of the four packages
+      - name: trusted publishing — readiness of the three packages
         id: oidc
         if: steps.have.outputs.missing != '0'
         run: |
@@ -193,7 +196,7 @@ jobs:
             | jq '{repository, repository_owner, workflow_ref, job_workflow_ref, event_name, ref, environment, sub, aud}' \
             || echo "  (could not decode claims)"
           READY=true
-          for PKG in canvas-wasm viewer plugin-api plugin-sdk; do
+          for PKG in paged viewer plugin-sdk; do
             CODE="$(curl -sS -o /tmp/exch.json -w '%{http_code}' -X POST \
               -H "Authorization: Bearer ${ID_TOKEN}" \
               "https://registry.npmjs.org/-/npm/v1/oidc/token/exchange/package/@paged-media%2f${PKG}")"
@@ -208,13 +211,14 @@ jobs:
           done
           echo "ready=$READY" >> "$GITHUB_OUTPUT"
           if [ "$READY" = true ]; then
-            echo "::notice::All four packages authenticate via OIDC. Once this release is on npm, the NPM_TOKEN secret can be deleted."
+            echo "::notice::All three packages authenticate via OIDC. Once this release is on npm, the NPM_TOKEN secret can be deleted."
           else
-            echo "::notice::Each package needs its own Trusted Publisher entry: organization paged-media, repository paged, workflow release.yml, no environment."
+            echo "::notice::Each package needs its own Trusted Publisher entry: organization paged-media, repository paged, workflow release.yml, no environment. A package not on npm yet (the first release of paged and viewer) cannot have one: that release publishes with NPM_TOKEN."
           fi
 
       # THE AUTH GATE, before anything expensive: trusted publishing ready for
-      # all four, or a token that authenticates. A bad token costs two seconds
+      # all three, or a token that authenticates (the first release: the two
+      # new names have no Trusted Publisher entry yet). A bad token costs two seconds
       # and names itself (E401) instead of arriving as E404-on-PUT after the
       # build (four releases went missing that way). A throwaway userconfig
       # keeps the runner's ~/.npmrc untouched.
@@ -225,7 +229,7 @@ jobs:
         run: |
           set -euo pipefail
           if [ "${{ steps.oidc.outputs.ready }}" = "true" ]; then
-            echo "trusted publishing is ready for all four packages."
+            echo "trusted publishing is ready for all three packages."
             if [ -n "${NPM_TOKEN}" ]; then
               echo "::notice::NPM_TOKEN is still set; npm uses OIDC first. Delete the secret after this release."
             fi
@@ -252,7 +256,8 @@ jobs:
 
       # A release never takes wasm from a cache: the four parts are built
       # from this tag (the `wasm-release` profile, wasm-bindgen --target web,
-      # wasm-opt -Oz) into canvas-wasm and the viewer's wasm/.
+      # wasm-opt -Oz) into canvas-wasm and the viewer's wasm/; packages/paged
+      # is assembled from canvas-wasm below.
       - name: engine wasm (built fresh)
         if: steps.have.outputs.missing != '0'
         uses: ./.github/actions/engine-wasm
@@ -279,7 +284,7 @@ jobs:
       # Build BEFORE the suite: react-free-import.spec.ts asserts on the
       # SHIPPED artifact and skips itself when dist/ is absent. The vendored
       # wire and capability catalog must match the engine this tag builds.
-      - name: plugin-api and plugin-sdk — typecheck, build, test, wire and catalog lockstep
+      - name: plugin-api and plugin-sdk — typecheck, build (./api inlined), test, wire and catalog lockstep
         if: steps.have.outputs.missing != '0'
         working-directory: platform/extensions
         run: |
@@ -290,16 +295,28 @@ jobs:
           bun scripts/sync-wire.mjs --check
           bun scripts/sync-catalog.mjs --check
 
-      # The four tarballs at the release version, with workspace: and catalog:
+      # The paged package: the engine's built files and the CLI bundled into
+      # dist/paged.js (one file, node: builtins only, its notices beside it),
+      # and the CLI's own checks of `paged mcp` and of that bundle.
+      - name: "@paged-media/paged — the CLI's mcp parity and bundle specs, assemble"
+        if: steps.have.outputs.missing != '0'
+        run: |
+          set -euo pipefail
+          ( cd apps/cli && bun run test test/mcp-parity.spec.ts test/npm-bundle.spec.ts )
+          ( cd packages/paged && bun run build )
+
+      # The three tarballs at the release version, with workspace: and catalog:
       # resolved; stage.mjs runs verify-tarballs.mjs (names, versions, licence,
-      # repository, every entry point present, one version for the four, and
-      # the viewer subset audit of the packed files).
-      - name: pack the four packages at the release version
+      # repository, access, every entry point present, nothing private
+      # depended on, the bin's imports, ./api type-only, and the viewer subset
+      # audit of the packed files).
+      - name: pack the three packages at the release version
         if: steps.have.outputs.missing != '0'
         run: bun tooling/release/stage.mjs "${{ steps.ver.outputs.version }}" "$RUNNER_TEMP/npm" --keep
 
       # Install the tarballs into empty projects under Node (npm) and Bun,
-      # import every entry and subpath, run the paged-plugin bin, typecheck a
+      # import every entry and subpath, run the paged bin (paged mcp
+      # included) and the paged-plugin bin (init included), typecheck a
       # consumer with nodenext and bundler resolution.
       - name: clean-room consumer test
         if: steps.have.outputs.missing != '0'
@@ -333,7 +350,7 @@ jobs:
           if [ -n "${NODE_AUTH_TOKEN}" ]; then
             printf '%s\n' "//registry.npmjs.org/:_authToken=\${NODE_AUTH_TOKEN}" >> "$NPM_CONFIG_USERCONFIG"
           fi
-          for PKG in canvas-wasm viewer plugin-api plugin-sdk; do
+          for PKG in paged viewer plugin-sdk; do
             if npm view "@paged-media/$PKG@$V" version >/dev/null 2>&1; then
               echo "skip @paged-media/$PKG@$V (already on npm)"
               continue
@@ -344,7 +361,7 @@ jobs:
             npm publish --provenance --access public --tag "$TAG" --loglevel verbose "$TGZ"
           done
 
-      - name: dist-tags of the four packages
+      - name: dist-tags of the three packages
         run: node tooling/release/assert-dist-tags.mjs "${{ steps.ver.outputs.version }}" "${{ steps.ver.outputs.tag }}"
 
   deploy:
