@@ -64,6 +64,7 @@ import {
   fromElementId,
   parseAddress,
 } from "@paged-media/plugin-sdk";
+import { labelKey } from "@paged-media/helpers";
 
 import manifest from "../manifest.json";
 import {
@@ -100,7 +101,7 @@ import {
 } from "./source-part";
 
 export const PLUGIN_ID = manifest.id;
-const LABEL_KEY = `x-paged:${PLUGIN_ID}`;
+const LABEL_KEY = labelKey(PLUGIN_ID);
 
 /** Default bounds of an inserted web frame, page-local pt. */
 const DEFAULT_BOUNDS: [number, number, number, number] = [60, 60, 240, 300];

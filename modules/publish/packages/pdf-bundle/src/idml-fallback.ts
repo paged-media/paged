@@ -37,6 +37,7 @@
 // `Rectangle.image_bytes`; the `<Image>` element flips `has_image_element`.
 
 import JSZip from "jszip";
+import { bytesToBase64 } from "@paged-media/helpers";
 
 /** One rasterized PDF page: its point size + the PNG-encoded pixels. */
 export interface PdfPageRaster {
@@ -142,19 +143,6 @@ function fmt(n: number): string {
   return String(n);
 }
 
-function base64(bytes: Uint8Array): string {
-  // Chunked to stay well under any argument-count limits for large pages.
-  let binary = "";
-  const CHUNK = 0x8000;
-  for (let i = 0; i < bytes.length; i += CHUNK) {
-    const slice = bytes.subarray(i, i + CHUNK);
-    binary += String.fromCharCode.apply(null, slice as unknown as number[]);
-  }
-  // Present in both browser (btoa) and node (Buffer) runtimes.
-  if (typeof btoa === "function") return btoa(binary);
-  return Buffer.from(binary, "binary").toString("base64");
-}
-
 // The four page corners, anchored at the item origin (0,0) — exactly the
 // walk `write_path_geometry` emits in page_item.rs:
 //   (0,0) (0,h) (w,h) (w,0)
@@ -192,7 +180,7 @@ function pathGeometry(widthPt: number, heightPt: number): string {
 function spread(page: PdfPageRaster, index: number): string {
   const bounds = boundsStr(page.widthPt, page.heightPt);
   const geometry = pathGeometry(page.widthPt, page.heightPt);
-  const contents = base64(page.pngBytes);
+  const contents = bytesToBase64(page.pngBytes);
   const spreadId = `spread_p${index}`;
   const pageId = `page_p${index}`;
   const rectId = `rect_p${index}`;

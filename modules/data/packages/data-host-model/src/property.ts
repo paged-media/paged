@@ -6,6 +6,7 @@
 // objects a selector names today, and which swatch a colour is.
 
 import type { Mutation, ObjectOp } from "@paged-media/plugin-api";
+import { asciiJson } from "@paged-media/helpers";
 
 /** `data-core` `TargetRef`: `"host"` or `{ selector }`. */
 export type TargetRef = "host" | { selector: string };
@@ -190,16 +191,10 @@ export function planProperties(
 
 // ── labels (ADR 559) ────────────────────────────────────────────────────────
 
-/** Escape every non-ASCII character of a JSON text as `\uXXXX` (surrogate
- *  pairs as two escapes). InDesign re-encodes non-BMP characters in a label
- *  as `<?AID xxxx?>` processing text; an ASCII-only value comes back
- *  byte-exact (the 2026-10-06 round-trip survey). */
-export function asciiJson(value: unknown): string {
-  return JSON.stringify(value).replace(
-    /[\u0080-￿]/g,
-    (c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, "0")}`,
-  );
-}
+/** `JSON.stringify` with every non-ASCII character as a `\uXXXX` escape: an
+ *  ASCII-only value comes back from InDesign byte-exact (the 2026-10-06
+ *  round-trip survey). The shared one (`@paged-media/helpers`). */
+export { asciiJson };
 
 /** Undo InDesign's label re-encoding: every `<?AID xxxx?>` (one UTF-16 code
  *  unit, hex) back to its character. Safe on any text. */

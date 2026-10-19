@@ -61,6 +61,7 @@ import type {
   CodeEditorDiagnostic,
   ElementId,
 } from "@paged-media/plugin-api";
+import { PX_PER_PT } from "@paged-media/helpers";
 import {
   asFrameTarget,
   boundNamesIn,
@@ -732,9 +733,6 @@ export function makeWebSourcePanel(
     );
   };
 }
-
-/** CSS px per point (1 pt = 1/72 in, 1 px = 1/96 in). */
-const PX_PER_PT = 96 / 72;
 
 /** The frame's content size in CSS px, or `null` when the host answers no
  *  geometry. Follows resizes (a `resizeFrame`'s reflow, a gesture commit —

@@ -68,6 +68,7 @@ import type {
   ValueType,
 } from "@paged-media/plugin-api";
 import { formatAddress, parseAddress } from "@paged-media/plugin-sdk";
+import { encodeEnvelope, labelKey } from "@paged-media/helpers";
 
 import type { ImportReport, SlideReport, Transition } from "./engine.js";
 
@@ -83,7 +84,7 @@ import newSlideResult from "../schema/new-slide.result.json" with { type: "json"
 export const PLUGIN_ID = "media.paged.slide";
 /** The label key every slide label is written under (the host derives the
  *  same key for `document.setMetadata`). */
-export const LABEL_KEY = `x-paged:${PLUGIN_ID}`;
+export const LABEL_KEY = labelKey(PLUGIN_ID);
 /** Version of the label payloads below (plugin-owned migrations). */
 export const LABEL_VERSION = 1;
 /** The engine's cap on one label is 64 KiB; stay under it with room for
@@ -163,17 +164,11 @@ export interface PlaceholderLabel {
   placeholder: { type: string; idx: number | null };
 }
 
-/** JSON whose non-ASCII characters are `\uXXXX` escapes: labels travel
- *  through InDesign as XML attribute text (ADR 559). Still valid JSON. */
-export function asciiJson(value: unknown): string {
-  return JSON.stringify(value).replace(
-    /[\u007f-￿]/g,
-    (c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, "0")}`,
-  );
-}
-
+/** A label value: `{ v, data }` whose non-ASCII characters are `\uXXXX`
+ *  escapes, as labels travel through InDesign as XML attribute text (ADR
+ *  559). Still valid JSON. */
 function envelope(data: unknown): string {
-  return asciiJson({ v: LABEL_VERSION, data });
+  return encodeEnvelope(data, LABEL_VERSION);
 }
 
 export function transitionRecord(

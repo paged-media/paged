@@ -17,6 +17,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
+import { bytesToBase64Url } from "@paged-media/helpers";
 // Signing in to a paged.server from the browser editor: an OAuth 2.1 public
 // client (dynamic registration, PKCE S256), in a popup. Main thread only.
 //
@@ -40,18 +41,12 @@ interface Tokens {
 const key = (server: string, what: string) =>
   `paged.server.${new URL(server).origin}.${what}`;
 
-function b64url(bytes: Uint8Array): string {
-  let s = "";
-  for (const b of bytes) s += String.fromCharCode(b);
-  return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-}
-
 function random(n = 32): string {
-  return b64url(crypto.getRandomValues(new Uint8Array(n)));
+  return bytesToBase64Url(crypto.getRandomValues(new Uint8Array(n)));
 }
 
 async function s256(verifier: string): Promise<string> {
-  return b64url(
+  return bytesToBase64Url(
     new Uint8Array(
       await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier)),
     ),
