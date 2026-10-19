@@ -3000,6 +3000,22 @@ pub(super) fn apply_set_cell_span(
     };
     let table = find_table_mut(doc, story_id, table_id)
         .ok_or_else(|| OperationError::NodeNotFound(node.clone()))?;
+    // A span stays inside the grid: a cell at column `col` spans at most
+    // the columns to the table's right edge, and likewise for rows
+    // (finding SCR-8: a 9-column span on a 3-column table was stored).
+    let columns = table.column_count.max(table.columns.len() as u32);
+    let rows = (table.header_row_count + table.body_row_count + table.footer_row_count)
+        .max(table.rows.len() as u32);
+    for (start, span, len) in [(col, column_span, columns), (row, row_span, rows)] {
+        let end = start.saturating_add(span.max(1));
+        if end > len {
+            return Err(OperationError::InvalidPosition {
+                parent: node.clone(),
+                position: end as usize,
+                len: len as usize,
+            });
+        }
+    }
     let cell = table
         .cells
         .iter_mut()

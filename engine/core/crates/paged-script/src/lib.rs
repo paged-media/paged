@@ -1549,6 +1549,18 @@ fn paged_set(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<J
     })))
 }
 
+/// A required text argument: `None` when it is absent (`undefined` or
+/// `null`), which the caller refuses with the document untouched (finding
+/// SCR-1: it was stored as the word "undefined"). Any other value converts
+/// as `String(v)` does, so a Symbol still throws.
+fn required_text(args: &[JsValue], index: usize, ctx: &mut Context) -> JsResult<Option<String>> {
+    let value = args.get_or_undefined(index);
+    if value.is_undefined() || value.is_null() {
+        return Ok(None);
+    }
+    Ok(Some(value.to_string(ctx)?.to_std_string_escaped()))
+}
+
 /// `paged.insertText(storyId, offset, text)` — insert plain text at a
 /// story-local body offset (Stage 1 text authoring). `\n` splits into
 /// paragraphs. Lands as `Mutation::InsertText` through the same apply
@@ -1561,10 +1573,9 @@ fn paged_insert_text(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> Js
         .to_string(ctx)?
         .to_std_string_escaped();
     let offset = args.get_or_undefined(1).to_number(ctx)? as u32;
-    let text = args
-        .get_or_undefined(2)
-        .to_string(ctx)?
-        .to_std_string_escaped();
+    let Some(text) = required_text(args, 2, ctx)? else {
+        return Ok(JsValue::from(false));
+    };
     let mutation = Mutation::InsertText {
         story_id,
         offset,
@@ -1759,6 +1770,23 @@ fn paged_apply_style(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> Js
     } else {
         paged_mutate::operation::StyleScope::Paragraph
     };
+    // A style the document does not have is refused, not applied as a
+    // dangling reference (finding SCR-9). The empty style clears.
+    let exists = style.is_empty()
+        || with_model(|m| {
+            let styles = &m.scene().styles;
+            match scope {
+                paged_mutate::operation::StyleScope::Character => {
+                    styles.character_styles.contains_key(&style)
+                }
+                paged_mutate::operation::StyleScope::Paragraph => {
+                    styles.paragraph_styles.contains_key(&style)
+                }
+            }
+        });
+    if !exists {
+        return Ok(JsValue::from(false));
+    }
     let mutation = Mutation::ApplyStyle {
         paragraph: None,
         story_id,
@@ -1999,6 +2027,30 @@ fn read_string_array(value: &JsValue, ctx: &mut Context) -> Vec<String> {
     out
 }
 
+/// An id list a WRITE acts on: every entry must parse, or the call is
+/// refused (`None`). A typo in one entry is a caller error, not something
+/// to drop quietly: running a verb on two of three named elements is a
+/// different operation from the one asked for (finding SCR-2). `None` too
+/// for a value that is not a list.
+fn strict_element_id_array(
+    value: &JsValue,
+    ctx: &mut Context,
+) -> Option<Vec<paged_canvas::element_selection::ElementId>> {
+    let obj = value.as_object()?;
+    let len = obj
+        .get(js_string!("length"), ctx)
+        .ok()
+        .and_then(|v| v.as_number())
+        .unwrap_or(0.0) as usize;
+    (0..len)
+        .map(|i| {
+            let item = obj.get(i as u32, ctx).ok()?;
+            let s = item.to_string(ctx).ok()?;
+            parse_element_id(&s.to_std_string_escaped())
+        })
+        .collect()
+}
+
 /// Parse a JS array of element-id address strings into `ElementId`s,
 /// dropping unparseable entries (shared by `setElementSelection` +
 /// `pathfinderBoolean`).
@@ -2224,19 +2276,11 @@ fn paged_duplicate_elements(
     args: &[JsValue],
     ctx: &mut Context,
 ) -> JsResult<JsValue> {
-    let given = args
-        .get_or_undefined(0)
-        .as_object()
-        .and_then(|o| o.get(js_string!("length"), ctx).ok())
-        .and_then(|v| v.as_number())
-        .unwrap_or(0.0) as usize;
-    let element_ids = parse_element_id_array(args.get_or_undefined(0), ctx);
-    // An id that does not parse is a caller error, not something to
-    // drop quietly: duplicating two of three named elements would be a
-    // different operation from the one asked for.
-    if element_ids.is_empty() || element_ids.len() != given {
+    let Some(element_ids) = strict_element_id_array(args.get_or_undefined(0), ctx)
+        .filter(|ids| !ids.is_empty())
+    else {
         return Ok(JsValue::null());
-    }
+    };
     let coord = |v: &JsValue, ctx: &mut Context| -> JsResult<f32> {
         if v.is_undefined() || v.is_null() {
             Ok(0.0)
@@ -2275,16 +2319,11 @@ fn paged_duplicate_elements(
 /// the engine refuses (a threaded text frame, items on two spreads, …) or
 /// an id does not parse. A read: nothing changes.
 fn paged_copy_elements(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
-    let given = args
-        .get_or_undefined(0)
-        .as_object()
-        .and_then(|o| o.get(js_string!("length"), ctx).ok())
-        .and_then(|v| v.as_number())
-        .unwrap_or(0.0) as usize;
-    let element_ids = parse_element_id_array(args.get_or_undefined(0), ctx);
-    if element_ids.is_empty() || element_ids.len() != given {
+    let Some(element_ids) = strict_element_id_array(args.get_or_undefined(0), ctx)
+        .filter(|ids| !ids.is_empty())
+    else {
         return Ok(JsValue::null());
-    }
+    };
     let snippet = with_model(|m| m.export_elements(&element_ids).ok());
     Ok(match snippet {
         Some((json, _, _)) => JsValue::from(js_string!(json)),
@@ -2730,7 +2769,9 @@ fn paged_pathfinder_boolean(
     let Some(kept) = parse_element_id(&id) else {
         return Ok(JsValue::from(false));
     };
-    let others = parse_element_id_array(args.get_or_undefined(1), ctx);
+    let Some(others) = strict_element_id_array(args.get_or_undefined(1), ctx) else {
+        return Ok(JsValue::from(false));
+    };
     let Some(kind) = from_js::<paged_mutate::PathfinderKind>(args.get_or_undefined(2), ctx) else {
         return Ok(JsValue::from(false));
     };
@@ -2792,11 +2833,10 @@ fn pathfinder_region(
     ctx: &mut Context,
     make: fn(Vec<paged_canvas::element_selection::ElementId>) -> Mutation,
 ) -> JsValue {
-    let element_ids = parse_element_id_array(args.get_or_undefined(0), ctx);
-    if element_ids.is_empty() {
-        return JsValue::from(false);
+    match strict_element_id_array(args.get_or_undefined(0), ctx) {
+        Some(element_ids) if !element_ids.is_empty() => apply_bool(&make(element_ids)),
+        _ => JsValue::from(false),
     }
-    apply_bool(&make(element_ids))
 }
 
 /// `paged.pathfinderDivide(elementIds)` (`Mutation::PathfinderDivide`).
@@ -2873,10 +2913,11 @@ fn paged_pathfinder_faces(
     args: &[JsValue],
     ctx: &mut Context,
 ) -> JsResult<JsValue> {
-    let element_ids = parse_element_id_array(args.get_or_undefined(0), ctx);
-    if element_ids.is_empty() {
+    let Some(element_ids) = strict_element_id_array(args.get_or_undefined(0), ctx)
+        .filter(|ids| !ids.is_empty())
+    else {
         return Ok(JsValue::from(false));
-    }
+    };
     let faces = read_string_array(args.get_or_undefined(1), ctx);
     let Some(mode) = from_js::<paged_mutate::FaceSelectMode>(args.get_or_undefined(2), ctx) else {
         return Ok(JsValue::from(false));
@@ -3441,10 +3482,9 @@ fn paged_rename_bookmark(
         .get_or_undefined(0)
         .to_string(ctx)?
         .to_std_string_escaped();
-    let name = args
-        .get_or_undefined(1)
-        .to_string(ctx)?
-        .to_std_string_escaped();
+    let Some(name) = required_text(args, 1, ctx)? else {
+        return Ok(JsValue::from(false));
+    };
     Ok(apply_bool(&Mutation::RenameBookmark { bookmark_id, name }))
 }
 
@@ -3840,15 +3880,18 @@ fn paged_set_cell_span(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> 
 fn read_style_spec(
     value: &JsValue,
     ctx: &mut Context,
-) -> (Option<String>, Option<String>, Option<String>) {
-    match value.as_object() {
-        Some(obj) => (
-            prop_string(&obj, "id", ctx),
-            prop_string(&obj, "name", ctx),
-            prop_string(&obj, "basedOn", ctx),
-        ),
-        None => (None, None, None),
+) -> Option<(Option<String>, Option<String>, Option<String>)> {
+    if value.is_undefined() || value.is_null() {
+        return Some((None, None, None));
     }
+    // A spec that is not an object (`createParagraphStyle('Body')`) is
+    // refused, not read as `{}` (finding SCR-3).
+    let obj = value.as_object()?;
+    Some((
+        prop_string(&obj, "id", ctx),
+        prop_string(&obj, "name", ctx),
+        prop_string(&obj, "basedOn", ctx),
+    ))
 }
 
 /// `paged.createParagraphStyle({id?,name?,basedOn?})` — returns the new
@@ -3858,7 +3901,9 @@ fn paged_create_paragraph_style(
     args: &[JsValue],
     ctx: &mut Context,
 ) -> JsResult<JsValue> {
-    let (self_id, name, based_on) = read_style_spec(args.get_or_undefined(0), ctx);
+    let Some((self_id, name, based_on)) = read_style_spec(args.get_or_undefined(0), ctx) else {
+        return Ok(JsValue::null());
+    };
     Ok(apply_new_self_id(
         CollectionName::ParagraphStyles,
         &Mutation::CreateParagraphStyle {
@@ -3879,10 +3924,9 @@ fn paged_rename_paragraph_style(
         .get_or_undefined(0)
         .to_string(ctx)?
         .to_std_string_escaped();
-    let name = args
-        .get_or_undefined(1)
-        .to_string(ctx)?
-        .to_std_string_escaped();
+    let Some(name) = required_text(args, 1, ctx)? else {
+        return Ok(JsValue::from(false));
+    };
     Ok(apply_bool(&Mutation::RenameParagraphStyle {
         style_id,
         name,
@@ -3908,7 +3952,9 @@ fn paged_create_character_style(
     args: &[JsValue],
     ctx: &mut Context,
 ) -> JsResult<JsValue> {
-    let (self_id, name, based_on) = read_style_spec(args.get_or_undefined(0), ctx);
+    let Some((self_id, name, based_on)) = read_style_spec(args.get_or_undefined(0), ctx) else {
+        return Ok(JsValue::null());
+    };
     Ok(apply_new_self_id(
         CollectionName::CharacterStyles,
         &Mutation::CreateCharacterStyle {
@@ -3929,10 +3975,9 @@ fn paged_rename_character_style(
         .get_or_undefined(0)
         .to_string(ctx)?
         .to_std_string_escaped();
-    let name = args
-        .get_or_undefined(1)
-        .to_string(ctx)?
-        .to_std_string_escaped();
+    let Some(name) = required_text(args, 1, ctx)? else {
+        return Ok(JsValue::from(false));
+    };
     Ok(apply_bool(&Mutation::RenameCharacterStyle {
         style_id,
         name,
@@ -3958,7 +4003,9 @@ fn paged_create_object_style(
     args: &[JsValue],
     ctx: &mut Context,
 ) -> JsResult<JsValue> {
-    let (self_id, name, based_on) = read_style_spec(args.get_or_undefined(0), ctx);
+    let Some((self_id, name, based_on)) = read_style_spec(args.get_or_undefined(0), ctx) else {
+        return Ok(JsValue::null());
+    };
     Ok(apply_new_self_id(
         CollectionName::ObjectStyles,
         &Mutation::CreateObjectStyle {
@@ -3979,10 +4026,9 @@ fn paged_rename_object_style(
         .get_or_undefined(0)
         .to_string(ctx)?
         .to_std_string_escaped();
-    let name = args
-        .get_or_undefined(1)
-        .to_string(ctx)?
-        .to_std_string_escaped();
+    let Some(name) = required_text(args, 1, ctx)? else {
+        return Ok(JsValue::from(false));
+    };
     Ok(apply_bool(&Mutation::RenameObjectStyle { style_id, name }))
 }
 
@@ -4005,7 +4051,9 @@ fn paged_create_cell_style(
     args: &[JsValue],
     ctx: &mut Context,
 ) -> JsResult<JsValue> {
-    let (self_id, name, based_on) = read_style_spec(args.get_or_undefined(0), ctx);
+    let Some((self_id, name, based_on)) = read_style_spec(args.get_or_undefined(0), ctx) else {
+        return Ok(JsValue::null());
+    };
     Ok(apply_new_self_id(
         CollectionName::CellStyles,
         &Mutation::CreateCellStyle {
@@ -4026,10 +4074,9 @@ fn paged_rename_cell_style(
         .get_or_undefined(0)
         .to_string(ctx)?
         .to_std_string_escaped();
-    let name = args
-        .get_or_undefined(1)
-        .to_string(ctx)?
-        .to_std_string_escaped();
+    let Some(name) = required_text(args, 1, ctx)? else {
+        return Ok(JsValue::from(false));
+    };
     Ok(apply_bool(&Mutation::RenameCellStyle { style_id, name }))
 }
 
@@ -4052,7 +4099,9 @@ fn paged_create_table_style(
     args: &[JsValue],
     ctx: &mut Context,
 ) -> JsResult<JsValue> {
-    let (self_id, name, based_on) = read_style_spec(args.get_or_undefined(0), ctx);
+    let Some((self_id, name, based_on)) = read_style_spec(args.get_or_undefined(0), ctx) else {
+        return Ok(JsValue::null());
+    };
     Ok(apply_new_self_id(
         CollectionName::TableStyles,
         &Mutation::CreateTableStyle {
@@ -4073,10 +4122,9 @@ fn paged_rename_table_style(
         .get_or_undefined(0)
         .to_string(ctx)?
         .to_std_string_escaped();
-    let name = args
-        .get_or_undefined(1)
-        .to_string(ctx)?
-        .to_std_string_escaped();
+    let Some(name) = required_text(args, 1, ctx)? else {
+        return Ok(JsValue::from(false));
+    };
     Ok(apply_bool(&Mutation::RenameTableStyle { style_id, name }))
 }
 
@@ -4321,10 +4369,9 @@ fn paged_activate_condition_set(
 /// zero-based stacking index (`Mutation::LayerInsert`).
 fn paged_layer_insert(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
     let position = args.get_or_undefined(0).to_number(ctx)? as u32;
-    let name = args
-        .get_or_undefined(1)
-        .to_string(ctx)?
-        .to_std_string_escaped();
+    let Some(name) = required_text(args, 1, ctx)? else {
+        return Ok(JsValue::from(false));
+    };
     Ok(apply_bool(&Mutation::LayerInsert { position, name }))
 }
 
@@ -4403,10 +4450,9 @@ fn paged_layer_set_name(_this: &JsValue, args: &[JsValue], ctx: &mut Context) ->
         .get_or_undefined(0)
         .to_string(ctx)?
         .to_std_string_escaped();
-    let name = args
-        .get_or_undefined(1)
-        .to_string(ctx)?
-        .to_std_string_escaped();
+    let Some(name) = required_text(args, 1, ctx)? else {
+        return Ok(JsValue::from(false));
+    };
     Ok(apply_bool(&Mutation::LayerSetName { layer_id, name }))
 }
 

@@ -589,9 +589,9 @@ fn rename_bookmark() {
         &format!("paged.renameBookmark({a:?}, Symbol('n'))"),
         SYMBOL_TO_STRING,
     );
-    // finding SCR-1: a missing name is renamed to the text "undefined"; it should be refused.
-    writes(&mut m, &format!("paged.renameBookmark({a:?})"), "true");
-    assert!(bookmarks(&mut m).to_string().contains("\"undefined\""));
+    // SCR-1 (fixed): a missing name is refused.
+    refuses(&mut m, &format!("paged.renameBookmark({a:?})"), "false");
+    assert!(!bookmarks(&mut m).to_string().contains("\"undefined\""));
     writes(
         &mut m,
         &format!("paged.renameBookmark({a:?}, 'Preface')"),
