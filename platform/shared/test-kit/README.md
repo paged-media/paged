@@ -27,12 +27,21 @@ it("undo restores the frame", async () => {
 });
 ```
 
-An id is `<kind>:<id>` (the `SurfaceId` type); the kinds are `command`,
-`panel`, `tool`, `menu`, `keybinding`, `setting`, `cli` and `script`
-(`SURFACE_KINDS`). Plugin contributions use the same kinds with their own
-ids. `cli:` ids are the binary and the command path, one space apart
-(`cli:paged export-pdf`); `keybinding:` ids are the binding's id or
-`<chord>→<command>`; `menu:` ids are the item's id.
+An id is `<kind>:<id>` (the `SurfaceId` type). The kinds (`SURFACE_KINDS`)
+and their ids; plugin contributions use the same kinds with their own ids:
+
+| Kind         | Id                                                                                                                                                                                                                                              |
+| ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `command`    | the command id: `command:paged.editor.undo`; a bundle's manifest commands and typed object-model commands: `command:media.paged.slide.newSlide`                                                                                                 |
+| `panel`      | the panel id, schema panels included: `panel:paged.layers`                                                                                                                                                                                      |
+| `tool`       | the tool id: `tool:paged.tool.rectangle`                                                                                                                                                                                                        |
+| `menu`       | the item's path as registered, the menu registry's own key: `menu:File/Export PDF…`. `menu:<command id>` is an accepted alias while exactly ONE item (host or plugin) invokes that command; the gate errors and lists the paths when several do |
+| `keybinding` | `<key>→<command>`, the key as registered (lowercase combo): `keybinding:cmd+z→paged.editor.undo`; `->` is read as `→`                                                                                                                           |
+| `setting`    | the configuration key; a tool option is `<toolId>.<key>`: `setting:paged.tool.polygon.sides`                                                                                                                                                    |
+| `cli`        | the binary and the command path, one space apart: `cli:paged export-pdf`                                                                                                                                                                        |
+| `script`     | the function's full name: `script:paged.document.pages`, `script:editor.select`                                                                                                                                                                 |
+| `importer`   | a bundle's importer id (`contributes.importers`)                                                                                                                                                                                                |
+| `exporter`   | a bundle's exporter id (`contributes.exporters`)                                                                                                                                                                                                |
 
 **The forms the gate reads, and nothing else:**
 

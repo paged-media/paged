@@ -25,7 +25,7 @@ describe("covers", () => {
     expect(covers("command:paged.undo", "panel:paged.layers")).toBeUndefined();
   });
 
-  it("names the eight surface kinds the gate enumerates", () => {
+  it("names the ten surface kinds the gate enumerates", () => {
     expect([...SURFACE_KINDS]).toEqual([
       "command",
       "panel",
@@ -35,6 +35,8 @@ describe("covers", () => {
       "setting",
       "cli",
       "script",
+      "importer",
+      "exporter",
     ]);
   });
 
