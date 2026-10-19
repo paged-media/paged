@@ -50,6 +50,7 @@ import {
   nativeKey,
   prettyKey,
   useRegistries,
+  useRegistryView,
   type PanelProps,
 } from "@paged-media/shell";
 
@@ -117,8 +118,13 @@ const AD_HOC: { key: string; what: string; where: string }[] = [
 ];
 
 export function KeyboardShortcutsPanel(_props: PanelProps) {
-  const { keybindings, commands } = useRegistries();
+  // Views of the registries (ADR 229): the table follows what bundles
+  // register after it first rendered.
+  const registries = useRegistries();
+  const keybindings = useRegistryView(registries.keybindings);
+  const commands = useRegistryView(registries.commands);
 
+  // eslint-disable-next-line no-restricted-syntax -- a computed block, not a single expression (ADR 229)
   const rows = useMemo(() => {
     const titles = new Map(commands.list().map((c) => [c.id, c.title]));
     // One row per COMMAND. cmd+ and ctrl+ are separate contributions for

@@ -162,18 +162,21 @@ export function useObjectProperty(req: ObjectPropertyRequest): ObjectProperty {
   const scope = req.scope ?? "element";
 
   // ------------------------------------------------------- targets
+  // eslint-disable-next-line no-restricted-syntax -- a computed block, not a single expression (ADR 229)
   const targetIds = useMemo((): ElementId[] => {
     if (req.targets) return [];
     if (scope === "content")
       return contentSelection ? [storyRangeId(contentSelection)] : [];
     return elementSelection;
   }, [req.targets, scope, contentSelection, elementSelection]);
+  // eslint-disable-next-line no-restricted-syntax -- a computed block, not a single expression (ADR 229)
   const addresses = useMemo((): string[] => {
     if (req.targets) return [...req.targets];
     if (!model) return [];
     return targetIds.map((id) => model.addressOf(id));
   }, [req.targets, model, targetIds]);
   const addressesKey = JSON.stringify(addresses);
+  // eslint-disable-next-line no-restricted-syntax -- a hook's result: callers may compare it (ADR 229)
   const elementOf = useCallback(
     (address: string): ElementId | null => {
       const i = addresses.indexOf(address);
@@ -305,6 +308,7 @@ export function useObjectProperty(req: ObjectPropertyRequest): ObjectProperty {
   const claimed = claim.source === "provider" ? claim : null;
   const readOnly = row?.access === "readOnly" || row?.access === "derived";
 
+  // eslint-disable-next-line no-restricted-syntax -- a computed block, not a single expression (ADR 229)
   const commit = useMemo(() => {
     if (claimed) {
       if (!claimed.writable || !providerHost || !wire) return null;
@@ -350,6 +354,7 @@ export function useObjectProperty(req: ObjectPropertyRequest): ObjectProperty {
     scope,
   ]);
 
+  // eslint-disable-next-line no-restricted-syntax -- a computed block, not a single expression (ADR 229)
   const edit = useMemo(() => {
     if (!commit || !row) return null;
     const type = row.type;
@@ -418,6 +423,7 @@ export function useObjectProperty(req: ObjectPropertyRequest): ObjectProperty {
  *  inputs of the durable bind target. */
 export function useElementLabels() {
   const client = useCanvasClient();
+  // eslint-disable-next-line no-restricted-syntax -- not a plain binding (ADR 229)
   return useCallback(
     async (id: ElementId | null) => {
       if (!id)

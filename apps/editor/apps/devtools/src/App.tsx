@@ -17,7 +17,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   InspectorClient,
   Mutation,
@@ -36,13 +36,21 @@ export function App() {
   const [descriptors, setDescriptors] = useState<PropertyDescriptor[]>([]);
   const [renderEpoch, setRenderEpoch] = useState(0);
   const [pageIndex, setPageIndex] = useState(0);
+  // The scene tree is read where it changes (a file opened, a mutation
+  // applied) and kept in state. Read from `client` during render, it would
+  // be computed once per client: the client object stays the same while
+  // its document changes (ADR 229).
+  const [tree, setTree] = useState<ReturnType<InspectorClient["tree"]> | null>(
+    null,
+  );
 
-  const handleFile = useCallback(async (file: File) => {
+  const handleFile = async (file: File) => {
     try {
       setError(null);
       const bytes = new Uint8Array(await file.arrayBuffer());
       const c = await InspectorClient.open(bytes);
       setClient(c);
+      setTree(c.tree());
       setSelected(null);
       setDescriptors([]);
       setPageIndex(0);
@@ -50,7 +58,7 @@ export function App() {
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
-  }, []);
+  };
 
   useEffect(() => {
     if (!client || !selected) {
@@ -64,22 +72,20 @@ export function App() {
     }
   }, [client, selected, renderEpoch]);
 
-  const applyMutation = useCallback(
-    (mutation: Mutation) => {
-      if (!client) return;
-      try {
-        client.apply(mutation);
-        // Trigger re-fetch of descriptors + re-render of PNG. This is
-        // the "live, not snapshot" stand-in for M0; a real subscription
-        // path lands once paged-mutate's Notifier surfaces through the
-        // bridge.
-        setRenderEpoch((e) => e + 1);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : String(err));
-      }
-    },
-    [client],
-  );
+  const applyMutation = (mutation: Mutation) => {
+    if (!client) return;
+    try {
+      client.apply(mutation);
+      setTree(client.tree());
+      // Trigger re-fetch of descriptors + re-render of PNG. This is
+      // the "live, not snapshot" stand-in for M0; a real subscription
+      // path lands once paged-mutate's Notifier surfaces through the
+      // bridge.
+      setRenderEpoch((e) => e + 1);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  };
 
   return (
     <div className="app">
@@ -90,9 +96,9 @@ export function App() {
       </header>
       <main>
         <aside className="pane pane-tree">
-          {client ? (
+          {client && tree ? (
             <Tree
-              tree={client.tree()}
+              tree={tree}
               selectedKey={selected ? nodeKey(selected) : null}
               onSelect={setSelected}
               onSelectPage={setPageIndex}

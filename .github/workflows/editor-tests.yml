@@ -27,8 +27,9 @@ concurrency:
 # `corpus/idml` LFS packs, their InDesign reference PDFs, poppler's
 # `pdftoppm`, and the `paged-diff` Rust binary built from a `core`
 # checkout — none of which the package-boundary runner carries. It stays
-# a local / core-CI concern; `PAGED_CI_LEAN=1` drops `fidelity.spec.ts`
-# + `extensive-corpus.spec.ts` from collection (both read the envato
+# a local / core-CI concern: the per-pack sweep is the root
+# tests/fidelity project, which no CI step selects, and `PAGED_CI_LEAN=1`
+# drops `extensive-corpus.spec.ts` from collection (it reads the envato
 # manifest at import time). The lean surface (~412 tests) still needs the
 # small license-clear `corpus/idml/generated` fixtures + `corpus/fonts`, which
 # the harness loads — those come from a sparse LFS checkout of the
@@ -89,10 +90,13 @@ on:
       - "tooling/rust/build-wasm.sh"
       - "tooling/bootstrap.sh"
       - "tooling/js/check-workspace-deps.mjs"
+      - "tooling/js/react-compiler.mjs"
+      - "tooling/js/bun-react-compiler.ts"
       - ".github/actions/engine-wasm/**"
       - ".github/actions/module-wasm/**"
       - ".github/actions/wasm-tools/**"
       - ".github/workflows/editor-tests.yml"
+      - "tests/integration/**"
       - "bun.lock"
       - "bunfig.toml"
       - "package.json"
@@ -126,10 +130,13 @@ on:
       - "tooling/rust/build-wasm.sh"
       - "tooling/bootstrap.sh"
       - "tooling/js/check-workspace-deps.mjs"
+      - "tooling/js/react-compiler.mjs"
+      - "tooling/js/bun-react-compiler.ts"
       - ".github/actions/engine-wasm/**"
       - ".github/actions/module-wasm/**"
       - ".github/actions/wasm-tools/**"
       - ".github/workflows/editor-tests.yml"
+      - "tests/integration/**"
       - "bun.lock"
       - "bunfig.toml"
       - "package.json"
@@ -289,6 +296,39 @@ jobs:
       - name: panels and components, DOM lane (apps/canvas)
         run: bun run test:dom
 
+      # The same two DOM lanes on COMPILED code (ADR 229): the shell's and
+      # the canvas's sources through the React Compiler, with the build's
+      # own options (tooling/js/bun-react-compiler.ts). `bun test` above runs
+      # the sources as written; the app ships them compiled, and a component
+      # that reads a registry, a store or a module variable during render
+      # behaves differently once compiled. This is where that shows.
+      - name: react-live (platform/shared/react-live, the views of mutable sources)
+        working-directory: platform/shared/react-live
+        run: bun run test
+      - name: shell DOM lane, compiled (React Compiler)
+        run: bun run --filter ./packages/shell test:dom:compiled
+      - name: panels and components, DOM lane, compiled (React Compiler)
+        run: bun run --filter ./apps/canvas test:dom:compiled
+
+      # The production build, with the React Compiler (ADR 229). Its check
+      # (tooling/js/react-compiler.mjs) fails the build unless every module
+      # the compiler memoized imports react/compiler-runtime, there is one
+      # copy of it, and every chunk with compiled code reaches it; the
+      # report says how many components and hooks were compiled and skipped.
+      - name: production build (compiled chunks import react/compiler-runtime)
+        working-directory: apps/editor/apps/canvas
+        env:
+          PAGED_REACT_COMPILER_REPORT: ${{ runner.temp }}/react-compiler-build.json
+        run: bunx --bun vite build
+      - name: upload the React Compiler build report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: react-compiler-build
+          path: ${{ runner.temp }}/react-compiler-build.json
+          if-no-files-found: warn
+          retention-days: 30
+
       # Every gated fidelity pack must carry a threshold entry, or the
       # fidelity gate silently skips it.
       - name: fidelity thresholds schema
@@ -321,12 +361,9 @@ jobs:
           retention-days: 90
       # The surface-conformance gate runs in its own job (`surface`, below):
       # it is static and needs none of the wasm this job builds.
-      # The two-way manifest check (ADR 226): every bundle in the editor's
-      # table, activated against the headless engine, registers what its
-      # manifest declares — and, in 'warn' mode, nothing it does not. The
-      # host adapter only ever refused the second kind.
-      - name: bundle manifests match their registrations
-        run: bun run test:bundle-contracts
+      # The two-way manifest check (ADR 226), the BundleHost contract and the
+      # nine built-ins in the headless editor are the repository's root tests
+      # (tests/contracts, tests/system): the `tests` workflow runs them.
       # The headless editor (apps/canvas/tests/headless): the shell, the
       # client and the real engine under bun test, no browser. Commands,
       # editor.* automation, Boa scripts and plugin hosts asserted against
@@ -685,7 +722,8 @@ jobs:
       # THREE features red on state.paged.media (command-palette,
       # context-toolbars, panels.properties — the latter two attached only
       # because the ingest test-map unions them onto every journey spec).
-      # Naming the two real gating projects fixes all of it.
+      # Naming the real gating projects fixes all of it (`integration`,
+      # the root tests/integration round trips, joined them in T1).
       - name: playwright (lean surface, shard ${{ matrix.shard }})
         working-directory: apps/editor/apps/canvas
         env:
@@ -695,6 +733,7 @@ jobs:
           npx playwright test \
             --project=chromium \
             --project=journeys \
+            --project=integration \
             --grep-invert @quarantine \
             --shard=${{ matrix.shard }}/${{ env.SHARDS }} \
             --reporter=blob
@@ -716,6 +755,7 @@ jobs:
           npx playwright test \
             --project=chromium \
             --project=journeys \
+            --project=integration \
             --grep @quarantine \
             --retries=2 \
             --pass-with-no-tests \
@@ -852,8 +892,11 @@ jobs:
         run: |
           bunx --no-install playwright merge-reports --reporter=json ${{ github.workspace }}/quarantine-blobs \
             > /dev/null
+      # Only over a merged report: when the shards produced none, the merge
+      # step above is the red, and a rate over nothing would be a number
+      # that means nothing.
       - name: flake rate
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && hashFiles('playwright-results.json') != '' }}
         run: |
           reports=("$GITHUB_WORKSPACE/playwright-results.json")
           if [ -s "$GITHUB_WORKSPACE/playwright-quarantine.json" ]; then
@@ -863,7 +906,7 @@ jobs:
             --json-out "$GITHUB_WORKSPACE/flake-rate.json" \
             --md-out "$GITHUB_STEP_SUMMARY"
       - name: upload the flake rate
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && hashFiles('flake-rate.json') != '' }}
         uses: actions/upload-artifact@v4
         with:
           name: playwright-flake-rate

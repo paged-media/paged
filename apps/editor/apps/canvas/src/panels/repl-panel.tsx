@@ -25,7 +25,7 @@
 // Same Operation channel as the inspector and gestures; this is
 // the third consumer and the prerequisite for Stage 2 (QuickJS).
 
-import { useCallback, useRef, useState } from "react";
+import { useRef, useState } from "react";
 
 import { useCanvasClient } from "@paged-media/shell";
 
@@ -45,7 +45,7 @@ export function ReplPanel(_: PanelProps) {
   const [log, setLog] = useState<LogEntry[]>([]);
   const logRef = useRef<HTMLDivElement | null>(null);
 
-  const append = useCallback((entry: LogEntry) => {
+  const append = (entry: LogEntry) => {
     setLog((prev) => [...prev, entry]);
     // Defer the scroll to the next paint so the new entry is in the DOM.
     requestAnimationFrame(() => {
@@ -54,46 +54,43 @@ export function ReplPanel(_: PanelProps) {
         behavior: "smooth",
       });
     });
-  }, []);
+  };
 
-  const run = useCallback(
-    async (line: string): Promise<string> => {
-      const parsed: ParsedCommand = parseLine(line);
-      switch (parsed.kind) {
-        case "error":
-          return `error: ${parsed.message}`;
-        case "undo":
-          await client.undo();
-          return "ok (undo)";
-        case "redo":
-          await client.redo();
-          return "ok (redo)";
-        case "inspect": {
-          const props = await client.elementProperties(parsed.elementId);
-          if (!props) return "null (element not found)";
-          return JSON.stringify(props, null, 2);
-        }
-        case "mutation": {
-          try {
-            await client.mutate(parsed.mutation);
-            return `ok (${parsed.mutation.op})`;
-          } catch (err) {
-            return `error: dispatch failed (${(err as Error).message})`;
-          }
+  const run = async (line: string): Promise<string> => {
+    const parsed: ParsedCommand = parseLine(line);
+    switch (parsed.kind) {
+      case "error":
+        return `error: ${parsed.message}`;
+      case "undo":
+        await client.undo();
+        return "ok (undo)";
+      case "redo":
+        await client.redo();
+        return "ok (redo)";
+      case "inspect": {
+        const props = await client.elementProperties(parsed.elementId);
+        if (!props) return "null (element not found)";
+        return JSON.stringify(props, null, 2);
+      }
+      case "mutation": {
+        try {
+          await client.mutate(parsed.mutation);
+          return `ok (${parsed.mutation.op})`;
+        } catch (err) {
+          return `error: dispatch failed (${(err as Error).message})`;
         }
       }
-    },
-    [client],
-  );
+    }
+  };
 
-  const submit = useCallback(() => {
+  const submit = () => {
     const line = draft.trim();
     if (line === "") return;
     setDraft("");
     void run(line).then((result) => {
       append({ prompt: line, result });
     });
-  }, [draft, run, append]);
+  };
 
   return (
     <div className="flex flex-col h-full text-sm font-mono" data-repl="ready">

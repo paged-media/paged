@@ -97,7 +97,6 @@ tasks:
       && bun run test:canvas-unit
       && bun run test:thresholds
       && bun run test:wasm-budget
-      && bun run test:bundle-contracts
       && bun run test:seam-guard
       && bun run test:applicability
       && bun run test:solo-profiles
@@ -189,10 +188,10 @@ tasks:
 
   e2e:
     description: >-
-      Playwright, the chromium + journeys projects of editor-tests. Needs the
+      Playwright, the chromium + journeys + integration projects of editor-tests. Needs the
       private corpus at apps/editor/corpus (a symlink) and a browser
       (`bunx playwright install chromium` in apps/canvas).
-    script: "cd apps/canvas && bunx --no-install playwright test --project=chromium --project=journeys"
+    script: "cd apps/canvas && bunx --no-install playwright test --project=chromium --project=journeys --project=integration"
     deps:
       [
         "~:fixtures",

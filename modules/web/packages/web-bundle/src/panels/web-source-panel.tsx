@@ -354,6 +354,7 @@ export async function persistDraft(
  *  fake-timer spec covers). The first render emits immediately. */
 function useDebouncedValue<T>(value: T, ms: number): T {
   const [debounced, setDebounced] = useState(value);
+  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
   const debouncer = useMemo(() => createDebouncer(ms), [ms]);
   useEffect(() => {
     debouncer.schedule(() => setDebounced(value));
@@ -539,6 +540,7 @@ export function makeWebSourcePanel(
     // async; a stale flag guards out-of-order replies on fast
     // selection changes. Pre-v33 documents migrate one-time from
     // plugin storage (write-through, then the storage entry drops).
+    // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
     const loadFor = useCallback(async (id: ElementId, storageKey: string) => {
       // Prefer the portable .paged container part, then the metadata label,
       // then the legacy host.storage entry below.
@@ -1014,6 +1016,7 @@ function SourceEditor({
   // provider announces a new revision — the preview substitutes them as
   // the canvas does.
   const { bindings, refresh: refreshBindings } = useBindings(host, id, preview);
+  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
   const rendered = useMemo(
     () => renderWebFrameSource(preview, bindings.vars),
     [preview, bindings],
@@ -1058,6 +1061,7 @@ function SourceEditor({
   // over the DEBOUNCED, RENDERED draft — the lint lane rides the same
   // ~300 ms cadence as the preview. W-06: a family whose bytes were
   // SHOWN drops its "not previewable" info (it IS previewable now).
+  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
   const diagnostics = useMemo<WebDiagnostic[]>(
     () => [
       ...rendered.diagnostics,
@@ -1084,6 +1088,7 @@ function SourceEditor({
   // families are missing from the engine document (substitute
   // on-canvas too), and a matched family the host had no bytes for is
   // still a browser substitute HERE.
+  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
   const badge = useMemo(
     () => previewFontBadge(rendered.css, fontFamilies, shownFamilies),
     [rendered, fontFamilies, shownFamilies],
@@ -1093,6 +1098,7 @@ function SourceEditor({
   // gutter position so they're filtered out here but still show in
   // the summary list + the Problems panel). Rendered only by the
   // widget lane — the textarea fallback has no gutter and says so.
+  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
   const htmlGutter = useMemo<CodeEditorDiagnostic[]>(
     () =>
       diagnostics
@@ -1109,10 +1115,12 @@ function SourceEditor({
   // script — sandbox="" unchanged). The preview then uses the
   // document's actual faces for every resolved family. The srcdoc body
   // is the RENDERED source (template pass applied).
+  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
   const fontFaceCss = useMemo(
     () => composeFontFaces(resolvedFaces),
     [resolvedFaces],
   );
+  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
   const srcdoc = useMemo(
     () =>
       composeSrcdoc(
@@ -1122,10 +1130,12 @@ function SourceEditor({
     [rendered, preview.options, fontFaceCss],
   );
 
+  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
   const dirty = useMemo(
     () => JSON.stringify(draft) !== JSON.stringify(persisted),
     [draft, persisted],
   );
+  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
   const commit = useCallback(() => {
     const next = draft;
     void persistDraft(host, id, next).then(({ applied, reason }) => {
@@ -1147,6 +1157,7 @@ function SourceEditor({
   // Seed the draft from a starter template — replaces html/css, keeps
   // the author's current frame OPTIONS (media/viewport). A draft edit
   // (not a document write): the explicit save still commits it.
+  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
   const seedTemplate = useCallback((templateId: string) => {
     const t = templateById(templateId);
     if (!t) return;
@@ -1158,6 +1169,7 @@ function SourceEditor({
   // runs, so strip it, don't just diagnose). Sets the draft html to the
   // cleaned markup and notes what was removed. Pure web-model strip via
   // `ingestHtml`; the linter still runs over the result downstream.
+  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
   const ingestInto = useCallback((raw: string) => {
     const { html, removed } = ingestHtml(raw);
     setDraft((d) => ({ ...d, html }));
@@ -1170,6 +1182,7 @@ function SourceEditor({
 
   // Read from the K-6 system clipboard when wired; else open the paste
   // box (the affordance always available). Never throws.
+  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
   const pasteFromClipboard = useCallback(() => {
     void ingestFromClipboard(host).then((result) => {
       if (!result) {
@@ -1191,6 +1204,7 @@ function SourceEditor({
   // source range in the bundle-owned textarea (fallback lane); in the
   // host-widget lane there is no selection prop, so it cannot move the
   // caret (the honest W-01 subset boundary — see find-in-source.ts).
+  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
   const outline = useMemo<TagOutlineEntry[]>(
     () => tagOutline(draft.html),
     [draft.html],
@@ -1209,6 +1223,7 @@ function SourceEditor({
     [frameIdStr],
   );
   useEffect(() => () => clearOutlineHighlight(host), []);
+  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
   const findInSource = useCallback(
     (entry: TagOutlineEntry, index: number) => {
       setActiveTag(index);
@@ -1231,6 +1246,7 @@ function SourceEditor({
   // which DISABLES the pass (placeholders then stay verbatim and stop
   // warning — the documented opt-in seam).
   const varEntries = Object.entries(draft.vars ?? {});
+  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
   const setVarEntries = useCallback((entries: Array<[string, string]>) => {
     setDraft((d) => {
       const next = { ...d };

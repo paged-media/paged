@@ -106,18 +106,22 @@ export function tableCellElementId(cell: TableCellSelection): ElementId {
 export function TableSelectionProvider({ children }: PropsWithChildren) {
   const [cell, setCell] = useState<TableCellSelection | null>(null);
 
+  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
   const selectCell = useCallback((next: TableCellSelection) => {
     setCell(next);
   }, []);
+  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
   const clearCell = useCallback(() => {
     setCell(null);
   }, []);
 
+  // eslint-disable-next-line no-restricted-syntax -- its type argument types the value (ADR 229)
   const cellElementId = useMemo<ElementId | null>(
     () => (cell ? tableCellElementId(cell) : null),
     [cell],
   );
 
+  // eslint-disable-next-line no-restricted-syntax -- its type argument types the value (ADR 229)
   const value = useMemo<TableSelectionContextValue>(
     () => ({ cell, selectCell, clearCell, cellElementId }),
     [cell, selectCell, clearCell, cellElementId],

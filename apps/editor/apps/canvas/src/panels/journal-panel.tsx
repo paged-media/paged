@@ -78,27 +78,46 @@ const mono: React.CSSProperties = {
 // Module-scope so the identities are stable across renders (a new function
 // every render makes useSyncExternalStore resubscribe on every commit).
 const subscribe = (cb: () => void) => journal.subscribe(cb);
-const getVersion = () => journal.version();
+
+// The snapshot is keyed on the buffer's REVISION, not on `entries()`: a
+// ledger-only change (an eviction, a counted SAB write) leaves the entry
+// array identical and would otherwise never reach the screen. It is the
+// snapshot itself that the store returns, not the revision: a value read
+// beside a revision that only triggers the render is a value the React
+// Compiler keeps (ADR 229).
+interface JournalView {
+  entries: ReturnType<typeof journal.entries>;
+  ledger: ReturnType<typeof journal.getLedger>;
+  counts: ReturnType<typeof journal.counts>;
+}
+let view: { version: number; value: JournalView } | null = null;
+const getView = (): JournalView => {
+  const version = journal.version();
+  if (view?.version !== version) {
+    view = {
+      version,
+      value: {
+        entries: journal.entries(),
+        ledger: journal.getLedger(),
+        counts: journal.counts(),
+      },
+    };
+  }
+  return view.value;
+};
 
 export function JournalPanel() {
-  // Subscribe to the buffer's REVISION, not to `entries()`: a ledger-only
-  // change (an eviction, a counted SAB write) leaves the entry array identical
-  // and would otherwise never reach the screen.
-  const version = useSyncExternalStore(subscribe, getVersion, getVersion);
+  const { entries, ledger, counts } = useSyncExternalStore(
+    subscribe,
+    getView,
+    getView,
+  );
   const [minSeverity, setMinSeverity] = useState<JournalSeverity | "all">(
     "all",
   );
   const [exporting, setExporting] = useState(false);
 
-  const { entries, ledger, counts } = useMemo(() => {
-    void version;
-    return {
-      entries: journal.entries(),
-      ledger: journal.getLedger(),
-      counts: journal.counts(),
-    };
-  }, [version]);
-
+  // eslint-disable-next-line no-restricted-syntax -- a computed block, not a single expression (ADR 229)
   const shown = useMemo(() => {
     const rank = { debug: 0, info: 1, warn: 2, error: 3 } as const;
     const floor = minSeverity === "all" ? -1 : rank[minSeverity];
@@ -410,18 +429,15 @@ function ExportDialog({ onClose }: { onClose: () => void }) {
   const [includeCrash, setIncludeCrash] = useState(false);
   const [includeShape, setIncludeShape] = useState(false);
 
-  const options = useMemo(
-    () => ({
-      // Both sections are OPT-IN and default OFF. Stack traces embed the
-      // user's disk paths; document shape carries font families.
-      crash: includeCrash ? { stacks: readCrashStacks() } : undefined,
-      documentShape: includeShape ? getDocumentShape() : undefined,
-    }),
-    [includeCrash, includeShape],
-  );
+  const options = {
+    // Both sections are OPT-IN and default OFF. Stack traces embed the
+    // user's disk paths; document shape carries font families.
+    crash: includeCrash ? { stacks: readCrashStacks() } : undefined,
+    documentShape: includeShape ? getDocumentShape() : undefined,
+  };
 
-  const text = useMemo(() => previewBundle(options), [options]);
-  const bundle = useMemo(() => buildBundleNow(options), [options]);
+  const text = previewBundle(options);
+  const bundle = buildBundleNow(options);
 
   return (
     <div

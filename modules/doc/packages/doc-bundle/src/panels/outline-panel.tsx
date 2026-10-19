@@ -28,6 +28,7 @@
 // (pure, unit-tested). No DOCX semantics here (CLAUDE.md hard rule).
 
 import type { DockEdge, PanelProps } from "@paged-media/plugin-api";
+import { subscribeOf, useLive } from "@paged-media/react-live";
 import * as React from "react";
 
 import {
@@ -228,10 +229,11 @@ export function makeOutlinePanel(
   actions: OutlinePanelActions,
 ): PanelDescriptor {
   const Component: React.FC<PanelProps> = () => {
-    const [, force] = React.useReducer((n: number) => n + 1, 0);
-    React.useEffect(() => store.subscribe(force), []);
-    const doc = store.get();
-    const notice = store.notice();
+    // The store as a render value (react-live, editor ADR 229): a new view
+    // after every change, so the document and the notice are read again.
+    const live = useLive(store, subscribeOf);
+    const doc = live.get();
+    const notice = live.notice();
 
     if (!doc) {
       return (

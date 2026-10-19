@@ -278,8 +278,8 @@ Not done:
   variable first and places them in one batch, so 20 variables are one mutate and one undo
   step (budget W5, was 20); a batch core refuses falls back to one mutate per variable.
 - **Engine fixes that protocol 69 brings** (core v0.69.0): typing at a field's edge lands beside the field, and undoing a
-  `deleteRange` puts its runs and fields back. Both stay pinned as defects against 68
-  (`fixedFrom(69, it)` in `test/real-core.ts`). The IDML import's paragraph mark between
+  `deleteRange` puts its runs and fields back. Their tests were expected failures against 68;
+  the workspace engine has both fixes, so they are plain tests. The IDML import's paragraph mark between
   adjacent placeholders is fixed from protocol 70, whose IDML import includes the
   plugin-publish fix (Data Merge, above).
 - **Fields at the caret.** A field placed at the user's caret sends the caret both as

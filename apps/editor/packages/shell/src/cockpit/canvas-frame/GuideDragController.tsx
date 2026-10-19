@@ -51,7 +51,7 @@
 // same Operation channel as every other edit. The re-query is skipped
 // while a drag is live so it never clobbers an in-flight preview.
 
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef } from "react";
 
 import type {
   GuideSummary,
@@ -107,6 +107,39 @@ function pageForDoc(
   return null;
 }
 
+/** The guides mirror rebuilt from each spread's live `guides` set
+ *  (`pageIndex` is spread-local: mapped to a document page id through each
+ *  spread's running page offset). Null when the read fails. Outside the
+ *  component: the React Compiler does not compile a conditional inside a
+ *  `try` (ADR 229). */
+async function guidesFromSpreads(
+  client: ReturnType<typeof useCanvasClient>,
+  handle: { pageIds: string[] } | null,
+): Promise<{ spreadIds: string[]; mirror: OptimisticGuide[] } | null> {
+  try {
+    const spreads = await client.collection<SpreadSummary>("spreads");
+    const pages = handle?.pageIds ?? [];
+    const mirror: OptimisticGuide[] = [];
+    let pageOffset = 0;
+    for (const sp of spreads) {
+      for (const g of (sp.guides ?? []) as GuideSummary[]) {
+        const pageId = pages[pageOffset + (g.pageIndex ?? 0)] ?? pages[0];
+        if (!pageId) continue;
+        mirror.push({
+          id: g.id,
+          spreadId: sp.selfId,
+          orientation: g.orientation,
+          pageId,
+          position: g.position,
+        });
+      }
+      pageOffset += sp.pageCount;
+    }
+    return { spreadIds: spreads.map((s) => s.selfId), mirror };
+  } catch {
+    return null;
+  }
+}
 export function GuideDragController() {
   const client = useCanvasClient();
   const { camera } = useCamera();
@@ -116,13 +149,21 @@ export function GuideDragController() {
   // Live refs so the once-per-drag window listeners read fresh values
   // without re-subscribing every preview tick.
   const cameraRef = useRef(camera);
-  cameraRef.current = camera;
+  useLayoutEffect(() => {
+    cameraRef.current = camera;
+  });
   const handleRef = useRef(handle);
-  handleRef.current = handle;
+  useLayoutEffect(() => {
+    handleRef.current = handle;
+  });
   const dragRef = useRef<GuideDragState | null>(drag);
-  dragRef.current = drag;
+  useLayoutEffect(() => {
+    dragRef.current = drag;
+  });
   const guidesRef = useRef(guides);
-  guidesRef.current = guides;
+  useLayoutEffect(() => {
+    guidesRef.current = guides;
+  });
 
   // Spread ids for the loaded document, document order. Guides are
   // spread-scoped; a created guide lands on the spread that owns the
@@ -133,6 +174,7 @@ export function GuideDragController() {
    *  wire map we approximate by page order (one-spread-per-page is the
    *  common multi-spread shape); single-spread docs always return the
    *  first spread. Part of the documented wire gap. */
+  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
   const spreadForPageId = useCallback(
     (pageId: PageId | null): string | null => {
       const ids = spreadIdsRef.current;
@@ -153,35 +195,18 @@ export function GuideDragController() {
   // GuideSummary already carries the engine's positional id, so we use
   // it directly (no reindex needed). Skipped while a drag is live so a
   // mid-drag Operation push never clobbers the preview.
+  // eslint-disable-next-line no-restricted-syntax -- handed to a hook that compares it (ADR 229)
   const resyncFromSpreads = useCallback(async () => {
     if (dragRef.current) return;
-    try {
-      const spreads = await client.collection<SpreadSummary>("spreads");
-      spreadIdsRef.current = spreads.map((s) => s.selfId);
-      const pages = handleRef.current?.pageIds ?? [];
-      const mirror: OptimisticGuide[] = [];
-      let pageOffset = 0;
-      for (const sp of spreads) {
-        for (const g of (sp.guides ?? []) as GuideSummary[]) {
-          const pageId = pages[pageOffset + (g.pageIndex ?? 0)] ?? pages[0];
-          if (!pageId) continue;
-          mirror.push({
-            id: g.id,
-            spreadId: sp.selfId,
-            orientation: g.orientation,
-            pageId,
-            position: g.position,
-          });
-        }
-        pageOffset += sp.pageCount;
-      }
-      setGuides(mirror);
-    } catch {
-      /* worker reload / disconnect — keep the current mirror */
-    }
+    const read = await guidesFromSpreads(client, handleRef.current);
+    if (!read) return; // worker reload / disconnect — keep the current mirror
+    spreadIdsRef.current = read.spreadIds;
+    setGuides(read.mirror);
   }, [client, setGuides]);
   const resyncRef = useRef(resyncFromSpreads);
-  resyncRef.current = resyncFromSpreads;
+  useLayoutEffect(() => {
+    resyncRef.current = resyncFromSpreads;
+  });
 
   // Seed on load + re-sync on every Operation push (mutationApplied /
   // undoApplied / redoApplied). Load is detected by a pageIds signature
@@ -213,6 +238,7 @@ export function GuideDragController() {
   /** Convert a client (viewport) pointer position to a document-space
    *  point through the live camera + the viewport wrapper rect. The
    *  cockpit tags the wrapper `data-paged-viewport`. */
+  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
   const clientToDoc = useCallback(
     (clientX: number, clientY: number): [number, number] | null => {
       const wrap = document.querySelector("[data-paged-viewport]");
@@ -230,6 +256,7 @@ export function GuideDragController() {
 
   /** Is the client point over a ruler strip? Used to cancel a create
    *  / delete a moved guide. */
+  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
   const overRulerAt = useCallback((clientX: number, clientY: number) => {
     const el = document.elementFromPoint(clientX, clientY);
     return Boolean(el && el.closest("[data-h-ruler], [data-v-ruler]"));
@@ -241,6 +268,7 @@ export function GuideDragController() {
    *  ruler. Pure read — both the live preview (onMove) and the commit
    *  (onUp) call it, so the release uses the freshest position rather
    *  than a possibly-stale React state snapshot. */
+  // eslint-disable-next-line no-restricted-syntax -- handed to a hook that compares it (ADR 229)
   const resolvePreview = useCallback(
     (
       orientation: "horizontal" | "vertical",
@@ -281,9 +309,12 @@ export function GuideDragController() {
     [overRulerAt, clientToDoc],
   );
   const resolvePreviewRef = useRef(resolvePreview);
-  resolvePreviewRef.current = resolvePreview;
+  useLayoutEffect(() => {
+    resolvePreviewRef.current = resolvePreview;
+  });
 
   /** Fire one guide mutation; resolve true on `mutationApplied`. */
+  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
   const dispatch = useCallback(
     async (mutation: Mutation): Promise<boolean> => {
       try {
@@ -299,6 +330,7 @@ export function GuideDragController() {
   /** Commit the drag's terminal mutation (or none) + mirror it into
    *  the optimistic store. Exactly one of insertGuide / moveGuide /
    *  deleteGuide, or zero (cancel). */
+  // eslint-disable-next-line no-restricted-syntax -- handed to a hook that compares it (ADR 229)
   const settle = useCallback(
     async (d: GuideDragState, onRuler: boolean) => {
       if (d.kind === "create") {
@@ -357,7 +389,9 @@ export function GuideDragController() {
     [spreadForPageId, dispatch, setGuides],
   );
   const settleRef = useRef(settle);
-  settleRef.current = settle;
+  useLayoutEffect(() => {
+    settleRef.current = settle;
+  });
 
   // ── window listeners, mounted only while a drag is live ──────────
   const dragActive = drag != null;

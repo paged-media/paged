@@ -22,9 +22,8 @@
 // core's page-space fix (paged-media/core#70) reads it in page space and
 // reports `pageOrigin`. Every assertion is made in SPREAD space, through
 // `storedTransformOf` — and the first case proves that conversion against
-// the document's own stored `frameTransform` — so the same spec is right on
-// either engine. CI runs the pinned one; `PAGED_ENGINE_FROM` points it at a
-// local build of the other (`./host.ts`).
+// the document's own stored `frameTransform` — so the assertions hold on
+// either engine. The workspace engine reports the origin, so every case runs.
 
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -172,22 +171,6 @@ const apply = (m: Affine, [x, y]: readonly number[]): Vec => [
   m[1] * x! + m[3] * y! + m[5],
 ];
 
-// Whether the engine reports a page's origin in elementGeometry, probed once
-// while the file loads: bun:test has no runtime skip (vitest's ctx.skip()),
-// so the cases that need it are skipIf'd on it instead.
-const PAGE_ORIGIN = await (async () => {
-  const p = await openHost();
-  try {
-    await p.load(DOC());
-    const [g] = await p.host.document.elementGeometry([poly("tri")]);
-    return (
-      (g as { pageOrigin?: unknown } | undefined)?.pageOrigin !== undefined
-    );
-  } finally {
-    p.dispose();
-  }
-})();
-
 describe("draw conformance — page space on a page that does not start at its spread's origin", () => {
   let h: HeadlessHost;
 
@@ -311,24 +294,20 @@ describe("draw conformance — page space on a page that does not start at its s
     near(await spreadOutline(poly("o1")), home);
   });
 
-  it.skipIf(!PAGE_ORIGIN)(
-    "Objects on a path: the ARTBOARD fit holds the objects on THIS page (an engine that reports the origin)",
-    async () => {
-      // The published engine reads spread space here and reports no origin,
-      // so its artboard fit compares against the wrong rect and refuses;
-      // that is the engine fix's to correct, and the bundle uses the origin
-      // as soon as it is reported.
-      await h.host.selection.set([poly("o1"), poly("o2"), poly("spine")]);
-      const moved = await applyMakeObjectsOnPath(h.host, {
-        alignToPath: false,
-      });
-      expect(moved).toHaveLength(2);
-      expect(centre(await spreadOutline(poly("o2")))[0]).toBeCloseTo(
-        ORIGIN[0] + 500,
-        3,
-      );
-    },
-  );
+  it("Objects on a path: the ARTBOARD fit holds the objects on THIS page (an engine that reports the origin)", async () => {
+    // An engine before the page-space fix read spread space here and
+    // reported no origin, so its artboard fit compared against the wrong
+    // rect and refused; the bundle uses the origin the engine reports.
+    await h.host.selection.set([poly("o1"), poly("o2"), poly("spine")]);
+    const moved = await applyMakeObjectsOnPath(h.host, {
+      alignToPath: false,
+    });
+    expect(moved).toHaveLength(2);
+    expect(centre(await spreadOutline(poly("o2")))[0]).toBeCloseTo(
+      ORIGIN[0] + 500,
+      3,
+    );
+  });
 
   it("Shape Builder: an oval's stand-in lies exactly on the oval's curve", async () => {
     const probe = await ovalStandIns(h.host, [oval("ov"), oval("ov2")], "spec");
@@ -383,7 +362,10 @@ describe("draw conformance — page space on a page that does not start at its s
 /** "Ho" in Lora on the same page placement (`create-outlines.spec.ts`'s
  *  document, moved): the frame's box is page (40, 300)–(400, 380). */
 const LORA = readFileSync(
-  join(dirname(fileURLToPath(import.meta.url)), "../fixtures/fonts/Lora.ttf"),
+  join(
+    dirname(fileURLToPath(import.meta.url)),
+    "../../../../../../engine/core/corpus/fonts/Lora.ttf",
+  ),
 );
 const TEXT_DOC = () =>
   buildIdml([
@@ -442,50 +424,47 @@ describe("draw conformance — Create Outlines on a page that does not start at 
   });
   afterAll(() => h?.dispose());
 
-  it.skipIf(!PAGE_ORIGIN)(
-    "the outlines, holes and all, land inside the frame's box on its page (an engine that reports the origin)",
-    async () => {
-      // The outlines door answers page space on every engine; only an engine
-      // that reports the page origin lets the re-merged runs get it back.
-      const frame = { kind: "textFrame", id: "tf" } as ElementId;
-      const before = new Set(
-        ((await h.host.document.tree()) as { id?: ElementId }[]).map((n) =>
-          String(n.id?.id),
-        ),
-      );
-      await h.host.selection.set([frame]);
-      expect(await applyCreateOutlines(h.host)).toEqual([frame]);
-      const leaves: ElementId[] = [];
-      const walk = (
-        nodes: readonly {
-          id?: ElementId | null;
-          children?: readonly unknown[] | null;
-        }[],
-      ) => {
-        for (const n of nodes) {
-          if (n.children?.length) walk(n.children as never);
-          else if (n.id && !before.has(String(n.id.id))) leaves.push(n.id);
-        }
-      };
-      walk((await h.host.document.tree()) as never);
-      expect(leaves.length).toBeGreaterThanOrEqual(1);
-      let holed = 0;
-      for (const id of leaves) {
-        const t = (await h.host.document.pathAnchors(id))!;
-        if (t.subpathStarts.length > 1) holed++;
-        const m = storedTransformOf(
-          (t.itemTransform ?? null) as Affine | null,
-          pageOriginOf(t),
-        ) ?? [1, 0, 0, 1, 0, 0];
-        for (const a of t.anchors) {
-          const [x, y] = apply(m, a.anchor);
-          expect(x - ORIGIN[0]).toBeGreaterThan(39);
-          expect(x - ORIGIN[0]).toBeLessThan(401);
-          expect(y - ORIGIN[1]).toBeGreaterThan(299);
-          expect(y - ORIGIN[1]).toBeLessThan(381);
-        }
+  it("the outlines, holes and all, land inside the frame's box on its page (an engine that reports the origin)", async () => {
+    // The outlines door answers page space on every engine; only an engine
+    // that reports the page origin lets the re-merged runs get it back.
+    const frame = { kind: "textFrame", id: "tf" } as ElementId;
+    const before = new Set(
+      ((await h.host.document.tree()) as { id?: ElementId }[]).map((n) =>
+        String(n.id?.id),
+      ),
+    );
+    await h.host.selection.set([frame]);
+    expect(await applyCreateOutlines(h.host)).toEqual([frame]);
+    const leaves: ElementId[] = [];
+    const walk = (
+      nodes: readonly {
+        id?: ElementId | null;
+        children?: readonly unknown[] | null;
+      }[],
+    ) => {
+      for (const n of nodes) {
+        if (n.children?.length) walk(n.children as never);
+        else if (n.id && !before.has(String(n.id.id))) leaves.push(n.id);
       }
-      expect(holed).toBeGreaterThanOrEqual(1);
-    },
-  );
+    };
+    walk((await h.host.document.tree()) as never);
+    expect(leaves.length).toBeGreaterThanOrEqual(1);
+    let holed = 0;
+    for (const id of leaves) {
+      const t = (await h.host.document.pathAnchors(id))!;
+      if (t.subpathStarts.length > 1) holed++;
+      const m = storedTransformOf(
+        (t.itemTransform ?? null) as Affine | null,
+        pageOriginOf(t),
+      ) ?? [1, 0, 0, 1, 0, 0];
+      for (const a of t.anchors) {
+        const [x, y] = apply(m, a.anchor);
+        expect(x - ORIGIN[0]).toBeGreaterThan(39);
+        expect(x - ORIGIN[0]).toBeLessThan(401);
+        expect(y - ORIGIN[1]).toBeGreaterThan(299);
+        expect(y - ORIGIN[1]).toBeLessThan(381);
+      }
+    }
+    expect(holed).toBeGreaterThanOrEqual(1);
+  });
 });

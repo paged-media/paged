@@ -32,6 +32,25 @@ import { minimalIdml } from "../../../platform/extensions/packages/plugin-sdk/te
 
 export { silent };
 export const FIXTURES = fileURLToPath(new URL("./fixtures/", import.meta.url));
+/** The repository root (the goldens write it as `<REPO>`). */
+export const REPO_ROOT = fileURLToPath(new URL("../../../", import.meta.url));
+
+/** paged.data's InDesign Data Merge lane
+ *  (modules/data/conformance/indesign-merge), read where the lane keeps it:
+ *  the long-record-set template, its records, and InDesign's own recording
+ *  of the merge (57 records, 2 columns, columns first, 3 pages). */
+const DATA_MERGE_LANE = join(
+  REPO_ROOT,
+  "modules",
+  "data",
+  "conformance",
+  "indesign-merge",
+);
+export const LONG_RECORD_SET = {
+  idml: join(DATA_MERGE_LANE, "templates", "long-record-set.idml"),
+  csv: join(DATA_MERGE_LANE, "csv", "long-record-set.csv"),
+  recorded: join(DATA_MERGE_LANE, "recorded", "long-record-set.json"),
+};
 
 /** Run the CLI in-process; stdout parsed as JSON when it is JSON. */
 export async function cli(

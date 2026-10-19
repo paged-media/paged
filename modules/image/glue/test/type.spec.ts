@@ -27,7 +27,7 @@
 // only what the document already embeds and never fetches.
 //
 // So the font-shaped assertions live here, where a committed test face
-// (`fixtures/fonts/`) is supplied to the door the way the host would,
+// (the engine's corpus fonts) is supplied to the door the way the host would,
 // and the honest ones that need no glyphs live in Rust.
 
 import { describe, expect, it } from "bun:test";
@@ -59,12 +59,12 @@ function geomFor(
 }
 
 /** A real TrueType face standing in for the one the HOST would serve:
- *  Roboto Regular (Apache-2.0, `fixtures/fonts/LICENSE-roboto.txt`),
- *  committed beside this spec so every machine runs the font-shaped
+ *  Roboto Regular (Apache-2.0, `engine/core/corpus/fonts/LICENSE-roboto.txt`),
+ *  committed in the engine's corpus so every machine runs the font-shaped
  *  assertions. It is a TEST fixture: the bundle itself still ships no
  *  font and fetches none. */
 const FIXTURE_FACE = new URL(
-  "./fixtures/fonts/Roboto-Regular.ttf",
+  "../../../../engine/core/corpus/fonts/Roboto-Regular.ttf",
   import.meta.url,
 );
 

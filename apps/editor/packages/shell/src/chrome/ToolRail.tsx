@@ -32,6 +32,7 @@ import { createPortal } from "react-dom";
 import { applicabilityOf, applicabilityStyle } from "./applicability";
 
 import { useRegistries } from "../state/registries-context";
+import { useRegistryView } from "../state/live";
 import { useEditContextStack } from "../state/edit-context-stack";
 import { VIEW_TOOL_IDS, useTool } from "../state/tool-context";
 import { Icon, hasIcon } from "../icons";
@@ -239,6 +240,17 @@ function deriveSections(
   }));
 }
 
+/** The persisted "last used" faces (a module function: the React Compiler
+ *  does not compile a component with a conditional inside a `try`). */
+function readLastUsed(): Record<ToolGroupId, string> {
+  try {
+    return JSON.parse(
+      window.localStorage.getItem(LAST_USED_STORAGE_KEY) ?? "{}",
+    ) as Record<ToolGroupId, string>;
+  } catch {
+    return {};
+  }
+}
 export function ToolRail({
   foot,
   hostToolIds,
@@ -250,27 +262,24 @@ export function ToolRail({
    *  no tool is treated as a plugin's (nothing is hidden). */
   hostToolIds?: ReadonlySet<string>;
 }) {
-  const { tools, editContexts: contextRegistry } = useRegistries();
+  const registries = useRegistries();
   const { effectiveTool, setBaseTool } = useTool();
 
   // Re-derive when the tool or edit-context registry changes (bundles
-  // add/remove tools; a context's `toolIds` decide undeclared clusters).
-  const [version, setVersion] = useState(0);
-  useEffect(() => {
-    const bump = () => setVersion((n) => n + 1);
-    const subs = [tools.onChange(bump), contextRegistry.onChange(bump)];
-    return () => subs.forEach((s) => s.dispose());
-  }, [tools, contextRegistry]);
+  // add/remove tools; a context's `toolIds` decide undeclared clusters):
+  // both are read through views that change with their contents
+  // (state/live.ts, ADR 229).
+  const tools = useRegistryView(registries.tools);
+  const contextRegistry = useRegistryView(registries.editContexts);
 
-  const sections = useMemo(
-    () => deriveSections(tools.groups()),
-    // `version` bumps on every registry change so the model re-derives.
-    [tools, version],
-  );
+  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
+  const sections = useMemo(() => deriveSections(tools.groups()), [tools]);
+  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
   const clusters = useMemo(
     () => deriveClusters(sections, contextRegistry.list()),
-    [sections, contextRegistry, version],
+    [sections, contextRegistry],
   );
+  // eslint-disable-next-line no-restricted-syntax -- a computed block, not a single expression (ADR 229)
   const clusterOf = useMemo(() => {
     const m = new Map<ToolGroupId, string>();
     for (const c of clusters) for (const s of c.slots) m.set(s.group, c.label);
@@ -283,15 +292,8 @@ export function ToolRail({
   // updated whenever a member of the group becomes effective (click,
   // flyout pick, or shortcut). Persisted in localStorage so the rail
   // faces survive a reload, alongside the dock layout.
-  const [lastUsed, setLastUsed] = useState<Record<ToolGroupId, string>>(() => {
-    try {
-      return JSON.parse(
-        window.localStorage.getItem(LAST_USED_STORAGE_KEY) ?? "{}",
-      ) as Record<ToolGroupId, string>;
-    } catch {
-      return {};
-    }
-  });
+  const [lastUsed, setLastUsed] =
+    useState<Record<ToolGroupId, string>>(readLastUsed);
   useEffect(() => {
     try {
       window.localStorage.setItem(
@@ -309,28 +311,23 @@ export function ToolRail({
   const [tornOff, setTornOff] = useState<
     Record<ToolGroupId, { x: number; y: number }>
   >({});
-  const tearOff = useCallback(
-    (group: ToolGroupId, pos: { x: number; y: number }) => {
-      setTornOff((prev) => ({ ...prev, [group]: pos }));
-    },
-    [],
-  );
-  const moveTearOff = useCallback(
-    (group: ToolGroupId, pos: { x: number; y: number }) => {
-      setTornOff((prev) => ({ ...prev, [group]: pos }));
-    },
-    [],
-  );
-  const closeTearOff = useCallback((group: ToolGroupId) => {
+  const tearOff = (group: ToolGroupId, pos: { x: number; y: number }) => {
+    setTornOff((prev) => ({ ...prev, [group]: pos }));
+  };
+  const moveTearOff = (group: ToolGroupId, pos: { x: number; y: number }) => {
+    setTornOff((prev) => ({ ...prev, [group]: pos }));
+  };
+  const closeTearOff = (group: ToolGroupId) => {
     setTornOff((prev) => {
       const next = { ...prev };
       delete next[group];
       return next;
     });
-  }, []);
+  };
 
   // Index tool id → group so an effective-tool change can promote the
   // right slot face.
+  // eslint-disable-next-line no-restricted-syntax -- a computed block, not a single expression (ADR 229)
   const groupOf = useMemo(() => {
     const m = new Map<string, ToolGroupId>();
     for (const sec of sections)
@@ -346,18 +343,14 @@ export function ToolRail({
     }
   }, [effectiveTool, groupOf, lastUsed]);
 
-  const faceToolOf = useCallback(
-    (slot: SlotModel): ToolContribution => {
-      const id = lastUsed[slot.group];
-      // `pick` refuses planned tools, so a planned id here can only be
-      // stale localStorage (a tool that was live when it was parked).
-      return (
-        slot.members.find((m) => m.id === id && !isPlanned(m)) ??
-        slot.defaultTool
-      );
-    },
-    [lastUsed],
-  );
+  const faceToolOf = (slot: SlotModel): ToolContribution => {
+    const id = lastUsed[slot.group];
+    // `pick` refuses planned tools, so a planned id here can only be
+    // stale localStorage (a tool that was live when it was parked).
+    return (
+      slot.members.find((m) => m.id === id && !isPlanned(m)) ?? slot.defaultTool
+    );
+  };
 
   // K-1 residual closed — an active edit context that declares `toolIds`
   // restricts the rail: every other tool renders dimmed. Picking a dimmed
@@ -366,6 +359,7 @@ export function ToolRail({
   // doubles as an exit, never a dead end. No restriction (empty/absent
   // toolIds, e.g. the sheet grid session) leaves the rail untouched.
   const editContexts = useEditContextStack();
+  // eslint-disable-next-line no-restricted-syntax -- a computed block, not a single expression (ADR 229)
   const restrictedTools = useMemo(() => {
     // `null` (nothing declared) leaves the rail untouched; a DECLARED
     // list restricts to it, and a declared EMPTY list restricts to
@@ -374,24 +368,21 @@ export function ToolRail({
     return ids ? new Set(ids) : null;
   }, [editContexts.active]);
 
-  const pick = useCallback(
-    (tool: ToolContribution) => {
-      // Honest stub — the click is acknowledged by the disabled
-      // affordance, never by a tool switch that then does nothing.
-      if (isPlanned(tool)) return;
-      // Hand and Zoom look at the context's content; they never leave it.
-      if (
-        restrictedTools &&
-        !restrictedTools.has(tool.id) &&
-        !VIEW_TOOL_IDS.includes(tool.id)
-      ) {
-        editContexts.commit();
-      }
-      setLastUsed((prev) => ({ ...prev, [tool.group]: tool.id }));
-      setBaseTool(tool.id);
-    },
-    [setBaseTool, restrictedTools, editContexts],
-  );
+  const pick = (tool: ToolContribution) => {
+    // Honest stub — the click is acknowledged by the disabled
+    // affordance, never by a tool switch that then does nothing.
+    if (isPlanned(tool)) return;
+    // Hand and Zoom look at the context's content; they never leave it.
+    if (
+      restrictedTools &&
+      !restrictedTools.has(tool.id) &&
+      !VIEW_TOOL_IDS.includes(tool.id)
+    ) {
+      editContexts.commit();
+    }
+    setLastUsed((prev) => ({ ...prev, [tool.group]: tool.id }));
+    setBaseTool(tool.id);
+  };
 
   // Plugin FRAME tools — contributed by a bundle (not the host) and
   // claimed by one of its edit contexts' `toolIds`, i.e. tools that work
@@ -399,14 +390,14 @@ export function ToolRail({
   // image). Outside every context they leave the rail; inside their
   // context the restriction below shows them. The tool in hand is never
   // hidden, whichever way it was picked (shortcut, command palette).
+  // eslint-disable-next-line no-restricted-syntax -- a computed block, not a single expression (ADR 229)
   const frameTools = useMemo(() => {
     const ids = new Set<string>();
     if (!hostToolIds) return ids;
     for (const ctx of contextRegistry.list())
       for (const id of ctx.toolIds ?? []) if (!hostToolIds.has(id)) ids.add(id);
     return ids;
-    // `version` bumps when a bundle registers or drops a context.
-  }, [hostToolIds, contextRegistry, version]);
+  }, [hostToolIds, contextRegistry]);
 
   const slotVisible = (slot: SlotModel): boolean => {
     if (slot.members.some((m) => m.id === effectiveTool)) return true;
@@ -645,53 +636,47 @@ function ToolSlot({
     }
   };
 
-  const openFlyout = useCallback(() => {
+  const openFlyout = () => {
     const rect = popoverAnchor(containerRef.current);
     if (rect) setFlyoutPos({ left: rect.left, top: rect.top });
     onUnhint?.();
     setFlyoutOpen(true);
-  }, [onUnhint]);
+  };
 
-  const onPointerDown = useCallback(
-    (e: ReactPointerEvent) => {
-      onUnhint?.();
-      if (e.button !== 0 || !hasFlyout) return;
+  const onPointerDown = (e: ReactPointerEvent) => {
+    onUnhint?.();
+    if (e.button !== 0 || !hasFlyout) return;
+    openedByHold.current = false;
+    longPressRef.current = window.setTimeout(() => {
+      openedByHold.current = true;
+      openFlyout();
+    }, LONG_PRESS_MS);
+  };
+
+  const onClick = (e: ReactMouseEvent<HTMLButtonElement>) => {
+    clearTimer();
+    // A hold opened the flyout — don't also activate the face tool.
+    if (openedByHold.current) {
       openedByHold.current = false;
-      longPressRef.current = window.setTimeout(() => {
-        openedByHold.current = true;
-        openFlyout();
-      }, LONG_PRESS_MS);
-    },
-    [hasFlyout, openFlyout],
-  );
-
-  const onClick = useCallback(
-    (e: ReactMouseEvent<HTMLButtonElement>) => {
-      clearTimer();
-      // A hold opened the flyout — don't also activate the face tool.
-      if (openedByHold.current) {
-        openedByHold.current = false;
+      return;
+    }
+    // Alt+click cycles the slot through its group's hidden tools —
+    // the non-conflicting form of "cycle within a group" (the
+    // Shift+key combos are real tool shortcuts of their own).
+    // Planned members are skipped: cycling onto one would park the
+    // slot on an inert face.
+    if (e.altKey && hasFlyout) {
+      const start = slot.members.findIndex((m) => m.id === face.id);
+      for (let step = 1; step <= slot.members.length; step++) {
+        const next = slot.members[(start + step) % slot.members.length];
+        if (isPlanned(next)) continue;
+        onPick(next);
         return;
       }
-      // Alt+click cycles the slot through its group's hidden tools —
-      // the non-conflicting form of "cycle within a group" (the
-      // Shift+key combos are real tool shortcuts of their own).
-      // Planned members are skipped: cycling onto one would park the
-      // slot on an inert face.
-      if (e.altKey && hasFlyout) {
-        const start = slot.members.findIndex((m) => m.id === face.id);
-        for (let step = 1; step <= slot.members.length; step++) {
-          const next = slot.members[(start + step) % slot.members.length];
-          if (isPlanned(next)) continue;
-          onPick(next);
-          return;
-        }
-        return;
-      }
-      onPick(face);
-    },
-    [face, onPick, hasFlyout, slot.members],
-  );
+      return;
+    }
+    onPick(face);
+  };
 
   // Close the flyout on a pointer-down OUTSIDE this slot. The
   // containment check keeps the opening gesture's own trailing pointer
@@ -946,6 +931,7 @@ function useRailTooltip() {
     }
   };
 
+  // eslint-disable-next-line no-restricted-syntax -- a hook's result: callers may compare it (ADR 229)
   const show = useCallback((h: RailHint) => {
     clear();
     if (visible.current || performance.now() < warmUntil.current) {
@@ -959,6 +945,7 @@ function useRailTooltip() {
     }, TOOLTIP_DELAY_MS);
   }, []);
 
+  // eslint-disable-next-line no-restricted-syntax -- a hook's result: callers may compare it (ADR 229)
   const hide = useCallback(() => {
     clear();
     if (visible.current)

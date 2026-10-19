@@ -38,7 +38,7 @@
 // field writes through `host.objects`, offers "Bind to data…" and shows
 // the binding badge.
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 import {
   CockpitBtn,
@@ -102,39 +102,48 @@ function pickerLabel(title: string): string {
 function useObjectNames(list: readonly string[] | null): Map<string, string> {
   const model = useObjectModel();
   const [names, setNames] = useState<Map<string, string>>(new Map());
+  // The addresses by value: the effect reads them back from the key, so a
+  // new array with the same addresses does not run it again.
   const key = JSON.stringify(list ?? []);
   useEffect(() => {
-    if (!model || !list || list.length === 0) {
+    const addresses = JSON.parse(key) as string[];
+    if (!model || addresses.length === 0) {
       setNames(new Map());
       return;
     }
     let cancelled = false;
-    void Promise.all(
-      list.map(async (a) => {
-        try {
-          const v = await model.objects.get(a, "name");
-          return v.kind === "value" &&
-            typeof v.value === "string" &&
-            v.value !== ""
-            ? ([a, v.value] as const)
-            : null;
-        } catch {
-          return null;
-        }
-      }),
-    ).then((pairs) => {
-      if (!cancelled)
-        setNames(
-          new Map(
-            pairs.filter((p): p is readonly [string, string] => p !== null),
-          ),
-        );
-    });
+    void Promise.all(addresses.map((a) => objectName(model, a))).then(
+      (pairs) => {
+        if (!cancelled)
+          setNames(
+            new Map(
+              pairs.filter((p): p is readonly [string, string] => p !== null),
+            ),
+          );
+      },
+    );
     return () => {
       cancelled = true;
     };
-  }, [model, key]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [model, key]);
   return names;
+}
+
+/** An address and its own name, or null (no name, or a refused read).
+ *  Outside the hook: the compiler does not compile a conditional inside a
+ *  `try` (ADR 229). */
+async function objectName(
+  model: NonNullable<ReturnType<typeof useObjectModel>>,
+  address: string,
+): Promise<readonly [string, string] | null> {
+  try {
+    const v = await model.objects.get(address, "name");
+    return v.kind === "value" && typeof v.value === "string" && v.value !== ""
+      ? ([address, v.value] as const)
+      : null;
+  } catch {
+    return null;
+  }
 }
 
 function Picker({
@@ -210,7 +219,7 @@ const COMPONENTS: Record<string, number> = { CMYK: 4, RGB: 3, LAB: 3, Gray: 1 };
 /** The whole colour (`swatch.color`) as ONE write: space + components
  *  (+ the model it carries) go together. */
 function SwatchColorEditor({ address }: { address: string }) {
-  const targets = useMemo(() => [address], [address]);
+  const targets = [address];
   const field = useObjectField({ path: "color", targets, schemaKind: address });
   const current =
     field.state.state === "value" &&
@@ -282,20 +291,25 @@ function SwatchColorEditor({ address }: { address: string }) {
   );
 }
 
+const swatchAddress = (selfId: string): string =>
+  formatAddress({ kind: "swatch", name: selfId } as never);
+
 export function SwatchOptionsPanel() {
   const swatches = useCollection<SwatchSummary>("swatches");
   const [pick, setPick] = useState("");
   const editable = (swatches ?? []).filter(
     (s) => s.kind !== "none" && s.kind !== "registration",
   );
-  const selfId =
+  // A string, said so: the compiler cannot tell an element read off the
+  // collection is not mutated later, and would not memoize on it (ADR 229).
+  const selfId = String(
     pick && editable.some((s) => s.selfId === pick)
       ? pick
-      : (editable[0]?.selfId ?? "");
-  const address = selfId
-    ? formatAddress({ kind: "swatch", name: selfId } as never)
-    : null;
-  const targets = useMemo(() => (address ? [address] : []), [address]);
+      : (editable[0]?.selfId ?? ""),
+  );
+  const address = selfId ? swatchAddress(selfId) : null;
+  // One array per swatch, for the fields' effects below.
+  const targets = address ? [address] : [];
   return (
     <div
       data-swatch-options-panel={swatches ? "ready" : "loading"}
@@ -374,7 +388,7 @@ function AddressListPanel({
   const names = useObjectNames(list);
   const [pick, setPick] = useState("");
   const address = pick && list?.includes(pick) ? pick : (list?.[0] ?? null);
-  const targets = useMemo(() => (address ? [address] : []), [address]);
+  const targets = address ? [address] : [];
   return (
     <div
       data-object-options-panel={list ? testId : "loading"}
@@ -544,7 +558,7 @@ export function SectionOptionsPanel() {
   const address = selfId
     ? formatAddress({ kind: "section", id: selfId } as never)
     : null;
-  const targets = useMemo(() => (address ? [address] : []), [address]);
+  const targets = address ? [address] : [];
   return (
     <div
       data-section-options-panel={sections ? "ready" : "loading"}

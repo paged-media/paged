@@ -1,0 +1,98 @@
+{
+  "$comment": "The components and hooks of this package the React Compiler leaves uncompiled: its bailouts (it could not prove the Rules of React; the reason is its own) and the functions it cannot see as components (notCompiled). Written by tooling/js/react-compiler-coverage.mjs --write; CI fails on a new one, and the lists only get shorter (apps/editor/docs/adr/229-react-compiler.md).",
+  "compiler": "babel-plugin-react-compiler@1.0.0",
+  "skipped": 15,
+  "bailouts": [
+    {
+      "file": "src/ConsentDialog.tsx",
+      "function": "ConsentPrompt",
+      "reason": "Suppression",
+      "detail": "React Compiler has skipped optimizing this component because one or more React ESLint rules were disabled"
+    },
+    {
+      "file": "src/DocumentReplaceDialog.tsx",
+      "function": "ReplacePrompt",
+      "reason": "Suppression",
+      "detail": "React Compiler has skipped optimizing this component because one or more React ESLint rules were disabled"
+    },
+    {
+      "file": "src/main.tsx",
+      "function": "CanvasAppIntegration",
+      "reason": "Refs",
+      "detail": "Cannot access refs during render"
+    },
+    {
+      "file": "src/main.tsx",
+      "function": "PluginBundles",
+      "reason": "Immutability",
+      "detail": "This value cannot be modified"
+    },
+    {
+      "file": "src/panels/canvas-panel.tsx",
+      "function": "CanvasPanel",
+      "reason": "Refs",
+      "detail": "Cannot access refs during render"
+    },
+    {
+      "file": "src/panels/cockpit/document-map-panel.tsx",
+      "function": "useMissingLinksByPage",
+      "reason": "Suppression",
+      "detail": "React Compiler has skipped optimizing this component because one or more React ESLint rules were disabled"
+    },
+    {
+      "file": "src/panels/schema-list-demo-panel.tsx",
+      "function": "SchemaListDemoPanel",
+      "reason": "Refs",
+      "detail": "Cannot access refs during render"
+    },
+    {
+      "file": "src/panels/table-panel.tsx",
+      "function": "useAddressFields",
+      "reason": "Hooks",
+      "detail": "Hooks must always be called in a consistent order, and may not be called conditionally. See the Rules of Hooks (https://react.dev/warnings/invalid-hook-call-warning)"
+    },
+    {
+      "file": "src/playground/PlaygroundController.tsx",
+      "function": "PlaygroundController",
+      "reason": "Suppression",
+      "detail": "React Compiler has skipped optimizing this component because one or more React ESLint rules were disabled"
+    },
+    {
+      "file": "src/SecretPromptDialog.tsx",
+      "function": "SecretPrompt",
+      "reason": "Suppression",
+      "detail": "React Compiler has skipped optimizing this component because one or more React ESLint rules were disabled"
+    },
+    {
+      "file": "src/ui/useAnimatedCamera.ts",
+      "function": "useAnimatedCamera",
+      "reason": "Refs",
+      "detail": "Cannot access refs during render"
+    },
+    {
+      "file": "src/ui/useGestureSpine.ts",
+      "function": "useGestureSpine",
+      "reason": "Suppression",
+      "detail": "React Compiler has skipped optimizing this component because one or more React ESLint rules were disabled"
+    },
+    {
+      "file": "src/ui/usePathEditMode.ts",
+      "function": "usePathEditMode",
+      "reason": "Suppression",
+      "detail": "React Compiler has skipped optimizing this component because one or more React ESLint rules were disabled"
+    },
+    {
+      "file": "src/ui/useTextEditing.ts",
+      "function": "useTextEditing",
+      "reason": "Refs",
+      "detail": "Cannot access refs during render"
+    },
+    {
+      "file": "src/ui/ViewportCanvas.tsx",
+      "function": "ViewportCanvas",
+      "reason": "Suppression",
+      "detail": "React Compiler has skipped optimizing this component because one or more React ESLint rules were disabled"
+    }
+  ],
+  "notCompiled": []
+}

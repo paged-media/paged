@@ -108,6 +108,7 @@ export function useGestureSpine(): {
     ? resolveCursorCss(contribution.cursor)
     : undefined;
 
+  // eslint-disable-next-line no-restricted-syntax -- not a plain binding (ADR 229)
   return useMemo(
     () => ({
       toolGesture: hasHandler

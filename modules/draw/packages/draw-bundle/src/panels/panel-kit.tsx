@@ -123,6 +123,37 @@ export function refusalText(message: string): string {
   return /[.!?)]$/.test(text) ? text : `${text}.`;
 }
 
+/** Run `work` and resolve with the first warning it logged, or the message
+ *  of what it threw (also logged), or null. Outside the hook: the React
+ *  Compiler does not compile a `try … finally` (editor ADR 229). */
+async function firstWarning(
+  host: BundleHost,
+  work: () => Promise<unknown>,
+): Promise<string | null> {
+  const tap = tapWarnings(host);
+  let first: string | null = null;
+  const listen = (message: string) => {
+    if (first === null) first = message;
+  };
+  tap?.listeners.add(listen);
+  try {
+    await work();
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    host.log.warn(`draw panel: ${message}`);
+    if (first === null) first = message;
+  } finally {
+    tap?.listeners.delete(listen);
+  }
+  return first;
+}
+
+/** The attribute a refusal line carries (a computed key the compiler does
+ *  not lower inside a component). */
+function refusalAttr(attr: string | undefined): Record<string, string> {
+  return { [attr ?? "data-draw-panel-refusal"]: "" };
+}
+
 /**
  * Run panel actions and keep the last refusal on screen. `run(work)`
  * clears the previous message, runs the work, and shows the first
@@ -144,24 +175,11 @@ export function useActionFeedback(
       mounted.current = false;
     };
   }, []);
+  // eslint-disable-next-line no-restricted-syntax -- a hook's result: callers may compare it (ADR 229)
   const run = React.useCallback(
     async (work: () => Promise<unknown>) => {
       setRefusal(null);
-      const tap = tapWarnings(host);
-      let first: string | null = null;
-      const listen = (message: string) => {
-        if (first === null) first = message;
-      };
-      tap?.listeners.add(listen);
-      try {
-        await work();
-      } catch (e) {
-        const message = e instanceof Error ? e.message : String(e);
-        host.log.warn(`draw panel: ${message}`);
-        if (first === null) first = message;
-      } finally {
-        tap?.listeners.delete(listen);
-      }
+      const first = await firstWarning(host, work);
       if (mounted.current && first !== null) setRefusal(refusalText(first));
       after();
     },
@@ -177,11 +195,7 @@ export function Refusal(props: {
 }): React.ReactElement | null {
   if (props.text === null) return null;
   return (
-    <div
-      role="status"
-      style={refusalStyle}
-      {...{ [props.attr ?? "data-draw-panel-refusal"]: "" }}
-    >
+    <div role="status" style={refusalStyle} {...refusalAttr(props.attr)}>
       {props.text}
     </div>
   );

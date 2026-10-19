@@ -41,6 +41,7 @@ import {
   useDocument,
   useDocumentMeta,
   useRegistries,
+  useRegistryView,
   type PanelProps,
 } from "@paged-media/shell";
 
@@ -94,7 +95,7 @@ export function OutputsPanel(_props: PanelProps) {
   // K-2 / S-06 — plugin-registered exporters surface as one-click
   // outputs here (the host owns blob→download). The Export Center is the
   // one place documents AND plugin-contributed outputs are exported.
-  const { exporters } = useRegistries();
+  const exporters = useRegistryView(useRegistries().exporters);
   const pluginExporters = exporters.list();
   const [exportPhase, setExportPhase] = useState<{
     id: string;
@@ -105,12 +106,7 @@ export function OutputsPanel(_props: PanelProps) {
     const exporter = pluginExporters.find((e) => e.id === id);
     if (!exporter) return;
     setExportPhase({ id, kind: "running" });
-    try {
-      const ran = await runPluginExporter(exporter);
-      setExportPhase({ id, kind: ran ? "done" : "error" });
-    } catch {
-      setExportPhase({ id, kind: "error" });
-    }
+    setExportPhase({ id, kind: await exporterOutcome(exporter) });
   };
 
   return (
@@ -270,6 +266,52 @@ type ImagePhase =
   | { kind: "done"; files: number }
   | { kind: "error"; message: string };
 
+// The two runs settle outside the components: the React Compiler does not
+// compile a component with a conditional inside a `try` (ADR 229).
+
+/** A plugin exporter's run, as the outputs row shows it. */
+async function exporterOutcome(
+  exporter: Parameters<typeof runPluginExporter>[0],
+): Promise<"done" | "error"> {
+  try {
+    return (await runPluginExporter(exporter)) ? "done" : "error";
+  } catch {
+    return "error";
+  }
+}
+
+/** The image export's outcome. */
+async function imageExportPhase(
+  client: Parameters<typeof runImageExport>[0],
+  handle: { pageIds: string[]; pageSizesPt: [number, number][] },
+  image: Parameters<typeof runImageExport>[1]["settings"],
+  baseName: string | undefined,
+): Promise<ImagePhase> {
+  try {
+    const { files, refused } = await runImageExport(client, {
+      pageIds: handle.pageIds,
+      pageSizesPt: handle.pageSizesPt,
+      settings: image,
+      baseName,
+    });
+    if (refused === "range") {
+      // A refusal is a RESULT, not an exception — the range simply
+      // named no page in this document, and saying so beats both a
+      // thrown error and a silent zero-file "success".
+      return {
+        kind: "error",
+        message: `"${image.range}" names no page in this ${handle.pageIds.length}-page document.`,
+      };
+    }
+    return { kind: "done", files };
+  } catch (err) {
+    return {
+      kind: "error",
+      message: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
+
 /** Export mode — RIGHT inspector: per-target settings (kit
  *  ExportInspector). LIVE targets carry real inline settings + a real
  *  run action; HONEST targets carry the concept seam. */
@@ -290,30 +332,9 @@ export function ExportInspectorPanel(_props: PanelProps) {
   const onRunImage = async () => {
     if (!handle) return;
     setImagePhase({ kind: "running" });
-    try {
-      const { files, refused } = await runImageExport(client, {
-        pageIds: handle.pageIds,
-        pageSizesPt: handle.pageSizesPt,
-        settings: image,
-        baseName: meta?.documentName,
-      });
-      if (refused === "range") {
-        // A refusal is a RESULT, not an exception — the range simply
-        // named no page in this document, and saying so beats both a
-        // thrown error and a silent zero-file "success".
-        setImagePhase({
-          kind: "error",
-          message: `"${image.range}" names no page in this ${handle.pageIds.length}-page document.`,
-        });
-        return;
-      }
-      setImagePhase({ kind: "done", files });
-    } catch (err) {
-      setImagePhase({
-        kind: "error",
-        message: err instanceof Error ? err.message : String(err),
-      });
-    }
+    setImagePhase(
+      await imageExportPhase(client, handle, image, meta?.documentName),
+    );
   };
 
   return (

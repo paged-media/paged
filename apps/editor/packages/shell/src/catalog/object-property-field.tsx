@@ -127,6 +127,7 @@ export function useFieldTargets(
 
   // Selection hosts (core addresses + their elements), for a scoped kind.
   const scopedToKind = address === "selection" && !!kind;
+  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
   const hosts = useMemo((): { address: string; element: ElementId }[] => {
     if (!scopedToKind || !model) return [];
     return elementSelection.map((id) => ({
@@ -136,6 +137,7 @@ export function useFieldTargets(
   }, [scopedToKind, model, elementSelection]);
   const hostsKey = hosts.map((h) => h.address).join("\n");
   // Every selected object as a possible host (for `{ bind }` addresses).
+  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
   const selectionHosts = useMemo(
     (): { address: string; element: ElementId }[] =>
       model
@@ -200,6 +202,7 @@ export function useFieldTargets(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [model, addressKey, isSelector, scopedToKind, hostsKey, kind, tick]);
 
+  // eslint-disable-next-line no-restricted-syntax -- not a plain binding (ADR 229)
   return useMemo((): ResolvedFieldTargets => {
     if (address === "selection" && !kind)
       return { targets: undefined, bindScope: undefined };

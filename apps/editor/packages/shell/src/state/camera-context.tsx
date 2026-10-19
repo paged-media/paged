@@ -53,6 +53,7 @@ export function CameraProvider({ children }: PropsWithChildren) {
   const [camera, setCameraState] = useState<Camera>(IDENTITY_CAMERA);
   const [viewportSize, setViewportSize] = useState<ViewportSize>([0, 0]);
 
+  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
   const setCamera = useCallback(
     (cam: Camera) => {
       setCameraState(cam);
@@ -61,6 +62,7 @@ export function CameraProvider({ children }: PropsWithChildren) {
     [client],
   );
 
+  // eslint-disable-next-line no-restricted-syntax -- its type argument types the value (ADR 229)
   const value = useMemo<CameraContextValue>(
     () => ({ camera, setCamera, viewportSize, setViewportSize }),
     [camera, setCamera, viewportSize],

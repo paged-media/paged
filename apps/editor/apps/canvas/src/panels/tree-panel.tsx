@@ -21,7 +21,7 @@
 // the corresponding frame; selection mirrors in both directions
 // because the panel reads `useSelection()` for the highlight.
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 
 import { useCanvasClient, useSelection } from "@paged-media/shell";
 
@@ -69,19 +69,16 @@ export function TreePanel(_: PanelProps) {
 
   const selectedKey = useMemo_selectionKey(elementSelection);
 
-  const onPick = useCallback(
-    (id: ElementId) => {
-      void client
-        .setElementSelection([id], "replace")
-        .then((ids) => {
-          setElementSelection(ids);
-          return client.elementGeometry(ids);
-        })
-        .then(setElementGeometry)
-        .catch(() => {});
-    },
-    [client, setElementSelection, setElementGeometry],
-  );
+  const onPick = (id: ElementId) => {
+    void client
+      .setElementSelection([id], "replace")
+      .then((ids) => {
+        setElementSelection(ids);
+        return client.elementGeometry(ids);
+      })
+      .then(setElementGeometry)
+      .catch(() => {});
+  };
 
   if (roots.length === 0) {
     return (
