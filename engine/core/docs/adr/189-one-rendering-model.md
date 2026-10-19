@@ -4,8 +4,11 @@
 - **Scope:**
   - `crates/paged-gpu`: `vcpu.rs` (the CPU rasterizer), `vello_map.rs` (the mapping both lanes
     share, with stroke adjustment and curve flattening), `ink_planes.rs` (ink planes and
-    overprint), `separations.rs`, `vello_rs.rs`; the tiny-skia rasterizer `cpu.rs` is deleted.
-  - `crates/paged-renderer`: the Fancy corner (`pipeline/shapes.rs`), drawn as InDesign draws it.
+    overprint), `separations.rs`, `vello_rs.rs`, `svg.rs` (placed SVGs); the tiny-skia
+    rasterizer `cpu.rs` is deleted.
+  - `crates/paged-renderer`: the Fancy corner (`pipeline/shapes.rs`), drawn as InDesign draws it;
+    SVG decoding (`pipeline/image_decode.rs`) parses with `usvg` instead of rendering with
+    `resvg`.
   - `crates/paged-cli` (the `tiny-skia` backend name stays an alias of `cpu`).
   - `corpus/generated/parity-thresholds.json`.
   - Comments and documentation that named tiny-skia, across the engine and the editor.
@@ -81,8 +84,17 @@ missed all three, failing `corners`, `inline-objects` and `table-nested`:
    → (2,1) → (1,1) → (1,2) → (3,2) → (3,0)` in thirds of the way from the vertex toward each
    edge point, at any corner angle. It was three approximating arcs, so the frame's long sides
    were not adjusted where InDesign's were.
-8. **tiny-skia is no longer a dependency of the engine.** `resvg` still brings tiny-skia
-   (0.12, since resvg 0.48) for placed SVGs, until those are drawn as vectors.
+8. **tiny-skia and `resvg` are no longer dependencies of the engine.** `resvg` kept tiny-skia
+   in every engine wasm for placed SVGs alone. `usvg` still parses them, and `paged_gpu::svg`
+   (feature `svg`, on in every renderer build, the viewer's included) draws the tree with
+   `vello_cpu` the way `resvg` did: fill rules, solid, gradient and pattern paints, dashed
+   strokes, isolated groups with opacity, blend mode, clip path and mask, nested SVG images.
+   Filters are not applied (a filtered group is drawn unfiltered), and raster images inside
+   an SVG stay undecoded, as before. The pixels come back with straight alpha, as
+   `DecodedImage` holds them; `resvg`'s were premultiplied. `usvg` is built without its
+   `text` feature: the engine gives it no font database (the browser sandbox reads no system
+   fonts), so it drew no SVG text before either, and the feature's shaper cost 0.9 MB in every
+   engine wasm.
 
 ## Evidence
 
@@ -149,14 +161,28 @@ required.
   0.2 default, which stays until lavapipe has measured this lane.
 - **Ink coverage.** The ink tests, including
   `ink_coverage_numbers_are_exact_for_a_pixel_aligned_fill`, pass with the same numbers.
-- **Tests.** `cargo nextest --workspace`: 4,056 tests, all passing with the CMYK test profile in
+- **Tests.** `cargo nextest --workspace`: 4,067 tests, all passing (23 skipped) with the CMYK test profile in
   place (`corpus/profiles`), none re-baselined. The 50 tests of `cpu.rs` were ported to
   `vcpu.rs`. Added: the adjustment and flattening rules (`vello_map`), whole-pixel rules and
-  rectangles on the CPU lane, the same pixels on both lanes (`vello_rs`, on Metal), and the
-  paper composite's rounding. `inline_objects` and `corner_options` count InDesign's Fancy
+  rectangles on the CPU lane, the same pixels on both lanes (`vello_rs`, on Metal), the paper
+  composite's rounding, and the SVG renderer's fills, fill rules, gradients, dashes, group
+  opacity, clip paths, masks, patterns and straight alpha (`svg`). `inline_objects` and `corner_options` count InDesign's Fancy
   geometry. A blend-group parity test draws its control edge with a clip, which, like a
   group's bounds, is not adjusted.
-- **Size.** SIZE_TBD
+- **Size** (`scripts/build-wasm-packages.sh`, against main at the same commit; the app-wide
+  budget counts canvas-wasm and its `repo` entry):
+
+  | Artifact                     | main (tiny-skia) | `vello_cpu`, `resvg` kept | SVGs on `vello_cpu`  | `usvg` without `text` |
+  | ---------------------------- | ---------------- | ------------------------- | -------------------- | --------------------- |
+  | canvas-wasm                  | 29,675,295       | 30,053,858 (+378,563)     | 29,684,223 (+8,928)  | 28,778,520 (−896,775) |
+  | canvas-wasm `repo`           | 690,942          | 690,942                   | 690,942              | 690,942               |
+  | viewer (`paged_sdk_bg.wasm`) | 12,416,183       | 12,463,412 (+47,229)      | 12,424,292 (+8,109)  | 11,519,129 (−897,054) |
+
+  In the unoptimised canvas-wasm `vello_cpu` is 142 KB, `vello_common` 82 KB and
+  `fearless_simd` 60 KB; tiny-skia was 315 KB and `resvg` 55 KB. The app-wide budget (100 MB,
+  `apps/editor/scripts/wasm-budget.mjs` over the editor and every module): main measured
+  100,302,231 bytes, over the cap, before this change; on this tree, merged with main, it
+  measures 99.4 MB (0.6 MB under).
 - **Speed.** Natively, raster time per document at 144 dpi (`paged-inspect`, the rasterizer
   alone, best of five), tiny-skia → first `vello_cpu` build → this:
 
@@ -181,8 +207,12 @@ required.
   319 ms, where every effect flushes the page and synchronises the pool, and `annual-base` 35 →
   40 to 48 ms, from a thread pool built per page. It stays off: a win would need a pool kept
   across pages and effects that do not flush, and the editor's wasm has no threads.
-- **Editor snapshots** (`snapshot-backends.journey.spec.ts`, 72 dpi, GPU against CPU):
-  JOURNEY_TBD
+- **Editor snapshots** (`snapshot-backends.journey.spec.ts`, 72 dpi, GPU against CPU, 70
+  pages): the worst mean difference is 0.050 levels and no pixel is more than 8 levels apart
+  (budget 0.064 and 0.004 %); the largest difference anywhere is 6 levels. The first
+  `vello_cpu` build measured 0.051 and 0.003 %, tiny-skia 0.104 and 0.574 %. All seven GPU
+  journeys (`gpu-backend`, `gpu-device-loss`, `gpu-reentrancy`, `snapshot-backends`) pass on
+  Metal.
 
 ## Consequences
 
@@ -198,6 +228,10 @@ measuring.
 
 InDesign's own screen rendering was not measured: the references are Splash renders of
 InDesign's PDFs, and this follows Splash.
+
+A placed SVG with a filter (a blur, a drop shadow) is drawn without it, which `resvg` drew. No
+fixture places an SVG; `vello_cpu`'s filters are experimental, and mapping SVG's filter graph
+onto them is the follow-up if documents need it.
 
 ## Related
 
