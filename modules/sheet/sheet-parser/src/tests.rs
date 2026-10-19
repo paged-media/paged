@@ -523,6 +523,110 @@ fn structured_ref_rewrite_passthrough() {
     assert_eq!(f.root, g.root, "structured ref must survive a row insert");
 }
 
+/// Excel's this-row column range, `Table1[@[A]:[B]]` (Excel 2007 spelled
+/// it `Table1[[#This Row],[A]:[B]]`), is the this-row area over a column
+/// span. The `@` form did not parse, and the table-less span printed as
+/// `[@A:[B]]`, which reads back as one column named `A:[B` (found by the
+/// parse_formula fuzz target from `[[]@:[]]`).
+#[test]
+fn structured_ref_this_row_span__feat__sheet_table_structured() {
+    use sheet_core::ast::{StructuredRef, TableArea};
+    let span = |table: &str| {
+        Expr::StructuredRef(StructuredRef {
+            table: table.into(),
+            area: TableArea::ThisRow,
+            col_start: Some("A".into()),
+            col_end: Some("B".into()),
+        })
+    };
+    for (t, table) in [
+        ("Table1[@[A]:[B]]", "Table1"),
+        ("Table1[[#This Row],[A]:[B]]", "Table1"),
+        ("Table1[ @[A] : [B] ]", "Table1"),
+        ("[@[A]:[B]]", ""),
+        ("[[#This Row],[A]:[B]]", ""),
+    ] {
+        assert_eq!(p(t).root, span(table), "{t}");
+    }
+    // The canonical forms: `@` without a table, the storage form with one.
+    assert_eq!(roundtrip("[[#This Row],[A]:[B]]"), "[@[A]:[B]]");
+    assert_eq!(roundtrip("[@[A]:[B]]"), "[@[A]:[B]]");
+    assert_eq!(roundtrip("Table1[@[A]:[B]]"), "Table1[[#This Row],[A]:[B]]");
+    assert_eq!(
+        roundtrip("[@[Net Amount]:['#Items]]"),
+        "[@[Net Amount]:['#Items]]"
+    );
+    assert_eq!(
+        roundtrip("SUM(T[@[Jan]:[Mar]])"),
+        "SUM(T[[#This Row],[Jan]:[Mar]])"
+    );
+}
+
+/// Excel's structured-reference grammar ([MS-XLSX] 2.2.2, Microsoft's
+/// "Using structured references with Excel tables"): a column is never
+/// empty; `[ ] # ' @` inside a column name are escaped with `'`; items are
+/// separated by commas, the `#` specifiers before the columns; `@` is only
+/// the leading this-row shorthand. The printer brackets every column that
+/// holds one of the documented special characters.
+#[test]
+fn structured_ref_follows_excels_grammar__feat__sheet_table_structured() {
+    for bad in [
+        // Found by the parse_formula fuzz target: an empty column, and `@`
+        // as an item after a column.
+        "[[]@:[]]",
+        "T[[]]",
+        "T[[ ]]",
+        "[@[]]",
+        "T[[A]:[]]",
+        "T[[#Headers],[]]",
+        "T[[A]@:[B]]",
+        "T[[#Headers],@]",
+        "T[[#Headers][A]]",
+        "T[[#Headers],,[A]]",
+        "T[[A],]",
+        "T[[A],[#Headers]]",
+        "T[A[B]]",
+        "T[#Foo]",
+        "T[[#Foo]]",
+        "T[[a#b]]",
+        "T[[a@b]]",
+        "[@A:[B]]",
+        "T[[A']]",
+    ] {
+        assert!(parse(bad, &Ctx::new()).is_err(), "{bad:?} should not parse");
+    }
+    let col = |t: &str| match p(t).root {
+        Expr::StructuredRef(r) => r.col_start.map(|c| c.to_string()),
+        e => panic!("{t}: not a structured ref: {e:?}"),
+    };
+    // The five escapes, in a simple and in a bracketed column.
+    assert_eq!(col("T['#Items]").as_deref(), Some("#Items"));
+    assert_eq!(col("T[[Total '[USD']]]").as_deref(), Some("Total [USD]"));
+    assert_eq!(col("T[[It''s]]").as_deref(), Some("It's"));
+    assert_eq!(col("T[[a'@b]]").as_deref(), Some("a@b"));
+    for (input, canonical) in [
+        ("T['#Items]", "T[['#Items]]"),
+        ("T[[Total '[USD']]]", "T[[Total '[USD']]]"),
+        ("T[[It''s]]", "T[[It''s]]"),
+        ("T[[a'@b]]", "T[[a'@b]]"),
+        // Spaces after `[`, before `]` and around commas (Excel's
+        // readability spacing).
+        ("T[ [#Headers], [#Data], [A] ]", "T[[#Headers],[#Data],[A]]"),
+        // Columns with the documented special characters are bracketed.
+        ("T[[Col.1]]", "T[[Col.1]]"),
+        ("T[[Total $ Amount]]", "T[[Total $ Amount]]"),
+        ("T[[a-b]]", "T[[a-b]]"),
+        ("T[[a/b]]", "T[[a/b]]"),
+        ("T[[a\"b]]", "T[[a\"b]]"),
+        ("T[[a{b}]]", "T[[a{b}]]"),
+        ("T[[a^b&c*d+e=f<g>h]]", "T[[a^b&c*d+e=f<g>h]]"),
+        ("T[Plain_1]", "T[Plain_1]"),
+    ] {
+        assert_eq!(roundtrip(input), canonical, "{input}");
+        assert_eq!(roundtrip(canonical), canonical, "{canonical}");
+    }
+}
+
 #[test]
 fn structured_ref_malformed_is_error() {
     // Unterminated bracket.
@@ -1078,7 +1182,34 @@ mod prop {
                 col_start: Some(c),
                 col_end: None,
             }),
+            // ...and its column span `[@[A]:[B]]`.
+            (arb_col(), arb_col()).prop_map(|(c0, c1)| StructuredRef {
+                table: compact_str::CompactString::default(),
+                area: TableArea::ThisRow,
+                col_start: Some(c0),
+                col_end: Some(c1),
+            }),
         ]
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(20000))]
+        /// The TEXT side of the structured-reference fixpoint (found by
+        /// fuzzing: `[[]@:[]]` printed as `[@[]:[]]`, which did not parse):
+        /// any text over the bracket grammar's alphabet that parses must
+        /// print to text that parses back to the same AST.
+        #[allow(non_snake_case)]
+        #[test]
+        fn parsed_structured_text_prints_reparsable__feat__sheet_table_structured(
+            t in r"T?\[[\[\]@:#',A ]{0,12}\]"
+        ) {
+            if let Ok(f) = parse(&t, &Ctx::new()) {
+                let printed = print(&f, 0, &Ctx::new());
+                let reparsed = parse(&printed, &Ctx::new())
+                    .unwrap_or_else(|err| panic!("{t:?} printed {printed:?}, which fails: {err}"));
+                prop_assert_eq!(&reparsed.root, &f.root, "{:?} printed {}", t, printed);
+            }
+        }
     }
 
     proptest! {
