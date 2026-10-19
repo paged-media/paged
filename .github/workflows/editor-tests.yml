@@ -256,6 +256,11 @@ jobs:
       - name: network policy (connect-src)
         run: bun run test:network-policy
 
+      # Trusted Types (ADR 240): the policy header the dev server and the
+      # committed _headers send, and the default policy's script-URL rule.
+      - name: trusted types policy
+        run: bun run test:trusted-types
+
       # The module door (ADR 223): what the editor answers host.modules, and
       # the build-time module manifest it answers from.
       - name: module door (module manifest)
