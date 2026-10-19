@@ -1,23 +1,24 @@
-# npm: 25 packages → 4
+# npm: 25 packages → 4 → 3
 
 The decision is [PM-0008](../adr/PM-0008-npm-packages-and-release.md). This page is the
 inventory it acts on (taken from the registry on 2026-10-18) and the exact commands for the
-package owner.
+package owner. Amendment 3 (2026-10-19, before the first release) makes the four three; the
+right-hand column below says where each package ends up now.
 
 ## On npm today
 
 | Package | Versions | dist-tags | After the migration |
 |---|---|---|---|
-| `@paged-media/idml-viewer` | 54 | latest 0.73.4, canary 0.1.0-canary.0 | **public**, absorbs `sdk` as `/session` |
-| `@paged-media/canvas-wasm` | 54 | latest 0.73.4 | **public**, absorbs `introspect-wasm` (`./introspect`) and `repo-wasm` (`./repo`) |
-| `@paged-media/plugin-api` | 60 | latest **0.2.8-canary.0** (June), canary 0.2.63-canary.0 | **public**, type-only |
+| `@paged-media/idml-viewer` | 54 | latest 0.73.4, canary 0.1.0-canary.0 | deprecate → **`@paged-media/viewer`** (new, public; absorbs `sdk` as `/session`) |
+| `@paged-media/canvas-wasm` | 54 | latest 0.73.4 | deprecate → **`@paged-media/paged`** (new, public; `./introspect`, `./repo`, and the `paged` bin); private in the workspace |
+| `@paged-media/plugin-api` | 60 | latest **0.2.8-canary.0** (June), canary 0.2.63-canary.0 | deprecate → `@paged-media/plugin-sdk/api`; private in the workspace |
 | `@paged-media/plugin-sdk` | 61 | latest **0.2.8-canary.0** (June), canary 0.2.63-canary.0 | **public**, absorbs `plugin-cli` (`paged-plugin` bin) |
-| `@paged-media/sdk` | 54 | latest 0.73.4, canary 0.1.0-canary.0 | deprecate → `@paged-media/idml-viewer/session` |
-| `@paged-media/introspect-wasm` | 54 | latest 0.73.4 | deprecate → `@paged-media/canvas-wasm/introspect` |
+| `@paged-media/sdk` | 54 | latest 0.73.4, canary 0.1.0-canary.0 | deprecate → `@paged-media/viewer/session` |
+| `@paged-media/introspect-wasm` | 54 | latest 0.73.4 | deprecate → `@paged-media/paged/introspect` |
 | `@paged-media/plugin-cli` | 7 | latest 0.1.2-canary.0, canary 0.1.6 | deprecate → the `paged-plugin` bin of `@paged-media/plugin-sdk` |
-| `@paged-media/data`, `draw`, `image`, `pdf`, `publish`, `sheet`, `web` | 1–22 each | | deprecate: built into the editor |
-| `@paged-media/data-bundle`, `draw-bundle`, `image-glue`, `sheet-bundle`, `web-bundle` | | | deprecate: earlier names of the bundles |
-| `@paged-media/data-host-model`, `draw-geometry`, `draw-tools`, `image-manifest`, `sheet-host-model`, `web-model` | 1 each | | deprecate: internal packages |
+| `@paged-media/data`, `draw`, `image`, `pdf`, `publish`, `sheet`, `web` | 1–22 each | | retire: unpublish where npm allows it, else deprecate (built into the editor) |
+| `@paged-media/data-bundle`, `draw-bundle`, `image-glue`, `sheet-bundle`, `web-bundle` | | | retire (earlier names of the bundles) |
+| `@paged-media/data-host-model`, `draw-geometry`, `draw-tools`, `image-manifest`, `sheet-host-model`, `web-model` | 1 each | | retire (internal packages) |
 
 `@paged-media/repo-wasm` 0.74.0 was never published. `doc`, `slide`, `client`, `ai` and `cli`
 were never on npm, and stay private workspace packages.
