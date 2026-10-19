@@ -22,7 +22,12 @@ import { covers, SURFACE_KINDS, type SurfaceId } from "../src/index.ts";
 
 describe("covers", () => {
   it("is a no-op that returns nothing", () => {
-    expect(covers("command:paged.undo", "panel:paged.layers")).toBeUndefined();
+    // Called through an alias: the gate reads only calls of the bare
+    // identifier `covers`, and this test asserts nothing about a surface.
+    const mark = covers;
+    expect(
+      mark("command:paged.editor.undo", "panel:paged.layers"),
+    ).toBeUndefined();
   });
 
   it("names the ten surface kinds the gate enumerates", () => {
