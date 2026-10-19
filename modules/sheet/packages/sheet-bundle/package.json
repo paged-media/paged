@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "@paged-media/helpers": "workspace:*",
+    "@paged-media/react-live": "workspace:*",
     "@paged-media/wasm-boot": "workspace:*"
   },
   "peerDependencies": {
@@ -54,8 +55,5 @@
     "type": "git",
     "url": "git+https://github.com/paged-media/paged.git",
     "directory": "modules/sheet/packages/sheet-bundle"
-  },
-  "dependencies": {
-    "@paged-media/react-live": "workspace:*"
   }
 }
