@@ -74,6 +74,14 @@ async function importIdml(
       `${IDML_IMPORTER_ID}: opened ${file.name} as the active document`,
     );
   } catch (err) {
+    // The host asked before replacing an edited document and the user
+    // kept it: an answer, not a failure.
+    if ((err as { name?: unknown } | null)?.name === "AbortError") {
+      host.log.info(
+        `${IDML_IMPORTER_ID}: ${file.name} not opened — the user kept the open document`,
+      );
+      return;
+    }
     host.log.error(
       `${IDML_IMPORTER_ID}: failed to open ${file.name} — ${String(err)}`,
     );

@@ -22,8 +22,10 @@
 // contribution so there's a single load path.
 
 import { createBlankDocument, loadDocumentFile } from "../document-loader";
-import { cancelPendingPlacement } from "../pending-placement";
 import { setPendingImportSource } from "../import-source";
+import { confirmDiscard, isReplaceDeclined } from "../replace-guard";
+
+export { confirmDiscard };
 import type { PagedEditor } from "../paged-editor";
 import type { CommandContribution } from "../../registries";
 
@@ -38,48 +40,9 @@ const LETTER_PT: readonly [number, number] = [612, 792];
  * Build the File ▸ New command. Mints a blank single-page document via
  * the engine ([`CanvasClient.newBlankDocument`]) and runs it through the
  * same document-state orchestration as Open, so the menu, palette, and
- * tests all reach one path.
+ * tests all reach one path. Asks first when the open document has
+ * unsaved edits (`confirmDiscard`, the one replace guard, ADR 230).
  */
-/** Ask before discarding an edited document.
- *
- *  `File > New` and `File > Open` both replace the open document
- *  outright. The editor has no autosave and no recent-files list, so a
- *  mis-click here is unrecoverable — the previous document is simply
- *  gone. The dirty flag was already displayed in two places and acted on
- *  in none.
- *
- *  `window.confirm` deliberately, not a designed modal: this must work
- *  before any React tree exists (a failed bundle load still reaches the
- *  menu), it must be synchronous so nothing races the replacement, and
- *  it is the one dialog the platform guarantees. A prettier modal is a
- *  fine follow-up; shipping nothing until it exists is not.
- *
- *  Returns true when it is safe to proceed. */
-export async function confirmDiscard(
-  editor: PagedEditor,
-  what: string,
-): Promise<boolean> {
-  // A placement armed against the OUTGOING document must not resolve
-  // into the incoming one. Clicking a MENU already cancels it (a click
-  // outside the canvas stands the placement down), but the keyboard
-  // route — Cmd+N with an image loaded — reaches here with the
-  // placement still armed, and the next canvas click would drop that
-  // image into a document the user never chose it for.
-  cancelPendingPlacement();
-  let dirty = false;
-  try {
-    dirty = (await editor.client.documentMeta()).dirty;
-  } catch {
-    // No document, or the worker is not answering — nothing to lose.
-    return true;
-  }
-  if (!dirty) return true;
-  return globalThis.confirm(
-    `This document has unsaved edits. ${what} will discard them.\n\n` +
-      "Save with Cmd+S first, or continue to discard.",
-  );
-}
-
 export function buildNewDocumentCommand(options: {
   setStatus: (s: string) => void;
   pushWarning: (w: string) => void;
@@ -108,14 +71,14 @@ export function buildNewDocumentCommand(options: {
  * is nothing to discard can reuse the same callback wiring instead of
  * copying it. Exactly one such caller exists: solo mode's boot artboard.
  *
- * WHY THE CONFIRM MUST NOT BE ON THIS PATH. `confirmDiscard` calls
- * `globalThis.confirm`, which on a freshly-opened application is a modal
- * asking whether to discard a document that does not exist — and under
- * Playwright is auto-DISMISSED when nothing listens, so the boot
- * document would silently never be created and every plugin menu entry
- * would stay greyed (the SDK gates them on `pageCount > 0`). The two
- * failure modes are a nonsense dialog and an invisible no-op; neither
- * belongs at boot.
+ * WHY THE GUARD MUST NOT BE ON THIS PATH. `confirmDiscard` asks a
+ * question, which on a freshly-opened application is a modal asking
+ * whether to discard a document that does not exist — and its platform
+ * fallback is auto-DISMISSED under Playwright when nothing listens, so
+ * the boot document would silently never be created and every plugin
+ * menu entry would stay greyed (the SDK gates them on `pageCount > 0`).
+ * The two failure modes are a nonsense dialog and an invisible no-op;
+ * neither belongs at boot.
  */
 export async function mintBlankDocument(
   editor: PagedEditor,
@@ -169,66 +132,88 @@ export function buildOpenIdmlCommand(options: {
     title: "Open…",
     category: "File",
     handler: async (paged) => {
-      const editor = paged as PagedEditor;
       const file = await options.pickFile();
       if (!file) return;
-      // K-2 / S-06 — a registered plugin importer may claim this file type
-      // (e.g. paged.sheet's .xlsx). Route the bytes to the plugin instead
-      // of the default IDML load — the plugin owns what the file becomes
-      // (it does not replace the document unless it chooses to).
-      const importer = editor.registries.importers.resolve(
-        file.name,
-        file.type,
-      );
-      if (importer) {
-        options.setStatus(`importing ${file.name} via ${importer.title}…`);
-        try {
-          const bytes = new Uint8Array(await file.arrayBuffer());
-          // U14 — park the file name for the open orchestration: an
-          // importer that OPENS a document does so through
-          // `nativeDocument.open(bytes)`, which carries no name.
-          setPendingImportSource(file.name);
-          await importer.import({
-            name: file.name,
-            bytes,
-            mimeType: file.type,
-          });
-          options.setStatus(`imported ${file.name}`);
-        } catch (err) {
-          options.pushWarning(
-            `import of ${file.name} via ${importer.title} failed: ` +
-              (err instanceof Error ? err.message : String(err)),
-          );
-        } finally {
-          setPendingImportSource(null);
-        }
-        return;
-      }
-      // The guard sits HERE, not before the picker and not before the
-      // importer routing above. Asking before the picker interrupts a
-      // gesture the user may abandon anyway, and a plugin importer does
-      // not necessarily replace the document — paged.sheet's .xlsx adds
-      // a frame. This branch is the one that always replaces, so it is
-      // the only one where "continue" means "discard what is open".
-      if (!(await confirmDiscard(editor, `Opening ${file.name}`))) return;
-      await loadDocumentFile(editor.client, file, {
-        setHandle: editor.document.setHandle,
-        setSourceName: editor.document.setSourceName,
-        setLoading: editor.document.setLoading,
-        setStatus: options.setStatus,
-        setSnapshotsReady: editor.document.setSnapshotsReady,
-        addSnapshot: (pageId, url) => {
-          editor.document.setSnapshots((prev) => {
-            const next = new Map(prev);
-            next.set(pageId, url);
-            return next;
-          });
-        },
-        resetForNewDocument: editor.document.resetForNewDocument,
-        pushWarning: options.pushWarning,
-      });
+      await openFile(paged as PagedEditor, file, options);
     },
   };
+}
+
+/**
+ * Open a file the user chose: picked through File ▸ Open…, dropped on the
+ * canvas, or handed to the shell's file input. ONE path for all of them,
+ * so a drop asks exactly what File ▸ Open asks (F-01: the drop used to
+ * replace an edited document without a word).
+ *
+ * K-2 / S-06 — a registered plugin importer may claim the file type
+ * (paged.sheet's .xlsx, paged.pdf's .pdf). The bytes go to the importer,
+ * which owns what the file becomes; one that REPLACES the document does
+ * so through `host.nativeDocument.open`, whose backend asks the same
+ * question there (an importer that adds a frame asks nothing). Every
+ * other file replaces the document through the one IDML load path, after
+ * the question.
+ */
+export async function openFile(
+  editor: PagedEditor,
+  file: File,
+  sinks: {
+    setStatus: (s: string) => void;
+    pushWarning: (w: string) => void;
+  },
+): Promise<void> {
+  const importer = editor.registries.importers.resolve(file.name, file.type);
+  if (importer) {
+    sinks.setStatus(`importing ${file.name} via ${importer.title}…`);
+    try {
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      // U14 — park the file name for the open orchestration: an
+      // importer that OPENS a document does so through
+      // `nativeDocument.open(bytes)`, which carries no name.
+      setPendingImportSource(file.name);
+      await importer.import({
+        name: file.name,
+        bytes,
+        mimeType: file.type,
+      });
+      sinks.setStatus(`imported ${file.name}`);
+    } catch (err) {
+      if (isReplaceDeclined(err)) {
+        // The user kept the open document at the replace question: an
+        // answer, not a failure.
+        sinks.setStatus(`kept the open document; ${file.name} not opened`);
+      } else {
+        sinks.pushWarning(
+          `import of ${file.name} via ${importer.title} failed: ` +
+            (err instanceof Error ? err.message : String(err)),
+        );
+      }
+    } finally {
+      setPendingImportSource(null);
+    }
+    return;
+  }
+  // The guard sits HERE, not before the picker and not before the
+  // importer routing above. Asking before the picker interrupts a
+  // gesture the user may abandon anyway, and a plugin importer does
+  // not necessarily replace the document — paged.sheet's .xlsx adds
+  // a frame. This branch is the one that always replaces.
+  if (!(await confirmDiscard(editor, `Opening ${file.name}`))) return;
+  await loadDocumentFile(editor.client, file, {
+    setHandle: editor.document.setHandle,
+    setSourceName: editor.document.setSourceName,
+    setLoading: editor.document.setLoading,
+    setStatus: sinks.setStatus,
+    setSnapshotsReady: editor.document.setSnapshotsReady,
+    addSnapshot: (pageId, url) => {
+      editor.document.setSnapshots((prev) => {
+        const next = new Map(prev);
+        next.set(pageId, url);
+        return next;
+      });
+    },
+    resetForNewDocument: editor.document.resetForNewDocument,
+    pushWarning: sinks.pushWarning,
+  });
 }
 
 /** File ▸ New from a brief… (ADR 221) — opens the AI Assistant panel in

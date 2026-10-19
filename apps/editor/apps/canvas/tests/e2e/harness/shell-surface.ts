@@ -96,9 +96,11 @@ export function shellFixture(): Uint8Array {
 /** Boot the editor; with `doc`, load the matrix fixture and fit page 1. */
 export async function openShell(
   page: Page,
-  options: { doc: boolean } = { doc: true },
+  options: { doc: boolean; answerReplacePrompts?: boolean } = { doc: true },
 ): Promise<void> {
-  await openCanvas(page);
+  await openCanvas(page, {
+    answerReplacePrompts: options.answerReplacePrompts,
+  });
   if (!options.doc) return;
   await loadShellFixture(page);
 }

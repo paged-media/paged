@@ -1877,7 +1877,10 @@ export interface NativeDocumentSurface {
    *  relative prefix). Empty when the host wires no backend. */
   listParts(prefix?: string): Promise<string[]>;
   /** Replace the active document by loading a native/importable package
-   *  (an importer plugin produces these bytes, e.g. from IDML). */
+   *  (an importer plugin produces these bytes, e.g. from IDML). When the
+   *  active document has unsaved edits the host asks the user first (save,
+   *  don't save, cancel); when they keep it, nothing changes and the
+   *  promise rejects with an error named `AbortError`. */
   open(bytes: Uint8Array): Promise<void>;
 }
 
@@ -1887,11 +1890,10 @@ export interface NativeDocumentSurface {
 // and replace it with a document the PLUGIN built (paged.data's "Merge to new
 // document": clone the template, open the clone, merge into it). The editor
 // holds one document at a time, so "a second document" means "replace the
-// active one", and that is destructive: unlike `nativeDocument.open` (an
-// importer's door, reached only after the user chose File > Open and
-// confirmed there), a plugin-initiated `open` ASKS THE USER FIRST when the
-// active document has unsaved edits. Declining is an ordinary outcome, not
-// an error (`{ opened: false, reason: "declined" }`).
+// active one", and that is destructive: like `nativeDocument.open` (an
+// importer's door), a plugin-initiated `open` ASKS THE USER FIRST when the
+// active document has unsaved edits. Here declining is an ordinary outcome,
+// not an error (`{ opened: false, reason: "declined" }`).
 //
 // Always present — when the host injects no backend both doors reject and
 // `supports("documents.open@1")` / `supports("documents.exportPaged@1")` are

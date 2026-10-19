@@ -31,6 +31,7 @@
 
 import { useEffect, useState } from "react";
 import {
+  confirmReplace,
   loadDocumentFile,
   useCanvasClient,
   useDocument,
@@ -89,6 +90,10 @@ export function CorpusPicker() {
       const file = new File([buf], `${id.replace("/", "-")}.idml`, {
         type: "application/octet-stream",
       });
+      // The dev picker replaces the document like File ▸ Open does, so it
+      // asks the same question first (ADR 230).
+      if (!(await confirmReplace(client, { action: `Opening ${file.name}` })))
+        return;
       await loadDocumentFile(client, file, {
         setHandle: doc.setHandle,
         setSourceName: doc.setSourceName,
