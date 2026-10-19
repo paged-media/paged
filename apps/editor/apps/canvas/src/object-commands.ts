@@ -1865,6 +1865,26 @@ export async function releaseClippingMask(
 const notInsideAnEditContext = (state: unknown): boolean =>
   !(state as { editContext?: unknown } | null)?.editContext;
 
+/** Whether anything is selected: every Object verb acts on the selection,
+ *  so with none it is greyed in the menu and the palette and quiet on its
+ *  key, as in InDesign (SH-8, the UX audit's F-14; ADR 249). The handlers
+ *  still read the live selection themselves. */
+const hasSelection = (state: unknown): boolean =>
+  ((
+    state as {
+      selection?: { elementSelection?: readonly unknown[] } | null;
+    } | null
+  )?.selection?.elementSelection?.length ?? 0) > 0;
+
+/** The first seven verbs' rule, and the clipping mask's: outside an edit
+ *  context, on a selection. */
+const onSelectedObjects = (state: unknown): boolean =>
+  notInsideAnEditContext(state) && hasSelection(state);
+
+/** Delete and nudge: where the keys are the object's, on a selection. */
+const onSelectionWhereKeysApply = (state: unknown): boolean =>
+  objectVerbApplies(state) && hasSelection(state);
+
 /** The slices of `PagedEditor` the delete + nudge guards read. Read
  *  structurally (every member optional) so the predicates stay total
  *  against a partial handle — a standalone mount, a test. */
@@ -1999,56 +2019,56 @@ export function buildObjectCommands(
       id: PAGED_OBJECT_BRING_TO_FRONT,
       title: "Bring to front",
       category: "Object",
-      when: notInsideAnEditContext,
+      when: onSelectedObjects,
       handler: () => handlers.bringToFront(),
     },
     {
       id: PAGED_OBJECT_BRING_FORWARD,
       title: "Bring forward",
       category: "Object",
-      when: notInsideAnEditContext,
+      when: onSelectedObjects,
       handler: () => handlers.bringForward(),
     },
     {
       id: PAGED_OBJECT_SEND_BACKWARD,
       title: "Send backward",
       category: "Object",
-      when: notInsideAnEditContext,
+      when: onSelectedObjects,
       handler: () => handlers.sendBackward(),
     },
     {
       id: PAGED_OBJECT_SEND_TO_BACK,
       title: "Send to back",
       category: "Object",
-      when: notInsideAnEditContext,
+      when: onSelectedObjects,
       handler: () => handlers.sendToBack(),
     },
     {
       id: PAGED_OBJECT_GROUP,
       title: "Group",
       category: "Object",
-      when: notInsideAnEditContext,
+      when: onSelectedObjects,
       handler: () => handlers.group(),
     },
     {
       id: PAGED_OBJECT_UNGROUP,
       title: "Ungroup",
       category: "Object",
-      when: notInsideAnEditContext,
+      when: onSelectedObjects,
       handler: () => handlers.ungroup(),
     },
     {
       id: PAGED_OBJECT_SELECT_PARENT_GROUP,
       title: "Select parent group",
       category: "Object",
-      when: notInsideAnEditContext,
+      when: onSelectedObjects,
       handler: () => handlers.selectParentGroup(),
     },
     {
       id: PAGED_OBJECT_DELETE,
       title: "Delete",
       category: "Object",
-      when: objectVerbApplies,
+      when: onSelectionWhereKeysApply,
       handler: () => handlers.delete(),
     },
     ...NUDGE_COMMANDS.map(
@@ -2056,7 +2076,7 @@ export function buildObjectCommands(
         id,
         title,
         category: "Object",
-        when: objectVerbApplies,
+        when: onSelectionWhereKeysApply,
         handler: () => handlers.nudge(direction, large),
       }),
     ),
@@ -2064,14 +2084,14 @@ export function buildObjectCommands(
       id: PAGED_OBJECT_MAKE_CLIPPING_MASK,
       title: "Make clipping mask",
       category: "Object",
-      when: notInsideAnEditContext,
+      when: onSelectedObjects,
       handler: () => handlers.makeClippingMask(),
     },
     {
       id: PAGED_OBJECT_RELEASE_CLIPPING_MASK,
       title: "Release clipping mask",
       category: "Object",
-      when: notInsideAnEditContext,
+      when: onSelectedObjects,
       handler: () => handlers.releaseClippingMask(),
     },
   ];

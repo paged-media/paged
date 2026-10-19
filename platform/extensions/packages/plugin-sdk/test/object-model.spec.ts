@@ -131,7 +131,11 @@ describe("host.objects — registry over core and a plugin (ADR 323, real engine
     expect(await h.objects.query(`${NOTE}[size!=12]`)).toEqual([]);
     expect(await h.objects.query(NOTE, { limit: 1 })).toEqual([`${NOTE}/n1`]);
     expect(await h.objects.query(`${NOTE}:nth(2)`)).toEqual([`${NOTE}/n2`]);
-    expect(await h.objects.query("frame[name")).toEqual([]);
+    // A selector that does not parse is refused, not "nothing matched"
+    // (AUTO-2).
+    await expect(h.objects.query("frame[name")).rejects.toThrow(
+      /invalidSelector/,
+    );
   });
 
   it("query() — core kinds through the containment tree", async () => {

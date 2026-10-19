@@ -270,10 +270,10 @@ describe("host.contribute — what the editor does with a contribution", () => {
 
   // MenuContribution.command: "Must be a command the bundle has
   // REGISTERED — the host refuses an entry pointing at nothing". The SDK
-  // checks the manifest's declaration only, so an entry onto a declared
-  // command the bundle has not registered (or registers only under a
-  // condition) is accepted and sits in the menu bar, doing nothing.
-  test.failing(
+  // checked the manifest's declaration only, so an entry onto a declared
+  // command the bundle had not registered was accepted and sat in the
+  // menu bar, doing nothing (HOST-7, fixed: ADR 249).
+  test(
     "HOST-7 — a menu entry onto a declared but unregistered command is refused",
     () => {
       expect(t.registered().commands).not.toContain(`${PROBE_ID}.command.two`);

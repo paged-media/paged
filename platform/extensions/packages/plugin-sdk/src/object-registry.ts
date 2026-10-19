@@ -1110,10 +1110,13 @@ export function createObjectRegistry(
     opts?: { limit?: number },
   ): Promise<string[]> {
     const sel = parseSelector(selector);
-    if (!sel) {
-      log.warn(`objects.query: "${selector}" is not a selector`);
-      return [];
-    }
+    // A selector that does not parse is a refusal, not "nothing matched"
+    // (AUTO-2): a typo must not read as an empty document. `paged query`
+    // on the command line refuses it the same way.
+    if (!sel)
+      throw new Error(
+        `invalidSelector: objects.query: "${selector}" does not parse`,
+      );
     let out: string[];
     try {
       out = await querySteps(sel.steps);

@@ -202,10 +202,11 @@ describe("host.blob — the editor's OPFS backing", () => {
   });
 
   // `supports("storage.blob@1")` means "a real store is wired, so a bundle
-  // can actually persist bytes" (host-impl.ts). The editor answers true
-  // whenever it injected its OPFS backend, also where OPFS is unavailable
-  // (an insecure context, a denied origin): every write then rejects.
-  test.failing(
+  // can actually persist bytes" (host-impl.ts). The editor answered true
+  // whenever it injected its OPFS backend, also where OPFS was unavailable
+  // (an insecure context, a denied origin). Fixed (HOST-2, ADR 248): the
+  // store says whether bytes persist and supports() follows it.
+  test(
     "HOST-2 — with OPFS unavailable, supports(storage.blob@1) still says bytes persist",
     async () => {
       t.editorApp!.platform.opfs.setAvailable(false);

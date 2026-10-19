@@ -28,7 +28,12 @@
 import { useEffect, useState } from "react";
 
 import { IconButton, useDisclosure } from "@paged-media/panel-kit";
-import { Icon, useCanvasClient, useCollection } from "@paged-media/shell";
+import {
+  Icon,
+  useCanvasClient,
+  useCollection,
+  useDocument,
+} from "@paged-media/shell";
 import type { ColorGroupSummary, ColorPreview } from "@paged-media/client";
 
 function MemberChip({ swatchId }: { swatchId: string }) {
@@ -129,6 +134,10 @@ function GroupRow({
 export function ColorGroupsPanel() {
   const client = useCanvasClient();
   const items = useCollection<ColorGroupSummary>("colorGroups");
+  // With no document there is nothing to add a group to: the button
+  // greys rather than sending a mutation the engine refuses (PN-157,
+  // the UX audit's F-14; ADR 249).
+  const hasDocument = (useDocument().handle?.pageCount ?? 0) > 0;
 
   if (items === null) {
     return (
@@ -180,7 +189,8 @@ export function ColorGroupsPanel() {
         type="button"
         data-toolbar-btn="new-color-group"
         onClick={onNew}
-        className="flex h-[30px] w-full cursor-pointer items-center justify-center gap-[6px] rounded-[7px] border border-dashed bg-transparent text-xs"
+        disabled={!hasDocument}
+        className="flex h-[30px] w-full cursor-pointer items-center justify-center gap-[6px] rounded-[7px] border border-dashed bg-transparent text-xs disabled:cursor-default disabled:opacity-50"
         style={{
           borderColor: "var(--chrome-divider)",
           color: "var(--pg-muted-fg)",

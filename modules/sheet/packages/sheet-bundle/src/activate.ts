@@ -113,7 +113,11 @@ export function activate(host: BundleHost): BundleHandle {
   });
   /** See the note above `activate`: a workbook must be open for the
    *  clipboard verbs to have anything to act on. */
-  const workbookIsOpen = () => session.state().engine !== null;
+  // A booted engine is not an open workbook: after a failed import the
+  // engine is up with an empty default sheet nobody opened (SHT-3). The
+  // gate asks what the handlers ask: an engine AND an active sheet.
+  const workbookIsOpen = () =>
+    session.state().engine !== null && session.state().activeSheet !== null;
   // ADR 023 — the binding-provider handle is the SECOND thing allocated
   // outside a facade-tracked registration (the session is the first), so
   // dispose tears it down explicitly. `null` on a host with no registry.

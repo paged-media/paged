@@ -253,11 +253,11 @@ describe("editor.*", () => {
     expect(dumpDiff(before, await e.dump())).toEqual([]);
   });
 
-  // finding AUTO-1: `editor.setProperty` discards the engine's reply, so a
+  // finding AUTO-1 (fixed, ADR 248): `editor.setProperty` discarded the engine's reply, so a
   // write the engine refuses (an unknown path) resolves as if it landed;
   // `editor.set` and `editor.mutate`'s callers see the refusal. It should
   // reject with the engine's reason.
-  test.failing(
+  test(
     "finding AUTO-1: editor.setProperty rejects a write the engine refuses",
     async () => {
       covers("script:editor.setProperty");
@@ -311,12 +311,12 @@ describe("editor.*", () => {
     ).toEqual([]);
   });
 
-  // finding AUTO-2: `editor.query` with a selector that does not parse
+  // finding AUTO-2 (fixed, ADR 248): `editor.query` with a selector that does not parse
   // resolves to an empty list (the registry logs "is not a selector" to the
   // console), so a typo reads as "nothing matched". `paged query` on the
   // command line refuses it ("selector does not parse"); the automation
   // should reject too, as its own doc promises for refusals.
-  test.failing(
+  test(
     "finding AUTO-2: editor.query rejects a selector that does not parse",
     async () => {
       covers("script:editor.query");

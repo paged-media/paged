@@ -723,7 +723,15 @@ fn evaluate(ctx: &mut Context, source: &str) -> Outcome {
             paged.frame = function (id) {
                 return new Proxy({}, {
                     set(_t, prop, value) {
-                        baseSet(id, String(prop), value);
+                        // A refused write throws (finding SCR-12): a
+                        // script must not run on as if it landed. The
+                        // trap's `false` alone is silent outside strict
+                        // mode, so the refusal is raised here.
+                        if (baseSet(id, String(prop), value) !== true) {
+                            throw new TypeError(
+                                "paged.frame(" + JSON.stringify(id) + ")." +
+                                String(prop) + ": the write was refused");
+                        }
                         return true;
                     },
                     get(_t, prop) {

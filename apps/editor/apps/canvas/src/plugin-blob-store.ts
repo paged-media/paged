@@ -26,9 +26,11 @@
 //
 // OPFS lives in the ORIGIN, persists across reloads, and is main-thread
 // writable in the editor's target (Chromium). When OPFS is unavailable
-// (older browser / denied), every method degrades to the empty answer and
-// `supports("storage.blob@1")` still reads true (a backend IS injected) —
-// the bundle's own try/catch handles a failed persist honestly.
+// (older browser, insecure context, denied origin), every method degrades
+// to the empty answer and `available()` reads false, so
+// `supports("storage.blob@1")` says what is true: bytes do not persist
+// (HOST-2). Availability is learnt from OPFS's own answer — the root
+// directory refused — and recovers when a later call succeeds.
 
 import type { BlobStore } from "@paged-media/plugin-sdk";
 
@@ -42,26 +44,52 @@ type DirHandle = FileSystemDirectoryHandle & {
   entries(): AsyncIterableIterator<[string, FileSystemHandle]>;
 };
 
+/** Whether the last attempt to reach the OPFS root was refused. */
+let rootRefused = false;
+
+function opfs(): (() => Promise<FileSystemDirectoryHandle>) | null {
+  const storage = (globalThis.navigator?.storage ?? null) as
+    | (StorageManager & {
+        getDirectory?: () => Promise<FileSystemDirectoryHandle>;
+      })
+    | null;
+  return storage?.getDirectory ? () => storage.getDirectory!() : null;
+}
+
+/** Bytes can persist: OPFS exists, the context is secure, and the root
+ *  was not refused the last time it was asked for. */
+function opfsAvailable(): boolean {
+  if (globalThis.isSecureContext === false) return false;
+  return opfs() !== null && !rootRefused;
+}
+
 async function pluginDir(
   pluginId: string,
   create: boolean,
 ): Promise<DirHandle | null> {
-  const storage = navigator.storage as StorageManager & {
-    getDirectory?: () => Promise<FileSystemDirectoryHandle>;
-  };
-  if (!storage?.getDirectory) return null;
+  const getDirectory = opfs();
+  if (!getDirectory) return null;
+  let root: FileSystemDirectoryHandle;
   try {
-    const root = await storage.getDirectory();
+    root = await getDirectory();
+    rootRefused = false;
+  } catch {
+    // OPFS access denied (an insecure context, a denied origin).
+    rootRefused = true;
+    return null;
+  }
+  try {
     const blobs = await root.getDirectoryHandle("plugin-blobs", { create });
     return (await blobs.getDirectoryHandle(pluginId, { create })) as DirHandle;
   } catch {
-    // create:false on a not-yet-created tree, or OPFS access denied.
+    // create:false on a not-yet-created tree.
     return null;
   }
 }
 
 export function createEditorBlobStore(): BlobStore {
   return {
+    available: opfsAvailable,
     async write(pluginId, key, bytes) {
       const dir = await pluginDir(pluginId, true);
       if (!dir) throw new Error("OPFS unavailable — cannot persist blob");

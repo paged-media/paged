@@ -61,6 +61,7 @@ import type {
   DocumentsSurface,
   OpenDocumentResult,
   BundleHost,
+  CommandContribution,
   ClipboardSurface,
   ClipboardPayload,
   ContributionSurface,
@@ -544,6 +545,11 @@ export interface BlobStore {
   keys(pluginId: string): Promise<string[]>;
   /** Total bytes this plugin currently stores. */
   used(pluginId: string): Promise<number>;
+  /** Whether bytes can persist right now. Optional: a store without it
+   *  always can. A store over a backing that can be missing or denied
+   *  (OPFS in an insecure context, a denied origin) answers false then,
+   *  and `supports("storage.blob@1")` follows it (HOST-2). */
+  available?(): boolean;
 }
 
 /**
@@ -1567,6 +1573,26 @@ export function createBundleHost(
   /** The verdict for the contribution/non-document doors: in 'enforce'
    *  a violation throws PluginCapabilityError; in 'warn' it logs and
    *  the caller proceeds. Returns void either way. */
+  /** This bundle's registered commands, by id (see `contribute.command`). */
+  const liveCommands = new Map<string, CommandContribution>();
+  /** Whether a command applies in `state`: registered, and its `when`
+   *  (absent: always) holds. A string `when` is the contract's inert DSL
+   *  form and a throwing predicate cannot vouch for the command; both
+   *  read as not applicable, as the host's own registry reads them. */
+  const commandApplies = (
+    cmd: CommandContribution | undefined,
+    state: unknown,
+  ): boolean => {
+    if (!cmd) return false;
+    if (cmd.when === undefined) return true;
+    if (typeof cmd.when !== "function") return false;
+    try {
+      return Boolean(cmd.when(state));
+    } catch {
+      return false;
+    }
+  };
+
   const requireDeclared = (
     ok: boolean,
     door: string,
@@ -1743,7 +1769,16 @@ export function createBundleHost(
         "contribute.command",
         `contributes.commands[] must include "${c.id}"`,
       );
-      return store.add(getEditor().registries.commands.register(c));
+      const reg = getEditor().registries.commands.register(c);
+      // The live commands of this bundle: a menu entry needs one to point
+      // at, and takes its enablement from the command's own `when`.
+      liveCommands.set(c.id, c);
+      return store.add(
+        toDisposable(() => {
+          if (liveCommands.get(c.id) === c) liveCommands.delete(c.id);
+          reg.dispose();
+        }),
+      );
     },
     keybinding(c) {
       // Keybindings carry no id to list; the boolean capability is
@@ -1768,6 +1803,14 @@ export function createBundleHost(
         "contribute.menu",
         `contributes.commands[] must include "${c.command}" before a menu ` +
           `entry can invoke it`,
+      );
+      // Declared is not enough: the command must be REGISTERED, or the
+      // entry sits in the bar doing nothing (HOST-7).
+      requireDeclared(
+        liveCommands.has(c.command),
+        "contribute.menu",
+        `"${c.command}" must be registered (contribute.command) before a ` +
+          `menu entry can invoke it`,
       );
       const scope = c.scope ?? "document";
       const editContext = typeof scope === "object" ? scope.editContext : null;
@@ -1800,8 +1843,13 @@ export function createBundleHost(
             ) {
               return false;
             }
-            if (editContext === null) return true;
-            return st.editContext?.type === editContext;
+            if (editContext !== null && st.editContext?.type !== editContext)
+              return false;
+            // The command's own `when` decides too (MNU-1): an entry onto
+            // a command that cannot run where the user stands is greyed,
+            // not offered for a click the registry then refuses silently.
+            // A command since disposed applies nowhere.
+            return commandApplies(liveCommands.get(c.command), state);
           },
         }),
       );
@@ -4623,7 +4671,12 @@ export function createBundleHost(
     clipboard,
     tools,
     objects,
-    supports: (feature) => featureSet.has(feature),
+    supports: (feature) =>
+      // `storage.blob@1` means bytes persist: a wired store that says it
+      // cannot persist right now does not count (HOST-2).
+      feature === "storage.blob@1"
+        ? featureSet.has(feature) && options?.blobStore?.available?.() !== false
+        : featureSet.has(feature),
     get editor() {
       return getEditor();
     },

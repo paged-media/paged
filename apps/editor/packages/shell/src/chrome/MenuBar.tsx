@@ -41,7 +41,7 @@ import { useOptionalPaged } from "../state/paged-editor";
 import { useOptionalEditContextStack } from "../state/edit-context-stack";
 import { useSelectionEditContext } from "../state/use-selection-object-type";
 import { useWorkflowMode } from "../state/workflow-mode-context";
-import { isEnabled, type VisibilityPredicate } from "../registries/types";
+import { entryApplies, type VisibilityPredicate } from "../registries/types";
 import { Icon, hasIcon } from "../icons";
 import { useRovingFocus } from "../focus/roving-focus";
 
@@ -98,7 +98,10 @@ export function MenuBar() {
   const tools = useRegistryView(registries.tools);
   const editContexts = useRegistryView(registries.editContexts);
   const modes = useRegistryView(registries.modes);
-  const { commands } = registries;
+  // A view too: an entry greys while its command is unregistered or its
+  // command's `when` is false (ADR 249), so the bar re-renders when a
+  // bundle registers one.
+  const commands = useRegistryView(registries.commands);
   const activeContext = useOptionalEditContextStack()?.active ?? null;
   const selectionContext = useSelectionEditContext();
   const { mode } = useWorkflowMode();
@@ -145,7 +148,7 @@ export function MenuBar() {
   const applies = (leaf: MenuLeaf) =>
     !leaf.disabled &&
     leaf.kind !== "label" &&
-    isEnabled(leaf.when, () => paged);
+    entryApplies(leaf.when, leaf.command, commands, () => paged);
 
   // WHEN A CONTEXT MENU SHOWS. A plugin's items cannot say it: the SDK
   // gates every one of them on "a document is open", so with a document
@@ -188,6 +191,8 @@ export function MenuBar() {
 
   const ctx: RenderCtx = {
     invoke: (id) => void commands.invoke(id),
+    applies: (item) =>
+      entryApplies(item.when, item.command, commands, () => paged),
     state: paged,
     keyFor,
     iconFor,
@@ -616,6 +621,9 @@ export function prettyKey(combo: string): string {
 
 interface RenderCtx {
   invoke: (commandId: string) => void;
+  /** The entry's own `when`, its command registered, and the command's
+   *  `when` (ADR 249). */
+  applies: (item: MenuLeaf) => boolean;
   state: unknown;
   keyFor: (commandId: string) => string | null;
   iconFor: (leaf: MenuLeaf) => string | null;
@@ -717,7 +725,7 @@ function renderLeaf(
   // TWO REASONS TO GREY, which the user needs told apart: `disabled` is
   // a seam (the feature does not exist yet — "soon"); a false `when` is
   // "does not apply where you are standing", which promises nothing.
-  const inapplicable = !isEnabled(item.when, () => ctx.state);
+  const inapplicable = !ctx.applies(item);
   const greyed = Boolean(item.disabled) || inapplicable;
   const accel =
     ctx.keyFor(item.command) ??
