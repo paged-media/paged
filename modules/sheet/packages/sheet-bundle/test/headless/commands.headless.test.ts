@@ -49,7 +49,7 @@ if (process.env.REQUIRE_REAL_ENGINE === "1" && !ENGINE_BUILT) {
 }
 
 describe.skipIf(!ENGINE_BUILT)(
-  "paged.sheet commands on the real engine (unavailable without the sheet wasm: bash scripts/build-wasm.sh)",
+  `paged.sheet commands on the real engine${ENGINE_BUILT ? "" : " (unavailable: the sheet wasm, bash scripts/build-wasm.sh)"}`,
   () => {
     setDefaultTimeout(60_000);
     let env: SheetEnv;

@@ -128,7 +128,7 @@ const effect = {
 };
 
 describe.skipIf(!ENGINE_BUILT)(
-  "paged.sheet keybindings (unavailable without the sheet wasm: bash scripts/build-wasm.sh)",
+  `paged.sheet keybindings${ENGINE_BUILT ? "" : " (unavailable: the sheet wasm, bash scripts/build-wasm.sh)"}`,
   () => {
     setDefaultTimeout(30_000);
     let env: SheetEnv;
