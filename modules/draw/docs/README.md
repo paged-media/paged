@@ -7,6 +7,8 @@ What this folder holds.
   two Rust crates, what activation registers, the main data paths, where data is stored,
   the host doors used, and how it is built and tested.
 - [`status.md`](status.md): what ships today, the limits of what ships, and what is not built.
+- [`testing.md`](testing.md): how every command, tool, panel, tool option and file
+  handler is tested, layer by layer, and the findings committed as expected failures.
 - [`adr/`](adr/README.md): the decision records of this repository, 350–357.
 
 ## Decisions in other repositories that bind this one

@@ -117,7 +117,10 @@ export interface TextScene {
   text: string;
 }
 
-export const TEXT = "Hello world\rSecond paragraph";
+/** Two paragraphs. The engine's insertText breaks a paragraph at "\n" (a
+ *  "\r" stays in the run as a character); the break takes one offset, so
+ *  "Second paragraph" starts at 12. */
+export const TEXT = "Hello world\nSecond paragraph";
 
 export const textScene: SceneBuilder<TextScene> = async ({
   client,

@@ -23,7 +23,8 @@
 // the composite widget it belongs to (a radio group, tab list, toolbar,
 // list box, menu, grid or tree, which take one tab stop and move inside
 // with the arrow keys). Names are computed by dom-accessibility-api, the
-// same computation Testing Library's `getByRole({ name })` uses.
+// same computation Testing Library's `getByRole({ name })` uses, with
+// HTML-AAM's last fallback for text fields (the placeholder) added.
 
 import { computeAccessibleName, getRole } from "dom-accessibility-api";
 
@@ -82,7 +83,14 @@ export function controls(root: HTMLElement): Control[] {
     if ((el as HTMLInputElement).type === "hidden") continue;
     const role =
       getRole(el) ?? el.getAttribute("role") ?? el.tagName.toLowerCase();
-    const name = computeAccessibleName(el).trim();
+    // HTML-AAM names a text field by its placeholder when nothing else
+    // names it (browsers do); dom-accessibility-api stops before that.
+    const name = (
+      computeAccessibleName(el) ||
+      (el.matches("input, textarea")
+        ? (el.getAttribute("placeholder") ?? "")
+        : "")
+    ).trim();
     const composite = el.closest(COMPOSITES) as HTMLElement | null;
     const reachable =
       inTabOrder(el) ||
