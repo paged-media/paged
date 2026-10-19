@@ -116,7 +116,7 @@ table. The first compiled run: 491 compiled, 76 bailouts, 9 not compiled (85.2%)
 |---|---:|---:|---:|---:|
 | apps/editor/apps/canvas | 203 | 15 | 0 | 93.1% |
 | apps/editor/apps/devtools | 10 | 0 | 0 | 100.0% |
-| apps/editor/packages/shell | 249 | 12 | 0 | 95.4% |
+| apps/editor/packages/shell | 250 | 11 | 0 | 95.8% |
 | apps/editor/packages/ui | 9 | 3 | 0 | 75.0% |
 | modules/data/packages/data-bundle | 5 | 2 | 0 | 71.4% |
 | modules/doc/packages/doc-bundle | 5 | 0 | 0 | 100.0% |
@@ -126,7 +126,7 @@ table. The first compiled run: 491 compiled, 76 bailouts, 9 not compiled (85.2%)
 | modules/slide/packages/slide-bundle | 4 | 0 | 0 | 100.0% |
 | modules/web/packages/web-bundle | 8 | 1 | 1 | 80.0% |
 | platform/shared/react-live | 1 | 0 | 0 | 100.0% |
-| **all** | **541** | **35** | **1** | **93.8%** |
+| **all** | **542** | **34** | **1** | **93.9%** |
 
 A run takes 7 s here (270 files).
 
@@ -136,7 +136,7 @@ What the 76 first bailouts were, and what was done:
 |---|---:|---:|---|
 | Todo | 28 | 2 | a `try` the compiler does not lower (a `finally`; a conditional, optional chain or `??` inside it) moved to a module function returning its outcome, or became a promise chain; `\|\|=`, `??=` and computed template keys written out |
 | Refs | 22 | 9 | a "latest value" ref written during render is written in a layout effect; the properties panel's steer pin is state; the dev handle (`__canvas`) is published from a layout effect |
-| Suppression | 19 | 19 | none yet (below) |
+| Suppression | 19 | 18 | the FPS hook (below); the rest not yet |
 | PreserveManualMemo | 3 | 1 | the dependency arrays the compiler could not match were completed (two were missing a dependency) |
 | Immutability | 2 | 2 | none yet |
 | Hooks | 2 | 2 | none yet |
@@ -150,11 +150,17 @@ still returned from a factory.
 
 What is left, and why:
 
-- **Suppression (19)**: a function that disables a Rules-of-React rule, every one of them
+- **Suppression (18)**: a function that disables a Rules-of-React rule, every one of them
   `exhaustive-deps` on an effect that runs on fewer dependencies than it reads, on purpose (the
   viewport canvas, the gesture spine, path editing, the overlay host, the cockpit state, the
   panel rail, the number input and dial, the three prompt dialogs, ...). Making those effects
-  honest changes when they run; each is its own change with its own test.
+  honest changes when they run; each is its own change with its own test. One such
+  suppression hid a real bug: the FPS hook's frame loop read the `fps` of the first render (0)
+  and, once its sample window was full, a sample count that is always a multiple of 15, so it
+  set the state on every frame instead of at 4 Hz, and the whole shell chrome re-rendered with
+  it (in the DOM lane, 1,500 to 2,800 commits a second while a shell was mounted). The loop
+  keeps its own frame count now and the hook compiles; mounting the shell in a test went from
+  about 1,700 commits per settle to 15, and the canvas DOM lane from minutes to under one.
 - **Refs (9)**: providers and hooks that read or write a ref during render deliberately. The
   editor handle and the caret are written during render because children read them while
   rendering (`PagedEditorBinder`, `ContentSelectionProvider`); the edit-context stack, the
@@ -167,11 +173,11 @@ What is left, and why:
   (`useAddressFields`, `useObjectBindings`), sheet's grid (a memo whose dependencies the
   compiler cannot match), web's source panel (returned from its factory).
 
-No `"use no memo"` is in the tree. The ratchet fails CI on a new entry, so these 36 only go
+No `"use no memo"` is in the tree. The ratchet fails CI on a new entry, so these 35 only go
 down.
 
-The production build reports the same from the bundle's side: 523 components and hooks
-compiled in 231 modules, 35 skipped, in the eight chunks that hold first-party React code, all
+The production build reported the same from the bundle's side (before the FPS hook's fix): 523
+components and hooks compiled in 231 modules, 35 skipped, in the eight chunks that hold first-party React code, all
 of them reaching `react/compiler-runtime` in the entry chunk.
 
 The Rules-of-React lint suppressions (`eslint-suppressions.json`, recorded when the rules were
@@ -308,6 +314,10 @@ the work (Layers, Swatches). Where the time after the input is spent outside Rea
 unchanged. Both runs agree on the direction of every renders figure. The next-frame medians of
 one build move by up to 10 ms between runs on a shared machine, so only the Layers and Swatches
 differences hold up; the rest are unchanged.
+
+Both builds measured here still had the FPS hook's per-frame state update (fixed afterwards,
+see Coverage): the renders figures include the shell chrome re-rendering on frames whose
+rounded rate changed, in both columns alike.
 
 ### Memo census (the "Memo ✨" check)
 
