@@ -118,12 +118,14 @@ pub use model::{font_files_from_paths, font_registry_from_paths, FontFile};
 pub use resolve::{
     resolve, AnchorPosition, FieldChange, NumberingMap, ResolutionResult, ResolveOptions,
 };
+pub use snapshot::{
+    encode_snapshot_png, snapshot_page, Snapshot, SnapshotError, SnapshotPage, SnapshotPng,
+};
 #[cfg(feature = "cpu")]
 pub use snapshot::{
     render_snapshot, render_snapshot_at_dpi, render_snapshot_png, render_snapshot_png_at_dpi,
-    render_snapshot_png_hiding, Snapshot,
+    render_snapshot_png_hiding,
 };
-pub use snapshot::{SnapshotError, SnapshotPng};
 
 // Re-export upstream identifiers + the display-list IR so consumers
 // depend on a single root crate.

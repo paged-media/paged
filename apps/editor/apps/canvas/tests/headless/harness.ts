@@ -97,7 +97,7 @@ import {
   type EngineWorker,
   type ModelDump,
   type ModelDumpOptions,
-} from "@paged-media/test-kit";
+} from "@paged-media/test-kit/headless";
 
 import {
   buildAppCommands,
@@ -224,6 +224,53 @@ function recordingSlice(seed: Record<string, unknown> = {}) {
       return null;
     },
   });
+}
+
+/** The overlay signals (shell/src/state/overlay-signals-context.tsx), the
+ *  same members with the same semantics: both preview writers land in one
+ *  slot (an empty list clears it), the retained layers keep their stack
+ *  order and a re-set keeps its place. */
+function headlessOverlaySignals() {
+  type Shape = unknown;
+  const o = {
+    hitSelection: null as unknown,
+    setHitSelection(v: unknown) {
+      o.hitSelection = v;
+    },
+    marqueeRect: null as unknown,
+    setMarqueeRect(v: unknown) {
+      o.marqueeRect = v;
+    },
+    snapLines: [] as readonly unknown[],
+    setSnapLines(v: readonly unknown[]) {
+      o.snapLines = v;
+    },
+    /** One shape (`setToolPreview`) or a list (`setToolPreviews`). */
+    toolPreview: null as Shape | readonly Shape[] | null,
+    setToolPreview(v: Shape | null) {
+      o.toolPreview = v;
+    },
+    setToolPreviews(v: readonly Shape[] | null) {
+      o.toolPreview = v && v.length > 0 ? v : null;
+    },
+    overlayLayers: [] as ReadonlyArray<{
+      key: string;
+      shapes: readonly Shape[];
+    }>,
+    setOverlayLayer(key: string, shapes: readonly Shape[]) {
+      const i = o.overlayLayers.findIndex((l) => l.key === key);
+      if (i < 0) o.overlayLayers = [...o.overlayLayers, { key, shapes }];
+      else {
+        const next = o.overlayLayers.slice();
+        next[i] = { key, shapes };
+        o.overlayLayers = next;
+      }
+    },
+    removeOverlayLayer(key: string) {
+      o.overlayLayers = o.overlayLayers.filter((l) => l.key !== key);
+    },
+  };
+  return o;
 }
 
 /** What the headless editor holds in place of the shell's React state. */
@@ -438,7 +485,7 @@ function headlessState(): HeadlessState {
     contentSelection,
     toolSettings,
     screenMode,
-    overlaySignals: recordingSlice(),
+    overlaySignals: headlessOverlaySignals(),
     editContext: null,
   };
 }
@@ -712,6 +759,12 @@ export async function createHeadlessEditor(
   // The object registry reads the editor lazily and arms the Boa host
   // bridge on the client (main.tsx: setObjectModelEditor(paged)).
   setObjectModelEditor(editor as unknown as ContractEditor);
+  // The registry is a module singleton (one per app) and its core seam
+  // subscribes to the FIRST client it meets; the app has one client per
+  // page life, a test process has one per editor. Release the previous
+  // editor's subscription so the seam follows this one.
+  objectRegistry.core?.dispose();
+  objectRegistry.core?.invalidate();
 
   const setSelection = async (ids: ElementId[]) => {
     const applied = await client.setElementSelection(ids, "replace");
@@ -1115,6 +1168,7 @@ export async function createHeadlessEditor(
       setAssistantOpener(null);
       if (live === ed) {
         live = null;
+        objectRegistry.core?.dispose();
         setObjectModelEditor(null);
         delete (globalThis as { __canvas?: unknown }).__canvas;
       }
