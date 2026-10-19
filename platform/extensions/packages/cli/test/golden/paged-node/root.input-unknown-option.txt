@@ -1,0 +1,11 @@
+$ paged-node get --bogus
+# exit 2
+# stdout
+{
+  "error": {
+    "message": "unknown option --bogus",
+    "exit": 2
+  }
+}
+# stderr
+(empty)

@@ -1,0 +1,11 @@
+$ paged-node invoke <TMP>/fixture.paged core.nope '{}' --no-plugins
+# exit 2
+# stdout
+{
+  "error": {
+    "message": "no typed command \"core.nope\" (see `paged-node commands <TMP>/fixture.paged`)",
+    "exit": 2
+  }
+}
+# stderr
+(empty)

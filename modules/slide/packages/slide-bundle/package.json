@@ -17,7 +17,8 @@
   ],
   "scripts": {
     "typecheck": "bun check",
-    "test": "bun test --parallel --preload ../../../../tooling/js/bun-test-setup.ts"
+    "test": "bun test --parallel --preload ../../../../tooling/js/bun-test-setup.ts --path-ignore-patterns '**/*.dom.test.*'",
+    "test:dom": "bun test --parallel --preload ../../../../tooling/js/bun-test-setup.ts --preload ./test/happydom.ts .dom.test."
   },
   "peerDependencies": {
     "@paged-media/plugin-api": "workspace:*",
@@ -25,14 +26,20 @@
     "react": ">=19.3"
   },
   "devDependencies": {
+    "@happy-dom/global-registrator": "catalog:",
     "@paged-media/canvas-wasm": "workspace:*",
     "@paged-media/plugin-api": "workspace:*",
     "@paged-media/plugin-sdk": "workspace:*",
+    "@paged-media/test-kit": "workspace:*",
+    "@testing-library/dom": "catalog:",
+    "@testing-library/react": "catalog:",
+    "@types/bun": "catalog:",
     "@types/node": "catalog:",
     "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "happy-dom": "catalog:",
     "react": "catalog:",
-    "typescript": "catalog:",
-    "@paged-media/test-kit": "workspace:*",
-    "@types/bun": "catalog:"
+    "react-dom": "catalog:",
+    "typescript": "catalog:"
   }
 }

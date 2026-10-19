@@ -28,6 +28,7 @@
 import { readFileSync } from "node:fs";
 
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { covers } from "@paged-media/test-kit";
 
 import {
   createHeadlessHost,
@@ -36,8 +37,8 @@ import {
 } from "@paged-media/plugin-sdk";
 import type { ObjectValue, ValueType } from "@paged-media/plugin-api";
 
-import slideBundle from "../src/index";
-import { slideEngine, type ImportReport } from "../src/engine";
+import slideBundle from "../../src/index";
+import { slideEngine, type ImportReport } from "../../src/engine";
 import {
   DECK_ADDRESS,
   IMPORT_PPTX_COMMAND,
@@ -47,19 +48,19 @@ import {
   DECK_SCHEMA,
   LAYOUT_SCHEMA,
   slideAddress,
-} from "../src/object-model";
-import { SLIDE_PANEL_FIELDS } from "../src/panel-fields";
+} from "../../src/object-model";
+import { SLIDE_PANEL_FIELDS } from "../../src/panel-fields";
 import { fileURLToPath } from "node:url";
 
 // The engine is this package's own @paged-media/canvas-wasm devDependency.
 // Without an anchor the headless harness resolves it from plugin-sdk's
 // install location, which in the root Bun workspace is whichever version the
 // store hoists, not the one this package pins.
-const ENGINE_ANCHOR = fileURLToPath(new URL(".", import.meta.url));
+const ENGINE_ANCHOR = fileURLToPath(new URL("..", import.meta.url));
 
 const P = "plugin:media.paged.slide";
 const FIXTURE = new URL(
-  "../../../slide-conformance/fixtures/placeholders.pptx",
+  "../../../../slide-conformance/fixtures/placeholders.pptx",
   import.meta.url,
 );
 
@@ -109,6 +110,7 @@ describe("[plugin-slide.object-model] slides, layouts, placeholders through host
   });
 
   it("the import command opens a slide per page; the deck answers from its label", async () => {
+    covers("command:media.paged.slide.importPptx");
     expect(slides).toEqual(report.slides.map((s) => slideAddress(s.pageId)));
     expect(await h.objects.query(`${P}/slide`)).toEqual(slides);
     expect(v(await h.objects.get(DECK_ADDRESS, "slideCount"))).toBe(
@@ -239,6 +241,7 @@ describe("[plugin-slide.object-model] slides, layouts, placeholders through host
   });
 
   it("newSlide and delete change the deck, each one undo step", async () => {
+    covers("command:media.paged.slide.newSlide");
     const n = slides.length;
     const out = (await h.objects.invoke(NEW_SLIDE_COMMAND, {
       after: slides[0]!,
@@ -266,6 +269,19 @@ describe("[plugin-slide.object-model] slides, layouts, placeholders through host
     await expect(
       h.objects.invoke(NEW_SLIDE_COMMAND, { after: "x" }),
     ).rejects.toThrow(/unknownAddress/);
+  });
+
+  it("newSlide is one undo step: undo takes the page away, redo brings it back", async () => {
+    covers("command:media.paged.slide.newSlide");
+    const before = await h.objects.query(`${P}/slide`);
+    const out = (await h.objects.invoke(NEW_SLIDE_COMMAND, {})) as {
+      slide: string;
+    };
+    expect(await h.objects.query(`${P}/slide`)).toEqual([...before, out.slide]);
+    await h.host.document.undo();
+    expect(await h.objects.query(`${P}/slide`)).toEqual(before);
+    await h.host.document.redo();
+    expect(await h.objects.query(`${P}/slide`)).toEqual([...before, out.slide]);
   });
 
   it("labels are the persistence: a saved and reopened deck keeps its slide data", async () => {

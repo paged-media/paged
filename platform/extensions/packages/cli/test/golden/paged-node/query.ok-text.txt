@@ -1,0 +1,7 @@
+$ paged-node query <TMP>/fixture.paged 'page:#1 > frame' --format text --no-plugins
+# exit 0
+# stdout
+rectangle:urect
+textFrame:u1
+# stderr
+(empty)

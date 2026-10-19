@@ -1,0 +1,11 @@
+$ paged-node delete <TMP>/missing.paged rectangle:urect --no-plugins
+# exit 2
+# stdout
+{
+  "error": {
+    "message": "cannot read <TMP>/missing.paged: ENOENT: no such file or directory, open '<TMP>/missing.paged'",
+    "exit": 2
+  }
+}
+# stderr
+(empty)

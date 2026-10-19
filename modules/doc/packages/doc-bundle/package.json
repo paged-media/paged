@@ -28,10 +28,11 @@
     "@paged-media/doc-host-model": "workspace:*",
     "@paged-media/plugin-api": "workspace:*",
     "@paged-media/plugin-sdk": "workspace:*",
+    "@paged-media/test-kit": "workspace:*",
+    "@types/bun": "catalog:",
     "@types/node": "catalog:",
     "@types/react": "catalog:",
     "react": "catalog:",
-    "typescript": "catalog:",
-    "@types/bun": "catalog:"
+    "typescript": "catalog:"
   }
 }

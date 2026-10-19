@@ -1,0 +1,11 @@
+$ paged-node apply <TMP>/fixture.paged --data <TMP>/records.csv --bindings <TMP>/bindings.json --no-plugins
+# exit 2
+# stdout
+{
+  "error": {
+    "message": "this verb needs the paged.data bundle — install @paged-media/data (and @duckdb/duckdb-wasm@1.29.0) beside the CLI",
+    "exit": 2
+  }
+}
+# stderr
+(empty)

@@ -1,0 +1,16 @@
+$ paged-node batch <TMP>/fixture.paged <TMP>/refused-ops.json --no-save --no-plugins
+# exit 1
+# stdout
+{
+  "ops": 1,
+  "result": {
+    "applied": false,
+    "code": "invalidValue",
+    "reason": "space must be one of CMYK | RGB | LAB | Gray",
+    "undoSteps": 0,
+    "index": 0
+  },
+  "saved": null
+}
+# stderr
+(empty)

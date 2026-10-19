@@ -1,0 +1,11 @@
+$ paged-node plugins --plugins=@paged-media/not-installed
+# exit 2
+# stdout
+{
+  "error": {
+    "message": "plugin @paged-media/not-installed: Cannot find module '@paged-media/not-installed'\nRequire stack:\n- <CLI>/package.json",
+    "exit": 2
+  }
+}
+# stderr
+(empty)

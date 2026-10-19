@@ -1,0 +1,11 @@
+$ paged-node set <TMP>/fixture.paged rectangle:urect frameStrokeWeight thick --no-save --no-plugins
+# exit 1
+# stdout
+{
+  "error": {
+    "message": "rectangle:urect frameStrokeWeight: \"thick\" is not a length — expected length (pt; or with a unit: 3mm, 0.5in, 12pt) or null",
+    "exit": 1
+  }
+}
+# stderr
+(empty)
