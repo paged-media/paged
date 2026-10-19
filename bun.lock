@@ -8,6 +8,9 @@
     "apps/editor": {
       "name": "paged-monorepo",
       "version": "0.0.0",
+      "devDependencies": {
+        "@babel/parser": "7.29.8",
+      },
     },
     "apps/editor/apps/canvas": {
       "name": "paged-canvas",
