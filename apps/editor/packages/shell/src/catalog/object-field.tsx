@@ -43,6 +43,7 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 
 import type { ElementId, Value } from "@paged-media/client";
+import { refusalText, status } from "@paged-media/panel-kit";
 
 import { Icon } from "../icons";
 import { useRegistries } from "../state/registries-context";
@@ -487,9 +488,9 @@ export function ObjectFieldFrame({
         <div
           data-field-error=""
           className="mt-[2px] text-[10.5px]"
-          style={{ color: "var(--status-error, var(--pg-destructive))" }}
+          style={{ color: status.error }}
         >
-          {field.error}
+          {refusalText(field.error)}
         </div>
       ) : null}
       {menu && (

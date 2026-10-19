@@ -72,127 +72,19 @@ function coveredPanels(): Map<string, string[]> {
  * The controls that break the basics today, by the primitive that renders
  * them (one fix in the primitive fixes every panel that uses it). The
  * signature is `a11yProblems`'s line for such a control.
+ *
+ * Empty since the panel kit's field naming (`LabelledBy`, `NamedAs`,
+ * `useFieldName`, platform/shared/panel-kit): a row's label names the
+ * controls of the row, a field with no visible label is named after its
+ * row's title, and the one-off controls carry their own names. That closed
+ * PN-5 to PN-16. A new unnamed control is fixed, not listed here.
  */
-const A11Y_KNOWN: ReadonlyArray<{ id: string; signature: string }> = [
-  // NumberInput (packages/ui): the field's label is a sibling span in the
-  // PropertyField row and the input gets an aria-label only when the
-  // caller passes one; the scrub label beside it is aria-hidden.
-  {
-    id: "PN-5",
-    signature: "no accessible name: <input role=textbox .flex-1.min-w-0>",
-  },
-  // KitSelect (packages/ui): a native select with no label association.
-  {
-    id: "PN-6",
-    signature: "no accessible name: <select role=combobox .w-full.h-[30px]>",
-  },
-  // The shell's Input (components/ui/input.tsx) in text PropertyFields.
-  {
-    id: "PN-7",
-    signature: "no accessible name: <input role=textbox .flex.w-full>",
-  },
-  // The switch leaf (catalog/leaves.tsx) and the concept-kit switch.
-  {
-    id: "PN-8",
-    signature: "no accessible name: <button role=switch .relative.w-[30px]>",
-  },
-  // The style apply-list select (cell, table, paragraph, character and
-  // object styles: components/cockpit/apply-list.tsx and the two table
-  // style panels).
-  {
-    id: "PN-9",
-    signature: "no accessible name: <select role=combobox .h-[30px].w-full>",
-  },
-  // The options panels' target pickers (object-options-panels.tsx).
-  {
-    id: "PN-10",
-    signature: "no accessible name: <select role=combobox .h-[28px].w-full>",
-  },
-  // Icon-only row toggles in ListRows (visibility / lock eyes).
-  {
-    id: "PN-11",
-    signature:
-      "no accessible name: <button role=button .shrink-0.cursor-pointer>",
-  },
-  // Icon-only segments in a radio-style toggle group (reference point,
-  // fitting).
-  { id: "PN-12", signature: "no accessible name: <button role=radio>" },
-  // The colour picker's hex field (ColorPicker) and the colour inputs.
-  { id: "PN-13", signature: "no accessible name: <input role=textbox>" },
-  // Swatch Options' name field.
-  {
-    id: "PN-14",
-    signature: "no accessible name: <input role=textbox .h-[28px].w-full>",
-  },
-  // The gradient editor's stop colour and location.
-  {
-    id: "PN-15",
-    signature: "no accessible name: <select role=combobox .flex-1.min-w-0>",
-  },
-  {
-    id: "PN-15",
-    signature: "no accessible name: <input role=spinbutton .w-[52px].text-xs>",
-  },
-  // One-off fields with no label and no placeholder: the script editor's
-  // source, the Actions name field, the bullet character.
-  {
-    id: "PN-16",
-    signature: "no accessible name: <textarea role=textbox .font-mono.text-xs>",
-  },
-  { id: "PN-16", signature: "no accessible name: <input role=input>" },
-  {
-    id: "PN-16",
-    signature: "no accessible name: <input role=textbox .w-full.min-w-0>",
-  },
-];
+const A11Y_KNOWN: ReadonlyArray<{ id: string; signature: string }> = [];
 
 /** Which of those each panel shows today (the rich scene, a rectangle
  *  selected). A panel listed here has an expected-failure reach test; the
- *  row goes when the panel passes. */
-const A11Y_FINDINGS: Record<string, readonly string[]> = {
-  "paged.actions": ["PN-16"],
-  "paged.align": ["PN-6", "PN-8"],
-  "paged.bullets-numbering": ["PN-6", "PN-16"],
-  "paged.cell-styles": ["PN-9"],
-  "paged.character": ["PN-5", "PN-6"],
-  "paged.character-styles": ["PN-9"],
-  "paged.color": ["PN-5", "PN-6", "PN-13"],
-  "paged.color-group-options": ["PN-7", "PN-10"],
-  "paged.color-wheel": ["PN-13"],
-  "paged.conditions": ["PN-6"],
-  "paged.control": ["PN-5", "PN-6"],
-  "paged.document-setup": ["PN-5", "PN-6", "PN-7"],
-  "paged.effects": ["PN-6", "PN-8"],
-  "paged.export-tagging": ["PN-6", "PN-8"],
-  "paged.frame-fitting": ["PN-12"],
-  "paged.glyphs": ["PN-6"],
-  "paged.gradient-options": ["PN-5", "PN-6", "PN-7", "PN-10"],
-  "paged.gradients": ["PN-5", "PN-6", "PN-15"],
-  "paged.guides": ["PN-5", "PN-10"],
-  "paged.inspector": ["PN-5", "PN-6", "PN-7"],
-  "paged.layers": ["PN-11"],
-  "paged.margins-columns": ["PN-5", "PN-6", "PN-10"],
-  "paged.master-options": ["PN-7", "PN-10"],
-  "paged.object-export": ["PN-6"],
-  "paged.object-options": ["PN-5", "PN-6", "PN-7"],
-  "paged.object-styles": ["PN-9"],
-  "paged.object-transform": ["PN-12"],
-  "paged.paragraph": ["PN-5", "PN-6", "PN-8"],
-  "paged.paragraph-styles": ["PN-9"],
-  "paged.pathfinder": ["PN-6"],
-  "paged.properties": ["PN-5", "PN-6"],
-  "paged.schema-tree-demo": ["PN-11"],
-  "paged.script-editor": ["PN-16"],
-  "paged.section-options": ["PN-5", "PN-6", "PN-7", "PN-10"],
-  "paged.stroke": ["PN-5", "PN-6"],
-  "paged.style-options": ["PN-5", "PN-6", "PN-7", "PN-10"],
-  "paged.swatch-options": ["PN-5", "PN-6", "PN-7", "PN-10", "PN-14"],
-  "paged.swatches": ["PN-6"],
-  "paged.table-styles": ["PN-9"],
-  "paged.text-frame-options": ["PN-5", "PN-6", "PN-8"],
-  "paged.text-variables": ["PN-6", "PN-7", "PN-10"],
-  "paged.text-wrap": ["PN-6"],
-};
+ *  ratchet test below holds the list exact. */
+const A11Y_FINDINGS: Readonly<Record<string, readonly string[]>> = {};
 
 const findingOf = (problem: string) =>
   A11Y_KNOWN.find((k) => k.signature === problem)?.id ?? null;

@@ -44,6 +44,8 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
+import { IconButton } from "@paged-media/panel-kit";
+
 import { useCanvasClient } from "@paged-media/shell";
 import { ColorMixer, type MixerValue } from "@paged-media/ui";
 import type {
@@ -302,11 +304,11 @@ export function SwatchRow({
         </select>
       )}
       {!reserved && (
-        <button
-          type="button"
+        <IconButton
+          label="Delete swatch"
           title={
             canDelete
-              ? "delete swatch"
+              ? "Delete swatch"
               : "The active content type does not serve swatch deletion"
           }
           data-action="remove-swatch"
@@ -323,7 +325,7 @@ export function SwatchRow({
           className="px-1 hover:text-status-error disabled:opacity-40"
         >
           ✕
-        </button>
+        </IconButton>
       )}
 
       {/* Edit popover — portal + fixed position (overflow clipping). */}

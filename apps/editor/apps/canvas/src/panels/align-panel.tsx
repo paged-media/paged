@@ -117,7 +117,12 @@ export function AlignPanel() {
         >
           Align to
         </div>
-        <KitSelect value="selection" onChange={() => {}} data-align-scope>
+        <KitSelect
+          aria-label="Align to"
+          value="selection"
+          onChange={() => {}}
+          data-align-scope
+        >
           <option value="selection">Selection</option>
           <option value="page" disabled>
             Page — awaiting engine support
@@ -155,6 +160,7 @@ export function AlignPanel() {
             type="button"
             role="switch"
             aria-checked={false}
+            aria-label="Use spacing"
             disabled
             data-use-spacing
             className="relative w-[30px] h-[17px] shrink-0 rounded-full border-0 opacity-55"

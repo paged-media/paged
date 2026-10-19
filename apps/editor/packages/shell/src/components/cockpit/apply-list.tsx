@@ -91,6 +91,7 @@ export function ApplyList({
             <select
               value={appliedId}
               disabled={readonly || onApply == null}
+              aria-label="Applied style"
               data-apply-select
               data-collection={collection}
               onChange={(e) => onApply?.(e.target.value)}

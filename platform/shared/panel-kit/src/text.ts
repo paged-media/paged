@@ -131,6 +131,19 @@ function fromObject(value: object, subject: string | undefined): string | null {
   return null;
 }
 
+/** `json` described, or null when it is not a JSON object. */
+function fromJson(json: string, subject: string | undefined): string | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(json);
+  } catch {
+    return null;
+  }
+  return parsed && typeof parsed === "object"
+    ? fromObject(parsed, subject)
+    : null;
+}
+
 /**
  * A refusal as one sentence for the panel. `raw` is whatever the layer
  * handed over: a log line, an Error, an engine error or its JSON, a write
@@ -149,16 +162,13 @@ export function refusalText(raw: unknown, subject?: string): string {
     if (next === text) break;
     text = next;
   }
-  if (text.startsWith("{")) {
-    try {
-      const parsed: unknown = JSON.parse(text);
-      if (parsed && typeof parsed === "object") {
-        const said = fromObject(parsed, subject);
-        if (said) return said;
-      }
-    } catch {
-      // Not JSON after all: read it as words.
-    }
+  // An engine error as JSON, alone or behind words ("rejected by engine:
+  // {…}"): the error says why, the words around it say only that it
+  // failed.
+  const brace = text.indexOf("{");
+  if (brace >= 0) {
+    const said = fromJson(text.slice(brace), subject);
+    if (said) return said;
   }
   text = text.replace(/\s*[—-]+\s*no-op\.?$/i, "");
   if (/^[a-z]+(?:[A-Z][a-z0-9]*)+$/.test(text))

@@ -14,3 +14,4 @@ Range 700–749.
 | [707](707-embedded-fonts-are-decoded-and-given-to-the-document.md) | A deck's embedded fonts are decoded here and given to the document within their licences | Accepted 2026-10-14 |
 | [708](708-a-deck-is-built-as-a-native-document.md) | A deck is built as a native document with the engine's model crates | Accepted 2026-10-19 |
 | [709](709-one-drawingml-chart-reader.md) | One DrawingML chart reader and model for paged.slide and paged.sheet; the layouts stay per module | Accepted 2026-10-19 |
+| [710](710-chart-labels-are-formatted-by-sheet-format.md) | Chart labels are formatted by sheet-format | Accepted 2026-10-19 |

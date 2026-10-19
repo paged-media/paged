@@ -31,13 +31,20 @@ import {
   ConfirmButton,
   Disclosure,
   IconButton,
+  FieldInput,
+  FieldSelect,
+  FieldTextarea,
+  LabelledBy,
+  NamedAs,
   Refusal,
   Segment,
   StatusLine,
+  Tab,
   status,
   useActionFeedback,
   useConfirm,
   useDisclosure,
+  useFieldName,
 } from "../src";
 
 afterEach(() => {
@@ -347,5 +354,91 @@ describe("named controls", () => {
     expect(on!.getAttribute("data-active")).toBe("true");
     expect(off!.getAttribute("aria-pressed")).toBe("false");
     expect(off!.getAttribute("data-active")).toBe("false");
+  });
+
+  it("Tab is a tab that says whether it is selected", () => {
+    const view = render(
+      <div role="tablist">
+        <Tab selected>Paragraph</Tab>
+        <Tab selected={false}>Character</Tab>
+      </div>,
+    );
+    const tabs = view.getAllByRole("tab");
+    expect(tabs.map((t) => t.getAttribute("aria-selected"))).toEqual([
+      "true",
+      "false",
+    ]);
+    expect(tabs[0]!.getAttribute("data-active")).toBe("true");
+    expect(view.getByRole("tab", { selected: true }).textContent).toBe(
+      "Paragraph",
+    );
+  });
+});
+
+describe("row labels", () => {
+  function Field(props: { "aria-label"?: string }) {
+    return <input {...useFieldName(props)} />;
+  }
+
+  it("a control without a name takes the row label's; one with a name keeps it", () => {
+    const view = render(
+      <div>
+        <span id="size-label">Size</span>
+        <LabelledBy id="size-label">
+          <Field />
+          <Field aria-label="Size unit" />
+          <NamedAs name="Leading">
+            <Field />
+          </NamedAs>
+          <NamedAs name="Ignored" fallback>
+            <Field />
+          </NamedAs>
+        </LabelledBy>
+        <NamedAs name="Tracking" fallback>
+          <Field />
+        </NamedAs>
+        <Field />
+      </div>,
+    );
+    const [inRow, named, inner, rowWins, fallback, outside] =
+      view.getAllByRole("textbox");
+    expect(inRow!.getAttribute("aria-labelledby")).toBe("size-label");
+    expect(view.getAllByRole("textbox", { name: "Size" })).toEqual([
+      inRow!,
+      rowWins!,
+    ]);
+    expect(named!.hasAttribute("aria-labelledby")).toBe(false);
+    expect(view.getByRole("textbox", { name: "Size unit" })).toBe(named!);
+    // The nearest naming wins.
+    expect(inner!.getAttribute("aria-label")).toBe("Leading");
+    expect(inner!.hasAttribute("aria-labelledby")).toBe(false);
+    // A fallback name yields to the row's; alone, it names the control.
+    expect(rowWins!.getAttribute("aria-labelledby")).toBe("size-label");
+    expect(fallback!.getAttribute("aria-label")).toBe("Tracking");
+    expect(outside!.hasAttribute("aria-labelledby")).toBe(false);
+    expect(outside!.hasAttribute("aria-label")).toBe(false);
+  });
+
+  it("the native fields take their row's name and keep everything else", () => {
+    const view = render(
+      <div>
+        <span id="row">Style</span>
+        <LabelledBy id="row">
+          <FieldSelect data-picker="" defaultValue="b">
+            <option value="a">A</option>
+            <option value="b">B</option>
+          </FieldSelect>
+          <FieldInput placeholder="Name" />
+          <FieldTextarea aria-label="Source" />
+        </LabelledBy>
+      </div>,
+    );
+    const select = view.getByRole("combobox", { name: "Style" });
+    expect((select as HTMLSelectElement).value).toBe("b");
+    expect(select.hasAttribute("data-picker")).toBe(true);
+    expect(view.getAllByRole("textbox", { name: "Style" })).toHaveLength(1);
+    expect(view.getByRole("textbox", { name: "Source" }).tagName).toBe(
+      "TEXTAREA",
+    );
   });
 });
