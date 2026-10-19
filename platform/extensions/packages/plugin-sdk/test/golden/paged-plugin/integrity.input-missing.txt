@@ -1,0 +1,6 @@
+$ paged-plugin integrity <TMP>/nowhere
+# exit 1
+# stdout
+(empty)
+# stderr
+error: no such file: <TMP>/nowhere
