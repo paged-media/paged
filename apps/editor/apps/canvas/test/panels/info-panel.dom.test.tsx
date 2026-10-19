@@ -58,7 +58,7 @@ describe("Info panel", () => {
   test("a blank document: one page, clean", async () => {
     covers("panel:paged.info");
     const h = await mount("blank");
-    expect(rows(h)).toMatchObject({ Pages: "1", Dirty: "no" });
+    expect(rows(h)).toMatchObject({ Pages: "1", Units: "Points", Dirty: "no" });
     expect(h.sent("requestDocumentMeta").length).toBeGreaterThan(0);
   });
 

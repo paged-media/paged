@@ -74,6 +74,7 @@ import {
   type PanelProps,
   type SpreadEntry,
 } from "@paged-media/shell";
+import { lengthIn, useDocumentUnit, type LengthUnit } from "@paged-media/ui";
 import type {
   CanvasClient,
   ElementId,
@@ -467,8 +468,11 @@ export function DocumentMapPanel(_props: PanelProps) {
 }
 
 /** Compact margin/column readout for a page — only the non-default
- *  bits ("M 36pt", "2 col") so the row stays terse. */
-function pageMetaLabel(p: PageSummary | undefined): string | null {
+ *  bits ("M 36 pt", "2 col") so the row stays terse. */
+function pageMetaLabel(
+  p: PageSummary | undefined,
+  unit: LengthUnit,
+): string | null {
   if (!p) return null;
   const parts: string[] = [];
   const margins = [
@@ -481,8 +485,8 @@ function pageMetaLabel(p: PageSummary | undefined): string | null {
   if (margins.some((m) => m > 0)) {
     parts.push(
       uniform
-        ? `M ${Math.round(margins[0])}pt`
-        : `M ${margins.map((m) => Math.round(m)).join("/")}`,
+        ? `M ${lengthIn(margins[0], unit)} ${unit}`
+        : `M ${margins.map((m) => lengthIn(m, unit)).join("/")} ${unit}`,
     );
   }
   if ((p.columnCount ?? 1) > 1) parts.push(`${p.columnCount} col`);
@@ -512,7 +516,8 @@ function SpreadRow({
   onClick: () => void;
   onChipJump: (pageIndices: number[]) => void;
 }) {
-  const metaLabel = pageMetaLabel(pageByIndex.get(entry.pageIndices[0]));
+  const unit = useDocumentUnit();
+  const metaLabel = pageMetaLabel(pageByIndex.get(entry.pageIndices[0]), unit);
   // REAL — missing links attributed to any page in this spread.
   const missingLinks = entry.pageIndices.reduce(
     (sum, i) => sum + (missingLinksByPage?.get(i) ?? 0),

@@ -51,6 +51,7 @@ import {
   useDocument,
 } from "@paged-media/shell";
 import type { PageSummary } from "@paged-media/client";
+import { formatLengthPair, useDocumentUnit } from "@paged-media/ui";
 
 import { invokeCoreCommand } from "../core-command-dialog";
 import { fitCamera, layoutPages } from "../ui/layout";
@@ -60,6 +61,7 @@ export function PagesListPanel() {
   const client = useCanvasClient();
   const items = useCollection<PageSummary>("pages");
   const [selected, setSelected] = useState<string | null>(null);
+  const unit = useDocumentUnit();
   const { handle } = useDocument();
   const { camera, setCamera, viewportSize } = useCamera();
   const animateCamera = useAnimatedCamera(camera, setCamera);
@@ -203,7 +205,7 @@ export function PagesListPanel() {
               key: p.selfId,
               icon: "panel-pages-list",
               primary: `Page ${p.index}`,
-              secondary: `${p.sizePt[0].toFixed(0)} × ${p.sizePt[1].toFixed(0)} pt`,
+              secondary: formatLengthPair(p.sizePt[0], p.sizePt[1], unit),
               selected: p.selfId === selected,
               onClick: () => {
                 setSelected((cur) => (cur === p.selfId ? null : p.selfId));
