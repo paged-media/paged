@@ -16,8 +16,8 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// PERF BUDGETS — the freehand tools (pencil, paintbrush, blob brush,
-// eraser, lasso). The rules are in `perf-budgets.spec.ts` and bind here
+// PERF BUDGETS — the freehand tools (paintbrush, blob brush, eraser,
+// lasso; the Pencil is the host's since ADR 359). The rules are in `perf-budgets.spec.ts` and bind here
 // too: a budget is a COUNT, it is the MEASURED value, it is only ever
 // lowered, and every scenario says which expensive path it exercises.
 //
@@ -63,7 +63,6 @@ import {
   createEraserBrushHandler,
   createLassoSelectHandler,
   createPaintbrushHandler,
-  createPencilHandler,
 } from "../../src";
 import {
   BUDGET_TIMEOUT_MS,
@@ -93,7 +92,6 @@ import {
 type MakeHandler = (host: BundleHost) => GestureHandler;
 
 const SWEEP_TOOLS: Record<string, MakeHandler> = {
-  pencil: createPencilHandler,
   paintbrush: createPaintbrushHandler,
   blobBrush: createBlobBrushHandler,
   eraser: createEraserBrushHandler,
@@ -296,11 +294,11 @@ describe("perf budgets — the freehand tools", () => {
     return { work: counted, undoSteps, seen };
   };
 
-  // COVERS: `handlers/stroke-preview.ts`, which the preview `sync()` in
-  // `handlers/pencil.ts` and `createSweepHandler` in `handlers/brush.ts`
-  // both publish through.
+  // COVERS: `handlers/stroke-preview.ts`, which `createSweepHandler` in
+  // `handlers/brush.ts` publishes through (the retired Pencil handler did
+  // too).
   //
-  // History (a budget only goes DOWN), identical for all four tools —
+  // History (a budget only goes DOWN), identical for every sweep tool —
   // they share the loop:
   //
   //                      arrays built   points built   points across the door
@@ -316,7 +314,7 @@ describe("perf budgets — the freehand tools", () => {
   // (`setToolPreview(shape)`) holds one whole shape, last write wins, so
   // each publish names the entire polyline. TARGET S — which needs a door
   // that can EXTEND a retained preview; no handler change reaches it.
-  describe("pencil / paintbrush / blob brush / eraser — one array per stroke, each sample copied once", () => {
+  describe("paintbrush / blob brush / eraser — one array per stroke, each sample copied once", () => {
     /** The preview standing after the last move IS the stroke: every
      *  kept sample, in order. An append that skipped, repeated or
      *  reordered a sample — or a handler still showing an earlier
@@ -372,8 +370,8 @@ describe("perf budgets — the freehand tools", () => {
     it("pacing changes nothing: the handler is synchronous and waits on no reply", async () => {
       const stroke = spiral(500);
       const { work, built, preview } = await inFlight(
-        "pencil 500 paced",
-        createPencilHandler,
+        "paintbrush 500 paced",
+        createPaintbrushHandler,
         stroke,
         "paced",
       );
@@ -393,8 +391,8 @@ describe("perf budgets — the freehand tools", () => {
       // than the floor, so the machine keeps fewer than it was sent.
       expect(kept).toHaveLength(KEPT_OF_2000);
       const { work, built, preview } = await inFlight(
-        "pencil pen 2000",
-        createPencilHandler,
+        "paintbrush pen 2000",
+        createPaintbrushHandler,
         stroke,
       );
       // The preview is the KEPT samples — a dropped one never shows.
@@ -625,9 +623,11 @@ describe("perf budgets — the freehand tools", () => {
     });
   });
 
-  // COVERS: the commits — `commit()` in `handlers/pencil.ts` and
-  // `commitPaintbrush` / `commitBlobBrush` / `commitEraserBrush` in
-  // `handlers/brush.ts`.
+  // COVERS: the commits — `commitPaintbrush` / `commitBlobBrush` /
+  // `commitEraserBrush` in `handlers/brush.ts`. (The pencil rows below
+  // are the retired bundle Pencil's, kept as measured; the host's Pencil
+  // pins its one-batch lift in apps/editor packages/tools and its
+  // headless tier, ADR 359.)
   //
   // History (a budget only goes DOWN):
   //
@@ -762,72 +762,6 @@ describe("perf budgets — the freehand tools", () => {
     const expectPutBack = async (): Promise<void> => {
       expect(await leafIds(w.h)).toHaveLength(518);
     };
-
-    it("pencil, mouse: one insert and its paint, one step", async () => {
-      const { work, undoSteps } = await lift(
-        "pencil lift mouse",
-        createPencilHandler,
-        spiral(500),
-        [],
-      );
-      // insert + the graphic default's stroke colour and weight (the
-      // workload has no `[Normal Graphics Frame]`, so InDesign's). As
-      // found: a bare `insertPath`, 0 reads.
-      expect(work.mutations).toEqual([{ op: "batch", ops: 3 }]);
-      expect(work.count("document.meta")).toBe(1);
-      expect(work.reads()).toBe(1);
-      expect(work.count("editor.client.send:requestStyleProperties")).toBe(1);
-      expect(undoSteps).toBe(1);
-    });
-
-    it("pencil, pen pressure: the insert and its variable-width outline are one batch", async () => {
-      const stroke = penStroke(2000);
-      const batched = await lift(
-        "pencil lift pen",
-        createPencilHandler,
-        stroke,
-        [],
-        landedOver([]),
-      );
-      const stepwise = await lift(
-        "pencil lift pen, stepwise",
-        createPencilHandler,
-        stroke,
-        [],
-        landedOver([]),
-        refusingBatches,
-      );
-
-      // insert + its paint (stroke colour, weight) + bind + outline. As
-      // found: 2 mutations, 2 undo steps.
-      expect(batched.work.mutations).toEqual([{ op: "batch", ops: 5 }]);
-      expect(batched.undoSteps).toBe(1);
-      expect(batched.work.count("document.meta")).toBe(1);
-      expect(batched.work.reads()).toBe(1);
-      expect(
-        batched.work.count("editor.client.send:requestStyleProperties"),
-      ).toBe(1);
-
-      // One new element, selected, and it is the OUTLINE — a closed
-      // contour — not the open centerline the stroke was drawn as.
-      expect(batched.seen.leaves).toBe(519);
-      expect(batched.seen.created).toHaveLength(1);
-      expect(batched.seen.createdIsSelection).toBe(true);
-      expect(batched.seen.created[0]!.subpathOpen).toEqual([false]);
-      // …and exactly the element the two-step chain leaves.
-      expect(batched.seen.created).toEqual(stepwise.seen.created);
-
-      // The fallback is the chain as found, after the one refused batch —
-      // its insert carrying the same paint, so the centerline it leaves
-      // on a refused outline wears what the batch's outline would have.
-      expect(stepwise.work.mutations).toEqual([
-        { op: "batch", ops: 5 },
-        { op: "batch", ops: 3 },
-        { op: "setElementProperty", ops: 1 },
-      ]);
-      expect(stepwise.undoSteps).toBe(2);
-      await expectPutBack();
-    });
 
     it("paintbrush: one read, one batch, one undo step", async () => {
       const stroke = spiral(500);

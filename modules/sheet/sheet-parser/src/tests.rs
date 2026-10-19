@@ -775,9 +775,45 @@ fn whole_columns_and_rows_parse_and_print__feat__sheet_parser_dialect() {
     assert!(parse("SUM(A:B2)", &Ctx::new()).is_err());
     assert!(parse("SUM(1:A)", &Ctx::new()).is_err());
     assert!(parse("SUM(A:XFE)", &Ctx::new()).is_err());
-    assert!(
-        !matches!(p("SUM(1:1048577)").root, Expr::Func(_, ref a) if matches!(a[0], Expr::Range(_)))
-    );
+    // Past the last row it is no band, so `:` would join two numbers.
+    assert!(parse("SUM(1:1048577)", &Ctx::new()).is_err());
+}
+
+/// A whole-row band is ONE token: `89:3` with nothing between its parts.
+/// With whitespace inside (`89:\n3`, `89 : 3`) or parentheses around a
+/// part, the text is the range operator over two NUMBERS, which Excel
+/// refuses (both operands of `:` must be references). It used to parse
+/// to that operator and print as `89:3`, the band, so print/parse was not
+/// a fixpoint (found by the parse_formula fuzz target; the input is
+/// `fuzz/regressions/parse_formula-range-of-numbers-print-not-reparsable.txt`).
+#[test]
+fn a_range_of_literals_is_a_parse_error__feat__sheet_parser_dialect() {
+    let fuzz = "NETWORKDAYS(1/0,89:\n3:$33-3:3>3:31/0,89:\n3444)\n";
+    for t in [
+        fuzz,
+        "SUM(89:\n3)",
+        "SUM(89: 3)",
+        "SUM(89 :3)",
+        "SUM((89):(3))",
+        "SUM(A1:3)",
+        "SUM(3:A1)",
+        "SUM(Data!A1:3)",
+        "SUM(A1:\"B2\")",
+        "SUM(A1:TRUE)",
+        "SUM(A1:{1})",
+        "SUM(1:3:5)",
+    ] {
+        let err = parse(t, &Ctx::new()).expect_err(t);
+        assert!(err.message.contains("reference"), "{t:?}: {}", err.message);
+    }
+    // Still a band, a range and a reference error: no whitespace inside a
+    // band; spaces around `:` between two cells; `#REF!` is Excel's
+    // reference error.
+    assert_eq!(roundtrip("SUM(89:3)"), "SUM(89:3)");
+    assert_eq!(roundtrip("SUM(A1 : B2)"), "SUM(A1:B2)");
+    assert_eq!(roundtrip("SUM(A1:\nB2)"), "SUM(A1:B2)");
+    assert_eq!(roundtrip("SUM(A1:#REF!)"), "SUM(A1:#REF!)");
+    assert_eq!(roundtrip("SUM(A1:INDEX(B:B,3))"), "SUM(A1:INDEX(B:B,3))");
 }
 
 #[test]
@@ -953,12 +989,13 @@ mod prop {
     proptest! {
         #![proptest_config(ProptestConfig::with_cases(4000))]
         /// The TEXT side of the fixpoint (found by fuzzing:
-        /// `(1/0,-100,-1000)` printed as text that did not parse): any text
-        /// over a small operator alphabet that parses must print to text that
-        /// parses back to the same AST.
+        /// `(1/0,-100,-1000)` printed as text that did not parse, and
+        /// `89:\n3` printed as the band `89:3`): any text over a small
+        /// operator alphabet that parses must print to text that parses
+        /// back to the same AST.
         #[allow(non_snake_case)]
         #[test]
-        fn parsed_text_prints_reparsable__feat__sheet_parser_dialect(t in "[-+*/^&(),%1A0 ]{1,14}") {
+        fn parsed_text_prints_reparsable__feat__sheet_parser_dialect(t in "[-+*/^&(),%:1A0 \n]{1,14}") {
             if let Ok(f) = parse(&t, &Ctx::new()) {
                 let printed = print(&f, 0, &Ctx::new());
                 let reparsed = parse(&printed, &Ctx::new())

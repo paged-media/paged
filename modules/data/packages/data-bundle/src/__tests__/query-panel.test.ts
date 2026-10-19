@@ -10,6 +10,7 @@ import type { BundleHost } from "@paged-media/plugin-api";
 
 import type { DataSourceSession, QueryPreview, SessionState } from "../session";
 
+import { silentConsole as silent } from "@paged-media/plugin-sdk";
 // bun:test hoists no vi.mock and has no vi.doMock / vi.resetModules: the
 // real exports are taken once, before anything is mocked, and mock.module
 // patches the loaded module in place (every importer sees the change).
@@ -69,8 +70,6 @@ const text = (n: unknown): string =>
       : Array.isArray(n)
         ? n.map(text).join("")
         : text((n as El).props?.children);
-
-const silent = { debug() {}, info() {}, warn() {}, error() {} };
 
 function stubSession(
   over: Partial<DataSourceSession>,

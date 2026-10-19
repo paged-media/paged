@@ -32,7 +32,7 @@ import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 
 import { createHeadlessHost } from "@paged-media/plugin-sdk";
 
-import { minimalIdml } from "../../plugin-sdk/test/fixtures/minimal-idml";
+import { minimalIdml } from "../../../platform/extensions/packages/plugin-sdk/test/fixtures/minimal-idml";
 import {
   cli,
   engineOptions,

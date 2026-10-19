@@ -52,7 +52,11 @@ import { createGradientSwatchHandler } from "./handlers/gradient-tool";
 import { createLineHandler } from "./handlers/line-tool";
 import { createPolygonHandler } from "./handlers/polygon-tool";
 import { createPageHandler } from "./handlers/page-tool";
-import { createPencilHandler } from "./handlers/pencil-tool";
+import {
+  createPencilHandler,
+  PENCIL_OPTION_FIELDS,
+  PENCIL_TOOL_ID,
+} from "./handlers/pencil-tool";
 import { createPenHandler } from "./handlers/pen-tool";
 import { createRectangleHandler } from "./handlers/rectangle-tool";
 import { createTypeHandler } from "./handlers/type-tool";
@@ -230,8 +234,11 @@ export const BUILT_IN_TOOLS: ToolContribution[] = [
     cluster: "draw",
     order: 0,
     isGroupDefault: true,
-    // Editor-ops — freehand → RDP → `insertPath{smooth}` (v24).
+    // THE Pencil (paged.draw retired its own into this one, draw ADR
+    // 359): freehand → draw-tools' PencilMachine (RDP, close-on-lift) →
+    // `insertPath{smooth}`, the engine fitting the curve (v24).
     gesture: createPencilHandler,
+    options: { toolId: PENCIL_TOOL_ID, fields: PENCIL_OPTION_FIELDS },
   },
   {
     id: "paged.tool.smooth",

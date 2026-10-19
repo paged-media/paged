@@ -149,6 +149,26 @@ const SETTINGS_INVENTORY_REQUIRED = true;
 
 const MIN_REASON = 40;
 
+/** The template the 2026-10-19 seeding wrote into every entry: it says
+ *  where an id is mentioned, not why no test can assert it. Every seeded
+ *  reason was replaced by a written one at the programme's close-out; an
+ *  entry carrying the template again fails the run. */
+const SEEDED_REASON = [
+  /^Seeded 2026-10-19\b/i,
+  /\bwhen covers\(\) became the measure\b/i,
+  /\bno test file names it at all\b/i,
+  /\bonly mentioned, in \d+ test files?\b/i,
+];
+
+/** What is wrong with an acknowledged entry's reason, or null. */
+export function reasonProblem(reason) {
+  if (typeof reason !== "string" || reason.trim().length < MIN_REASON)
+    return `has no reason a reader can use (min ${MIN_REASON} characters): say what and why`;
+  if (SEEDED_REASON.some((re) => re.test(reason)))
+    return "still carries the seeded template: say why no test is possible or sensible today, and what would make one possible";
+  return null;
+}
+
 const satisfies = (layers, req) =>
   req.tier.some((t) => layers.has(t)) && (!req.tag || layers.has(req.tag));
 
@@ -396,10 +416,8 @@ export function computeGate(root = ROOT, ackDir = ACK_DIR, options = {}) {
       ackFailures.push(
         `${a.file}: "${a.key}" is ${item.origin} surface; it belongs in ${item.origin}.${a.kind}.${a.clause}.json`,
       );
-    if (typeof a.reason !== "string" || a.reason.trim().length < MIN_REASON)
-      ackFailures.push(
-        `${a.file}: "${a.key}" has no reason a reader can use (min ${MIN_REASON} characters): say what and why`,
-      );
+    const problem = reasonProblem(a.reason);
+    if (problem) ackFailures.push(`${a.file}: "${a.key}" ${problem}`);
   }
   const lost = [];
   const stale = [];

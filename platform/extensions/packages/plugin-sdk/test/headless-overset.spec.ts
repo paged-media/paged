@@ -32,7 +32,7 @@ import { afterEach, describe, expect, it } from "bun:test";
 import { createHeadlessHost, type HeadlessHost } from "../src/harness";
 import { minimalIdml } from "./fixtures/minimal-idml";
 
-const silent = { debug() {}, info() {}, warn() {}, error() {} };
+import { silentConsole as silent } from "../src/testing";
 // Space Grotesk (SIL OFL 1.1, test/fixtures/fonts/OFL-spacegrotesk.txt).
 const FONT = new Uint8Array(
   readFileSync(

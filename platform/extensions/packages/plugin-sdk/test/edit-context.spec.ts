@@ -53,8 +53,7 @@ import {
 } from "../src/edit-context";
 import { makeFakeEditor } from "./fake-editor";
 
-const silent = { debug() {}, info() {}, warn() {}, error() {} };
-
+import { silentConsole as silent } from "../src/testing";
 // A manifest that DECLARES both a vectorGraphic edit context and a
 // webFrame object type (+ its source edit context) — the truthful
 // first-party shape; the gate passes under the default 'enforce'.

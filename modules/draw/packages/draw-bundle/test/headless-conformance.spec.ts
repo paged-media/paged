@@ -28,8 +28,8 @@
 // fake editor), this drives the bundle's document door through the true
 // parse→apply→inverse engine path — no UI, no editor, no browser.
 //
-// CONTRIBUTION COUNT (honesty note): the bundle registers EIGHTEEN
-// tools (three anchor-editing + the pro set: Curvature, Pencil,
+// CONTRIBUTION COUNT (honesty note): the bundle registers TWENTY
+// tools (three anchor-editing + the pro set: Curvature,
 // Gradient Annotator, Measure, Shape Builder, Corner Radius + the v0
 // brushes: Paintbrush, Blob Brush, Eraser + the wave-2 trio:
 // Eyedropper, Width, Lasso Select + the Live Paint pair: Bucket, Face
@@ -89,7 +89,6 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
         "media.paged.draw.tool.deleteAnchor",
         "media.paged.draw.tool.convertAnchor",
         "media.paged.draw.tool.curvature",
-        "media.paged.draw.tool.pencil",
         "media.paged.draw.tool.gradientAnnotator",
         "media.paged.draw.tool.measure",
         "media.paged.draw.tool.shapeBuilder",
@@ -109,7 +108,7 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
         // Scissors at any point — the same flyout.
         "media.paged.draw.tool.scissorsAnyPoint",
       ]);
-      // The contribution log holds the twenty-one tools, then EACH schema
+      // The contribution log holds the twenty tools, then EACH schema
       // panel as TWO entries: the synthesized React `panel` the panels
       // registry sees (the host turns a schema into a registry panel via
       // the injected renderer / seam) AND the `schemaPanel` recorded
@@ -123,15 +122,15 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
       // context.
       // (Pen is a core built-in.)
       expect(harness.contributions.map((c) => c.kind)).toEqual([
-        // Three anchor editors + the pro set (Curvature, Pencil,
+        // Three anchor editors + the pro set (Curvature,
         // Gradient Annotator, Measure, Shape Builder, Corner Radius) +
         // the v0 brushes (Paintbrush, Blob Brush, Eraser) + the
         // wave-2 trio (Eyedropper, Width, Lasso Select) + the Live
         // Paint pair (Bucket, Face Selection) + Type on a Path
         // (C-29) + the Repeat steering widget (§12.4, the one tool
         // with no shortcut — see tools.ts) + the Knife and Scissors
-        // at any point (keyless too) — twenty-one tools.
-        "tool",
+        // at any point (keyless too) — twenty tools (the Pencil is the
+        // host's, ADR 359).
         "tool",
         "tool",
         "tool",
@@ -674,7 +673,7 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
     const before = await treeSize();
 
     const handle = harness.loadBundle(drawBundle);
-    expect(harness.toolsContributed()).toHaveLength(21);
+    expect(harness.toolsContributed()).toHaveLength(20);
     handle.dispose();
 
     // After dispose: the contribution log is empty (registrations torn

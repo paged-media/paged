@@ -4,6 +4,8 @@
   package is `packages/cli` at 0.1.0-canary.0; it is not on npm yet (see Consequences). The
   design notes are [`DESIGN.md`](../../DESIGN.md) §22. Amended 2026-10-16: the bin is
   `paged-node` (see the amendment below; it supersedes §5).
+- **Moved (wave C, 2026-10-19):** the package is `apps/cli` now, outside the community-facing
+  tree; the paths below are as recorded.
 - **Scope:** `packages/cli` (`src/session.ts`, `src/plugins.ts`, `src/verbs.ts`,
   `src/values.ts`, `src/errors.ts`, `src/data.ts`, `src/node-shims.ts`, `src/main.ts`,
   `src/bin.ts`), `HeadlessHost.exportDocument` in `packages/plugin-sdk/src/harness.ts`, and the
