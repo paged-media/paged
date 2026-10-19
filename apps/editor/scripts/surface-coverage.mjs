@@ -137,10 +137,11 @@ export const LAYERS = [
   "gesture",
 ];
 
-/** An unknown covers() id fails the run once this is true. It stays false
- *  while the enumeration settles, so a sibling's correct id that the
- *  enumeration does not know yet is reported, not blocking. */
-const ORPHANS_FAIL = false;
+/** An unknown covers() id (a typo, a renamed id, an id the enumeration
+ *  does not know) fails the run. Reported but not failing while the
+ *  enumeration settled; failing since 2026-10-19, when it named no
+ *  orphan with 418 ids asserted. */
+const ORPHANS_FAIL = true;
 
 /** The editor's settings inventory (owned by the shell's storage-key
  *  scan, apps/canvas/test/unit/settings/storage-inventory.test.ts). */
