@@ -48,7 +48,7 @@ export interface PluginManifest {
   name: string;
   /** Bundle semver. */
   version: string;
-  /** Semver range against `@paged-media/plugin-api`. */
+  /** Semver range against the contract's `API_VERSION` (`^0.2`). */
   apiVersion: string;
   publisher?: string;
   capabilities?: PluginCapabilities;

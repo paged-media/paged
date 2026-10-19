@@ -16,8 +16,9 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// Node loader for the PUBLISHED engine wasm (Decision B): boots
-// `@paged-media/canvas-wasm` outside a browser and outside the editor,
+// Node loader for the engine wasm (Decision B): boots `@paged-media/paged`
+// (the engine on npm) or, in the workspace, `@paged-media/canvas-wasm`
+// outside a browser and outside the editor,
 // and exposes the SAME `handleMessage` JSON-envelope dispatch the
 // editor worker drives (apps/canvas/src/worker/worker.ts). This is the
 // missing piece B-13 names: "the engine wasm consumable headless".
@@ -55,20 +56,33 @@
 // builtins keeps this module import-safe everywhere; the Node-only code
 // paths still resolve the real builtins on first call.
 
-/** The published package the headless harness boots. */
+/** The engine's workspace package: the vendored wire is stamped with it. */
 export const CANVAS_WASM_PKG = "@paged-media/canvas-wasm";
+
+/**
+ * The packages the headless harness boots the engine from, in order: the
+ * published `@paged-media/paged` (the engine on npm, PM-0008 amendment 3),
+ * then the workspace's private `@paged-media/canvas-wasm`. Both carry the
+ * same files at their root (`paged_canvas_wasm.js` + `_bg.wasm`).
+ */
+export const ENGINE_PACKAGES: readonly string[] = [
+  "@paged-media/paged",
+  CANVAS_WASM_PKG,
+];
 
 /** Lazy Node builtins — resolved on first headless call, never at import
  *  (so the browser graph can pull this module without touching them). */
 async function nodeBuiltins() {
-  const [{ createRequire }, { readFileSync }, path, url] = await Promise.all([
-    import("node:module"),
-    import("node:fs"),
-    import("node:path"),
-    import("node:url"),
-  ]);
+  const [{ createRequire }, { existsSync, readFileSync }, path, url] =
+    await Promise.all([
+      import("node:module"),
+      import("node:fs"),
+      import("node:path"),
+      import("node:url"),
+    ]);
   return {
     createRequire,
+    existsSync,
     readFileSync,
     dirname: path.dirname,
     resolve: path.resolve,
@@ -123,7 +137,7 @@ export interface LoadedEngine {
 
 export interface LoadHeadlessEngineOptions {
   /**
-   * Where to resolve `@paged-media/canvas-wasm` from. Defaults to this
+   * Where to resolve the engine (`ENGINE_PACKAGES`) from. Defaults to this
    * module's own resolution (the SDK's node_modules), then the editor's
    * `packages/client` (the sibling-checkout dev luxury) — mirroring
    * scripts/sync-wire.mjs so the loader and the wire stamp agree on
@@ -140,14 +154,19 @@ export interface LoadHeadlessEngineOptions {
 
 const STAMP_PREFIX = `// Synced from ${CANVAS_WASM_PKG}@`;
 
-/** This module's own dir + the vendored wire `.d.ts` path, resolved
- *  lazily (the builtins aren't available at import in the browser). */
+/** This module's own dir + where the vendored wire `.d.ts` may be, resolved
+ *  lazily (the builtins aren't available at import in the browser): the
+ *  published package's `dist/api/`, then plugin-api's source in the
+ *  workspace. */
 async function modulePaths() {
   const { dirname, resolve, fileURLToPath } = await nodeBuiltins();
   const here = dirname(fileURLToPath(import.meta.url));
   return {
     here,
-    wireDts: resolve(here, "../../plugin-api/src/wire.d.ts"),
+    wireDts: [
+      resolve(here, "api/wire.d.ts"),
+      resolve(here, "../../plugin-api/src/wire.d.ts"),
+    ],
   };
 }
 
@@ -158,17 +177,20 @@ export async function readVendoredWireVersion(
   wireDtsPath?: string,
 ): Promise<string | null> {
   const { readFileSync } = await nodeBuiltins();
-  const path = wireDtsPath ?? (await modulePaths()).wireDts;
-  let text: string;
-  try {
-    text = readFileSync(path, "utf8");
-  } catch {
-    return null;
-  }
-  for (const line of text.split("\n", 8)) {
-    if (line.startsWith(STAMP_PREFIX)) {
-      return line.slice(STAMP_PREFIX.length).trim();
+  const paths = wireDtsPath ? [wireDtsPath] : (await modulePaths()).wireDts;
+  for (const path of paths) {
+    let text: string;
+    try {
+      text = readFileSync(path, "utf8");
+    } catch {
+      continue;
     }
+    for (const line of text.split("\n", 8)) {
+      if (line.startsWith(STAMP_PREFIX)) {
+        return line.slice(STAMP_PREFIX.length).trim();
+      }
+    }
+    return null;
   }
   return null;
 }
@@ -180,7 +202,7 @@ export function protocolFromVersion(version: string): number | null {
 }
 
 /**
- * Resolve the published package's loader JS + `_bg.wasm` on disk.
+ * Resolve the engine package's loader JS + `_bg.wasm` on disk.
  * Throws (never warn-skips) when the package cannot be resolved: a
  * headless host with no engine behind it is the exact fiction the
  * harness exists to prevent (B-13).
@@ -191,8 +213,14 @@ export async function resolveCanvasWasm(resolveFrom?: string): Promise<{
   version: string;
   dir: string;
 }> {
-  const { createRequire, readFileSync, dirname, resolve, pathToFileURL } =
-    await nodeBuiltins();
+  const {
+    createRequire,
+    existsSync,
+    readFileSync,
+    dirname,
+    resolve,
+    pathToFileURL,
+  } = await nodeBuiltins();
   const { here } = await modulePaths();
   // Anchor candidates: this module first (standalone install), then the
   // editor's packages/client (the sync-wire default; in the monorepo at
@@ -207,33 +235,40 @@ export async function resolveCanvasWasm(resolveFrom?: string): Promise<{
 
   let lastErr: unknown;
   for (const anchor of anchors) {
-    try {
-      const req = createRequire(pathToFileURL(resolve(anchor, "package.json")));
-      const pkgJsonPath = req.resolve(`${CANVAS_WASM_PKG}/package.json`);
-      const dir = dirname(pkgJsonPath);
-      const pkg = JSON.parse(readFileSync(pkgJsonPath, "utf8")) as {
-        version?: string;
-        main?: string;
-      };
-      const loaderPath = resolve(dir, pkg.main ?? "paged_canvas_wasm.js");
-      const wasmPath = resolve(dir, "paged_canvas_wasm_bg.wasm");
-      return {
-        loaderUrl: pathToFileURL(loaderPath).href,
-        wasmPath,
-        version: pkg.version ?? "unknown",
-        dir,
-      };
-    } catch (err) {
-      lastErr = err;
+    const req = createRequire(pathToFileURL(resolve(anchor, "package.json")));
+    for (const name of ENGINE_PACKAGES) {
+      try {
+        const pkgJsonPath = req.resolve(`${name}/package.json`);
+        const dir = dirname(pkgJsonPath);
+        // The glue sits at the package root in both packages; `main` is
+        // canvas-wasm's (the published package's `main` is the same file).
+        const loaderPath = resolve(dir, "paged_canvas_wasm.js");
+        const wasmPath = resolve(dir, "paged_canvas_wasm_bg.wasm");
+        if (!existsSync(wasmPath)) {
+          lastErr = new Error(`${name} at ${dir} has no ${wasmPath}`);
+          continue;
+        }
+        const pkg = JSON.parse(readFileSync(pkgJsonPath, "utf8")) as {
+          version?: string;
+        };
+        return {
+          loaderUrl: pathToFileURL(loaderPath).href,
+          wasmPath,
+          version: pkg.version ?? "unknown",
+          dir,
+        };
+      } catch (err) {
+        lastErr = err;
+      }
     }
   }
   throw new Error(
-    `plugin-sdk: ${CANVAS_WASM_PKG} is not resolvable for the headless ` +
-      `harness (tried ${anchors.length} anchors). Install it as a ` +
-      `devDependency, or run inside a workspace where the editor's ` +
-      `packages/client provides it. No warn-skip: a headless host with ` +
-      `no real engine is the fiction createHeadlessHost exists to ` +
-      `prevent (B-13). Last error: ${String(lastErr)}`,
+    `plugin-sdk: no engine is resolvable for the headless harness (tried ` +
+      `${ENGINE_PACKAGES.join(" and ")} from ${anchors.length} anchors). ` +
+      `Install @paged-media/paged as a devDependency, or run inside the ` +
+      `workspace, where ${CANVAS_WASM_PKG} provides it. No warn-skip: a ` +
+      `headless host with no real engine is the fiction createHeadlessHost ` +
+      `exists to prevent (B-13). Last error: ${String(lastErr)}`,
   );
 }
 

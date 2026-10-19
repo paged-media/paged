@@ -20,14 +20,14 @@ and each one names the plugins that follow it and those that do not.
 | [010](010-raw-mutate-gate-capability-enforcement.md) | The raw-mutate gate + in-process capability enforcement line | Accepted (amended 2026-10-02) |
 | [012](012-k1-modal-session-undo-coalescing.md) | K-1 modal sessions: the §8.0 seamless-undo coalescing boundary | Accepted (amended 2026-10-02) |
 | [017](017-importer-exporter-door-shape.md) | Importer / exporter door shape: resolve-by-extension, load-into-engine (K-2) | Accepted (amended 2026-10-02) |
-| [300](300-type-only-contract.md) | The contract package is type-only; values reach a bundle through the host object | Accepted, recorded retroactively 2026-10-02 |
+| [300](300-type-only-contract.md) | The contract package is type-only; values reach a bundle through the host object | Accepted, recorded retroactively 2026-10-02 (amended 2026-10-19: ships as `plugin-sdk/api`) |
 | [301](301-host-adapter-lives-in-plugin-sdk.md) | The host adapter lives in plugin-sdk, not in the editor | Accepted, recorded retroactively 2026-10-02 |
 | [302](302-vendored-wire-types.md) | Engine wire types are vendored and re-synced on each protocol bump | Accepted, recorded retroactively 2026-10-02 |
 | [303](303-manifest-schema.md) | The manifest is a closed-vocabulary schema; the CLI mirrors it without dependencies | Accepted, recorded retroactively 2026-10-02 |
 | [304](304-bundle-lifecycle.md) | Bundle lifecycle: one synchronous activate, structural teardown, guarded activation | Accepted, recorded retroactively 2026-10-02 |
 | [305](305-doors-always-present.md) | Every door is always present; a missing backend answers honestly and `supports()` reports it | Accepted, recorded retroactively 2026-10-02 |
 | [306](306-canary-releases.md) | Releases: a canary on every push, version-gated, published without tokens | Accepted, recorded retroactively 2026-10-02; superseded by PM-0008 (2026-10-18) |
-| [307](307-contract-as-peer-dependency.md) | Bundles take the contract packages as peer dependencies | Accepted, recorded retroactively 2026-10-02 |
+| [307](307-contract-as-peer-dependency.md) | Bundles take the contract packages as peer dependencies | Accepted, recorded retroactively 2026-10-02 (amended 2026-10-19: one peer, plugin-sdk) |
 | [308](308-plugin-wasm.md) | Plugin wasm is a declared capability, loaded by the bundle, under one app-wide size budget | Accepted, recorded retroactively 2026-10-02 |
 | [309](309-conformance-against-real-engine.md) | Conformance runs against the real published engine | Accepted, recorded retroactively 2026-10-02 (amended 2026-10-18) |
 | [310](310-one-write-door.md) | One write door: `document.mutate`, engine-owned history, failures as outcomes | Accepted, recorded retroactively 2026-10-02 |
