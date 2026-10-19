@@ -35,6 +35,7 @@ export function InkManagerPanel() {
   const [inks, setInks] = useState<InkSummary[]>([]);
   const [standardLab, setStandardLab] = useState(false);
 
+  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
   const refresh = useCallback(() => {
     void client
       .collection<InkSummary>("inks")

@@ -57,6 +57,7 @@ export function PanelRail({ items }: { items: PanelRailItem[] }) {
     const sub = panels.onChange(() => bump());
     return () => sub.dispose();
   }, [panels]);
+  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
   const pluginItems = useMemo(
     () =>
       panels

@@ -174,6 +174,7 @@ export function GuideDragController() {
    *  wire map we approximate by page order (one-spread-per-page is the
    *  common multi-spread shape); single-spread docs always return the
    *  first spread. Part of the documented wire gap. */
+  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
   const spreadForPageId = useCallback(
     (pageId: PageId | null): string | null => {
       const ids = spreadIdsRef.current;
@@ -194,6 +195,7 @@ export function GuideDragController() {
   // GuideSummary already carries the engine's positional id, so we use
   // it directly (no reindex needed). Skipped while a drag is live so a
   // mid-drag Operation push never clobbers the preview.
+  // eslint-disable-next-line no-restricted-syntax -- handed to a hook that compares it (ADR 229)
   const resyncFromSpreads = useCallback(async () => {
     if (dragRef.current) return;
     const read = await guidesFromSpreads(client, handleRef.current);
@@ -236,6 +238,7 @@ export function GuideDragController() {
   /** Convert a client (viewport) pointer position to a document-space
    *  point through the live camera + the viewport wrapper rect. The
    *  cockpit tags the wrapper `data-paged-viewport`. */
+  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
   const clientToDoc = useCallback(
     (clientX: number, clientY: number): [number, number] | null => {
       const wrap = document.querySelector("[data-paged-viewport]");
@@ -253,6 +256,7 @@ export function GuideDragController() {
 
   /** Is the client point over a ruler strip? Used to cancel a create
    *  / delete a moved guide. */
+  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
   const overRulerAt = useCallback((clientX: number, clientY: number) => {
     const el = document.elementFromPoint(clientX, clientY);
     return Boolean(el && el.closest("[data-h-ruler], [data-v-ruler]"));
@@ -264,6 +268,7 @@ export function GuideDragController() {
    *  ruler. Pure read — both the live preview (onMove) and the commit
    *  (onUp) call it, so the release uses the freshest position rather
    *  than a possibly-stale React state snapshot. */
+  // eslint-disable-next-line no-restricted-syntax -- handed to a hook that compares it (ADR 229)
   const resolvePreview = useCallback(
     (
       orientation: "horizontal" | "vertical",
@@ -309,6 +314,7 @@ export function GuideDragController() {
   });
 
   /** Fire one guide mutation; resolve true on `mutationApplied`. */
+  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
   const dispatch = useCallback(
     async (mutation: Mutation): Promise<boolean> => {
       try {
@@ -324,6 +330,7 @@ export function GuideDragController() {
   /** Commit the drag's terminal mutation (or none) + mirror it into
    *  the optimistic store. Exactly one of insertGuide / moveGuide /
    *  deleteGuide, or zero (cancel). */
+  // eslint-disable-next-line no-restricted-syntax -- handed to a hook that compares it (ADR 229)
   const settle = useCallback(
     async (d: GuideDragState, onRuler: boolean) => {
       if (d.kind === "create") {

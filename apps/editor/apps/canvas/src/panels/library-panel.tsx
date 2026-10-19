@@ -25,7 +25,7 @@
 // version being replaced stays in the list; a release is a name given once
 // to a version and never moved.
 
-import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 
 import {
   confirmDiscard,
@@ -186,31 +186,28 @@ export function LibraryPanel() {
     };
   }, [library, current, version, tick, liveVersion]);
 
-  const open = useCallback(
-    async (entry: DocumentEntry, target = "main") => {
-      if (!library) return;
-      if (!(await confirmDiscard(editor, `Opening ${entry.name}`))) return;
-      const bytes = await library.exportPaged(entry.id, target);
-      const doc = editor.document;
-      await loadDocumentFile(
-        editor.client,
-        new File([bytes.slice()], `${entry.name}.paged`),
-        {
-          setHandle: doc.setHandle,
-          setSourceName: doc.setSourceName,
-          setLoading: doc.setLoading,
-          setStatus: (s) => console.info("[library]", s),
-          setSnapshotsReady: doc.setSnapshotsReady,
-          addSnapshot: (pageId, url) =>
-            doc.setSnapshots((prev) => new Map(prev).set(pageId, url)),
-          resetForNewDocument: doc.resetForNewDocument,
-          pushWarning: (w) => console.warn("[library]", w),
-          libraryDocument: entry,
-        },
-      );
-    },
-    [editor, library],
-  );
+  const open = async (entry: DocumentEntry, target = "main") => {
+    if (!library) return;
+    if (!(await confirmDiscard(editor, `Opening ${entry.name}`))) return;
+    const bytes = await library.exportPaged(entry.id, target);
+    const doc = editor.document;
+    await loadDocumentFile(
+      editor.client,
+      new File([bytes.slice()], `${entry.name}.paged`),
+      {
+        setHandle: doc.setHandle,
+        setSourceName: doc.setSourceName,
+        setLoading: doc.setLoading,
+        setStatus: (s) => console.info("[library]", s),
+        setSnapshotsReady: doc.setSnapshotsReady,
+        addSnapshot: (pageId, url) =>
+          doc.setSnapshots((prev) => new Map(prev).set(pageId, url)),
+        resetForNewDocument: doc.resetForNewDocument,
+        pushWarning: (w) => console.warn("[library]", w),
+        libraryDocument: entry,
+      },
+    );
+  };
 
   const act = (f: () => Promise<unknown>) => () => {
     f()

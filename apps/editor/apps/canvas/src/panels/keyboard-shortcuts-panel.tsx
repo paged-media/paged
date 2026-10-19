@@ -124,6 +124,7 @@ export function KeyboardShortcutsPanel(_props: PanelProps) {
   const keybindings = useRegistryView(registries.keybindings);
   const commands = useRegistryView(registries.commands);
 
+  // eslint-disable-next-line no-restricted-syntax -- a computed block, not a single expression (ADR 229)
   const rows = useMemo(() => {
     const titles = new Map(commands.list().map((c) => [c.id, c.title]));
     // One row per COMMAND. cmd+ and ctrl+ are separate contributions for

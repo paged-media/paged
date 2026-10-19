@@ -35,7 +35,7 @@
 // A path the schema does not carry (a wire-only struct) keeps the legacy
 // editor and is marked `data-schema="none"`, so the gap stays visible.
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
 import {
   BoundsInput,
@@ -298,10 +298,7 @@ function TransformEditor(props: {
   value: Extract<Value, { type: "transform" }>;
   onCommit: (v: Value) => void;
 }) {
-  const m = useMemo(
-    () => props.value.value ?? [1, 0, 0, 1, 0, 0],
-    [props.value.value],
-  );
+  const m = props.value.value ?? [1, 0, 0, 1, 0, 0];
   const labels = ["a", "b", "c", "d", "tx", "ty"];
   return (
     <div className="grid grid-cols-3 gap-1" data-transform-editor>

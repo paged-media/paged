@@ -17,7 +17,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 
 import { NumberInput, type NumberInputProps } from "./NumberInput";
 import { convertLength, type LengthUnit } from "./units";
@@ -63,10 +63,8 @@ export function LengthInput(props: LengthInputProps) {
   } = props;
   const [unit, setUnit] = useState<LengthUnit>(defaultUnit);
 
-  const displayValue = useMemo(
-    () => (valuePt === null ? null : convertLength(valuePt, "pt", unit)),
-    [valuePt, unit],
-  );
+  const displayValue =
+    valuePt === null ? null : convertLength(valuePt, "pt", unit);
 
   return (
     // `max-w-full` + `min-w-0` on both boxes: in a narrow cell (a 2-up

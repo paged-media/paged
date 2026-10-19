@@ -302,6 +302,7 @@ export function LayersPanel(_: PanelProps) {
     selectionRef.current = selectedElements;
   });
 
+  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
   const rowById = useCallback(
     (id: string): LayerRow | undefined =>
       rowsRef.current.find((r) => r.selfId === id),
@@ -321,6 +322,7 @@ export function LayersPanel(_: PanelProps) {
   // undo step). Reorder and insert are ops the object model has no
   // property for, so they stay plain mutations.
   const objectModel = useObjectModel();
+  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
   const run = useCallback(
     async (
       mutation: Mutation,
@@ -542,10 +544,11 @@ export function LayersPanel(_: PanelProps) {
     return () => handles.forEach((h) => h.dispose());
   }, [registries, run, rowById, objectModel]);
 
-  const onAdd = useCallback(() => {
+  const onAdd = () => {
     void registries.commands.invoke(LAYERS_ADD_COMMAND);
-  }, [registries]);
+  };
 
+  // eslint-disable-next-line no-restricted-syntax -- a computed block, not a single expression (ADR 229)
   const ownerNote = useMemo(() => {
     if (!provider) return null;
     const owner = active.find((p) => p.plugin === provider);
@@ -599,7 +602,7 @@ function LayerOptions({ rows }: { rows: readonly LayerRow[] }) {
   const [pick, setPick] = useState("");
   const id = rows.some((r) => r.selfId === pick) ? pick : rows[0]!.selfId;
   const address = layerAddress(id);
-  const targets = useMemo(() => [address], [address]);
+  const targets = [address];
   return (
     <CockpitSection title="Layer Options" defaultOpen={false}>
       <div className="flex flex-col gap-1.5 pb-2" data-layer-options={address}>

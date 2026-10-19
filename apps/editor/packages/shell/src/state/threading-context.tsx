@@ -138,29 +138,35 @@ export function ThreadingProvider({ children }: PropsWithChildren) {
     loadedRef.current = loaded;
   });
 
+  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
   const loadCursor = useCallback((cursor: LoadedCursor) => {
     loadedRef.current = cursor;
     setLoaded(cursor);
   }, []);
 
+  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
   const clearCursor = useCallback(() => {
     loadedRef.current = null;
     setLoaded(null);
   }, []);
 
+  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
   const continuesChain = useCallback(
     (frameId: string) => chain.withPrev.has(frameId),
     [chain],
   );
+  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
   const hasNext = useCallback(
     (frameId: string) => chain.withNext.has(frameId),
     [chain],
   );
+  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
   const isOverset = useCallback(
     (frameId: string) => oversetFrames.has(frameId),
     [oversetFrames],
   );
 
+  // eslint-disable-next-line no-restricted-syntax -- its type argument types the value (ADR 229)
   const value = useMemo<ThreadingContextValue>(
     () => ({
       loaded,

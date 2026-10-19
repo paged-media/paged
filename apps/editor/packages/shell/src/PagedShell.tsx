@@ -31,10 +31,8 @@
 // canvas internals.
 
 import React, {
-  useCallback,
   useEffect,
   useLayoutEffect,
-  useMemo,
   useRef,
   useState,
   type ComponentType,
@@ -509,7 +507,7 @@ function ShellChrome({
       ]);
     });
   }, [initialDocumentSizePt, paged, handle, setStatus]);
-  const sabSupported = useMemo(() => supportsSharedArrayBuffer(), []);
+  const sabSupported = supportsSharedArrayBuffer();
 
   // Editor-ops — the worker-message subscriber below needs the live
   // document handle (to refresh the page grid on page-structure
@@ -579,10 +577,7 @@ function ShellChrome({
   }, [registries, tools]);
 
   // The host's own tools — every other rail tool came from a bundle.
-  const hostToolIds = useMemo(
-    () => new Set((tools ?? []).map((t) => t.id)),
-    [tools],
-  );
+  const hostToolIds = new Set((tools ?? []).map((t) => t.id));
 
   // The fixed cockpit layout is the only work area — apps supply the
   // viewport component (the canvas is a SLOT, not a panel).
@@ -1260,67 +1255,55 @@ function ShellChrome({
     setSelectionRects,
   ]);
 
-  const onFile = useCallback(
-    (file: File) => {
-      // K-2 / S-06 — a registered plugin importer may claim this file
-      // type (drag-drop / header input). Route the bytes to the plugin
-      // instead of the default IDML load — the plugin owns what the file
-      // becomes (it does not replace the document unless it chooses to).
-      const importer = registries.importers.resolve(file.name, file.type);
-      if (importer) {
-        setStatus(`importing ${file.name} via ${importer.title}…`);
-        // A promise chain, not try/finally: the React Compiler does not
-        // compile a component with a `finally` in it (ADR 229).
-        void (async () => {
-          const bytes = new Uint8Array(await file.arrayBuffer());
-          // U14 — park the file name for the open orchestration: an
-          // importer that OPENS a document does so through
-          // `nativeDocument.open(bytes)`, which carries no name.
-          setPendingImportSource(file.name);
-          await importer.import({
-            name: file.name,
-            bytes,
-            mimeType: file.type,
-          });
-          setStatus(`imported ${file.name}`);
-        })()
-          .catch((err: unknown) => {
-            setWarnings((prev) => [
-              ...prev,
-              `import of ${file.name} via ${importer.title} failed: ` +
-                (err instanceof Error ? err.message : String(err)),
-            ]);
-          })
-          .finally(() => setPendingImportSource(null));
-        return;
-      }
-      void loadDocumentFile(client, file, {
-        setHandle,
-        setSourceName,
-        setLoading,
-        setStatus,
-        setSnapshotsReady,
-        addSnapshot: (pageId, url) =>
-          setSnapshots((prev) => {
-            const next = new Map(prev);
-            next.set(pageId, url);
-            return next;
-          }),
-        resetForNewDocument,
-        pushWarning: (w) => setWarnings((prev) => [...prev, w]),
-      });
-    },
-    [
-      client,
-      registries,
-      resetForNewDocument,
+  const onFile = (file: File) => {
+    // K-2 / S-06 — a registered plugin importer may claim this file
+    // type (drag-drop / header input). Route the bytes to the plugin
+    // instead of the default IDML load — the plugin owns what the file
+    // becomes (it does not replace the document unless it chooses to).
+    const importer = registries.importers.resolve(file.name, file.type);
+    if (importer) {
+      setStatus(`importing ${file.name} via ${importer.title}…`);
+      // A promise chain, not try/finally: the React Compiler does not
+      // compile a component with a `finally` in it (ADR 229).
+      void (async () => {
+        const bytes = new Uint8Array(await file.arrayBuffer());
+        // U14 — park the file name for the open orchestration: an
+        // importer that OPENS a document does so through
+        // `nativeDocument.open(bytes)`, which carries no name.
+        setPendingImportSource(file.name);
+        await importer.import({
+          name: file.name,
+          bytes,
+          mimeType: file.type,
+        });
+        setStatus(`imported ${file.name}`);
+      })()
+        .catch((err: unknown) => {
+          setWarnings((prev) => [
+            ...prev,
+            `import of ${file.name} via ${importer.title} failed: ` +
+              (err instanceof Error ? err.message : String(err)),
+          ]);
+        })
+        .finally(() => setPendingImportSource(null));
+      return;
+    }
+    void loadDocumentFile(client, file, {
       setHandle,
       setSourceName,
       setLoading,
-      setSnapshots,
+      setStatus,
       setSnapshotsReady,
-    ],
-  );
+      addSnapshot: (pageId, url) =>
+        setSnapshots((prev) => {
+          const next = new Map(prev);
+          next.set(pageId, url);
+          return next;
+        }),
+      resetForNewDocument,
+      pushWarning: (w) => setWarnings((prev) => [...prev, w]),
+    });
+  };
 
   const shellBody = (
     <div style={shellStyle}>

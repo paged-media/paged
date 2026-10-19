@@ -181,6 +181,7 @@ export function usePagePosition(): PagePosition {
 
   /** Send one batch; report a refusal; re-read the selection chrome
    *  (it caches geometry and refreshes only on clicks and gestures). */
+  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
   const send = useCallback(
     async (verb: string, ops: Mutation[]) => {
       if (ops.length === 0) return;
@@ -201,6 +202,7 @@ export function usePagePosition(): PagePosition {
     [client, elementGeometry, elementSelection, setElementGeometry],
   );
 
+  // eslint-disable-next-line no-restricted-syntax -- a hook's result: callers may compare it (ADR 229)
   const moveBy = useCallback(
     async (dx: number, dy: number) => {
       problemsSink.clear(OBJECT_DIAGNOSTIC_SOURCE);
@@ -216,6 +218,7 @@ export function usePagePosition(): PagePosition {
   );
 
   const edgeLeaf = state.edgeLeaf;
+  // eslint-disable-next-line no-restricted-syntax -- a hook's result: callers may compare it (ADR 229)
   const setEdges = useCallback(
     async (box: PageBox) => {
       problemsSink.clear(OBJECT_DIAGNOSTIC_SOURCE);

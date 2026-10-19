@@ -174,6 +174,7 @@ function ThreadLinesRender(props: OverlayProps) {
   // rather than by being current.
   const runRef = useRef(0);
 
+  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
   const refresh = useCallback(async () => {
     const run = ++runRef.current;
     const read = await readChains(client, () => run === runRef.current);

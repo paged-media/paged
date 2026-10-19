@@ -33,7 +33,7 @@
 // (the contract carries no label), never the raw id. Token-layer styling (--pg-*, --space-*, --font-mono,
 // --radius-*) mirrors the workbook panel so it reads native in both themes.
 
-import { useCallback, type CSSProperties, type ReactElement } from "react";
+import { type CSSProperties, type ReactElement } from "react";
 import { onDidChangeOf, useLive } from "@paged-media/react-live";
 
 import type { BundleHost } from "@paged-media/plugin-api";
@@ -137,10 +137,10 @@ export function makeDatasetsPanel(
     const datasets = session.discoverDatasets();
     const st = live.state();
 
-    const onSource = useCallback((id: string) => {
+    const onSource = (id: string) => {
       host.log.info(`sourcing sheet from dataset "${id}"`);
       void session.sourceFromDataset(id);
-    }, []);
+    };
     // Using a dataset starts a fresh workbook: with another workbook open
     // that replaces it, so the button asks for a second click first.
     const { armed, confirm } = useConfirm();

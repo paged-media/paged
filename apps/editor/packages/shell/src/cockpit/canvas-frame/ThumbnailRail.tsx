@@ -22,7 +22,7 @@
 // labels are page ranges, click navigates (the app supplies the
 // camera-fit via `onNavigate` — the layout math lives app-side).
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 
 import { Icon } from "../../icons";
 import { useDocument } from "../../state/document-context";
@@ -36,10 +36,7 @@ export function ThumbnailRail() {
   const spreads = useCollection<SpreadSummary>("spreads");
   const [selected, setSelected] = useState<string | null>(null);
 
-  const entries = useMemo(
-    () => (handle ? groupSpreads(handle.pageIds, spreads) : []),
-    [handle, spreads],
-  );
+  const entries = handle ? groupSpreads(handle.pageIds, spreads) : [];
 
   const scrollBy = (dir: -1 | 1) => {
     const el = document.querySelector<HTMLElement>("[data-thumbnail-strip]");

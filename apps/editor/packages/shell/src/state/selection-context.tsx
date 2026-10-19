@@ -169,6 +169,7 @@ export function SelectionProvider({ children }: PropsWithChildren) {
   const activeTool = tool
     ? legacyToolFor(tool.effectiveTool)
     : legacyToolFallback;
+  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
   const setActiveTool = useCallback(
     (t: ActiveTool) => {
       if (tool) tool.setBaseTool(toolIdForLegacy(t));
@@ -182,6 +183,7 @@ export function SelectionProvider({ children }: PropsWithChildren) {
   // Keep the array IDENTITY when its contents did not change: this
   // value sits in a context half the panels read, and a marquee writes
   // the selection on every pointer sample.
+  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
   const setSelectedAnchors = useCallback((indices: readonly number[]) => {
     setSelectedAnchorsState((prev) =>
       sameIndices(prev, indices)
@@ -193,6 +195,7 @@ export function SelectionProvider({ children }: PropsWithChildren) {
   }, []);
   const selectedAnchorIndex =
     selectedAnchors.length === 1 ? selectedAnchors[0] : null;
+  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
   const setSelectedAnchorIndex = useCallback(
     (index: number | null) =>
       setSelectedAnchors(index === null ? NO_ANCHORS : [index]),
@@ -202,6 +205,7 @@ export function SelectionProvider({ children }: PropsWithChildren) {
     useState<PathEditSession | null>(null);
   const [activeGroup, setActiveGroup] = useState<string | null>(null);
 
+  // eslint-disable-next-line no-restricted-syntax -- its type argument types the value (ADR 229)
   const value = useMemo<SelectionContextValue>(
     () => ({
       elementSelection,
@@ -259,6 +263,7 @@ function usePlacedGeometry(
     pages: NO_SPREAD_PAGES,
   });
   const base = learned.key === pagesKey ? learned.pages : NO_SPREAD_PAGES;
+  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
   const known = useMemo(
     () => learnSpreadPages(base, geometry),
     [base, geometry],
@@ -291,6 +296,7 @@ function usePlacedGeometry(
     }
   }, [client, geometry, known, pagesKey]);
 
+  // eslint-disable-next-line no-restricted-syntax -- not a plain binding (ADR 229)
   return useMemo(() => {
     const sizeOf = (pageId: string): readonly [number, number] | null => {
       const i = handle ? handle.pageIds.indexOf(pageId) : -1;

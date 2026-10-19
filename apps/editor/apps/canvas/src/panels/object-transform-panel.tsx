@@ -73,7 +73,7 @@ import {
   useSelection,
 } from "@paged-media/shell";
 import { LengthInput, NumberInput, SmartDialMicro } from "@paged-media/ui";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import type { Value } from "@paged-media/client";
 
 import { usePagePosition } from "./page-position";
@@ -434,11 +434,9 @@ function GroupTransformField() {
   const { elementSelection } = useSelection();
   const groups = elementSelection.filter((id) => id.kind === "group");
   const key = groups.map((id) => JSON.stringify(id)).join("|");
-  const targets = useMemo(
-    () =>
-      key ? key.split("|").map((j) => addressOfElement(JSON.parse(j))) : [],
-    [key],
-  );
+  const targets = key
+    ? key.split("|").map((j) => addressOfElement(JSON.parse(j)))
+    : [];
   if (!targets.length) return null;
   return (
     <div

@@ -175,6 +175,7 @@ export function useActionFeedback(
       mounted.current = false;
     };
   }, []);
+  // eslint-disable-next-line no-restricted-syntax -- a hook's result: callers may compare it (ADR 229)
   const run = React.useCallback(
     async (work: () => Promise<unknown>) => {
       setRefusal(null);

@@ -123,6 +123,7 @@ export function useScrubGesture(options: ScrubGestureOptions): ScrubGesture {
     }
   }, [initial]);
 
+  // eslint-disable-next-line no-restricted-syntax -- a hook's result: callers may compare it (ADR 229)
   const bind = useCallback((el: HTMLElement | null) => {
     setElement(el);
   }, []);
