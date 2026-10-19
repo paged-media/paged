@@ -354,8 +354,9 @@ pub(crate) struct GestureSession {
     /// Phase D — anchor point in spread coords (resolved at begin
     /// from the caller's page-local input). Used by rotate / scale.
     pub anchor_spread: Option<(f32, f32)>,
-    /// Phase D — pivot in spread coords. For rotate / scale this is
-    /// the average of every snapshot's transformed centroid.
+    /// Phase D — pivot in spread coords. For rotate / scale / shear this
+    /// is the centre of the selection's box (ADR 191): one item's or one
+    /// group's own box, the axis-aligned box of several.
     pub pivot_spread: Option<(f32, f32)>,
     /// Phase G — camera scale (px/pt) at begin time, used by the
     /// snap pass to convert its CSS-px tolerance to doc-space pt.
@@ -372,6 +373,88 @@ pub(crate) struct GestureSession {
     /// keeps it, and one whose parent stays takes the move seen from the
     /// parent's frame (see `paged_mutate::group_frame`).
     pub(crate) group_frames: std::collections::HashMap<String, GroupFrame>,
+    /// R6 (GF-1) — a `Resize` of a selection holding a GROUP resizes the
+    /// selection's box, not each item's bounds: a group has no bounds of
+    /// its own to write. The box is scaled about the handle opposite the
+    /// one dragged (the centre with Alt) along its own axes, and that
+    /// scale is composed into every leaf's transform, the groups keeping
+    /// theirs (ADR 191). `None` for a selection of leaves,
+    /// which resize their bounds.
+    pub(crate) resize_box: Option<SelectionBox>,
+}
+
+/// The box a transform of the selection works on: `bounds` in the box's
+/// own space, placed in spread space by `placement` (`None` = the page
+/// axes). One item's own box, one group's box (its members' outlines in
+/// the group's space, `group_box`), or the axis-aligned union of several.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct SelectionBox {
+    pub(crate) bounds: Bounds,
+    pub(crate) placement: Option<[f32; 6]>,
+}
+
+impl SelectionBox {
+    /// The box's centre, spread space: the default reference point.
+    fn centre(&self) -> (f32, f32) {
+        let b = self.bounds;
+        apply_affine(
+            self.placement.unwrap_or(IDENTITY),
+            (b.left + b.right) * 0.5,
+            (b.top + b.bottom) * 0.5,
+        )
+    }
+
+    /// The box's four corners, spread space.
+    fn corners(&self) -> [(f32, f32); 4] {
+        let b = self.bounds;
+        let m = self.placement.unwrap_or(IDENTITY);
+        [
+            apply_affine(m, b.left, b.top),
+            apply_affine(m, b.right, b.top),
+            apply_affine(m, b.right, b.bottom),
+            apply_affine(m, b.left, b.bottom),
+        ]
+    }
+
+    /// The spread-space matrix a handle drag of `delta` applies: the box
+    /// resized in its own space by the frame resize rule
+    /// ([`apply_resize`]: the dragged edges move, Alt from the centre,
+    /// Shift keeps the aspect), as the scale + shift that maps the old box
+    /// onto the new one, conjugated by the placement.
+    pub(crate) fn resize_matrix(
+        &self,
+        handle: ResizeHandle,
+        delta: (f32, f32),
+        modifiers: GestureModifiers,
+    ) -> [f32; 6] {
+        use paged_mutate::path_math::{affine_inverse, affine_multiply};
+        let b = self.bounds;
+        let local = inverse_rotate_delta(self.placement, delta);
+        let nb = apply_resize(b, handle, local, modifiers);
+        // A box with no extent along an axis (a group of one straight
+        // line) cannot be scaled along it; it keeps that size.
+        let ratio = |new: f32, old: f32| {
+            if old.abs() < 1e-6 {
+                1.0
+            } else {
+                new / old
+            }
+        };
+        let sx = ratio(nb.right - nb.left, b.right - b.left);
+        let sy = ratio(nb.bottom - nb.top, b.bottom - b.top);
+        let local_m = [sx, 0.0, 0.0, sy, nb.left - b.left * sx, nb.top - b.top * sy];
+        match self
+            .placement
+            .and_then(|p| affine_inverse(p).map(|pi| (p, pi)))
+        {
+            Some((p, pi)) => affine_multiply(p, affine_multiply(local_m, pi)),
+            None => local_m,
+        }
+    }
+}
+
+fn apply_affine(m: [f32; 6], x: f32, y: f32) -> (f32, f32) {
+    (m[0] * x + m[2] * y + m[4], m[1] * x + m[3] * y + m[5])
 }
 
 /// See [`GestureSession::group_frames`].
@@ -501,7 +584,8 @@ impl CanvasModel {
         // transform structure intact. Members include sub-groups,
         // which expand recursively — each sub-group also has its
         // transform updated.
-        let nodes = self.expand_group_ids(&nodes);
+        let targets = nodes;
+        let nodes = self.expand_group_ids(&targets);
         // C-77 — the engine refuses to move a locked item; refuse the
         // drag before its preview moves one. A group's members are in
         // `nodes` now, so a locked member stops the group too.
@@ -559,9 +643,27 @@ impl CanvasModel {
                 },
                 None => None,
             };
-            Some(explicit.unwrap_or_else(|| union_centroid_in_spread(&snapshots)))
+            // R6 (GM-1) — else the centre of the selection's box, the
+            // reference point InDesign defaults to. It was the mean of
+            // the snapshots' centres, where a group's zero-bounds
+            // snapshot stood for a phantom point at its origin.
+            Some(explicit.unwrap_or_else(|| {
+                self.selection_box(&targets, &snapshots)
+                    .map(|b| b.centre())
+                    .unwrap_or_else(|| union_centroid_in_spread(&snapshots))
+            }))
         } else {
             None
+        };
+        let resize_box = match gesture {
+            GestureType::Resize { .. }
+                if snapshots
+                    .iter()
+                    .any(|s| matches!(s.node_id, NodeId::Group(_))) =>
+            {
+                self.selection_box(&targets, &snapshots)
+            }
+            _ => None,
         };
         let group_frames = self.group_frames_of(&snapshots);
         let scale_frame = match (gesture, single_target) {
@@ -584,6 +686,7 @@ impl CanvasModel {
             camera_scale,
             scale_frame,
             group_frames,
+            resize_box,
         });
         Ok(handle)
     }
@@ -1031,6 +1134,72 @@ impl CanvasModel {
         Err(GestureError::ElementNotFound(id.clone()))
     }
 
+    /// The box a transform of `targets` (the selection as given, before
+    /// its groups expand) works on: one target's own box — a group's is
+    /// the box InDesign draws around it ([`crate::group_box`]) — or the
+    /// axis-aligned box of several, as InDesign's selection box is for
+    /// several items (`tools/indesign-export/scale-frame-probe.json`,
+    /// cases 1c–1e). `None` when a target has no geometry.
+    fn selection_box(
+        &self,
+        targets: &[ElementId],
+        snapshots: &[NodeSnapshot],
+    ) -> Option<SelectionBox> {
+        let mut seen = std::collections::HashSet::new();
+        let mut boxes = Vec::new();
+        for t in targets {
+            if !seen.insert(t.raw_id()) {
+                continue;
+            }
+            let own = match t {
+                ElementId::Group(raw) => self.scene.spreads.iter().find_map(|parsed| {
+                    let spread = &parsed.spread;
+                    let gi = spread
+                        .groups
+                        .iter()
+                        .position(|g| g.self_id.as_deref() == Some(raw.as_str()))?;
+                    crate::group_box::group_box(spread, gi)
+                        .map(|(bounds, placement)| SelectionBox { bounds, placement })
+                }),
+                _ => snapshots
+                    .iter()
+                    .find(|s| s.id.raw_id() == t.raw_id())
+                    .map(|s| SelectionBox {
+                        bounds: s.bounds,
+                        placement: s.item_transform,
+                    }),
+            };
+            boxes.push(own?);
+        }
+        match boxes.as_slice() {
+            [] => None,
+            [one] => Some(*one),
+            many => {
+                let (mut l, mut t, mut r, mut b) = (
+                    f32::INFINITY,
+                    f32::INFINITY,
+                    f32::NEG_INFINITY,
+                    f32::NEG_INFINITY,
+                );
+                for (x, y) in many.iter().flat_map(|bx| bx.corners()) {
+                    l = l.min(x);
+                    r = r.max(x);
+                    t = t.min(y);
+                    b = b.max(y);
+                }
+                Some(SelectionBox {
+                    bounds: Bounds {
+                        top: t,
+                        left: l,
+                        bottom: b,
+                        right: r,
+                    },
+                    placement: None,
+                })
+            }
+        }
+    }
+
     /// Where every snapshotted group sits: its parent's spread-space
     /// frame and whether the parent is snapshotted (moves) too.
     fn group_frames_of(
@@ -1201,6 +1370,15 @@ fn compute_node_mutation(
     let NodeId::Group(id) = &snap.node_id else {
         return compute_node_mutation_in_spread(snap, session, delta);
     };
+    // ADR 191 — a resize changes the members, never a group's own frame:
+    // the leaves (spread space) take the matrix and every group keeps its
+    // stored transform, so the scale is written once, on the leaves. Put
+    // on the group, a box collapsed to a sliver stored a scale of 0.0007,
+    // and the IDML writer's four decimals (GF-4) moved every member by
+    // points on save → load.
+    if session.resize_box.is_some() {
+        return NodeMutation::Transform(snap.item_transform);
+    }
     let Some(place) = session.group_frames.get(id).copied() else {
         return compute_node_mutation_in_spread(snap, session, delta);
     };
@@ -1278,6 +1456,20 @@ fn compute_node_mutation_in_spread(
                     d,
                 )))
             }
+        }
+        GestureType::Resize { handle } if session.resize_box.is_some() => {
+            // R6 (GF-1) — the selection holds a group: the box is
+            // resized and every leaf takes the same spread-space matrix
+            // (the groups keep theirs, `compute_node_mutation`).
+            let m = session.resize_box.expect("guarded").resize_matrix(
+                handle,
+                delta,
+                session.modifiers,
+            );
+            NodeMutation::Transform(Some(paged_mutate::path_math::affine_multiply(
+                m,
+                snap.item_transform.unwrap_or(IDENTITY),
+            )))
         }
         GestureType::Resize { handle } => {
             // Phase G — for a rotated/scaled frame, the world-space
@@ -1823,7 +2015,8 @@ fn transformed_aabb(b: Bounds, m: Option<[f32; 6]>) -> [f32; 4] {
 }
 
 /// Phase D — average of every snapshot's transformed centroid in
-/// spread coords. The pivot for rotate / scale.
+/// spread coords. The pivot only when the selection has no box (a
+/// target without geometry); see [`CanvasModel::selection_box`].
 fn union_centroid_in_spread(snapshots: &[NodeSnapshot]) -> (f32, f32) {
     let mut sx = 0.0_f32;
     let mut sy = 0.0_f32;
@@ -2240,6 +2433,7 @@ pub(crate) fn compute_new_bounds(
         camera_scale: None,
         scale_frame: None,
         group_frames: std::collections::HashMap::new(),
+        resize_box: None,
     };
     match compute_node_mutation(&snap, &session, delta) {
         NodeMutation::Bounds(b) => b,
@@ -2780,6 +2974,7 @@ mod tests {
             camera_scale: None,
             scale_frame: None,
             group_frames: std::collections::HashMap::new(),
+            resize_box: None,
         };
         compute_node_mutation(&snap, &session, (0.0, 50.0))
     }
