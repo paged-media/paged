@@ -44,12 +44,14 @@ PM-0008 the separate `@paged-media/plugin-cli` package). One file, no dependenci
 build step. Its commands are `validate`, `untyped` (prints the untyped-commands baseline),
 `integrity` and `modules-upload` ([ADR 326](adr/326-wasm-resolved-through-the-host.md)).
 
-**`packages/cli`** — `@paged-media/cli`, bin `paged-node`, not on npm yet. A host over
+**`apps/cli`** (until wave C `packages/cli` here) — `@paged-media/cli`, bin `paged-node`,
+private. A first-party application, not part of the contract. A host over
 `createHeadlessHost` that loads the installed bundles and reads and writes any object through
 `host.objects` ([ADR 324](adr/324-node-cli-over-the-headless-host.md),
 [ADR 329](adr/329-plugins-contribute-a-typed-object-model.md)).
 
-**`packages/ai`** — `@paged-media/ai`, not on npm yet. The model, the system prompt, the tools
+**`platform/shared/ai`** (until wave C `packages/ai` here) — `@paged-media/ai`, private
+internal code of the editor and paged-node. The model, the system prompt, the tools
 and the loop behind `paged-node ai` and the editor's Claude integration
 ([ADR 325](adr/325-claude-agent-package.md)).
 

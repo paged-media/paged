@@ -202,9 +202,7 @@ describe("layers from the path", () => {
       "golden",
       "rust",
     ]);
-    expect(
-      L("platform/extensions/packages/cli/test/cli.golden.spec.ts"),
-    ).toEqual(["golden", "unit"]);
+    expect(L("apps/cli/test/cli.golden.spec.ts")).toEqual(["golden", "unit"]);
     expect(L("engine/core/crates/paged-script/tests/it/basics.rs")).toEqual([
       "rust",
       "script",

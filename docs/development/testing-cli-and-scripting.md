@@ -21,7 +21,7 @@ automation's 19 functions.
 | Surface                                  | Tests                                                                                                 | Run                                                    |
 | ---------------------------------------- | ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
 | `paged` (Rust), `paged-run`, `paged mcp` | `engine/core/crates/paged-cli/tests/it/golden*.rs`, goldens in `tests/golden/`                        | `cargo nextest run -p paged-cli` (in `engine/core`)    |
-| `paged-node`                             | `platform/extensions/packages/cli/test/cli-golden.spec.ts`, goldens in `test/golden/`                 | `bun test test/cli-golden.spec.ts` (in the package)    |
+| `paged-node`                             | `apps/cli/test/cli-golden.spec.ts`, goldens in `test/golden/`                                         | `bun test test/cli-golden.spec.ts` (in the package)    |
 | `paged-plugin`                           | `platform/extensions/packages/plugin-sdk/test/paged-plugin-golden.spec.ts`, goldens in `test/golden/` | `bun run test` (in the package)                        |
 | Boa `paged.*` / `console.*`              | `engine/core/crates/paged-script/tests/it/host_functions/`                                            | `cargo nextest run -p paged-script`                    |
 | `paged.run`, `editor.*`, `demo.*`        | `apps/editor/apps/canvas/tests/headless/script-automation.test.ts`                                    | `bun run test:headless` (in `apps/editor/apps/canvas`) |
@@ -94,7 +94,7 @@ crates/paged-cli/cli.json`), commit both.
 
 ## The TypeScript command lines
 
-The TypeScript CLIs have golden tests in `platform/extensions/packages/cli/test/cli-golden.spec.ts`
+The TypeScript CLIs have golden tests in `apps/cli/test/cli-golden.spec.ts`
 (`paged-node`) and `platform/extensions/packages/plugin-sdk/test/paged-plugin-golden.spec.ts`
 (`paged-plugin`), built on the shared kit `plugin-sdk/test/golden-kit.ts`. Each case runs one
 command line and records a transcript in `test/golden/<binary>/<command>.<case>.txt`: the

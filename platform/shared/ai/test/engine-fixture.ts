@@ -26,15 +26,15 @@ import { fileURLToPath } from "node:url";
 import {
   createHeadlessHost,
   type HeadlessHost,
-} from "../../plugin-sdk/src/harness";
-import { minimalIdml } from "../../plugin-sdk/test/fixtures/minimal-idml";
+} from "../../../extensions/packages/plugin-sdk/src/harness";
+import { minimalIdml } from "../../../extensions/packages/plugin-sdk/test/fixtures/minimal-idml";
 import type { ScriptEngine } from "../src";
 
 const FONT = new Uint8Array(
   readFileSync(
     fileURLToPath(
       new URL(
-        "../../plugin-sdk/test/fixtures/fonts/SpaceGrotesk-VF.ttf",
+        "../../../extensions/packages/plugin-sdk/test/fixtures/fonts/SpaceGrotesk-VF.ttf",
         import.meta.url,
       ),
     ),

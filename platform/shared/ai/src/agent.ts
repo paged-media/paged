@@ -22,6 +22,7 @@
 // the CLI — so tools execute locally and only model turns cross the network.
 
 import type Anthropic from "@anthropic-ai/sdk";
+import { bytesToBase64 } from "@paged-media/helpers";
 
 import { lookupApi, type ApiCatalog } from "./catalog";
 import { readStoryHealth, type ScriptEngine, type ScriptRun } from "./engine";
@@ -86,13 +87,6 @@ function clip(text: string): string {
   return text.length <= RESULT_CHAR_LIMIT
     ? text
     : `${text.slice(0, RESULT_CHAR_LIMIT)}\n… (${text.length - RESULT_CHAR_LIMIT} more characters cut)`;
-}
-
-function base64(bytes: Uint8Array): string {
-  let binary = "";
-  for (let i = 0; i < bytes.length; i += 0x8000)
-    binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
-  return btoa(binary);
 }
 
 function lastText(message: Anthropic.Message): string {
@@ -223,7 +217,7 @@ export async function runAgent(options: AgentOptions): Promise<AgentResult> {
                     source: {
                       type: "base64",
                       media_type: "image/png",
-                      data: base64(png),
+                      data: bytesToBase64(png),
                     },
                   },
                 ],

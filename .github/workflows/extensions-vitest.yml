@@ -34,6 +34,10 @@ on:
       # Prose under docs/ builds and tests nothing (test inputs are not .md there).
       - "!platform/extensions/docs/**/*.md"
       - "platform/shared/test-kit/**"
+      # First-party packages that ride this job because they boot the engine
+      # it builds: @paged-media/ai and paged-node.
+      - "platform/shared/ai/**"
+      - "apps/cli/**"
       - ".github/workflows/extensions-vitest.yml"
       - "bun.lock"
       - "bunfig.toml"
@@ -57,6 +61,10 @@ on:
       # Prose under docs/ builds and tests nothing (test inputs are not .md there).
       - "!platform/extensions/docs/**/*.md"
       - "platform/shared/test-kit/**"
+      # First-party packages that ride this job because they boot the engine
+      # it builds: @paged-media/ai and paged-node.
+      - "platform/shared/ai/**"
+      - "apps/cli/**"
       - ".github/workflows/extensions-vitest.yml"
       - "bun.lock"
       - "bunfig.toml"
@@ -151,18 +159,20 @@ jobs:
             || echo "TESTS_FAILED=1" >> "$GITHUB_ENV"
           test -s packages/plugin-sdk/junit.xml
 
-      # @paged-media/ai: the agent loop and the proxy against the real
-      # engine, with the model replaced by canned turns (no key, no network).
+      # @paged-media/ai (platform/shared/ai): the agent loop and the proxy
+      # against the real engine, with the model replaced by canned turns (no
+      # key, no network). Not part of the contract; it rides this job for the
+      # engine.
       - name: ai package suite
-        run: ( cd packages/ai && bun run test ) || echo "TESTS_FAILED=1" >> "$GITHUB_ENV"
+        run: ( cd ../shared/ai && bun run test ) || echo "TESTS_FAILED=1" >> "$GITHUB_ENV"
 
-      # paged-node (packages/cli): its golden transcripts, every verb against
+      # paged-node (apps/cli): its golden transcripts, every verb against
       # the engine built above (the model of `ai` is a local fake). The data
       # verbs' successes need the paged.data engine wasm, which this job does
       # not build: they report `unavailable` and are skipped. The package's
       # other specs need it too, so only the goldens run here.
       - name: paged-node golden tests
-        run: ( cd packages/cli && bun run test test/cli-golden.spec.ts ) || echo "TESTS_FAILED=1" >> "$GITHUB_ENV"
+        run: ( cd ../../apps/cli && bun run test test/cli-golden.spec.ts ) || echo "TESTS_FAILED=1" >> "$GITHUB_ENV"
 
       # The shared test kit (platform/shared/test-kit): the gesture kit's
       # editor half, the engine's transform maths as properties, the gesture
