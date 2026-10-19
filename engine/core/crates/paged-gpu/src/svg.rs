@@ -23,10 +23,11 @@
 //! carries, instead of linking a second one (tiny-skia) for it alone.
 //! Paths take their fill rule, solid, gradient and pattern paints, and
 //! strokes with dashes; a group isolates with its opacity, blend mode,
-//! clip path and mask; text is drawn from usvg's outlines; a nested SVG
-//! image is drawn in place. Filters are not applied: a filtered group is
-//! drawn unfiltered. Raster images inside an SVG are not decoded, as with
-//! the `resvg` build this replaces.
+//! clip path and mask; a nested SVG image is drawn in place, and text
+//! from usvg's outlines when usvg is built with fonts (it is not: see
+//! paged-renderer's Cargo.toml). Filters are not applied: a filtered group
+//! is drawn unfiltered. Raster images inside an SVG are not decoded, as
+//! with the `resvg` build this replaces.
 
 use vello_cpu::kurbo::{self, Affine, BezPath, Rect, Shape};
 use vello_cpu::peniko::{
