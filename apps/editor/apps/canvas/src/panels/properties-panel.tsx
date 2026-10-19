@@ -36,6 +36,7 @@
 import { useEffect, useState } from "react";
 
 import type { ElementId } from "@paged-media/client";
+import { formatLengthPair, useDocumentUnit } from "@paged-media/ui";
 import {
   CatalogRegistryProvider,
   CockpitBtn,
@@ -386,7 +387,7 @@ function humanizeType(type: string): string {
 function PageSummary() {
   const { handle } = useDocument();
   const first = handle?.pageSizesPt[0];
-  const fmt = (pt: number) => `${(pt / 72).toFixed(2).replace(/\.00$/, "")} in`;
+  const unit = useDocumentUnit();
   return (
     <CockpitSection title="Geometry">
       <CockpitRow label="Pages">
@@ -394,7 +395,7 @@ function PageSummary() {
       </CockpitRow>
       <CockpitRow label="Size">
         <CockpitValue>
-          {first ? `${fmt(first[0])} × ${fmt(first[1])}` : "—"}
+          {first ? formatLengthPair(first[0], first[1], unit) : "—"}
         </CockpitValue>
       </CockpitRow>
       <span className="pg-ui-xs" style={{ lineHeight: 1.45 }}>

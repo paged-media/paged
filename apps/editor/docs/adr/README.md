@@ -50,6 +50,7 @@ and 024 predate that scheme and keep their numbers. Records 200–217 were writt
 | [233](233-panel-controls-share-one-kit.md) | Panel controls share one kit: named by their row, refusals in words | Accepted 2026-10-19 |
 | [234](234-keyboard-focus-and-text-input.md) | Keyboard focus belongs to the focused control; text arrives as input | Accepted 2026-10-19 |
 | [240](240-react-19-features.md) | The editor uses React 19's effect events, Activity, view transitions, Fragment refs and Trusted Types | Accepted 2026-10-19 |
+| [245](245-one-document-unit.md) | One document unit for every length | Accepted 2026-10-19 |
 
 Decisions made in other repositories that this editor's code rests on are listed in
 [`../README.md`](../README.md). Comments in the source also cite ADR 025 (the journal) and

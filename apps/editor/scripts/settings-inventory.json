@@ -17,6 +17,21 @@
       ]
     },
     {
+      "id": "paged.units",
+      "kind": "preference",
+      "storage": "localStorage",
+      "key": "paged.units",
+      "default": "pt",
+      "values": ["pt", "pc", "in", "mm", "cm", "px"],
+      "effect": "the unit every geometry length is shown and read in (editor ADR 245); a typed unit converts",
+      "source": "apps/editor/packages/ui/src/inputs/document-unit.ts",
+      "marker": "\"paged.units\"",
+      "sites": [
+        ["getItem", "STORAGE_KEY"],
+        ["setItem", "STORAGE_KEY"]
+      ]
+    },
+    {
       "id": "paged.workflowMode",
       "kind": "preference",
       "storage": "localStorage",

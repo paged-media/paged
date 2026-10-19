@@ -49,7 +49,7 @@ export interface BoundsInputProps {
 export function BoundsInput(props: BoundsInputProps) {
   const {
     valuePt,
-    defaultUnit = "pt",
+    defaultUnit,
     labels = ["T", "L", "B", "R"],
     layout = "grid2",
     onChangePt,
