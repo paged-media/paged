@@ -88,7 +88,11 @@ describe("repeat — the affines (properties)", () => {
   it("affineTranslate moves every point by the offset", () => {
     fc.assert(
       fc.property(vec2, vec2, (d, p) => {
-        assertVecClose(at(affineTranslate(d[0], d[1]), p), [p[0] + d[0], p[1] + d[1]], 0);
+        assertVecClose(
+          at(affineTranslate(d[0], d[1]), p),
+          [p[0] + d[0], p[1] + d[1]],
+          0,
+        );
       }),
     );
   });
@@ -133,14 +137,23 @@ describe("repeat — the affines (properties)", () => {
 
   it("affineReflect is an involution with determinant −1 that fixes its axis", () => {
     fc.assert(
-      fc.property(angleDeg, smallVec2, vec2, real(-500, 500), (deg, c, p, along) => {
-        const m = affineReflect(deg, c);
-        const tol = 1e-9 * scaleOf(c, p, [along, along]);
-        assertVecClose(at(m, at(m, p)), p, tol, "twice");
-        assertClose(det(m), -1, 1e-12, "determinant");
-        const onAxis: Vec2 = [c[0] + along * Math.cos(deg * DEG), c[1] + along * Math.sin(deg * DEG)];
-        assertVecClose(at(m, onAxis), onAxis, tol, "a point on the axis");
-      }),
+      fc.property(
+        angleDeg,
+        smallVec2,
+        vec2,
+        real(-500, 500),
+        (deg, c, p, along) => {
+          const m = affineReflect(deg, c);
+          const tol = 1e-9 * scaleOf(c, p, [along, along]);
+          assertVecClose(at(m, at(m, p)), p, tol, "twice");
+          assertClose(det(m), -1, 1e-12, "determinant");
+          const onAxis: Vec2 = [
+            c[0] + along * Math.cos(deg * DEG),
+            c[1] + along * Math.sin(deg * DEG),
+          ];
+          assertVecClose(at(m, onAxis), onAxis, tol, "a point on the axis");
+        },
+      ),
     );
   });
 
@@ -150,8 +163,10 @@ describe("repeat — the affines (properties)", () => {
         const image = at(affineReflect(deg, c), p);
         const ux = Math.cos(deg * DEG);
         const uy = Math.sin(deg * DEG);
-        const side = (q: Vec2): number => (q[0] - c[0]) * uy - (q[1] - c[1]) * ux;
-        const along = (q: Vec2): number => (q[0] - c[0]) * ux + (q[1] - c[1]) * uy;
+        const side = (q: Vec2): number =>
+          (q[0] - c[0]) * uy - (q[1] - c[1]) * ux;
+        const along = (q: Vec2): number =>
+          (q[0] - c[0]) * ux + (q[1] - c[1]) * uy;
         const tol = 1e-9 * scaleOf(c, p);
         assertClose(side(image), -side(p), tol, "signed distance to the axis");
         assertClose(along(image), along(p), tol, "position along the axis");
@@ -163,8 +178,18 @@ describe("repeat — the affines (properties)", () => {
     fc.assert(
       fc.property(smallVec2, vec2, (c, p) => {
         const tol = 1e-9 * scaleOf(c, p);
-        assertVecClose(at(affineReflect(90, c), p), [2 * c[0] - p[0], p[1]], tol, "vertical axis");
-        assertVecClose(at(affineReflect(0, c), p), [p[0], 2 * c[1] - p[1]], tol, "horizontal axis");
+        assertVecClose(
+          at(affineReflect(90, c), p),
+          [2 * c[0] - p[0], p[1]],
+          tol,
+          "vertical axis",
+        );
+        assertVecClose(
+          at(affineReflect(0, c), p),
+          [p[0], 2 * c[1] - p[1]],
+          tol,
+          "horizontal axis",
+        );
       }),
     );
   });
@@ -180,7 +205,12 @@ describe("repeat — tables and bounds (properties)", () => {
         expect(out.subpathStarts).not.toBe(table.subpathStarts);
         out.anchors.forEach((a, i) => {
           for (const key of ["anchor", "left", "right"] as const) {
-            assertVecClose(a[key], at(m, table.anchors[i][key]), 0, `anchors[${i}].${key}`);
+            assertVecClose(
+              a[key],
+              at(m, table.anchors[i][key]),
+              0,
+              `anchors[${i}].${key}`,
+            );
           }
         });
       }),
@@ -189,15 +219,31 @@ describe("repeat — tables and bounds (properties)", () => {
 
   it("transforming twice is transforming once by the composition", () => {
     fc.assert(
-      fc.property(canonicalTable, placementMatrix, placementMatrix, (table, first, second) => {
-        const stepwise = transformAnchorTable(transformAnchorTable(table, first), second);
-        const composed = transformAnchorTable(table, composeAffine(second, first));
-        stepwise.anchors.forEach((a, i) => {
-          for (const key of ["anchor", "left", "right"] as const) {
-            assertVecClose(a[key], composed.anchors[i][key], 1e-6, `anchors[${i}].${key}`);
-          }
-        });
-      }),
+      fc.property(
+        canonicalTable,
+        placementMatrix,
+        placementMatrix,
+        (table, first, second) => {
+          const stepwise = transformAnchorTable(
+            transformAnchorTable(table, first),
+            second,
+          );
+          const composed = transformAnchorTable(
+            table,
+            composeAffine(second, first),
+          );
+          stepwise.anchors.forEach((a, i) => {
+            for (const key of ["anchor", "left", "right"] as const) {
+              assertVecClose(
+                a[key],
+                composed.anchors[i][key],
+                1e-6,
+                `anchors[${i}].${key}`,
+              );
+            }
+          });
+        },
+      ),
     );
   });
 
@@ -228,11 +274,18 @@ describe("repeat — tables and bounds (properties)", () => {
     fc.assert(
       fc.property(bounds, placementMatrix, (b, m) => {
         const moved = transformBounds(b, m);
-        const tol = 1e-9 * Math.max(1, ...b.map(Math.abs), ...moved.map(Math.abs));
-        assertVecClose(boundsCenter(moved), at(m, boundsCenter(b)), tol, "centre");
+        const tol =
+          1e-9 * Math.max(1, ...b.map(Math.abs), ...moved.map(Math.abs));
+        assertVecClose(
+          boundsCenter(moved),
+          at(m, boundsCenter(b)),
+          tol,
+          "centre",
+        );
         const shorter = Math.min(b[2] - b[0], b[3] - b[1]);
         assertTrue(
-          moved[2] - moved[0] >= shorter - tol && moved[3] - moved[1] >= shorter - tol,
+          moved[2] - moved[0] >= shorter - tol &&
+            moved[3] - moved[1] >= shorter - tol,
           "a rotated box is smaller than the source",
         );
       }),
@@ -275,7 +328,12 @@ describe("repeat — radial (properties)", () => {
         } else if (Math.abs(sweep) >= 360) {
           assertClose(step * n, sweep, 1e-9 * Math.abs(sweep), "n steps");
         } else {
-          assertClose(step * (n - 1), sweep, 1e-9 * Math.max(1, Math.abs(sweep)), "n − 1 steps");
+          assertClose(
+            step * (n - 1),
+            sweep,
+            1e-9 * Math.max(1, Math.abs(sweep)),
+            "n − 1 steps",
+          );
         }
       }),
     );
@@ -285,46 +343,73 @@ describe("repeat — radial (properties)", () => {
     fc.assert(
       fc.property(vec2, radiusPt, angleDeg, (source, r, start) => {
         const center = radialCenterFor(source, r, start);
-        assertVecClose(radialPointAt(center, r, start), source, 1e-9 * scaleOf(source, [r, r]));
-        assertClose(dist(center, source), r, 1e-9 * scaleOf(source, [r, r]), "radius");
+        assertVecClose(
+          radialPointAt(center, r, start),
+          source,
+          1e-9 * scaleOf(source, [r, r]),
+        );
+        assertClose(
+          dist(center, source),
+          r,
+          1e-9 * scaleOf(source, [r, r]),
+          "radius",
+        );
       }),
     );
   });
 
   it("places `count` instances: the source untouched, instance k on the ring k steps on — rotated or not", () => {
     fc.assert(
-      fc.property(count, radiusPt, angleDeg, sweepDeg, smallVec2, fc.boolean(), (n, r, start, sweep, source, rotate) => {
-        const center = radialCenterFor(source, r, start);
-        const placements = radialPlacements({
-          count: n,
-          radiusPt: r,
-          startDeg: start,
-          sweepDeg: sweep,
-          rotateInstances: rotate,
-          center,
-        });
-        expect(placements).toHaveLength(n);
-        expect(placements[0]).toEqual({ index: 0, col: 0, row: 0, matrix: [1, 0, 0, 1, 0, 0] });
-        const step = radialStepDeg(n, sweep);
-        const tol = 1e-9 * scaleOf(source, center, [r, r]);
-        placements.forEach((p, k) => {
-          expect([p.index, p.col, p.row]).toEqual([k, k, 0]);
-          // Where the SOURCE'S CENTRE lands is the same in both modes.
-          assertVecClose(
-            at(p.matrix, source),
-            radialPointAt(center, r, start + k * step),
-            tol,
-            `instance ${k}`,
-          );
-          if (k === 0) return;
-          if (rotate) {
-            assertVecClose(at(p.matrix, center), center, tol, `instance ${k} ring centre`);
-            assertClose(det(p.matrix), 1, 1e-12);
-          } else {
-            expect(p.matrix.slice(0, 4)).toEqual([1, 0, 0, 1]);
-          }
-        });
-      }),
+      fc.property(
+        count,
+        radiusPt,
+        angleDeg,
+        sweepDeg,
+        smallVec2,
+        fc.boolean(),
+        (n, r, start, sweep, source, rotate) => {
+          const center = radialCenterFor(source, r, start);
+          const placements = radialPlacements({
+            count: n,
+            radiusPt: r,
+            startDeg: start,
+            sweepDeg: sweep,
+            rotateInstances: rotate,
+            center,
+          });
+          expect(placements).toHaveLength(n);
+          expect(placements[0]).toEqual({
+            index: 0,
+            col: 0,
+            row: 0,
+            matrix: [1, 0, 0, 1, 0, 0],
+          });
+          const step = radialStepDeg(n, sweep);
+          const tol = 1e-9 * scaleOf(source, center, [r, r]);
+          placements.forEach((p, k) => {
+            expect([p.index, p.col, p.row]).toEqual([k, k, 0]);
+            // Where the SOURCE'S CENTRE lands is the same in both modes.
+            assertVecClose(
+              at(p.matrix, source),
+              radialPointAt(center, r, start + k * step),
+              tol,
+              `instance ${k}`,
+            );
+            if (k === 0) return;
+            if (rotate) {
+              assertVecClose(
+                at(p.matrix, center),
+                center,
+                tol,
+                `instance ${k} ring centre`,
+              );
+              assertClose(det(p.matrix), 1, 1e-12);
+            } else {
+              expect(p.matrix.slice(0, 4)).toEqual([1, 0, 0, 1]);
+            }
+          });
+        },
+      ),
     );
   });
 
@@ -351,59 +436,94 @@ describe("repeat — grid (properties)", () => {
 
   it("is columns × rows placements in row-major order, each carrying the cell centre to its own cell", () => {
     fc.assert(
-      fc.property(cells, cells, stepPt, stepPt, fc.boolean(), fc.boolean(), smallVec2, (columns, rows, stepX, stepY, flipColumns, flipRows, cellCenter) => {
-        const placements = gridPlacements({
-          columns,
-          rows,
-          stepX,
-          stepY,
-          flipColumns,
-          flipRows,
-          cellCenter,
-        });
-        expect(placements).toHaveLength(columns * rows);
-        placements.forEach((p, i) => {
-          const col = i % columns;
-          const row = Math.floor(i / columns);
-          expect([p.index, p.col, p.row]).toEqual([i, col, row]);
-          // A flip is about the DESTINATION cell's centre, so the centre
-          // itself lands on the plain lattice point regardless.
+      fc.property(
+        cells,
+        cells,
+        stepPt,
+        stepPt,
+        fc.boolean(),
+        fc.boolean(),
+        smallVec2,
+        (columns, rows, stepX, stepY, flipColumns, flipRows, cellCenter) => {
+          const placements = gridPlacements({
+            columns,
+            rows,
+            stepX,
+            stepY,
+            flipColumns,
+            flipRows,
+            cellCenter,
+          });
+          expect(placements).toHaveLength(columns * rows);
+          placements.forEach((p, i) => {
+            const col = i % columns;
+            const row = Math.floor(i / columns);
+            expect([p.index, p.col, p.row]).toEqual([i, col, row]);
+            // A flip is about the DESTINATION cell's centre, so the centre
+            // itself lands on the plain lattice point regardless.
+            assertVecClose(
+              at(p.matrix, cellCenter),
+              [cellCenter[0] + col * stepX, cellCenter[1] + row * stepY],
+              1e-9 * scaleOf(cellCenter, [col * stepX, row * stepY]),
+              `cell (${col}, ${row})`,
+            );
+            const flips =
+              (flipColumns && col % 2 === 1 ? 1 : 0) +
+              (flipRows && row % 2 === 1 ? 1 : 0);
+            assertClose(
+              det(p.matrix),
+              flips === 1 ? -1 : 1,
+              1e-12,
+              `cell (${col}, ${row}) orientation`,
+            );
+          });
           assertVecClose(
-            at(p.matrix, cellCenter),
-            [cellCenter[0] + col * stepX, cellCenter[1] + row * stepY],
-            1e-9 * scaleOf(cellCenter, [col * stepX, row * stepY]),
-            `cell (${col}, ${row})`,
+            at(placements[0].matrix, [7, -3]),
+            [7, -3],
+            0,
+            "the source cell",
           );
-          const flips = (flipColumns && col % 2 === 1 ? 1 : 0) + (flipRows && row % 2 === 1 ? 1 : 0);
-          assertClose(det(p.matrix), flips === 1 ? -1 : 1, 1e-12, `cell (${col}, ${row}) orientation`);
-        });
-        assertVecClose(at(placements[0].matrix, [7, -3]), [7, -3], 0, "the source cell");
-      }),
+        },
+      ),
     );
   });
 
   it("a column flip mirrors left↔right about the cell centre, a row flip top↔bottom", () => {
     fc.assert(
-      fc.property(stepPt, stepPt, smallVec2, smallVec2, (stepX, stepY, cellCenter, offset) => {
-        const placements = gridPlacements({
-          columns: 2,
-          rows: 2,
-          stepX,
-          stepY,
-          flipColumns: true,
-          flipRows: true,
-          cellCenter,
-        });
-        const p: Vec2 = [cellCenter[0] + offset[0], cellCenter[1] + offset[1]];
-        const tol = 1e-9 * scaleOf(cellCenter, offset, [stepX, stepY]);
-        const expected = (col: number, row: number): Vec2 => [
-          cellCenter[0] + col * stepX + (col === 1 ? -offset[0] : offset[0]),
-          cellCenter[1] + row * stepY + (row === 1 ? -offset[1] : offset[1]),
-        ];
-        placements.forEach((pl) => {
-          assertVecClose(at(pl.matrix, p), expected(pl.col, pl.row), tol, `cell (${pl.col}, ${pl.row})`);
-        });
-      }),
+      fc.property(
+        stepPt,
+        stepPt,
+        smallVec2,
+        smallVec2,
+        (stepX, stepY, cellCenter, offset) => {
+          const placements = gridPlacements({
+            columns: 2,
+            rows: 2,
+            stepX,
+            stepY,
+            flipColumns: true,
+            flipRows: true,
+            cellCenter,
+          });
+          const p: Vec2 = [
+            cellCenter[0] + offset[0],
+            cellCenter[1] + offset[1],
+          ];
+          const tol = 1e-9 * scaleOf(cellCenter, offset, [stepX, stepY]);
+          const expected = (col: number, row: number): Vec2 => [
+            cellCenter[0] + col * stepX + (col === 1 ? -offset[0] : offset[0]),
+            cellCenter[1] + row * stepY + (row === 1 ? -offset[1] : offset[1]),
+          ];
+          placements.forEach((pl) => {
+            assertVecClose(
+              at(pl.matrix, p),
+              expected(pl.col, pl.row),
+              tol,
+              `cell (${pl.col}, ${pl.row})`,
+            );
+          });
+        },
+      ),
     );
   });
 });
@@ -414,8 +534,17 @@ describe("repeat — mirror (properties)", () => {
       fc.property(angleDeg, smallVec2, vec2, (angle, origin, p) => {
         const placements = mirrorPlacements({ angleDeg: angle, origin });
         expect(placements).toHaveLength(2);
-        expect(placements[0]).toEqual({ index: 0, col: 0, row: 0, matrix: [1, 0, 0, 1, 0, 0] });
-        expect([placements[1].index, placements[1].col, placements[1].row]).toEqual([1, 1, 0]);
+        expect(placements[0]).toEqual({
+          index: 0,
+          col: 0,
+          row: 0,
+          matrix: [1, 0, 0, 1, 0, 0],
+        });
+        expect([
+          placements[1].index,
+          placements[1].col,
+          placements[1].row,
+        ]).toEqual([1, 1, 0]);
         const m = placements[1].matrix;
         assertVecClose(at(m, at(m, p)), p, 1e-9 * scaleOf(origin, p));
         assertVecClose(at(m, origin), origin, 1e-9 * scaleOf(origin));
@@ -428,7 +557,12 @@ describe("repeat — mirror (properties)", () => {
       fc.property(angleDeg, (angle) => {
         const n = mirrorAxisNormal(angle);
         assertClose(Math.hypot(n[0], n[1]), 1, 1e-12, "length");
-        assertClose(n[0] * Math.cos(angle * DEG) + n[1] * Math.sin(angle * DEG), 0, 1e-12, "dot with the axis");
+        assertClose(
+          n[0] * Math.cos(angle * DEG) + n[1] * Math.sin(angle * DEG),
+          0,
+          1e-12,
+          "dot with the axis",
+        );
       }),
     );
     assertVecClose(mirrorAxisNormal(90), [1, 0], 1e-12);
@@ -437,16 +571,24 @@ describe("repeat — mirror (properties)", () => {
 
   it("an axis `offset` off the centre throws the mirror image 2·offset along the normal", () => {
     fc.assert(
-      fc.property(angleDeg, smallVec2, real(-300, 300), (angle, center, offset) => {
-        const origin = mirrorOriginFor(center, angle, offset);
-        const n = mirrorAxisNormal(angle);
-        const image = at(mirrorPlacements({ angleDeg: angle, origin })[1].matrix, center);
-        assertVecClose(
-          image,
-          [center[0] + 2 * offset * n[0], center[1] + 2 * offset * n[1]],
-          1e-9 * scaleOf(center, [offset, offset]),
-        );
-      }),
+      fc.property(
+        angleDeg,
+        smallVec2,
+        real(-300, 300),
+        (angle, center, offset) => {
+          const origin = mirrorOriginFor(center, angle, offset);
+          const n = mirrorAxisNormal(angle);
+          const image = at(
+            mirrorPlacements({ angleDeg: angle, origin })[1].matrix,
+            center,
+          );
+          assertVecClose(
+            image,
+            [center[0] + 2 * offset * n[0], center[1] + 2 * offset * n[1]],
+            1e-9 * scaleOf(center, [offset, offset]),
+          );
+        },
+      ),
     );
   });
 });
@@ -467,16 +609,21 @@ describe("repeat — the artboard fit and the extent (properties)", () => {
     fc.assert(
       fc.property(placements, bounds, page, (ps, b, pg) => {
         const { placed, dropped } = fitPlacementsToPage(ps, b, pg);
-        expect([...placed, ...dropped].map((p) => p.index).sort((x, y) => x - y)).toEqual(
-          ps.map((p) => p.index),
-        );
+        expect(
+          [...placed, ...dropped].map((p) => p.index).sort((x, y) => x - y),
+        ).toEqual(ps.map((p) => p.index));
         expect(placed.some((p) => p.index === 0)).toBe(true);
         const inside = (p: RepeatPlacement): boolean => {
           const [top, left, bottom, right] = transformBounds(b, p.matrix);
-          return left >= 0 && top >= 0 && right <= pg.width && bottom <= pg.height;
+          return (
+            left >= 0 && top >= 0 && right <= pg.width && bottom <= pg.height
+          );
         };
-        for (const p of placed) if (p.index !== 0) assertTrue(inside(p), `placed ${p.index} is off the page`);
-        for (const p of dropped) assertTrue(!inside(p), `dropped ${p.index} was on the page`);
+        for (const p of placed)
+          if (p.index !== 0)
+            assertTrue(inside(p), `placed ${p.index} is off the page`);
+        for (const p of dropped)
+          assertTrue(!inside(p), `dropped ${p.index} was on the page`);
       }),
     );
   });
@@ -484,7 +631,10 @@ describe("repeat — the artboard fit and the extent (properties)", () => {
   it("an unreadable page keeps everything", () => {
     fc.assert(
       fc.property(placements, bounds, (ps, b) => {
-        expect(fitPlacementsToPage(ps, b, null)).toEqual({ placed: ps, dropped: [] });
+        expect(fitPlacementsToPage(ps, b, null)).toEqual({
+          placed: ps,
+          dropped: [],
+        });
       }),
     );
   });

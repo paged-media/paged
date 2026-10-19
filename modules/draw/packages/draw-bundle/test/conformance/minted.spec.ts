@@ -30,7 +30,14 @@
 //     batch has to keep — the two that were known, and the one that
 //     decides how many rebuilds one batch may carry.
 
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "bun:test";
+import {
+  afterAll,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+} from "bun:test";
 
 import type {
   BundleHost,
@@ -100,7 +107,11 @@ const remove = (id: ElementId | string): MutationInput => ({
 });
 const fill = (elementId: ElementId, value: string | null): MutationInput => ({
   op: "setElementProperty",
-  args: { elementId, path: "frameFillColor", value: { type: "colorRef", value } },
+  args: {
+    elementId,
+    path: "frameFillColor",
+    value: { type: "colorRef", value },
+  },
 });
 
 /** The raw reply to a mutation — the engine's own words. */
@@ -109,7 +120,11 @@ interface RawApplied {
   payload: {
     appliedSeq?: number;
     createdId?: ElementId | null;
-    minted?: { handle: string | null; element: ElementId; storyId: string | null }[];
+    minted?: {
+      handle: string | null;
+      element: ElementId;
+      storyId: string | null;
+    }[];
     error?: unknown;
   };
 }
@@ -130,8 +145,11 @@ describe("draw conformance — the minted seam (what did my write create)", () =
   afterAll(() => h?.dispose());
 
   const raw = async (mutation: MutationInput): Promise<RawApplied> =>
-    (await h.host.editor.client.mutate(mutation as Mutation)) as unknown as RawApplied;
-  const batch = (...ops: MutationInput[]): MutationInput => batchMutationFor(ops);
+    (await h.host.editor.client.mutate(
+      mutation as Mutation,
+    )) as unknown as RawApplied;
+  const batch = (...ops: MutationInput[]): MutationInput =>
+    batchMutationFor(ops);
   /** `handle=kind:id` per minted element, `-` for an unnamed one. */
   const listed = (reply: RawApplied): string[] =>
     (reply.payload.minted ?? []).map(
@@ -150,8 +168,14 @@ describe("draw conformance — the minted seam (what did my write create)", () =
     });
 
     it("a batch lists one entry per creating child, in the order it wrote them", async () => {
-      const reply = await raw(batch(square(10, 10), square(40, 10), square(70, 10)));
-      expect(listed(reply)).toEqual(["-=polygon:uc", "-=polygon:ud", "-=polygon:ue"]);
+      const reply = await raw(
+        batch(square(10, 10), square(40, 10), square(70, 10)),
+      );
+      expect(listed(reply)).toEqual([
+        "-=polygon:uc",
+        "-=polygon:ud",
+        "-=polygon:ue",
+      ]);
       // `createdId` is the LAST of them — what the seam cross-checks a
       // list against before believing it is this mutation's.
       expect(reply.payload.createdId).toEqual({ kind: "polygon", id: "ue" });
@@ -171,7 +195,11 @@ describe("draw conformance — the minted seam (what did my write create)", () =
       // Engine 0.70.0 (core c7d9ccb): a batch that translates whole now
       // names each bound mint, as the mixed lane always did. The group
       // was not bound, so it stays unnamed.
-      expect(listed(reply)).toEqual(["a=polygon:uc", "b=polygon:ud", "-=group:ue"]);
+      expect(listed(reply)).toEqual([
+        "a=polygon:uc",
+        "b=polygon:ud",
+        "-=group:ue",
+      ]);
       expect(reply.payload.createdId).toEqual({ kind: "group", id: "ue" });
       expect(await treeShape(h)).toBe("ua ub ue[uc ud]");
     });
@@ -247,14 +275,18 @@ describe("draw conformance — the minted seam (what did my write create)", () =
           bind("a"),
           stampDrawMetadata(ref("a"), {
             v: 1,
-            data: { probe: { id: "$h:a", element: { kind: "polygon", id: "$h:a" } } },
+            data: {
+              probe: { id: "$h:a", element: { kind: "polygon", id: "$h:a" } },
+            },
           }),
         ),
       );
       const made = reply.payload.minted![0]!.element;
       expect(await h.host.document.getMetadata(made)).toEqual({
         v: 1,
-        data: { probe: { id: "$h:a", element: { kind: "polygon", id: "$h:a" } } },
+        data: {
+          probe: { id: "$h:a", element: { kind: "polygon", id: "$h:a" } },
+        },
       });
     });
   });
@@ -305,12 +337,9 @@ describe("draw conformance — the minted seam (what did my write create)", () =
       const { minting, bound, shape, undoSteps, reads } = await run(counted);
       expect(reads).toBe(0);
       // Everything minted, in order — the absorbed contour included.
-      expect(mintedIds(minting).map((e) => `${e.kind}:${String(e.id)}`)).toEqual([
-        "polygon:uc",
-        "polygon:ud",
-        "polygon:ue",
-        "group:uf",
-      ]);
+      expect(
+        mintedIds(minting).map((e) => `${e.kind}:${String(e.id)}`),
+      ).toEqual(["polygon:uc", "polygon:ud", "polygon:ue", "group:uf"]);
       expect(Object.fromEntries(bound!.byHandle)).toEqual({
         p0: { kind: "polygon", id: "uc" },
         p0_hole: { kind: "polygon", id: "ud" },
@@ -366,11 +395,18 @@ describe("draw conformance — the minted seam (what did my write create)", () =
         outcome: { applied: true, createdId: null, pageIds: [] },
         minted: [{ element, handle }],
       });
-      expect(bindMinted(told({ kind: "group", id: "g" } as ElementId, null), one)).toBeNull();
-      // …and a name the engine reports differently from the batch's.
-      expect(bindMinted(told({ kind: "polygon", id: "u1" } as ElementId, "q"), one)).toBeNull();
       expect(
-        bindMinted(told({ kind: "polygon", id: "u1" } as ElementId, "p"), one)?.byHandle.get("p"),
+        bindMinted(told({ kind: "group", id: "g" } as ElementId, null), one),
+      ).toBeNull();
+      // …and a name the engine reports differently from the batch's.
+      expect(
+        bindMinted(told({ kind: "polygon", id: "u1" } as ElementId, "q"), one),
+      ).toBeNull();
+      expect(
+        bindMinted(
+          told({ kind: "polygon", id: "u1" } as ElementId, "p"),
+          one,
+        )?.byHandle.get("p"),
       ).toEqual({ kind: "polygon", id: "u1" });
     });
 
@@ -391,9 +427,17 @@ describe("draw conformance — the minted seam (what did my write create)", () =
   // it is the engine's, not this bundle's.
   describe("the batch rules a build-replace-group flow keeps (measured)", () => {
     /** A grouped pair at `x`, built the way a flow builds one. */
-    const pair = async (x: number): Promise<[ElementId, ElementId, ElementId]> => {
+    const pair = async (
+      x: number,
+    ): Promise<[ElementId, ElementId, ElementId]> => {
       const reply = await raw(
-        batch(square(x, 200), bind("a"), square(x + 25, 200), bind("b"), group(ref("a"), ref("b"))),
+        batch(
+          square(x, 200),
+          bind("a"),
+          square(x + 25, 200),
+          bind("b"),
+          group(ref("a"), ref("b")),
+        ),
       );
       const [a, b, g] = reply.payload.minted!.map((m) => m.element);
       return [a!, b!, g!];
@@ -405,7 +449,9 @@ describe("draw conformance — the minted seam (what did my write create)", () =
       bind(`n${i}_1`),
     ];
     const refusal = (reply: RawApplied): string =>
-      reply.kind === "mutationFailed" ? JSON.stringify(reply.payload.error) : "";
+      reply.kind === "mutationFailed"
+        ? JSON.stringify(reply.payload.error)
+        : "";
 
     // FIXED in 0.71.8 (core d98e439). Up to 0.71.7 this batch was REFUSED
     // — "batch failed at index 1: position 3 out of range for parent
@@ -418,7 +464,9 @@ describe("draw conformance — the minted seam (what did my write create)", () =
     it("a batch that DELETES then INSERTS applies (0.71.8; it was refused) — and one undo restores it", async () => {
       const one = await raw(square(10, 200));
       expect(await treeShape(h)).toBe("ua ub uc");
-      const reply = await raw(batch(remove(one.payload.createdId!), square(40, 200), bind("x")));
+      const reply = await raw(
+        batch(remove(one.payload.createdId!), square(40, 200), bind("x")),
+      );
       expect(refusal(reply)).toBe("");
       expect(reply.kind).toBe("mutationApplied");
       expect(listed(reply)).toEqual(["x=polygon:ud"]);
@@ -456,7 +504,9 @@ describe("draw conformance — the minted seam (what did my write create)", () =
 
       // …the last member: the group goes with it, and ONE undo restores
       // the group AND both members.
-      expect((await raw(batch(remove(a), remove(b)))).kind).toBe("mutationApplied");
+      expect((await raw(batch(remove(a), remove(b)))).kind).toBe(
+        "mutationApplied",
+      );
       expect(await treeShape(h)).toBe("ua ub");
       await h.host.document.undo();
       expect(await treeShape(h)).toBe(before);
@@ -468,7 +518,13 @@ describe("draw conformance — the minted seam (what did my write create)", () =
       const [a, b, g] = await pair(40);
       const before = await treeShape(h);
       const reply = await raw(
-        batch(...fresh(0, 40), dissolve(g), remove(a), remove(b), group(ref("n0_0"), ref("n0_1"))),
+        batch(
+          ...fresh(0, 40),
+          dissolve(g),
+          remove(a),
+          remove(b),
+          group(ref("n0_0"), ref("n0_1")),
+        ),
       );
       expect(reply.kind).toBe("mutationApplied");
       expect(await treeShape(h)).toBe("ua ub u11[uf u10]");
@@ -489,12 +545,16 @@ describe("draw conformance — the minted seam (what did my write create)", () =
         ),
       );
       expect(reply.kind).toBe("mutationApplied");
-      expect(await treeShape(h)).toBe("ua ub u1b[u15 u16] u1c[u17 u18] u1d[u19 u1a]");
+      expect(await treeShape(h)).toBe(
+        "ua ub u1b[u15 u16] u1c[u17 u18] u1d[u19 u1a]",
+      );
       // ONE undo step, and it puts back exactly what was there.
       await h.host.document.undo();
       expect(await treeShape(h)).toBe(before);
       await h.host.document.redo();
-      expect(await treeShape(h)).toBe("ua ub u1b[u15 u16] u1c[u17 u18] u1d[u19 u1a]");
+      expect(await treeShape(h)).toBe(
+        "ua ub u1b[u15 u16] u1c[u17 u18] u1d[u19 u1a]",
+      );
     });
 
     it("…and, since 0.65.0, rebuild by rebuild too: interleaved, the batch applies, the document is right and one undo restores it", async () => {
@@ -549,7 +609,13 @@ describe("draw conformance — the minted seam (what did my write create)", () =
         const before = await treeShape(h);
         expect(before).toBe("ua ub ue[uc ud] u11[uf u10]");
         const reply = await raw(
-          batch(...fresh(0, 40), dissolve(g), remove(a), remove(b), group(ref("n0_0"), ref("n0_1"))),
+          batch(
+            ...fresh(0, 40),
+            dissolve(g),
+            remove(a),
+            remove(b),
+            group(ref("n0_0"), ref("n0_1")),
+          ),
         );
         expect(reply.kind).toBe("mutationApplied");
         expect(await treeShape(h)).toBe("ua ub u11[uf u10] u14[u12 u13]");

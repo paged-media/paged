@@ -50,7 +50,10 @@ const EL = { kind: "polygon", id: "p" } as ElementId;
 
 describe("planScissorsAt", () => {
   it("a click ON an anchor cuts there, with no insert (the host Scissors' rule)", () => {
-    expect(planScissorsAt(SQUARE, [100.5, 0.5], 2)).toEqual({ kind: "anchor", index: 1 });
+    expect(planScissorsAt(SQUARE, [100.5, 0.5], 2)).toEqual({
+      kind: "anchor",
+      index: 1,
+    });
   });
 
   it("a click on a SEGMENT plans the de Casteljau insert, then opens at the new anchor", () => {
@@ -84,7 +87,10 @@ describe("planScissorsAt", () => {
   it("an OPEN contour's ENDPOINT is not a cut (the engine refuses it); an interior anchor is", () => {
     expect(planScissorsAt(CURVE, [0, 0], 1)).toBeNull();
     expect(planScissorsAt(CURVE, [150, 80], 1)).toBeNull();
-    expect(planScissorsAt(CURVE, [100, 0], 1)).toEqual({ kind: "anchor", index: 1 });
+    expect(planScissorsAt(CURVE, [100, 0], 1)).toEqual({
+      kind: "anchor",
+      index: 1,
+    });
   });
 
   it("a click on nothing plans nothing", () => {
@@ -103,7 +109,10 @@ describe("scissorsMutation", () => {
       "pathPointInsert",
       "pathOpenAt",
     ]);
-    expect(batch.args.ops[3]).toEqual({ op: "pathOpenAt", args: { elementId: EL, index: 1 } });
+    expect(batch.args.ops[3]).toEqual({
+      op: "pathOpenAt",
+      args: { elementId: EL, index: 1 },
+    });
   });
 
   it("an anchor cut is the one pathOpenAt", () => {

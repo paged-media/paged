@@ -239,9 +239,7 @@ test.describe("gestures.md DR-05/DR-07 — gridify (Rectangle tool)", () => {
     page,
   }) => {
     const before = await treeCount(page, "rectangle");
-    const seen = new Set(
-      (await treeIds(page, "rectangle")).map((r) => r.id),
-    );
+    const seen = new Set((await treeIds(page, "rectangle")).map((r) => r.id));
     await activateTool(page, "shape");
     const from = await screenPoint(page, 140, 140);
     const to = await screenPoint(page, 320, 240);
@@ -271,7 +269,9 @@ test.describe("gestures.md DR-05/DR-07 — gridify (Rectangle tool)", () => {
       .toBe(before);
   });
 
-  test("DR-05/INV-1 — Escape mid-gridify creates nothing @feat:editor-tools.draw.gridify @level:happy", async ({ page }) => {
+  test("DR-05/INV-1 — Escape mid-gridify creates nothing @feat:editor-tools.draw.gridify @level:happy", async ({
+    page,
+  }) => {
     const before = await treeCount(page, "rectangle");
     await activateTool(page, "shape");
     const from = await screenPoint(page, 120, 120);

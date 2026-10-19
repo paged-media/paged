@@ -64,7 +64,8 @@ function withMutate(
     host.document.mutate(mutation);
   const document = new Proxy(host.document, {
     get(target, prop, receiver) {
-      if (prop !== "mutate") return Reflect.get(target, prop, receiver) as unknown;
+      if (prop !== "mutate")
+        return Reflect.get(target, prop, receiver) as unknown;
       return (mutation: MutationInput) => mutate(mutation, real);
     },
   });
@@ -134,7 +135,9 @@ export async function undoMarkOn(
   })) as RawReply;
   const seq = reply.payload?.appliedSeq;
   if (reply.kind !== "mutationApplied" || typeof seq !== "number") {
-    throw new Error(`undoMarkOn: the mark was refused — ${JSON.stringify(reply)}`);
+    throw new Error(
+      `undoMarkOn: the mark was refused — ${JSON.stringify(reply)}`,
+    );
   }
   return seq;
 }
@@ -156,10 +159,14 @@ export async function undoStepsBackTo(
     const undone = reply.payload?.undoneSeq;
     if (undone === mark) return steps;
     if (typeof undone === "number" && undone < mark) {
-      throw new Error(`undoStepsBackTo: undid past the mark (${undone} < ${mark})`);
+      throw new Error(
+        `undoStepsBackTo: undid past the mark (${undone} < ${mark})`,
+      );
     }
   }
-  throw new Error(`undoStepsBackTo: the mark did not come back in ${limit} undos`);
+  throw new Error(
+    `undoStepsBackTo: the mark did not come back in ${limit} undos`,
+  );
 }
 
 // ------------------------------------------------------- document pictures
@@ -173,7 +180,9 @@ export function treeShapeOf(roots: readonly SceneTreeNode[]): string {
       const below = treeShapeOf(node.children ?? []);
       if (!node.id) return below;
       const id =
-        typeof node.id.id === "string" ? node.id.id : JSON.stringify(node.id.id);
+        typeof node.id.id === "string"
+          ? node.id.id
+          : JSON.stringify(node.id.id);
       return node.id.kind === "group" || (node.children ?? []).length > 0
         ? `${id}[${below}]`
         : id;

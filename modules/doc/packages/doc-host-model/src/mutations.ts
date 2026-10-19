@@ -34,7 +34,14 @@ export function buildStyleMutations(ir: LoweredDoc): Mutation[] {
   for (const sw of ir.swatches) {
     ops.push({
       op: "createSwatch",
-      args: { spec: { selfId: sw.id, name: sw.name, space: sw.space, value: sw.value } },
+      args: {
+        spec: {
+          selfId: sw.id,
+          name: sw.name,
+          space: sw.space,
+          value: sw.value,
+        },
+      },
     } as Mutation);
   }
   for (const style of ir.styles) {
@@ -42,7 +49,12 @@ export function buildStyleMutations(ir: LoweredDoc): Mutation[] {
     for (const prop of style.props) {
       ops.push({
         op: "setStyleProperty",
-        args: { collection: style.collection, styleId: style.id, path: prop.path, value: prop.value },
+        args: {
+          collection: style.collection,
+          styleId: style.id,
+          path: prop.path,
+          value: prop.value,
+        },
       } as Mutation);
     }
   }
@@ -50,8 +62,18 @@ export function buildStyleMutations(ir: LoweredDoc): Mutation[] {
 }
 
 function createStyleOp(style: LoweredStyle): Mutation {
-  const op = style.collection === "paragraph" ? "createParagraphStyle" : "createCharacterStyle";
-  return { op, args: { selfId: style.id, name: style.name, basedOn: style.basedOn ?? null } } as Mutation;
+  const op =
+    style.collection === "paragraph"
+      ? "createParagraphStyle"
+      : "createCharacterStyle";
+  return {
+    op,
+    args: {
+      selfId: style.id,
+      name: style.name,
+      basedOn: style.basedOn ?? null,
+    },
+  } as Mutation;
 }
 
 // ---------------------------------------------------------------------------
@@ -99,7 +121,14 @@ function poured(
   /** Index of the native paragraph the text starts in; `undefined` when the
    *  pour does not know (no paragraph addresses are emitted then). */
   paraBase?: number,
-): { text: string; ranges: Range[]; images: ImageAt[]; links: LinkAt[]; length: number; breaks: number } {
+): {
+  text: string;
+  ranges: Range[];
+  images: ImageAt[];
+  links: LinkAt[];
+  length: number;
+  breaks: number;
+} {
   const ranges: Range[] = [];
   const images: ImageAt[] = [];
   const links: LinkAt[] = [];
@@ -108,7 +137,9 @@ function poured(
   // Separators emitted so far: each starts a new native paragraph.
   let breaks = 0;
   const addressed = (r: Range, index: number): Range =>
-    paraBase !== undefined && r.start === r.end ? { ...r, paragraph: paraBase + index } : r;
+    paraBase !== undefined && r.start === r.end
+      ? { ...r, paragraph: paraBase + index }
+      : r;
   paragraphs.forEach((para, pIdx) => {
     const paraStart = offset;
     const firstIndex = breaks;
@@ -130,7 +161,12 @@ function poured(
       local += chars.length;
       offset += chars.length;
       if (run.charStyleId) {
-        ranges.push({ start: runStart, end: offset, style: run.charStyleId, scope: "character" });
+        ranges.push({
+          start: runStart,
+          end: offset,
+          style: run.charStyleId,
+          scope: "character",
+        });
       }
       if (run.hyperlinkUrl && offset > runStart) {
         links.push({ start: runStart, end: offset, url: run.hyperlinkUrl });
@@ -148,18 +184,32 @@ function poured(
     // of a paragraph that has text (see the two separator rules above).
     const splits = (at: number) => (at > 0 && at < local) || at >= local;
     // The native paragraph (relative to this pour) segment `k` is.
-    const segIndex = (k: number) => firstIndex + segs.slice(0, k + 1).filter((s) => splits(s.at)).length;
+    const segIndex = (k: number) =>
+      firstIndex + segs.slice(0, k + 1).filter((s) => splits(s.at)).length;
     const firstEnd = segs.length > 0 ? paraStart + segs[0].at : offset;
     if (para.paraStyleId) {
       ranges.push(
-        addressed({ start: paraStart, end: firstEnd, style: para.paraStyleId, scope: "paragraph" }, firstIndex),
+        addressed(
+          {
+            start: paraStart,
+            end: firstEnd,
+            style: para.paraStyleId,
+            scope: "paragraph",
+          },
+          firstIndex,
+        ),
       );
     }
     segs.forEach((seg, k) => {
       const start = paraStart + seg.at;
       const end = k + 1 < segs.length ? paraStart + segs[k + 1].at : offset;
       if (seg.paraStyleId) {
-        ranges.push(addressed({ start, end, style: seg.paraStyleId, scope: "paragraph" }, segIndex(k)));
+        ranges.push(
+          addressed(
+            { start, end, style: seg.paraStyleId, scope: "paragraph" },
+            segIndex(k),
+          ),
+        );
       }
     });
     // An inline picture is a character of its line (core 17d3d3d places the
@@ -171,7 +221,9 @@ function poured(
       const inSeg = segs.filter((s) => splits(s.at) && s.at <= at).length;
       images.push({
         offset: paraStart + at,
-        ...(paraBase !== undefined ? { paragraph: paraBase + firstIndex + inSeg } : {}),
+        ...(paraBase !== undefined
+          ? { paragraph: paraBase + firstIndex + inSeg }
+          : {}),
         widthPt: img.widthPt,
         heightPt: img.heightPt,
         uri: img.uri,
@@ -216,8 +268,18 @@ export function buildTextPour(
      *  an engine without that address ignores the field. */
     paraBase?: number;
   } = {},
-): { mutations: Mutation[]; length: number; byteLength: number; carets: Mutation[]; breaks: number } {
-  const { text, ranges, images, links, length, breaks } = poured(paragraphs, styleBase, opts.paraBase);
+): {
+  mutations: Mutation[];
+  length: number;
+  byteLength: number;
+  carets: Mutation[];
+  breaks: number;
+} {
+  const { text, ranges, images, links, length, breaks } = poured(
+    paragraphs,
+    styleBase,
+    opts.paraBase,
+  );
   const ops: Mutation[] = [];
   const carets: Mutation[] = [];
   if (text.length > 0) {
@@ -227,7 +289,14 @@ export function buildTextPour(
     } as Mutation);
   }
   for (const r of ranges.filter((r) => r.scope === "paragraph")) {
-    const op = applyStyleOp(storyId, r.start, r.end, r.style, "paragraph", r.paragraph);
+    const op = applyStyleOp(
+      storyId,
+      r.start,
+      r.end,
+      r.style,
+      "paragraph",
+      r.paragraph,
+    );
     if (isCaret(r)) carets.push(op);
     if (!(isCaret(r) && opts.deferCarets)) ops.push(op);
   }
@@ -276,7 +345,14 @@ function applyStyleOp(
   /** v65 paragraph address (see `Range.paragraph`). */
   paragraph?: number,
 ): Mutation {
-  const args = { storyId, start, end, style, scope, ...(paragraph !== undefined ? { paragraph } : {}) };
+  const args = {
+    storyId,
+    start,
+    end,
+    style,
+    scope,
+    ...(paragraph !== undefined ? { paragraph } : {}),
+  };
   return { op: "applyStyle", args } as Mutation;
 }
 
@@ -302,7 +378,10 @@ function applyStyleInCell(
 // Tables
 
 /** The `insertTable` op (its outcome mints the tableId). */
-export function buildTableInsert(table: LoweredTable, storyId: string): Mutation {
+export function buildTableInsert(
+  table: LoweredTable,
+  storyId: string,
+): Mutation {
   return {
     op: "insertTable",
     args: {
@@ -323,7 +402,9 @@ export function buildTableInsert(table: LoweredTable, storyId: string): Mutation
  *  qualifier, so ranged styling can't reach cell interiors (a Tier-2 limitation);
  *  cell text is poured at the cell's default formatting. */
 function cellText(cell: LoweredCell): string {
-  return cell.paragraphs.map((p) => p.runs.map((r) => r.text).join("")).join("\n");
+  return cell.paragraphs
+    .map((p) => p.runs.map((r) => r.text).join(""))
+    .join("\n");
 }
 
 /** A cell whose Word content is one EMPTY paragraph that carries a paragraph
@@ -333,21 +414,32 @@ function cellText(cell: LoweredCell): string {
  *  one empty paragraph (core `apply_insert_text`), which the caret can then
  *  style. */
 function isStyledEmptyCell(cell: LoweredCell): boolean {
-  return cellText(cell).length === 0 && cell.paragraphs.some((p) => p.paraStyleId);
+  return (
+    cellText(cell).length === 0 && cell.paragraphs.some((p) => p.paraStyleId)
+  );
 }
 
 /** The cell-pour + merge batch for a resolved `tableId`: `insertText` per cell
  *  (addressed by TextCellAddr) + `setCellSpan` per merged cell. A styled cell
  *  with no text gets an EMPTY `insertText`, so it has the paragraph its caret
  *  styles ({@link buildTableCellCarets}). */
-export function buildTableCells(table: LoweredTable, storyId: string, tableId: string): Mutation {
+export function buildTableCells(
+  table: LoweredTable,
+  storyId: string,
+  tableId: string,
+): Mutation {
   const ops: Mutation[] = [];
   for (const cell of table.cells) {
     const text = cellText(cell);
     if (isStyledEmptyCell(cell)) {
       ops.push({
         op: "insertText",
-        args: { storyId, offset: 0, text: "", cell: { tableId, row: cell.row, col: cell.col } },
+        args: {
+          storyId,
+          offset: 0,
+          text: "",
+          cell: { tableId, row: cell.row, col: cell.col },
+        },
       } as Mutation);
     }
     if (text.length > 0) {
@@ -367,11 +459,29 @@ export function buildTableCells(table: LoweredTable, storyId: string, tableId: s
           const runStart = offset;
           offset += codePointLen(run.text);
           if (run.charStyleId) {
-            ops.push(applyStyleInCell(storyId, runStart, offset, run.charStyleId, "character", addr));
+            ops.push(
+              applyStyleInCell(
+                storyId,
+                runStart,
+                offset,
+                run.charStyleId,
+                "character",
+                addr,
+              ),
+            );
           }
         }
         if (para.paraStyleId && offset > paraStart) {
-          ops.push(applyStyleInCell(storyId, paraStart, offset, para.paraStyleId, "paragraph", addr));
+          ops.push(
+            applyStyleInCell(
+              storyId,
+              paraStart,
+              offset,
+              para.paraStyleId,
+              "paragraph",
+              addr,
+            ),
+          );
         }
         void pIdx;
       });
@@ -382,14 +492,28 @@ export function buildTableCells(table: LoweredTable, storyId: string, tableId: s
     // default and every row comes out shorter than Word's.
     const elementId = {
       kind: "tableCell",
-      id: { story_id: storyId, table_id: tableId, row: cell.row, col: cell.col },
+      id: {
+        story_id: storyId,
+        table_id: tableId,
+        row: cell.row,
+        col: cell.col,
+      },
     };
     if (cell.insetsPt) {
-      const paths = ["cellInsetTop", "cellInsetLeft", "cellInsetBottom", "cellInsetRight"];
+      const paths = [
+        "cellInsetTop",
+        "cellInsetLeft",
+        "cellInsetBottom",
+        "cellInsetRight",
+      ];
       cell.insetsPt.forEach((pt, i) => {
         ops.push({
           op: "setElementProperty",
-          args: { elementId, path: paths[i], value: { type: "length", value: pt } },
+          args: {
+            elementId,
+            path: paths[i],
+            value: { type: "length", value: pt },
+          },
         } as Mutation);
       });
     }
@@ -430,7 +554,11 @@ export function buildTableCells(table: LoweredTable, storyId: string, tableId: s
  *  with an empty `insertText`, and its caret at 0 styles it.
  *  Applied after every cell is poured (see {@link buildStoryBlocks}), so an
  *  engine that refuses a caret costs no cell its text. */
-export function buildTableCellCarets(table: LoweredTable, storyId: string, tableId: string): Mutation[] {
+export function buildTableCellCarets(
+  table: LoweredTable,
+  storyId: string,
+  tableId: string,
+): Mutation[] {
   const ops: Mutation[] = [];
   for (const cell of table.cells) {
     if (cellText(cell).length === 0 && !isStyledEmptyCell(cell)) continue;
@@ -440,7 +568,8 @@ export function buildTableCellCarets(table: LoweredTable, storyId: string, table
     for (const para of cell.paragraphs) {
       const paraStart = offset;
       for (const run of para.runs) offset += codePointLen(run.text);
-      if (para.paraStyleId && offset === paraStart) last.set(paraStart, para.paraStyleId);
+      if (para.paraStyleId && offset === paraStart)
+        last.set(paraStart, para.paraStyleId);
     }
     for (const [at, style] of last) {
       ops.push(applyStyleInCell(storyId, at, at, style, "paragraph", addr));
@@ -481,13 +610,17 @@ export function buildStory(ir: LoweredDoc, storyId: string): StoryStep[] {
  *  is one story holding every block. */
 export function sectionBlocks(ir: LoweredDoc): LoweredBlock[][] {
   const blocks = ir.story.blocks;
-  const sections = ir.sections && ir.sections.length > 0 ? ir.sections : [ir.section];
+  const sections =
+    ir.sections && ir.sections.length > 0 ? ir.sections : [ir.section];
   const starts: number[] = [];
   sections.forEach((s, k) => {
-    const joins = k > 0 && s.story !== undefined && s.story === sections[k - 1].story;
+    const joins =
+      k > 0 && s.story !== undefined && s.story === sections[k - 1].story;
     if (!joins) starts.push(s.firstBlock ?? 0);
   });
-  return starts.map((start, k) => blocks.slice(start, k + 1 < starts.length ? starts[k + 1] : blocks.length));
+  return starts.map((start, k) =>
+    blocks.slice(start, k + 1 < starts.length ? starts[k + 1] : blocks.length),
+  );
 }
 
 /** How many native paragraphs a block list pours as: one per paragraph block,
@@ -496,7 +629,11 @@ export function sectionBlocks(ir: LoweredDoc): LoweredBlock[][] {
 export function pouredParagraphCount(blocks: readonly LoweredBlock[]): number {
   const one = (p: LoweredParagraph) => 1 + (p.segments?.length ?? 0);
   return blocks.reduce(
-    (n, b) => n + (b.kind === "paragraph" ? one(b) : (b.flow ?? []).reduce((k, p) => k + one(p), 0)),
+    (n, b) =>
+      n +
+      (b.kind === "paragraph"
+        ? one(b)
+        : (b.flow ?? []).reduce((k, p) => k + one(p), 0)),
     0,
   );
 }
@@ -517,7 +654,10 @@ export function pouredParagraphCount(blocks: readonly LoweredBlock[]): number {
  *  `docx-lower` reports as a warning. Blank lines inside table cells are
  *  styled in the same step, by cell-addressed carets
  *  ({@link buildTableCellCarets}). */
-export function buildStoryBlocks(blocks: readonly LoweredBlock[], storyId: string): StoryStep[] {
+export function buildStoryBlocks(
+  blocks: readonly LoweredBlock[],
+  storyId: string,
+): StoryStep[] {
   const steps: StoryStep[] = [];
   let pending: LoweredParagraph[] = [];
   // Each text step's carets, filled in when the pour runs it (the style base
@@ -544,7 +684,10 @@ export function buildStoryBlocks(blocks: readonly LoweredBlock[], storyId: strin
       length: probe.length,
       byteLength: probe.byteLength,
       mutations: (textBase, styleBase) => {
-        const out = buildTextPour(paras, storyId, textBase, styleBase, { deferCarets: true, paraBase });
+        const out = buildTextPour(paras, storyId, textBase, styleBase, {
+          deferCarets: true,
+          paraBase,
+        });
         caretsByStep[slot] = out.carets;
         return out.mutations;
       },
@@ -601,8 +744,13 @@ export function buildStoryBlocks(blocks: readonly LoweredBlock[], storyId: strin
  * `batch`: style catalog + swatches, then the paragraph pour. For documents with
  * tables use {@link buildStory} (tables need mid-execution id resolution).
  */
-export function buildDocumentMutations(ir: LoweredDoc, opts: { storyId: string }): Mutation {
-  const paragraphs = ir.story.blocks.filter((b) => b.kind === "paragraph") as LoweredParagraph[];
+export function buildDocumentMutations(
+  ir: LoweredDoc,
+  opts: { storyId: string },
+): Mutation {
+  const paragraphs = ir.story.blocks.filter(
+    (b) => b.kind === "paragraph",
+  ) as LoweredParagraph[];
   const ops: Mutation[] = [
     ...buildStyleMutations(ir),
     ...buildTextPour(paragraphs, opts.storyId, 0).mutations,
@@ -614,7 +762,9 @@ export function buildDocumentMutations(ir: LoweredDoc, opts: { storyId: string }
  *  structural so this package needs no newer plugin-api than it builds on. */
 export interface StoryContentLike {
   selfId?: string;
-  paragraphs: Array<{ runs: Array<{ text: string }> } & Record<string, unknown>>;
+  paragraphs: Array<
+    { runs: Array<{ text: string }> } & Record<string, unknown>
+  >;
 }
 
 /**
@@ -630,7 +780,8 @@ export function mergeSectionContents(
   contents: readonly StoryContentLike[],
   pouredParagraphs: readonly number[],
 ): StoryContentLike {
-  const isEmpty = (p: { runs: Array<{ text: string }> }) => p.runs.every((r) => r.text === "");
+  const isEmpty = (p: { runs: Array<{ text: string }> }) =>
+    p.runs.every((r) => r.text === "");
   const paragraphs: StoryContentLike["paragraphs"] = [];
   contents.forEach((c, k) => {
     const ps = [...c.paragraphs];
@@ -657,9 +808,21 @@ export function bodyRunLocation(
   ir: LoweredDoc,
   block: number,
   run: number,
-): { story: number; paragraph: number; paragraphText: string; prefix: string; text: string } | null {
+): {
+  story: number;
+  paragraph: number;
+  paragraphText: string;
+  prefix: string;
+  text: string;
+} | null {
   const target = ir.story.blocks[block];
-  if (!target || target.kind !== "paragraph" || run < 0 || run >= target.runs.length) return null;
+  if (
+    !target ||
+    target.kind !== "paragraph" ||
+    run < 0 ||
+    run >= target.runs.length
+  )
+    return null;
   if ((target.segments ?? []).length > 0) return null;
   const groups = sectionBlocks(ir);
   let first = 0;
@@ -670,7 +833,8 @@ export function bodyRunLocation(
       let paragraph = 0;
       for (const b of group.slice(0, block - first)) {
         if (b.kind === "paragraph") paragraph += one(b);
-        else if (b.flow && b.flow.length > 0) paragraph += b.flow.reduce((n, p) => n + one(p), 0);
+        else if (b.flow && b.flow.length > 0)
+          paragraph += b.flow.reduce((n, p) => n + one(p), 0);
         else paragraph += 1;
       }
       const texts = target.runs.map((r) => r.text);

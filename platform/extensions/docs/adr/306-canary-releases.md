@@ -1,6 +1,9 @@
 # ADR 306 — Releases: a canary on every push, version-gated, published without tokens
 
 - **Status:** Accepted. Recorded retroactively on 2026-10-02 from the code at `d90f727`.
+  Superseded 2026-10-18 by [PM-0008](../../../../docs/adr/PM-0008-npm-packages-and-release.md):
+  `plugin-api` and `plugin-sdk` are published by the repository's `release.yml` from a
+  `v0.<protocol>.<patch>` tag, with the engine packages, and the canary lane is gone.
 - **Scope:** `.github/workflows/publish.yml`, `.github/workflows/contract-guard.yml`,
   `scripts/assert-contract-bumped.mjs`, and the `publishConfig` of the three packages
 

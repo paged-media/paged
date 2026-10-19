@@ -41,7 +41,9 @@
 // hence the package.json rather than the module.
 import canvasWasmPackage from "@paged-media/canvas-wasm/package.json" with { type: "json" };
 
-export const PROTOCOL_VERSION: number = protocolFromVersion(canvasWasmPackage.version);
+export const PROTOCOL_VERSION: number = protocolFromVersion(
+  canvasWasmPackage.version,
+);
 
 /** The installed engine package's full version (`0.<protocol>.<patch>`),
  *  for an About line. */
@@ -51,7 +53,9 @@ export const ENGINE_VERSION: string = canvasWasmPackage.version;
 export function protocolFromVersion(version: string): number {
   const minor = Number(version.split(".")[1]);
   if (!Number.isInteger(minor)) {
-    throw new Error(`@paged-media/canvas-wasm version ${version} is not 0.<protocol>.<patch>`);
+    throw new Error(
+      `@paged-media/canvas-wasm version ${version} is not 0.<protocol>.<patch>`,
+    );
   }
   return minor;
 }

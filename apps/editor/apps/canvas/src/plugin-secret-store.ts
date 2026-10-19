@@ -147,7 +147,8 @@ function idbDo<T>(
         const tx = db.transaction(STORE, mode);
         const req = fn(tx.objectStore(STORE));
         req.onsuccess = () => resolve(req.result);
-        req.onerror = () => reject(req.error ?? new Error("idb request failed"));
+        req.onerror = () =>
+          reject(req.error ?? new Error("idb request failed"));
         tx.oncomplete = () => db.close();
       }),
   );
@@ -212,7 +213,11 @@ export function createEditorSecretStore(): EditorSecretStore {
 
   // --- tier-aware primitives ---------------------------------------------
 
-  async function store(pluginId: string, ref: string, value: string): Promise<void> {
+  async function store(
+    pluginId: string,
+    ref: string,
+    value: string,
+  ): Promise<void> {
     const key = nsKey(pluginId, ref);
     if (tier() === "webcrypto") {
       const salt = randomBytes(16);

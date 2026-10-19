@@ -56,10 +56,15 @@ const EXPORTER_ID = "media.paged.doc.exporter.docx";
 function engineGrows(): boolean {
   const require = createRequire(import.meta.url);
   const pkg = JSON.parse(
-    readFileSync(require.resolve("@paged-media/canvas-wasm/package.json"), "utf8"),
+    readFileSync(
+      require.resolve("@paged-media/canvas-wasm/package.json"),
+      "utf8",
+    ),
   ) as { version: string };
   const [, minor, patch] = pkg.version.split(/[.-]/).map(Number);
-  return pkg.version.includes("-local") || minor > 63 || (minor === 63 && patch >= 1);
+  return (
+    pkg.version.includes("-local") || minor > 63 || (minor === 63 && patch >= 1)
+  );
 }
 
 /** Word's pages: [width, height] in points. */
@@ -97,7 +102,10 @@ type CanvasGlobal = { __canvas: { ready: boolean; registries: Registries } };
 
 const invoke = (page: Page, id: string) =>
   page.evaluate(
-    (cmd) => (globalThis as unknown as CanvasGlobal).__canvas.registries.commands.invoke(cmd),
+    (cmd) =>
+      (
+        globalThis as unknown as CanvasGlobal
+      ).__canvas.registries.commands.invoke(cmd),
     id,
   );
 
@@ -116,7 +124,11 @@ async function pageContent(page: Page): Promise<PageContent[]> {
           client: {
             send: (m: unknown) => Promise<{
               kind: string;
-              payload?: { content?: { paragraphs?: Array<{ runs: Array<{ text: string }> }> } };
+              payload?: {
+                content?: {
+                  paragraphs?: Array<{ runs: Array<{ text: string }> }>;
+                };
+              };
             }>;
             selectionGeometry: (s: unknown) => Promise<Rect[]>;
             executeScript: (s: string) => Promise<{ output: string[] }>;
@@ -125,7 +137,9 @@ async function pageContent(page: Page): Promise<PageContent[]> {
       }
     ).__canvas.client;
     const pageIds = (
-      JSON.parse((await c.executeScript("paged.pages()")).output[0] ?? "[]") as Array<{
+      JSON.parse(
+        (await c.executeScript("paged.pages()")).output[0] ?? "[]",
+      ) as Array<{
         selfId: string;
       }>
     ).map((p) => p.selfId);
@@ -133,9 +147,13 @@ async function pageContent(page: Page): Promise<PageContent[]> {
       (await c.executeScript("paged.stories()")).output[0] ?? "[]",
     ) as Array<{ selfId: string }>;
     const out = pageIds.map(() => ({ lines: 0, first: "", last: "" }));
-    const sections: Array<{ label: string; storyId: string; paras: string[] }> = [];
+    const sections: Array<{ label: string; storyId: string; paras: string[] }> =
+      [];
     for (const { selfId } of stories) {
-      const r = await c.send({ kind: "requestStoryContent", payload: { storyId: selfId } });
+      const r = await c.send({
+        kind: "requestStoryContent",
+        payload: { storyId: selfId },
+      });
       const paras = (r.payload?.content?.paragraphs ?? []).map((p) =>
         p.runs.map((run) => run.text).join(""),
       );
@@ -146,7 +164,12 @@ async function pageContent(page: Page): Promise<PageContent[]> {
     sections.sort((a, b) => a.label.localeCompare(b.label));
     for (const { storyId, paras } of sections) {
       const end = paras.reduce((n, p) => n + p.length + 1, 0) - 1;
-      const lines = await c.selectionGeometry({ storyId, start: 0, end, affinity: false });
+      const lines = await c.selectionGeometry({
+        storyId,
+        start: 0,
+        end,
+        affinity: false,
+      });
       for (const l of lines) {
         const i = pageIds.indexOf(l.pageId);
         if (i >= 0) out[i].lines += 1;
@@ -171,7 +194,12 @@ async function pageContent(page: Page): Promise<PageContent[]> {
   });
 }
 
-type PageRow = { sizePt?: [number, number]; widthPt?: number; heightPt?: number; marginTopPt?: number };
+type PageRow = {
+  sizePt?: [number, number];
+  widthPt?: number;
+  heightPt?: number;
+  marginTopPt?: number;
+};
 
 async function pages(page: Page): Promise<PageRow[]> {
   const raw = await script(page, "paged.pages()");
@@ -197,7 +225,10 @@ function documentXml(docx: Buffer): string {
     const name = docx.subarray(p + 46, p + 46 + nameLen).toString("utf8");
     if (name === "word/document.xml") {
       const dataAt =
-        local + 30 + docx.readUInt16LE(local + 26) + docx.readUInt16LE(local + 28);
+        local +
+        30 +
+        docx.readUInt16LE(local + 26) +
+        docx.readUInt16LE(local + 28);
       const data = docx.subarray(dataAt, dataAt + size);
       return (method === 8 ? inflateRawSync(data) : data).toString("utf8");
     }
@@ -212,7 +243,10 @@ test.describe("plugin-doc — standalone open (ADR 029)", () => {
   test("AC-DOCSO-1 — a two-section Word document opens as its own pages, paginated like Word, and saves back whole @feat:plugin-doc.file-entry @level:gesture", async ({
     page,
   }) => {
-    test.skip(!engineGrows(), "this engine predates page growth (canvas-wasm < 0.63.1)");
+    test.skip(
+      !engineGrows(),
+      "this engine predates page growth (canvas-wasm < 0.63.1)",
+    );
     await openCanvas(page);
     await invoke(page, "paged.file.new");
     await page.waitForFunction(
@@ -225,9 +259,9 @@ test.describe("plugin-doc — standalone open (ADR 029)", () => {
         () =>
           page.evaluate(
             () =>
-              (globalThis as unknown as CanvasGlobal).__canvas.registries.importers.resolve(
-                "x.docx",
-              )?.id ?? null,
+              (
+                globalThis as unknown as CanvasGlobal
+              ).__canvas.registries.importers.resolve("x.docx")?.id ?? null,
           ),
         { timeout: 15_000 },
       )
@@ -239,15 +273,24 @@ test.describe("plugin-doc — standalone open (ADR 029)", () => {
     await opened;
 
     // The engine grows the section stories: Word's five pages.
-    await expect.poll(async () => (await pages(page)).length, { timeout: 60_000 }).toBe(5);
+    await expect
+      .poll(async () => (await pages(page)).length, { timeout: 60_000 })
+      .toBe(5);
     const listed = await pages(page);
-    expect(listed.map((p) => p.marginTopPt), "generated pages keep their section's margins").toEqual(
-      WORD_MARGIN_TOP,
-    );
+    expect(
+      listed.map((p) => p.marginTopPt),
+      "generated pages keep their section's margins",
+    ).toEqual(WORD_MARGIN_TOP);
     const sizes = listed.map(sizeOf);
     sizes.forEach(([w, h], i) => {
-      expect(Math.abs(w - WORD_PAGES[i][0]), `page ${i + 1} width`).toBeLessThan(0.5);
-      expect(Math.abs(h - WORD_PAGES[i][1]), `page ${i + 1} height`).toBeLessThan(0.5);
+      expect(
+        Math.abs(w - WORD_PAGES[i][0]),
+        `page ${i + 1} width`,
+      ).toBeLessThan(0.5);
+      expect(
+        Math.abs(h - WORD_PAGES[i][1]),
+        `page ${i + 1} height`,
+      ).toBeLessThan(0.5);
     });
 
     // What lands on each page is Word's map, keepNext included: S1 P054
@@ -261,15 +304,22 @@ test.describe("plugin-doc — standalone open (ADR 029)", () => {
     // Save-back reads every section story and stitches one body again: the
     // exported document carries all 160 paragraphs in order.
     const out = await page.evaluate(async (exporterId) => {
-      const exp = (globalThis as unknown as CanvasGlobal).__canvas.registries.exporters
+      const exp = (
+        globalThis as unknown as CanvasGlobal
+      ).__canvas.registries.exporters
         ?.list()
         .find((e) => e.id === exporterId);
       const r = exp ? await exp.export() : null;
       return r ? { fileName: r.fileName, bytes: Array.from(r.bytes) } : null;
     }, EXPORTER_ID);
-    expect(out, "the Word exporter answers after a standalone open").not.toBeNull();
+    expect(
+      out,
+      "the Word exporter answers after a standalone open",
+    ).not.toBeNull();
     const xml = documentXml(Buffer.from(out!.bytes));
-    const texts = [...xml.matchAll(/<w:t[^>]*>([^<]*)<\/w:t>/g)].map((m) => m[1]);
+    const texts = [...xml.matchAll(/<w:t[^>]*>([^<]*)<\/w:t>/g)].map(
+      (m) => m[1],
+    );
     expect(texts.length).toBe(160);
     expect(texts[0]).toBe("S1 P001 of the first section.");
     expect(texts[119]).toBe("S1 P120 of the first section.");

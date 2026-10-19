@@ -46,9 +46,7 @@ let current: RenderReport | null = null;
 let seq = 0;
 const listeners = new Set<() => void>();
 
-export function publishRenderReport(
-  report: Omit<RenderReport, "seq">,
-): void {
+export function publishRenderReport(report: Omit<RenderReport, "seq">): void {
   current = { ...report, seq: ++seq };
   for (const l of [...listeners]) l();
 }

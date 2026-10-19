@@ -70,10 +70,7 @@ export interface KeybindingRegistry extends Api.KeybindingRegistry {
   detach(): void;
   /** The binding a key press would fire — with the live state, or with
    *  `state` when given (diagnostics, the registry invariants). */
-  resolve(
-    event: KeyEventLike,
-    state?: unknown,
-  ): KeybindingContribution | null;
+  resolve(event: KeyEventLike, state?: unknown): KeybindingContribution | null;
 }
 
 /** Internal: parsed key combo + the command to invoke. */

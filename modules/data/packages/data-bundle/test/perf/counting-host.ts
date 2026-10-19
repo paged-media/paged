@@ -125,7 +125,8 @@ export function countingHost(host: BundleHost): {
   /** Count what a reply CARRIED, without touching what the caller sees. */
   const observe = (door: string, result: unknown): void => {
     if (door !== "document.placeholders" && door !== "document.tree") return;
-    if (!result || typeof (result as PromiseLike<unknown>).then !== "function") return;
+    if (!result || typeof (result as PromiseLike<unknown>).then !== "function")
+      return;
     const into = s;
     (result as PromiseLike<unknown>).then(
       (reply) => {
@@ -236,13 +237,16 @@ export function countingHost(host: BundleHost): {
  *  budget names. */
 export function workSummary(work: WorkLog): Record<string, unknown> {
   const calls: Record<string, number> = {};
-  for (const door of Object.keys(work.calls).sort()) calls[door] = work.calls[door]!;
+  for (const door of Object.keys(work.calls).sort())
+    calls[door] = work.calls[door]!;
   return {
     calls,
     reads: work.reads(),
     placeholdersRead: work.placeholdersRead,
     treeNodesRead: work.treeNodesRead,
     geometryIdsAsked: work.geometryIdsAsked,
-    mutations: work.mutations.map((m) => (m.op === "batch" ? `batch(${m.ops})` : m.op)),
+    mutations: work.mutations.map((m) =>
+      m.op === "batch" ? `batch(${m.ops})` : m.op,
+    ),
   };
 }

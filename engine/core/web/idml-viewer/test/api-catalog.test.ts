@@ -33,9 +33,14 @@ const root = join(here, "..");
 function exportedNames(indexTs: string): string[] {
   const names = new Set<string>();
   // Match each `export { ... }` / `export type { ... }` block and pull identifiers.
-  for (const [, list = ""] of indexTs.matchAll(/export\s+(?:type\s+)?\{([^}]*)\}/g)) {
+  for (const [, list = ""] of indexTs.matchAll(
+    /export\s+(?:type\s+)?\{([^}]*)\}/g,
+  )) {
     for (const raw of list.split(",")) {
-      const [id = ""] = raw.trim().replace(/^type\s+/, "").split(/\s+as\s+/);
+      const [id = ""] = raw
+        .trim()
+        .replace(/^type\s+/, "")
+        .split(/\s+as\s+/);
       if (id.trim()) names.add(id.trim());
     }
   }
@@ -44,21 +49,33 @@ function exportedNames(indexTs: string): string[] {
 
 describe("api-catalog.json", () => {
   const indexTs = readFileSync(join(root, "src", "index.ts"), "utf8");
-  const catalog = JSON.parse(readFileSync(join(root, "api-catalog.json"), "utf8")) as {
+  const catalog = JSON.parse(
+    readFileSync(join(root, "api-catalog.json"), "utf8"),
+  ) as {
     groups: { members: { name: string }[] }[];
   };
-  const memberNames = catalog.groups.flatMap((g) => g.members.map((m) => m.name));
+  const memberNames = catalog.groups.flatMap((g) =>
+    g.members.map((m) => m.name),
+  );
   const exports = exportedNames(indexTs);
 
   it("documents every export of src/index.ts", () => {
-    const covered = (id: string) => memberNames.some((n) => n === id || n.startsWith(`${id}.`));
+    const covered = (id: string) =>
+      memberNames.some((n) => n === id || n.startsWith(`${id}.`));
     const missing = exports.filter((id) => !covered(id));
-    expect(missing, `undocumented exports — add them to api-catalog.json: ${missing.join(", ")}`).toEqual([]);
+    expect(
+      missing,
+      `undocumented exports — add them to api-catalog.json: ${missing.join(", ")}`,
+    ).toEqual([]);
   });
 
   it("has well-formed members (name + signature + summary)", () => {
     for (const g of catalog.groups) {
-      for (const m of g.members as { name: string; signature?: string; summary?: string }[]) {
+      for (const m of g.members as {
+        name: string;
+        signature?: string;
+        summary?: string;
+      }[]) {
         expect(m.name, "member missing name").toBeTruthy();
         expect(m.signature, `member ${m.name} missing signature`).toBeTruthy();
         expect(m.summary, `member ${m.name} missing summary`).toBeTruthy();

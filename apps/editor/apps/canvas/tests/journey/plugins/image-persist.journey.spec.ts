@@ -97,14 +97,25 @@ async function placePng(
       const paged = (
         globalThis as unknown as {
           __paged: {
-            mutateWithBytes(m: unknown, b: Uint8Array, t?: boolean): Promise<{ kind: string }>;
+            mutateWithBytes(
+              m: unknown,
+              b: Uint8Array,
+              t?: boolean,
+            ): Promise<{ kind: string }>;
           };
         }
       ).__paged;
       const reply = await paged.mutateWithBytes(
         {
           op: "batch",
-          args: { ops: [{ op: "replaceImageBytes", args: { elementId: frame, bytes: [] } }] },
+          args: {
+            ops: [
+              {
+                op: "replaceImageBytes",
+                args: { elementId: frame, bytes: [] },
+              },
+            ],
+          },
         },
         bytes,
         true,
@@ -122,7 +133,9 @@ async function placedSha(page: Page, frame: string): Promise<string | null> {
       globalThis as unknown as {
         __paged: {
           client: {
-            placedAssetBytesBinary(id: string): Promise<{ encoded: Uint8Array } | null>;
+            placedAssetBytesBinary(
+              id: string,
+            ): Promise<{ encoded: Uint8Array } | null>;
           };
         };
       }
@@ -130,7 +143,9 @@ async function placedSha(page: Page, frame: string): Promise<string | null> {
     const placed = await paged.client.placedAssetBytesBinary(id);
     if (!placed) return null;
     const d = await crypto.subtle.digest("SHA-256", placed.encoded.slice());
-    return Array.from(new Uint8Array(d), (b) => b.toString(16).padStart(2, "0")).join("");
+    return Array.from(new Uint8Array(d), (b) =>
+      b.toString(16).padStart(2, "0"),
+    ).join("");
   }, frame);
 }
 
@@ -148,7 +163,10 @@ async function marker(page: Page, frame: string): Promise<Marker | null> {
                 payload: {
                   result?: {
                     entries: Array<{
-                      value?: { type?: string; value?: { key?: string; value?: unknown } };
+                      value?: {
+                        type?: string;
+                        value?: { key?: string; value?: unknown };
+                      };
                     }>;
                   } | null;
                 };
@@ -161,10 +179,15 @@ async function marker(page: Page, frame: string): Promise<Marker | null> {
         kind: "requestElementProperties",
         payload: { id: { kind: "rectangle", id } },
       });
-      if (reply.kind !== "elementProperties" || !reply.payload.result) return null;
+      if (reply.kind !== "elementProperties" || !reply.payload.result)
+        return null;
       for (const e of reply.payload.result.entries) {
         const v = e.value;
-        if (v?.type === "pluginMetadata" && v.value?.key === key && typeof v.value.value === "string") {
+        if (
+          v?.type === "pluginMetadata" &&
+          v.value?.key === key &&
+          typeof v.value.value === "string"
+        ) {
           return JSON.parse(v.value.value) as Marker;
         }
       }
@@ -192,7 +215,9 @@ async function editContextType(page: Page): Promise<string | null> {
     () =>
       (
         globalThis as unknown as {
-          __canvas: { debugContext?: () => { editContext?: { type?: string } | null } };
+          __canvas: {
+            debugContext?: () => { editContext?: { type?: string } | null };
+          };
         }
       ).__canvas.debugContext?.().editContext?.type ?? null,
   );
@@ -200,7 +225,9 @@ async function editContextType(page: Page): Promise<string | null> {
 
 /** "Layers (N)". */
 async function layerCount(page: Page): Promise<number> {
-  const t = (await page.locator("[data-image-layers-title]").first().textContent()) ?? "";
+  const t =
+    (await page.locator("[data-image-layers-title]").first().textContent()) ??
+    "";
   const m = t.match(/\((\d+)\)/);
   return m ? Number(m[1]) : 0;
 }
@@ -209,12 +236,16 @@ async function layerCount(page: Page): Promise<number> {
 async function undoDepth(page: Page): Promise<number> {
   const el = page.locator("[data-image-history-readout]");
   if ((await el.count()) === 0) return 0;
-  const m = ((await el.first().textContent()) ?? "").match(/History:\s*(\d+)\s*undo/);
+  const m = ((await el.first().textContent()) ?? "").match(
+    /History:\s*(\d+)\s*undo/,
+  );
   return m ? Number(m[1]) : 0;
 }
 
 async function statusText(page: Page): Promise<string> {
-  return (await page.locator("[data-image-status]").first().textContent()) ?? "";
+  return (
+    (await page.locator("[data-image-status]").first().textContent()) ?? ""
+  );
 }
 
 async function sourceNote(page: Page): Promise<string> {
@@ -225,11 +256,17 @@ async function sourceNote(page: Page): Promise<string> {
 /** Select the frame and run "Adjust image": ingest its placed bytes into
  *  the session (restoring stored layers when the marker allows) and enter
  *  the `rasterImage` edit context. */
-async function adjust(designer: Designer, page: Page, frame: string): Promise<void> {
+async function adjust(
+  designer: Designer,
+  page: Page,
+  frame: string,
+): Promise<void> {
   await designer.selectElement("rectangle", frame);
   await designer.runCommand(CMD.adjust);
   await designer.openPanel(ADJ_PANEL);
-  await expect.poll(() => layerCount(page), { timeout: 20_000 }).toBeGreaterThan(0);
+  await expect
+    .poll(() => layerCount(page), { timeout: 20_000 })
+    .toBeGreaterThan(0);
 }
 
 /** Save (.paged) through the real command and return the downloaded bytes. */
@@ -248,7 +285,12 @@ test.describe("journey · paged.image persistence", () => {
     const designer = new Designer(page);
     await designer.open();
     await designer.newDocument();
-    const frame = await designer.drawRectangle({ x0: 90, y0: 120, x1: 360, y1: 320 });
+    const frame = await designer.drawRectangle({
+      x0: 90,
+      y0: 120,
+      x1: 360,
+      y1: 320,
+    });
     expect(frame, "drew a target frame").not.toBe("");
     expect(await placePng(page, frame, 160, 120), "placed real PNG bytes").toBe(
       "mutationApplied",
@@ -283,9 +325,13 @@ test.describe("journey · paged.image persistence", () => {
     // ── 2. AN UNCOMMITTED STACK EDIT: a new layer, filled with noise. ──
     const base = await layerCount(page);
     await designer.runCommand(CMD.addLayer);
-    await expect.poll(() => layerCount(page), { timeout: 15_000 }).toBe(base + 1);
+    await expect
+      .poll(() => layerCount(page), { timeout: 15_000 })
+      .toBe(base + 1);
     await designer.runCommand(CMD.fillNoise);
-    await expect.poll(() => undoDepth(page), { timeout: 20_000 }).toBeGreaterThan(0);
+    await expect
+      .poll(() => undoDepth(page), { timeout: 20_000 })
+      .toBeGreaterThan(0);
     expect(
       await placedSha(page, frame),
       "an edit alone does not touch the document",
@@ -307,8 +353,12 @@ test.describe("journey · paged.image persistence", () => {
     expect(m1.data?.record).toMatch(/^f\/.+\/r1\.json$/);
     const baked1 = await placedSha(page, frame);
     expect(baked1, "the commit replaced the placed bytes").not.toBe(original);
-    expect(baked1, "marker.baked is the hash of the placed bytes").toBe(m1.data?.baked);
-    const record1 = JSON.parse((await partText(page, PARTS_BASE + m1.data!.record!)) ?? "null") as {
+    expect(baked1, "marker.baked is the hash of the placed bytes").toBe(
+      m1.data?.baked,
+    );
+    const record1 = JSON.parse(
+      (await partText(page, PARTS_BASE + m1.data!.record!)) ?? "null",
+    ) as {
       v: number;
       manifest: string;
       buffers: string[];
@@ -316,18 +366,21 @@ test.describe("journey · paged.image persistence", () => {
     } | null;
     expect(record1, "the revision record is a container part").not.toBeNull();
     expect(record1!.baked).toBe(baked1);
-    expect(record1!.buffers.length, "both layers' pixels are stored").toBeGreaterThanOrEqual(2);
+    expect(
+      record1!.buffers.length,
+      "both layers' pixels are stored",
+    ).toBeGreaterThanOrEqual(2);
     for (const sha of [record1!.manifest, ...record1!.buffers]) {
       expect(
         await page.evaluate(
           async (p) =>
-            (
-              await (
-                globalThis as unknown as {
-                  __paged: { parts: { read(p: string): Promise<Uint8Array | null> } };
-                }
-              ).__paged.parts.read(p)
-            ) !== null,
+            (await (
+              globalThis as unknown as {
+                __paged: {
+                  parts: { read(p: string): Promise<Uint8Array | null> };
+                };
+              }
+            ).__paged.parts.read(p)) !== null,
           `${PARTS_BASE}px/${sha}.bin`,
         ),
         `layer data px/${sha.slice(0, 12)}… is stored`,
@@ -339,10 +392,15 @@ test.describe("journey · paged.image persistence", () => {
     // ── 4. DOCUMENT UNDO reverts the commit; REDO re-applies it. Leave the
     //    edit context first: inside it Edit ▸ Undo steps the IMAGE's
     //    journal (ADR 012), which is the other tier. ──
-    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur?.());
+    await page.evaluate(() =>
+      (document.activeElement as HTMLElement | null)?.blur?.(),
+    );
     await page.keyboard.press("Escape");
     await expect
-      .poll(() => editContextType(page), { timeout: 10_000, message: "Esc leaves the context" })
+      .poll(() => editContextType(page), {
+        timeout: 10_000,
+        message: "Esc leaves the context",
+      })
       .toBeNull();
     await designer.runCommand(CMD.undo);
     await expect
@@ -354,7 +412,10 @@ test.describe("journey · paged.image persistence", () => {
     expect((await marker(page, frame))?.v, "…and the v1 marker").toBe(1);
     await designer.runCommand(CMD.redo);
     await expect
-      .poll(() => placedSha(page, frame), { timeout: 15_000, message: "redo re-applies the commit" })
+      .poll(() => placedSha(page, frame), {
+        timeout: 15_000,
+        message: "redo re-applies the commit",
+      })
       .toBe(baked1);
     expect((await marker(page, frame))?.data?.rev).toBe(1);
 
@@ -373,7 +434,9 @@ test.describe("journey · paged.image persistence", () => {
     //    same pixels and the bake would not move. ──
     const depth = await undoDepth(page);
     await designer.runCommand(CMD.fillForeground);
-    await expect.poll(() => undoDepth(page), { timeout: 20_000 }).toBeGreaterThan(depth);
+    await expect
+      .poll(() => undoDepth(page), { timeout: 20_000 })
+      .toBeGreaterThan(depth);
     expect((await marker(page, frame))?.data?.rev, "not committed yet").toBe(1);
     const saved = await savePaged(designer, page);
     const m2 = (await marker(page, frame))!;
@@ -386,14 +449,17 @@ test.describe("journey · paged.image persistence", () => {
     expect(entries, "revision 2's record is in the saved file").toContain(
       PARTS_BASE + m2.data!.record!,
     );
-    const record2 = JSON.parse(readZipText(saved, PARTS_BASE + m2.data!.record!) ?? "{}") as {
+    const record2 = JSON.parse(
+      readZipText(saved, PARTS_BASE + m2.data!.record!) ?? "{}",
+    ) as {
       manifest: string;
       buffers: string[];
     };
     for (const sha of [record2.manifest, ...record2.buffers]) {
-      expect(entries, `layer data ${sha.slice(0, 12)}… is in the saved file`).toContain(
-        `${PARTS_BASE}px/${sha}.bin`,
-      );
+      expect(
+        entries,
+        `layer data ${sha.slice(0, 12)}… is in the saved file`,
+      ).toContain(`${PARTS_BASE}px/${sha}.bin`);
     }
 
     // ── 7. REOPEN FROM THE FILE — File ▸ New first, so nothing of this
@@ -401,14 +467,24 @@ test.describe("journey · paged.image persistence", () => {
     //    user's door) and adjust the frame again: revision 2's layers come
     //    back from the file's parts. ──
     await designer.newDocument();
-    expect(await placedSha(page, frame), "the frame is gone with the old document").toBeNull();
-    expect(await partText(page, PARTS_BASE + m2.data!.record!), "and so are its parts").toBeNull();
+    expect(
+      await placedSha(page, frame),
+      "the frame is gone with the old document",
+    ).toBeNull();
+    expect(
+      await partText(page, PARTS_BASE + m2.data!.record!),
+      "and so are its parts",
+    ).toBeNull();
     // The discard confirm is accepted by `openCanvas`'s dialog handler.
     const chooser = page.waitForEvent("filechooser", { timeout: 30_000 });
     const opening = designer.runCommand(CMD.open);
     await (
       await chooser
-    ).setFiles({ name: "persist.paged", mimeType: "application/x-paged+zip", buffer: saved });
+    ).setFiles({
+      name: "persist.paged",
+      mimeType: "application/x-paged+zip",
+      buffer: saved,
+    });
     await opening;
     await expect
       .poll(() => placedSha(page, frame), {
@@ -420,6 +496,9 @@ test.describe("journey · paged.image persistence", () => {
     await expect
       .poll(() => sourceNote(page), { timeout: 20_000 })
       .toContain("Reopened 2 stored layers (revision 2)");
-    expect(await layerCount(page), "the layer stack came back from the file").toBe(2);
+    expect(
+      await layerCount(page),
+      "the layer stack came back from the file",
+    ).toBe(2);
   });
 });

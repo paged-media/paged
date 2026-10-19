@@ -426,7 +426,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # need tags for `git tag -l`
+          fetch-depth: 0 # need tags for `git tag -l`
       - name: warn if PROTOCOL_VERSION is unpublished (no matching tag)
         run: |
           set -euo pipefail

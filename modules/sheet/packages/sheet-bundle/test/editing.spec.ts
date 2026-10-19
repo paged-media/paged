@@ -16,7 +16,11 @@ import { createElement } from "react";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
 import { describe, expect, it } from "bun:test";
 
-import type { BundleHost, ClipboardPayload, SceneLayer } from "@paged-media/plugin-api";
+import type {
+  BundleHost,
+  ClipboardPayload,
+  SceneLayer,
+} from "@paged-media/plugin-api";
 
 import {
   advance,
@@ -73,7 +77,10 @@ describe("grid navigation model [sheet.grid.selection]", () => {
     expect(m.active).toEqual({ row: 0, col: 1 }); // column-major walk
     expect(rectOf(m)).toEqual({ anchorRow: 0, anchorCol: 0, rows: 2, cols: 2 });
     // A single cell just moves.
-    expect(advance(collapsed({ row: 3, col: 3 }), "up").active).toEqual({ row: 2, col: 3 });
+    expect(advance(collapsed({ row: 3, col: 3 }), "up").active).toEqual({
+      row: 2,
+      col: 3,
+    });
   });
 
   it("a fill-handle drag extends along the axis left by the most", () => {
@@ -95,11 +102,15 @@ describe("grid navigation model [sheet.grid.selection]", () => {
 
   it("scrolls the window as little as possible to show a cell", () => {
     const vis = { rows: 10, cols: 4 };
-    expect(scrollToShow({ firstRow: 0, firstCol: 0 }, vis, { row: 12, col: 1 })).toEqual({
+    expect(
+      scrollToShow({ firstRow: 0, firstCol: 0 }, vis, { row: 12, col: 1 }),
+    ).toEqual({
       firstRow: 3,
       firstCol: 0,
     });
-    expect(scrollToShow({ firstRow: 5, firstCol: 2 }, vis, { row: 1, col: 1 })).toEqual({
+    expect(
+      scrollToShow({ firstRow: 5, firstCol: 2 }, vis, { row: 1, col: 1 }),
+    ).toEqual({
       firstRow: 1,
       firstCol: 1,
     });
@@ -118,28 +129,52 @@ describe("grid key map [sheet.grid.keyboard]", () => {
       kind: "advance",
       dir: "left",
     });
-    expect(gridKeyAction({ key: "Enter" }, null)).toEqual({ kind: "advance", dir: "down" });
+    expect(gridKeyAction({ key: "Enter" }, null)).toEqual({
+      kind: "advance",
+      dir: "down",
+    });
     expect(gridKeyAction({ key: "F2" }, null)).toEqual({ kind: "edit" });
     expect(gridKeyAction({ key: "Delete" }, null)).toEqual({ kind: "clear" });
-    expect(gridKeyAction({ key: "Backspace" }, null)).toEqual({ kind: "clear" });
-    expect(gridKeyAction({ key: "x" }, null)).toEqual({ kind: "type", ch: "x" });
-    expect(gridKeyAction({ key: "c", metaKey: true }, null)).toEqual({ kind: "copy" });
-    expect(gridKeyAction({ key: "v", ctrlKey: true }, null)).toEqual({ kind: "paste" });
-    expect(gridKeyAction({ key: "d", metaKey: true }, null)).toEqual({ kind: "fill", dir: "down" });
-    expect(gridKeyAction({ key: "z", metaKey: true, shiftKey: true }, null)).toEqual({
+    expect(gridKeyAction({ key: "Backspace" }, null)).toEqual({
+      kind: "clear",
+    });
+    expect(gridKeyAction({ key: "x" }, null)).toEqual({
+      kind: "type",
+      ch: "x",
+    });
+    expect(gridKeyAction({ key: "c", metaKey: true }, null)).toEqual({
+      kind: "copy",
+    });
+    expect(gridKeyAction({ key: "v", ctrlKey: true }, null)).toEqual({
+      kind: "paste",
+    });
+    expect(gridKeyAction({ key: "d", metaKey: true }, null)).toEqual({
+      kind: "fill",
+      dir: "down",
+    });
+    expect(
+      gridKeyAction({ key: "z", metaKey: true, shiftKey: true }, null),
+    ).toEqual({
       kind: "redo",
     });
     // Mid-edit: Enter/Tab commit and move, arrows commit in Enter mode and
     // stay with the editor in F2 mode, Backspace edits.
-    expect(gridKeyAction({ key: "Tab" }, "enter")).toEqual({ kind: "commit", then: "right" });
+    expect(gridKeyAction({ key: "Tab" }, "enter")).toEqual({
+      kind: "commit",
+      then: "right",
+    });
     expect(gridKeyAction({ key: "ArrowUp" }, "enter")).toEqual({
       kind: "commitMove",
       dRow: -1,
       dCol: 0,
     });
     expect(gridKeyAction({ key: "ArrowUp" }, "edit")).toEqual({ kind: "none" });
-    expect(gridKeyAction({ key: "Backspace" }, "edit")).toEqual({ kind: "backspace" });
-    expect(gridKeyAction({ key: "Escape" }, "enter")).toEqual({ kind: "cancel" });
+    expect(gridKeyAction({ key: "Backspace" }, "edit")).toEqual({
+      kind: "backspace",
+    });
+    expect(gridKeyAction({ key: "Escape" }, "enter")).toEqual({
+      kind: "cancel",
+    });
   });
 });
 
@@ -215,22 +250,35 @@ async function inFrame(s: WorkbookSession) {
   };
 }
 
-describe.skipIf(!built)("range selection in-frame [sheet.grid.selection]", () => {
-  it("drag selects a range; shift-click extends from the anchor", async () => {
-    const { s } = await open([]);
-    const at = await inFrame(s);
-    expect(s.pointerDownInFrame(...at(1, 1))).toBe(true);
-    expect(s.pointerMoveInFrame(...at(3, 2))).toBe(true);
-    expect(s.pointerUpInFrame(...at(3, 2))).toBe(true);
-    expect(s.state().gridSelection).toEqual({ anchorRow: 1, anchorCol: 1, rows: 3, cols: 2 });
-    expect(s.activeCell()).toEqual({ row: 1, col: 1 });
-    s.pointerUpInFrame(0, 0);
-    // Shift-click from the same anchor.
-    expect(s.pointerDownInFrame(...at(0, 0), { shift: true })).toBe(true);
-    s.pointerUpInFrame(...at(0, 0));
-    expect(s.state().gridSelection).toEqual({ anchorRow: 0, anchorCol: 0, rows: 2, cols: 2 });
-  });
-});
+describe.skipIf(!built)(
+  "range selection in-frame [sheet.grid.selection]",
+  () => {
+    it("drag selects a range; shift-click extends from the anchor", async () => {
+      const { s } = await open([]);
+      const at = await inFrame(s);
+      expect(s.pointerDownInFrame(...at(1, 1))).toBe(true);
+      expect(s.pointerMoveInFrame(...at(3, 2))).toBe(true);
+      expect(s.pointerUpInFrame(...at(3, 2))).toBe(true);
+      expect(s.state().gridSelection).toEqual({
+        anchorRow: 1,
+        anchorCol: 1,
+        rows: 3,
+        cols: 2,
+      });
+      expect(s.activeCell()).toEqual({ row: 1, col: 1 });
+      s.pointerUpInFrame(0, 0);
+      // Shift-click from the same anchor.
+      expect(s.pointerDownInFrame(...at(0, 0), { shift: true })).toBe(true);
+      s.pointerUpInFrame(...at(0, 0));
+      expect(s.state().gridSelection).toEqual({
+        anchorRow: 0,
+        anchorCol: 0,
+        rows: 2,
+        cols: 2,
+      });
+    });
+  },
+);
 
 describe.skipIf(!built)("in-frame keys [sheet.grid.keyboard]", () => {
   it("arrows, shift-arrows, Tab and Enter move; typing then Enter commits and moves down", async () => {
@@ -240,7 +288,12 @@ describe.skipIf(!built)("in-frame keys [sheet.grid.keyboard]", () => {
     s.pointerUpInFrame(...at(0, 0));
     expect(s.handleGridKey({ key: "ArrowRight" })).toBe(true);
     expect(s.handleGridKey({ key: "ArrowDown", shiftKey: true })).toBe(true);
-    expect(s.state().gridSelection).toEqual({ anchorRow: 0, anchorCol: 1, rows: 2, cols: 1 });
+    expect(s.state().gridSelection).toEqual({
+      anchorRow: 0,
+      anchorCol: 1,
+      rows: 2,
+      cols: 1,
+    });
     expect(s.handleGridKey({ key: "Enter" })).toBe(true); // walks inside
     expect(s.activeCell()).toEqual({ row: 1, col: 1 });
     for (const ch of "42") s.handleGridKey({ key: ch });
@@ -318,7 +371,12 @@ describe.skipIf(!built)("copy / paste [sheet.edit.clipboard]", () => {
     expect(await s.pasteAtSelection()).toEqual({ ok: true, rows: 2, cols: 1 });
     expect(input(s, 3, 2)).toBe("=B4*10");
     expect(input(s, 4, 2)).toBe("=B5*$A$1");
-    expect(s.state().gridSelection).toEqual({ anchorRow: 3, anchorCol: 2, rows: 2, cols: 1 });
+    expect(s.state().gridSelection).toEqual({
+      anchorRow: 3,
+      anchorCol: 2,
+      rows: 2,
+      cols: 1,
+    });
     expect(s.undoCellEdit()).toBe(true);
     expect([input(s, 3, 2), input(s, 4, 2)]).toEqual(["", ""]);
   });
@@ -350,54 +408,70 @@ describe.skipIf(!built)("copy / paste [sheet.edit.clipboard]", () => {
   });
 });
 
-describe.skipIf(!built)("fill handle and fill down/right [sheet.edit.fill]", () => {
-  it("dragging the fill handle in-frame continues a series; one undo step", async () => {
-    const { s } = await open([
-      [0, 0, "1"],
-      [1, 0, "2"],
-      [0, 1, "Mon"],
-    ]);
-    const at = await inFrame(s);
-    s.selectCell(0, 0);
-    s.extendSelection(1, 0);
-    await tick();
-    // The knob sits on the selection's bottom-right corner.
-    const sc = s.gridScene(0, 0, 400, 200)!;
-    const knob: [number, number] = [sc.viewport.xOffsets[1], sc.viewport.yOffsets[2]];
-    expect(s.pointerDownInFrame(...knob)).toBe(true);
-    expect(s.pointerMoveInFrame(...at(4, 0))).toBe(true);
-    expect(s.pointerUpInFrame(...at(4, 0))).toBe(true);
-    expect([2, 3, 4].map((r) => input(s, r, 0))).toEqual(["3", "4", "5"]);
-    expect(s.state().gridSelection).toEqual({ anchorRow: 0, anchorCol: 0, rows: 5, cols: 1 });
-    expect(s.undoCellEdit()).toBe(true);
-    expect([2, 3, 4].map((r) => input(s, r, 0))).toEqual(["", "", ""]);
-    // The weekday list through the session door.
-    s.selectCell(0, 1);
-    expect(s.fillSelectionTo({ anchorRow: 0, anchorCol: 1, rows: 3, cols: 1 }).ok).toBe(true);
-    expect([input(s, 1, 1), input(s, 2, 1)]).toEqual(["Tue", "Wed"]);
-  });
+describe.skipIf(!built)(
+  "fill handle and fill down/right [sheet.edit.fill]",
+  () => {
+    it("dragging the fill handle in-frame continues a series; one undo step", async () => {
+      const { s } = await open([
+        [0, 0, "1"],
+        [1, 0, "2"],
+        [0, 1, "Mon"],
+      ]);
+      const at = await inFrame(s);
+      s.selectCell(0, 0);
+      s.extendSelection(1, 0);
+      await tick();
+      // The knob sits on the selection's bottom-right corner.
+      const sc = s.gridScene(0, 0, 400, 200)!;
+      const knob: [number, number] = [
+        sc.viewport.xOffsets[1],
+        sc.viewport.yOffsets[2],
+      ];
+      expect(s.pointerDownInFrame(...knob)).toBe(true);
+      expect(s.pointerMoveInFrame(...at(4, 0))).toBe(true);
+      expect(s.pointerUpInFrame(...at(4, 0))).toBe(true);
+      expect([2, 3, 4].map((r) => input(s, r, 0))).toEqual(["3", "4", "5"]);
+      expect(s.state().gridSelection).toEqual({
+        anchorRow: 0,
+        anchorCol: 0,
+        rows: 5,
+        cols: 1,
+      });
+      expect(s.undoCellEdit()).toBe(true);
+      expect([2, 3, 4].map((r) => input(s, r, 0))).toEqual(["", "", ""]);
+      // The weekday list through the session door.
+      s.selectCell(0, 1);
+      expect(
+        s.fillSelectionTo({ anchorRow: 0, anchorCol: 1, rows: 3, cols: 1 }).ok,
+      ).toBe(true);
+      expect([input(s, 1, 1), input(s, 2, 1)]).toEqual(["Tue", "Wed"]);
+    });
 
-  it("Cmd+D copies the top row down (formulas re-addressed); Cmd+R copies right", async () => {
-    const { s } = await open([
-      [0, 0, "1"],
-      [1, 0, "2"],
-      [2, 0, "3"],
-      [0, 1, "=A1*2"],
-    ]);
-    s.selectCell(0, 1);
-    s.extendSelection(2, 1);
-    expect(s.handleGridKey({ key: "d", metaKey: true })).toBe(true);
-    expect([input(s, 1, 1), input(s, 2, 1)]).toEqual(["=A2*2", "=A3*2"]);
-    expect(display(s, 2, 1)).toBe("6");
-    // One cell: Cmd+R takes the cell to its left.
-    s.selectCell(0, 2);
-    expect(s.fillRight().ok).toBe(true);
-    expect(input(s, 0, 2)).toBe("=B1*2");
-    // Row 1 has nothing above it: refused, nothing written.
-    s.selectCell(0, 3);
-    expect(s.fillDown()).toEqual({ ok: false, message: "nothing above to fill from" });
-  });
-});
+    it("Cmd+D copies the top row down (formulas re-addressed); Cmd+R copies right", async () => {
+      const { s } = await open([
+        [0, 0, "1"],
+        [1, 0, "2"],
+        [2, 0, "3"],
+        [0, 1, "=A1*2"],
+      ]);
+      s.selectCell(0, 1);
+      s.extendSelection(2, 1);
+      expect(s.handleGridKey({ key: "d", metaKey: true })).toBe(true);
+      expect([input(s, 1, 1), input(s, 2, 1)]).toEqual(["=A2*2", "=A3*2"]);
+      expect(display(s, 2, 1)).toBe("6");
+      // One cell: Cmd+R takes the cell to its left.
+      s.selectCell(0, 2);
+      expect(s.fillRight().ok).toBe(true);
+      expect(input(s, 0, 2)).toBe("=B1*2");
+      // Row 1 has nothing above it: refused, nothing written.
+      s.selectCell(0, 3);
+      expect(s.fillDown()).toEqual({
+        ok: false,
+        message: "nothing above to fill from",
+      });
+    });
+  },
+);
 
 describe.skipIf(!built)("find in sheet [sheet.grid.find]", () => {
   it("find next selects the next match after the active cell, wraps, and scrolls in-frame", async () => {
@@ -414,10 +488,15 @@ describe.skipIf(!built)("find in sheet [sheet.grid.find]", () => {
     expect(s.findNext("apple")).toMatchObject({ row: 30, col: 1 });
     expect(s.activeCell()).toEqual({ row: 30, col: 1 });
     await tick();
-    const texts = fake.submits.at(-1)!.items.flatMap((i) => (i.kind === "text" ? [i.text] : []));
+    const texts = fake.submits
+      .at(-1)!
+      .items.flatMap((i) => (i.kind === "text" ? [i.text] : []));
     expect(texts).toContain("Apple pie");
     expect(s.findAgain()).toMatchObject({ row: 0, col: 0 }); // wrapped
-    expect(s.findNext("apple", undefined, true)).toMatchObject({ row: 30, col: 1 });
+    expect(s.findNext("apple", undefined, true)).toMatchObject({
+      row: 30,
+      col: 1,
+    });
     expect(s.findNext("zzz")).toBeNull();
     // Cmd+F asks for the find field.
     const before = s.state().findRequest;
@@ -429,10 +508,15 @@ describe.skipIf(!built)("find in sheet [sheet.grid.find]", () => {
 // ─────────────────────────────────────────────── the grid panel, real engine
 
 function byData(tree: ReactTestRenderer, key: string) {
-  return tree.root.findAll((n) => n.props != null && n.props[key] !== undefined);
+  return tree.root.findAll(
+    (n) => n.props != null && n.props[key] !== undefined,
+  );
 }
 
-function keyEvent(key: string, mods: { shiftKey?: boolean; metaKey?: boolean } = {}) {
+function keyEvent(
+  key: string,
+  mods: { shiftKey?: boolean; metaKey?: boolean } = {},
+) {
   let stopped = false;
   const target = {};
   return {
@@ -450,51 +534,77 @@ function keyEvent(key: string, mods: { shiftKey?: boolean; metaKey?: boolean } =
   };
 }
 
-describe.skipIf(!built)("grid panel keys, find and fill [sheet.grid.keyboard]", () => {
-  it("the focused grid moves with arrows, types into the editor, and owns Cmd+Z", async () => {
-    const { s, fake } = await open([[0, 0, "1"]]);
-    let tree!: ReactTestRenderer;
-    act(() => {
-      tree = create(createElement(makeGridPanel(fake.host, s)));
+describe.skipIf(!built)(
+  "grid panel keys, find and fill [sheet.grid.keyboard]",
+  () => {
+    it("the focused grid moves with arrows, types into the editor, and owns Cmd+Z", async () => {
+      const { s, fake } = await open([[0, 0, "1"]]);
+      let tree!: ReactTestRenderer;
+      act(() => {
+        tree = create(createElement(makeGridPanel(fake.host, s)));
+      });
+      s.selectCell(0, 0);
+      const surface = () => byData(tree, "data-grid-surface")[0];
+      act(() =>
+        surface().props.onKeyDown(keyEvent("ArrowDown", { shiftKey: true }).ev),
+      );
+      expect(s.state().gridSelection).toEqual({
+        anchorRow: 0,
+        anchorCol: 0,
+        rows: 2,
+        cols: 1,
+      });
+      // Typing opens the panel's cell editor on the ACTIVE cell.
+      act(() => surface().props.onKeyDown(keyEvent("9").ev));
+      const editor = byData(tree, "data-grid-editor")[0];
+      expect(editor.props.value).toBe("9");
+      act(() =>
+        editor.props.onKeyDown({
+          key: "Enter",
+          shiftKey: false,
+          preventDefault() {},
+        }),
+      );
+      expect(input(s, 0, 0)).toBe("9");
+      // Cmd+Z on the focused grid is the sheet's undo, and stops there (the
+      // host's document undo keybinding never sees it).
+      const z = keyEvent("z", { metaKey: true });
+      act(() => surface().props.onKeyDown(z.ev));
+      expect(input(s, 0, 0)).toBe("1");
+      expect(z.stopped()).toBe(true);
+      act(() => tree.unmount());
     });
-    s.selectCell(0, 0);
-    const surface = () => byData(tree, "data-grid-surface")[0];
-    act(() => surface().props.onKeyDown(keyEvent("ArrowDown", { shiftKey: true }).ev));
-    expect(s.state().gridSelection).toEqual({ anchorRow: 0, anchorCol: 0, rows: 2, cols: 1 });
-    // Typing opens the panel's cell editor on the ACTIVE cell.
-    act(() => surface().props.onKeyDown(keyEvent("9").ev));
-    const editor = byData(tree, "data-grid-editor")[0];
-    expect(editor.props.value).toBe("9");
-    act(() =>
-      editor.props.onKeyDown({ key: "Enter", shiftKey: false, preventDefault() {} }),
-    );
-    expect(input(s, 0, 0)).toBe("9");
-    // Cmd+Z on the focused grid is the sheet's undo, and stops there (the
-    // host's document undo keybinding never sees it).
-    const z = keyEvent("z", { metaKey: true });
-    act(() => surface().props.onKeyDown(z.ev));
-    expect(input(s, 0, 0)).toBe("1");
-    expect(z.stopped()).toBe(true);
-    act(() => tree.unmount());
-  });
 
-  it("the find field selects the next match; Delete clears from the panel", async () => {
-    const { s, fake } = await open([
-      [0, 0, "x"],
-      [4, 2, "needle"],
-    ]);
-    let tree!: ReactTestRenderer;
-    act(() => {
-      tree = create(createElement(makeGridPanel(fake.host, s)));
+    it("the find field selects the next match; Delete clears from the panel", async () => {
+      const { s, fake } = await open([
+        [0, 0, "x"],
+        [4, 2, "needle"],
+      ]);
+      let tree!: ReactTestRenderer;
+      act(() => {
+        tree = create(createElement(makeGridPanel(fake.host, s)));
+      });
+      s.selectCell(0, 0);
+      const field = () => byData(tree, "data-find-input")[0];
+      act(() => field().props.onChange({ target: { value: "need" } }));
+      act(() =>
+        field().props.onKeyDown({
+          key: "Enter",
+          shiftKey: false,
+          preventDefault() {},
+        }),
+      );
+      expect(s.activeCell()).toEqual({ row: 4, col: 2 });
+      expect(
+        JSON.stringify(byData(tree, "data-find-status")[0].props.children),
+      ).toContain("C5");
+      act(() =>
+        byData(tree, "data-grid-surface")[0].props.onKeyDown(
+          keyEvent("Delete").ev,
+        ),
+      );
+      expect(input(s, 4, 2)).toBe("");
+      act(() => tree.unmount());
     });
-    s.selectCell(0, 0);
-    const field = () => byData(tree, "data-find-input")[0];
-    act(() => field().props.onChange({ target: { value: "need" } }));
-    act(() => field().props.onKeyDown({ key: "Enter", shiftKey: false, preventDefault() {} }));
-    expect(s.activeCell()).toEqual({ row: 4, col: 2 });
-    expect(JSON.stringify(byData(tree, "data-find-status")[0].props.children)).toContain("C5");
-    act(() => byData(tree, "data-grid-surface")[0].props.onKeyDown(keyEvent("Delete").ev));
-    expect(input(s, 4, 2)).toBe("");
-    act(() => tree.unmount());
-  });
-});
+  },
+);

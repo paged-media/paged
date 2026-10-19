@@ -51,7 +51,12 @@ test.describe("journey · color", () => {
     );
 
     // Draw a frame (real drag) and fill it with the brand swatch.
-    const id = await designer.drawRectangle({ x0: 90, y0: 120, x1: 320, y1: 300 });
+    const id = await designer.drawRectangle({
+      x0: 90,
+      y0: 120,
+      x1: 320,
+      y1: 300,
+    });
     await designer.selectElement("rectangle", id);
     await designer.expectContext(FRAME_SELECTED);
     await designer.applyFill("rectangle", id, brandRed);

@@ -66,9 +66,17 @@ type Bounds = [number, number, number, number];
 /** The frame's bounds (top, left, bottom, right) in page points. */
 async function boundsOf(page: Page, frame: ElementRef): Promise<Bounds> {
   return page.evaluate(async (id) => {
-    const c = (globalThis as unknown as {
-      __canvas: { client: { elementGeometry: (ids: unknown[]) => Promise<Array<{ bounds: Bounds }>> } };
-    }).__canvas;
+    const c = (
+      globalThis as unknown as {
+        __canvas: {
+          client: {
+            elementGeometry: (
+              ids: unknown[],
+            ) => Promise<Array<{ bounds: Bounds }>>;
+          };
+        };
+      }
+    ).__canvas;
     return (await c.client.elementGeometry([id]))[0]!.bounds;
   }, frame);
 }
@@ -78,14 +86,18 @@ async function boundsOf(page: Page, frame: ElementRef): Promise<Bounds> {
 async function frameAt(page: Page, bounds: Bounds): Promise<ElementRef | null> {
   return page.evaluate(async (want) => {
     type Node = { id?: { kind: string; id: unknown }; children?: Node[] };
-    const c = (globalThis as unknown as {
-      __canvas: {
-        client: {
-          sceneTree: () => Promise<Node[]>;
-          elementGeometry: (ids: unknown[]) => Promise<Array<{ bounds: Bounds }>>;
+    const c = (
+      globalThis as unknown as {
+        __canvas: {
+          client: {
+            sceneTree: () => Promise<Node[]>;
+            elementGeometry: (
+              ids: unknown[],
+            ) => Promise<Array<{ bounds: Bounds }>>;
+          };
         };
-      };
-    }).__canvas;
+      }
+    ).__canvas;
     const frames: { kind: string; id: string }[] = [];
     const walk = (nodes: Node[]) => {
       for (const n of nodes) {
@@ -105,7 +117,9 @@ async function frameAt(page: Page, bounds: Bounds): Promise<ElementRef | null> {
 }
 
 /** Place, edit A1 → 10 in-frame, leave; returns the saved .paged bytes. */
-async function editAndSave(page: Page): Promise<{ paged: Buffer; frame: ElementRef }> {
+async function editAndSave(
+  page: Page,
+): Promise<{ paged: Buffer; frame: ElementRef }> {
   const designer = new Designer(page);
   await designer.open();
   await designer.newDocument();
@@ -115,17 +129,22 @@ async function editAndSave(page: Page): Promise<{ paged: Buffer; frame: ElementR
   await page.keyboard.type("10");
   await page.keyboard.press("Enter");
   await exitSheet(page);
-  await expect.poll(() => placedValues(page), { timeout: 10_000 }).toEqual(EDITED);
+  await expect
+    .poll(() => placedValues(page), { timeout: 10_000 })
+    .toEqual(EDITED);
   const paged = await exportPaged(page);
-  expect(zipEntryNames(paged), "the .paged carries the workbook part").toContain(
-    "paged/media.paged.sheet/workbook.xlsx",
-  );
+  expect(
+    zipEntryNames(paged),
+    "the .paged carries the workbook part",
+  ).toContain("paged/media.paged.sheet/workbook.xlsx");
   return { paged, frame };
 }
 
 /** Open `paged` through the file door of a brand-new editor. */
 async function reopenFresh(browser: Browser, paged: Buffer): Promise<Page> {
-  const ctx = await browser.newContext({ viewport: { width: 1600, height: 1000 } });
+  const ctx = await browser.newContext({
+    viewport: { width: 1600, height: 1000 },
+  });
   const page = await ctx.newPage();
   await new Designer(page).open();
   await page.setInputFiles('input[type="file"]', {
@@ -161,13 +180,19 @@ test.describe("journey · paged.sheet edit persistence", () => {
     const reopened = await reopenFresh(browser, paged);
     try {
       const again = await frameAt(reopened, bounds);
-      expect(again, "the placed frame is in the reopened document").not.toBeNull();
+      expect(
+        again,
+        "the placed frame is in the reopened document",
+      ).not.toBeNull();
       await enterSheet(reopened, again!, { withGrid: true });
       await openPanel(reopened, GRID_PANEL);
       await reopened.keyboard.press(`${MOD}+Home`);
-      await expect(reopened.locator("[data-formula-cellref]")).toHaveText("A1", {
-        timeout: 10_000,
-      });
+      await expect(reopened.locator("[data-formula-cellref]")).toHaveText(
+        "A1",
+        {
+          timeout: 10_000,
+        },
+      );
       await expect(reopened.locator("[data-formula-input]")).toHaveValue("10");
     } finally {
       await reopened.context().close();

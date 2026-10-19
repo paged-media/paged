@@ -59,7 +59,8 @@ export async function readContext(page: Page): Promise<ObservedContext> {
     const c = w.__canvas;
 
     const propsRoot = document.querySelector('[data-properties-panel="ready"]');
-    const inspectorKind = propsRoot?.getAttribute("data-inspector-kind") ?? null;
+    const inspectorKind =
+      propsRoot?.getAttribute("data-inspector-kind") ?? null;
     const sectionsPresent = Array.from(
       document.querySelectorAll("[data-properties-section]"),
     )
@@ -126,7 +127,9 @@ export function diffContext(
   const tag = exp.intent;
   const cmp = (dim: string, want: unknown, got: unknown) => {
     if (want !== undefined && want !== got) {
-      d.push(`[${tag}] ${dim}: expected ${JSON.stringify(want)}, was ${JSON.stringify(got)}`);
+      d.push(
+        `[${tag}] ${dim}: expected ${JSON.stringify(want)}, was ${JSON.stringify(got)}`,
+      );
     }
   };
 

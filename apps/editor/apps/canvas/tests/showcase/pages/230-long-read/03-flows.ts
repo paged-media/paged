@@ -38,7 +38,12 @@ import { expect } from "@playwright/test";
 import { dirname, resolve as pathResolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { assignLayer, marginNote, proseFrame, specLabel } from "../../annual-support";
+import {
+  assignLayer,
+  marginNote,
+  proseFrame,
+  specLabel,
+} from "../../annual-support";
 import { LAYER, STYLE, SWATCH, p } from "../../names-annual";
 import { ConsoleTap, settle } from "../../plugin-support";
 import type { PageContext, PageReport } from "../../types";
@@ -55,7 +60,14 @@ import {
 } from "./00-support";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const ARTICLE = pathResolve(__dirname, "..", "..", "assets", "web", "long-read.html");
+const ARTICLE = pathResolve(
+  __dirname,
+  "..",
+  "..",
+  "assets",
+  "web",
+  "long-read.html",
+);
 
 const ref = (id: string) => ({ kind: "rectangle", id });
 
@@ -69,20 +81,28 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   ];
   const elements: string[] = [];
 
-  const head = await proseFrame(ctx, p(105), [48, 96, 480, 124], [
-    { text: "One source, two flows, four frames", style: STYLE.head1 },
-  ]);
-  const intro = await proseFrame(ctx, p(105), [48, 128, 480, 170], [
-    {
-      text:
-        "The article declares flow-into: article-flow; its route notes " +
-        "declare flow-into: sidebar-flow. Frames are the real Regions " +
-        "consumers here — the chain below is persisted in the source's " +
-        "envelope in the document, and this page reads that record back " +
-        "as its proof.",
-      style: STYLE.bodySmall,
-    },
-  ]);
+  const head = await proseFrame(
+    ctx,
+    p(105),
+    [48, 96, 480, 124],
+    [{ text: "One source, two flows, four frames", style: STYLE.head1 }],
+  );
+  const intro = await proseFrame(
+    ctx,
+    p(105),
+    [48, 128, 480, 170],
+    [
+      {
+        text:
+          "The article declares flow-into: article-flow; its route notes " +
+          "declare flow-into: sidebar-flow. Frames are the real Regions " +
+          "consumers here — the chain below is persisted in the source's " +
+          "envelope in the document, and this page reads that record back " +
+          "as its proof.",
+        style: STYLE.bodySmall,
+      },
+    ],
+  );
   elements.push(head.frameId, intro.frameId);
 
   // ── the four frames ──────────────────────────────────────────────
@@ -99,7 +119,11 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   await setWebSource(doc, src, splitHtmlAsset(ARTICLE));
 
   // ── thread the primary flow, then the named flow ─────────────────
-  await runOnSelection(ctx, [ref(src), ref(r1), ref(r2)], `${WEB_CMD}.threadWebFlow`);
+  await runOnSelection(
+    ctx,
+    [ref(src), ref(r1), ref(r2)],
+    `${WEB_CMD}.threadWebFlow`,
+  );
   const threaded = await settle(
     page,
     async () => ((await persistedRecipients(doc, src)) ?? []).length === 2,
@@ -110,7 +134,11 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     "threadWebFlow persisted two primary recipients into the source part",
   ).toBe(true);
 
-  await runOnSelection(ctx, [ref(src), ref(sidebar)], `${WEB_CMD}.threadWebFlowNamed`);
+  await runOnSelection(
+    ctx,
+    [ref(src), ref(sidebar)],
+    `${WEB_CMD}.threadWebFlowNamed`,
+  );
   await settle(
     page,
     async () => ((await persistedRecipients(doc, src)) ?? []).length === 3,
@@ -131,13 +159,21 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     doc.ledger ? doc.ledger.transient(fn) : fn();
   await runTransient(async () => {
     const scratch = await doc.rectangle(pg105, [198, 456, 336, 540]);
-    await runOnSelection(ctx, [ref(src), ref(scratch)], `${WEB_CMD}.threadWebFlow`);
+    await runOnSelection(
+      ctx,
+      [ref(src), ref(scratch)],
+      `${WEB_CMD}.threadWebFlow`,
+    );
     const grew = await settle(
       page,
       async () => ((await persistedRecipients(doc, src)) ?? []).length === 4,
       10_000,
     );
-    await runOnSelection(ctx, [ref(src), ref(scratch)], `${WEB_CMD}.unthreadWebFlow`);
+    await runOnSelection(
+      ctx,
+      [ref(src), ref(scratch)],
+      `${WEB_CMD}.unthreadWebFlow`,
+    );
     const shrank = await settle(
       page,
       async () => ((await persistedRecipients(doc, src)) ?? []).length === 3,
@@ -147,10 +183,10 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     notes.push(
       grew && shrank
         ? "unthreadWebFlow round trip verified through the persisted envelope " +
-          "(chain 3 → 4 → 3); the scratch frame was deleted — demonstrated, " +
-          "not resident"
+            "(chain 3 → 4 → 3); the scratch frame was deleted — demonstrated, " +
+            "not resident"
         : "the unthread round trip could not be verified through the envelope " +
-          `(grew=${grew}, shrank=${shrank})`,
+            `(grew=${grew}, shrank=${shrank})`,
     );
   });
 
@@ -182,7 +218,9 @@ export async function build(ctx: PageContext): Promise<PageReport> {
       covers.push("plugin-web.engine-rendering", "plugin-platform.scene-layer");
       notes.push(
         `renderWebFlow submitted ${submitted} frame(s) across the two flows` +
-          (tap.saw(/overset/i) ? " (overset reported past the last frame)" : ""),
+          (tap.saw(/overset/i)
+            ? " (overset reported past the last frame)"
+            : ""),
       );
     } else {
       notes.push(
@@ -198,21 +236,34 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   }
 
   // ── captions naming the syntax ───────────────────────────────────
-  const capSrc = await proseFrame(ctx, p(105), [48, 384, 186, 402], [
-    { text: "source — flow-into: article-flow", style: STYLE.caption },
-  ]);
-  const capR = await proseFrame(ctx, p(105), [198, 444, 480, 462], [
-    {
-      text: "flow-from consumers 1 and 2 — the primary chain, in selection order",
-      style: STYLE.caption,
-    },
-  ]);
-  const capSide = await proseFrame(ctx, p(105), [48, 544, 480, 568], [
-    {
-      text: "flow-into: sidebar-flow — the named flow, routed by threadWebFlowNamed",
-      style: STYLE.caption,
-    },
-  ]);
+  const capSrc = await proseFrame(
+    ctx,
+    p(105),
+    [48, 384, 186, 402],
+    [{ text: "source — flow-into: article-flow", style: STYLE.caption }],
+  );
+  const capR = await proseFrame(
+    ctx,
+    p(105),
+    [198, 444, 480, 462],
+    [
+      {
+        text: "flow-from consumers 1 and 2 — the primary chain, in selection order",
+        style: STYLE.caption,
+      },
+    ],
+  );
+  const capSide = await proseFrame(
+    ctx,
+    p(105),
+    [48, 544, 480, 568],
+    [
+      {
+        text: "flow-into: sidebar-flow — the named flow, routed by threadWebFlowNamed",
+        style: STYLE.caption,
+      },
+    ],
+  );
   elements.push(capSrc.frameId, capR.frameId, capSide.frameId);
 
   elements.push(
@@ -235,5 +286,10 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     ]),
   );
 
-  return { title: "One source, two flows, four frames", covers, elements, notes };
+  return {
+    title: "One source, two flows, four frames",
+    covers,
+    elements,
+    notes,
+  };
 }

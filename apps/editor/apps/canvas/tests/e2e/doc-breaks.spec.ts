@@ -46,7 +46,10 @@ import { script } from "./harness/ui";
 
 type Page = import("@playwright/test").Page;
 
-const FIXTURE = pathResolve(dirname(fileURLToPath(import.meta.url)), "harness/doc-breaks.docx");
+const FIXTURE = pathResolve(
+  dirname(fileURLToPath(import.meta.url)),
+  "harness/doc-breaks.docx",
+);
 const OPEN_COMMAND = "paged.file.openIdml";
 const IMPORTER_ID = "media.paged.doc.importer.docx";
 const EXPORTER_ID = "media.paged.doc.exporter.docx";
@@ -57,7 +60,10 @@ const EXPORTER_ID = "media.paged.doc.exporter.docx";
 function engineProtocol(): number {
   const require = createRequire(import.meta.url);
   const pkg = JSON.parse(
-    readFileSync(require.resolve("@paged-media/canvas-wasm/package.json"), "utf8"),
+    readFileSync(
+      require.resolve("@paged-media/canvas-wasm/package.json"),
+      "utf8",
+    ),
   ) as { version: string };
   return Number(pkg.version.split(/[.-]/)[1]);
 }
@@ -98,7 +104,10 @@ type CanvasGlobal = { __canvas: { ready: boolean; registries: Registries } };
 
 const invoke = (page: Page, id: string) =>
   page.evaluate(
-    (cmd) => (globalThis as unknown as CanvasGlobal).__canvas.registries.commands.invoke(cmd),
+    (cmd) =>
+      (
+        globalThis as unknown as CanvasGlobal
+      ).__canvas.registries.commands.invoke(cmd),
     id,
   );
 
@@ -116,7 +125,11 @@ async function pageMap(page: Page): Promise<string[][][]> {
           client: {
             send: (m: unknown) => Promise<{
               kind: string;
-              payload?: { content?: { paragraphs?: Array<{ runs: Array<{ text: string }> }> } };
+              payload?: {
+                content?: {
+                  paragraphs?: Array<{ runs: Array<{ text: string }> }>;
+                };
+              };
             }>;
             selectionGeometry: (s: unknown) => Promise<Rect[]>;
             executeScript: (s: string) => Promise<{ output: string[] }>;
@@ -125,12 +138,16 @@ async function pageMap(page: Page): Promise<string[][][]> {
       }
     ).__canvas.client;
     const pageIds = (
-      JSON.parse((await c.executeScript("paged.pages()")).output[0] ?? "[]") as Array<{
+      JSON.parse(
+        (await c.executeScript("paged.pages()")).output[0] ?? "[]",
+      ) as Array<{
         selfId: string;
       }>
     ).map((p) => p.selfId);
     const stories = (
-      JSON.parse((await c.executeScript("paged.stories()")).output[0] ?? "[]") as Array<{
+      JSON.parse(
+        (await c.executeScript("paged.stories()")).output[0] ?? "[]",
+      ) as Array<{
         selfId: string;
       }>
     )
@@ -139,7 +156,10 @@ async function pageMap(page: Page): Promise<string[][][]> {
       .sort((a, b) => Number(a.slice(6)) - Number(b.slice(6)));
     const placed: Array<{ page: number; left: number; label: string }> = [];
     for (const storyId of stories) {
-      const r = await c.send({ kind: "requestStoryContent", payload: { storyId } });
+      const r = await c.send({
+        kind: "requestStoryContent",
+        payload: { storyId },
+      });
       const paras = (r.payload?.content?.paragraphs ?? []).map((p) =>
         p.runs.map((run) => run.text).join(""),
       );
@@ -155,7 +175,11 @@ async function pageMap(page: Page): Promise<string[][][]> {
           affinity: false,
         });
         const i = rects.length ? pageIds.indexOf(rects[0].pageId) : -1;
-        placed.push({ page: i, left: rects[0]?.leftPt ?? 0, label: text.split(/\s+/)[0] });
+        placed.push({
+          page: i,
+          left: rects[0]?.leftPt ?? 0,
+          label: text.split(/\s+/)[0],
+        });
       }
     }
     const out: string[][][] = pageIds.map(() => [[]]);
@@ -173,7 +197,11 @@ async function pageMap(page: Page): Promise<string[][][]> {
   });
 }
 
-type PageRow = { sizePt?: [number, number]; widthPt?: number; heightPt?: number };
+type PageRow = {
+  sizePt?: [number, number];
+  widthPt?: number;
+  heightPt?: number;
+};
 
 async function pages(page: Page): Promise<PageRow[]> {
   const raw = await script(page, "paged.pages()");
@@ -194,7 +222,11 @@ function documentXml(docx: Buffer): string {
     const local = docx.readUInt32LE(p + 42);
     const name = docx.subarray(p + 46, p + 46 + nameLen).toString("utf8");
     if (name === "word/document.xml") {
-      const dataAt = local + 30 + docx.readUInt16LE(local + 26) + docx.readUInt16LE(local + 28);
+      const dataAt =
+        local +
+        30 +
+        docx.readUInt16LE(local + 26) +
+        docx.readUInt16LE(local + 28);
       const data = docx.subarray(dataAt, dataAt + size);
       return (method === 8 ? inflateRawSync(data) : data).toString("utf8");
     }
@@ -225,9 +257,9 @@ test.describe("plugin-doc — Word's breaks (ADR 028 / 029)", () => {
         () =>
           page.evaluate(
             () =>
-              (globalThis as unknown as CanvasGlobal).__canvas.registries.importers.resolve(
-                "x.docx",
-              )?.id ?? null,
+              (
+                globalThis as unknown as CanvasGlobal
+              ).__canvas.registries.importers.resolve("x.docx")?.id ?? null,
           ),
         { timeout: 15_000 },
       )
@@ -256,13 +288,18 @@ test.describe("plugin-doc — Word's breaks (ADR 028 / 029)", () => {
     // one Word paragraph it was: nothing was edited, so the document comes
     // back with all 46 paragraphs and every break where Word had it.
     const out = await page.evaluate(async (exporterId) => {
-      const exp = (globalThis as unknown as CanvasGlobal).__canvas.registries.exporters
+      const exp = (
+        globalThis as unknown as CanvasGlobal
+      ).__canvas.registries.exporters
         ?.list()
         .find((e) => e.id === exporterId);
       const r = exp ? await exp.export() : null;
       return r ? { fileName: r.fileName, bytes: Array.from(r.bytes) } : null;
     }, EXPORTER_ID);
-    expect(out, "the Word exporter answers after a standalone open").not.toBeNull();
+    expect(
+      out,
+      "the Word exporter answers after a standalone open",
+    ).not.toBeNull();
     const xml = documentXml(Buffer.from(out!.bytes));
     expect(xml.match(/<w:p>/g)?.length, "Word's 46 paragraphs").toBe(46);
     expect(xml.match(/<w:br w:type="page"\/>/g)?.length).toBe(3);

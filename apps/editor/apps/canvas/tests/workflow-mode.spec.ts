@@ -170,7 +170,9 @@ test.describe("Cockpit — per-mode panel sets + toolbars (D3-D4)", () => {
     // that repeated the rail's tools). With nothing open it says how to
     // start; the Preview toggle is always there.
     await expect(page.locator('[data-control-bar="document"]')).toBeVisible();
-    await expect(page.locator('[data-cockpit-action="preview-toggle"]')).toBeVisible();
+    await expect(
+      page.locator('[data-cockpit-action="preview-toggle"]'),
+    ).toBeVisible();
 
     // Export: the real PDF button.
     await page.evaluate(() => window.__canvas.setMode("export"));

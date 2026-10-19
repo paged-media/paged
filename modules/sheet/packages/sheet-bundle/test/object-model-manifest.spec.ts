@@ -10,9 +10,16 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "bun:test";
 
-import type { BundleHost, ObjectModelContribution } from "@paged-media/plugin-api";
+import type {
+  BundleHost,
+  ObjectModelContribution,
+} from "@paged-media/plugin-api";
 
-import { contributeObjectModel, SHEET_KINDS, SHEET_SCHEMAS } from "../src/object-model";
+import {
+  contributeObjectModel,
+  SHEET_KINDS,
+  SHEET_SCHEMAS,
+} from "../src/object-model";
 import type { WorkbookSession } from "../src/session";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -29,7 +36,10 @@ function registeredModel(): ObjectModelContribution {
         return { dispose() {}, changed() {} };
       },
     },
-    document: { onDidChange: () => ({ dispose() {} }), onDidOpen: () => ({ dispose() {} }) },
+    document: {
+      onDidChange: () => ({ dispose() {} }),
+      onDidOpen: () => ({ dispose() {} }),
+    },
     log: { debug() {}, info() {}, warn() {}, error() {} },
   } as unknown as BundleHost;
   const session = {
@@ -51,7 +61,11 @@ function registeredModel(): ObjectModelContribution {
 function declaration() {
   const m = registeredModel();
   return {
-    kinds: m.kinds.map((k) => ({ kind: k.kind, title: k.title, schema: `object-model/${k.kind}.schema.json` })),
+    kinds: m.kinds.map((k) => ({
+      kind: k.kind,
+      title: k.title,
+      schema: `object-model/${k.kind}.schema.json`,
+    })),
     commands: (m.commands ?? []).map((c) => ({
       id: c.id,
       title: c.title,
@@ -83,14 +97,19 @@ describe("the manifest declares the object model the bundle registers [sheet.obj
 
   it("every schema file holds the runtime rows", () => {
     for (const kind of SHEET_KINDS) {
-      const rows = JSON.parse(readFileSync(join(PKG, "object-model", `${kind}.schema.json`), "utf8"));
+      const rows = JSON.parse(
+        readFileSync(join(PKG, "object-model", `${kind}.schema.json`), "utf8"),
+      );
       expect(rows).toEqual(JSON.parse(JSON.stringify(SHEET_SCHEMAS[kind])));
     }
   });
 
   it("each typed command shares its id with the palette command it types (the untyped list shrinks)", () => {
     const untyped = (manifest.contributes.commands as string[]).filter(
-      (id) => !manifest.contributes.objectModel.commands.some((c: { id: string }) => c.id === id),
+      (id) =>
+        !manifest.contributes.objectModel.commands.some(
+          (c: { id: string }) => c.id === id,
+        ),
     );
     // Shrink-only: 24 untyped at the object-model baseline (2026-10-06).
     expect(untyped.sort()).toEqual([

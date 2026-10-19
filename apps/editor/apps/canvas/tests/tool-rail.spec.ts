@@ -50,7 +50,14 @@ test.describe("Concept 1 — tool rail", () => {
   }) => {
     await expect(page.locator('[data-tool-rail="ready"]')).toBeVisible();
     // One slot per flyout group; spot-check the four sections.
-    for (const group of ["select", "type", "pen", "shape", "transform", "hand"]) {
+    for (const group of [
+      "select",
+      "type",
+      "pen",
+      "shape",
+      "transform",
+      "hand",
+    ]) {
       await expect(page.locator(`[data-tool-slot="${group}"]`)).toBeVisible();
     }
     // Selection is the default active tool.
@@ -164,7 +171,9 @@ test.describe("Concept 1 — tool rail", () => {
     const shape = page.locator('[data-tool-slot="shape"]');
     await shape.click(); // Rectangle (group default)
     await expect(
-      page.locator('[data-tool-slot="shape"][data-tool="paged.tool.rectangle"]'),
+      page.locator(
+        '[data-tool-slot="shape"][data-tool="paged.tool.rectangle"]',
+      ),
     ).toBeVisible();
     await shape.click({ modifiers: ["Alt"] }); // → Ellipse
     await expect(
@@ -269,9 +278,10 @@ test.describe("Concept 1 — tool rail", () => {
     // A planned member never takes the slot FACE from a working
     // sibling: Free Transform is planned, so the transform slot faces
     // Rotate (which drives the engine's rotate gesture arm).
-    await expect(
-      page.locator('[data-tool-slot="transform"]'),
-    ).toHaveAttribute("data-tool", "paged.tool.rotate");
+    await expect(page.locator('[data-tool-slot="transform"]')).toHaveAttribute(
+      "data-tool",
+      "paged.tool.rotate",
+    );
   });
 
   test("AC-RAIL-12 — the frame slot draws (its three tools are wired) @feat:editor-shell.tool-rail @feat:editor-tools.draw.rectangle @level:happy", async ({
@@ -295,7 +305,9 @@ test.describe("Concept 1 — tool rail", () => {
               globalThis as unknown as {
                 __canvas: {
                   registries: {
-                    tools: { get: (id: string) => { gesture?: unknown } | undefined };
+                    tools: {
+                      get: (id: string) => { gesture?: unknown } | undefined;
+                    };
                   };
                 };
               }

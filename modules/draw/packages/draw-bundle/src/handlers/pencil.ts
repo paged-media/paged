@@ -212,13 +212,21 @@ export function createPencilHandler(host: BundleHost): GestureHandler {
       });
       pageId = e.pageId;
       sync(
-        machine.handle({ type: "down", point: e.pagePoint, pressure: e.pressure }),
+        machine.handle({
+          type: "down",
+          point: e.pagePoint,
+          pressure: e.pressure,
+        }),
       );
     },
     onPointerMove(e: CanvasPointerEvent) {
       if (!machine || !e.pagePoint || e.pageId !== pageId) return;
       sync(
-        machine.handle({ type: "move", point: e.pagePoint, pressure: e.pressure }),
+        machine.handle({
+          type: "move",
+          point: e.pagePoint,
+          pressure: e.pressure,
+        }),
       );
     },
     onPointerUp(e: CanvasPointerEvent) {

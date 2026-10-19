@@ -3,18 +3,27 @@
 // off), inside the selection, with the foreground colour. One click, one
 // journaled edit.
 
-import type { BundleHost, CanvasPointerEvent, GestureHandler } from "@paged-media/plugin-api";
+import type {
+  BundleHost,
+  CanvasPointerEvent,
+  GestureHandler,
+} from "@paged-media/plugin-api";
 
 import { pageToImage, resolveFrameFit, type FitTransform } from "./frame-fit";
 import type { ImageSession } from "./session";
 
-export function makeBucketGesture(host: BundleHost, session: ImageSession): GestureHandler {
+export function makeBucketGesture(
+  host: BundleHost,
+  session: ImageSession,
+): GestureHandler {
   let fit: FitTransform | null = null;
   return {
     onActivate() {
-      void resolveFrameFit(host, session.state().source, "paint bucket").then((f) => {
-        fit = f;
-      });
+      void resolveFrameFit(host, session.state().source, "paint bucket").then(
+        (f) => {
+          fit = f;
+        },
+      );
     },
     onDeactivate() {
       fit = null;

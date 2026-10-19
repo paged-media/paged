@@ -105,9 +105,9 @@ describe("host.assets.registerFont (W-15)", () => {
   it("is gated on capabilities.assets including fonts", async () => {
     const p = recordingProvider();
     const { host } = hostOver(p, undefined, {});
-    await expect(host.assets.registerFont(face(), "Inter")).rejects.toBeInstanceOf(
-      PluginCapabilityError,
-    );
+    await expect(
+      host.assets.registerFont(face(), "Inter"),
+    ).rejects.toBeInstanceOf(PluginCapabilityError);
     expect(p.calls).toEqual([]);
   });
 
@@ -115,7 +115,10 @@ describe("host.assets.registerFont (W-15)", () => {
     const p = recordingProvider();
     const { host } = hostOver(p);
     await expect(
-      host.assets.registerFont(face(ASSET_BUDGETS.maxFontFaceBytes + 1), "Huge"),
+      host.assets.registerFont(
+        face(ASSET_BUDGETS.maxFontFaceBytes + 1),
+        "Huge",
+      ),
     ).rejects.toThrow(/cap/);
     expect(p.calls).toEqual([]);
   });
@@ -123,17 +126,23 @@ describe("host.assets.registerFont (W-15)", () => {
   it("is inert on a host whose provider cannot register (flag false)", async () => {
     const warns: string[] = [];
     const readOnly: BundleAssetProvider = { getFontFace: async () => null };
-    const { host } = createBundleHost(() => makeFakeEditor().editor, manifest(), {
-      console: { ...silent, warn: (m: string) => void warns.push(m) },
-      capabilityMode: "enforce",
-      assetSource: readOnly,
-    });
+    const { host } = createBundleHost(
+      () => makeFakeEditor().editor,
+      manifest(),
+      {
+        console: { ...silent, warn: (m: string) => void warns.push(m) },
+        capabilityMode: "enforce",
+        assetSource: readOnly,
+      },
+    );
     expect(host.supports("assets.registerFont@1")).toBe(false);
     const d = await host.assets.registerFont(face(), "Inter");
     d.dispose();
     expect(warns.some((w) => w.includes("assets.registerFont"))).toBe(true);
     // No provider at all: same.
-    expect(hostOver(undefined).host.supports("assets.registerFont@1")).toBe(false);
+    expect(hostOver(undefined).host.supports("assets.registerFont@1")).toBe(
+      false,
+    );
   });
 
   it("dispose clears the scene faces and replays every other live face, across bundles", async () => {

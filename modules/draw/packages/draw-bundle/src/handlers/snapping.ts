@@ -61,7 +61,10 @@ export interface Snapper {
    *  far). */
   snap(e: CanvasPointerEvent, extra?: readonly Vec2[]): Vec2 | null;
   /** Snap through the engine when the host can (v67), else `snap`. */
-  snapAsync(e: CanvasPointerEvent, extra?: readonly Vec2[]): Promise<Vec2 | null>;
+  snapAsync(
+    e: CanvasPointerEvent,
+    extra?: readonly Vec2[],
+  ): Promise<Vec2 | null>;
   /** The last plugin-side snap, for a host that draws smart guides. */
   last(): SnapResult | null;
   /** The last engine snap, when the engine answered. */
@@ -75,7 +78,10 @@ export function createSnapper(host: BundleHost): Snapper {
   let lastResult: SnapResult | null = null;
   let lastEngineResult: SnapPointResult | null = null;
   const engine = host.supports("document.snapPoint@1");
-  const snap = (e: CanvasPointerEvent, extra: readonly Vec2[] = []): Vec2 | null => {
+  const snap = (
+    e: CanvasPointerEvent,
+    extra: readonly Vec2[] = [],
+  ): Vec2 | null => {
     if (!e.pagePoint) return null;
     if (e.modifiers.cmd) {
       lastResult = null;

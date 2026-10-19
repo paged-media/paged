@@ -112,7 +112,10 @@ export class CurvatureMachine {
     }
   }
 
-  private onDown(point: Vec2, modifiers: CurvatureModifiers): CurvatureSnapshot {
+  private onDown(
+    point: Vec2,
+    modifiers: CurvatureModifiers,
+  ): CurvatureSnapshot {
     this.hover = null;
     // Closing click: on the first point with a closeable run.
     if (

@@ -21,7 +21,7 @@
 // The closed plugin-capability vocabularies (rendering surfaces, clipboard
 // grants, wasm purposes, …) were hand-mirrored in three places: the TS unions
 // in plugin-api `manifest.ts`, the JSON enums in `manifest.schema.json`, and the
-// runtime `Set`s in the zero-dep `plugin-cli`. The hard constraints (plugin-api
+// runtime `Set`s in the zero-dep `paged-plugin` bin. The hard constraints (plugin-api
 // is type-only → no runtime const; the CLI is zero-dep, no build step → can't
 // import either) rule out a single literal feeding all three at runtime. So the
 // single source of truth is **manifest.schema.json**, and this test GATES the
@@ -35,12 +35,11 @@ import { describe, expect, it } from "bun:test";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const API = join(here, "..", "..", "plugin-api", "src");
-const CLI_PATH = join(here, "..", "..", "plugin-cli", "bin", "paged-plugin.mjs");
+const CLI_PATH = join(here, "..", "bin", "paged-plugin.mjs");
 
-const schema = JSON.parse(readFileSync(join(API, "manifest.schema.json"), "utf8")) as Record<
-  string,
-  unknown
->;
+const schema = JSON.parse(
+  readFileSync(join(API, "manifest.schema.json"), "utf8"),
+) as Record<string, unknown>;
 const cliSrc = readFileSync(CLI_PATH, "utf8");
 // The vocabulary unions are spread across the plugin-api type surface
 // (manifest.ts, assets.ts, …), so scan every .ts source, not just manifest.ts.
@@ -80,7 +79,9 @@ const SCHEMA_SCALARS = new Set(collected.scalars);
 
 // The CLI's `const NAME = new Set([...])` literal.
 function cliSet(name: string): string[] | null {
-  const m = cliSrc.match(new RegExp(`const ${name} = new Set\\(\\[([\\s\\S]*?)\\]\\)`));
+  const m = cliSrc.match(
+    new RegExp(`const ${name} = new Set\\(\\[([\\s\\S]*?)\\]\\)`),
+  );
   if (!m) return null;
   return [...m[1].matchAll(/"([^"]+)"/g)].map((x) => x[1]);
 }
@@ -121,14 +122,33 @@ type Vocab = {
   reserved?: string[];
 };
 const VOCAB: Record<string, Vocab> = {
-  rendering: { values: ["sceneLayer", "overlay", "hitTest", "resourceProvider"], cliSet: "RENDERING" },
-  assets: { values: ["fonts", "images"], cliSet: "ASSET_KINDS", reservedCliSet: "ASSET_KINDS_RESERVED", reserved: [] },
+  rendering: {
+    values: ["sceneLayer", "overlay", "hitTest", "resourceProvider"],
+    cliSet: "RENDERING",
+  },
+  assets: {
+    values: ["fonts", "images"],
+    cliSet: "ASSET_KINDS",
+    reservedCliSet: "ASSET_KINDS_RESERVED",
+    reserved: [],
+  },
   clipboard: { values: ["none", "vector", "full"], cliSet: "CLIPBOARD" },
   scopes: { values: ["broad", "scoped"], cliSet: "SCOPES" },
-  wasmPurposes: { values: ["layout", "codec", "compute", "engine"], cliSet: "WASM_PURPOSES" },
+  wasmPurposes: {
+    values: ["layout", "codec", "compute", "engine"],
+    cliSet: "WASM_PURPOSES",
+  },
   entries: { values: ["doubleClick"], cliSet: "ENTRIES" },
-  bakedFallbacks: { values: ["group", "rectangle", "raster"], cliSet: "BAKED_FALLBACKS" },
-  gpuRealm: { values: ["bundle"], cliSet: "GPU_REALMS", reservedCliSet: "GPU_REALMS_RESERVED", reserved: ["shared"] },
+  bakedFallbacks: {
+    values: ["group", "rectangle", "raster"],
+    cliSet: "BAKED_FALLBACKS",
+  },
+  gpuRealm: {
+    values: ["bundle"],
+    cliSet: "GPU_REALMS",
+    reservedCliSet: "GPU_REALMS_RESERVED",
+    reserved: ["shared"],
+  },
 };
 
 describe("capability vocabulary — single source: manifest.schema.json", () => {

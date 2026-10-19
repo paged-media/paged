@@ -171,11 +171,19 @@ function floatBits(v: number): number {
   return SCRATCH_U32[0];
 }
 
-export function docToViewport(cam: Camera, x: number, y: number): [number, number] {
+export function docToViewport(
+  cam: Camera,
+  x: number,
+  y: number,
+): [number, number] {
   return [x * cam.scale + cam.tx, y * cam.scale + cam.ty];
 }
 
-export function viewportToDoc(cam: Camera, x: number, y: number): [number, number] {
+export function viewportToDoc(
+  cam: Camera,
+  x: number,
+  y: number,
+): [number, number] {
   const inv = 1 / cam.scale;
   return [(x - cam.tx) * inv, (y - cam.ty) * inv];
 }

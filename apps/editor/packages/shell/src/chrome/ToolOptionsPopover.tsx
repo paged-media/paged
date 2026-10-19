@@ -52,7 +52,7 @@ function Field({ toolId, field }: { toolId: string; field: ToolOptionField }) {
   const current = settings.getValue(toolId, field.key);
 
   if (field.kind === "number") {
-    const value = typeof current === "number" ? current : field.min ?? 0;
+    const value = typeof current === "number" ? current : (field.min ?? 0);
     return (
       <label style={rowStyle}>
         <span style={labelStyle}>{field.label}</span>
@@ -92,7 +92,7 @@ function Field({ toolId, field }: { toolId: string; field: ToolOptionField }) {
 
   // select
   const value =
-    typeof current === "string" ? current : field.options[0]?.value ?? "";
+    typeof current === "string" ? current : (field.options[0]?.value ?? "");
   return (
     <label style={rowStyle}>
       <span style={labelStyle}>{field.label}</span>

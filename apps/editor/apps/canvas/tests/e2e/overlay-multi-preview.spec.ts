@@ -165,7 +165,8 @@ test.describe("overlay MULTI preview — geometry and a label at once (K-9)", ()
       close: true,
     });
     await setToolPreviews(page, [face(40), face(90), face(140)]);
-    await expect.poll(() => previewCounts(page), { timeout: 5_000 })
+    await expect
+      .poll(() => previewCounts(page), { timeout: 5_000 })
       .toMatchObject({ paths: 3 });
 
     // An EMPTY list clears, exactly like null (the contract's two

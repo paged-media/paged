@@ -78,7 +78,11 @@ const B: PenPath = {
   ]),
 };
 
-const anchorHit = (path: PenPath, index: number): PenHit => ({ kind: "anchor", path, index });
+const anchorHit = (path: PenPath, index: number): PenHit => ({
+  kind: "anchor",
+  path,
+  index,
+});
 const segmentHit = (path: PenPath, index: number, t: number): PenHit => ({
   kind: "segment",
   path,
@@ -96,24 +100,32 @@ function click(m: PenMachine, point: P, hit?: PenHit, mods = NONE) {
 }
 
 function hover(m: PenMachine, point: P, hit?: PenHit) {
-  return m.handle({ type: "move", point, modifiers: NONE, ...(hit ? { hit } : {}) });
+  return m.handle({
+    type: "move",
+    point,
+    modifiers: NONE,
+    ...(hit ? { hit } : {}),
+  });
 }
 
 /** The ops of an edit plan addressed at `id`, element stripped — what
  *  the reference model applies to that element's table. */
 function opsFor(plan: PenPlan | null, id: ElementId): PathPointOp[] {
-  if (!plan || plan.kind === "insertPath") throw new Error("expected an edit plan");
+  if (!plan || plan.kind === "insertPath")
+    throw new Error("expected an edit plan");
   return plan.ops
     .filter((op) => op.elementId === id)
     .map(({ elementId: _elementId, ...op }) => op as PathPointOp);
 }
 
 function editOps(plan: PenPlan | null): TargetedPathOp[] {
-  if (!plan || plan.kind === "insertPath") throw new Error("expected an edit plan");
+  if (!plan || plan.kind === "insertPath")
+    throw new Error("expected an edit plan");
   return plan.ops;
 }
 
-const positions = (anchors: readonly AnchorTriple[]) => anchors.map((a) => a.anchor);
+const positions = (anchors: readonly AnchorTriple[]) =>
+  anchors.map((a) => a.anchor);
 
 describe("PenMachine v2 — intents", () => {
   it("an open path's endpoint offers to continue it, selected or not", () => {
@@ -124,13 +136,17 @@ describe("PenMachine v2 — intents", () => {
 
   it("an interior anchor of the SELECTED path offers delete; of another path, nothing", () => {
     const m = machine();
-    expect(hover(m, [50, 0], anchorHit({ ...A, selected: true }, 1)).intent).toBe("delete");
+    expect(
+      hover(m, [50, 0], anchorHit({ ...A, selected: true }, 1)).intent,
+    ).toBe("delete");
     expect(hover(m, [50, 0], anchorHit(A, 1)).intent).toBe("draw");
   });
 
   it("a segment of the SELECTED path offers add; of another path, nothing", () => {
     const m = machine();
-    expect(hover(m, [25, 0], segmentHit({ ...A, selected: true }, 0, 0.5)).intent).toBe("add");
+    expect(
+      hover(m, [25, 0], segmentHit({ ...A, selected: true }, 0, 0.5)).intent,
+    ).toBe("add");
     expect(hover(m, [25, 0], segmentHit(A, 0, 0.5)).intent).toBe("draw");
   });
 
@@ -138,18 +154,28 @@ describe("PenMachine v2 — intents", () => {
     const closed: PenPath = {
       id: A_ID,
       selected: true,
-      table: { anchors: [corner(0, 0), corner(50, 0), corner(50, 50)], subpathStarts: [0], subpathOpen: [false] },
+      table: {
+        anchors: [corner(0, 0), corner(50, 0), corner(50, 50)],
+        subpathStarts: [0],
+        subpathOpen: [false],
+      },
     };
     const m = machine();
     expect(hover(m, [0, 0], anchorHit(closed, 0)).intent).toBe("delete");
-    expect(hover(m, [0, 0], anchorHit({ ...closed, selected: false }, 0)).intent).toBe("draw");
+    expect(
+      hover(m, [0, 0], anchorHit({ ...closed, selected: false }, 0)).intent,
+    ).toBe("draw");
   });
 
   it("delete is not offered where the two-anchor floor would refuse it", () => {
     const pair: PenPath = {
       id: A_ID,
       selected: true,
-      table: { anchors: [corner(0, 0), corner(50, 0)], subpathStarts: [0], subpathOpen: [false] },
+      table: {
+        anchors: [corner(0, 0), corner(50, 0)],
+        subpathStarts: [0],
+        subpathOpen: [false],
+      },
     };
     expect(hover(machine(), [0, 0], anchorHit(pair, 0)).intent).toBe("draw");
   });
@@ -159,7 +185,9 @@ describe("PenMachine v2 — intents", () => {
     expect(hover(m, [5, 5]).intent).toBe("draw");
     expect(hover(m, [5, 5], { kind: "empty" }).intent).toBe("draw");
     expect(hover(m, [5, 5], anchorHit(A, 7)).intent).toBe("draw");
-    expect(hover(m, [5, 5], segmentHit({ ...A, selected: true }, 2, 0.5)).intent).toBe("draw");
+    expect(
+      hover(m, [5, 5], segmentHit({ ...A, selected: true }, 2, 0.5)).intent,
+    ).toBe("draw");
   });
 
   it("with a path in progress, add / delete give way to placing an anchor", () => {
@@ -174,9 +202,16 @@ describe("PenMachine v2 — intents", () => {
 
   it("the press reports its own intent while the pointer is down", () => {
     const m = machine();
-    const snap = m.handle({ type: "down", point: [100, 0], modifiers: NONE, hit: anchorHit(A, 2) });
+    const snap = m.handle({
+      type: "down",
+      point: [100, 0],
+      modifiers: NONE,
+      hit: anchorHit(A, 2),
+    });
     expect(snap.intent).toBe("continue");
-    expect(m.handle({ type: "up", point: [100, 0], modifiers: NONE }).intent).toBe("draw");
+    expect(
+      m.handle({ type: "up", point: [100, 0], modifiers: NONE }).intent,
+    ).toBe("draw");
   });
 
   it("the v1 close-on-first-anchor reads as the close intent too", () => {
@@ -217,16 +252,32 @@ describe("PenMachine v2 — continuing an open path", () => {
     expect(snap.plan).toEqual({
       kind: "continue",
       ops: [
-        { elementId: A_ID, op: "pathPointInsert", index: 3, anchor: corner(150, 50) },
-        { elementId: A_ID, op: "pathPointInsert", index: 4, anchor: corner(200, 50) },
+        {
+          elementId: A_ID,
+          op: "pathPointInsert",
+          index: 3,
+          anchor: corner(150, 50),
+        },
+        {
+          elementId: A_ID,
+          op: "pathPointInsert",
+          index: 4,
+          anchor: corner(200, 50),
+        },
       ],
     });
     expect(penPlanMutation(snap.plan!, "pg")).toEqual({
       op: "batch",
       args: {
         ops: [
-          { op: "pathPointInsert", args: { elementId: A_ID, index: 3, anchor: corner(150, 50) } },
-          { op: "pathPointInsert", args: { elementId: A_ID, index: 4, anchor: corner(200, 50) } },
+          {
+            op: "pathPointInsert",
+            args: { elementId: A_ID, index: 3, anchor: corner(150, 50) },
+          },
+          {
+            op: "pathPointInsert",
+            args: { elementId: A_ID, index: 4, anchor: corner(200, 50) },
+          },
         ],
       },
     });
@@ -253,7 +304,9 @@ describe("PenMachine v2 — continuing an open path", () => {
     expect(snap.plan!.kind).toBe("continue");
     // Each insert goes AT the contour's first index, so the run ends up
     // reversed in front of it.
-    expect(editOps(snap.plan).map((op) => "index" in op && op.index)).toEqual([0, 0]);
+    expect(editOps(snap.plan).map((op) => "index" in op && op.index)).toEqual([
+      0, 0,
+    ]);
     const after = applyPathOps(A.table, opsFor(snap.plan, A_ID));
     expect(positions(after.anchors)).toEqual([
       [-100, 50],
@@ -264,18 +317,38 @@ describe("PenMachine v2 — continuing an open path", () => {
     ]);
     // In PATH direction the dragged anchor's onward handle is now its
     // INCOMING one (left), and the mirrored one leads on to the old start.
-    expect(after.anchors[1]).toEqual({ anchor: [-50, 0], left: [-70, 20], right: [-30, -20] });
+    expect(after.anchors[1]).toEqual({
+      anchor: [-50, 0],
+      left: [-70, 20],
+      right: [-30, -20],
+    });
   });
 
   it("dragging off the picked-up END pulls a new outgoing handle and leaves the incoming one alone", () => {
     const curved: PenPath = {
       id: A_ID,
-      table: open([corner(0, 0), { anchor: [100, 0], left: [80, 30], right: [100, 0] }]),
+      table: open([
+        corner(0, 0),
+        { anchor: [100, 0], left: [80, 30], right: [100, 0] },
+      ]),
     };
     const m = machine();
-    m.handle({ type: "down", point: [100, 0], modifiers: NONE, hit: anchorHit(curved, 1) });
-    const dragging = m.handle({ type: "move", point: [130, -10], modifiers: NONE });
-    expect(dragging.anchors[0]).toEqual({ anchor: [100, 0], left: [80, 30], right: [130, -10] });
+    m.handle({
+      type: "down",
+      point: [100, 0],
+      modifiers: NONE,
+      hit: anchorHit(curved, 1),
+    });
+    const dragging = m.handle({
+      type: "move",
+      point: [130, -10],
+      modifiers: NONE,
+    });
+    expect(dragging.anchors[0]).toEqual({
+      anchor: [100, 0],
+      left: [80, 30],
+      right: [130, -10],
+    });
     m.handle({ type: "up", point: [130, -10], modifiers: NONE });
     click(m, [200, 0]);
     const snap = m.handle({ type: "key", key: "Enter" });
@@ -283,22 +356,46 @@ describe("PenMachine v2 — continuing an open path", () => {
     expect(snap.plan).toEqual({
       kind: "continue",
       ops: [
-        { elementId: A_ID, op: "pathPointSet", index: 1, role: "right", position: [130, -10] },
-        { elementId: A_ID, op: "pathPointInsert", index: 2, anchor: corner(200, 0) },
+        {
+          elementId: A_ID,
+          op: "pathPointSet",
+          index: 1,
+          role: "right",
+          position: [130, -10],
+        },
+        {
+          elementId: A_ID,
+          op: "pathPointInsert",
+          index: 2,
+          anchor: corner(200, 0),
+        },
       ],
     });
   });
 
   it("at the START the new outgoing handle is the path's LEFT handle", () => {
     const m = machine();
-    m.handle({ type: "down", point: [0, 0], modifiers: NONE, hit: anchorHit(A, 0) });
+    m.handle({
+      type: "down",
+      point: [0, 0],
+      modifiers: NONE,
+      hit: anchorHit(A, 0),
+    });
     m.handle({ type: "move", point: [-20, -20], modifiers: NONE });
     m.handle({ type: "up", point: [-20, -20], modifiers: NONE });
     const snap = m.handle({ type: "key", key: "Enter" });
     // A handle alone is a change worth committing.
     expect(snap.plan).toEqual({
       kind: "continue",
-      ops: [{ elementId: A_ID, op: "pathPointSet", index: 0, role: "left", position: [-20, -20] }],
+      ops: [
+        {
+          elementId: A_ID,
+          op: "pathPointSet",
+          index: 0,
+          role: "left",
+          position: [-20, -20],
+        },
+      ],
     });
   });
 
@@ -345,7 +442,12 @@ describe("PenMachine v2 — continuing an open path", () => {
     click(m, [40, 10]);
     const snap = m.handle({ type: "key", key: "Enter" });
     expect(editOps(snap.plan)).toEqual([
-      { elementId: A_ID, op: "pathPointInsert", index: 1, anchor: corner(40, 10) },
+      {
+        elementId: A_ID,
+        op: "pathPointInsert",
+        index: 1,
+        anchor: corner(40, 10),
+      },
     ]);
   });
 });
@@ -355,7 +457,14 @@ describe("PenMachine v2 — subpaths and transforms", () => {
   const compound: PenPath = {
     id: A_ID,
     table: {
-      anchors: [corner(0, 0), corner(50, 0), corner(100, 0), corner(0, 200), corner(40, 200), corner(20, 240)],
+      anchors: [
+        corner(0, 0),
+        corner(50, 0),
+        corner(100, 0),
+        corner(0, 200),
+        corner(40, 200),
+        corner(20, 240),
+      ],
       subpathStarts: [0, 3],
       subpathOpen: [true, false],
     },
@@ -368,8 +477,20 @@ describe("PenMachine v2 — subpaths and transforms", () => {
     click(m, [200, 0]);
     const snap = m.handle({ type: "key", key: "Enter" });
     expect(editOps(snap.plan)).toEqual([
-      { elementId: A_ID, op: "pathPointInsert", index: 3, anchor: corner(150, 0), prevSubpathStarts: [0, 4] },
-      { elementId: A_ID, op: "pathPointInsert", index: 4, anchor: corner(200, 0), prevSubpathStarts: [0, 5] },
+      {
+        elementId: A_ID,
+        op: "pathPointInsert",
+        index: 3,
+        anchor: corner(150, 0),
+        prevSubpathStarts: [0, 4],
+      },
+      {
+        elementId: A_ID,
+        op: "pathPointInsert",
+        index: 4,
+        anchor: corner(200, 0),
+        prevSubpathStarts: [0, 5],
+      },
     ]);
     const after = applyPathOps(compound.table, opsFor(snap.plan, A_ID));
     expect(positions(contourOf(after, 0))).toEqual([
@@ -397,7 +518,13 @@ describe("PenMachine v2 — subpaths and transforms", () => {
     const later: PenPath = {
       id: A_ID,
       table: {
-        anchors: [corner(0, 200), corner(40, 200), corner(20, 240), corner(0, 0), corner(50, 0)],
+        anchors: [
+          corner(0, 200),
+          corner(40, 200),
+          corner(20, 240),
+          corner(0, 0),
+          corner(50, 0),
+        ],
         subpathStarts: [0, 3],
         subpathOpen: [false, true],
       },
@@ -407,7 +534,12 @@ describe("PenMachine v2 — subpaths and transforms", () => {
     click(m, [-50, 0]);
     const snap = m.handle({ type: "key", key: "Enter" });
     expect(editOps(snap.plan)).toEqual([
-      { elementId: A_ID, op: "pathPointInsert", index: 3, anchor: corner(-50, 0) },
+      {
+        elementId: A_ID,
+        op: "pathPointInsert",
+        index: 3,
+        anchor: corner(-50, 0),
+      },
     ]);
     const after = applyPathOps(later.table, opsFor(snap.plan, A_ID));
     expect(after.subpathStarts).toEqual([0, 3]);
@@ -428,7 +560,12 @@ describe("PenMachine v2 — subpaths and transforms", () => {
     click(m, [310, 120]);
     const snap = m.handle({ type: "key", key: "Enter" });
     expect(editOps(snap.plan)).toEqual([
-      { elementId: A_ID, op: "pathPointInsert", index: 3, anchor: corner(150, 50) },
+      {
+        elementId: A_ID,
+        op: "pathPointInsert",
+        index: 3,
+        anchor: corner(150, 50),
+      },
     ]);
   });
 
@@ -453,7 +590,12 @@ describe("PenMachine v2 — closing a continued path", () => {
     expect(snap.plan).toEqual({
       kind: "close",
       ops: [
-        { elementId: A_ID, op: "pathPointInsert", index: 3, anchor: corner(50, 80) },
+        {
+          elementId: A_ID,
+          op: "pathPointInsert",
+          index: 3,
+          anchor: corner(50, 80),
+        },
         { elementId: A_ID, op: "closePath", subpath: 0 },
       ],
     });
@@ -466,14 +608,23 @@ describe("PenMachine v2 — closing a continued path", () => {
     const m = machine();
     click(m, [100, 0], anchorHit(A, 2));
     const snap = click(m, [0, 0], anchorHit(A, 0));
-    expect(editOps(snap.plan)).toEqual([{ elementId: A_ID, op: "closePath", subpath: 0 }]);
+    expect(editOps(snap.plan)).toEqual([
+      { elementId: A_ID, op: "closePath", subpath: 0 },
+    ]);
   });
 
   it("works from the START onto the END, and names the right contour", () => {
     const later: PenPath = {
       id: A_ID,
       table: {
-        anchors: [corner(0, 200), corner(40, 200), corner(20, 240), corner(0, 0), corner(50, 0), corner(100, 0)],
+        anchors: [
+          corner(0, 200),
+          corner(40, 200),
+          corner(20, 240),
+          corner(0, 0),
+          corner(50, 0),
+          corner(100, 0),
+        ],
         subpathStarts: [0, 3],
         subpathOpen: [false, true],
       },
@@ -483,7 +634,12 @@ describe("PenMachine v2 — closing a continued path", () => {
     click(m, [50, -60]);
     const snap = click(m, [100, 0], anchorHit(later, 5));
     expect(editOps(snap.plan)).toEqual([
-      { elementId: A_ID, op: "pathPointInsert", index: 3, anchor: corner(50, -60) },
+      {
+        elementId: A_ID,
+        op: "pathPointInsert",
+        index: 3,
+        anchor: corner(50, -60),
+      },
       { elementId: A_ID, op: "closePath", subpath: 1 },
     ]);
     const after = applyPathOps(later.table, opsFor(snap.plan, A_ID));
@@ -500,12 +656,23 @@ describe("PenMachine v2 — closing a continued path", () => {
     const m = machine();
     click(m, [100, 0], anchorHit(A, 2));
     click(m, [50, 80]);
-    const pressed = m.handle({ type: "down", point: [0, 0], modifiers: NONE, hit: anchorHit(A, 0) });
+    const pressed = m.handle({
+      type: "down",
+      point: [0, 0],
+      modifiers: NONE,
+      hit: anchorHit(A, 0),
+    });
     expect(pressed.plan).toBeNull();
     expect(pressed.intent).toBe("close");
-    const dragged = m.handle({ type: "move", point: [-40, -40], modifiers: NONE });
+    const dragged = m.handle({
+      type: "move",
+      point: [-40, -40],
+      modifiers: NONE,
+    });
     expect(dragged.anchors).toHaveLength(2);
-    expect(m.handle({ type: "up", point: [-40, -40], modifiers: NONE }).plan!.kind).toBe("close");
+    expect(
+      m.handle({ type: "up", point: [-40, -40], modifiers: NONE }).plan!.kind,
+    ).toBe("close");
   });
 
   it("an open end of ANOTHER contour of the same element is not a close target", () => {
@@ -537,7 +704,12 @@ describe("PenMachine v2 — joining another open path", () => {
     expect(snap.plan).toEqual({
       kind: "join",
       ops: [
-        { elementId: A_ID, op: "pathPointInsert", index: 3, anchor: corner(150, -20) },
+        {
+          elementId: A_ID,
+          op: "pathPointInsert",
+          index: 3,
+          anchor: corner(150, -20),
+        },
         // The twin: ON B's picked endpoint, so that pair of ends is the
         // nearest one `joinPaths` can find — carrying the handle that
         // endpoint was dangling as its incoming one.
@@ -554,12 +726,18 @@ describe("PenMachine v2 — joining another open path", () => {
   });
 
   it("the twin is bit-for-bit the picked endpoint, never a round-tripped copy", () => {
-    const odd: PenPath = { id: B_ID, table: open([corner(0.1 + 0.2, 1 / 3), corner(9, 9)]) };
+    const odd: PenPath = {
+      id: B_ID,
+      table: open([corner(0.1 + 0.2, 1 / 3), corner(9, 9)]),
+    };
     const m = machine();
     click(m, [100, 0], anchorHit(A, 2));
     const snap = click(m, [0.3, 0.33], anchorHit(odd, 0));
     const twin = editOps(snap.plan)[0];
-    expect(twin.op === "pathPointInsert" && twin.anchor.anchor).toEqual([0.1 + 0.2, 1 / 3]);
+    expect(twin.op === "pathPointInsert" && twin.anchor.anchor).toEqual([
+      0.1 + 0.2,
+      1 / 3,
+    ]);
   });
 
   it("joining onto the other path's END carries its right handle", () => {
@@ -580,7 +758,12 @@ describe("PenMachine v2 — joining another open path", () => {
     click(m, [-40, 30]);
     const snap = click(m, [200, 0], anchorHit(B, 0));
     expect(editOps(snap.plan)).toEqual([
-      { elementId: A_ID, op: "pathPointInsert", index: 0, anchor: corner(-40, 30) },
+      {
+        elementId: A_ID,
+        op: "pathPointInsert",
+        index: 0,
+        anchor: corner(-40, 30),
+      },
       {
         elementId: A_ID,
         op: "pathPointInsert",
@@ -603,14 +786,25 @@ describe("PenMachine v2 — joining another open path", () => {
     const m2 = machine();
     const t: Affine = [1, 0, 0, 1, 5, 0];
     click(m2, [105, 0], anchorHit({ ...A, transform: t }, 2));
-    expect(hover(m2, [205, 0], anchorHit({ ...B, transform: [...t] as unknown as Affine }, 0)).intent).toBe("join");
+    expect(
+      hover(
+        m2,
+        [205, 0],
+        anchorHit({ ...B, transform: [...t] as unknown as Affine }, 0),
+      ).intent,
+    ).toBe("join");
   });
 
   it("refuses a join when either path has more than one contour", () => {
     const multi: PenPath = {
       id: B_ID,
       table: {
-        anchors: [corner(200, 0), corner(250, 50), corner(300, 300), corner(350, 300)],
+        anchors: [
+          corner(200, 0),
+          corner(250, 50),
+          corner(300, 300),
+          corner(350, 300),
+        ],
         subpathStarts: [0, 2],
         subpathOpen: [true, true],
       },
@@ -648,7 +842,11 @@ describe("PenMachine v2 — extending a path with a new run", () => {
     ]);
     // Walked from the path's side, the handle that led ON to the path is
     // now the INCOMING one.
-    expect(after.anchors[3]).toEqual({ anchor: [200, 100], left: [160, 90], right: [240, 110] });
+    expect(after.anchors[3]).toEqual({
+      anchor: [200, 100],
+      left: [160, 90],
+      right: [240, 110],
+    });
   });
 
   it("ending on an open START puts the run in front of it, in drawing order", () => {
@@ -657,8 +855,18 @@ describe("PenMachine v2 — extending a path with a new run", () => {
     click(m, [-100, 50]);
     const snap = click(m, [0, 0], anchorHit(A, 0));
     expect(editOps(snap.plan)).toEqual([
-      { elementId: A_ID, op: "pathPointInsert", index: 0, anchor: corner(-100, 50) },
-      { elementId: A_ID, op: "pathPointInsert", index: 0, anchor: corner(-200, 50) },
+      {
+        elementId: A_ID,
+        op: "pathPointInsert",
+        index: 0,
+        anchor: corner(-100, 50),
+      },
+      {
+        elementId: A_ID,
+        op: "pathPointInsert",
+        index: 0,
+        anchor: corner(-200, 50),
+      },
     ]);
     const after = applyPathOps(A.table, opsFor(snap.plan, A_ID));
     expect(positions(after.anchors).slice(0, 3)).toEqual([
@@ -681,7 +889,13 @@ describe("PenMachine v2 — extending a path with a new run", () => {
     click(m, [120, 40]);
     const snap = click(m, [50, 0], anchorHit(multi, 1));
     expect(editOps(snap.plan)).toEqual([
-      { elementId: A_ID, op: "pathPointInsert", index: 2, anchor: corner(120, 40), prevSubpathStarts: [0, 3] },
+      {
+        elementId: A_ID,
+        op: "pathPointInsert",
+        index: 2,
+        anchor: corner(120, 40),
+        prevSubpathStarts: [0, 3],
+      },
     ]);
   });
 
@@ -705,8 +919,20 @@ describe("PenMachine v2 — add / delete anchor on the selected path", () => {
     expect(snap.plan).toEqual({
       kind: "addAnchor",
       ops: [
-        { elementId: A_ID, op: "pathPointSet", index: 0, role: "right", position: [0, 0] },
-        { elementId: A_ID, op: "pathPointSet", index: 1, role: "left", position: [50, 0] },
+        {
+          elementId: A_ID,
+          op: "pathPointSet",
+          index: 0,
+          role: "right",
+          position: [0, 0],
+        },
+        {
+          elementId: A_ID,
+          op: "pathPointSet",
+          index: 1,
+          role: "left",
+          position: [50, 0],
+        },
         // The de Casteljau midpoint: on a straight segment the new
         // anchor's handles lie along it, so the shape is unchanged.
         {
@@ -736,11 +962,20 @@ describe("PenMachine v2 — add / delete anchor on the selected path", () => {
 
   it("the plan arrives on release, not on press, and a drag pulls nothing", () => {
     const m = machine();
-    const pressed = m.handle({ type: "down", point: [50, 0], modifiers: NONE, hit: anchorHit(sel, 1) });
+    const pressed = m.handle({
+      type: "down",
+      point: [50, 0],
+      modifiers: NONE,
+      hit: anchorHit(sel, 1),
+    });
     expect(pressed.plan).toBeNull();
     expect(pressed.intent).toBe("delete");
-    expect(m.handle({ type: "move", point: [80, 40], modifiers: NONE }).anchors).toHaveLength(0);
-    expect(m.handle({ type: "up", point: [80, 40], modifiers: NONE }).plan!.kind).toBe("deleteAnchor");
+    expect(
+      m.handle({ type: "move", point: [80, 40], modifiers: NONE }).anchors,
+    ).toHaveLength(0);
+    expect(
+      m.handle({ type: "up", point: [80, 40], modifiers: NONE }).plan!.kind,
+    ).toBe("deleteAnchor");
   });
 
   it("the pen keeps working after an anchor edit", () => {
@@ -759,10 +994,19 @@ describe("PenMachine v2 — the plan is a superset of the v1 commit", () => {
     click(m, [0, 0]);
     click(m, [30, 0]);
     const snap = m.handle({ type: "key", key: "Enter" });
-    expect(snap.plan).toEqual({ kind: "insertPath", anchors: snap.commit!.anchors, open: true });
+    expect(snap.plan).toEqual({
+      kind: "insertPath",
+      anchors: snap.commit!.anchors,
+      open: true,
+    });
     expect(penPlanMutation(snap.plan!, "page-1")).toEqual({
       op: "insertPath",
-      args: { pageId: "page-1", anchors: [corner(0, 0), corner(30, 0)], open: true, smooth: false },
+      args: {
+        pageId: "page-1",
+        anchors: [corner(0, 0), corner(30, 0)],
+        open: true,
+        smooth: false,
+      },
     });
   });
 
@@ -793,17 +1037,27 @@ const pointArb = fc.tuple(coord, coord);
 
 const tripleArb: fc.Arbitrary<AnchorTriple> = fc
   .tuple(pointArb, pointArb, pointArb)
-  .map(([a, l, r]) => ({ anchor: [a[0], a[1]], left: [l[0], l[1]], right: [r[0], r[1]] }));
+  .map(([a, l, r]) => ({
+    anchor: [a[0], a[1]],
+    left: [l[0], l[1]],
+    right: [r[0], r[1]],
+  }));
 
 /** 1–3 contours of 1–4 anchors; at least the PICKED contour is open. */
 const pathArb = fc
-  .array(fc.array(tripleArb, { minLength: 1, maxLength: 4 }), { minLength: 1, maxLength: 3 })
+  .array(fc.array(tripleArb, { minLength: 1, maxLength: 4 }), {
+    minLength: 1,
+    maxLength: 3,
+  })
   .chain((contours) =>
     fc.record({
       contours: fc.constant(contours),
       pick: fc.nat({ max: contours.length - 1 }),
       end: fc.constantFrom<"start" | "end">("start", "end"),
-      othersOpen: fc.array(fc.boolean(), { minLength: contours.length, maxLength: contours.length }),
+      othersOpen: fc.array(fc.boolean(), {
+        minLength: contours.length,
+        maxLength: contours.length,
+      }),
     }),
   );
 
@@ -847,7 +1101,9 @@ describe("PenMachine v2 — properties", () => {
           const grown = positions(contourOf(after, pick));
           const original = positions(contours[pick]);
           expect(grown).toEqual(
-            atEnd ? [...original, ...clicks] : [...[...clicks].reverse(), ...original],
+            atEnd
+              ? [...original, ...clicks]
+              : [...[...clicks].reverse(), ...original],
           );
           // Every other contour is exactly what it was.
           contours.forEach((c, i) => {

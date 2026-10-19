@@ -95,18 +95,18 @@ through `host.objects` (code: `packages/draw-bundle/src/object-model/`). Address
 first consumers' fix-ups, §12.7 the panel property row). It is on `main` and published since
 `@paged-media/draw` 0.1.0-canary.16.
 
-| Kind | Rows | Backing | One write = |
-|---|---|---|---|
-| `path` | 10 (points, one point `points[]` and its anchor and two handles, contour starts, open flags, counts, transform) | core `framePath` | 1 undo step |
-| `appearance` | 5 (fills, strokes, graphic style, overridden, baked) | element envelope + bake | 1 undo step |
-| `graphicStyle` | 10 (name, fills, strokes, 6 base paints, linked count) | library, document label | 1 undo step, followers re-applied |
-| `symbol` | 6 | library, document label | 1 undo step (delete unlinks instances) |
-| `symbolInstance` | 4 | per-leaf links | 1 undo step |
-| `pattern` | 11 | recipe, document label | 1 undo step |
-| `repeat` | 20 | recipe, document label | 1 undo step |
-| `blend` | 15 | recipe, document label | 1 undo step |
-| `livePaint` | 4 | recipe, document label | 1 undo step |
-| `objectsOnPath` | 11 | recipe, document label | 1 undo step |
+| Kind             | Rows                                                                                                            | Backing                 | One write =                            |
+| ---------------- | --------------------------------------------------------------------------------------------------------------- | ----------------------- | -------------------------------------- |
+| `path`           | 10 (points, one point `points[]` and its anchor and two handles, contour starts, open flags, counts, transform) | core `framePath`        | 1 undo step                            |
+| `appearance`     | 5 (fills, strokes, graphic style, overridden, baked)                                                            | element envelope + bake | 1 undo step                            |
+| `graphicStyle`   | 10 (name, fills, strokes, 6 base paints, linked count)                                                          | library, document label | 1 undo step, followers re-applied      |
+| `symbol`         | 6                                                                                                               | library, document label | 1 undo step (delete unlinks instances) |
+| `symbolInstance` | 4                                                                                                               | per-leaf links          | 1 undo step                            |
+| `pattern`        | 11                                                                                                              | recipe, document label  | 1 undo step                            |
+| `repeat`         | 20                                                                                                              | recipe, document label  | 1 undo step                            |
+| `blend`          | 15                                                                                                              | recipe, document label  | 1 undo step                            |
+| `livePaint`      | 4                                                                                                               | recipe, document label  | 1 undo step                            |
+| `objectsOnPath`  | 11                                                                                                              | recipe, document label  | 1 undo step                            |
 
 - **Undoable library and recipe writes.** An object-model write stores the library in a
   content-addressed part and names its hash in the document label `x-paged:media.paged.draw`,
@@ -131,12 +131,12 @@ first consumers' fix-ups, §12.7 the panel property row). It is on `main` and pu
 
 ### Illustrator variables
 
-| Variable | Where it maps |
-|---|---|
-| Text | core `story:<id>` `content` (or a story range) |
+| Variable    | Where it maps                                                      |
+| ----------- | ------------------------------------------------------------------ |
+| Text        | core `story:<id>` `content` (or a story range)                     |
 | Linked file | core image placement (`placeImage`); not yet a `host.objects` path |
-| Visibility | core `elementVisible` on the page item |
-| Graph data | not built — paged.draw has no chart engine (see below) |
+| Visibility  | core `elementVisible` on the page item                             |
+| Graph data  | not built — paged.draw has no chart engine (see below)             |
 
 **Graph data is a gap.** paged.draw draws no charts and will not grow a chart engine.
 paged.sheet has one (plotters into a frozen geometry IR drawn as native vector). Reuse goes
@@ -240,12 +240,12 @@ panel of these rows. The fields:
 What each published canary of `@paged-media/draw` added since 0.1.0-canary.13. A merge that
 leaves the version unchanged publishes nothing.
 
-| Version | Published | Added |
-|---|---|---|
+| Version         | Published  | Added                                                                                                                                                                                                                                                                                                                                       |
+| --------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 0.1.0-canary.20 | 2026-10-14 | Curvature and Pencil paint their path with the graphic default; Reflect writes a nested group's transform in its parent's frame; the link index follows `document.onDidChange` and `document.onDidOpen` and reads nothing off the raw client. Peers `>=0.2.55-canary.0`. Carries the engine 0.71.8 test pins, which change no runtime code. |
-| 0.1.0-canary.19 | 2026-10-13 | Shape Builder keeps the faces a gesture does not cross and merges an oval by its curve; transforms and re-tabled paths are written in spread space on either engine; Create Outlines re-merges glyph runs on their page. |
-| 0.1.0-canary.18 | 2026-10-11 | Messages a user sees (panel refusals, status bindings, panel and export notes) say what happens in plain words instead of naming internal gap ids. |
-| 0.1.0-canary.17 | 2026-10-11 | The panel pass: one-sentence intros, "About" sections, own icons, a second click to delete a style or symbol, refusals shown in the panel. The Stroke and Fill panels are no longer contributed; the host's panels carry their rows. |
-| 0.1.0-canary.16 | 2026-10-11 | The object model (ten kinds, 97 typed command twins) and a schema panel of its property rows (named Draw settings since canary.17); engine protocol 71 (canvas-wasm 0.71.1). Peers `>=0.2.45-canary.0`. |
-| 0.1.0-canary.15 | 2026-10-05 | Curvature snaps through the engine (`document.snapPoint`, protocol 67), the plugin-side snapper as the fallback. |
-| 0.1.0-canary.14 | 2026-10-05 | The published type declarations inline `draw-geometry` and `draw-tools`. |
+| 0.1.0-canary.19 | 2026-10-13 | Shape Builder keeps the faces a gesture does not cross and merges an oval by its curve; transforms and re-tabled paths are written in spread space on either engine; Create Outlines re-merges glyph runs on their page.                                                                                                                    |
+| 0.1.0-canary.18 | 2026-10-11 | Messages a user sees (panel refusals, status bindings, panel and export notes) say what happens in plain words instead of naming internal gap ids.                                                                                                                                                                                          |
+| 0.1.0-canary.17 | 2026-10-11 | The panel pass: one-sentence intros, "About" sections, own icons, a second click to delete a style or symbol, refusals shown in the panel. The Stroke and Fill panels are no longer contributed; the host's panels carry their rows.                                                                                                        |
+| 0.1.0-canary.16 | 2026-10-11 | The object model (ten kinds, 97 typed command twins) and a schema panel of its property rows (named Draw settings since canary.17); engine protocol 71 (canvas-wasm 0.71.1). Peers `>=0.2.45-canary.0`.                                                                                                                                     |
+| 0.1.0-canary.15 | 2026-10-05 | Curvature snaps through the engine (`document.snapPoint`, protocol 67), the plugin-side snapper as the fallback.                                                                                                                                                                                                                            |
+| 0.1.0-canary.14 | 2026-10-05 | The published type declarations inline `draw-geometry` and `draw-tools`.                                                                                                                                                                                                                                                                    |

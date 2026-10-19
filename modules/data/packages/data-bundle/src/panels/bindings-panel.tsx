@@ -26,7 +26,11 @@
 
 import { useState, type CSSProperties, type ReactElement } from "react";
 import type { BundleHost, ElementId } from "@paged-media/plugin-api";
-import type { IdmlFit, RuleTarget, VisibilityTargetKind } from "../../../data-host-model/src";
+import type {
+  IdmlFit,
+  RuleTarget,
+  VisibilityTargetKind,
+} from "../../../data-host-model/src";
 
 import type {
   BarcodeSymbology,
@@ -51,20 +55,38 @@ import { DiagnosticsList } from "./diagnostics";
 import { useSessionSnapshot } from "./use-session";
 
 /** The binding kinds the panel defines. */
-type BindKind = "variable" | "image" | "barcode" | "table" | "visibility" | "rule" | "recordFlow";
+type BindKind =
+  | "variable"
+  | "image"
+  | "barcode"
+  | "table"
+  | "visibility"
+  | "rule"
+  | "recordFlow";
 
 const KIND_OPTIONS: { value: BindKind; label: string; field: string }[] = [
   { value: "variable", label: "variable field", field: "field (column name)" },
   { value: "image", label: "image", field: "field with the image path or URL" },
   { value: "barcode", label: "barcode / QR", field: "field to encode" },
   { value: "table", label: "table", field: "columns, comma-separated" },
-  { value: "visibility", label: "show / hide", field: "field or expression (true = shown)" },
+  {
+    value: "visibility",
+    label: "show / hide",
+    field: "field or expression (true = shown)",
+  },
   { value: "rule", label: "style rule", field: "condition, e.g. stock < 5" },
-  { value: "recordFlow", label: "record flow (catalog)", field: "fields per record, comma-separated" },
+  {
+    value: "recordFlow",
+    label: "record flow (catalog)",
+    field: "fields per record, comma-separated",
+  },
 ];
 
 /** The rule actions — each applies a document style by name. */
-const RULE_ACTIONS: { value: "characterStyle" | "paragraphStyle" | "tableStyle"; label: string }[] = [
+const RULE_ACTIONS: {
+  value: "characterStyle" | "paragraphStyle" | "tableStyle";
+  label: string;
+}[] = [
   { value: "characterStyle", label: "character style" },
   { value: "paragraphStyle", label: "paragraph style" },
   { value: "tableStyle", label: "cell style (table column)" },
@@ -123,15 +145,22 @@ function draftFrom(b: BindingSync): FormatDraft {
 }
 
 function patternFrom(d: FormatDraft): FormatPattern {
-  const decimals = Math.max(0, Math.min(10, Number.parseInt(d.decimals, 10) || 0));
+  const decimals = Math.max(
+    0,
+    Math.min(10, Number.parseInt(d.decimals, 10) || 0),
+  );
   switch (d.kind) {
     case "number":
     case "percent":
       return { kind: d.kind, decimals };
     case "currency":
-      return d.symbol.trim() ? { kind: "currency", decimals, symbol: d.symbol.trim() } : { kind: "currency", decimals };
+      return d.symbol.trim()
+        ? { kind: "currency", decimals, symbol: d.symbol.trim() }
+        : { kind: "currency", decimals };
     case "date":
-      return d.date.trim() ? { kind: "date", pattern: d.date.trim() } : { kind: "date" };
+      return d.date.trim()
+        ? { kind: "date", pattern: d.date.trim() }
+        : { kind: "date" };
     default:
       return { kind: "plain" };
   }
@@ -215,31 +244,52 @@ export function queryOptions(
   const allRowsOf = new Map<string, string>();
   for (const q of queries) {
     const m = ALL_ROWS.exec(sqlOf.get(q) ?? "");
-    if (m && sources.includes(m[1]) && !allRowsOf.has(m[1])) allRowsOf.set(m[1], q);
+    if (m && sources.includes(m[1]) && !allRowsOf.has(m[1]))
+      allRowsOf.set(m[1], q);
   }
   const taken = new Set(queries);
   const out: QueryOption[] = [];
   for (const source of sources) {
     const existing = allRowsOf.get(source);
     if (existing) {
-      out.push({ value: `s:${source}`, label: `All rows of ${source}`, query: existing, title: sqlOf.get(existing) ?? "" });
+      out.push({
+        value: `s:${source}`,
+        label: `All rows of ${source}`,
+        query: existing,
+        title: sqlOf.get(existing) ?? "",
+      });
       continue;
     }
     let id = "q_all";
     if (taken.has(id)) id = `q_all_${source.replace(/[^A-Za-z0-9_]+/g, "_")}`;
     taken.add(id);
     const sql = `SELECT * FROM ${source}`;
-    out.push({ value: `s:${source}`, label: `All rows of ${source}`, query: id, sql, title: sql });
+    out.push({
+      value: `s:${source}`,
+      label: `All rows of ${source}`,
+      query: id,
+      sql,
+      title: sql,
+    });
   }
   const used = new Set(allRowsOf.values());
   for (const q of queries) {
     if (used.has(q)) continue;
-    out.push({ value: `q:${q}`, label: `Query ${q}`, query: q, title: sqlOf.get(q) ?? "" });
+    out.push({
+      value: `q:${q}`,
+      label: `Query ${q}`,
+      query: q,
+      title: sqlOf.get(q) ?? "",
+    });
   }
   return out;
 }
 
-const row: CSSProperties = { display: "flex", gap: "var(--space-2, 8px)", flexWrap: "wrap" };
+const row: CSSProperties = {
+  display: "flex",
+  gap: "var(--space-2, 8px)",
+  flexWrap: "wrap",
+};
 
 /** "Bind to data…" (ADR 558): the editor names the object and the property;
  *  this asks for the query and the expression, then defines the binding. */
@@ -279,11 +329,23 @@ function PropertyDraftRow(props: {
     onDone();
   };
   return (
-    <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }} data-data-bind-property>
+    <div
+      style={{
+        display: "flex",
+        flexWrap: "wrap",
+        gap: 6,
+        alignItems: "center",
+      }}
+      data-data-bind-property
+    >
       <span>
         Bind <code>{draft.path}</code> of <code>{draft.selector}</code> to
       </span>
-      <select data-data-bind-property-query value={query} onChange={(e) => setQuery(e.target.value)}>
+      <select
+        data-data-bind-property-query
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+      >
         {queries.map((q) => (
           <option key={q} value={q}>
             {q}
@@ -298,10 +360,17 @@ function PropertyDraftRow(props: {
         onChange={(e) => setExpr(e.target.value)}
         style={{ flex: "1 1 140px", minWidth: 0 }}
       />
-      <button type="button" data-data-bind-property-define onClick={() => void bind()}>
+      <button
+        type="button"
+        data-data-bind-property-define
+        onClick={() => void bind()}
+      >
         Bind
       </button>
-      <button type="button" onClick={() => (session.setPropertyDraft(null), onDone())}>
+      <button
+        type="button"
+        onClick={() => (session.setPropertyDraft(null), onDone())}
+      >
         Cancel
       </button>
       {msg && <span data-data-bind-property-msg>{msg}</span>}
@@ -320,14 +389,14 @@ export function makeBindingsPanel(
     // Binding AUTHORING: kind + query + field drive a real addBinding flow.
     const [bindKind, setBindKind] = useState<BindKind>("variable");
     const [invert, setInvert] = useState(false);
-    const [ruleAction, setRuleAction] = useState<(typeof RULE_ACTIONS)[number]["value"]>(
-      "characterStyle",
-    );
+    const [ruleAction, setRuleAction] =
+      useState<(typeof RULE_ACTIONS)[number]["value"]>("characterStyle");
     const [ruleStyle, setRuleStyle] = useState("");
     const [groupBy, setGroupBy] = useState("");
-    const [flowPreview, setFlowPreview] = useState<{ id: string; preview: RecordFlowPreview } | null>(
-      null,
-    );
+    const [flowPreview, setFlowPreview] = useState<{
+      id: string;
+      preview: RecordFlowPreview;
+    } | null>(null);
     const [bindField, setBindField] = useState("");
     const [bindSeq, setBindSeq] = useState(1);
     const [bindMsg, setBindMsg] = useState<string | null>(null);
@@ -337,7 +406,9 @@ export function makeBindingsPanel(
     const [stepMsg, setStepMsg] = useState<string | null>(null);
     // Wave 5 — Data Merge options.
     const [mergeMode, setMergeMode] = useState<"single" | "multiple">("single");
-    const [mergeArrange, setMergeArrange] = useState<"rows" | "columns">("rows");
+    const [mergeArrange, setMergeArrange] = useState<"rows" | "columns">(
+      "rows",
+    );
     const [mergeRowSpacing, setMergeRowSpacing] = useState(12);
     const [mergeColSpacing, setMergeColSpacing] = useState(12);
     const [mergeKeep, setMergeKeep] = useState(true);
@@ -345,10 +416,13 @@ export function makeBindingsPanel(
     const [mergeBlank, setMergeBlank] = useState(true);
     const [mergeMsg, setMergeMsg] = useState<string | null>(null);
 
-    const sqlOf = new Map((session.listQueries?.() ?? []).map((q) => [q.id, q.sql]));
+    const sqlOf = new Map(
+      (session.listQueries?.() ?? []).map((q) => [q.id, q.sql]),
+    );
     const options = queryOptions(snapshot.sources, snapshot.queries, sqlOf);
     /** The picked "Records from" entry (the first one until the user picks). */
-    const picked = (): QueryOption | null => options.find((o) => o.value === queryPick) ?? options[0] ?? null;
+    const picked = (): QueryOption | null =>
+      options.find((o) => o.value === queryPick) ?? options[0] ?? null;
     /** The picked query's id, defining it first when it is a source's rows. */
     function ensurePicked(): string | null {
       const opt = picked();
@@ -370,7 +444,12 @@ export function makeBindingsPanel(
         recordsPerPage:
           mergeMode === "single"
             ? { mode: "single" }
-            : { mode: "multiple", arrange: mergeArrange, rowSpacingPt: mergeRowSpacing, columnSpacingPt: mergeColSpacing },
+            : {
+                mode: "multiple",
+                arrange: mergeArrange,
+                rowSpacingPt: mergeRowSpacing,
+                columnSpacingPt: mergeColSpacing,
+              },
         removeBlankLines: mergeBlank,
         template: mergeKeep ? "keep" : "consume",
         ...(mergeNewDoc ? { destination: "newDocument" as const } : {}),
@@ -388,7 +467,12 @@ export function makeBindingsPanel(
     // again keeps its place); the count is there once the query has run.
     const stepQuery = picked()?.query ?? null;
     const recordTotal = stepQuery ? (snapshot.records?.[stepQuery] ?? 0) : 0;
-    const previewIndex = stepQuery ? Math.min(snapshot.preview?.[stepQuery] ?? 0, Math.max(0, recordTotal - 1)) : 0;
+    const previewIndex = stepQuery
+      ? Math.min(
+          snapshot.preview?.[stepQuery] ?? 0,
+          Math.max(0, recordTotal - 1),
+        )
+      : 0;
     // §9 field-mapping wizard: the engine's column → binding suggestions.
     const [mappings, setMappings] = useState<ColumnMapping[]>([]);
     const [chosen, setChosen] = useState<Set<string>>(new Set());
@@ -406,7 +490,9 @@ export function makeBindingsPanel(
     // firing preview, and where in a story the style lands.
     const [ruleStyles, setRuleStyles] = useState<StyleOption[]>([]);
     const [ruleCheck, setRuleCheck] = useState<ExprCheck | null>(null);
-    const [rulePreview, setRulePreview] = useState<ConditionPreview | null>(null);
+    const [rulePreview, setRulePreview] = useState<ConditionPreview | null>(
+      null,
+    );
     const [ruleScope, setRuleScope] = useState<"story" | "paragraphs">("story");
 
     /** Re-read every binding's sync state, locale and pattern. */
@@ -424,8 +510,11 @@ export function makeBindingsPanel(
     }
 
     /** The document's styles for a rule action (the selfId is what applies). */
-    async function loadRuleStyles(action: (typeof RULE_ACTIONS)[number]["value"]): Promise<void> {
-      const styles = (await session.documentStyles(RULE_STYLE_KIND[action])) ?? [];
+    async function loadRuleStyles(
+      action: (typeof RULE_ACTIONS)[number]["value"],
+    ): Promise<void> {
+      const styles =
+        (await session.documentStyles(RULE_STYLE_KIND[action])) ?? [];
       setRuleStyles(styles);
       if (styles.length > 0 && !styles.some((st) => st.selfId === ruleStyle)) {
         setRuleStyle(styles[0].selfId);
@@ -440,7 +529,11 @@ export function makeBindingsPanel(
       if (!q) return;
       const check = (await session.checkExpression(when, q)) ?? null;
       setRuleCheck(check);
-      setRulePreview(check && check.ok ? ((await session.previewCondition(q, when)) ?? null) : null);
+      setRulePreview(
+        check && check.ok
+          ? ((await session.previewCondition(q, when)) ?? null)
+          : null,
+      );
       refresh();
     }
 
@@ -456,7 +549,10 @@ export function makeBindingsPanel(
     async function applyFormat(id: string): Promise<void> {
       if (!draft) return;
       await session.setBindingFormat(id, patternFrom(draft));
-      await session.setBindingLocale(id, draft.locale === "" ? null : draft.locale);
+      await session.setBindingLocale(
+        id,
+        draft.locale === "" ? null : draft.locale,
+      );
       setFormatPreview((await session.previewBinding(id, 0)) ?? null);
       await reloadSync();
     }
@@ -491,7 +587,10 @@ export function makeBindingsPanel(
       setWizardQuery(q);
       setMappings(cols);
       setChosen(new Set(cols.filter((c) => c.mappable).map((c) => c.column)));
-      if (cols.length === 0) setBindMsg(`No columns to map — "${q}" returned no data. Refresh data and try again.`);
+      if (cols.length === 0)
+        setBindMsg(
+          `No columns to map — "${q}" returned no data. Refresh data and try again.`,
+        );
       refresh();
     }
 
@@ -535,7 +634,11 @@ export function makeBindingsPanel(
     async function ruleTarget(): Promise<RuleTarget | null> {
       const cell = host.selection.get().find((e) => e.kind === "tableCell");
       if (cell) {
-        const id = cell.id as { story_id: string; table_id: string; col: number };
+        const id = cell.id as {
+          story_id: string;
+          table_id: string;
+          col: number;
+        };
         return {
           kind: "tableColumn",
           storyId: id.story_id,
@@ -546,7 +649,9 @@ export function makeBindingsPanel(
       }
       let caret: { storyId: string; offset: number } | null = null;
       try {
-        caret = host.supports("text.caret@1") ? (host.text?.caret() ?? null) : null;
+        caret = host.supports("text.caret@1")
+          ? (host.text?.caret() ?? null)
+          : null;
       } catch {
         caret = null;
       }
@@ -562,7 +667,11 @@ export function makeBindingsPanel(
           let at = 0;
           story.paragraphs.forEach((p, i) => {
             const len = p.runs.reduce((m, r) => m + [...r.text].length, 0);
-            if (caret!.offset >= at && caret!.offset <= at + len && caretParagraph === 0) {
+            if (
+              caret!.offset >= at &&
+              caret!.offset <= at + len &&
+              caretParagraph === 0
+            ) {
               caretParagraph = i;
             }
             at += len;
@@ -573,7 +682,11 @@ export function makeBindingsPanel(
         // no story read: the range ends at the caret
       }
       if (ruleScope === "paragraphs") {
-        return { kind: "storyParagraphs", storyId: caret.storyId, firstParagraph: caretParagraph };
+        return {
+          kind: "storyParagraphs",
+          storyId: caret.storyId,
+          firstParagraph: caretParagraph,
+        };
       }
       return { kind: "storyRange", storyId: caret.storyId, start: 0, end };
     }
@@ -590,7 +703,9 @@ export function makeBindingsPanel(
       }
       const field = bindField.trim();
       if (!field) {
-        setBindMsg(`enter the ${KIND_OPTIONS.find((k) => k.value === bindKind)!.field}`);
+        setBindMsg(
+          `enter the ${KIND_OPTIONS.find((k) => k.value === bindKind)!.field}`,
+        );
         return;
       }
       const q = opt.query;
@@ -622,10 +737,19 @@ export function makeBindingsPanel(
             session.addImageBinding(id, rect.id as string, q, field, { fit });
             setBindMsg(`image binding ${id} → the selected rectangle (${fit})`);
           } else {
-            session.addBarcodeBinding(id, rect.id as string, q, symbology, field, {
-              missing: "skip",
-            });
-            setBindMsg(`barcode binding ${id} → the selected rectangle (${symbology})`);
+            session.addBarcodeBinding(
+              id,
+              rect.id as string,
+              q,
+              symbology,
+              field,
+              {
+                missing: "skip",
+              },
+            );
+            setBindMsg(
+              `barcode binding ${id} → the selected rectangle (${symbology})`,
+            );
           }
           break;
         case "table": {
@@ -637,13 +761,15 @@ export function makeBindingsPanel(
             q,
             cols.map((c) => ({ header: c, expr: c })),
           );
-          setBindMsg(`table binding ${id} (${cols.length} column(s)) — Lower places the table`);
+          setBindMsg(
+            `table binding ${id} (${cols.length} column(s)) — Lower places the table`,
+          );
           break;
         }
         case "visibility": {
-          const el = selection.find((e) => VISIBILITY_KINDS.includes(e.kind)) as
-            | (ElementId & { id: string })
-            | undefined;
+          const el = selection.find((e) =>
+            VISIBILITY_KINDS.includes(e.kind),
+          ) as (ElementId & { id: string }) | undefined;
           if (!el) {
             setBindMsg("select the frame, shape or group to show or hide");
             return;
@@ -666,10 +792,15 @@ export function makeBindingsPanel(
           }
           const target = await ruleTarget();
           if (!target) {
-            setBindMsg("select a table cell, or put the text cursor in the story to style");
+            setBindMsg(
+              "select a table cell, or put the text cursor in the story to style",
+            );
             return;
           }
-          if ((ruleAction === "tableStyle") !== (target.kind === "tableColumn")) {
+          if (
+            (ruleAction === "tableStyle") !==
+            (target.kind === "tableColumn")
+          ) {
             setBindMsg(
               ruleAction === "tableStyle"
                 ? "a cell style rule needs a selected table cell"
@@ -682,11 +813,21 @@ export function makeBindingsPanel(
           const check = (await session.checkExpression(field, q)) ?? null;
           if (check && !check.ok) {
             setRuleCheck(check);
-            setBindMsg(`the condition is not usable: ${check.error ?? "it does not parse"}`);
+            setBindMsg(
+              `the condition is not usable: ${check.error ?? "it does not parse"}`,
+            );
             return;
           }
-          session.addRuleBinding(id, id, q, field, { action: ruleAction, name: style }, target);
-          const styleName = ruleStyles.find((st) => st.selfId === style)?.name ?? style;
+          session.addRuleBinding(
+            id,
+            id,
+            q,
+            field,
+            { action: ruleAction, name: style },
+            target,
+          );
+          const styleName =
+            ruleStyles.find((st) => st.selfId === style)?.name ?? style;
           setBindMsg(
             `style rule ${id}: when ${field} → ${styleName} on the ${
               target.kind === "tableColumn"
@@ -727,14 +868,20 @@ export function makeBindingsPanel(
       <div style={wrap}>
         {(snapshot.relink ?? []).length > 0 && (
           <div style={note} data-data-relink>
-            Re-link data: {(snapshot.relink ?? []).join(", ")} — the bindings came back from the
-            document&apos;s labels, the data did not (import the file again in Data sources).
+            Re-link data: {(snapshot.relink ?? []).join(", ")} — the bindings
+            came back from the document&apos;s labels, the data did not (import
+            the file again in Data sources).
           </div>
         )}
         {/* A "Bind to data…" draft (from any panel's field) shows whether
             or not a source exists yet: it names the target being bound,
             and with no source it is where the user learns what to import. */}
-        <PropertyDraftRow host={host} session={session} queries={snapshot.queries} onDone={refresh} />
+        <PropertyDraftRow
+          host={host}
+          session={session}
+          queries={snapshot.queries}
+          onDone={refresh}
+        />
         {options.length === 0 ? (
           <div style={{ ...row, alignItems: "center" }} data-data-bind-empty>
             <p style={{ ...note, margin: 0, flexBasis: "100%" }}>
@@ -756,7 +903,10 @@ export function makeBindingsPanel(
           </div>
         ) : (
           <>
-            <label style={{ ...row, alignItems: "center" }} data-data-bind-query>
+            <label
+              style={{ ...row, alignItems: "center" }}
+              data-data-bind-query
+            >
               Records from{" "}
               <select
                 data-data-bind-query-pick
@@ -792,7 +942,9 @@ export function makeBindingsPanel(
                 type="text"
                 value={bindField}
                 onChange={(e) => setBindField(e.target.value)}
-                placeholder={KIND_OPTIONS.find((k) => k.value === bindKind)!.field}
+                placeholder={
+                  KIND_OPTIONS.find((k) => k.value === bindKind)!.field
+                }
                 style={{ flex: "1 1 120px", minWidth: 0 }}
               />
               {bindKind === "visibility" && (
@@ -861,11 +1013,17 @@ export function makeBindingsPanel(
                     <select
                       data-data-bind-rule-scope
                       value={ruleScope}
-                      onChange={(e) => setRuleScope(e.target.value as "story" | "paragraphs")}
+                      onChange={(e) =>
+                        setRuleScope(e.target.value as "story" | "paragraphs")
+                      }
                       title="Where in the story the style lands"
                     >
-                      <option value="story">whole story, when any record fires</option>
-                      <option value="paragraphs">one paragraph per record, from the cursor</option>
+                      <option value="story">
+                        whole story, when any record fires
+                      </option>
+                      <option value="paragraphs">
+                        one paragraph per record, from the cursor
+                      </option>
                     </select>
                   )}
                   <button
@@ -893,7 +1051,10 @@ export function makeBindingsPanel(
               {bindKind === "image" && (
                 <label style={note}>
                   fit:{" "}
-                  <select value={fit} onChange={(e) => setFit(e.target.value as IdmlFit)}>
+                  <select
+                    value={fit}
+                    onChange={(e) => setFit(e.target.value as IdmlFit)}
+                  >
                     {FIT_OPTIONS.map((o) => (
                       <option key={o.value} value={o.value}>
                         {o.label}
@@ -907,7 +1068,9 @@ export function makeBindingsPanel(
                   symbology:{" "}
                   <select
                     value={symbology}
-                    onChange={(e) => setSymbology(e.target.value as BarcodeSymbology)}
+                    onChange={(e) =>
+                      setSymbology(e.target.value as BarcodeSymbology)
+                    }
                   >
                     {SYMBOLOGY_OPTIONS.map((o) => (
                       <option key={o.value} value={o.value}>
@@ -927,7 +1090,11 @@ export function makeBindingsPanel(
                 Add binding
               </button>
             </div>
-            {bindMsg && <p style={note} data-data-bind-msg>{bindMsg}</p>}
+            {bindMsg && (
+              <p style={note} data-data-bind-msg>
+                {bindMsg}
+              </p>
+            )}
             {bindKind === "rule" && (ruleCheck || rulePreview) && (
               <p style={note} data-data-rule-preview-out>
                 {ruleCheck && !ruleCheck.ok ? (
@@ -936,53 +1103,91 @@ export function makeBindingsPanel(
                   </span>
                 ) : rulePreview ? (
                   rulePreview.error ? (
-                    <span style={{ color: "var(--status-error, #c33)" }}>{rulePreview.error}</span>
+                    <span style={{ color: "var(--status-error, #c33)" }}>
+                      {rulePreview.error}
+                    </span>
                   ) : (
                     <>
-                      fires on {rulePreview.fires.length} of {rulePreview.total} record
+                      fires on {rulePreview.fires.length} of {rulePreview.total}{" "}
+                      record
                       {rulePreview.total === 1 ? "" : "s"}
                       {rulePreview.fires.length > 0 &&
                         `: ${rulePreview.fires
                           .slice(0, 20)
                           .map((i) => `#${i + 1}`)
-                          .join(", ")}${rulePreview.fires.length > 20 ? " …" : ""}`}
+                          .join(
+                            ", ",
+                          )}${rulePreview.fires.length > 20 ? " …" : ""}`}
                     </>
                   )
                 ) : null}
               </p>
             )}
             <div style={row} data-data-merge>
-              <strong title="Merges the records picked under Records from">Data Merge</strong>
+              <strong title="Merges the records picked under Records from">
+                Data Merge
+              </strong>
               <select
                 data-data-merge-mode
                 value={mergeMode}
-                onChange={(e) => setMergeMode(e.target.value as "single" | "multiple")}
+                onChange={(e) =>
+                  setMergeMode(e.target.value as "single" | "multiple")
+                }
               >
                 <option value="single">Single record per page</option>
                 <option value="multiple">Multiple records per page</option>
               </select>
               {mergeMode === "multiple" && (
                 <>
-                  <select data-data-merge-arrange value={mergeArrange} onChange={(e) => setMergeArrange(e.target.value as "rows" | "columns")}>
+                  <select
+                    data-data-merge-arrange
+                    value={mergeArrange}
+                    onChange={(e) =>
+                      setMergeArrange(e.target.value as "rows" | "columns")
+                    }
+                  >
                     <option value="rows">Rows first</option>
                     <option value="columns">Columns first</option>
                   </select>
                   <label>
                     row spacing{" "}
-                    <input type="number" value={mergeRowSpacing} onChange={(e) => setMergeRowSpacing(Number(e.target.value))} style={{ width: 48 }} />
+                    <input
+                      type="number"
+                      value={mergeRowSpacing}
+                      onChange={(e) =>
+                        setMergeRowSpacing(Number(e.target.value))
+                      }
+                      style={{ width: 48 }}
+                    />
                   </label>
                   <label>
                     column spacing{" "}
-                    <input type="number" value={mergeColSpacing} onChange={(e) => setMergeColSpacing(Number(e.target.value))} style={{ width: 48 }} />
+                    <input
+                      type="number"
+                      value={mergeColSpacing}
+                      onChange={(e) =>
+                        setMergeColSpacing(Number(e.target.value))
+                      }
+                      style={{ width: 48 }}
+                    />
                   </label>
                 </>
               )}
               <label>
-                <input type="checkbox" checked={mergeBlank} onChange={(e) => setMergeBlank(e.target.checked)} /> remove
-                blank lines
+                <input
+                  type="checkbox"
+                  checked={mergeBlank}
+                  onChange={(e) => setMergeBlank(e.target.checked)}
+                />{" "}
+                remove blank lines
               </label>
               <label title="Keep the template page and put the merged records on new pages after it">
-                <input type="checkbox" checked={mergeKeep} onChange={(e) => setMergeKeep(e.target.checked)} /> keep template
+                <input
+                  type="checkbox"
+                  checked={mergeKeep}
+                  onChange={(e) => setMergeKeep(e.target.checked)}
+                />{" "}
+                keep template
               </label>
               <label
                 title={
@@ -1011,7 +1216,11 @@ export function makeBindingsPanel(
                 Merge records
               </button>
             </div>
-            {mergeMsg && <p style={note} data-data-merge-msg>{mergeMsg}</p>}
+            {mergeMsg && (
+              <p style={note} data-data-merge-msg>
+                {mergeMsg}
+              </p>
+            )}
             <div style={row}>
               <button
                 type="button"
@@ -1063,13 +1272,19 @@ export function makeBindingsPanel(
                 ‹ prev
               </button>
               <span data-testid="preview-position">
-                {recordTotal === 0 ? "— / —" : `${previewIndex + 1} / ${recordTotal}`}
+                {recordTotal === 0
+                  ? "— / —"
+                  : `${previewIndex + 1} / ${recordTotal}`}
               </span>
               <button
                 type="button"
                 title="Show the document resolved against the next record"
                 // Before the query ran, "next" runs it and shows record 1.
-                disabled={recordTotal === 0 ? !stepQuery : previewIndex >= recordTotal - 1}
+                disabled={
+                  recordTotal === 0
+                    ? !stepQuery
+                    : previewIndex >= recordTotal - 1
+                }
                 onClick={() => {
                   void stepTo(recordTotal === 0 ? 0 : previewIndex + 1);
                 }}
@@ -1107,15 +1322,26 @@ export function makeBindingsPanel(
                 Map fields…
               </button>
               {mappings.length > 0 && (
-                <button type="button" onClick={confirmWizard} data-testid="wizard-confirm">
+                <button
+                  type="button"
+                  onClick={confirmWizard}
+                  data-testid="wizard-confirm"
+                >
                   Create {chosen.size} binding{chosen.size === 1 ? "" : "s"}
                 </button>
               )}
             </div>
             {mappings.length > 0 && (
-              <div data-testid="wizard-columns" style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+              <div
+                data-testid="wizard-columns"
+                style={{ display: "flex", flexDirection: "column", gap: "4px" }}
+              >
                 {mappings.map((m) => (
-                  <label key={m.column} style={note} title={m.mappable ? m.expr : "needs a manual expression"}>
+                  <label
+                    key={m.column}
+                    style={note}
+                    title={m.mappable ? m.expr : "needs a manual expression"}
+                  >
                     <input
                       type="checkbox"
                       disabled={!m.mappable}
@@ -1129,11 +1355,14 @@ export function makeBindingsPanel(
                         });
                       }}
                     />{" "}
-                    {m.header} <span style={{ opacity: 0.6 }}>({m.fieldType})</span> →{" "}
+                    {m.header}{" "}
+                    <span style={{ opacity: 0.6 }}>({m.fieldType})</span> →{" "}
                     {m.mappable ? (
                       <code>{m.expr}</code>
                     ) : (
-                      <span style={{ color: "var(--status-warn, #c80)" }}>manual expr needed</span>
+                      <span style={{ color: "var(--status-warn, #c80)" }}>
+                        manual expr needed
+                      </span>
                     )}
                   </label>
                 ))}
@@ -1142,9 +1371,13 @@ export function makeBindingsPanel(
           </>
         )}
         {changes && (
-          <div data-testid="change-report" style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+          <div
+            data-testid="change-report"
+            style={{ display: "flex", flexDirection: "column", gap: "4px" }}
+          >
             <strong>
-              changed since last sync: {changes.changed} changed · {changes.unchanged} unchanged
+              changed since last sync: {changes.changed} changed ·{" "}
+              {changes.unchanged} unchanged
               {changes.added ? ` · ${changes.added} added` : ""}
               {changes.removed ? ` · ${changes.removed} removed` : ""}
             </strong>
@@ -1167,15 +1400,26 @@ export function makeBindingsPanel(
                 </span>
               ))}
             {changes.changed + changes.added + changes.removed === 0 && (
-              <span style={note}>nothing changed — every bound region is up to date.</span>
+              <span style={note}>
+                nothing changed — every bound region is up to date.
+              </span>
             )}
           </div>
         )}
         {rowDiff && (
-          <div data-testid="row-diff" style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            {rowDiff.length === 0 && <span style={note}>no query has data yet — refresh first.</span>}
+          <div
+            data-testid="row-diff"
+            style={{ display: "flex", flexDirection: "column", gap: 4 }}
+          >
+            {rowDiff.length === 0 && (
+              <span style={note}>no query has data yet — refresh first.</span>
+            )}
             {rowDiff.map((d) => (
-              <div key={d.query} data-row-diff-query={d.query} style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+              <div
+                key={d.query}
+                data-row-diff-query={d.query}
+                style={{ display: "flex", flexDirection: "column", gap: 2 }}
+              >
                 <strong>
                   {d.query}:{" "}
                   {d.baseline
@@ -1191,7 +1435,9 @@ export function makeBindingsPanel(
                       void rekey(d.query, e.target.value);
                     }}
                   >
-                    <option value="">{d.key.length === 0 ? "the whole row" : "automatic"}</option>
+                    <option value="">
+                      {d.key.length === 0 ? "the whole row" : "automatic"}
+                    </option>
                     {d.columns.map((c) => (
                       <option key={c} value={c}>
                         {c}
@@ -1201,32 +1447,56 @@ export function makeBindingsPanel(
                 </label>
                 {!d.baseline &&
                   d.updated.map((u) => (
-                    <span key={`u${u.index}`} data-row-change="updated" style={mono}>
+                    <span
+                      key={`u${u.index}`}
+                      data-row-change="updated"
+                      style={mono}
+                    >
                       ~ {u.key}:{" "}
-                      {u.changes.map((c) => `${c.column} ${c.before} → ${c.after}`).join("; ")}
+                      {u.changes
+                        .map((c) => `${c.column} ${c.before} → ${c.after}`)
+                        .join("; ")}
                     </span>
                   ))}
                 {!d.baseline &&
                   d.inserted.map((r) => (
-                    <span key={`i${r.index}`} data-row-change="inserted" style={{ ...mono, color: "var(--status-ok, #2a2)" }}>
+                    <span
+                      key={`i${r.index}`}
+                      data-row-change="inserted"
+                      style={{ ...mono, color: "var(--status-ok, #2a2)" }}
+                    >
                       + {r.key}: {r.values.join(" · ")}
                     </span>
                   ))}
                 {d.removed.map((r) => (
-                  <span key={`r${r.index}`} data-row-change="removed" style={{ ...mono, color: "var(--status-error, #c33)" }}>
+                  <span
+                    key={`r${r.index}`}
+                    data-row-change="removed"
+                    style={{ ...mono, color: "var(--status-error, #c33)" }}
+                  >
                     − {r.key}: {r.values.join(" · ")}
                   </span>
                 ))}
-                {d.updatedCount + d.insertedCount + d.removedCount > d.updated.length + d.inserted.length + d.removed.length &&
-                  !d.baseline && <span style={note}>… more rows than listed</span>}
+                {d.updatedCount + d.insertedCount + d.removedCount >
+                  d.updated.length + d.inserted.length + d.removed.length &&
+                  !d.baseline && (
+                    <span style={note}>… more rows than listed</span>
+                  )}
                 {d.affected.length > 0 ? (
                   <span style={note}>reaches:</span>
                 ) : (
-                  !d.baseline && <span style={note}>no binding reads what changed.</span>
+                  !d.baseline && (
+                    <span style={note}>no binding reads what changed.</span>
+                  )
                 )}
                 {d.affected.map((a) => (
-                  <span key={a.binding} data-row-affected={a.binding} style={note}>
-                    <span style={mono}>{a.binding}</span> ({a.kind}) — {a.reason}
+                  <span
+                    key={a.binding}
+                    data-row-affected={a.binding}
+                    style={note}
+                  >
+                    <span style={mono}>{a.binding}</span> ({a.kind}) —{" "}
+                    {a.reason}
                   </span>
                 ))}
               </div>
@@ -1253,174 +1523,194 @@ export function makeBindingsPanel(
                 const sync = syncRows?.find((r) => r.id === b.id) ?? null;
                 const status = sync?.status ?? null;
                 return (
-                <li key={b.id} data-binding-kind={b.kind}>
-                  <span style={mono}>{b.id}</span> <span style={note}>({b.kind})</span>
-                  {status && (
-                    <span
-                      data-sync-status={status}
-                      title="Pinned and overridden content is never replaced by a refresh"
-                      style={{ marginLeft: 6, color: SYNC_COLOR[status] }}
-                    >
-                      {SYNC_LABEL[status]}
-                    </span>
-                  )}
-                  {sync?.locale && <span style={note}> · {sync.locale}</span>}
-                  {status && status !== "pinned" && status !== "overridden" && b.kind !== "rule" && (
-                    <button
-                      type="button"
-                      data-data-sync-pin
-                      title="Keep this content as it is; refreshes leave it alone"
-                      onClick={() => {
-                        void decide(() => session.pin(b.id));
-                      }}
-                    >
-                      Pin
-                    </button>
-                  )}
-                  {status === "pinned" && (
-                    <button
-                      type="button"
-                      data-data-sync-unpin
-                      title="Follow the source again from the next refresh"
-                      onClick={() => {
-                        void decide(() => session.unpin(b.id));
-                      }}
-                    >
-                      Unpin
-                    </button>
-                  )}
-                  {(status === "pinned" || status === "overridden") && (
-                    <button
-                      type="button"
-                      data-data-sync-accept
-                      title="Replace this content with the source's value now"
-                      onClick={() => {
-                        void decide(() => session.acceptSource(b.id));
-                      }}
-                    >
-                      Accept source
-                    </button>
-                  )}
-                  {b.kind === "variable" && sync && (
-                    <button
-                      type="button"
-                      data-data-format-open
-                      title="Number, currency or date pattern and locale for this field"
-                      onClick={() => openFormat(sync)}
-                    >
-                      Format…
-                    </button>
-                  )}
-                  {formatOpen === b.id && draft && (
-                    <div data-data-format-editor style={{ ...row, marginTop: 4 }}>
-                      <select
-                        data-data-format-kind
-                        value={draft.kind}
-                        onChange={(e) => {
-                          setDraft({ ...draft, kind: e.target.value as FormatPattern["kind"] });
-                          refresh();
+                  <li key={b.id} data-binding-kind={b.kind}>
+                    <span style={mono}>{b.id}</span>{" "}
+                    <span style={note}>({b.kind})</span>
+                    {status && (
+                      <span
+                        data-sync-status={status}
+                        title="Pinned and overridden content is never replaced by a refresh"
+                        style={{ marginLeft: 6, color: SYNC_COLOR[status] }}
+                      >
+                        {SYNC_LABEL[status]}
+                      </span>
+                    )}
+                    {sync?.locale && <span style={note}> · {sync.locale}</span>}
+                    {status &&
+                      status !== "pinned" &&
+                      status !== "overridden" &&
+                      b.kind !== "rule" && (
+                        <button
+                          type="button"
+                          data-data-sync-pin
+                          title="Keep this content as it is; refreshes leave it alone"
+                          onClick={() => {
+                            void decide(() => session.pin(b.id));
+                          }}
+                        >
+                          Pin
+                        </button>
+                      )}
+                    {status === "pinned" && (
+                      <button
+                        type="button"
+                        data-data-sync-unpin
+                        title="Follow the source again from the next refresh"
+                        onClick={() => {
+                          void decide(() => session.unpin(b.id));
                         }}
                       >
-                        {FORMAT_KINDS.map((k) => (
-                          <option key={k.value} value={k.value}>
-                            {k.label}
-                          </option>
-                        ))}
-                      </select>
-                      {(draft.kind === "number" || draft.kind === "currency" || draft.kind === "percent") && (
-                        <label style={note}>
-                          decimals{" "}
+                        Unpin
+                      </button>
+                    )}
+                    {(status === "pinned" || status === "overridden") && (
+                      <button
+                        type="button"
+                        data-data-sync-accept
+                        title="Replace this content with the source's value now"
+                        onClick={() => {
+                          void decide(() => session.acceptSource(b.id));
+                        }}
+                      >
+                        Accept source
+                      </button>
+                    )}
+                    {b.kind === "variable" && sync && (
+                      <button
+                        type="button"
+                        data-data-format-open
+                        title="Number, currency or date pattern and locale for this field"
+                        onClick={() => openFormat(sync)}
+                      >
+                        Format…
+                      </button>
+                    )}
+                    {formatOpen === b.id && draft && (
+                      <div
+                        data-data-format-editor
+                        style={{ ...row, marginTop: 4 }}
+                      >
+                        <select
+                          data-data-format-kind
+                          value={draft.kind}
+                          onChange={(e) => {
+                            setDraft({
+                              ...draft,
+                              kind: e.target.value as FormatPattern["kind"],
+                            });
+                            refresh();
+                          }}
+                        >
+                          {FORMAT_KINDS.map((k) => (
+                            <option key={k.value} value={k.value}>
+                              {k.label}
+                            </option>
+                          ))}
+                        </select>
+                        {(draft.kind === "number" ||
+                          draft.kind === "currency" ||
+                          draft.kind === "percent") && (
+                          <label style={note}>
+                            decimals{" "}
+                            <input
+                              data-data-format-decimals
+                              type="number"
+                              min={0}
+                              max={10}
+                              value={draft.decimals}
+                              style={{ width: "3.5em" }}
+                              onChange={(e) => {
+                                setDraft({
+                                  ...draft,
+                                  decimals: e.target.value,
+                                });
+                                refresh();
+                              }}
+                            />
+                          </label>
+                        )}
+                        {draft.kind === "currency" && (
                           <input
-                            data-data-format-decimals
-                            type="number"
-                            min={0}
-                            max={10}
-                            value={draft.decimals}
-                            style={{ width: "3.5em" }}
+                            data-data-format-symbol
+                            type="text"
+                            value={draft.symbol}
+                            placeholder="symbol (locale's)"
+                            style={{ width: 90 }}
                             onChange={(e) => {
-                              setDraft({ ...draft, decimals: e.target.value });
+                              setDraft({ ...draft, symbol: e.target.value });
                               refresh();
                             }}
                           />
-                        </label>
-                      )}
-                      {draft.kind === "currency" && (
-                        <input
-                          data-data-format-symbol
-                          type="text"
-                          value={draft.symbol}
-                          placeholder="symbol (locale's)"
-                          style={{ width: 90 }}
+                        )}
+                        {draft.kind === "date" && (
+                          <input
+                            data-data-format-date
+                            type="text"
+                            value={draft.date}
+                            placeholder="DD.MM.YYYY (locale's)"
+                            style={{ width: 110 }}
+                            onChange={(e) => {
+                              setDraft({ ...draft, date: e.target.value });
+                              refresh();
+                            }}
+                          />
+                        )}
+                        <select
+                          data-data-format-locale
+                          value={draft.locale}
+                          title="Format this field for another locale than the session's"
                           onChange={(e) => {
-                            setDraft({ ...draft, symbol: e.target.value });
+                            setDraft({ ...draft, locale: e.target.value });
                             refresh();
                           }}
-                        />
-                      )}
-                      {draft.kind === "date" && (
-                        <input
-                          data-data-format-date
-                          type="text"
-                          value={draft.date}
-                          placeholder="DD.MM.YYYY (locale's)"
-                          style={{ width: 110 }}
-                          onChange={(e) => {
-                            setDraft({ ...draft, date: e.target.value });
-                            refresh();
-                          }}
-                        />
-                      )}
-                      <select
-                        data-data-format-locale
-                        value={draft.locale}
-                        title="Format this field for another locale than the session's"
-                        onChange={(e) => {
-                          setDraft({ ...draft, locale: e.target.value });
-                          refresh();
-                        }}
-                      >
-                        <option value="">session locale ({session.getLocale()})</option>
-                        {locales.map((l) => (
-                          <option key={l.tag} value={l.tag}>
-                            {l.tag} — {l.currency} · {l.date}
+                        >
+                          <option value="">
+                            session locale ({session.getLocale()})
                           </option>
-                        ))}
-                      </select>
+                          {locales.map((l) => (
+                            <option key={l.tag} value={l.tag}>
+                              {l.tag} — {l.currency} · {l.date}
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          type="button"
+                          data-data-format-apply
+                          onClick={() => {
+                            void applyFormat(b.id);
+                          }}
+                        >
+                          Apply
+                        </button>
+                        {formatPreview !== null && (
+                          <span data-data-format-preview style={mono}>
+                            → {formatPreview}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                    {b.kind === "recordFlow" && (
                       <button
                         type="button"
-                        data-data-format-apply
+                        data-data-flow-preview
                         onClick={() => {
-                          void applyFormat(b.id);
+                          void previewFlow(b.id);
                         }}
                       >
-                        Apply
+                        Preview
                       </button>
-                      {formatPreview !== null && (
-                        <span data-data-format-preview style={mono}>
-                          → {formatPreview}
-                        </span>
-                      )}
-                    </div>
-                  )}
-                  {b.kind === "recordFlow" && (
-                    <button
-                      type="button"
-                      data-data-flow-preview
-                      onClick={() => {
-                        void previewFlow(b.id);
-                      }}
-                    >
-                      Preview
-                    </button>
-                  )}
-                </li>
+                    )}
+                  </li>
                 );
               })}
             </ul>
           )}
         </div>
         {flowPreview && (
-          <div data-testid="flow-preview" style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+          <div
+            data-testid="flow-preview"
+            style={{ display: "flex", flexDirection: "column", gap: 2 }}
+          >
             <strong>
               {flowPreview.id}: {flowPreview.preview.total} record(s)
             </strong>
@@ -1428,22 +1718,32 @@ export function makeBindingsPanel(
               <span
                 key={i}
                 data-flow-block={b.kind}
-                style={b.kind === "record" ? mono : { ...note, fontWeight: 600 }}
+                style={
+                  b.kind === "record" ? mono : { ...note, fontWeight: 600 }
+                }
               >
                 {b.text}
               </span>
             ))}
             {flowPreview.preview.blocks.length > 50 && (
-              <span style={note}>… {flowPreview.preview.blocks.length - 50} more</span>
+              <span style={note}>
+                … {flowPreview.preview.blocks.length - 50} more
+              </span>
             )}
-            <span style={note}>Placing the flow into frames comes with merge.</span>
+            <span style={note}>
+              Placing the flow into frames comes with merge.
+            </span>
           </div>
         )}
         <div
           data-status={snapshot.status}
           // The message, not the engine's state name: "status: idle — …"
           // read as a debug line. The state stays on `data-status`.
-          style={{ color: /error|missing|fail/i.test(String(snapshot.status)) ? "var(--status-error)" : "var(--pg-muted-fg)" }}
+          style={{
+            color: /error|missing|fail/i.test(String(snapshot.status))
+              ? "var(--status-error)"
+              : "var(--pg-muted-fg)",
+          }}
         >
           {snapshot.message}
         </div>

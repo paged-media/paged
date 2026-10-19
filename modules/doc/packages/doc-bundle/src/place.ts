@@ -26,7 +26,12 @@
 import type { LoweredDoc } from "@paged-media/doc-host-model";
 import { buildStory, buildStyleMutations } from "@paged-media/doc-host-model";
 import { applyStyleOps, pourSteps } from "./pour.js";
-import type { BundleHost, Diagnostic, ElementId, PageId } from "@paged-media/plugin-api";
+import type {
+  BundleHost,
+  Diagnostic,
+  ElementId,
+  PageId,
+} from "@paged-media/plugin-api";
 
 /** The diagnostics key this plugin publishes under. */
 export const DIAGNOSTICS_KEY = "media.paged.doc";

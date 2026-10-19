@@ -57,7 +57,17 @@ const ASK = "Give every frame on this page a 4 pt stroke in the Night swatch.";
 async function run(page: Page, source: string): Promise<string[]> {
   const r = await page.evaluate(
     async (s) =>
-      (globalThis as unknown as { __canvas: { client: { executeScript(s: string): Promise<{ output: string[]; error: string | null }> } } }).__canvas.client.executeScript(s),
+      (
+        globalThis as unknown as {
+          __canvas: {
+            client: {
+              executeScript(
+                s: string,
+              ): Promise<{ output: string[]; error: string | null }>;
+            };
+          };
+        }
+      ).__canvas.client.executeScript(s),
     source,
   );
   if (r.error) throw new Error(`script failed: ${r.error}`);
@@ -65,7 +75,11 @@ async function run(page: Page, source: string): Promise<string[]> {
 }
 
 /** Each frame on page 1: its fill, rotation, stroke weight and stroke colour. */
-async function frames(page: Page): Promise<Array<{ fill: unknown; angle: unknown; weight: unknown; stroke: unknown }>> {
+async function frames(
+  page: Page,
+): Promise<
+  Array<{ fill: unknown; angle: unknown; weight: unknown; stroke: unknown }>
+> {
   const out = await run(
     page,
     `const v = (f, p) => JSON.parse(paged.get(f, p)).value;
@@ -76,15 +90,27 @@ console.log(JSON.stringify(JSON.parse(paged.query("page:#1 > frame")).map((f) =>
 
 /** Aim a punch-in at a rectangle of the editor's UI (CSS px), through the
  *  live camera: focus() takes page points. */
-async function aimView(k: Kit, box: { x: number; y: number; width: number; height: number }): Promise<[number, number, number, number]> {
+async function aimView(
+  k: Kit,
+  box: { x: number; y: number; width: number; height: number },
+): Promise<[number, number, number, number]> {
   const o = await screenPoint(k.page, 0, 0);
   const s = ((await screenPoint(k.page, 100, 0)).x - o.x) / 100;
-  return [(box.x - o.x) / s, (box.y - o.y) / s, (box.x + box.width - o.x) / s, (box.y + box.height - o.y) / s];
+  return [
+    (box.x - o.x) / s,
+    (box.y - o.y) / s,
+    (box.x + box.width - o.x) / s,
+    (box.y + box.height - o.y) / s,
+  ];
 }
 
 /** The script panel's ask bar, source and log, as one region. */
-async function scriptArea(rows: Locator[]): Promise<{ x: number; y: number; width: number; height: number }> {
-  const boxes = await Promise.all(rows.map(async (r) => (await r.boundingBox())!));
+async function scriptArea(
+  rows: Locator[],
+): Promise<{ x: number; y: number; width: number; height: number }> {
+  const boxes = await Promise.all(
+    rows.map(async (r) => (await r.boundingBox())!),
+  );
   const x = Math.min(...boxes.map((b) => b.x)) - 8;
   const y = Math.min(...boxes.map((b) => b.y)) - 8;
   const r = Math.max(...boxes.map((b) => b.x + b.width)) + 8;
@@ -116,18 +142,30 @@ film("developers", async (k) => {
     await press(k, page.locator("[data-playground-play]"));
     await expect(status).toHaveAttribute("data-playground-status", "playing");
     // The dome, drawn by its anchors.
-    await expect(page.getByText("A curve, by its anchors", { exact: true }).last()).toBeVisible({ timeout: 30_000 });
+    await expect(
+      page.getByText("A curve, by its anchors", { exact: true }).last(),
+    ).toBeVisible({ timeout: 30_000 });
     await k.hold(600);
   });
 
   // ── Pause, step twice (the card appears, then fills), play on. ──
   await k.scene("step", async () => {
     await press(k, page.locator("[data-playground-play]"));
-    await expect(status).toHaveAttribute("data-playground-status", "paused", { timeout: 10_000 });
+    await expect(status).toHaveAttribute("data-playground-status", "paused", {
+      timeout: 10_000,
+    });
     // The narration box running when it paused finishes on its own clock;
     // the next step is then the card's statement.
-    await expect(page.getByText("A curve, by its anchors", { exact: true })).toHaveCount(0, { timeout: 10_000 });
-    const rects = async () => (await run(page, `console.log(JSON.parse(paged.query("page:#1 > frame")).length)`))[0];
+    await expect(
+      page.getByText("A curve, by its anchors", { exact: true }),
+    ).toHaveCount(0, { timeout: 10_000 });
+    const rects = async () =>
+      (
+        await run(
+          page,
+          `console.log(JSON.parse(paged.query("page:#1 > frame")).length)`,
+        )
+      )[0];
     const before = await rects();
     await press(k, page.locator("[data-playground-step]"));
     await expect.poll(rects).not.toBe(before);
@@ -135,7 +173,9 @@ film("developers", async (k) => {
     await press(k, page.locator("[data-playground-step]"));
     await k.hold(700);
     await press(k, page.locator("[data-playground-play]"));
-    await expect(page.getByText("Live corners", { exact: true }).last()).toBeVisible({ timeout: 30_000 });
+    await expect(
+      page.getByText("Live corners", { exact: true }).last(),
+    ).toBeVisible({ timeout: 30_000 });
     await k.hold(1500);
   });
 
@@ -143,7 +183,11 @@ film("developers", async (k) => {
   // edit removes the wait. (Restart does not stop a statement already
   // running: it would go on drawing into the fresh page.)
   await k.cut("a fresh page", async () => {
-    await expect(page.locator("[data-playground-status]")).toHaveAttribute("data-playground-status", "done", { timeout: 60_000 });
+    await expect(page.locator("[data-playground-status]")).toHaveAttribute(
+      "data-playground-status",
+      "done",
+      { timeout: 60_000 },
+    );
     await page.locator("[data-playground-toggle]").click();
     await expect(page.locator("[data-playground-source]")).toHaveCount(0);
     await designer.newDocument();
@@ -157,13 +201,20 @@ film("developers", async (k) => {
   await k.scene("console", async () => {
     await menu(k, ["Window", "Developer", "Script"]);
     await expect(panel).toBeVisible();
-    k.focus(await aimView(k, await scriptArea([panel.locator("[data-script-ask]"), source, log])), 1.8);
+    k.focus(
+      await aimView(
+        k,
+        await scriptArea([panel.locator("[data-script-ask]"), source, log]),
+      ),
+      1.8,
+    );
     await press(k, source);
     await page.keyboard.press("Meta+a");
     await page.keyboard.press("Backspace");
     await typeHuman(page, QUERY, 11);
     await press(k, panel.locator("[data-action=run]"));
-    for (const n of [1, 2, 3, 4]) await expect(log).toContainText(`rectangle:u${n}`);
+    for (const n of [1, 2, 3, 4])
+      await expect(log).toContainText(`rectangle:u${n}`);
   });
 
   // ── One batch: every frame restyled, as one step. ──
@@ -174,7 +225,13 @@ film("developers", async (k) => {
     await page.keyboard.insertText(BATCH);
     await k.hold(900);
     await press(k, panel.locator("[data-action=run]"));
-    await expect.poll(async () => (await frames(page)).every((f) => f.fill === "Color/Violet" && f.angle === -6)).toBe(true);
+    await expect
+      .poll(async () =>
+        (await frames(page)).every(
+          (f) => f.fill === "Color/Violet" && f.angle === -6,
+        ),
+      )
+      .toBe(true);
     k.unfocus();
     await k.hold(600);
   });
@@ -184,13 +241,23 @@ film("developers", async (k) => {
     await k.key("Meta+z", "Undo", "⌘Z");
     await expect
       .poll(async () => (await frames(page)).map((f) => `${f.fill}/${f.angle}`))
-      .toEqual(["Color/Rose/0", "Color/Mint/0", "Color/Mint/0", "Color/Rose/0"]);
+      .toEqual([
+        "Color/Rose/0",
+        "Color/Mint/0",
+        "Color/Mint/0",
+        "Color/Rose/0",
+      ]);
   });
 
   // ── Ask Claude, in plain words; wait for its script to land. ──
   await k.scene("ask", async () => {
     const input = panel.locator("[data-script-ask-input]");
-    k.focus(await aimView(k, await scriptArea([panel.locator("[data-script-ask]"), source])));
+    k.focus(
+      await aimView(
+        k,
+        await scriptArea([panel.locator("[data-script-ask]"), source]),
+      ),
+    );
     await press(k, input);
     await typeHuman(page, ASK, 13);
     await press(k, panel.locator("[data-action=ask]"));
@@ -199,9 +266,18 @@ film("developers", async (k) => {
 
   // ── Claude's script runs through the same door; it reads the result. ──
   await k.scene("claude", async () => {
-    await expect(panel.locator("[data-script-note]").last()).toContainText("Claude:", { timeout: 90_000 });
+    await expect(panel.locator("[data-script-note]").last()).toContainText(
+      "Claude:",
+      { timeout: 90_000 },
+    );
     await expect
-      .poll(async () => (await frames(page)).every((f) => f.weight === 4 && f.stroke === "Color/Night"), { timeout: 15_000 })
+      .poll(
+        async () =>
+          (await frames(page)).every(
+            (f) => f.weight === 4 && f.stroke === "Color/Night",
+          ),
+        { timeout: 15_000 },
+      )
       .toBe(true);
     await k.hold(900);
     k.unfocus();
@@ -216,25 +292,42 @@ film("developers", async (k) => {
     // Select the first frame, so the panel shows its appearance.
     await k.key("v");
     await pointer.click(await screenPoint(page, 120, 120), { targetWidth: 60 });
-    await expect.poll(async () => (await run(page, `console.log(paged.selection())`))[0]).toContain('"id":"u1"');
-    await press(k, page.locator("header").getByText("Plugins", { exact: true }).first());
+    await expect
+      .poll(async () => (await run(page, `console.log(paged.selection())`))[0])
+      .toContain('"id":"u1"');
+    await press(
+      k,
+      page.locator("header").getByText("Plugins", { exact: true }).first(),
+    );
     await k.hold(250);
     await hover(k, page.getByRole("menuitem", { name: /^Draw/ }).first());
     await k.hold(400);
     // Settle into the Draw row (the way down crossed Data, whose submenu
     // can stay open) until Draw's own submenu shows.
-    await pointer.moveTo({ x: pointer.position.x + 10, y: pointer.position.y }, { targetWidth: 60 });
-    await expect(page.getByRole("menuitem", { name: /^Compound path/ })).toBeVisible({ timeout: 5000 });
+    await pointer.moveTo(
+      { x: pointer.position.x + 10, y: pointer.position.y },
+      { targetWidth: 60 },
+    );
+    await expect(
+      page.getByRole("menuitem", { name: /^Compound path/ }),
+    ).toBeVisible({ timeout: 5000 });
     // The submenu lists the plugin's commands, then its panels: the second
     // "Appearance" is the panel. Into the submenu's column first, then down
     // it: a diagonal would cross the main menu's other rows and close it.
-    const panelItem = page.getByRole("menuitem", { name: /^Appearance$/ }).last();
+    const panelItem = page
+      .getByRole("menuitem", { name: /^Appearance$/ })
+      .last();
     await panelItem.waitFor({ state: "visible", timeout: 5000 });
     const column = (await panelItem.boundingBox())!;
-    await pointer.moveTo({ x: column.x + column.width / 2, y: pointer.position.y }, { targetWidth: column.width });
+    await pointer.moveTo(
+      { x: column.x + column.width / 2, y: pointer.position.y },
+      { targetWidth: column.width },
+    );
     await k.hold(200);
     await press(k, panelItem);
-    await expect(page.locator('[data-dock-tab="media.paged.draw.panel.appearance"]')).toBeVisible();
+    await expect(
+      page.locator('[data-dock-tab="media.paged.draw.panel.appearance"]'),
+    ).toBeVisible();
     await k.hold(1200);
   });
 

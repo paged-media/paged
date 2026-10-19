@@ -220,7 +220,11 @@ export function ObjectTransformPanel() {
             aria-label="y"
           />
         </div>
-        <ObjectFieldFrame field={resolved.bounds} className="relative flex items-center gap-2" data-size-cells="">
+        <ObjectFieldFrame
+          field={resolved.bounds}
+          className="relative flex items-center gap-2"
+          data-size-cells=""
+        >
           <div className="grid min-w-0 flex-1 grid-cols-2 gap-2">
             <LengthInput
               prefix="W"
@@ -258,7 +262,10 @@ export function ObjectTransformPanel() {
             />
           </button>
         </ObjectFieldFrame>
-        <ObjectFieldFrame field={resolved.opacity} className="relative grid grid-cols-[84px_1fr] items-center gap-2">
+        <ObjectFieldFrame
+          field={resolved.opacity}
+          className="relative grid grid-cols-[84px_1fr] items-center gap-2"
+        >
           <span className="text-xs" style={{ color: "var(--pg-muted-fg)" }}>
             Opacity
           </span>
@@ -310,86 +317,91 @@ export function ObjectTransformPanel() {
           {rsOpen && (
             <div className="flex flex-col gap-[9px] pb-3">
               <ObjectFieldFrame field={resolved.rotation}>
-              <SmartDialMicro
-                label="Rotation"
-                value={rotation}
-                min={-180}
-                max={180}
-                unit="°"
-                signed
-                disabled={!canRotate}
-                onChange={() => {
-                  /* live updates ignored; commit on drag-end / wheel */
-                }}
-                onCommit={(next) => {
-                  resolved.rotation.onCommit?.({
-                    type: "length",
-                    value: next,
-                  } as Value);
-                }}
-              />
+                <SmartDialMicro
+                  label="Rotation"
+                  value={rotation}
+                  min={-180}
+                  max={180}
+                  unit="°"
+                  signed
+                  disabled={!canRotate}
+                  onChange={() => {
+                    /* live updates ignored; commit on drag-end / wheel */
+                  }}
+                  onCommit={(next) => {
+                    resolved.rotation.onCommit?.({
+                      type: "length",
+                      value: next,
+                    } as Value);
+                  }}
+                />
               </ObjectFieldFrame>
               <div className="grid grid-cols-2 gap-2">
                 <ObjectFieldFrame field={resolved.scaleX}>
-                <NumberInput
-                  value={scaleX == null ? null : scaleX * 100}
-                  icon="ui-size"
-                  suffix="%"
-                  min={0}
-                  precision={0}
-                  disabled={!canScaleX}
-                  onChange={() => {}}
-                  onCommit={(next) => {
-                    resolved.scaleX.onCommit?.({
-                      type: "length",
-                      value: next / 100,
-                    } as Value);
-                  }}
-                  aria-label="scale x"
-                />
+                  <NumberInput
+                    value={scaleX == null ? null : scaleX * 100}
+                    icon="ui-size"
+                    suffix="%"
+                    min={0}
+                    precision={0}
+                    disabled={!canScaleX}
+                    onChange={() => {}}
+                    onCommit={(next) => {
+                      resolved.scaleX.onCommit?.({
+                        type: "length",
+                        value: next / 100,
+                      } as Value);
+                    }}
+                    aria-label="scale x"
+                  />
                 </ObjectFieldFrame>
                 <ObjectFieldFrame field={resolved.scaleY}>
-                <NumberInput
-                  value={scaleY == null ? null : scaleY * 100}
-                  icon="ui-size"
-                  suffix="%"
-                  min={0}
-                  precision={0}
-                  disabled={!canScaleY}
-                  onChange={() => {}}
-                  onCommit={(next) => {
-                    resolved.scaleY.onCommit?.({
-                      type: "length",
-                      value: next / 100,
-                    } as Value);
-                  }}
-                  aria-label="scale y"
-                />
+                  <NumberInput
+                    value={scaleY == null ? null : scaleY * 100}
+                    icon="ui-size"
+                    suffix="%"
+                    min={0}
+                    precision={0}
+                    disabled={!canScaleY}
+                    onChange={() => {}}
+                    onCommit={(next) => {
+                      resolved.scaleY.onCommit?.({
+                        type: "length",
+                        value: next / 100,
+                      } as Value);
+                    }}
+                    aria-label="scale y"
+                  />
                 </ObjectFieldFrame>
               </div>
               <div className="flex gap-[6px]">
-                <ObjectFieldFrame field={resolved.flipH} className="relative flex flex-1">
-                <button
-                  type="button"
-                  disabled={!canFlipH}
-                  data-flip-h
-                  data-on={flipH === true ? "true" : "false"}
-                  title="Flip horizontal"
-                  className="h-[28px] flex-1 rounded-[6px] border-0 text-xs font-semibold"
-                  style={{
-                    background: flipH ? "var(--pg-primary)" : "var(--pg-muted)",
-                    color: flipH ? "var(--pg-primary-fg)" : "var(--pg-fg)",
-                    opacity: canFlipH ? 1 : 0.55,
-                  }}
-                  onClick={() => {
-                    resolved.flipH.onCommit?.({
-                      type: "bool",
-                      value: !(flipH === true),
-                    } as Value);
-                  }}
+                <ObjectFieldFrame
+                  field={resolved.flipH}
+                  className="relative flex flex-1"
                 >
-                  Flip H
-                </button>
+                  <button
+                    type="button"
+                    disabled={!canFlipH}
+                    data-flip-h
+                    data-on={flipH === true ? "true" : "false"}
+                    title="Flip horizontal"
+                    className="h-[28px] flex-1 rounded-[6px] border-0 text-xs font-semibold"
+                    style={{
+                      background: flipH
+                        ? "var(--pg-primary)"
+                        : "var(--pg-muted)",
+                      color: flipH ? "var(--pg-primary-fg)" : "var(--pg-fg)",
+                      opacity: canFlipH ? 1 : 0.55,
+                    }}
+                    onClick={() => {
+                      resolved.flipH.onCommit?.({
+                        type: "bool",
+                        value: !(flipH === true),
+                      } as Value);
+                    }}
+                  >
+                    Flip H
+                  </button>
                 </ObjectFieldFrame>
                 <button
                   type="button"
@@ -423,13 +435,23 @@ function GroupTransformField() {
   const groups = elementSelection.filter((id) => id.kind === "group");
   const key = groups.map((id) => JSON.stringify(id)).join("|");
   const targets = useMemo(
-    () => (key ? key.split("|").map((j) => addressOfElement(JSON.parse(j))) : []),
+    () =>
+      key ? key.split("|").map((j) => addressOfElement(JSON.parse(j))) : [],
     [key],
   );
   if (!targets.length) return null;
   return (
-    <div className="flex flex-col gap-[9px]" data-section="Group" data-group-transform={targets.join(" ")}>
-      <PropertyField path="groupTransform" label="Group transform" targets={targets} schemaKind="group" />
+    <div
+      className="flex flex-col gap-[9px]"
+      data-section="Group"
+      data-group-transform={targets.join(" ")}
+    >
+      <PropertyField
+        path="groupTransform"
+        label="Group transform"
+        targets={targets}
+        schemaKind="group"
+      />
     </div>
   );
 }

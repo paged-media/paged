@@ -18,7 +18,7 @@ and `DESIGN.md` §4.6c; D-03 is the network consent door
 **Consumes / proves:** the engine side is **already built + tested** —
 `DataSession::publish_provider(query, id, category) -> ProviderPublication`
 (`plugin-data: data-js/src/core.rs`; `plugin-data: data-conformance/tests/it/provider.rs`, 3 tests;
-registry `data.provider.publish`, coverage-gated). What is missing is the *core SDK door*
+registry `data.provider.publish`, coverage-gated). What is missing is the _core SDK door_
 to register/discover it.
 
 ## Problem
@@ -32,8 +32,8 @@ by plugin identity, no message-passing, even co-installed. They must rendezvous
 **only at a neutral core contract**.
 
 The platform offers no such contract today. The closest precedent is
-`host.bindings` — a *named, reactive value store* (`publish(name, value)` /
-`get(name)` / `onDidChange(listener)`): exactly the right *shape* (named,
+`host.bindings` — a _named, reactive value store_ (`publish(name, value)` /
+`get(name)` / `onDidChange(listener)`): exactly the right _shape_ (named,
 reactive, decoupled), but scoped to scalar UI bindings, not schema-bearing
 tabular datasets pulled on demand. A data provider is `host.bindings` raised to
 **datasets**: a schema descriptor cheap enough to enumerate, a row payload
@@ -49,9 +49,9 @@ records }` — the records **stabilized** to a permutation-invariant order and t
 
 ### Stage 1 — a `dataProviders` capability (manifest)
 
-*Status note (2026-10-02): this section predates the implementation; `host.dataProviders` is
+_Status note (2026-10-02): this section predates the implementation; `host.dataProviders` is
 present on every host and each call is checked against the declared role instead — see
-[ADR 305](../adr/305-doors-always-present.md) and `DESIGN.md` §4.6c.*
+[ADR 305](../adr/305-doors-always-present.md) and `DESIGN.md` §4.6c._
 
 Two roles on a closed-vocabulary capability (additive → an `apiVersion` minor
 bump, like D-03's `network`):
@@ -70,12 +70,12 @@ surface. Categories are a neutral, open string vocabulary (`"dataset"`,
 
 ### Stage 2 — the `host.dataProviders` surface
 
-*Status note (2026-10-02): this section predates the implementation; the shipped types are in
+_Status note (2026-10-02): this section predates the implementation; the shipped types are in
 `packages/plugin-api/src/host.ts`. `DataProviderDescriptor` shipped as
 `DataProviderRegistration`, `RecordSet` as `ProviderRecordSet` (`{ schema, columns, rowCount }`),
 a schema field is `{ name, ty, nullable? }` (`ty`, not `type`), and `getSnapshot` may also
 answer synchronously. The registry behind the surface is one shared instance the host app
-creates (`createDataProviderRegistry`) and injects into every bundle host.*
+creates (`createDataProviderRegistry`) and injects into every bundle host._
 
 ```ts
 interface DataProvidersSurface {
@@ -96,18 +96,27 @@ interface DataProvidersSurface {
 }
 
 interface DataProviderDescriptor {
-  id: string;            // stable, discoverable key (the rendezvous id)
-  category: string;      // discovery category
-  schema: ProviderSchema;// field names + Arrow-aligned types (the descriptor half)
-  revision: string;      // current content etag
-  getSnapshot(): Promise<RecordSet>;   // lazy row payload (provider realm)
+  id: string; // stable, discoverable key (the rendezvous id)
+  category: string; // discovery category
+  schema: ProviderSchema; // field names + Arrow-aligned types (the descriptor half)
+  revision: string; // current content etag
+  getSnapshot(): Promise<RecordSet>; // lazy row payload (provider realm)
 }
 interface DataProviderHandle {
-  update(revision: string): void;  // new data resolved → bump revision, notify consumers
-  dispose(): void;                 // provider gone → discover() stops listing it
+  update(revision: string): void; // new data resolved → bump revision, notify consumers
+  dispose(): void; // provider gone → discover() stops listing it
 }
-interface DataProviderInfo     { id: string; category: string; schema: ProviderSchema; revision: string }
-interface DataProviderSnapshot { id: string; revision: string; records: RecordSet }
+interface DataProviderInfo {
+  id: string;
+  category: string;
+  schema: ProviderSchema;
+  revision: string;
+}
+interface DataProviderSnapshot {
+  id: string;
+  revision: string;
+  records: RecordSet;
+}
 ```
 
 `ProviderSchema` / `RecordSet` are the Arrow-aligned interchange substrate §7.1
@@ -122,8 +131,12 @@ On `paged.data`'s side this is small and already designed for:
 ```ts
 const pub = engine.publish_provider(queryId, providerId, "dataset");
 const handle = host.dataProviders.register({
-  id: pub.id, category: pub.category, schema: pub.schema, revision: pub.revision,
-  getSnapshot: async () => engine.publish_provider(queryId, providerId, "dataset").records,
+  id: pub.id,
+  category: pub.category,
+  schema: pub.schema,
+  revision: pub.revision,
+  getSnapshot: async () =>
+    engine.publish_provider(queryId, providerId, "dataset").records,
 });
 // on every source refresh that moves the bound query:
 handle.update(engine.publish_provider(queryId, providerId, "dataset").revision);
@@ -135,13 +148,13 @@ no spurious churn.
 
 ## Security notes (§7.1 — enforced by shape, not convention)
 
-- **The contract exposes *data*, not control.** The consumer-facing API
+- **The contract exposes _data_, not control.** The consumer-facing API
   (`discover`/`get`/`onDidChange`) has **no parameter** by which a consumer can
   hand the provider a query, a source, a parameter, or an origin. A consumer
   reads published results; it **cannot drive `paged.data`'s network/file reach**.
 - **The provider's fetch stays governed by §11.** `getSnapshot` runs in the
   provider's realm; it returns the **already-resolved** `RecordSet`. A consumer
-  pulling cannot *induce* a network/DuckDB-`httpfs` fetch `paged.data` is not
+  pulling cannot _induce_ a network/DuckDB-`httpfs` fetch `paged.data` is not
   authorized (consented) to perform — pulling reads cache, it does not authorize
   reach. This composes with the D-03 consent gate without weakening it.
 - **No identity leak.** `DataProviderInfo` carries `id`/`category`/`schema` —
@@ -158,9 +171,9 @@ both depend only on the SDK. The isolation superset is fully preserved.
 
 - **`host.bindings` as-is** — wrong granularity: scalar values, no schema, no
   lazy pull, no per-row revision. A 200k-row catalog dataset is not a UI binding.
-  (Right *shape* to imitate; wrong *scope* to reuse.)
+  (Right _shape_ to imitate; wrong _scope_ to reuse.)
 - **A shared `@paged-media/*` package both import** — violates §2.1 (build-time
-  coupling) and couples release cycles. The whole point is a *neutral* contract.
+  coupling) and couples release cycles. The whole point is a _neutral_ contract.
 - **`paged.data` writes a sheet directly** — violates §2.1 (inter-plugin contact)
-  and inverts ownership: the sheet should *pull*, on its own schedule, what it
+  and inverts ownership: the sheet should _pull_, on its own schedule, what it
   chooses to consume.

@@ -63,11 +63,9 @@ jobs:
         run: bun install --frozen-lockfile
       - name: typecheck
         run: bun run --filter './packages/*' typecheck
-      # CI never checks out ../plugin-sdk (that path only exists in the local
-      # sibling-clone layout), so validate through the PUBLISHED plugin-cli —
-      # the same way plugin-publish/ci.yml validates its manifests.
+      # The in-tree paged-plugin bin of plugin-sdk, as every module's CI runs it.
       - name: validate manifest
-        run: bun "$GITHUB_WORKSPACE/platform/extensions/packages/plugin-cli/bin/paged-plugin.mjs" validate packages/doc-bundle/manifest.json
+        run: bun "$GITHUB_WORKSPACE/platform/extensions/packages/plugin-sdk/bin/paged-plugin.mjs" validate packages/doc-bundle/manifest.json
       # Red results must still upload (the state matrix wants the ✗), so the
       # run does not abort here — the gate at the end fails the job once the
       # artifact is safely uploaded.

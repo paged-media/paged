@@ -1,0 +1,11 @@
+$ paged-node ai
+# exit 2
+# stdout
+{
+  "error": {
+    "message": "usage: paged-node ai <doc> <brief> | --new <size> <brief>",
+    "exit": 2
+  }
+}
+# stderr
+(empty)

@@ -9,7 +9,8 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "typecheck": "bun check -p tsconfig.json"
+    "typecheck": "bun check -p tsconfig.json",
+    "test": "bun test --parallel --timeout 30000 --preload ../../../../tooling/js/bun-test-setup.ts"
   },
   "dependencies": {
     "@paged-media/client": "workspace:*",
@@ -25,6 +26,9 @@
   "devDependencies": {
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "@paged-media/test-kit": "workspace:*",
+    "@types/bun": "catalog:",
+    "fast-check": "^4.10.2"
   }
 }

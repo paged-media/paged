@@ -17,7 +17,14 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-export { DemoOverlay, DemoSpotlight, demoShowInfo, demoHighlight, demoResetOverlay, type DemoInfoRequest } from "./overlay";
+export {
+  DemoOverlay,
+  DemoSpotlight,
+  demoShowInfo,
+  demoHighlight,
+  demoResetOverlay,
+  type DemoInfoRequest,
+} from "./overlay";
 export {
   buildAutomation,
   type CanvasHandleLike,
@@ -32,7 +39,11 @@ export {
   buildObjectAutomation,
   type ObjectAutomationApi,
 } from "./object-automation";
-export { runDemoScript, runDemoScriptWithHandle, type RunResult } from "./runner";
+export {
+  runDemoScript,
+  runDemoScriptWithHandle,
+  type RunResult,
+} from "./runner";
 export {
   DemoSession,
   splitTopLevelStatements,

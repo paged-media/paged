@@ -64,9 +64,12 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   const page = p(124);
   const [left, top, right] = contentBox(page);
 
-  const head = await proseFrame(ctx, page, [left, top, right, top + 32], [
-    { text: "The container, opened", style: STYLE.head1 },
-  ]);
+  const head = await proseFrame(
+    ctx,
+    page,
+    [left, top, right, top + 32],
+    [{ text: "The container, opened", style: STYLE.head1 }],
+  );
   elements.push(head.frameId);
 
   // ── write first, so the listing below includes this page's part ──
@@ -82,10 +85,9 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   await writePart(ctx.page, NOTE_PATH, noteBytes);
   const readBack = await readPart(ctx.page, NOTE_PATH);
   expect(readBack.found, `${NOTE_PATH} reads back after the write`).toBe(true);
-  expect(
-    readBack.bytes.length,
-    "the part reads back byte-for-byte",
-  ).toBe(noteBytes.length);
+  expect(readBack.bytes.length, "the part reads back byte-for-byte").toBe(
+    noteBytes.length,
+  );
   const roundTrip = JSON.parse(
     new TextDecoder().decode(Uint8Array.from(readBack.bytes)),
   ) as typeof manifestNote;
@@ -99,14 +101,19 @@ export async function build(ctx: PageContext): Promise<PageReport> {
       `back ${readBack.bytes.length} bytes`,
   );
 
-  const intro = await proseFrame(ctx, page, [left, top + 40, right, top + 146], [
-    {
-      text:
-        "A .paged file is a valid IDML package with tenants. Every plugin that worked on this book may leave parts under its own paged/ namespace — a workbook, a web source, a recipe — and they travel with the file, opaque to the IDML half and untouched by it. Below is the container's own answer to what it carries at this moment of the build: " +
-        `${parts.length} part(s), listed by the same listPagedParts door the editor's native-document backend reads.`,
-      style: STYLE.bodyFirst,
-    },
-  ]);
+  const intro = await proseFrame(
+    ctx,
+    page,
+    [left, top + 40, right, top + 146],
+    [
+      {
+        text:
+          "A .paged file is a valid IDML package with tenants. Every plugin that worked on this book may leave parts under its own paged/ namespace — a workbook, a web source, a recipe — and they travel with the file, opaque to the IDML half and untouched by it. Below is the container's own answer to what it carries at this moment of the build: " +
+          `${parts.length} part(s), listed by the same listPagedParts door the editor's native-document backend reads.`,
+        style: STYLE.bodyFirst,
+      },
+    ],
+  );
   elements.push(intro.frameId);
 
   // ── the parts index ──────────────────────────────────────────────
@@ -136,7 +143,12 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   const table = await dataTable(
     ctx,
     page,
-    [left, tableTop, right, Math.min(500, tableTop + 62 + rows.length * rowHeight)],
+    [
+      left,
+      tableTop,
+      right,
+      Math.min(500, tableTop + 62 + rows.length * rowHeight),
+    ],
     {
       caption:
         "Table 20·2 — the parts index, grouped by plugin. Roles are the bundles' own partTypes declarations; the path carries none.",
@@ -150,25 +162,30 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   const tableBottom = Math.min(500, tableTop + 62 + rows.length * rowHeight);
 
   // ── the round trip, printed ──────────────────────────────────────
-  const rt = await proseFrame(ctx, page, [left, tableBottom + 16, right, 630], [
-    { text: "One part, written and read back", style: STYLE.head2 },
-    {
-      text: `writePagedPart ${NOTE_PATH} · caller unset · ${noteBytes.length} bytes in`,
-      style: STYLE.codeBlock,
-    },
-    {
-      text: `readPagedPart → found · ${readBack.bytes.length} bytes out · note: “${roundTrip.note}”`,
-      style: STYLE.codeBlock,
-    },
-    {
-      text:
-        "The write went through the same wire door a plugin's host.parts uses, with the caller field left unset — the engine then enforces only the paged/ boundary (a named caller is additionally confined to its own subtree). The bytes came back equal, and from the next save on, the note travels inside the file. " +
-        (before.length === 0
-          ? "In this solo build the note is the container's only tenant; in the chain build the studios' workbooks, sources and recipes ride beside it."
-          : `It joins the ${before.length} part(s) the studios had already checked in.`),
-      style: STYLE.bodySmall,
-    },
-  ]);
+  const rt = await proseFrame(
+    ctx,
+    page,
+    [left, tableBottom + 16, right, 630],
+    [
+      { text: "One part, written and read back", style: STYLE.head2 },
+      {
+        text: `writePagedPart ${NOTE_PATH} · caller unset · ${noteBytes.length} bytes in`,
+        style: STYLE.codeBlock,
+      },
+      {
+        text: `readPagedPart → found · ${readBack.bytes.length} bytes out · note: “${roundTrip.note}”`,
+        style: STYLE.codeBlock,
+      },
+      {
+        text:
+          "The write went through the same wire door a plugin's host.parts uses, with the caller field left unset — the engine then enforces only the paged/ boundary (a named caller is additionally confined to its own subtree). The bytes came back equal, and from the next save on, the note travels inside the file. " +
+          (before.length === 0
+            ? "In this solo build the note is the container's only tenant; in the chain build the studios' workbooks, sources and recipes ride beside it."
+            : `It joins the ${before.length} part(s) the studios had already checked in.`),
+        style: STYLE.bodySmall,
+      },
+    ],
+  );
   elements.push(rt.frameId);
 
   elements.push(

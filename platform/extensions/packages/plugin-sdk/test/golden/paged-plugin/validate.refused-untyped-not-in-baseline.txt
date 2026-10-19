@@ -1,0 +1,7 @@
+$ paged-plugin validate <TMP>/untyped.json --untyped-baseline <TMP>/baseline.json
+# exit 1
+# stdout
+(empty)
+# stderr
+✗ <TMP>/untyped.json
+  - command "media.paged.test.go" is untyped and not in the baseline — contribute it typed (contributes.objectModel.commands, ADR 323)

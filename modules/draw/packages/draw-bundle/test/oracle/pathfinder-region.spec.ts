@@ -71,7 +71,13 @@ import { describe, expect, it, beforeAll, afterAll } from "bun:test";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
 
 import { pathfinderRegionMutationFor } from "../../src";
-import { onEngine, openOracleHost, paintOf, pathsOf, type Paint } from "./engine";
+import {
+  onEngine,
+  openOracleHost,
+  paintOf,
+  pathsOf,
+  type Paint,
+} from "./engine";
 import {
   AREA_REL_TOL,
   BOUNDS_ABS_TOL,
@@ -168,7 +174,8 @@ const PATHFINDER_REGION_CASES: RegionCase[] = [
     parameters: { verb: "pathfinderMinusBack" },
   },
 ];
-const caseOf = (id: string) => PATHFINDER_REGION_CASES.find((c) => c.id === id)!;
+const caseOf = (id: string) =>
+  PATHFINDER_REGION_CASES.find((c) => c.id === id)!;
 
 // --- pieces ------------------------------------------------------------------
 
@@ -191,7 +198,10 @@ interface Piece {
 const bySize = (a: Piece, b: Piece) =>
   a.area - b.area || a.bounds[0] - b.bounds[0] || a.bounds[1] - b.bounds[1];
 
-function pieceOf(paths: OraclePath[], paint: Pick<Piece, "fill" | "stroke" | "strokeWeight">): Piece {
+function pieceOf(
+  paths: OraclePath[],
+  paint: Pick<Piece, "fill" | "stroke" | "strokeWeight">,
+): Piece {
   const shape = summarize(paths);
   const closed = shape.allClosed;
   return {
@@ -266,9 +276,10 @@ function expectPiecesByDefinition(got: Piece[], c: RegionCase) {
   const want = byDefinition(c);
   expect(got.length, `${c.id}: piece count`).toBe(want.length);
   got.forEach((piece, i) => {
-    expect(relDiff(piece.area, want[i].area), `${c.id} piece ${i}: area`).toBeLessThan(
-      AREA_REL_TOL,
-    );
+    expect(
+      relDiff(piece.area, want[i].area),
+      `${c.id} piece ${i}: area`,
+    ).toBeLessThan(AREA_REL_TOL);
     expect(piece.fill, `${c.id} piece ${i}: fill`).toEqual(want[i].fill);
   });
 }
@@ -329,10 +340,14 @@ describe("oracle — pathfinder region verbs", () => {
       for (const c of FIXTURE.cases) {
         for (const p of c.measured.paths) {
           const signed = signedArea(p);
-          expect(relDiff(Math.abs(signed), p.area), `${c.id} area`).toBeLessThan(AREA_REL_TOL);
-          expect(boundsDiff(pathBounds(p), p.bounds), `${c.id} bounds`).toBeLessThan(
-            BOUNDS_ABS_TOL,
-          );
+          expect(
+            relDiff(Math.abs(signed), p.area),
+            `${c.id} area`,
+          ).toBeLessThan(AREA_REL_TOL);
+          expect(
+            boundsDiff(pathBounds(p), p.bounds),
+            `${c.id} bounds`,
+          ).toBeLessThan(BOUNDS_ABS_TOL);
           expect(windingOf(signed), `${c.id} winding`).toBe(p.winding);
           // No result here is a compound path: one path, one object.
           expect(p.compound, c.id).toBeUndefined();
@@ -382,7 +397,9 @@ describe("oracle — pathfinder region verbs", () => {
     });
 
     it("what set algebra does not predict: Trim inserts the crossing points into the untouched front object", () => {
-      const front = theirs("rects-trim").find((p) => Math.abs(p.area - 8800) < 0.01)!;
+      const front = theirs("rects-trim").find(
+        (p) => Math.abs(p.area - 8800) < 0.01,
+      )!;
       expect(front.anchors).toBe(6); // a rectangle, with two extra anchors
       expect(front.fill).toEqual(BLUE);
     });
@@ -408,12 +425,14 @@ describe("oracle — pathfinder region verbs", () => {
         expect(ours.length).toBe(want.length);
         ours.forEach((piece, i) => {
           expect(piece.closed, `piece ${i}`).toBe(want[i].closed);
-          expect(relDiff(piece.area, want[i].area), `piece ${i}: area`).toBeLessThan(
-            AREA_REL_TOL,
-          );
-          expect(boundsDiff(piece.bounds, want[i].bounds), `piece ${i}: bounds`).toBeLessThan(
-            BOUNDS_ABS_TOL,
-          );
+          expect(
+            relDiff(piece.area, want[i].area),
+            `piece ${i}: area`,
+          ).toBeLessThan(AREA_REL_TOL);
+          expect(
+            boundsDiff(piece.bounds, want[i].bounds),
+            `piece ${i}: bounds`,
+          ).toBeLessThan(BOUNDS_ABS_TOL);
           expect(piece.anchors, `piece ${i}: anchors`).toBe(want[i].anchors);
           expect(piece.fill, `piece ${i}: fill`).toEqual(want[i].fill);
           expect(piece.stroke, `piece ${i}: stroke`).toBe("none");
@@ -426,12 +445,18 @@ describe("oracle — pathfinder region verbs", () => {
         const c = caseOf(id);
         const [, front] = c.input.paths;
         const overlap =
-          paintedArea(c.input.paths, "nonzero") - paintedArea(c.input.paths, "evenodd");
+          paintedArea(c.input.paths, "nonzero") -
+          paintedArea(c.input.paths, "evenodd");
         const [asSent] = await engine(c);
         const [want] = theirs(id);
-        expect(relDiff(asSent.area, paintedArea([front]) - overlap), id).toBeLessThan(AREA_REL_TOL);
+        expect(
+          relDiff(asSent.area, paintedArea([front]) - overlap),
+          id,
+        ).toBeLessThan(AREA_REL_TOL);
         expect(relDiff(asSent.area, want.area), id).toBeLessThan(AREA_REL_TOL);
-        expect(boundsDiff(asSent.bounds, want.bounds), id).toBeLessThan(BOUNDS_ABS_TOL);
+        expect(boundsDiff(asSent.bounds, want.bounds), id).toBeLessThan(
+          BOUNDS_ABS_TOL,
+        );
         expect(asSent.fill, id).toEqual(BLUE);
       }
     });
@@ -439,7 +464,8 @@ describe("oracle — pathfinder region verbs", () => {
     it("CONVENTION — Outline: the same line work, cut at every vertex (12 lines) instead of at the crossings (4), stroked at 1 pt instead of 0", async () => {
       const ours = await engine(caseOf("rects-outline"));
       const want = theirs("rects-outline");
-      const total = (pieces: Piece[]) => pieces.reduce((sum, p) => sum + p.length, 0);
+      const total = (pieces: Piece[]) =>
+        pieces.reduce((sum, p) => sum + p.length, 0);
       const union = (pieces: Piece[]) =>
         pieces.reduce(
           (b, p) => [
@@ -480,10 +506,14 @@ describe("oracle — pathfinder region verbs", () => {
         (x) => x.parameters.verb !== "pathfinderOutline",
       )) {
         const ours = await engine(c);
-        expect(new Set(ours.flatMap((p) => p.windings)), `${c.id}: engine`).toEqual(new Set(["ccw"]));
-        expect(new Set(theirs(c.id).flatMap((p) => p.windings)), `${c.id}: Illustrator`).toEqual(
-          new Set(["ccw"]),
-        );
+        expect(
+          new Set(ours.flatMap((p) => p.windings)),
+          `${c.id}: engine`,
+        ).toEqual(new Set(["ccw"]));
+        expect(
+          new Set(theirs(c.id).flatMap((p) => p.windings)),
+          `${c.id}: Illustrator`,
+        ).toEqual(new Set(["ccw"]));
       }
     });
   });

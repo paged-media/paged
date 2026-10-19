@@ -46,7 +46,8 @@ export function SoftProofToggle() {
         .catch(() => {});
     refresh();
     const off = client.subscribe((msg) => {
-      if (msg.kind === "documentLoaded" || msg.kind === "mutationApplied") refresh();
+      if (msg.kind === "documentLoaded" || msg.kind === "mutationApplied")
+        refresh();
       if (msg.kind === "colorProfileRegistered") {
         setProfiles((prev) =>
           prev.includes(msg.payload.name) ? prev : [...prev, msg.payload.name],

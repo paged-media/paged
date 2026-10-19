@@ -58,7 +58,11 @@ import {
 } from "../../../sheet-host-model/src";
 
 import type { FindMatch } from "../engine";
-import { columnLabel, type SessionNotice, type WorkbookSession } from "../session";
+import {
+  columnLabel,
+  type SessionNotice,
+  type WorkbookSession,
+} from "../session";
 import {
   fillTarget,
   fullyVisible,
@@ -200,7 +204,10 @@ export function makeGridPanel(
       const ro = new ResizeObserver((entries) => {
         const width = entries[entries.length - 1]?.contentRect.width ?? 0;
         if (width <= 0) return; // hidden (a collapsed dock): keep the last size
-        const next = Math.max(MIN_VIEWPORT_W_PT, Math.floor(width / PX_PER_PT) - SURFACE_BORDER_PX);
+        const next = Math.max(
+          MIN_VIEWPORT_W_PT,
+          Math.floor(width / PX_PER_PT) - SURFACE_BORDER_PX,
+        );
         setViewW((prev) => (prev === next ? prev : next));
       });
       ro.observe(el);
@@ -211,7 +218,9 @@ export function makeGridPanel(
     // One status line for answers that used to reach only the log: copy and
     // paste (posted by the session, whichever caller asked), a refused fill
     // and an edit that did not commit.
-    const [notice, setNotice] = useState<SessionNotice | null>(() => session.notice());
+    const [notice, setNotice] = useState<SessionNotice | null>(() =>
+      session.notice(),
+    );
     useEffect(() => {
       const sub = session.onNotice(setNotice);
       return () => sub.dispose();
@@ -240,7 +249,11 @@ export function makeGridPanel(
     const runFind = (backwards: boolean) => {
       const hit = session.findNext(findText, findOpts, backwards);
       setFindStatus(
-        hit ? `${columnLabel(hit.col)}${hit.row + 1}` : findText ? "No match" : null,
+        hit
+          ? `${columnLabel(hit.col)}${hit.row + 1}`
+          : findText
+            ? "No match"
+            : null,
       );
     };
     const onFindAll = () => {
@@ -279,7 +292,8 @@ export function makeGridPanel(
     // when the selection moves off it, the draft is cleared.
     const [fbDraft, setFbDraft] = useState<string | null>(null);
     const [draftCell, setDraftCell] = useState<string>("");
-    const fbCellKey = fbRow !== null && fbCol !== null ? `${fbRow}:${fbCol}` : "";
+    const fbCellKey =
+      fbRow !== null && fbCol !== null ? `${fbRow}:${fbCol}` : "";
     if (fbDraft !== null && fbCellKey !== draftCell) {
       // Selection moved off the cell being edited — discard the draft.
       setFbDraft(null);
@@ -294,7 +308,9 @@ export function makeGridPanel(
     );
     const fbValue =
       fbDraft ??
-      (fbRow !== null && fbCol !== null ? session.cellInputAt(fbRow, fbCol) : "");
+      (fbRow !== null && fbCol !== null
+        ? session.cellInputAt(fbRow, fbCol)
+        : "");
 
     const fbInputRef = useRef<HTMLInputElement | null>(null);
     const [fbCaret, setFbCaret] = useState(0);
@@ -413,7 +429,10 @@ export function makeGridPanel(
       const rect = e.currentTarget.getBoundingClientRect();
       // Pixel → content-space pt (the SVG viewBox is pt; it renders at
       // PX_PER_PT, so divide back out).
-      return [(e.clientX - rect.left) / PX_PER_PT, (e.clientY - rect.top) / PX_PER_PT];
+      return [
+        (e.clientX - rect.left) / PX_PER_PT,
+        (e.clientY - rect.top) / PX_PER_PT,
+      ];
     };
 
     const onSvgMouseDown = useCallback(
@@ -443,7 +462,10 @@ export function makeGridPanel(
         const hit = hitCell(scene, xPt, yPt);
         if (!hit) return;
         if (fillDrag) {
-          setFillDrag({ ...fillDrag, target: fillTarget(fillDrag.source, hit) });
+          setFillDrag({
+            ...fillDrag,
+            target: fillTarget(fillDrag.source, hit),
+          });
         } else if (lastDragCell.current !== `${hit.row}:${hit.col}`) {
           lastDragCell.current = `${hit.row}:${hit.col}`;
           session.extendSelection(hit.row, hit.col);
@@ -534,32 +556,39 @@ export function makeGridPanel(
         if (!hit) return;
         session.setGridSelection(hit.row, hit.col, 1, 1);
         // The re-enterable input (a formula shows as its formula).
-        setEditor({ row: hit.row, col: hit.col, value: session.cellInputAt(hit.row, hit.col) });
+        setEditor({
+          row: hit.row,
+          col: hit.col,
+          value: session.cellInputAt(hit.row, hit.col),
+        });
       },
       [scene, st.activeSheet],
     );
 
-    const commitEditor = useCallback((then?: AdvanceDir) => {
-      if (!editor || st.activeSheet === null) {
+    const commitEditor = useCallback(
+      (then?: AdvanceDir) => {
+        if (!editor || st.activeSheet === null) {
+          setEditor(null);
+          return;
+        }
+        const ok = session.editCell(
+          st.activeSheet,
+          editor.row,
+          editor.col,
+          editor.value,
+        );
+        if (!ok) showError("The cell edit was not saved.");
         setEditor(null);
-        return;
-      }
-      const ok = session.editCell(
-        st.activeSheet,
-        editor.row,
-        editor.col,
-        editor.value,
-      );
-      if (!ok) showError("The cell edit was not saved.");
-      setEditor(null);
-      if (then) {
-        session.handleGridKey({
-          key: then === "right" || then === "left" ? "Tab" : "Enter",
-          shiftKey: then === "left" || then === "up",
-        });
-        surfaceRef.current?.focus();
-      }
-    }, [editor, st.activeSheet]);
+        if (then) {
+          session.handleGridKey({
+            key: then === "right" || then === "left" ? "Tab" : "Enter",
+            shiftKey: then === "left" || then === "up",
+          });
+          surfaceRef.current?.focus();
+        }
+      },
+      [editor, st.activeSheet],
+    );
 
     const onEditorKey = useCallback(
       (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -606,7 +635,9 @@ export function makeGridPanel(
       );
     }
 
-    const svg = svgOf(fillDrag?.target ? { ...scene, fillPreview: fillDrag.target } : scene);
+    const svg = svgOf(
+      fillDrag?.target ? { ...scene, fillPreview: fillDrag.target } : scene,
+    );
     const wPx = (scene.viewport.xOffsets.at(-1) ?? 0) * PX_PER_PT;
     const hPx = (scene.viewport.yOffsets.at(-1) ?? 0) * PX_PER_PT;
 
@@ -697,7 +728,14 @@ export function makeGridPanel(
         </div>
 
         {/* Find and replace in the sheet (Wave 5; the one home for find). */}
-        <div data-grid-find style={{ display: "flex", flexWrap: "wrap", gap: "var(--space-1, 4px)" }}>
+        <div
+          data-grid-find
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            gap: "var(--space-1, 4px)",
+          }}
+        >
           <input
             ref={findInputRef}
             data-find-input
@@ -725,7 +763,11 @@ export function makeGridPanel(
             type="button"
             data-find-prev
             disabled={!findText}
-            title={findText ? "Previous match (Shift+Enter)" : "Type something to find first"}
+            title={
+              findText
+                ? "Previous match (Shift+Enter)"
+                : "Type something to find first"
+            }
             onClick={() => runFind(true)}
             style={scrollBtn}
           >
@@ -735,7 +777,9 @@ export function makeGridPanel(
             type="button"
             data-find-next
             disabled={!findText}
-            title={findText ? "Next match (Enter)" : "Type something to find first"}
+            title={
+              findText ? "Next match (Enter)" : "Type something to find first"
+            }
             onClick={() => runFind(false)}
             style={scrollBtn}
           >
@@ -745,7 +789,11 @@ export function makeGridPanel(
             type="button"
             data-sheet-find
             disabled={!findText}
-            title={findText ? "List every match in this sheet" : "Type something to find first"}
+            title={
+              findText
+                ? "List every match in this sheet"
+                : "Type something to find first"
+            }
             onClick={onFindAll}
             style={scrollBtn}
           >
@@ -764,11 +812,21 @@ export function makeGridPanel(
             </span>
           )}
         </div>
-        <details data-sheet-replace-section style={{ font: "12px var(--font-sans, sans-serif)" }}>
+        <details
+          data-sheet-replace-section
+          style={{ font: "12px var(--font-sans, sans-serif)" }}
+        >
           <summary style={{ cursor: "pointer", color: "var(--pg-muted-fg)" }}>
             Replace and options
           </summary>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: "var(--space-1, 4px)", marginTop: "var(--space-1, 4px)" }}>
+          <div
+            style={{
+              display: "flex",
+              flexWrap: "wrap",
+              gap: "var(--space-1, 4px)",
+              marginTop: "var(--space-1, 4px)",
+            }}
+          >
             <input
               data-sheet-find-replacement
               type="text"
@@ -782,22 +840,51 @@ export function makeGridPanel(
               type="button"
               data-sheet-replace-all
               disabled={!findText}
-              title={findText ? "Replace every match in this sheet" : "Type something to find first"}
+              title={
+                findText
+                  ? "Replace every match in this sheet"
+                  : "Type something to find first"
+              }
               onClick={onReplaceAll}
               style={scrollBtn}
             >
               Replace all
             </button>
           </div>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: "var(--space-2, 8px)", marginTop: "var(--space-1, 4px)" }}>
+          <div
+            style={{
+              display: "flex",
+              flexWrap: "wrap",
+              gap: "var(--space-2, 8px)",
+              marginTop: "var(--space-1, 4px)",
+            }}
+          >
             {(
               [
                 ["data-sheet-find-case", "Match case", matchCase, setMatchCase],
-                ["data-sheet-find-entire", "Entire cell", entireCell, setEntireCell],
-                ["data-sheet-find-formulas", "In formulas", inFormulas, setInFormulas],
+                [
+                  "data-sheet-find-entire",
+                  "Entire cell",
+                  entireCell,
+                  setEntireCell,
+                ],
+                [
+                  "data-sheet-find-formulas",
+                  "In formulas",
+                  inFormulas,
+                  setInFormulas,
+                ],
               ] as const
             ).map(([attr, label, checked, set]) => (
-              <label key={attr} style={{ display: "flex", alignItems: "center", gap: 4, color: "var(--pg-fg)" }}>
+              <label
+                key={attr}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 4,
+                  color: "var(--pg-fg)",
+                }}
+              >
                 <input
                   {...{ [attr]: true }}
                   type="checkbox"
@@ -810,7 +897,16 @@ export function makeGridPanel(
           </div>
         </details>
         {findMsg && (
-          <p data-sheet-find-msg role="status" style={{ ...note, marginTop: 0, color: "var(--pg-fg)", fontSize: 12 }}>
+          <p
+            data-sheet-find-msg
+            role="status"
+            style={{
+              ...note,
+              marginTop: 0,
+              color: "var(--pg-fg)",
+              fontSize: 12,
+            }}
+          >
             {findMsg}
           </p>
         )}
@@ -845,7 +941,12 @@ export function makeGridPanel(
                     cursor: "pointer",
                   }}
                 >
-                  <span style={{ fontFamily: "var(--font-mono, monospace)", fontSize: 11 }}>
+                  <span
+                    style={{
+                      fontFamily: "var(--font-mono, monospace)",
+                      fontSize: 11,
+                    }}
+                  >
                     {columnLabel(h.col)}
                     {h.row + 1}
                   </span>{" "}
@@ -857,7 +958,13 @@ export function makeGridPanel(
         )}
 
         {/* Scroll controls — one row/col per step; the engine re-windows. */}
-        <div style={{ display: "flex", flexWrap: "wrap", gap: "var(--space-1, 4px)" }}>
+        <div
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            gap: "var(--space-1, 4px)",
+          }}
+        >
           <button
             type="button"
             data-grid-scroll="up"
@@ -915,7 +1022,9 @@ export function makeGridPanel(
             type="button"
             data-grid-copy
             disabled={!sel}
-            title={sel ? "Copy the selected cells" : "Select cells to copy first"}
+            title={
+              sel ? "Copy the selected cells" : "Select cells to copy first"
+            }
             onClick={() => void session.copySelection()}
             style={{ ...scrollBtn, marginLeft: "var(--space-2, 8px)" }}
           >
@@ -925,7 +1034,11 @@ export function makeGridPanel(
             type="button"
             data-grid-paste
             disabled={!sel}
-            title={sel ? "Paste at the selected cell" : "Select a cell to paste at first"}
+            title={
+              sel
+                ? "Paste at the selected cell"
+                : "Select a cell to paste at first"
+            }
             onClick={() => void session.pasteAtSelection()}
             style={scrollBtn}
           >
@@ -941,7 +1054,10 @@ export function makeGridPanel(
             style={{
               margin: 0,
               font: "12px var(--font-sans, sans-serif)",
-              color: notice.tone === "error" ? "var(--status-error)" : "var(--pg-muted-fg)",
+              color:
+                notice.tone === "error"
+                  ? "var(--status-error)"
+                  : "var(--pg-muted-fg)",
             }}
           >
             {notice.text}
@@ -1011,15 +1127,14 @@ export function makeGridPanel(
         {/* S-01/S-02 honesty: this is the interim panel grid, not the
             in-frame sheets-mode surface (still SDK-blocked). */}
         <p data-grid-honesty style={{ ...note, marginTop: 0 }}>
-          Click a cell to select it and type to edit; the same grid edits
-          inside a placed sheet frame.
+          Click a cell to select it and type to edit; the same grid edits inside
+          a placed sheet frame.
         </p>
         <details style={{ ...note, marginTop: 0 }}>
           <summary style={{ cursor: "pointer" }}>About</summary>
-          Drag or Shift+click to select a range. F2 edits the cell, Enter or
-          Tab commits and moves, Delete clears. Drag the corner handle to
-          fill. Double-click a placed sheet frame on the page to edit it
-          there.
+          Drag or Shift+click to select a range. F2 edits the cell, Enter or Tab
+          commits and moves, Delete clears. Drag the corner handle to fill.
+          Double-click a placed sheet frame on the page to edit it there.
         </details>
       </div>
     );

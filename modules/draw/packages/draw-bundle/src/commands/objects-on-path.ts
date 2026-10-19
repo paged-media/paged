@@ -160,7 +160,11 @@ import {
   type RepeatBounds,
 } from "@paged-media/draw-geometry";
 
-import { pageOriginOf, storedTransformOf, type PageOrigin } from "../page-origin";
+import {
+  pageOriginOf,
+  storedTransformOf,
+  type PageOrigin,
+} from "../page-origin";
 import { stampDrawMetadata } from "./appearance-bake";
 import { blendSourceFrom } from "./blend";
 import { announceRecipeChange, linkIndex } from "../link-index";
@@ -338,7 +342,9 @@ const num = (v: unknown, fallback: number): number =>
 /** A 6-number affine, or null. */
 export function affineFrom(v: unknown): Affine | null {
   if (!Array.isArray(v) || v.length !== 6) return null;
-  const out = v.map((n) => (typeof n === "number" && Number.isFinite(n) ? n : NaN));
+  const out = v.map((n) =>
+    typeof n === "number" && Number.isFinite(n) ? n : NaN,
+  );
   return out.some(Number.isNaN) ? null : (out as unknown as Affine);
 }
 
@@ -370,7 +376,9 @@ export function objectsOnPathParamsFrom(
         ? null
         : Array.isArray(p.order)
           ? p.order
-              .map((n) => (typeof n === "number" && Number.isFinite(n) ? n : -1))
+              .map((n) =>
+                typeof n === "number" && Number.isFinite(n) ? n : -1,
+              )
               .filter((n) => n >= 0)
           : base.order,
     fitToArtboard: bool("fitToArtboard", base.fitToArtboard),
@@ -481,7 +489,11 @@ export function placeObjectsOnPath(args: {
   params: ObjectsOnPathParams;
   /** The artboard: its size, and its top-left in the space the plan runs
    *  in (the page's origin inside its spread; `[0, 0]` when omitted). */
-  page: { width: number; height: number; origin?: readonly [number, number] } | null;
+  page: {
+    width: number;
+    height: number;
+    origin?: readonly [number, number];
+  } | null;
 }): OnPathPlacement[] {
   const { params } = args;
   const slots: PathSlot[] =
@@ -730,7 +742,9 @@ export function objectsOnPathBatchFor(args: {
   const ops: Mutation[] = [];
   for (const placement of plan.placements) {
     if (placement.matrix) {
-      ops.push(frameTransformMutationFor(placement.object.id, placement.matrix));
+      ops.push(
+        frameTransformMutationFor(placement.object.id, placement.matrix),
+      );
     }
   }
   plan.placements.forEach((placement) => {
@@ -797,7 +811,10 @@ export function objectsOnPathExpandBatchFor(
     op: "batch",
     args: {
       ops: leaves.map((leaf) =>
-        stampDrawMetadata(leaf.id, withOnPathKey(leaf.envelope, leaf.key, null)),
+        stampDrawMetadata(
+          leaf.id,
+          withOnPathKey(leaf.envelope, leaf.key, null),
+        ),
       ),
     },
   };
@@ -821,7 +838,9 @@ export async function readObjectsOnPathLibrary(
     return emptyLibrary();
   }
   try {
-    return parseObjectsOnPathLibrary(await readRecipeBytes(host, OBJECTS_ON_PATH_PART));
+    return parseObjectsOnPathLibrary(
+      await readRecipeBytes(host, OBJECTS_ON_PATH_PART),
+    );
   } catch (e) {
     host.log.warn(`objects-on-path: recipe read failed (${String(e)})`);
     return emptyLibrary();
@@ -834,7 +853,8 @@ export async function writeObjectsOnPathLibrary(
 ): Promise<boolean> {
   if (!host.supports(OBJECTS_ON_PATH_FEATURE)) return false;
   try {
-    await writeRecipeBytes(host, 
+    await writeRecipeBytes(
+      host,
       OBJECTS_ON_PATH_PART,
       serializeObjectsOnPathLibrary(library),
     );
@@ -872,7 +892,10 @@ export async function readOnPathObject(
       innerBounds: item.bounds as RepeatBounds,
       home:
         home ??
-        storedTransformOf(item.itemTransform as Affine | null, pageOriginOf(item)) ??
+        storedTransformOf(
+          item.itemTransform as Affine | null,
+          pageOriginOf(item),
+        ) ??
         IDENTITY_AFFINE,
     },
   };
@@ -884,14 +907,23 @@ export async function readOnPathObject(
 export async function readOnPathSpine(
   host: BundleHost,
   id: ElementId,
-): Promise<{ metric: PathMetric; pageId: string; pageOrigin: PageOrigin } | null> {
+): Promise<{
+  metric: PathMetric;
+  pageId: string;
+  pageOrigin: PageOrigin;
+} | null> {
   const table = await host.document.pathAnchors(id).catch(() => null);
   if (!table || table.anchors.length < 2) return null;
   const pageOrigin = pageOriginOf(table);
-  const stored = storedTransformOf(table.itemTransform as Affine | null, pageOrigin);
+  const stored = storedTransformOf(
+    table.itemTransform as Affine | null,
+    pageOrigin,
+  );
   const source = blendSourceFrom({
     ...table,
-    itemTransform: stored ? ([...stored] as [number, number, number, number, number, number]) : null,
+    itemTransform: stored
+      ? ([...stored] as [number, number, number, number, number, number])
+      : null,
   });
   const run = source.subpaths[0];
   if (!run || run.length < 2) return null;
@@ -1202,9 +1234,7 @@ export async function applyMakeObjectsOnPath(
     );
     return [];
   }
-  const objects = selection.filter(
-    (id) => String(id.id) !== String(pathId.id),
-  );
+  const objects = selection.filter((id) => String(id.id) !== String(pathId.id));
   if (objects.length === 0) {
     host.log.warn(
       `${label}: the selection carries the path (${String(pathId.id)}) and ` +
@@ -1280,7 +1310,8 @@ export async function applyUpdateObjectsOnPath(
   // HOME comes from the links first (they survive with no container
   // writer), then from the recipe.
   const homes = new Map<string, Affine>();
-  for (const link of links.objects) homes.set(String(link.id.id), link.ref.home);
+  for (const link of links.objects)
+    homes.set(String(link.id.id), link.ref.home);
   for (const row of saved?.objects ?? []) {
     if (!homes.has(row.id)) homes.set(row.id, row.home);
   }

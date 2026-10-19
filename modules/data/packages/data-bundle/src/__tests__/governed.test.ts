@@ -30,7 +30,10 @@ vi.mock("../engine", () => ({
   ENGINE_NOT_BUILT: "not built",
   bootEngine: vi.fn(async () => ({
     set_locale() {},
-    governed_catalog(_query: string, metadata: { columns: { name: string }[] }) {
+    governed_catalog(
+      _query: string,
+      metadata: { columns: { name: string }[] },
+    ) {
       // A faithful-enough stand-in: echo the documented names so the test proves
       // the sidecar reached the engine (the real merge is Rust-tested).
       return {
@@ -51,10 +54,19 @@ import { createSession } from "../session";
 
 function fakeHost(): BundleHost {
   return {
-    manifest: { id: "media.paged.data", name: "d", version: "0.0.1", apiVersion: "^0.2" },
+    manifest: {
+      id: "media.paged.data",
+      name: "d",
+      version: "0.0.1",
+      apiVersion: "^0.2",
+    },
     log: { debug() {}, info() {}, warn() {}, error() {} },
     // The document doors every host has; nothing here fires them.
-    document: { onWillSave: () => ({ dispose() {} }), onDidChange: () => ({ dispose() {} }), onDidOpen: () => ({ dispose() {} }) },
+    document: {
+      onWillSave: () => ({ dispose() {} }),
+      onDidChange: () => ({ dispose() {} }),
+      onDidOpen: () => ({ dispose() {} }),
+    },
     supports: () => false,
   } as unknown as BundleHost;
 }

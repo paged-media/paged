@@ -37,29 +37,57 @@ export interface EngineRead {
 }
 
 /** One `RequestGet { address, path }` against the running engine. */
-export function engineRead(page: Page, address: string, path: string): Promise<EngineRead> {
+export function engineRead(
+  page: Page,
+  address: string,
+  path: string,
+): Promise<EngineRead> {
   return page.evaluate(
     async ({ address, path }) => {
-      const c = (globalThis as unknown as {
-        __canvas: { client: { send(m: unknown): Promise<{ kind: string; payload?: unknown }> } };
-      }).__canvas;
-      const r = await c.client.send({ kind: "requestGet", payload: { address, path } });
-      const p = (r.payload ?? {}) as { value?: { value?: unknown } | null; code?: string | null; error?: string | null };
-      return { value: p.value ? (p.value.value ?? null) : null, code: p.code ?? (p.error ? "error" : null) };
+      const c = (
+        globalThis as unknown as {
+          __canvas: {
+            client: {
+              send(m: unknown): Promise<{ kind: string; payload?: unknown }>;
+            };
+          };
+        }
+      ).__canvas;
+      const r = await c.client.send({
+        kind: "requestGet",
+        payload: { address, path },
+      });
+      const p = (r.payload ?? {}) as {
+        value?: { value?: unknown } | null;
+        code?: string | null;
+        error?: string | null;
+      };
+      return {
+        value: p.value ? (p.value.value ?? null) : null,
+        code: p.code ?? (p.error ? "error" : null),
+      };
     },
     { address, path },
   );
 }
 
 /** The engine's value for `path` on `address` (refusals fail the test). */
-export async function engineGet(page: Page, address: string, path: string): Promise<unknown> {
+export async function engineGet(
+  page: Page,
+  address: string,
+  path: string,
+): Promise<unknown> {
   const r = await engineRead(page, address, path);
   expect(r.code, `${address}.${path}: the engine refused the read`).toBeNull();
   return r.value;
 }
 
 /** Does the running engine read `path` on this address at all? */
-export async function engineHasPath(page: Page, address: string, path: string): Promise<boolean> {
+export async function engineHasPath(
+  page: Page,
+  address: string,
+  path: string,
+): Promise<boolean> {
   return (await engineRead(page, address, path)).code !== "noSuchPath";
 }
 
@@ -68,7 +96,9 @@ const RENDER_WIDTH_PX = 400;
 /** The page's current render, small (a render CHANGE is the question). */
 export async function pageRender(page: Page, info: PageInfo): Promise<Buffer> {
   const dpi = (RENDER_WIDTH_PX * 72) / info.widthPt;
-  return Buffer.from(await snapshotPagePng(page, info.pageId, RENDER_WIDTH_PX, dpi));
+  return Buffer.from(
+    await snapshotPagePng(page, info.pageId, RENDER_WIDTH_PX, dpi),
+  );
 }
 
 /** Poll until the page renders differently from `before` (a rebuild is

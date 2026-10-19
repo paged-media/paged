@@ -36,7 +36,13 @@ import { expect, test, type Page } from "@playwright/test";
 import { openCanvas } from "../fidelity/canvas-driver";
 
 const BUNDLE_ID = "media.paged.journeypages";
-const REPO_ROOT = pathResolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "..");
+const REPO_ROOT = pathResolve(
+  dirname(fileURLToPath(import.meta.url)),
+  "..",
+  "..",
+  "..",
+  "..",
+);
 /** Twelve pages: room to navigate. */
 const LAYOUT_IDML = `${REPO_ROOT}/corpus/idml/generated/layout.idml`;
 
@@ -57,7 +63,9 @@ type Host = {
     ): Promise<{ widthPx: number; heightPx: number; png: Uint8Array } | null>;
   };
 };
-type G = { __pages70: { host: Host; changes: (string | null)[]; pages: string[] } };
+type G = {
+  __pages70: { host: Host; changes: (string | null)[]; pages: string[] };
+};
 
 /** Load the test bundle, then open the fixture through its
  *  `nativeDocument.open` — the File > Open orchestration a plugin
@@ -65,7 +73,9 @@ type G = { __pages70: { host: Host; changes: (string | null)[]; pages: string[] 
  *  page ids. */
 async function openThroughBundle(page: Page): Promise<string[]> {
   await page.waitForFunction(
-    () => typeof (globalThis as unknown as { __loadTestBundle?: unknown }).__loadTestBundle === "function",
+    () =>
+      typeof (globalThis as unknown as { __loadTestBundle?: unknown })
+        .__loadTestBundle === "function",
   );
   const bytes = Array.from(readFileSync(LAYOUT_IDML));
   return page.evaluate(
@@ -91,7 +101,9 @@ async function openThroughBundle(page: Page): Promise<string[]> {
       const changes: (string | null)[] = [];
       host.viewport.onDidChangeActivePage((p) => changes.push(p));
       await host.nativeDocument.open(new Uint8Array(bytes));
-      const pages = (await host.document.collection("pages")).map((p) => p.selfId);
+      const pages = (await host.document.collection("pages")).map(
+        (p) => p.selfId,
+      );
       g.__pages70 = { host, changes, pages };
       return pages;
     },
@@ -100,7 +112,9 @@ async function openThroughBundle(page: Page): Promise<string[]> {
 }
 
 const pagesHost = (page: Page) =>
-  page.evaluate(() => (globalThis as unknown as G).__pages70.host.viewport.activePage());
+  page.evaluate(() =>
+    (globalThis as unknown as G).__pages70.host.viewport.activePage(),
+  );
 
 test.describe("journey · v70 page doors: go to a page, page images", () => {
   test("goToPage moves the camera to the page and the active page follows @feat:editor-shell.panels.pages-navigator @level:gesture", async ({
@@ -113,7 +127,8 @@ test.describe("journey · v70 page doors: go to a page, page images", () => {
     // page under the viewport's centre, with the whole document fitted.
     await expect.poll(() => pagesHost(page)).not.toBeNull();
     const start = await pagesHost(page);
-    const target = pages[pages.length - 1] === start ? pages[0] : pages[pages.length - 1];
+    const target =
+      pages[pages.length - 1] === start ? pages[0] : pages[pages.length - 1];
 
     const r = await page.evaluate(async (target) => {
       const g = (globalThis as unknown as G).__pages70;
@@ -134,8 +149,12 @@ test.describe("journey · v70 page doors: go to a page, page images", () => {
       const g = (globalThis as unknown as G).__pages70;
       return { camera: g.host.viewport.camera(), changes: g.changes };
     });
-    expect(after.changes.at(-1), "onDidChangeActivePage reported it").toBe(target);
-    expect(after.camera.ty, "the camera moved down the document").not.toBe(r.before.ty);
+    expect(after.changes.at(-1), "onDidChangeActivePage reported it").toBe(
+      target,
+    );
+    expect(after.camera.ty, "the camera moved down the document").not.toBe(
+      r.before.ty,
+    );
   });
 
   test("render.snapshot answers a PNG of a page and null for an unknown one @level:happy", async ({
@@ -146,7 +165,9 @@ test.describe("journey · v70 page doors: go to a page, page images", () => {
     const r = await page.evaluate(async (pageId) => {
       const g = (globalThis as unknown as G).__pages70;
       const shot = await g.host.render.snapshot(pageId, { widthPx: 240 });
-      const none = await g.host.render.snapshot("no-such-page", { widthPx: 240 });
+      const none = await g.host.render.snapshot("no-such-page", {
+        widthPx: 240,
+      });
       return {
         supports: g.host.supports("render.snapshot@1"),
         width: shot?.widthPx ?? 0,

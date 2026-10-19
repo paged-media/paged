@@ -68,7 +68,11 @@ const invoke = (page: Page, id: string) =>
     (c) =>
       (
         globalThis as unknown as {
-          __canvas: { registries: { commands: { invoke: (i: string) => Promise<unknown> } } };
+          __canvas: {
+            registries: {
+              commands: { invoke: (i: string) => Promise<unknown> };
+            };
+          };
         }
       ).__canvas.registries.commands.invoke(c),
     id,
@@ -88,9 +92,13 @@ async function importCsv(page: Page): Promise<boolean> {
   const status = page.locator("[data-status]").last();
   try {
     await expect
-      .poll(async () => (await status.getAttribute("data-status").catch(() => null)) ?? "?", {
-        timeout: 45_000,
-      })
+      .poll(
+        async () =>
+          (await status.getAttribute("data-status").catch(() => null)) ?? "?",
+        {
+          timeout: 45_000,
+        },
+      )
       .toBe("ready");
     return true;
   } catch {
@@ -110,8 +118,11 @@ test.describe("journey · paged.data dataset panel", () => {
     const ready = await importCsv(page);
     if (!ready) {
       const got =
-        (await page.locator("[data-status]").last().getAttribute("data-status").catch(() => null)) ??
-        "unknown";
+        (await page
+          .locator("[data-status]")
+          .last()
+          .getAttribute("data-status")
+          .catch(() => null)) ?? "unknown";
       skipWithoutDuckDB(
         got,
         `dataset panel needs DuckDB-WASM to boot (engine status "${got}"). It boots on the ` +
@@ -119,12 +130,16 @@ test.describe("journey · paged.data dataset panel", () => {
           "fires if the package shipped no bin/duckdb-engine.wasm or the context is not cross-origin isolated.",
       );
     }
-    await expect(page.getByText(/data_people/).first()).toBeVisible({ timeout: 6_000 });
+    await expect(page.getByText(/data_people/).first()).toBeVisible({
+      timeout: 6_000,
+    });
 
     // ── 2. DEFINE A QUERY — the dataset panel materializes a query; a binding
     //    over "All rows of data_people" defines it (SELECT * FROM the source). ──
     await openPanel(page, BINDINGS_PANEL);
-    await expect(page.locator("[data-data-bind-author]")).toBeVisible({ timeout: 10_000 });
+    await expect(page.locator("[data-data-bind-author]")).toBeVisible({
+      timeout: 10_000,
+    });
     await addBindingThroughPanel(page, "variable", "name");
 
     // ── 3. OPEN THE DATASET PANEL via the openDataset command (the menu/
@@ -133,9 +148,13 @@ test.describe("journey · paged.data dataset panel", () => {
     await invoke(page, OPEN_DATASET_COMMAND);
     // data canary.6 (U12): the v-header body text is gone — anchor the
     // mounted panel on its stable variables block, then the query selector.
-    await expect(page.locator("[data-data-variables]")).toBeVisible({ timeout: 10_000 });
+    await expect(page.locator("[data-data-variables]")).toBeVisible({
+      timeout: 10_000,
+    });
     await expect(page.locator("[data-data-dataset-empty]")).toHaveCount(0);
-    await expect(page.getByText(/^Query/).last()).toBeVisible({ timeout: 8_000 });
+    await expect(page.getByText(/^Query/).last()).toBeVisible({
+      timeout: 8_000,
+    });
 
     // ── 4. CATALOG (§7) — "Preview rows" re-runs the DuckDB query
     //    (data.query.seam) and materializes the resolved schema: the panel
@@ -143,8 +162,12 @@ test.describe("journey · paged.data dataset panel", () => {
     //    shows its first rows. The CSV fixture has 2 columns (name, role)
     //    and 3 records. ──
     await page.getByRole("button", { name: /preview rows/i }).click();
-    await expect(page.getByText(/^\d+ columns? · \d+ documented/)).toBeVisible({ timeout: 10_000 });
-    await expect(page.getByText(/^2 columns · /)).toBeVisible({ timeout: 6_000 });
+    await expect(page.getByText(/^\d+ columns? · \d+ documented/)).toBeVisible({
+      timeout: 10_000,
+    });
+    await expect(page.getByText(/^2 columns · /)).toBeVisible({
+      timeout: 6_000,
+    });
     const rows = page.locator("[data-data-dataset-rows]");
     await expect(rows).toHaveAttribute("data-data-dataset-rows", "3");
     await expect(rows).toContainText("Ada Lovelace");
@@ -167,7 +190,9 @@ test.describe("journey · paged.data dataset panel", () => {
     //    yet" note is only for a host without the registry). ──
     await page.getByRole("button", { name: /publish provider/i }).click();
     await expect(
-      page.getByText(/provider ".*-dataset" \(revision .*\) is shared with other plugins/i),
+      page.getByText(
+        /provider ".*-dataset" \(revision .*\) is shared with other plugins/i,
+      ),
     ).toBeVisible({
       timeout: 10_000,
     });

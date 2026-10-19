@@ -40,7 +40,9 @@ function locked(name: string): string | undefined {
 }
 
 describe("ENGINE_PIN = the web-render lockfile", () => {
-  it("blitz = blitz-dom", () => expect(ENGINE_PIN.blitz).toBe(locked("blitz-dom")));
+  it("blitz = blitz-dom", () =>
+    expect(ENGINE_PIN.blitz).toBe(locked("blitz-dom")));
   it("stylo = stylo", () => expect(ENGINE_PIN.stylo).toBe(locked("stylo")));
-  it("anyrender = anyrender", () => expect(ENGINE_PIN.anyrender).toBe(locked("anyrender")));
+  it("anyrender = anyrender", () =>
+    expect(ENGINE_PIN.anyrender).toBe(locked("anyrender")));
 });

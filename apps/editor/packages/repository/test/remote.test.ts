@@ -25,13 +25,18 @@ import { strict as assert } from "node:assert";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
-import { initSync, Repository } from "@paged-media/repo-wasm";
+import { initSync, Repository } from "@paged-media/canvas-wasm/repo";
 
 import { memoryFs } from "../src/fs.ts";
 import { Library, RemoteError } from "../src/library.ts";
 
 initSync({
-  module: readFileSync(new URL(import.meta.resolve("@paged-media/repo-wasm/paged_repo_wasm_bg.wasm"))),
+  module: readFileSync(
+    new URL(
+      import.meta
+        .resolve("@paged-media/canvas-wasm/repo/paged_repo_wasm_bg.wasm"),
+    ),
+  ),
 });
 
 const URL_ = process.env.PAGED_SERVER_URL;
@@ -119,46 +124,77 @@ const library = () =>
     newId: () => `doc-${++n}`,
   });
 
-test("push, clone, edit, pull: two browsers through one server", { skip: !URL_ }, async () => {
-  const remote = { url: URL_!, repo: `browser-${Date.now().toString(36)}`, token: "dev-token" };
-  const a = library();
-  const doc1 = await a.importFile(doc("<Story/>"), "brochure.idml");
-  const first = await a.push(doc1.id, remote);
-  assert.ok(first.sent > 0);
+test(
+  "push, clone, edit, pull: two browsers through one server",
+  { skip: !URL_ },
+  async () => {
+    const remote = {
+      url: URL_!,
+      repo: `browser-${Date.now().toString(36)}`,
+      token: "dev-token",
+    };
+    const a = library();
+    const doc1 = await a.importFile(doc("<Story/>"), "brochure.idml");
+    const first = await a.push(doc1.id, remote);
+    assert.ok(first.sent > 0);
 
-  const b = library();
-  const copy = await b.clone(remote, "brochure");
-  assert.deepEqual(await b.exportPaged(copy.id), await a.exportPaged(doc1.id));
+    const b = library();
+    const copy = await b.clone(remote, "brochure");
+    assert.deepEqual(
+      await b.exportPaged(copy.id),
+      await a.exportPaged(doc1.id),
+    );
 
-  await a.save(doc1.id, doc("<Story>edited in A</Story>"));
-  const second = await a.push(doc1.id, remote);
-  assert.ok(second.sent <= 4, `sent ${second.sent}`);
-  assert.ok(second.bytes < 4096, `sent ${second.bytes} bytes for a one-story edit`);
+    await a.save(doc1.id, doc("<Story>edited in A</Story>"));
+    const second = await a.push(doc1.id, remote);
+    assert.ok(second.sent <= 4, `sent ${second.sent}`);
+    assert.ok(
+      second.bytes < 4096,
+      `sent ${second.bytes} bytes for a one-story edit`,
+    );
 
-  const pulled = await b.pull(copy.id, remote);
-  assert.equal(pulled.changed, true);
-  assert.deepEqual(await b.exportPaged(copy.id), await a.exportPaged(doc1.id));
-  assert.equal((await b.pull(copy.id, remote)).changed, false);
-  assert.deepEqual(
-    (await a.evidence(doc1.id)).map((e) => e.action).filter((x) => x === "push"),
-    ["push", "push"],
-  );
+    const pulled = await b.pull(copy.id, remote);
+    assert.equal(pulled.changed, true);
+    assert.deepEqual(
+      await b.exportPaged(copy.id),
+      await a.exportPaged(doc1.id),
+    );
+    assert.equal((await b.pull(copy.id, remote)).changed, false);
+    assert.deepEqual(
+      (await a.evidence(doc1.id))
+        .map((e) => e.action)
+        .filter((x) => x === "push"),
+      ["push", "push"],
+    );
 
-  // Both edit; A pushes first. B can neither push over A nor pull past its own edit.
-  await a.save(doc1.id, doc("<Story>A again</Story>"));
-  await b.save(copy.id, doc("<Story>B instead</Story>"));
-  await a.push(doc1.id, remote);
-  await assert.rejects(b.push(copy.id, remote), (e) => e instanceof RemoteError && [403, 409].includes(e.status));
-  await assert.rejects(b.pull(copy.id, remote), /forward/);
-});
+    // Both edit; A pushes first. B can neither push over A nor pull past its own edit.
+    await a.save(doc1.id, doc("<Story>A again</Story>"));
+    await b.save(copy.id, doc("<Story>B instead</Story>"));
+    await a.push(doc1.id, remote);
+    await assert.rejects(
+      b.push(copy.id, remote),
+      (e) => e instanceof RemoteError && [403, 409].includes(e.status),
+    );
+    await assert.rejects(b.pull(copy.id, remote), /forward/);
+  },
+);
 
-test("a paged:// reference resolves through the server when the library lacks it", { skip: !URL_ }, async () => {
-  const repo = `ds-${Date.now().toString(36)}`;
-  const csv = enc.encode("sku,price\nA1,9.90\n");
-  const a = library();
-  const ds = await a.importDataset("products", [{ path: "data/products.csv", bytes: csv }]);
-  await a.push(ds.id, { url: URL_!, repo, token: "dev-token" });
-  const b = library();
-  const got = await b.resolve(`paged://${repo}/data/products.csv`, { url: URL_!, token: "dev-token" });
-  assert.deepEqual(got, csv);
-});
+test(
+  "a paged:// reference resolves through the server when the library lacks it",
+  { skip: !URL_ },
+  async () => {
+    const repo = `ds-${Date.now().toString(36)}`;
+    const csv = enc.encode("sku,price\nA1,9.90\n");
+    const a = library();
+    const ds = await a.importDataset("products", [
+      { path: "data/products.csv", bytes: csv },
+    ]);
+    await a.push(ds.id, { url: URL_!, repo, token: "dev-token" });
+    const b = library();
+    const got = await b.resolve(`paged://${repo}/data/products.csv`, {
+      url: URL_!,
+      token: "dev-token",
+    });
+    assert.deepEqual(got, csv);
+  },
+);

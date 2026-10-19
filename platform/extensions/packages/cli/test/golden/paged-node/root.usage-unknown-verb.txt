@@ -1,0 +1,11 @@
+$ paged-node nope
+# exit 2
+# stdout
+{
+  "error": {
+    "message": "unknown verb \"nope\" — one of: get, set, create, delete, query, schema, batch, commands, invoke, run, ai, export, apply, merge, plugins, describe",
+    "exit": 2
+  }
+}
+# stderr
+(empty)

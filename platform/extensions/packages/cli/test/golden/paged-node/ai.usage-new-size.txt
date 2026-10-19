@@ -1,0 +1,11 @@
+$ paged-node ai --new huge 'a flyer' --no-save --no-plugins
+# exit 2
+# stdout
+{
+  "error": {
+    "message": "--new takes a3, a4, a5, letter, legal, tabloid or WxH in points, not \"huge\"",
+    "exit": 2
+  }
+}
+# stderr
+(empty)

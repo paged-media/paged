@@ -58,9 +58,10 @@ async function loadBytesStats(page: Page, bytes: number[]): Promise<DocStats> {
       globalThis as unknown as {
         __canvas: {
           client: {
-            loadDocument: (
-              bytes: Uint8Array,
-            ) => Promise<{ pageCount: number; pageSizesPt: [number, number][] }>;
+            loadDocument: (bytes: Uint8Array) => Promise<{
+              pageCount: number;
+              pageSizesPt: [number, number][];
+            }>;
           };
         };
       }
@@ -82,7 +83,9 @@ test.describe("W3.B2 — Save As IDML", () => {
     await loadFixture(page, "tables");
 
     const bytes = await exportIdmlBytes(page);
-    expect(bytes.length, "exported IDML bytes are non-empty").toBeGreaterThan(0);
+    expect(bytes.length, "exported IDML bytes are non-empty").toBeGreaterThan(
+      0,
+    );
     // ZIP local-file-header magic: 0x50 0x4B 0x03 0x04 ("PK\x03\x04").
     expect(bytes[0]).toBe(0x50); // 'P'
     expect(bytes[1]).toBe(0x4b); // 'K'

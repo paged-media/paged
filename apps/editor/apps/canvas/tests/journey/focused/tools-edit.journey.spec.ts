@@ -45,7 +45,11 @@ test.describe("journey · path/threading/guide tools", () => {
         (id) =>
           (
             globalThis as unknown as {
-              __canvas: { registries: { commands: { invoke: (c: string) => Promise<unknown> } } };
+              __canvas: {
+                registries: {
+                  commands: { invoke: (c: string) => Promise<unknown> };
+                };
+              };
             }
           ).__canvas.registries.commands.invoke(`paged.tool.activate.${id}`),
         toolId,
@@ -54,9 +58,17 @@ test.describe("journey · path/threading/guide tools", () => {
       page2.evaluate(async () => {
         const spreads = (await (
           globalThis as unknown as {
-            __canvas: { client: { collection: (n: string) => Promise<Array<{ guides?: unknown[] }>> } };
+            __canvas: {
+              client: {
+                collection: (
+                  n: string,
+                ) => Promise<Array<{ guides?: unknown[] }>>;
+              };
+            };
           }
-        ).__canvas.client.collection("spreads")) as Array<{ guides?: unknown[] }>;
+        ).__canvas.client.collection("spreads")) as Array<{
+          guides?: unknown[];
+        }>;
         return spreads.reduce((n, s) => n + (s.guides?.length ?? 0), 0);
       });
 
@@ -70,24 +82,44 @@ test.describe("journey · path/threading/guide tools", () => {
       await activate("paged.tool.directSelect");
       const r = (await mutate(page, {
         op: "pathPointSet",
-        args: { elementId: { kind: "polygon", id: pathId }, index: 0, role: "anchor", position: [130, 215] },
+        args: {
+          elementId: { kind: "polygon", id: pathId },
+          index: 0,
+          role: "anchor",
+          position: [130, 215],
+        },
       })) as { kind?: string };
-      if (r.kind !== "mutationApplied") fail.push("editor-tools.path.direct-edit");
+      if (r.kind !== "mutationApplied")
+        fail.push("editor-tools.path.direct-edit");
     } catch (e) {
       fail.push(`editor-tools.path.direct-edit (${String(e).slice(0, 50)})`);
     }
 
     // THREADING PORTS — a selected text frame renders in/out chain ports.
     try {
-      const { frameId } = await designer.addTextFrame({ x0: 80, y0: 300, x1: 300, y1: 400 });
+      const { frameId } = await designer.addTextFrame({
+        x0: 80,
+        y0: 300,
+        x1: 300,
+        y1: 400,
+      });
       await designer.selectElement("textFrame", frameId);
       await expect
-        .poll(() => page.locator('[data-thread-port="out"]').first().getAttribute("data-thread-state"), {
-          timeout: 5000,
-        })
+        .poll(
+          () =>
+            page
+              .locator('[data-thread-port="out"]')
+              .first()
+              .getAttribute("data-thread-state"),
+          {
+            timeout: 5000,
+          },
+        )
         .toBe("empty");
     } catch (e) {
-      fail.push(`editor-tools.text.threading-ports (${String(e).slice(0, 50)})`);
+      fail.push(
+        `editor-tools.text.threading-ports (${String(e).slice(0, 50)})`,
+      );
     }
 
     // GUIDE DRAG — pull a horizontal guide off the ruler onto the page.
@@ -99,14 +131,21 @@ test.describe("journey · path/threading/guide tools", () => {
       const from = { x: drop.x, y: ruler.y + ruler.height / 2 };
       await page.mouse.move(from.x, from.y);
       await page.mouse.down();
-      await page.mouse.move((from.x + drop.x) / 2, (from.y + drop.y) / 2, { steps: 4 });
+      await page.mouse.move((from.x + drop.x) / 2, (from.y + drop.y) / 2, {
+        steps: 4,
+      });
       await page.mouse.move(drop.x, drop.y, { steps: 6 });
       await page.mouse.up();
-      await expect.poll(() => engineGuideCount(page), { timeout: 5000 }).toBeGreaterThan(before);
+      await expect
+        .poll(() => engineGuideCount(page), { timeout: 5000 })
+        .toBeGreaterThan(before);
     } catch (e) {
       fail.push(`editor-tools.guides.drag (${String(e).slice(0, 50)})`);
     }
 
-    expect(fail, `edit-tool aspects that did not verify: ${fail.join(" | ")}`).toEqual([]);
+    expect(
+      fail,
+      `edit-tool aspects that did not verify: ${fail.join(" | ")}`,
+    ).toEqual([]);
   });
 });

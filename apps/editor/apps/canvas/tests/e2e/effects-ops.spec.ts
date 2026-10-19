@@ -286,9 +286,8 @@ test.describe("E2E effects op round-trips", () => {
         },
         expectModel: async () => {
           expect(
-            (
-              (await readProp(page, rect, c.enablePath)) as { value: boolean }
-            ).value,
+            ((await readProp(page, rect, c.enablePath)) as { value: boolean })
+              .value,
           ).toBe(true);
           c.assertField(await readProp(page, rect, c.fieldPath));
         },

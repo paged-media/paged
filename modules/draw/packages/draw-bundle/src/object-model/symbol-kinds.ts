@@ -59,7 +59,14 @@ import {
   type SymbolInstance,
 } from "../commands/symbols";
 import { linkIndex } from "../link-index";
-import { fromWrite, kindBatch, plan, rejected, type Planned, type Planner } from "./plan";
+import {
+  fromWrite,
+  kindBatch,
+  plan,
+  rejected,
+  type Planned,
+  type Planner,
+} from "./plan";
 import {
   BOOL,
   INT,
@@ -81,35 +88,73 @@ export const SYMBOL_KIND = "symbol";
 export const SYMBOL_INSTANCE_KIND = "symbolInstance";
 
 export const SYMBOL_SCHEMA: readonly PropertySchema[] = [
-  row("name", TEXT, { title: "Name", summary: "The symbol's name — what a persisted reference selects by." }),
-  ro("registration", enumOf(SYMBOL_REGISTRATIONS), "The registration point on the §16.1 nine-point grid (set at define)."),
-  ro("origin", POINT, "The registration point in the definition's own coordinates (pt)."),
+  row("name", TEXT, {
+    title: "Name",
+    summary: "The symbol's name — what a persisted reference selects by.",
+  }),
+  ro(
+    "registration",
+    enumOf(SYMBOL_REGISTRATIONS),
+    "The registration point on the §16.1 nine-point grid (set at define).",
+  ),
+  ro(
+    "origin",
+    POINT,
+    "The registration point in the definition's own coordinates (pt).",
+  ),
   derived("pieceCount", INT, "How many artwork pieces the definition holds."),
-  derived("bounds", { kind: "bounds" }, "The definition's control-point hull [minX, minY, maxX, maxY]."),
-  derived("instanceCount", INT, "How many placed instances follow this definition."),
+  derived(
+    "bounds",
+    { kind: "bounds" },
+    "The definition's control-point hull [minX, minY, maxX, maxY].",
+  ),
+  derived(
+    "instanceCount",
+    INT,
+    "How many placed instances follow this definition.",
+  ),
 ];
 
 export const SYMBOL_INSTANCE_SCHEMA: readonly PropertySchema[] = [
-  ro("symbol", { kind: "ref", to: `plugin:media.paged.draw/${SYMBOL_KIND}` }, "The definition this instance follows."),
+  ro(
+    "symbol",
+    { kind: "ref", to: `plugin:media.paged.draw/${SYMBOL_KIND}` },
+    "The definition this instance follows.",
+  ),
   ro("origin", POINT, "Where the registration point was placed (page pt)."),
-  ro("leaves", REFS, "The instance's page items, in piece order — each one's own core properties are its overrides."),
+  ro(
+    "leaves",
+    REFS,
+    "The instance's page items, in piece order — each one's own core properties are its overrides.",
+  ),
   row("linked", BOOL, {
     title: "Linked",
-    summary: "false breaks the link and keeps the artwork (Break link). Re-linking is a re-place.",
+    summary:
+      "false breaks the link and keeps the artwork (Break link). Re-linking is a re-place.",
   }),
 ];
 
 /** The unlink stamps for an instance's leaves. */
-async function unlinkOps(host: BundleHost, instance: SymbolInstance): Promise<MutationInput[]> {
+async function unlinkOps(
+  host: BundleHost,
+  instance: SymbolInstance,
+): Promise<MutationInput[]> {
   const index = linkIndex(host);
   const out: MutationInput[] = [];
   for (const leaf of instance.leaves) {
-    out.push(stampDrawMetadata(leaf, withSymbolInstance(await index.envelopeOf(leaf), null)));
+    out.push(
+      stampDrawMetadata(
+        leaf,
+        withSymbolInstance(await index.envelopeOf(leaf), null),
+      ),
+    );
   }
   return out;
 }
 
-export function makeSymbolKind(host: BundleHost): ObjectKindContribution & Planner {
+export function makeSymbolKind(
+  host: BundleHost,
+): ObjectKindContribution & Planner {
   const idOf = (address: string) => localIdOf(address, SYMBOL_KIND);
   const symbolKind: ObjectKindContribution & Planner = {
     kind: SYMBOL_KIND,
@@ -118,7 +163,9 @@ export function makeSymbolKind(host: BundleHost): ObjectKindContribution & Plann
     content: { kind: "vector" },
     hostOf: () => "doc",
     async list() {
-      return (await readSymbolLibrary(host)).symbols.map((s) => addressOf(SYMBOL_KIND, s.id));
+      return (await readSymbolLibrary(host)).symbols.map((s) =>
+        addressOf(SYMBOL_KIND, s.id),
+      );
     },
     async get(address, path): Promise<ObjectValue> {
       const id = idOf(address);
@@ -143,7 +190,8 @@ export function makeSymbolKind(host: BundleHost): ObjectKindContribution & Plann
           return refuse("unknownPath", `symbol has no "${path}"`);
       }
     },
-    batch: (ops: readonly ObjectOp[]) => kindBatch(host, (o) => symbolKind.plan(o))(ops),
+    batch: (ops: readonly ObjectOp[]) =>
+      kindBatch(host, (o) => symbolKind.plan(o))(ops),
     async plan(ops: readonly ObjectOp[]): Promise<Planned> {
       let library = await readSymbolLibrary(host);
       const mutations: MutationInput[] = [];
@@ -158,7 +206,8 @@ export function makeSymbolKind(host: BundleHost): ObjectKindContribution & Plann
         const def = id ? findSymbol(library, id) : null;
         if (!def) return rejected(`no symbol ${op.address}`);
         if (op.op === "delete") {
-          for (const inst of await symbolInstances(host, def.id)) mutations.push(...(await unlinkOps(host, inst)));
+          for (const inst of await symbolInstances(host, def.id))
+            mutations.push(...(await unlinkOps(host, inst)));
           library = removeSymbolFrom(library, def.id);
         } else if (op.path === "name") {
           library = renameSymbolIn(library, def.id, String(op.value));
@@ -166,13 +215,20 @@ export function makeSymbolKind(host: BundleHost): ObjectKindContribution & Plann
           return rejected(`symbol has no writable "${op.path}"`);
         }
       }
-      return plan({ mutations, libraries: [{ legacyPart: SYMBOLS_PART, bytes: serializeSymbolLibrary(library) }] });
+      return plan({
+        mutations,
+        libraries: [
+          { legacyPart: SYMBOLS_PART, bytes: serializeSymbolLibrary(library) },
+        ],
+      });
     },
   };
   return symbolKind;
 }
 
-export function makeSymbolInstanceKind(host: BundleHost): ObjectKindContribution & Planner {
+export function makeSymbolInstanceKind(
+  host: BundleHost,
+): ObjectKindContribution & Planner {
   const idOf = (address: string) => localIdOf(address, SYMBOL_INSTANCE_KIND);
   const find = async (address: string): Promise<SymbolInstance | null> => {
     const id = idOf(address);
@@ -198,13 +254,16 @@ export function makeSymbolInstanceKind(host: BundleHost): ObjectKindContribution
       const within = query.within ? parseAddress(query.within) : null;
       if (within?.kind === "item") {
         const item = formatAddress(within);
-        all = all.filter((i) => i.leaves.some((l) => coreAddressOf(l) === item));
+        all = all.filter((i) =>
+          i.leaves.some((l) => coreAddressOf(l) === item),
+        );
       }
       return all.map((i) => addressOf(SYMBOL_INSTANCE_KIND, i.instance));
     },
     async get(address, path): Promise<ObjectValue> {
       const inst = await find(address);
-      if (!inst) return refuse("unknownAddress", `no symbol instance ${address}`);
+      if (!inst)
+        return refuse("unknownAddress", `no symbol instance ${address}`);
       switch (path) {
         case "symbol":
           return val(addressOf(SYMBOL_KIND, inst.symbol));
@@ -223,19 +282,21 @@ export function makeSymbolInstanceKind(host: BundleHost): ObjectKindContribution
   };
 
   async function planInstances(ops: readonly ObjectOp[]): Promise<ObjectWrite> {
-      const mutations: MutationInput[] = [];
-      for (const op of ops) {
-        if (op.op !== "set" || op.path !== "linked") {
-          return {
-            kind: "rejected",
-            reason: "a symbol instance is placed by placeSymbolInstance; only `linked` is writable here",
-          };
-        }
-        const inst = await find(op.address);
-        if (!inst) return { kind: "rejected", reason: `no symbol instance ${op.address}` };
-        if (op.value === true) continue; // already linked (it is listed)
-        mutations.push(...(await unlinkOps(host, inst)));
+    const mutations: MutationInput[] = [];
+    for (const op of ops) {
+      if (op.op !== "set" || op.path !== "linked") {
+        return {
+          kind: "rejected",
+          reason:
+            "a symbol instance is placed by placeSymbolInstance; only `linked` is writable here",
+        };
       }
-      return { kind: "mutations", mutations };
+      const inst = await find(op.address);
+      if (!inst)
+        return { kind: "rejected", reason: `no symbol instance ${op.address}` };
+      if (op.value === true) continue; // already linked (it is listed)
+      mutations.push(...(await unlinkOps(host, inst)));
+    }
+    return { kind: "mutations", mutations };
   }
 }

@@ -53,11 +53,13 @@ test.describe("Phase 5 — toggle-group primitive", () => {
             error: string | null;
           }>;
         };
-        setContentSelection?(sel: {
-          storyId: string;
-          start: number;
-          end: number;
-        } | null): void;
+        setContentSelection?(
+          sel: {
+            storyId: string;
+            start: number;
+            end: number;
+          } | null,
+        ): void;
       };
       const dbg = (window as unknown as { __canvas?: DebugCanvas }).__canvas;
       if (!dbg?.client) throw new Error("__canvas client not available");
@@ -161,9 +163,7 @@ test.describe("Phase 5 — toggle-group primitive", () => {
       const inspect = JSON.parse(inspectJson) as {
         entries: Array<{ path: string; value: { value: string } | null }>;
       };
-      const entry = inspect.entries.find(
-        (e) => e.path === "frameStrokeEndCap",
-      );
+      const entry = inspect.entries.find((e) => e.path === "frameStrokeEndCap");
       return entry?.value?.value ?? null;
     });
 

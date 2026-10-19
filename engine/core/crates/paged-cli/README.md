@@ -104,7 +104,7 @@ editor-REPL guard — the right rule for a REPL and the wrong one for a
 batch CLI, where authoring a 134-page document is the job rather than a
 hang.
 
-Raising it *on the wire* would be protocol drift, so `ExecuteScript` and
+Raising it _on the wire_ would be protocol drift, so `ExecuteScript` and
 `session`'s `run-script` both keep the 2 s default: the docs gate
 validates its corpus against the shipped default, and quietly raising it
 there would let an example that times out in the editor pass the gate.

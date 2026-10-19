@@ -72,7 +72,10 @@ function fixture(): LoweredContent {
   };
 }
 
-const placement: LowerPlacement = { pageId: "Page/u1", bounds: [24, 30, 64, 150] };
+const placement: LowerPlacement = {
+  pageId: "Page/u1",
+  bounds: [24, 30, 64, 150],
+};
 const binding: Binding = makeBinding("Sheet1", "A1:B2", 7);
 
 describe("sheet_plugin_lower_mutations: phase-1 batch", () => {
@@ -93,8 +96,9 @@ describe("sheet_plugin_lower_mutations: phase-1 batch", () => {
 
   it("the frame is placed at the requested page-local bounds", () => {
     const { batch } = lowerToMutations(fixture(), placement, binding);
-    const ops = (batch as { args: { ops: Array<{ op: string; args: unknown }> } })
-      .args.ops;
+    const ops = (
+      batch as { args: { ops: Array<{ op: string; args: unknown }> } }
+    ).args.ops;
     const frame = ops[0] as {
       args: { pageId: string; bounds: [number, number, number, number] };
     };
@@ -104,8 +108,9 @@ describe("sheet_plugin_lower_mutations: phase-1 batch", () => {
 
   it("rule offsets are page-local: content-space offset + frame origin", () => {
     const { batch } = lowerToMutations(fixture(), placement, binding);
-    const ops = (batch as { args: { ops: Array<{ op: string; args: unknown }> } })
-      .args.ops;
+    const ops = (
+      batch as { args: { ops: Array<{ op: string; args: unknown }> } }
+    ).args.ops;
     // bounds = [top=24, left=30, ...]; the h-rule at y=20, x 0..120.
     const h = ops[1] as {
       args: { start: [number, number]; end: [number, number] };
@@ -122,8 +127,9 @@ describe("sheet_plugin_lower_mutations: phase-1 batch", () => {
 
   it("binding is written onto the $created sentinel with this plugin's key", () => {
     const { batch } = lowerToMutations(fixture(), placement, binding);
-    const ops = (batch as { args: { ops: Array<{ op: string; args: unknown }> } })
-      .args.ops;
+    const ops = (
+      batch as { args: { ops: Array<{ op: string; args: unknown }> } }
+    ).args.ops;
     const meta = ops[3] as {
       op: string;
       args: {
@@ -216,10 +222,37 @@ describe("sheet_lower_condfmt_databar: drawn-rect lowering", () => {
     const c = fixture();
     c.databars = [
       // Two bars sharing the document-default blue → ONE swatch reused.
-      { row: 0, col: 1, x: 60, y: 0, w: 30, h: 18, fillFraction: 0.5, fill: "#638EC6" },
-      { row: 1, col: 1, x: 60, y: 20, w: 60, h: 18, fillFraction: 1.0, fill: "#638EC6" },
+      {
+        row: 0,
+        col: 1,
+        x: 60,
+        y: 0,
+        w: 30,
+        h: 18,
+        fillFraction: 0.5,
+        fill: "#638EC6",
+      },
+      {
+        row: 1,
+        col: 1,
+        x: 60,
+        y: 20,
+        w: 60,
+        h: 18,
+        fillFraction: 1.0,
+        fill: "#638EC6",
+      },
       // A zero-width bar (value at domain min) is skipped — no path emitted.
-      { row: 0, col: 0, x: 0, y: 0, w: 0, h: 18, fillFraction: 0.0, fill: "#638EC6" },
+      {
+        row: 0,
+        col: 0,
+        x: 0,
+        y: 0,
+        w: 0,
+        h: 18,
+        fillFraction: 0.0,
+        fill: "#638EC6",
+      },
     ];
     return c;
   }
@@ -245,8 +278,9 @@ describe("sheet_lower_condfmt_databar: drawn-rect lowering", () => {
 
   it("bar rects are page-local closed rings; the fill is a swatch colorRef", () => {
     const { batch } = lowerToMutations(withBars(), placement, binding);
-    const ops = (batch as { args: { ops: Array<{ op: string; args: unknown }> } })
-      .args.ops;
+    const ops = (
+      batch as { args: { ops: Array<{ op: string; args: unknown }> } }
+    ).args.ops;
     const path = ops.find((o) => o.op === "insertPath") as {
       args: { anchors: Array<{ anchor: [number, number] }>; open: boolean };
     };
@@ -323,7 +357,10 @@ describe("sheet_style_applystyle_pour: style emission", () => {
       mk({ key: 1, fontSizePt: 18, fontName: "Cambria", textRgb: "#FF0000" }),
     );
     expect(props).toEqual([
-      { path: "characterFontFamily", value: { type: "text", value: "Cambria" } },
+      {
+        path: "characterFontFamily",
+        value: { type: "text", value: "Cambria" },
+      },
       { path: "characterFontSize", value: { type: "length", value: 18 } },
       {
         // The colorRef names a SWATCH, never a hex: an unresolvable ref
@@ -389,7 +426,10 @@ describe("sheet_style_applystyle_pour: style emission", () => {
       rows: [],
       rules: { h: [], v: [] },
       merges: [],
-      styles: [defaultStyle, mk({ key: 1, textRgb: "#0000FF", fillRgb: "#FFFF00" })],
+      styles: [
+        defaultStyle,
+        mk({ key: 1, textRgb: "#0000FF", fillRgb: "#FFFF00" }),
+      ],
     };
     const [emission] = styleEmissions(content);
     expect(emission.props).toEqual([

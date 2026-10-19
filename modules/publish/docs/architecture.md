@@ -177,15 +177,15 @@ model). In memory, the engine keeps the original package bytes and the decompres
 
 ## Boundary to other repositories
 
-| Door or API | Used by | For |
-|---|---|---|
-| `defineBundle` (`@paged-media/plugin-sdk`) | both bundles | the exported `publishBundle` and `pdfBundle` |
-| `host.supports` | both bundles | probing `contribute.importer@1`, `contribute.exporter@1`, `document.openNative@1` |
-| `host.contribute.importer` | both bundles | `.idml` and `.pdf` |
-| `host.contribute.exporter` | publish bundle | `.idml` |
-| `host.nativeDocument.open` | both bundles | replace the active document with a package |
-| `host.editor.client.send` | publish bundle | the engine message `exportIdml`; the raw editor handle |
-| `host.log` | both bundles | activation, a missing door, and the result or failure of an import |
+| Door or API                                | Used by        | For                                                                               |
+| ------------------------------------------ | -------------- | --------------------------------------------------------------------------------- |
+| `defineBundle` (`@paged-media/plugin-sdk`) | both bundles   | the exported `publishBundle` and `pdfBundle`                                      |
+| `host.supports`                            | both bundles   | probing `contribute.importer@1`, `contribute.exporter@1`, `document.openNative@1` |
+| `host.contribute.importer`                 | both bundles   | `.idml` and `.pdf`                                                                |
+| `host.contribute.exporter`                 | publish bundle | `.idml`                                                                           |
+| `host.nativeDocument.open`                 | both bundles   | replace the active document with a package                                        |
+| `host.editor.client.send`                  | publish bundle | the engine message `exportIdml`; the raw editor handle                            |
+| `host.log`                                 | both bundles   | activation, a missing door, and the result or failure of an import                |
 
 Neither bundle contributes a panel, a command or a menu entry, and neither calls
 `host.document`. The manifests declare `document.read: "broad"` and `openNative: true`; the

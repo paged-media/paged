@@ -95,7 +95,7 @@ async function strokeWeight(
   ref: { kind: string; id: string },
 ): Promise<number> {
   const v = await propOf(page, ref, "frameStrokeWeight");
-  return v?.type === "length" ? (v.value as number) ?? 0 : 0;
+  return v?.type === "length" ? ((v.value as number) ?? 0) : 0;
 }
 
 test.describe("journey · paged.draw appearance stack", () => {
@@ -113,7 +113,12 @@ test.describe("journey · paged.draw appearance stack", () => {
 
     // ── 1. AUTHOR — a filled rectangle (the appearance bake seeds new
     //    layers from the frame's current paint). ──
-    const id = await designer.drawRectangle({ x0: 160, y0: 170, x1: 430, y1: 360 });
+    const id = await designer.drawRectangle({
+      x0: 160,
+      y0: 170,
+      x1: 430,
+      y1: 360,
+    });
     expect(id, "drew a rectangle").not.toBe("");
     const ref = { kind: "rectangle", id };
     await designer.applyFill("rectangle", id, "Color/Black");
@@ -131,9 +136,12 @@ test.describe("journey · paged.draw appearance stack", () => {
     const beforeFill = await designer.renderBytes();
     await invokeCommand(page, "media.paged.draw.command.appearanceAddFill");
     await expect
-      .poll(async () => (await propOf(page, ref, "frameFillColor"))?.type ?? "", {
-        timeout: 6_000,
-      })
+      .poll(
+        async () => (await propOf(page, ref, "frameFillColor"))?.type ?? "",
+        {
+          timeout: 6_000,
+        },
+      )
       .toBe("colorRef");
 
     // ── 3. ADD STROKE — stacks a stroke layer and bakes it onto the
@@ -152,9 +160,12 @@ test.describe("journey · paged.draw appearance stack", () => {
     // The frame is intact after the clear (a property read still resolves
     // — Clear empties metadata, it does not delete the element).
     await expect
-      .poll(async () => (await propOf(page, ref, "frameFillColor"))?.type ?? "", {
-        timeout: 6_000,
-      })
+      .poll(
+        async () => (await propOf(page, ref, "frameFillColor"))?.type ?? "",
+        {
+          timeout: 6_000,
+        },
+      )
       .toBe("colorRef");
   });
 });

@@ -25,7 +25,14 @@
 // Real engine: skipped without the wasm artifact, FAILS under
 // REQUIRE_REAL_ENGINE=1 (the engine-real.spec.ts dual gate).
 
-import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from "bun:test";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  setDefaultTimeout,
+} from "bun:test";
 
 import type { BundleHost } from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
@@ -57,7 +64,12 @@ if (process.env.REQUIRE_REAL_ENGINE === "1" && !ENGINE_BUILT) {
 /** Every text frame in the scene tree. */
 async function textFrames(host: BundleHost): Promise<string[]> {
   const out: string[] = [];
-  const walk = (ns: readonly { id?: { kind: string; id: unknown } | null; children?: unknown[] }[]) => {
+  const walk = (
+    ns: readonly {
+      id?: { kind: string; id: unknown } | null;
+      children?: unknown[];
+    }[],
+  ) => {
     for (const n of ns) {
       if (n.id?.kind === "textFrame") out.push(n.id.id as string);
       if (n.children) walk(n.children as never);
@@ -83,7 +95,10 @@ describe.skipIf(!ENGINE_BUILT)("one-call placement [sheet.lower.page]", () => {
     h?.dispose();
   });
 
-  async function placeOn(host: BundleHost, label = (r: number, c: number) => `${r}${c}`) {
+  async function placeOn(
+    host: BundleHost,
+    label = (r: number, c: number) => `${r}${c}`,
+  ) {
     const s = createWorkbookSession(host);
     sessions.push(s);
     await s.import(await authorWorkbook(3, 2, label), "p.xlsx");
@@ -116,7 +131,12 @@ describe.skipIf(!ENGINE_BUILT)("one-call placement [sheet.lower.page]", () => {
     expect(tables[0].get("2:1")).toBe("21");
     // The binding rode the batch: the table record without ids (they did
     // not exist when it was written).
-    const b = parseBinding(await raw.document.getMetadata({ kind: "textFrame", id: frame! } as never));
+    const b = parseBinding(
+      await raw.document.getMetadata({
+        kind: "textFrame",
+        id: frame!,
+      } as never),
+    );
     expect(b?.data.table).toBeDefined();
     expect(b?.data.table?.tableId).toBeUndefined();
 
@@ -128,7 +148,12 @@ describe.skipIf(!ENGINE_BUILT)("one-call placement [sheet.lower.page]", () => {
     expect(after).toHaveLength(1);
     expect(after[0].get("2:1")).toBe("edited");
     // ...and the refresh re-stamped the record with its ids.
-    const b2 = parseBinding(await raw.document.getMetadata({ kind: "textFrame", id: frame! } as never));
+    const b2 = parseBinding(
+      await raw.document.getMetadata({
+        kind: "textFrame",
+        id: frame!,
+      } as never),
+    );
     expect(b2?.data.table?.tableId).toBeTruthy();
   });
 
@@ -139,8 +164,12 @@ describe.skipIf(!ENGINE_BUILT)("one-call placement [sheet.lower.page]", () => {
     await a.flushPersist();
     a.dispose();
     expect(
-      parseBinding(await raw.document.getMetadata({ kind: "textFrame", id: frame! } as never))
-        ?.data.table?.tableId,
+      parseBinding(
+        await raw.document.getMetadata({
+          kind: "textFrame",
+          id: frame!,
+        } as never),
+      )?.data.table?.tableId,
     ).toBeUndefined();
 
     const b = createWorkbookSession(raw);
@@ -158,8 +187,12 @@ describe.skipIf(!ENGINE_BUILT)("one-call placement [sheet.lower.page]", () => {
     expect(await textFrames(raw)).toEqual([frame]);
     // ...and the refresh re-stamped the record with the ids it read.
     expect(
-      parseBinding(await raw.document.getMetadata({ kind: "textFrame", id: frame! } as never))
-        ?.data.table?.tableId,
+      parseBinding(
+        await raw.document.getMetadata({
+          kind: "textFrame",
+          id: frame!,
+        } as never),
+      )?.data.table?.tableId,
     ).toBeTruthy();
   });
 

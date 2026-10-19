@@ -7,7 +7,11 @@
 // test/sources-real.spec.ts and duckdb-real.spec.ts.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "bun:test";
-import { advanceTimersByTimeAsync, stubGlobal, unstubAllGlobals } from "@paged-media/test-kit";
+import {
+  advanceTimersByTimeAsync,
+  stubGlobal,
+  unstubAllGlobals,
+} from "@paged-media/test-kit";
 import type { BundleHost } from "@paged-media/plugin-api";
 
 import { encodeSession, SESSION_PART, type PersistedSession } from "../persist";
@@ -38,7 +42,12 @@ vi.mock("../engine", () => ({
         return `key-${new TextDecoder().decode(bytes).length}`;
       },
       payload() {
-        return { sources: [...sources.values()], queries, templates: [], bindings: [] };
+        return {
+          sources: [...sources.values()],
+          queries,
+          templates: [],
+          bindings: [],
+        };
       },
       load_payload(p: { queries?: { id: string; sql: string }[] }) {
         queries.push(...(p.queries ?? []));
@@ -63,7 +72,18 @@ vi.mock("../query/duckdb", () => ({
       // Not the guard any more (it asks DuckDB nothing); kept for older callers.
       const ast = {
         error: false,
-        statements: [{ node: { from_table: { type: "BASE_TABLE", table_name: "feed", schema_name: "", catalog_name: "" } } }],
+        statements: [
+          {
+            node: {
+              from_table: {
+                type: "BASE_TABLE",
+                table_name: "feed",
+                schema_name: "",
+                catalog_name: "",
+              },
+            },
+          },
+        ],
       };
       return { columns: ["j"], rows: [[JSON.stringify(ast)]] };
     },
@@ -80,11 +100,19 @@ const fetchMock = vi.fn(async () => ({
   arrayBuffer: async () => new TextEncoder().encode(body).buffer,
 }));
 
-function fakeHost(consented: Set<string>, saved?: PersistedSession): BundleHost {
+function fakeHost(
+  consented: Set<string>,
+  saved?: PersistedSession,
+): BundleHost {
   const parts = new Map<string, Uint8Array>();
   if (saved) parts.set(SESSION_PART, encodeSession(saved));
   return {
-    manifest: { id: "media.paged.data", name: "d", version: "0.0.1", apiVersion: "^0.2" },
+    manifest: {
+      id: "media.paged.data",
+      name: "d",
+      version: "0.0.1",
+      apiVersion: "^0.2",
+    },
     log: { debug() {}, info() {}, warn() {}, error() {} },
     supports: (k: string) => k === "storage.parts@1",
     parts: {
@@ -100,7 +128,10 @@ function fakeHost(consented: Set<string>, saved?: PersistedSession): BundleHost 
         return { granted: [...origins], denied: [], remembered: true };
       },
     },
-    document: { onWillSave: () => ({ dispose() {} }), onDidChange: () => ({ dispose() {} }) },
+    document: {
+      onWillSave: () => ({ dispose() {} }),
+      onDidChange: () => ({ dispose() {} }),
+    },
   } as unknown as BundleHost;
 }
 
@@ -119,11 +150,20 @@ afterEach(() => {
 
 describe("refresh policies [data.source.adapters]", () => {
   it("parses and refuses what the editor cannot honour", () => {
-    expect(readPolicy({ policy: "interval", secs: 60 })).toEqual({ policy: "interval", secs: 60 });
-    expect(readPolicy({ policy: "interval", secs: 1 })).toEqual({ policy: "manual" });
+    expect(readPolicy({ policy: "interval", secs: 60 })).toEqual({
+      policy: "interval",
+      secs: 60,
+    });
+    expect(readPolicy({ policy: "interval", secs: 1 })).toEqual({
+      policy: "manual",
+    });
     expect(readPolicy({ policy: "weird" })).toEqual({ policy: "manual" });
-    expect(refusePolicy("file", { policy: "interval", secs: 60 })).toMatch(/cannot be watched/);
-    expect(refusePolicy("remote", { policy: "interval", secs: 5 })).toMatch(/at least 15/);
+    expect(refusePolicy("file", { policy: "interval", secs: 60 })).toMatch(
+      /cannot be watched/,
+    );
+    expect(refusePolicy("remote", { policy: "interval", secs: 5 })).toMatch(
+      /at least 15/,
+    );
     expect(refusePolicy("file", { policy: "onOpen" })).toBeNull();
   });
 
@@ -131,14 +171,23 @@ describe("refresh policies [data.source.adapters]", () => {
     const host = fakeHost(new Set());
     const s = createSession(host, 0);
     await s.registerCsvSource("local", "a\n1\n");
-    expect(s.setRefreshPolicy("local", { policy: "interval", secs: 60 })).toMatch(/cannot be watched/);
-    expect(s.setRefreshPolicy("nope", { policy: "onOpen" })).toMatch(/no source named/);
+    expect(
+      s.setRefreshPolicy("local", { policy: "interval", secs: 60 }),
+    ).toMatch(/cannot be watched/);
+    expect(s.setRefreshPolicy("nope", { policy: "onOpen" })).toMatch(
+      /no source named/,
+    );
     expect(s.setRefreshPolicy("local", { policy: "onOpen" })).toBeNull();
     expect(s.getRefreshPolicy("local")).toEqual({ policy: "onOpen" });
     // Mirrored into the engine's source definition.
-    expect(defined.at(-1)).toEqual({ id: "local", refresh: { policy: "onOpen" } });
+    expect(defined.at(-1)).toEqual({
+      id: "local",
+      refresh: { policy: "onOpen" },
+    });
     await s.flushPersist();
-    const part = JSON.parse(new TextDecoder().decode((await host.parts.read(SESSION_PART))!));
+    const part = JSON.parse(
+      new TextDecoder().decode((await host.parts.read(SESSION_PART))!),
+    );
     expect(part.refresh).toEqual({ local: { policy: "onOpen" } });
     s.dispose();
   });
@@ -146,8 +195,12 @@ describe("refresh policies [data.source.adapters]", () => {
   it("polls a consented remote source, re-runs queries only on a content change, stops without consent [data.security.gates]", async () => {
     const consented = new Set<string>();
     const s = createSession(fakeHost(consented), 0);
-    expect(s.addRemoteSource("feed", "https://api.test/feed.csv", "csv")).toBeNull();
-    expect(s.setRefreshPolicy("feed", { policy: "interval", secs: 60 })).toBeNull();
+    expect(
+      s.addRemoteSource("feed", "https://api.test/feed.csv", "csv"),
+    ).toBeNull();
+    expect(
+      s.setRefreshPolicy("feed", { policy: "interval", secs: 60 }),
+    ).toBeNull();
     // No consent: nothing polls, nothing fetches.
     expect(s.getState().polling).toEqual([]);
     await advanceTimersByTimeAsync(vi, 120_000);
@@ -183,14 +236,35 @@ describe("refresh policies [data.source.adapters]", () => {
   it("on open: a remembered origin is fetched for onOpen and polled for interval; an unconsented one is not [data.security.gates]", async () => {
     const saved: PersistedSession = {
       v: 1,
-      engine: { sources: [], queries: [{ id: "q", sql: "SELECT * FROM feed" }], templates: [], bindings: [] },
+      engine: {
+        sources: [],
+        queries: [{ id: "q", sql: "SELECT * FROM feed" }],
+        templates: [],
+        bindings: [],
+      },
       locale: "en",
       sync: [],
-      targets: { image: {}, barcode: {}, visibility: {}, rule: {}, lowered: {} },
+      targets: {
+        image: {},
+        barcode: {},
+        visibility: {},
+        rule: {},
+        lowered: {},
+      },
       data: [],
       remote: [
-        { name: "feed", url: "https://api.test/feed.csv", format: "csv", params: {} },
-        { name: "other", url: "https://other.test/x.csv", format: "csv", params: {} },
+        {
+          name: "feed",
+          url: "https://api.test/feed.csv",
+          format: "csv",
+          params: {},
+        },
+        {
+          name: "other",
+          url: "https://other.test/x.csv",
+          format: "csv",
+          params: {},
+        },
       ],
       refresh: {
         feed: { policy: "onOpen" },

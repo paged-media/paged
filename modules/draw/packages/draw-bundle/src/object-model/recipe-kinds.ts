@@ -120,46 +120,122 @@ const refs = (list: readonly ElementRef[]) => list.map(coreAddressOf);
 // ------------------------------------------------- params, per recipe
 
 const REPEAT_PARAMS: Record<keyof RepeatParams, ParamRow> = {
-  kind: { type: enumOf(["radial", "grid", "mirror"]), summary: "Which repeat: around a ring, on a grid, or mirrored." },
-  count: { type: INT, range: { min: 1, max: 200 }, summary: "Radial: instances around the ring." },
+  kind: {
+    type: enumOf(["radial", "grid", "mirror"]),
+    summary: "Which repeat: around a ring, on a grid, or mirrored.",
+  },
+  count: {
+    type: INT,
+    range: { min: 1, max: 200 },
+    summary: "Radial: instances around the ring.",
+  },
   radiusPt: { type: LEN, range: { min: 0 }, summary: "Radial: ring radius." },
   startDeg: { type: DEG, summary: "Radial: angle of the first instance." },
-  sweepDeg: { type: DEG, range: { min: -360, max: 360 }, summary: "Radial: the arc the instances span." },
-  rotateInstances: { type: BOOL, summary: "Radial: turn each instance with the ring." },
+  sweepDeg: {
+    type: DEG,
+    range: { min: -360, max: 360 },
+    summary: "Radial: the arc the instances span.",
+  },
+  rotateInstances: {
+    type: BOOL,
+    summary: "Radial: turn each instance with the ring.",
+  },
   columns: { type: INT, range: { min: 1 }, summary: "Grid: columns." },
   rows: { type: INT, range: { min: 1 }, summary: "Grid: rows." },
   spacing: { type: POINT, summary: "Grid: [horizontal, vertical] gap in pt." },
   flipColumns: { type: BOOL, summary: "Grid: mirror every other column." },
   flipRows: { type: BOOL, summary: "Grid: mirror every other row." },
   angleDeg: { type: DEG, summary: "Mirror: the axis angle." },
-  offsetPt: { type: LEN, nullable: true, summary: "Mirror: axis offset from the source (null = touching)." },
-  clip: { type: BOOL, summary: "Clip the instances (to clipRect, or the page)." },
-  clipRect: { type: { kind: "bounds" }, nullable: true, summary: "Clip rectangle [top, left, bottom, right]; null = the page." },
-  fitToArtboard: { type: BOOL, summary: "Drop instances that would leave the page." },
+  offsetPt: {
+    type: LEN,
+    nullable: true,
+    summary: "Mirror: axis offset from the source (null = touching).",
+  },
+  clip: {
+    type: BOOL,
+    summary: "Clip the instances (to clipRect, or the page).",
+  },
+  clipRect: {
+    type: { kind: "bounds" },
+    nullable: true,
+    summary: "Clip rectangle [top, left, bottom, right]; null = the page.",
+  },
+  fitToArtboard: {
+    type: BOOL,
+    summary: "Drop instances that would leave the page.",
+  },
 };
 
 const BLEND_PARAMS: Record<keyof BlendParams, ParamRow> = {
-  spacing: { type: enumOf(["smoothColor", "steps", "distance"]), summary: "Spacing mode: smooth colour, specified steps, specified distance." },
-  steps: { type: INT, range: { min: 1, max: BLEND_MAX_STEPS }, summary: "Specified steps: the intermediate count." },
-  distancePt: { type: LEN, range: { min: 0 }, summary: "Specified distance: the gap along the spine." },
-  orientation: { type: enumOf(["page", "path"]), summary: "Align intermediates to the page, or turn them with the spine." },
+  spacing: {
+    type: enumOf(["smoothColor", "steps", "distance"]),
+    summary:
+      "Spacing mode: smooth colour, specified steps, specified distance.",
+  },
+  steps: {
+    type: INT,
+    range: { min: 1, max: BLEND_MAX_STEPS },
+    summary: "Specified steps: the intermediate count.",
+  },
+  distancePt: {
+    type: LEN,
+    range: { min: 0 },
+    summary: "Specified distance: the gap along the spine.",
+  },
+  orientation: {
+    type: enumOf(["page", "path"]),
+    summary: "Align intermediates to the page, or turn them with the spine.",
+  },
   easing: { type: enumOf(EASE_KINDS), summary: "Position easing curve." },
-  easingStrength: { type: NUM, range: { min: 0, max: 1 }, summary: "Position easing strength (0 = linear)." },
-  colorEasing: { type: enumOf(EASE_KINDS), nullable: true, summary: "Independent colour easing; null = follow position." },
-  colorEasingStrength: { type: NUM, range: { min: 0, max: 1 }, summary: "Colour easing strength." },
+  easingStrength: {
+    type: NUM,
+    range: { min: 0, max: 1 },
+    summary: "Position easing strength (0 = linear).",
+  },
+  colorEasing: {
+    type: enumOf(EASE_KINDS),
+    nullable: true,
+    summary: "Independent colour easing; null = follow position.",
+  },
+  colorEasingStrength: {
+    type: NUM,
+    range: { min: 0, max: 1 },
+    summary: "Colour easing strength.",
+  },
   reverseSpine: { type: BOOL, summary: "Run along the spine the other way." },
-  reverseFrontToBack: { type: BOOL, summary: "Reverse the paint order of the intermediates." },
-  fitToArtboard: { type: BOOL, summary: "Drop intermediates that would leave the page." },
+  reverseFrontToBack: {
+    type: BOOL,
+    summary: "Reverse the paint order of the intermediates.",
+  },
+  fitToArtboard: {
+    type: BOOL,
+    summary: "Drop intermediates that would leave the page.",
+  },
 };
 
 const PATTERN_PARAMS: Record<keyof PatternParams, ParamRow> = {
   layout: { type: enumOf(["grid", "brick", "hex"]), summary: "Tile lattice." },
-  tile: { type: POINT, nullable: true, summary: "Tile size [width, height] in pt; null = the source's bounds." },
-  spacing: { type: POINT, summary: "[horizontal, vertical] spacing in pt; negative overlaps." },
+  tile: {
+    type: POINT,
+    nullable: true,
+    summary: "Tile size [width, height] in pt; null = the source's bounds.",
+  },
+  spacing: {
+    type: POINT,
+    summary: "[horizontal, vertical] spacing in pt; negative overlaps.",
+  },
   columns: { type: INT, range: { min: 1 }, summary: "Copies across." },
   rows: { type: INT, range: { min: 1 }, summary: "Copies down." },
-  offset: { type: NUM, range: { min: 0, max: 1 }, summary: "Brick / hex row offset, as a fraction of a tile." },
-  dim: { type: PCT, range: { min: 0, max: 100 }, summary: "Copies' opacity (a real frameOpacity)." },
+  offset: {
+    type: NUM,
+    range: { min: 0, max: 1 },
+    summary: "Brick / hex row offset, as a fraction of a tile.",
+  },
+  dim: {
+    type: PCT,
+    range: { min: 0, max: 100 },
+    summary: "Copies' opacity (a real frameOpacity).",
+  },
   overlap: {
     type: {
       kind: "struct",
@@ -174,17 +250,43 @@ const PATTERN_PARAMS: Record<keyof PatternParams, ParamRow> = {
 };
 
 const OBJECTS_ON_PATH_PARAMS: Record<keyof ObjectsOnPathParams, ParamRow> = {
-  distribute: { type: enumOf(["count", "spacing"]), summary: "Spread the objects evenly, or at a fixed spacing." },
-  spacingPt: { type: LEN, range: { min: 0 }, summary: "Spacing mode: the gap along the path." },
-  startOffsetPt: { type: LEN, summary: "Where along the path the first object sits." },
-  alignToPath: { type: BOOL, summary: "Turn each object with the path's tangent." },
-  pivot: { type: enumOf(SYMBOL_REGISTRATIONS), summary: "The point of each object that rides the path." },
+  distribute: {
+    type: enumOf(["count", "spacing"]),
+    summary: "Spread the objects evenly, or at a fixed spacing.",
+  },
+  spacingPt: {
+    type: LEN,
+    range: { min: 0 },
+    summary: "Spacing mode: the gap along the path.",
+  },
+  startOffsetPt: {
+    type: LEN,
+    summary: "Where along the path the first object sits.",
+  },
+  alignToPath: {
+    type: BOOL,
+    summary: "Turn each object with the path's tangent.",
+  },
+  pivot: {
+    type: enumOf(SYMBOL_REGISTRATIONS),
+    summary: "The point of each object that rides the path.",
+  },
   reverseOrder: { type: BOOL, summary: "Place the objects in reverse order." },
-  order: { type: { kind: "list", of: INT }, nullable: true, summary: "An explicit object order; null = selection order." },
-  fitToArtboard: { type: BOOL, summary: "Skip slots that would leave the page." },
+  order: {
+    type: { kind: "list", of: INT },
+    nullable: true,
+    summary: "An explicit object order; null = selection order.",
+  },
+  fitToArtboard: {
+    type: BOOL,
+    summary: "Skip slots that would leave the page.",
+  },
 };
 
-const paramRows = <P extends object>(table: Record<keyof P, ParamRow>, defaults: P): PropertySchema[] =>
+const paramRows = <P extends object>(
+  table: Record<keyof P, ParamRow>,
+  defaults: P,
+): PropertySchema[] =>
   (Object.keys(table) as (keyof P & string)[]).map((k) =>
     row(k, table[k].type, {
       ...(table[k].nullable ? { nullable: true } : {}),
@@ -194,7 +296,10 @@ const paramRows = <P extends object>(table: Record<keyof P, ParamRow>, defaults:
     }),
   );
 
-const NAME = row("name", TEXT, { title: "Name", summary: "The recipe's name — what a persisted reference selects by." });
+const NAME = row("name", TEXT, {
+  title: "Name",
+  summary: "The recipe's name — what a persisted reference selects by.",
+});
 
 // ----------------------------------------------------- the factory
 
@@ -219,9 +324,14 @@ interface RecipeSpec<L> {
   verbs: { make: string; release: string };
 }
 
-function makeRecipeKind<L>(host: BundleHost, spec: RecipeSpec<L>): ObjectKindContribution & Planner {
+function makeRecipeKind<L>(
+  host: BundleHost,
+  spec: RecipeSpec<L>,
+): ObjectKindContribution & Planner {
   const writable = new Set(
-    spec.schema.filter((r) => (r.access ?? "readWrite") === "readWrite").map((r) => r.path),
+    spec.schema
+      .filter((r) => (r.access ?? "readWrite") === "readWrite")
+      .map((r) => r.path),
   );
   const find = async (address: string) => {
     const id = localIdOf(address, spec.kind);
@@ -234,7 +344,9 @@ function makeRecipeKind<L>(host: BundleHost, spec: RecipeSpec<L>): ObjectKindCon
     schema: spec.schema,
     hostOf: () => "doc",
     async list() {
-      return spec.records(await spec.read(host)).map((r) => addressOf(spec.kind, r.id));
+      return spec
+        .records(await spec.read(host))
+        .map((r) => addressOf(spec.kind, r.id));
     },
     async get(address, path): Promise<ObjectValue> {
       const rec = await find(address);
@@ -251,27 +363,41 @@ function makeRecipeKind<L>(host: BundleHost, spec: RecipeSpec<L>): ObjectKindCon
   };
 
   async function planOps(ops: readonly ObjectOp[]): Promise<Planned> {
-      const lib = await spec.read(host);
-      const records = spec.records(lib).map((r) => ({
-        ...r,
-        ...(r.params ? { params: { ...(r.params as Record<string, unknown>) } } : {}),
-      }));
-      for (const op of ops) {
-        if (op.op === "create") {
-          return rejected(`a ${spec.kind} is built from artwork — invoke ${spec.verbs.make}`);
-        }
-        if (op.op === "delete") {
-          return rejected(`removing a ${spec.kind} removes artwork — invoke ${spec.verbs.release}`);
-        }
-        if (op.op !== "set") return rejected(`${spec.kind} cannot ${op.op}`);
-        const id = localIdOf(op.address, spec.kind);
-        const rec = records.find((r) => r.id === id);
-        if (!rec) return rejected(`no ${spec.kind} ${op.address}`);
-        if (!writable.has(op.path)) return rejected(`${spec.kind} has no writable "${op.path}"`);
-        if (op.path === "name") rec.name = String(op.value);
-        else (rec.params as Record<string, unknown>)[op.path] = op.value;
+    const lib = await spec.read(host);
+    const records = spec.records(lib).map((r) => ({
+      ...r,
+      ...(r.params
+        ? { params: { ...(r.params as Record<string, unknown>) } }
+        : {}),
+    }));
+    for (const op of ops) {
+      if (op.op === "create") {
+        return rejected(
+          `a ${spec.kind} is built from artwork — invoke ${spec.verbs.make}`,
+        );
       }
-      return plan({ libraries: [{ legacyPart: spec.part, bytes: spec.serialize(spec.withRecords(lib, records)) }] });
+      if (op.op === "delete") {
+        return rejected(
+          `removing a ${spec.kind} removes artwork — invoke ${spec.verbs.release}`,
+        );
+      }
+      if (op.op !== "set") return rejected(`${spec.kind} cannot ${op.op}`);
+      const id = localIdOf(op.address, spec.kind);
+      const rec = records.find((r) => r.id === id);
+      if (!rec) return rejected(`no ${spec.kind} ${op.address}`);
+      if (!writable.has(op.path))
+        return rejected(`${spec.kind} has no writable "${op.path}"`);
+      if (op.path === "name") rec.name = String(op.value);
+      else (rec.params as Record<string, unknown>)[op.path] = op.value;
+    }
+    return plan({
+      libraries: [
+        {
+          legacyPart: spec.part,
+          bytes: spec.serialize(spec.withRecords(lib, records)),
+        },
+      ],
+    });
   }
 }
 
@@ -284,14 +410,23 @@ export const REPEAT_SCHEMA: readonly PropertySchema[] = [
   ...paramRows(REPEAT_PARAMS, REPEAT_DEFAULTS),
   ro("sources", REFS, "The source artwork."),
   ro("instances", REFS, "The instances the last Make / Update built."),
-  row("clipFrame", REF_FRAME, { access: "readOnly", nullable: true, summary: "The clip frame of a clipped repeat (null = unclipped)." }),
+  row("clipFrame", REF_FRAME, {
+    access: "readOnly",
+    nullable: true,
+    summary: "The clip frame of a clipped repeat (null = unclipped).",
+  }),
 ];
 
 export const BLEND_SCHEMA: readonly PropertySchema[] = [
   NAME,
   ...paramRows(BLEND_PARAMS, BLEND_DEFAULTS),
   ro("keys", REFS, "The two key objects."),
-  row("spine", REF_FRAME, { access: "readOnly", nullable: true, summary: "The replaced spine path (null = the straight line between the keys)." }),
+  row("spine", REF_FRAME, {
+    access: "readOnly",
+    nullable: true,
+    summary:
+      "The replaced spine path (null = the straight line between the keys).",
+  }),
   ro("stepObjects", REFS, "The intermediates the last Make / Update built."),
 ];
 
@@ -304,7 +439,11 @@ export const PATTERN_SCHEMA: readonly PropertySchema[] = [
 export const OBJECTS_ON_PATH_SCHEMA: readonly PropertySchema[] = [
   NAME,
   ...paramRows(OBJECTS_ON_PATH_PARAMS, OBJECTS_ON_PATH_DEFAULTS),
-  row("path", REF_FRAME, { access: "readOnly", nullable: true, summary: "The path the objects ride." }),
+  row("path", REF_FRAME, {
+    access: "readOnly",
+    nullable: true,
+    summary: "The path the objects ride.",
+  }),
   ro("objects", REFS, "The objects on the path (moved, never copied)."),
 ];
 
@@ -313,22 +452,35 @@ export const LIVE_PAINT_SCHEMA: readonly PropertySchema[] = [
   ro("inputs", REFS, "The ordered member paths the faces are computed from."),
   ro(
     "faces",
-    { kind: "list", of: { kind: "struct", fields: { face: TEXT, fill: TEXT } } },
-    "Each painted face id and its swatch (\"\" = unpainted). Paint through fillLivePaintFace.",
+    {
+      kind: "list",
+      of: { kind: "struct", fields: { face: TEXT, fill: TEXT } },
+    },
+    'Each painted face id and its swatch ("" = unpainted). Paint through fillLivePaintFace.',
   ),
   derived("faceCount", INT, "How many faces carry a paint."),
 ];
 
 /** The pure manifest view of the five kinds. */
-export const RECIPE_KINDS: readonly { kind: string; title: string; schema: readonly PropertySchema[] }[] = [
+export const RECIPE_KINDS: readonly {
+  kind: string;
+  title: string;
+  schema: readonly PropertySchema[];
+}[] = [
   { kind: "pattern", title: "Pattern field", schema: PATTERN_SCHEMA },
   { kind: "repeat", title: "Repeat", schema: REPEAT_SCHEMA },
   { kind: "blend", title: "Blend", schema: BLEND_SCHEMA },
   { kind: "livePaint", title: "Live paint group", schema: LIVE_PAINT_SCHEMA },
-  { kind: "objectsOnPath", title: "Objects on a path", schema: OBJECTS_ON_PATH_SCHEMA },
+  {
+    kind: "objectsOnPath",
+    title: "Objects on a path",
+    schema: OBJECTS_ON_PATH_SCHEMA,
+  },
 ];
 
-export function makeRecipeKinds(host: BundleHost): (ObjectKindContribution & Planner)[] {
+export function makeRecipeKinds(
+  host: BundleHost,
+): (ObjectKindContribution & Planner)[] {
   return [
     makeRecipeKind(host, {
       kind: "pattern",
@@ -339,8 +491,13 @@ export function makeRecipeKinds(host: BundleHost): (ObjectKindContribution & Pla
       records: (l) => l.fields,
       withRecords: (l, r) => ({ ...l, fields: r as typeof l.fields }),
       serialize: serializePatternLibrary,
-      extra: (r) => ({ sources: refs((r as unknown as { sources: ElementRef[] }).sources) }),
-      verbs: { make: `${C}.makePatternFromSelection`, release: `${C}.releasePatternField` },
+      extra: (r) => ({
+        sources: refs((r as unknown as { sources: ElementRef[] }).sources),
+      }),
+      verbs: {
+        make: `${C}.makePatternFromSelection`,
+        release: `${C}.releasePatternField`,
+      },
     }),
     makeRecipeKind(host, {
       kind: "repeat",
@@ -352,14 +509,21 @@ export function makeRecipeKinds(host: BundleHost): (ObjectKindContribution & Pla
       withRecords: (l, r) => ({ ...l, repeats: r as typeof l.repeats }),
       serialize: serializeRepeatLibrary,
       extra: (r) => {
-        const x = r as unknown as { sources: ElementRef[]; instances: ElementRef[]; clipFrame: ElementRef | null };
+        const x = r as unknown as {
+          sources: ElementRef[];
+          instances: ElementRef[];
+          clipFrame: ElementRef | null;
+        };
         return {
           sources: refs(x.sources),
           instances: refs(x.instances),
           clipFrame: x.clipFrame ? coreAddressOf(x.clipFrame) : null,
         };
       },
-      verbs: { make: `${C}.makeRadialRepeat / makeGridRepeat / makeMirrorRepeat`, release: `${C}.releaseRepeat` },
+      verbs: {
+        make: `${C}.makeRadialRepeat / makeGridRepeat / makeMirrorRepeat`,
+        release: `${C}.releaseRepeat`,
+      },
     }),
     makeRecipeKind(host, {
       kind: "blend",
@@ -371,8 +535,16 @@ export function makeRecipeKinds(host: BundleHost): (ObjectKindContribution & Pla
       withRecords: (l, r) => ({ ...l, blends: r as typeof l.blends }),
       serialize: serializeBlendLibrary,
       extra: (r) => {
-        const x = r as unknown as { keys: ElementRef[]; spine: ElementRef | null; steps: ElementRef[] };
-        return { keys: refs(x.keys), spine: x.spine ? coreAddressOf(x.spine) : null, stepObjects: refs(x.steps) };
+        const x = r as unknown as {
+          keys: ElementRef[];
+          spine: ElementRef | null;
+          steps: ElementRef[];
+        };
+        return {
+          keys: refs(x.keys),
+          spine: x.spine ? coreAddressOf(x.spine) : null,
+          stepObjects: refs(x.steps),
+        };
       },
       verbs: { make: `${C}.blendSelected`, release: `${C}.releaseBlend` },
     }),
@@ -386,14 +558,20 @@ export function makeRecipeKinds(host: BundleHost): (ObjectKindContribution & Pla
       withRecords: (l, r) => ({ ...l, groups: r as typeof l.groups }),
       serialize: serializeLivePaintLibrary,
       extra: (r) => {
-        const x = r as unknown as { inputs: ElementRef[]; faces: { face: string; fill: string | null }[] };
+        const x = r as unknown as {
+          inputs: ElementRef[];
+          faces: { face: string; fill: string | null }[];
+        };
         return {
           inputs: refs(x.inputs),
           faces: x.faces.map((f) => ({ face: f.face, fill: f.fill ?? "" })),
           faceCount: x.faces.filter((f) => f.fill !== null).length,
         };
       },
-      verbs: { make: `${C}.makeLivePaintGroup`, release: `${C}.releaseLivePaint` },
+      verbs: {
+        make: `${C}.makeLivePaintGroup`,
+        release: `${C}.releaseLivePaint`,
+      },
     }),
     makeRecipeKind(host, {
       kind: "objectsOnPath",
@@ -402,13 +580,25 @@ export function makeRecipeKinds(host: BundleHost): (ObjectKindContribution & Pla
       schema: OBJECTS_ON_PATH_SCHEMA,
       read: readObjectsOnPathLibrary,
       records: (l) => l.associations,
-      withRecords: (l, r) => ({ ...l, associations: r as typeof l.associations }),
+      withRecords: (l, r) => ({
+        ...l,
+        associations: r as typeof l.associations,
+      }),
       serialize: serializeObjectsOnPathLibrary,
       extra: (r) => {
-        const x = r as unknown as { path: ElementRef | null; objects: ElementRef[] };
-        return { path: x.path ? coreAddressOf(x.path) : null, objects: refs(x.objects) };
+        const x = r as unknown as {
+          path: ElementRef | null;
+          objects: ElementRef[];
+        };
+        return {
+          path: x.path ? coreAddressOf(x.path) : null,
+          objects: refs(x.objects),
+        };
       },
-      verbs: { make: `${C}.makeObjectsOnPath`, release: `${C}.releaseObjectsOnPath` },
+      verbs: {
+        make: `${C}.makeObjectsOnPath`,
+        release: `${C}.releaseObjectsOnPath`,
+      },
     }),
   ];
 }

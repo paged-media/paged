@@ -193,7 +193,9 @@ test.describe("Phase 5 — Color panel", () => {
       const swatches = await dbg.client.collection<{ selfId: string }>(
         "swatches",
       );
-      const swatch = swatches.find((s) => s.selfId && s.selfId !== "Swatch/None");
+      const swatch = swatches.find(
+        (s) => s.selfId && s.selfId !== "Swatch/None",
+      );
       if (!swatch) throw new Error("no usable swatch in fixture");
 
       const before = (await dbg.client.documentMeta()).defaultFillColor ?? null;

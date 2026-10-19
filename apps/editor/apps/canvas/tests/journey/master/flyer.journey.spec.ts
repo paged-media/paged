@@ -52,7 +52,12 @@ test.describe("journey · master", () => {
 
     let storyId: string | null = null;
     await test.step("S1 · headline text frame + type", async () => {
-      const r = await designer.addTextFrame({ x0: 70, y0: 80, x1: 540, y1: 180 });
+      const r = await designer.addTextFrame({
+        x0: 70,
+        y0: 80,
+        x1: 540,
+        y1: 180,
+      });
       storyId = r.storyId;
       expect(storyId).toBeTruthy();
       await designer.placeCaret(storyId!, 0);
@@ -73,7 +78,12 @@ test.describe("journey · master", () => {
 
     let heroId = "";
     await test.step("S3 · draw + fill a hero shape (real pointer drag)", async () => {
-      heroId = await designer.drawRectangle({ x0: 70, y0: 220, x1: 540, y1: 560 });
+      heroId = await designer.drawRectangle({
+        x0: 70,
+        y0: 220,
+        x1: 540,
+        y1: 560,
+      });
       expect(heroId).toBeTruthy();
       await designer.selectElement("rectangle", heroId);
       // The DTP contract: a selected graphic frame → Frame context.

@@ -9,15 +9,15 @@ references below (§2.7, §3, §4.8, §4.9, §6, §11) are to `DESIGN.md` at the
 
 ## The decision
 
-*Status note (2026-10-02): this section predates the implementation; the capability
+_Status note (2026-10-02): this section predates the implementation; the capability
 enforcement that item 2 describes as advisory is now enforced in-process — see the checklist
-below, [ADR 010](../adr/010-raw-mutate-gate-capability-enforcement.md) and `DESIGN.md` §11.*
+below, [ADR 010](../adr/010-raw-mutate-gate-capability-enforcement.md) and `DESIGN.md` §11._
 
 **Same-realm bundle execution is FIRST-PARTY-ONLY policy.** Today every loaded
 bundle runs in the host realm with a full `BundleHost` and — via the gesture
 spine's `onActivate(paged)` and `host.editor` (§4.9) — the raw `PagedEditor`.
 That is the declared incubation posture for paged.draw + paged.web and it is
-fine *for code we author and ship*. It is **not** a third-party plugin loading
+fine _for code we author and ship_. It is **not** a third-party plugin loading
 mechanism, and nothing may quietly turn it into one.
 
 Any third-party / external plugin loading requires, as a hard prerequisite:
@@ -29,12 +29,12 @@ Any third-party / external plugin loading requires, as a hard prerequisite:
    this becomes a Boa-context-per-plugin or, more likely, worker-per-plugin
    boundary; the isolate story has to be re-derived for Boa, see
    [ADR 001](https://github.com/paged-media/core/blob/main/docs/adr/001-boa-over-quickjs.md)).
-   The bundle source is unchanged; the *host object* is what gets proxied. This
+   The bundle source is unchanged; the _host object_ is what gets proxied. This
    is the one structural change that retires `host.editor` (§4.9: "dies at the
    boundary, by design").
 2. **Capability enforcement** at the namespace chokepoint (§2.7, §4.8). Today
-   the chokepoint scopes *contribution ids* and *metadata keys* (the
-   `<manifest.id>.*` / `x-paged:<id>` rule); it does not gate *capability*.
+   the chokepoint scopes _contribution ids_ and _metadata keys_ (the
+   `<manifest.id>.*` / `x-paged:<id>` rule); it does not gate _capability_.
    Manifest permissions are advisory. Both must become enforced — at the
    engine boundary, where the isolate puts the trust line — before any
    foreign code loads.
@@ -46,9 +46,9 @@ precisely so this stays a flip, not a rewrite — but the flip is gated, below.
 
 ## Known same-realm debts (the distance to close)
 
-*Status note (2026-10-02): this section predates the implementation; a declarative panel form
+_Status note (2026-10-02): this section predates the implementation; a declarative panel form
 now exists beside the React panel and overlay doors, which still take live components — see
-[ADR 312](../adr/312-panels-as-data.md) and `DESIGN.md` §6 and §12.*
+[ADR 312](../adr/312-panels-as-data.md) and `DESIGN.md` §6 and §12._
 
 Same-realm makes these benign-in-process and load-bearing-at-the-boundary:
 
@@ -58,7 +58,7 @@ Same-realm makes these benign-in-process and load-bearing-at-the-boundary:
   so a bundle holding the raw handle could
   `mutate({op:"setPluginMetadata", key:"x-paged:<other>"})`
   and write another plugin's namespace. Now: an additive `caller:
-  Option<String>` rides the wire op;
+Option<String>` rides the wire op;
   `core: crates/paged-mutate/src/apply/layer.rs`
   `apply_plugin_metadata` enforces key == `x-paged:<caller>` server-side when
   `caller` is set (test
@@ -96,13 +96,13 @@ Same-realm makes these benign-in-process and load-bearing-at-the-boundary:
 
 ## Gate checklist — flipping the policy
 
-*Status note (2026-10-02): the boxes are as last ticked on 2026-06-08. Since then two bundles
+_Status note (2026-10-02): the boxes are as last ticked on 2026-06-08. Since then two bundles
 have used `host.editor` again, each as a named escape hatch
 (`plugin-draw: packages/draw-bundle/src/handlers/measure.ts`,
 `plugin-publish: packages/publish-bundle/src/io/idml.ts`), and the capability gate covers more
 doors than the ones listed here; the current state is recorded in
 [ADR 319](../adr/319-trust-line.md) and in the amendment to
-[ADR 010](../adr/010-raw-mutate-gate-capability-enforcement.md).*
+[ADR 010](../adr/010-raw-mutate-gate-capability-enforcement.md)._
 
 Same-realm stays first-party-only until ALL of:
 
@@ -115,7 +115,7 @@ Same-realm stays first-party-only until ALL of:
       gated on the isolate.
 - [x] Caller identity enforced at the engine boundary (2026-06-08,
       protocol v36): `setPluginMetadata` rejects keys outside
-      the *calling* plugin's namespace server-side (`caller` field +
+      the _calling_ plugin's namespace server-side (`caller` field +
       `apply_plugin_metadata` gate), not just in the SDK door.
 - [x] Manifest capabilities ENFORCED, not advisory — the namespace chokepoint
       (§2.7/§4.8) gates capability, denials are loud. **(2026-06-07:
@@ -154,10 +154,10 @@ The assertion lives in `packages/plugin-sdk/src/load.ts`: `loadBundle`
 reads the HOST's trust vouch (`CreateBundleHostOptions.trust`, type
 `BundleTrust = "first-party"`, defaulting to `"first-party"`) and **throws**
 for any other value, pointing at this gate checklist. The vouch comes from the
-host, not the bundle, by necessity — there is no trustworthy signal *on* the
+host, not the bundle, by necessity — there is no trustworthy signal _on_ the
 bundle yet: the manifest `id` namespace (`media.paged.*`) is self-asserted (a
 foreign bundle could claim it) and package signing is the last unchecked box
-above. So the assertion does not *authenticate* a bundle as first-party; it
+above. So the assertion does not _authenticate_ a bundle as first-party; it
 makes the host's first-party-only **decision** explicit and load-bearing in
 code, so the drift-by-default this record warns about (a quiet dynamic-import
 of foreign code onto the same-realm path) becomes a deliberate, greppable,

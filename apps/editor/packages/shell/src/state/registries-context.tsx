@@ -85,6 +85,41 @@ export interface ShellRegistries {
 const Context = createContext<ShellRegistries | null>(null);
 
 /**
+ * The shell's registry set, outside React: what `RegistriesProvider`
+ * mounts, and what a headless editor (the editor's `tests/headless`
+ * harness) builds without a DOM. `getEditor` is the command registry's
+ * handler argument and the keybinding registry's `when` state.
+ */
+export function createShellRegistries(
+  getEditor: () => unknown,
+): ShellRegistries {
+  const commands = createCommandRegistry(getEditor);
+  // Pass `getEditor` as the keybinding state thunk too, so `when`
+  // predicates (e.g. the tool-shortcut text-suppression guard) read
+  // the live editor handle.
+  const keybindings = createKeybindingRegistry(commands, getEditor);
+  // Tools are supplied by the app via `<PagedShell tools={...}>` and
+  // registered in ShellChrome (mirrors panels/overlays), so the rail
+  // contains zero hardcoded entries. Bundles add more via
+  // `useRegistries().tools.register(...)`.
+  const tools = createToolRegistry();
+  return {
+    panels: createPanelRegistry(),
+    modes: createModeRegistry(),
+    commands,
+    semanticGroups: createSemanticGroupRegistry(),
+    keybindings,
+    menus: createMenuRegistry(),
+    overlays: createOverlayRegistry(),
+    tools,
+    editContexts: createEditContextRegistry(),
+    objectTypes: createObjectTypeRegistry(),
+    importers: createImporterRegistry(),
+    exporters: createExporterRegistry(),
+  };
+}
+
+/**
  * Mounts the four registry instances at the shell root. The command
  * registry needs a `getEditor` thunk so its `invoke` can pass the
  * current `PagedEditor` into handlers; the caller (typically the
@@ -99,30 +134,7 @@ export function RegistriesProvider({
   // memo factory twice (Strict Mode does this in dev).
   const ref = useRef<ShellRegistries | null>(null);
   if (!ref.current) {
-    const commands = createCommandRegistry(getEditor);
-    // Pass `getEditor` as the keybinding state thunk too, so `when`
-    // predicates (e.g. the tool-shortcut text-suppression guard) read
-    // the live editor handle.
-    const keybindings = createKeybindingRegistry(commands, getEditor);
-    // Tools are supplied by the app via `<PagedShell tools={...}>` and
-    // registered in ShellChrome (mirrors panels/overlays), so the rail
-    // contains zero hardcoded entries. Bundles add more via
-    // `useRegistries().tools.register(...)`.
-    const tools = createToolRegistry();
-    ref.current = {
-      panels: createPanelRegistry(),
-      modes: createModeRegistry(),
-      commands,
-      semanticGroups: createSemanticGroupRegistry(),
-      keybindings,
-      menus: createMenuRegistry(),
-      overlays: createOverlayRegistry(),
-      tools,
-      editContexts: createEditContextRegistry(),
-      objectTypes: createObjectTypeRegistry(),
-      importers: createImporterRegistry(),
-      exporters: createExporterRegistry(),
-    };
+    ref.current = createShellRegistries(getEditor);
   }
 
   // Keydown listener lifecycle — symmetric attach/detach so

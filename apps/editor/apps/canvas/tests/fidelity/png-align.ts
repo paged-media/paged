@@ -89,8 +89,14 @@ export function alignPngPair(refPath: string, candPath: string): AlignedPair {
   }
   const w = Math.max(ref.width, cand.width);
   const h = Math.max(ref.height, cand.height);
-  const dw = Math.max(Math.abs(ref.width - cand.width), Math.abs(ref.width - cand.width));
-  const dh = Math.max(Math.abs(ref.height - cand.height), Math.abs(ref.height - cand.height));
+  const dw = Math.max(
+    Math.abs(ref.width - cand.width),
+    Math.abs(ref.width - cand.width),
+  );
+  const dh = Math.max(
+    Math.abs(ref.height - cand.height),
+    Math.abs(ref.height - cand.height),
+  );
   if (dw > MAX_PAD_PX || dh > MAX_PAD_PX) {
     throw new Error(
       `dimension mismatch beyond pad budget (${MAX_PAD_PX}px): ref ${ref.width}x${ref.height} vs cand ${cand.width}x${cand.height}`,

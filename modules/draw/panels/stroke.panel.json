@@ -8,7 +8,11 @@
       "rows": [
         {
           "type": "numeric",
-          "bind": { "kind": "selectionProperty", "path": "frameStrokeWeight", "coerce": "pt" },
+          "bind": {
+            "kind": "selectionProperty",
+            "path": "frameStrokeWeight",
+            "coerce": "pt"
+          },
           "min": 0,
           "label": { "key": "stroke.weight" }
         },
@@ -29,8 +33,16 @@
       "title": { "key": "stroke.dashes" },
       "$comment": "Paper had visibleWhen strokeType == dashed. The catalog forbids conditionals; the real panel exposes a derived 'dashControlsVisible' bound value from plugin state, or ships as an expert leaf. Engine gap: no dash-pattern PropertyPath yet (B-12).",
       "rows": [
-        { "type": "numeric", "bind": { "kind": "derived", "key": "dashLength" }, "label": { "key": "stroke.dash" } },
-        { "type": "numeric", "bind": { "kind": "derived", "key": "gapLength" }, "label": { "key": "stroke.gap" } }
+        {
+          "type": "numeric",
+          "bind": { "kind": "derived", "key": "dashLength" },
+          "label": { "key": "stroke.dash" }
+        },
+        {
+          "type": "numeric",
+          "bind": { "kind": "derived", "key": "gapLength" },
+          "label": { "key": "stroke.gap" }
+        }
       ]
     }
   ]

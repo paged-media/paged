@@ -57,7 +57,9 @@ describe("buildIdmlFromRasters", () => {
     const idml = await buildIdmlFromRasters(PAGES);
 
     // First local file header at offset 0: signature PK\x03\x04.
-    expect([idml[0], idml[1], idml[2], idml[3]]).toEqual([0x50, 0x4b, 0x03, 0x04]);
+    expect([idml[0], idml[1], idml[2], idml[3]]).toEqual([
+      0x50, 0x4b, 0x03, 0x04,
+    ]);
     // Compression method (offset 8) == 0 → STORED.
     expect(u16(idml, 8)).toBe(0);
     // Filename (offset 30, length at 26) is "mimetype".

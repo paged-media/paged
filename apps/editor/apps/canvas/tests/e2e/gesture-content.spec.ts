@@ -126,7 +126,9 @@ async function runContentGesture(
   await page.evaluate(async (handle) => {
     const c = (
       globalThis as unknown as {
-        __canvas: { client: { commitGesture: (h: number) => Promise<unknown> } };
+        __canvas: {
+          client: { commitGesture: (h: number) => Promise<unknown> };
+        };
       }
     ).__canvas;
     await c.client.commitGesture(handle);
@@ -319,7 +321,9 @@ test.describe("W2.10 — content rotate / scale gestures (channel)", () => {
     await cancelGesture(page, h);
 
     const log = await drainGestureLog(page);
-    expect(countKind(log, "gestureCancelled"), "one cancelled envelope").toBe(1);
+    expect(countKind(log, "gestureCancelled"), "one cancelled envelope").toBe(
+      1,
+    );
     expect(
       countKind(log, "gestureCommitted"),
       "INV-1: no commit on abort",
@@ -337,22 +341,24 @@ test.describe("W2.10 — content rotate / scale gestures (channel)", () => {
     ).toBe(true);
   }
 
-  test("AC-W2.10-3 — RotateContent cancel rolls back @feat:editor-tools.content-transform @feat:geometry-coordinates.image-content-transform @level:edge", async ({ page }) => {
+  test("AC-W2.10-3 — RotateContent cancel rolls back @feat:editor-tools.content-transform @feat:geometry-coordinates.image-content-transform @level:edge", async ({
+    page,
+  }) => {
     const rect = (await elementPageRectPt(page, target.ref))!;
     const [, cy] = centroid(rect);
-    await assertContentCancelRollsBack(
-      page,
-      { kind: "rotateContent" },
-      [rect.right, cy],
-    );
+    await assertContentCancelRollsBack(page, { kind: "rotateContent" }, [
+      rect.right,
+      cy,
+    ]);
   });
 
-  test("AC-W2.10-4 — ScaleContent cancel rolls back @feat:editor-tools.content-transform @feat:geometry-coordinates.image-content-transform @level:edge", async ({ page }) => {
+  test("AC-W2.10-4 — ScaleContent cancel rolls back @feat:editor-tools.content-transform @feat:geometry-coordinates.image-content-transform @level:edge", async ({
+    page,
+  }) => {
     const rect = (await elementPageRectPt(page, target.ref))!;
-    await assertContentCancelRollsBack(
-      page,
-      { kind: "scaleContent" },
-      [rect.right, rect.bottom],
-    );
+    await assertContentCancelRollsBack(page, { kind: "scaleContent" }, [
+      rect.right,
+      rect.bottom,
+    ]);
   });
 });

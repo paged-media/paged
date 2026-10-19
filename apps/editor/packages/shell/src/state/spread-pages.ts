@@ -62,7 +62,11 @@ export function learnSpreadPages(
     if (!g.pageId || !g.spreadId || !g.pageOrigin) continue;
     const list = (next ?? known).get(g.spreadId) ?? [];
     const had = list.find((p) => p.pageId === g.pageId);
-    if (had && had.origin[0] === g.pageOrigin[0] && had.origin[1] === g.pageOrigin[1]) {
+    if (
+      had &&
+      had.origin[0] === g.pageOrigin[0] &&
+      had.origin[1] === g.pageOrigin[1]
+    ) {
       continue;
     }
     next ??= new Map(known);
@@ -110,7 +114,10 @@ export function spreadPagesFromSummaries(
 
 /** `known` plus the pages `found` places; `found` wins for a page both
  *  name. Returns `known` itself when `found` is empty. */
-export function mergeSpreadPages(known: SpreadPages, found: SpreadPages): SpreadPages {
+export function mergeSpreadPages(
+  known: SpreadPages,
+  found: SpreadPages,
+): SpreadPages {
   if (found.size === 0) return known;
   const next = new Map(known);
   for (const [spreadId, pages] of found) {
@@ -177,22 +184,36 @@ export function placeOnPages(
   known: SpreadPages,
   pageSize: (pageId: PageId) => readonly [number, number] | null,
 ): ElementGeometryItem[] {
-  if (!items.some((g) => !g.pageId && g.spreadId)) return items as ElementGeometryItem[];
+  if (!items.some((g) => !g.pageId && g.spreadId))
+    return items as ElementGeometryItem[];
   return items.map((g) => {
     if (g.pageId || !g.spreadId) return g;
     const pages = known.get(g.spreadId);
     if (!pages || pages.length === 0) return g;
-    const m: Affine = g.itemTransform ? [...g.itemTransform] : [1, 0, 0, 1, 0, 0];
+    const m: Affine = g.itemTransform
+      ? [...g.itemTransform]
+      : [1, 0, 0, 1, 0, 0];
     const [top, left, bottom, right] = g.bounds;
     const cx = (left + right) / 2;
     const cy = (top + bottom) / 2;
-    const centre: [number, number] = [m[0] * cx + m[2] * cy + m[4], m[1] * cx + m[3] * cy + m[5]];
+    const centre: [number, number] = [
+      m[0] * cx + m[2] * cy + m[4],
+      m[1] * cx + m[3] * cy + m[5],
+    ];
     let best = pages[0];
     let bestDistance = Infinity;
     for (const p of pages) {
       const [w, h] = pageSize(p.pageId) ?? [0, 0];
-      const dx = Math.max(p.origin[0] - centre[0], 0, centre[0] - (p.origin[0] + w));
-      const dy = Math.max(p.origin[1] - centre[1], 0, centre[1] - (p.origin[1] + h));
+      const dx = Math.max(
+        p.origin[0] - centre[0],
+        0,
+        centre[0] - (p.origin[0] + w),
+      );
+      const dy = Math.max(
+        p.origin[1] - centre[1],
+        0,
+        centre[1] - (p.origin[1] + h),
+      );
       const distance = Math.hypot(dx, dy);
       if (distance < bestDistance) {
         best = p;
@@ -202,7 +223,14 @@ export function placeOnPages(
     return {
       ...g,
       pageId: best.pageId,
-      itemTransform: [m[0], m[1], m[2], m[3], m[4] - best.origin[0], m[5] - best.origin[1]],
+      itemTransform: [
+        m[0],
+        m[1],
+        m[2],
+        m[3],
+        m[4] - best.origin[0],
+        m[5] - best.origin[1],
+      ],
       pageOrigin: [best.origin[0], best.origin[1]],
     };
   });

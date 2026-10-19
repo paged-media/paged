@@ -38,7 +38,12 @@
 import { expect } from "@playwright/test";
 
 import { openPanel } from "../../../fidelity/canvas-driver";
-import { marginNote, proseFrame, specLabel, type Para } from "../../annual-support";
+import {
+  marginNote,
+  proseFrame,
+  specLabel,
+  type Para,
+} from "../../annual-support";
 import { STYLE, p } from "../../names-annual";
 import { ConsoleTap, captureDownload, settle } from "../../plugin-support";
 import type { PageContext, PageReport } from "../../types";
@@ -59,20 +64,28 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   const elements: string[] = [];
   const receipts: string[] = [];
 
-  const head = await proseFrame(ctx, p(102), [60, 96, 492, 124], [
-    { text: "Round trips", style: STYLE.head1 },
-  ]);
-  const intro = await proseFrame(ctx, p(102), [60, 128, 492, 182], [
-    {
-      text:
-        "Everything below happened while this page was being built, and the " +
-        "receipts carry the measured values of this very run: the sort and " +
-        "its principled refusal, the replacement that recalculated its " +
-        "dependents, the captured cell style, the exported workbook, and " +
-        "the part the container actually holds.",
-      style: STYLE.bodySmall,
-    },
-  ]);
+  const head = await proseFrame(
+    ctx,
+    p(102),
+    [60, 96, 492, 124],
+    [{ text: "Round trips", style: STYLE.head1 }],
+  );
+  const intro = await proseFrame(
+    ctx,
+    p(102),
+    [60, 128, 492, 182],
+    [
+      {
+        text:
+          "Everything below happened while this page was being built, and the " +
+          "receipts carry the measured values of this very run: the sort and " +
+          "its principled refusal, the replacement that recalculated its " +
+          "dependents, the captured cell style, the exported workbook, and " +
+          "the part the container actually holds.",
+        style: STYLE.bodySmall,
+      },
+    ],
+  );
   elements.push(head.frameId, intro.frameId);
 
   // ── SORT — a values column sorts; the spill range refuses ────────
@@ -104,19 +117,25 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     );
     receipts.push(`sortRange C3:C6 (spill) — ${refusal}`);
   } else {
-    receipts.push(`sortRange C3:C6 (spill) — refused: ${refusal.slice(0, 110)}`);
+    receipts.push(
+      `sortRange C3:C6 (spill) — refused: ${refusal.slice(0, 110)}`,
+    );
   }
 
   // ── FIND & REPLACE — the dependent recalculates ──────────────────
   // The command opens the Grid panel with its find field focused; replace
   // sits under "Replace and options".
   await doc.runCommand(`${SHEET_CMD}.findReplace`);
-  await expect(page.locator('[data-sheet-panel="grid"]')).toBeVisible({ timeout: 120_000 });
+  await expect(page.locator('[data-sheet-panel="grid"]')).toBeVisible({
+    timeout: 120_000,
+  });
   await page.locator("[data-sheet-find-needle]").fill("Sum");
   await page.locator("[data-sheet-find]").click();
   const findMsg = page.locator("[data-sheet-find-msg]");
   await expect(findMsg).toBeVisible({ timeout: 8_000 });
-  await expect(findMsg).toHaveText(/^[1-9]\d* match(es)?\.$/, { timeout: 8_000 });
+  await expect(findMsg).toHaveText(/^[1-9]\d* match(es)?\.$/, {
+    timeout: 8_000,
+  });
   await page.locator("[data-sheet-replace-section] > summary").click();
   await page.locator("[data-sheet-find-replacement]").fill("Total");
   await page.locator("[data-sheet-replace-all]").click();
@@ -132,7 +151,10 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   covers.push("sheet.edit.ops");
 
   // ── CLIPBOARD pair (best-effort headless) ────────────────────────
-  const tap = new ConsoleTap(page, /copySelection|pasteAtSelection|styleFromCell/i);
+  const tap = new ConsoleTap(
+    page,
+    /copySelection|pasteAtSelection|styleFromCell/i,
+  );
   try {
     await selectGridCell(page, 0, 0);
     await doc.runCommand(`${SHEET_CMD}.copySelection`);
@@ -140,18 +162,24 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     await selectGridCell(page, 0, 3); // D1, untouched by every module
     await doc.runCommand(`${SHEET_CMD}.pasteSelection`);
     await page.waitForTimeout(350);
-    const complaint = tap.lines.find((l) => /copySelection:|pasteAtSelection:/.test(l));
+    const complaint = tap.lines.find((l) =>
+      /copySelection:|pasteAtSelection:/.test(l),
+    );
     receipts.push(
       complaint
         ? `copy/paste — degraded honestly: ${complaint.slice(0, 100)}`
         : "copy/paste — A1 copied and pasted at D1 through the OS clipboard",
     );
     if (complaint) {
-      notes.push(`clipboard lane degraded on this run: ${complaint.slice(0, 160)}`);
+      notes.push(
+        `clipboard lane degraded on this run: ${complaint.slice(0, 160)}`,
+      );
     }
   } catch (err) {
     notes.push(`clipboard drive threw: ${String(err).split("\n")[0]}`);
-    receipts.push("copy/paste — the drive itself failed on this lane (see notes)");
+    receipts.push(
+      "copy/paste — the drive itself failed on this lane (see notes)",
+    );
   }
 
   // ── STYLE FROM CELL — a document style captured from selection ───
@@ -170,8 +198,11 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   const styleGrew = await settle(
     page,
     async () =>
-      ((await doc.designer.collection("cellStyles")) as Array<{ selfId: string }>)
-        .length > stylesBefore.length,
+      (
+        (await doc.designer.collection("cellStyles")) as Array<{
+          selfId: string;
+        }>
+      ).length > stylesBefore.length,
     10_000,
   );
   if (styleGrew) {
@@ -186,7 +217,9 @@ export async function build(ctx: PageContext): Promise<PageReport> {
       `styleFromCell — document cell style minted: ${minted?.name ?? minted?.selfId ?? "(unnamed)"}`,
     );
   } else {
-    const complaint = tap.lines.find((l) => /styleFromCell|setStyleProperty/.test(l));
+    const complaint = tap.lines.find((l) =>
+      /styleFromCell|setStyleProperty/.test(l),
+    );
     receipts.push(
       "styleFromCell — the capture ran but no document cell style " +
         "landed: the engine rejected the style-property writes",
@@ -303,20 +336,30 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     text: r,
     style: STYLE.codeBlock,
   }));
-  const block = await proseFrame(ctx, p(102), [60, 200, 492, 430], receiptParas);
-  const closer = await proseFrame(ctx, p(102), [60, 446, 492, 540], [
-    {
-      text:
-        "The refusal above is a feature: a range whose cells are spill " +
-        "output cannot be reordered without corrupting the references that " +
-        "produced it, so the engine declines with its reasons instead of " +
-        "shuffling values it would immediately recompute. And the part " +
-        "listing is the chapter's opening promise kept — the workbook " +
-        "travels with the document, and the container will say so to " +
-        "anyone who asks it.",
-      style: STYLE.bodySmall,
-    },
-  ]);
+  const block = await proseFrame(
+    ctx,
+    p(102),
+    [60, 200, 492, 430],
+    receiptParas,
+  );
+  const closer = await proseFrame(
+    ctx,
+    p(102),
+    [60, 446, 492, 540],
+    [
+      {
+        text:
+          "The refusal above is a feature: a range whose cells are spill " +
+          "output cannot be reordered without corrupting the references that " +
+          "produced it, so the engine declines with its reasons instead of " +
+          "shuffling values it would immediately recompute. And the part " +
+          "listing is the chapter's opening promise kept — the workbook " +
+          "travels with the document, and the container will say so to " +
+          "anyone who asks it.",
+        style: STYLE.bodySmall,
+      },
+    ],
+  );
   elements.push(block.frameId, closer.frameId);
 
   elements.push(

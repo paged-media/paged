@@ -26,7 +26,11 @@
 // if you switch the artboard fit off. Its wording is pinned by a
 // conformance test.
 
-import type { BundleHost, ElementId, PanelProps } from "@paged-media/plugin-api";
+import type {
+  BundleHost,
+  ElementId,
+  PanelProps,
+} from "@paged-media/plugin-api";
 import * as React from "react";
 
 import {
@@ -82,7 +86,10 @@ export function onPathMakeBlocker(selected: number): string | null {
 }
 
 /** The line that names which selected object is the path. */
-export function onPathTargetLine(last: ElementId | null, selected: number): string {
+export function onPathTargetLine(
+  last: ElementId | null,
+  selected: number,
+): string {
   if (last === null || selected < 2) {
     return "The last object you select is used as the path.";
   }
@@ -153,7 +160,9 @@ export function makeObjectsOnPathPanel(host: BundleHost): {
     const [active, setActive] = React.useState<string | null>(null);
     const [placed, setPlaced] = React.useState<Record<string, number>>({});
     const [selected, setSelected] = React.useState(0);
-    const [lastSelected, setLastSelected] = React.useState<ElementId | null>(null);
+    const [lastSelected, setLastSelected] = React.useState<ElementId | null>(
+      null,
+    );
     const [portable, setPortable] = React.useState(true);
     const [draft, setDraft, followDraft] =
       useFollowedDraft<ObjectsOnPathParams>(OBJECTS_ON_PATH_DEFAULTS);
@@ -237,7 +246,10 @@ export function makeObjectsOnPathPanel(host: BundleHost): {
         data-draw-onpath-portable={portable ? "true" : "false"}
         data-draw-onpath-active={active ?? ""}
       >
-        <PanelIntro summary={OBJECTS_ON_PATH_SUMMARY} attr="data-draw-onpath-intro" />
+        <PanelIntro
+          summary={OBJECTS_ON_PATH_SUMMARY}
+          attr="data-draw-onpath-intro"
+        />
         <div style={{ ...rowStyle, justifyContent: "space-between" }}>
           <span style={{ ...sectionStyle, paddingTop: 0 }}>
             Objects on path ({records.length})
@@ -251,7 +263,9 @@ export function makeObjectsOnPathPanel(host: BundleHost): {
             }
             data-draw-onpath-make
             disabled={onPathMakeBlocker(selected) !== null}
-            onClick={() => void run(() => applyMakeObjectsOnPath(host, { ...draft }))}
+            onClick={() =>
+              void run(() => applyMakeObjectsOnPath(host, { ...draft }))
+            }
           >
             + On path
           </button>
@@ -265,8 +279,8 @@ export function makeObjectsOnPathPanel(host: BundleHost): {
 
         {!portable && (
           <div style={mutedStyle} data-draw-onpath-degraded>
-            This editor cannot save data into the document, so the
-            distribution settings are not kept. Release and update still work.
+            This editor cannot save data into the document, so the distribution
+            settings are not kept. Release and update still work.
           </div>
         )}
 
@@ -375,7 +389,8 @@ export function makeObjectsOnPathPanel(host: BundleHost): {
                   title="Place the objects again with the settings above"
                   data-draw-onpath-update
                   onClick={() =>
-                    void run(() => applyUpdateObjectsOnPath(host, {
+                    void run(() =>
+                      applyUpdateObjectsOnPath(host, {
                         onPathId: record.id,
                         ...draft,
                       }),
@@ -390,7 +405,8 @@ export function makeObjectsOnPathPanel(host: BundleHost): {
                   title="Select the objects on this path"
                   data-draw-onpath-select
                   onClick={() =>
-                    void run(() => applySelectObjectsOnPath(host, { onPathId: record.id }),
+                    void run(() =>
+                      applySelectObjectsOnPath(host, { onPathId: record.id }),
                     )
                   }
                 >
@@ -402,7 +418,8 @@ export function makeObjectsOnPathPanel(host: BundleHost): {
                   title="Stop tracking and leave the objects on the path"
                   data-draw-onpath-expand
                   onClick={() =>
-                    void run(() => applyExpandObjectsOnPath(host, { onPathId: record.id }),
+                    void run(() =>
+                      applyExpandObjectsOnPath(host, { onPathId: record.id }),
                     )
                   }
                 >
@@ -414,7 +431,8 @@ export function makeObjectsOnPathPanel(host: BundleHost): {
                   title="Put every object back exactly where it was"
                   data-draw-onpath-release
                   onClick={() =>
-                    void run(() => applyReleaseObjectsOnPath(host, { onPathId: record.id }),
+                    void run(() =>
+                      applyReleaseObjectsOnPath(host, { onPathId: record.id }),
                     )
                   }
                 >
@@ -428,7 +446,10 @@ export function makeObjectsOnPathPanel(host: BundleHost): {
           ))
         )}
 
-        <PanelAbout text={OBJECTS_ON_PATH_PANEL_NOTE} attr="data-draw-onpath-note" />
+        <PanelAbout
+          text={OBJECTS_ON_PATH_PANEL_NOTE}
+          attr="data-draw-onpath-note"
+        />
       </div>
     );
   };

@@ -84,14 +84,48 @@ export const UI_GLYPHS: Record<string, ReactNode> = {
   ),
   "ui-arrange-front": (
     <>
-      <rect x={4} y={4} width={11} height={11} rx={1.5} {...LINE} strokeDasharray="2 2" />
-      <rect x={9} y={9} width={11} height={11} rx={1.5} {...LINE} fill="currentColor" fillOpacity={0.3} />
+      <rect
+        x={4}
+        y={4}
+        width={11}
+        height={11}
+        rx={1.5}
+        {...LINE}
+        strokeDasharray="2 2"
+      />
+      <rect
+        x={9}
+        y={9}
+        width={11}
+        height={11}
+        rx={1.5}
+        {...LINE}
+        fill="currentColor"
+        fillOpacity={0.3}
+      />
     </>
   ),
   "ui-arrange-back": (
     <>
-      <rect x={4} y={4} width={11} height={11} rx={1.5} {...LINE} fill="currentColor" fillOpacity={0.3} />
-      <rect x={9} y={9} width={11} height={11} rx={1.5} {...LINE} strokeDasharray="2 2" />
+      <rect
+        x={4}
+        y={4}
+        width={11}
+        height={11}
+        rx={1.5}
+        {...LINE}
+        fill="currentColor"
+        fillOpacity={0.3}
+      />
+      <rect
+        x={9}
+        y={9}
+        width={11}
+        height={11}
+        rx={1.5}
+        {...LINE}
+        strokeDasharray="2 2"
+      />
     </>
   ),
   "ui-search": (

@@ -27,7 +27,11 @@
 //
 // A unit test importing the SOURCE cannot catch this (the test runner resolves React
 // from the workspace root), so this asserts on the shipped artifact: no
-// top-level react import may survive the bundle.
+// top-level react import may survive the bundle. The artifact is built HERE,
+// with the bundling step of the package's own `build` script, into a
+// temporary directory: the tests used to read `dist/` and return early when
+// no build had run, which passed without asserting anything in every checkout
+// that had not built the package first.
 //
 // The FIRST fix for that used a top-level `await import("react")`, which
 // broke the artifact a second way: the bundler emits top-level await
@@ -39,14 +43,15 @@
 // in a consumer. These tests pin the gate and the resulting shape;
 // `src/react-optional.ts` holds the full record.
 
-import { existsSync, readFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { describe, expect, it } from "bun:test";
+import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const DIST = resolve(HERE, "../dist/index.js");
+const PKG = resolve(HERE, "..");
 
 function readPkg(): {
   scripts?: Record<string, string>;
@@ -62,25 +67,68 @@ function readPkg(): {
 
 /** TypeScript `module` settings that ALLOW top-level await (TS1378 names
  *  them). Compiling at anything else is what makes it a build error. */
-const TLA_CAPABLE = /^(es2022|esnext|system|node16|node18|node20|nodenext|preserve)$/i;
+const TLA_CAPABLE =
+  /^(es2022|esnext|system|node16|node18|node20|nodenext|preserve)$/i;
 
 function readBuildModule(): string | undefined {
-  const config = JSON.parse(readFileSync(resolve(HERE, "../tsconfig.build.json"), "utf8")) as {
+  const config = JSON.parse(
+    readFileSync(resolve(HERE, "../tsconfig.build.json"), "utf8"),
+  ) as {
     compilerOptions?: { module?: string };
   };
   return config.compilerOptions?.module;
 }
 
+/** The bundling step of the package's `build` script (`bun build … --outdir
+ *  dist …`), as argv, with the output directory swapped for `outdir`. Read
+ *  from package.json so the artifact asserted on is the one `bun run build`
+ *  ships, not a second recipe kept here. */
+function bundleCommand(outdir: string): string[] {
+  const build = readPkg().scripts?.build ?? "";
+  const step = build
+    .split("&&")
+    .map((s) => s.trim())
+    .find((s) => s.startsWith("bun build "));
+  if (!step)
+    throw new Error(`no "bun build" step in the build script: ${build}`);
+  const argv = step.split(/\s+/);
+  const at = argv.indexOf("--outdir");
+  if (at < 0 || at + 1 >= argv.length)
+    throw new Error(`the build step names no --outdir: ${step}`);
+  argv[at + 1] = outdir;
+  return argv;
+}
+
+let outdir = "";
+let bundle = "";
+
+beforeAll(() => {
+  outdir = mkdtempSync(join(tmpdir(), "plugin-sdk-react-free-"));
+  const [cmd, ...args] = bundleCommand(outdir);
+  const run = Bun.spawnSync(
+    [cmd === "bun" ? process.execPath : cmd!, ...args],
+    {
+      cwd: PKG,
+      stdout: "pipe",
+      stderr: "pipe",
+    },
+  );
+  if (run.exitCode !== 0)
+    throw new Error(
+      `bundling the package failed (${run.exitCode}): ${run.stderr.toString()}`,
+    );
+  bundle = readFileSync(join(outdir, "index.js"), "utf8");
+});
+
+afterAll(() => {
+  if (outdir) rmSync(outdir, { recursive: true, force: true });
+});
+
 describe("the published bundle keeps React optional", () => {
   it("has no top-level react import", () => {
-    if (!existsSync(DIST)) {
-      // `bun run build` has not run in this checkout — nothing to assert
-      // against. BOTH workflows now build before the suite (they did not,
-      // which left this guard inert in CI); locally, run `bun run build` first.
-      return;
-    }
-    const bundle = readFileSync(DIST, "utf8");
-    const statics = bundle.match(/^\s*import[^;]*?from\s*["']react["']/gm) ?? [];
+    expect(bundle.length, "the bundle was built").toBeGreaterThan(0);
+    const statics =
+      bundle.match(/^\s*import[^;]*?from\s*["']react["']/gm) ?? [];
     expect(
       statics,
       "a static react import makes the whole package unloadable without React",
@@ -88,8 +136,7 @@ describe("the published bundle keeps React optional", () => {
   });
 
   it("resolves React dynamically, and never with a top-level await", () => {
-    if (!existsSync(DIST)) return;
-    const bundle = readFileSync(DIST, "utf8");
+    expect(bundle.length, "the bundle was built").toBeGreaterThan(0);
     expect(
       bundle,
       "React must still be resolved at runtime — a dropped import() means " +
@@ -108,9 +155,14 @@ describe("the published bundle keeps React optional", () => {
     // rather than a consumer's dev server. This asserts the gate is still
     // configured and on the build's path — the build asserts the rest.
     const build = readPkg().scripts?.build ?? "";
-    expect(build, "the build must run the declaration compile").toContain("tsc -p tsconfig.build.json");
+    expect(build, "the build must run the declaration compile").toContain(
+      "tsc -p tsconfig.build.json",
+    );
     const moduleSetting = readBuildModule();
-    expect(moduleSetting, "tsconfig.build.json must pin an explicit module").toBeDefined();
+    expect(
+      moduleSetting,
+      "tsconfig.build.json must pin an explicit module",
+    ).toBeDefined();
     expect(
       TLA_CAPABLE.test(moduleSetting ?? ""),
       `module "${moduleSetting}" allows top-level await; Vite's dep-optimizer ` +

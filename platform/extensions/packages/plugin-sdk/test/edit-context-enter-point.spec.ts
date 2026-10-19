@@ -30,7 +30,10 @@ import type {
   PluginManifest,
 } from "@paged-media/plugin-api";
 
-import { createBindingProviderRegistry, createBundleHost } from "../src/host-impl";
+import {
+  createBindingProviderRegistry,
+  createBundleHost,
+} from "../src/host-impl";
 import { createHeadlessHost } from "../src/harness";
 import { makeFakeEditor } from "./fake-editor";
 
@@ -65,7 +68,9 @@ function ctx(seen: EnteredEditContext[]): EditContextContribution {
 describe("EnteredEditContext entering point (W-19)", () => {
   it("reaches onEnter unchanged through the registry", () => {
     const fake = makeFakeEditor();
-    const { host } = createBundleHost(() => fake.editor, MANIFEST, { console: silent });
+    const { host } = createBundleHost(() => fake.editor, MANIFEST, {
+      console: silent,
+    });
     const seen: EnteredEditContext[] = [];
     host.contribute.editContext(ctx(seen));
     const reg = fake.editContexts.get("webFrame") as EditContextContribution;
@@ -90,7 +95,9 @@ describe("EnteredEditContext entering point (W-19)", () => {
 
   it("a point-less entry stays point-less (programmatic enter)", () => {
     const fake = makeFakeEditor();
-    const { host } = createBundleHost(() => fake.editor, MANIFEST, { console: silent });
+    const { host } = createBundleHost(() => fake.editor, MANIFEST, {
+      console: silent,
+    });
     const seen: EnteredEditContext[] = [];
     host.contribute.editContext(ctx(seen));
     const reg = fake.editContexts.get("webFrame") as EditContextContribution;
@@ -100,7 +107,9 @@ describe("EnteredEditContext entering point (W-19)", () => {
 
   it("supports('editContext.enterPoint@1') only when the host vouches", () => {
     const fake = makeFakeEditor();
-    const off = createBundleHost(() => fake.editor, MANIFEST, { console: silent }).host;
+    const off = createBundleHost(() => fake.editor, MANIFEST, {
+      console: silent,
+    }).host;
     const on = createBundleHost(() => fake.editor, MANIFEST, {
       console: silent,
       editContextEnterPoint: true,

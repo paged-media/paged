@@ -36,7 +36,12 @@
 import { expect } from "@playwright/test";
 
 import { script } from "../../../e2e/harness/ui";
-import { assignLayer, proseFrame, specLabel, type Para } from "../../annual-support";
+import {
+  assignLayer,
+  proseFrame,
+  specLabel,
+  type Para,
+} from "../../annual-support";
 import { CHAR, LAYER, STYLE, p } from "../../names-annual";
 import type { PageContext, PageReport } from "../../types";
 import { compileLimits, type Limit } from "./00-support";
@@ -79,9 +84,12 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   );
 
   // ── A·1 head + introduction ──────────────────────────────────────
-  const head = await proseFrame(ctx, p(127), [48, 54, 480, 88], [
-    { text: "Appendix A — The Limits Ledger", style: STYLE.head1 },
-  ]);
+  const head = await proseFrame(
+    ctx,
+    p(127),
+    [48, 54, 480, 88],
+    [{ text: "Appendix A — The Limits Ledger", style: STYLE.head1 }],
+  );
   elements.push(head.frameId);
 
   // The classification glyphs live in JetBrains Mono (Code Inline) —
@@ -100,13 +108,11 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   };
   const introParas: Para[] = [
     {
-      text:
-        "A recorded limit is a demonstration that says where it stops. Every page of this annual that showed a feature partially, or met an edge the engine declares rather than hides, set a ◪ note in its margin and pointed here. This ledger is those margins, gathered: compiled at build time from the page sources themselves — every marginNote call read back out of the modules, deduplicated, its folio resolved through the chapter plan — because a limits appendix that was typed by hand would itself be a claim nobody checked.",
+      text: "A recorded limit is a demonstration that says where it stops. Every page of this annual that showed a feature partially, or met an edge the engine declares rather than hides, set a ◪ note in its margin and pointed here. This ledger is those margins, gathered: compiled at build time from the page sources themselves — every marginNote call read back out of the modules, deduplicated, its folio resolved through the chapter plan — because a limits appendix that was typed by hand would itself be a claim nobody checked.",
       style: STYLE.bodyFirst,
     },
     {
-      text:
-        `The annual prints them for the same reason it prints specimen labels: a specimen that hides its edges is an advertisement. ${limits.length} limits stand recorded — ${partial} marked ◪, demonstrated to a recorded boundary, and ${declared} marked □, absences the platform declares by design rather than failures it met. Each entry is compacted to its leading clause; the full wording stands in the margin of the folio cited beside it.`,
+      text: `The annual prints them for the same reason it prints specimen labels: a specimen that hides its edges is an advertisement. ${limits.length} limits stand recorded — ${partial} marked ◪, demonstrated to a recorded boundary, and ${declared} marked □, absences the platform declares by design rather than failures it met. Each entry is compacted to its leading clause; the full wording stands in the margin of the folio cited beside it.`,
       style: STYLE.body,
     },
   ];
@@ -123,16 +129,17 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   // conservative line budget (44 chars/line against a measured ~55,
   // so a column underfills rather than oversets) and poured one story
   // per column; every column's overset flag is then asserted false.
-  const boxes: Array<{ page: number; box: [number, number, number, number] }> = [
-    { page: p(127), box: [48, 260, 258, 630] },
-    { page: p(127), box: [270, 260, 480, 630] },
-    { page: p(128), box: [60, 64, 270, 630] },
-    { page: p(128), box: [282, 64, 492, 630] },
-    { page: p(129), box: [48, 64, 258, 630] },
-    { page: p(129), box: [270, 64, 480, 630] },
-    { page: p(130), box: [60, 64, 270, 330] },
-    { page: p(130), box: [282, 64, 492, 330] },
-  ];
+  const boxes: Array<{ page: number; box: [number, number, number, number] }> =
+    [
+      { page: p(127), box: [48, 260, 258, 630] },
+      { page: p(127), box: [270, 260, 480, 630] },
+      { page: p(128), box: [60, 64, 270, 630] },
+      { page: p(128), box: [282, 64, 492, 630] },
+      { page: p(129), box: [48, 64, 258, 630] },
+      { page: p(129), box: [270, 64, 480, 630] },
+      { page: p(130), box: [60, 64, 270, 330] },
+      { page: p(130), box: [282, 64, 492, 330] },
+    ];
 
   // Consecutive folios print as a range ("23–30"): a note whose module
   // declares no exact page resolves to its chapter's spread, and eight
@@ -248,8 +255,7 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   //    When the ledger never reaches A·4's columns (the conservative
   //    deal often ends on A·3), the roll rises to the top of the page
   //    instead of leaving a half-page hole above itself. ─────────────
-  const p130Empty =
-    perColumn[6].length === 0 && perColumn[7].length === 0;
+  const p130Empty = perColumn[6].length === 0 && perColumn[7].length === 0;
   const lift = p130Empty ? 260 : 0;
   const rollHead = await proseFrame(
     ctx,
@@ -258,8 +264,7 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     [
       { text: "The engine findings", style: STYLE.head2 },
       {
-        text:
-          "Ten of the notes above are surface readings of deeper seams. The campaign's own roll:",
+        text: "Ten of the notes above are surface readings of deeper seams. The campaign's own roll:",
         style: STYLE.bodySmall,
       },
     ],
@@ -269,7 +274,10 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     ctx,
     p(130),
     [60, 404 - lift, 270, 634 - lift],
-    ENGINE_FINDINGS.slice(0, 5).map((f) => ({ text: f, style: STYLE.specValue })),
+    ENGINE_FINDINGS.slice(0, 5).map((f) => ({
+      text: f,
+      style: STYLE.specValue,
+    })),
   );
   const rollB = await proseFrame(
     ctx,

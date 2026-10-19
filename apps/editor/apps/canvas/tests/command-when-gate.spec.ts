@@ -122,7 +122,9 @@ test.describe("CommandRegistry — the `when` gate", () => {
     // The Actions panel records invocations for replay. A refused
     // command must not enter that log: replaying it later would run a
     // step the user never performed.
-    const state = { editContext: { type: "webFrame" } as { type: string } | null };
+    const state = {
+      editContext: { type: "webFrame" } as { type: string } | null,
+    };
     const registry = registryOver(state);
     const seen: string[] = [];
     registry.observe?.((e) => seen.push(e.phase));
@@ -151,8 +153,9 @@ test.describe("CommandRegistry — the `when` gate", () => {
 // React wiring is exercised by tool-rail.spec.ts.
 
 /** The rail's rule, extracted verbatim from `ToolRail.tsx`. */
-const restrictionOf = (toolIds: readonly string[] | null): Set<string> | null =>
-  toolIds ? new Set(toolIds) : null;
+const restrictionOf = (
+  toolIds: readonly string[] | null,
+): Set<string> | null => (toolIds ? new Set(toolIds) : null);
 
 test.describe("edit context — toolIds semantics", () => {
   test("AC-CTX-TOOLS-1 — ABSENT leaves the rail untouched @level:happy", () => {
@@ -267,17 +270,26 @@ const lookup = (id: string) => TOOLS[id];
 test.describe("context toolbar — the segment", () => {
   test("AC-BAR-1 — names the content type and offers its tools @level:happy", () => {
     const m = contextSegmentModel(
-      { label: "rasterImage", type: "rasterImage", toolIds: ["media.paged.image.tool.brush"] },
+      {
+        label: "rasterImage",
+        type: "rasterImage",
+        toolIds: ["media.paged.image.tool.brush"],
+      },
       lookup,
     );
-    expect(m.label, "the type reads as words, as in the breadcrumb").toBe("Raster image");
+    expect(m.label, "the type reads as words, as in the breadcrumb").toBe(
+      "Raster image",
+    );
     expect(m.tools.map((t) => t.title)).toEqual(["Brush"]);
     expect(m.noTools).toBe(false);
   });
 
   test("AC-BAR-2 — DECLARED-EMPTY says so out loud @level:edge", () => {
     // The assertion that matters. A blank here would be read as a bug.
-    const m = contextSegmentModel({ label: "sheet", type: "sheet", toolIds: [] }, lookup);
+    const m = contextSegmentModel(
+      { label: "sheet", type: "sheet", toolIds: [] },
+      lookup,
+    );
     expect(m.noTools).toBe(true);
     expect(m.tools).toEqual([]);
   });
@@ -285,7 +297,10 @@ test.describe("context toolbar — the segment", () => {
   test("AC-BAR-3 — an UNDECLARED list claims nothing about tools @level:edge", () => {
     // `null` means the context never said. It must not be reported as
     // "no tools apply", which is a different and much stronger claim.
-    const m = contextSegmentModel({ label: "legacy", type: "legacy", toolIds: null }, lookup);
+    const m = contextSegmentModel(
+      { label: "legacy", type: "legacy", toolIds: null },
+      lookup,
+    );
     expect(m.noTools).toBe(false);
     expect(m.label).toBe("Legacy");
   });

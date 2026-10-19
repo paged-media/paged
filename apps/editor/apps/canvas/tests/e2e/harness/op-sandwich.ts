@@ -144,8 +144,7 @@ export async function installReplyRecorder(page: Page): Promise<void> {
           createdId: p.createdId,
           pageStructureChanged: p.pageStructureChanged as boolean | undefined,
           cacheStats: p.cacheStats as
-            | { hits: number; misses: number }
-            | undefined,
+            { hits: number; misses: number } | undefined,
         });
       }
     });
@@ -240,7 +239,11 @@ export async function opSandwich(
           p.height,
         )
       : null;
-    return { probe: p, region: r, diff: r ? diffPngPixels(baseline, png, r) : p };
+    return {
+      probe: p,
+      region: r,
+      diff: r ? diffPngPixels(baseline, png, r) : p,
+    };
   };
 
   let { probe, region, diff: finalDiff } = await sample();
@@ -322,12 +325,12 @@ export async function opSandwich(
       finalDiff.changedInside,
       probe.changed === 0
         ? "operation produced NO render change ANYWHERE on the page — not applied to the canvas document" +
-          `\n  engine replies: ${JSON.stringify(engineSaid)}` +
-          `\n  (read \`rebuilds\`: > 0 ⇒ rebuilt and still identical = engine defect;` +
-          ` 0 ⇒ never redrawn = the op did not reach the raster)`
+            `\n  engine replies: ${JSON.stringify(engineSaid)}` +
+            `\n  (read \`rebuilds\`: > 0 ⇒ rebuilt and still identical = engine defect;` +
+            ` 0 ⇒ never redrawn = the op did not reach the raster)`
         : `operation changed ${probe.changed}px on the page but 0 inside the affected region ` +
-          `(region px ${JSON.stringify(region)}, whole-page bbox ${JSON.stringify(probe.bbox)}) ` +
-          `— the op painted, the region is looking in the wrong place`,
+            `(region px ${JSON.stringify(region)}, whole-page bbox ${JSON.stringify(probe.bbox)}) ` +
+            `— the op painted, the region is looking in the wrong place`,
     ).toBeGreaterThan(0);
     if (region && (o.containment ?? true)) {
       expect(

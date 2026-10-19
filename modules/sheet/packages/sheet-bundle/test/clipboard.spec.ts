@@ -50,8 +50,18 @@ function fakeEngine() {
     sortRange: () => ({ changed: [], edits: [] }),
     findAll: () => [],
     replaceAll: () => ({ occurrences: 0, changed: [], edits: [], skipped: [] }),
-    getRangeLowered: () => ({ cols: [], rows: [], rules: { h: [], v: [] }, merges: [] }),
-    getRangeStyled: () => ({ cols: [], rows: [], rules: { h: [], v: [] }, merges: [] }),
+    getRangeLowered: () => ({
+      cols: [],
+      rows: [],
+      rules: { h: [], v: [] },
+      merges: [],
+    }),
+    getRangeStyled: () => ({
+      cols: [],
+      rows: [],
+      rules: { h: [], v: [] },
+      merges: [],
+    }),
     // The COPY source: a 2×2 grid of formatted display strings.
     getRangeValues: () => [
       ["Name", "Qty"],
@@ -59,7 +69,14 @@ function fakeEngine() {
     ],
     paginate: () => [],
     getGridScene: () => ({
-      viewport: { firstRow: 0, firstCol: 0, rows: 0, cols: 0, xOffsets: [0], yOffsets: [0] },
+      viewport: {
+        firstRow: 0,
+        firstCol: 0,
+        rows: 0,
+        cols: 0,
+        xOffsets: [0],
+        yOffsets: [0],
+      },
       cells: [],
       styles: [],
       gridlines: { h: [], v: [] },
@@ -87,7 +104,10 @@ function fakeHost() {
   const host = {
     log: { debug() {}, info() {}, warn() {}, error() {} },
     // The document doors every host has; nothing here fires them.
-    document: { onDidChange: () => ({ dispose() {} }), onDidOpen: () => ({ dispose() {} }) },
+    document: {
+      onDidChange: () => ({ dispose() {} }),
+      onDidOpen: () => ({ dispose() {} }),
+    },
     supports: (f: string) => f === "clipboard@1",
     clipboard: {
       async read() {
@@ -178,7 +198,9 @@ describe("sheet_grid_clipboard_paste_range: K-6 paste", () => {
     expect(session.undoCellEdit()).toBe(true);
     // 4 cells reverted to "" (their captured prev input).
     expect(setCellCalls.length).toBe(before + 4);
-    expect(setCellCalls.slice(before).every(([, , , v]) => v === "")).toBe(true);
+    expect(setCellCalls.slice(before).every(([, , , v]) => v === "")).toBe(
+      true,
+    );
     // A second undo finds the journal exhausted (the paste was one step).
     expect(session.undoCellEdit()).toBe(false);
   });
@@ -223,11 +245,18 @@ describe("sheet_grid_clipboard_paste_range: K-6 paste", () => {
 describe("sheet_grid_clipboard_paste_range: the setCells batch door [sheet.edit.ops]", () => {
   it("pastes through ONE setCells call and journals the whole paste as one undo", async () => {
     const { engine, setCellCalls } = fakeEngine();
-    const batches: { sheet: number; row: number; col: number; input: string }[][] = [];
+    const batches: {
+      sheet: number;
+      row: number;
+      col: number;
+      input: string;
+    }[][] = [];
     engine.setCells = (inputs) => {
       batches.push([...inputs]);
       // The reply carries each cell's prior input (the journal's inverse).
-      const prevInputs = inputs.map((i) => engine.getCellInput(i.sheet, i.row, i.col));
+      const prevInputs = inputs.map((i) =>
+        engine.getCellInput(i.sheet, i.row, i.col),
+      );
       for (const i of inputs) engine.setCell(i.sheet, i.row, i.col, i.input);
       setCellCalls.length = 0; // the batch is ONE engine call
       return { changedCount: inputs.length, circular: [], prevInputs };
@@ -235,8 +264,19 @@ describe("sheet_grid_clipboard_paste_range: the setCells batch door [sheet.edit.
     const { host, setClipboard } = fakeHost();
     const session = bootedSession(host, engine);
     session.setGridSelection(1, 1, 1, 1);
-    setClipboard({ tabular: { rows: [["a", "b"], ["c", "d"]] } });
-    expect(await session.pasteAtSelection()).toEqual({ ok: true, rows: 2, cols: 2 });
+    setClipboard({
+      tabular: {
+        rows: [
+          ["a", "b"],
+          ["c", "d"],
+        ],
+      },
+    });
+    expect(await session.pasteAtSelection()).toEqual({
+      ok: true,
+      rows: 2,
+      cols: 2,
+    });
     expect(batches).toEqual([
       [
         { sheet: 0, row: 1, col: 1, input: "a" },
@@ -262,7 +302,11 @@ describe("sheet_grid_clipboard_paste_range: the setCells batch door [sheet.edit.
     const session = bootedSession(host, engine);
     session.setGridSelection(0, 0, 1, 1);
     setClipboard({ tabular: { rows: [["x", "y"]] } });
-    expect(await session.pasteAtSelection()).toEqual({ ok: true, rows: 1, cols: 2 });
+    expect(await session.pasteAtSelection()).toEqual({
+      ok: true,
+      rows: 1,
+      cols: 2,
+    });
     expect(setCellCalls).toEqual([
       [0, 0, 0, "x"],
       [0, 0, 1, "y"],

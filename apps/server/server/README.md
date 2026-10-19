@@ -7,23 +7,23 @@ core's `paged-repo` crate — the same code the editor runs in the browser.
 The browser is complete without this server; this adds sync, sharing and (next)
 an MCP endpoint. Concept: `../docs/concept.md`.
 
-| Crate | What |
-|---|---|
-| `crates/paged-server` | the Worker + `RepoObject` Durable Object (wasm32, `worker` 0.8) |
-| `crates/paged-sync` | a client: push (send only what the server lacks), pull, projections |
+| Crate                 | What                                                                |
+| --------------------- | ------------------------------------------------------------------- |
+| `crates/paged-server` | the Worker + `RepoObject` Durable Object (wasm32, `worker` 0.8)     |
+| `crates/paged-sync`   | a client: push (send only what the server lacks), pull, projections |
 
 ## HTTP (M1)
 
-| Route | |
-|---|---|
-| `POST /v1/r/{repo}/have` | JSON `[address]` → the ones the server lacks |
-| `PUT /v1/r/{repo}/objects` | a pack; every record checked against its address; large blobs to R2 before their row |
-| `GET /v1/r/{repo}/refs` | `{name: address}` |
-| `POST /v1/r/{repo}/refs/{name}` | `{expected, new}`: compare-and-set through the kernel's governance |
-| `GET /v1/r/{repo}/log/{ref}` | first-parent history |
-| `GET /v1/r/{repo}/objects/{address}` | one object, immutable |
-| `GET /v1/r/{repo}/file/{ref}` | the `.paged` projection; `?history=1` carries the history |
-| `GET /v1/r/{repo}/evidence` | the evidence log |
+| Route                                |                                                                                      |
+| ------------------------------------ | ------------------------------------------------------------------------------------ |
+| `POST /v1/r/{repo}/have`             | JSON `[address]` → the ones the server lacks                                         |
+| `PUT /v1/r/{repo}/objects`           | a pack; every record checked against its address; large blobs to R2 before their row |
+| `GET /v1/r/{repo}/refs`              | `{name: address}`                                                                    |
+| `POST /v1/r/{repo}/refs/{name}`      | `{expected, new}`: compare-and-set through the kernel's governance                   |
+| `GET /v1/r/{repo}/log/{ref}`         | first-parent history                                                                 |
+| `GET /v1/r/{repo}/objects/{address}` | one object, immutable                                                                |
+| `GET /v1/r/{repo}/file/{ref}`        | the `.paged` projection; `?history=1` carries the history                            |
+| `GET /v1/r/{repo}/evidence`          | the evidence log                                                                     |
 
 | `GET/POST /v1/r/{repo}/cr` | change requests: list, open `{source, target, title}` |
 | `POST /v1/r/{repo}/cr/{id}/{approve,merge,close}` | approvals bind to the source head they saw; merge goes through the kernel |
@@ -37,12 +37,12 @@ first writer.
 `/v1/w/{ws}/r/{repo}/…` takes the same routes for a workspace's repository, which
 obeys the workspace's policy and refuses everything when it cannot read one.
 
-| Route | |
-|---|---|
-| `POST /v1/w/{ws}` | create; the caller is its owner |
-| `GET /v1/w/{ws}/policy` | `{seq, policy}`: roles (owner, editor, reviewer, viewer), agent autonomy, `main_merge_only` |
-| `PUT /v1/w/{ws}/policy` | `{expected_seq, policy}`: owner only, compare-and-set; a policy that does not parse or leaves no owner is refused |
-| `GET /v1/w/{ws}/policy/log` | every version, each hash naming the one before |
+| Route                       |                                                                                                                   |
+| --------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `POST /v1/w/{ws}`           | create; the caller is its owner                                                                                   |
+| `GET /v1/w/{ws}/policy`     | `{seq, policy}`: roles (owner, editor, reviewer, viewer), agent autonomy, `main_merge_only`                       |
+| `PUT /v1/w/{ws}/policy`     | `{expected_seq, policy}`: owner only, compare-and-set; a policy that does not parse or leaves no owner is refused |
+| `GET /v1/w/{ws}/policy/log` | every version, each hash naming the one before                                                                    |
 
 ## Sign-in
 
@@ -50,13 +50,13 @@ paged.server is an OAuth 2.1 authorization server for its clients (an MCP client
 such as Claude, the editor, the CLI) and delegates identity to any OpenID Connect
 provider.
 
-| Route | |
-|---|---|
-| `GET /.well-known/oauth-authorization-server` | RFC 8414 metadata |
-| `GET /.well-known/oauth-protected-resource` | RFC 9728; a 401 names it in `WWW-Authenticate` |
-| `POST /oauth/register` | RFC 7591 dynamic registration; public clients, https or loopback redirects |
-| `GET /oauth/authorize` | PKCE S256 only → the provider (code + PKCE + nonce) → `/oauth/callback` |
-| `POST /oauth/token` | `authorization_code` (one-time, PKCE-checked) and `refresh_token` (rotating) |
+| Route                                         |                                                                              |
+| --------------------------------------------- | ---------------------------------------------------------------------------- |
+| `GET /.well-known/oauth-authorization-server` | RFC 8414 metadata                                                            |
+| `GET /.well-known/oauth-protected-resource`   | RFC 9728; a 401 names it in `WWW-Authenticate`                               |
+| `POST /oauth/register`                        | RFC 7591 dynamic registration; public clients, https or loopback redirects   |
+| `GET /oauth/authorize`                        | PKCE S256 only → the provider (code + PKCE + nonce) → `/oauth/callback`      |
+| `POST /oauth/token`                           | `authorization_code` (one-time, PKCE-checked) and `refresh_token` (rotating) |
 
 - Access tokens are HMAC-signed (`PAGED_TOKEN_SECRET`, ≥ 32 chars) and live an
   hour: checking one needs no lookup.

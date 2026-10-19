@@ -34,7 +34,14 @@
 //       be softened — the note now states that canvas and export
 //       AGREE, which is what the Vello mask work made true.
 
-import { describe, expect, it, beforeAll, beforeEach, afterAll } from "bun:test";
+import {
+  describe,
+  expect,
+  it,
+  beforeAll,
+  beforeEach,
+  afterAll,
+} from "bun:test";
 
 import type { CommandContribution, ElementId } from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
@@ -177,13 +184,18 @@ describe("draw conformance — opacity masks (C-28, engine protocol v58)", () =>
       expect(opacityMaskOf(null)).toBeNull();
       expect(opacityMaskOf({ v: 1, data: { opacityMask: 7 } })).toBeNull();
       expect(
-        opacityMaskOf({ v: 1, data: { opacityMask: { mask: { kind: "polygon" } } } }),
+        opacityMaskOf({
+          v: 1,
+          data: { opacityMask: { mask: { kind: "polygon" } } },
+        }),
       ).toBeNull();
       // An unknown mode reads as the default rather than propagating.
       expect(
         opacityMaskOf({
           v: 1,
-          data: { opacityMask: { mask: { kind: "oval", id: "u1" }, maskType: "nope" } },
+          data: {
+            opacityMask: { mask: { kind: "oval", id: "u1" }, maskType: "nope" },
+          },
         })!.maskType,
       ).toBe(DEFAULT_OPACITY_MASK_MODE);
     });
@@ -195,7 +207,7 @@ describe("draw conformance — opacity masks (C-28, engine protocol v58)", () =>
             kind: "notImplemented",
             details: {
               what:
-                'frame mutation failed: invalid value for FrameTransform on ' +
+                "frame mutation failed: invalid value for FrameTransform on " +
                 'Polygon("ua"): C-28: an item cannot mask itself',
             },
           },
@@ -300,9 +312,9 @@ describe("draw conformance — opacity masks (C-28, engine protocol v58)", () =>
         maskType: "alpha",
         invert: true,
       });
-      expect((await opacityMaskLinks(h.host)).map((l) => l.ref.mask.id)).toEqual([
-        "ub",
-      ]);
+      expect(
+        (await opacityMaskLinks(h.host)).map((l) => l.ref.mask.id),
+      ).toEqual(["ub"]);
 
       // MEASURED, not claimed: ONE undo restores the artwork AND drops
       // the stamp together…
@@ -338,7 +350,9 @@ describe("draw conformance — opacity masks (C-28, engine protocol v58)", () =>
       // ONE undo re-applies the mask WITH its record.
       await h.host.document.undo();
       expect(await leafKeys(h)).toEqual(["polygon:ua"]);
-      expect(opacityMaskOf(await h.host.document.getMetadata(A))).not.toBeNull();
+      expect(
+        opacityMaskOf(await h.host.document.getMetadata(A)),
+      ).not.toBeNull();
     });
 
     it("the release target is resolved from the STAMP, not from selection order", async () => {
@@ -349,8 +363,11 @@ describe("draw conformance — opacity masks (C-28, engine protocol v58)", () =>
       await h.host.selection.set([A]);
       const target = await resolveMaskTarget(h.host);
       expect(target).toEqual(A);
-      expect(await resolveMaskTarget(h.host, { targetId: { kind: "polygon", id: "ub" } }))
-        .toEqual({ kind: "polygon", id: "ub" });
+      expect(
+        await resolveMaskTarget(h.host, {
+          targetId: { kind: "polygon", id: "ub" },
+        }),
+      ).toEqual({ kind: "polygon", id: "ub" });
     });
 
     // ---------------------------------------------------- the refusals
@@ -410,9 +427,9 @@ describe("draw conformance — opacity masks (C-28, engine protocol v58)", () =>
       expect(
         await applyMakeOpacityMask(h.host, { targetId: textFrame, maskId: A }),
       ).toBeNull();
-      expect(
-        String(h.host.bindings.get(BIND_OPACITY_MASK_STATUS)),
-      ).toContain("cannot take part in an opacity mask");
+      expect(String(h.host.bindings.get(BIND_OPACITY_MASK_STATUS))).toContain(
+        "cannot take part in an opacity mask",
+      );
     });
 
     it("RELEASING an unmasked item reports the engine's sentence, not silence", async () => {

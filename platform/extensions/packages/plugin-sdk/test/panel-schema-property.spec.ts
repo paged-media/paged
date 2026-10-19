@@ -20,7 +20,12 @@
 
 import { describe, expect, it } from "bun:test";
 
-import type { PanelSchema, PluginManifest, PropertyFieldProps, PropertySchema } from "@paged-media/plugin-api";
+import type {
+  PanelSchema,
+  PluginManifest,
+  PropertyFieldProps,
+  PropertySchema,
+} from "@paged-media/plugin-api";
 
 import { createBundleHost } from "../src/host-impl";
 import { makeFakeEditor } from "./fake-editor";
@@ -39,7 +44,10 @@ const LAYER = "plugin:acme.img/layer";
 const ROWS: Record<string, PropertySchema[]> = {
   [LAYER]: [
     { path: "opacity", type: { kind: "number", unit: "percent" } },
-    { path: "blendMode", type: { kind: "enum", members: ["normal", "multiply"] } },
+    {
+      path: "blendMode",
+      type: { kind: "enum", members: ["normal", "multiply"] },
+    },
     { path: "points[].anchor", type: { kind: "point" } },
   ],
 };
@@ -53,8 +61,18 @@ const panel = (rows: PanelSchema["sections"][number]["rows"]): PanelSchema => ({
 
 describe("panel property rows", () => {
   it("the builders produce discriminated rows", () => {
-    const r = propertyRow("opacity", { bind: "activeLayer" }, { kind: LAYER, label: "Opacity" });
-    expect(r).toEqual({ field: "property", address: { bind: "activeLayer" }, path: "opacity", kind: LAYER, label: "Opacity" });
+    const r = propertyRow(
+      "opacity",
+      { bind: "activeLayer" },
+      { kind: LAYER, label: "Opacity" },
+    );
+    expect(r).toEqual({
+      field: "property",
+      address: { bind: "activeLayer" },
+      path: "opacity",
+      kind: LAYER,
+      label: "Opacity",
+    });
     expect(isPropertyRow(r)).toBe(true);
     expect(isPropertyRow({ widget: "paged.readout" })).toBe(false);
     const rows = propertyRows(LAYER, ["opacity", "blendMode"], "selection", {
@@ -80,7 +98,9 @@ describe("panel property rows", () => {
       propertyRow("points[3].anchor", { bind: "active" }, { kind: LAYER }),
       propertyRow("opacity", { addresses: [`${LAYER}/f1/7`] }, { kind: LAYER }),
     ]);
-    expect(validatePanelSchema(s, { schemaOf, pluginId: "acme.img" })).toEqual([]);
+    expect(validatePanelSchema(s, { schemaOf, pluginId: "acme.img" })).toEqual(
+      [],
+    );
   });
 
   it("reports malformed rows as data, never a throw", () => {
@@ -90,13 +110,26 @@ describe("panel property rows", () => {
       propertyRow("nope", "selection", { kind: LAYER }),
       propertyRow("opacity", { bind: "" }, { kind: LAYER }),
       propertyRow("opacity", "[[[", { kind: LAYER }),
-      propertyRow("opacity", { addresses: ["not an address"] }, { kind: LAYER }),
+      propertyRow(
+        "opacity",
+        { addresses: ["not an address"] },
+        { kind: LAYER },
+      ),
       propertyRow("opacity", "selection", { kind: "plugin:other.x/layer" }),
-      { field: "property", address: "selection", path: "opacity", kind: LAYER, widget: "paged.readout" } as never,
+      {
+        field: "property",
+        address: "selection",
+        path: "opacity",
+        kind: LAYER,
+        widget: "paged.readout",
+      } as never,
       { field: "widget", widget: "x" } as never,
     ]);
     const issues = validatePanelSchema(s, { schemaOf, pluginId: "acme.img" });
-    const at = (i: number) => issues.filter((x) => x.at === `sections[0].rows[${i}]`).map((x) => x.message);
+    const at = (i: number) =>
+      issues
+        .filter((x) => x.at === `sections[0].rows[${i}]`)
+        .map((x) => x.message);
     expect(at(0)).toEqual(['a row needs a widget id or field: "property"']);
     // A kind-less selection row is a core row: legal.
     expect(at(1)).toEqual([]);
@@ -110,21 +143,39 @@ describe("panel property rows", () => {
   });
 
   it("a selector address types the field by its last step", () => {
-    expect(selectorKind(`textFrame[name="a"] > ${LAYER}[name="b"]`)).toBe(LAYER);
+    expect(selectorKind(`textFrame[name="a"] > ${LAYER}[name="b"]`)).toBe(
+      LAYER,
+    );
     expect(selectorKind("frame")).toBe("frame");
     expect(selectorKind("[[")).toBeNull();
     // An unknown path on the selector's kind is caught without `kind`.
-    const issues = validatePanelSchema(panel([propertyRow("nope", `${LAYER}[name="b"]`)]), { schemaOf });
-    expect(issues).toEqual([{ at: "sections[0].rows[0]", message: `path "nope" is not a row of ${LAYER}` }]);
+    const issues = validatePanelSchema(
+      panel([propertyRow("nope", `${LAYER}[name="b"]`)]),
+      { schemaOf },
+    );
+    expect(issues).toEqual([
+      {
+        at: "sections[0].rows[0]",
+        message: `path "nope" is not a row of ${LAYER}`,
+      },
+    ]);
   });
 });
 
 describe("widgets.PropertyField", () => {
-  const MANIFEST: PluginManifest = { id: "acme.img", name: "img", version: "1.0.0", main: "x.js", engines: { paged: ">=0.0.0" } } as never;
+  const MANIFEST: PluginManifest = {
+    id: "acme.img",
+    name: "img",
+    version: "1.0.0",
+    main: "x.js",
+    engines: { paged: ">=0.0.0" },
+  } as never;
   const silent = { debug() {}, info() {}, warn() {}, error() {} };
   it("is optional: absent without an object-model host, present (and flagged) when injected", () => {
     const fake = makeFakeEditor();
-    const bare = createBundleHost(() => fake.editor, MANIFEST, { console: silent }).host;
+    const bare = createBundleHost(() => fake.editor, MANIFEST, {
+      console: silent,
+    }).host;
     expect(bare.widgets.PropertyField).toBeUndefined();
     expect(bare.supports("widgets.propertyField@1")).toBe(false);
     const Field = (_: PropertyFieldProps) => null;
@@ -143,7 +194,10 @@ describe("widgets.PropertyField", () => {
     }).host;
     expect(withValues.supports("widgets.propertyField.values@1")).toBe(true);
     // The flag without the field promises nothing.
-    const flagOnly = createBundleHost(() => fake.editor, MANIFEST, { console: silent, propertyFieldValues: true }).host;
+    const flagOnly = createBundleHost(() => fake.editor, MANIFEST, {
+      console: silent,
+      propertyFieldValues: true,
+    }).host;
     expect(flagOnly.supports("widgets.propertyField.values@1")).toBe(false);
     expect(typeof wired.widgets.CodeEditor).toBe("function");
   });
@@ -157,11 +211,16 @@ describe("publishObjectList", () => {
     let layers = ["plugin:acme.img/layer/f1/1", "plugin:acme.img/layer/f1/2"];
     const queries: string[] = [];
     const host = {
-      selection: { get: () => selection, onDidChange: (l: () => void) => (listeners.push(l), { dispose() {} }) },
+      selection: {
+        get: () => selection,
+        onDidChange: (l: () => void) => (listeners.push(l), { dispose() {} }),
+      },
       objects: {
         query: async (s: string) => (queries.push(s), layers),
         get: async (a: string, p: string) =>
-          p === "name" ? { kind: "value", value: `L${a.slice(-1)}` } : { kind: "value", value: 50 },
+          p === "name"
+            ? { kind: "value", value: `L${a.slice(-1)}` }
+            : { kind: "value", value: 50 },
         onDidChange: (l: () => void) => (listeners.push(l), { dispose() {} }),
       },
       bindings: {
@@ -173,7 +232,8 @@ describe("publishObjectList", () => {
     const list = publishObjectList(host as never, {
       rows: "rows",
       select: "layer",
-      selector: (sel) => (sel.length === 1 ? `${sel[0]} > plugin:acme.img/layer` : null),
+      selector: (sel) =>
+        sel.length === 1 ? `${sel[0]} > plugin:acme.img/layer` : null,
       secondaryPath: "opacity",
     });
     await list.refresh();
@@ -205,9 +265,18 @@ describe("publishObjectList — the selection event leads the snapshot", () => {
     const queries: string[] = [];
     const host = {
       // The snapshot lags: still empty when the event fires.
-      selection: { get: () => [], onDidChange: (l: (ids: unknown[]) => void) => ((onSel = l), { dispose() {} }) },
+      selection: {
+        get: () => [],
+        onDidChange: (l: (ids: unknown[]) => void) => (
+          (onSel = l),
+          { dispose() {} }
+        ),
+      },
       objects: {
-        query: async (s: string) => (queries.push(s), ["plugin:acme.doc/field/u1/f0"]),
+        query: async (s: string) => (
+          queries.push(s),
+          ["plugin:acme.doc/field/u1/f0"]
+        ),
         get: async () => ({ kind: "value", value: "First" }),
         onDidChange: (l: () => void) => ((onObj = l), { dispose() {} }),
       },
@@ -220,7 +289,8 @@ describe("publishObjectList — the selection event leads the snapshot", () => {
     const list = publishObjectList(host as never, {
       rows: "rows",
       select: "field",
-      selector: (sel) => (sel.length === 1 ? `${sel[0]} > plugin:acme.doc/field` : null),
+      selector: (sel) =>
+        sel.length === 1 ? `${sel[0]} > plugin:acme.doc/field` : null,
     });
     await list.refresh();
     expect(values.get("rows")).toEqual([]);

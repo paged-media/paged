@@ -49,7 +49,11 @@ export const WEB_PARTS_PREFIX = "paged/media.paged.web/";
 export interface WebSource {
   html: string;
   css: string;
-  options: { media: "print" | "screen"; overflow: "clip"; viewportWidth?: number };
+  options: {
+    media: "print" | "screen";
+    overflow: "clip";
+    viewportWidth?: number;
+  };
 }
 
 /** Split an HTML file into the envelope's two lanes, the way the
@@ -128,7 +132,10 @@ export async function readPartText(
         };
       }
     ).__canvas;
-    const reply = await c.client.send({ kind: "readPagedPart", payload: { path } });
+    const reply = await c.client.send({
+      kind: "readPagedPart",
+      payload: { path },
+    });
     if (reply.kind !== "pagedPartRead" || !reply.payload.found) return null;
     return new TextDecoder().decode(Uint8Array.from(reply.payload.bytes ?? []));
   }, path);
@@ -201,7 +208,10 @@ export async function persistedRecipients(
 ): Promise<Array<{ id: string; flow?: string }> | null> {
   // A handle reaches no read door, so resolve the frame's real id first.
   const [realId] = await doc.ids(frameId);
-  let envelope = await readWebLabel(doc.page, { kind: "rectangle", id: realId });
+  let envelope = await readWebLabel(doc.page, {
+    kind: "rectangle",
+    id: realId,
+  });
   const hash = envelope?.data?.ref?.hash;
   if (typeof hash === "string") {
     const text = await readPartText(

@@ -24,7 +24,12 @@
 // sidecar file read yet (data.governed.extract) and no native batch execution
 // (napi-rs) — the ENGINE sides are done; these are the seams.
 
-import { useEffect, useState, type CSSProperties, type ReactElement } from "react";
+import {
+  useEffect,
+  useState,
+  type CSSProperties,
+  type ReactElement,
+} from "react";
 import type { BundleHost } from "@paged-media/plugin-api";
 
 import type { LocaleInfo } from "../review";
@@ -122,8 +127,14 @@ export function makeDatasetPanel(
         // schema, columns undocumented until a sidecar lands.
         const cat = await session.governedCatalog(selected, { columns: [] });
         setCatalog(cat);
-        const sql = session.listQueries?.()?.find((q) => q.id === selected)?.sql;
-        setRows(sql ? ((await session.previewQuery(sql, PREVIEW_ROWS)) ?? null) : null);
+        const sql = session
+          .listQueries?.()
+          ?.find((q) => q.id === selected)?.sql;
+        setRows(
+          sql
+            ? ((await session.previewQuery(sql, PREVIEW_ROWS)) ?? null)
+            : null,
+        );
         refreshSnapshot();
       } catch (e) {
         setError(String(e));
@@ -160,7 +171,9 @@ export function makeDatasetPanel(
       if (!planMode) return;
       const rf = session.listBindings().find((b) => b.kind === "recordFlow");
       if (!rf) {
-        setError("no record-flow binding — define one in the Bindings panel first");
+        setError(
+          "no record-flow binding — define one in the Bindings panel first",
+        );
         return;
       }
       setError("");
@@ -178,7 +191,11 @@ export function makeDatasetPanel(
     async function publish(): Promise<void> {
       setError("");
       try {
-        const pub = await session.publishProvider(selected, `${selected}-dataset`, "dataset");
+        const pub = await session.publishProvider(
+          selected,
+          `${selected}-dataset`,
+          "dataset",
+        );
         // Registered with the host's data-provider registry (D-09) when the
         // host injects one; only a host without it gets the "can't share" note.
         setProviderNote(
@@ -263,7 +280,9 @@ export function makeDatasetPanel(
       await refreshPalette();
     }
 
-    const flowBinding = (session.listBindings?.() ?? []).find((b) => b.kind === "recordFlow");
+    const flowBinding = (session.listBindings?.() ?? []).find(
+      (b) => b.kind === "recordFlow",
+    );
     const openPanel = (id: string): void => {
       try {
         host.shell.openPanel(id);
@@ -310,11 +329,19 @@ export function makeDatasetPanel(
                 : "No queries yet. Pick records in Bindings, or save a query in Data query."}
             </p>
             {snapshot.sources.length === 0 ? (
-              <button type="button" data-data-dataset-open-sources onClick={() => openPanel(SOURCES_PANEL_ID)}>
+              <button
+                type="button"
+                data-data-dataset-open-sources
+                onClick={() => openPanel(SOURCES_PANEL_ID)}
+              >
                 Open Data sources
               </button>
             ) : (
-              <button type="button" data-data-dataset-open-query onClick={() => openPanel(QUERY_PANEL_ID)}>
+              <button
+                type="button"
+                data-data-dataset-open-query
+                onClick={() => openPanel(QUERY_PANEL_ID)}
+              >
                 Open Data query
               </button>
             )}
@@ -357,12 +384,19 @@ export function makeDatasetPanel(
 
             {catalog && (
               <div style={note}>
-                {catalog.columns.length} column{catalog.columns.length === 1 ? "" : "s"} · {documented} documented
-                {drift > 0 ? ` · ${drift} schema note${drift === 1 ? "" : "s"}` : ""}
+                {catalog.columns.length} column
+                {catalog.columns.length === 1 ? "" : "s"} · {documented}{" "}
+                documented
+                {drift > 0
+                  ? ` · ${drift} schema note${drift === 1 ? "" : "s"}`
+                  : ""}
               </div>
             )}
             {rows && rows.diagnostic && (
-              <div style={{ color: "var(--status-error)" }} data-data-dataset-rows-error>
+              <div
+                style={{ color: "var(--status-error)" }}
+                data-data-dataset-rows-error
+              >
                 {rows.diagnostic.message}
               </div>
             )}
@@ -376,7 +410,11 @@ export function makeDatasetPanel(
                           <th
                             key={c.name}
                             title={c.type}
-                            style={{ textAlign: "left", padding: "2px 6px", borderBottom: "1px solid var(--pg-border)" }}
+                            style={{
+                              textAlign: "left",
+                              padding: "2px 6px",
+                              borderBottom: "1px solid var(--pg-border)",
+                            }}
                           >
                             {c.name}
                           </th>
@@ -387,7 +425,14 @@ export function makeDatasetPanel(
                       {rows.rows.map((r, i) => (
                         <tr key={i}>
                           {r.map((v, j) => (
-                            <td key={j} style={{ ...mono, padding: "2px 6px", whiteSpace: "nowrap" }}>
+                            <td
+                              key={j}
+                              style={{
+                                ...mono,
+                                padding: "2px 6px",
+                                whiteSpace: "nowrap",
+                              }}
+                            >
                               {v ?? ""}
                             </td>
                           ))}
@@ -420,9 +465,17 @@ export function makeDatasetPanel(
             </div>
             {plan && (
               <div>
-                {plan.units.length} output{plan.units.length === 1 ? "" : "s"} from {plan.totalRecords} record
+                {plan.units.length} output{plan.units.length === 1 ? "" : "s"}{" "}
+                from {plan.totalRecords} record
                 {plan.totalRecords === 1 ? "" : "s"}
-                <span style={note}> — {plan.units.slice(0, 4).map((u) => u.label).join(", ")}</span>
+                <span style={note}>
+                  {" "}
+                  —{" "}
+                  {plan.units
+                    .slice(0, 4)
+                    .map((u) => u.label)
+                    .join(", ")}
+                </span>
                 <div style={{ marginTop: 4 }}>
                   {/* The §10 in-app batch executor: real pagination over a
                       nominal frame chain. It writes no pages in this editor,
@@ -445,10 +498,14 @@ export function makeDatasetPanel(
             )}
             {runs && (
               <div data-data-batch-runs={runs.length}>
-                Planned {runs.length} output document{runs.length === 1 ? "" : "s"}:
+                Planned {runs.length} output document
+                {runs.length === 1 ? "" : "s"}:
                 <ul style={{ margin: "4px 0", paddingLeft: 16 }}>
                   {runs.slice(0, 6).map((r, i) => {
-                    const flow = r.flow as { frames?: unknown[]; total?: number };
+                    const flow = r.flow as {
+                      frames?: unknown[];
+                      total?: number;
+                    };
                     return (
                       <li key={i}>
                         {r.label}
@@ -460,7 +517,9 @@ export function makeDatasetPanel(
                       </li>
                     );
                   })}
-                  {runs.length > 6 && <li style={note}>… {runs.length - 6} more</li>}
+                  {runs.length > 6 && (
+                    <li style={note}>… {runs.length - 6} more</li>
+                  )}
                 </ul>
                 {/* Developer knowledge (was user-facing copy): real
                     pagination over a nominal one-frame chain (the live
@@ -492,14 +551,16 @@ export function makeDatasetPanel(
               </div>
               {variables.length === 0 ? (
                 <p style={note}>
-                  No variables yet. A text, image or visibility binding IS a variable —
-                  define one in the Bindings panel, then capture a data set here.
+                  No variables yet. A text, image or visibility binding IS a
+                  variable — define one in the Bindings panel, then capture a
+                  data set here.
                 </p>
               ) : (
                 <ul style={{ margin: "4px 0", paddingLeft: 16 }}>
                   {variables.map((v) => (
                     <li key={v.name} style={v.bound ? undefined : note}>
-                      <span style={mono}>{v.name}</span> <span style={note}>· {v.trait}</span>
+                      <span style={mono}>{v.name}</span>{" "}
+                      <span style={note}>· {v.trait}</span>
                       {!v.bound && (
                         <span style={note}>
                           {" "}
@@ -535,7 +596,10 @@ export function makeDatasetPanel(
               {dataSets.length > 0 && (
                 <div style={row}>
                   data set:{" "}
-                  <select value={activeSet} onChange={(e) => void switchTo(e.target.value)}>
+                  <select
+                    value={activeSet}
+                    onChange={(e) => void switchTo(e.target.value)}
+                  >
                     <option value="">— pick a data set —</option>
                     {dataSets.map((d) => (
                       <option key={d} value={d}>
@@ -544,7 +608,8 @@ export function makeDatasetPanel(
                     ))}
                   </select>
                   <span style={note}>
-                    {dataSets.length} set{dataSets.length === 1 ? "" : "s"} · switching is one undo step
+                    {dataSets.length} set{dataSets.length === 1 ? "" : "s"} ·
+                    switching is one undo step
                   </span>
                 </div>
               )}
@@ -561,13 +626,20 @@ export function makeDatasetPanel(
                     readOnly
                     value={exportedXml}
                     rows={8}
-                    style={{ width: "100%", fontFamily: "var(--font-mono, ui-monospace, monospace)", fontSize: 11 }}
+                    style={{
+                      width: "100%",
+                      fontFamily: "var(--font-mono, ui-monospace, monospace)",
+                      fontSize: 11,
+                    }}
                     data-data-variable-library
                   />
                 </div>
               )}
               {Object.keys(skips).length > 0 && (
-                <ul style={{ ...note, margin: "4px 0", paddingLeft: 16 }} data-data-set-skips>
+                <ul
+                  style={{ ...note, margin: "4px 0", paddingLeft: 16 }}
+                  data-data-set-skips
+                >
                   {Object.entries(skips).map(([name, why]) => (
                     <li key={name}>
                       skipped {name}: {why}
@@ -581,13 +653,20 @@ export function makeDatasetPanel(
             {snapshot.message && (
               <div
                 data-data-dataset-status={snapshot.status}
-                style={snapshot.status === "error" ? { color: "var(--status-error)" } : note}
+                style={
+                  snapshot.status === "error"
+                    ? { color: "var(--status-error)" }
+                    : note
+                }
               >
                 {snapshot.message}
               </div>
             )}
             {error && (
-              <div data-status="error" style={{ color: "var(--status-error, #e66)" }}>
+              <div
+                data-status="error"
+                style={{ color: "var(--status-error, #e66)" }}
+              >
                 {error}
               </div>
             )}
@@ -609,7 +688,9 @@ export function makeDatasetPanel(
             registration rides host.dataProviders (D-09) when the host injects
             it; native server/CI batch awaits the napi-rs binding. The engine
             sides are done. */}
-        <p style={note}>Server-side batch runs aren&apos;t available in this editor yet.</p>
+        <p style={note}>
+          Server-side batch runs aren&apos;t available in this editor yet.
+        </p>
       </div>
     );
   };

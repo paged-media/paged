@@ -40,8 +40,12 @@ interface CanvasGlobal {
     elementSelection: Ref[];
     client: {
       elementGeometry: (ids: Ref[]) => Promise<Geometry[]>;
-      executeScript: (s: string) => Promise<{ output: string[]; error: string | null }>;
-      mutate: (m: unknown) => Promise<{ kind: string; payload?: { createdId?: Ref | null } }>;
+      executeScript: (
+        s: string,
+      ) => Promise<{ output: string[]; error: string | null }>;
+      mutate: (
+        m: unknown,
+      ) => Promise<{ kind: string; payload?: { createdId?: Ref | null } }>;
       camera: { read: () => { scale: number } };
     };
     handle: { pageIds: string[] };
@@ -49,18 +53,35 @@ interface CanvasGlobal {
 }
 
 const geometry = (page: Page, ids: Ref[]) =>
-  page.evaluate((ids) => (globalThis as unknown as CanvasGlobal).__canvas.client.elementGeometry(ids), ids);
+  page.evaluate(
+    (ids) =>
+      (globalThis as unknown as CanvasGlobal).__canvas.client.elementGeometry(
+        ids,
+      ),
+    ids,
+  );
 
 const selection = (page: Page) =>
-  page.evaluate(() => (globalThis as unknown as CanvasGlobal).__canvas.elementSelection);
+  page.evaluate(
+    () => (globalThis as unknown as CanvasGlobal).__canvas.elementSelection,
+  );
 
 const cameraScale = (page: Page) =>
-  page.evaluate(() => (globalThis as unknown as CanvasGlobal).__canvas.client.camera.read().scale);
+  page.evaluate(
+    () =>
+      (globalThis as unknown as CanvasGlobal).__canvas.client.camera.read()
+        .scale,
+  );
 
 /** The union of the items' composed boxes. */
 async function unionBox(page: Page, ids: Ref[]): Promise<Box> {
   const items = await geometry(page, ids);
-  const box: Box = { left: Infinity, top: Infinity, right: -Infinity, bottom: -Infinity };
+  const box: Box = {
+    left: Infinity,
+    top: Infinity,
+    right: -Infinity,
+    bottom: -Infinity,
+  };
   for (const g of items) {
     const [top, left, bottom, right] = g.bounds;
     const m = g.itemTransform ?? [1, 0, 0, 1, 0, 0];
@@ -87,8 +108,18 @@ async function twoRectangles(page: Page): Promise<Ref[]> {
   const designer = new Designer(page);
   await designer.open();
   await designer.newDocument();
-  const a = await designer.drawRectangle({ x0: 100, y0: 100, x1: 200, y1: 180 });
-  const b = await designer.drawRectangle({ x0: 240, y0: 100, x1: 340, y1: 180 });
+  const a = await designer.drawRectangle({
+    x0: 100,
+    y0: 100,
+    x1: 200,
+    y1: 180,
+  });
+  const b = await designer.drawRectangle({
+    x0: 240,
+    y0: 100,
+    x1: 340,
+    y1: 180,
+  });
   return [
     { kind: "rectangle", id: a },
     { kind: "rectangle", id: b },
@@ -115,7 +146,9 @@ async function clickedGroup(page: Page): Promise<Ref> {
   await activateTool(page, "select");
   const p = await screenPoint(page, 150, 140);
   await page.mouse.click(p.x, p.y);
-  await expect.poll(async () => (await selection(page)).map((r) => r.kind)).toEqual(["group"]);
+  await expect
+    .poll(async () => (await selection(page)).map((r) => r.kind))
+    .toEqual(["group"]);
   return (await selection(page))[0];
 }
 
@@ -146,7 +179,10 @@ async function settledBox(page: Page, ids: Ref[], before: Box): Promise<Box> {
   await expect
     .poll(async () => {
       const b = await unionBox(page, ids);
-      return Math.abs(b.right - b.left - (before.right - before.left)) > 1 || Math.abs(b.bottom - b.top - (before.bottom - before.top)) > 1;
+      return (
+        Math.abs(b.right - b.left - (before.right - before.left)) > 1 ||
+        Math.abs(b.bottom - b.top - (before.bottom - before.top)) > 1
+      );
     })
     .toBe(true);
   // One more read after the commit has landed.
@@ -167,7 +203,10 @@ test.describe("a handle drag scales around the opposite handle", () => {
     const after = await settledBox(page, [group], before);
     // The opposite (north-west) corner stays; the grabbed corner follows
     // the pointer.
-    expect({ left: after.left, top: after.top }).toEqual({ left: near(before.left), top: near(before.top) });
+    expect({ left: after.left, top: after.top }).toEqual({
+      left: near(before.left),
+      top: near(before.top),
+    });
     expect({ right: after.right, bottom: after.bottom }).toEqual({
       right: near(before.right + 60 / k),
       bottom: near(before.bottom + 40 / k),
@@ -219,7 +258,10 @@ test.describe("a handle drag scales around the opposite handle", () => {
     await dragHandle(page, "southEast", 90, 10);
     await page.keyboard.up("Shift");
     const after = await settledBox(page, [group], before);
-    expect({ left: after.left, top: after.top }).toEqual({ left: near(before.left), top: near(before.top) });
+    expect({ left: after.left, top: after.top }).toEqual({
+      left: near(before.left),
+      top: near(before.top),
+    });
     const ratio = (b: Box) => (b.right - b.left) / (b.bottom - b.top);
     expect(ratio(after)).toBeCloseTo(ratio(before), 2);
   });
@@ -230,12 +272,19 @@ test.describe("a handle drag scales around the opposite handle", () => {
     const group = await clickedGroup(page);
     const before = await unionBox(page, [group]);
     const k = await cameraScale(page);
-    await dragHandle(page, "southEast", 40, 20, () => page.keyboard.down("Alt"));
+    await dragHandle(page, "southEast", 40, 20, () =>
+      page.keyboard.down("Alt"),
+    );
     await page.keyboard.up("Alt");
     const after = await settledBox(page, [group], before);
     // The centre stays; the grabbed corner follows the pointer and the
     // opposite one mirrors it.
-    expect({ left: after.left, top: after.top, right: after.right, bottom: after.bottom }).toEqual({
+    expect({
+      left: after.left,
+      top: after.top,
+      right: after.right,
+      bottom: after.bottom,
+    }).toEqual({
       left: near(before.left - 40 / k),
       top: near(before.top - 20 / k),
       right: near(before.right + 40 / k),
@@ -269,16 +318,35 @@ function rotAbout(deg: number, [px, py]: Pt): number[] {
 }
 
 const mutate = (page: Page, m: unknown) =>
-  page.evaluate((m) => (globalThis as unknown as CanvasGlobal).__canvas.client.mutate(m), m);
+  page.evaluate(
+    (m) => (globalThis as unknown as CanvasGlobal).__canvas.client.mutate(m),
+    m,
+  );
 
 /** A rectangle with `bounds` placed by `transform`, made over the wire. */
-async function frame(page: Page, bounds: number[], transform?: number[]): Promise<Ref> {
-  const pageId = await page.evaluate(() => (globalThis as unknown as CanvasGlobal).__canvas.handle.pageIds[0]);
-  const made = await mutate(page, { op: "insertFrame", args: { pageId, bounds } });
+async function frame(
+  page: Page,
+  bounds: number[],
+  transform?: number[],
+): Promise<Ref> {
+  const pageId = await page.evaluate(
+    () => (globalThis as unknown as CanvasGlobal).__canvas.handle.pageIds[0],
+  );
+  const made = await mutate(page, {
+    op: "insertFrame",
+    args: { pageId, bounds },
+  });
   const id = made.payload?.createdId;
   expect(id, "insertFrame mints the frame").toBeTruthy();
   if (transform) {
-    expect((await mutate(page, { op: "moveFrame", args: { frameId: id!.id, transform } })).kind).toBe("mutationApplied");
+    expect(
+      (
+        await mutate(page, {
+          op: "moveFrame",
+          args: { frameId: id!.id, transform },
+        })
+      ).kind,
+    ).toBe("mutationApplied");
   }
   return id!;
 }
@@ -289,7 +357,10 @@ async function frame(page: Page, bounds: number[], transform?: number[]): Promis
 function measure(g: Geometry) {
   const [t, l, b, r] = g.bounds;
   const m = g.itemTransform ?? [1, 0, 0, 1, 0, 0];
-  const at = (x: number, y: number): Pt => [m[0] * x + m[2] * y + m[4], m[1] * x + m[3] * y + m[5]];
+  const at = (x: number, y: number): Pt => [
+    m[0] * x + m[2] * y + m[4],
+    m[1] * x + m[3] * y + m[5],
+  ];
   const nw = at(l, t);
   const ne = at(r, t);
   const sw = at(l, b);
@@ -309,13 +380,22 @@ function measure(g: Geometry) {
   };
 }
 
-const measured = async (page: Page, ref: Ref) => measure((await geometry(page, [ref]))[0]);
+const measured = async (page: Page, ref: Ref) =>
+  measure((await geometry(page, [ref]))[0]);
 
-const closePt = ([x, y]: Pt, digits = 0) => [expect.closeTo(x, digits), expect.closeTo(y, digits)];
+const closePt = ([x, y]: Pt, digits = 0) => [
+  expect.closeTo(x, digits),
+  expect.closeTo(y, digits),
+];
 
 /** Select by a script, then wait until the chrome's `handle` sits on
  *  `at` (page space): the selection box is drawn and current. */
-async function selectAndSettle(page: Page, refs: Ref[], handle: string, at: () => Promise<Pt>): Promise<void> {
+async function selectAndSettle(
+  page: Page,
+  refs: Ref[],
+  handle: string,
+  at: () => Promise<Pt>,
+): Promise<void> {
   await page.evaluate(
     (ids) =>
       (globalThis as unknown as CanvasGlobal).__canvas.client.executeScript(
@@ -323,14 +403,22 @@ async function selectAndSettle(page: Page, refs: Ref[], handle: string, at: () =
       ),
     refs.map((r) => `${r.kind}:${r.id}`),
   );
-  await expect.poll(async () => (await selection(page)).length).toBe(refs.length);
+  await expect
+    .poll(async () => (await selection(page)).length)
+    .toBe(refs.length);
   await activateTool(page, "select");
   await expect
     .poll(async () => {
       const [x, y] = await at();
       const want = await screenPoint(page, x, y);
-      const b = await page.locator(`[data-handle="${handle}"]`).first().boundingBox();
-      return b !== null && Math.hypot(b.x + b.width / 2 - want.x, b.y + b.height / 2 - want.y) < 1;
+      const b = await page
+        .locator(`[data-handle="${handle}"]`)
+        .first()
+        .boundingBox();
+      return (
+        b !== null &&
+        Math.hypot(b.x + b.width / 2 - want.x, b.y + b.height / 2 - want.y) < 1
+      );
     })
     .toBe(true);
 }
@@ -346,16 +434,29 @@ test.describe("a handle drag on a rotated item", () => {
     // a group turned 30°.
     const a = await frame(page, [200, 150, 260, 310]);
     const b = await frame(page, [280, 200, 320, 280]);
-    const made = await mutate(page, { op: "createGroup", args: { memberIds: [a, b] } });
+    const made = await mutate(page, {
+      op: "createGroup",
+      args: { memberIds: [a, b] },
+    });
     const group = made.payload!.createdId!;
-    await mutate(page, { op: "setGroupTransform", args: { groupId: group.id, transform: rotAbout(30, [150, 200]) } });
+    await mutate(page, {
+      op: "setGroupTransform",
+      args: { groupId: group.id, transform: rotAbout(30, [150, 200]) },
+    });
 
     const before = await measured(page, group);
     expect(before.topEdge).toBeCloseTo(-30, 1);
-    await selectAndSettle(page, [group], "southEast", async () => (await measured(page, group)).se);
+    await selectAndSettle(
+      page,
+      [group],
+      "southEast",
+      async () => (await measured(page, group)).se,
+    );
     const k = await cameraScale(page);
     await dragHandle(page, "southEast", 40, 30);
-    await expect.poll(async () => (await measured(page, group)).w).toBeGreaterThan(before.w + 1);
+    await expect
+      .poll(async () => (await measured(page, group)).w)
+      .toBeGreaterThan(before.w + 1);
     await page.waitForTimeout(200);
 
     const after = await measured(page, group);
@@ -383,7 +484,12 @@ test.describe("a handle drag on a rotated item", () => {
       const r = await frame(page, [0, 0, 60, 160], rot(30, 200, 400));
       const [raw] = await geometry(page, [r]);
       const before = await measured(page, r);
-      await selectAndSettle(page, [r], "east", async () => (await measured(page, r)).east);
+      await selectAndSettle(
+        page,
+        [r],
+        "east",
+        async () => (await measured(page, r)).east,
+      );
       const k = await cameraScale(page);
 
       // The pointer moves on the page axes; only its share along the
@@ -394,19 +500,28 @@ test.describe("a handle drag on a rotated item", () => {
       if (how === "Cmd") await page.keyboard.up("Meta");
       const [ux, uy] = rot(30, 0, 0);
       const along = (dx * ux + dy * uy) / k;
-      await expect.poll(async () => (await measured(page, r)).w).toBeGreaterThan(before.w + 1);
+      await expect
+        .poll(async () => (await measured(page, r)).w)
+        .toBeGreaterThan(before.w + 1);
       await page.waitForTimeout(200);
 
       const after = await measured(page, r);
-      expect(after.w, "longer by the drag along its own axis").toBeCloseTo(before.w + along, 0);
+      expect(after.w, "longer by the drag along its own axis").toBeCloseTo(
+        before.w + along,
+        0,
+      );
       expect(after.h, "no taller").toBeCloseTo(before.h, 1);
       expect(after.topEdge, "still at 30°").toBeCloseTo(-30, 1);
       expect(after.corner, "still a rectangle").toBeCloseTo(90, 1);
-      expect(after.west, "the opposite side stays").toEqual(closePt(before.west));
+      expect(after.west, "the opposite side stays").toEqual(
+        closePt(before.west),
+      );
       // A plain drag resizes the frame's bounds; Cmd scales its transform.
       const [now] = await geometry(page, [r]);
       if (how === "plain") {
-        expect(now.itemTransform?.slice(0, 4)).toEqual(raw.itemTransform?.slice(0, 4));
+        expect(now.itemTransform?.slice(0, 4)).toEqual(
+          raw.itemTransform?.slice(0, 4),
+        );
       } else {
         expect(now.bounds).toEqual(raw.bounds);
       }
@@ -432,12 +547,17 @@ test.describe("a handle drag on a rotated item", () => {
 
     // The union's east side out by half its width: 150% along x.
     await dragHandle(page, "east", ((before.right - before.left) / 2) * k, 0);
-    await expect.poll(async () => (await box()).right).toBeGreaterThan(before.right + 1);
+    await expect
+      .poll(async () => (await box()).right)
+      .toBeGreaterThan(before.right + 1);
     await page.waitForTimeout(200);
 
     const after = await box();
     expect(after.left, "the opposite side stays").toBeCloseTo(before.left, 0);
-    expect(after.right - after.left).toBeCloseTo(1.5 * (before.right - before.left), 0);
+    expect(after.right - after.left).toBeCloseTo(
+      1.5 * (before.right - before.left),
+      0,
+    );
     // InDesign's readback (scale-frame-probe, 3b): both are sheared.
     const m30 = await measured(page, r30);
     expect(m30.w).toBeCloseTo(222.71, 0);

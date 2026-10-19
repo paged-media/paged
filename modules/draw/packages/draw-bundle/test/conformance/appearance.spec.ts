@@ -50,7 +50,10 @@ import {
 import { F1_MULTI_SHAPE } from "../fixtures/corpus";
 import { openHost } from "./host";
 
-const RECT = { kind: "rectangle", id: F1_MULTI_SHAPE.ids.rectangle! } as ElementId;
+const RECT = {
+  kind: "rectangle",
+  id: F1_MULTI_SHAPE.ids.rectangle!,
+} as ElementId;
 
 async function readProp(
   h: HeadlessHost,
@@ -68,9 +71,20 @@ describe("draw conformance — Appearance model (Phase 9 Tier B)", () => {
   describe("stack ↔ envelope round-trip", () => {
     it("appearanceOf reads the stack out of an envelope (empty when absent)", () => {
       expect(appearanceOf(null)).toEqual({ fills: [], strokes: [] });
-      expect(appearanceOf({ v: 1, data: {} })).toEqual({ fills: [], strokes: [] });
-      const env = { v: 1, data: { appearance: { fills: [{ color: "Color/Black" }], strokes: [] } } };
-      expect(appearanceOf(env)).toEqual({ fills: [{ color: "Color/Black" }], strokes: [] });
+      expect(appearanceOf({ v: 1, data: {} })).toEqual({
+        fills: [],
+        strokes: [],
+      });
+      const env = {
+        v: 1,
+        data: {
+          appearance: { fills: [{ color: "Color/Black" }], strokes: [] },
+        },
+      };
+      expect(appearanceOf(env)).toEqual({
+        fills: [{ color: "Color/Black" }],
+        strokes: [],
+      });
     });
 
     it("withAppearance merges the stack, preserving other draw metadata", () => {
@@ -86,9 +100,21 @@ describe("draw conformance — Appearance model (Phase 9 Tier B)", () => {
     });
 
     it("an empty stack drops the key (and clears to null when alone)", () => {
-      const withOther = { v: 1, data: { tool: "x", appearance: { fills: [{ color: "C" }], strokes: [] } } };
-      expect(withAppearance(withOther, { fills: [], strokes: [] })).toEqual({ v: 1, data: { tool: "x" } });
-      const alone = { v: 1, data: { appearance: { fills: [{ color: "C" }], strokes: [] } } };
+      const withOther = {
+        v: 1,
+        data: {
+          tool: "x",
+          appearance: { fills: [{ color: "C" }], strokes: [] },
+        },
+      };
+      expect(withAppearance(withOther, { fills: [], strokes: [] })).toEqual({
+        v: 1,
+        data: { tool: "x" },
+      });
+      const alone = {
+        v: 1,
+        data: { appearance: { fills: [{ color: "C" }], strokes: [] } },
+      };
       expect(withAppearance(alone, { fills: [], strokes: [] })).toBeNull();
     });
   });
@@ -110,25 +136,43 @@ describe("draw conformance — Appearance model (Phase 9 Tier B)", () => {
       expect(ops).toEqual([
         {
           op: "setElementProperty",
-          args: { elementId: RECT, path: "frameFillColor", value: { type: "colorRef", value: "Color/Paper" } },
+          args: {
+            elementId: RECT,
+            path: "frameFillColor",
+            value: { type: "colorRef", value: "Color/Paper" },
+          },
         },
         {
           op: "setElementProperty",
-          args: { elementId: RECT, path: "frameFillTint", value: { type: "length", value: 80 } },
+          args: {
+            elementId: RECT,
+            path: "frameFillTint",
+            value: { type: "length", value: 80 },
+          },
         },
         {
           op: "setElementProperty",
-          args: { elementId: RECT, path: "frameStrokeColor", value: { type: "colorRef", value: "Color/Black" } },
+          args: {
+            elementId: RECT,
+            path: "frameStrokeColor",
+            value: { type: "colorRef", value: "Color/Black" },
+          },
         },
         {
           op: "setElementProperty",
-          args: { elementId: RECT, path: "frameStrokeWeight", value: { type: "length", value: 3 } },
+          args: {
+            elementId: RECT,
+            path: "frameStrokeWeight",
+            value: { type: "length", value: 3 },
+          },
         },
       ]);
     });
 
     it("an empty stack bakes nothing (the frame keeps its own paint)", () => {
-      expect(bakeAppearanceMutations(RECT, { fills: [], strokes: [] })).toEqual([]);
+      expect(bakeAppearanceMutations(RECT, { fills: [], strokes: [] })).toEqual(
+        [],
+      );
     });
 
     it("a fill with no tint omits the frameFillTint write", () => {
@@ -137,7 +181,9 @@ describe("draw conformance — Appearance model (Phase 9 Tier B)", () => {
         strokes: [],
       });
       expect(ops).toHaveLength(1);
-      expect((ops[0] as { args: { path: string } }).args.path).toBe("frameFillColor");
+      expect((ops[0] as { args: { path: string } }).args.path).toBe(
+        "frameFillColor",
+      );
     });
   });
 
@@ -153,7 +199,10 @@ describe("draw conformance — Appearance model (Phase 9 Tier B)", () => {
 
     it("commitAppearance persists the stack AND bakes the top layer", async () => {
       const stack: AppearanceStack = {
-        fills: [{ color: "Color/Black", tint: 100 }, { color: "Color/Paper", tint: 100 }],
+        fills: [
+          { color: "Color/Black", tint: 100 },
+          { color: "Color/Paper", tint: 100 },
+        ],
         strokes: [{ color: "Color/Black", weight: 2 }],
       };
       const prev = await h.host.document.getMetadata(RECT);
@@ -187,19 +236,27 @@ describe("draw conformance — Appearance model (Phase 9 Tier B)", () => {
     it("the recorded Add fill command stacks a layer on the selected element", async () => {
       await h.host.selection.set([RECT]);
       const rec = h.contributions.find(
-        (c) => c.kind === "command" && c.id === "media.paged.draw.command.appearanceAddFill",
+        (c) =>
+          c.kind === "command" &&
+          c.id === "media.paged.draw.command.appearanceAddFill",
       );
       expect(rec).toBeDefined();
-      await (rec!.value as { handler: (p?: unknown) => unknown }).handler(undefined);
+      await (rec!.value as { handler: (p?: unknown) => unknown }).handler(
+        undefined,
+      );
 
       const env = await h.host.document.getMetadata(RECT);
       expect(appearanceOf(env).fills.length).toBe(1);
 
       // Clear via the Clear command, then wipe metadata for the next test.
       const clear = h.contributions.find(
-        (c) => c.kind === "command" && c.id === "media.paged.draw.command.appearanceClear",
+        (c) =>
+          c.kind === "command" &&
+          c.id === "media.paged.draw.command.appearanceClear",
       );
-      await (clear!.value as { handler: (p?: unknown) => unknown }).handler(undefined);
+      await (clear!.value as { handler: (p?: unknown) => unknown }).handler(
+        undefined,
+      );
       await h.host.document.setMetadata(RECT, null);
       expect(await h.host.document.getMetadata(RECT)).toBeNull();
     });

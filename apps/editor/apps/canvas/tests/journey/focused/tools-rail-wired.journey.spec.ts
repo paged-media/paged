@@ -33,7 +33,11 @@
 
 import { expect, test } from "@playwright/test";
 
-import { activateTool, screenPoint, treeCount } from "../../e2e/harness/viewport";
+import {
+  activateTool,
+  screenPoint,
+  treeCount,
+} from "../../e2e/harness/viewport";
 import { Designer } from "../driver/designer";
 
 type Page = import("@playwright/test").Page;
@@ -51,9 +55,9 @@ const readNumberProp = async (
         globalThis as unknown as {
           __canvas: {
             client: {
-              elementProperties: (
-                id: unknown,
-              ) => Promise<{ entries: Array<{ path: string; value: unknown }> } | null>;
+              elementProperties: (id: unknown) => Promise<{
+                entries: Array<{ path: string; value: unknown }>;
+              } | null>;
             };
           };
         }
@@ -73,7 +77,9 @@ const anchorCount = (page: Page, ref: Ref): Promise<number> =>
       globalThis as unknown as {
         __canvas: {
           client: {
-            pathAnchors: (id: unknown) => Promise<{ anchors: unknown[] } | null>;
+            pathAnchors: (
+              id: unknown,
+            ) => Promise<{ anchors: unknown[] } | null>;
           };
         };
       }
@@ -123,7 +129,9 @@ test.describe("journey · rail tools that were dead", () => {
     // ELLIPSE FRAME — Alt+click cycles the slot to it; drag → insertOval.
     try {
       const before = await treeCount(page, "oval");
-      await page.locator('[data-tool-slot="frame"]').click({ modifiers: ["Alt"] });
+      await page
+        .locator('[data-tool-slot="frame"]')
+        .click({ modifiers: ["Alt"] });
       await expect(
         page.locator(
           '[data-tool-slot="frame"][data-tool="paged.tool.ellipseFrame"][data-active="true"]',
@@ -141,7 +149,12 @@ test.describe("journey · rail tools that were dead", () => {
     // planned stub and never takes the face). Select a frame, drag →
     // the engine's `rotate` arm commits a non-zero rotation.
     try {
-      const rectId = await designer.drawRectangle({ x0: 100, y0: 300, x1: 260, y1: 400 });
+      const rectId = await designer.drawRectangle({
+        x0: 100,
+        y0: 300,
+        x1: 260,
+        y1: 400,
+      });
       const ref: Ref = { kind: "rectangle", id: rectId };
       await designer.selectElement("rectangle", rectId);
       await activateTool(page, "transform");
@@ -152,9 +165,15 @@ test.describe("journey · rail tools that were dead", () => {
       ).toBeVisible();
       await dragOnPage(page, [300, 350], [300, 250]);
       await expect
-        .poll(async () => Math.abs((await readNumberProp(page, ref, "frameRotationAngle")) ?? 0), {
-          timeout: 5000,
-        })
+        .poll(
+          async () =>
+            Math.abs(
+              (await readNumberProp(page, ref, "frameRotationAngle")) ?? 0,
+            ),
+          {
+            timeout: 5000,
+          },
+        )
         .toBeGreaterThan(0.5);
     } catch (e) {
       fail.push(`transform.rotate (${String(e).slice(0, 55)})`);
@@ -163,7 +182,12 @@ test.describe("journey · rail tools that were dead", () => {
     // SCALE — Alt+click cycles the transform slot to Scale; drag →
     // the `scale` arm moves the frame's scale off 1.0.
     try {
-      const rectId = await designer.drawRectangle({ x0: 100, y0: 430, x1: 260, y1: 520 });
+      const rectId = await designer.drawRectangle({
+        x0: 100,
+        y0: 430,
+        x1: 260,
+        y1: 520,
+      });
       const ref: Ref = { kind: "rectangle", id: rectId };
       await designer.selectElement("rectangle", rectId);
       await activateTool(page, "transform");
@@ -177,9 +201,15 @@ test.describe("journey · rail tools that were dead", () => {
       ).toBeVisible();
       await dragOnPage(page, [300, 470], [420, 560]);
       await expect
-        .poll(async () => Math.abs(((await readNumberProp(page, ref, "frameScaleX")) ?? 1) - 1), {
-          timeout: 5000,
-        })
+        .poll(
+          async () =>
+            Math.abs(
+              ((await readNumberProp(page, ref, "frameScaleX")) ?? 1) - 1,
+            ),
+          {
+            timeout: 5000,
+          },
+        )
         .toBeGreaterThan(0.01);
     } catch (e) {
       fail.push(`transform.scale (${String(e).slice(0, 55)})`);
@@ -199,7 +229,9 @@ test.describe("journey · rail tools that were dead", () => {
       const before = await anchorCount(page, ref);
       await designer.selectElement("polygon", pathId);
       // The Smooth tool lives behind the Pencil slot's flyout.
-      await page.locator('[data-tool-slot="pencil"]').click({ button: "right" });
+      await page
+        .locator('[data-tool-slot="pencil"]')
+        .click({ button: "right" });
       await page
         .locator('[data-tool-flyout="pencil"] [data-tool="paged.tool.smooth"]')
         .click();
@@ -217,6 +249,8 @@ test.describe("journey · rail tools that were dead", () => {
       fail.push(`pencil.smooth (${String(e).slice(0, 55)})`);
     }
 
-    expect(fail, `rail tools that did not drive: ${fail.join(" | ")}`).toEqual([]);
+    expect(fail, `rail tools that did not drive: ${fail.join(" | ")}`).toEqual(
+      [],
+    );
   });
 });

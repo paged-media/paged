@@ -72,9 +72,14 @@ export function bundleOf(mod: Record<string, unknown>): PagedBundle | null {
   return null;
 }
 
-function packageJsonOf(requireFrom: NodeRequire, name: string): { version?: string } | null {
+function packageJsonOf(
+  requireFrom: NodeRequire,
+  name: string,
+): { version?: string } | null {
   try {
-    return JSON.parse(readFileSync(requireFrom.resolve(`${name}/package.json`), "utf8"));
+    return JSON.parse(
+      readFileSync(requireFrom.resolve(`${name}/package.json`), "utf8"),
+    );
   } catch {
     return null;
   }
@@ -86,10 +91,18 @@ export function autoCandidates(cwd: string): string[] {
   const pj = join(cwd, "package.json");
   if (existsSync(pj)) {
     try {
-      const pkg = JSON.parse(readFileSync(pj, "utf8")) as Record<string, Record<string, string> | undefined>;
+      const pkg = JSON.parse(readFileSync(pj, "utf8")) as Record<
+        string,
+        Record<string, string> | undefined
+      >;
       const req = createRequire(pj);
-      for (const name of Object.keys({ ...pkg["dependencies"], ...pkg["devDependencies"] })) {
-        const dep = packageJsonOf(req, name) as { paged?: { manifest?: string } } | null;
+      for (const name of Object.keys({
+        ...pkg["dependencies"],
+        ...pkg["devDependencies"],
+      })) {
+        const dep = packageJsonOf(req, name) as {
+          paged?: { manifest?: string };
+        } | null;
         if (dep?.paged?.manifest) out.add(name);
       }
     } catch {
@@ -100,15 +113,26 @@ export function autoCandidates(cwd: string): string[] {
 }
 
 /** Import one bundle by package name or path, resolved from `cwd`. */
-export async function importBundle(source: string, cwd: string): Promise<DiscoveredBundle> {
+export async function importBundle(
+  source: string,
+  cwd: string,
+): Promise<DiscoveredBundle> {
   const anchor = join(cwd, "package.json");
   const req = createRequire(anchor);
   const looksLikePath = source.startsWith(".") || isAbsolute(source);
   const resolved = looksLikePath ? resolve(cwd, source) : req.resolve(source);
-  const mod = (await import(pathToFileURL(resolved).href)) as Record<string, unknown>;
+  const mod = (await import(pathToFileURL(resolved).href)) as Record<
+    string,
+    unknown
+  >;
   const bundle = bundleOf(mod);
-  if (!bundle) throw new Error(`${source} exports no plugin bundle ({ manifest, activate })`);
-  const version = looksLikePath ? bundle.manifest.version : (packageJsonOf(req, source)?.version ?? bundle.manifest.version);
+  if (!bundle)
+    throw new Error(
+      `${source} exports no plugin bundle ({ manifest, activate })`,
+    );
+  const version = looksLikePath
+    ? bundle.manifest.version
+    : (packageJsonOf(req, source)?.version ?? bundle.manifest.version);
   return { source, version: version ?? null, bundle, module: mod };
 }
 

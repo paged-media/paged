@@ -44,7 +44,10 @@ const SHIFT: DirectSelectModifiers = { shift: true, alt: false };
 const ALT: DirectSelectModifiers = { shift: false, alt: true };
 
 const EMPTY: DirectSelectHit = { kind: "empty" };
-const anchorHit = (index: number): DirectSelectHit => ({ kind: "anchor", index });
+const anchorHit = (index: number): DirectSelectHit => ({
+  kind: "anchor",
+  index,
+});
 const handleHit = (index: number, side: "left" | "right"): DirectSelectHit => ({
   kind: "handle",
   index,
@@ -103,7 +106,12 @@ function machine(
   return new DirectSelectMachine({ table, slop: 2, nudgeStep: 1, ...extra });
 }
 
-function down(m: DirectSelectMachine, point: P, hit: DirectSelectHit, mods = NONE) {
+function down(
+  m: DirectSelectMachine,
+  point: P,
+  hit: DirectSelectHit,
+  mods = NONE,
+) {
   return m.handle({ type: "down", point, hit, modifiers: mods });
 }
 function move(m: DirectSelectMachine, point: P, mods = NONE) {
@@ -112,7 +120,12 @@ function move(m: DirectSelectMachine, point: P, mods = NONE) {
 function up(m: DirectSelectMachine, point: P, mods = NONE) {
   return m.handle({ type: "up", point, modifiers: mods });
 }
-function click(m: DirectSelectMachine, point: P, hit: DirectSelectHit, mods = NONE) {
+function click(
+  m: DirectSelectMachine,
+  point: P,
+  hit: DirectSelectHit,
+  mods = NONE,
+) {
   down(m, point, hit, mods);
   return up(m, point, mods);
 }
@@ -143,8 +156,14 @@ function expectTablesClose(
   expect(actual.anchors.length).toBe(expected.anchors.length);
   actual.anchors.forEach((a, i) => {
     for (const role of ["anchor", "left", "right"] as const) {
-      expect(a[role][0], `anchor ${i} ${role}.x`).toBeCloseTo(expected.anchors[i][role][0], digits);
-      expect(a[role][1], `anchor ${i} ${role}.y`).toBeCloseTo(expected.anchors[i][role][1], digits);
+      expect(a[role][0], `anchor ${i} ${role}.x`).toBeCloseTo(
+        expected.anchors[i][role][0],
+        digits,
+      );
+      expect(a[role][1], `anchor ${i} ${role}.y`).toBeCloseTo(
+        expected.anchors[i][role][1],
+        digits,
+      );
     }
   });
 }
@@ -161,7 +180,9 @@ describe("DirectSelectMachine — dragging anchors", () => {
     // ONE op: the engine drags both handles with the anchor.
     expect(snap.commit).toEqual({
       kind: "move",
-      ops: [{ op: "pathPointSet", index: 1, role: "anchor", position: [60, 70] }],
+      ops: [
+        { op: "pathPointSet", index: 1, role: "anchor", position: [60, 70] },
+      ],
     });
     expect(snap.selected).toEqual([1]);
     expect(snap.mode).toBe("idle");
@@ -253,7 +274,9 @@ describe("DirectSelectMachine — dragging handles", () => {
     expect(a.left[0]).toBeCloseTo(50, 10);
     expect(a.left[1]).toBeCloseTo(30, 10);
     expect(snap.commit!.kind).toBe("handle");
-    expect(snap.commit!.ops.map((o) => [o.op, o.index, "role" in o && o.role])).toEqual([
+    expect(
+      snap.commit!.ops.map((o) => [o.op, o.index, "role" in o && o.role]),
+    ).toEqual([
       ["pathPointSet", 1, "left"],
       ["pathPointSet", 1, "right"],
     ]);
@@ -287,7 +310,11 @@ describe("DirectSelectMachine — dragging handles", () => {
 
   it("a cusp is a corner: its handles are always independent", () => {
     const cusp: AnchorTable = {
-      anchors: [corner(0, 0), { anchor: [50, 50], left: [30, 50], right: [50, 90] }, corner(100, 0)],
+      anchors: [
+        corner(0, 0),
+        { anchor: [50, 50], left: [30, 50], right: [50, 90] },
+        corner(100, 0),
+      ],
       subpathStarts: [0],
       subpathOpen: [true],
     };
@@ -300,13 +327,20 @@ describe("DirectSelectMachine — dragging handles", () => {
 
   it("a one-handled anchor is a corner too: nothing to pair with", () => {
     const oneHanded: AnchorTable = {
-      anchors: [{ anchor: [0, 0], left: [0, 0], right: [30, 0] }, corner(100, 0)],
+      anchors: [
+        { anchor: [0, 0], left: [0, 0], right: [30, 0] },
+        corner(100, 0),
+      ],
       subpathStarts: [0],
       subpathOpen: [true],
     };
     const m = machine(oneHanded);
     const snap = drag(m, [30, 0], [30, 30], handleHit(0, "right"));
-    expect(snap.table.anchors[0]).toEqual({ anchor: [0, 0], left: [0, 0], right: [30, 30] });
+    expect(snap.table.anchors[0]).toEqual({
+      anchor: [0, 0],
+      left: [0, 0],
+      right: [30, 30],
+    });
     expect(snap.commit!.ops).toEqual([
       { op: "pathPointSet", index: 0, role: "right", position: [30, 30] },
     ]);
@@ -333,7 +367,9 @@ describe("DirectSelectMachine — dragging handles", () => {
 
   it("dragging a handle does not change the selection", () => {
     const m = machine(ARCH, { selection: [0, 2] });
-    expect(drag(m, [90, 50], [90, 80], handleHit(1, "right")).selected).toEqual([0, 2]);
+    expect(drag(m, [90, 50], [90, 80], handleHit(1, "right")).selected).toEqual(
+      [0, 2],
+    );
   });
 });
 
@@ -356,7 +392,9 @@ describe("DirectSelectMachine — dragging a segment", () => {
     expect(a.right[1]).toBeCloseTo(-80 / 3, 10);
     expect(b.left[1]).toBeCloseTo(-80 / 3, 10);
     expect(snap.commit!.kind).toBe("segment");
-    expect(snap.commit!.ops.map((o) => [o.index, "role" in o && o.role])).toEqual([
+    expect(
+      snap.commit!.ops.map((o) => [o.index, "role" in o && o.role]),
+    ).toEqual([
       [0, "right"],
       [1, "left"],
     ]);
@@ -375,13 +413,18 @@ describe("DirectSelectMachine — dragging a segment", () => {
     // Segment 3 runs (0,100) → (0,0).
     const snap = drag(m, [0, 50], [-20, 50], segmentHit(3, 0.5));
     // Ops are in ascending index order, whichever way the segment runs.
-    expect(snap.commit!.ops.map((o) => [o.index, "role" in o && o.role])).toEqual([
+    expect(
+      snap.commit!.ops.map((o) => [o.index, "role" in o && o.role]),
+    ).toEqual([
       [0, "left"],
       [3, "right"],
     ]);
     const s = snap.table.anchors[3];
     const e = snap.table.anchors[0];
-    expect(evalCubic(s.anchor, s.right, e.left, e.anchor, 0.5)[0]).toBeCloseTo(-20, 10);
+    expect(evalCubic(s.anchor, s.right, e.left, e.anchor, 0.5)[0]).toBeCloseTo(
+      -20,
+      10,
+    );
   });
 
   it("an OPEN contour's last anchor starts no segment — the press is empty space", () => {
@@ -469,7 +512,9 @@ describe("DirectSelectMachine — selecting", () => {
 
   it("reports the click's hit so a host can layer double-click / insert on it", () => {
     const m = machine(QUAD);
-    expect(click(m, [50, 0], segmentHit(0, 0.5)).click).toEqual(segmentHit(0, 0.5));
+    expect(click(m, [50, 0], segmentHit(0, 0.5)).click).toEqual(
+      segmentHit(0, 0.5),
+    );
     expect(click(m, [0, 0], anchorHit(0)).click).toEqual(anchorHit(0));
     // A drag is not a click.
     expect(drag(m, [0, 0], [20, 20], anchorHit(0)).click).toBeNull();
@@ -512,7 +557,11 @@ describe("DirectSelectMachine — click vs drag", () => {
   });
 
   it("a drag that ends where it began emits no ops", () => {
-    for (const hit of [anchorHit(1), handleHit(1, "right"), segmentHit(0, 0.5)]) {
+    for (const hit of [
+      anchorHit(1),
+      handleHit(1, "right"),
+      segmentHit(0, 0.5),
+    ]) {
       const m = machine(ARCH);
       down(m, [50, 50], hit);
       // Out past the slop — the preview really did change…
@@ -533,7 +582,11 @@ describe("DirectSelectMachine — click vs drag", () => {
     // opposite handle would straighten it — an op for a drag that went
     // nowhere.
     const nearly: AnchorTable = {
-      anchors: [corner(0, 0), { anchor: [50, 50], left: [30, 50.01], right: [90, 50] }, corner(100, 0)],
+      anchors: [
+        corner(0, 0),
+        { anchor: [50, 50], left: [30, 50.01], right: [90, 50] },
+        corner(100, 0),
+      ],
       subpathStarts: [0],
       subpathOpen: [true],
     };
@@ -549,7 +602,10 @@ describe("DirectSelectMachine — click vs drag", () => {
     // Shift held on a handle that sits off the 45° grid: the constraint
     // would snap it, though the pointer is back where it started.
     const offGrid: AnchorTable = {
-      anchors: [corner(0, 0), { anchor: [50, 50], left: [50, 50], right: [90, 55] }],
+      anchors: [
+        corner(0, 0),
+        { anchor: [50, 50], left: [50, 50], right: [90, 55] },
+      ],
       subpathStarts: [0],
       subpathOpen: [true],
     };
@@ -617,13 +673,23 @@ describe("DirectSelectMachine — click vs drag", () => {
 
 describe("DirectSelectMachine — keys", () => {
   it("arrow keys nudge the selected anchors by the caller's step", () => {
-    const m = new DirectSelectMachine({ table: QUAD, slop: 2, nudgeStep: 0.5, selection: [0, 2] });
+    const m = new DirectSelectMachine({
+      table: QUAD,
+      slop: 2,
+      nudgeStep: 0.5,
+      selection: [0, 2],
+    });
     const right = key(m, "ArrowRight");
     expect(right.commit).toEqual({
       kind: "nudge",
       ops: [
         { op: "pathPointSet", index: 0, role: "anchor", position: [0.5, 0] },
-        { op: "pathPointSet", index: 2, role: "anchor", position: [100.5, 100] },
+        {
+          op: "pathPointSet",
+          index: 2,
+          role: "anchor",
+          position: [100.5, 100],
+        },
       ],
     });
     // Up is −y: page space is y-down.
@@ -637,13 +703,19 @@ describe("DirectSelectMachine — keys", () => {
 
   it("Shift multiplies the nudge by ten", () => {
     const m = machine(QUAD, { selection: [1] });
-    expect(key(m, "ArrowRight", SHIFT).table.anchors[1].anchor).toEqual([110, 0]);
+    expect(key(m, "ArrowRight", SHIFT).table.anchors[1].anchor).toEqual([
+      110, 0,
+    ]);
   });
 
   it("a nudge carries the handles with the anchor", () => {
     const m = machine(ARCH, { selection: [1] });
     const snap = key(m, "ArrowDown");
-    expect(snap.table.anchors[1]).toEqual({ anchor: [50, 51], left: [30, 51], right: [90, 51] });
+    expect(snap.table.anchors[1]).toEqual({
+      anchor: [50, 51],
+      left: [30, 51],
+      right: [90, 51],
+    });
     expect(snap.commit!.ops).toHaveLength(1);
   });
 
@@ -684,7 +756,9 @@ describe("DirectSelectMachine — keys", () => {
 
   it("Backspace is Delete", () => {
     const m = machine(QUAD, { selection: [0] });
-    expect(key(m, "Backspace").commit!.ops).toEqual([{ op: "pathPointRemove", index: 0 }]);
+    expect(key(m, "Backspace").commit!.ops).toEqual([
+      { op: "pathPointRemove", index: 0 },
+    ]);
   });
 
   it("Delete refuses to shrink a contour below two anchors — nothing is removed", () => {
@@ -731,7 +805,9 @@ describe("DirectSelectMachine — subpaths", () => {
     // Anchor 2 is the triangle's last: its segment returns to anchor 0,
     // not on to anchor 3 (the next contour's first).
     const snap = drag(m, [10, 20], [0, 20], segmentHit(2, 0.5));
-    expect(snap.commit!.ops.map((o) => [o.index, "role" in o && o.role])).toEqual([
+    expect(
+      snap.commit!.ops.map((o) => [o.index, "role" in o && o.role]),
+    ).toEqual([
       [0, "left"],
       [2, "right"],
     ]);
@@ -768,7 +844,9 @@ describe("DirectSelectMachine — subpaths", () => {
     const bare: AnchorTable = { anchors: QUAD.anchors, subpathStarts: [] };
     const m = machine(bare, { selection: [0] });
     // No `subpathOpen` ⇒ closed ⇒ the closing segment exists.
-    expect(drag(m, [0, 50], [-10, 50], segmentHit(3, 0.5)).commit!.ops).toHaveLength(2);
+    expect(
+      drag(m, [0, 50], [-10, 50], segmentHit(3, 0.5)).commit!.ops,
+    ).toHaveLength(2);
     expect(key(m, "Delete").table.subpathStarts).toEqual([]);
   });
 });
@@ -830,7 +908,9 @@ describe("DirectSelectMachine — coordinate spaces", () => {
     expect(snap.table.anchors[0].anchor).toEqual([0, 0]);
     // Delete addresses indices only, so it still works.
     m.setSelection([0]);
-    expect(key(m, "Delete").commit!.ops).toEqual([{ op: "pathPointRemove", index: 0 }]);
+    expect(key(m, "Delete").commit!.ops).toEqual([
+      { op: "pathPointRemove", index: 0 },
+    ]);
   });
 });
 
@@ -860,7 +940,11 @@ describe("DirectSelectMachine — the host's side", () => {
 
   it("a hit the table cannot honour degrades to empty space", () => {
     const m = machine(QUAD, { selection: [0] });
-    for (const hit of [anchorHit(9), handleHit(-1, "left"), segmentHit(0, Number.NaN)]) {
+    for (const hit of [
+      anchorHit(9),
+      handleHit(-1, "left"),
+      segmentHit(0, Number.NaN),
+    ]) {
       down(m, [0, 0], hit);
       expect(move(m, [50, 50]).mode).toBe("marquee");
       key(m, "Escape");
@@ -875,8 +959,19 @@ describe("DirectSelectMachine — the host's side", () => {
       op: "batch",
       args: {
         ops: [
-          { op: "pathPointSet", args: { elementId: id, index: 0, role: "anchor", position: [5, 5] } },
-          { op: "pathPointSet", args: { elementId: id, index: 1, role: "anchor", position: [105, 5] } },
+          {
+            op: "pathPointSet",
+            args: { elementId: id, index: 0, role: "anchor", position: [5, 5] },
+          },
+          {
+            op: "pathPointSet",
+            args: {
+              elementId: id,
+              index: 1,
+              role: "anchor",
+              position: [105, 5],
+            },
+          },
         ],
       },
     });
@@ -899,7 +994,11 @@ const point = fc.tuple(coord, coord);
 const modifiersArb = fc.record({ shift: fc.boolean(), alt: fc.boolean() });
 
 const tripleArb: fc.Arbitrary<AnchorTriple> = fc
-  .tuple(point, fc.option(point, { nil: null }), fc.option(point, { nil: null }))
+  .tuple(
+    point,
+    fc.option(point, { nil: null }),
+    fc.option(point, { nil: null }),
+  )
   .map(([anchor, left, right]) => ({
     anchor: [anchor[0], anchor[1]],
     left: left ? [left[0], left[1]] : [anchor[0], anchor[1]],
@@ -960,30 +1059,49 @@ describe("DirectSelectMachine — properties", () => {
 
   it("a paired-handle drag keeps the two handles collinear with the anchor", () => {
     fc.assert(
-      fc.property(smoothArb, fc.constantFrom<"left" | "right">("left", "right"), point, point, (a, side, from, to) => {
-        fc.pre(Math.hypot(to[0] - from[0], to[1] - from[1]) > 3);
-        const table: AnchorTable = {
-          anchors: [corner(-600, -600), a, corner(600, 600)],
-          subpathStarts: [0],
-          subpathOpen: [true],
-        };
-        const other = side === "left" ? "right" : "left";
-        const snap = drag(machine(table), from, to, handleHit(1, side));
-        const after = snap.table.anchors[1];
-        const dragged: P = [after[side][0] - a.anchor[0], after[side][1] - a.anchor[1]];
-        const opposite: P = [after[other][0] - a.anchor[0], after[other][1] - a.anchor[1]];
-        const dl = Math.hypot(dragged[0], dragged[1]);
-        fc.pre(dl > 1e-6);
-        const ol = Math.hypot(opposite[0], opposite[1]);
-        // Collinear…
-        expect(Math.abs(dragged[0] * opposite[1] - dragged[1] * opposite[0])).toBeLessThanOrEqual(1e-7 * dl * ol + 1e-9);
-        // …on opposite sides of the anchor…
-        expect(dragged[0] * opposite[0] + dragged[1] * opposite[1]).toBeLessThan(0);
-        // …and the opposite handle kept its own length.
-        expect(ol).toBeCloseTo(Math.hypot(a[other][0] - a.anchor[0], a[other][1] - a.anchor[1]), 6);
-        // The anchor itself never moves under a handle drag.
-        expect(after.anchor).toEqual(a.anchor);
-      }),
+      fc.property(
+        smoothArb,
+        fc.constantFrom<"left" | "right">("left", "right"),
+        point,
+        point,
+        (a, side, from, to) => {
+          fc.pre(Math.hypot(to[0] - from[0], to[1] - from[1]) > 3);
+          const table: AnchorTable = {
+            anchors: [corner(-600, -600), a, corner(600, 600)],
+            subpathStarts: [0],
+            subpathOpen: [true],
+          };
+          const other = side === "left" ? "right" : "left";
+          const snap = drag(machine(table), from, to, handleHit(1, side));
+          const after = snap.table.anchors[1];
+          const dragged: P = [
+            after[side][0] - a.anchor[0],
+            after[side][1] - a.anchor[1],
+          ];
+          const opposite: P = [
+            after[other][0] - a.anchor[0],
+            after[other][1] - a.anchor[1],
+          ];
+          const dl = Math.hypot(dragged[0], dragged[1]);
+          fc.pre(dl > 1e-6);
+          const ol = Math.hypot(opposite[0], opposite[1]);
+          // Collinear…
+          expect(
+            Math.abs(dragged[0] * opposite[1] - dragged[1] * opposite[0]),
+          ).toBeLessThanOrEqual(1e-7 * dl * ol + 1e-9);
+          // …on opposite sides of the anchor…
+          expect(
+            dragged[0] * opposite[0] + dragged[1] * opposite[1],
+          ).toBeLessThan(0);
+          // …and the opposite handle kept its own length.
+          expect(ol).toBeCloseTo(
+            Math.hypot(a[other][0] - a.anchor[0], a[other][1] - a.anchor[1]),
+            6,
+          );
+          // The anchor itself never moves under a handle drag.
+          expect(after.anchor).toEqual(a.anchor);
+        },
+      ),
     );
   });
 
@@ -997,9 +1115,18 @@ describe("DirectSelectMachine — properties", () => {
         point,
         (s, e, t, from, d) => {
           fc.pre(Math.hypot(d[0], d[1]) > 3);
-          const table: AnchorTable = { anchors: [s, e], subpathStarts: [0], subpathOpen: [true] };
+          const table: AnchorTable = {
+            anchors: [s, e],
+            subpathStarts: [0],
+            subpathOpen: [true],
+          };
           const before = evalCubic(s.anchor, s.right, e.left, e.anchor, t);
-          const snap = drag(machine(table), from, [from[0] + d[0], from[1] + d[1]], segmentHit(0, t));
+          const snap = drag(
+            machine(table),
+            from,
+            [from[0] + d[0], from[1] + d[1]],
+            segmentHit(0, t),
+          );
           const [a, b] = snap.table.anchors;
           const after = evalCubic(a.anchor, a.right, b.left, b.anchor, t);
           expect(after[0]).toBeCloseTo(before[0] + d[0], 6);
@@ -1018,13 +1145,30 @@ describe("DirectSelectMachine — properties", () => {
     const hit: fc.Arbitrary<DirectSelectHit> = fc.oneof(
       fc.constant<DirectSelectHit>(EMPTY),
       index.map(anchorHit),
-      fc.tuple(index, fc.constantFrom<"left" | "right">("left", "right")).map(([i, s]) => handleHit(i, s)),
-      fc.tuple(index, fc.double({ min: 0, max: 1, noNaN: true })).map(([i, t]) => segmentHit(i, t)),
+      fc
+        .tuple(index, fc.constantFrom<"left" | "right">("left", "right"))
+        .map(([i, s]) => handleHit(i, s)),
+      fc
+        .tuple(index, fc.double({ min: 0, max: 1, noNaN: true }))
+        .map(([i, t]) => segmentHit(i, t)),
     );
     return fc.oneof(
-      fc.record({ type: fc.constant("down" as const), point, hit, modifiers: modifiersArb }),
-      fc.record({ type: fc.constant("move" as const), point, modifiers: modifiersArb }),
-      fc.record({ type: fc.constant("up" as const), point, modifiers: modifiersArb }),
+      fc.record({
+        type: fc.constant("down" as const),
+        point,
+        hit,
+        modifiers: modifiersArb,
+      }),
+      fc.record({
+        type: fc.constant("move" as const),
+        point,
+        modifiers: modifiersArb,
+      }),
+      fc.record({
+        type: fc.constant("up" as const),
+        point,
+        modifiers: modifiersArb,
+      }),
       fc.record({
         type: fc.constant("key" as const),
         key: fc.constantFrom(
@@ -1041,7 +1185,10 @@ describe("DirectSelectMachine — properties", () => {
   };
 
   const scenarioArb = tableArb.chain((table) =>
-    fc.tuple(fc.constant(table), fc.array(eventArb(table.anchors.length), { maxLength: 40 })),
+    fc.tuple(
+      fc.constant(table),
+      fc.array(eventArb(table.anchors.length), { maxLength: 40 }),
+    ),
   );
 
   function replay(
@@ -1071,7 +1218,8 @@ describe("DirectSelectMachine — properties", () => {
         replay(table, events, null, (snap, engine) => {
           expectTablesClose(snap.table, engine, 6);
           expect([...snap.table.subpathStarts]).toEqual(engine.subpathStarts);
-          for (const i of snap.selected) expect(i).toBeLessThan(engine.anchors.length);
+          for (const i of snap.selected)
+            expect(i).toBeLessThan(engine.anchors.length);
         });
       }),
       { numRuns: 300 },
@@ -1113,21 +1261,33 @@ describe("DirectSelectMachine — properties", () => {
 
   it("Escape during any gesture leaves no trace", () => {
     fc.assert(
-      fc.property(tableArb, fc.nat(), point, point, modifiersArb, (table, pick, from, to, mods) => {
-        const n = table.anchors.length;
-        const hits = [EMPTY, anchorHit(pick % n), handleHit(pick % n, "left"), segmentHit(pick % n, 0.4)];
-        for (const hit of hits) {
-          const m = machine(table, { selection: [0] });
-          const before = m.snapshot();
-          down(m, from, hit, mods);
-          move(m, to, mods);
-          const snap = key(m, "Escape");
-          expect(snap.commit).toBeNull();
-          expect(snap.table).toBe(before.table);
-          expect(snap.selected).toEqual(before.selected);
-          expect(up(m, to, mods).commit).toBeNull();
-        }
-      }),
+      fc.property(
+        tableArb,
+        fc.nat(),
+        point,
+        point,
+        modifiersArb,
+        (table, pick, from, to, mods) => {
+          const n = table.anchors.length;
+          const hits = [
+            EMPTY,
+            anchorHit(pick % n),
+            handleHit(pick % n, "left"),
+            segmentHit(pick % n, 0.4),
+          ];
+          for (const hit of hits) {
+            const m = machine(table, { selection: [0] });
+            const before = m.snapshot();
+            down(m, from, hit, mods);
+            move(m, to, mods);
+            const snap = key(m, "Escape");
+            expect(snap.commit).toBeNull();
+            expect(snap.table).toBe(before.table);
+            expect(snap.selected).toEqual(before.selected);
+            expect(up(m, to, mods).commit).toBeNull();
+          }
+        },
+      ),
     );
   });
 });

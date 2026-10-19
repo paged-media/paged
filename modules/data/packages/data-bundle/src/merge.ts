@@ -56,9 +56,19 @@
 //   merged text and compares its lines × leading with the frame. A host that
 //   does report a story overset is believed as well.
 
-import type { BundleHost, ElementId, Mutation, MutationOutcome, PageId } from "@paged-media/plugin-api";
+import type {
+  BundleHost,
+  ElementId,
+  Mutation,
+  MutationOutcome,
+  PageId,
+} from "@paged-media/plugin-api";
 
-import { BINDING_KEY, makeEnvelope, type IdmlFit } from "../../data-host-model/src";
+import {
+  BINDING_KEY,
+  makeEnvelope,
+  type IdmlFit,
+} from "../../data-host-model/src";
 
 // ── the engine contract (data-lower/src/merge.rs, camelCase serde) ──────────
 
@@ -74,7 +84,8 @@ export type RecordsPerPage =
       columnSpacingPt?: number;
     };
 
-export type MergeFrameContent = { kind: "text"; text: string } | { kind: "image"; field: string };
+export type MergeFrameContent =
+  { kind: "text"; text: string } | { kind: "image"; field: string };
 
 export interface MergeTemplateFrame {
   id: string;
@@ -151,7 +162,12 @@ export interface TemplateFrameInfo {
    *  template read before the merge copied it. */
   frame?: CopiedProperty[];
   /** The text's font, size and leading, for overset measurement. */
-  font: { family: string; style: string | null; sizePt: number; leadingPt: number };
+  font: {
+    family: string;
+    style: string | null;
+    sizePt: number;
+    leadingPt: number;
+  };
 }
 
 export interface MergeTemplate {
@@ -257,14 +273,18 @@ const FRESH_FRAME_DEFAULTS: Readonly<Record<string, readonly unknown[]>> = {
  *  ([`FRESH_FRAME_DEFAULTS`]). Unset and default values are left to the
  *  fresh frame, so a plain template frame costs no extra operation per
  *  record. */
-export function isSetValue(v: { type?: string; value?: unknown } | null | undefined, path?: string): boolean {
+export function isSetValue(
+  v: { type?: string; value?: unknown } | null | undefined,
+  path?: string,
+): boolean {
   if (!v) return false;
   const x = v.value;
   if (x === null || x === undefined) return false;
   if (path && FRESH_FRAME_DEFAULTS[path]?.includes(x)) return false;
   if (typeof x === "boolean") return x;
   if (typeof x === "string") return x !== "" && !/\[None\]$/.test(x);
-  if (Array.isArray(x)) return v.type === "bounds" ? x.some((n) => n !== 0) : x.length > 0;
+  if (Array.isArray(x))
+    return v.type === "bounds" ? x.some((n) => n !== 0) : x.length > 0;
   return true;
 }
 
@@ -281,19 +301,31 @@ export function textOffsetLength(text: string): number {
 
 /** A story's text in the planner's convention: runs joined, paragraphs (and
  *  forced line breaks, which arrive as `\n` inside runs) separated by `\n`. */
-export function storyText(content: { paragraphs: { runs: { text: string }[] }[] }): string {
-  return content.paragraphs.map((p) => p.runs.map((r) => r.text).join("")).join("\n");
+export function storyText(content: {
+  paragraphs: { runs: { text: string }[] }[];
+}): string {
+  return content.paragraphs
+    .map((p) => p.runs.map((r) => r.text).join(""))
+    .join("\n");
 }
 
 /** Every element of one page, in z-order, from the scene tree. Pages are
  *  addressed by document order (the tree's page rows carry no id). */
 export function pageElements(
-  tree: readonly { kind: string; id?: ElementId | null; children?: readonly unknown[] }[],
+  tree: readonly {
+    kind: string;
+    id?: ElementId | null;
+    children?: readonly unknown[];
+  }[],
   pageIndex: number,
 ): ElementId[] {
   let index = 0;
   const out: ElementId[] = [];
-  type Node = { kind: string; id?: ElementId | null; children?: readonly Node[] };
+  type Node = {
+    kind: string;
+    id?: ElementId | null;
+    children?: readonly Node[];
+  };
   const walkItems = (nodes: readonly Node[]) => {
     for (const n of nodes) {
       if (n.id) out.push(n.id);
@@ -381,7 +413,8 @@ export async function readMergeTemplate(
   opts: ReadTemplateOptions = {},
 ): Promise<{ template: MergeTemplate | null; diagnostics: string[] }> {
   const diagnostics: string[] = [];
-  const pages = opts.pages ?? (await host.document.collection<TemplatePageRow>("pages"));
+  const pages =
+    opts.pages ?? (await host.document.collection<TemplatePageRow>("pages"));
   let pageId = opts.pageId;
   if (!pageId) {
     const meta = await host.document.meta();
@@ -398,34 +431,59 @@ export async function readMergeTemplate(
   const candidates =
     opts.frames ??
     pageElements(opts.tree ?? (await host.document.tree()), pageIndex).filter(
-      (e) => e.kind === "textFrame" || (e.kind === "rectangle" && (e.id as string) in imageFields),
+      (e) =>
+        e.kind === "textFrame" ||
+        (e.kind === "rectangle" && (e.id as string) in imageFields),
     );
   if (candidates.length === 0) {
-    return { template: null, diagnostics: ["merge: the template page has no frames"] };
+    return {
+      template: null,
+      diagnostics: ["merge: the template page has no frames"],
+    };
   }
   const geoms = await host.document.elementGeometry(candidates);
 
   // The text frames and their stories.
-  type Raw = { element: ElementId; spread: Bounds; storyId: string | null; text: string | null };
+  type Raw = {
+    element: ElementId;
+    spread: Bounds;
+    storyId: string | null;
+    text: string | null;
+  };
   const raws: Raw[] = [];
   // Every item of the page answers in page space when the engine names the
   // page's origin.
-  const pageLocal = geoms.some((g) => (g as { pageOrigin?: unknown }).pageOrigin != null);
+  const pageLocal = geoms.some(
+    (g) => (g as { pageOrigin?: unknown }).pageOrigin != null,
+  );
   for (const g of geoms) {
-    const spread = transformBounds(g.bounds as Bounds, g.itemTransform as number[] | null);
+    const spread = transformBounds(
+      g.bounds as Bounds,
+      g.itemTransform as number[] | null,
+    );
     if (g.id.kind === "textFrame") {
       const storyId = (g as { storyId?: string | null }).storyId ?? null;
-      const content = storyId ? await host.document.storyContent(storyId) : null;
+      const content = storyId
+        ? await host.document.storyContent(storyId)
+        : null;
       const text = content ? storyText(content) : "";
       if (!opts.frames && !HAS_PLACEHOLDER.test(text)) continue;
       raws.push({ element: g.id, spread, storyId, text });
-    } else if (g.id.kind === "rectangle" && (g.id.id as string) in imageFields) {
+    } else if (
+      g.id.kind === "rectangle" &&
+      (g.id.id as string) in imageFields
+    ) {
       raws.push({ element: g.id, spread, storyId: null, text: null });
     }
   }
   const firstText = raws.find((r) => r.text !== null);
   if (!firstText) {
-    return { template: null, diagnostics: ["merge: no text frame with a <<field>> on the template page"] };
+    return {
+      template: null,
+      diagnostics: [
+        "merge: no text frame with a <<field>> on the template page",
+      ],
+    };
   }
 
   // Recover the page's spread origin from one confirmed hit (an older
@@ -434,12 +492,14 @@ export async function readMergeTemplate(
   const s = firstText.spread;
   const cx = (s[1] + s[3]) / 2;
   const cy = (s[0] + s[2]) / 2;
-  for (const [ox, oy] of origin ? [] : [
-    [-pw / 2, -ph / 2],
-    [-pw, -ph / 2],
-    [0, -ph / 2],
-    [0, 0],
-  ]) {
+  for (const [ox, oy] of origin
+    ? []
+    : [
+        [-pw / 2, -ph / 2],
+        [-pw, -ph / 2],
+        [0, -ph / 2],
+        [0, 0],
+      ]) {
     const hit = await host.document.hitTest(pageId, [cx - ox, cy - oy]);
     if (hit?.frameId === (firstText.element.id as string) && hit.frameBounds) {
       origin = [s[1] - hit.frameBounds.left, s[0] - hit.frameBounds.top];
@@ -449,10 +509,17 @@ export async function readMergeTemplate(
   if (!origin) {
     return {
       template: null,
-      diagnostics: ["merge: could not locate the template frames on their page (hitTest found no frame)"],
+      diagnostics: [
+        "merge: could not locate the template frames on their page (hitTest found no frame)",
+      ],
     };
   }
-  const local = (b: Bounds): Bounds => [b[0] - origin![1], b[1] - origin![0], b[2] - origin![1], b[3] - origin![0]];
+  const local = (b: Bounds): Bounds => [
+    b[0] - origin![1],
+    b[1] - origin![0],
+    b[2] - origin![1],
+    b[3] - origin![0],
+  ];
 
   const frames: MergeTemplateFrame[] = [];
   const infos: TemplateFrameInfo[] = [];
@@ -460,27 +527,52 @@ export async function readMergeTemplate(
     const frame = await copiedFrameProperties(host, r.element);
     if (r.text !== null) {
       const format = await copiedProperties(host, r.storyId, r.text);
-      frames.push({ id: r.element.id as string, bounds: local(r.spread), content: { kind: "text", text: r.text } });
-      infos.push({ element: r.element, storyId: r.storyId, format, frame, font: fontOf(format) });
+      frames.push({
+        id: r.element.id as string,
+        bounds: local(r.spread),
+        content: { kind: "text", text: r.text },
+      });
+      infos.push({
+        element: r.element,
+        storyId: r.storyId,
+        format,
+        frame,
+        font: fontOf(format),
+      });
     } else {
       const field = imageFields[r.element.id as string];
-      frames.push({ id: r.element.id as string, bounds: local(r.spread), content: { kind: "image", field } });
+      frames.push({
+        id: r.element.id as string,
+        bounds: local(r.spread),
+        content: { kind: "image", field },
+      });
       infos.push({
         element: r.element,
         storyId: null,
         format: [],
         frame,
-        font: { family: "", style: null, sizePt: DEFAULT_SIZE_PT, leadingPt: DEFAULT_SIZE_PT * AUTO_LEADING },
+        font: {
+          family: "",
+          style: null,
+          sizePt: DEFAULT_SIZE_PT,
+          leadingPt: DEFAULT_SIZE_PT * AUTO_LEADING,
+        },
       });
     }
   }
-  if (frames.length !== raws.length) diagnostics.push("merge: some template frames were skipped");
+  if (frames.length !== raws.length)
+    diagnostics.push("merge: some template frames were skipped");
   return {
     template: {
       pageId,
       frames: infos,
       spec: {
-        marginBox: [page.marginTopPt, page.marginLeftPt, ph - page.marginBottomPt, pw - page.marginRightPt],
+        marginBox: [
+          page.marginTopPt,
+          page.marginLeftPt,
+          ph - page.marginBottomPt,
+          pw - page.marginRightPt,
+        ],
         frames,
       },
     },
@@ -500,12 +592,16 @@ async function copiedProperties(
     kind: "storyRange",
     id: { story_id: storyId, start: 0, end: textOffsetLength(text) },
   } as ElementId);
-  const entries = (props?.entries ?? []) as { path: string; value?: { value?: unknown } | null }[];
+  const entries = (props?.entries ?? []) as {
+    path: string;
+    value?: { value?: unknown } | null;
+  }[];
   const out: CopiedProperty[] = [];
   for (const path of COPIED_TEXT_PATHS) {
     const e = entries.find((x) => x.path === path);
     const v = e?.value;
-    if (!v || v.value === null || v.value === undefined || v.value === "") continue;
+    if (!v || v.value === null || v.value === undefined || v.value === "")
+      continue;
     out.push({ path, value: v });
   }
   return out;
@@ -514,29 +610,53 @@ async function copiedProperties(
 /** The frame-level formatting of a template frame: every property it sets
  *  that a merged copy takes over ([`isCopiedFramePath`]), its object style
  *  first so the frame's own overrides after it win. */
-async function copiedFrameProperties(host: BundleHost, element: ElementId): Promise<CopiedProperty[]> {
+async function copiedFrameProperties(
+  host: BundleHost,
+  element: ElementId,
+): Promise<CopiedProperty[]> {
   let props: Awaited<ReturnType<BundleHost["document"]["elementProperties"]>>;
   try {
     props = await host.document.elementProperties(element);
   } catch {
     return [];
   }
-  const entries = (props?.entries ?? []) as { path: string; value?: { type?: string; value?: unknown } | null }[];
+  const entries = (props?.entries ?? []) as {
+    path: string;
+    value?: { type?: string; value?: unknown } | null;
+  }[];
   const out: CopiedProperty[] = [];
   for (const e of entries) {
     if (!isCopiedFramePath(e.path) || !isSetValue(e.value, e.path)) continue;
     out.push({ path: e.path, value: e.value });
   }
-  out.sort((a, b) => Number(b.path === "appliedObjectStyle") - Number(a.path === "appliedObjectStyle"));
+  out.sort(
+    (a, b) =>
+      Number(b.path === "appliedObjectStyle") -
+      Number(a.path === "appliedObjectStyle"),
+  );
   return out;
 }
 
 function fontOf(format: CopiedProperty[]): TemplateFrameInfo["font"] {
-  const get = (p: string) => (format.find((f) => f.path === p)?.value as { value?: unknown } | undefined)?.value;
-  const size = typeof get("characterFontSize") === "number" ? (get("characterFontSize") as number) : DEFAULT_SIZE_PT;
-  const leading = typeof get("characterLeading") === "number" ? (get("characterLeading") as number) : size * AUTO_LEADING;
-  const family = typeof get("characterFontFamily") === "string" ? (get("characterFontFamily") as string) : "";
-  const style = typeof get("characterFontStyle") === "string" ? (get("characterFontStyle") as string) : null;
+  const get = (p: string) =>
+    (format.find((f) => f.path === p)?.value as { value?: unknown } | undefined)
+      ?.value;
+  const size =
+    typeof get("characterFontSize") === "number"
+      ? (get("characterFontSize") as number)
+      : DEFAULT_SIZE_PT;
+  const leading =
+    typeof get("characterLeading") === "number"
+      ? (get("characterLeading") as number)
+      : size * AUTO_LEADING;
+  const family =
+    typeof get("characterFontFamily") === "string"
+      ? (get("characterFontFamily") as string)
+      : "";
+  const style =
+    typeof get("characterFontStyle") === "string"
+      ? (get("characterFontStyle") as string)
+      : null;
   return { family, style, sizePt: size, leadingPt: leading };
 }
 
@@ -580,21 +700,28 @@ export function pageMutations(
     if (plan.pageCount <= 1) return null;
     ops.push(...(opts.clear ?? []));
     // Remove the merge frames first so the page copies come out empty.
-    if (opts.templatePresent !== false) ops.push(...removeTemplateFrames(template));
+    if (opts.templatePresent !== false)
+      ops.push(...removeTemplateFrames(template));
     for (let i = 1; i < plan.pageCount; i++) {
       ops.push({ op: "duplicatePage", args: { page: template.pageId } });
     }
   } else {
     ops.push(...(opts.clear ?? []));
     for (let i = 0; i < plan.pageCount; i++) {
-      ops.push({ op: "insertPage", args: { afterPageId: template.pageId, masterId: null } });
+      ops.push({
+        op: "insertPage",
+        args: { afterPageId: template.pageId, masterId: null },
+      });
     }
   }
   return ops.length === 0 ? null : { op: "batch", args: { ops } };
 }
 
 function removeTemplateFrames(template: MergeTemplate): Mutation[] {
-  return template.frames.map((f) => ({ op: "deleteFrame", args: { frameId: f.element.id as string } }));
+  return template.frames.map((f) => ({
+    op: "deleteFrame",
+    args: { frameId: f.element.id as string },
+  }));
 }
 
 /** The whole merge as ONE batch, for an engine that names pages minted in a
@@ -615,11 +742,15 @@ export function oneStepMutation(
   for (const op of (pagesOp.args as { ops: Mutation[] }).ops) {
     ops.push(op);
     if (op.op === "insertPage" || op.op === "duplicatePage") {
-      ops.push({ op: "bindCreated", args: { handle: `p${minted}` } } as Mutation);
+      ops.push({
+        op: "bindCreated",
+        args: { handle: `p${minted}` },
+      } as Mutation);
       minted += 1;
     }
   }
-  const handle = (k: number) => `$h:p${minted - 1 - (opts.template === "consume" ? k - 1 : k)}` as PageId;
+  const handle = (k: number) =>
+    `$h:p${minted - 1 - (opts.template === "consume" ? k - 1 : k)}` as PageId;
   const pages: PageId[] = Array.from({ length: plan.pageCount }, (_, k) =>
     opts.template === "consume" && k === 0 ? template.pageId : handle(k),
   );
@@ -630,7 +761,8 @@ export function oneStepMutation(
 
 /** Resolve an image reference against `imageBase`. */
 export function imageUri(ref: string, base?: string): string {
-  if (!base || /^[a-z][a-z0-9+.-]*:/i.test(ref) || ref.startsWith("/")) return ref;
+  if (!base || /^[a-z][a-z0-9+.-]*:/i.test(ref) || ref.startsWith("/"))
+    return ref;
   return base.endsWith("/") ? base + ref : `${base}/${ref}`;
 }
 
@@ -645,7 +777,10 @@ export function contentMutation(
 ): Mutation {
   const ops: Mutation[] = [];
   if (opts.template === "consume" && plan.pageCount <= 1) {
-    ops.push(...(opts.clear ?? []), ...(opts.templatePresent !== false ? removeTemplateFrames(template) : []));
+    ops.push(
+      ...(opts.clear ?? []),
+      ...(opts.templatePresent !== false ? removeTemplateFrames(template) : []),
+    );
   }
   const fit = opts.fit ?? "Proportionally";
   for (const rec of plan.records) {
@@ -667,18 +802,32 @@ export function contentMutation(
       // options, …) on the merged copy, as InDesign's merge keeps it.
       const frameProps = (frame: ElementId): Mutation[] =>
         (info?.frame ?? []).map(
-          (p) => ({ op: "setElementProperty", args: { elementId: frame, path: p.path, value: p.value } }) as Mutation,
+          (p) =>
+            ({
+              op: "setElementProperty",
+              args: { elementId: frame, path: p.path, value: p.value },
+            }) as Mutation,
         );
       if (f.text !== undefined) {
-        const frame: ElementId = { kind: "textFrame", id: `$h:${h}` } as ElementId;
+        const frame: ElementId = {
+          kind: "textFrame",
+          id: `$h:${h}`,
+        } as ElementId;
         ops.push({ op: "insertTextFrame", args: { pageId, bounds: f.bounds } });
         ops.push({ op: "bindCreated", args: { handle: h } });
         ops.push(...frameProps(frame));
         if (f.text.length > 0) {
-          ops.push({ op: "insertText", args: { storyId: `$h:${h}`, offset: 0, text: f.text } });
+          ops.push({
+            op: "insertText",
+            args: { storyId: `$h:${h}`, offset: 0, text: f.text },
+          });
           const range = {
             kind: "storyRange",
-            id: { story_id: `$h:${h}`, start: 0, end: textOffsetLength(f.text) },
+            id: {
+              story_id: `$h:${h}`,
+              start: 0,
+              end: textOffsetLength(f.text),
+            },
           } as ElementId;
           for (const p of info?.format ?? []) {
             ops.push({
@@ -687,16 +836,32 @@ export function contentMutation(
             } as Mutation);
           }
         }
-        ops.push({ op: "setPluginMetadata", args: { elementId: frame, key: BINDING_KEY, value: label } });
+        ops.push({
+          op: "setPluginMetadata",
+          args: { elementId: frame, key: BINDING_KEY, value: label },
+        });
       } else {
-        const frame: ElementId = { kind: "rectangle", id: `$h:${h}` } as ElementId;
+        const frame: ElementId = {
+          kind: "rectangle",
+          id: `$h:${h}`,
+        } as ElementId;
         ops.push({ op: "insertFrame", args: { pageId, bounds: f.bounds } });
         ops.push({ op: "bindCreated", args: { handle: h } });
         ops.push(...frameProps(frame));
         if (f.image) {
-          ops.push({ op: "placeImage", args: { elementId: `$h:${h}`, uri: imageUri(f.image, opts.imageBase), fit } });
+          ops.push({
+            op: "placeImage",
+            args: {
+              elementId: `$h:${h}`,
+              uri: imageUri(f.image, opts.imageBase),
+              fit,
+            },
+          });
         }
-        ops.push({ op: "setPluginMetadata", args: { elementId: frame, key: BINDING_KEY, value: label } });
+        ops.push({
+          op: "setPluginMetadata",
+          args: { elementId: frame, key: BINDING_KEY, value: label },
+        });
       }
     }
   }
@@ -734,8 +899,20 @@ export interface MergeResult {
 /** An applied `mutate` answer. */
 type AppliedOutcome = Extract<MutationOutcome, { applied: true }>;
 
-function failed(diagnostics: string[], mutateCalls = 0, plan: MergePlan | null = null): MergeResult {
-  return { ok: false, plan, pages: [], records: [], overset: [], mutateCalls, diagnostics };
+function failed(
+  diagnostics: string[],
+  mutateCalls = 0,
+  plan: MergePlan | null = null,
+): MergeResult {
+  return {
+    ok: false,
+    plan,
+    pages: [],
+    records: [],
+    overset: [],
+    mutateCalls,
+    diagnostics,
+  };
 }
 
 /**
@@ -763,7 +940,11 @@ export async function mergeRecords(
     return failed([`merge: ${String(e)}`]);
   }
   diagnostics.push(...plan.diagnostics);
-  if (plan.records.length === 0) return { ...failed([...diagnostics, "merge: no records"], 0, plan), ok: true };
+  if (plan.records.length === 0)
+    return {
+      ...failed([...diagnostics, "merge: no records"], 0, plan),
+      ok: true,
+    };
   const mergeId = opts.mergeId ?? `merge-${opts.query}`;
   const wopts: MergeWriteOptions = { ...opts, mergeId };
 
@@ -780,24 +961,38 @@ export async function mergeRecords(
       outcome = tried;
       pages = outputPages(await pageIds(host), template, wopts, plan.pageCount);
     } else {
-      diagnostics.push(`merge: the one-step batch was refused (${errorText(tried.error)}); pages, then content`);
+      diagnostics.push(
+        `merge: the one-step batch was refused (${errorText(tried.error)}); pages, then content`,
+      );
     }
   }
   if (!outcome) {
     const two = await writeInTwoSteps(host, plan, template, wopts);
     mutateCalls += two.mutateCalls;
-    if ("error" in two) return failed([...diagnostics, two.error], mutateCalls, plan);
+    if ("error" in two)
+      return failed([...diagnostics, two.error], mutateCalls, plan);
     outcome = two.outcome;
     pages = two.pages;
   }
   if (pages.length !== plan.pageCount) {
-    return failed([...diagnostics, `merge: expected ${plan.pageCount} output pages, found ${pages.length}`], mutateCalls, plan);
+    return failed(
+      [
+        ...diagnostics,
+        `merge: expected ${plan.pageCount} output pages, found ${pages.length}`,
+      ],
+      mutateCalls,
+      plan,
+    );
   }
   // Minted in creation order, one per record frame (pages a one-step batch
   // minted are left out). The handle names each; where a host reports it
   // null, the position does.
-  const order = plan.records.flatMap((rec) => rec.frames.map((f) => `m${rec.record}f${f.template}`));
-  const frames = (outcome.minted ?? []).filter((m) => !/page|spread/i.test(m.element.kind));
+  const order = plan.records.flatMap((rec) =>
+    rec.frames.map((f) => `m${rec.record}f${f.template}`),
+  );
+  const frames = (outcome.minted ?? []).filter(
+    (m) => !/page|spread/i.test(m.element.kind),
+  );
   const minted = new Map(frames.map((m, i) => [m.handle ?? order[i] ?? "", m]));
 
   // 3. Overset (DM-7): the engine lists the words, the host measures them at
@@ -807,7 +1002,11 @@ export async function mergeRecords(
   const metrics = await measureWords(host, template, words);
   const measured = engine.merge_overset(plan, metrics) as boolean[][];
   const reported = new Set(
-    (await host.document.collection<{ selfId: string; overset?: boolean }>("stories"))
+    (
+      await host.document.collection<{ selfId: string; overset?: boolean }>(
+        "stories",
+      )
+    )
       .filter((s) => s.overset)
       .map((s) => s.selfId),
   );
@@ -818,22 +1017,29 @@ export async function mergeRecords(
     rec.frames.forEach((f, k) => {
       const m = minted.get(`m${rec.record}f${f.template}`);
       if (!m) {
-        diagnostics.push(`merge: record ${rec.record} frame ${f.template} was not minted`);
+        diagnostics.push(
+          `merge: record ${rec.record} frame ${f.template} was not minted`,
+        );
         return;
       }
-      const over = (measured[r]?.[k] ?? false) || (m.storyId !== null && reported.has(m.storyId));
+      const over =
+        (measured[r]?.[k] ?? false) ||
+        (m.storyId !== null && reported.has(m.storyId));
       frames.push({ element: m.element, storyId: m.storyId, overset: over });
     });
     if (frames.some((f) => f.overset)) overset.push(rec.record);
     records.push({ record: rec.record, page: rec.page, frames });
   });
-  if (overset.length > 0) diagnostics.push(`merge: ${overset.length} record(s) overset`);
+  if (overset.length > 0)
+    diagnostics.push(`merge: ${overset.length} record(s) overset`);
   return { ok: true, plan, pages, records, overset, mutateCalls, diagnostics };
 }
 
 /** The document's page ids, in order. */
 async function pageIds(host: BundleHost): Promise<string[]> {
-  return (await host.document.collection<{ selfId: string }>("pages")).map((p) => p.selfId);
+  return (await host.document.collection<{ selfId: string }>("pages")).map(
+    (p) => p.selfId,
+  );
 }
 
 /** The merge's output pages: from the template on (`consume`) or after it
@@ -846,7 +1052,11 @@ function outputPages(
   count: number,
 ): PageId[] {
   const at = after.indexOf(template.pageId);
-  return (opts.template === "consume" ? after.slice(at, at + count) : after.slice(at + 1, at + 1 + count)) as PageId[];
+  return (
+    opts.template === "consume"
+      ? after.slice(at, at + count)
+      : after.slice(at + 1, at + 1 + count)
+  ) as PageId[];
 }
 
 /** The merge as two steps: the pages (when it needs new ones), then the
@@ -856,23 +1066,42 @@ async function writeInTwoSteps(
   plan: MergePlan,
   template: MergeTemplate,
   wopts: MergeWriteOptions,
-): Promise<{ error: string; mutateCalls: number } | { outcome: AppliedOutcome; pages: PageId[]; mutateCalls: number }> {
+): Promise<
+  | { error: string; mutateCalls: number }
+  | { outcome: AppliedOutcome; pages: PageId[]; mutateCalls: number }
+> {
   let mutateCalls = 0;
   const before = await pageIds(host);
   const pagesOp = pageMutations(plan, template, wopts);
   if (pagesOp) {
     mutateCalls += 1;
     const o = await host.document.mutate(pagesOp);
-    if (!o.applied) return { error: `merge: adding pages was refused: ${errorText(o.error)}`, mutateCalls };
+    if (!o.applied)
+      return {
+        error: `merge: adding pages was refused: ${errorText(o.error)}`,
+        mutateCalls,
+      };
   }
   const after = await pageIds(host);
   const pages = outputPages(after, template, wopts, plan.pageCount);
-  if (pages.length !== plan.pageCount || (pagesOp === null && after.length !== before.length)) {
-    return { error: `merge: expected ${plan.pageCount} output pages, found ${pages.length}`, mutateCalls };
+  if (
+    pages.length !== plan.pageCount ||
+    (pagesOp === null && after.length !== before.length)
+  ) {
+    return {
+      error: `merge: expected ${plan.pageCount} output pages, found ${pages.length}`,
+      mutateCalls,
+    };
   }
   mutateCalls += 1;
-  const o = await host.document.mutate(contentMutation(plan, template, pages, wopts));
-  if (!o.applied) return { error: `merge: the content batch was refused: ${errorText(o.error)}`, mutateCalls };
+  const o = await host.document.mutate(
+    contentMutation(plan, template, pages, wopts),
+  );
+  if (!o.applied)
+    return {
+      error: `merge: the content batch was refused: ${errorText(o.error)}`,
+      mutateCalls,
+    };
   return { outcome: o, pages, mutateCalls };
 }
 
@@ -886,7 +1115,10 @@ export async function measureWords(
 ): Promise<FrameMetrics[]> {
   if (host.supports("text.measureStrings@1")) {
     // Group the words by face + size: one call per group.
-    const groups = new Map<string, { font: TemplateFrameInfo["font"]; words: Set<string> }>();
+    const groups = new Map<
+      string,
+      { font: TemplateFrameInfo["font"]; words: Set<string> }
+    >();
     template.frames.forEach((f, i) => {
       const key = JSON.stringify([f.font.family, f.font.style, f.font.sizePt]);
       const g = groups.get(key) ?? { font: f.font, words: new Set<string>() };
@@ -897,11 +1129,23 @@ export async function measureWords(
     for (const [key, g] of groups) {
       const list = [...g.words];
       const measured =
-        list.length > 0 ? await host.text.measureStrings(g.font.family, g.font.style, list, g.font.sizePt) : [];
-      advance.set(key, new Map(list.map((w, k) => [w, measured[k]?.advance ?? 0])));
+        list.length > 0
+          ? await host.text.measureStrings(
+              g.font.family,
+              g.font.style,
+              list,
+              g.font.sizePt,
+            )
+          : [];
+      advance.set(
+        key,
+        new Map(list.map((w, k) => [w, measured[k]?.advance ?? 0])),
+      );
     }
     return template.frames.map((f, i) => {
-      const byWord = advance.get(JSON.stringify([f.font.family, f.font.style, f.font.sizePt]))!;
+      const byWord = advance.get(
+        JSON.stringify([f.font.family, f.font.style, f.font.sizePt]),
+      )!;
       const advances: Record<string, number> = {};
       for (const w of words[i] ?? []) advances[w] = byWord.get(w) ?? 0;
       return { leadingPt: f.font.leadingPt, advances };
@@ -912,7 +1156,9 @@ export async function measureWords(
     const font = template.frames[i].font;
     const advances: Record<string, number> = {};
     for (const w of words[i] ?? []) {
-      advances[w] = (await host.text.measureString(font.family, font.style, w, font.sizePt)).advance;
+      advances[w] = (
+        await host.text.measureString(font.family, font.style, w, font.sizePt)
+      ).advance;
     }
     metrics.push({ leadingPt: font.leadingPt, advances });
   }

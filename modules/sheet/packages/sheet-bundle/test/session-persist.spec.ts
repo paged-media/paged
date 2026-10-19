@@ -42,12 +42,20 @@ import { createWorkbookSession } from "../src/session";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const WASM = join(HERE, "..", "bin", "sheet_js_bg.wasm");
 const built = existsSync(WASM);
-const FIXTURE = join(HERE, "..", "..", "..", "corpus/xlsx-corpus/01-minimal.xlsx");
+const FIXTURE = join(
+  HERE,
+  "..",
+  "..",
+  "..",
+  "corpus/xlsx-corpus/01-minimal.xlsx",
+);
 
 if (process.env.REQUIRE_REAL_ENGINE === "1" && !built) {
   describe("session persistence (wasm artifact) — REQUIRED", () => {
     it("FAILS: REQUIRE_REAL_ENGINE=1 but the wasm artifact is missing", () => {
-      throw new Error(`REQUIRE_REAL_ENGINE=1 but ${WASM} is missing — run scripts/build-wasm.sh`);
+      throw new Error(
+        `REQUIRE_REAL_ENGINE=1 but ${WASM} is missing — run scripts/build-wasm.sh`,
+      );
     });
   });
 }
@@ -123,152 +131,158 @@ async function reload(host: BundleHost) {
   return next;
 }
 
-describe.skipIf(!built)("sheet edits persist [sheet.plugin.persistence]", () => {
-  afterEach(() => {
-    vi.useRealTimers();
-  });
+describe.skipIf(!built)(
+  "sheet edits persist [sheet.plugin.persistence]",
+  () => {
+    afterEach(() => {
+      vi.useRealTimers();
+    });
 
-  it("edit, let the debounce elapse, reload: the value and the formula survive", async () => {
-    const doc = fakeDocument();
-    const s1 = createWorkbookSession(doc.host);
-    await s1.import(new Uint8Array(readFileSync(FIXTURE)), "minimal.xlsx");
-    expect(doc.workbookWrites()).toBe(1); // the import itself
+    it("edit, let the debounce elapse, reload: the value and the formula survive", async () => {
+      const doc = fakeDocument();
+      const s1 = createWorkbookSession(doc.host);
+      await s1.import(new Uint8Array(readFileSync(FIXTURE)), "minimal.xlsx");
+      expect(doc.workbookWrites()).toBe(1); // the import itself
 
-    vi.useFakeTimers();
-    expect(s1.editCell(0, 9, 0, "42")).toBe(true);
-    expect(s1.editCell(0, 9, 1, "=A10*2")).toBe(true);
-    // Debounced: two edits in quick succession are ONE write, after the delay.
-    expect(doc.workbookWrites()).toBe(1);
-    await advanceTimersByTimeAsync(vi, 5_000);
-    vi.useRealTimers();
-    await waitFor(() => expect(doc.workbookWrites()).toBe(2));
+      vi.useFakeTimers();
+      expect(s1.editCell(0, 9, 0, "42")).toBe(true);
+      expect(s1.editCell(0, 9, 1, "=A10*2")).toBe(true);
+      // Debounced: two edits in quick succession are ONE write, after the delay.
+      expect(doc.workbookWrites()).toBe(1);
+      await advanceTimersByTimeAsync(vi, 5_000);
+      vi.useRealTimers();
+      await waitFor(() => expect(doc.workbookWrites()).toBe(2));
 
-    const s2 = await reload(doc.host);
-    expect(s2.state().engine!.getCellInput(0, 9, 0)).toBe("42");
-    expect(s2.state().engine!.getCellInput(0, 9, 1)).toBe("=A10*2");
-    expect(s2.state().engine!.getCellDisplay(0, 9, 1)).toBe("84");
-    s1.dispose();
-    s2.dispose();
-  });
+      const s2 = await reload(doc.host);
+      expect(s2.state().engine!.getCellInput(0, 9, 0)).toBe("42");
+      expect(s2.state().engine!.getCellInput(0, 9, 1)).toBe("=A10*2");
+      expect(s2.state().engine!.getCellDisplay(0, 9, 1)).toBe("84");
+      s1.dispose();
+      s2.dispose();
+    });
 
-  it("edit, deactivate before the debounce fires, reload: the edit is flushed, not dropped", async () => {
-    const doc = fakeDocument();
-    const s1 = createWorkbookSession(doc.host);
-    await s1.import(new Uint8Array(readFileSync(FIXTURE)), "minimal.xlsx");
-    expect(s1.editCell(0, 9, 0, "flushed")).toBe(true);
-    s1.dispose(); // the bundle deactivates (or the editor closes the doc)
-    await waitFor(() => expect(doc.workbookWrites()).toBe(2));
+    it("edit, deactivate before the debounce fires, reload: the edit is flushed, not dropped", async () => {
+      const doc = fakeDocument();
+      const s1 = createWorkbookSession(doc.host);
+      await s1.import(new Uint8Array(readFileSync(FIXTURE)), "minimal.xlsx");
+      expect(s1.editCell(0, 9, 0, "flushed")).toBe(true);
+      s1.dispose(); // the bundle deactivates (or the editor closes the doc)
+      await waitFor(() => expect(doc.workbookWrites()).toBe(2));
 
-    const s2 = await reload(doc.host);
-    expect(s2.state().engine!.getCellInput(0, 9, 0)).toBe("flushed");
-    s2.dispose();
-  });
+      const s2 = await reload(doc.host);
+      expect(s2.state().engine!.getCellInput(0, 9, 0)).toBe("flushed");
+      s2.dispose();
+    });
 
-  it("leaving the frame flushes: a save right after the exit carries the edit", async () => {
-    // The host has no will-save hook yet, so a document saved inside the
-    // debounce window shipped the PRE-edit workbook part — and reopening it
-    // then re-lowered the placed table from the stale workbook (the editor
-    // journey sheet-edit-persist, saving right after Esc). Exiting the
-    // frame is where the session's edits reach the page; the part follows
-    // at the same moment.
-    const doc = fakeDocument();
-    const s1 = createWorkbookSession(doc.host);
-    await s1.import(new Uint8Array(readFileSync(FIXTURE)), "minimal.xlsx");
-    vi.useFakeTimers();
-    expect(s1.editCell(0, 9, 0, "on exit")).toBe(true);
-    s1.hideGridInFrame(); // the context exits (Esc) — no timer has run
-    vi.useRealTimers();
-    await waitFor(() => expect(doc.workbookWrites()).toBe(2));
+    it("leaving the frame flushes: a save right after the exit carries the edit", async () => {
+      // The host has no will-save hook yet, so a document saved inside the
+      // debounce window shipped the PRE-edit workbook part — and reopening it
+      // then re-lowered the placed table from the stale workbook (the editor
+      // journey sheet-edit-persist, saving right after Esc). Exiting the
+      // frame is where the session's edits reach the page; the part follows
+      // at the same moment.
+      const doc = fakeDocument();
+      const s1 = createWorkbookSession(doc.host);
+      await s1.import(new Uint8Array(readFileSync(FIXTURE)), "minimal.xlsx");
+      vi.useFakeTimers();
+      expect(s1.editCell(0, 9, 0, "on exit")).toBe(true);
+      s1.hideGridInFrame(); // the context exits (Esc) — no timer has run
+      vi.useRealTimers();
+      await waitFor(() => expect(doc.workbookWrites()).toBe(2));
 
-    const s2 = await reload(doc.host);
-    expect(s2.state().engine!.getCellInput(0, 9, 0)).toBe("on exit");
-    s1.dispose();
-    s2.dispose();
-  });
+      const s2 = await reload(doc.host);
+      expect(s2.state().engine!.getCellInput(0, 9, 0)).toBe("on exit");
+      s1.dispose();
+      s2.dispose();
+    });
 
-  it("an undo is an edit too: undone value is what reloads", async () => {
-    const doc = fakeDocument();
-    const s1 = createWorkbookSession(doc.host);
-    await s1.import(new Uint8Array(readFileSync(FIXTURE)), "minimal.xlsx");
-    const before = s1.state().engine!.getCellInput(0, 0, 0);
-    expect(s1.editCell(0, 0, 0, "changed")).toBe(true);
-    expect(s1.undoCellEdit()).toBe(true);
-    s1.dispose();
-    await waitFor(() => expect(doc.workbookWrites()).toBe(2));
+    it("an undo is an edit too: undone value is what reloads", async () => {
+      const doc = fakeDocument();
+      const s1 = createWorkbookSession(doc.host);
+      await s1.import(new Uint8Array(readFileSync(FIXTURE)), "minimal.xlsx");
+      const before = s1.state().engine!.getCellInput(0, 0, 0);
+      expect(s1.editCell(0, 0, 0, "changed")).toBe(true);
+      expect(s1.undoCellEdit()).toBe(true);
+      s1.dispose();
+      await waitFor(() => expect(doc.workbookWrites()).toBe(2));
 
-    const s2 = await reload(doc.host);
-    expect(s2.state().engine!.getCellInput(0, 0, 0)).toBe(before);
-    s2.dispose();
-  });
+      const s2 = await reload(doc.host);
+      expect(s2.state().engine!.getCellInput(0, 0, 0)).toBe(before);
+      s2.dispose();
+    });
 
-  it("no edit, no write: a session that only reads leaves the stored bytes alone", async () => {
-    const doc = fakeDocument();
-    const s1 = createWorkbookSession(doc.host);
-    await s1.import(new Uint8Array(readFileSync(FIXTURE)), "minimal.xlsx");
-    s1.dispose();
-    await new Promise((r) => setTimeout(r, 50));
-    expect(doc.workbookWrites()).toBe(1);
-  });
-});
+    it("no edit, no write: a session that only reads leaves the stored bytes alone", async () => {
+      const doc = fakeDocument();
+      const s1 = createWorkbookSession(doc.host);
+      await s1.import(new Uint8Array(readFileSync(FIXTURE)), "minimal.xlsx");
+      s1.dispose();
+      await new Promise((r) => setTimeout(r, 50));
+      expect(doc.workbookWrites()).toBe(1);
+    });
+  },
+);
 
-describe.skipIf(!built)("a save waits for the workbook [sheet.plugin.persistence]", () => {
-  afterEach(() => {
-    vi.useRealTimers();
-  });
+describe.skipIf(!built)(
+  "a save waits for the workbook [sheet.plugin.persistence]",
+  () => {
+    afterEach(() => {
+      vi.useRealTimers();
+    });
 
-  it("a save inside the debounce window carries the edit (host will-save door)", async () => {
-    // Until protocol 66 a document saved within PERSIST_DEBOUNCE_MS of a
-    // cell edit shipped the PRE-edit workbook part: the debounced write had
-    // not run yet and nothing told the session a save was coming.
-    const doc = fakeDocument({ willSave: true });
-    const s1 = createWorkbookSession(doc.host);
-    await s1.import(new Uint8Array(readFileSync(FIXTURE)), "minimal.xlsx");
-    expect(doc.willSaveListeners()).toBe(1);
+    it("a save inside the debounce window carries the edit (host will-save door)", async () => {
+      // Until protocol 66 a document saved within PERSIST_DEBOUNCE_MS of a
+      // cell edit shipped the PRE-edit workbook part: the debounced write had
+      // not run yet and nothing told the session a save was coming.
+      const doc = fakeDocument({ willSave: true });
+      const s1 = createWorkbookSession(doc.host);
+      await s1.import(new Uint8Array(readFileSync(FIXTURE)), "minimal.xlsx");
+      expect(doc.willSaveListeners()).toBe(1);
 
-    vi.useFakeTimers();
-    expect(s1.editCell(0, 9, 0, "saved at once")).toBe(true);
-    // No timer runs: the save lands well inside the 750 ms debounce.
-    const saved = await doc.save();
-    vi.useRealTimers();
-    expect(doc.workbookWrites()).toBe(2);
-    expect(saved).not.toBeNull();
+      vi.useFakeTimers();
+      expect(s1.editCell(0, 9, 0, "saved at once")).toBe(true);
+      // No timer runs: the save lands well inside the 750 ms debounce.
+      const saved = await doc.save();
+      vi.useRealTimers();
+      expect(doc.workbookWrites()).toBe(2);
+      expect(saved).not.toBeNull();
 
-    const s2 = await reload(doc.host);
-    expect(s2.state().engine!.getCellInput(0, 9, 0)).toBe("saved at once");
-    s1.dispose();
-    s2.dispose();
-  });
+      const s2 = await reload(doc.host);
+      expect(s2.state().engine!.getCellInput(0, 9, 0)).toBe("saved at once");
+      s1.dispose();
+      s2.dispose();
+    });
 
-  it("a save with nothing pending writes nothing", async () => {
-    const doc = fakeDocument({ willSave: true });
-    const s1 = createWorkbookSession(doc.host);
-    await s1.import(new Uint8Array(readFileSync(FIXTURE)), "minimal.xlsx");
-    await doc.save();
-    expect(doc.workbookWrites()).toBe(1); // the import only
-    s1.dispose();
-  });
+    it("a save with nothing pending writes nothing", async () => {
+      const doc = fakeDocument({ willSave: true });
+      const s1 = createWorkbookSession(doc.host);
+      await s1.import(new Uint8Array(readFileSync(FIXTURE)), "minimal.xlsx");
+      await doc.save();
+      expect(doc.workbookWrites()).toBe(1); // the import only
+      s1.dispose();
+    });
 
-  it("dispose (deactivate) unregisters the listener", async () => {
-    const doc = fakeDocument({ willSave: true });
-    const s1 = createWorkbookSession(doc.host);
-    expect(doc.willSaveListeners()).toBe(1);
-    s1.dispose();
-    expect(doc.willSaveListeners()).toBe(0);
-  });
+    it("dispose (deactivate) unregisters the listener", async () => {
+      const doc = fakeDocument({ willSave: true });
+      const s1 = createWorkbookSession(doc.host);
+      expect(doc.willSaveListeners()).toBe(1);
+      s1.dispose();
+      expect(doc.willSaveListeners()).toBe(0);
+    });
 
-  it("a host without the door: nothing registered, the debounce still persists", async () => {
-    const doc = fakeDocument({ willSave: false });
-    const s1 = createWorkbookSession(doc.host);
-    await s1.import(new Uint8Array(readFileSync(FIXTURE)), "minimal.xlsx");
-    expect(doc.willSaveRegistrations).not.toHaveBeenCalled();
+    it("a host without the door: nothing registered, the debounce still persists", async () => {
+      const doc = fakeDocument({ willSave: false });
+      const s1 = createWorkbookSession(doc.host);
+      await s1.import(new Uint8Array(readFileSync(FIXTURE)), "minimal.xlsx");
+      expect(doc.willSaveRegistrations).not.toHaveBeenCalled();
 
-    vi.useFakeTimers();
-    expect(s1.editCell(0, 9, 0, "debounced")).toBe(true);
-    await doc.save(); // no listener: the save cannot wait for the edit
-    expect(doc.workbookWrites()).toBe(1);
-    await advanceTimersByTimeAsync(vi, 5_000);
-    vi.useRealTimers();
-    await waitFor(() => expect(doc.workbookWrites()).toBe(2));
-    s1.dispose();
-  });
-});
+      vi.useFakeTimers();
+      expect(s1.editCell(0, 9, 0, "debounced")).toBe(true);
+      await doc.save(); // no listener: the save cannot wait for the edit
+      expect(doc.workbookWrites()).toBe(1);
+      await advanceTimersByTimeAsync(vi, 5_000);
+      vi.useRealTimers();
+      await waitFor(() => expect(doc.workbookWrites()).toBe(2));
+      s1.dispose();
+    });
+  },
+);

@@ -358,7 +358,7 @@ excludeFiles = ["**/*.spec.*", "**/*.test.*"]
 # Community-facing: everything in platform/extensions (tests and scripts
 # included) imports only the public packages (@paged-media/plugin-api,
 # @paged-media/plugin-sdk, @paged-media/idml-viewer, @paged-media/canvas-wasm)
-# and its own (plugin-cli, ai, cli). Never platform/shared/*, a module, or
+# and its own (ai, cli). Never platform/shared/*, a module, or
 # the editor's packages. Third-party packages are not restricted.
 [[lint.overrides]]
 files = ["platform/extensions/**/*.{ts,tsx,js,mjs,cjs}"]
@@ -366,6 +366,6 @@ files = ["platform/extensions/**/*.{ts,tsx,js,mjs,cjs}"]
 "no-restricted-imports" = [
   "error",
   { patterns = [
-    { regex = '^@paged-media/(?!(plugin-api|plugin-sdk|idml-viewer|canvas-wasm|plugin-cli|ai|cli)(/|$))', message = "platform/extensions is what third-party extensions build on: it imports only the public @paged-media packages (plugin-api, plugin-sdk, idml-viewer, canvas-wasm) and its own. Internal shared code (platform/shared/*), the modules and the editor are not part of the contract (docs/adr/PM-0002)." },
+    { regex = '^@paged-media/(?!(plugin-api|plugin-sdk|idml-viewer|canvas-wasm|ai|cli)(/|$))', message = "platform/extensions is what third-party extensions build on: it imports only the public @paged-media packages (plugin-api, plugin-sdk, idml-viewer, canvas-wasm) and its own. Internal shared code (platform/shared/*), the modules and the editor are not part of the contract (docs/adr/PM-0002)." },
   ] },
 ]

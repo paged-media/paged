@@ -66,13 +66,13 @@ export function NavigatorPanel(_props: PanelProps) {
       <PanelToolbar>
         <ToolbarBtn icon="ui-plus" label="Add page" onClick={onNew} />
       </PanelToolbar>
-    <PageNavigator
-      pageIds={handle.pageIds}
-      pageSizesPt={handle.pageSizesPt}
-      snapshots={snapshots}
-      viewportSize={viewportSize}
-      onCameraChange={animateCamera}
-    />
+      <PageNavigator
+        pageIds={handle.pageIds}
+        pageSizesPt={handle.pageSizesPt}
+        snapshots={snapshots}
+        viewportSize={viewportSize}
+        onCameraChange={animateCamera}
+      />
     </>
   );
 }

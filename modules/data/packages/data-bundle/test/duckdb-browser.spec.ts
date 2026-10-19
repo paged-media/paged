@@ -8,7 +8,11 @@
 // Chromium; REQUIRE_REAL_BROWSER=1 makes that a failure.
 import { afterAll, describe, expect, it } from "bun:test";
 import { REQUIRE_REAL_DUCKDB } from "./real-duckdb";
-import { REQUIRE_REAL_BROWSER, startBrowserLane, type BrowserLane } from "./browser-lane";
+import {
+  REQUIRE_REAL_BROWSER,
+  startBrowserLane,
+  type BrowserLane,
+} from "./browser-lane";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -24,7 +28,9 @@ const LANE_OFF = !REQUIRED && process.env.PAGED_BROWSER_LANE === "0";
 // The lane starts while the file loads, not in a beforeAll: bun:test has no
 // runtime skip (vitest's `ctx.skip()`), so the tests that need the lane are
 // skipped up front when it did not start, exactly where they used to skip.
-const started = LANE_OFF ? { lane: undefined, error: "PAGED_BROWSER_LANE=0" } : await startBrowserLane();
+const started = LANE_OFF
+  ? { lane: undefined, error: "PAGED_BROWSER_LANE=0" }
+  : await startBrowserLane();
 const lane: BrowserLane | undefined = started.lane;
 const why = started.error ?? "";
 const NO_LANE = !lane && !REQUIRED;
@@ -37,7 +43,15 @@ afterAll(async () => {
 async function inPage<T>(body: string, arg?: unknown): Promise<T> {
   if (!lane) throw new Error(`the browser lane did not start: ${why}`);
   return lane.page.evaluate(
-    async ({ body, arg, csv }: { body: string; arg: unknown; csv: Record<string, string> }) => {
+    async ({
+      body,
+      arg,
+      csv,
+    }: {
+      body: string;
+      arg: unknown;
+      csv: Record<string, string>;
+    }) => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const L = (window as any).lane;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -45,13 +59,24 @@ async function inPage<T>(body: string, arg?: unknown): Promise<T> {
       if (!w.duck) {
         w.duck = await L.bootDuckDB();
         for (const [name, text] of Object.entries(csv)) {
-          await L.loadIntoDuckDB(w.duck, name, "csv", new TextEncoder().encode(text), () => {
-            throw new Error("no xlsx here");
-          });
+          await L.loadIntoDuckDB(
+            w.duck,
+            name,
+            "csv",
+            new TextEncoder().encode(text),
+            () => {
+              throw new Error("no xlsx here");
+            },
+          );
         }
       }
       // eslint-disable-next-line no-new-func
-      return new Function("L", "d", "arg", `return (async () => { ${body} })();`)(L, w.duck, arg);
+      return new Function(
+        "L",
+        "d",
+        "arg",
+        `return (async () => { ${body} })();`,
+      )(L, w.duck, arg);
     },
     { body, arg, csv: FIXTURE_CSV },
   );
@@ -60,59 +85,81 @@ async function inPage<T>(body: string, arg?: unknown): Promise<T> {
 describe.skipIf(LANE_OFF)(
   "the query lane in the shipped browser worker [data.security.gates]",
   () => {
-    it.skipIf(NO_LANE)("the lane starts (fails under REQUIRE_REAL_BROWSER / REQUIRE_REAL_DUCKDB when it cannot)", () => {
-      expect(lane, why).toBeDefined();
-    });
+    it.skipIf(NO_LANE)(
+      "the lane starts (fails under REQUIRE_REAL_BROWSER / REQUIRE_REAL_DUCKDB when it cannot)",
+      () => {
+        expect(lane, why).toBeDefined();
+      },
+    );
 
-    it.skipIf(NO_LANE)("the guard admits a SELECT over a source table, and it runs [data.query.seam]", async () => {
-      const out = await inPage<{ verdict: unknown; rows: unknown }>(
-        `const verdict = await L.guard(d, "SELECT name FROM people ORDER BY name");
+    it.skipIf(NO_LANE)(
+      "the guard admits a SELECT over a source table, and it runs [data.query.seam]",
+      async () => {
+        const out = await inPage<{ verdict: unknown; rows: unknown }>(
+          `const verdict = await L.guard(d, "SELECT name FROM people ORDER BY name");
          const rows = (await d.rows("SELECT name FROM people ORDER BY name")).rows;
          return { verdict, rows };`,
-      );
-      expect(out.verdict).toBeNull();
-      expect(out.rows).toEqual([["Ada"], ["Grace"]]);
-      expect(lane!.errors.filter((e) => /out of bounds|signature mismatch|RuntimeError/.test(e))).toEqual([]);
-      // The guard reaches nothing outside the page's origin (it used to
-      // autoload DuckDB's json extension from extensions.duckdb.org).
-      expect(lane!.offOrigin).toEqual([]);
-    });
+        );
+        expect(out.verdict).toBeNull();
+        expect(out.rows).toEqual([["Ada"], ["Grace"]]);
+        expect(
+          lane!.errors.filter((e) =>
+            /out of bounds|signature mismatch|RuntimeError/.test(e),
+          ),
+        ).toEqual([]);
+        // The guard reaches nothing outside the page's origin (it used to
+        // autoload DuckDB's json extension from extensions.duckdb.org).
+        expect(lane!.offOrigin).toEqual([]);
+      },
+    );
 
-    it.skipIf(NO_LANE)("refuses every reach outside the source tables [data.security.gates]", async () => {
-      const verdicts = await inPage<(null | { kind: string; message: string })[]>(
-        `const out = [];
+    it.skipIf(NO_LANE)(
+      "refuses every reach outside the source tables [data.security.gates]",
+      async () => {
+        const verdicts = await inPage<
+          (null | { kind: string; message: string })[]
+        >(
+          `const out = [];
          for (const sql of arg) out.push(await L.guard(d, sql));
          return out;`,
-        REFUSED.map(([sql]) => sql),
-      );
-      REFUSED.forEach(([sql, msg], i) => {
-        expect(verdicts[i]?.kind, sql).toBe("Guard");
-        expect(verdicts[i]?.message, sql).toMatch(msg);
-      });
-      expect(lane!.offOrigin).toEqual([]);
-    });
+          REFUSED.map(([sql]) => sql),
+        );
+        REFUSED.forEach(([sql, msg], i) => {
+          expect(verdicts[i]?.kind, sql).toBe("Guard");
+          expect(verdicts[i]?.message, sql).toMatch(msg);
+        });
+        expect(lane!.offOrigin).toEqual([]);
+      },
+    );
 
-    it.skipIf(NO_LANE)("admits ordinary queries — joins, CTEs, aggregates — and DuckDB runs them [data.query.seam]", async () => {
-      const out = await inPage<{ verdict: unknown; rows: unknown; error?: string }[]>(
-        `const out = [];
+    it.skipIf(NO_LANE)(
+      "admits ordinary queries — joins, CTEs, aggregates — and DuckDB runs them [data.query.seam]",
+      async () => {
+        const out = await inPage<
+          { verdict: unknown; rows: unknown; error?: string }[]
+        >(
+          `const out = [];
          for (const sql of arg) {
            const verdict = await L.guard(d, sql);
            try { out.push({ verdict, rows: (await d.rows(sql)).rows }); }
            catch (e) { out.push({ verdict, rows: null, error: String(e && e.message || e) }); }
          }
          return out;`,
-        ALLOWED.map(([sql]) => sql),
-      );
-      ALLOWED.forEach(([sql, rows], i) => {
-        expect(out[i].verdict, sql).toBeNull();
-        expect(out[i].error, sql).toBeUndefined();
-        expect(out[i].rows, sql).toEqual(rows);
-      });
-    });
+          ALLOWED.map(([sql]) => sql),
+        );
+        ALLOWED.forEach(([sql, rows], i) => {
+          expect(out[i].verdict, sql).toBeNull();
+          expect(out[i].error, sql).toBeUndefined();
+          expect(out[i].rows, sql).toEqual(rows);
+        });
+      },
+    );
 
-    it.skipIf(NO_LANE)("the engine lock: no statement changes a setting, and imports still work after it [data.security.gates]", async () => {
-      const out = await inPage<{ set: string[]; late: unknown }>(
-        `const set = [];
+    it.skipIf(NO_LANE)(
+      "the engine lock: no statement changes a setting, and imports still work after it [data.security.gates]",
+      async () => {
+        const out = await inPage<{ set: string[]; late: unknown }>(
+          `const set = [];
          for (const sql of ["SET enable_external_access = true", "SET lock_configuration = false",
                             "RESET lock_configuration", "PRAGMA enable_external_access = true",
                             "SET autoinstall_known_extensions = true"]) {
@@ -120,10 +167,12 @@ describe.skipIf(LANE_OFF)(
          }
          await L.loadIntoDuckDB(d, "late", "csv", new TextEncoder().encode("a,b\\n1,2\\n"), () => null);
          return { set, late: (await d.rows("SELECT * FROM late")).rows };`,
-      );
-      for (const m of out.set) expect(m).toMatch(/configuration has been locked/);
-      expect(out.late).toEqual([["1", "2"]]);
-    });
+        );
+        for (const m of out.set)
+          expect(m).toMatch(/configuration has been locked/);
+        expect(out.late).toEqual([["1", "2"]]);
+      },
+    );
 
     // DuckDB-WASM 1.29.0's eh build has neither json nor parquet built in;
     // DuckDB loads them on first use. They used to come from
@@ -153,13 +202,23 @@ describe.skipIf(LANE_OFF)(
         ["1", "2026-01-15", "DATE"],
         ["2", "2026-02-01", "DATE"],
       ]);
-      expect(lane!.served).toContain("/bin/duckdb-ext/v1.1.1/wasm_eh/json.duckdb_extension.wasm");
+      expect(lane!.served).toContain(
+        "/bin/duckdb-ext/v1.1.1/wasm_eh/json.duckdb_extension.wasm",
+      );
       expect(lane!.offOrigin).toEqual([]);
-      expect(lane!.errors.filter((e) => /unreachable|RuntimeError|Content Security Policy/.test(e))).toEqual([]);
+      expect(
+        lane!.errors.filter((e) =>
+          /unreachable|RuntimeError|Content Security Policy/.test(e),
+        ),
+      ).toEqual([]);
     });
 
     it("a Parquet import loads parquet from bin/duckdb-ext: DECIMAL keeps its scale, DATE stays a date [data.source.adapters]", async () => {
-      const out = await inPage<{ types?: unknown; rows?: unknown; error?: string }>(
+      const out = await inPage<{
+        types?: unknown;
+        rows?: unknown;
+        error?: string;
+      }>(
         `try {
            await L.loadIntoDuckDB(d, "products", "parquet", new Uint8Array(arg), () => null);
            return {
@@ -181,13 +240,23 @@ describe.skipIf(LANE_OFF)(
         ["B-2", "19.50", "10", "2026-02-01"],
         ["C-3", "7.00", null, null],
       ]);
-      expect(lane!.served).toContain("/bin/duckdb-ext/v1.1.1/wasm_eh/parquet.duckdb_extension.wasm");
+      expect(lane!.served).toContain(
+        "/bin/duckdb-ext/v1.1.1/wasm_eh/parquet.duckdb_extension.wasm",
+      );
       expect(lane!.offOrigin).toEqual([]);
-      expect(lane!.errors.filter((e) => /unreachable|RuntimeError|Content Security Policy/.test(e))).toEqual([]);
+      expect(
+        lane!.errors.filter((e) =>
+          /unreachable|RuntimeError|Content Security Policy/.test(e),
+        ),
+      ).toEqual([]);
     });
 
     it("an XLSX import (the data engine reads the sheet, DuckDB's read_json the records) runs in the worker [data.source.adapters]", async () => {
-      const out = await inPage<{ rows?: unknown; sheet?: unknown; error?: string }>(
+      const out = await inPage<{
+        rows?: unknown;
+        sheet?: unknown;
+        error?: string;
+      }>(
         `try {
            const e = await L.bootEngine(Date.UTC(2026, 9, 6) / 86400000);
            const r = await L.loadIntoDuckDB(d, "xl", "xlsx", new Uint8Array(arg), (b, sh) => e.xlsx_import(b, sh));
@@ -212,7 +281,10 @@ describe.skipIf(LANE_OFF)(
     it("the whole lane made no request outside its origin, and loaded extensions only from bin/duckdb-ext [data.security.gates]", () => {
       expect(lane!.offOrigin).toEqual([]);
       const ext = lane!.served.filter((p) => p.includes("duckdb_extension"));
-      expect(ext.every((p) => p.startsWith("/bin/duckdb-ext/v1.1.1/wasm_eh/")), ext.join(", ")).toBe(true);
+      expect(
+        ext.every((p) => p.startsWith("/bin/duckdb-ext/v1.1.1/wasm_eh/")),
+        ext.join(", "),
+      ).toBe(true);
     });
   },
 );
@@ -225,90 +297,122 @@ describe.skipIf(LANE_OFF)(
   "the engines load through the host's module door [data.query.seam]",
   () => {
     const DATA_WASM = join(__dirname, "..", "bin", "data_js_bg.wasm");
-    const sri = (bytes: Buffer) => "sha384-" + createHash("sha384").update(bytes).digest("base64");
+    const sri = (bytes: Buffer) =>
+      "sha384-" + createHash("sha384").update(bytes).digest("base64");
 
-    it.skipIf(NO_LANE)("DuckDB instantiates from the module host; the worker stays in bin/", async () => {
-      const before = lane!.served.length;
-      const out = await lane!.page.evaluate(
-        async ({ origin }: { origin: string }) => {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const L = (window as any).lane;
-          const fallbacks: string[] = [];
-          const d = await L.bootDuckDB({
-            resolveWasm: async (name: string) =>
-              name === "duckdb-engine"
-                ? { url: `${origin}/@paged-media/data/0.0.0-test/bin/duckdb-engine.wasm`, integrity: null }
-                : null,
-            onFallback: (r: string) => fallbacks.push(r),
-          });
-          const rows = (await d.rows("SELECT 40 + 2")).rows;
-          await d.close();
-          return { rows, fallbacks };
-        },
-        { origin: lane!.moduleOrigin },
-      );
-      expect(out.fallbacks).toEqual([]);
-      expect(out.rows).toEqual([["42"]]);
-      expect(lane!.moduleServed).toContain("/@paged-media/data/0.0.0-test/bin/duckdb-engine.wasm");
-      const served = lane!.served.slice(before);
-      expect(served).toContain("/bin/duckdb-browser-eh.worker.js");
-      expect(served).not.toContain("/bin/duckdb-engine.wasm");
-    }, 60_000);
+    it.skipIf(NO_LANE)(
+      "DuckDB instantiates from the module host; the worker stays in bin/",
+      async () => {
+        const before = lane!.served.length;
+        const out = await lane!.page.evaluate(
+          async ({ origin }: { origin: string }) => {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const L = (window as any).lane;
+            const fallbacks: string[] = [];
+            const d = await L.bootDuckDB({
+              resolveWasm: async (name: string) =>
+                name === "duckdb-engine"
+                  ? {
+                      url: `${origin}/@paged-media/data/0.0.0-test/bin/duckdb-engine.wasm`,
+                      integrity: null,
+                    }
+                  : null,
+              onFallback: (r: string) => fallbacks.push(r),
+            });
+            const rows = (await d.rows("SELECT 40 + 2")).rows;
+            await d.close();
+            return { rows, fallbacks };
+          },
+          { origin: lane!.moduleOrigin },
+        );
+        expect(out.fallbacks).toEqual([]);
+        expect(out.rows).toEqual([["42"]]);
+        expect(lane!.moduleServed).toContain(
+          "/@paged-media/data/0.0.0-test/bin/duckdb-engine.wasm",
+        );
+        const served = lane!.served.slice(before);
+        expect(served).toContain("/bin/duckdb-browser-eh.worker.js");
+        expect(served).not.toContain("/bin/duckdb-engine.wasm");
+      },
+      60_000,
+    );
 
-    it.skipIf(NO_LANE)("a host engine that is not there falls back to bin/", async () => {
-      const before = lane!.served.length;
-      const out = await lane!.page.evaluate(
-        async ({ origin }: { origin: string }) => {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const L = (window as any).lane;
-          const fallbacks: string[] = [];
-          const d = await L.bootDuckDB({
-            resolveWasm: async () => ({ url: `${origin}/@paged-media/data/0.0.0-test/bin/missing.wasm`, integrity: null }),
-            onFallback: (r: string) => fallbacks.push(r),
-          });
-          const rows = (await d.rows("SELECT 1")).rows;
-          await d.close();
-          return { rows, fallbacks: fallbacks.length };
-        },
-        { origin: lane!.moduleOrigin },
-      );
-      expect(out.rows).toEqual([["1"]]);
-      expect(out.fallbacks).toBe(1);
-      expect(lane!.served.slice(before)).toContain("/bin/duckdb-engine.wasm");
-    }, 60_000);
+    it.skipIf(NO_LANE)(
+      "a host engine that is not there falls back to bin/",
+      async () => {
+        const before = lane!.served.length;
+        const out = await lane!.page.evaluate(
+          async ({ origin }: { origin: string }) => {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const L = (window as any).lane;
+            const fallbacks: string[] = [];
+            const d = await L.bootDuckDB({
+              resolveWasm: async () => ({
+                url: `${origin}/@paged-media/data/0.0.0-test/bin/missing.wasm`,
+                integrity: null,
+              }),
+              onFallback: (r: string) => fallbacks.push(r),
+            });
+            const rows = (await d.rows("SELECT 1")).rows;
+            await d.close();
+            return { rows, fallbacks: fallbacks.length };
+          },
+          { origin: lane!.moduleOrigin },
+        );
+        expect(out.rows).toEqual([["1"]]);
+        expect(out.fallbacks).toBe(1);
+        expect(lane!.served.slice(before)).toContain("/bin/duckdb-engine.wasm");
+      },
+      60_000,
+    );
 
-    it.skipIf(NO_LANE)("the data engine loads from the module host with its integrity; a wrong digest is refused by the fetch", async () => {
-      const good = sri(readFileSync(DATA_WASM));
-      const bad = sri(Buffer.from("not the engine"));
-      const out = await lane!.page.evaluate(
-        async ({ origin, good, bad }: { origin: string; good: string; bad: string }) => {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const L = (window as any).lane;
-          const url = `${origin}/@paged-media/data/0.0.0-test/bin/data_js_bg.wasm`;
-          const fallbacks: string[] = [];
-          const e = await L.bootEngine(Date.UTC(2026, 9, 11) / 86400000, {
-            resolveWasm: async (name: string) => (name === "data-engine" ? { url, integrity: good } : null),
-            onFallback: (r: string) => fallbacks.push(r),
-          });
-          const okType = typeof e.payload;
-          // The glue is initialised once per realm, so a second boot cannot
-          // show the fallback; prove that the browser refuses a wrong digest
-          // for the same response (bootEngine then loads bin/ — the unit
-          // test in src/__tests__/wasm-door.test.ts drives that branch).
-          let refused = false;
-          try {
-            await fetch(url, { integrity: bad });
-          } catch {
-            refused = true;
-          }
-          return { okType, fallbacks, refused };
-        },
-        { origin: lane!.moduleOrigin, good, bad },
-      );
-      expect(out.fallbacks).toEqual([]);
-      expect(out.okType).toBe("function");
-      expect(out.refused).toBe(true);
-      expect(lane!.moduleServed).toContain("/@paged-media/data/0.0.0-test/bin/data_js_bg.wasm");
-    }, 60_000);
+    it.skipIf(NO_LANE)(
+      "the data engine loads from the module host with its integrity; a wrong digest is refused by the fetch",
+      async () => {
+        const good = sri(readFileSync(DATA_WASM));
+        const bad = sri(Buffer.from("not the engine"));
+        const out = await lane!.page.evaluate(
+          async ({
+            origin,
+            good,
+            bad,
+          }: {
+            origin: string;
+            good: string;
+            bad: string;
+          }) => {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const L = (window as any).lane;
+            const url = `${origin}/@paged-media/data/0.0.0-test/bin/data_js_bg.wasm`;
+            const fallbacks: string[] = [];
+            const e = await L.bootEngine(Date.UTC(2026, 9, 11) / 86400000, {
+              resolveWasm: async (name: string) =>
+                name === "data-engine" ? { url, integrity: good } : null,
+              onFallback: (r: string) => fallbacks.push(r),
+            });
+            const okType = typeof e.payload;
+            // The glue is initialised once per realm, so a second boot cannot
+            // show the fallback; prove that the browser refuses a wrong digest
+            // for the same response (bootEngine then loads bin/ — the unit
+            // test in src/__tests__/wasm-door.test.ts drives that branch).
+            let refused = false;
+            try {
+              await fetch(url, { integrity: bad });
+            } catch {
+              refused = true;
+            }
+            return { okType, fallbacks, refused };
+          },
+          { origin: lane!.moduleOrigin, good, bad },
+        );
+        expect(out.fallbacks).toEqual([]);
+        expect(out.okType).toBe("function");
+        expect(out.refused).toBe(true);
+        expect(lane!.moduleServed).toContain(
+          "/@paged-media/data/0.0.0-test/bin/data_js_bg.wasm",
+        );
+      },
+      60_000,
+    );
   },
 );

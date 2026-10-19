@@ -39,7 +39,10 @@ export interface BindingEnvelope {
  *  recipe is stored under `data` to satisfy the host's metadata-envelope
  *  contract (`{ v, data, engine? }`). */
 export function makeEnvelope(payload: unknown): string {
-  return JSON.stringify({ v: BINDING_VERSION, data: payload } satisfies BindingEnvelope);
+  return JSON.stringify({
+    v: BINDING_VERSION,
+    data: payload,
+  } satisfies BindingEnvelope);
 }
 
 /** Parse an envelope JSON, returning `null` on anything malformed (the panel

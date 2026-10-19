@@ -28,25 +28,36 @@ import type { PageContext, PageReport } from "../../types";
 export async function build(ctx: PageContext): Promise<PageReport> {
   const page = p(65);
 
-  const number = await proseFrame(ctx, page, [48, 100, 220, 196], [
-    { text: "12", style: STYLE.chapterNumber },
-  ]);
-  const title = await proseFrame(ctx, page, [48, 200, 480, 252], [
-    { text: "The Table", style: STYLE.chapterTitle },
-  ]);
-  const deck = await proseFrame(ctx, page, [48, 264, 448, 400], [
-    {
-      text:
-        "A table is not a grid of rectangles that happen to align; it is a " +
-        "structure the text owns — rows and columns inside a story, with a " +
-        "header that knows to say itself again. This chapter builds one " +
-        "taller than its frame and lets it walk across the gutter, its " +
-        "header and footer repeating at the break; then it takes a cell " +
-        "apart property by property, rebuilds the grid live, and dresses " +
-        "the whole thing in styles.",
-      style: STYLE.deck,
-    },
-  ]);
+  const number = await proseFrame(
+    ctx,
+    page,
+    [48, 100, 220, 196],
+    [{ text: "12", style: STYLE.chapterNumber }],
+  );
+  const title = await proseFrame(
+    ctx,
+    page,
+    [48, 200, 480, 252],
+    [{ text: "The Table", style: STYLE.chapterTitle }],
+  );
+  const deck = await proseFrame(
+    ctx,
+    page,
+    [48, 264, 448, 400],
+    [
+      {
+        text:
+          "A table is not a grid of rectangles that happen to align; it is a " +
+          "structure the text owns — rows and columns inside a story, with a " +
+          "header that knows to say itself again. This chapter builds one " +
+          "taller than its frame and lets it walk across the gutter, its " +
+          "header and footer repeating at the break; then it takes a cell " +
+          "apart property by property, rebuilds the grid live, and dresses " +
+          "the whole thing in styles.",
+        style: STYLE.deck,
+      },
+    ],
+  );
   const rule = await plate(ctx, page, [48, 410, 300, 412], SWATCH.vermilion);
 
   const label = await specLabel(ctx, page, [

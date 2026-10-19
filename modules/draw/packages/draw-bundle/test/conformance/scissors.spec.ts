@@ -30,7 +30,14 @@
 //       landed on the page;
 //   (6) the live tool: a click cuts, a drag does not.
 
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "bun:test";
+import {
+  afterAll,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+} from "bun:test";
 
 import type { ElementId, PathAnchorsResult } from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
@@ -64,8 +71,10 @@ const DOC = () =>
       ]),
   );
 
-const tableOf = async (h: HeadlessHost, id: ElementId): Promise<PathAnchorsResult> =>
-  (await h.host.document.pathAnchors(id))!;
+const tableOf = async (
+  h: HeadlessHost,
+  id: ElementId,
+): Promise<PathAnchorsResult> => (await h.host.document.pathAnchors(id))!;
 
 describe("draw conformance — Scissors at any point", () => {
   let h: HeadlessHost;
@@ -102,7 +111,11 @@ describe("draw conformance — Scissors at any point", () => {
     expect(last).toEqual(first);
     // Every original corner is still on the path.
     for (const c of before.anchors) {
-      expect(after.anchors.some((a) => a.anchor[0] === c.anchor[0] && a.anchor[1] === c.anchor[1])).toBe(true);
+      expect(
+        after.anchors.some(
+          (a) => a.anchor[0] === c.anchor[0] && a.anchor[1] === c.anchor[1],
+        ),
+      ).toBe(true);
     }
   });
 
@@ -130,8 +143,20 @@ describe("draw conformance — Scissors at any point", () => {
     // First half: anchor 0 → the cut anchor; second half: the twin → old anchor 1.
     for (const u of [0.25, 0.5, 0.75]) {
       // The first half covers t ∈ [0, t*] of the original.
-      const half = evalCubic(a[0]!.anchor, a[0]!.right, a[1]!.left, a[1]!.anchor, u);
-      const orig = evalCubic([100, 300], [140, 250], [260, 250], [300, 300], u * t);
+      const half = evalCubic(
+        a[0]!.anchor,
+        a[0]!.right,
+        a[1]!.left,
+        a[1]!.anchor,
+        u,
+      );
+      const orig = evalCubic(
+        [100, 300],
+        [140, 250],
+        [260, 250],
+        [300, 300],
+        u * t,
+      );
       expect(half[0]).toBeCloseTo(orig[0], 1);
       expect(half[1]).toBeCloseTo(orig[1], 1);
     }
@@ -186,10 +211,17 @@ describe("draw conformance — Scissors at any point", () => {
     ];
     await h.host.document.mutate({
       op: "setElementProperty",
-      args: { elementId: SQ, path: "frameTransform", value: { type: "transform", value: m } },
+      args: {
+        elementId: SQ,
+        path: "frameTransform",
+        value: { type: "transform", value: m },
+      },
     });
     // The inner top edge's midpoint (150, 100) is on the page at m·p.
-    const page: [number, number] = [m[0] * 150 + m[2] * 100 + m[4], m[1] * 150 + m[3] * 100 + m[5]];
+    const page: [number, number] = [
+      m[0] * 150 + m[2] * 100 + m[4],
+      m[1] * 150 + m[3] * 100 + m[5],
+    ];
     const done = await applyScissorsAt(h.host, SQ, PAGE_ID, page);
     expect(done?.plan.kind).toBe("segment");
     const after = await tableOf(h, SQ);
@@ -200,7 +232,9 @@ describe("draw conformance — Scissors at any point", () => {
   describe("the live tool", () => {
     it("a click on an edge cuts it; a DRAG does not", async () => {
       let done: ScissorsResult | null | undefined;
-      const handler = createScissorsHandler(h.host, { onCut: (r) => (done = r) });
+      const handler = createScissorsHandler(h.host, {
+        onCut: (r) => (done = r),
+      });
       handler.onActivate(undefined as never);
       const drag = { ...pointerAt(PAGE_ID, [150, 100]), maxDelta: 40 };
       handler.onPointerUp(drag);

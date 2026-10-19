@@ -118,7 +118,9 @@ describe("namedFlowDiagnostics", () => {
   });
 
   it("notes multiple named flows are each threadable via the picker (all render)", () => {
-    const d = namedFlowDiagnostics("#a { flow-into: one } #b { flow-into: two }");
+    const d = namedFlowDiagnostics(
+      "#a { flow-into: one } #b { flow-into: two }",
+    );
     expect(
       d.some(
         (x) =>
@@ -132,7 +134,14 @@ describe("namedFlowDiagnostics", () => {
   });
 
   it("notes that DOM flow-from regions are not used (the frame chain receives)", () => {
-    const d = namedFlowDiagnostics("#a { flow-into: main } .r { flow-from: main }");
-    expect(d.some((x) => x.message.includes("flow-from") && x.message.includes("frame chain"))).toBe(true);
+    const d = namedFlowDiagnostics(
+      "#a { flow-into: main } .r { flow-from: main }",
+    );
+    expect(
+      d.some(
+        (x) =>
+          x.message.includes("flow-from") && x.message.includes("frame chain"),
+      ),
+    ).toBe(true);
   });
 });

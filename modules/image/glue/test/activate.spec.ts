@@ -52,7 +52,10 @@ describe("imageBundle.activate", () => {
   it("registers the panel, the commands, the tools, and the raster importer", () => {
     const fake = makeFakeEditor();
     load(fake);
-    expect(fake.panels.ids()).toEqual([PANEL_ID, "media.paged.image.panel.properties"]);
+    expect(fake.panels.ids()).toEqual([
+      PANEL_ID,
+      "media.paged.image.panel.properties",
+    ]);
     expect(fake.commands.ids()).toEqual([
       "media.paged.image.command.openImage",
       "media.paged.image.command.adjustSelected",
@@ -187,7 +190,10 @@ describe("imageBundle.activate", () => {
 describe("the manifest copy", () => {
   it("is byte-identical to the validated manifest", () => {
     const here = fileURLToPath(new URL(".", import.meta.url));
-    const declared = readFileSync(`${here}../../manifest/manifest.json`, "utf8");
+    const declared = readFileSync(
+      `${here}../../manifest/manifest.json`,
+      "utf8",
+    );
     const embedded = readFileSync(`${here}../manifest.json`, "utf8");
     expect(embedded).toBe(declared);
   });

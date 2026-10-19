@@ -54,7 +54,11 @@ requireBlitz("web conformance — baked faces after a reopen");
 
 type Reply = { kind: string; payload?: any };
 type Send = (m: { kind: string; payload?: unknown }) => Promise<Reply>;
-type RegisterDocumentFont = (family: string, bytes: Uint8Array, style: string | null) => Promise<Reply>;
+type RegisterDocumentFont = (
+  family: string,
+  bytes: Uint8Array,
+  style: string | null,
+) => Promise<Reply>;
 type FontRow = { family: string; isMissing: boolean };
 
 /** Shaped in the bundled face: the CSS names a family no document holds. */
@@ -71,7 +75,8 @@ const BRANDED: WebFrameSource = {
   css: "@font-face{font-family:'Brand';src:url(fonts/brand.ttf) format('truetype')} body{margin:0} p{font-family:'Brand';margin:0}",
 };
 
-const clientOf = (h: HeadlessHost) => (h.host.editor as unknown as { client: { send: Send } }).client;
+const clientOf = (h: HeadlessHost) =>
+  (h.host.editor as unknown as { client: { send: Send } }).client;
 
 /** A headless host wired like the editor: document face bytes come from the
  *  engine's document registry, scene faces go to its scene-layer registry.
@@ -83,22 +88,51 @@ async function editorLikeHost(sent: Reply[]): Promise<HeadlessHost> {
     storage: mapBacking(),
     assetSource: {
       getFontFace: async (family: string, style?: string) => {
-        const r = await clientOf(h).send({ kind: "requestFontFaceBytes", payload: { family, style: style ?? null } });
+        const r = await clientOf(h).send({
+          kind: "requestFontFaceBytes",
+          payload: { family, style: style ?? null },
+        });
         if (r.kind !== "fontFaceBytes" || !r.payload.found) return null;
-        return { bytes: Uint8Array.from(r.payload.bytes), format: "truetype", family: r.payload.family };
+        return {
+          bytes: Uint8Array.from(r.payload.bytes),
+          format: "truetype",
+          family: r.payload.family,
+        };
       },
-      registerFont: async (family: string, bytes: Uint8Array, style?: string) => {
-        await clientOf(h).send({ kind: "registerFont", payload: { family, style: style ?? null, bytes: [...bytes], scope: "sceneLayer" } });
+      registerFont: async (
+        family: string,
+        bytes: Uint8Array,
+        style?: string,
+      ) => {
+        await clientOf(h).send({
+          kind: "registerFont",
+          payload: {
+            family,
+            style: style ?? null,
+            bytes: [...bytes],
+            scope: "sceneLayer",
+          },
+        });
       },
       clearSceneFonts: async () => {
-        await clientOf(h).send({ kind: "clearFontRegistry", payload: { scope: "sceneLayer" } });
+        await clientOf(h).send({
+          kind: "clearFontRegistry",
+          payload: { scope: "sceneLayer" },
+        });
       },
     },
   });
-  const client = clientOf(h) as { send: Send; registerDocumentFont?: RegisterDocumentFont };
+  const client = clientOf(h) as {
+    send: Send;
+    registerDocumentFont?: RegisterDocumentFont;
+  };
   const raw = client.send.bind(client);
   client.send = (m) => {
-    if (m.kind === "registerFont" && (m.payload as { scope?: string }).scope === "document") sent.push(m as Reply);
+    if (
+      m.kind === "registerFont" &&
+      (m.payload as { scope?: string }).scope === "document"
+    )
+      sent.push(m as Reply);
     return raw(m);
   };
   // A client that scopes faces to the open document (plugin SDK ADR 330)
@@ -106,87 +140,118 @@ async function editorLikeHost(sent: Reply[]): Promise<HeadlessHost> {
   const scoped = client.registerDocumentFont?.bind(client);
   if (scoped) {
     client.registerDocumentFont = (family, bytes, style) => {
-      sent.push({ kind: "registerFont", payload: { family, style, scope: "document" } });
+      sent.push({
+        kind: "registerFont",
+        payload: { family, style, scope: "document" },
+      });
       return scoped(family, bytes, style);
     };
   }
   return h;
 }
 
-describe.skipIf(!blitzPresent)("web conformance — the faces a bake gave the document come back on open @feat:plugin-web.bake-to-native", () => {
-  const hosts: HeadlessHost[] = [];
-  afterEach(() => {
-    for (const h of hosts.splice(0)) h.dispose();
-  });
+describe.skipIf(!blitzPresent)(
+  "web conformance — the faces a bake gave the document come back on open @feat:plugin-web.bake-to-native",
+  () => {
+    const hosts: HeadlessHost[] = [];
+    afterEach(() => {
+      for (const h of hosts.splice(0)) h.dispose();
+    });
 
-  /** Bake `source` into a fresh document, optionally delete the web frame,
-   *  and save the document as .paged. */
-  async function bakeAndSave(source: WebFrameSource, options: { deleteFrame?: boolean; undoBake?: boolean } = {}) {
-    const sent: Reply[] = [];
-    const h = await editorLikeHost(sent);
-    hosts.push(h);
-    await h.load(W1_EMPTY_PAGE.bytes());
-    const engine = await primeBlitz(h.host as unknown as BundleHost);
-    h.loadBundle(webBundle);
-    const host = h.host as unknown as BundleHost;
-    await host.parts.write("resources/fonts/brand.ttf", renamedFace("Brand"));
-    const out = await host.document.mutate({
-      op: "insertFrame",
-      args: { pageId: W1_EMPTY_PAGE.pageId, bounds: [40, 40, 260, 400] },
-    } as never);
-    if (!out.applied || !out.createdId) throw new Error("no frame");
-    const frame = out.createdId as ElementId;
-    const w = await writeWebSource(host, frame, source);
-    if (!w.applied) throw new Error(`not written: ${w.reason}`);
-    const baked = await bakeWebFrameToDocument(host, frame, engine);
-    expect(baked.baked).toBe(true);
-    expect(sent.length, "the bake gave the document a face").toBeGreaterThan(0);
-    if (options.undoBake) await host.document.undo();
-    if (options.deleteFrame) {
-      const del = await host.document.mutate({ op: "deleteFrame", args: { frameId: (frame as { id: string }).id } } as never);
-      expect(del.applied).toBe(true);
+    /** Bake `source` into a fresh document, optionally delete the web frame,
+     *  and save the document as .paged. */
+    async function bakeAndSave(
+      source: WebFrameSource,
+      options: { deleteFrame?: boolean; undoBake?: boolean } = {},
+    ) {
+      const sent: Reply[] = [];
+      const h = await editorLikeHost(sent);
+      hosts.push(h);
+      await h.load(W1_EMPTY_PAGE.bytes());
+      const engine = await primeBlitz(h.host as unknown as BundleHost);
+      h.loadBundle(webBundle);
+      const host = h.host as unknown as BundleHost;
+      await host.parts.write("resources/fonts/brand.ttf", renamedFace("Brand"));
+      const out = await host.document.mutate({
+        op: "insertFrame",
+        args: { pageId: W1_EMPTY_PAGE.pageId, bounds: [40, 40, 260, 400] },
+      } as never);
+      if (!out.applied || !out.createdId) throw new Error("no frame");
+      const frame = out.createdId as ElementId;
+      const w = await writeWebSource(host, frame, source);
+      if (!w.applied) throw new Error(`not written: ${w.reason}`);
+      const baked = await bakeWebFrameToDocument(host, frame, engine);
+      expect(baked.baked).toBe(true);
+      expect(sent.length, "the bake gave the document a face").toBeGreaterThan(
+        0,
+      );
+      if (options.undoBake) await host.document.undo();
+      if (options.deleteFrame) {
+        const del = await host.document.mutate({
+          op: "deleteFrame",
+          args: { frameId: (frame as { id: string }).id },
+        } as never);
+        expect(del.applied).toBe(true);
+      }
+      const { bytes } = await h.exportDocument("paged");
+      return bytes;
     }
-    const { bytes } = await h.exportDocument("paged");
-    return bytes;
-  }
 
-  /** Open `bytes` in a NEW session and activate the bundle. */
-  async function reopen(bytes: Uint8Array) {
-    const sent: Reply[] = [];
-    const h = await editorLikeHost(sent);
-    hosts.push(h);
-    await h.load(bytes);
-    h.loadBundle(webBundle);
-    const host = h.host as unknown as BundleHost;
-    const row = async (family: string) =>
-      (await host.document.collection<FontRow>("fonts")).find((f) => f.family === family);
-    return { h, host, sent, row };
-  }
+    /** Open `bytes` in a NEW session and activate the bundle. */
+    async function reopen(bytes: Uint8Array) {
+      const sent: Reply[] = [];
+      const h = await editorLikeHost(sent);
+      hosts.push(h);
+      await h.load(bytes);
+      h.loadBundle(webBundle);
+      const host = h.host as unknown as BundleHost;
+      const row = async (family: string) =>
+        (await host.document.collection<FontRow>("fonts")).find(
+          (f) => f.family === family,
+        );
+      return { h, host, sent, row };
+    }
 
-  it("the bundled face of a baked run is given back on open, without a re-bake", async () => {
-    const saved = await bakeAndSave(MAILER);
-    const { row, sent } = await reopen(saved);
-    expect(await row(BUNDLED_FAMILY), "the baked text names the bundled face").toBeTruthy();
-    await waitFor(async () => expect((await row(BUNDLED_FAMILY))?.isMissing).toBe(false), { timeout: 3_000 });
-    expect(sent.map((m) => m.payload.family)).toEqual([BUNDLED_FAMILY]);
-  });
+    it("the bundled face of a baked run is given back on open, without a re-bake", async () => {
+      const saved = await bakeAndSave(MAILER);
+      const { row, sent } = await reopen(saved);
+      expect(
+        await row(BUNDLED_FAMILY),
+        "the baked text names the bundled face",
+      ).toBeTruthy();
+      await waitFor(
+        async () => expect((await row(BUNDLED_FAMILY))?.isMissing).toBe(false),
+        { timeout: 3_000 },
+      );
+      expect(sent.map((m) => m.payload.family)).toEqual([BUNDLED_FAMILY]);
+    });
 
-  it("an @font-face face comes back after the web frame and its source are deleted", async () => {
-    const saved = await bakeAndSave(BRANDED, { deleteFrame: true });
-    const { row } = await reopen(saved);
-    expect((await row("Brand"))?.isMissing === undefined, "the baked text still names Brand").toBe(false);
-    await waitFor(async () => expect((await row("Brand"))?.isMissing).toBe(false), { timeout: 3_000 });
-  });
+    it("an @font-face face comes back after the web frame and its source are deleted", async () => {
+      const saved = await bakeAndSave(BRANDED, { deleteFrame: true });
+      const { row } = await reopen(saved);
+      expect(
+        (await row("Brand"))?.isMissing === undefined,
+        "the baked text still names Brand",
+      ).toBe(false);
+      await waitFor(
+        async () => expect((await row("Brand"))?.isMissing).toBe(false),
+        { timeout: 3_000 },
+      );
+    });
 
-  it("a face no text names any more is not given back, and its record is dropped on the next save", async () => {
-    const saved = await bakeAndSave(MAILER, { undoBake: true });
-    const { h, host, sent, row } = await reopen(saved);
-    // Give the open pass time to run; nothing names the family, so nothing is given.
-    await new Promise((r) => setTimeout(r, 200));
-    expect(await row(BUNDLED_FAMILY)).toBeUndefined();
-    expect(sent).toEqual([]);
-    expect((await host.parts.list("faces/")).length, "the bake left its record").toBeGreaterThan(0);
-    await h.willSave.fire();
-    expect(await host.parts.list("faces/")).toEqual([]);
-  });
-});
+    it("a face no text names any more is not given back, and its record is dropped on the next save", async () => {
+      const saved = await bakeAndSave(MAILER, { undoBake: true });
+      const { h, host, sent, row } = await reopen(saved);
+      // Give the open pass time to run; nothing names the family, so nothing is given.
+      await new Promise((r) => setTimeout(r, 200));
+      expect(await row(BUNDLED_FAMILY)).toBeUndefined();
+      expect(sent).toEqual([]);
+      expect(
+        (await host.parts.list("faces/")).length,
+        "the bake left its record",
+      ).toBeGreaterThan(0);
+      await h.willSave.fire();
+      expect(await host.parts.list("faces/")).toEqual([]);
+    });
+  },
+);

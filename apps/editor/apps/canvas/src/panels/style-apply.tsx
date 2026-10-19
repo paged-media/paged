@@ -54,13 +54,9 @@ interface StyleRow {
 }
 
 type CreateStyleOp =
-  | "createParagraphStyle"
-  | "createCharacterStyle"
-  | "createObjectStyle";
+  "createParagraphStyle" | "createCharacterStyle" | "createObjectStyle";
 type DeleteStyleOp =
-  | "deleteParagraphStyle"
-  | "deleteCharacterStyle"
-  | "deleteObjectStyle";
+  "deleteParagraphStyle" | "deleteCharacterStyle" | "deleteObjectStyle";
 
 export interface StyleApplyPanelProps {
   /** Document collection feeding the list. */

@@ -53,9 +53,12 @@ export interface InvalidationSource {
 
 /** Inclusive 0-based bounds of an A1 range (`B2`, `A1:C10`, `$A$1:$B$2`),
  *  or null when it does not parse (the caller then assumes an overlap). */
-export function a1Bounds(
-  range: string,
-): { firstRow: number; firstCol: number; lastRow: number; lastCol: number } | null {
+export function a1Bounds(range: string): {
+  firstRow: number;
+  firstCol: number;
+  lastRow: number;
+  lastCol: number;
+} | null {
   const ref = /^\$?([A-Za-z]{1,3})\$?(\d+)$/;
   const parts = range.split(":");
   if (parts.length < 1 || parts.length > 2) return null;
@@ -64,7 +67,8 @@ export function a1Bounds(
     const m = ref.exec(p.trim());
     if (!m) return null;
     let col = 0;
-    for (const ch of m[1].toUpperCase()) col = col * 26 + (ch.charCodeAt(0) - 64);
+    for (const ch of m[1].toUpperCase())
+      col = col * 26 + (ch.charCodeAt(0) - 64);
     cells.push([Number(m[2]) - 1, col - 1]);
   }
   const [a, b] = [cells[0], cells[cells.length - 1]];
@@ -112,7 +116,10 @@ export function subscribeProviderInvalidation(
       providers.text?.invalidate();
       return;
     }
-    if (moved || (change.kind === "cells" && touchesSelection(sel, change.regions))) {
+    if (
+      moved ||
+      (change.kind === "cells" && touchesSelection(sel, change.regions))
+    ) {
       providers.text?.invalidate();
     }
   });

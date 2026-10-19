@@ -43,7 +43,10 @@ import type {
   ElementId,
 } from "@paged-media/client";
 
-type Client = Pick<CanvasClient, "subscribe" | "setElementSelection" | "elementGeometry">;
+type Client = Pick<
+  CanvasClient,
+  "subscribe" | "setElementSelection" | "elementGeometry"
+>;
 
 export interface ScriptSelectionSink {
   setElementSelection(ids: ElementId[]): void;
@@ -53,7 +56,10 @@ export interface ScriptSelectionSink {
 const key = (ids: readonly ElementId[]) => JSON.stringify(ids);
 
 /** Follow selections scripts make; returns the unsubscribe. */
-export function followScriptSelection(client: Client, sink: ScriptSelectionSink): () => void {
+export function followScriptSelection(
+  client: Client,
+  sink: ScriptSelectionSink,
+): () => void {
   // The engine's selection as its last reply named it.
   let reported: readonly ElementId[] = [];
   // Runs that finish while a read is in flight need one more read, not one

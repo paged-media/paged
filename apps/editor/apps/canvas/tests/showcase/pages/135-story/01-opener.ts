@@ -28,24 +28,35 @@ import { prose } from "./00-support";
 export async function build(ctx: PageContext): Promise<PageReport> {
   const page = p(33);
 
-  const number = await prose(ctx, page, [48, 110, 220, 210], [
-    { text: "5", style: STYLE.chapterNumber },
-  ]);
-  const title = await prose(ctx, page, [48, 214, 480, 266], [
-    { text: "The Story", style: STYLE.chapterTitle },
-  ]);
-  const deck = await prose(ctx, page, [48, 280, 430, 400], [
-    {
-      text:
-        "A paragraph belongs to a story, and a story is not a frame: it is " +
-        "the text itself, which merely stands in frames for as long as they " +
-        "hold it. This chapter threads one story through four frames, lets " +
-        "another overflow and says so, and teaches frames to balance their " +
-        "columns, grow to fit, wrap around an island, and carry anchored " +
-        "cargo through every edit.",
-      style: STYLE.deck,
-    },
-  ]);
+  const number = await prose(
+    ctx,
+    page,
+    [48, 110, 220, 210],
+    [{ text: "5", style: STYLE.chapterNumber }],
+  );
+  const title = await prose(
+    ctx,
+    page,
+    [48, 214, 480, 266],
+    [{ text: "The Story", style: STYLE.chapterTitle }],
+  );
+  const deck = await prose(
+    ctx,
+    page,
+    [48, 280, 430, 400],
+    [
+      {
+        text:
+          "A paragraph belongs to a story, and a story is not a frame: it is " +
+          "the text itself, which merely stands in frames for as long as they " +
+          "hold it. This chapter threads one story through four frames, lets " +
+          "another overflow and says so, and teaches frames to balance their " +
+          "columns, grow to fit, wrap around an island, and carry anchored " +
+          "cargo through every edit.",
+        style: STYLE.deck,
+      },
+    ],
+  );
   const rule = await plate(ctx, page, [48, 408, 300, 410], SWATCH.vermilion);
 
   const label = await specLabel(ctx, page, [

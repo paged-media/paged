@@ -18,10 +18,11 @@ import { dirname, resolve } from "node:path";
 const here = dirname(fileURLToPath(import.meta.url));
 // The corpus: `apps/editor/corpus` (a local symlink) when present, else the
 // monorepo-root `corpus` (gitignored; a local symlink to the private corpus).
-const CORPUS = [
-  resolve(here, "..", "corpus"), // apps/editor/corpus
-  resolve(here, "..", "..", "..", "corpus"), // <repo root>/corpus
-].find((dir) => existsSync(dir)) ?? resolve(here, "..", "corpus");
+const CORPUS =
+  [
+    resolve(here, "..", "corpus"), // apps/editor/corpus
+    resolve(here, "..", "..", "..", "corpus"), // <repo root>/corpus
+  ].find((dir) => existsSync(dir)) ?? resolve(here, "..", "corpus");
 const THRESHOLDS_PATH = resolve(
   CORPUS,
   "config",

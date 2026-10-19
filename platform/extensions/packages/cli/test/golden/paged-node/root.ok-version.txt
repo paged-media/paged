@@ -1,0 +1,6 @@
+$ paged-node --version
+# exit 0
+# stdout
+{"cli":"<CLI_VERSION>","engine":"<ENGINE_VERSION>"}
+# stderr
+(empty)

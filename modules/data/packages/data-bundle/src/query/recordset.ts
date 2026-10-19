@@ -52,14 +52,7 @@ export type ValueJson =
 
 /** A field logical type matching `data-core::FieldType` serde (lowercase). */
 export type FieldTypeJson =
-  | "bool"
-  | "int"
-  | "float"
-  | "text"
-  | "date"
-  | "datetime"
-  | "bytes"
-  | "null";
+  "bool" | "int" | "float" | "text" | "date" | "datetime" | "bytes" | "null";
 
 export interface FieldJson {
   name: string;
@@ -147,7 +140,9 @@ function typeOf(field: ArrowLikeField): ArrowType | null {
 }
 
 function typeText(field: ArrowLikeField): string {
-  return String((field.type as { toString?(): string })?.toString?.() ?? field.type ?? "").toLowerCase();
+  return String(
+    (field.type as { toString?(): string })?.toString?.() ?? field.type ?? "",
+  ).toLowerCase();
 }
 
 /** Arrow types data-core has no kind for: TIME, INTERVAL, DURATION and the
@@ -156,12 +151,21 @@ function typeText(field: ArrowLikeField): string {
 export function needsText(field: ArrowLikeField): boolean {
   const t = typeOf(field);
   if (t) {
-    return [T.Time, T.Interval, T.Duration, T.List, T.Struct, T.Union, T.FixedSizeList, T.Map].includes(
-      t.typeId as never,
-    );
+    return [
+      T.Time,
+      T.Interval,
+      T.Duration,
+      T.List,
+      T.Struct,
+      T.Union,
+      T.FixedSizeList,
+      T.Map,
+    ].includes(t.typeId as never);
   }
   const s = typeText(field);
-  return /^(time(?!stamp)|interval|duration|list|struct|map|union|fixedsizelist)/.test(s);
+  return /^(time(?!stamp)|interval|duration|list|struct|map|union|fixedsizelist)/.test(
+    s,
+  );
 }
 
 /** Map an Arrow field's type to our logical field type: by the Arrow type id
@@ -208,7 +212,11 @@ export function classifyType(field: ArrowLikeField): FieldTypeJson {
  *  stores a decimal as its UNSCALED integer (`get` returns a big-number view
  *  whose `String()` is that integer), so the scale is needed to read it. */
 export function decimalScale(field: ArrowLikeField): number | null {
-  const t = field.type as { typeId?: unknown; scale?: unknown; toString?(): string } | null;
+  const t = field.type as {
+    typeId?: unknown;
+    scale?: unknown;
+    toString?(): string;
+  } | null;
   if (!t || typeof t !== "object") return null;
   const isDecimal =
     t.typeId === T.Decimal || /^decimal/i.test(String(t.toString?.() ?? ""));
@@ -223,7 +231,9 @@ export function decimalToNumber(unscaled: string, scale: number): number {
   const neg = unscaled.startsWith("-");
   const digits = (neg ? unscaled.slice(1) : unscaled).padStart(scale + 1, "0");
   const cut = digits.length - scale;
-  return Number(`${neg ? "-" : ""}${digits.slice(0, cut)}.${digits.slice(cut)}`);
+  return Number(
+    `${neg ? "-" : ""}${digits.slice(0, cut)}.${digits.slice(cut)}`,
+  );
 }
 
 /** Wrap one raw cell as a tagged `ValueJson` for the given field type. */
@@ -255,8 +265,18 @@ export type DecodedColumn =
   | { kind: "bool"; values: Uint8Array; valid: Uint8Array | null }
   | { kind: "date"; values: Int32Array; valid: Uint8Array | null }
   | { kind: "datetime"; values: Float64Array; valid: Uint8Array | null }
-  | { kind: "utf8"; bytes: Uint8Array; offsets: Int32Array; valid: Uint8Array | null }
-  | { kind: "binary"; bytes: Uint8Array; offsets: Int32Array; valid: Uint8Array | null };
+  | {
+      kind: "utf8";
+      bytes: Uint8Array;
+      offsets: Int32Array;
+      valid: Uint8Array | null;
+    }
+  | {
+      kind: "binary";
+      bytes: Uint8Array;
+      offsets: Int32Array;
+      valid: Uint8Array | null;
+    };
 
 /** A whole result as typed column buffers — what `ingestColumnBatch` sends. */
 export interface ColumnBatch {
@@ -276,7 +296,10 @@ export function batchBytes(batch: ColumnBatch): number {
   let n = 0;
   for (const c of batch.columns) {
     n += c.valid?.byteLength ?? 0;
-    n += "bytes" in c ? c.bytes.byteLength + c.offsets.byteLength : c.values.byteLength;
+    n +=
+      "bytes" in c
+        ? c.bytes.byteLength + c.offsets.byteLength
+        : c.values.byteLength;
   }
   return n;
 }
@@ -309,7 +332,9 @@ function rawChunks(col: ArrowLikeColumn): ArrowLikeChunk[] | null {
   const data = col.data;
   if (!Array.isArray(data) || data.length === 0) return null;
   // A sliced chunk (offset ≠ 0) is read per row; DuckDB never returns one.
-  return data.every((d) => d.offset === 0 && d.values !== undefined) ? data : null;
+  return data.every((d) => d.offset === 0 && d.values !== undefined)
+    ? data
+    : null;
 }
 
 class ValidityBuilder {
@@ -330,7 +355,11 @@ class ValidityBuilder {
 const encoder = new TextEncoder();
 
 /** Read one Arrow column into its typed form. */
-export function decodeColumn(col: ArrowLikeColumn | null, field: ArrowLikeField, rows: number): DecodedColumn {
+export function decodeColumn(
+  col: ArrowLikeColumn | null,
+  field: ArrowLikeField,
+  rows: number,
+): DecodedColumn {
   const ty = classifyType(field);
   const t = typeOf(field);
   const valid = new ValidityBuilder(rows);
@@ -341,7 +370,8 @@ export function decodeColumn(col: ArrowLikeColumn | null, field: ArrowLikeField,
     for (const d of chunks!) {
       if (d.nullCount > 0 && d.nullBitmap && d.nullBitmap.length > 0) {
         for (let i = 0; i < d.length; i++)
-          if (((d.nullBitmap[i >> 3] >> (i & 7)) & 1) === 0) valid.clear(base + i);
+          if (((d.nullBitmap[i >> 3] >> (i & 7)) & 1) === 0)
+            valid.clear(base + i);
       }
       f(d, base);
       base += d.length;
@@ -352,7 +382,10 @@ export function decodeColumn(col: ArrowLikeColumn | null, field: ArrowLikeField,
   const perRow = (): unknown[] => {
     if (!col) return new Array(rows).fill(null);
     const scale = decimalScale(field);
-    if (typeof col.get === "function" && (scale !== null || (col.nullCount ?? 0) > 0 || t !== null)) {
+    if (
+      typeof col.get === "function" &&
+      (scale !== null || (col.nullCount ?? 0) > 0 || t !== null)
+    ) {
       return Array.from({ length: rows }, (_, r) => {
         const cell = col.get!(r);
         if (cell == null) return null;
@@ -367,7 +400,8 @@ export function decodeColumn(col: ArrowLikeColumn | null, field: ArrowLikeField,
     if (chunks && t && (t.typeId === T.Utf8 || t.typeId === T.Binary)) {
       // The UTF-8 buffer and offsets ARE Arrow's layout: concatenate chunks.
       let total = 0;
-      for (const d of chunks) total += d.valueOffsets![d.length] - d.valueOffsets![0];
+      for (const d of chunks)
+        total += d.valueOffsets![d.length] - d.valueOffsets![0];
       const bytes = new Uint8Array(total);
       const offsets = new Int32Array(rows + 1);
       let at = 0;
@@ -375,10 +409,16 @@ export function decodeColumn(col: ArrowLikeColumn | null, field: ArrowLikeField,
         const o = d.valueOffsets!;
         const v = d.values as Uint8Array;
         bytes.set(v.subarray(o[0], o[d.length]), at);
-        for (let i = 0; i < d.length; i++) offsets[base + i + 1] = at + (o[i + 1] - o[0]);
+        for (let i = 0; i < d.length; i++)
+          offsets[base + i + 1] = at + (o[i + 1] - o[0]);
         at += o[d.length] - o[0];
       });
-      return { kind: ty === "text" ? "utf8" : "binary", bytes, offsets, valid: valid.done() };
+      return {
+        kind: ty === "text" ? "utf8" : "binary",
+        bytes,
+        offsets,
+        valid: valid.done(),
+      };
     }
     // Per row: encode each cell.
     const cells = perRow();
@@ -392,7 +432,8 @@ export function decodeColumn(col: ArrowLikeColumn | null, field: ArrowLikeField,
         valid.clear(i);
         b = new Uint8Array(0);
       } else if (ty === "bytes") {
-        b = c instanceof Uint8Array ? c : Uint8Array.from(c as ArrayLike<number>);
+        b =
+          c instanceof Uint8Array ? c : Uint8Array.from(c as ArrayLike<number>);
       } else {
         b = encoder.encode(t?.typeId === T.Time ? timeText(c) : String(c));
       }
@@ -406,7 +447,12 @@ export function decodeColumn(col: ArrowLikeColumn | null, field: ArrowLikeField,
       bytes.set(b, p);
       p += b.length;
     }
-    return { kind: ty === "text" ? "utf8" : "binary", bytes, offsets, valid: valid.done() };
+    return {
+      kind: ty === "text" ? "utf8" : "binary",
+      bytes,
+      offsets,
+      valid: valid.done(),
+    };
   }
 
   if (ty === "bool") {
@@ -414,19 +460,29 @@ export function decodeColumn(col: ArrowLikeColumn | null, field: ArrowLikeField,
     if (chunks && t?.typeId === T.Bool) {
       eachChunk((d, base) => {
         const v = d.values as Uint8Array;
-        for (let i = 0; i < d.length; i++) values[base + i] = (v[i >> 3] >> (i & 7)) & 1;
+        for (let i = 0; i < d.length; i++)
+          values[base + i] = (v[i >> 3] >> (i & 7)) & 1;
       });
     } else {
-      perRow().forEach((c, i) => (c == null ? valid.clear(i) : (values[i] = c ? 1 : 0)));
+      perRow().forEach((c, i) =>
+        c == null ? valid.clear(i) : (values[i] = c ? 1 : 0),
+      );
     }
     return { kind: "bool", values, valid: valid.done() };
   }
 
   if (ty === "date") {
     const values = new Int32Array(rows);
-    if (chunks && t?.typeId === T.Date && t.unit === 0 && chunks.every((d) => d.values instanceof Int32Array)) {
+    if (
+      chunks &&
+      t?.typeId === T.Date &&
+      t.unit === 0 &&
+      chunks.every((d) => d.values instanceof Int32Array)
+    ) {
       // DateDay: the buffer IS days (get() would give epoch ms — DQ-1).
-      eachChunk((d, base) => values.set((d.values as Int32Array).subarray(0, d.length), base));
+      eachChunk((d, base) =>
+        values.set((d.values as Int32Array).subarray(0, d.length), base),
+      );
     } else {
       perRow().forEach((c, i) => {
         if (c == null) return valid.clear(i);
@@ -442,16 +498,26 @@ export function decodeColumn(col: ArrowLikeColumn | null, field: ArrowLikeField,
   if (ty === "datetime") {
     const values = new Float64Array(rows);
     const unit = t?.unit ?? 1;
-    if (chunks && t?.typeId === T.Timestamp && chunks.every((d) => d.values instanceof BigInt64Array)) {
+    if (
+      chunks &&
+      t?.typeId === T.Timestamp &&
+      chunks.every((d) => d.values instanceof BigInt64Array)
+    ) {
       // The buffer is in the column's storage unit (DQ-2): floor to ms.
       eachChunk((d, base) => {
         const v = d.values as BigInt64Array;
-        for (let i = 0; i < d.length; i++) values[base + i] = toMillis(v[i], unit);
+        for (let i = 0; i < d.length; i++)
+          values[base + i] = toMillis(v[i], unit);
       });
     } else {
       perRow().forEach((c, i) => {
         if (c == null) return valid.clear(i);
-        values[i] = c instanceof Date ? c.getTime() : typeof c === "bigint" ? toMillis(c, unit) : Math.floor(Number(c));
+        values[i] =
+          c instanceof Date
+            ? c.getTime()
+            : typeof c === "bigint"
+              ? toMillis(c, unit)
+              : Math.floor(Number(c));
       });
     }
     return { kind: "datetime", values, valid: valid.done() };
@@ -466,10 +532,16 @@ export function decodeColumn(col: ArrowLikeColumn | null, field: ArrowLikeField,
       const w = d.values as Uint32Array;
       for (let i = 0; i < d.length; i++) {
         if (!isValid(valid.bits, base + i)) continue;
-        values[base + i] = decimalToNumber(wordsToBigInt(w, i * words, words).toString(), scale);
+        values[base + i] = decimalToNumber(
+          wordsToBigInt(w, i * words, words).toString(),
+          scale,
+        );
       }
     });
-  } else if (chunks && (t?.typeId === T.Int || (t?.typeId === T.Float && t.precision !== 0))) {
+  } else if (
+    chunks &&
+    (t?.typeId === T.Int || (t?.typeId === T.Float && t.precision !== 0))
+  ) {
     eachChunk((d, base) => {
       const v = d.values!;
       if (v instanceof BigInt64Array || v instanceof BigUint64Array) {
@@ -479,7 +551,9 @@ export function decodeColumn(col: ArrowLikeColumn | null, field: ArrowLikeField,
       }
     });
   } else {
-    perRow().forEach((c, i) => (c == null ? valid.clear(i) : (values[i] = Number(c))));
+    perRow().forEach((c, i) =>
+      c == null ? valid.clear(i) : (values[i] = Number(c)),
+    );
   }
   return { kind: "f64", values, valid: valid.done() };
 }
@@ -493,7 +567,9 @@ function timeText(c: unknown): string {
   const pad = (n: number) => String(n).padStart(2, "0");
   const frac = us % 1e6;
   const base = `${pad(Math.floor(s / 3600))}:${pad(Math.floor(s / 60) % 60)}:${pad(s % 60)}`;
-  return frac ? `${base}.${String(frac).padStart(6, "0").replace(/0+$/, "")}` : base;
+  return frac
+    ? `${base}.${String(frac).padStart(6, "0").replace(/0+$/, "")}`
+    : base;
 }
 
 function schemaOf(table: ArrowLikeTable): FieldJson[] {
@@ -502,7 +578,9 @@ function schemaOf(table: ArrowLikeTable): FieldJson[] {
     const scale = decimalScale(f);
     // A DECIMAL keeps its scale for display (oracle defect DM-8); HUGEINT
     // (an int) has none.
-    return scale !== null && ty === "float" ? { name: f.name, ty, nullable: true, scale } : { name: f.name, ty, nullable: true };
+    return scale !== null && ty === "float"
+      ? { name: f.name, ty, nullable: true, scale }
+      : { name: f.name, ty, nullable: true };
   });
 }
 
@@ -510,7 +588,9 @@ function schemaOf(table: ArrowLikeTable): FieldJson[] {
  *  `ingestColumnBatch` sends (one copy per column into the engine). */
 export function arrowToColumns(table: ArrowLikeTable): ColumnBatch {
   const fields = schemaOf(table);
-  const columns = table.schema.fields.map((f, i) => decodeColumn(table.getChildAt(i), f, table.numRows));
+  const columns = table.schema.fields.map((f, i) =>
+    decodeColumn(table.getChildAt(i), f, table.numRows),
+  );
   return { schema: { fields }, row_count: table.numRows, columns };
 }
 
@@ -538,10 +618,16 @@ export function columnToValues(c: DecodedColumn, rows: number): ValueJson[] {
         out[i] = { t: "datetime", v: c.values[i] };
         break;
       case "utf8":
-        out[i] = { t: "text", v: decoder.decode(c.bytes.subarray(c.offsets[i], c.offsets[i + 1])) };
+        out[i] = {
+          t: "text",
+          v: decoder.decode(c.bytes.subarray(c.offsets[i], c.offsets[i + 1])),
+        };
         break;
       case "binary":
-        out[i] = { t: "bytes", v: Array.from(c.bytes.subarray(c.offsets[i], c.offsets[i + 1])) };
+        out[i] = {
+          t: "bytes",
+          v: Array.from(c.bytes.subarray(c.offsets[i], c.offsets[i + 1])),
+        };
         break;
     }
   }

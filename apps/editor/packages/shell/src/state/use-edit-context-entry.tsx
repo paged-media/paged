@@ -76,8 +76,7 @@ export function readEnvelope(
 ): MetaEnvelope | null {
   for (const entry of entries) {
     const v = entry.value as
-      | { type?: string; value?: { key?: string; value?: unknown } }
-      | undefined;
+      { type?: string; value?: { key?: string; value?: unknown } } | undefined;
     if (
       v &&
       v.type === "pluginMetadata" &&

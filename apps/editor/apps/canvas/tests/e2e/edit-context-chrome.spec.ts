@@ -32,7 +32,9 @@ import { expect, test, type Page } from "@playwright/test";
 
 import { Designer } from "../journey/driver/designer";
 
-async function debug(page: Page): Promise<{ tool: string | null; context: string | null }> {
+async function debug(
+  page: Page,
+): Promise<{ tool: string | null; context: string | null }> {
   return page.evaluate(() => {
     const d = (
       globalThis as unknown as {
@@ -44,7 +46,10 @@ async function debug(page: Page): Promise<{ tool: string | null; context: string
         };
       }
     ).__canvas.debugContext?.();
-    return { tool: d?.tools?.base ?? null, context: d?.editContext?.type ?? null };
+    return {
+      tool: d?.tools?.base ?? null,
+      context: d?.editContext?.type ?? null,
+    };
   });
 }
 
@@ -54,21 +59,35 @@ async function enterRasterContext(page: Page): Promise<void> {
   const designer = new Designer(page);
   await designer.open();
   await designer.newDocument();
-  const frame = await designer.drawRectangle({ x0: 90, y0: 120, x1: 360, y1: 320 });
+  const frame = await designer.drawRectangle({
+    x0: 90,
+    y0: 120,
+    x1: 360,
+    y1: 320,
+  });
   const placed = await page.evaluate(async (elementId) => {
     const cv = new OffscreenCanvas(160, 120);
     const ctx = cv.getContext("2d")!;
     ctx.fillStyle = "#2050d0";
     ctx.fillRect(0, 0, 160, 120);
     const bytes = Array.from(
-      new Uint8Array(await (await cv.convertToBlob({ type: "image/png" })).arrayBuffer()),
+      new Uint8Array(
+        await (await cv.convertToBlob({ type: "image/png" })).arrayBuffer(),
+      ),
     );
     const c = (
       globalThis as unknown as {
-        __canvas: { client: { mutate: (m: unknown) => Promise<{ kind: string }> } };
+        __canvas: {
+          client: { mutate: (m: unknown) => Promise<{ kind: string }> };
+        };
       }
     ).__canvas;
-    return (await c.client.mutate({ op: "replaceImageBytes", args: { elementId, bytes } })).kind;
+    return (
+      await c.client.mutate({
+        op: "replaceImageBytes",
+        args: { elementId, bytes },
+      })
+    ).kind;
   }, frame);
   expect(placed).toBe("mutationApplied");
   await designer.activate("select");
@@ -89,7 +108,9 @@ test.describe("ED-11 — raster context chrome", () => {
     await expect(segment).toBeVisible();
     await expect(segment).not.toContainText("rasterImage");
     await expect(segment).not.toContainText(",");
-    await expect(segment.locator("[data-context-label]")).toHaveText("Raster image");
+    await expect(segment.locator("[data-context-label]")).toHaveText(
+      "Raster image",
+    );
     const pills = segment.locator("[data-context-tool]");
     expect(await pills.count()).toBeGreaterThan(1);
     // A pill IS the tool: pressing one arms it, inside the context.
@@ -105,15 +126,24 @@ test.describe("ED-11 — raster context chrome", () => {
   }) => {
     await enterRasterContext(page);
     await page.locator('[data-tool-slot="zoom"]').click();
-    await expect.poll(async () => (await debug(page)).tool).toBe("paged.tool.zoom");
-    expect((await debug(page)).context, "the rail's Zoom keeps the context").toBe("rasterImage");
+    await expect
+      .poll(async () => (await debug(page)).tool)
+      .toBe("paged.tool.zoom");
+    expect(
+      (await debug(page)).context,
+      "the rail's Zoom keeps the context",
+    ).toBe("rasterImage");
 
     await page.locator("[data-context-tool]").first().click();
     await page.locator("body").focus();
     await page.keyboard.press("z");
-    await expect.poll(async () => (await debug(page)).tool).toBe("paged.tool.zoom");
+    await expect
+      .poll(async () => (await debug(page)).tool)
+      .toBe("paged.tool.zoom");
     await page.waitForTimeout(200);
-    expect((await debug(page)).context, "Z keeps the context").toBe("rasterImage");
+    expect((await debug(page)).context, "Z keeps the context").toBe(
+      "rasterImage",
+    );
   });
 
   test("AC-CTXBAR-3 — Escape leaves the frame and puts its tool down @feat:editor-shell.context-toolbars @level:edge", async ({
@@ -121,9 +151,13 @@ test.describe("ED-11 — raster context chrome", () => {
   }) => {
     await enterRasterContext(page);
     const inside = (await debug(page)).tool;
-    expect(inside, "entry arms the context's first tool").toMatch(/^media\.paged\.image\./);
+    expect(inside, "entry arms the context's first tool").toMatch(
+      /^media\.paged\.image\./,
+    );
     await page.keyboard.press("Escape");
     await expect.poll(async () => (await debug(page)).context).toBe(null);
-    await expect.poll(async () => (await debug(page)).tool).toBe("paged.tool.select");
+    await expect
+      .poll(async () => (await debug(page)).tool)
+      .toBe("paged.tool.select");
   });
 });

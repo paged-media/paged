@@ -42,7 +42,14 @@ import {
   proseFrame,
   specLabel,
 } from "../../annual-support";
-import { LAYER, OBJECT_STYLE, STYLE, SWATCH, contentBox, p } from "../../names-annual";
+import {
+  LAYER,
+  OBJECT_STYLE,
+  STYLE,
+  SWATCH,
+  contentBox,
+  p,
+} from "../../names-annual";
 import type { PageContext, PageReport } from "../../types";
 import { tryRawMutate, type WireId } from "./wire";
 
@@ -70,9 +77,12 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   const slate = await doc.swatch(SWATCH.slate);
   const paperWarm = await doc.swatch(SWATCH.paperWarm);
 
-  const head = await proseFrame(ctx, page, [left, 54, right, 84], [
-    { text: "Groups, nests, and the dressed frame", style: STYLE.head1 },
-  ]);
+  const head = await proseFrame(
+    ctx,
+    page,
+    [left, 54, right, 84],
+    [{ text: "Groups, nests, and the dressed frame", style: STYLE.head1 }],
+  );
   elements.push(head.frameId);
 
   const tile = async (
@@ -135,15 +145,20 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   })) as string;
   await doc.mutate("dissolveGroup", { groupId: groupId2 });
 
-  const trioCap = await proseFrame(ctx, page, [left, 216, right, 246], [
-    {
-      text:
-        "The upper trio was grouped and moved 180 by 44 as ONE " +
-        "setGroupTransform; the lower trio was grouped and dissolved - " +
-        "members stay, the wrapper goes.",
-      style: STYLE.caption,
-    },
-  ]);
+  const trioCap = await proseFrame(
+    ctx,
+    page,
+    [left, 216, right, 246],
+    [
+      {
+        text:
+          "The upper trio was grouped and moved 180 by 44 as ONE " +
+          "setGroupTransform; the lower trio was grouped and dissolved - " +
+          "members stay, the wrapper goes.",
+        style: STYLE.caption,
+      },
+    ],
+  );
   elements.push(trioCap.frameId);
 
   // ── band 2: pasteInto / releaseFrom ──────────────────────────────
@@ -180,7 +195,9 @@ export async function build(ctx: PageContext): Promise<PageReport> {
         "no longer holds; the margin note is now stale",
     );
   } else {
-    notes.push(`deleteFrame on the nested child refused as expected: ${refusal.error}`);
+    notes.push(
+      `deleteFrame on the nested child refused as expected: ${refusal.error}`,
+    );
   }
 
   // Pair two: nested and RELEASED — the twin ends the page unclipped.
@@ -192,16 +209,21 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   });
   await doc.mutate("releaseFrom", { childId: { kind: "oval", id: child2 } });
 
-  const nestCap = await proseFrame(ctx, page, [left, 352, right, 394], [
-    {
-      text:
-        "Left: an oval pasted INTO a frame - it is clipped at the " +
-        "container's edge, and deleteFrame refuses it until released. " +
-        "Right: the same nesting, then releaseFrom - the twin ends the " +
-        "page whole, overlapping its container unclipped.",
-      style: STYLE.caption,
-    },
-  ]);
+  const nestCap = await proseFrame(
+    ctx,
+    page,
+    [left, 352, right, 394],
+    [
+      {
+        text:
+          "Left: an oval pasted INTO a frame - it is clipped at the " +
+          "container's edge, and deleteFrame refuses it until released. " +
+          "Right: the same nesting, then releaseFrom - the twin ends the " +
+          "page whole, overlapping its container unclipped.",
+        style: STYLE.caption,
+      },
+    ],
+  );
   elements.push(nestCap.frameId);
 
   // ── band 3: the object-style battery ─────────────────────────────
@@ -300,24 +322,29 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     throw new Error("the scratch object style survived its deleteObjectStyle");
   }
 
-  const styleProse = await proseFrame(ctx, page, [252, 404, right, 560], [
-    {
-      text:
-        "The frame at left wears Exhibit Frame, an object style that did " +
-        "not exist when this chapter began. It was born Exhibit Panel, " +
-        "renamed live, and based on the fixture's Annotation Marker - " +
-        "which is where the tinted fill and hairline come from, because " +
-        "the definition door for object styles is closed today.",
-      style: STYLE.bodySmall,
-    },
-    {
-      text:
-        "A second style, Scratch Object, ran the whole triple - created, " +
-        "renamed, deleted - and the checkpoint carries no trace of it: " +
-        "demonstrated, not resident.",
-      style: STYLE.bodySmall,
-    },
-  ]);
+  const styleProse = await proseFrame(
+    ctx,
+    page,
+    [252, 404, right, 560],
+    [
+      {
+        text:
+          "The frame at left wears Exhibit Frame, an object style that did " +
+          "not exist when this chapter began. It was born Exhibit Panel, " +
+          "renamed live, and based on the fixture's Annotation Marker - " +
+          "which is where the tinted fill and hairline come from, because " +
+          "the definition door for object styles is closed today.",
+        style: STYLE.bodySmall,
+      },
+      {
+        text:
+          "A second style, Scratch Object, ran the whole triple - created, " +
+          "renamed, deleted - and the checkpoint carries no trace of it: " +
+          "demonstrated, not resident.",
+        style: STYLE.bodySmall,
+      },
+    ],
+  );
   elements.push(styleProse.frameId);
 
   elements.push(

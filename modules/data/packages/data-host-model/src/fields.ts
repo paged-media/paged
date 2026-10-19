@@ -66,7 +66,9 @@ export function insertFieldMutation(
     args: {
       storyId,
       offset,
-      field: { placeholder: { plugin: FIELD_PLUGIN, key, value: value ?? undefined } },
+      field: {
+        placeholder: { plugin: FIELD_PLUGIN, key, value: value ?? undefined },
+      },
       // Typed since plugin-api 0.2.41 (protocol 69); an older engine ignores it.
       ...(contentOffset !== undefined ? { contentOffset } : {}),
     },
@@ -164,7 +166,9 @@ export function backToFront<T extends { storyId: string; offset: number }>(
 /** Keep only the fields this plugin owns (defence in depth — the host already
  *  scopes the enumeration, but a pure filter keeps the refresh honest if a
  *  broader read ever lands). */
-export function ownFields(fields: readonly PlaceholderField[]): PlaceholderField[] {
+export function ownFields(
+  fields: readonly PlaceholderField[],
+): PlaceholderField[] {
   return fields.filter((f) => f.plugin === FIELD_PLUGIN);
 }
 
@@ -254,7 +258,10 @@ function appliedCellStyleMutation(
   return {
     op: "setElementProperty",
     args: {
-      elementId: { kind: "tableCell", id: { story_id: storyId, table_id: tableId, row, col } },
+      elementId: {
+        kind: "tableCell",
+        id: { story_id: storyId, table_id: tableId, row, col },
+      },
       path: "appliedCellStyle",
       value: { type: "text", value: styleName } satisfies Value,
     },
@@ -268,7 +275,13 @@ function appliedCellStyleMutation(
 export type RuleTarget =
   | { kind: "storyRange"; storyId: string; start: number; end: number }
   | { kind: "storyParagraphs"; storyId: string; firstParagraph: number }
-  | { kind: "tableColumn"; storyId: string; tableId: string; col: number; headerRows: number };
+  | {
+      kind: "tableColumn";
+      storyId: string;
+      tableId: string;
+      col: number;
+      headerRows: number;
+    };
 
 /** One paragraph's character range in its story, read live by the caller
  *  (`[start, end)` in core's offset space, where a break is not a character). */
@@ -317,14 +330,30 @@ export function ruleMutations(
   if (apply.kind === "character" || apply.kind === "paragraph") {
     if (target.kind === "storyRange") {
       if (fires.length === 0) return [];
-      return [applyStyleMutation(target.storyId, target.start, target.end, apply.name, apply.kind)];
+      return [
+        applyStyleMutation(
+          target.storyId,
+          target.start,
+          target.end,
+          apply.name,
+          apply.kind,
+        ),
+      ];
     }
     if (target.kind === "storyParagraphs") {
       const out: Mutation[] = [];
       for (const recordIndex of fires) {
         const p = paragraphs[target.firstParagraph + recordIndex];
         if (!p) continue;
-        out.push(applyStyleMutation(target.storyId, p.start, p.end, apply.name, apply.kind));
+        out.push(
+          applyStyleMutation(
+            target.storyId,
+            p.start,
+            p.end,
+            apply.name,
+            apply.kind,
+          ),
+        );
       }
       return out;
     }
@@ -347,5 +376,8 @@ export function ruleMutations(
  *  (idempotent at the host: re-creating an existing self id is a no-op there).
  *  Paragraph/character rules use their named style as-is (assumed to exist). */
 export function createRuleCellStyle(styleName: string): Mutation {
-  return { op: "createCellStyle", args: { selfId: styleName, name: styleName } };
+  return {
+    op: "createCellStyle",
+    args: { selfId: styleName, name: styleName },
+  };
 }

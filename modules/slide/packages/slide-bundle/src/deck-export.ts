@@ -50,8 +50,13 @@ function leaves(nodes: readonly TreeNode[], out: TreeNode[] = []): TreeNode[] {
 const r1 = (v: number) => Math.round(v * 10) / 10;
 
 async function sha256(text: string): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
-  return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, "0")).join("");
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(text),
+  );
+  return Array.from(new Uint8Array(digest), (b) =>
+    b.toString(16).padStart(2, "0"),
+  ).join("");
 }
 
 /**
@@ -68,13 +73,18 @@ export async function pageFingerprints(host: BundleHost): Promise<string[]> {
     for (const g of await doc.elementGeometry(all.map((n) => n.id!) as never)) {
       const id = (g as { id: { id: string } }).id.id;
       const b = (g as { bounds: number[] }).bounds.map(r1);
-      const t = ((g as { itemTransform?: number[] | null }).itemTransform ?? [1, 0, 0, 1, 0, 0]).map(r1);
+      const t = (
+        (g as { itemTransform?: number[] | null }).itemTransform ?? [
+          1, 0, 0, 1, 0, 0,
+        ]
+      ).map(r1);
       geometry.set(id, [b, t]);
     }
   }
   const storyOf = new Map<string, string>();
   for (const s of await doc.collection<{ selfId: string }>("stories")) {
-    for (const link of await doc.frameChain(s.selfId)) storyOf.set(link.frameId, s.selfId);
+    for (const link of await doc.frameChain(s.selfId))
+      storyOf.set(link.frameId, s.selfId);
   }
   const out: string[] = [];
   for (const items of pages) {
@@ -82,8 +92,10 @@ export async function pageFingerprints(host: BundleHost): Promise<string[]> {
     for (const n of leaves(items)) {
       const id = n.id?.id;
       const story = id ? storyOf.get(id) : undefined;
-      const text = story ? (await doc.storyContent(story))?.paragraphs ?? null : null;
-      parts.push([n.kind, id ? geometry.get(id) ?? null : null, text]);
+      const text = story
+        ? ((await doc.storyContent(story))?.paragraphs ?? null)
+        : null;
+      parts.push([n.kind, id ? (geometry.get(id) ?? null) : null, text]);
     }
     out.push(await sha256(JSON.stringify(parts)));
   }

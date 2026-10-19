@@ -69,7 +69,10 @@ export function pageOriginOf(read: object | null | undefined): PageOrigin {
   const o = (read as PageOriginRead | null | undefined)?.pageOrigin;
   if (!Array.isArray(o) || o.length !== 2) return SPREAD_ORIGIN;
   const [x, y] = o as unknown[];
-  return typeof x === "number" && Number.isFinite(x) && typeof y === "number" && Number.isFinite(y)
+  return typeof x === "number" &&
+    Number.isFinite(x) &&
+    typeof y === "number" &&
+    Number.isFinite(y)
     ? [x, y]
     : SPREAD_ORIGIN;
 }
@@ -95,6 +98,11 @@ export function storedTransformOf(
 /** A PAGE-space table as the anchors `framePath` must store on a path
  *  `insertPath` just made on that page (identity transform, so its
  *  stored anchors are spread coordinates). */
-export function spreadTableOf(table: AnchorTable, origin: PageOrigin): AnchorTable {
-  return isSpreadOrigin(origin) ? table : transformAnchorTable(table, affineTranslate(origin[0], origin[1]));
+export function spreadTableOf(
+  table: AnchorTable,
+  origin: PageOrigin,
+): AnchorTable {
+  return isSpreadOrigin(origin)
+    ? table
+    : transformAnchorTable(table, affineTranslate(origin[0], origin[1]));
 }

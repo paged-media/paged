@@ -98,7 +98,9 @@ describe("host.journal — the door", () => {
     expect(host.supports("journal@1")).toBe(false);
     // Inert means INERT — not throwing. A plugin that instruments itself must
     // keep working on a host that keeps no ring.
-    expect(() => host.journal.record({ code: "media.paged.test.x" })).not.toThrow();
+    expect(() =>
+      host.journal.record({ code: "media.paged.test.x" }),
+    ).not.toThrow();
   });
 
   it("reports journal@1 only when a real ring is wired", () => {

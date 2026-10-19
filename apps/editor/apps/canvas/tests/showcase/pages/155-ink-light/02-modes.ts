@@ -89,13 +89,19 @@ async function half(
     await plate(ctx, pageIndex, [0, 0, TRIM_W_PT, TRIM_H_PT], SWATCH.paperWarm),
   );
 
-  const head = await proseFrame(ctx, pageIndex, [54, 40, 486, 76], [
-    { text: header.title, style: STYLE.head1 },
-  ]);
+  const head = await proseFrame(
+    ctx,
+    pageIndex,
+    [54, 40, 486, 76],
+    [{ text: header.title, style: STYLE.head1 }],
+  );
   elements.push(head.frameId);
-  const caption = await proseFrame(ctx, pageIndex, [54, 80, 486, 112], [
-    { text: header.caption, style: STYLE.caption },
-  ]);
+  const caption = await proseFrame(
+    ctx,
+    pageIndex,
+    [54, 80, 486, 112],
+    [{ text: header.caption, style: STYLE.caption }],
+  );
   elements.push(caption.frameId);
 
   for (const [i, mode] of modes.entries()) {

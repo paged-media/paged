@@ -83,10 +83,18 @@ export interface CoreObjects {
   get(a: ParsedAddress, path: string): Promise<ObjectValue>;
   /** Plan a write (value already schema-validated). `kind` names the SDK
    *  kind of a `$h:` handle address made earlier in the same batch. */
-  planSet(a: ParsedAddress, path: string, value: unknown, kind?: string): Promise<CorePlan>;
+  planSet(
+    a: ParsedAddress,
+    path: string,
+    value: unknown,
+    kind?: string,
+  ): Promise<CorePlan>;
   /** Plan a `create` of a core object (protocol 71). `handle` binds the
    *  new object for later ops of the same batch. */
-  planCreate?(op: Extract<ObjectOp, { op: "create" }>, handle: string): Promise<CoreCreatePlan>;
+  planCreate?(
+    op: Extract<ObjectOp, { op: "create" }>,
+    handle: string,
+  ): Promise<CoreCreatePlan>;
   /** Plan a `delete` of a core object. */
   planDelete?(a: ParsedAddress): Promise<CorePlan>;
   /** The wire `ElementId` of an address (labels go here). */
@@ -99,7 +107,12 @@ export interface CoreObjects {
    *  on a label host: `setPluginMetadata` (item / story), `setPageMetadata`
    *  (page, protocol 70) or `setDocumentMetadata` (doc); null when the
    *  address is not a label host. */
-  planLabel(a: ParsedAddress, key: string, value: string | null, caller: string): Promise<MutationInput | null>;
+  planLabel(
+    a: ParsedAddress,
+    key: string,
+    value: string | null,
+    caller: string,
+  ): Promise<MutationInput | null>;
   /** Evaluate core selector steps (no plugin steps). */
   query(steps: readonly SelectorStep[]): Promise<string[]>;
   /** Commit mutations as ONE engine mutation (a `batch` when > 1). */
@@ -127,7 +140,10 @@ export const OBJECT_MODEL_PROTOCOL = 71;
  * The core seam over a live engine. Feature-detects the engine protocol
  * and delegates to the protocol-71 seam or the pre-71 table.
  */
-export function createCoreObjects(getEditor: () => PagedEditor, options: CreateCoreObjectsOptions = {}): CoreObjects {
+export function createCoreObjects(
+  getEditor: () => PagedEditor,
+  options: CreateCoreObjectsOptions = {},
+): CoreObjects {
   const v70 = createCoreObjectsV70(getEditor);
   const v71 = createCoreObjectsV71(getEditor, v70);
   let protocol: number | null = null;
@@ -135,7 +151,10 @@ export function createCoreObjects(getEditor: () => PagedEditor, options: CreateC
 
   const known = (): number | null => {
     if (protocol !== null) return protocol;
-    const p = typeof options.protocol === "function" ? options.protocol() : options.protocol;
+    const p =
+      typeof options.protocol === "function"
+        ? options.protocol()
+        : options.protocol;
     if (typeof p === "number") protocol = p;
     return protocol;
   };
@@ -145,11 +164,19 @@ export function createCoreObjects(getEditor: () => PagedEditor, options: CreateC
     if (k !== null) return k;
     probing ??= (async () => {
       try {
-        const reply = (await getEditor().client.send({ kind: "requestQuery", payload: { selector: "doc" } } as never)) as {
+        const reply = (await getEditor().client.send({
+          kind: "requestQuery",
+          payload: { selector: "doc" },
+        } as never)) as {
           kind?: string;
           protocol?: unknown;
         };
-        const p = typeof reply.protocol === "number" ? reply.protocol : reply.kind === "queryResult" ? OBJECT_MODEL_PROTOCOL : 70;
+        const p =
+          typeof reply.protocol === "number"
+            ? reply.protocol
+            : reply.kind === "queryResult"
+              ? OBJECT_MODEL_PROTOCOL
+              : 70;
         protocol = p;
         return p;
       } catch {
@@ -163,15 +190,18 @@ export function createCoreObjects(getEditor: () => PagedEditor, options: CreateC
     return probing;
   }
 
-  const pick = (): CoreObjects => ((known() ?? 0) >= OBJECT_MODEL_PROTOCOL ? v71 : v70);
-  const on = async (): Promise<CoreObjects> => ((await detect()) >= OBJECT_MODEL_PROTOCOL ? v71 : v70);
+  const pick = (): CoreObjects =>
+    (known() ?? 0) >= OBJECT_MODEL_PROTOCOL ? v71 : v70;
+  const on = async (): Promise<CoreObjects> =>
+    (await detect()) >= OBJECT_MODEL_PROTOCOL ? v71 : v70;
 
   return {
     ready: detect,
     kinds: () => pick().kinds(),
     schema: (kind) => pick().schema(kind),
     get: async (a, path) => (await on()).get(a, path),
-    planSet: async (a, path, value, kind) => (await on()).planSet(a, path, value, kind),
+    planSet: async (a, path, value, kind) =>
+      (await on()).planSet(a, path, value, kind),
     planCreate: async (op, handle) => (await on()).planCreate!(op, handle),
     planDelete: async (a) => (await on()).planDelete!(a),
     elementIdOf: (a) => v70.elementIdOf(a),
@@ -187,4 +217,7 @@ export function createCoreObjects(getEditor: () => PagedEditor, options: CreateC
 }
 
 /** Every item kind word a selector may use for core frames. */
-export const FRAME_KIND_WORDS: readonly string[] = ["frame", ...PAGE_ITEM_KINDS];
+export const FRAME_KIND_WORDS: readonly string[] = [
+  "frame",
+  ...PAGE_ITEM_KINDS,
+];

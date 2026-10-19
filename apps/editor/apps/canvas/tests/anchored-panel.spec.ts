@@ -154,9 +154,9 @@ test.describe("W2.12 — Anchored Object panel", () => {
     );
     // The fixture's AnchoredPosition="InlinePosition" reflects on the
     // mode select.
-    await expect(
-      root.locator('[data-anchored-select="position"]'),
-    ).toHaveValue("InlinePosition");
+    await expect(root.locator('[data-anchored-select="position"]')).toHaveValue(
+      "InlinePosition",
+    );
     // SpineRelative="true" → the spine-relative toggle is on.
     await expect(
       root.locator('[data-anchored-toggle="spine-relative"]'),

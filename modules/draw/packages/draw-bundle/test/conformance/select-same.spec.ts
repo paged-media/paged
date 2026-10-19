@@ -54,9 +54,15 @@ import {
 import { F1_MULTI_SHAPE } from "../fixtures/corpus";
 import { openHost } from "./host";
 
-const RECT = { kind: "rectangle", id: F1_MULTI_SHAPE.ids.rectangle! } as ElementId;
+const RECT = {
+  kind: "rectangle",
+  id: F1_MULTI_SHAPE.ids.rectangle!,
+} as ElementId;
 const POLY = { kind: "polygon", id: F1_MULTI_SHAPE.ids.polygon! } as ElementId;
-const LINE = { kind: "graphicLine", id: F1_MULTI_SHAPE.ids.graphicLine! } as ElementId;
+const LINE = {
+  kind: "graphicLine",
+  id: F1_MULTI_SHAPE.ids.graphicLine!,
+} as ElementId;
 
 async function leafCount(h: HeadlessHost): Promise<number> {
   const roots = await h.host.document.tree();
@@ -83,13 +89,21 @@ describe("draw conformance — Select-same (Phase 9 Tier B)", () => {
               kind: "Page",
               label: "1",
               children: [
-                { kind: "Rectangle", label: "r", id: { kind: "rectangle", id: "ur" } },
+                {
+                  kind: "Rectangle",
+                  label: "r",
+                  id: { kind: "rectangle", id: "ur" },
+                },
                 {
                   kind: "Group",
                   label: "g",
                   id: { kind: "group", id: "ug" },
                   children: [
-                    { kind: "Polygon", label: "p", id: { kind: "polygon", id: "up" } },
+                    {
+                      kind: "Polygon",
+                      label: "p",
+                      id: { kind: "polygon", id: "up" },
+                    },
                   ],
                 },
               ],
@@ -142,12 +156,19 @@ describe("draw conformance — Select-same (Phase 9 Tier B)", () => {
       const before = await leafCount(h);
       await h.host.selection.set([RECT]);
       const rec = h.contributions.find(
-        (c) => c.kind === "command" && c.id === "media.paged.draw.command.selectSameFill",
+        (c) =>
+          c.kind === "command" &&
+          c.id === "media.paged.draw.command.selectSameFill",
       );
       expect(rec).toBeDefined();
-      await (rec!.value as { handler: (p?: unknown) => unknown }).handler(undefined);
+      await (rec!.value as { handler: (p?: unknown) => unknown }).handler(
+        undefined,
+      );
 
-      const sel = h.host.selection.get().map((e) => e.id).sort();
+      const sel = h.host.selection
+        .get()
+        .map((e) => e.id)
+        .sort();
       expect(sel).toEqual(["upoly", "urect"]);
       // Pure selection — the document leaf count is unchanged.
       expect(await leafCount(h)).toBe(before);
@@ -156,10 +177,14 @@ describe("draw conformance — Select-same (Phase 9 Tier B)", () => {
     it("with no reference selected the command is a no-op (no throw)", async () => {
       await h.host.selection.set([]);
       const rec = h.contributions.find(
-        (c) => c.kind === "command" && c.id === "media.paged.draw.command.selectSameStroke",
+        (c) =>
+          c.kind === "command" &&
+          c.id === "media.paged.draw.command.selectSameStroke",
       );
       await expect(
-        (rec!.value as { handler: (p?: unknown) => unknown }).handler(undefined),
+        (rec!.value as { handler: (p?: unknown) => unknown }).handler(
+          undefined,
+        ),
       ).resolves.toBeUndefined();
     });
   });
@@ -185,8 +210,14 @@ describe("draw conformance — Select-same (Phase 9 Tier B)", () => {
         (c) =>
           c.kind === "command" &&
           c.id === "media.paged.draw.command.selectSameStrokeWeight",
-      )!.value as { handler: (p?: unknown, payload?: unknown) => Promise<unknown> };
-    const selectedIds = () => h.host.selection.get().map((e) => e.id).sort();
+      )!.value as {
+        handler: (p?: unknown, payload?: unknown) => Promise<unknown>;
+      };
+    const selectedIds = () =>
+      h.host.selection
+        .get()
+        .map((e) => e.id)
+        .sort();
 
     beforeAll(async () => {
       h = await openHost();
@@ -200,14 +231,19 @@ describe("draw conformance — Select-same (Phase 9 Tier B)", () => {
 
     it("the weights are what the fixture says (every kind reads one, the line included)", async () => {
       expect(await valueForCriterion(h.host, RECT, "strokeWeight")).toBe(2);
-      expect(await valueForCriterion(h.host, POLY, "strokeWeight")).toBeCloseTo(2.4, 6);
+      expect(await valueForCriterion(h.host, POLY, "strokeWeight")).toBeCloseTo(
+        2.4,
+        6,
+      );
       expect(await valueForCriterion(h.host, LINE, "strokeWeight")).toBe(3);
     });
 
     it("no tolerance is the EXACT match it always was — the reference alone", async () => {
-      expect((await selectSameMatches(h.host, RECT, "strokeWeight")).map((e) => e.id)).toEqual([
-        "urect",
-      ]);
+      expect(
+        (await selectSameMatches(h.host, RECT, "strokeWeight")).map(
+          (e) => e.id,
+        ),
+      ).toEqual(["urect"]);
       await h.host.selection.set([RECT]);
       await weightCommand().handler(undefined);
       expect(selectedIds()).toEqual(["urect"]);
@@ -215,7 +251,9 @@ describe("draw conformance — Select-same (Phase 9 Tier B)", () => {
 
     it("a tolerance widens it, INCLUSIVE: 0.4 reaches the polygon, 1 reaches the line", async () => {
       const ids = async (t: number) =>
-        (await selectSameMatches(h.host, RECT, "strokeWeight", t)).map((e) => e.id).sort();
+        (await selectSameMatches(h.host, RECT, "strokeWeight", t))
+          .map((e) => e.id)
+          .sort();
       expect(await ids(0.39)).toEqual(["urect"]);
       expect(await ids(0.4)).toEqual(["upoly", "urect"]);
       expect(await ids(0.99)).toEqual(["upoly", "urect"]);
@@ -223,7 +261,9 @@ describe("draw conformance — Select-same (Phase 9 Tier B)", () => {
       // Measured from the REFERENCE, not pairwise: from the line, 0.6
       // reaches the polygon (0.6 away) and not the rectangle (1 away).
       expect(
-        (await selectSameMatches(h.host, LINE, "strokeWeight", 0.6)).map((e) => e.id).sort(),
+        (await selectSameMatches(h.host, LINE, "strokeWeight", 0.6))
+          .map((e) => e.id)
+          .sort(),
       ).toEqual(["uline", "upoly"]);
     });
 
@@ -239,13 +279,19 @@ describe("draw conformance — Select-same (Phase 9 Tier B)", () => {
     it("a COLOUR criterion ignores a tolerance — swatch refs are identities, so it stays exact", async () => {
       await h.host.selection.set([RECT]);
       const fill = h.contributions.find(
-        (c) => c.kind === "command" && c.id === "media.paged.draw.command.selectSameFill",
-      )!.value as { handler: (p?: unknown, payload?: unknown) => Promise<unknown> };
+        (c) =>
+          c.kind === "command" &&
+          c.id === "media.paged.draw.command.selectSameFill",
+      )!.value as {
+        handler: (p?: unknown, payload?: unknown) => Promise<unknown>;
+      };
       await fill.handler(undefined, { tolerance: 50 });
       // The same two black-filled leaves as with no tolerance at all.
       expect(selectedIds()).toEqual(["upoly", "urect"]);
       expect(
-        (await selectSameMatches(h.host, RECT, "fill", 50)).map((e) => e.id).sort(),
+        (await selectSameMatches(h.host, RECT, "fill", 50))
+          .map((e) => e.id)
+          .sort(),
       ).toEqual(["upoly", "urect"]);
     });
 
@@ -254,7 +300,9 @@ describe("draw conformance — Select-same (Phase 9 Tier B)", () => {
       expect(strokeWeightToleranceOf({ tolerance: "1" })).toBe(0);
       expect(strokeWeightToleranceOf({ tolerance: -2 })).toBe(0);
       expect(strokeWeightToleranceOf({ tolerance: Number.NaN })).toBe(0);
-      expect(strokeWeightToleranceOf({ tolerance: 1e9 })).toBe(MAX_STROKE_WEIGHT_TOLERANCE);
+      expect(strokeWeightToleranceOf({ tolerance: 1e9 })).toBe(
+        MAX_STROKE_WEIGHT_TOLERANCE,
+      );
       expect(strokeWeightToleranceOf({ tolerance: 0.25 })).toBe(0.25);
     });
   });

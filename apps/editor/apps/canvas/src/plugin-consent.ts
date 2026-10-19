@@ -51,7 +51,9 @@ declare const __PAGED_DATA_ORIGINS__: readonly string[] | undefined;
 
 /** The data origins the page's `connect-src` admits (empty = the floor). */
 export function admittedDataOrigins(): readonly string[] {
-  return typeof __PAGED_DATA_ORIGINS__ === "undefined" ? [] : __PAGED_DATA_ORIGINS__;
+  return typeof __PAGED_DATA_ORIGINS__ === "undefined"
+    ? []
+    : __PAGED_DATA_ORIGINS__;
 }
 
 /** Will a request to `origin` pass this page's network wall? */

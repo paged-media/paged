@@ -79,7 +79,13 @@ async function importBytes(page: Page, name: string, bytes: number[]) {
                 resolve: (
                   name: string,
                   mime?: string,
-                ) => { id: string; import: (f: { name: string; bytes: Uint8Array }) => void | Promise<void> } | null;
+                ) => {
+                  id: string;
+                  import: (f: {
+                    name: string;
+                    bytes: Uint8Array;
+                  }) => void | Promise<void>;
+                } | null;
               };
             };
           };
@@ -105,17 +111,28 @@ test.describe("journey · paged.publish plugin", () => {
     // Author something visible (a bare frame has no fill — paint it),
     // prove it painted.
     const blank = await designer.renderBytes();
-    const rect = await designer.drawRectangle({ x0: 120, y0: 140, x1: 380, y1: 340 });
+    const rect = await designer.drawRectangle({
+      x0: 120,
+      y0: 140,
+      x1: 380,
+      y1: 340,
+    });
     await designer.applyFill("rectangle", rect);
     await expect
-      .poll(async () => designer.renderDiffPixels(blank, await designer.renderBytes()), {
-        timeout: 15_000,
-      })
+      .poll(
+        async () =>
+          designer.renderDiffPixels(blank, await designer.renderBytes()),
+        {
+          timeout: 15_000,
+        },
+      )
       .toBeGreaterThan(64);
 
     // EXPORT — the Export Center path (registry, not a menu click).
     const out = await exportIdml(page);
-    expect("reason" in out ? out.reason : "", "idml export did not drive").toBe("");
+    expect("reason" in out ? out.reason : "", "idml export did not drive").toBe(
+      "",
+    );
     if ("reason" in out) return;
     expect(out.magic.startsWith("PK"), "IDML is a ZIP (PK…)").toBe(true);
     expect(out.bytes.length).toBeGreaterThan(1000);
@@ -134,9 +151,13 @@ test.describe("journey · paged.publish plugin", () => {
     // The rectangle must come back — poll the pixel delta against blank
     // (single cold sample flakes; see the journey-flake lesson).
     await expect
-      .poll(async () => designer.renderDiffPixels(blank2, await designer.renderBytes()), {
-        timeout: 20_000,
-      })
+      .poll(
+        async () =>
+          designer.renderDiffPixels(blank2, await designer.renderBytes()),
+        {
+          timeout: 20_000,
+        },
+      )
       .toBeGreaterThan(64);
     // eslint-disable-next-line no-console
     console.log(`[journey] paged.publish round-trip bytes=${out.bytes.length}`);

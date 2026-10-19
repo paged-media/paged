@@ -11,7 +11,8 @@ import type { MergeResult, RecordsPerPage } from "./merge";
 import type { DataSourceSession, SessionMergeOptions } from "./session";
 
 /** Why a merge did not start: there is nothing to merge yet. */
-export const NO_QUERY_TO_MERGE = "no query to merge: import a data source first (Data sources)";
+export const NO_QUERY_TO_MERGE =
+  "no query to merge: import a data source first (Data sources)";
 
 /**
  * Run a Data Merge. `null`, at once, when there is no query yet; the Bindings
@@ -58,20 +59,28 @@ export interface MergeCommandArgs {
 }
 
 /** The typed command's arguments as the session's merge options. */
-export function mergeOptionsOf(a: MergeCommandArgs): Partial<SessionMergeOptions> {
+export function mergeOptionsOf(
+  a: MergeCommandArgs,
+): Partial<SessionMergeOptions> {
   const recordsPerPage: RecordsPerPage =
     a.mode === "multiple"
       ? {
           mode: "multiple",
           ...(a.arrange ? { arrange: a.arrange } : {}),
-          ...(typeof a.rowSpacingPt === "number" ? { rowSpacingPt: a.rowSpacingPt } : {}),
-          ...(typeof a.columnSpacingPt === "number" ? { columnSpacingPt: a.columnSpacingPt } : {}),
+          ...(typeof a.rowSpacingPt === "number"
+            ? { rowSpacingPt: a.rowSpacingPt }
+            : {}),
+          ...(typeof a.columnSpacingPt === "number"
+            ? { columnSpacingPt: a.columnSpacingPt }
+            : {}),
         }
       : { mode: "single" };
   return {
     ...(a.query ? { query: a.query } : {}),
     recordsPerPage,
-    ...(typeof a.removeBlankLines === "boolean" ? { removeBlankLines: a.removeBlankLines } : {}),
+    ...(typeof a.removeBlankLines === "boolean"
+      ? { removeBlankLines: a.removeBlankLines }
+      : {}),
     ...(a.template ? { template: a.template } : {}),
     ...(a.destination ? { destination: a.destination } : {}),
     ...(a.pageId ? { pageId: a.pageId } : {}),
@@ -90,8 +99,19 @@ export interface MergeCommandResult {
   diagnostics: string[];
 }
 
-export function mergeCommandResult(r: MergeResult | null, session: DataSourceSession): MergeCommandResult {
-  if (!r) return { ok: false, records: 0, pages: 0, overset: 0, message: NO_QUERY_TO_MERGE, diagnostics: [NO_QUERY_TO_MERGE] };
+export function mergeCommandResult(
+  r: MergeResult | null,
+  session: DataSourceSession,
+): MergeCommandResult {
+  if (!r)
+    return {
+      ok: false,
+      records: 0,
+      pages: 0,
+      overset: 0,
+      message: NO_QUERY_TO_MERGE,
+      diagnostics: [NO_QUERY_TO_MERGE],
+    };
   return {
     ok: r.ok,
     records: r.records.length,

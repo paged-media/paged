@@ -19,15 +19,32 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "bun:test";
 import { binUrl } from "../src/bin-url";
-import { DUCKDB_ARTIFACTS, duckdbHandle, type DuckDBHandle } from "../src/query/duckdb";
+import {
+  DUCKDB_ARTIFACTS,
+  duckdbHandle,
+  type DuckDBHandle,
+} from "../src/query/duckdb";
 import { nodeBootSql } from "./duckdb-node-ext";
-import { assertLowered, bootEngine, defineCatalog, partA } from "./pipeline-parts.mjs";
+import {
+  assertLowered,
+  bootEngine,
+  defineCatalog,
+  partA,
+} from "./pipeline-parts.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const PKG = join(HERE, "..");
 const BIN = join(PKG, "bin");
 const ENGINE_WASM = join(BIN, DUCKDB_ARTIFACTS.module);
-const NODE_API = join(PKG, "..", "..", "vendor", "duckdb-wasm", "dist", "duckdb-node-blocking.cjs");
+const NODE_API = join(
+  PKG,
+  "..",
+  "..",
+  "vendor",
+  "duckdb-wasm",
+  "dist",
+  "duckdb-node-blocking.cjs",
+);
 const DATA_JS_WASM = join(BIN, "data_js_bg.wasm");
 const REQUIRE = process.env.REQUIRE_REAL_DUCKDB === "1";
 
@@ -46,9 +63,13 @@ function requireNodeDuckDB(): any {
 /** Boot real DuckDB over the shipped EH engine; never throws — returns why not. */
 async function tryBoot(): Promise<{ handle?: DuckDBHandle; error?: string }> {
   if (!existsSync(ENGINE_WASM))
-    return { error: `${ENGINE_WASM} is missing — run \`bash scripts/vendor-duckdb.sh\`` };
+    return {
+      error: `${ENGINE_WASM} is missing — run \`bash scripts/vendor-duckdb.sh\``,
+    };
   if (!existsSync(NODE_API))
-    return { error: `${NODE_API} is missing — run \`bash scripts/vendor-duckdb.sh\`` };
+    return {
+      error: `${NODE_API} is missing — run \`bash scripts/vendor-duckdb.sh\``,
+    };
   try {
     const duckdb = requireNodeDuckDB();
     // Only the shipped EH module is offered. The mvp slot is a path that does
@@ -56,7 +77,10 @@ async function tryBoot(): Promise<{ handle?: DuckDBHandle; error?: string }> {
     // silently testing a variant that does not ship.
     const db = await duckdb.createDuckDB(
       {
-        mvp: { mainModule: join(BIN, "duckdb-mvp.NOT-SHIPPED.wasm"), mainWorker: "" },
+        mvp: {
+          mainModule: join(BIN, "duckdb-mvp.NOT-SHIPPED.wasm"),
+          mainWorker: "",
+        },
         eh: { mainModule: ENGINE_WASM, mainWorker: "" },
       },
       new duckdb.VoidLogger(),
@@ -67,7 +91,9 @@ async function tryBoot(): Promise<{ handle?: DuckDBHandle; error?: string }> {
     for (const s of nodeBootSql()) conn.query(s); // as bootDuckDB does
     return { handle: duckdbHandle(db, conn, () => db.reset?.()) };
   } catch (err) {
-    return { error: `DuckDB failed to boot: ${err instanceof Error ? err.message : String(err)}` };
+    return {
+      error: `DuckDB failed to boot: ${err instanceof Error ? err.message : String(err)}`,
+    };
   }
 }
 
@@ -80,7 +106,10 @@ if (REQUIRE) {
       expect(boot.error, boot.error).toBeUndefined();
     });
     it("the data-js engine the lane feeds is built", () => {
-      expect(engineBuilt, `${DATA_JS_WASM} missing — run \`bash scripts/build-wasm.sh\``).toBe(true);
+      expect(
+        engineBuilt,
+        `${DATA_JS_WASM} missing — run \`bash scripts/build-wasm.sh\``,
+      ).toBe(true);
     });
   });
 }
@@ -97,8 +126,12 @@ describe("shipped DuckDB artifact set [data.query.seam]", () => {
   it.skipIf(!existsSync(ENGINE_WASM) && !REQUIRE)(
     "is staged: engine within the manifest cap, worker present, JS API self-contained",
     () => {
-      const manifest = JSON.parse(readFileSync(join(PKG, "manifest.json"), "utf8"));
-      const decl = manifest.capabilities.wasm.find((w: { name: string }) => w.name === "duckdb-engine");
+      const manifest = JSON.parse(
+        readFileSync(join(PKG, "manifest.json"), "utf8"),
+      );
+      const decl = manifest.capabilities.wasm.find(
+        (w: { name: string }) => w.name === "duckdb-engine",
+      );
       expect(decl.path).toBe(`bin/${DUCKDB_ARTIFACTS.module}`);
       expect(decl.purpose).toBe("engine");
       expect(statSync(ENGINE_WASM).size).toBeLessThanOrEqual(decl.maxBytes);
@@ -110,46 +143,56 @@ describe("shipped DuckDB artifact set [data.query.seam]", () => {
   );
 });
 
-describe.skipIf(!boot.handle || !engineBuilt)("real DuckDB → recordset.ts → data-js engine [data.query.seam]", () => {
-  it("registers a CSV, runs a SELECT, and the engine lowers it like the hand-built RecordSet", async () => {
-    const duck = boot.handle!;
-    // The bundle's real import path: registerCsv → insertCSVFromPath (detect).
-    await duck.registerCsv("products", CSV);
-    const records = await duck.query("SELECT sku, price FROM products ORDER BY sku");
+describe.skipIf(!boot.handle || !engineBuilt)(
+  "real DuckDB → recordset.ts → data-js engine [data.query.seam]",
+  () => {
+    it("registers a CSV, runs a SELECT, and the engine lowers it like the hand-built RecordSet", async () => {
+      const duck = boot.handle!;
+      // The bundle's real import path: registerCsv → insertCSVFromPath (detect).
+      await duck.registerCsv("products", CSV);
+      const records = await duck.query(
+        "SELECT sku, price FROM products ORDER BY sku",
+      );
 
-    // recordset.ts classified DuckDB's types: VARCHAR → text, DOUBLE → float.
-    expect(records.row_count).toBe(2);
-    expect(records.schema.fields.map((f) => [f.name, f.ty])).toEqual([
-      ["sku", "text"],
-      ["price", "float"],
-    ]);
+      // recordset.ts classified DuckDB's types: VARCHAR → text, DOUBLE → float.
+      expect(records.row_count).toBe(2);
+      expect(records.schema.fields.map((f) => [f.name, f.ty])).toEqual([
+        ["sku", "text"],
+        ["price", "float"],
+      ]);
 
-    const engine = await bootEngine();
-    defineCatalog(engine);
-    engine.ingest_result("q1", records);
-    const lowered = assertLowered(engine.resolve_lowered("t1"), "DuckDB");
-    // Parity with Part A: the same recipe over a hand-built RecordSet.
-    const expected = await partA();
-    expect(lowered.text).toBe(expected.text);
-  });
+      const engine = await bootEngine();
+      defineCatalog(engine);
+      engine.ingest_result("q1", records);
+      const lowered = assertLowered(engine.resolve_lowered("t1"), "DuckDB");
+      // Parity with Part A: the same recipe over a hand-built RecordSet.
+      const expected = await partA();
+      expect(lowered.text).toBe(expected.text);
+    });
 
-  it("re-registering a CSV source replaces its table (importing the file again)", async () => {
-    const duck = boot.handle!;
-    await duck.registerCsv("reimported", "name\nApple 14\n");
-    // The second import of the same source: DuckDB's CSV insert creates the
-    // table, so without dropping the first one it fails "already exists".
-    await duck.registerCsv("reimported", "name\nAardvark 14\n");
-    const rs = await duck.query("SELECT name FROM reimported");
-    expect(rs.row_count).toBe(1);
-    expect(rs.columns[0][0]).toEqual({ t: "text", v: "Aardvark 14" });
-  });
+    it("re-registering a CSV source replaces its table (importing the file again)", async () => {
+      const duck = boot.handle!;
+      await duck.registerCsv("reimported", "name\nApple 14\n");
+      // The second import of the same source: DuckDB's CSV insert creates the
+      // table, so without dropping the first one it fails "already exists".
+      await duck.registerCsv("reimported", "name\nAardvark 14\n");
+      const rs = await duck.query("SELECT name FROM reimported");
+      expect(rs.row_count).toBe(1);
+      expect(rs.columns[0][0]).toEqual({ t: "text", v: "Aardvark 14" });
+    });
 
-  it("queries registered file bytes (the file-import path)", async () => {
-    const duck = boot.handle!;
-    await duck.registerFileBuffer("stock.csv", new TextEncoder().encode("sku,qty\nA-1,3\nB-2,0\n"));
-    const rs = await duck.query("SELECT sku, qty FROM read_csv_auto('stock.csv') WHERE qty > 0");
-    expect(rs.row_count).toBe(1);
-    expect(rs.columns[0][0]).toEqual({ t: "text", v: "A-1" });
-    expect(rs.schema.fields[1].ty).toBe("int");
-  });
-});
+    it("queries registered file bytes (the file-import path)", async () => {
+      const duck = boot.handle!;
+      await duck.registerFileBuffer(
+        "stock.csv",
+        new TextEncoder().encode("sku,qty\nA-1,3\nB-2,0\n"),
+      );
+      const rs = await duck.query(
+        "SELECT sku, qty FROM read_csv_auto('stock.csv') WHERE qty > 0",
+      );
+      expect(rs.row_count).toBe(1);
+      expect(rs.columns[0][0]).toEqual({ t: "text", v: "A-1" });
+      expect(rs.schema.fields[1].ty).toBe("int");
+    });
+  },
+);

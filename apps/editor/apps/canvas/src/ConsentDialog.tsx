@@ -28,7 +28,11 @@
 
 import { useEffect, useState, useSyncExternalStore } from "react";
 import type { CSSProperties } from "react";
-import { reachableOrigin, type ConsentController, type PendingConsent } from "./plugin-consent";
+import {
+  reachableOrigin,
+  type ConsentController,
+  type PendingConsent,
+} from "./plugin-consent";
 
 export function ConsentDialog({
   controller,
@@ -49,8 +53,7 @@ function ConsentPrompt({ pending }: { pending: PendingConsent }) {
   const [remember, setRemember] = useState(false);
 
   const deny = (): void => pending.decide({ granted: [], remember: false });
-  const allow = (): void =>
-    pending.decide({ granted: [...checked], remember });
+  const allow = (): void => pending.decide({ granted: [...checked], remember });
 
   // Esc denies (the safe default for an un-acknowledged prompt).
   useEffect(() => {
@@ -108,12 +111,20 @@ function ConsentPrompt({ pending }: { pending: PendingConsent }) {
         </h2>
         <p style={{ margin: "0 0 14px", color: "var(--muted-fg, #9a9a9a)" }}>
           A plugin wants to reach the origins below.{" "}
-          <strong style={{ color: "var(--fg, #e7e7e7)" }}>{pending.purpose}</strong>
+          <strong style={{ color: "var(--fg, #e7e7e7)" }}>
+            {pending.purpose}
+          </strong>
         </p>
 
         <ul
           data-testid="consent-origins"
-          style={{ listStyle: "none", margin: "0 0 14px", padding: 0, display: "grid", gap: 6 }}
+          style={{
+            listStyle: "none",
+            margin: "0 0 14px",
+            padding: 0,
+            display: "grid",
+            gap: 6,
+          }}
         >
           {pending.origins.map((origin) => (
             <li key={origin}>
@@ -136,16 +147,23 @@ function ConsentPrompt({ pending }: { pending: PendingConsent }) {
                   checked={checked.has(origin)}
                   onChange={() => toggle(origin)}
                 />
-                <code style={{ font: "12px var(--font-mono, monospace)" }}>{origin}</code>
+                <code style={{ font: "12px var(--font-mono, monospace)" }}>
+                  {origin}
+                </code>
               </label>
               {reachableOrigin(origin) ? null : (
                 <p
                   data-testid="consent-origin-blocked"
                   data-origin={origin}
-                  style={{ margin: "4px 0 0 8px", fontSize: 12, color: "var(--muted-fg, #9a9a9a)" }}
+                  style={{
+                    margin: "4px 0 0 8px",
+                    fontSize: 12,
+                    color: "var(--muted-fg, #9a9a9a)",
+                  }}
                 >
-                  This editor&apos;s network policy does not admit this origin. Allowing it records
-                  your consent, but requests to it stay blocked until the deployment lists it.
+                  This editor&apos;s network policy does not admit this origin.
+                  Allowing it records your consent, but requests to it stay
+                  blocked until the deployment lists it.
                 </p>
               )}
             </li>
@@ -153,7 +171,13 @@ function ConsentPrompt({ pending }: { pending: PendingConsent }) {
         </ul>
 
         <label
-          style={{ display: "flex", gap: 8, alignItems: "center", margin: "0 0 16px", color: "var(--muted-fg, #9a9a9a)" }}
+          style={{
+            display: "flex",
+            gap: 8,
+            alignItems: "center",
+            margin: "0 0 16px",
+            color: "var(--muted-fg, #9a9a9a)",
+          }}
         >
           <input
             type="checkbox"

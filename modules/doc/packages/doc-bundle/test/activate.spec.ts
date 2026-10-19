@@ -114,7 +114,10 @@ describe("paged.doc — the declared surface (ADR 024)", () => {
     const ctx = activated().editContexts[0]!;
     expect(ctx.toolIds, "toolIds is DECLARED").toBeDefined();
     expect(ctx.toolIds).toContain("paged.tool.type");
-    expect(ctx.toolIds!.length, "and it is NOT the empty statement").toBeGreaterThan(0);
+    expect(
+      ctx.toolIds!.length,
+      "and it is NOT the empty statement",
+    ).toBeGreaterThan(0);
   });
 
   it("declares its panel and does NOT raise it by hand", () => {

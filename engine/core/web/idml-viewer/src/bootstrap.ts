@@ -19,10 +19,11 @@
 import type { ViewerSessionLike } from "./session.js";
 
 /**
- * Create a `ViewerSession` from the wasm bundled with the PUBLISHED
- * package (`wasm/paged_sdk.js` + `wasm/paged_sdk_bg.wasm`, placed by
- * the publish workflow — absent in a source checkout, where embedders
- * inject a session built via `viewer/build-wasm.sh` instead).
+ * Create a `ViewerSession` from the wasm that ships in this package
+ * (`wasm/paged_sdk.js` + `wasm/paged_sdk_bg.wasm`, the `./session`
+ * entry). In a source checkout `wasm/` is a build output:
+ * `bash engine/core/scripts/build-wasm-packages.sh --workspace session`
+ * (or `moon run core:wasm-pkg`) writes it.
  *
  * `wasmUrl` overrides the `.wasm` location for bundlers that move
  * assets; default resolves next to the glue file.

@@ -43,7 +43,14 @@
 //       source with no readable geometry is skipped, nothing selected
 //       is a no-op.
 
-import { describe, expect, it, beforeAll, afterAll, beforeEach } from "bun:test";
+import {
+  describe,
+  expect,
+  it,
+  beforeAll,
+  afterAll,
+  beforeEach,
+} from "bun:test";
 
 import type {
   BundleHost,
@@ -264,18 +271,26 @@ describe("draw conformance — PATTERN EDITING v1 (a re-editable tile FIELD, not
       expect(PATTERN_SWATCH_NOTE).toContain("THIS IS NOT A PATTERN SWATCH");
       // The three places the paint type is absent — named, because a
       // reader has to be able to check the claim.
-      expect(PATTERN_SWATCH_NOTE).toContain("no pattern paint type in the format");
+      expect(PATTERN_SWATCH_NOTE).toContain(
+        "no pattern paint type in the format",
+      );
       expect(PATTERN_SWATCH_NOTE).toContain("Graphic model");
       expect(PATTERN_SWATCH_NOTE).toContain(
         "colour and gradient swatches are the only two kinds",
       );
-      expect(PATTERN_SWATCH_NOTE).toContain("would render nothing and lie on save");
+      expect(PATTERN_SWATCH_NOTE).toContain(
+        "would render nothing and lie on save",
+      );
       expect(PATTERN_SWATCH_NOTE).toContain("not supported yet");
       expect(PATTERN_SWATCH_NOTE).not.toMatch(/RFI|\b[A-Z]-\d+\b/);
       // The panel says it in plain words AND adds the two limits its own
       // form cannot hide.
-      expect(PATTERN_PANEL_NOTE).toContain("It is not a fill you can apply to other objects");
-      expect(PATTERN_PANEL_NOTE).toContain("The copies always sit above the original");
+      expect(PATTERN_PANEL_NOTE).toContain(
+        "It is not a fill you can apply to other objects",
+      );
+      expect(PATTERN_PANEL_NOTE).toContain(
+        "The copies always sit above the original",
+      );
       expect(PATTERN_PANEL_NOTE).toContain("Dimming sets the copies' opacity");
       // Baking and re-planning are ONE undo step each (measured below);
       // the note said TWO until it was corrected to match.
@@ -304,7 +319,11 @@ describe("draw conformance — PATTERN EDITING v1 (a re-editable tile FIELD, not
         PATTERN_DEFAULTS.columns,
         PATTERN_DEFAULTS.rows,
         PATTERN_DEFAULTS.spacing,
-      ]).toEqual([PATTERN_COLUMNS, PATTERN_ROWS, [PATTERN_SPACING_PT, PATTERN_SPACING_PT]]);
+      ]).toEqual([
+        PATTERN_COLUMNS,
+        PATTERN_ROWS,
+        [PATTERN_SPACING_PT, PATTERN_SPACING_PT],
+      ]);
       const p = patternParamsFrom({
         layout: "hex",
         spacing: -4,
@@ -339,16 +358,19 @@ describe("draw conformance — PATTERN EDITING v1 (a re-editable tile FIELD, not
       const grid = patternParamsFrom({ spacing: [6, 6] });
       expect(patternStepFor(grid, [100, 50])).toEqual([106, 56]);
       // An explicit tile size overrides the selection bounds.
-      expect(patternStepFor(patternParamsFrom({ tile: [40, 40] }), [100, 50])).toEqual(
-        [46, 46],
-      );
+      expect(
+        patternStepFor(patternParamsFrom({ tile: [40, 40] }), [100, 50]),
+      ).toEqual([46, 46]);
       // Negative spacing is a real overlap: the step is SHORTER than
       // the tile.
-      expect(patternStepFor(patternParamsFrom({ spacing: -20 }), [100, 100])).toEqual([
-        80, 80,
-      ]);
+      expect(
+        patternStepFor(patternParamsFrom({ spacing: -20 }), [100, 100]),
+      ).toEqual([80, 80]);
       const hex = patternParamsFrom({ layout: "hex", spacing: [0, 0] });
-      expect(patternStepFor(hex, [100, 100])).toEqual([100, 100 * HEX_ROW_FACTOR]);
+      expect(patternStepFor(hex, [100, 100])).toEqual([
+        100,
+        100 * HEX_ROW_FACTOR,
+      ]);
       expect(HEX_ROW_FACTOR).toBeCloseTo(0.8660254, 6);
     });
 
@@ -486,8 +508,9 @@ describe("draw conformance — PATTERN EDITING v1 (a re-editable tile FIELD, not
       ).toEqual([]);
       // A FUTURE version reads as empty rather than half-understood.
       expect(
-        parsePatternLibrary(new TextEncoder().encode('{"v":99,"fields":[{"id":"x"}]}'))
-          .fields,
+        parsePatternLibrary(
+          new TextEncoder().encode('{"v":99,"fields":[{"id":"x"}]}'),
+        ).fields,
       ).toEqual([]);
       // A field with no id is dropped; a field with junk params falls
       // back to the defaults rather than poisoning a later plan.
@@ -527,14 +550,22 @@ describe("draw conformance — PATTERN EDITING v1 (a re-editable tile FIELD, not
     });
 
     it("the element links round-trip and never clobber a sibling key", () => {
-      const env = withPatternKey({ v: 1, data: { keepMe: 1 } }, "patternSource", {
-        pattern: "pat-1",
-        index: 2,
-      });
+      const env = withPatternKey(
+        { v: 1, data: { keepMe: 1 } },
+        "patternSource",
+        {
+          pattern: "pat-1",
+          index: 2,
+        },
+      );
       expect(env!.data.keepMe).toBe(1);
       expect(patternSourceOf(env)).toEqual({ pattern: "pat-1", index: 2 });
-      expect(withPatternKey(env, "patternSource", null)!.data).toEqual({ keepMe: 1 });
-      expect(withPatternKey({ v: 1, data: {} }, "patternSource", null)).toBeNull();
+      expect(withPatternKey(env, "patternSource", null)!.data).toEqual({
+        keepMe: 1,
+      });
+      expect(
+        withPatternKey({ v: 1, data: {} }, "patternSource", null),
+      ).toBeNull();
       expect(patternSourceOf(null)).toBeNull();
       expect(patternSourceOf({ v: 1, data: { patternSource: 7 } })).toBeNull();
 
@@ -557,7 +588,12 @@ describe("draw conformance — PATTERN EDITING v1 (a re-editable tile FIELD, not
           v: 1,
           data: { patternTile: { of: poly("us"), col: 1, row: 0 } },
         }),
-      ).toEqual({ pattern: PATTERN_LEGACY_FIELD, of: poly("us"), col: 1, row: 0 });
+      ).toEqual({
+        pattern: PATTERN_LEGACY_FIELD,
+        of: poly("us"),
+        col: 1,
+        row: 0,
+      });
       expect(PATTERN_LEGACY_FIELD).toBe("");
     });
   });
@@ -590,7 +626,10 @@ describe("draw conformance — PATTERN EDITING v1 (a re-editable tile FIELD, not
       const kept = { kind: "polygon", id: "$h:pt0_0" };
       expect(ops[4]!.args.elementId).toEqual(kept);
       expect(ops[4]!.args.path).toBe("framePath");
-      expect(ops[5]).toEqual({ op: "deleteFrame", args: { frameId: "$h:pt0_1" } });
+      expect(ops[5]).toEqual({
+        op: "deleteFrame",
+        args: { frameId: "$h:pt0_1" },
+      });
       expect(ops[10]).toEqual({
         op: "createGroup",
         args: { memberIds: [poly("us"), kept] },
@@ -684,12 +723,16 @@ describe("draw conformance — PATTERN EDITING v1 (a re-editable tile FIELD, not
       expect((ops[2] as { op: string }).op).toBe("setPluginMetadata");
       expect(
         patternTileOf(
-          JSON.parse((ops[2] as { args: { value: string } }).args.value) as never,
+          JSON.parse(
+            (ops[2] as { args: { value: string } }).args.value,
+          ) as never,
         ),
       ).toEqual({ pattern: "pat-1", of: poly("us"), col: 1, row: 0 });
       expect(
         patternSourceOf(
-          JSON.parse((ops[3] as { args: { value: string } }).args.value) as never,
+          JSON.parse(
+            (ops[3] as { args: { value: string } }).args.value,
+          ) as never,
         ),
       ).toEqual({ pattern: "pat-1", index: 0 });
       expect(ops[4]).toEqual({
@@ -721,7 +764,8 @@ describe("draw conformance — PATTERN EDITING v1 (a re-editable tile FIELD, not
       // The SOURCE is only stamped — its own opacity is never touched.
       const sourceOps = ops.filter(
         (o) =>
-          (o as { args?: { elementId?: ElementId } }).args?.elementId?.id === "us",
+          (o as { args?: { elementId?: ElementId } }).args?.elementId?.id ===
+          "us",
       );
       expect(sourceOps.map((o) => (o as { op: string }).op)).toEqual([
         "setPluginMetadata",
@@ -736,15 +780,18 @@ describe("draw conformance — PATTERN EDITING v1 (a re-editable tile FIELD, not
         absorb: [poly("u2")],
       });
       const ops = (
-        patternFinishBatchFor({ plan: RING, bindings, sourceEnvelopes: [null] }) as Extract<
-          Mutation,
-          { op: "batch" }
-        >
+        patternFinishBatchFor({
+          plan: RING,
+          bindings,
+          sourceEnvelopes: [null],
+        }) as Extract<Mutation, { op: "batch" }>
       ).args.ops;
-      expect((ops[0] as { args: { path: string } }).args.path).toBe("framePath");
+      expect((ops[0] as { args: { path: string } }).args.path).toBe(
+        "framePath",
+      );
       expect(
-        (ops[0] as { args: { value: { value: { subpathStarts: number[] } } } }).args
-          .value.value.subpathStarts,
+        (ops[0] as { args: { value: { value: { subpathStarts: number[] } } } })
+          .args.value.value.subpathStarts,
       ).toEqual([0, 4]);
       expect(ops[1]).toEqual({ op: "deleteFrame", args: { frameId: "u2" } });
     });
@@ -770,7 +817,11 @@ describe("draw conformance — PATTERN EDITING v1 (a re-editable tile FIELD, not
 
     it("release unlinks only; delete-tiles dissolves, deletes, then unlinks", () => {
       const release = patternReleaseBatchFor([
-        { id: poly("us"), envelope: { v: 1, data: { keepMe: 1 } }, key: "patternSource" },
+        {
+          id: poly("us"),
+          envelope: { v: 1, data: { keepMe: 1 } },
+          key: "patternSource",
+        },
         { id: poly("u1"), envelope: null, key: "patternTile" },
       ]) as Extract<Mutation, { op: "batch" }>;
       expect(release.args.ops.map((o) => (o as { op: string }).op)).toEqual([
@@ -779,10 +830,14 @@ describe("draw conformance — PATTERN EDITING v1 (a re-editable tile FIELD, not
       ]);
       // A sibling key survives the release …
       expect(
-        JSON.parse((release.args.ops[0] as { args: { value: string } }).args.value),
+        JSON.parse(
+          (release.args.ops[0] as { args: { value: string } }).args.value,
+        ),
       ).toEqual({ v: 1, data: { keepMe: 1 } });
       // … and an envelope with nothing left is cleared to null.
-      expect((release.args.ops[1] as { args: { value: unknown } }).args.value).toBeNull();
+      expect(
+        (release.args.ops[1] as { args: { value: unknown } }).args.value,
+      ).toBeNull();
 
       const del = patternDeleteBatchFor({
         group: { kind: "group", id: "ug" } as ElementId,
@@ -810,7 +865,10 @@ describe("draw conformance — PATTERN EDITING v1 (a re-editable tile FIELD, not
 
     beforeEach(async () => {
       await h.host.selection.set([]);
-      await writePatternLibrary(h.host, { v: PATTERN_LIBRARY_VERSION, fields: [] });
+      await writePatternLibrary(h.host, {
+        v: PATTERN_LIBRARY_VERSION,
+        fields: [],
+      });
     });
 
     it("the page RECT is readable, which is what makes the fit possible", async () => {
@@ -861,23 +919,29 @@ describe("draw conformance — PATTERN EDITING v1 (a re-editable tile FIELD, not
         value: "Color/Black",
       });
       // … and its tile link, naming the field it belongs to.
-      expect(patternTileOf(await h.host.document.getMetadata(created[0]))).toEqual({
+      expect(
+        patternTileOf(await h.host.document.getMetadata(created[0])),
+      ).toEqual({
         pattern: "pat-1",
         of: INNER,
         col: 1,
         row: 0,
       });
-      expect(patternTileOf(await h.host.document.getMetadata(created[7]))).toEqual({
+      expect(
+        patternTileOf(await h.host.document.getMetadata(created[7])),
+      ).toEqual({
         pattern: "pat-1",
         of: INNER,
         col: 2,
         row: 2,
       });
       // The SOURCE carries the back-link.
-      expect(patternSourceOf(await h.host.document.getMetadata(INNER))).toEqual({
-        pattern: "pat-1",
-        index: 0,
-      });
+      expect(patternSourceOf(await h.host.document.getMetadata(INNER))).toEqual(
+        {
+          pattern: "pat-1",
+          index: 0,
+        },
+      );
 
       // The recipe is a REAL container part, at the declared path.
       const bytes = await h.host.parts.read(PATTERN_PART);
@@ -906,7 +970,9 @@ describe("draw conformance — PATTERN EDITING v1 (a re-editable tile FIELD, not
       expect(await leafIds(h)).toHaveLength(3 + 8);
       await h.host.document.undo();
       expect(await groupShape(h)).toBeNull();
-      expect(patternSourceOf(await h.host.document.getMetadata(INNER))).toBeNull();
+      expect(
+        patternSourceOf(await h.host.document.getMetadata(INNER)),
+      ).toBeNull();
       expect(await sortedLeafIds(h)).toEqual(PRISTINE);
     });
 
@@ -922,7 +988,11 @@ describe("draw conformance — PATTERN EDITING v1 (a re-editable tile FIELD, not
               op: "insertPath",
               args: {
                 pageId: F6_RING_PAIR.pageId,
-                anchors: [anchorAt([10, 10]), anchorAt([20, 10]), anchorAt([20, 20])],
+                anchors: [
+                  anchorAt([10, 10]),
+                  anchorAt([20, 10]),
+                  anchorAt([20, 20]),
+                ],
                 open: false,
               },
             },
@@ -956,7 +1026,11 @@ describe("draw conformance — PATTERN EDITING v1 (a re-editable tile FIELD, not
               op: "insertPath",
               args: {
                 pageId: F6_RING_PAIR.pageId,
-                anchors: [anchorAt([10, 10]), anchorAt([20, 10]), anchorAt([20, 20])],
+                anchors: [
+                  anchorAt([10, 10]),
+                  anchorAt([20, 10]),
+                  anchorAt([20, 20]),
+                ],
                 open: false,
               },
             },
@@ -984,7 +1058,11 @@ describe("draw conformance — PATTERN EDITING v1 (a re-editable tile FIELD, not
               op: "insertPath",
               args: {
                 pageId: F6_RING_PAIR.pageId,
-                anchors: [anchorAt([10, 10]), anchorAt([20, 10]), anchorAt([20, 20])],
+                anchors: [
+                  anchorAt([10, 10]),
+                  anchorAt([20, 10]),
+                  anchorAt([20, 20]),
+                ],
                 open: false,
               },
             },
@@ -996,7 +1074,9 @@ describe("draw conformance — PATTERN EDITING v1 (a re-editable tile FIELD, not
       // The source is gone and the insert landed in its place.
       const inserted = out.applied ? String(out.createdId?.id) : "";
       expect(inserted).not.toBe(String(F6_RING_PAIR.innerId));
-      expect(await sortedLeafIds(h)).toEqual([inserted, "uopen", "uouter"].sort());
+      expect(await sortedLeafIds(h)).toEqual(
+        [inserted, "uopen", "uouter"].sort(),
+      );
       await undoTo(h, 1);
       expect(await sortedLeafIds(h)).toEqual(PRISTINE);
     });
@@ -1081,8 +1161,12 @@ describe("draw conformance — PATTERN EDITING v1 (a re-editable tile FIELD, not
       expect(first!.table.anchors[0].anchor[0]).toBe(
         src!.table.anchors[0].anchor[0] + 80,
       );
-      expect(patternTileOf(await h.host.document.getMetadata(tiles[0]))!.col).toBe(2);
-      expect(patternTileOf(await h.host.document.getMetadata(tiles[1]))!.col).toBe(1);
+      expect(
+        patternTileOf(await h.host.document.getMetadata(tiles[0]))!.col,
+      ).toBe(2);
+      expect(
+        patternTileOf(await h.host.document.getMetadata(tiles[1]))!.col,
+      ).toBe(1);
       // … and insertion order IS tree order, so column 1 really does
       // paint above column 2 (the only z-control the wire offers).
       const order = await leafIds(h);
@@ -1101,16 +1185,25 @@ describe("draw conformance — PATTERN EDITING v1 (a re-editable tile FIELD, not
       // Move the SOURCE — v0's residual was that this changed nothing.
       const moved = await h.host.document.mutate({
         op: "pathPointSet",
-        args: { elementId: INNER, index: 0, role: "anchor", position: [210, 210] },
+        args: {
+          elementId: INNER,
+          index: 0,
+          role: "anchor",
+          position: [210, 210],
+        },
       });
       expect(moved.applied).toBe(true);
       // Still nothing, by itself: the tiles are copies.
-      expect((await compoundSourceOf(h.host, first[0]))!.table.anchors[0].anchor).toEqual(
-        [306, 200],
-      );
+      expect(
+        (await compoundSourceOf(h.host, first[0]))!.table.anchors[0].anchor,
+      ).toEqual([306, 200]);
 
       // A re-plan picks the edit up AND applies the new parameters.
-      const replanned = await applyEditPattern(h.host, { columns: 3, rows: 1, dim: 50 });
+      const replanned = await applyEditPattern(h.host, {
+        columns: 3,
+        rows: 1,
+        dim: 50,
+      });
       expect(replanned).toHaveLength(2);
       // Fresh geometry: the moved anchor rode along.
       expect(
@@ -1174,7 +1267,9 @@ describe("draw conformance — PATTERN EDITING v1 (a re-editable tile FIELD, not
       expect((await compoundSourceOf(h.host, INNER))!.table.anchors).toEqual(
         sourceBefore!.table.anchors,
       );
-      expect(patternSourceOf(await h.host.document.getMetadata(INNER))).toBeNull();
+      expect(
+        patternSourceOf(await h.host.document.getMetadata(INNER)),
+      ).toBeNull();
       // The recipe is gone from the container part.
       expect((await readPatternLibrary(h.host)).fields).toEqual([]);
 
@@ -1258,7 +1353,9 @@ describe("draw conformance — PATTERN EDITING v1 (a re-editable tile FIELD, not
       expect(created).toHaveLength(3);
       // Each copy came in as 2 contours and was merged back into a ring.
       for (const id of created) {
-        expect(contourCountOf((await compoundSourceOf(h.host, id))!.table)).toBe(2);
+        expect(
+          contourCountOf((await compoundSourceOf(h.host, id))!.table),
+        ).toBe(2);
       }
 
       // Unwind: pattern (1) + make compound (1) + the setup insert (1).
@@ -1285,15 +1382,25 @@ describe("draw conformance — PATTERN EDITING v1 (a re-editable tile FIELD, not
       // The copy ceiling REFUSES rather than truncating.
       await h.host.selection.set([INNER]);
       expect(
-        await applyMakePattern(h.host, { columns: 40, rows: 40, fitToArtboard: false }),
+        await applyMakePattern(h.host, {
+          columns: 40,
+          rows: 40,
+          fitToArtboard: false,
+        }),
       ).toEqual([]);
       expect(await sortedLeafIds(h)).toEqual(PRISTINE);
       expect(PATTERN_MAX_TILES).toBe(400);
 
       // Nothing to release / un-bake / re-plan is a no-op, never a throw.
-      expect(await applyReleasePattern(h.host, { patternId: "pat-9" })).toBe(false);
-      expect(await applyDeletePatternTiles(h.host, { patternId: "pat-9" })).toBe(0);
-      expect(await applyEditPattern(h.host, { patternId: "pat-9" })).toEqual([]);
+      expect(await applyReleasePattern(h.host, { patternId: "pat-9" })).toBe(
+        false,
+      );
+      expect(
+        await applyDeletePatternTiles(h.host, { patternId: "pat-9" }),
+      ).toBe(0);
+      expect(await applyEditPattern(h.host, { patternId: "pat-9" })).toEqual(
+        [],
+      );
       expect(await sortedLeafIds(h)).toEqual(PRISTINE);
     });
 
@@ -1307,13 +1414,13 @@ describe("draw conformance — PATTERN EDITING v1 (a re-editable tile FIELD, not
       const links = await patternLinks(h.host, PATTERN_LEGACY_FIELD);
       expect(links.tiles).toHaveLength(1);
       // Re-plan refuses with the reason, because v0 stored no parameters.
-      expect(await applyEditPattern(h.host, { patternId: PATTERN_LEGACY_FIELD })).toEqual(
-        [],
-      );
+      expect(
+        await applyEditPattern(h.host, { patternId: PATTERN_LEGACY_FIELD }),
+      ).toEqual([]);
       // Release still works on it.
-      expect(await applyReleasePattern(h.host, { patternId: PATTERN_LEGACY_FIELD })).toBe(
-        true,
-      );
+      expect(
+        await applyReleasePattern(h.host, { patternId: PATTERN_LEGACY_FIELD }),
+      ).toBe(true);
       expect(await h.host.document.getMetadata(poly("uopen"))).toBeNull();
       await undoTo(h, 2);
       expect(await sortedLeafIds(h)).toEqual(PRISTINE);
@@ -1345,7 +1452,9 @@ describe("draw conformance — PATTERN EDITING v1 (a re-editable tile FIELD, not
       expect(commandFor(h, SELECT_PATTERN_TILES_COMMAND_ID).title).toContain(
         "Select the field's tiles",
       );
-      expect(commandFor(h, DELETE_PATTERN_TILES_COMMAND_ID).title).toContain("un-bake");
+      expect(commandFor(h, DELETE_PATTERN_TILES_COMMAND_ID).title).toContain(
+        "un-bake",
+      );
       expect(commandFor(h, RELEASE_PATTERN_COMMAND_ID).title).toContain(
         "keep the artwork",
       );
@@ -1462,15 +1571,23 @@ describe("draw conformance — PATTERN EDITING v1 (a re-editable tile FIELD, not
           name: "re-plan, 2 × 1 → 3 × 1 with fresh geometry",
           setup: async () => {
             await h.host.selection.set([INNER]);
-            expect(await applyMakePattern(h.host, { columns: 2, rows: 1 })).toHaveLength(1);
+            expect(
+              await applyMakePattern(h.host, { columns: 2, rows: 1 }),
+            ).toHaveLength(1);
             const moved = await h.host.document.mutate({
               op: "pathPointSet",
-              args: { elementId: INNER, index: 0, role: "anchor", position: [210, 210] },
+              args: {
+                elementId: INNER,
+                index: 0,
+                role: "anchor",
+                position: [210, 210],
+              },
             });
             expect(moved.applied).toBe(true);
             return [];
           },
-          run: (host) => applyEditPattern(host, { columns: 3, rows: 1, dim: 50 }),
+          run: (host) =>
+            applyEditPattern(host, { columns: 3, rows: 1, dim: 50 }),
           tiles: 2,
           // 2 × (insert, bind) + dissolve + 1 delete
           //   + 2 × (fill, stroke, dim, link) + source link + group
@@ -1498,7 +1615,9 @@ describe("draw conformance — PATTERN EDITING v1 (a re-editable tile FIELD, not
           const shipped = await through("oneBatch");
           expect(shipped.result).toHaveLength(scenario.tiles);
           // ONE batch, ONE undo step, and that step restores the document.
-          expect(shipped.work.mutations).toEqual([{ op: "batch", ops: scenario.ops }]);
+          expect(shipped.work.mutations).toEqual([
+            { op: "batch", ops: scenario.ops },
+          ]);
           expect(shipped.undoSteps).toBe(1);
           expect(shipped.restored).toBe(true);
           expect(shipped.work.count("document.tree")).toBe(scenario.trees);
@@ -1563,7 +1682,9 @@ describe("draw conformance — PATTERN EDITING v1 (a re-editable tile FIELD, not
         });
         expect(above).toHaveLength(1);
         const before = await leafIds(h);
-        const oldTiles = (await patternLinks(h.host, "pat-1")).tiles.map((t) => String(t.id.id));
+        const oldTiles = (await patternLinks(h.host, "pat-1")).tiles.map((t) =>
+          String(t.id.id),
+        );
         expect(oldTiles.length).toBeGreaterThan(0);
 
         const logged: string[] = [];
@@ -1574,11 +1695,15 @@ describe("draw conformance — PATTERN EDITING v1 (a re-editable tile FIELD, not
           rows: 1,
         });
         expect(work.mutations.map((m) => m.op)).toEqual(["batch"]);
-        expect(logged.join("\n")).not.toContain("a member already belongs to another group");
+        expect(logged.join("\n")).not.toContain(
+          "a member already belongs to another group",
+        );
         // The field now has the new tiles, linked; the old ones are gone.
         expect(replanned).toHaveLength(2);
         expect(
-          (await patternLinks(h.host, "pat-1")).tiles.map((t) => String(t.id.id)).sort(),
+          (await patternLinks(h.host, "pat-1")).tiles
+            .map((t) => String(t.id.id))
+            .sort(),
         ).toEqual(replanned.map((t) => String(t.id)).sort());
         const now = await leafIds(h);
         for (const old of oldTiles) expect(now).not.toContain(old);

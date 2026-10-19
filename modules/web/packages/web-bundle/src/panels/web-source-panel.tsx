@@ -100,7 +100,11 @@ import {
 } from "../render-report";
 import { autoRendererFor } from "../auto-render";
 import { resolveBindings, watchProviders, type Bindings } from "../bindings";
-import { clearOutlineHighlight, highlightOutlineEntry, onCanvasPick } from "../outline-highlight";
+import {
+  clearOutlineHighlight,
+  highlightOutlineEntry,
+  onCanvasPick,
+} from "../outline-highlight";
 import {
   documentValuesNotify,
   loadWebSource,
@@ -108,7 +112,11 @@ import {
   writeDocumentValues,
   writeWebSource,
 } from "../source-part";
-import { createDraftSession, type DraftSession, type DraftStore } from "./draft-store";
+import {
+  createDraftSession,
+  type DraftSession,
+  type DraftStore,
+} from "./draft-store";
 
 import { createDebouncer } from "./debounce";
 import {
@@ -192,7 +200,14 @@ const primaryButton: CSSProperties = {
 /** A collapsed "About" disclosure for detail a one-line note leaves out. */
 function About({ children }: { children: ReactNode }): ReactElement {
   return (
-    <details data-web-about style={{ ...mutedNote, flexBasis: "100%", margin: "var(--space-1, 4px) 0 0" }}>
+    <details
+      data-web-about
+      style={{
+        ...mutedNote,
+        flexBasis: "100%",
+        margin: "var(--space-1, 4px) 0 0",
+      }}
+    >
       <summary style={{ cursor: "pointer" }}>About</summary>
       <div style={{ margin: "var(--space-1, 4px) 0 0" }}>{children}</div>
     </details>
@@ -373,13 +388,27 @@ function FlowPicker({
   return (
     <div
       data-web-flow-picker
-      style={{ padding: "var(--space-3, 12px)", font: "12px var(--font-sans, sans-serif)" }}
+      style={{
+        padding: "var(--space-3, 12px)",
+        font: "12px var(--font-sans, sans-serif)",
+      }}
     >
-      <p style={{ margin: "0 0 var(--space-2, 8px)", color: "var(--pg-muted-fg)" }}>
+      <p
+        style={{
+          margin: "0 0 var(--space-2, 8px)",
+          color: "var(--pg-muted-fg)",
+        }}
+      >
         Thread {targetCount} selected frame{targetCount === 1 ? "" : "s"} into a
         flow:
       </p>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: "var(--space-1, 4px)" }}>
+      <div
+        style={{
+          display: "flex",
+          flexWrap: "wrap",
+          gap: "var(--space-1, 4px)",
+        }}
+      >
         {options.map((o) => (
           <button
             key={o.name}
@@ -464,8 +493,7 @@ export function makeWebSourcePanel(
     const [panelError, setPanelError] = useState<string | null>(null);
     useEffect(() => setPanelError(null), [selection]);
 
-    const target =
-      selection.length === 1 ? asFrameTarget(selection[0]) : null;
+    const target = selection.length === 1 ? asFrameTarget(selection[0]) : null;
     const key = target ? sourceKeyFor(target) : null;
 
     // Selection → reload the source for the new target. The mount
@@ -489,8 +517,7 @@ export function makeWebSourcePanel(
       let stale = false;
       const first = selection[0];
       void (async () => {
-        const src =
-          await loadWebSource(host, first);
+        const src = await loadWebSource(host, first);
         if (!stale) setFlowSource(src);
       })();
       return () => {
@@ -511,24 +538,20 @@ export function makeWebSourcePanel(
     // async; a stale flag guards out-of-order replies on fast
     // selection changes. Pre-v33 documents migrate one-time from
     // plugin storage (write-through, then the storage entry drops).
-    const loadFor = useCallback(
-      async (id: ElementId, storageKey: string) => {
-        // Prefer the portable .paged container part, then the metadata label,
-        // then the legacy host.storage entry below.
-        let src =
-          await loadWebSource(host, id);
-        if (!src) {
-          const legacy = host.storage.get<WebFrameSource>(storageKey);
-          if (legacy) {
-            src = legacy;
-            const out = await writeWebSource(host, id, legacy);
-            if (out.applied) host.storage.delete(storageKey);
-          }
+    const loadFor = useCallback(async (id: ElementId, storageKey: string) => {
+      // Prefer the portable .paged container part, then the metadata label,
+      // then the legacy host.storage entry below.
+      let src = await loadWebSource(host, id);
+      if (!src) {
+        const legacy = host.storage.get<WebFrameSource>(storageKey);
+        if (legacy) {
+          src = legacy;
+          const out = await writeWebSource(host, id, legacy);
+          if (out.applied) host.storage.delete(storageKey);
         }
-        return src;
-      },
-      [],
-    );
+      }
+      return src;
+    }, []);
     useEffect(() => {
       let stale = false;
       // Drop the PREVIOUS target's source synchronously so the editor
@@ -585,22 +608,43 @@ export function makeWebSourcePanel(
         );
       }
       return (
-        <div data-web-panel="empty" style={{ padding: "var(--space-3, 12px)", font: "12px var(--font-sans, sans-serif)" }}>
-          <p style={{ margin: "0 0 var(--space-2, 8px)", color: "var(--pg-muted-fg)" }}>
+        <div
+          data-web-panel="empty"
+          style={{
+            padding: "var(--space-3, 12px)",
+            font: "12px var(--font-sans, sans-serif)",
+          }}
+        >
+          <p
+            style={{
+              margin: "0 0 var(--space-2, 8px)",
+              color: "var(--pg-muted-fg)",
+            }}
+          >
             Insert a web frame, or select one frame to edit its HTML and CSS.
           </p>
           <button
             type="button"
             data-web-insert
             onClick={() =>
-              void insertWebFrame(host, SOURCE_PANEL_ID).then((refusal) => setPanelError(refusal))
+              void insertWebFrame(host, SOURCE_PANEL_ID).then((refusal) =>
+                setPanelError(refusal),
+              )
             }
             style={primaryButton}
           >
             Insert web frame
           </button>
           {panelError && (
-            <p data-web-panel-error role="alert" style={{ ...mutedNote, margin: "var(--space-2, 8px) 0 0", color: "var(--status-error)" }}>
+            <p
+              data-web-panel-error
+              role="alert"
+              style={{
+                ...mutedNote,
+                margin: "var(--space-2, 8px) 0 0",
+                color: "var(--status-error)",
+              }}
+            >
               {panelError}
             </p>
           )}
@@ -621,8 +665,19 @@ export function makeWebSourcePanel(
         });
       };
       return (
-        <div data-web-panel="convert" style={{ padding: "var(--space-3, 12px)", font: "12px var(--font-sans, sans-serif)" }}>
-          <p style={{ margin: "0 0 var(--space-2, 8px)", color: "var(--pg-muted-fg)" }}>
+        <div
+          data-web-panel="convert"
+          style={{
+            padding: "var(--space-3, 12px)",
+            font: "12px var(--font-sans, sans-serif)",
+          }}
+        >
+          <p
+            style={{
+              margin: "0 0 var(--space-2, 8px)",
+              color: "var(--pg-muted-fg)",
+            }}
+          >
             The selected {target.kind} is not a web frame yet.
           </p>
           <button
@@ -634,7 +689,15 @@ export function makeWebSourcePanel(
             Make web frame
           </button>
           {panelError && (
-            <p data-web-panel-error role="alert" style={{ ...mutedNote, margin: "var(--space-2, 8px) 0 0", color: "var(--status-error)" }}>
+            <p
+              data-web-panel-error
+              role="alert"
+              style={{
+                ...mutedNote,
+                margin: "var(--space-2, 8px) 0 0",
+                color: "var(--status-error)",
+              }}
+            >
               {panelError}
             </p>
           )}
@@ -677,8 +740,13 @@ const PX_PER_PT = 96 / 72;
  *  geometry. Follows resizes (a `resizeFrame`'s reflow, a gesture commit —
  *  a resize by the handles, which carries no reflow — and a script run) and
  *  undo/redo. */
-function useFrameSizePx(host: BundleHost, id: ElementId): { width: number; height: number } | null {
-  const [size, setSize] = useState<{ width: number; height: number } | null>(null);
+function useFrameSizePx(
+  host: BundleHost,
+  id: ElementId,
+): { width: number; height: number } | null {
+  const [size, setSize] = useState<{ width: number; height: number } | null>(
+    null,
+  );
   const frameId = (id as { id?: unknown }).id;
   useEffect(() => {
     let stale = false;
@@ -778,20 +846,37 @@ function BoundData({
     <div data-web-bound>
       {/* Part of the Variables section: the {{doc.…}}, {{frame.…}} and
           {{data.…}} names the draft uses, and their values. */}
-      <div style={{ ...mutedNote, margin: "var(--space-2, 8px) 0 var(--space-1, 4px)" }}>From the document and data</div>
+      <div
+        style={{
+          ...mutedNote,
+          margin: "var(--space-2, 8px) 0 var(--space-1, 4px)",
+        }}
+      >
+        From the document and data
+      </div>
       {names.map((name) => {
         const value = bindings.vars[name];
         const key = docKey(name);
         return (
           <div key={name} data-web-bound-row={name} style={optionRow}>
-            <code style={{ font: "11px var(--font-mono, monospace)", width: 120, overflow: "hidden" }}>{name}</code>
+            <code
+              style={{
+                font: "11px var(--font-mono, monospace)",
+                width: 120,
+                overflow: "hidden",
+              }}
+            >
+              {name}
+            </code>
             {key !== null ? (
               <>
                 <input
                   data-web-bound-input={name}
                   aria-label={`Document value ${key}`}
                   value={values[name] ?? value ?? ""}
-                  onChange={(e) => setValues({ ...values, [name]: e.target.value })}
+                  onChange={(e) =>
+                    setValues({ ...values, [name]: e.target.value })
+                  }
                   style={{ ...field, flex: 1 }}
                 />
                 <button
@@ -812,7 +897,14 @@ function BoundData({
                 </button>
               </>
             ) : (
-              <span data-web-bound-value={name} style={value === undefined ? mutedNote : { font: "12px var(--font-sans, sans-serif)" }}>
+              <span
+                data-web-bound-value={name}
+                style={
+                  value === undefined
+                    ? mutedNote
+                    : { font: "12px var(--font-sans, sans-serif)" }
+                }
+              >
                 {value === undefined ? "No value" : value}
               </span>
             )}
@@ -820,12 +912,17 @@ function BoundData({
         );
       })}
       <About>
-        Names you can use: doc.title, doc.pages, doc.&lt;key&gt; (a document value you set here),
-        frame.page, and data.&lt;field&gt; (the first record of a data source). The same document
-        values are listed under Document values in Web frame properties.
+        Names you can use: doc.title, doc.pages, doc.&lt;key&gt; (a document
+        value you set here), frame.page, and data.&lt;field&gt; (the first
+        record of a data source). The same document values are listed under
+        Document values in Web frame properties.
       </About>
       {note && (
-        <span data-web-bound-note role="alert" style={{ ...mutedNote, color: "var(--status-error)" }}>
+        <span
+          data-web-bound-note
+          role="alert"
+          style={{ ...mutedNote, color: "var(--status-error)" }}
+        >
           {note}
         </span>
       )}
@@ -869,7 +966,9 @@ function SourceEditor({
   // the iframe + diagnostics (task 2: preview refresh ≠ document write).
   // A draft kept from an earlier visit (or from before an undo remount)
   // wins over the persisted source, and shows as unsaved.
-  const [draft, setDraft] = useState<WebFrameSource>(() => drafts.get(sourceKey) ?? initial);
+  const [draft, setDraft] = useState<WebFrameSource>(
+    () => drafts.get(sourceKey) ?? initial,
+  );
   const [persisted, setPersisted] = useState<WebFrameSource>(initial);
   useEffect(() => {
     drafts.track(sourceKey, draft, persisted);
@@ -917,7 +1016,10 @@ function SourceEditor({
   // provider announces a new revision — the preview substitutes them as
   // the canvas does.
   const { bindings, refresh: refreshBindings } = useBindings(host, id, preview);
-  const rendered = useMemo(() => renderWebFrameSource(preview, bindings.vars), [preview, bindings]);
+  const rendered = useMemo(
+    () => renderWebFrameSource(preview, bindings.vars),
+    [preview, bindings],
+  );
   // W-06 — document faces the host asset store served BYTES for and we
   // composed into real `@font-face` rules (data URLs — see
   // font-resolution.ts for why data:, not blob:, in a sandboxed
@@ -997,7 +1099,11 @@ function SourceEditor({
     () =>
       diagnostics
         .filter((d): d is typeof d & { line: number } => d.line !== undefined)
-        .map((d) => ({ severity: d.severity, message: d.message, line: d.line })),
+        .map((d) => ({
+          severity: d.severity,
+          message: d.message,
+          line: d.line,
+        })),
     [diagnostics],
   );
   // W-06: the served document faces become a real `@font-face` prelude
@@ -1109,7 +1215,9 @@ function SourceEditor({
     (entry: TagOutlineEntry, index: number) => {
       setActiveTag(index);
       void highlightOutlineEntry(host, id, { ...draft }, index).then((n) =>
-        setHighlightNote(n > 0 ? null : `<${entry.tag}> paints no box on the canvas`),
+        setHighlightNote(
+          n > 0 ? null : `<${entry.tag}> paints no box on the canvas`,
+        ),
       );
       const el = htmlTextareaRef.current;
       if (!el) return; // host-widget lane: no caret to drive
@@ -1125,17 +1233,14 @@ function SourceEditor({
   // which DISABLES the pass (placeholders then stay verbatim and stop
   // warning — the documented opt-in seam).
   const varEntries = Object.entries(draft.vars ?? {});
-  const setVarEntries = useCallback(
-    (entries: Array<[string, string]>) => {
-      setDraft((d) => {
-        const next = { ...d };
-        if (entries.length === 0) delete next.vars;
-        else next.vars = Object.fromEntries(entries);
-        return next;
-      });
-    },
-    [],
-  );
+  const setVarEntries = useCallback((entries: Array<[string, string]>) => {
+    setDraft((d) => {
+      const next = { ...d };
+      if (entries.length === 0) delete next.vars;
+      else next.vars = Object.fromEntries(entries);
+      return next;
+    });
+  }, []);
 
   const CodeEditor = lane.CodeEditor;
   // The preview IFRAME takes the frame's content size — an iframe's element
@@ -1148,7 +1253,11 @@ function SourceEditor({
     <div
       data-web-panel="source"
       data-web-editor-lane={lane.native ? "widget" : "textarea"}
-      style={{ padding: "var(--space-3, 12px)", display: "flex", flexDirection: "column" }}
+      style={{
+        padding: "var(--space-3, 12px)",
+        display: "flex",
+        flexDirection: "column",
+      }}
     >
       <div
         style={{
@@ -1192,7 +1301,8 @@ function SourceEditor({
             placeholder="Paste HTML here — it is sanitized on insert"
             aria-label="Paste HTML to ingest"
             onPaste={(e) => {
-              const text = e.clipboardData.getData("text/html") ||
+              const text =
+                e.clipboardData.getData("text/html") ||
                 e.clipboardData.getData("text/plain");
               if (text) {
                 e.preventDefault();
@@ -1307,12 +1417,19 @@ function SourceEditor({
             ))}
           </ul>
           {lane.native && (
-            <p data-web-outline-hint style={{ margin: "var(--space-1, 4px) 0 0", ...mutedNote }}>
-              Each tag shows its line in the editor; click one to outline it on the canvas.
+            <p
+              data-web-outline-hint
+              style={{ margin: "var(--space-1, 4px) 0 0", ...mutedNote }}
+            >
+              Each tag shows its line in the editor; click one to outline it on
+              the canvas.
             </p>
           )}
           {highlightNote && (
-            <p data-web-outline-note style={{ margin: "var(--space-1, 4px) 0 0", ...mutedNote }}>
+            <p
+              data-web-outline-note
+              style={{ margin: "var(--space-1, 4px) 0 0", ...mutedNote }}
+            >
               {highlightNote}
             </p>
           )}
@@ -1331,7 +1448,10 @@ function SourceEditor({
       {/* Replace the draft's HTML/CSS with a vetted starter (keeps the
           current frame options). A draft edit — the explicit save still
           commits it. */}
-      <details data-web-template-replace style={{ margin: "var(--space-1, 4px) 0 0" }}>
+      <details
+        data-web-template-replace
+        style={{ margin: "var(--space-1, 4px) 0 0" }}
+      >
         <summary
           style={{
             font: "700 10px var(--font-sans, sans-serif)",
@@ -1366,7 +1486,8 @@ function SourceEditor({
           <option value="screen">Screen</option>
         </select>
         <span data-web-media-note style={rowNote}>
-          Adds the class media-{draft.options.media} to the body; @media queries still match screen.
+          Adds the class media-{draft.options.media} to the body; @media queries
+          still match screen.
         </span>
       </label>
       <label style={optionRow}>
@@ -1379,7 +1500,10 @@ function SourceEditor({
           onChange={(e) =>
             setDraft({
               ...draft,
-              options: { ...draft.options, overflow: normalizeOverflow(e.target.value) },
+              options: {
+                ...draft.options,
+                overflow: normalizeOverflow(e.target.value),
+              },
             })
           }
           style={field}
@@ -1412,7 +1536,11 @@ function SourceEditor({
               entries[i] = [e.target.value, value];
               setVarEntries(entries);
             }}
-            style={{ ...field, width: 96, fontFamily: "var(--font-mono, monospace)" }}
+            style={{
+              ...field,
+              width: 96,
+              fontFamily: "var(--font-mono, monospace)",
+            }}
           />
           <input
             data-web-var-value
@@ -1476,11 +1604,17 @@ function SourceEditor({
           Write {"{{name}}"} in the HTML or CSS to insert a variable.
         </span>
         <About>
-          A variable can pass through a filter, as in {"{{name | upper}}"}. Filters:{" "}
-          {TEMPLATE_FILTERS.join(", ")}. Variables are plain text substitution; they run no scripts.
+          A variable can pass through a filter, as in {"{{name | upper}}"}.
+          Filters: {TEMPLATE_FILTERS.join(", ")}. Variables are plain text
+          substitution; they run no scripts.
         </About>
       </div>
-      <BoundData host={host} names={boundNamesIn(draft)} bindings={bindings} onChanged={refreshBindings} />
+      <BoundData
+        host={host}
+        names={boundNamesIn(draft)}
+        bindings={bindings}
+        onChanged={refreshBindings}
+      />
       <div style={kicker}>Preview</div>
       {/* Font badge: W1 honesty + the W-06 flip. When the asset store
           serves a used family's BYTES, the panel composes a real
@@ -1531,7 +1665,11 @@ function SourceEditor({
             </span>
           ) : (
             <span
-              title={badge.shown.length > 0 ? `From the document: ${badge.shown.join(", ")}` : undefined}
+              title={
+                badge.shown.length > 0
+                  ? `From the document: ${badge.shown.join(", ")}`
+                  : undefined
+              }
             >
               Some fonts are browser substitutes in the preview.
               {badge.unregistered.length > 0
@@ -1567,12 +1705,16 @@ function SourceEditor({
       {/* The preview is the browser's rendering at the frame's size; the
           canvas is the engine's, re-rendered when the saved source or the
           frame's size changes (auto-render.ts). What still differs is said. */}
-      <p data-web-preview-note style={{ margin: "var(--space-1, 4px) 0 0", ...mutedNote }}>
+      <p
+        data-web-preview-note
+        style={{ margin: "var(--space-1, 4px) 0 0", ...mutedNote }}
+      >
         The canvas shows this preview once you save.
       </p>
       <About>
-        The preview is the browser’s rendering at the frame’s size. The canvas lays text out in
-        its bundled typeface, and “Shrink to fit” scales only on the canvas.
+        The preview is the browser’s rendering at the frame’s size. The canvas
+        lays text out in its bundled typeface, and “Shrink to fit” scales only
+        on the canvas.
       </About>
       {/* Persistence is EXPLICIT: one undoable metadata mutation per
           save, never a side effect of typing (the preview above
@@ -1592,7 +1734,9 @@ function SourceEditor({
           data-web-commit
           disabled={!dirty}
           onClick={commit}
-          title={dirty ? undefined : "Nothing to save: the document has these edits"}
+          title={
+            dirty ? undefined : "Nothing to save: the document has these edits"
+          }
           style={{
             ...primaryButton,
             padding: "4px 12px",
@@ -1608,7 +1752,11 @@ function SourceEditor({
             : "Saved to the document"}
         </span>
         {saveError && (
-          <span data-web-save-error role="alert" style={{ ...rowNote, color: "var(--status-error)" }}>
+          <span
+            data-web-save-error
+            role="alert"
+            style={{ ...rowNote, color: "var(--status-error)" }}
+          >
             {saveError}
           </span>
         )}
@@ -1616,7 +1764,10 @@ function SourceEditor({
       {diagnostics.length > 0 && (
         <>
           <div style={kicker}>Diagnostics</div>
-          <ul data-web-diagnostics style={{ listStyle: "none", margin: 0, padding: 0 }}>
+          <ul
+            data-web-diagnostics
+            style={{ listStyle: "none", margin: 0, padding: 0 }}
+          >
             {diagnostics.map((d, i) => (
               <li
                 key={i}

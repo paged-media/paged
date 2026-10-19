@@ -100,7 +100,11 @@
 // that state honestly (`data-swatch-preview="unresolved"`) instead of
 // painting a plausible grey.
 
-import type { BundleHost, Mutation, SwatchSummary } from "@paged-media/plugin-api";
+import type {
+  BundleHost,
+  Mutation,
+  SwatchSummary,
+} from "@paged-media/plugin-api";
 import {
   paletteEntryToSpec,
   paletteEntryToSummary,
@@ -173,8 +177,7 @@ export function makeSwatchesBindingProvider(
    *  must not cause a create that core would then refuse as a duplicate. */
   const documentHas = async (swatchId: string): Promise<boolean | null> => {
     try {
-      const rows =
-        await host.document.collection<SwatchSummary>("swatches");
+      const rows = await host.document.collection<SwatchSummary>("swatches");
       return rows.some((s) => s.selfId === swatchId);
     } catch (err) {
       host.log.warn("swatches provider: document swatch read failed", err);

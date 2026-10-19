@@ -26,8 +26,19 @@ import { afterEach, describe, expect, it } from "bun:test";
 
 import { createHeadlessHost, type HeadlessHost } from "../src/harness";
 
-const FONT = new Uint8Array(readFileSync(fileURLToPath(new URL("./fixtures/fonts/SpaceGrotesk-VF.ttf", import.meta.url))));
-const silent = { debug() {}, info() {}, warn() {}, error() {} } as unknown as Console;
+const FONT = new Uint8Array(
+  readFileSync(
+    fileURLToPath(
+      new URL("./fixtures/fonts/SpaceGrotesk-VF.ttf", import.meta.url),
+    ),
+  ),
+);
+const silent = {
+  debug() {},
+  info() {},
+  warn() {},
+  error() {},
+} as unknown as Console;
 let live: HeadlessHost | null = null;
 afterEach(() => {
   live?.dispose();
@@ -44,6 +55,8 @@ describe("headless newBlank", () => {
       const f = paged.insertTextFrame(p[0].selfId, [72, 72, 200, 523]);
       console.log(JSON.stringify(p[0].sizePt), f);`);
     expect(run.error).toBeNull();
-    expect(run.output[0]).toMatch(/^\[log\] \[595(\.0)?,842(\.0)?\] textFrame:/);
+    expect(run.output[0]).toMatch(
+      /^\[log\] \[595(\.0)?,842(\.0)?\] textFrame:/,
+    );
   });
 });

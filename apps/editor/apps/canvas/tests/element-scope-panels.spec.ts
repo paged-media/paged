@@ -118,9 +118,11 @@ test.describe("Phase 3 — element-scope declarative panels", () => {
     // fixture-dependent total: the resolved-vs-null split of the
     // shared fields depends on the fixture's emitted stroke defaults.
     await expect(
-      page.locator(
-        '[data-stroke-panel="ready"] [data-section="Stroke"] [data-mixed]',
-      ).first(),
+      page
+        .locator(
+          '[data-stroke-panel="ready"] [data-section="Stroke"] [data-mixed]',
+        )
+        .first(),
     ).toBeVisible();
     // Weight is a LengthInput; the input is visible + resolved (the
     // fixture emits a StrokeWeight default attribute).
@@ -231,9 +233,7 @@ test.describe("Phase 3 — element-scope declarative panels", () => {
           globalThis as unknown as {
             __canvas: {
               client: {
-                elementProperties: (
-                  id: unknown,
-                ) => Promise<{
+                elementProperties: (id: unknown) => Promise<{
                   entries: { path: string; value?: { value?: number } }[];
                 } | null>;
               };
@@ -290,9 +290,7 @@ test.describe("Phase 3 — element-scope declarative panels", () => {
           globalThis as unknown as {
             __canvas: {
               client: {
-                elementProperties: (
-                  id: unknown,
-                ) => Promise<{
+                elementProperties: (id: unknown) => Promise<{
                   entries: { path: string; value?: { value?: boolean } }[];
                 } | null>;
               };
@@ -379,9 +377,7 @@ test.describe("Phase 3 — element-scope declarative panels", () => {
           globalThis as unknown as {
             __canvas: {
               client: {
-                elementProperties: (
-                  id: unknown,
-                ) => Promise<{
+                elementProperties: (id: unknown) => Promise<{
                   entries: {
                     path: string;
                     value?: { value?: [number, number, number, number] };

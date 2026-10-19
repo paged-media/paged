@@ -27,7 +27,11 @@ import type { PropertySchema } from "@paged-media/plugin-api";
 import { propertyRowsOf, validatePanelSchema } from "@paged-media/plugin-sdk";
 
 import manifest from "../manifest.json";
-import { SHEET_KINDS, SHEET_SCHEMAS, type SheetKind } from "../src/object-model";
+import {
+  SHEET_KINDS,
+  SHEET_SCHEMAS,
+  type SheetKind,
+} from "../src/object-model";
 import {
   BIND,
   PROPERTIES_PANEL_ID,
@@ -40,42 +44,70 @@ import {
 const PREFIX = `plugin:${manifest.id}/`;
 const schemaOf = (k: string): readonly PropertySchema[] | undefined => {
   const kind = k.slice(PREFIX.length) as SheetKind;
-  return k.startsWith(PREFIX) && SHEET_KINDS.includes(kind) ? SHEET_SCHEMAS[kind] : undefined;
+  return k.startsWith(PREFIX) && SHEET_KINDS.includes(kind)
+    ? SHEET_SCHEMAS[kind]
+    : undefined;
 };
 
 describe("sheet properties panel (property rows)", () => {
   it("validates against the kinds' schemas", () => {
-    expect(validatePanelSchema(SHEET_PROPERTIES_PANEL, { pluginId: manifest.id, schemaOf })).toEqual([]);
+    expect(
+      validatePanelSchema(SHEET_PROPERTIES_PANEL, {
+        pluginId: manifest.id,
+        schemaOf,
+      }),
+    ).toEqual([]);
   });
 
   it("every SHEET_PANEL_FIELDS entry is a writable row, rendered through a property row", () => {
     for (const f of SHEET_PANEL_FIELDS) {
       const row = SHEET_SCHEMAS[f.kind].find((r) => r.path === f.path);
       expect(row, `${f.kind}.${f.path}`).toBeDefined();
-      expect(row!.access ?? "readWrite", `${f.kind}.${f.path}`).toBe("readWrite");
+      expect(row!.access ?? "readWrite", `${f.kind}.${f.path}`).toBe(
+        "readWrite",
+      );
     }
-    const rows = propertyRowsOf(SHEET_PROPERTIES_PANEL).map((r) => `${r.field.kind!.slice(PREFIX.length)}.${r.field.path}`);
-    expect(rows.sort()).toEqual(SHEET_PANEL_FIELDS.map((f) => `${f.kind}.${f.path}`).sort());
+    const rows = propertyRowsOf(SHEET_PROPERTIES_PANEL).map(
+      (r) => `${r.field.kind!.slice(PREFIX.length)}.${r.field.path}`,
+    );
+    expect(rows.sort()).toEqual(
+      SHEET_PANEL_FIELDS.map((f) => `${f.kind}.${f.path}`).sort(),
+    );
     // Tables are read-only: no field.
-    expect(SHEET_PANEL_FIELDS.some((f) => (f.kind as string) === "table")).toBe(false);
+    expect(SHEET_PANEL_FIELDS.some((f) => (f.kind as string) === "table")).toBe(
+      false,
+    );
   });
 
   it("covers EVERY writable row of every kind (derived / read-only rows are readouts)", () => {
-    const declared = new Set(SHEET_PANEL_FIELDS.map((f) => `${f.kind}.${f.path}`));
+    const declared = new Set(
+      SHEET_PANEL_FIELDS.map((f) => `${f.kind}.${f.path}`),
+    );
     const writable = SHEET_KINDS.flatMap((k) =>
-      SHEET_SCHEMAS[k].filter((r) => (r.access ?? "readWrite") === "readWrite").map((r) => `${k}.${r.path}`),
+      SHEET_SCHEMAS[k]
+        .filter((r) => (r.access ?? "readWrite") === "readWrite")
+        .map((r) => `${k}.${r.path}`),
     );
     expect(writable.filter((w) => !declared.has(w))).toEqual([]);
   });
 
   it("list rows: range grids row by row at a fixed shape, chart series as struct items", () => {
     const row = (kind: string, path: string) =>
-      propertyRowsOf(SHEET_PROPERTIES_PANEL).find((r) => r.field.kind === `${PREFIX}${kind}` && r.field.path === path)!.field;
+      propertyRowsOf(SHEET_PROPERTIES_PANEL).find(
+        (r) => r.field.kind === `${PREFIX}${kind}` && r.field.path === path,
+      )!.field;
     for (const p of ["values", "inputs"]) {
-      expect(row("range", p).items).toEqual({ add: false, remove: false, reorder: false });
+      expect(row("range", p).items).toEqual({
+        add: false,
+        remove: false,
+        reorder: false,
+      });
       expect(row("range", p).address).toEqual({ bind: BIND.range });
     }
-    expect(row("chart", "series").items).toMatchObject({ fields: ["name", "values", "categories", "color"], itemLabel: "name" });
+    expect(row("chart", "series").items).toMatchObject({
+      fields: ["name", "values", "categories", "color"],
+      itemLabel: "name",
+    });
   });
 
   it("is declared in the manifest", () => {
@@ -84,13 +116,21 @@ describe("sheet properties panel (property rows)", () => {
 
   it("publishes the grid's active cell as the cell rows' address", () => {
     let active: { row: number; col: number } | null = { row: 1, col: 2 };
-    let grid: { anchorRow: number; anchorCol: number; rows: number; cols: number } | null = { anchorRow: 1, anchorCol: 2, rows: 1, cols: 1 };
+    let grid: {
+      anchorRow: number;
+      anchorCol: number;
+      rows: number;
+      cols: number;
+    } | null = { anchorRow: 1, anchorCol: 2, rows: 1, cols: 1 };
     const listeners: Array<(c: { kind: string }) => void> = [];
     const session = {
       state: () => ({ activeSheet: 7, gridSelection: grid }),
       activeCell: () => active,
       sheets: () => [{ id: 7, name: "Sheet1", rows: 3, cols: 3 }],
-      onDidChange: (l: (c: { kind: string }) => void) => (listeners.push(l), { dispose() {} }),
+      onDidChange: (l: (c: { kind: string }) => void) => (
+        listeners.push(l),
+        { dispose() {} }
+      ),
     };
     expect(activeCellAddress(session as never)).toBe(`${PREFIX}cell/Sheet1!C2`);
     const values = new Map<string, unknown>();
@@ -101,7 +141,11 @@ describe("sheet properties panel (property rows)", () => {
         delete: (n: string) => values.delete(n),
       },
       selection: { get: () => [], onDidChange: () => ({ dispose() {} }) },
-      objects: { query: async () => [], get: async () => ({ kind: "absent" }), onDidChange: () => ({ dispose() {} }) },
+      objects: {
+        query: async () => [],
+        get: async () => ({ kind: "absent" }),
+        onDidChange: () => ({ dispose() {} }),
+      },
     };
     const d = publishPropertyBindings(host as never, session as never);
     expect(values.get(BIND.cell)).toBe(`${PREFIX}cell/Sheet1!C2`);

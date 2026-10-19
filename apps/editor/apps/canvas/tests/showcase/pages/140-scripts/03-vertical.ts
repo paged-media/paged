@@ -75,16 +75,21 @@ export async function build(ctx: PageContext): Promise<PageReport> {
         "in the base document; everything around them is set live.",
     ),
   );
-  const foot43 = await prose(ctx, p(43), [48, 592, 480, 636], [
-    {
-      text:
-        "Vertical composition turns the writing frame on its side: glyphs " +
-        "stack down the column and columns advance toward the spine. " +
-        "Kinsoku keeps forbidden characters off line starts and ends; " +
-        "mojikumi tightens the full-width punctuation between them.",
-      style: STYLE.bodySmall,
-    },
-  ]);
+  const foot43 = await prose(
+    ctx,
+    p(43),
+    [48, 592, 480, 636],
+    [
+      {
+        text:
+          "Vertical composition turns the writing frame on its side: glyphs " +
+          "stack down the column and columns advance toward the spine. " +
+          "Kinsoku keeps forbidden characters off line starts and ends; " +
+          "mojikumi tightens the full-width punctuation between them.",
+        style: STYLE.bodySmall,
+      },
+    ],
+  );
   elements.push(foot43.frameId);
 
   const note43 = await marginNote(
@@ -106,16 +111,21 @@ export async function build(ctx: PageContext): Promise<PageReport> {
         "advance toward the spine on both pages of the spread.",
     ),
   );
-  const foot44 = await prose(ctx, p(44), [60, 592, 492, 636], [
-    {
-      text:
-        "Ruby sets a reading above its base text — in vertical writing, " +
-        "to the right of the column. Kenten sets an emphasis mark beside " +
-        "each glyph it covers; both ride the run, not the frame, and " +
-        "reflow with the story.",
-      style: STYLE.bodySmall,
-    },
-  ]);
+  const foot44 = await prose(
+    ctx,
+    p(44),
+    [60, 592, 492, 636],
+    [
+      {
+        text:
+          "Ruby sets a reading above its base text — in vertical writing, " +
+          "to the right of the column. Kenten sets an emphasis mark beside " +
+          "each glyph it covers; both ride the run, not the frame, and " +
+          "reflow with the story.",
+        style: STYLE.bodySmall,
+      },
+    ],
+  );
   elements.push(foot44.frameId);
 
   const note44 = await marginNote(

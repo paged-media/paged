@@ -45,7 +45,10 @@ import type { BundleHost, ElementId } from "@paged-media/plugin-api";
 
 /** The request kinds this bundle sends raw — the facade gaps, named. */
 export type RawRequest =
-  | { kind: "requestNearestPathPoint"; payload: { id: ElementId; point: [number, number] } }
+  | {
+      kind: "requestNearestPathPoint";
+      payload: { id: ElementId; point: [number, number] };
+    }
   | { kind: "requestGradientDetail"; payload: { gradientId: string } }
   | { kind: "requestTextOutlines"; payload: { id: ElementId } }
   | {
@@ -63,7 +66,8 @@ const REPLY_KIND: Record<RawRequest["kind"], string> = {
 
 /** Does this host carry the hatch at all? */
 export function hasRawWire(host: BundleHost): boolean {
-  const client = (host as { editor?: { client?: { send?: unknown } } }).editor?.client;
+  const client = (host as { editor?: { client?: { send?: unknown } } }).editor
+    ?.client;
   return typeof client?.send === "function";
 }
 
@@ -72,7 +76,10 @@ export function hasRawWire(host: BundleHost): boolean {
  * null when the host has no hatch, the send fails, or the reply is not
  * the kind this request expects.
  */
-export async function rawRead(host: BundleHost, request: RawRequest): Promise<unknown> {
+export async function rawRead(
+  host: BundleHost,
+  request: RawRequest,
+): Promise<unknown> {
   if (!hasRawWire(host)) return null;
   try {
     // An error reply is turned into null by the reply-kind check below.
@@ -151,7 +158,11 @@ export interface TextOutlinesWire {
   runs: {
     rgb: [number, number, number];
     cmyk?: [number, number, number, number] | null;
-    anchors: { anchor: [number, number]; left: [number, number]; right: [number, number] }[];
+    anchors: {
+      anchor: [number, number];
+      left: [number, number];
+      right: [number, number];
+    }[];
     subpathStarts: number[];
     glyphs: number;
   }[];
@@ -173,7 +184,8 @@ export async function rawTextOutlines(
 }
 
 /** The style families `requestStyleProperties` addresses. */
-export type StyleCollectionWire = "paragraph" | "character" | "object" | "cell" | "table";
+export type StyleCollectionWire =
+  "paragraph" | "character" | "object" | "cell" | "table";
 
 /** `requestStyleProperties`' answer — typed HERE because the curated wire
  *  subset does not carry `StyleProperties`. `entries` has the inspector's

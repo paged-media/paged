@@ -34,7 +34,11 @@
 // so a spec says what the user would see, not which ops were sent.
 
 import type { BundleHost, ElementId } from "@paged-media/plugin-api";
-import { ovalToPath, transformBounds, type Affine } from "@paged-media/draw-geometry";
+import {
+  ovalToPath,
+  transformBounds,
+  type Affine,
+} from "@paged-media/draw-geometry";
 
 export type EngineShape = "spread" | "page";
 export const SHAPES: readonly EngineShape[] = ["spread", "page"];
@@ -71,7 +75,9 @@ interface Group {
 }
 
 const apply = (m: Affine | null, p: readonly number[]): Vec =>
-  m ? [m[0] * p[0]! + m[2] * p[1]! + m[4], m[1] * p[0]! + m[3] * p[1]! + m[5]] : [p[0]!, p[1]!];
+  m
+    ? [m[0] * p[0]! + m[2] * p[1]! + m[4], m[1] * p[0]! + m[3] * p[1]! + m[5]]
+    : [p[0]!, p[1]!];
 
 const compose = (o: Affine, i: Affine): Affine => [
   o[0] * i[0] + o[2] * i[1],
@@ -98,7 +104,11 @@ const bboxOf = (triples: readonly Triple[]): Box => {
   return [t, l, b, r];
 };
 
-const triple = (p: Vec): Triple => ({ anchor: [...p], left: [...p], right: [...p] });
+const triple = (p: Vec): Triple => ({
+  anchor: [...p],
+  left: [...p],
+  right: [...p],
+});
 
 /** A pure translation. */
 export const T = (x: number, y: number): Affine => [1, 0, 0, 1, x, y];
@@ -110,8 +120,16 @@ export const RT = (deg: number, x: number, y: number): Affine => {
 
 /** InDesign's facing spread of two 612 × 792 pages, centred on the spine:
  *  the verso at (-612, -396), the recto at (0, -396). */
-export const VERSO: FakePage = { id: "pv", origin: [-612, -396], size: [612, 792] };
-export const RECTO: FakePage = { id: "pr", origin: [0, -396], size: [612, 792] };
+export const VERSO: FakePage = {
+  id: "pv",
+  origin: [-612, -396],
+  size: [612, 792],
+};
+export const RECTO: FakePage = {
+  id: "pr",
+  origin: [0, -396],
+  size: [612, 792],
+};
 
 export class FakeEngine {
   readonly items = new Map<string, Item>();
@@ -120,7 +138,14 @@ export class FakeEngine {
    *  core's door does), when a spec sets it. */
   readonly textOutlines = new Map<string, unknown>();
   /** What `planarRegions` answers (RAW space), when a spec sets it. */
-  planarFaces: { id: string; signature: number[]; anchors: Triple[]; subpathStarts: number[] }[] | null = null;
+  planarFaces:
+    | {
+        id: string;
+        signature: number[];
+        anchors: Triple[];
+        subpathStarts: number[];
+      }[]
+    | null = null;
   private seq = 0;
 
   constructor(
@@ -145,7 +170,9 @@ export class FakeEngine {
     onPage: Affine,
     open = false,
   ): void {
-    const list = (typeof contours[0]![0] === "number" ? [contours] : contours) as readonly (readonly Vec[])[];
+    const list = (
+      typeof contours[0]![0] === "number" ? [contours] : contours
+    ) as readonly (readonly Vec[])[];
     const anchors: Triple[] = [];
     const starts: number[] = [];
     for (const c of list) {
@@ -177,12 +204,17 @@ export class FakeEngine {
   }
 
   /** A group of existing items with its own stored transform. */
-  addGroup(id: string, members: string[], transform: Affine | null = null): void {
+  addGroup(
+    id: string,
+    members: string[],
+    transform: Affine | null = null,
+  ): void {
     this.groups.set(id, { id, members, transform });
   }
 
   private groupOf(itemId: string): Group | null {
-    for (const g of this.groups.values()) if (g.members.includes(itemId)) return g;
+    for (const g of this.groups.values())
+      if (g.members.includes(itemId)) return g;
     return null;
   }
 
@@ -196,25 +228,38 @@ export class FakeEngine {
   /** The page holding an item's transformed centroid — core's
    *  `host_page` rule. Null = the pasteboard. */
   hostPage(item: Item): FakePage | null {
-    const [t, l, b, r] = transformBounds(item.bounds, this.effective(item) ?? [1, 0, 0, 1, 0, 0]);
+    const [t, l, b, r] = transformBounds(
+      item.bounds,
+      this.effective(item) ?? [1, 0, 0, 1, 0, 0],
+    );
     const cx = (l + r) / 2;
     const cy = (t + b) / 2;
     return (
       this.pages.find(
-        (p) => cx >= p.origin[0] && cx <= p.origin[0] + p.size[0] && cy >= p.origin[1] && cy <= p.origin[1] + p.size[1],
+        (p) =>
+          cx >= p.origin[0] &&
+          cx <= p.origin[0] + p.size[0] &&
+          cy >= p.origin[1] &&
+          cy <= p.origin[1] + p.size[1],
       ) ?? null
     );
   }
 
   /** What the geometry doors answer for the transform, in this shape. */
-  private readTransform(item: Item): { itemTransform: Affine | null; pageOrigin?: Vec } {
+  private readTransform(item: Item): {
+    itemTransform: Affine | null;
+    pageOrigin?: Vec;
+  } {
     const stored = this.effective(item);
     const page = this.hostPage(item);
     if (this.shape === "spread" || !page) return { itemTransform: stored };
     const [ox, oy] = page.origin;
     const m = stored ?? [1, 0, 0, 1, 0, 0];
     return {
-      itemTransform: ox === 0 && oy === 0 ? stored : [m[0], m[1], m[2], m[3], m[4] - ox, m[5] - oy],
+      itemTransform:
+        ox === 0 && oy === 0
+          ? stored
+          : [m[0], m[1], m[2], m[3], m[4] - ox, m[5] - oy],
       pageOrigin: [ox, oy],
     };
   }
@@ -243,7 +288,11 @@ export class FakeEngine {
       id,
       pageId: this.hostPage(item)?.id ?? null,
       spreadId: "s",
-      anchors: item.anchors.map((a) => ({ anchor: [...a.anchor], left: [...a.left], right: [...a.right] })),
+      anchors: item.anchors.map((a) => ({
+        anchor: [...a.anchor],
+        left: [...a.left],
+        right: [...a.right],
+      })),
       subpathStarts: item.starts.length > 1 ? [...item.starts] : [],
       subpathOpen: [...item.open],
       ...this.readTransform(item),
@@ -258,15 +307,26 @@ export class FakeEngine {
     let box: Box | null = null;
     for (const m of g.members) {
       const item = this.items.get(m)!;
-      const b = transformBounds(item.bounds, this.effective(item) ?? [1, 0, 0, 1, 0, 0]);
+      const b = transformBounds(
+        item.bounds,
+        this.effective(item) ?? [1, 0, 0, 1, 0, 0],
+      );
       box = box
-        ? [Math.min(box[0], b[0]), Math.min(box[1], b[1]), Math.max(box[2], b[2]), Math.max(box[3], b[3])]
+        ? [
+            Math.min(box[0], b[0]),
+            Math.min(box[1], b[1]),
+            Math.max(box[2], b[2]),
+            Math.max(box[3], b[3]),
+          ]
         : [b[0], b[1], b[2], b[3]];
     }
     return {
       entries: [
         { path: "frameBounds", value: { type: "bounds", value: box } },
-        { path: "frameTransform", value: { type: "transform", value: g.transform } },
+        {
+          path: "frameTransform",
+          value: { type: "transform", value: g.transform },
+        },
       ],
     };
   }
@@ -274,7 +334,11 @@ export class FakeEngine {
   // ------------------------------------------------------------- writes
 
   /** Apply a mutation (a batch or one op). Answers what it minted. */
-  mutate(m: unknown): { applied: boolean; minted: ElementId[]; error?: string } {
+  mutate(m: unknown): {
+    applied: boolean;
+    minted: ElementId[];
+    error?: string;
+  } {
     const minted: ElementId[] = [];
     const handles = new Map<string, string>();
     const resolve = (raw: unknown): string => {
@@ -291,12 +355,18 @@ export class FakeEngine {
       const a = op.args;
       switch (op.op) {
         case "batch":
-          for (const child of a.ops as { op: string; args: Record<string, unknown> }[]) one(child);
+          for (const child of a.ops as {
+            op: string;
+            args: Record<string, unknown>;
+          }[])
+            one(child);
           return;
         case "insertPath": {
           const [ox, oy] = this.page(String(a.pageId)).origin;
           const shift = (p: number[]): Vec => [p[0]! + ox, p[1]! + oy];
-          const anchors = (a.anchors as { anchor: number[]; left: number[]; right: number[] }[]).map((t) => ({
+          const anchors = (
+            a.anchors as { anchor: number[]; left: number[]; right: number[] }[]
+          ).map((t) => ({
             anchor: shift(t.anchor),
             left: shift(t.left),
             right: shift(t.right),
@@ -328,17 +398,23 @@ export class FakeEngine {
           }
           const v = (a.value as { value: unknown }).value;
           if (a.path === "framePath") {
-            const fp = v as { anchors: { anchor: number[]; left: number[]; right: number[] }[]; subpathStarts: number[] };
+            const fp = v as {
+              anchors: { anchor: number[]; left: number[]; right: number[] }[];
+              subpathStarts: number[];
+            };
             item.anchors = fp.anchors.map((t) => ({
               anchor: [t.anchor[0]!, t.anchor[1]!],
               left: [t.left[0]!, t.left[1]!],
               right: [t.right[0]!, t.right[1]!],
             }));
-            item.starts = fp.subpathStarts.length > 0 ? [...fp.subpathStarts] : [0];
+            item.starts =
+              fp.subpathStarts.length > 0 ? [...fp.subpathStarts] : [0];
           } else if (a.path === "frameBounds") {
             item.bounds = [...(v as Box)] as Box;
           } else if (a.path === "frameTransform") {
-            item.transform = v ? ([...(v as number[])] as unknown as Affine) : null;
+            item.transform = v
+              ? ([...(v as number[])] as unknown as Affine)
+              : null;
           }
           return;
         }
@@ -353,7 +429,11 @@ export class FakeEngine {
           return;
         case "createGroup": {
           const id = `g${++this.seq}`;
-          this.groups.set(id, { id, transform: null, members: (a.memberIds as unknown[]).map(idOf) });
+          this.groups.set(id, {
+            id,
+            transform: null,
+            members: (a.memberIds as unknown[]).map(idOf),
+          });
           minted.push({ kind: "group", id } as ElementId);
           return;
         }
@@ -381,14 +461,21 @@ export class FakeEngine {
     const item = this.items.get(id);
     if (!item) throw new Error(`no element ${id}`);
     const m = this.effective(item);
-    if (item.kind === "oval") return [ovalToPath(item.bounds).anchors.map((a) => apply(m, a.anchor))];
+    if (item.kind === "oval")
+      return [ovalToPath(item.bounds).anchors.map((a) => apply(m, a.anchor))];
     const starts = item.starts.length > 0 ? item.starts : [0];
-    return starts.map((s, i) => item.anchors.slice(s, starts[i + 1] ?? item.anchors.length).map((a) => apply(m, a.anchor)));
+    return starts.map((s, i) =>
+      item.anchors
+        .slice(s, starts[i + 1] ?? item.anchors.length)
+        .map((a) => apply(m, a.anchor)),
+    );
   }
 
   /** `spreadOutline` in `page`'s own coordinates. */
   pageOutline(id: string, page: FakePage): Vec[][] {
-    return this.spreadOutline(id).map((c) => c.map(([x, y]) => [x - page.origin[0], y - page.origin[1]] as Vec));
+    return this.spreadOutline(id).map((c) =>
+      c.map(([x, y]) => [x - page.origin[0], y - page.origin[1]] as Vec),
+    );
   }
 
   /** The stored transform (what `frameTransform` reads). */
@@ -399,9 +486,17 @@ export class FakeEngine {
 
 /** The smallest host the commands under test reach: the geometry reads,
  *  `mutate`, the pages collection, a settable selection and a log. */
-export function fakeHost(engine: FakeEngine, selection: ElementId[] = []): BundleHost {
+export function fakeHost(
+  engine: FakeEngine,
+  selection: ElementId[] = [],
+): BundleHost {
   let sel = [...selection];
-  const log = { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} };
+  const log = {
+    debug: () => {},
+    info: () => {},
+    warn: () => {},
+    error: () => {},
+  };
   return {
     log,
     supports: () => false,
@@ -410,8 +505,13 @@ export function fakeHost(engine: FakeEngine, selection: ElementId[] = []): Bundl
     editor: {
       client: {
         send: async (req: { kind: string; payload?: { id?: ElementId } }) => {
-          const hit = req.kind === "requestTextOutlines" ? engine.textOutlines.get(String(req.payload?.id?.id)) : undefined;
-          return hit ? { kind: "textOutlines", payload: { result: hit } } : { kind: "error", payload: null };
+          const hit =
+            req.kind === "requestTextOutlines"
+              ? engine.textOutlines.get(String(req.payload?.id?.id))
+              : undefined;
+          return hit
+            ? { kind: "textOutlines", payload: { result: hit } }
+            : { kind: "error", payload: null };
         },
       },
     },
@@ -427,15 +527,25 @@ export function fakeHost(engine: FakeEngine, selection: ElementId[] = []): Bundl
       pathAnchors: async (id: ElementId) => engine.pathAnchors(id),
       elementProperties: async (id: ElementId) => engine.elementProperties(id),
       collection: async (name: string) =>
-        name === "pages" ? engine.pages.map((p) => ({ selfId: p.id, sizePt: [...p.size] })) : [],
+        name === "pages"
+          ? engine.pages.map((p) => ({ selfId: p.id, sizePt: [...p.size] }))
+          : [],
       planarRegions: async () =>
         engine.planarFaces
           ? { found: true, complete: true, faces: engine.planarFaces }
-          : { found: false, complete: false, faces: [], reason: "no arrangement in this spec" },
+          : {
+              found: false,
+              complete: false,
+              faces: [],
+              reason: "no arrangement in this spec",
+            },
       mutate: async (m: unknown) => {
         const out = engine.mutate(m);
         return out.applied
-          ? { applied: true, minted: out.minted.map((element) => ({ element, handle: null })) }
+          ? {
+              applied: true,
+              minted: out.minted.map((element) => ({ element, handle: null })),
+            }
           : { applied: false, error: out.error };
       },
     },
@@ -443,7 +553,10 @@ export function fakeHost(engine: FakeEngine, selection: ElementId[] = []): Bundl
 }
 
 /** `expect`-free closeness of two contour lists, for a readable message. */
-export function outlineDelta(got: readonly Vec[][], want: readonly Vec[][]): number {
+export function outlineDelta(
+  got: readonly Vec[][],
+  want: readonly Vec[][],
+): number {
   if (got.length !== want.length) return Infinity;
   let worst = 0;
   got.forEach((c, i) => {

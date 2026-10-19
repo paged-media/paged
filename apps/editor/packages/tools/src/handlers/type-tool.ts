@@ -116,10 +116,17 @@ export function createTypeHandler(): GestureHandler {
     paged?.overlaySignals.setToolPreview(null);
   };
 
-  const boundsFor = (end: [number, number]): [number, number, number, number] => {
+  const boundsFor = (
+    end: [number, number],
+  ): [number, number, number, number] => {
     const [sx, sy] = startLocal!;
     const [ex, ey] = end;
-    return [Math.min(sy, ey), Math.min(sx, ex), Math.max(sy, ey), Math.max(sx, ex)];
+    return [
+      Math.min(sy, ey),
+      Math.min(sx, ex),
+      Math.max(sy, ey),
+      Math.max(sx, ex),
+    ];
   };
 
   return {
@@ -182,7 +189,10 @@ export function createTypeHandler(): GestureHandler {
       reset();
       if (declined) return;
       const [top, left, bottom, right] = bounds;
-      if (bottom - top < MIN_TEXT_FRAME_PT || right - left < MIN_TEXT_FRAME_PT) {
+      if (
+        bottom - top < MIN_TEXT_FRAME_PT ||
+        right - left < MIN_TEXT_FRAME_PT
+      ) {
         return;
       }
       void createAndEnter(paged, pageId, bounds);

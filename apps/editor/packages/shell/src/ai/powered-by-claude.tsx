@@ -34,7 +34,10 @@ export interface PoweredByClaudeProps {
   className?: string;
 }
 
-export function PoweredByClaude({ size = 10, className }: PoweredByClaudeProps) {
+export function PoweredByClaude({
+  size = 10,
+  className,
+}: PoweredByClaudeProps) {
   return (
     <a
       href="https://www.anthropic.com/claude"

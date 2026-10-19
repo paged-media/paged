@@ -270,9 +270,15 @@ function xmlEscape(s: string): string {
 
 /** Look up a style by key in the scene's table (the default key-0 style
  *  when absent — matching the engine's IR-v2 default). */
-function styleOf(scene: GridScene, key: number | undefined): LoweredStyle | undefined {
+function styleOf(
+  scene: GridScene,
+  key: number | undefined,
+): LoweredStyle | undefined {
   if (key === undefined) return scene.styles.find((s) => s.key === 0);
-  return scene.styles.find((s) => s.key === key) ?? scene.styles.find((s) => s.key === 0);
+  return (
+    scene.styles.find((s) => s.key === key) ??
+    scene.styles.find((s) => s.key === 0)
+  );
 }
 
 /** Build the `<rect>` fills for every cell carrying a `fillRgb` style.
@@ -314,7 +320,11 @@ function gridLines(rules: Rules, o: GridSvgOptions): string {
 /** Build the per-cell border `<line>` elements from style flags
  *  (top/right/bottom/left). Drawn over the gridlines so an explicit
  *  border wins visually. */
-function cellBorders(scene: GridScene, vp: GridViewport, o: GridSvgOptions): string {
+function cellBorders(
+  scene: GridScene,
+  vp: GridViewport,
+  o: GridSvgOptions,
+): string {
   const parts: string[] = [];
   const seg = (x1: number, y1: number, x2: number, y2: number): string =>
     `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" ` +
@@ -339,7 +349,11 @@ function cellBorders(scene: GridScene, vp: GridViewport, o: GridSvgOptions): str
 
 /** Build the cell `<text>` elements (already-formatted text, alignment,
  *  per-style colour/weight/italic/size). Viewport-local pt geometry. */
-function cellTexts(scene: GridScene, vp: GridViewport, o: GridSvgOptions): string {
+function cellTexts(
+  scene: GridScene,
+  vp: GridViewport,
+  o: GridSvgOptions,
+): string {
   const parts: string[] = [];
   for (const cell of scene.cells) {
     const ci = cell.col - vp.firstCol;
@@ -370,7 +384,9 @@ function cellTexts(scene: GridScene, vp: GridViewport, o: GridSvgOptions): strin
 /** The viewport-local pt rectangle of the selection (clamped to the
  *  visible window), or `null` when there is no selection or it lies
  *  entirely outside the window. `[x, y, width, height]`. */
-export function selectionRect(scene: GridScene): [number, number, number, number] | null {
+export function selectionRect(
+  scene: GridScene,
+): [number, number, number, number] | null {
   const sel = scene.selection;
   if (!sel) return null;
   const vp = scene.viewport;
@@ -398,7 +414,9 @@ export const FILL_HANDLE_PT = 5;
 /** The fill handle's viewport-local rect `[x, y, w, h]`: a square centred
  *  on the selection's bottom-right corner, or `null` when there is no
  *  selection or that corner is outside the window. */
-export function fillHandleRect(scene: GridScene): [number, number, number, number] | null {
+export function fillHandleRect(
+  scene: GridScene,
+): [number, number, number, number] | null {
   const sel = scene.selection;
   if (!sel) return null;
   const vp = scene.viewport;
@@ -415,11 +433,18 @@ export function hitFillHandle(scene: GridScene, x: number, y: number): boolean {
   const r = fillHandleRect(scene);
   if (!r) return false;
   const tol = 2;
-  return x >= r[0] - tol && x <= r[0] + r[2] + tol && y >= r[1] - tol && y <= r[1] + r[3] + tol;
+  return (
+    x >= r[0] - tol &&
+    x <= r[0] + r[2] + tol &&
+    y >= r[1] - tol &&
+    y <= r[1] + r[3] + tol
+  );
 }
 
 /** The fill-drag target outline rect (clamped to the window), or null. */
-function fillPreviewRect(scene: GridScene): [number, number, number, number] | null {
+function fillPreviewRect(
+  scene: GridScene,
+): [number, number, number, number] | null {
   if (!scene.fillPreview) return null;
   return selectionRect({ ...scene, selection: scene.fillPreview });
 }
@@ -614,7 +639,12 @@ export function cssColorToScenePaint(css: string): ScenePaint {
   return { r: 0, g: 0, b: 0, a: 1 };
 }
 
-function rectPath(x0: number, y0: number, x1: number, y1: number): ScenePathSeg[] {
+function rectPath(
+  x0: number,
+  y0: number,
+  x1: number,
+  y1: number,
+): ScenePathSeg[] {
   return [
     { op: "moveTo", x: x0, y: y0 },
     { op: "lineTo", x: x1, y: y0 },

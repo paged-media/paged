@@ -45,12 +45,29 @@ function fakeEngine() {
     sortRange: () => ({ changed: [], edits: [] }),
     findAll: () => [],
     replaceAll: () => ({ occurrences: 0, changed: [], edits: [], skipped: [] }),
-    getRangeLowered: () => ({ cols: [], rows: [], rules: { h: [], v: [] }, merges: [] }),
-    getRangeStyled: () => ({ cols: [], rows: [], rules: { h: [], v: [] }, merges: [] }),
+    getRangeLowered: () => ({
+      cols: [],
+      rows: [],
+      rules: { h: [], v: [] },
+      merges: [],
+    }),
+    getRangeStyled: () => ({
+      cols: [],
+      rows: [],
+      rules: { h: [], v: [] },
+      merges: [],
+    }),
     getRangeValues: () => [],
     paginate: () => [],
     getGridScene: () => ({
-      viewport: { firstRow: 0, firstCol: 0, rows: 1, cols: 1, xOffsets: [0, 40], yOffsets: [0, 20] },
+      viewport: {
+        firstRow: 0,
+        firstCol: 0,
+        rows: 1,
+        cols: 1,
+        xOffsets: [0, 40],
+        yOffsets: [0, 20],
+      },
       cells: [],
       styles: [],
       gridlines: { h: [], v: [] },
@@ -80,7 +97,10 @@ function fakeEngine() {
 const silentHost = {
   log: { debug() {}, info() {}, warn() {}, error() {} },
   // The document doors every host has; nothing here fires them.
-  document: { onDidChange: () => ({ dispose() {} }), onDidOpen: () => ({ dispose() {} }) },
+  document: {
+    onDidChange: () => ({ dispose() {} }),
+    onDidOpen: () => ({ dispose() {} }),
+  },
   supports: () => false,
 } as unknown as BundleHost;
 
@@ -109,7 +129,10 @@ describe("sheet_plugin_formula_bar: session glue", () => {
 
   it("functionList sources names from the engine and CACHES (one wasm call)", () => {
     const { session, listFnCalls } = booted();
-    expect(session.functionList().map((f) => f.name)).toEqual(["SUM", "VLOOKUP"]);
+    expect(session.functionList().map((f) => f.name)).toEqual([
+      "SUM",
+      "VLOOKUP",
+    ]);
     // A second read is served from the cache (the registry is build-fixed).
     session.functionList();
     expect(listFnCalls()).toBe(1);

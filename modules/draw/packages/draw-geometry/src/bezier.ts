@@ -257,10 +257,7 @@ export function reshapeSegmentByDrag(
   t: number,
   delta: Vec2,
 ): SegmentReshape {
-  const tc = Math.min(
-    1 - SEGMENT_DRAG_T_MIN,
-    Math.max(SEGMENT_DRAG_T_MIN, t),
-  );
+  const tc = Math.min(1 - SEGMENT_DRAG_T_MIN, Math.max(SEGMENT_DRAG_T_MIN, t));
   const u = 1 - tc;
   const w = segmentDragWeight(tc);
   const k1 = (1 - w) / (3 * u * u * tc);

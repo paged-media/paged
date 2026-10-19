@@ -48,7 +48,9 @@ test.describe("F1 — the host end of contribute.menu()", () => {
       .poll(
         () =>
           page.evaluate(
-            () => (globalThis as unknown as { __canvas: { ready: boolean } }).__canvas.ready,
+            () =>
+              (globalThis as unknown as { __canvas: { ready: boolean } })
+                .__canvas.ready,
           ),
         { timeout: 30_000 },
       )
@@ -118,7 +120,9 @@ test.describe("F1 — the host end of contribute.menu()", () => {
       .poll(
         () =>
           page.evaluate(
-            () => (globalThis as unknown as { __canvas: { ready: boolean } }).__canvas.ready,
+            () =>
+              (globalThis as unknown as { __canvas: { ready: boolean } })
+                .__canvas.ready,
           ),
         { timeout: 30_000 },
       )
@@ -168,9 +172,10 @@ test.describe("F1 — the host end of contribute.menu()", () => {
     for (const [name, r] of Object.entries(verdict)) {
       expect(r, `${name} is missing from the menu`).not.toBeNull();
       expect(r!.atRoot, `${name} should apply at the document root`).toBe(true);
-      expect(r!.inContext, `${name} should NOT apply inside an edit context`).toBe(
-        false,
-      );
+      expect(
+        r!.inContext,
+        `${name} should NOT apply inside an edit context`,
+      ).toBe(false);
     }
   });
 

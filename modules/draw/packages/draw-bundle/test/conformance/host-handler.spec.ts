@@ -109,7 +109,9 @@ describe("draw conformance — host-routed anchor handler (B-17)", () => {
     handler.onPointerUp(clickUp(F1_MULTI_SHAPE.pageId, click));
 
     // The host-routed mutate lands exactly one new anchor.
-    await until(async () => (await liveTable(h.host, el)).anchors.length === before + 1);
+    await until(
+      async () => (await liveTable(h.host, el)).anchors.length === before + 1,
+    );
     const after = await liveTable(h.host, el);
     expect(after.anchors.length).toBe(before + 1);
     // The inserted anchor (index 1, between the endpoints) sits at the
@@ -143,7 +145,9 @@ describe("draw conformance — host-routed anchor handler (B-17)", () => {
     await h.host.selection.set([el]);
     const base = (await liveTable(h.host, el)).anchors.length;
     handler.onPointerUp(clickUp(F1_MULTI_SHAPE.pageId, click));
-    await until(async () => (await liveTable(h.host, el)).anchors.length === base + 1);
+    await until(
+      async () => (await liveTable(h.host, el)).anchors.length === base + 1,
+    );
     const viaHandler = await liveTable(h.host, el);
     await h.host.document.undo();
 

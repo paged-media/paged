@@ -70,10 +70,7 @@ test.describe("journey · paged.image raster type", () => {
     const text = page.locator("[data-image-type-text]");
     await expect(text).toBeVisible();
     await expect(text).toHaveValue("");
-    await expect(text).toHaveAttribute(
-      "placeholder",
-      /click the canvas/i,
-    );
+    await expect(text).toHaveAttribute("placeholder", /click the canvas/i);
     await expect(page.locator("[data-image-type-family]")).toBeVisible();
 
     // ── 3. THE SCOPE SENTENCE. The one thing a designer must learn
@@ -159,9 +156,7 @@ test.describe("journey · paged.image raster type", () => {
     // never reaches the tool, which is the whole point of the test.
     await expect
       .poll(status, { timeout: 15_000 })
-      .toMatch(
-        /Type set in|Type failed|serves no fonts|carries no bytes for/,
-      );
+      .toMatch(/Type set in|Type failed|serves no fonts|carries no bytes for/);
     expect(await status(), "the click changed the status line").not.toBe(
       before,
     );

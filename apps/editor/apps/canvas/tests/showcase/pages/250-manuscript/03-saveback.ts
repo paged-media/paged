@@ -55,43 +55,53 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   const t0 = Date.now();
   const lap = (label: string): void => {
     // eslint-disable-next-line no-console
-    console.log(`[250 timing] saveback ${label} at t+${Math.round((Date.now() - t0) / 1000)}s`);
+    console.log(
+      `[250 timing] saveback ${label} at t+${Math.round((Date.now() - t0) / 1000)}s`,
+    );
   };
   const pg = p(118);
   const notes: string[] = [];
   const elements: string[] = [];
   const covers: string[] = [];
 
-  const head = await proseFrame(ctx, pg, [60, 54, 492, 82], [
-    { text: "Save-back, honestly", style: STYLE.head1 },
-  ]);
-  const body = await proseFrame(ctx, pg, [60, 88, 492, 330], [
-    {
-      text:
-        "The manuscript on the last spread can go home again. The exporter " +
-        "holds the report's original bytes, and when an edited story comes " +
-        "back it does not re-serialize the document — it patches it. " +
-        "quick-xml runs once as a locator, computing the exact byte ranges " +
-        "of the runs that changed; everything outside those ranges is " +
-        "raw-copied, and hand-built fragments are spliced into the holes. " +
-        "Untouched bytes are identical by construction — rsids, ignorable " +
-        "namespaces, parts Paged does not model — because no serializer " +
-        "ever touches them.",
-      style: STYLE.body,
-    },
-    {
-      text:
-        "Which runs changed is decided by identity, not by index: the diff " +
-        "aligns story blocks, table rows and runs through an LCS keyed on " +
-        "what each node IS, so deleting a middle paragraph edits that " +
-        "paragraph's source node and never rewrites its successor. " +
-        "Synthesized docx-auto styles project back to direct formatting, so " +
-        "Word never meets a synthetic style name. And what the patcher will " +
-        "not risk, it refuses out loud: column operations on a gridSpan " +
-        "table land in a skip ledger instead of a guess.",
-      style: STYLE.body,
-    },
-  ]);
+  const head = await proseFrame(
+    ctx,
+    pg,
+    [60, 54, 492, 82],
+    [{ text: "Save-back, honestly", style: STYLE.head1 }],
+  );
+  const body = await proseFrame(
+    ctx,
+    pg,
+    [60, 88, 492, 330],
+    [
+      {
+        text:
+          "The manuscript on the last spread can go home again. The exporter " +
+          "holds the report's original bytes, and when an edited story comes " +
+          "back it does not re-serialize the document — it patches it. " +
+          "quick-xml runs once as a locator, computing the exact byte ranges " +
+          "of the runs that changed; everything outside those ranges is " +
+          "raw-copied, and hand-built fragments are spliced into the holes. " +
+          "Untouched bytes are identical by construction — rsids, ignorable " +
+          "namespaces, parts Paged does not model — because no serializer " +
+          "ever touches them.",
+        style: STYLE.body,
+      },
+      {
+        text:
+          "Which runs changed is decided by identity, not by index: the diff " +
+          "aligns story blocks, table rows and runs through an LCS keyed on " +
+          "what each node IS, so deleting a middle paragraph edits that " +
+          "paragraph's source node and never rewrites its successor. " +
+          "Synthesized docx-auto styles project back to direct formatting, so " +
+          "Word never meets a synthetic style name. And what the patcher will " +
+          "not risk, it refuses out loud: column operations on a gridSpan " +
+          "table land in a skip ledger instead of a guess.",
+        style: STYLE.body,
+      },
+    ],
+  );
   elements.push(head.frameId, body.frameId);
 
   lap("intro frames done");
@@ -196,7 +206,11 @@ export async function build(ctx: PageContext): Promise<PageReport> {
           }
         ).__canvas.registries.exporters;
         if (!reg) {
-          return { ids: null as string[] | null, bytes: null as number[] | null, name: "" };
+          return {
+            ids: null as string[] | null,
+            bytes: null as number[] | null,
+            name: "",
+          };
         }
         const ids = reg.list().map((e) => e.id);
         const hit = reg.list().find((e) => e.id === exporterId);
@@ -236,23 +250,33 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   }
 
   lap("export block done");
-  const verdict = await proseFrame(ctx, pg, [60, 344, 492, 452], [
-    { text: verdictText, style: STYLE.bodySmall },
-    { text: exportLine, style: STYLE.bodySmall },
-  ]);
+  const verdict = await proseFrame(
+    ctx,
+    pg,
+    [60, 344, 492, 452],
+    [
+      { text: verdictText, style: STYLE.bodySmall },
+      { text: exportLine, style: STYLE.bodySmall },
+    ],
+  );
   elements.push(verdict.frameId);
 
-  const provenance = await proseFrame(ctx, pg, [60, 466, 492, 560], [
-    {
-      text:
-        "Provenance, end to end: the report was PLACED, its source travels " +
-        "as the container part the last page printed, its content lowered " +
-        "to native stories — and the file that just left through the " +
-        "exporter is the same manuscript, patched or carried verbatim, " +
-        "never re-invented. A place, not an open; a patch, not a rewrite.",
-      style: STYLE.bodySmall,
-    },
-  ]);
+  const provenance = await proseFrame(
+    ctx,
+    pg,
+    [60, 466, 492, 560],
+    [
+      {
+        text:
+          "Provenance, end to end: the report was PLACED, its source travels " +
+          "as the container part the last page printed, its content lowered " +
+          "to native stories — and the file that just left through the " +
+          "exporter is the same manuscript, patched or carried verbatim, " +
+          "never re-invented. A place, not an open; a patch, not a rewrite.",
+        style: STYLE.bodySmall,
+      },
+    ],
+  );
   elements.push(provenance.frameId);
 
   lap("verdict + provenance frames done");
@@ -268,9 +292,7 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     .locator("[data-doc-diagnostics]")
     .innerText({ timeout: 120_000 })
     .catch(() => "");
-  const footLine = diagText
-    .split("\n")
-    .find((line) => /footnote/i.test(line));
+  const footLine = diagText.split("\n").find((line) => /footnote/i.test(line));
   if (footLine) {
     footnoteQuote = footLine.trim().slice(0, 160);
   }

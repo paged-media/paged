@@ -36,13 +36,25 @@ import {
   subscribeLibrary,
   usePaged,
 } from "@paged-media/shell";
-import { accessToken, signedInAs, signIn, signOut } from "@paged-media/repository";
+import {
+  accessToken,
+  signedInAs,
+  signIn,
+  signOut,
+} from "@paged-media/repository";
 import type { CommitInfo, DocumentEntry } from "@paged-media/repository";
 
-import { connect as connectLive, disconnect as disconnectLive, live } from "../live-bridge";
+import {
+  connect as connectLive,
+  disconnect as disconnectLive,
+  live,
+} from "../live-bridge";
 import { downloadBytes } from "../shell-file-saver";
 
-const mono = { fontFamily: "var(--font-mono, monospace)", fontSize: 11 } as const;
+const mono = {
+  fontFamily: "var(--font-mono, monospace)",
+  fontSize: 11,
+} as const;
 const kicker = {
   fontSize: 10,
   letterSpacing: "0.08em",
@@ -69,17 +81,31 @@ const SERVER = typeof __PAGED_SERVER__ === "undefined" ? "" : __PAGED_SERVER__;
 /** The server repository a document syncs with: its own, or one named after it. */
 function remoteRepo(d: DocumentEntry): string {
   if (d.remote?.repo) return d.remote.repo;
-  const slug = d.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40);
-  return `${slug || "document"}-${d.id.replace(/[^a-z0-9]/gi, "").slice(0, 8).toLowerCase()}`;
+  const slug = d.name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 40);
+  return `${slug || "document"}-${d.id
+    .replace(/[^a-z0-9]/gi, "")
+    .slice(0, 8)
+    .toLowerCase()}`;
 }
 
 function when(ts: number): string {
-  return new Date(ts).toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" });
+  return new Date(ts).toLocaleString(undefined, {
+    dateStyle: "short",
+    timeStyle: "short",
+  });
 }
 
 export function LibraryPanel() {
   const editor = usePaged();
-  const version = useSyncExternalStore(subscribeLibrary, libraryVersion, libraryVersion);
+  const version = useSyncExternalStore(
+    subscribeLibrary,
+    libraryVersion,
+    libraryVersion,
+  );
   const library = getLibrary();
   const current = currentLibraryDocument();
   const [docs, setDocs] = useState<DocumentEntry[]>([]);
@@ -87,10 +113,16 @@ export function LibraryPanel() {
   const [releases, setReleases] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
-  const [who, setWho] = useState<string | null>(() => (SERVER ? signedInAs(SERVER) : null));
+  const [who, setWho] = useState<string | null>(() =>
+    SERVER ? signedInAs(SERVER) : null,
+  );
   const [syncNote, setSyncNote] = useState<string | null>(null);
   // A live save adds a branch: the refs below are read again when the relay moves.
-  const liveVersion = useSyncExternalStore(live.subscribe, live.version, live.version);
+  const liveVersion = useSyncExternalStore(
+    live.subscribe,
+    live.version,
+    live.version,
+  );
   const [branches, setBranches] = useState<string[]>([]);
   const refresh = () => setTick((t) => t + 1);
 
@@ -107,7 +139,10 @@ export function LibraryPanel() {
         setLog(history);
         const named: Record<string, string> = {};
         for (const [ref, hash] of Object.entries(refs)) {
-          if (ref.startsWith("releases/")) named[hash] = [named[hash], ref.slice(9)].filter(Boolean).join(", ");
+          if (ref.startsWith("releases/"))
+            named[hash] = [named[hash], ref.slice(9)]
+              .filter(Boolean)
+              .join(", ");
         }
         setReleases(named);
         setBranches(Object.keys(refs).filter((r) => r.startsWith("agent/")));
@@ -127,17 +162,22 @@ export function LibraryPanel() {
       if (!(await confirmDiscard(editor, `Opening ${entry.name}`))) return;
       const bytes = await library.exportPaged(entry.id, target);
       const doc = editor.document;
-      await loadDocumentFile(editor.client, new File([bytes.slice()], `${entry.name}.paged`), {
-        setHandle: doc.setHandle,
-        setSourceName: doc.setSourceName,
-        setLoading: doc.setLoading,
-        setStatus: (s) => console.info("[library]", s),
-        setSnapshotsReady: doc.setSnapshotsReady,
-        addSnapshot: (pageId, url) => doc.setSnapshots((prev) => new Map(prev).set(pageId, url)),
-        resetForNewDocument: doc.resetForNewDocument,
-        pushWarning: (w) => console.warn("[library]", w),
-        libraryDocument: entry,
-      });
+      await loadDocumentFile(
+        editor.client,
+        new File([bytes.slice()], `${entry.name}.paged`),
+        {
+          setHandle: doc.setHandle,
+          setSourceName: doc.setSourceName,
+          setLoading: doc.setLoading,
+          setStatus: (s) => console.info("[library]", s),
+          setSnapshotsReady: doc.setSnapshotsReady,
+          addSnapshot: (pageId, url) =>
+            doc.setSnapshots((prev) => new Map(prev).set(pageId, url)),
+          resetForNewDocument: doc.resetForNewDocument,
+          pushWarning: (w) => console.warn("[library]", w),
+          libraryDocument: entry,
+        },
+      );
     },
     [editor, library],
   );
@@ -145,7 +185,9 @@ export function LibraryPanel() {
   const act = (f: () => Promise<unknown>) => () => {
     f()
       .then(refresh)
-      .catch((err: unknown) => setError(err instanceof Error ? err.message : String(err)));
+      .catch((err: unknown) =>
+        setError(err instanceof Error ? err.message : String(err)),
+      );
   };
 
   const remoteFor = async (d: DocumentEntry) => {
@@ -159,23 +201,48 @@ export function LibraryPanel() {
 
   if (!library) {
     return (
-      <div data-library-panel style={{ padding: 12, font: "12px var(--font-sans, sans-serif)", color: "var(--pg-muted-fg)" }}>
-        The library needs the browser&apos;s private file system, which is not available here. Files still open and
-        save as before.
+      <div
+        data-library-panel
+        style={{
+          padding: 12,
+          font: "12px var(--font-sans, sans-serif)",
+          color: "var(--pg-muted-fg)",
+        }}
+      >
+        The library needs the browser&apos;s private file system, which is not
+        available here. Files still open and save as before.
       </div>
     );
   }
 
   return (
-    <div data-library-panel style={{ padding: 12, font: "12px var(--font-sans, sans-serif)", color: "var(--pg-fg)" }}>
+    <div
+      data-library-panel
+      style={{
+        padding: 12,
+        font: "12px var(--font-sans, sans-serif)",
+        color: "var(--pg-fg)",
+      }}
+    >
       <div style={{ ...kicker, marginTop: 0 }}>This document</div>
       {!current ? (
-        <p data-library-unsaved style={{ margin: 0, color: "var(--pg-muted-fg)" }}>
-          Not in the library yet. Save (Cmd+S) keeps it here, with every later save as a version.
+        <p
+          data-library-unsaved
+          style={{ margin: 0, color: "var(--pg-muted-fg)" }}
+        >
+          Not in the library yet. Save (Cmd+S) keeps it here, with every later
+          save as a version.
         </p>
       ) : (
         <>
-          <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              gap: 8,
+              flexWrap: "wrap",
+            }}
+          >
             <strong>{current.name}</strong>
             <button
               type="button"
@@ -193,27 +260,66 @@ export function LibraryPanel() {
               Export with history
             </button>
           </div>
-          <ul data-library-versions style={{ listStyle: "none", margin: "8px 0 0", padding: 0 }}>
+          <ul
+            data-library-versions
+            style={{ listStyle: "none", margin: "8px 0 0", padding: 0 }}
+          >
             {log.map((c, i) => (
               <li
                 key={c.hash}
                 data-library-version={c.hash}
-                style={{ padding: "4px 0", borderTop: "1px solid var(--border, #2a2a2a)" }}
+                style={{
+                  padding: "4px 0",
+                  borderTop: "1px solid var(--border, #2a2a2a)",
+                }}
               >
-                <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    gap: 8,
+                  }}
+                >
                   <span>
                     {c.message}
-                    {c.agent && <span style={{ ...mono, marginLeft: 6, color: "var(--status-warn)" }}>agent</span>}
+                    {c.agent && (
+                      <span
+                        style={{
+                          ...mono,
+                          marginLeft: 6,
+                          color: "var(--status-warn)",
+                        }}
+                      >
+                        agent
+                      </span>
+                    )}
                     {releases[c.hash] && (
-                      <span style={{ ...mono, marginLeft: 6, color: "var(--status-ok, #6c6)" }}>
+                      <span
+                        style={{
+                          ...mono,
+                          marginLeft: 6,
+                          color: "var(--status-ok, #6c6)",
+                        }}
+                      >
                         released {releases[c.hash]}
                       </span>
                     )}
                   </span>
-                  <span style={{ ...mono, color: "var(--pg-muted-fg)" }}>{when(c.ts)}</span>
+                  <span style={{ ...mono, color: "var(--pg-muted-fg)" }}>
+                    {when(c.ts)}
+                  </span>
                 </div>
-                <div style={{ display: "flex", gap: 6, marginTop: 3, alignItems: "center" }}>
-                  <span style={{ ...mono, color: "var(--pg-muted-fg)" }}>{c.hash.slice(0, 10)}</span>
+                <div
+                  style={{
+                    display: "flex",
+                    gap: 6,
+                    marginTop: 3,
+                    alignItems: "center",
+                  }}
+                >
+                  <span style={{ ...mono, color: "var(--pg-muted-fg)" }}>
+                    {c.hash.slice(0, 10)}
+                  </span>
                   {i > 0 && (
                     <button
                       type="button"
@@ -248,8 +354,16 @@ export function LibraryPanel() {
                     style={button}
                     title="Name this version; a release never moves"
                     onClick={act(async () => {
-                      const name = globalThis.prompt("Release name (it never moves once given):", "");
-                      if (name?.trim()) await library.release(current.id, name.trim().replace(/\s+/g, "-"), c.hash);
+                      const name = globalThis.prompt(
+                        "Release name (it never moves once given):",
+                        "",
+                      );
+                      if (name?.trim())
+                        await library.release(
+                          current.id,
+                          name.trim().replace(/\s+/g, "-"),
+                          c.hash,
+                        );
                     })}
                   >
                     Release
@@ -264,9 +378,22 @@ export function LibraryPanel() {
       {SERVER && (
         <div data-library-server>
           <div style={kicker}>Server</div>
-          <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-            <span style={{ ...mono, color: "var(--pg-muted-fg)" }} data-library-who>
-              {who ? `${new URL(SERVER).host} · ${who}` : `${new URL(SERVER).host} · signed out`}
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              gap: 8,
+              flexWrap: "wrap",
+              alignItems: "center",
+            }}
+          >
+            <span
+              style={{ ...mono, color: "var(--pg-muted-fg)" }}
+              data-library-who
+            >
+              {who
+                ? `${new URL(SERVER).host} · ${who}`
+                : `${new URL(SERVER).host} · signed out`}
             </span>
             {who ? (
               <button
@@ -295,16 +422,33 @@ export function LibraryPanel() {
             )}
           </div>
           {who && current && (
-            <div style={{ display: "flex", gap: 6, marginTop: 6, alignItems: "center", flexWrap: "wrap" }}>
-              <span style={{ ...mono, color: "var(--pg-muted-fg)" }}>{remoteRepo(current)}</span>
+            <div
+              style={{
+                display: "flex",
+                gap: 6,
+                marginTop: 6,
+                alignItems: "center",
+                flexWrap: "wrap",
+              }}
+            >
+              <span style={{ ...mono, color: "var(--pg-muted-fg)" }}>
+                {remoteRepo(current)}
+              </span>
               <button
                 type="button"
                 data-library-push
                 style={button}
                 title="Send this document's versions the server lacks"
                 onClick={act(async () => {
-                  const r = await library.push(current.id, await remoteFor(current));
-                  setSyncNote(r.sent ? `Pushed ${r.sent} object${r.sent === 1 ? "" : "s"} (${r.bytes.toLocaleString()} bytes)` : "Up to date");
+                  const r = await library.push(
+                    current.id,
+                    await remoteFor(current),
+                  );
+                  setSyncNote(
+                    r.sent
+                      ? `Pushed ${r.sent} object${r.sent === 1 ? "" : "s"} (${r.bytes.toLocaleString()} bytes)`
+                      : "Up to date",
+                  );
                 })}
               >
                 Push
@@ -315,8 +459,13 @@ export function LibraryPanel() {
                 style={button}
                 title="Take the server's newer versions; a document that moved apart is refused, not merged"
                 onClick={act(async () => {
-                  const r = await library.pull(current.id, await remoteFor(current));
-                  setSyncNote(r.changed ? "Pulled newer versions" : "Up to date");
+                  const r = await library.pull(
+                    current.id,
+                    await remoteFor(current),
+                  );
+                  setSyncNote(
+                    r.changed ? "Pulled newer versions" : "Up to date",
+                  );
                   if (r.changed) await open(current);
                 })}
               >
@@ -330,11 +479,15 @@ export function LibraryPanel() {
               data-library-clone
               style={{ ...button, marginTop: 6 }}
               onClick={act(async () => {
-                const repo = globalThis.prompt("Server repository to open:", "")?.trim();
+                const repo = globalThis
+                  .prompt("Server repository to open:", "")
+                  ?.trim();
                 if (!repo) return;
                 const token = await accessToken(SERVER);
                 if (!token) throw new Error("Sign in to the server first.");
-                await open(await library.clone({ url: SERVER, repo, token }, repo));
+                await open(
+                  await library.clone({ url: SERVER, repo, token }, repo),
+                );
               })}
             >
               Open from server…
@@ -343,13 +496,28 @@ export function LibraryPanel() {
           {who && (
             <div data-library-claude style={{ marginTop: 10 }}>
               <div style={kicker}>Claude</div>
-              <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+              <div
+                style={{
+                  display: "flex",
+                  gap: 8,
+                  alignItems: "center",
+                  flexWrap: "wrap",
+                }}
+              >
                 {live.state() === "open" ? (
                   <>
-                    <span style={{ ...mono, color: "var(--pg-muted-fg)" }} data-library-live-state>
+                    <span
+                      style={{ ...mono, color: "var(--pg-muted-fg)" }}
+                      data-library-live-state
+                    >
                       Connected · Claude can use this tab
                     </span>
-                    <button type="button" data-library-live-disconnect style={button} onClick={() => disconnectLive()}>
+                    <button
+                      type="button"
+                      data-library-live-disconnect
+                      style={button}
+                      onClick={() => disconnectLive()}
+                    >
                       Disconnect
                     </button>
                   </>
@@ -362,10 +530,19 @@ export function LibraryPanel() {
                     title="Let Claude (signed in to this server as you) run scripts, render pages and save versions in this tab"
                     onClick={act(() => connectLive(SERVER, editor.client))}
                   >
-                    {live.state() === "connecting" ? "Connecting…" : "Connect to Claude"}
+                    {live.state() === "connecting"
+                      ? "Connecting…"
+                      : "Connect to Claude"}
                   </button>
                 )}
-                <label style={{ ...mono, display: "flex", gap: 4, alignItems: "center" }}>
+                <label
+                  style={{
+                    ...mono,
+                    display: "flex",
+                    gap: 4,
+                    alignItems: "center",
+                  }}
+                >
                   <input
                     type="checkbox"
                     data-library-live-ask
@@ -379,34 +556,88 @@ export function LibraryPanel() {
                 <div
                   key={call.id}
                   data-library-live-pending={call.tool}
-                  style={{ border: "1px solid var(--status-warn, #c90)", borderRadius: 4, padding: 6, marginTop: 6 }}
+                  style={{
+                    border: "1px solid var(--status-warn, #c90)",
+                    borderRadius: 4,
+                    padding: 6,
+                    marginTop: 6,
+                  }}
                 >
                   <div style={mono}>
-                    Claude wants to {call.tool === "save_document" ? "save a version on its own branch" : "run a script"}
+                    Claude wants to{" "}
+                    {call.tool === "save_document"
+                      ? "save a version on its own branch"
+                      : "run a script"}
                   </div>
                   {typeof call.args.source === "string" && (
-                    <pre style={{ ...mono, maxHeight: 120, overflow: "auto", margin: "4px 0" }}>{call.args.source}</pre>
+                    <pre
+                      style={{
+                        ...mono,
+                        maxHeight: 120,
+                        overflow: "auto",
+                        margin: "4px 0",
+                      }}
+                    >
+                      {call.args.source}
+                    </pre>
                   )}
                   <div style={{ display: "flex", gap: 6 }}>
-                    <button type="button" data-library-live-allow style={button} onClick={() => live.answer(call.id, true)}>
+                    <button
+                      type="button"
+                      data-library-live-allow
+                      style={button}
+                      onClick={() => live.answer(call.id, true)}
+                    >
                       Allow
                     </button>
-                    <button type="button" data-library-live-decline style={button} onClick={() => live.answer(call.id, false)}>
+                    <button
+                      type="button"
+                      data-library-live-decline
+                      style={button}
+                      onClick={() => live.answer(call.id, false)}
+                    >
                       Decline
                     </button>
                   </div>
                 </div>
               ))}
               {live.log().length > 0 && (
-                <ul data-library-live-log style={{ listStyle: "none", margin: "6px 0 0", padding: 0 }}>
-                  {live.log().slice(0, 8).map((e) => (
-                    <li key={e.id} data-library-live-entry={e.outcome} style={{ ...mono, display: "flex", justifyContent: "space-between", gap: 6 }}>
-                      <span>
-                        {e.tool} <span style={{ color: "var(--pg-muted-fg)" }}>{e.summary}</span>
-                      </span>
-                      <span style={{ color: e.outcome === "done" ? "var(--pg-muted-fg)" : "var(--status-warn)" }}>{e.outcome}</span>
-                    </li>
-                  ))}
+                <ul
+                  data-library-live-log
+                  style={{ listStyle: "none", margin: "6px 0 0", padding: 0 }}
+                >
+                  {live
+                    .log()
+                    .slice(0, 8)
+                    .map((e) => (
+                      <li
+                        key={e.id}
+                        data-library-live-entry={e.outcome}
+                        style={{
+                          ...mono,
+                          display: "flex",
+                          justifyContent: "space-between",
+                          gap: 6,
+                        }}
+                      >
+                        <span>
+                          {e.tool}{" "}
+                          <span style={{ color: "var(--pg-muted-fg)" }}>
+                            {e.summary}
+                          </span>
+                        </span>
+                        <span
+                          style={{
+                            color:
+                              e.outcome === "done"
+                                ? "var(--pg-muted-fg)"
+                                : "var(--status-warn)",
+                          }}
+                        >
+                          {e.outcome}
+                        </span>
+                      </li>
+                    ))}
                 </ul>
               )}
             </div>
@@ -415,7 +646,15 @@ export function LibraryPanel() {
             <div data-library-agent-branches style={{ marginTop: 8 }}>
               <div style={kicker}>Claude's branches</div>
               {branches.map((b) => (
-                <div key={b} style={{ display: "flex", justifyContent: "space-between", gap: 6, alignItems: "center" }}>
+                <div
+                  key={b}
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    gap: 6,
+                    alignItems: "center",
+                  }}
+                >
                   <span style={{ ...mono }}>{b}</span>
                   <button
                     type="button"
@@ -434,7 +673,14 @@ export function LibraryPanel() {
             </div>
           )}
           {syncNote && (
-            <p data-library-sync-note style={{ ...mono, margin: "6px 0 0", color: "var(--pg-muted-fg)" }}>
+            <p
+              data-library-sync-note
+              style={{
+                ...mono,
+                margin: "6px 0 0",
+                color: "var(--pg-muted-fg)",
+              }}
+            >
               {syncNote}
             </p>
           )}
@@ -443,20 +689,39 @@ export function LibraryPanel() {
 
       <div style={kicker}>Library</div>
       {docs.length === 0 ? (
-        <p style={{ margin: 0, color: "var(--pg-muted-fg)" }}>No documents yet. Opening or saving a file adds it.</p>
+        <p style={{ margin: 0, color: "var(--pg-muted-fg)" }}>
+          No documents yet. Opening or saving a file adds it.
+        </p>
       ) : (
-        <ul data-library-documents style={{ listStyle: "none", margin: 0, padding: 0 }}>
+        <ul
+          data-library-documents
+          style={{ listStyle: "none", margin: 0, padding: 0 }}
+        >
           {docs.map((d) => (
             <li
               key={d.id}
               data-library-document={d.id}
-              style={{ display: "flex", justifyContent: "space-between", gap: 8, padding: "3px 0" }}
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                gap: 8,
+                padding: "3px 0",
+              }}
             >
-              <span style={{ fontWeight: d.id === current?.id ? 600 : 400 }}>{d.name}</span>
+              <span style={{ fontWeight: d.id === current?.id ? 600 : 400 }}>
+                {d.name}
+              </span>
               <span style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                <span style={{ ...mono, color: "var(--pg-muted-fg)" }}>{when(d.updatedAt)}</span>
+                <span style={{ ...mono, color: "var(--pg-muted-fg)" }}>
+                  {when(d.updatedAt)}
+                </span>
                 {d.id !== current?.id && (
-                  <button type="button" data-library-open style={button} onClick={act(() => open(d))}>
+                  <button
+                    type="button"
+                    data-library-open
+                    style={button}
+                    onClick={act(() => open(d))}
+                  >
                     Open
                   </button>
                 )}
@@ -466,7 +731,10 @@ export function LibraryPanel() {
         </ul>
       )}
       {error && (
-        <p data-library-error style={{ ...mono, color: "var(--status-error)", marginTop: 8 }}>
+        <p
+          data-library-error
+          style={{ ...mono, color: "var(--status-error)", marginTop: 8 }}
+        >
           {error}
         </p>
       )}

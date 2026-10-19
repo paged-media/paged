@@ -158,7 +158,9 @@ export function gradientStopMutationFor(
   locationPct: number,
 ): Mutation | null {
   const spec = gradientSpecWithStop(detail, index, locationPct);
-  return spec ? { op: "editGradient", args: { gradientId: detail.selfId, spec } } : null;
+  return spec
+    ? { op: "editGradient", args: { gradientId: detail.selfId, spec } }
+    : null;
 }
 
 /** A stop marker: a closed diamond `r` pt across its half-diagonal. */
@@ -272,7 +274,10 @@ export function createGradientAnnotatorHandler(
   });
 
   /** The axis, then one marker per stop at `points`. */
-  const draw = (a: AxisState, points: readonly (readonly [number, number])[]) => {
+  const draw = (
+    a: AxisState,
+    points: readonly (readonly [number, number])[],
+  ) => {
     const r = host.viewport.pxToPt(STOP_MARKER_PX);
     const shapes: ToolPreviewShape[] = [
       axisLine(a),
@@ -296,7 +301,9 @@ export function createGradientAnnotatorHandler(
     shown = { axis, detail };
     draw(
       axis,
-      (detail?.stops ?? []).map((s) => pointOnAxis(lineOf(axis), s.locationPct)),
+      (detail?.stops ?? []).map((s) =>
+        pointOnAxis(lineOf(axis), s.locationPct),
+      ),
     );
   };
 
@@ -337,7 +344,10 @@ export function createGradientAnnotatorHandler(
     onPointerMove(e: CanvasPointerEvent) {
       if (stopDrag) {
         if (!e.pagePoint || e.pageId !== stopDrag.shown.axis.pageId) return;
-        const snap = stopDrag.machine.handle({ type: "move", point: e.pagePoint });
+        const snap = stopDrag.machine.handle({
+          type: "move",
+          point: e.pagePoint,
+        });
         draw(stopDrag.shown.axis, snap.points);
         return;
       }
@@ -357,7 +367,11 @@ export function createGradientAnnotatorHandler(
             : machine.handle({ type: "key", key: "Escape" });
         const mutation =
           snap.commit && at.detail
-            ? gradientStopMutationFor(at.detail, snap.commit.index, snap.commit.locationPct)
+            ? gradientStopMutationFor(
+                at.detail,
+                snap.commit.index,
+                snap.commit.locationPct,
+              )
             : null;
         if (!mutation) {
           void renderAxis();
@@ -367,7 +381,9 @@ export function createGradientAnnotatorHandler(
           .mutate(mutation)
           .then((outcome) => {
             if (!outcome.applied) {
-              host.log.warn(`gradient stop rejected by engine: ${JSON.stringify(outcome.error)}`);
+              host.log.warn(
+                `gradient stop rejected by engine: ${JSON.stringify(outcome.error)}`,
+              );
             } else {
               host.log.info(
                 `gradient stop ${snap.commit!.index + 1} of ${at.axis.gradientId} moved to ` +

@@ -12,7 +12,13 @@ import {
   sourceNameOf,
   virtualFileName,
 } from "../query/import";
-import { checkQuery, diagnoseDuckDBError, positionOf, previewSql, trimSql } from "../query/sql";
+import {
+  checkQuery,
+  diagnoseDuckDBError,
+  positionOf,
+  previewSql,
+  trimSql,
+} from "../query/sql";
 import { ALLOWED, REFUSED } from "../../test/guard-matrix";
 
 describe("file names and quoting [data.source.adapters]", () => {
@@ -89,7 +95,9 @@ describe("query builders [data.query.seam]", () => {
     expect(valueLiteral("-3")).toBe("-3");
     expect(valueLiteral("1e3")).toBe("1e3");
     expect(valueLiteral("12 items")).toBe("'12 items'");
-    expect(valueLiteral("x'); DROP TABLE t; --")).toBe("'x''); DROP TABLE t; --'");
+    expect(valueLiteral("x'); DROP TABLE t; --")).toBe(
+      "'x''); DROP TABLE t; --'",
+    );
   });
 });
 
@@ -108,9 +116,13 @@ describe("the query guard's lexer and allow-list [data.security.gates]", () => {
 
   it("reads strings, quoted names and comments the way DuckDB does", () => {
     // Statement words inside strings, quoted names and comments are data.
-    expect(checkQuery("SELECT 'DROP TABLE x; read_csv(1)' AS s FROM t")).toBeNull();
+    expect(
+      checkQuery("SELECT 'DROP TABLE x; read_csv(1)' AS s FROM t"),
+    ).toBeNull();
     expect(checkQuery('SELECT "update", "set" FROM t')).toBeNull();
-    expect(checkQuery("SELECT 1 /* outer /* nested ; */ still comment ; */ FROM t")).toBeNull();
+    expect(
+      checkQuery("SELECT 1 /* outer /* nested ; */ still comment ; */ FROM t"),
+    ).toBeNull();
     // A bare statement word is refused, with a hint and a position.
     expect(checkQuery("SELECT update FROM t")).toMatchObject({
       kind: "Guard",
@@ -121,12 +133,20 @@ describe("the query guard's lexer and allow-list [data.security.gates]", () => {
   });
 
   it("knows FROM inside function arguments and IS DISTINCT FROM is not a table", () => {
-    expect(checkQuery("SELECT extract(year FROM d), substring(s FROM 2 FOR 3), trim(BOTH 'x' FROM s) FROM t")).toBeNull();
-    expect(checkQuery("SELECT * FROM t WHERE a IS NOT DISTINCT FROM 'x'")).toBeNull();
+    expect(
+      checkQuery(
+        "SELECT extract(year FROM d), substring(s FROM 2 FOR 3), trim(BOTH 'x' FROM s) FROM t",
+      ),
+    ).toBeNull();
+    expect(
+      checkQuery("SELECT * FROM t WHERE a IS NOT DISTINCT FROM 'x'"),
+    ).toBeNull();
     // …but a subquery inside such a call has a real FROM.
-    expect(checkQuery("SELECT substring((FROM read_csv('x') SELECT 'a') FROM 1) FROM t")?.message).toMatch(
-      /read_csv\(\)/,
-    );
+    expect(
+      checkQuery(
+        "SELECT substring((FROM read_csv('x') SELECT 'a') FROM 1) FROM t",
+      )?.message,
+    ).toMatch(/read_csv\(\)/);
   });
 
   it("refuses unbalanced brackets, so the text cannot escape the preview wrapper", () => {
@@ -138,9 +158,15 @@ describe("the query guard's lexer and allow-list [data.security.gates]", () => {
 
   it("allows list and struct literals and commas in a join condition", () => {
     expect(checkQuery("SELECT [1, 2], {'a': 1, 'b': 2} FROM t")).toBeNull();
-    expect(checkQuery("SELECT * FROM a JOIN b ON (a.x, a.y) = (b.x, b.y), c")).toBeNull();
-    expect(checkQuery("SELECT * FROM a JOIN b USING (x, y) ORDER BY 1, 2")).toBeNull();
-    expect(checkQuery("SELECT * FROM a JOIN b ON a.x = b.x, read_csv('y')")?.message).toMatch(/read_csv/);
+    expect(
+      checkQuery("SELECT * FROM a JOIN b ON (a.x, a.y) = (b.x, b.y), c"),
+    ).toBeNull();
+    expect(
+      checkQuery("SELECT * FROM a JOIN b USING (x, y) ORDER BY 1, 2"),
+    ).toBeNull();
+    expect(
+      checkQuery("SELECT * FROM a JOIN b ON a.x = b.x, read_csv('y')")?.message,
+    ).toMatch(/read_csv/);
   });
 });
 
@@ -151,7 +177,8 @@ describe("DuckDB error text → diagnostics [data.query.seam]", () => {
     );
     expect(diagnoseDuckDBError(err, 1)).toEqual({
       kind: "Binder",
-      message: 'Referenced column "zz" not found in FROM clause!\nCandidate bindings: "t.a"',
+      message:
+        'Referenced column "zz" not found in FROM clause!\nCandidate bindings: "t.a"',
       line: 1,
       column: 8,
     });
@@ -162,11 +189,16 @@ describe("DuckDB error text → diagnostics [data.query.seam]", () => {
       kind: "IO",
       message: "No files found",
     });
-    expect(diagnoseDuckDBError(new Error("boom"))).toEqual({ kind: "Error", message: "boom" });
+    expect(diagnoseDuckDBError(new Error("boom"))).toEqual({
+      kind: "Error",
+      message: "boom",
+    });
   });
 
   it("puts the user's query on its own line in a preview", () => {
-    expect(previewSql("SELECT 1;  \n", 10)).toBe("SELECT * FROM (\nSELECT 1\n) AS paged_preview LIMIT 10");
+    expect(previewSql("SELECT 1;  \n", 10)).toBe(
+      "SELECT * FROM (\nSELECT 1\n) AS paged_preview LIMIT 10",
+    );
     expect(trimSql("  SELECT 1 ;;\n")).toBe("SELECT 1");
     expect(positionOf("ab\ncd", 4)).toEqual({ line: 2, column: 2 });
   });

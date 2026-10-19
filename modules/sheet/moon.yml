@@ -1,67 +1,67 @@
-$schema: '../../.moon/cache/schemas/project.json'
+$schema: "../../.moon/cache/schemas/project.json"
 
 # paged.sheet: a Cargo workspace (sheet-* crates; fuzz/ is a separate
 # cargo-fuzz workspace that sheet-fuzz.yml runs) and JS packages.
-language: 'rust'
-layer: 'library'
-stack: 'systems'
-tags: ['rust', 'node', 'module', 'wasm']
+language: "rust"
+layer: "library"
+stack: "systems"
+tags: ["rust", "node", "module", "wasm"]
 
 project:
-  title: 'modules/sheet'
-  description: 'Spreadsheet module: calc engine, formats, XLSX, charts.'
+  title: "modules/sheet"
+  description: "Spreadsheet module: calc engine, formats, XLSX, charts."
 
-# validate:manifest runs the in-tree plugin-cli.
+# validate:manifest runs the in-tree paged-plugin bin (plugin-sdk).
 dependsOn:
-  - id: 'extensions'
-    scope: 'development'
-  - id: 'test-kit'
-    scope: 'development'
+  - id: "extensions"
+    scope: "development"
+  - id: "test-kit"
+    scope: "development"
 
 fileGroups:
   rust-sources:
-    - '**/*.rs'
-    - '**/Cargo.toml'
-    - 'Cargo.lock'
-    - 'rust-toolchain*'
-    - '/.cargo/*.toml'
-    - '!fuzz/**'
+    - "**/*.rs"
+    - "**/Cargo.toml"
+    - "Cargo.lock"
+    - "rust-toolchain*"
+    - "/.cargo/*.toml"
+    - "!fuzz/**"
   rust-tests:
-    - '**/*'
-    - '!docs/**'
-    - '!**/*.md'
-    - '!fuzz/**'
-    - '/.cargo/*.toml'
+    - "**/*"
+    - "!docs/**"
+    - "!**/*.md"
+    - "!fuzz/**"
+    - "/.cargo/*.toml"
 
 tasks:
   js-test:
     # sheet-vitest.yml builds the engine wasm before bun test.
-    deps: ['~:wasm']
+    deps: ["~:wasm"]
 
   wasm:
-    description: 'sheet-js wasm into packages/sheet-bundle/bin/ (scripts/build-wasm.sh).'
-    toolchains: ['rust']
-    command: 'bash scripts/build-wasm.sh'
+    description: "sheet-js wasm into packages/sheet-bundle/bin/ (scripts/build-wasm.sh)."
+    toolchains: ["rust"]
+    command: "bash scripts/build-wasm.sh"
     inputs:
-      - '@group(rust-sources)'
-      - 'scripts/build-wasm.sh'
-      - 'scripts/source-hash.mjs'
-      - 'packages/sheet-bundle/manifest.json'
+      - "@group(rust-sources)"
+      - "scripts/build-wasm.sh"
+      - "scripts/source-hash.mjs"
+      - "packages/sheet-bundle/manifest.json"
     outputs:
-      - 'packages/sheet-bundle/bin/sheet_js*'
-      - 'packages/sheet-bundle/bin/SOURCE_HASH'
+      - "packages/sheet-bundle/bin/sheet_js*"
+      - "packages/sheet-bundle/bin/SOURCE_HASH"
     options:
       # Needs wasm-bindgen-cli at the Cargo.lock version; sheet-rust and
       # sheet-vitest build it in CI.
-      runInCI: 'skip'
+      runInCI: "skip"
 
   wasm-perf:
-    description: 'The counting engine wasm (perf-counters) into packages/sheet-bundle/bin-perf/.'
-    toolchains: ['rust']
-    command: 'bash scripts/build-wasm-perf.sh'
+    description: "The counting engine wasm (perf-counters) into packages/sheet-bundle/bin-perf/."
+    toolchains: ["rust"]
+    command: "bash scripts/build-wasm-perf.sh"
     inputs:
-      - '@group(rust-sources)'
-      - 'scripts/build-wasm-perf.sh'
+      - "@group(rust-sources)"
+      - "scripts/build-wasm-perf.sh"
     options:
       cache: false
       runInCI: false

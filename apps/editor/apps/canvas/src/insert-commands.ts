@@ -289,12 +289,7 @@ export function pageTargetFor({
   let nearestD = Infinity;
   for (let i = 0; i < rects.length; i++) {
     const r = rects[i];
-    if (
-      docX >= r.x &&
-      docX <= r.x + r.w &&
-      docY >= r.y &&
-      docY <= r.y + r.h
-    ) {
+    if (docX >= r.x && docX <= r.x + r.w && docY >= r.y && docY <= r.y + r.h) {
       return at(i);
     }
     // Distance to the rect (0 inside — handled above), for the
@@ -677,7 +672,12 @@ export function psdHeaderSize(
   bytes: Uint8Array,
 ): { width: number; height: number } | null {
   if (bytes.length < 26) return null;
-  if (bytes[0] !== 0x38 || bytes[1] !== 0x42 || bytes[2] !== 0x50 || bytes[3] !== 0x53) {
+  if (
+    bytes[0] !== 0x38 ||
+    bytes[1] !== 0x42 ||
+    bytes[2] !== 0x50 ||
+    bytes[3] !== 0x53
+  ) {
     return null;
   }
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
@@ -715,7 +715,9 @@ export function placeDragBox(
 
 /** The selection when it is exactly one EMPTY graphic frame — where a
  *  Place puts the picture instead of asking for a point (ED-6). */
-async function selectedEmptyFrame(paged: PagedEditor): Promise<ElementId | null> {
+async function selectedEmptyFrame(
+  paged: PagedEditor,
+): Promise<ElementId | null> {
   const selected = paged.selection.elementSelection;
   if (selected.length !== 1) return null;
   const [id] = selected;
@@ -792,7 +794,10 @@ export async function placeImage(
     }
   }
   if (!size) {
-    report("error", `Place image: could not decode "${file.name}" as an image.`);
+    report(
+      "error",
+      `Place image: could not decode "${file.name}" as an image.`,
+    );
     return REFUSED;
   }
 
@@ -1013,30 +1018,29 @@ const PLUGIN_INSERT_ENTRIES: {
   command: string;
   order: number;
   icon?: string;
-}[] =
-  [
-    // The three Data-menu entries raise the same panels the Data-mode
-    // pills do, named as the panels are named. They were "Connect
-    // source…", "Field mapping…" and "Generate pages…" — three names for
-    // panels titled Data sources, Bindings and Dataset preview, the last
-    // of which generates no pages.
-    {
-      path: "Data/Data sources…",
-      command: "paged.panel.show.media.paged.data.panel.sources",
-      order: 10,
-    },
-    {
-      path: "Data/Bindings…",
-      command: "paged.panel.show.media.paged.data.panel.bindings",
-      order: 20,
-    },
+}[] = [
+  // The three Data-menu entries raise the same panels the Data-mode
+  // pills do, named as the panels are named. They were "Connect
+  // source…", "Field mapping…" and "Generate pages…" — three names for
+  // panels titled Data sources, Bindings and Dataset preview, the last
+  // of which generates no pages.
+  {
+    path: "Data/Data sources…",
+    command: "paged.panel.show.media.paged.data.panel.sources",
+    order: 10,
+  },
+  {
+    path: "Data/Bindings…",
+    command: "paged.panel.show.media.paged.data.panel.bindings",
+    order: 20,
+  },
 
-    {
-      path: "Data/Dataset preview…",
-      command: "paged.panel.show.media.paged.data.panel.dataset",
-      order: 30,
-    },
-  ];
+  {
+    path: "Data/Dataset preview…",
+    command: "paged.panel.show.media.paged.data.panel.dataset",
+    order: 30,
+  },
+];
 
 export const INSERT_MENU_ITEMS: MenuItemContribution[] = [
   // Not an insert — it rode in the plugin-courtesy table (group

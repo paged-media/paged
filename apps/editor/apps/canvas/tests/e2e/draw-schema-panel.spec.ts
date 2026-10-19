@@ -117,20 +117,25 @@ test.describe("E2E draw-schema-panel (the W3.1 declarative panel)", () => {
     const panel = page.locator(`[data-schema-panel="${PANEL_ID}"]`);
     await expect(panel).toBeVisible();
     // Sections come from the host's schema renderer.
-    await expect(panel.locator('[data-schema-section="Selected object"]')).toBeVisible();
+    await expect(
+      panel.locator('[data-schema-section="Selected object"]'),
+    ).toBeVisible();
     await expect(panel.locator('[data-schema-section="Path"]')).toBeVisible();
     // With a path selected, its rows are host PropertyFields over draw's
     // object kinds — the type comes from the kind's schema row.
     await select(page, POLY);
     const points = panel.locator('[data-plugin-property-field="points"]');
-    await expect(points).toHaveAttribute("data-property-kind", "plugin:media.paged.draw/path", {
-      timeout: 5_000,
-    });
-    await expect(points).toHaveAttribute("data-property-targets", "1");
-    await expect(points.locator('[data-property-field="points"]')).toHaveAttribute(
-      "data-value-type",
-      "list",
+    await expect(points).toHaveAttribute(
+      "data-property-kind",
+      "plugin:media.paged.draw/path",
+      {
+        timeout: 5_000,
+      },
     );
+    await expect(points).toHaveAttribute("data-property-targets", "1");
+    await expect(
+      points.locator('[data-property-field="points"]'),
+    ).toHaveAttribute("data-value-type", "list");
   });
 
   test("AC-SCHEMA-2 — the Path rows follow the selection", async ({ page }) => {
@@ -143,15 +148,21 @@ test.describe("E2E draw-schema-panel (the W3.1 declarative panel)", () => {
     // The rectangle is bounds-based — no path-anchor table, so its point
     // list is empty.
     await select(page, RECT);
-    await expect(pointsList).toHaveAttribute("data-list-length", "0", { timeout: 5_000 });
+    await expect(pointsList).toHaveAttribute("data-list-length", "0", {
+      timeout: 5_000,
+    });
 
     // The polygon IS a path: its three anchors appear as list items.
     await select(page, POLY);
-    await expect(pointsList).toHaveAttribute("data-list-length", "3", { timeout: 5_000 });
+    await expect(pointsList).toHaveAttribute("data-list-length", "3", {
+      timeout: 5_000,
+    });
     await expect(pointsList.locator("[data-list-item]")).toHaveCount(3);
 
     // And back: re-selecting the rectangle empties it again.
     await select(page, RECT);
-    await expect(pointsList).toHaveAttribute("data-list-length", "0", { timeout: 5_000 });
+    await expect(pointsList).toHaveAttribute("data-list-length", "0", {
+      timeout: 5_000,
+    });
   });
 });

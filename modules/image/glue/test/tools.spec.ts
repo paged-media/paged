@@ -28,7 +28,13 @@ import manifestJson from "@paged-media/image-manifest/manifest.json";
 import { constrain45 } from "../src/gradient-tool";
 import { redEyeBox } from "../src/red-eye-tool";
 import { createImageSession } from "../src/session";
-import { makeFakeEditor, mapBacking, psdBytes, shellStub, silentConsole } from "./helpers";
+import {
+  makeFakeEditor,
+  mapBacking,
+  psdBytes,
+  shellStub,
+  silentConsole,
+} from "./helpers";
 
 describe("gradient tool", () => {
   it("Shift snaps the line to 45° and keeps its length", () => {
@@ -43,18 +49,27 @@ describe("gradient tool", () => {
 describe("red eye tool", () => {
   it("a drag is its box, either direction; a click is a 24 px box around the point", () => {
     expect(redEyeBox([10, 10], [4, 20])).toEqual({ x: 4, y: 10, w: 6, h: 10 });
-    expect(redEyeBox([50, 50], [50.5, 50])).toEqual({ x: 38, y: 38, w: 24, h: 24 });
+    expect(redEyeBox([50, 50], [50.5, 50])).toEqual({
+      x: 38,
+      y: 38,
+      w: 24,
+      h: 24,
+    });
   });
 });
 
 describe("in Node (no GPU)", () => {
   it("both decline with the GPU reason", async () => {
     const fake = makeFakeEditor();
-    const handle = createBundleHost(() => fake.editor, manifestJson as PluginManifest, {
-      console: silentConsole,
-      storage: mapBacking(),
-      shell: shellStub(),
-    });
+    const handle = createBundleHost(
+      () => fake.editor,
+      manifestJson as PluginManifest,
+      {
+        console: silentConsole,
+        storage: mapBacking(),
+        shell: shellStub(),
+      },
+    );
     const session = createImageSession(handle.host);
     expect(await session.importBytes("t.psd", psdBytes())).toBe(true);
     expect(await session.fillGradientLine([0, 0], [2, 0])).toBe(false);

@@ -45,13 +45,18 @@ import {
 import { undo } from "./harness/gesture";
 import { selectElements } from "./harness/ui";
 
-async function anchorCount(page: Page, ref: { kind: string; id: string }): Promise<number> {
+async function anchorCount(
+  page: Page,
+  ref: { kind: string; id: string },
+): Promise<number> {
   return page.evaluate(async (id) => {
     const c = (
       globalThis as unknown as {
         __canvas: {
           client: {
-            pathAnchors: (id: unknown) => Promise<{ anchors: unknown[] } | null>;
+            pathAnchors: (
+              id: unknown,
+            ) => Promise<{ anchors: unknown[] } | null>;
           };
         };
       }
@@ -111,7 +116,8 @@ test("WD-01 — a Width-tool drag near an anchor widens the selected open path; 
           client: {
             pathAnchors: (id: unknown) => Promise<{
               anchors: Array<{ anchor: [number, number] }>;
-              itemTransform?: [number, number, number, number, number, number] | null;
+              itemTransform?:
+                [number, number, number, number, number, number] | null;
             } | null>;
           };
         };
@@ -121,7 +127,10 @@ test("WD-01 — a Width-tool drag near an anchor widens the selected open path; 
     if (!res || res.anchors.length === 0) return null;
     const a = res.anchors[Math.floor(res.anchors.length / 2)].anchor;
     const m = res.itemTransform ?? [1, 0, 0, 1, 0, 0];
-    return { x: m[0] * a[0] + m[2] * a[1] + m[4], y: m[1] * a[0] + m[3] * a[1] + m[5] };
+    return {
+      x: m[0] * a[0] + m[2] * a[1] + m[4],
+      y: m[1] * a[0] + m[3] * a[1] + m[5],
+    };
   }, drawn!);
   expect(anchorPt, "the drawn path exposes anchors on the wire").not.toBeNull();
 

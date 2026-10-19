@@ -99,9 +99,12 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     args: { elementId: { kind, id }, path, value },
   });
 
-  const head = await proseFrame(ctx, PAGE, [60, 54, 492, 86], [
-    { text: "One parameter at a time", style: STYLE.head1 },
-  ]);
+  const head = await proseFrame(
+    ctx,
+    PAGE,
+    [60, 54, 492, 86],
+    [{ text: "One parameter at a time", style: STYLE.head1 }],
+  );
   elements.push(head.frameId);
 
   // Table geometry: label column at 60, four 60 pt tile cells from
@@ -115,25 +118,25 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   for (const [r, family] of EFFECT_FAMILIES.entries()) {
     const y = ROW_Y0 + r * ROW_PITCH;
 
-    const rowLabel = await proseFrame(ctx, PAGE, [60, y, 182, y + 58], [
-      {
-        text: family.label,
-        style: STYLE.caption,
-        charRanges: [
-          { start: 0, end: family.label.length, style: CHAR.smallCaps },
-        ],
-      },
-    ]);
+    const rowLabel = await proseFrame(
+      ctx,
+      PAGE,
+      [60, y, 182, y + 58],
+      [
+        {
+          text: family.label,
+          style: STYLE.caption,
+          charRanges: [
+            { start: 0, end: family.label.length, style: CHAR.smallCaps },
+          ],
+        },
+      ],
+    );
     elements.push(rowLabel.frameId);
 
     for (const [j, variant] of family.variants(sw).entries()) {
       const tx = TILE_X0 + j * TILE_PITCH;
-      const square = await doc.rectangle(pageId, [
-        tx + 10,
-        y,
-        tx + 50,
-        y + 40,
-      ]);
+      const square = await doc.rectangle(pageId, [tx + 10, y, tx + 50, y + 40]);
       elements.push(square);
       await doc.batch([
         setOn("rectangle", square, "frameFillColor", {
@@ -142,12 +145,7 @@ export async function build(ctx: PageContext): Promise<PageReport> {
         }),
         ...batteryOps("rectangle", square, family.base(sw)),
         // The one knob this square turns.
-        setOn(
-          "rectangle",
-          square,
-          variant.write.path,
-          variant.write.value,
-        ),
+        setOn("rectangle", square, variant.write.path, variant.write.value),
         setOn("rectangle", square, "itemLayer", {
           type: "text",
           value: contentLayer,

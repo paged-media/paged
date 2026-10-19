@@ -51,9 +51,9 @@ describe("draw-tools — the on-canvas REPEAT widget (§12.4)", () => {
       expect(near(center[1], -150, 1e-9)).toBe(true);
       // The SOURCE is still on the ring — it never moves.
       const back = radialPointAt(center, steer.radiusPt!, steer.startDeg!);
-      expect(near(back[0], CENTER[0], 1e-9) && near(back[1], CENTER[1], 1e-9)).toBe(
-        true,
-      );
+      expect(
+        near(back[0], CENTER[0], 1e-9) && near(back[1], CENTER[1], 1e-9),
+      ).toBe(true);
     });
 
     it("RADIAL — a sub-pixel drag reads as NO radius rather than a degenerate ring", () => {
@@ -101,7 +101,9 @@ describe("draw-tools — the on-canvas REPEAT widget (§12.4)", () => {
 
     it("is ignored for the GRID, which has no angular parameter to snap", () => {
       const a = repeatSteer("grid", CENTER, [170, 60], SIZE);
-      const b = repeatSteer("grid", CENTER, [170, 60], SIZE, { constrain: true });
+      const b = repeatSteer("grid", CENTER, [170, 60], SIZE, {
+        constrain: true,
+      });
       expect(b).toEqual(a);
     });
 
@@ -127,9 +129,9 @@ describe("draw-tools — the on-canvas REPEAT widget (§12.4)", () => {
       expect(near(points[1][1], CENTER[1], 1e-9)).toBe(true);
       // Every ring sample is one radius from the centre.
       for (const p of points.slice(1)) {
-        expect(near(Math.hypot(p[0] - center[0], p[1] - center[1]), 120, 1e-9)).toBe(
-          true,
-        );
+        expect(
+          near(Math.hypot(p[0] - center[0], p[1] - center[1]), 120, 1e-9),
+        ).toBe(true);
       }
     });
 

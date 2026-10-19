@@ -48,8 +48,16 @@ import type {
 } from "@paged-media/plugin-api";
 import { parseAddress } from "@paged-media/plugin-sdk";
 
-import { APPEARANCE_KIND, APPEARANCE_SCHEMA, makeAppearanceKind } from "./appearance-kind";
-import { GRAPHIC_STYLE_KIND, GRAPHIC_STYLE_SCHEMA, makeGraphicStyleKind } from "./graphic-style-kind";
+import {
+  APPEARANCE_KIND,
+  APPEARANCE_SCHEMA,
+  makeAppearanceKind,
+} from "./appearance-kind";
+import {
+  GRAPHIC_STYLE_KIND,
+  GRAPHIC_STYLE_SCHEMA,
+  makeGraphicStyleKind,
+} from "./graphic-style-kind";
 import { PATH_KIND, PATH_SCHEMA, makePathKind } from "./path-kind";
 import { finishPlans, isRejected, type DrawPlan, type Planner } from "./plan";
 import { RECIPE_KINDS, makeRecipeKinds } from "./recipe-kinds";
@@ -63,23 +71,45 @@ import {
 } from "./symbol-kinds";
 import { TWINS, argsOf, typedCommands } from "./typed-commands";
 
-export { TWINS, payloadFor, typedCommands, type TwinSpec } from "./typed-commands";
+export {
+  TWINS,
+  payloadFor,
+  typedCommands,
+  type TwinSpec,
+} from "./typed-commands";
 export { validSubpathStarts } from "./path-kind";
 
 /** Every kind, as pure data (kind, title, schema) — the manifest view. */
-export const DRAW_OBJECT_KINDS: readonly { kind: string; title: string; schema: readonly PropertySchema[] }[] = [
+export const DRAW_OBJECT_KINDS: readonly {
+  kind: string;
+  title: string;
+  schema: readonly PropertySchema[];
+}[] = [
   { kind: PATH_KIND, title: "Path", schema: PATH_SCHEMA },
   { kind: APPEARANCE_KIND, title: "Appearance", schema: APPEARANCE_SCHEMA },
-  { kind: GRAPHIC_STYLE_KIND, title: "Graphic style", schema: GRAPHIC_STYLE_SCHEMA },
+  {
+    kind: GRAPHIC_STYLE_KIND,
+    title: "Graphic style",
+    schema: GRAPHIC_STYLE_SCHEMA,
+  },
   { kind: SYMBOL_KIND, title: "Symbol", schema: SYMBOL_SCHEMA },
-  { kind: SYMBOL_INSTANCE_KIND, title: "Symbol instance", schema: SYMBOL_INSTANCE_SCHEMA },
+  {
+    kind: SYMBOL_INSTANCE_KIND,
+    title: "Symbol instance",
+    schema: SYMBOL_INSTANCE_SCHEMA,
+  },
   ...RECIPE_KINDS,
 ];
 
 /** The `contributes.objectModel` block the manifest carries (pure). */
 export function drawObjectModelManifest(): {
   kinds: { kind: string; title: string; schema: PropertySchema[] }[];
-  commands: { id: string; title: string; args: ValueType; result?: ValueType }[];
+  commands: {
+    id: string;
+    title: string;
+    args: ValueType;
+    result?: ValueType;
+  }[];
 } {
   return {
     kinds: DRAW_OBJECT_KINDS.map((k) => ({
@@ -125,7 +155,11 @@ export async function planDrawBatch(
   for (const op of ops) {
     const name = kindOfOp(op);
     const planner = name ? planners.get(name) : undefined;
-    if (!planner) return { kind: "rejected", reason: `paged.draw has no kind for ${JSON.stringify(op)}` };
+    if (!planner)
+      return {
+        kind: "rejected",
+        reason: `paged.draw has no kind for ${JSON.stringify(op)}`,
+      };
     const group = groups.get(planner) ?? [];
     group.push(op);
     groups.set(planner, group);
@@ -159,9 +193,13 @@ export function drawObjectModel(host: BundleHost): ObjectModelContribution {
 
 /** Contribute it. `null` where the host does not announce the door
  *  (`contribute.objectModel@1`). */
-export function contributeDrawObjectModel(host: BundleHost): ObjectModelHandle | null {
+export function contributeDrawObjectModel(
+  host: BundleHost,
+): ObjectModelHandle | null {
   if (!host.supports("contribute.objectModel@1")) {
-    host.log.info("object model: this host does not announce contribute.objectModel@1 — skipped");
+    host.log.info(
+      "object model: this host does not announce contribute.objectModel@1 — skipped",
+    );
     return null;
   }
   return host.contribute.objectModel(drawObjectModel(host));

@@ -33,20 +33,37 @@
 //   · Chart series — a list of struct items (values / categories ranges,
 //     name, colour), edited item by item (plugin-sdk planValueEdit).
 
-import type { Address, BundleHost, Disposable, PanelSchema, PanelSchemaPropertyRow, PanelSchemaRow } from "@paged-media/plugin-api";
+import type {
+  Address,
+  BundleHost,
+  Disposable,
+  PanelSchema,
+  PanelSchemaPropertyRow,
+  PanelSchemaRow,
+} from "@paged-media/plugin-api";
 import { propertyRows, publishObjectList } from "@paged-media/plugin-sdk";
 
-import { PLUGIN_ID, WORKBOOK_ADDRESS, cellAddressOf, rangeAddressOf } from "../object-model";
+import {
+  PLUGIN_ID,
+  WORKBOOK_ADDRESS,
+  cellAddressOf,
+  rangeAddressOf,
+} from "../object-model";
 import type { WorkbookSession } from "../session";
 
 export const PROPERTIES_PANEL_ID = "media.paged.sheet.panel.properties";
 
-type FieldKind = "workbook" | "sheet" | "cell" | "range" | "namedRange" | "chart";
+type FieldKind =
+  "workbook" | "sheet" | "cell" | "range" | "namedRange" | "chart";
 
 /** The schema-driven panel fields (ADR 323 / Wave 4), in panel order. Every
  *  entry is a writable row of its kind (a spec holds it to that); tables
  *  are read-only and have none. */
-export const SHEET_PANEL_FIELDS: ReadonlyArray<{ kind: FieldKind; path: string; group: string }> = [
+export const SHEET_PANEL_FIELDS: ReadonlyArray<{
+  kind: FieldKind;
+  path: string;
+  group: string;
+}> = [
   { kind: "workbook", path: "name", group: "Workbook" },
   { kind: "workbook", path: "iterative", group: "Workbook" },
   { kind: "sheet", path: "name", group: "Sheet" },
@@ -107,19 +124,28 @@ export const BIND = {
   chart: "sheet.properties.chart",
 } as const;
 
-const pathsOf = (group: string) => SHEET_PANEL_FIELDS.filter((f) => f.group === group).map((f) => f.path);
-const kindOf = (group: string) => SHEET_PANEL_FIELDS.find((f) => f.group === group)!.kind;
+const pathsOf = (group: string) =>
+  SHEET_PANEL_FIELDS.filter((f) => f.group === group).map((f) => f.path);
+const kindOf = (group: string) =>
+  SHEET_PANEL_FIELDS.find((f) => f.group === group)!.kind;
 
 const list = (rows: string, select: string): PanelSchemaRow => ({
   widget: "paged.list",
-  list: { items: { kind: "binding", bind: rows }, labelField: "name", secondaryField: "secondary", selectionBinding: select },
+  list: {
+    items: { kind: "binding", bind: rows },
+    labelField: "name",
+    secondaryField: "secondary",
+    selectionBinding: select,
+  },
 });
 
 /** List / struct presentation per (kind.path). A range's rows are fixed
  *  by its shape (a write must match it), so its value grids edit row by
  *  row without add / remove / reorder; a chart's series are a stack of
  *  struct items titled by their name. */
-const ROW_OPTIONS: Readonly<Record<string, Omit<PanelSchemaPropertyRow, "field" | "path" | "address">>> = {
+const ROW_OPTIONS: Readonly<
+  Record<string, Omit<PanelSchemaPropertyRow, "field" | "path" | "address">>
+> = {
   "range.values": { items: { add: false, remove: false, reorder: false } },
   "range.inputs": { items: { add: false, remove: false, reorder: false } },
   "chart.series": {
@@ -131,11 +157,20 @@ const ROW_OPTIONS: Readonly<Record<string, Omit<PanelSchemaPropertyRow, "field" 
   },
 };
 
-const section = (group: string, address: Parameters<typeof propertyRows>[2], lead: PanelSchemaRow[] = []) => {
+const section = (
+  group: string,
+  address: Parameters<typeof propertyRows>[2],
+  lead: PanelSchemaRow[] = [],
+) => {
   const kind = kindOf(group);
   return {
     title: group,
-    rows: [...lead, ...propertyRows(qualified(kind), pathsOf(group), address, { row: (p) => ROW_OPTIONS[`${kind}.${p}`] ?? {} })],
+    rows: [
+      ...lead,
+      ...propertyRows(qualified(kind), pathsOf(group), address, {
+        row: (p) => ROW_OPTIONS[`${kind}.${p}`] ?? {},
+      }),
+    ],
   };
 };
 
@@ -150,8 +185,18 @@ export const SHEET_PROPERTIES_PANEL: PanelSchema = {
     { ...section("Selected range", { bind: BIND.range }), collapsible: true },
     section("Sheet", { bind: BIND.sheet }, [list(BIND.sheets, BIND.sheet)]),
     section("Workbook", { addresses: [WORKBOOK_ADDRESS] }),
-    { ...section("Named range", { bind: BIND.name }, [list(BIND.names, BIND.name)]), collapsible: true },
-    { ...section("Chart", { bind: BIND.chart }, [list(BIND.charts, BIND.chart)]), collapsible: true },
+    {
+      ...section("Named range", { bind: BIND.name }, [
+        list(BIND.names, BIND.name),
+      ]),
+      collapsible: true,
+    },
+    {
+      ...section("Chart", { bind: BIND.chart }, [
+        list(BIND.charts, BIND.chart),
+      ]),
+      collapsible: true,
+    },
   ],
 };
 
@@ -169,26 +214,38 @@ export function activeCellAddress(session: WorkbookSession): Address | null {
 export function selectedRangeAddress(session: WorkbookSession): Address | null {
   const st = session.state();
   const g = st.gridSelection;
-  if (st.activeSheet === null || !g || (g.rows <= 1 && g.cols <= 1)) return null;
+  if (st.activeSheet === null || !g || (g.rows <= 1 && g.cols <= 1))
+    return null;
   const name = session.sheets().find((s) => s.id === st.activeSheet)?.name;
-  return name ? rangeAddressOf(name, g.anchorRow, g.anchorCol, g.rows, g.cols) : null;
+  return name
+    ? rangeAddressOf(name, g.anchorRow, g.anchorCol, g.rows, g.cols)
+    : null;
 }
 
 /** Keep the panel's bindings live: the active cell (from the session) and
  *  the sheet / named-range / chart lists (from `host.objects`). */
-export function publishPropertyBindings(host: BundleHost, session: WorkbookSession): Disposable {
+export function publishPropertyBindings(
+  host: BundleHost,
+  session: WorkbookSession,
+): Disposable {
   const publishCell = () => {
     const a = activeCellAddress(session);
     if (a === null) host.bindings.delete(BIND.cell);
-    else if (host.bindings.get(BIND.cell) !== a) host.bindings.publish(BIND.cell, a);
+    else if (host.bindings.get(BIND.cell) !== a)
+      host.bindings.publish(BIND.cell, a);
     const r = selectedRangeAddress(session);
     if (r === null) host.bindings.delete(BIND.range);
-    else if (host.bindings.get(BIND.range) !== r) host.bindings.publish(BIND.range, r);
+    else if (host.bindings.get(BIND.range) !== r)
+      host.bindings.publish(BIND.range, r);
   };
   publishCell();
   const sub = session.onDidChange(publishCell);
   const lists = [
-    publishObjectList(host, { rows: BIND.sheets, select: BIND.sheet, selector: () => qualified("sheet") }),
+    publishObjectList(host, {
+      rows: BIND.sheets,
+      select: BIND.sheet,
+      selector: () => qualified("sheet"),
+    }),
     publishObjectList(host, {
       rows: BIND.names,
       select: BIND.name,

@@ -62,7 +62,11 @@ export interface SessionRaster {
 
 export interface ViewerSessionLike {
   load(idml: Uint8Array, font?: Uint8Array): SessionDiagnostics;
-  register_font(family: string, style: string | undefined, bytes: Uint8Array): void;
+  register_font(
+    family: string,
+    style: string | undefined,
+    bytes: Uint8Array,
+  ): void;
   page_count(): number;
   set_page(index: number): void;
   page_layout(): SessionPagesLayout;
@@ -80,7 +84,10 @@ export interface ViewerSessionLike {
   ): SessionDiagnostics;
   /** Binds the presenter to `canvas` on first call (fit-page paint). */
   render_to_canvas_main(canvas: HTMLCanvasElement): Promise<SessionDiagnostics>;
-  render_page_to_bytes(index: number, targetWidthPx: number): Promise<SessionRaster>;
+  render_page_to_bytes(
+    index: number,
+    targetWidthPx: number,
+  ): Promise<SessionRaster>;
   resize(width: number, height: number, devicePixelRatio: number): void;
   /** wasm-bindgen finalizer. */
   free?(): void;

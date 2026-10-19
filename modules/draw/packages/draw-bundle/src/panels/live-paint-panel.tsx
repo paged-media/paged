@@ -37,7 +37,11 @@
 //   · the SWATCH select drives the bucket's fill (module state in
 //     `handlers/live-paint.ts`) — the tool has nothing else to read.
 
-import type { BundleHost, PanelProps, SwatchSummary } from "@paged-media/plugin-api";
+import type {
+  BundleHost,
+  PanelProps,
+  SwatchSummary,
+} from "@paged-media/plugin-api";
 import * as React from "react";
 
 import {
@@ -52,13 +56,15 @@ import {
   LIVE_PAINT_FEATURE,
   type LivePaintRecipe,
 } from "../commands/live-paint";
-import {
-  getLivePaintFill,
-  setLivePaintFill,
-} from "../handlers/live-paint";
+import { getLivePaintFill, setLivePaintFill } from "../handlers/live-paint";
 import { linkIndex } from "../link-index";
 import { usePanelReload } from "./use-panel-reload";
-import { PanelAbout, PanelIntro, Refusal, useActionFeedback } from "./panel-kit";
+import {
+  PanelAbout,
+  PanelIntro,
+  Refusal,
+  useActionFeedback,
+} from "./panel-kit";
 
 export const LIVE_PAINT_PANEL_ID = "media.paged.draw.panel.livePaint";
 
@@ -176,7 +182,10 @@ export function makeLivePaintPanel(host: BundleHost): {
         data-draw-live-paint-portable={portable ? "true" : "false"}
         data-draw-live-paint-active={active ?? ""}
       >
-        <PanelIntro summary={LIVE_PAINT_SUMMARY} attr="data-draw-live-paint-intro" />
+        <PanelIntro
+          summary={LIVE_PAINT_SUMMARY}
+          attr="data-draw-live-paint-intro"
+        />
         <div style={{ ...rowStyle, justifyContent: "space-between" }}>
           <span style={{ ...sectionStyle, paddingTop: 0 }}>
             Live paint ({groups.length})
@@ -254,7 +263,8 @@ export function makeLivePaintPanel(host: BundleHost): {
                   title="Rebuild the fills from the paths' current shapes; areas that no longer exist lose their fill"
                   data-draw-live-paint-regenerate
                   onClick={() =>
-                    void run(() => applyRegenerateLivePaint(host, { groupId: group.id }),
+                    void run(() =>
+                      applyRegenerateLivePaint(host, { groupId: group.id }),
                     )
                   }
                 >
@@ -266,7 +276,8 @@ export function makeLivePaintPanel(host: BundleHost): {
                   title="Select every filled area of this group"
                   data-draw-live-paint-select
                   onClick={() =>
-                    void run(() => applySelectLivePaintFaces(host, { groupId: group.id }),
+                    void run(() =>
+                      applySelectLivePaintFaces(host, { groupId: group.id }),
                     )
                   }
                 >
@@ -278,7 +289,9 @@ export function makeLivePaintPanel(host: BundleHost): {
                   title="Stop tracking this group; the paths and the filled areas stay as ordinary artwork"
                   data-draw-live-paint-release
                   onClick={() =>
-                    void run(() => applyReleaseLivePaint(host, { groupId: group.id }))
+                    void run(() =>
+                      applyReleaseLivePaint(host, { groupId: group.id }),
+                    )
                   }
                 >
                   Release
@@ -313,7 +326,8 @@ export function makeLivePaintPanel(host: BundleHost): {
                       title="Select this area's fill"
                       data-draw-live-paint-face-select
                       onClick={() =>
-                        void run(() => applySelectLivePaintFaces(host, {
+                        void run(() =>
+                          applySelectLivePaintFaces(host, {
                             groupId: group.id,
                             face: face.face,
                           }),
@@ -328,7 +342,8 @@ export function makeLivePaintPanel(host: BundleHost): {
                       title="Delete this area's fill"
                       data-draw-live-paint-face-delete
                       onClick={() =>
-                        void run(() => applyDeleteLivePaintFace(host, {
+                        void run(() =>
+                          applyDeleteLivePaintFace(host, {
                             groupId: group.id,
                             face: face.face,
                           }),

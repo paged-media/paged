@@ -76,8 +76,7 @@ const DARK: [number, number, number, number] = [60, 60, 60, 255];
 const LIGHT: [number, number, number, number] = [180, 180, 180, 255];
 
 /** 32×16, split down the middle: DARK left of x = 16, LIGHT from it. */
-const splitImage = () =>
-  testImage(32, 16, (x) => (x < 16 ? DARK : LIGHT));
+const splitImage = () => testImage(32, 16, (x) => (x < 16 ? DARK : LIGHT));
 
 const selectedCount = (cov: Uint8Array) => {
   let n = 0;
@@ -251,9 +250,10 @@ describe("quick selection — growth from a painted dab", () => {
     });
     stroke.dab(100, 100);
     expect(stroke.count()).toBe(500);
-    expect(windows.length, `touched ${windows.length} of 16 tiles`).toBeLessThan(
-      4,
-    );
+    expect(
+      windows.length,
+      `touched ${windows.length} of 16 tiles`,
+    ).toBeLessThan(4);
 
     // And a second dab inside the already-grown region re-reads nothing.
     const before = windows.length;

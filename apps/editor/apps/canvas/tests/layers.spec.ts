@@ -66,7 +66,8 @@ test.describe("Track M.1 — layers read + toggle", () => {
     await openCanvas(page);
     await page.evaluate(
       async ({ pack }) => {
-        const c = (globalThis as unknown as { __canvas: CanvasGlobal }).__canvas;
+        const c = (globalThis as unknown as { __canvas: CanvasGlobal })
+          .__canvas;
         const url = `/@fs${pack}`;
         const bytes = new Uint8Array(await (await fetch(url)).arrayBuffer());
         await c.client.loadDocument(bytes);
@@ -90,7 +91,8 @@ test.describe("Track M.1 — layers read + toggle", () => {
     const wasVisible = target.visible;
     await page.evaluate(
       async ({ id, next }) => {
-        const c = (globalThis as unknown as { __canvas: CanvasGlobal }).__canvas;
+        const c = (globalThis as unknown as { __canvas: CanvasGlobal })
+          .__canvas;
         await c.client.mutate({
           op: "layerSetVisible",
           args: { layerId: id, visible: next },
@@ -120,7 +122,8 @@ test.describe("Track M.1 — layers read + toggle", () => {
     // Lock toggle.
     await page.evaluate(
       async ({ id }) => {
-        const c = (globalThis as unknown as { __canvas: CanvasGlobal }).__canvas;
+        const c = (globalThis as unknown as { __canvas: CanvasGlobal })
+          .__canvas;
         await c.client.mutate({
           op: "layerSetLocked",
           args: { layerId: id, locked: true },
@@ -137,7 +140,8 @@ test.describe("Track M.1 — layers read + toggle", () => {
     // Printable toggle.
     await page.evaluate(
       async ({ id, next }) => {
-        const c = (globalThis as unknown as { __canvas: CanvasGlobal }).__canvas;
+        const c = (globalThis as unknown as { __canvas: CanvasGlobal })
+          .__canvas;
         await c.client.mutate({
           op: "layerSetPrintable",
           args: { layerId: id, printable: next },

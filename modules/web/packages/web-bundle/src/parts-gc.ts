@@ -72,12 +72,19 @@ interface Reach {
 
 /** Whether the document's text names the family of each kept face in
  *  `paths` (the Fonts collection: every family a run or style names). */
-async function facesNamed(host: BundleHost, paths: readonly string[]): Promise<Map<string, boolean>> {
+async function facesNamed(
+  host: BundleHost,
+  paths: readonly string[],
+): Promise<Map<string, boolean>> {
   const out = new Map<string, boolean>();
   const faces = paths.filter((p) => FACE_PART.test(p));
   if (faces.length === 0) return out;
   const rows = await host.document.collection<{ family?: unknown }>("fonts");
-  const named = new Set(rows.map((r) => (typeof r.family === "string" ? r.family.toLowerCase() : "")));
+  const named = new Set(
+    rows.map((r) =>
+      typeof r.family === "string" ? r.family.toLowerCase() : "",
+    ),
+  );
   for (const path of faces) {
     const family = await keptFaceFamily(host, path);
     out.set(path, family !== null && named.has(family.toLowerCase()));
@@ -85,7 +92,10 @@ async function facesNamed(host: BundleHost, paths: readonly string[]): Promise<M
   return out;
 }
 
-async function reachable(host: BundleHost, paths: readonly string[] = []): Promise<Reach> {
+async function reachable(
+  host: BundleHost,
+  paths: readonly string[] = [],
+): Promise<Reach> {
   const { items, found } = await discoverWebFrames(host);
   const hashes = new Set<string>();
   for (const f of found) {

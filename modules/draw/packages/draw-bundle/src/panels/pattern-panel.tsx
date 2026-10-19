@@ -141,25 +141,29 @@ export function makePatternPanel(host: BundleHost): {
     // once per document REVISION, out of the walk every panel shares. It
     // used to walk the document twice per reload (the resolve, then the
     // tally) and read the recipe twice, on every event.
-    const reload = usePanelReload(host, "pattern", async ({ live, selection }) => {
-      const library = await readPatternLibrary(host);
-      if (!live()) return;
-      const field = await resolvePatternField(host, undefined, library);
-      if (!live()) return;
-      const links = await patternLinks(host);
-      if (!live()) return;
-      const tally: Record<string, number> = {};
-      for (const tile of links.tiles) {
-        tally[tile.ref.pattern] = (tally[tile.ref.pattern] ?? 0) + 1;
-      }
-      setPortable(host.supports(PATTERN_FEATURE));
-      setFields(library.fields);
-      setHasSelection(selection.length > 0);
-      setActive(field);
-      setPlaced(tally);
-      const saved = library.fields.find((f) => f.id === field);
-      if (saved) followDraft(saved.id, saved.params);
-    });
+    const reload = usePanelReload(
+      host,
+      "pattern",
+      async ({ live, selection }) => {
+        const library = await readPatternLibrary(host);
+        if (!live()) return;
+        const field = await resolvePatternField(host, undefined, library);
+        if (!live()) return;
+        const links = await patternLinks(host);
+        if (!live()) return;
+        const tally: Record<string, number> = {};
+        for (const tile of links.tiles) {
+          tally[tile.ref.pattern] = (tally[tile.ref.pattern] ?? 0) + 1;
+        }
+        setPortable(host.supports(PATTERN_FEATURE));
+        setFields(library.fields);
+        setHasSelection(selection.length > 0);
+        setActive(field);
+        setPlaced(tally);
+        const saved = library.fields.find((f) => f.id === field);
+        if (saved) followDraft(saved.id, saved.params);
+      },
+    );
 
     const { refusal, run } = useActionFeedback(host, reload);
 
@@ -215,8 +219,8 @@ export function makePatternPanel(host: BundleHost): {
 
         {!portable && (
           <div style={mutedStyle} data-draw-pattern-degraded>
-            This editor cannot save data into the document, so pattern
-            settings are not kept. Copies can still be released or deleted.
+            This editor cannot save data into the document, so pattern settings
+            are not kept. Copies can still be released or deleted.
           </div>
         )}
 
@@ -265,7 +269,12 @@ export function makePatternPanel(host: BundleHost): {
           (n) => setDraft({ ...draft, columns: n }),
           "columns",
         )}
-        {numberRow("Rows", draft.rows, (n) => setDraft({ ...draft, rows: n }), "rows")}
+        {numberRow(
+          "Rows",
+          draft.rows,
+          (n) => setDraft({ ...draft, rows: n }),
+          "rows",
+        )}
         {numberRow(
           "Dim copies to (%)",
           draft.dim,
@@ -352,7 +361,8 @@ export function makePatternPanel(host: BundleHost): {
                   title="Rebuild the copies with the settings above and the artwork's current shape"
                   data-draw-pattern-replan
                   onClick={() =>
-                    void run(() => applyEditPattern(host, { patternId: field.id, ...draft }),
+                    void run(() =>
+                      applyEditPattern(host, { patternId: field.id, ...draft }),
                     )
                   }
                 >
@@ -364,7 +374,8 @@ export function makePatternPanel(host: BundleHost): {
                   title="Select this pattern's copies"
                   data-draw-pattern-select
                   onClick={() =>
-                    void run(() => applySelectPatternTiles(host, { patternId: field.id }),
+                    void run(() =>
+                      applySelectPatternTiles(host, { patternId: field.id }),
                     )
                   }
                 >
@@ -376,7 +387,8 @@ export function makePatternPanel(host: BundleHost): {
                   title="Remove every copy and keep the original artwork"
                   data-draw-pattern-unbake
                   onClick={() =>
-                    void run(() => applyDeletePatternTiles(host, { patternId: field.id }),
+                    void run(() =>
+                      applyDeletePatternTiles(host, { patternId: field.id }),
                     )
                   }
                 >
@@ -388,7 +400,9 @@ export function makePatternPanel(host: BundleHost): {
                   title="Stop tracking this pattern; all the artwork stays"
                   data-draw-pattern-release
                   onClick={() =>
-                    void run(() => applyReleasePattern(host, { patternId: field.id }))
+                    void run(() =>
+                      applyReleasePattern(host, { patternId: field.id }),
+                    )
                   }
                 >
                   Release

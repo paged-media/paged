@@ -1,7 +1,7 @@
 node_modules/
 dist/
-# Decision-B: the introspect wasm + its `.d.ts` now ship in the
-# published `@paged-media/introspect-wasm` package (resolved from
-# node_modules); there is no longer a vendored `src/wasm/` directory.
+# The introspect wasm + its `.d.ts` ship as the `./introspect` entry of
+# the `@paged-media/canvas-wasm` workspace package (PM-0008); there is no
+# vendored `src/wasm/` directory.
 tsconfig.tsbuildinfo
 *.local

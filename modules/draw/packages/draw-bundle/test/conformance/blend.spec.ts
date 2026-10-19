@@ -38,7 +38,15 @@
 //       frame, and a TYPED count over the ceiling (which refuses, where
 //       a DERIVED one clamps).
 
-import { describe, expect, it, beforeAll, afterAll, beforeEach, vi } from "bun:test";
+import {
+  describe,
+  expect,
+  it,
+  beforeAll,
+  afterAll,
+  beforeEach,
+  vi,
+} from "bun:test";
 
 import type {
   BundleHost,
@@ -821,7 +829,11 @@ describe("draw conformance — BLENDS v1 (§16.2)", () => {
     // outlines, paint and links, the group, the recipe, the selected
     // group.
     for (const [name, setup, run] of [
-      ["make", async () => h.host.selection.set([UA, UB]), (host: BundleHost) => applyMakeBlend(host, { steps: 3 })],
+      [
+        "make",
+        async () => h.host.selection.set([UA, UB]),
+        (host: BundleHost) => applyMakeBlend(host, { steps: 3 }),
+      ],
       [
         "update",
         async () => {
@@ -857,7 +869,9 @@ describe("draw conformance — BLENDS v1 (§16.2)", () => {
         expect(shipped.undoSteps).toBe(1);
         expect(shipped.restored).toBe(true);
         // As found: 3 for a make; an update's link walk on top.
-        expect(shipped.work.count("document.tree")).toBe(name === "make" ? 0 : 1);
+        expect(shipped.work.count("document.tree")).toBe(
+          name === "make" ? 0 : 1,
+        );
         expect(await sortedLeafIds(h)).toEqual(PRISTINE);
       });
     }
@@ -1068,9 +1082,15 @@ describe("draw conformance — BLENDS v1 (§16.2)", () => {
     it("the panel note carries the two honesty facts in plain words", () => {
       // The panel's About text says the same two things as the module's
       // notes, without their internal terms.
-      expect(BLEND_PANEL_NOTE).toContain("does not change the intermediates until");
-      expect(BLEND_PANEL_NOTE).toContain("the artwork is only rebuilt when you build or update");
-      expect(BLEND_PANEL_NOTE).toContain("keeps its own colour and stays outside the blend's group");
+      expect(BLEND_PANEL_NOTE).toContain(
+        "does not change the intermediates until",
+      );
+      expect(BLEND_PANEL_NOTE).toContain(
+        "the artwork is only rebuilt when you build or update",
+      );
+      expect(BLEND_PANEL_NOTE).toContain(
+        "keeps its own colour and stays outside the blend's group",
+      );
       // What "live" means: a preview of the PLAN, not of the artwork.
       expect(BLEND_LIVE_NOTE).toContain("preview of the");
       expect(BLEND_LIVE_NOTE).toContain("PLAN");

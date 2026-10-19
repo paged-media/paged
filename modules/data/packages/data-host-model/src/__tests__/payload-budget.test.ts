@@ -76,7 +76,10 @@ function heavyManifest(): unknown {
       })),
     },
     grouping: [
-      { by: "family_name", footer: { expression: 'CONCAT("Familie: ", COUNT())' } },
+      {
+        by: "family_name",
+        footer: { expression: 'CONCAT("Familie: ", COUNT())' },
+      },
       { by: "sku", footer: null },
     ],
     pagination: { repeatHeaders: true, orphanMin: 2 },
@@ -103,13 +106,17 @@ function elementRecipe(i: number): unknown {
 
 describe("D-08 — document payload vs the 64 KiB metadata cap", () => {
   it("a heavy catalog manifest envelope fits with >3x headroom", () => {
-    const bytes = new TextEncoder().encode(makeEnvelope(heavyManifest())).length;
+    const bytes = new TextEncoder().encode(
+      makeEnvelope(heavyManifest()),
+    ).length;
     expect(bytes).toBeLessThan(CAP / 3);
   });
 
   it("per-element binding recipes are two orders of magnitude under the cap", () => {
     for (let i = 0; i < 16; i++) {
-      const bytes = new TextEncoder().encode(makeEnvelope(elementRecipe(i))).length;
+      const bytes = new TextEncoder().encode(
+        makeEnvelope(elementRecipe(i)),
+      ).length;
       expect(bytes).toBeLessThan(CAP / 100);
     }
   });

@@ -56,7 +56,9 @@ const MAX_TOLERANCE_PT = 20;
 function toleranceFor(paged: PagedEditor): number {
   const raw = paged.toolSettings.getValue(TOOL_ID, "tolerance");
   const n =
-    typeof raw === "number" && Number.isFinite(raw) ? raw : DEFAULT_TOLERANCE_PT;
+    typeof raw === "number" && Number.isFinite(raw)
+      ? raw
+      : DEFAULT_TOLERANCE_PT;
   return Math.min(MAX_TOLERANCE_PT, Math.max(MIN_TOLERANCE_PT, n));
 }
 

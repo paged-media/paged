@@ -64,7 +64,8 @@ export const PAGED_VIEW_TOGGLE_TEXT_THREADS = "paged.view.toggleTextThreads";
 export const PAGED_VIEW_TOGGLE_SNAP_TO_POINTS = "paged.view.toggleSnapToPoints";
 /** View ▸ Show heading anchors — the resolver's anchor badges, a
  *  diagnostic drawn only on request. */
-export const PAGED_VIEW_TOGGLE_HEADING_ANCHORS = "paged.view.toggleHeadingAnchors";
+export const PAGED_VIEW_TOGGLE_HEADING_ANCHORS =
+  "paged.view.toggleHeadingAnchors";
 
 /** Help — the places the app sends you to learn it. */
 const HELP_LINKS = [

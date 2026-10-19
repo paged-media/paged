@@ -200,7 +200,13 @@ export function createPenHandler(): GestureHandler {
     e: CanvasPointerEvent,
   ): Promise<Vec2> =>
     hit.kind === "empty"
-      ? snapper.snapAsync(pageId, point, e, ptPerPx(), snapshot?.anchors.map((a) => a.anchor) ?? [])
+      ? snapper.snapAsync(
+          pageId,
+          point,
+          e,
+          ptPerPx(),
+          snapshot?.anchors.map((a) => a.anchor) ?? [],
+        )
       : point;
 
   const enqueue = (task: () => void | Promise<void>) => {
@@ -431,7 +437,11 @@ export function createPenHandler(): GestureHandler {
 
   const drag = (e: CanvasPointerEvent) => {
     if (!page || !machine) return;
-    feed({ type: "move", point: endLocalFor(page, e), modifiers: modifiers(e) });
+    feed({
+      type: "move",
+      point: endLocalFor(page, e),
+      modifiers: modifiers(e),
+    });
     repaint();
   };
 

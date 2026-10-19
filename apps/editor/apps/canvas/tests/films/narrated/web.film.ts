@@ -34,7 +34,13 @@ import { join } from "node:path";
 import { film, type Kit } from "../kit/film";
 import { typeHuman } from "../kit/pointer";
 import { menu, press, screenPoint } from "../kit/ui";
-import { sceneText, tapSceneLayers, webFrames, webSource, type ElementRef } from "../../journey/plugins/web-kit";
+import {
+  sceneText,
+  tapSceneLayers,
+  webFrames,
+  webSource,
+  type ElementRef,
+} from "../../journey/plugins/web-kit";
 
 const ASSETS = join(process.env.PAGED_MEDIA_ROOT ?? "", "assets");
 
@@ -45,30 +51,52 @@ const pt = (k: Kit, x: number, y: number) => screenPoint(k.page, x, y);
 
 /** A rectangle of the editor window (CSS px: x0, y0, x1, y1) in page points,
  *  for punching in on a panel: focus() aims through the page camera. */
-async function viewRect(k: Kit, r: [number, number, number, number]): Promise<[number, number, number, number]> {
+async function viewRect(
+  k: Kit,
+  r: [number, number, number, number],
+): Promise<[number, number, number, number]> {
   const o = await pt(k, 0, 0);
   const s = ((await pt(k, 100, 0)).x - o.x) / 100;
-  return [(r[0] - o.x) / s, (r[1] - o.y) / s, (r[2] - o.x) / s, (r[3] - o.y) / s];
+  return [
+    (r[0] - o.x) / s,
+    (r[1] - o.y) / s,
+    (r[2] - o.x) / s,
+    (r[3] - o.y) / s,
+  ];
 }
 
 /** Every page item of one kind, by id. */
 async function ids(page: Page, kind: string): Promise<string[]> {
   return page.evaluate(async (want) => {
     type Node = { id?: { kind: string; id: string } | null; children?: Node[] };
-    const c = (globalThis as unknown as { __canvas: { client: { executeScript(s: string): Promise<{ output: string[] }> } } }).__canvas;
+    const c = (
+      globalThis as unknown as {
+        __canvas: {
+          client: { executeScript(s: string): Promise<{ output: string[] }> };
+        };
+      }
+    ).__canvas;
     const r = await c.client.executeScript("JSON.stringify(paged.tree())");
     const out: string[] = [];
     const visit = (n: Node) => {
       if (n.id?.kind === want) out.push(n.id.id);
       for (const ch of n.children ?? []) visit(ch);
     };
-    for (const root of JSON.parse(JSON.parse(r.output[0])) as Node[]) visit(root);
+    for (const root of JSON.parse(JSON.parse(r.output[0])) as Node[])
+      visit(root);
     return out;
   }, kind);
 }
 
 const selection = (page: Page) =>
-  page.evaluate(() => (globalThis as unknown as { __canvas: { elementSelection?: ElementRef[] } }).__canvas.elementSelection ?? []);
+  page.evaluate(
+    () =>
+      (
+        globalThis as unknown as {
+          __canvas: { elementSelection?: ElementRef[] };
+        }
+      ).__canvas.elementSelection ?? [],
+  );
 
 /** Click the pasteboard beside the page: deselects, and leaves no hit marker
  *  on the page (a click on the page itself would). */
@@ -77,7 +105,10 @@ async function deselect(k: Kit): Promise<void> {
   await k.key("v");
   await k.pointer.click(await pt(k, -110, 420), { targetWidth: 120 });
   await k.hold(200);
-  expect((await ids(k.page, "rectangle")).length, "the deselect click created nothing").toBe(before);
+  expect(
+    (await ids(k.page, "rectangle")).length,
+    "the deselect click created nothing",
+  ).toBe(before);
 }
 
 film("web", async (k) => {
@@ -105,9 +136,13 @@ film("web", async (k) => {
     await menu(k, ["File", "Open…"]);
     k.chip("spring-mailer.html", "file");
     await (await chooser).setFiles(join(ASSETS, "spring-mailer.html"));
-    await expect.poll(async () => (await webFrames(page)).length, { timeout: 10_000 }).toBe(1);
+    await expect
+      .poll(async () => (await webFrames(page)).length, { timeout: 10_000 })
+      .toBe(1);
     first = (await webFrames(page))[0];
-    await expect.poll(() => sceneText(page, first.id), { timeout: 10_000 }).toContain("Spring line sheet");
+    await expect
+      .poll(() => sceneText(page, first.id), { timeout: 10_000 })
+      .toContain("Spring line sheet");
     k.focus(FRAMES);
     await k.hold(1800);
   });
@@ -121,7 +156,14 @@ film("web", async (k) => {
     const css = page.locator("[data-web-css] [data-code-input]");
     await expect(css).toBeVisible({ timeout: 10_000 });
     const panel = (await page.locator("[data-web-css]").first().boundingBox())!;
-    k.focus(await viewRect(k, [panel.x - 20, panel.y - 40, panel.x + panel.width + 20, Math.min(895, panel.y + panel.height + 300)]));
+    k.focus(
+      await viewRect(k, [
+        panel.x - 20,
+        panel.y - 40,
+        panel.x + panel.width + 20,
+        Math.min(895, panel.y + panel.height + 300),
+      ]),
+    );
     await k.hold(700);
     await press(k, css);
     // Select the background colour, the way a double-click on it would.
@@ -134,7 +176,11 @@ film("web", async (k) => {
     const save = page.locator("[data-web-commit]");
     await save.scrollIntoViewIfNeeded();
     await press(k, save);
-    await expect.poll(async () => (await webSource(page, first))?.css ?? "", { timeout: 10_000 }).toContain("#e9f5ee");
+    await expect
+      .poll(async () => (await webSource(page, first))?.css ?? "", {
+        timeout: 10_000,
+      })
+      .toContain("#e9f5ee");
     await k.hold(600);
     k.focus(FRAMES);
     await k.hold(2200);
@@ -146,9 +192,16 @@ film("web", async (k) => {
     await k.key("f", "Frame tool");
     k.focus(FRAMES);
     await k.hold(500);
-    await pointer.drag(await pt(k, 320, 60), await pt(k, 560, 240), { speed: 1.3 });
-    await expect.poll(async () => (await ids(page, "rectangle")).length).toBe(2);
-    second = { kind: "rectangle", id: (await ids(page, "rectangle")).find((id) => id !== first.id)! };
+    await pointer.drag(await pt(k, 320, 60), await pt(k, 560, 240), {
+      speed: 1.3,
+    });
+    await expect
+      .poll(async () => (await ids(page, "rectangle")).length)
+      .toBe(2);
+    second = {
+      kind: "rectangle",
+      id: (await ids(page, "rectangle")).find((id) => id !== first.id)!,
+    };
     await k.hold(400);
   });
 
@@ -164,9 +217,19 @@ film("web", async (k) => {
     await k.key("Meta+k", "Command palette", "⌘K");
     await k.hold(300);
     await typeHuman(page, "Thread web flow");
-    await press(k, page.getByRole("option", { name: /Thread web flow into frames/ }).first());
-    await expect.poll(async () => (await webSource(page, first))?.flow?.recipients?.[0]?.id, { timeout: 10_000 }).toBe(second.id);
-    await expect.poll(() => sceneText(page, second.id), { timeout: 10_000 }).toContain("Cotton sailor shirt");
+    await press(
+      k,
+      page.getByRole("option", { name: /Thread web flow into frames/ }).first(),
+    );
+    await expect
+      .poll(
+        async () => (await webSource(page, first))?.flow?.recipients?.[0]?.id,
+        { timeout: 10_000 },
+      )
+      .toBe(second.id);
+    await expect
+      .poll(() => sceneText(page, second.id), { timeout: 10_000 })
+      .toContain("Cotton sailor shirt");
     await deselect(k);
     k.focus(FRAMES);
     await k.hold(1600);
@@ -194,18 +257,32 @@ film("web", async (k) => {
       // openCanvas's handler dismisses every other dialog, which would
       // cancel the reload, so it goes first.
       page.removeAllListeners("dialog");
-      page.on("dialog", (d) => void (d.type() === "beforeunload" ? d.accept() : d.dismiss()).catch(() => {}));
+      page.on(
+        "dialog",
+        (d) =>
+          void (d.type() === "beforeunload" ? d.accept() : d.dismiss()).catch(
+            () => {},
+          ),
+      );
       await page.reload({ timeout: 30_000 });
       // No document yet, so no GPU canvas: wait for the editor itself.
       await expect
         .poll(() =>
           page.evaluate(() => {
-            const c = (globalThis as unknown as { __canvas?: { client?: unknown; registries?: unknown } }).__canvas;
+            const c = (
+              globalThis as unknown as {
+                __canvas?: { client?: unknown; registries?: unknown };
+              }
+            ).__canvas;
             return !!c?.client && !!c?.registries;
           }),
         )
         .toBe(true);
-      await page.locator("header").getByText("File", { exact: true }).first().waitFor();
+      await page
+        .locator("header")
+        .getByText("File", { exact: true })
+        .first()
+        .waitFor();
       await tapSceneLayers(page);
       await k.hold(800);
     });
@@ -213,17 +290,28 @@ film("web", async (k) => {
     await menu(k, ["File", "Open…"]);
     k.chip(saved.split("/").pop()!, "file");
     await (await chooser).setFiles(saved);
-    await expect.poll(async () => (await webFrames(page)).length, { timeout: 15_000 }).toBe(1);
-    await expect.poll(() => designer.gpuActive(), { timeout: 30_000 }).toBe(true);
+    await expect
+      .poll(async () => (await webFrames(page)).length, { timeout: 15_000 })
+      .toBe(1);
+    await expect
+      .poll(() => designer.gpuActive(), { timeout: 30_000 })
+      .toBe(true);
     const back = (await webFrames(page))[0];
     const source = await webSource(page, back);
     expect(source?.css, "the CSS came back").toContain("#e9f5ee");
     expect(source?.flow?.recipients?.length, "the flow came back").toBe(1);
-    await expect.poll(() => sceneText(page, source!.flow!.recipients[0].id), { timeout: 15_000 }).toContain("Cotton sailor shirt");
+    await expect
+      .poll(() => sceneText(page, source!.flow!.recipients[0].id), {
+        timeout: 15_000,
+      })
+      .toContain("Cotton sailor shirt");
     // Zooms are aimed through the camera logged at the roll: the reopened
     // page must sit where the first one did.
     const now = await pt(k, 0, 0);
-    expect(Math.abs(now.x - origin.x) + Math.abs(now.y - origin.y), "the reopened page sits where it did").toBeLessThan(1.5);
+    expect(
+      Math.abs(now.x - origin.x) + Math.abs(now.y - origin.y),
+      "the reopened page sits where it did",
+    ).toBeLessThan(1.5);
     k.focus(FRAMES);
     await k.hold(2200);
   });

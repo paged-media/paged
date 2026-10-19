@@ -134,9 +134,7 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   const all = await sceneRefs(ctx.page, "polygon");
   const geo = await geometryOf(ctx.page, all);
   const coverPageId = await doc.pageId(p(1));
-  const strays = geo
-    .filter((g) => g.pageId === coverPageId)
-    .map((g) => g.ref);
+  const strays = geo.filter((g) => g.pageId === coverPageId).map((g) => g.ref);
   expect(
     strays.length,
     "the cover carries the crest contours the importer misplaced",
@@ -216,9 +214,12 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     await doc.mutate("deleteFrame", { frameId: stray.id });
   }
   await doc.expectRenderChanged(p(1), coverBefore);
-  const stillThere = (await geometryOf(ctx.page, await sceneRefs(ctx.page, "polygon")))
-    .filter((g) => g.pageId === coverPageId);
-  expect(stillThere.length, "the cover is clear of the import's output").toBe(0);
+  const stillThere = (
+    await geometryOf(ctx.page, await sceneRefs(ctx.page, "polygon"))
+  ).filter((g) => g.pageId === coverPageId);
+  expect(stillThere.length, "the cover is clear of the import's output").toBe(
+    0,
+  );
 
   // NO margin note here: p77 already carries one, and the apparatus band
   // is a fixed slot — a second would print on top of the first. The
