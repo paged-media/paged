@@ -16,24 +16,21 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// Snapping for drawing tools (RFI C-68, the plugin-side route).
+// Snapping geometry: one resolver over a candidate list (RFI C-68).
 //
-// The engine snaps only its own translate gesture, against page and
-// sibling edges. Drawing tools — the Pen, Direct Selection, Curvature,
-// Measure — place POINTS, and the useful targets are other points: the
-// anchors of nearby paths, the page's edges and centre, ruler guides.
-// All of those are readable through doors a plugin already has
-// (`pathAnchors`, the page size, the guides collection), so the snapper
-// is pure geometry over a candidate list the host gathers once per
-// gesture. It is applied to the pointer BEFORE a machine sees it, so the
-// machines stay unaware of it.
+// The ENGINE owns snapping (engine ADR 125): the point-placing tools ask
+// its `requestSnapPoint` through draw-tools' `createSnapper`. This pure
+// resolver is what stays in TypeScript, for the one caller that must
+// answer before the engine can — the editor's Direct Selection, which
+// snaps a dragged anchor to the path's OTHER anchors on the drag sample
+// itself and applies the engine's answer when it arrives. Its precedence
+// is the engine's:
 //
-// Precedence, Illustrator's: a POINT wins outright (the pointer lands
-// exactly on it); otherwise the x and y axes snap INDEPENDENTLY to the
-// nearest alignment line within tolerance (smart guides: "in line with
-// that anchor"); otherwise the nearest point ON a segment. Tolerance is
-// in the same page-local units as the pointer (the host converts screen
-// pixels at the current zoom).
+// a POINT wins outright (the pointer lands exactly on it); otherwise the
+// x and y axes snap INDEPENDENTLY to the nearest alignment line within
+// tolerance (smart guides: "in line with that anchor"); otherwise the
+// nearest point ON a segment. Tolerance is in the same page-local units
+// as the pointer (the host converts screen pixels at the current zoom).
 
 import type { Vec2 } from "./types";
 
@@ -146,27 +143,4 @@ export function anchorTargets(
   for (const x of xs) out.push({ kind: "x", x, tag });
   for (const y of ys) out.push({ kind: "y", y, tag });
   return out;
-}
-
-/** Candidate targets for a page of `width` × `height` (page-local, origin
- *  top-left): its corners and centre as points, its edges and centre
- *  lines as alignment lines. */
-export function pageTargets(width: number, height: number): SnapTarget[] {
-  const tag = "page";
-  const corners: Vec2[] = [
-    [0, 0],
-    [width, 0],
-    [width, height],
-    [0, height],
-    [width / 2, height / 2],
-  ];
-  return [
-    ...corners.map((at): SnapTarget => ({ kind: "point", at, tag })),
-    { kind: "x", x: 0, tag },
-    { kind: "x", x: width / 2, tag },
-    { kind: "x", x: width, tag },
-    { kind: "y", y: 0, tag },
-    { kind: "y", y: height / 2, tag },
-    { kind: "y", y: height, tag },
-  ];
 }
