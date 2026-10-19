@@ -1,0 +1,11 @@
+$ paged-node run <TMP>/fixture.paged
+# exit 2
+# stdout
+{
+  "error": {
+    "message": "usage: paged-node run <doc> <script.js> [-- args…]",
+    "exit": 2
+  }
+}
+# stderr
+(empty)

@@ -1,0 +1,11 @@
+$ paged-node merge <TMP>/fixture.paged --data <TMP>/records.csv --out <TMP>/merged --format docx --no-plugins
+# exit 2
+# stdout
+{
+  "error": {
+    "message": "--format: \"docx\" is not pdf | idml | paged",
+    "exit": 2
+  }
+}
+# stderr
+(empty)

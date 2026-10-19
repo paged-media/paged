@@ -1,0 +1,11 @@
+$ paged-node query <TMP>/fixture.paged '[[' --no-plugins
+# exit 2
+# stdout
+{
+  "error": {
+    "message": "\"[[\" is not a selector",
+    "exit": 2
+  }
+}
+# stderr
+(empty)

@@ -1,0 +1,6 @@
+$ paged-plugin validate <TMP>/missing.json
+# exit 1
+# stdout
+(empty)
+# stderr
+error: no such file: <TMP>/missing.json

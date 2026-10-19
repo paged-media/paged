@@ -1,0 +1,11 @@
+$ paged-node run <TMP>/fixture.paged <TMP>/missing.mjs --no-plugins
+# exit 2
+# stdout
+{
+  "error": {
+    "message": "no script <TMP>/missing.mjs",
+    "exit": 2
+  }
+}
+# stderr
+(empty)

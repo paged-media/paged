@@ -152,6 +152,14 @@ jobs:
       - name: ai package suite
         run: ( cd packages/ai && bun run test ) || echo "TESTS_FAILED=1" >> "$GITHUB_ENV"
 
+      # paged-node (packages/cli): its golden transcripts, every verb against
+      # the engine built above (the model of `ai` is a local fake). The data
+      # verbs' successes need the paged.data engine wasm, which this job does
+      # not build: they report `unavailable` and are skipped. The package's
+      # other specs need it too, so only the goldens run here.
+      - name: paged-node golden tests
+        run: ( cd packages/cli && bun run test test/cli-golden.spec.ts ) || echo "TESTS_FAILED=1" >> "$GITHUB_ENV"
+
       # The shared test kit (platform/shared/test-kit): the gesture kit's
       # editor half, the engine's transform maths as properties, the gesture
       # invariants per kind and the gesture fuzzer (25 seeded sequences a
