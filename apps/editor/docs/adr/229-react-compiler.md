@@ -81,7 +81,9 @@ run(host); }` where `host` does not exist; draw's Symbols and Appearance buttons
 5. **Testing both ways.** `bun test` runs the sources as written. The same lanes run compiled
    with the preload `tooling/js/bun-react-compiler.ts` (put last: Bun gives a file to the first
    matching plugin, so a lane's own source plugin hands its result on), and CI runs the shell's
-   and the canvas app's DOM lanes that way. The Playwright suites run on the dev server, which
+   and the canvas app's DOM lanes that way. The preload caches its output by content
+   (`node_modules/.cache`), because `bun test --parallel` gives every test file a fresh module
+   registry and each file would compile its whole graph again. The Playwright suites run on the dev server, which
    compiles like the build. The interaction-latency probe (`tests/perf`) runs against the
    production build.
 6. **The coverage ratchet.** `tooling/js/react-compiler-coverage.mjs` compiles every source with

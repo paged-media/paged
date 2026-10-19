@@ -15,15 +15,25 @@
 //
 // `PAGED_REACT_COMPILER=0` turns it into a no-op, for an A/B run with the
 // same command.
+//
+// The output is cached by content in node_modules/.cache: `bun test
+// --parallel` gives every test file a fresh module registry, so without the
+// cache each file compiled the whole graph it imports again (the canvas DOM
+// lane: 79 files, each compiling the shell's ~300 sources, inside the tests
+// that import lazily).
 
 import { plugin } from "bun";
-import { readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import {
+  REPO_ROOT,
   compileSource,
   compilerEnabled,
-  createCollector,
+  compilerOptions,
   isReactSource,
 } from "./react-compiler.mjs";
 
@@ -31,7 +41,42 @@ const require = createRequire(import.meta.url);
 const babel = require("@babel/core") as typeof import("@babel/core");
 const PLUGIN = require.resolve("babel-plugin-react-compiler");
 
-const collector = createCollector();
+const CACHE = join(REPO_ROOT, "node_modules", ".cache", "paged-react-compiler");
+// What else decides the output: the compiler's version and options, and
+// the code of this preload and of the configuration it reads.
+const SALT = createHash("sha256")
+  .update(require("babel-plugin-react-compiler/package.json").version)
+  .update(JSON.stringify(compilerOptions()))
+  .update(readFileSync(fileURLToPath(import.meta.url)))
+  .update(readFileSync(join(REPO_ROOT, "tooling", "js", "react-compiler.mjs")))
+  .digest("hex");
+
+function cached(path: string, source: string, compile: () => string): string {
+  const key = createHash("sha256")
+    .update(SALT)
+    .update(path)
+    .update("\0")
+    .update(source)
+    .digest("hex");
+  const file = join(CACHE, `${key}.js`);
+  try {
+    return readFileSync(file, "utf8");
+  } catch {
+    // not cached yet
+  }
+  const code = compile();
+  try {
+    mkdirSync(CACHE, { recursive: true });
+    // Parallel workers compile the same file: each writes its own copy and
+    // renames it into place, so a reader never sees half a file.
+    const tmp = `${file}.${process.pid}.tmp`;
+    writeFileSync(tmp, code);
+    renameSync(tmp, file);
+  } catch {
+    // a cache that cannot be written only costs time
+  }
+  return code;
+}
 
 // A test that calls a component as a plain function, outside React (the
 // hook-store harnesses in data and image), would reach the compiled
@@ -56,19 +101,17 @@ function outsideRenderFallback(code: string): string {
  *  source comes back unchanged. */
 export function compileReact(path: string, source: string): string {
   if (!isReactSource(path)) return source;
-  const code = compileSource({
-    babel,
-    pluginPath: PLUGIN,
-    file: path,
-    code: source,
-    logger: collector.logger,
-    sourceMaps: "inline",
+  return cached(path, source, () => {
+    const code = compileSource({
+      babel,
+      pluginPath: PLUGIN,
+      file: path,
+      code: source,
+      sourceMaps: "inline",
+    });
+    return code === source ? source : outsideRenderFallback(code);
   });
-  return code === source ? source : outsideRenderFallback(code);
 }
-
-/** What the compiler did in this process, per file. */
-export const compiledFiles = collector.files;
 
 if (compilerEnabled()) {
   (
