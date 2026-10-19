@@ -52,6 +52,29 @@ import {
 const WASM_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "wasm");
 const WASM = join(WASM_DIR, "image_js_bg.wasm");
 
+// The four doors below run on the BUILT image-js wasm (glue/wasm/, a
+// build output: `moon run image:wasm`). Without it they are SKIPPED, and
+// say so; under REQUIRE_REAL_WASM=1 (image-ci's ts bundle lane, which
+// builds the wasm first) they run and fail on the missing artifact
+// instead (docs/development/testing.md). They used to return early and
+// pass, which reported four doors tested that never ran.
+const BUILT = existsSync(WASM);
+const REQUIRED = process.env.REQUIRE_REAL_WASM === "1";
+if (!BUILT && !REQUIRED) {
+  console.warn(
+    `unavailable: build output: ${WASM} is not built (moon run image:wasm); ` +
+      "the four real-wasm retouch doors are skipped",
+  );
+}
+/** A test of the real wasm door: skipped (and reported) without the
+ *  artifact, run — and failed — under REQUIRE_REAL_WASM=1. */
+const realWasm = it.skipIf(!BUILT && !REQUIRED);
+const requireWasm = () =>
+  expect(
+    existsSync(WASM),
+    `REQUIRE_REAL_WASM=1 but ${WASM} is missing — moon run image:wasm`,
+  ).toBe(true);
+
 async function boot(): Promise<ImageWasmModule> {
   const glue = (await import(
     /* @vite-ignore */ join(WASM_DIR, "image_js.js")
@@ -122,16 +145,19 @@ describe("dodge / burn / sponge", () => {
     expect(calls).toEqual([["highlights", 0.25, true]]);
   });
 
-  it("the real wasm refuses tone options with no stroke and names a bad range", async () => {
-    if (!existsSync(WASM)) return;
-    const wasm = await boot();
-    expect(() => wasm.brush_stroke_set_tone("midtones", 0.5, false)).toThrow(
-      /no stroke in progress/,
-    );
-    expect(() => wasm.brush_stroke_set_tone("darks", 0.5, false)).toThrow(
-      /unknown tonal range/,
-    );
-  });
+  realWasm(
+    "the real wasm refuses tone options with no stroke and names a bad range",
+    async () => {
+      requireWasm();
+      const wasm = await boot();
+      expect(() => wasm.brush_stroke_set_tone("midtones", 0.5, false)).toThrow(
+        /no stroke in progress/,
+      );
+      expect(() => wasm.brush_stroke_set_tone("darks", 0.5, false)).toThrow(
+        /unknown tonal range/,
+      );
+    },
+  );
 
   it("the session keeps the options (exposure clamped) and the strokes decline without a GPU", async () => {
     const { handle, session } = await ingest();
@@ -194,29 +220,32 @@ describe("blur / sharpen brushes", () => {
     }
   });
 
-  it("the real wasm knows the tool names and still declines without a GPU", async () => {
-    if (!existsSync(WASM)) return;
-    const wasm = await boot();
-    const img = wasm.ingest_rgba8(4, 4, new Uint8Array(64).fill(200));
-    const p = [
-      8,
-      0.5,
-      1,
-      1,
-      0.25,
-      "normal",
-      new Float32Array([0, 0, 0, 1]),
-      "none",
-    ] as const;
-    for (const t of ["blur", "sharpen"]) {
-      expect(() => wasm.brush_stroke_begin(img.handle, t, ...p)).toThrow(
-        /GPU-only/,
+  realWasm(
+    "the real wasm knows the tool names and still declines without a GPU",
+    async () => {
+      requireWasm();
+      const wasm = await boot();
+      const img = wasm.ingest_rgba8(4, 4, new Uint8Array(64).fill(200));
+      const p = [
+        8,
+        0.5,
+        1,
+        1,
+        0.25,
+        "normal",
+        new Float32Array([0, 0, 0, 1]),
+        "none",
+      ] as const;
+      for (const t of ["blur", "sharpen"]) {
+        expect(() => wasm.brush_stroke_begin(img.handle, t, ...p)).toThrow(
+          /GPU-only/,
+        );
+      }
+      expect(() => wasm.brush_stroke_begin(img.handle, "smudge", ...p)).toThrow(
+        /unknown paint tool/,
       );
-    }
-    expect(() => wasm.brush_stroke_begin(img.handle, "smudge", ...p)).toThrow(
-      /unknown paint tool/,
-    );
-  });
+    },
+  );
 
   it("the session declines both without a GPU", async () => {
     const { handle, session } = await ingest();
@@ -238,25 +267,28 @@ describe("spot healing brush", () => {
     expect(tools).toContain("media.paged.image.tool.spotHeal");
   });
 
-  it("the real wasm knows the tool name and declines without a GPU", async () => {
-    if (!existsSync(WASM)) return;
-    const wasm = await boot();
-    const img = wasm.ingest_rgba8(4, 4, new Uint8Array(64).fill(200));
-    expect(() =>
-      wasm.brush_stroke_begin(
-        img.handle,
-        "spot-heal",
-        8,
-        0.5,
-        1,
-        1,
-        0.25,
-        "normal",
-        new Float32Array([0, 0, 0, 1]),
-        "none",
-      ),
-    ).toThrow(/GPU-only/);
-  });
+  realWasm(
+    "the real wasm knows the tool name and declines without a GPU",
+    async () => {
+      requireWasm();
+      const wasm = await boot();
+      const img = wasm.ingest_rgba8(4, 4, new Uint8Array(64).fill(200));
+      expect(() =>
+        wasm.brush_stroke_begin(
+          img.handle,
+          "spot-heal",
+          8,
+          0.5,
+          1,
+          1,
+          0.25,
+          "normal",
+          new Float32Array([0, 0, 0, 1]),
+          "none",
+        ),
+      ).toThrow(/GPU-only/);
+    },
+  );
 
   it("the session goes straight to the GPU check (no Alt-click demanded)", async () => {
     const { handle, session } = await ingest();
@@ -293,8 +325,8 @@ describe("patch", () => {
     expect(calls).toEqual([[7, 30, -4]]);
   });
 
-  it("the real wasm door declines without a GPU", async () => {
-    if (!existsSync(WASM)) return;
+  realWasm("the real wasm door declines without a GPU", async () => {
+    requireWasm();
     const wasm = await boot();
     const img = wasm.ingest_rgba8(4, 4, new Uint8Array(64).fill(200));
     await expect(wasm.patch_selection(img.handle, 2, 0)).rejects.toThrow(
