@@ -25,7 +25,7 @@
 
 import { describe, expect, it } from "bun:test";
 
-import { covers } from "@paged-media/test-kit";
+import { covers, gestures } from "@paged-media/test-kit";
 
 import { at, bundleOnFake, C, RED, sourcePixels, spyOn } from "./command-kit";
 
@@ -59,7 +59,7 @@ describe("selection tools", () => {
   it("marquee (rectangle): a drag selects the pixels under it, Shift adds, the ants preview", async () => {
     covers("tool:media.paged.image.tool.marqueeRect");
     const k = await ingested();
-    const g = k.tools();
+    const g = gestures(k.toolTarget);
     await g
       .tool(`${T}.marqueeRect`)
       .settle()
@@ -77,8 +77,7 @@ describe("selection tools", () => {
   it("marquee (ellipse): a drag selects an anti-aliased ellipse", async () => {
     covers("tool:media.paged.image.tool.marqueeEllipse");
     const k = await ingested();
-    await k
-      .tools()
+    await gestures(k.toolTarget)
       .tool(`${T}.marqueeEllipse`)
       .settle()
       .drag({ from: [0, 0], to: [200, 100] })
@@ -93,8 +92,7 @@ describe("selection tools", () => {
   it("lasso: the drag's trail closes on release and selects its polygon", async () => {
     covers("tool:media.paged.image.tool.lasso");
     const k = await ingested();
-    await k
-      .tools()
+    await gestures(k.toolTarget)
       .tool(`${T}.lasso`)
       .settle()
       .drag({
@@ -114,7 +112,7 @@ describe("selection tools", () => {
   it("polygonal lasso: clicks place vertices, Backspace drops one, Enter closes; Escape abandons", async () => {
     covers("tool:media.paged.image.tool.polygonal-lasso");
     const k = await ingested();
-    const g = k.tools().tool(`${T}.polygonal-lasso`).settle();
+    const g = gestures(k.toolTarget).tool(`${T}.polygonal-lasso`).settle();
     // Abandoned: three vertices, then Escape — no selection.
     await g
       .click([0, 0])
@@ -141,7 +139,7 @@ describe("selection tools", () => {
   it("magic wand: a click selects the contiguous colour under it, Shift adds the other", async () => {
     covers("tool:media.paged.image.tool.magicWand");
     const k = await ingested();
-    const g = k.tools().tool(`${T}.magicWand`).settle();
+    const g = gestures(k.toolTarget).tool(`${T}.magicWand`).settle();
     await g.click([50, 50]).settle();
     expect(sel(k)).toEqual([0, 0, 2, 2]);
     expect(k.session.state().selection!.coverage).toBeCloseTo(0.5, 2);
@@ -153,7 +151,7 @@ describe("selection tools", () => {
   it("quick selection: painting over the image commits the grown region as the selection", async () => {
     covers("tool:media.paged.image.tool.quickSelect");
     const k = await ingested();
-    const g = k.tools().tool(`${T}.quickSelect`).settle();
+    const g = gestures(k.toolTarget).tool(`${T}.quickSelect`).settle();
     // The quick-select brush (tens of pixels wide) covers this whole
     // 4×2 image from inside the red half; the edge-stopping growth is
     // pinned on a larger image in selection.spec.ts.
@@ -170,8 +168,7 @@ describe("crop", () => {
   it("crop: dragging the top-left handle moves the crop rectangle in image pixels and previews it", async () => {
     covers("tool:media.paged.image.tool.crop");
     const k = await ingested();
-    await k
-      .tools()
+    await gestures(k.toolTarget)
       .tool(`${T}.crop`)
       .settle()
       .drag({ from: [0, 0], to: [100, 50] })
@@ -200,8 +197,7 @@ async function strokeSequence(k: K, tool: string) {
     brushExtend: true,
     brushCommit: true,
   });
-  await k
-    .tools()
+  await gestures(k.toolTarget)
     .tool(tool)
     .settle()
     .drag({ from: [25, 25], to: [175, 75], steps: 3 })
@@ -213,8 +209,7 @@ async function strokeSequence(k: K, tool: string) {
  *  nothing; the tip ring was previewed. */
 async function declinesForGpu(k: K, tool: string) {
   const before = await sourcePixels(k.session);
-  await k
-    .tools()
+  await gestures(k.toolTarget)
     .tool(tool)
     .settle()
     .drag({ from: [25, 25], to: [175, 75] })
@@ -234,8 +229,7 @@ describe("paint tools", () => {
     await declinesForGpu(k, `${T}.brush`);
     // Alt-click is the eyedropper: the 3×3 mean under pixel (0, 0),
     // clipped to the image, is pure red.
-    await k
-      .tools()
+    await gestures(k.toolTarget)
       .tool(`${T}.brush`)
       .settle()
       .click([25, 25], { mods: ["alt"] })
@@ -279,8 +273,7 @@ describe("retouching tools", () => {
   it("clone stamp: Alt-click sets the source in image pixels and paints nothing; a stroke then declines for the GPU", async () => {
     covers("tool:media.paged.image.tool.clone");
     const k = await ingested();
-    await k
-      .tools()
+    await gestures(k.toolTarget)
       .tool(`${T}.clone`)
       .settle()
       .click([75, 25], { mods: ["alt"] })
@@ -296,8 +289,7 @@ describe("retouching tools", () => {
   it("healing brush: Alt-click sets the source; a stroke declines for the GPU", async () => {
     covers("tool:media.paged.image.tool.heal");
     const k = await ingested();
-    await k
-      .tools()
+    await gestures(k.toolTarget)
       .tool(`${T}.heal`)
       .settle()
       .click([25, 75], { mods: ["alt"] })
@@ -373,7 +365,7 @@ describe("retouching tools", () => {
   it("patch: needs a selection; a drag names the source offset in image pixels; a click patches nothing", async () => {
     covers("tool:media.paged.image.tool.patch");
     const k = await ingested();
-    const g = k.tools().tool(`${T}.patch`).settle();
+    const g = gestures(k.toolTarget).tool(`${T}.patch`).settle();
     await g.drag({ from: [25, 25], to: [125, 25] }).settle();
     expect(k.session.state().status).toMatch(/needs a selection/);
     await k.run(`${C}.selectAll`);
@@ -395,7 +387,7 @@ describe("raster type", () => {
     covers("tool:media.paged.image.tool.type");
     const k = await ingested();
     const calls = spyOn(k.session, { paintText: true });
-    const g = k.tools().tool(`${T}.type`).settle();
+    const g = gestures(k.toolTarget).tool(`${T}.type`).settle();
     // No text yet: the click sets nothing.
     await g.click([50, 50]).settle();
     expect(calls).toEqual([]);
@@ -415,8 +407,7 @@ describe("raster type", () => {
 // handling, so the gesture runs on and commits on release.
 
 async function escapeThenRelease(k: K, tool: string) {
-  await k
-    .tools()
+  await gestures(k.toolTarget)
     .tool(tool)
     .settle()
     .down([0, 0])
@@ -449,8 +440,7 @@ describe("IMG-2 — Escape cancels the gesture (INV-2)", () => {
 
   it.failing("IMG-2 — lasso: Escape mid-drag selects nothing", async () => {
     const k = await ingested();
-    await k
-      .tools()
+    await gestures(k.toolTarget)
       .tool(`${T}.lasso`)
       .settle()
       .down([0, 0])
