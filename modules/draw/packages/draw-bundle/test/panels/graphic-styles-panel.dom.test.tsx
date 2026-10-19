@@ -69,6 +69,7 @@ import {
   PLAIN_LEAVES,
   RECORDS,
 } from "./harness";
+import { covers } from "@paged-media/test-kit";
 
 const PANEL = "[data-draw-graphic-styles-panel]";
 const ROW = '[data-draw-graphic-style-row="gs-1"]';
@@ -140,6 +141,7 @@ describe("Graphic styles panel — rendered against the engine", () => {
     afterEach(() => teardownPanels(h));
 
     it("+ From selection saves a style and LINKS the selection to it", async () => {
+      covers("panel:media.paged.draw.panel.graphicStyles");
       await h.host.selection.set([poly("s0")]);
       const panel = await mountPanel(h, makeGraphicStylesPanel);
       panel.reset();
@@ -165,6 +167,7 @@ describe("Graphic styles panel — rendered against the engine", () => {
     });
 
     it("Apply links another object, and the row's count follows", async () => {
+      covers("panel:media.paged.draw.panel.graphicStyles");
       const panel = await mountPanel(h, makeGraphicStylesPanel);
       await drive(() => h.host.selection.set([plainId(0)]), panel.work);
       expect(panel.attr(PANEL, "data-draw-graphic-style-linked")).toBe("");
@@ -197,6 +200,7 @@ describe("Graphic styles panel — rendered against the engine", () => {
     });
 
     it("Redefine takes the selection's appearance and propagates it to every link", async () => {
+      covers("panel:media.paged.draw.panel.graphicStyles");
       await h.host.selection.set([plainId(0)]);
       const panel = await mountPanel(h, makeGraphicStylesPanel);
       expect(panel.attr(PANEL, "data-draw-graphic-style-overridden")).toBe(
