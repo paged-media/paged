@@ -203,19 +203,16 @@ describe("Output readiness", () => {
     expect(h.mutations(from)).toEqual([]);
   });
 
-  // UX audit F-39: "the Prepress checklist reads 'Bleed 3 mm'" while every
-  // length elsewhere is in points.
-  test.failing(
-    "PN-303 (UX F-39): the bleed row reads in the document's unit, not mm",
-    async () => {
-      covers("panel:paged.output-readiness");
-      const h = await mountPanel(OutputReadinessPanel, {
-        id: "paged.output-readiness",
-      });
-      const bleed = h.root.querySelector('[data-readiness-row="bleed"]')!;
-      expect(bleed.textContent).not.toContain("mm");
-    },
-  );
+  // UX audit F-39 (fixed, ADR 245): the Prepress checklist read "Bleed 3 mm"
+  // while every length elsewhere was in points.
+  test("PN-303 (UX F-39): the bleed row reads in the document's unit, not mm", async () => {
+    covers("panel:paged.output-readiness");
+    const h = await mountPanel(OutputReadinessPanel, {
+      id: "paged.output-readiness",
+    });
+    const bleed = h.root.querySelector('[data-readiness-row="bleed"]')!;
+    expect(bleed.textContent).not.toContain("mm");
+  });
 });
 
 describe("Review inspector", () => {

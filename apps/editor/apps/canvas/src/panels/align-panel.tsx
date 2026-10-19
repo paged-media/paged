@@ -38,7 +38,7 @@ import {
   useRegistries,
   useSelection,
 } from "@paged-media/shell";
-import { KitSelect } from "@paged-media/ui";
+import { KitSelect, useDocumentUnit } from "@paged-media/ui";
 
 import { ALIGN_COMMAND, type AlignKind } from "../align-plan";
 
@@ -69,6 +69,7 @@ const DISTRIBUTE_BUTTONS: Array<{
 ];
 
 export function AlignPanel() {
+  const unit = useDocumentUnit();
   const registries = useRegistries();
   const model = useObjectModel();
   const { elementSelection } = useSelection();
@@ -175,7 +176,7 @@ export function AlignPanel() {
             className="pg-value text-xs"
             style={{ color: "var(--pg-muted-fg)" }}
           >
-            — mm
+            — {unit}
           </span>
         </span>
       </div>
