@@ -3590,9 +3590,11 @@ fn corner_rect_path_shapes_per_kind() {
         lines(CornerOption::Inset) > lines(CornerOption::Bevel),
         "inset fold-in adds an extra line segment per corner vs bevel"
     );
-    // Fancy: the ornamental three-arc scallop — three cubics per
-    // corner (calibrated; was a two-cubic ogee before W1.8).
-    assert_eq!(cubics(CornerOption::Fancy), 12);
+    // Fancy: InDesign's straight knot — no cubics, six LineTos per
+    // corner (read from its PDF export; three arcs before) plus the
+    // four edges.
+    assert_eq!(cubics(CornerOption::Fancy), 0);
+    assert_eq!(lines(CornerOption::Fancy), 28);
     // None / zero radius: sharp corners, no cubics.
     assert_eq!(cubics(CornerOption::None), 0);
 }
