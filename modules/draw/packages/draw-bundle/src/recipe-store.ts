@@ -72,6 +72,7 @@ import type {
   BundleHost,
   PluginMetadataEnvelope,
 } from "@paged-media/plugin-api";
+import { asciiJson, labelKey } from "@paged-media/helpers";
 
 import manifest from "../manifest.json";
 
@@ -91,7 +92,7 @@ export type RecipeHost = Pick<BundleHost, "parts" | "supports" | "log"> & {
  *  The object-model lane writes the SUB-KEY `x-paged:<id>.recipes`
  *  (`RECIPE_SUBKEY`), which the registry merges into this one label's
  *  `data` (plugin-sdk DESIGN.md §21.8) — core itself never sees a sub-key. */
-export const RECIPE_LABEL_KEY = `x-paged:${manifest.id}`;
+export const RECIPE_LABEL_KEY = labelKey(manifest.id);
 
 /** The feature the label lane rides. */
 export const RECIPE_LABEL_FEATURE = "document.documentMetadata@1";
@@ -136,14 +137,6 @@ export function recipeHash(text: string): string {
     fnv1a(text, 0x9dc5811c).toString(16).padStart(8, "0")
   );
 }
-
-/** Non-ASCII → `\uXXXX` (still valid JSON), the form InDesign keeps a
- *  label value in byte-exact (round-trip survey, 2026-10-06). */
-const asciiJson = (text: string): string =>
-  text.replace(
-    /[\u0080-￿]/g,
-    (c) => "\\u" + c.charCodeAt(0).toString(16).padStart(4, "0"),
-  );
 
 /** Does this host carry the undoable label lane? */
 export function labelled(host: RecipeHost): boolean {
@@ -305,12 +298,10 @@ export function withRecipeEntry(
       .sort(),
   ];
   const sizeOf = (r: Record<string, RecipeLabelEntry>) =>
-    asciiJson(
-      JSON.stringify({
-        v: prev?.v ?? 1,
-        data: { ...(prev?.data ?? {}), recipes: r },
-      }),
-    ).length;
+    asciiJson({
+      v: prev?.v ?? 1,
+      data: { ...(prev?.data ?? {}), recipes: r },
+    }).length;
   for (const n of order) {
     const inline = full[n];
     if (inline === undefined) continue;
@@ -432,7 +423,7 @@ export async function planRecipeWrites(
   return {
     host: "doc",
     labelKey: RECIPE_SUBKEY,
-    labelValue: asciiJson(JSON.stringify(recipes)),
+    labelValue: asciiJson(recipes),
     parts,
     hashes,
   };
