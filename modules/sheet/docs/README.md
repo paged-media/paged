@@ -17,6 +17,28 @@ What this folder holds.
 One document stays at the repo root: [`DECIMAL-SPIKE.md`](../DECIMAL-SPIKE.md), the measured
 comparison of `f64` and exact decimal arithmetic behind [ADR 501](adr/501-f64-numbers.md).
 
+## Tests
+
+The surface the bundle gives the editor (every command, panel, file handler and keybinding
+it registers) is asserted for behaviour, and each test names the surface id it vouches for
+with `covers()` (the surface-conformance gate,
+[`platform/extensions/docs/testing-plugins.md`](../../../platform/extensions/docs/testing-plugins.md)).
+All of them run the REAL bundle (`sheetBundle.activate`) and the real sheet engine; without
+the built wasm they are skipped and say so, and `REQUIRE_REAL_ENGINE=1` (the CI lane) makes
+that a failure.
+
+| Layer     | File                                                                             | What it asserts                                                                                                                                                                                                                                                                                                                                 |
+| --------- | -------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| unit      | `packages/sheet-bundle/test/commands.spec.ts`                                    | Each of the 26 command ids (palette commands and the object model's typed commands) on the SDK's in-process host over the recording fake editor: its `when` gate, the panel it opens, the warning it gives when something is missing, the workbook read back through the object model, and that a typed write emits ONE version-label mutation. |
+| headless  | `packages/sheet-bundle/test/headless/commands.headless.test.ts`                  | The same scenarios over the real canvas engine: the placed table in the exported document, the in-frame grid's scene layer, and `document.undo()` taking the workbook back. The findings SHT-1 and SHT-2 are expected failures here.                                                                                                            |
+| unit      | `packages/sheet-bundle/test/keybindings.spec.ts`                                 | The nine grid keys: bound to their commands, live only inside an entered sheet frame and not while typing in a field, and doing their command's work at the selection.                                                                                                                                                                          |
+| unit      | `packages/sheet-bundle/test/io.spec.ts`                                          | The `.xlsx` and `.csv`/`.tsv` importers on fixtures built in code, and the `.xlsx` exporter with a round trip through the importer (finding SHT-3).                                                                                                                                                                                             |
+| component | `packages/sheet-bundle/test/panels.dom.test.tsx` (`bun run test:dom`, happy-dom) | The Workbook, Grid, Datasets and Sheet properties panels as the bundle registers them, rendered and driven: placing, the replace confirmation, find and replace, the formula bar, sourcing from a dataset, and the property rows following the active cell.                                                                                     |
+
+The scenarios live in `packages/sheet-bundle/test/conformance/scenarios.ts` and the two hosts
+in `packages/sheet-bundle/test/conformance/env.ts`. The menu entries belong to the
+editor's Playwright layer (`apps/editor/apps/canvas/tests/`).
+
 ## Decisions in other repositories that bind this one
 
 These records live in other public paged-media repositories. The code here rests on each of

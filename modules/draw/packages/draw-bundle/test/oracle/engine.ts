@@ -30,7 +30,7 @@ import type { HeadlessHost } from "@paged-media/plugin-sdk";
 
 import { drawBundle } from "../../src";
 import { F1_MULTI_SHAPE } from "../fixtures/corpus";
-import { openHost } from "../conformance/host";
+import { openHost } from "../headless/host";
 import { pathsOfTable, type OraclePath, type Rgb } from "./oracle";
 
 type MutationArg = Parameters<HeadlessHost["host"]["document"]["mutate"]>[0];

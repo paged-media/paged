@@ -30,7 +30,7 @@
 // nothing for a group, so the nested case can only be driven against a
 // host answering the way the next engine does. The real engine's answer
 // for a group today — nothing, and the old write — is pinned in
-// `conformance/transform.spec.ts`.
+// `headless/transform.spec.ts`.
 
 import { describe, expect, it } from "bun:test";
 

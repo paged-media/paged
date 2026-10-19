@@ -27,6 +27,15 @@ export { stubGlobal, unstubAllGlobals } from "./globals.ts";
 export { importActual } from "./modules.ts";
 export { advanceTimersByTimeAsync, settle, type TimerClock } from "./timers.ts";
 
+// The surface-conformance marker (apps/editor/docs/reference/
+// surface-conformance.md): a typed no-op the gate reads statically.
+export {
+  covers,
+  SURFACE_KINDS,
+  type SurfaceId,
+  type SurfaceKind,
+} from "./covers.ts";
+
 // The gesture kit (apps/editor/docs/reference/gestures.md, "How gestures
 // are tested"). The public half lives in the plugin-sdk (the fake editor,
 // the DSL's unit backend, tapes, invariants) and is re-exported here, so
@@ -55,6 +64,7 @@ export {
   polygon,
   rect,
   storedZip,
+  textFrame,
   GESTURE_TARGETS,
   type FixturePageSpec,
   type FixtureSpec,
@@ -96,3 +106,29 @@ export {
   type MatrixTool,
   type MatrixZoom,
 } from "./gestures/matrix.ts";
+
+// The headless editor's engine half (apps/editor/apps/canvas/tests/headless
+// builds the editor on it): the canvas-wasm booted once per process, an
+// in-process render worker the real CanvasClient drives, and the canonical
+// model dump the headless and parity suites compare.
+export {
+  headlessEngineModule,
+  type EngineCanvasWorker,
+  type HeadlessEngineModule,
+} from "./headless/engine.ts";
+export {
+  createEngineWorker,
+  type EngineWorker,
+  type EngineWorkerOptions,
+  type GestureRecord,
+  type PostedMessage,
+} from "./headless/engine-worker.ts";
+export {
+  canonicalJson,
+  dumpDiff,
+  elementKey,
+  modelDump,
+  MODEL_DUMP_COLLECTIONS,
+  type ModelDump,
+  type ModelDumpOptions,
+} from "./headless/model-dump.ts";

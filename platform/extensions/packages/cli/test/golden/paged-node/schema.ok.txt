@@ -1,0 +1,69 @@
+$ paged-node schema <TMP>/fixture.paged layer --no-plugins
+# exit 0
+# stdout
+{
+  "of": "layer",
+  "rows": [
+    {
+      "addressKind": "layer",
+      "path": "layerVisible",
+      "type": {
+        "kind": "bool"
+      },
+      "nullable": false,
+      "default": true,
+      "virtual": {
+        "op": "setProperty",
+        "field": "value"
+      },
+      "bindable": true,
+      "since": 71
+    },
+    {
+      "addressKind": "layer",
+      "path": "layerLocked",
+      "type": {
+        "kind": "bool"
+      },
+      "nullable": false,
+      "default": false,
+      "virtual": {
+        "op": "setProperty",
+        "field": "value"
+      },
+      "bindable": true,
+      "since": 71
+    },
+    {
+      "addressKind": "layer",
+      "path": "layerPrintable",
+      "type": {
+        "kind": "bool"
+      },
+      "nullable": false,
+      "default": true,
+      "virtual": {
+        "op": "setProperty",
+        "field": "value"
+      },
+      "bindable": true,
+      "since": 71
+    },
+    {
+      "addressKind": "layer",
+      "path": "layerName",
+      "type": {
+        "kind": "text"
+      },
+      "nullable": false,
+      "virtual": {
+        "op": "setProperty",
+        "field": "value"
+      },
+      "bindable": true,
+      "since": 71
+    }
+  ]
+}
+# stderr
+(empty)

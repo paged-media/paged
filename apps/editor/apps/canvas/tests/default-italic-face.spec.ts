@@ -117,8 +117,10 @@ test.describe("The default family's italic", () => {
     const italic = await designer.renderBytes();
 
     // Save it and open it again through the file importer: a fresh load,
-    // whose only fonts are the ones the load registers.
-    const reopened = await page.evaluate(async () => {
+    // whose only fonts are the ones the load registers. No importer for
+    // `.idml` is a failure of this test (the evaluate throws), never an
+    // early way out of it.
+    await page.evaluate(async () => {
       const c = (
         globalThis as unknown as {
           __canvas: {
@@ -138,11 +140,9 @@ test.describe("The default family's italic", () => {
       ).__canvas;
       const bytes = await c.client.exportIdml();
       const imp = c.registries.importers.resolve("italic.idml");
-      if (!imp) return "no importer claims .idml";
+      if (!imp) throw new Error("no importer claims .idml");
       await imp.import({ name: "italic.idml", bytes });
-      return "";
     });
-    expect(reopened).toBe("");
     await expect
       .poll(
         async () =>

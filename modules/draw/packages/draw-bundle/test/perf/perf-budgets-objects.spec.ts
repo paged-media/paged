@@ -35,7 +35,7 @@ import type { HeadlessHost } from "@paged-media/plugin-sdk";
 
 import { drawBundle } from "../../src";
 import { F1_MULTI_SHAPE } from "../fixtures/corpus";
-import { openHost } from "../conformance/host";
+import { openHost } from "../headless/host";
 
 const D = "media.paged.draw";
 const A = (kind: string, id: string) => `plugin:${D}/${kind}/${id}`;
