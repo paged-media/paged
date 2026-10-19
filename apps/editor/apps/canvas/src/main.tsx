@@ -42,6 +42,10 @@ import {
   fetchDefaultFont,
   fetchDefaultFontFaces,
   takePendingImportSource,
+  setPendingImportSource,
+  isReplaceDeclined,
+  replacePrompts,
+  setDocumentSaver,
   useCamera,
   useCanvasClient,
   useContentSelection,
@@ -144,7 +148,6 @@ import drawTraceWorkerUrl from "@paged-media/draw/trace-worker?worker&url";
 import { createEditorConsentBackend } from "./plugin-consent";
 import { ConsentDialog } from "./ConsentDialog";
 import { createEditorDocuments } from "./plugin-documents";
-import { DocumentReplaceDialog } from "./DocumentReplaceDialog";
 import { createEditorSecretStore } from "./plugin-secret-store";
 import { SecretPromptDialog } from "./SecretPromptDialog";
 import { CoreCommandDialog } from "./core-command-dialog";
@@ -191,6 +194,7 @@ import {
   APP_KEYBINDINGS,
   APP_MENU_ITEMS,
   buildAppCommands,
+  PAGED_FILE_SAVE_PAGED,
 } from "./app-commands";
 import {
   arrangeSelection,
@@ -304,10 +308,10 @@ if (!import.meta.env.PROD) {
 }
 
 // D-26 (ADR 219) — the plugin DOCUMENTS door (host.documents): serialize the
-// open document and replace it with plugin-built bytes, asking keep/discard
-// first when it has unsaved edits. One instance: `PluginBundles` attaches the
-// live client + open orchestration and injects `backend` into every bundle
-// host; `<DocumentReplaceDialog>` renders the prompt from `controller`.
+// open document and replace it with plugin-built bytes, asking the shell's
+// replace question first when it has unsaved edits (ADR 230). One instance:
+// `PluginBundles` attaches the live client + open orchestration and injects
+// `backend` into every bundle host.
 const editorDocuments = createEditorDocuments();
 if (!import.meta.env.PROD) {
   // Test affordance (the `__consent` pattern): drive the door without a
@@ -320,7 +324,7 @@ if (!import.meta.env.PROD) {
         name: name ?? null,
         requester: { id: "media.paged.test", name: "Test plugin" },
       }),
-    current: () => editorDocuments.controller.current(),
+    current: () => replacePrompts.current(),
   };
 }
 
@@ -764,6 +768,14 @@ function CanvasAppIntegration() {
   const { handle, sourceName } = useDocument();
   const { contentSelection, setContentSelection } = useContentSelection();
   const registries = useRegistries();
+  // ADR 230 — the replace question's Save is the save Cmd+S runs.
+  useEffect(
+    () =>
+      setDocumentSaver(async () => {
+        await registries.commands.invoke(PAGED_FILE_SAVE_PAGED);
+      }),
+    [registries],
+  );
   // ADR 025 — THE COMMAND TAP. `commands.observe` is the one place a command
   // handler is ever called, so this single subscription sees every menu item,
   // keybinding, palette entry, tool activation, panel toggle and plugin
@@ -1070,16 +1082,28 @@ function CanvasAppIntegration() {
       // importer (pdf.js reconstruction → host.nativeDocument.open). The
       // menu-driven counterpart to drag-drop; resolves the importer by the
       // file's extension, so it degrades quietly if the plugin isn't loaded.
+      //
+      // The importer opens through `host.nativeDocument.open`, whose backend
+      // asks the replace question (ADR 230); the parked name lets it name
+      // the file, as File ▸ Open… and a drop do.
       openPdf: async () => {
         const [file] = await pickFiles({ accept: [".pdf", "application/pdf"] });
         if (!file) return;
         const importer = registries.importers.resolve(file.name);
         if (!importer) return;
-        await importer.import({
-          name: file.name,
-          bytes: file.bytes,
-          mimeType: "application/pdf",
-        });
+        setPendingImportSource(file.name);
+        await Promise.resolve()
+          .then(() =>
+            importer.import({
+              name: file.name,
+              bytes: file.bytes,
+              mimeType: "application/pdf",
+            }),
+          )
+          .catch((err: unknown) => {
+            if (!isReplaceDeclined(err)) reportFileFailure("Open PDF", err);
+          })
+          .finally(() => setPendingImportSource(null));
       },
       // W3.B2 — Save As IDML: serialise the loaded document to an
       // `.idml` package and trigger a browser download (mirrors the
@@ -1464,7 +1488,6 @@ function CanvasAppRoot() {
       <CanvasAppIntegration />
       <PluginBundles />
       <ConsentDialog controller={editorConsent.controller} />
-      <DocumentReplaceDialog controller={editorDocuments.controller} />
       <SecretPromptDialog controller={editorSecrets.controller} />
       <CoreCommandDialog />
       <GlobalLightDialog />

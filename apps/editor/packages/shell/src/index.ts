@@ -303,12 +303,27 @@ export {
 export {
   buildNewDocumentCommand,
   buildNewFromBriefCommand,
-  confirmDiscard,
+  openFile,
   PAGED_FILE_NEW_FROM_BRIEF,
   buildOpenIdmlCommand,
   PAGED_FILE_NEW,
   PAGED_FILE_OPEN_IDML,
 } from "./state/commands/file-commands";
+export {
+  attachReplacePromptSurface,
+  confirmDiscard,
+  confirmReplace,
+  isReplaceDeclined,
+  replaceConfirmText,
+  replaceDeclinedError,
+  replacePrompts,
+  setDocumentSaver,
+  type DirtySource,
+  type PendingReplace,
+  type ReplaceAnswer,
+  type ReplaceRequest,
+} from "./state/replace-guard";
+export { ReplaceDocumentPrompt } from "./chrome/ReplaceDocumentPrompt";
 export {
   buildExportAseCommand,
   buildImportAseCommand,
@@ -346,6 +361,9 @@ export {
   type DocumentLoaderCallbacks,
 } from "./state/document-loader";
 export {
+  allowImportReplace,
+  currentImportName,
+  importReplaceAllowed,
   setPendingImportSource,
   takePendingImportSource,
 } from "./state/import-source";

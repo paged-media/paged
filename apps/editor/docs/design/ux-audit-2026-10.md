@@ -117,6 +117,11 @@ The canvas drop target hands the file straight to the open path. The discard che
 
 **Screenshots:** `F-01-drop-replaces-unsaved-doc.png`
 
+**Fixed (2026-10-19, `b665b140d`).** One guard asks before every replacement (ADR 230): the
+drop, File ▸ Open…, File ▸ Open PDF…, every importer that opens a document and both plugin
+doors ask Save / Don't save / Cancel. Placing a dropped file instead of opening it (F-03)
+stays open.
+
 <a id="f-02"></a>
 
 #### F-02 · Corrupt or unsupported files fail silently, sometimes with a success message
@@ -207,6 +212,10 @@ File ▸ New and File ▸ Open on an edited document show `window.confirm`: "Thi
 **Deliberate?** documented in code as deliberate.
 
 **Screenshots:** `F-05-dirty-state-before-prompt.png`
+
+**Fixed (2026-10-19, `b665b140d`).** The shell's own prompt asks Save / Don't save / Cancel
+(Save saves, then continues; ADR 230). The platform `confirm` remains only as the fallback
+when no prompt is mounted, and its text names the platform's chord.
 
 <a id="f-06"></a>
 

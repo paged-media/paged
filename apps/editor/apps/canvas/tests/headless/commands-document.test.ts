@@ -28,6 +28,8 @@ import {
   buildExportAseCommand,
   buildImportAseCommand,
   buildOpenIdmlCommand,
+  openFile,
+  type PagedEditor,
 } from "@paged-media/shell";
 import {
   covers,
@@ -188,6 +190,155 @@ describe("File ▸ Open… (paged.file.openIdml)", () => {
     await e.idle();
     expect(status.at(-1)).toMatch(/^load failed: /);
     expect(dumpDiff(kept, await e.dump())).toEqual([]);
+  });
+});
+
+// R8 (UX audit F-01, SH-10): every open that replaces the document asks
+// the one replace question (ADR 230). File ▸ Open PDF… and a dropped
+// .docx reach the engine through an importer's `host.nativeDocument.open`;
+// a plugin-built document through `host.documents.open`. With no prompt
+// mounted (headless) the question is the platform confirm.
+describe("the replace question on every plugin open (R8)", () => {
+  const nativeHost = (e: HeadlessEditor) =>
+    e.host({
+      capabilities: {
+        document: { read: "broad", write: "broad", openNative: true },
+      },
+    } as never);
+
+  test("host.nativeDocument.open on an edited document asks; declining rejects with an AbortError and keeps it", async () => {
+    covers("command:paged.file.openIdml");
+    const e = await targets();
+    await edit(e);
+    const prompts: string[] = [];
+    stubGlobal("confirm", (m: string) => (prompts.push(m), false));
+    const kept = await e.dump();
+    const host = nativeHost(e);
+    const err = await host.nativeDocument
+      .open(gestureFixture("paths"))
+      .then(() => null)
+      .catch((x: unknown) => x as Error);
+    expect(err?.name).toBe("AbortError");
+    expect(prompts).toHaveLength(1);
+    expect(prompts[0]).toMatch(/^This document has unsaved edits\./);
+    expect(dumpDiff(kept, await e.dump())).toEqual([]);
+
+    stubGlobal("confirm", (m: string) => (prompts.push(m), true));
+    await host.nativeDocument.open(gestureFixture("paths"));
+    await e.idle();
+    expect(prompts).toHaveLength(2);
+    expect(dumpDiff(kept, await e.dump())).not.toEqual([]);
+  });
+
+  test("a clean document is replaced without a question", async () => {
+    covers("command:paged.file.openIdml");
+    const e = await targets();
+    stubGlobal("confirm", () => {
+      throw new Error("nothing to ask about");
+    });
+    await nativeHost(e).nativeDocument.open(gestureFixture("paths"));
+    await e.idle();
+    expect(Object.keys((await e.dump()).elements)).not.toContain(
+      elementKey(T.frame.id),
+    );
+  });
+
+  test("a dropped file an importer opens (a .pdf, a .docx) asks with the file's name; declining is no failure", async () => {
+    covers("command:paged.file.openIdml");
+    const e = await targets();
+    await edit(e);
+    const host = nativeHost(e);
+    // An importer shaped like paged.pdf's: it opens what it produced.
+    e.registries.importers.register({
+      id: "t.pdf",
+      title: "PDF",
+      extensions: [".pdf"],
+      async import() {
+        await host.nativeDocument.open(gestureFixture("paths"));
+      },
+    } as never);
+    const prompts: string[] = [];
+    stubGlobal("confirm", (m: string) => (prompts.push(m), false));
+    const kept = await e.dump();
+    const warnings: string[] = [];
+    const statuses: string[] = [];
+    await openFile(
+      e.editor as unknown as PagedEditor,
+      new File([new Uint8Array([37, 80, 68, 70])], "Brochure.pdf"),
+      {
+        setStatus: (s) => void statuses.push(s),
+        pushWarning: (w) => void warnings.push(w),
+      },
+    );
+    await e.idle();
+    expect(prompts).toHaveLength(1);
+    expect(prompts[0]).toContain("Opening Brochure.pdf will discard them");
+    expect(warnings).toEqual([]);
+    expect(statuses.at(-1)).toBe(
+      "kept the open document; Brochure.pdf not opened",
+    );
+    expect(dumpDiff(kept, await e.dump())).toEqual([]);
+  });
+
+  test("one import is asked about once, though its importer opens twice (paged.doc's skeleton, then its re-open)", async () => {
+    covers("command:paged.file.openIdml");
+    const e = await targets();
+    await edit(e);
+    const host = nativeHost(e);
+    e.registries.importers.register({
+      id: "t.docx",
+      title: "Word",
+      extensions: [".docx"],
+      async import() {
+        await host.nativeDocument.open(gestureFixture("paths"));
+        // The importer's own half-built document is now dirty…
+        await e.select([]);
+        await e.client.mutate({
+          op: "insertPage",
+          args: { afterPageId: null, masterId: null },
+        });
+        // …and it opens again: no second question.
+        await host.nativeDocument.open(gestureFixture("targets"));
+      },
+    } as never);
+    const prompts: string[] = [];
+    stubGlobal("confirm", (m: string) => (prompts.push(m), true));
+    await openFile(
+      e.editor as unknown as PagedEditor,
+      new File([new Uint8Array([80, 75, 3, 4])], "Report.docx"),
+      { setStatus() {}, pushWarning() {} },
+    );
+    await e.idle();
+    expect(prompts).toHaveLength(1);
+    expect(prompts[0]).toContain("Opening Report.docx");
+    expect(e.state.document.handle?.pageIds).toEqual([
+      T.pageId,
+      T.secondPageId,
+    ]);
+    // The session ended with the import: a plugin's next open asks again.
+    await e.client.mutate({
+      op: "insertPage",
+      args: { afterPageId: null, masterId: null },
+    });
+    await host.nativeDocument.open(gestureFixture("paths"));
+    expect(prompts).toHaveLength(2);
+  });
+
+  test("host.documents.open asks the same question, naming the plugin", async () => {
+    covers("command:paged.file.openIdml");
+    const e = await targets();
+    const bytes = await e.client.exportPaged();
+    await edit(e);
+    const prompts: string[] = [];
+    stubGlobal("confirm", (m: string) => (prompts.push(m), false));
+    const r = await e.hostApp.documents.backend.open(bytes, {
+      name: "Catalog (merged)",
+      requester: { id: "media.paged.data", name: "Data" },
+    } as never);
+    expect(r).toEqual({ opened: false, reason: "declined" });
+    expect(prompts[0]).toContain(
+      "Data wants to open Catalog (merged) in place of this document.",
+    );
   });
 });
 

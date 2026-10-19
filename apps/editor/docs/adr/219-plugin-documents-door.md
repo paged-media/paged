@@ -1,6 +1,8 @@
 # ADR 219 — A plugin may replace the open document, and the editor asks first
 
-- **Status:** Accepted, 2026-10-06.
+- **Status:** Accepted, 2026-10-06. The prompt is the shell's replace question since
+  2026-10-19 ([ADR 230](230-one-replace-question.md)); `DocumentReplaceDialog.tsx` is gone, and
+  `host.nativeDocument.open` asks too.
 - **Scope:** `apps/canvas/src/plugin-documents.ts`, `apps/canvas/src/DocumentReplaceDialog.tsx`,
   `apps/canvas/src/main.tsx`, `apps/canvas/src/worker/worker.ts`,
   `packages/client/src/client.ts` (`measureTexts`), `packages/shell/src/state/paged-editor.tsx`,
