@@ -8,6 +8,9 @@
     "apps/editor": {
       "name": "paged-monorepo",
       "version": "0.0.0",
+      "devDependencies": {
+        "@babel/parser": "7.29.8",
+      },
     },
     "apps/editor/apps/canvas": {
       "name": "paged-canvas",
@@ -160,11 +163,15 @@
         "tailwindcss-animate": "^1.0.7",
       },
       "devDependencies": {
+        "@happy-dom/global-registrator": "catalog:",
         "@paged-media/test-kit": "workspace:*",
+        "@testing-library/dom": "catalog:",
+        "@testing-library/react": "catalog:",
         "@types/bun": "catalog:",
         "@types/react": "catalog:",
         "@types/react-dom": "catalog:",
         "autoprefixer": "^10.5.5",
+        "happy-dom": "catalog:",
         "postcss": "^8.5.28",
         "tailwindcss": "^3.4.19",
         "typescript": "catalog:",

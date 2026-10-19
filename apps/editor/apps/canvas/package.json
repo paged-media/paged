@@ -12,7 +12,7 @@
     "typecheck:tests": "bun check -p tsconfig.tests.json",
     "test:contracts": "bun test --preload ../../../../tooling/js/bun-test-setup.ts ./test/contracts",
     "test:headless": "bun test --timeout 30000 --preload ../../../../tooling/js/bun-test-setup.ts ./tests/headless",
-    "test:unit": "bun test --parallel --timeout 30000 --preload ../../../../tooling/js/bun-test-setup.ts ./test/unit",
+    "test:unit": "bun test --parallel --timeout 30000 --preload ../../../../tooling/js/bun-test-setup.ts --path-ignore-patterns '**/*.dom.test.*' ./test/unit",
     "test:fidelity": "playwright test --config=playwright.config.ts",
     "test:journeys": "playwright test --project=journeys",
     "test:journeys:gpu": "playwright test --project=journeys-gpu",
