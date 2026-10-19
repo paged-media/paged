@@ -14,6 +14,7 @@ members = [
     "slide-chart",
     "slide-resolve",
     "slide-idml",
+    "slide-native",
     "pptx-export",
     "slide-js",
 ]
@@ -50,9 +51,18 @@ slide-geom = { path = "slide-geom" }
 slide-chart = { path = "slide-chart" }
 slide-resolve = { path = "slide-resolve" }
 slide-idml = { path = "slide-idml" }
+slide-native = { path = "slide-native" }
 slide-js = { path = "slide-js" }
 # Optional test resources (docs/development/testing.md): dev-dependency only.
 paged-test-resources = { path = "../../platform/shared/test-resources" }
+# The engine's model crates, path-depended from the engine workspace at the
+# same commit (ADR 708): a deck is built as a native `paged_scene::Document`
+# and packaged by core's one `.paged` writer.
+paged-model = { path = "../../engine/core/crates/paged-model" }
+paged-scene = { path = "../../engine/core/crates/paged-scene" }
+paged-store = { path = "../../engine/core/crates/paged-store" }
+# The IDML reader, for the equivalence test (dev-dependency only).
+idml-import = { path = "../../engine/core/crates/idml-import" }
 
 [workspace.lints.clippy]
 all = "warn"
