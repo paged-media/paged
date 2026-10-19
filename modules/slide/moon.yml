@@ -25,11 +25,22 @@ dependsOn:
   # paged-ooxml, a path dependency of the Cargo workspace.
   - id: "ooxml"
     scope: "production"
+  # dml-chart, the shared DrawingML chart reader (slide ADR 709).
+  - id: "dml-chart"
+    scope: "production"
+  # slide-chart labels through sheet-format (and sheet-core, whose build
+  # reads sheet's function registry), which read platform/shared/fmt (ADR 710).
+  - id: "sheet"
+    scope: "production"
+  - id: "fmt"
+    scope: "production"
 
 # Path dependencies into the engine (docx-skeleton / slide-native build on
 # paged-model, paged-scene, paged-store; ADR 606 / ADR 708) and into
-# platform/shared/ooxml (paged-ooxml, doc ADR 607): their crates are inputs
-# here too, so `moon ci` re-runs this project when one it builds changes.
+# platform/shared/ooxml (paged-ooxml, doc ADR 607), and into modules/sheet's
+# sheet-format and sheet-core and platform/shared/fmt (slide-chart, ADR 710):
+# their crates are inputs here too, so `moon ci` re-runs this project when
+# one it builds changes.
 # (Project file groups replace the workspace ones, so the defaults are
 # restated.)
 fileGroups:
@@ -44,6 +55,14 @@ fileGroups:
     - "/engine/core/crates/**/Cargo.toml"
     - "/platform/shared/ooxml/src/**/*.rs"
     - "/platform/shared/ooxml/Cargo.toml"
+    - "/platform/shared/dml-chart/src/**/*.rs"
+    - "/platform/shared/dml-chart/Cargo.toml"
+    - "/modules/sheet/Cargo.toml"
+    - "/modules/sheet/sheet-core/**/*"
+    - "/modules/sheet/sheet-format/**/*"
+    - "/modules/sheet/registry/functions/*.yaml"
+    - "/platform/shared/fmt/src/**/*.rs"
+    - "/platform/shared/fmt/Cargo.toml"
   rust-tests:
     - "**/*"
     - "!docs/**"
@@ -54,6 +73,14 @@ fileGroups:
     - "/engine/core/crates/**/Cargo.toml"
     - "/platform/shared/ooxml/src/**/*.rs"
     - "/platform/shared/ooxml/Cargo.toml"
+    - "/platform/shared/dml-chart/src/**/*.rs"
+    - "/platform/shared/dml-chart/Cargo.toml"
+    - "/modules/sheet/Cargo.toml"
+    - "/modules/sheet/sheet-core/**/*"
+    - "/modules/sheet/sheet-format/**/*"
+    - "/modules/sheet/registry/functions/*.yaml"
+    - "/platform/shared/fmt/src/**/*.rs"
+    - "/platform/shared/fmt/Cargo.toml"
 
 tasks:
   js-test:

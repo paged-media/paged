@@ -29,9 +29,23 @@ publish = false
 # The shared OOXML foundation: the OPC container (with its memory budget),
 # rels, the XML helpers and DrawingML colour. Without its `dom` feature, so
 # this workspace never compiles ooxmlsdk (slide reads parts as an element
-# tree, ADR 702). `deflate` keeps the zip backend this workspace always had.
-paged-ooxml = { path = "../../platform/shared/ooxml", features = ["deflate"] }
-zip = { version = "9", default-features = false, features = ["deflate"] }
+# tree, ADR 702). Its zip goes through flate2 (`deflate-flate2`), as this
+# workspace's does.
+paged-ooxml = { path = "../../platform/shared/ooxml", features = ["deflate-flate2"] }
+# The DrawingML chart model and reader, shared with sheet (slide ADR 709);
+# PowerPoint's chart layout stays in slide-chart.
+dml-chart = { path = "../../platform/shared/dml-chart", features = ["serde"] }
+# zip 9 deflates through flate2 alone, the declaration of engine/core, sheet,
+# publish and the server (and paged-store, which this workspace builds on):
+# zip's `deflate` feature would add zopfli (only for compression levels
+# above 9, which nothing here asks for) and pick flate2's zlib-rs backend.
+# flate2 below names the backend, so every crate that depends on `zip` lists
+# `flate2` beside it.
+zip = { version = "9", default-features = false, features = ["deflate-flate2"] }
+flate2 = { version = "1.1", default-features = false, features = ["rust_backend"] }
+# With ooxmlsdk gone from this graph (C1), nothing turns zlib-rs on, so the
+# packages are deflated by miniz_oxide: the parts are the same bytes, the
+# deflated streams are not (docs/migration/shared-foundations.md, C5).
 quick-xml = "0.41"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
