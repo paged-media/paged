@@ -30,7 +30,9 @@ schemars = { workspace = true, optional = true }
 # future curve-based features (offset / outline-stroke / curve
 # simplification). See path_math::bezier_conv for the
 # PathAnchor ↔ SimpleBezierPath converters.
-kurbo = "0.13"
+# Held at 0.11: kurbo 0.12's new stroker and offsetter change the geometry
+# outline stroke and offset path produce (docs/migration/rust-majors.md).
+kurbo = "0.11.3"
 # Not pinned with `=`: the workspace patches this to a build carrying the
 # upstream total-order fix (C-21, see the root Cargo.toml), and an exact pin
 # would exclude it. `Cargo.lock` is tracked, so the exact build stays
