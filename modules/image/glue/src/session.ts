@@ -1471,6 +1471,20 @@ export function createImageSession(host: BundleHost): ImageSession {
       emit();
       return false;
     }
+    // Finding IMG-1: a step across a canvas operation changes the extent
+    // (the engine re-sized the bound image); follow it here, as
+    // `canvasOp` does, so readouts and Commit see the restored canvas.
+    const src = state.source;
+    const extent = engine.layersExtent();
+    if (
+      extent.width > 0 &&
+      (extent.width !== src.width || extent.height !== src.height)
+    ) {
+      releaseTiles();
+      src.width = extent.width;
+      src.height = extent.height;
+      refreshSourceReadout();
+    }
     const ok = await recomposite();
     if (ok) setStatus(`${undo ? "Undid" : "Redid"} “${label}”.`);
     return ok;

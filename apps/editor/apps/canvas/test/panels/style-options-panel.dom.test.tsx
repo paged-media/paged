@@ -246,25 +246,22 @@ describe("Style Options panel: controls", () => {
 });
 
 describe("Style Options panel: findings", () => {
-  // The Name field takes the text and Enter, shows the new name, and
-  // sends nothing: the style keeps its old name with no message.
-  test.failing(
-    "PN-168: renaming a style in its Name field renames it (today nothing is sent and the field keeps the typed name)",
-    async () => {
-      covers("panel:paged.style-options");
-      const h = await mount();
-      const address = target(h)!;
-      const from = h.mark();
-      await h.typeInto("name", "Title");
-      expect(h.mutations(from)).toEqual([
-        set(address, "name", { type: "text", value: "Title" }),
-      ] as never);
-      expect((await rowsByName(h, "paragraphStyles")).get("Title")).toBe(
-        h.scene.paragraphStyle,
-      );
-      expect(optionLabels(styleSelect(h))).toContain("Title");
-    },
-  );
+  // Finding PN-168 (fixed): the Name field's Enter renames the style with
+  // core's set(name) (the SDK served the path itself and wrote nothing).
+  test("PN-168: renaming a style in its Name field renames it", async () => {
+    covers("panel:paged.style-options");
+    const h = await mount();
+    const address = target(h)!;
+    const from = h.mark();
+    await h.typeInto("name", "Title");
+    expect(h.mutations(from)).toEqual([
+      set(address, "name", { type: "text", value: "Title" }),
+    ] as never);
+    expect((await rowsByName(h, "paragraphStyles")).get("Title")).toBe(
+      h.scene.paragraphStyle,
+    );
+    expect(optionLabels(styleSelect(h))).toContain("Title");
+  });
 
   // UX audit F-22 (internal identifiers shown to users): enum fields list
   // the engine's member names ("LeftAlign", "NextColumn").

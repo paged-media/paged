@@ -58,12 +58,34 @@ export interface ExportTarget {
   action?: "dialog" | "image";
 }
 
+/** A target's readiness pill. The print PDF is the strictest standard
+ *  the document can meet (finding PN-305, UX audit F-11): PDF/X-4 when
+ *  the working space has an output intent, PDF 1.7 otherwise, and either
+ *  one exports. The other LIVE targets are ready the moment a document is
+ *  open; HONEST targets read `soon`. */
+export function exportReadiness(
+  target: Pick<ExportTarget, "id" | "live">,
+  loaded: boolean,
+  profileReady: boolean,
+  soon = "Coming soon",
+): { tone: "ready" | "warn" | "draft"; label: string } {
+  if (!target.live) return { tone: "draft", label: soon };
+  if (!loaded) return { tone: "draft", label: "No document" };
+  if (target.id === "pdf-x4") {
+    return {
+      tone: "ready",
+      label: profileReady ? "Ready · X-4" : "Ready · PDF 1.7",
+    };
+  }
+  return { tone: "ready", label: "Ready" };
+}
+
 export const EXPORT_TARGETS: ExportTarget[] = [
   {
     id: "pdf-x4",
     icon: "ui-doc",
-    title: "Print PDF (PDF/X-4)",
-    note: "Text as text · native CMYK + spot plates",
+    title: "Print PDF",
+    note: "PDF/X-4 with an output intent, else PDF 1.7 · text as text · native CMYK + spot plates",
     live: true,
     action: "dialog",
   },
@@ -255,8 +277,19 @@ export interface ImageExportResult {
  * stays unit-testable; it defaults to the Blob → object-URL → anchor
  * click pattern the PDF/IDML paths use.
  */
+/** The index in `pageIds` of the document's active page, else 0. */
+async function activePageIndexOf(
+  client: Partial<Pick<CanvasClient, "documentMeta">>,
+  pageIds: readonly string[],
+): Promise<number> {
+  const meta = await client.documentMeta?.().catch(() => null);
+  const index = meta?.activePage ? pageIds.indexOf(meta.activePage) : -1;
+  return Math.max(index, 0);
+}
+
 export async function runImageExport(
-  client: Pick<CanvasClient, "requestSnapshot">,
+  client: Pick<CanvasClient, "requestSnapshot"> &
+    Partial<Pick<CanvasClient, "documentMeta">>,
   args: {
     pageIds: string[];
     pageSizesPt: ReadonlyArray<readonly [number, number]>;
@@ -274,9 +307,11 @@ export async function runImageExport(
 
   let indices: number[];
   if (settings.scope === "current") {
-    indices = [
-      Math.min(Math.max(args.activePageIndex ?? 0, 0), pageIds.length - 1),
-    ];
+    // Finding PN-310: "Current page" is the page in view. A caller that
+    // names no index gets the document's active page, not page 1.
+    const active =
+      args.activePageIndex ?? (await activePageIndexOf(client, pageIds));
+    indices = [Math.min(Math.max(active, 0), pageIds.length - 1)];
   } else if (settings.scope === "range") {
     const parsed = parsePageRange(settings.range ?? "", pageIds.length);
     // REFUSE rather than fall back to every page. A range that parses

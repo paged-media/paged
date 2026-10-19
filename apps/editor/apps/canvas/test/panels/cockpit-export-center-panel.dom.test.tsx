@@ -98,8 +98,8 @@ describe("Export Center: states", () => {
     const h = await mount();
     expect(h.root.textContent).toContain("2 outputs available");
     expect(pill(h.root, "readiness-pdf-x4")).toEqual({
-      text: "PDF 1.7 — no output intent",
-      tone: "warn",
+      text: "Ready · PDF 1.7",
+      tone: "ready",
     });
     expect(pill(h.root, "readiness-image")).toEqual({
       text: "Ready",
@@ -190,17 +190,14 @@ describe("Export Center: controls", () => {
 });
 
 describe("Export Center: findings", () => {
-  // UX audit F-11: every new document fails the default PDF standard. The
-  // Export Center's one PDF output is the X-4 target, and on a document
-  // with no output intent it warns; Export… opens the dialog on X-4.
-  test.failing(
-    "PN-305 (UX F-11): a new document's PDF output is one it can meet (ready, not a warning)",
-    async () => {
-      covers("panel:paged.export-center");
-      const h = await mount();
-      expect(pill(h.root, "readiness-pdf-x4")?.tone).toBe("ready");
-    },
-  );
+  // Finding PN-305 (UX audit F-11, fixed): the print PDF is the strictest
+  // standard the document can meet, PDF 1.7 without an output intent, so a
+  // new document's PDF output is ready.
+  test("PN-305 (UX F-11): a new document's PDF output is one it can meet (ready, not a warning)", async () => {
+    covers("panel:paged.export-center");
+    const h = await mount();
+    expect(pill(h.root, "readiness-pdf-x4")?.tone).toBe("ready");
+  });
 
   // Each output row is a div with a click handler: no role, no tab stop.
   test.failing(

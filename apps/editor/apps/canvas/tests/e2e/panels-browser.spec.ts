@@ -307,22 +307,20 @@ test("Layers: Move selection here puts the frame clicked on the canvas on the la
   await expect.poll(itemLayer).toBe(was);
 });
 
-// At the right dock's default width (1280 × 720 window), each layer row's
-// four buttons (Hide, Lock, Move selection here, Printable) take the whole
-// row and the name column is squeezed to nothing: no row says which layer
-// it is.
-test.fail(
-  "PN-358: at the dock's default width every layer row shows its name",
-  async ({ page }) => {
-    covers("panel:paged.layers");
-    const ids = await twoLayers(page);
-    for (const id of ids) {
-      const name = layerRow(page, id).locator("[data-list-row-select]");
-      const box = await name.boundingBox();
-      expect(box?.width ?? 0).toBeGreaterThan(40);
-    }
-  },
-);
+// Finding PN-358 (fixed): at the right dock's default width (1280 × 720
+// window) each layer row's four toggles are glyph buttons (named by their
+// label), so the name column keeps its width.
+test("PN-358: at the dock's default width every layer row shows its name", async ({
+  page,
+}) => {
+  covers("panel:paged.layers");
+  const ids = await twoLayers(page);
+  for (const id of ids) {
+    const name = layerRow(page, id).locator("[data-list-row-select]");
+    const box = await name.boundingBox();
+    expect(box?.width ?? 0).toBeGreaterThan(40);
+  }
+});
 
 test("Properties follows a click on the canvas, and its stroke weight writes the clicked frame", async ({
   page,

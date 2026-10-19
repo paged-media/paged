@@ -195,6 +195,10 @@ const LAYERS_SCHEMA: ShellPanelSchema = {
                 // was visible or hidden.
                 label: "Hide",
                 state: { field: "visible", labelWhenOff: "Show" },
+                // PN-358: glyphs, as InDesign's Layers panel draws them, so
+                // four toggles leave the name its column.
+                icon: "ui-eye",
+                iconWhenOff: "ui-eye-off",
                 action: {
                   kind: "command",
                   command: LAYERS_TOGGLE_VISIBLE_COMMAND,
@@ -204,6 +208,8 @@ const LAYERS_SCHEMA: ShellPanelSchema = {
               {
                 label: "Unlock",
                 state: { field: "locked", labelWhenOff: "Lock" },
+                icon: "ui-lock",
+                iconWhenOff: "ui-unlock",
                 action: {
                   kind: "command",
                   command: LAYERS_TOGGLE_LOCKED_COMMAND,
@@ -226,6 +232,7 @@ const LAYERS_SCHEMA: ShellPanelSchema = {
                 // argues against at length. Sending the selection to a
                 // layer is the verb a designer actually reaches for.
                 label: "Move selection here",
+                icon: "ui-target",
                 action: {
                   kind: "command",
                   command: LAYERS_ASSIGN_SELECTION_COMMAND,
@@ -237,6 +244,8 @@ const LAYERS_SCHEMA: ShellPanelSchema = {
                 // and was simply absent from this panel.
                 label: "Printable",
                 state: { field: "printable", labelWhenOff: "Not printable" },
+                icon: "ui-print",
+                iconWhenOff: "ui-minus",
                 action: {
                   kind: "command",
                   command: LAYERS_TOGGLE_PRINTABLE_COMMAND,

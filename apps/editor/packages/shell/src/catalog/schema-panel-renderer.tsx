@@ -350,6 +350,8 @@ function SchemaListRow({
       // B2 — resolved per ROW by the leaf, which is the only tier that
       // has the row. Carried rather than resolved here for that reason.
       state: a.state,
+      icon: a.icon,
+      iconWhenOff: a.iconWhenOff,
       disabled: !gateOpen || applyTargetEmpty,
       onInvoke: (rowId: string) => {
         if (act.kind === "command") {

@@ -199,26 +199,24 @@ describe("Anchored Object: every control writes the anchored frame", () => {
     });
   }
 
-  // The panel's anchor-point options are spelled TopLeftAnchor …
-  // BottomRightAnchor; the engine's schema enum is TopLeftPoint …
-  // BottomRightPoint. Every choice is refused as invalidValue before it
-  // reaches the wire, and the field shows the refusal.
-  test.failing(
-    "PN-212: choosing the Center anchor point writes it (the engine's CenterPoint)",
-    async () => {
-      covers("panel:paged.anchored");
-      const h = await anchored();
-      await h.choose(select(h, "position"), "Anchored");
-      const center = [...select(h, "anchor-point").options].find(
-        (o) => o.textContent === "Center",
-      )!;
-      const from = h.mark();
-      await h.choose(select(h, "anchor-point"), center.value);
-      expect(h.mutations(from)).toHaveLength(1);
-      expect(await h.get(addr(h.scene.anchored), "anchorPoint")).toEqual({
-        type: "text",
-        value: "CenterPoint",
-      });
-    },
-  );
+  // Finding PN-212 (fixed in the engine): the anchor point is IDML's
+  // AnchorPoint enumeration, TopLeftAnchor … BottomRightAnchor, as InDesign
+  // writes it, the renderer reads it and the panel offers it. The engine's
+  // schema listed the reference points (TopLeftPoint …) instead and refused
+  // every choice as invalidValue.
+  test("PN-212: choosing the Center anchor point writes it (IDML's CenterAnchor)", async () => {
+    covers("panel:paged.anchored");
+    const h = await anchored();
+    await h.choose(select(h, "position"), "Anchored");
+    const center = [...select(h, "anchor-point").options].find(
+      (o) => o.textContent === "Center",
+    )!;
+    const from = h.mark();
+    await h.choose(select(h, "anchor-point"), center.value);
+    expect(h.mutations(from)).toHaveLength(1);
+    expect(await h.get(addr(h.scene.anchored), "anchorPoint")).toEqual({
+      type: "text",
+      value: "CenterAnchor",
+    });
+  });
 });

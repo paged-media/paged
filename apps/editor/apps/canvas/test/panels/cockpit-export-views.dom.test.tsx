@@ -92,11 +92,11 @@ describe("Outputs nav", () => {
     ]);
   });
 
-  test("a document without an output intent: PDF warns, images ready, the seams draft", async () => {
+  test("a document without an output intent: PDF (1.7) and images ready, the seams draft", async () => {
     covers("panel:paged.outputs");
     const h = await mountPanel(OutputsPanel, { id: "paged.outputs" });
     expect(dots(h)).toEqual([
-      ["pdf-x4", "warn"],
+      ["pdf-x4", "ready"],
       ["image", "ready"],
       ["web", "draft"],
       ["social", "draft"],
@@ -208,10 +208,11 @@ describe("Export inspector", () => {
   test("Print PDF: the readiness, the dialog hand-off, nothing sent here", async () => {
     covers("panel:paged.export-inspector");
     const h = await mount();
-    expect(h.root.textContent).toContain("Print PDF (PDF/X-4)");
+    expect(h.root.textContent).toContain("Print PDF");
+    // No output intent: the print PDF is PDF 1.7, and it exports (PN-305).
     expect(pill(h.root, "export-inspector-readiness")).toEqual({
-      text: "PDF 1.7 — no output intent",
-      tone: "warn",
+      text: "Ready · PDF 1.7",
+      tone: "ready",
     });
     const from = h.mark();
     await h.click(action(h.root, "export-inspector-run"));
@@ -319,25 +320,21 @@ describe("Export inspector", () => {
     );
   });
 
-  // `runImageExport` takes the active page's index for "Current page",
-  // and neither the inspector nor the Export Center passes it: it is
-  // always page 1.
-  test.failing(
-    "PN-310: Pages ▸ Current page exports the page in view, not page 1",
-    async () => {
-      covers("panel:paged.export-inspector");
-      const h = await mount(linksDocument());
-      await h.act(() => h.client.setActivePage("cp2"));
-      expect((await h.client.documentMeta()).activePage).toBe("cp2");
-      await h.act(() => setSelectedExportTarget("image"));
-      await h.choose(settings(h, "scope")!, "current");
-      const from = h.mark();
-      await h.click(action(h.root, "export-inspector-run-image"));
-      expect(
-        h
-          .sent("requestSnapshot", from)
-          .map((m) => (m.payload as { pageId: string }).pageId),
-      ).toEqual(["cp2"]);
-    },
-  );
+  // Finding PN-310 (fixed): "Current page" exports the document's active
+  // page when the caller names no index (it was always page 1).
+  test("PN-310: Pages ▸ Current page exports the page in view, not page 1", async () => {
+    covers("panel:paged.export-inspector");
+    const h = await mount(linksDocument());
+    await h.act(() => h.client.setActivePage("cp2"));
+    expect((await h.client.documentMeta()).activePage).toBe("cp2");
+    await h.act(() => setSelectedExportTarget("image"));
+    await h.choose(settings(h, "scope")!, "current");
+    const from = h.mark();
+    await h.click(action(h.root, "export-inspector-run-image"));
+    expect(
+      h
+        .sent("requestSnapshot", from)
+        .map((m) => (m.payload as { pageId: string }).pageId),
+    ).toEqual(["cp2"]);
+  });
 });

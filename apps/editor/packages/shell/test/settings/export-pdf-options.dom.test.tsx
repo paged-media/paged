@@ -128,8 +128,10 @@ describe("setting paged.exportPdf.options.v1", () => {
     covers("setting:paged.exportPdf.options.v1");
     mount(fakeClient().client);
     await waitFor(() => field("[data-export-dialog]"));
+    // No output intent: the standard the document can meet (PN-305,
+    // ADR 238).
     expect(field<HTMLSelectElement>("select[data-export-standard]").value).toBe(
-      "pdfx4",
+      "pdf17",
     );
     expect(field<HTMLSelectElement>("select[data-export-policy]").value).toBe(
       "preserveNumbers",
@@ -201,7 +203,7 @@ describe("setting paged.exportPdf.options.v1", () => {
       "convertToDestination",
     );
     expect(field<HTMLSelectElement>("select[data-export-standard]").value).toBe(
-      "pdfx4",
+      "pdf17",
     );
   });
 
@@ -211,8 +213,35 @@ describe("setting paged.exportPdf.options.v1", () => {
     mount(fakeClient().client);
     await waitFor(() => field("[data-export-dialog]"));
     expect(field<HTMLSelectElement>("select[data-export-standard]").value).toBe(
-      "pdfx4",
+      "pdf17",
     );
+  });
+
+  test("PN-305: with an output intent the dialog opens on PDF/X-4, without one on PDF 1.7", async () => {
+    covers("setting:paged.exportPdf.options.v1");
+    const withIntent = fakeClient().client as unknown as {
+      documentMeta: () => Promise<Record<string, unknown>>;
+    };
+    const meta = withIntent.documentMeta;
+    withIntent.documentMeta = async () => ({
+      ...(await meta()),
+      cmykProfileName: "FOGRA39",
+      cmykProfileActive: true,
+    });
+    const first = mount(withIntent as unknown as CanvasClient);
+    await waitFor(() =>
+      expect(
+        field<HTMLSelectElement>("select[data-export-standard]").value,
+      ).toBe("pdfx4"),
+    );
+    first.unmount();
+    mount(fakeClient().client);
+    await waitFor(() =>
+      expect(
+        field<HTMLSelectElement>("select[data-export-standard]").value,
+      ).toBe("pdf17"),
+    );
+    expect(localStorage.getItem(KEY)).toBeNull();
   });
 
   // Finding SH-103: the stored form is spread over the defaults without a

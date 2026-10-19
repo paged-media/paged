@@ -221,7 +221,6 @@ test.describe("UX audit 2026-10 — canvas gestures (expected failures until fix
   test("[F-32] a multi-page document opens with page 1 fitted, not the whole document @level:gesture", async ({
     page,
   }) => {
-    test.fail(EXPECTED, "F-32: documents open at fit-whole-document");
     await openCanvas(page);
     // The React path, and NO Home press: the camera the open leaves.
     await page.setInputFiles('input[type="file"]', {

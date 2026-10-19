@@ -2258,13 +2258,19 @@ export class CanvasClient {
         );
         return;
       // One request's dispatch threw; the worker reports it with that
-      // request's seq. Only that caller is rejected.
+      // request's seq. Only that caller is rejected — a binary load
+      // included (finding WRK-2: a throwing load used to stay pending,
+      // and every later font registration waited on it).
       case "dispatchError":
         if (msg.seq !== null) {
-          const p = this.pending.get(msg.seq) ?? this.bytesPending.get(msg.seq);
+          const p =
+            this.pending.get(msg.seq) ??
+            this.bytesPending.get(msg.seq) ??
+            this.loadDocPending.get(msg.seq);
           if (p) {
             this.pending.delete(msg.seq);
             this.bytesPending.delete(msg.seq);
+            this.loadDocPending.delete(msg.seq);
             p.reject(new Error(`canvas worker dispatch failed: ${details}`));
           }
         }

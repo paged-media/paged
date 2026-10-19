@@ -76,6 +76,15 @@ export function documentBounds(rects: ReadonlyArray<PageRect>): PageRect {
 }
 
 /**
+ * What a document opens on: its first page (UX audit F-32 — the view Home
+ * gives, with the page indicator on 1), not the whole document, which on
+ * a long document is a strip of slivers at a few percent.
+ */
+export function openingView(rects: ReadonlyArray<PageRect>): PageRect {
+  return rects[0] ?? { x: 0, y: 0, w: 0, h: 0 };
+}
+
+/**
  * Camera that fits `rect` (document space) into a viewport of the
  * given pixel size, with a margin. Centres the rect in the viewport.
  * Used for fit-to-document on load and fit-to-page on navigator click.

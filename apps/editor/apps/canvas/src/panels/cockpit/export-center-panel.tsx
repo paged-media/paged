@@ -46,6 +46,7 @@ import {
 import {
   EXPORT_TARGETS,
   exportTargetById,
+  exportReadiness,
   runImageExport,
   setSelectedExportTarget,
   useImageSettings,
@@ -59,12 +60,7 @@ function rowReadiness(
   loaded: boolean,
   profileReady: boolean,
 ): { tone: "ready" | "warn" | "draft"; label: string } {
-  if (!t.live) return { tone: "draft", label: "soon" };
-  if (!loaded) return { tone: "draft", label: "No document" };
-  if (t.id === "pdf-x4" && !profileReady) {
-    return { tone: "warn", label: "PDF 1.7 — no output intent" };
-  }
-  return { tone: "ready", label: t.id === "pdf-x4" ? "Ready · X-4" : "Ready" };
+  return exportReadiness(t, loaded, profileReady, "soon");
 }
 
 export function ExportCenterPanel() {

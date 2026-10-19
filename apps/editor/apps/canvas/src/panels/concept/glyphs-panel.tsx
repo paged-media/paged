@@ -40,6 +40,7 @@ import {
 import { KitSelect } from "@paged-media/ui";
 import type { FontSummary } from "@paged-media/client";
 
+import { insertAt } from "../../ui/useTextEditing";
 import { ConceptShell, Row, SeamSelect } from "./concept-kit";
 
 /** The gallery grid — punctuation, legal marks, fractions,
@@ -81,7 +82,7 @@ const GLYPHS = [
 
 export function GlyphsPanel() {
   const client = useCanvasClient();
-  const { contentSelection } = useContentSelection();
+  const { contentSelection, setContentSelection } = useContentSelection();
   const fonts = useCollection<FontSummary>("fonts");
   const [recent, setRecent] = useState<string[]>([]);
   const [family, setFamily] = useState<string>("");
@@ -92,23 +93,15 @@ export function GlyphsPanel() {
     ? `"${family}", var(--font-serif, serif)`
     : "var(--font-serif, serif)";
 
+  // Findings PN-210 / PN-211: a glyph goes in the way a typed character
+  // does — it replaces a selected range and moves the caret past it, so
+  // two clicks land in the order clicked.
   const insert = (glyph: string) => {
     if (!contentSelection) return;
-    void client
-      .mutate({
-        op: "insertText",
-        args: {
-          storyId: contentSelection.storyId,
-          offset: contentSelection.end,
-          text: glyph,
-        },
-      })
-      .then(() => {
-        setRecent((prev) =>
-          [glyph, ...prev.filter((g) => g !== glyph)].slice(0, 8),
-        );
-      })
-      .catch(() => {});
+    insertAt(client, contentSelection, glyph, setContentSelection);
+    setRecent((prev) =>
+      [glyph, ...prev.filter((g) => g !== glyph)].slice(0, 8),
+    );
   };
 
   const grid = (glyphs: string[], testId: string) => (

@@ -123,6 +123,14 @@ export interface SchemaListAction {
    *  so a spec asserts the state rather than the label text. */
   state?: { field: string; labelWhenOff: string };
 
+  /** A glyph for the button (a `ui-*` icon), drawn instead of the label
+   *  text, which stays the button's accessible name and its tooltip.
+   *  `iconWhenOff` follows `state` the way `labelWhenOff` does. A row with
+   *  several actions keeps its name column readable at a dock's default
+   *  width this way (finding PN-358, the Layers row's four toggles). */
+  icon?: string;
+  iconWhenOff?: string;
+
   /** Gate the button on a published binding (absent = enabled;
    *  `applyEntity` actions additionally disable while the target
    *  selection is empty — the honest no-write-path rule). */

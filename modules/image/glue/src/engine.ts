@@ -1634,6 +1634,9 @@ export interface ImageEngine {
   /** Undo/redo the newest journaled PIXEL edit (paint / fill / bake) and
    *  re-composite. Resolves to the edit's label, or "" when there is
    *  nothing to do. Layer STRUCTURE changes are not journaled. */
+  /** The open stack's canvas extent (`{0, 0}` with none open) — what an
+   *  undo or redo across a canvas operation leaves (finding IMG-1). */
+  layersExtent(): { width: number; height: number };
   layersUndo(): Promise<string>;
   layersRedo(): Promise<string>;
 }
@@ -2230,6 +2233,7 @@ export interface ImageWasmModule {
   layers_export(): Uint8Array[];
   layers_import(manifest: Uint8Array, buffers: Uint8Array[]): Promise<void>;
   psd_save_layers(psd_handle: number): string;
+  layers_extent(): Uint32Array;
   layers_undo(): Promise<string>;
   layers_redo(): Promise<string>;
 }
@@ -3085,6 +3089,10 @@ export function wrapEngine(wasm: ImageWasmModule): ImageEngine {
         p.invert,
         packAdjustExt(p),
       ),
+    layersExtent() {
+      const wh = wasm.layers_extent();
+      return { width: wh[0] ?? 0, height: wh[1] ?? 0 };
+    },
     layersUndo: () => wasm.layers_undo(),
     layersRedo: () => wasm.layers_redo(),
   };

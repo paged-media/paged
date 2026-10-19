@@ -58,7 +58,9 @@ export type {
 
 export {
   ContentSelectionProvider,
+  heldTypingStyle,
   useContentSelection,
+  type TypingStyle,
 } from "./state/content-selection-context";
 
 // ── Tool stack (Concept 1) ─────────────────────────────────────

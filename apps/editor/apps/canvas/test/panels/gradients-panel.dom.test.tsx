@@ -316,19 +316,15 @@ describe("Gradients panel: controls", () => {
 });
 
 describe("Gradients panel: findings", () => {
-  // The editor loads a gradient's stops when it is picked, and only
-  // then: an edit from elsewhere (Gradient Options, a script, an undo of
-  // one of its own edits) leaves it showing the old ramp, and its next
-  // commit writes that old ramp back over the change.
-  test.failing(
-    "PN-160: the ramp editor follows the gradient when it changes elsewhere",
-    async () => {
-      covers("panel:paged.gradients");
-      const h = await mount();
-      await h.mutate(threeStopEdit(h.scene) as never);
-      expect(stopRows(h)).toHaveLength(3);
-    },
-  );
+  // Finding PN-160 (fixed): the ramp editor reloads the active gradient on
+  // every applied change, so an edit from elsewhere (Gradient Options, a
+  // script, an undo) shows, and its next commit cannot write a stale ramp back.
+  test("PN-160: the ramp editor follows the gradient when it changes elsewhere", async () => {
+    covers("panel:paged.gradients");
+    const h = await mount();
+    await h.mutate(threeStopEdit(h.scene) as never);
+    expect(stopRows(h)).toHaveLength(3);
+  });
 
   // UX audit F-22 (internal identifiers shown to users): the ramp's stop
   // handles are named by the swatch's IDML id.

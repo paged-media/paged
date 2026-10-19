@@ -73,7 +73,7 @@ import type {
   TextCellAddr,
 } from "@paged-media/client";
 import {
-  documentBounds,
+  openingView,
   fitCamera,
   layoutPages,
   zoomAt,
@@ -303,7 +303,7 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
   // effect below.
   const fitOnAttach = useEffectEvent((width: number, height: number) => {
     if (rects.length > 0 && width > 10 && height > 10) {
-      props.onCameraChange(fitCamera(width, height, documentBounds(rects)));
+      props.onCameraChange(fitCamera(width, height, openingView(rects)));
     }
   });
   useEffect(() => {
@@ -385,7 +385,7 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
     if (!wrapperRef.current || rects.length === 0) return;
     const { width, height } = wrapperRef.current.getBoundingClientRect();
     if (width < 10 || height < 10) return;
-    props.onCameraChange(fitCamera(width, height, documentBounds(rects)));
+    props.onCameraChange(fitCamera(width, height, openingView(rects)));
     lastFitDocRef.current = props.docId;
   }, [rects, props]);
 

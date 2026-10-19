@@ -157,9 +157,20 @@ export function ExportPdfDialog() {
       setActiveProfile(meta.cmykProfileName ?? null);
       setProfileActive(meta.cmykProfileActive ?? false);
       setPageCount(meta.pageCount);
+      const canMeetX4 = meta.cmykProfileActive ?? false;
       setForm((f) => ({
         ...f,
         pageTo: f.allPages ? String(meta.pageCount) : f.pageTo,
+        // Finding PN-305 (UX audit F-11): the dialog opens on the
+        // strictest standard the document can meet — PDF/X-4 when its
+        // working space has an output intent (or a profile was picked),
+        // PDF 1.7 otherwise — so the default always exports. X-4 stays an
+        // informed choice in the menu. Not persisted: the next document
+        // decides again.
+        standard:
+          canMeetX4 || f.outputIntentProfile !== ""
+            ? loadSaved().standard
+            : "pdf17",
       }));
     });
     return () => {

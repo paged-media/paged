@@ -530,8 +530,9 @@ bleed accessor; colour section reads live profile/intent/ink limit.
 
 Kit centred readiness table, now **honest-or-live for every row** (six outputs).
 **LIVE** through the published client surface, each with a real per-row
-"Export…" action: **Print PDF (PDF/X-4)** (readiness from working space; opens
-the live `ExportPdfDialog`), **Page images (PNG)** (`client.requestSnapshot` →
+"Export…" action: **Print PDF** (the strictest standard the document can meet:
+PDF/X-4 with an output intent in the working space, PDF 1.7 otherwise, both
+ready; opens the live `ExportPdfDialog` on that standard), **Page images (PNG)** (`client.requestSnapshot` →
 real PNG bytes per page, downloaded; DPI/scope from the inspector's inline
 settings), **IDML package** (`client.exportIdml` → real `.idml`, downloaded —
 the same bytes as File ▸ Save As IDML). **HONEST seams** ("soon", disabled):

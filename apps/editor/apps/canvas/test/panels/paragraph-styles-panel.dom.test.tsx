@@ -100,37 +100,32 @@ describe("paged.paragraph-styles: paragraphs", () => {
 });
 
 describe("paged.paragraph-styles: findings", () => {
-  // Delete removes the style and leaves the text pointing at its id;
-  // the engine then mints that id again for the next style.
-  test.failing(
-    "PN-150: deleting the applied style puts its text back on the root style",
-    async () => {
-      covers("panel:paged.paragraph-styles");
-      const h = await mount();
-      await h.caret(h.scene.storyId, 3);
-      await h.click(applyItem(h, h.scene.paragraphStyle));
-      await h.click(applyAction(h, "delete"));
-      expect(
-        await h.get(at(h.scene.storyId, 3), "appliedParagraphStyle"),
-      ).toEqual({
-        type: "text",
-        value: "ParagraphStyle/$ID/[No paragraph style]",
-      });
-    },
-  );
+  // Findings PN-150 and PN-151 (fixed, engine ADR 194): Delete moves the
+  // text that carries the style to the root style, in one undo step, so a
+  // new style that reuses the id is applied to nothing.
+  test("PN-150: deleting the applied style puts its text back on the root style", async () => {
+    covers("panel:paged.paragraph-styles");
+    const h = await mount();
+    await h.caret(h.scene.storyId, 3);
+    await h.click(applyItem(h, h.scene.paragraphStyle));
+    await h.click(applyAction(h, "delete"));
+    expect(
+      await h.get(at(h.scene.storyId, 3), "appliedParagraphStyle"),
+    ).toEqual({
+      type: "text",
+      value: "ParagraphStyle/$ID/[No paragraph style]",
+    });
+  });
 
-  test.failing(
-    "PN-151: a style made after a delete is not applied to text that never received it",
-    async () => {
-      covers("panel:paged.paragraph-styles");
-      const h = await mount();
-      await h.caret(h.scene.storyId, 3);
-      await h.click(applyItem(h, h.scene.paragraphStyle));
-      await h.click(applyAction(h, "delete"));
-      await h.click(applyAction(h, "new"));
-      // The new style took the deleted one's id, so the list now says the
-      // caret's paragraph carries "New paragraph style".
-      expect(appliedItem(h)).toBeNull();
-    },
-  );
+  test("PN-151: a style made after a delete is not applied to text that never received it", async () => {
+    covers("panel:paged.paragraph-styles");
+    const h = await mount();
+    await h.caret(h.scene.storyId, 3);
+    await h.click(applyItem(h, h.scene.paragraphStyle));
+    await h.click(applyAction(h, "delete"));
+    await h.click(applyAction(h, "new"));
+    // The new style may take the deleted one's id; the caret's paragraph
+    // stays on the root style the delete put it on.
+    expect(appliedItem(h)).toBe("ParagraphStyle/$ID/[No paragraph style]");
+  });
 });
