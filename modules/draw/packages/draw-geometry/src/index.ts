@@ -34,7 +34,6 @@ export { segmentDistance, simplifyRdp, simplifyRdpIndices } from "./rdp";
 export {
   anchorTargets,
   closestOnSegment,
-  pageTargets,
   snapPoint,
   type SnapResult,
   type SnapTarget,
