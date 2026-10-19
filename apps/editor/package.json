@@ -19,7 +19,7 @@
     "test:journal": "bun test ./scripts/journal.test.mjs",
     "test:object-model": "bun test ./scripts/object-model.test.mjs",
     "test:wasm-budget": "bun scripts/wasm-budget.mjs",
-    "test:surface-coverage": "bun scripts/surface-coverage.mjs",
+    "test:surface-coverage": "bun test ./scripts/surface-coverage.test.mjs && bun scripts/surface-coverage.mjs",
     "test:bundle-contracts": "bun run --filter ./apps/canvas test:contracts",
     "test:headless": "bun run --filter ./apps/canvas test:headless",
     "test:seam-guard": "bun scripts/seam-guard.mjs",
@@ -27,5 +27,8 @@
     "test:feat-vocabulary": "bun scripts/feat-vocabulary-guard.mjs",
     "test:solo-profiles": "bun scripts/solo-profiles-guard.mjs",
     "test:client-catalog": "bun scripts/client-api-catalog.mjs --check"
+  },
+  "devDependencies": {
+    "@babel/parser": "7.29.8"
   }
 }
