@@ -22,6 +22,8 @@ exact-decimal = ["dep:rust_decimal"]
 
 [dependencies]
 sheet-core = { path = "../sheet-core" }
+# The calendar, the locale table and digit grouping (platform/shared/fmt).
+paged-fmt = { path = "../../../platform/shared/fmt" }
 sheet-format = { path = "../sheet-format" }
 compact_str.workspace = true
 # exact-decimal SPIKE carrier (D-6, M3) — OPTIONAL, keyed on `exact-decimal`.
