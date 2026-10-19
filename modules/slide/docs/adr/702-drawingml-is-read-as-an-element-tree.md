@@ -27,3 +27,12 @@ Export (ADR 704) may use the typed structs where writing benefits from them.
 - The reader is short and tolerant of real-world files: all corpus decks read with no error.
 - Correctness against the schema is checked by tests and the PowerPoint oracle (ADR 705), not by
   the type system.
+
+## Amendment 2026-10-19
+
+The element tree moved to `paged_ooxml::tree` (`platform/shared/ooxml`, doc ADR 607), because
+the shared chart reader (ADR 709) reads paged.sheet's charts through it too. `pptx-import/src/xml.rs`
+re-exports it; the decision stands. Two things changed: the chart namespace also matches the
+strict `http://purl.oclc.org/ooxml/drawingml/chart`, as the other namespaces already did, and
+element text has its line ends normalised as XML 1.0 requires (CR LF and a lone CR read as LF;
+a `&#13;` reference is kept), which paged.sheet's chart titles relied on.

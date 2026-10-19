@@ -1061,6 +1061,7 @@ mod tests {
                         ..Default::default()
                     }],
                     labels: None,
+                    element: "barChart".into(),
                 }],
                 ..Default::default()
             };

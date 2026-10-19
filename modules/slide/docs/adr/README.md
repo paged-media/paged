@@ -13,3 +13,4 @@ Range 700–749.
 | [706](706-transitions-run-on-webgpu-with-gl-transitions.md) | Slide transitions run on WebGPU, using the gl-transitions shader collection | Accepted 2026-10-05 |
 | [707](707-embedded-fonts-are-decoded-and-given-to-the-document.md) | A deck's embedded fonts are decoded here and given to the document within their licences | Accepted 2026-10-14 |
 | [708](708-a-deck-is-built-as-a-native-document.md) | A deck is built as a native document with the engine's model crates | Accepted 2026-10-19 |
+| [709](709-one-drawingml-chart-reader.md) | One DrawingML chart reader and model for paged.slide and paged.sheet; the layouts stay per module | Accepted 2026-10-19 |

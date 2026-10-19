@@ -1,0 +1,31 @@
+[package]
+name = "dml-chart"
+version = "0.0.0"
+edition = "2021"
+rust-version = "1.99"
+license = "AGPL-3.0-only OR LicenseRef-PMEL"
+publish = false
+description = "The DrawingML chart model and reader shared by paged.sheet and paged.slide: one c:chartSpace parse into plots, series (cached values and formula references), axes, title and legend, with each module's own paint and text types. The Excel and PowerPoint layout profiles stay in the modules."
+
+# A workspace of its own, as platform/shared/ooxml is: sheet and slide take
+# it as a path dependency (docs/adr/PM-0005).
+[workspace]
+
+[features]
+default = []
+# serde derives on the model (paged.slide serialises its deck IR).
+serde = ["dep:serde"]
+# A zip backend for paged-ooxml, which requires one, in this crate's own
+# build and tests only. The modules choose theirs through their own
+# paged-ooxml dependency and never enable this.
+standalone = ["paged-ooxml/deflate"]
+
+[dependencies]
+paged-ooxml = { path = "../ooxml" }
+serde = { version = "1", features = ["derive"], optional = true }
+
+[dev-dependencies]
+paged-ooxml = { path = "../ooxml", features = ["deflate"] }
+
+[lints.clippy]
+all = "warn"

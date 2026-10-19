@@ -112,6 +112,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "dml-chart"
+version = "0.0.0"
+dependencies = [
+ "paged-ooxml",
+ "serde",
+]
+
+[[package]]
 name = "equivalent"
 version = "1.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -289,6 +297,7 @@ checksum = "a89322df9ebe1c1578d689c92318e070967d1042b512afbe49518723f4e6d5cd"
 name = "pptx-core"
 version = "0.0.0"
 dependencies = [
+ "dml-chart",
  "serde",
 ]
 
@@ -319,6 +328,7 @@ dependencies = [
 name = "pptx-import"
 version = "0.0.0"
 dependencies = [
+ "dml-chart",
  "paged-ooxml",
  "paged-test-resources",
  "pptx-core",

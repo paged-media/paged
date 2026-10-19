@@ -21,6 +21,8 @@ on:
       - "platform/shared/test-resources/**"
       # The shared OOXML foundation, a path dependency of the Cargo workspace.
       - "platform/shared/ooxml/**"
+      # The shared DrawingML chart reader, a path dependency (slide ADR 709).
+      - "platform/shared/dml-chart/**"
       # slide-native path-depends on the engine's model crates (ADR 708), and
       # through them on more engine crates and engine/core's workspace
       # settings, so an engine change can break it.
@@ -39,6 +41,8 @@ on:
       - "platform/shared/test-resources/**"
       # The shared OOXML foundation, a path dependency of the Cargo workspace.
       - "platform/shared/ooxml/**"
+      # The shared DrawingML chart reader, a path dependency (slide ADR 709).
+      - "platform/shared/dml-chart/**"
       # slide-native path-depends on the engine's model crates (ADR 708), and
       # through them on more engine crates and engine/core's workspace
       # settings, so an engine change can break it.

@@ -31,6 +31,9 @@ publish = false
 # this workspace never compiles ooxmlsdk (slide reads parts as an element
 # tree, ADR 702). `deflate` keeps the zip backend this workspace always had.
 paged-ooxml = { path = "../../platform/shared/ooxml", features = ["deflate"] }
+# The DrawingML chart model and reader, shared with sheet (slide ADR 709);
+# PowerPoint's chart layout stays in slide-chart.
+dml-chart = { path = "../../platform/shared/dml-chart", features = ["serde"] }
 zip = { version = "9", default-features = false, features = ["deflate"] }
 quick-xml = "0.41"
 serde = { version = "1", features = ["derive"] }

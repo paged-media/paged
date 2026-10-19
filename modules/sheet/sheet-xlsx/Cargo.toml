@@ -49,6 +49,9 @@ sheet-parser = { path = "../sheet-parser" }
 # Without `dom` (no ooxmlsdk); `deflate-flate2` is the zip backend this
 # workspace always had (flate2's rust_backend, root Cargo.toml).
 paged-ooxml = { path = "../../../platform/shared/ooxml", features = ["deflate-flate2"] }
+# The DrawingML chart reader and model, shared with slide (slide ADR 709):
+# `parts::chart` folds it into `sheet_chart::ChartModel`, the Excel profile.
+dml-chart = { path = "../../../platform/shared/dml-chart" }
 zip.workspace = true
 # Not called directly: it selects zip's deflate backend (miniz_oxide), so a
 # save writes the same compressed bytes in every build (see the root
