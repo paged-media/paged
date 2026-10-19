@@ -313,7 +313,7 @@ describe("Master Options (paged.master-options)", () => {
   // The picker's labels are fetched once per LIST of addresses
   // (useObjectNames keys on the list), so a rename that keeps the list
   // leaves the old name in the picker.
-  test.failing(
+  test(
     "PN-208: after a rename the picker shows the new name",
     async () => {
       covers("panel:paged.master-options");

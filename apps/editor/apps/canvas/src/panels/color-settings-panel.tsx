@@ -44,7 +44,11 @@ const INTENTS = [
 
 export function ColorSettingsPanel() {
   const client = useCanvasClient();
-  const [profiles, setProfiles] = useState<string[]>([]);
+  // Seeded from every profile registered so far, then followed.
+  // (A test double of the client may not keep the list.)
+  const [profiles, setProfiles] = useState<string[]>(() => [
+    ...(client.colorProfileNames?.() ?? []),
+  ]);
   const [cmykProfile, setCmykProfile] = useState<string>("");
   const [intent, setIntent] = useState<string>("RelativeColorimetric");
   const [bpc, setBpc] = useState(true);

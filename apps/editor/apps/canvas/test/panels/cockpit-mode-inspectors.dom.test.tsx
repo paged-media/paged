@@ -96,7 +96,7 @@ describe("Story inspector", () => {
   // The count comes from the stats the engine sends at load and in reply
   // to a content selection; an edit that adds a story sends none, so the
   // header keeps the load's number. Same root as PN-300 (Health).
-  test.failing(
+  test(
     "PN-304: the story count follows the document: two stories added read 2 stories",
     async () => {
       covers("panel:paged.story-inspector");

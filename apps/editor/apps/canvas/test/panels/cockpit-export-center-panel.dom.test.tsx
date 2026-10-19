@@ -216,7 +216,7 @@ describe("Export Center: findings", () => {
   // "Publish every format from one place": the Outputs nav lists the
   // plugins' exporters (paged.publish's IDML among them), the Export
   // Center's table lists only its five built-in outputs.
-  test.failing(
+  test(
     "PN-309: the Export Center lists the plugins' exporters too",
     async () => {
       covers("panel:paged.export-center");

@@ -36,10 +36,11 @@
 // Same convention `useBindings` follows.
 
 import { useEffect, useState } from "react";
-import type {
-  CollectionName,
-  DocumentMeta,
-  DocumentStats,
+import {
+  changesTheDocument,
+  type CollectionName,
+  type DocumentMeta,
+  type DocumentStats,
 } from "@paged-media/client";
 
 import { useCanvasClient } from "../state/canvas-client-context";
@@ -47,7 +48,8 @@ import { useDocument } from "../state/document-context";
 
 /**
  * Hook returning the live array for a named document collection.
- * Re-fetches on every Operation-log push (mutation / undo / redo).
+ * Re-fetches on every change to the document (`changesTheDocument`:
+ * mutation, undo, redo, a gesture's commit, a script, a font registered).
  *
  * The cast to `T[]` is the deliberate boundary where the caller
  * commits to a typed `*Summary` shape — the wire-format
@@ -81,16 +83,7 @@ export function useCollection<T>(name: CollectionName): T[] | null {
     };
     refetch();
     const off = client.subscribe((msg) => {
-      if (
-        msg.kind === "mutationApplied" ||
-        msg.kind === "undoApplied" ||
-        msg.kind === "redoApplied" ||
-        // A script writes without mutationApplied notifications.
-        msg.kind === "scriptResult" ||
-        msg.kind === "documentLoaded"
-      ) {
-        refetch();
-      }
+      if (changesTheDocument(msg)) refetch();
     });
     return () => {
       cancelled = true;
@@ -131,16 +124,7 @@ export function useDocumentMeta(): DocumentMeta | null {
     };
     refetch();
     const off = client.subscribe((msg) => {
-      if (
-        msg.kind === "mutationApplied" ||
-        msg.kind === "undoApplied" ||
-        msg.kind === "redoApplied" ||
-        // A script writes without mutationApplied notifications.
-        msg.kind === "scriptResult" ||
-        msg.kind === "documentLoaded"
-      ) {
-        refetch();
-      }
+      if (changesTheDocument(msg)) refetch();
     });
     // A save flips `dirty` with no worker message to say so.
     const offSaved = client.onSaved(refetch);
@@ -174,8 +158,24 @@ export function useDocumentStats(): DocumentStats | null {
   useEffect(() => {
     if (handle?.stats) setStats(handle.stats);
   }, [handle]);
+  const hasDocument = handle != null;
 
   useEffect(() => {
+    let live = true;
+    // An edit pushes no counts, so they are read again after every
+    // change to the document (PN-300, PN-304: the tiles kept the load's
+    // numbers after an edit added a frame or a story).
+    const reread = () => {
+      void client
+        .documentStats()
+        .then((next) => {
+          if (live && next) setStats(next);
+        })
+        .catch(() => {});
+    };
+    // …and once on mount: the handle's counts are the load's, and a
+    // panel opened after an edit would show those.
+    if (hasDocument) reread();
     const off = client.subscribe((msg) => {
       if (msg.kind === "stats") {
         setStats(msg.payload);
@@ -186,10 +186,16 @@ export function useDocumentStats(): DocumentStats | null {
         // writes without the round trip that pushes `stats`.
         const after = (msg.payload as { stats?: DocumentStats }).stats;
         if (after) setStats(after);
+        else reread();
+      } else if (changesTheDocument(msg)) {
+        reread();
       }
     });
-    return off;
-  }, [client]);
+    return () => {
+      live = false;
+      off();
+    };
+  }, [client, hasDocument]);
 
   return stats;
 }

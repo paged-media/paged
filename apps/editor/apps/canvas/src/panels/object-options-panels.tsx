@@ -106,6 +106,14 @@ function useObjectNames(list: readonly string[] | null): Map<string, string> {
   // The addresses by value: the effect reads them back from the key, so a
   // new array with the same addresses does not run it again.
   const key = JSON.stringify(list ?? []);
+  // …and again after every change to the objects: a rename keeps the list
+  // and changes a name (PN-208).
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    if (!model) return;
+    const d = model.objects.onDidChange(() => setTick((n) => n + 1));
+    return () => d.dispose();
+  }, [model]);
   useEffect(() => {
     const addresses = JSON.parse(key) as string[];
     if (!model || addresses.length === 0) {
@@ -126,7 +134,7 @@ function useObjectNames(list: readonly string[] | null): Map<string, string> {
     return () => {
       cancelled = true;
     };
-  }, [model, key]);
+  }, [model, key, tick]);
   return names;
 }
 

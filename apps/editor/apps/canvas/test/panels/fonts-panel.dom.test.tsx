@@ -142,7 +142,7 @@ describe("Fonts panel: findings", () => {
   // useCollection re-reads on mutation / undo / redo / script / load, not
   // on fontRegistered: a family the user just supplied still reads
   // "missing" until something else edits the document.
-  test.failing(
+  test(
     "PN-106: registering a missing family's font updates the list at once",
     async () => {
       covers("panel:paged.fonts");

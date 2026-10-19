@@ -40,6 +40,7 @@ import {
   type ContentSelection,
   type DocumentHandle,
   type DocumentMeta,
+  type DocumentStats,
   type ExportPdfWireOptions,
   type ElementGeometryItem,
   type FontScope,
@@ -275,8 +276,39 @@ function sameBytes(a: Uint8Array, b: Uint8Array): boolean {
   return true;
 }
 
+/**
+ * Whether a worker message means the document may have changed, so a
+ * view that READ something from it (a collection, the meta, the counts)
+ * must read again (R15, editor ADR 248). One list for every reader: the
+ * readers that kept their own missed a font registered (a missing font's
+ * badge stayed), a gesture's commit, a part written by a plugin.
+ */
+export function changesTheDocument(msg: WorkerToMain): boolean {
+  switch (msg.kind) {
+    case "documentLoaded":
+    case "mutationApplied":
+    case "undoApplied":
+    case "redoApplied":
+    case "gestureCommitted":
+    // A script writes without mutationApplied notifications.
+    case "scriptResult":
+    case "fontRegistered":
+    case "fontRegistryCleared":
+    case "pagedPartWritten":
+    case "pagedPartDeleted":
+      return true;
+    default:
+      return false;
+  }
+}
+
 export class CanvasClient {
   private readonly worker: Worker;
+  /** The selection last posted (`setSelection`); `documentStats` posts it
+   *  again. A new document starts with none. */
+  private lastSelection: ContentSelection | null = null;
+  /** `colorProfileNames` — every profile the worker confirmed. */
+  private readonly colorProfiles: string[] = [];
   private nextSeq = 1;
   private readonly pending = new Map<number, PendingReply>();
   private readonly listeners = new Set<(msg: WorkerToMain) => void>();
@@ -581,7 +613,24 @@ export class CanvasClient {
   async setSelection(
     selection: ContentSelection | null,
   ): Promise<WorkerToMain> {
+    this.lastSelection = selection;
     return this.send({ kind: "setSelection", payload: { selection } });
+  }
+
+  /**
+   * The document's counts now (spreads, pages, frames, stories, …), or
+   * null without a document. The worker pushes them at load and answers
+   * them to a selection post; there is no request of their own, so this
+   * posts the selection last sent again, which changes nothing and is
+   * answered with the current counts (PN-300, PN-304: views that kept the
+   * load's counts after an edit).
+   */
+  async documentStats(): Promise<DocumentStats | null> {
+    const reply = await this.send({
+      kind: "setSelection",
+      payload: { selection: this.lastSelection },
+    });
+    return reply.kind === "stats" ? reply.payload : null;
   }
 
   /**
@@ -800,6 +849,7 @@ export class CanvasClient {
       case "documentLoaded":
         // A fresh document starts clean in the engine; forget the old save.
         this.savedAtEdit = null;
+        this.lastSelection = null;
         this.openDocId = msg.payload.docId;
         return;
       case "mutationApplied":
@@ -810,6 +860,10 @@ export class CanvasClient {
       case "pagedPartWritten":
       case "pagedPartDeleted":
         this.editCount += 1;
+        return;
+      case "colorProfileRegistered":
+        if (!this.colorProfiles.includes(msg.payload.name))
+          this.colorProfiles.push(msg.payload.name);
         return;
       default:
         return;
@@ -896,6 +950,14 @@ export class CanvasClient {
    * resolve against it; a document whose designmap names a
    * registered profile activates it at load.
    */
+  /** The names of the colour profiles registered with this worker, in
+   *  registration order: a view that lists them seeds from here and
+   *  follows `colorProfileRegistered` (PN-158: a list built only from the
+   *  messages a panel saw while mounted missed the earlier ones). */
+  colorProfileNames(): readonly string[] {
+    return [...this.colorProfiles];
+  }
+
   async registerColorProfile(name: string, bytes: Uint8Array): Promise<void> {
     const reply = await this.send({
       kind: "registerColorProfile",
@@ -1861,10 +1923,14 @@ export class CanvasClient {
     style: string | null = null,
     options: { scope?: FontScope } = {},
   ): Promise<void> {
-    const face =
-      (options.scope ?? "document") === "document"
-        ? this.addSessionFace(family, style, bytes)
-        : null;
+    const documentScope = (options.scope ?? "document") === "document";
+    const face = documentScope ? this.addSessionFace(family, style, bytes) : null;
+    // A session face the engine already holds byte for byte (the default
+    // family's other faces, asked for again after every load) is not
+    // posted again: the engine keeps every registered face for later
+    // loads, so each repeat was one more copy of the font in its memory
+    // (PAR-2, ADR 248).
+    if (documentScope && face === null) return;
     const reply = await this.post({
       kind: "registerFont",
       payload: {

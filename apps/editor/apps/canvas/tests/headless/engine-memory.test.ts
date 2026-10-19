@@ -77,8 +77,36 @@ describe("engine memory across document loads", () => {
     expect(grown).toBeLessThanOrEqual(BOUND);
   });
 
+  // PAR-2 (fixed, ADR 248): the client registered the default faces again
+  // after every load, and the engine keeps every registered face for later
+  // loads, so each open added a copy (~4 MB). A face the client already
+  // registered byte for byte is not posted again.
+  test("PAR-2: a load does not register the default faces again", async () => {
+    await rebootHeadlessEngine();
+    const ed = await createHeadlessEditor({ idml: doc() });
+    try {
+      await ed.load(doc());
+      const worker = ed.worker as unknown as {
+        postMessage(m: unknown, t?: unknown): void;
+      };
+      const post = worker.postMessage.bind(worker);
+      let registered = 0;
+      worker.postMessage = (m: unknown, t?: unknown) => {
+        if ((m as { msg?: { kind?: string } })?.msg?.kind === "registerFont")
+          registered++;
+        post(m, t as never);
+      };
+      for (let i = 0; i < 10; i++) await ed.load(doc());
+      expect(registered).toBe(0);
+    } finally {
+      await ed.dispose();
+    }
+  });
+
+  // What is left of the editor's growth per open is PAR-1's (~0.85 MB, the
+  // load's fallback font kept by the engine): flat once PAR-1 is fixed.
   test.failing(
-    "PAR-2: opening documents in the editor keeps its memory flat (the client re-registers the default faces after every load; ~4 MB per open)",
+    "PAR-1 in the editor: opening documents keeps its memory flat (each open keeps the fallback font, PAR-1)",
     async () => {
       await rebootHeadlessEngine();
       const ed = await createHeadlessEditor({ idml: doc() });

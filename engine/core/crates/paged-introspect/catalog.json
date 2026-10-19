@@ -12744,6 +12744,7 @@
         "min": 0.0,
         "max": 100.0
       },
+      "default": 100.0,
       "access": "readWrite",
       "virtual": {
         "op": "editSwatch",
@@ -12776,6 +12777,7 @@
         "min": 0.0,
         "max": 100.0
       },
+      "default": 100.0,
       "access": "readWrite",
       "virtual": {
         "op": "editSwatch",
