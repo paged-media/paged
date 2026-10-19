@@ -24,6 +24,11 @@
 // transform maps these to viewport (CSS) pixels.
 
 import type { Camera } from "@paged-media/client";
+// Deep import: the worker reads this module, and the shell barrel pulls in React.
+import {
+  ZOOM_MAX_SCALE,
+  ZOOM_MIN_SCALE,
+} from "@paged-media/shell/state/zoom-range";
 
 export interface PageRect {
   /** Top-left x in document space (pt). */
@@ -112,8 +117,8 @@ export function zoomAt(
   cursorViewportX: number,
   cursorViewportY: number,
   factor: number,
-  minScale = 0.05,
-  maxScale = 16,
+  minScale = ZOOM_MIN_SCALE,
+  maxScale = ZOOM_MAX_SCALE,
 ): Camera {
   const newScale = Math.max(minScale, Math.min(maxScale, cam.scale * factor));
   if (newScale === cam.scale) return cam;

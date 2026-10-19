@@ -27,6 +27,7 @@ import { createDebouncer } from "@paged-media/panel-kit";
 
 import type { WorkflowMode } from "../state/workflow-mode-context";
 import { scopedChromeKey } from "../state/chrome-storage-scope";
+import { isRecord, isStringArray } from "../lib/stored-settings";
 
 const KEY_BASE = "paged.cockpit.v1";
 /** Scoped per workspace — solo runs the cockpit under the mode id
@@ -71,11 +72,32 @@ export function loadCockpitStore(): CockpitStore {
   try {
     const raw = ls.getItem(KEY());
     if (!raw) return {};
-    const parsed = JSON.parse(raw) as CockpitStore;
-    return typeof parsed === "object" && parsed !== null ? parsed : {};
+    return checkedStore(JSON.parse(raw) as unknown);
   } catch {
     return {};
   }
+}
+
+/** The stored blob with every mode entry of the wrong shape dropped, so
+ *  that mode falls back to its slot seed (SH-101, ADR 247): `rightTabs`
+ *  must be a list of panel ids, and an `activeTab` that is not one of
+ *  them (and not null) reads as the first tab. */
+function checkedStore(parsed: unknown): CockpitStore {
+  if (!isRecord(parsed)) return {};
+  const out: Record<string, ModeUiState> = {};
+  for (const [mode, entry] of Object.entries(parsed)) {
+    if (!isRecord(entry) || !isStringArray(entry.rightTabs)) continue;
+    const rightTabs = entry.rightTabs as string[];
+    const activeTab =
+      entry.activeTab === null
+        ? null
+        : typeof entry.activeTab === "string" &&
+            rightTabs.includes(entry.activeTab)
+          ? entry.activeTab
+          : (rightTabs[0] ?? null);
+    out[mode] = { rightTabs, activeTab };
+  }
+  return out as CockpitStore;
 }
 
 let latest: CockpitStore = {};

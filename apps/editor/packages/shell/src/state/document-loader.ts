@@ -57,6 +57,13 @@ export interface DocumentLoaderCallbacks {
   libraryDocument?: DocumentEntry;
 }
 
+/** The newest load (open or New). Every step after an await checks it, so
+ *  a load another one superseded stops where it is: its handle, its page
+ *  thumbnails, its "loaded N pages" status and its ready flag never land
+ *  on the document that replaced it (SH-105, ADR 248). Module-scoped
+ *  because the document state the callbacks write is one per editor. */
+let newestLoad = 0;
+
 /**
  * Drives the load → snapshot → ready sequence for one IDML file.
  *
@@ -75,6 +82,7 @@ export async function loadDocumentFile(
   file: File,
   cb: DocumentLoaderCallbacks,
 ): Promise<void> {
+  const load = ++newestLoad;
   cb.setStatus(`loading ${file.name} (${file.size.toLocaleString()} bytes)…`);
   cb.setLoading({ name: file.name, bytes: file.size });
   cb.resetForNewDocument();
@@ -92,10 +100,12 @@ export async function loadDocumentFile(
   try {
     handle = await client.loadDocument(bytes, fontBytes);
   } catch (err) {
+    if (load !== newestLoad) return;
     cb.setLoading(null);
     cb.setStatus(`load failed: ${String(err)}`);
     return;
   }
+  if (load !== newestLoad) return;
 
   if (cb.libraryDocument) setCurrentLibraryDocument(cb.libraryDocument);
   else if (forLibrary) rememberOpenedFile(forLibrary, file.name);
@@ -104,7 +114,7 @@ export async function loadDocumentFile(
   cb.setStatus(
     `loaded ${handle.pageCount} page${handle.pageCount === 1 ? "" : "s"}; snapshotting…`,
   );
-  await snapshotAllPages(client, handle, cb);
+  await snapshotAllPages(client, handle, cb, load);
 }
 
 /** Size of a new blank document in points, [width, height]. */
@@ -125,6 +135,7 @@ export async function createBlankDocument(
   opts: BlankDocumentOptions,
   cb: DocumentLoaderCallbacks,
 ): Promise<void> {
+  const load = ++newestLoad;
   cb.setStatus("creating new document…");
   cb.setLoading({ name: "Untitled", bytes: 0 });
   cb.resetForNewDocument();
@@ -145,15 +156,17 @@ export async function createBlankDocument(
       fontBytes,
     );
   } catch (err) {
+    if (load !== newestLoad) return;
     cb.setLoading(null);
     cb.setStatus(`new document failed: ${String(err)}`);
     return;
   }
+  if (load !== newestLoad) return;
 
   cb.setHandle(handle);
   cb.setLoading(null);
   cb.setStatus(`new ${handle.pageCount}-page document; snapshotting…`);
-  await snapshotAllPages(client, handle, cb);
+  await snapshotAllPages(client, handle, cb, load);
 }
 
 /**
@@ -245,7 +258,8 @@ export async function requestPageThumbnail(
 
 /**
  * Sequential per-page snapshot requests + ready flag, shared by the
- * open-file and new-document paths. Sequential because the worker is
+ * open-file and new-document paths. `load` is the pass's load; a newer
+ * one stops it between pages. Sequential because the worker is
  * single-threaded; parallel requests would only queue. A missing
  * snapshot is a warning, not a hard failure.
  */
@@ -253,14 +267,23 @@ async function snapshotAllPages(
   client: CanvasClient,
   handle: DocumentHandle,
   cb: DocumentLoaderCallbacks,
+  load: number,
 ): Promise<void> {
   for (const pageId of handle.pageIds) {
+    if (load !== newestLoad) return;
     try {
-      cb.addSnapshot(pageId, await requestPageThumbnail(client, pageId));
+      const url = await requestPageThumbnail(client, pageId);
+      if (load !== newestLoad) {
+        URL.revokeObjectURL(url);
+        return;
+      }
+      cb.addSnapshot(pageId, url);
     } catch (err) {
+      if (load !== newestLoad) return;
       cb.pushWarning(`snapshot ${pageId}: ${String(err)}`);
     }
   }
+  if (load !== newestLoad) return;
 
   cb.setStatus(
     `loaded ${handle.pageCount} page${handle.pageCount === 1 ? "" : "s"}`,

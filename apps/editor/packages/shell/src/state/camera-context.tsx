@@ -22,6 +22,7 @@ import {
   useCallback,
   useContext,
   useMemo,
+  useRef,
   useState,
   type PropsWithChildren,
 } from "react";
@@ -29,6 +30,7 @@ import {
 import { IDENTITY_CAMERA, type Camera } from "@paged-media/client";
 
 import { useCanvasClient } from "./canvas-client-context";
+import { clampCamera } from "./zoom-range";
 
 export type ViewportSize = readonly [number, number];
 
@@ -46,16 +48,26 @@ const Context = createContext<CameraContextValue | null>(null);
  * size of its host element. `setCamera` writes through to the
  * client's SAB so the worker sees the new transform on its next
  * frame; React state mirrors the value so the viewport's CSS
- * transform re-renders in the same tick.
+ * transform re-renders in the same tick. Every write is held inside the
+ * one zoom range (`zoom-range.ts`, ADR 246).
  */
 export function CameraProvider({ children }: PropsWithChildren) {
   const client = useCanvasClient();
   const [camera, setCameraState] = useState<Camera>(IDENTITY_CAMERA);
-  const [viewportSize, setViewportSize] = useState<ViewportSize>([0, 0]);
+  const [viewportSize, setViewportSizeState] = useState<ViewportSize>([0, 0]);
+  // The size the clamp zooms about, read inside `setCamera` without
+  // making the setter change identity on every resize.
+  const sizeRef = useRef<ViewportSize>([0, 0]);
+  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
+  const setViewportSize = useCallback((size: ViewportSize) => {
+    sizeRef.current = size;
+    setViewportSizeState(size);
+  }, []);
 
   // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
   const setCamera = useCallback(
-    (cam: Camera) => {
+    (requested: Camera) => {
+      const cam = clampCamera(requested, sizeRef.current);
       setCameraState(cam);
       client.setCamera(cam);
     },
@@ -65,7 +77,7 @@ export function CameraProvider({ children }: PropsWithChildren) {
   // eslint-disable-next-line no-restricted-syntax -- its type argument types the value (ADR 229)
   const value = useMemo<CameraContextValue>(
     () => ({ camera, setCamera, viewportSize, setViewportSize }),
-    [camera, setCamera, viewportSize],
+    [camera, setCamera, viewportSize, setViewportSize],
   );
 
   return <Context.Provider value={value}>{children}</Context.Provider>;

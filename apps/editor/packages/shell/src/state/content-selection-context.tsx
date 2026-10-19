@@ -102,6 +102,11 @@ export function ContentSelectionProvider({ children }: PropsWithChildren) {
   const [caret, setCaret] = useState<CaretGeometry | null>(null);
   const [selectionRects, setSelectionRects] = useState<SelectionRect[]>([]);
   const contentSelectionRef = useRef<ContentSelection | null>(null);
+  // The newest selection's number. A caret or rects answer is applied only
+  // while its selection is still the newest, so an answer that arrives
+  // after the selection moved or was cleared (Escape) is dropped (SH-106,
+  // ADR 248).
+  const newestSelection = useRef(0);
   const [typingStyle, setTypingStyleRaw] = useState<TypingStyle | null>(null);
   // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
   const setTypingStyle = useCallback((style: TypingStyle | null) => {
@@ -121,16 +126,18 @@ export function ContentSelectionProvider({ children }: PropsWithChildren) {
       // old caret goes (an insert applies it before it moves the caret).
       setTypingStyle(null);
       void client.setSelection(sel);
+      const asked = ++newestSelection.current;
+      const current = () => asked === newestSelection.current;
       if (sel) {
         void client
           .caretGeometry(sel)
-          .then(setCaret)
-          .catch(() => setCaret(null));
+          .then((c) => current() && setCaret(c))
+          .catch(() => current() && setCaret(null));
         if (sel.start !== sel.end) {
           void client
             .selectionGeometry(sel)
-            .then(setSelectionRects)
-            .catch(() => setSelectionRects([]));
+            .then((r) => current() && setSelectionRects(r))
+            .catch(() => current() && setSelectionRects([]));
         } else {
           setSelectionRects([]);
         }

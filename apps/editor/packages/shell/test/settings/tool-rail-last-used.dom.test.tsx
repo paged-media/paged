@@ -180,12 +180,12 @@ describe("setting paged.toolRail.lastUsed", () => {
     await waitFor(() => expect(face("t.shape")).toBe("t.shape.rect"));
   });
 
-  // Finding SH-104: the stored value is `JSON.parse`d and used as the
+  // Finding SH-104 (fixed, ADR 247): the stored value is `JSON.parse`d and used as the
   // group → tool map without a shape check. Valid JSON that is not an
   // object — `null` here — makes `lastUsed[group]` throw inside the
   // rail's render and effects, so the whole tool rail fails to mount
   // instead of falling back to the group defaults.
-  test.failing(
+  test(
     "SH-104: a stored null falls back to the defaults instead of breaking the rail",
     async () => {
       covers("setting:paged.toolRail.lastUsed");

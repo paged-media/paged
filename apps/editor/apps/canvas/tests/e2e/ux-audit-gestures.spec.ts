@@ -20,7 +20,7 @@
 // The UX audit's canvas-gesture findings (docs/design/ux-audit-2026-10.md)
 // as regression tests: an open finding is an expected failure
 // (`test.fail`), titled with its finding id; a fixed one is a plain test
-// (F-26, F-29, F-30, GM-2: ADR 235). When a fix lands the test
+// (F-26, F-29, F-30, GM-2: ADR 235; F-31, F-33: ADR 246). When a fix lands the test
 // passes, Playwright reports it as an unexpected pass, and the marker
 // comes off in the same change. The behaviour is NOT fixed here.
 //
@@ -72,9 +72,6 @@ const editContext = (page: Page) =>
   );
 const angleOf = (cs: Array<[number, number]>) =>
   (Math.atan2(cs[1][1] - cs[0][1], cs[1][0] - cs[0][0]) * 180) / Math.PI;
-/** `PAGED_UX_AUDIT_SHOW=1` runs the expected failures as plain tests, to
- *  read WHY each fails today (they must fail for the finding's reason). */
-const EXPECTED = process.env.PAGED_UX_AUDIT_SHOW !== "1";
 const side = (cs: Array<[number, number]>) =>
   Math.hypot(cs[1][0] - cs[0][0], cs[1][1] - cs[0][1]);
 
@@ -185,10 +182,6 @@ test.describe("UX audit 2026-10 — canvas gestures (expected failures until fix
   test("[F-31] keyboard zoom and ctrl+wheel zoom share one range @level:gesture", async ({
     page,
   }) => {
-    test.fail(
-      EXPECTED,
-      "F-31: ctrl+wheel stops at 1,600 %, the keyboard goes past 60,000 %",
-    );
     const { g } = await gestureEditor(page);
     for (let i = 0; i < 60; i++) await g.key("Equal", { mods: ["cmd"] });
     await g.settle();
@@ -242,7 +235,6 @@ test.describe("UX audit 2026-10 — canvas gestures (expected failures until fix
   test("[F-33] Shift + wheel pans horizontally @level:gesture", async ({
     page,
   }) => {
-    test.fail(EXPECTED, "F-33: Shift + wheel scrolls vertically");
     const { g } = await gestureEditor(page);
     const c0 = await camera(page);
     await g.wheel({ at: T.empty.at, shift: true, deltaY: 200 }).settle();

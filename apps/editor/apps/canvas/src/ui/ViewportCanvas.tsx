@@ -1465,10 +1465,17 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
       const factor = Math.exp(-e.deltaY * 0.005);
       props.onCameraChange(zoomAt(props.camera, cx, cy, factor));
     } else {
+      // Shift+wheel is the horizontal scroll (F-33): a mouse wheel reports
+      // only deltaY, so with Shift held and no deltaX of its own the
+      // vertical delta pans sideways. A device that already sends deltaX
+      // (a trackpad, macOS's own Shift mapping) keeps its deltas.
+      const sideways = e.shiftKey && e.deltaX === 0;
+      const dx = sideways ? e.deltaY : e.deltaX;
+      const dy = sideways ? 0 : e.deltaY;
       props.onCameraChange({
         scale: props.camera.scale,
-        tx: props.camera.tx - e.deltaX,
-        ty: props.camera.ty - e.deltaY,
+        tx: props.camera.tx - dx,
+        ty: props.camera.ty - dy,
       });
     }
   };

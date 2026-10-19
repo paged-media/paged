@@ -163,13 +163,13 @@ describe("setting paged.export.image.v1", () => {
     expect(refused.widths).toEqual([]);
   });
 
-  // Finding SH-102: the stored value is spread over the defaults without
+  // Finding SH-102 (fixed, ADR 247): the stored value is spread over the defaults without
   // a check, so a DPI the UI never offers (a string, 0, 100000) becomes
   // the export's resolution: "huge" asks the engine for a NaN-wide
   // snapshot, 100000 for a 850000-px one. The other fields degrade by
   // luck (an unknown scope exports every page, an unknown format writes
   // PNG); dpi has no such fallback.
-  test.failing(
+  test(
     "SH-102: a stored DPI outside 72/150/300 falls back to the default",
     async () => {
       covers("setting:paged.export.image.v1");
