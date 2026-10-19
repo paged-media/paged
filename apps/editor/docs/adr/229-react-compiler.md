@@ -92,16 +92,33 @@ run(host); }` where `host` does not exist; draw's Symbols and Appearance buttons
    is invisible to it). CI fails on a new entry and on a stale one, so the lists only get
    shorter; the target is zero. A `"use no memo"` needs the issue it waits on and an expiry date
    in the comment above it, and fails CI once the date has passed.
+7. **No hand-written memoization in compiled code.** In a compiled component the compiler
+   memoizes every value on the dependencies it proves, and where it cannot match a hand-written
+   memo it leaves the function as written (`PreserveManualMemo`), so a `useMemo` or
+   `useCallback` there adds nothing. They are removed where the component compiles and the
+   value is used in it or handed to a child that does not compare it. Those that stay say why
+   on the line above, and `bun lint` (`no-restricted-syntax`) rejects one that does not: the
+   component is not compiled yet, the value is an effect dependency, a hook's result or a
+   compared prop, or its type argument types it. New code adds none.
 
 ## Consequences
 
-- The production bundle ships compiled components: 474 compiled in 204 modules, 76 left as
-  written, across the eight chunks that hold first-party React code. With the editor's main
-  panels open, 244 of the 518 mounted function components carry a compiler cache (the rest are
-  third-party, bailouts, or need no cache).
+- The production bundle ships compiled components: 523 compiled in 231 modules, 35 left as
+  written, across the eight chunks that hold first-party React code. The ratchet stands at 541
+  compiled, 35 bailouts and 1 not compiled (93.8%; the first compiled run: 491, 76, 9). The
+  19 suppression bailouts are effects that deliberately run on fewer dependencies than they read;
+  each is its own change.
+- Fewer re-renders for the same interactions (the DOM lane's render counter, as written against
+  compiled): Layers 116 to 67 panel renders, Properties 2,306 to 997, Swatches 267 to 88, Pages
+  5 to 1 per commit. The latency probe on the production build is in the migration record.
 - A new component that reads a registry, a store or a host surface during render reads it
   through a view (`useRegistryView`, `useLive`) or a store snapshot. The compiled DOM lanes fail
   on the patterns above when a test renders the component.
+- 296 hand-written `useMemo`/`useCallback` calls became 214, each with its reason; new code adds
+  none (decision 7).
+- A ref that holds the latest value of a prop or a callback is written in a layout effect, not
+  during render. Two stay written during render on purpose (the editor handle and the caret:
+  children read them while rendering), so their providers stay uncompiled.
 - `compiler-coverage.json` changes with the code: fixing a bailout, or adding a component the
   compiler cannot see, means running `bun tooling/js/react-compiler-coverage.mjs --write` in the
   same commit.
