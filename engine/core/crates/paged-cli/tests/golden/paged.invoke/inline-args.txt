@@ -1,0 +1,14 @@
+$ paged invoke doc.paged insertOval '{"pageId":"usp","bounds":[0,0,10,10]}' -o inline.paged
+--- exit: 0
+--- stdout
+{
+  "appliedSeq": 1,
+  "createdId": {
+    "id": "u6",
+    "kind": "oval"
+  },
+  "minted": [],
+  "op": "insertOval"
+}
+--- stderr
+(empty)

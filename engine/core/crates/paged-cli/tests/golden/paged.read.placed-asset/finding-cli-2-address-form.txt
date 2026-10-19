@@ -1,0 +1,16 @@
+$ paged read placed-asset doc.paged rectangle:u5
+--- exit: 0
+--- stdout
+{
+  "kind": "placedAssetBytes",
+  "payload": {
+    "elementId": "rectangle:u5",
+    "encoded": [],
+    "found": false,
+    "height": 0,
+    "uri": "",
+    "width": 0
+  }
+}
+--- stderr
+(empty)

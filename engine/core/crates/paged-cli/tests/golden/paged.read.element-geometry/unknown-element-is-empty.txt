@@ -1,0 +1,11 @@
+$ paged read element-geometry doc.paged oval:nope
+--- exit: 0
+--- stdout
+{
+  "kind": "elementGeometry",
+  "payload": {
+    "items": []
+  }
+}
+--- stderr
+(empty)

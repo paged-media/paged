@@ -1,0 +1,6 @@
+$ paged package doc.paged -o full
+--- exit: 1
+--- stdout
+(empty)
+--- stderr
+Error: full is not empty — a package goes into a new folder

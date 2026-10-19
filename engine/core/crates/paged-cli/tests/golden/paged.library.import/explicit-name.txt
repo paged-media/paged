@@ -1,0 +1,6 @@
+$ paged library import brochure.paged --library lib --name copy-2
+--- exit: 0
+--- stdout
+copy-2 <HASH>
+--- stderr
+(empty)

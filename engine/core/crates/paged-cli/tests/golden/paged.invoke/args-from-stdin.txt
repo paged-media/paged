@@ -1,0 +1,14 @@
+$ paged invoke doc.paged insertOval -
+--- exit: 0
+--- stdout
+{
+  "appliedSeq": 1,
+  "createdId": {
+    "id": "u6",
+    "kind": "oval"
+  },
+  "minted": [],
+  "op": "insertOval"
+}
+--- stderr
+insertOval applied to the loaded document. Nothing saved — pass -o to write the result.

@@ -1,0 +1,9 @@
+$ paged invoke doc.paged insertOval '{bad'
+--- exit: 1
+--- stdout
+(empty)
+--- stderr
+Error: the arguments are not JSON
+
+Caused by:
+    key must be a string at line 1 column 2

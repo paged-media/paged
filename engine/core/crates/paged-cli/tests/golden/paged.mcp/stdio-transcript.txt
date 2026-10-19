@@ -1,0 +1,11 @@
+$ paged mcp --library lib
+--- exit: 0
+--- stdout
+{"id":1,"jsonrpc":"2.0","result":{"capabilities":{"tools":{"listChanged":false}},"instructions":"paged is a page-layout system (InDesign-class documents: IDML and .paged). A document is a repository: versions (commits), branches and releases; a file is a projection of one version. Read with describe_document, history, read_part and diff. To change a document, either edit it in an engine (open_document, then run_script with paged.* JavaScript — call lookup_api first, the API is not guessable — check with render_page, and keep the result with save_document), or write parts directly with commit_parts. Your writes land on agent/ branches; a person merges them after review (propose_change). Never claim a change reached main unless the tool said so.","protocolVersion":"2025-06-18","serverInfo":{"name":"paged (local)","version":"<VERSION>"}}}
+{"id":2,"jsonrpc":"2.0","result":{"content":[{"text":"{\n  \"documents\": [\n    {\n      \"createdAt\": <TIME>,\n      \"head\": \"<HASH>\",\n      \"id\": \"brochure\",\n      \"name\": \"brochure\",\n      \"updatedAt\": <TIME>\n    }\n  ],\n  \"library\": \"lib\"\n}","type":"text"}],"isError":false,"structuredContent":{"documents":[{"createdAt":"<TIME>","head":"<HASH>","id":"brochure","name":"brochure","updatedAt":"<TIME>"}],"library":"lib"}}}
+{"error":{"code":-32602,"message":"no tool no_such_tool"},"id":3,"jsonrpc":"2.0"}
+{"id":4,"jsonrpc":"2.0","result":{"content":[{"text":"no document `nope` in lib","type":"text"}],"isError":true}}
+{"error":{"code":-32601,"message":"no method no/such/method"},"id":5,"jsonrpc":"2.0"}
+{"error":{"code":-32700,"message":"parse error: key must be a string at line 1 column 2"},"id":null,"jsonrpc":"2.0"}
+--- stderr
+(empty)

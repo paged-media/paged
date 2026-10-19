@@ -1,0 +1,12 @@
+$ paged read story-content
+--- exit: 2
+--- stdout
+(empty)
+--- stderr
+error: the following required arguments were not provided:
+  <DOC>
+  <STORY_ID>
+
+Usage: paged read story-content <DOC> <STORY_ID>
+
+For more information, try '--help'.

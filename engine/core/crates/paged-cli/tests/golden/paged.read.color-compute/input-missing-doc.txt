@@ -1,0 +1,9 @@
+$ paged read color-compute missing.paged CMYK --value 0
+--- exit: 1
+--- stdout
+(empty)
+--- stderr
+Error: read missing.paged
+
+Caused by:
+    No such file or directory (os error <N>)

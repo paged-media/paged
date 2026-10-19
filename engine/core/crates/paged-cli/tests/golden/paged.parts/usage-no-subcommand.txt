@@ -1,0 +1,18 @@
+$ paged parts
+--- exit: 2
+--- stdout
+(empty)
+--- stderr
+List, read and write a `.paged` container's content parts
+
+Usage: paged parts <COMMAND>
+
+Commands:
+  list    List the parts under a path prefix
+  read    Read one part's bytes
+  write   Write one part and save the container back
+  delete  Delete one part and save the container back
+  help    Print this message or the help of the given subcommand(s)
+
+Options:
+  -h, --help  Print help

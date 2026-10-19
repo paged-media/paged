@@ -1,0 +1,6 @@
+$ paged library import brochure.paged --library lib
+--- exit: 0
+--- stdout
+brochure <HASH>
+--- stderr
+(empty)

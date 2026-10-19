@@ -1,0 +1,6 @@
+$ paged render doc.paged --page nope -o p.png
+--- exit: 1
+--- stdout
+(empty)
+--- stderr
+Error: no page with id "nope"

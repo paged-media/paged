@@ -1,0 +1,6 @@
+$ paged set doc.paged 'not an address' frameFillColor Color/u1
+--- exit: 1
+--- stdout
+(empty)
+--- stderr
+Error: "not an address" is not an address (at 0: "not an address" is not an address: expected `doc` or `<kind>:<id>`) — use doc, rectangle:<id>, swatch:<id>, layer:<id>, style:<family>/<id>, cell:<table>/<row>,<col>, … (see `paged describe`, idGrammar)

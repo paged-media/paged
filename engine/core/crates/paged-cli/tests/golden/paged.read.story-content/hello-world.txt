@@ -1,0 +1,22 @@
+$ paged read story-content doc.paged Story/u0
+--- exit: 0
+--- stdout
+{
+  "kind": "storyContentResult",
+  "payload": {
+    "content": {
+      "paragraphs": [
+        {
+          "runs": [
+            {
+              "text": "Hello world"
+            }
+          ]
+        }
+      ],
+      "selfId": "Story/u0"
+    }
+  }
+}
+--- stderr
+(empty)

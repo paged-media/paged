@@ -1,0 +1,11 @@
+$ paged library import --library lib
+--- exit: 2
+--- stdout
+(empty)
+--- stderr
+error: the following required arguments were not provided:
+  <FILE>
+
+Usage: paged library import --library <LIBRARY> <FILE>
+
+For more information, try '--help'.

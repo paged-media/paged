@@ -1,0 +1,11 @@
+$ paged place doc.paged rectangle:u5
+--- exit: 2
+--- stdout
+(empty)
+--- stderr
+error: the following required arguments were not provided:
+  <IMAGE>
+
+Usage: paged place <DOC> <FRAME> <IMAGE>
+
+For more information, try '--help'.

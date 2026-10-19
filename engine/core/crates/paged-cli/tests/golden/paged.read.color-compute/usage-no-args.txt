@@ -1,0 +1,13 @@
+$ paged read color-compute
+--- exit: 2
+--- stdout
+(empty)
+--- stderr
+error: the following required arguments were not provided:
+  --value <VALUE>
+  <DOC>
+  <SPACE>
+
+Usage: paged read color-compute --value <VALUE> <DOC> <SPACE>
+
+For more information, try '--help'.
