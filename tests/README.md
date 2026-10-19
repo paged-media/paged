@@ -8,7 +8,7 @@ about:
 | Directory      | What it asserts                                                                                                                                                                                                                                                  | Runner                                                   | CI                                                          |
 | -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- | ----------------------------------------------------------- |
 | `contracts/`   | The plugin contract between the editor, plugin-sdk and the nine built-ins: every manifest against what its bundle registers, the surface gate's static enumeration against the same, and the BundleHost doors on the editor's, the headless and the bare adapter | `bun test` (`bun run test:contracts`)                    | `tests / contracts + system`                                |
-| `system/`      | The product is complete: all nine built-ins live in the headless editor                                                                                                                                                                                          | `bun test` (`bun run test:system`)                       | `tests / contracts + system`                                |
+| `system/`      | The product is complete: all nine built-ins live in the headless editor, and every wasm the editor ships verifies its integrity and boots in Chromium (V8)                                                                                                       | `bun test` (`bun run test:system`)                       | `tests / contracts + system`                                |
 | `integration/` | Round trips across components: a module's state saved into the editor's `.paged` container and read back after a reopen (sheet, data, image, web)                                                                                                                | Playwright, project `integration` of the editor's config | `editor / tests`, the Playwright shards                     |
 | `fidelity/`    | The editor's per-pack fidelity sweep: every pack of the private corpus rendered through the editor and diffed against InDesign's PDF                                                                                                                             | Playwright, project `fidelity`                           | none (local: it needs the corpus, `paged-diff`, `pdftoppm`) |
 
@@ -30,6 +30,12 @@ cd tests
 bun run test:contracts
 bun run test:system          # needs the engine's and the modules' wasm built
 ```
+
+`system/wasm-boot/` drives Chromium through the Playwright library
+(playwright-core) inside `bun test`. Without a Chromium it reports
+`unavailable: browser` and skips; `PAGED_REQUIRE_BROWSER=1` (CI) makes that a
+failure. `bun system/wasm-boot/trial.ts` re-runs the trial that chose that
+driver over `Bun.WebView` (`docs/migration/bun-webview.md`).
 
 ## What is not here, and why
 
