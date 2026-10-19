@@ -27,13 +27,14 @@
 // (`bin/sheet_js.js` + `bin/sheet_js_bg.wasm`, produced by
 // scripts/build-wasm.sh — lands in Phase 2). We DON'T use the host's
 // `loadBundleWasm` (it instantiates a RAW module — no wbindgen imports;
-// S-10), we load the glue in the bundle realm exactly like
-// @paged-media/canvas-wasm does, branching browser vs Node the way
-// plugin-sdk's wasm-loader.ts does:
-//   · browser: `default(new URL("./sheet_js_bg.wasm", import.meta.url))`
+// S-10), we load the glue in the bundle realm through
+// @paged-media/wasm-boot, once per realm:
+//   · browser: `default({ module_or_path })` with the bundler's `?url` asset
 //   · Node:    `node:fs` readFile the bytes, `initSync({ module: bytes })`
 // Until the artifact exists the dynamic import REJECTS — bootEngine
 // surfaces that honestly so the panel can say "engine wasm not built".
+
+import { isNodeRealm, wasmBindgenModule } from "@paged-media/wasm-boot";
 
 import type {
   ChartGeometry,
@@ -1090,78 +1091,35 @@ export function guardTraps(engine: SheetEngine): SheetEngine {
 export const ENGINE_NOT_BUILT =
   "engine wasm not built — run scripts/build-wasm.sh";
 
-/** Is this a Node-like (non-browser) realm? `window`/`document` absent. */
-function isNode(): boolean {
-  return (
-    typeof process !== "undefined" &&
-    process.versions != null &&
-    process.versions.node != null &&
-    typeof (globalThis as { window?: unknown }).window === "undefined"
-  );
-}
-
-/** Load + instantiate the engine wasm module (the glue + the `_bg.wasm`),
- *  branching browser vs Node exactly like `bootEngine`. Split out so both
- *  the XLSX-load boot and the EMPTY-workbook boot (S-15) share one
- *  instantiate path. Rejects with ENGINE_NOT_BUILT-flavoured detail when
- *  the artifact is missing. */
-/** The one module load per realm (single flight). The glue keeps ONE
- *  module-level instance, and its async `default()` checks "already
- *  initialised" BEFORE its await: two boots in flight at once (a reopened
- *  document restores on activation AND on `documentLoaded`) both
- *  instantiated, the second replaced the instance, and an engine built on
- *  the first then read the second's memory with its own pointer —
- *  "memory access out of bounds" in `list_freeze_panes`. Every boot shares
- *  this promise; a failed load is forgotten so a later boot can retry. */
-let moduleLoad: Promise<SheetWasmModule> | null = null;
-function loadModule(): Promise<SheetWasmModule> {
-  if (!moduleLoad) {
-    moduleLoad = instantiateModule().catch((err: unknown) => {
-      moduleLoad = null;
-      throw err;
-    });
-  }
-  return moduleLoad;
-}
-
-async function instantiateModule(): Promise<SheetWasmModule> {
-  let mod: SheetWasmModule;
-  try {
-    // @ts-ignore — the artifact (bin/sheet_js.js, the wasm-bindgen
-    // --target web glue) is produced by scripts/build-wasm.sh in Phase 2
-    // and is intentionally absent from the source tree; the dynamic
-    // import resolves at runtime once built. Typed via SheetWasmModule.
-    mod = (await import("../bin/sheet_js.js")) as SheetWasmModule;
-  } catch (cause) {
-    throw new Error(ENGINE_NOT_BUILT, { cause });
-  }
-
-  if (isNode()) {
-    const { readFile } = await import("node:fs/promises");
-    const { fileURLToPath } = await import("node:url");
-    const wasmPath = fileURLToPath(
-      new URL("../bin/sheet_js_bg.wasm", import.meta.url),
-    );
-    const bytes = await readFile(wasmPath);
-    mod.initSync({
-      module: new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength),
-    });
-  } else {
-    // Browser path: resolve the artifact through the bundler's explicit
-    // `?url` import (the editor's wasm-loading convention). A bare
-    // relative URL resolves against the SERVED module path, and the dev
-    // server answers its HTML fallback — the
-    // "expected magic word 00 61 73 6d, found 3c 21 64 6f" boot failure
-    // the K-1 live-validation e2e surfaced. Object form: the bare
-    // argument is deprecated by wasm-bindgen.
-    // @ts-ignore — `?url` is a bundler affordance, untyped.
-    const wasmUrl = (await import("../bin/sheet_js_bg.wasm?url")) as {
-      default: string;
-    };
-    await mod.default({ module_or_path: wasmUrl.default });
-  }
-  return mod;
-}
+/** The one module load per realm (single flight, @paged-media/wasm-boot).
+ *  The glue keeps ONE module-level instance, and its async `default()`
+ *  checks "already initialised" BEFORE its await: two boots in flight at
+ *  once (a reopened document restores on activation AND on
+ *  `documentLoaded`) both instantiated, the second replaced the instance,
+ *  and an engine built on the first then read the second's memory with its
+ *  own pointer — "memory access out of bounds" in `list_freeze_panes`.
+ *  Every boot shares this promise; a failed load is forgotten so a later
+ *  boot can retry. A realm with a `window` (happy-dom) boots the browser
+ *  way. */
+const loadModule = wasmBindgenModule<SheetWasmModule>({
+  // The artifact (bin/sheet_js.js, the wasm-bindgen --target web glue) is
+  // produced by scripts/build-wasm.sh and intentionally absent from the
+  // source tree. Typed via SheetWasmModule.
+  // @ts-ignore — absent until built.
+  glue: () => import("../bin/sheet_js.js"),
+  // The bundler's explicit `?url` import (the editor's wasm-loading
+  // convention). A bare relative URL resolves against the SERVED module
+  // path, and the dev server answers its HTML fallback — the
+  // "expected magic word 00 61 73 6d, found 3c 21 64 6f" boot failure the
+  // K-1 live-validation e2e surfaced.
+  // @ts-ignore — `?url` is a bundler affordance, untyped.
+  wasmUrl: () => import("../bin/sheet_js_bg.wasm?url"),
+  wasmFile: () => new URL("../bin/sheet_js_bg.wasm", import.meta.url),
+  isNode: () =>
+    isNodeRealm() &&
+    typeof (globalThis as { window?: unknown }).window === "undefined",
+  notBuilt: ENGINE_NOT_BUILT,
+});
 
 /** Load + boot the engine wasm, returning the facade. Browser path
  *  passes the `_bg.wasm` URL to `default()`; Node path reads the bytes

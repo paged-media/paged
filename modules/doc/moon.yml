@@ -24,6 +24,7 @@ tasks:
     inputs:
       - "@group(rust-sources)"
       - "scripts/build-wasm.sh"
+      - "/tooling/rust/build-wasm.sh"
       - "packages/doc-bundle/manifest.json"
     outputs:
       - "packages/doc-bundle/bin/docx_js*"

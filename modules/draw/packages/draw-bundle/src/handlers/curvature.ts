@@ -32,13 +32,13 @@ import type {
 
 import {
   CurvatureMachine,
+  createSnapper,
   curvaturePreview,
   type CurvatureSnapshot,
 } from "@paged-media/draw-tools";
 
 import { graphicPaintFor, withGraphicPaint } from "./graphic-default";
 import { insertPathMutationFor } from "./insert-path";
-import { createSnapper } from "./snapping";
 
 /** Screen-space radius for close-the-path / corner-toggle clicks. */
 const CLICK_TOLERANCE_PX = 8;
@@ -94,18 +94,27 @@ export function createCurvatureHandler(host: BundleHost): GestureHandler {
     );
   };
 
-  // C-68 — points snap through the engine (v67: every visible element,
-  // guides, the page, this run's own placed points); on an older host,
-  // to the page and the placed points. Cmd held bypasses. The engine
-  // answer is asynchronous, so pointer and key events run IN ORDER on one
-  // chain — a machine must never see an up before the down it follows.
-  const snapper = createSnapper(host);
+  // C-68 — points snap through the engine (engine ADR 125: every visible
+  // element, guides, the page, this run's own placed points), with the
+  // snapper the host's Pen uses too (draw-tools' `createSnapper`). Cmd
+  // held bypasses. The engine answer is asynchronous, so pointer and key
+  // events run IN ORDER on one chain — a machine must never see an up
+  // before the down it follows.
+  const snapper = createSnapper((query) => host.document.snapPoint(query));
   let placed: [number, number][] = [];
   const at = async (
     e: CanvasPointerEvent,
   ): Promise<[number, number] | null> => {
-    const p = await snapper.snapAsync(e, placed);
-    return p ? [p[0], p[1]] : null;
+    if (!e.pageId || !e.pagePoint) return null;
+    const p = await snapper.snap({
+      pageId: e.pageId,
+      point: e.pagePoint,
+      // CSS px per pt at the current zoom.
+      cameraScale: 1 / host.viewport.pxToPt(1),
+      extra: placed,
+      bypass: e.modifiers.cmd,
+    });
+    return [p[0], p[1]];
   };
   let chain: Promise<void> = Promise.resolve();
   const enqueue = (step: () => Promise<void> | void) => {
@@ -132,7 +141,6 @@ export function createCurvatureHandler(host: BundleHost): GestureHandler {
           });
           pageId = e.pageId;
           placed = [];
-          await snapper.prepare(e.pageId!);
         }
         if (e.pageId !== pageId) return; // one page per run
         const point = (await at(e))!;

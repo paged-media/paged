@@ -13,26 +13,14 @@
 # beside the host-door counts under PERF_SHOW=1. The gated budgets do not
 # need it.
 set -euo pipefail
-
-HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-CRATE="$HERE/packages/web-render"
-OUT="$CRATE/target/perf-wasm"
-TARGET="wasm32-unknown-unknown"
-
-LOCKED=$(grep -A1 '^name = "wasm-bindgen"$' "$CRATE/Cargo.lock" | grep version | head -1 | cut -d'"' -f2)
-CLI=$(wasm-bindgen --version 2>/dev/null | awk '{print $2}' || true)
-if [[ "$LOCKED" != "$CLI" ]]; then
-  echo "build-wasm-perf: error — wasm-bindgen-cli '${CLI:-missing}' != Cargo.lock $LOCKED" >&2
-  echo "                 cargo install wasm-bindgen-cli --version $LOCKED" >&2
-  exit 1
-fi
+cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
 # Same profile as the shipped engine (`wasm-release`, Cargo.toml), so the
 # wall-clock the perf spec prints is the shipped build's.
-( cd "$CRATE" && cargo build --profile wasm-release --target "$TARGET" \
-    --features blitz,perf-counters --target-dir "$CRATE/target/perf" )
-
-mkdir -p "$OUT"
-wasm-bindgen "$CRATE/target/perf/$TARGET/wasm-release/web_render.wasm" \
-  --target web --out-dir "$OUT" --out-name blitz_web
-echo "build-wasm-perf: wrote the counting engine to $OUT"
+CRATE="$PWD/packages/web-render"
+exec bash ../../tooling/rust/build-wasm.sh \
+  --crate-dir "$CRATE" --artifact web_render --out-name blitz_web \
+  --profile wasm-release --features blitz,perf-counters \
+  --target-dir "$CRATE/target/perf" \
+  --out "$CRATE/target/perf-wasm" \
+  --no-wasm-opt --no-budget

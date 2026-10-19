@@ -59,5 +59,8 @@ The engine owns snapping: its targets, its precedence and its settings. Hosts an
   editor's Direct Selection snaps locally at once and applies the engine's answer when it arrives
   for the position the drag is still at.
 - The plugin-side snapper stays as a fallback for hosts whose engine predates protocol 67.
+  (Amended 2026-10-19: the engine and the tools now ship at one revision, so the fallback is
+  gone; the host's Pen and paged.draw's Curvature share one snapper over this query,
+  `modules/draw` ADR 358.)
 - Not built: snapping to text baselines or the baseline grid, snapping a rotated frame's edges
   during translate or resize (rotated members still pass through), and per-target tolerances.

@@ -24,6 +24,8 @@
 // boundary (CLAUDE.md hard rule) — this file only constructs the handle (and
 // hands a result's typed column buffers across the column door).
 
+import { singleFlight } from "@paged-media/wasm-boot";
+
 import { WASM_ARTIFACTS, type WasmResolver } from "./bin-url";
 import { columnToValues, type ColumnBatch } from "./query/recordset";
 
@@ -225,22 +227,36 @@ export async function bootEngine(
   today: number,
   opts: BootEngineOptions = {},
 ): Promise<DataEngineLike> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let mod: any = null;
-  try {
-    mod = await import(/* @vite-ignore */ ENGINE_GLUE);
-  } catch {
-    throw new Error(ENGINE_NOT_BUILT);
-  }
-  if (!mod || typeof mod.DataEngine !== "function") {
-    throw new Error(ENGINE_NOT_BUILT);
-  }
-  // wasm-bindgen `--target web` exports a default init() that fetches the .wasm.
-  if (typeof mod.default === "function") {
-    await initEngineGlue(mod.default, opts);
-  }
+  const mod = await engineModule(opts);
   return new mod.DataEngine(today) as DataEngineLike;
 }
+
+/** The glue, imported and initialised once per realm: every boot shares one
+ *  init (the glue's `init()` checks "already initialised" before its await,
+ *  so two in flight would both instantiate; @paged-media/wasm-boot). The
+ *  first boot's options choose the module door. A failed boot is forgotten,
+ *  so a later one retries. */
+const engineModule = singleFlight(
+  async (
+    opts: BootEngineOptions,
+  ): Promise<{ DataEngine: new (today: number) => unknown }> => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let mod: any = null;
+    try {
+      mod = await import(/* @vite-ignore */ ENGINE_GLUE);
+    } catch {
+      throw new Error(ENGINE_NOT_BUILT);
+    }
+    if (!mod || typeof mod.DataEngine !== "function") {
+      throw new Error(ENGINE_NOT_BUILT);
+    }
+    // wasm-bindgen `--target web` exports a default init() that fetches the .wasm.
+    if (typeof mod.default === "function") {
+      await initEngineGlue(mod.default, opts);
+    }
+    return mod;
+  },
+);
 
 /** Run the glue's `init`: with the module door, on the host's copy fetched
  *  with its integrity (a byte that differs fails the fetch); on any failure
