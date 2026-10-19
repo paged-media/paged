@@ -631,6 +631,21 @@ pub const REFERENCE_POINTS: &[&str] = &[
     "BottomCenterPoint",
     "BottomRightPoint",
 ];
+/// IDML's `AnchorPoint` enumeration, which `AnchoredObjectSetting`
+/// `AnchorPoint` takes (finding PN-212: the anchored object's point is
+/// spelled `TopLeftAnchor` … `BottomRightAnchor`, as InDesign writes it and
+/// the renderer reads it, not as the reference points `…Point`).
+pub const ANCHOR_POINTS: &[&str] = &[
+    "TopLeftAnchor",
+    "TopCenterAnchor",
+    "TopRightAnchor",
+    "LeftCenterAnchor",
+    "CenterAnchor",
+    "RightCenterAnchor",
+    "BottomLeftAnchor",
+    "BottomCenterAnchor",
+    "BottomRightAnchor",
+];
 pub const CORNER_OPTIONS: &[&str] = &[
     "None",
     "RoundedCorner",

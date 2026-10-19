@@ -1846,6 +1846,99 @@ pub(super) fn apply_delete_numbering_list(
 // Like swatches, a style change can affect many frames we don't track,
 // so the invalidation is the conservative `structural`.
 
+/// Finding PN-150 — the `ApplyStyle` ops that move every paragraph (or
+/// run) carrying `style_id` onto its family's root style: the story body
+/// and each table cell's own stream. Families other than paragraph and
+/// character styles answer no moves.
+fn style_reference_moves(doc: &Document, prefix: &str, style_id: &str) -> Vec<Operation> {
+    use crate::operation::{CellAddr, StyleScope};
+    let (scope, root) = match prefix {
+        "ParagraphStyle" => (
+            StyleScope::Paragraph,
+            "ParagraphStyle/$ID/[No paragraph style]",
+        ),
+        "CharacterStyle" => (
+            StyleScope::Character,
+            "CharacterStyle/$ID/[No character style]",
+        ),
+        _ => return Vec::new(),
+    };
+    if style_id == root {
+        return Vec::new();
+    }
+    let mut ops = Vec::new();
+    let stream = |story_id: &str,
+                  cell: Option<CellAddr>,
+                  paragraphs: &[paged_model::Paragraph],
+                  ops: &mut Vec<Operation>| {
+        let mut offset: u32 = 0;
+        for (index, para) in paragraphs.iter().enumerate() {
+            let para_start = offset;
+            match scope {
+                StyleScope::Paragraph => {
+                    if para.paragraph_style.as_deref() == Some(style_id) {
+                        ops.push(Operation::ApplyStyle {
+                            paragraph: Some(index as u32),
+                            story_id: story_id.to_string(),
+                            start: para_start,
+                            end: para_start,
+                            style: root.to_string(),
+                            scope,
+                            cell: cell.clone(),
+                        });
+                    }
+                    offset += para
+                        .runs
+                        .iter()
+                        .map(|r| r.text.chars().count() as u32)
+                        .sum::<u32>();
+                }
+                StyleScope::Character => {
+                    for run in &para.runs {
+                        let len = run.text.chars().count() as u32;
+                        if len > 0 && run.character_style.as_deref() == Some(style_id) {
+                            ops.push(Operation::ApplyStyle {
+                                paragraph: None,
+                                story_id: story_id.to_string(),
+                                start: offset,
+                                end: offset + len,
+                                style: root.to_string(),
+                                scope,
+                                cell: cell.clone(),
+                            });
+                        }
+                        offset += len;
+                    }
+                }
+            }
+        }
+    };
+    for story in &doc.stories {
+        let story_id = story.self_id.as_str();
+        stream(story_id, None, &story.story.paragraphs, &mut ops);
+        for para in &story.story.paragraphs {
+            let Some(table) = para.table.as_ref() else {
+                continue;
+            };
+            let Some(table_id) = table.self_id.clone() else {
+                continue;
+            };
+            for c in &table.cells {
+                let Some((col, row)) = c.coords() else {
+                    continue;
+                };
+                let addr = CellAddr {
+                    table_id: table_id.clone(),
+                    row,
+                    col,
+                };
+                stream(story_id, Some(addr), &c.paragraphs, &mut ops);
+            }
+        }
+    }
+    ops
+}
+
 macro_rules! style_crud {
     (
         $def:path, $map:ident, $prefix:literal,
@@ -1964,6 +2057,25 @@ macro_rules! style_crud {
             doc: &mut Document,
             style_id: &str,
         ) -> Result<AppliedOperation, OperationError> {
+            // Finding PN-150: text that carries the style goes back on the
+            // family's root style first (InDesign's Delete Style default,
+            // "[No paragraph style]" / "[None]"), in one undo step with the
+            // delete. The inner delete finds nothing left to move.
+            let moves = style_reference_moves(doc, $prefix, style_id);
+            if !moves.is_empty() && doc.styles.$map.contains_key(style_id) {
+                let mut ops = moves;
+                ops.push(Operation::$DeleteOp {
+                    style_id: style_id.to_string(),
+                });
+                let applied = apply_inner(doc, &Operation::Batch { ops })?;
+                return Ok(AppliedOperation {
+                    op: Operation::$DeleteOp {
+                        style_id: style_id.to_string(),
+                    },
+                    inverse: applied.inverse,
+                    invalidation: applied.invalidation,
+                });
+            }
             let map = &mut doc.styles.$map;
             let captured =
                 map.remove(style_id)

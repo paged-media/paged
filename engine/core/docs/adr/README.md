@@ -122,6 +122,8 @@ is not written yet.
 | [191](191-a-group-transforms-about-its-box.md) | A group transforms about its box | Accepted 2026-10-19 |
 | [192](192-a-reflection-reads-as-the-flip-with-the-smaller-turn.md) | A reflection reads as the flip with the smaller turn | Accepted 2026-10-19 |
 | [193](193-page-item-snippets.md) | Page-item snippets: what Copy takes and Paste puts back | Accepted 2026-10-19 |
+| [194](194-deleting-a-style-moves-its-text-to-the-root-style.md) | Deleting a style moves its text to the root style | Accepted 2026-10-19 |
+| [195](195-the-state-hash-covers-the-whole-model.md) | The state hash covers the whole model | Accepted 2026-10-19 |
 
 Decisions made in other repositories that this engine's code rests on are listed in
 [`../README.md`](../README.md).

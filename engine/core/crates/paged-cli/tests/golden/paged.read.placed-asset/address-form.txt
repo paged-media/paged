@@ -6,10 +6,10 @@ $ paged read placed-asset doc.paged rectangle:u5
   "payload": {
     "elementId": "rectangle:u5",
     "encoded": [],
-    "found": false,
-    "height": 0,
-    "uri": "",
-    "width": 0
+    "found": true,
+    "height": 792,
+    "uri": "inline:u5",
+    "width": 612
   }
 }
 --- stderr

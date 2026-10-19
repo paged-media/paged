@@ -822,6 +822,91 @@ mod tests {
         );
     }
 
+    /// Finding PN-150: deleting a style that text carries puts that text
+    /// on the family's root style, in the delete's one undo step; undo
+    /// brings the style back on the same text.
+    #[test]
+    fn deleting_an_applied_style_moves_its_text_to_the_root_style() {
+        let mut doc = document_with_one_story("u1");
+        doc.stories[0].story.paragraphs[0].paragraph_style = Some("ParagraphStyle/Body".into());
+        doc.stories[0].story.paragraphs[1].paragraph_style = Some("ParagraphStyle/Other".into());
+        doc.stories[0].story.paragraphs[0].runs[1].character_style =
+            Some("CharacterStyle/Emph".into());
+        let mut project = Project::new(doc);
+        for (id, para) in [
+            ("ParagraphStyle/Body", true),
+            ("CharacterStyle/Emph", false),
+        ] {
+            let op = if para {
+                Operation::CreateParagraphStyle {
+                    self_id: Some(id.into()),
+                    name: Some("x".into()),
+                    based_on: None,
+                    restore_json: None,
+                }
+            } else {
+                Operation::CreateCharacterStyle {
+                    self_id: Some(id.into()),
+                    name: Some("x".into()),
+                    based_on: None,
+                    restore_json: None,
+                }
+            };
+            project.apply(op).unwrap();
+        }
+        let para_style = |p: &Project, i: usize| {
+            p.document().stories[0].story.paragraphs[i]
+                .paragraph_style
+                .clone()
+        };
+        let run_style = |p: &Project| {
+            p.document().stories[0].story.paragraphs[0]
+                .runs
+                .iter()
+                .find(|r| r.text == "world")
+                .and_then(|r| r.character_style.clone())
+        };
+        project
+            .apply(Operation::DeleteParagraphStyle {
+                style_id: "ParagraphStyle/Body".into(),
+            })
+            .unwrap();
+        assert_eq!(
+            para_style(&project, 0).as_deref(),
+            Some("ParagraphStyle/$ID/[No paragraph style]")
+        );
+        assert_eq!(
+            para_style(&project, 1).as_deref(),
+            Some("ParagraphStyle/Other")
+        );
+        project
+            .apply(Operation::DeleteCharacterStyle {
+                style_id: "CharacterStyle/Emph".into(),
+            })
+            .unwrap();
+        assert_eq!(
+            run_style(&project).as_deref(),
+            Some("CharacterStyle/$ID/[No character style]")
+        );
+        project.undo().unwrap().expect("undo the character delete");
+        assert_eq!(run_style(&project).as_deref(), Some("CharacterStyle/Emph"));
+        project.undo().unwrap().expect("undo the paragraph delete");
+        assert_eq!(
+            para_style(&project, 0).as_deref(),
+            Some("ParagraphStyle/Body")
+        );
+        assert!(project
+            .document()
+            .styles
+            .paragraph_styles
+            .contains_key("ParagraphStyle/Body"));
+        project.redo().unwrap().expect("redo the paragraph delete");
+        assert_eq!(
+            para_style(&project, 0).as_deref(),
+            Some("ParagraphStyle/$ID/[No paragraph style]")
+        );
+    }
+
     #[test]
     fn character_style_create_and_delete_round_trip() {
         let mut project = Project::new(document_with_one_textframe("TextFrame/u1"));

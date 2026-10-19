@@ -3,4 +3,4 @@ $ paged place doc.paged oval:u77 pic.png
 --- stdout
 (empty)
 --- stderr
-Error: place the image: not implemented: Mutation::ReplaceImageBytes
+Error: place the image: oval:u77: the target does not exist (notFound)

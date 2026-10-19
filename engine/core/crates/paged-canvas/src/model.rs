@@ -747,6 +747,54 @@ fn region_op(
     })
 }
 
+/// The frame id a frame mutation names, for the not-found answer
+/// (finding CLI-5). Only the mutations whose lowering resolves a frame id.
+fn missing_frame_target(mutation: &Mutation) -> Option<&str> {
+    match mutation {
+        Mutation::ResizeFrame { frame_id, .. }
+        | Mutation::MoveFrame { frame_id, .. }
+        | Mutation::DeleteFrame { frame_id } => Some(frame_id),
+        Mutation::PlaceImage { element_id, .. }
+        | Mutation::ReplaceImageBytes { element_id, .. } => Some(element_id),
+        _ => None,
+    }
+}
+
+/// A frame mutation the apply layer refused, as a worker error: a target
+/// that is not in the document is `NotFound` (finding CLI-5), anything
+/// else keeps the apply layer's words.
+fn frame_mutation_error(e: paged_mutate::OperationError) -> crate::channel::WorkerError {
+    fn missing(e: &paged_mutate::OperationError) -> Option<&paged_mutate::NodeId> {
+        match e {
+            paged_mutate::OperationError::NodeNotFound(node) => Some(node),
+            paged_mutate::OperationError::BatchFailed { source, .. } => missing(source),
+            _ => None,
+        }
+    }
+    match missing(&e) {
+        Some(node) => crate::channel::WorkerError::NotFound {
+            what: node_address(node),
+        },
+        None => crate::channel::WorkerError::NotImplemented {
+            what: format!("frame mutation failed: {e}"),
+        },
+    }
+}
+
+/// A node id spelled as the object model's `kind:id` address where it has
+/// one (`oval:u99`), else its debug form.
+fn node_address(node: &paged_mutate::NodeId) -> String {
+    use paged_mutate::NodeId;
+    match node {
+        NodeId::TextFrame(id) => format!("textFrame:{id}"),
+        NodeId::Rectangle(id) => format!("rectangle:{id}"),
+        NodeId::Oval(id) => format!("oval:{id}"),
+        NodeId::Polygon(id) => format!("polygon:{id}"),
+        NodeId::GraphicLine(id) => format!("graphicLine:{id}"),
+        other => format!("{other:?}"),
+    }
+}
+
 /// Inspector P1 — map a wire `ElementId` to the apply layer's
 /// `NodeId`. Unlike `path_node_id_for`, this version handles every
 /// element kind including Oval / Group; the apply layer may refuse
@@ -3236,6 +3284,16 @@ impl CanvasModel {
                 });
             }
             other => {
+                // Finding CLI-5: a frame mutation whose target resolves to
+                // nothing lands here; say the target is missing, not that
+                // the mutation is unimplemented.
+                if let Some(frame) = missing_frame_target(other)
+                    .filter(|id| self.resolve_frame_node_id(id).is_none())
+                {
+                    return Err(crate::channel::WorkerError::NotFound {
+                        what: frame.to_string(),
+                    });
+                }
                 return Err(crate::channel::WorkerError::NotImplemented {
                     what: format!("Mutation::{}", other.discriminant()),
                 });
@@ -5499,6 +5557,26 @@ impl CanvasModel {
     }
 
     pub(crate) fn resolve_frame_node_id(&self, frame_id: &str) -> Option<paged_mutate::NodeId> {
+        // Finding R16 (SCR-4, CLI-2, CLI-5) — a frame argument is the bare
+        // `Self` id or the `kind:id` address the object model answers
+        // (`rectangle:u5`); one parser, `paged_wire::Address`, reads the
+        // address. A kind that names a different page item does not resolve.
+        if frame_id.contains(':') {
+            let address = paged_wire::Address::parse(frame_id).ok()?;
+            let id = address.page_item_id()?;
+            let node = self.resolve_frame_node_id(id)?;
+            use paged_wire::AddressKind as K;
+            let matches = matches!(
+                (address.kind(), &node),
+                (K::TextFrame, paged_mutate::NodeId::TextFrame(_))
+                    | (K::Rectangle, paged_mutate::NodeId::Rectangle(_))
+                    | (K::Oval, paged_mutate::NodeId::Oval(_))
+                    | (K::Polygon, paged_mutate::NodeId::Polygon(_))
+                    | (K::GraphicLine, paged_mutate::NodeId::GraphicLine(_))
+                    | (K::Frame, _)
+            );
+            return matches.then_some(node);
+        }
         // v70 — master items resolve too, for mutations wrapped in
         // `OnMaster`.
         let spreads = self
@@ -5684,11 +5762,7 @@ impl CanvasModel {
         } else {
             Invalidation::Everything
         };
-        let applied = paged_mutate::apply(&mut self.scene, &op).map_err(|e| {
-            crate::channel::WorkerError::NotImplemented {
-                what: format!("frame mutation failed: {e}"),
-            }
-        })?;
+        let applied = paged_mutate::apply(&mut self.scene, &op).map_err(frame_mutation_error)?;
         self.stage_op_apply_ms(phase_elapsed_ms(t_op));
         // Perf-MasterText + Perf-BodyStory — committed mutations
         // can shift the per-page pool state (Alt-duplicate inserts
@@ -10138,6 +10212,18 @@ impl CanvasModel {
     /// filename, and a filename is the useful hint for a plugin picking
     /// a codec), falling back to the synthetic `inline:<element_id>`.
     pub fn placed_asset_bytes(&self, element_id: &str) -> Option<(String, u32, u32, Vec<u8>)> {
+        // Finding CLI-2 (R16): the `kind:id` address reads the same frame
+        // as its bare `Self` id; a kind that names another item finds none.
+        if element_id.contains(':') {
+            let node = self.resolve_frame_node_id(element_id)?;
+            let id = match &node {
+                paged_mutate::NodeId::Rectangle(id)
+                | paged_mutate::NodeId::Oval(id)
+                | paged_mutate::NodeId::Polygon(id) => id.clone(),
+                _ => return None,
+            };
+            return self.placed_asset_bytes(&id);
+        }
         let mut uri: Option<String> = None;
         let mut inline: Option<Vec<u8>> = None;
         for parsed in &self.scene.spreads {

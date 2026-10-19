@@ -150,26 +150,29 @@ fn place_image() {
         &format!("paged.placeImage({f:?}, Symbol('u'))"),
         SYMBOL_TO_STRING,
     );
-    // finding SCR-4: the address `insertFrame` answered is refused (the bridge hands it
-    // to the engine unresolved, unlike every other frame fn); it should place the image.
-    refuses(
+    // The address `insertFrame` answered places the image (finding SCR-4,
+    // fixed: it was refused, only the bare Self id worked).
+    writes(
         &mut m,
         &format!("paged.placeImage({f:?}, 'https://example.com/a.png')"),
-        "false",
+        "true",
     );
-    // The bare id is what the engine resolves today.
+    assert!(snapshot(&m)
+        .to_string()
+        .contains("https://example.com/a.png"));
+    // The bare id still works.
     let bare = f
         .split_once(':')
         .map_or(f.as_str(), |(_, id)| id)
         .to_string();
     writes(
         &mut m,
-        &format!("paged.placeImage({bare:?}, 'https://example.com/a.png')"),
+        &format!("paged.placeImage({bare:?}, 'https://example.com/c.png')"),
         "true",
     );
     assert!(snapshot(&m)
         .to_string()
-        .contains("https://example.com/a.png"));
+        .contains("https://example.com/c.png"));
 
     // With a fit, on a second frame.
     let g = ok(
