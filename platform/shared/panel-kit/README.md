@@ -21,3 +21,16 @@ const { refusal, run } = useActionFeedback(host, reload, "draw panel");
 <Refusal text={refusal} />
 <ConfirmButton label="Delete" onConfirm={() => void run(() => remove(id))} />
 ```
+
+A row names its controls:
+
+```tsx
+const id = useId();
+<span id={id}>Size</span>
+<LabelledBy id={id}>
+  <NumberInput … /> {/* aria-labelledby={id}, through useFieldName */}
+</LabelledBy>
+```
+
+The decision record is apps/editor ADR 233; the inventory and the numbers are in
+docs/migration/shared-foundations.md (C10).
