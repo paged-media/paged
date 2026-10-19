@@ -661,6 +661,12 @@ The Edit menu has Undo, Redo, Select all, Select same and Run command. It has no
 
 **Screenshots:** `F-28-edit-menu-no-copy-paste.png`, `F-28-after-paste-nothing.png`
 
+**Fixed (2026-10-19, `1f3b07f7a`).** Edit ▸ Cut, Copy, Paste, Paste in place and Duplicate
+(⌥⇧⌘D, a 1p0 step) with InDesign's chords (ADR 231). Copies are whole engine snippets (engine
+ADR 193): groups with their members, frames with their stories, the styles and swatches they
+name; they paste after a Cut and into the next document opened. Text from other applications
+pastes as a new text frame. Clear is not added (Delete is Object ▸ Delete).
+
 <a id="f-29"></a>
 
 #### F-29 · Double-click enters the wrong editing context; Direct Selection does not reach into groups
