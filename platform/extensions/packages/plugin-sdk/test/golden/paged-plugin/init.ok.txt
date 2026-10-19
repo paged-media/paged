@@ -1,0 +1,72 @@
+$ paged-plugin init <TMP>/hello-plugin
+# exit 0
+# stdout
+✓ com.example.hello-plugin in <TMP>/hello-plugin
+  package.json
+  tsconfig.json
+  src/manifest.json
+  src/index.ts
+  test/activate.test.ts
+  .gitignore
+  README.md
+next: cd <TMP>/hello-plugin && npm install && npm test
+# stderr
+(empty)
+# structure
+.gitignore
+README.md
+package.json
+src/index.ts
+src/manifest.json
+test/activate.test.ts
+tsconfig.json
+
+{
+  "name": "hello-plugin",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc",
+    "test": "node --test test/activate.test.ts",
+    "validate": "paged-plugin validate src/manifest.json"
+  },
+  "peerDependencies": {
+    "@paged-media/plugin-sdk": ">=<SDK_VERSION>"
+  },
+  "devDependencies": {
+    "@paged-media/plugin-sdk": "^<SDK_VERSION>",
+    "@types/node": "^24.0.0",
+    "typescript": "^7.0.2"
+  }
+}
+
+{
+  "id": "com.example.hello-plugin",
+  "name": "Hello Plugin",
+  "version": "0.1.0",
+  "apiVersion": "^0.2",
+  "capabilities": {
+    "document": {
+      "read": "broad"
+    }
+  },
+  "contributes": {
+    "commands": [
+      "com.example.hello-plugin.command.hello"
+    ],
+    "objectModel": {
+      "kinds": [],
+      "commands": [
+        {
+          "id": "com.example.hello-plugin.command.hello",
+          "title": "Say hello",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        }
+      ]
+    }
+  }
+}

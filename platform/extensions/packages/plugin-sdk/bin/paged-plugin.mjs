@@ -1,7 +1,14 @@
 #!/usr/bin/env node
 // `paged-plugin`, the bin of @paged-media/plugin-sdk (it was the
 // @paged-media/plugin-cli package until PM-0008) —
-// `paged-plugin validate <manifest.json>`.
+// `paged-plugin init [dir]` and `paged-plugin validate <manifest.json>`.
+//
+// `init` writes a minimal extension into a new (or empty) directory: a
+// manifest, one bundle with one command, an activation test over the SDK's
+// own doubles (`node --test`, no test framework), a tsconfig and a
+// package.json whose one dependency is this package, at this package's
+// version (PM-0008, amendment 3: types from `@paged-media/plugin-sdk/api`,
+// values from `@paged-media/plugin-sdk`). It refuses to overwrite a file.
 //
 // Plain ESM, zero dependencies, no build step: the published package ships
 // this file as it is. Validates a plugin manifest against the contract in
@@ -38,6 +45,7 @@ import { createHash } from "node:crypto";
 import {
   readFileSync,
   existsSync,
+  mkdirSync,
   statSync,
   writeFileSync,
   mkdtempSync,
@@ -121,7 +129,8 @@ function fail(msg) {
 
 function usage() {
   console.error(
-    "usage: paged-plugin validate <manifest.json> [--untyped-baseline <file>]\n" +
+    "usage: paged-plugin init [dir] [--id <reverse.dns.id>] [--name <name>]\n" +
+      "       paged-plugin validate <manifest.json> [--untyped-baseline <file>]\n" +
       "       paged-plugin untyped <manifest.json...>\n" +
       "       paged-plugin integrity <bundle-dir|manifest.json> [--check]\n" +
       "       paged-plugin modules-upload <bundle-dir|manifest.json> [--dry-run]",
@@ -958,6 +967,221 @@ function wasmArtifacts(manifest, manifestDir) {
   return list
     .filter((a) => a && typeof a.path === "string" && WASM_PATH_OK.test(a.path))
     .map((a) => ({ artifact: a, file: resolve(manifestDir, a.path) }));
+}
+
+// ── init ─────────────────────────────────────────────────────────
+
+/** The files `init` writes, for a plugin `id` named `name`, against this
+ *  package at `sdkVersion`. */
+function scaffold({ id, name, packageName, sdkVersion }) {
+  const command = `${id}.command.hello`;
+  const manifest = {
+    id,
+    name,
+    version: "0.1.0",
+    apiVersion: "^0.2",
+    capabilities: { document: { read: "broad" } },
+    contributes: {
+      commands: [command],
+      // The command's typed twin (ADR 323): scripts, the CLI and other
+      // plugins invoke it through host.objects.
+      objectModel: {
+        kinds: [],
+        commands: [
+          {
+            id: command,
+            title: "Say hello",
+            args: { kind: "struct", fields: {} },
+          },
+        ],
+      },
+    },
+  };
+  return {
+    "package.json": `${JSON.stringify(
+      {
+        name: packageName,
+        private: true,
+        version: "0.1.0",
+        type: "module",
+        scripts: {
+          typecheck: "tsc",
+          test: "node --test test/activate.test.ts",
+          validate: "paged-plugin validate src/manifest.json",
+        },
+        peerDependencies: { "@paged-media/plugin-sdk": `>=${sdkVersion}` },
+        devDependencies: {
+          "@paged-media/plugin-sdk": `^${sdkVersion}`,
+          "@types/node": "^24.0.0",
+          typescript: "^7.0.2",
+        },
+      },
+      null,
+      2,
+    )}\n`,
+    "tsconfig.json": `${JSON.stringify(
+      {
+        compilerOptions: {
+          target: "es2022",
+          module: "nodenext",
+          moduleResolution: "nodenext",
+          lib: ["es2022", "dom"],
+          types: ["node"],
+          strict: true,
+          noEmit: true,
+          allowImportingTsExtensions: true,
+          resolveJsonModule: true,
+          verbatimModuleSyntax: true,
+        },
+        include: ["src", "test"],
+      },
+      null,
+      2,
+    )}\n`,
+    "src/manifest.json": `${JSON.stringify(manifest, null, 2)}\n`,
+    "src/index.ts": `// ${name}: the bundle. Types come from @paged-media/plugin-sdk/api (type-only:
+// nothing there exists at run time), values from @paged-media/plugin-sdk and
+// from the host your activate() receives.
+
+import type { PluginManifest } from "@paged-media/plugin-sdk/api";
+import { defineBundle } from "@paged-media/plugin-sdk";
+
+import manifest from "./manifest.json" with { type: "json" };
+
+const HELLO = "${command}";
+
+export const bundle = defineBundle({
+  manifest: manifest as PluginManifest,
+  activate(host) {
+    const hello = async (): Promise<string> => {
+      const meta = await host.document.meta();
+      return \`hello from ${id}: \${meta.pageCount} pages\`;
+    };
+    // The typed command, for scripts, the CLI and other plugins ...
+    host.contribute.objectModel({
+      kinds: [],
+      commands: [
+        {
+          id: HELLO,
+          title: "Say hello",
+          args: { kind: "struct", fields: {} },
+          handler: hello,
+        },
+      ],
+    });
+    // ... and the same command in the editor's command palette.
+    host.contribute.command({
+      id: HELLO,
+      title: "Say hello",
+      handler: async () => host.log.info(await hello()),
+    });
+    // The host takes down everything registered through it; dispose only
+    // what you allocate outside it (timers, caches).
+    return { dispose() {} };
+  },
+});
+`,
+    "test/activate.test.ts": `// Activate the bundle against the SDK's fake editor, then dispose it: the
+// editor must be left exactly as it was found.
+
+import assert from "node:assert/strict";
+import { test } from "node:test";
+
+import {
+  createFakeEditor,
+  loadBundle,
+  mapBacking,
+  silentConsole,
+} from "@paged-media/plugin-sdk";
+
+import { bundle } from "../src/index.ts";
+
+test("activates with one namespaced command, and dispose removes it", () => {
+  const fake = createFakeEditor();
+  const loaded = loadBundle(() => fake.editor, bundle, {
+    console: silentConsole,
+    storage: mapBacking(),
+  });
+  assert.deepEqual(fake.ids("commands"), ["${command}"]);
+  loaded.dispose();
+  assert.deepEqual(fake.ids("commands"), []);
+});
+`,
+    ".gitignore": "node_modules/\ndist/\n",
+    "README.md": `# ${name}
+
+A paged extension, written by \`paged-plugin init\`.
+
+\`\`\`sh
+npm install
+npm test               # activate and dispose against the SDK's fake editor (Node 24)
+npm run typecheck
+npm run validate       # paged-plugin validate src/manifest.json
+\`\`\`
+
+\`src/manifest.json\` names the plugin (\`${id}\` namespaces every id it
+registers) and what it may do; \`src/index.ts\` is its \`activate(host)\`. Types
+come from \`@paged-media/plugin-sdk/api\`, values from \`@paged-media/plugin-sdk\`
+and from the host. \`@paged-media/plugin-sdk\` is a peer dependency: the editor
+provides the one copy at run time.
+`,
+  };
+}
+
+if (command === "init") {
+  let dirArg;
+  let id;
+  let name;
+  for (let i = 1; i < argv.length; i++) {
+    const a = argv[i];
+    if (a === "--id" || a === "--name") {
+      const v = argv[++i];
+      if (v === undefined || v.startsWith("--")) usage();
+      if (a === "--id") id = v;
+      else name = v;
+    } else if (a.startsWith("--") || dirArg !== undefined) usage();
+    else dirArg = a;
+  }
+  const dir = resolve(process.cwd(), dirArg ?? ".");
+  if (existsSync(dir) && !statSync(dir).isDirectory())
+    fail(`${dir} is not a directory`);
+  const base = (dirArg ? dir.split(sep).pop() : "hello") || "hello";
+  const slug =
+    base
+      .toLowerCase()
+      .replace(/[^a-z0-9-]+/g, "-")
+      .replace(/^[^a-z]+|-+$/g, "") || "hello";
+  id ??= `com.example.${slug}`;
+  name ??= slug.replace(
+    /(^|-)([a-z])/g,
+    (_m, sp, c) => `${sp ? " " : ""}${c.toUpperCase()}`,
+  );
+  if (!ID_PATTERN.test(id))
+    fail(
+      `--id "${id}" is not a reverse-DNS plugin id (e.g. com.example.hello)`,
+    );
+  const sdkVersion = JSON.parse(
+    readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), "..", "package.json"),
+      "utf8",
+    ),
+  ).version;
+  const files = scaffold({ id, name, packageName: slug, sdkVersion });
+  const taken = Object.keys(files).filter((f) => existsSync(join(dir, f)));
+  if (taken.length > 0)
+    fail(
+      `${dir} already has ${taken.join(", ")}; init writes into a new or empty directory`,
+    );
+  for (const [file, text] of Object.entries(files)) {
+    mkdirSync(dirname(join(dir, file)), { recursive: true });
+    writeFileSync(join(dir, file), text);
+  }
+  console.log(`✓ ${id} in ${dir}`);
+  for (const file of Object.keys(files)) console.log(`  ${file}`);
+  console.log(
+    `next: ${dirArg ? `cd ${dirArg} && ` : ""}npm install && npm test`,
+  );
+  process.exit(0);
 }
 
 if (command === "integrity") {

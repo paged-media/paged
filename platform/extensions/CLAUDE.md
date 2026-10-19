@@ -6,12 +6,13 @@ like the rest of the repository (ADR PM-0001; it was MPL-2.0 OR PMEL before).
 
 ## What this is
 
-Two packages of the repository's root Bun workspace, both public (see README
-for the tier table): `packages/plugin-api` (the contract, **type-only**) and
-`packages/plugin-sdk` (the runtime: in-process `BundleHost` adapter, loader,
-gesture kit, object registry, headless host; and `bin/paged-plugin.mjs`, the
+Two packages of the repository's root Bun workspace (see README for the tier
+table): `packages/plugin-api` (the contract, **type-only**, private) and
+`packages/plugin-sdk` (public: the runtime — in-process `BundleHost` adapter,
+loader, gesture kit, object registry, headless host; `bin/paged-plugin.mjs`, the
 zero-dep ESM manifest CLI with no build step, which was `packages/plugin-cli`,
-PM-0008). The first-party `@paged-media/cli` (bin `paged-node`, ADR 324) and
+PM-0008; and the contract itself as the type-only `./api` entry, which its
+build inlines from plugin-api, PM-0008 amendment 3). The first-party `@paged-media/cli` (bin `paged-node`, ADR 324) and
 `@paged-media/ai` (ADR 325) lived here until wave C; they are `apps/cli` and
 `platform/shared/ai` now, outside the community-facing tree; their ADRs stay
 in `docs/adr`. **`DESIGN.md` is the deliberation record** — when code and
@@ -20,6 +21,16 @@ are in `docs/adr/`; the object model is ADR 329, though the code still
 cites its proposal number, "ADR 323".
 
 ## Hard rules
+
+- **One public version: plugin-sdk's.** Any edit under
+  `packages/plugin-api/src` or `packages/plugin-sdk/src`, comments included,
+  bumps plugin-sdk's version, and plugin-api's private version moves to the
+  same value (`scripts/assert-contract-bumped.mjs`, the `extensions /
+contract-guard` workflow). Check origin/main right before bumping and take
+  the next free canary.
+- **The published plugin-sdk depends on nothing private.** Its `./api` is
+  plugin-api's declarations, copied in by `scripts/inline-api.mjs`; the build
+  fails if any file in `dist/` still imports `@paged-media/plugin-api`.
 
 - **`plugin-api` is type-only.** Every export is `export type`. A value
   export would drag host code (React, the wasm loader) into bundle module

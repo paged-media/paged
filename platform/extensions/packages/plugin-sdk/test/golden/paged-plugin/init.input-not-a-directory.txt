@@ -1,0 +1,6 @@
+$ paged-plugin init <TMP>/ok.json
+# exit 1
+# stdout
+(empty)
+# stderr
+error: <TMP>/ok.json is not a directory

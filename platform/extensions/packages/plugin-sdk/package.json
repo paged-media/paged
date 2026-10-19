@@ -1,21 +1,22 @@
 {
   "name": "@paged-media/plugin-sdk",
-  "version": "0.2.81-canary.0",
+  "version": "0.2.82-canary.0",
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
-    "./gesture-kit": "./src/gesture-kit.ts"
+    "./gesture-kit": "./src/gesture-kit.ts",
+    "./api": "./src/api.ts"
   },
   "scripts": {
     "typecheck": "bun check -p tsconfig.json",
     "test": "bun test --timeout 30000 --parallel --preload ../../../../tooling/js/bun-test-setup.ts",
-    "build": "bun scripts/build.mjs && tsc -p tsconfig.build.json",
+    "build": "bun scripts/build.mjs && tsc -p tsconfig.build.json && bun scripts/inline-api.mjs",
     "prepublishOnly": "bun run build"
   },
   "dependencies": {
-    "@paged-media/plugin-api": "workspace:*"
+    "@types/react": "catalog:"
   },
   "peerDependencies": {
     "react": ">=19.3"
@@ -28,15 +29,15 @@
   "devDependencies": {
     "@babel/core": "catalog:",
     "@paged-media/canvas-wasm": "workspace:*",
+    "@paged-media/plugin-api": "workspace:*",
     "@types/bun": "catalog:",
     "@types/node": "catalog:",
-    "@types/react": "catalog:",
     "babel-plugin-react-compiler": "catalog:",
     "fast-check": "^4.10.2",
     "react": "catalog:",
     "typescript": "catalog:"
   },
-  "description": "The Paged plugin runtime: loadBundle, the in-process BundleHost adapter, the gesture kit, and version negotiation; and the paged-plugin CLI (validate a manifest, stamp and host its wasm).",
+  "description": "The Paged extension SDK: the contract, type-only, as ./api; the runtime (loadBundle, the in-process BundleHost adapter, the gesture kit, the headless host, version negotiation); and the paged-plugin CLI (scaffold a plugin, validate a manifest, stamp and host its wasm).",
   "license": "AGPL-3.0-only OR LicenseRef-PMEL",
   "bin": {
     "paged-plugin": "./bin/paged-plugin.mjs"
@@ -53,7 +54,6 @@
   },
   "publishConfig": {
     "access": "public",
-    "tag": "canary",
     "main": "./dist/index.js",
     "types": "./dist/index.d.ts",
     "exports": {
@@ -64,7 +64,13 @@
       "./gesture-kit": {
         "types": "./dist/gesture-kit.d.ts",
         "default": "./dist/gesture-kit.js"
-      }
+      },
+      "./api": {
+        "types": "./dist/api/index.d.ts",
+        "default": "./dist/api/index.js"
+      },
+      "./api/manifest.schema.json": "./dist/api/manifest.schema.json",
+      "./package.json": "./package.json"
     }
   }
 }

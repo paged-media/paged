@@ -13,7 +13,8 @@ next to the code you change. This file holds only what crosses components.
   package; component scripts run with `bun run <script>` in the component's directory.
   The isolated linker makes an undeclared import fail; only `workspace:` links a
   workspace package (the editor's exact canary pins resolve from npm).
-- `platform/extensions` — the public extension contract (`plugin-api`) and SDK.
+- `platform/extensions` — the extension contract (`plugin-api`, private) and the
+  public SDK (`plugin-sdk`, which ships the contract as its `./api` entry).
   Built-in-only code must not leak into it: community extensions consume it.
 - `apps/editor`, `apps/server`, `apps/cli` (`paged-node`) — applications.
 - `platform/shared/*` — internal code of the built-ins and the editor (PM-0002):
@@ -85,6 +86,20 @@ tools and asks before anything that writes.
 - `serena` (Serena 2.0.0, `.serena/project.yml`): symbol navigation and edits
   for Rust (rust-analyzer, all ten Cargo workspaces via `linkedProjects`) and
   TypeScript/JavaScript. Setup and caveats: `docs/development/code-intelligence.md`.
+
+## npm packages
+
+Three public packages (docs/adr/PM-0008, amendment 3): `@paged-media/viewer`
+(`engine/core/web/idml-viewer`), `@paged-media/paged` (`packages/paged`: the
+engine of the private `@paged-media/canvas-wasm` plus the `paged` bin, the CLI of
+`apps/cli`) and `@paged-media/plugin-sdk` (with the private `plugin-api` inlined as
+`./api`). Every other workspace package is private, and a public one depends on
+no private one. `.github/workflows/release.yml` publishes the three from a tag.
+
+- Any edit under `platform/extensions/packages/{plugin-api,plugin-sdk}/src`,
+  comments included, bumps plugin-sdk's version (the contract's one public
+  number), and plugin-api's private version moves with it to the same value
+  (`extensions / contract-guard`).
 
 ## Invariants
 
