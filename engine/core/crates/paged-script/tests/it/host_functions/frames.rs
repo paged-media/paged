@@ -285,6 +285,49 @@ fn dissolve_group() {
 }
 
 #[test]
+fn copy_elements() {
+    covers!("script:paged.copyElements");
+    let (mut m, _, a, b) = two_ovals();
+    refuses(&mut m, "paged.copyElements()", "null");
+    refuses(&mut m, "paged.copyElements(['not an address'])", "null");
+    // A read: the snippet, and nothing written.
+    let before_count = count(&mut m, "oval");
+    let out = ok(&mut m, &format!("paged.copyElements([{a:?}, {b:?}])"));
+    let snippet = json_of(last_line(&out));
+    assert_eq!(snippet["format"], "paged.snippet/1");
+    assert_eq!(
+        snippet["spread"]["frames_in_order"]
+            .as_array()
+            .map(Vec::len),
+        Some(2)
+    );
+    assert_eq!(count(&mut m, "oval"), before_count);
+}
+
+#[test]
+fn paste_elements() {
+    covers!("script:paged.pasteElements");
+    let (mut m, pid, a, _) = two_ovals();
+    refuses(
+        &mut m,
+        &format!("paged.pasteElements('not a snippet', {pid:?})"),
+        "null",
+    );
+    let out = mints(
+        &mut m,
+        &format!("var s = paged.copyElements([{a:?}]); paged.pasteElements(s, {pid:?}, 300, 300)"),
+        |s| s.starts_with('['),
+    );
+    let copies: Vec<String> = serde_json::from_str(&out).expect("a JSON array of addresses");
+    assert_eq!(copies.len(), 1);
+    assert!(
+        copies[0].starts_with("oval:") && copies[0] != a,
+        "{copies:?}"
+    );
+    assert_eq!(count(&mut m, "oval"), 3);
+}
+
+#[test]
 fn duplicate_elements() {
     covers!("script:paged.duplicateElements");
     let (mut m, _, a, b) = two_ovals();

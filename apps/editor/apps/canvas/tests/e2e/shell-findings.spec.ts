@@ -30,7 +30,8 @@
 //                     keys move the caret behind it and never reach the menu
 //   SH-12             Enter that chooses a menu item also reaches the canvas:
 //                     the selected frame enters path-edit mode
-//   SH-201 (UX F-28)  no Cut, Copy, Paste or Duplicate for page items
+//   SH-201 (UX F-28)  no Cut, Copy, Paste or Duplicate for page items —
+//                     FIXED (ADR 231)
 
 import { expect, test, type Page } from "@playwright/test";
 
@@ -364,7 +365,7 @@ test.describe("SH-201 (UX F-28) — Cut, Copy, Paste, Duplicate", () => {
   test("SH-201: Copy then Paste on a selected frame adds a frame", async ({
     page,
   }) => {
-    test.fail();
+    covers("command:paged.edit.copy", "command:paged.edit.paste");
     await openShell(page, { doc: true });
     await select(page, [SHELL.frame]);
     await blurAll(page);
@@ -379,7 +380,12 @@ test.describe("SH-201 (UX F-28) — Cut, Copy, Paste, Duplicate", () => {
   test("SH-201: the Edit menu offers Cut, Copy, Paste and Duplicate", async ({
     page,
   }) => {
-    test.fail();
+    covers(
+      "menu:Edit/Cut",
+      "menu:Edit/Copy",
+      "menu:Edit/Paste",
+      "menu:Edit/Duplicate",
+    );
     await openShell(page, { doc: true });
     await page.locator('[data-menu-trigger="Edit"]').click();
     for (const name of ["Cut", "Copy", "Paste", "Duplicate"]) {

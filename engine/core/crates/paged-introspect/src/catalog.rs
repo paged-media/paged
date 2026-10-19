@@ -255,6 +255,10 @@ fn host_functions() -> Vec<HostFn> {
            "Group two-or-more elements; <2 valid members returns false."),
         f!("paged.duplicateElements", "([id, ...], dx, dy)", "string[] (created ids) JSON | null", "author",
            "Duplicate page items: a whole clone of each (properties, plugin metadata, group members, pasted-in children, a text frame's story), offset by (dx, dy) pt and inserted directly above its source, in one undo step. Selects the clones and returns their kind:id addresses in source order; null when the engine refuses (threaded text frame, anchored object, opacity mask, an element named together with its group)."),
+        f!("paged.copyElements", "([id, ...])", "string (snippet JSON) | null", "read",
+           "Copy page items whole (properties, group members, pasted-in children, a copy of each story, and the swatches and styles they name): the snippet paged.pasteElements takes, in this document or another. null when the engine refuses (threaded text frame, items on two spreads)."),
+        f!("paged.pasteElements", "(snippet, pageId, cx?, cy?)", "string[] (created ids) JSON | null", "author",
+           "Paste a paged.copyElements snippet on the page's spread, on top, in one undo step: centred on (cx, cy) in page space, or in place without a centre. Selects the copies and returns their kind:id addresses; null when the engine refuses."),
         // --- history ---
         f!("paged.undo", "()", "bool", "history", "Undo the last mutation."),
         f!("paged.redo", "()", "bool", "history", "Redo the last undone mutation."),

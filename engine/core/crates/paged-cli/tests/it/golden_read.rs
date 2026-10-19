@@ -308,6 +308,22 @@ fn element_geometry() {
 }
 
 #[test]
+fn snippet() {
+    covers!("cli:paged read snippet");
+    let fx = seeded("read-snippet");
+    shared_errors(&fx, "snippet", &["oval:u2"]);
+    let r = fx
+        .run(&["read", "snippet", "doc.paged", "oval:u2", "oval:u3"])
+        .code(0);
+    assert_eq!(r.json()["kind"], "elementsExported");
+    assert_eq!(r.json()["payload"]["count"], 2);
+    r.golden("paged read snippet", "two-ovals");
+    fx.run(&["read", "snippet", "doc.paged", "oval:nope"])
+        .code(0)
+        .golden("paged read snippet", "unknown-element-is-refused");
+}
+
+#[test]
 fn group_leaves() {
     covers!("cli:paged read group-leaves");
     let fx = seeded("read-group-leaves");
