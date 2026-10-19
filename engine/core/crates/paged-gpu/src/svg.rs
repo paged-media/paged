@@ -25,18 +25,19 @@
 //! strokes with dashes; a group isolates with its opacity, blend mode,
 //! clip path and mask; a nested SVG image is drawn in place, and text
 //! from usvg's outlines when usvg is built with fonts (it is not: see
-//! paged-renderer's Cargo.toml). Filters are not applied: a filtered group
-//! is drawn unfiltered. Raster images inside an SVG are not decoded, as
-//! with the `resvg` build this replaces.
+//! paged-renderer's Cargo.toml). A group with filters is drawn into a
+//! layer over its filter region, filtered ([`crate::svg_filter`]) and
+//! composited like any other isolated group. Raster images inside an SVG
+//! are not decoded, as with the `resvg` build this replaces.
 
 use vello_cpu::kurbo::{self, Affine, BezPath, Rect, Shape};
 use vello_cpu::peniko::{
     BlendMode, Color, ColorStop, Compose, Extend, Fill, Gradient, ImageAlphaType, ImageQuality,
-    ImageSampler, Mix,
+    ImageSampler, InterpolationAlphaSpace, Mix,
 };
 use vello_cpu::{
-    Image, ImageSource, Level, Mask, Pixmap, RasterizerSettings, RenderContext, RenderMode,
-    RenderSettings, Resources, TargetInit,
+    Image, ImageSource, Level, Mask, PixelMetadata, Pixmap, RasterizerSettings, RenderContext,
+    RenderMode, RenderSettings, Resources, TargetInit,
 };
 
 /// Rasterize `tree` into a `width × height` RGBA8 buffer (straight alpha,
@@ -45,11 +46,7 @@ use vello_cpu::{
 pub fn rasterize_svg(tree: &usvg::Tree, width: u32, height: u32, scale: f32) -> Option<Vec<u8>> {
     let w = u16::try_from(width).ok().filter(|w| *w > 0)?;
     let h = u16::try_from(height).ok().filter(|h| *h > 0)?;
-    let mut svg = Svg {
-        w,
-        h,
-        res: Resources::new(),
-    };
+    let mut svg = Svg::new(w, h);
     let pix = svg.render(tree.root(), Affine::scale(scale as f64));
     Some(pix.take_rgba8(ImageAlphaType::Alpha))
 }
@@ -58,6 +55,24 @@ struct Svg {
     w: u16,
     h: u16,
     res: Resources,
+    /// How far a filtered group's layer may reach, in this surface's
+    /// pixels: the canvas and a quarter of it on every side. Content
+    /// further out can only reach the canvas through a filter that moves
+    /// it that far (a long offset, a wide blur); the bound keeps a filter
+    /// region that names the whole plane from allocating it.
+    reach: (i32, i32, i32, i32),
+}
+
+impl Svg {
+    fn new(w: u16, h: u16) -> Svg {
+        let (mx, my) = (w as i32 / 4, h as i32 / 4);
+        Svg {
+            w,
+            h,
+            res: Resources::new(),
+            reach: (-mx, -my, w as i32 + mx, h as i32 + my),
+        }
+    }
 }
 
 /// Coverage per pixel, `w × h`.
@@ -136,8 +151,96 @@ impl Svg {
             mask,
             None,
         );
-        self.draw_children(ctx, group, ts);
+        if group.filters().is_empty() {
+            self.draw_children(ctx, group, ts);
+        } else {
+            self.draw_filtered(ctx, group, ts);
+        }
         ctx.pop_layer();
+    }
+
+    /// A filtered group: its children drawn into a layer over its filter
+    /// region, every filter run over that layer in turn, and the result
+    /// drawn back. A filter works in the group's own axes: under a
+    /// rotation or a skew the layer is laid out along them, at the device
+    /// resolution, and drawn back through the rest of the transform,
+    /// resampled. Otherwise the layer is whole device pixels, sized as
+    /// `resvg` sizes it, and goes back pixel for pixel.
+    fn draw_filtered(&mut self, ctx: &mut RenderContext, group: &usvg::Group, ts: Affine) {
+        let [a, b, c, d, e, f] = ts.as_coeffs();
+        let axis_aligned = b.abs() < 1e-9 && c.abs() < 1e-9 && a > 0.0 && d > 0.0;
+        // `local` maps user space onto the layer's pixel grid (before its
+        // origin is chosen), `back` that grid onto this surface.
+        let (local, back) = if axis_aligned {
+            (ts, Affine::IDENTITY)
+        } else {
+            let (sx, sy) = (a.hypot(b), c.hypot(d));
+            if sx < 1e-9 || sy < 1e-9 {
+                return;
+            }
+            (
+                Affine::scale_non_uniform(sx, sy),
+                Affine::new([a / sx, b / sx, c / sy, d / sy, e, f]),
+            )
+        };
+        let bbox = crate::svg_filter::device_rect(group.layer_bounding_box(), local);
+        let (rx0, ry0, rx1, ry1) = self.reach;
+        let reach = if axis_aligned {
+            Rect::new(rx0 as f64, ry0 as f64, rx1 as f64, ry1 as f64)
+        } else {
+            let inv = back.inverse();
+            let corners = [(rx0, ry0), (rx1, ry0), (rx1, ry1), (rx0, ry1)]
+                .map(|(x, y)| inv * kurbo::Point::new(x as f64, y as f64));
+            corners[1..]
+                .iter()
+                .fold(Rect::from_points(corners[0], corners[0]), |r, p| {
+                    r.union_pt(*p)
+                })
+        };
+        let (x0, y0) = (bbox.x0.floor(), bbox.y0.floor());
+        let (x1, y1) = (
+            x0 + bbox.width().ceil().max(1.0),
+            y0 + bbox.height().ceil().max(1.0),
+        );
+        let (lx0, ly0) = (reach.x0.floor(), reach.y0.floor());
+        let (lx1, ly1) = (reach.x1.ceil(), reach.y1.ceil());
+        let (x0, y0, x1, y1) = (x0.max(lx0), y0.max(ly0), x1.min(lx1), y1.min(ly1));
+        if !(x0 < x1 && y0 < y1) || x1 - x0 > u16::MAX as f64 || y1 - y0 > u16::MAX as f64 {
+            return;
+        }
+        let (w, h) = ((x1 - x0) as u16, (y1 - y0) as u16);
+        let to_layer = Affine::translate((-x0, -y0)) * local;
+        let mut layer = Svg {
+            w,
+            h,
+            res: Resources::new(),
+            reach: (
+                (lx0 - x0) as i32,
+                (ly0 - y0) as i32,
+                (lx1 - x0) as i32,
+                (ly1 - y0) as i32,
+            ),
+        };
+        let mut buf = to_buf(&layer.render(group, to_layer));
+        for filter in group.filters() {
+            crate::svg_filter::apply(filter, to_layer, &mut buf, &mut |g, place, w, h| {
+                let mut s = Svg::new(w as u16, h as u16);
+                to_buf(&s.render(g, place))
+            });
+        }
+        let pix = from_buf(buf);
+        ctx.set_transform(back * Affine::translate((x0, y0)));
+        ctx.set_paint(Image {
+            image: ImageSource::Pixmap(std::sync::Arc::new(pix)),
+            sampler: ImageSampler::new()
+                .with_extend(Extend::Pad)
+                .with_quality(if axis_aligned {
+                    ImageQuality::Low
+                } else {
+                    ImageQuality::Medium
+                }),
+        });
+        ctx.fill_rect(&Rect::new(0.0, 0.0, w as f64, h as f64));
     }
 
     fn draw_path(&mut self, ctx: &mut RenderContext, path: &usvg::Path, ts: Affine) {
@@ -224,6 +327,7 @@ impl Svg {
                     (g.x2() as f64, g.y2() as f64),
                 );
                 gradient.extend = extend(g.spread_method());
+                gradient.interpolation_alpha_space = InterpolationAlphaSpace::Unpremultiplied;
                 ctx.set_paint(gradient.with_stops(stops(g.stops(), opacity).as_slice()));
                 ctx.set_paint_transform(affine(g.transform()));
                 draw(ctx);
@@ -236,6 +340,7 @@ impl Svg {
                     g.r().get(),
                 );
                 gradient.extend = extend(g.spread_method());
+                gradient.interpolation_alpha_space = InterpolationAlphaSpace::Unpremultiplied;
                 ctx.set_paint(gradient.with_stops(stops(g.stops(), opacity).as_slice()));
                 ctx.set_paint_transform(affine(g.transform()));
                 draw(ctx);
@@ -244,11 +349,26 @@ impl Svg {
                 let Some((tile, tile_ts)) = self.pattern_tile(pattern, ts) else {
                     return;
                 };
+                // A tile that lands on whole device pixels is copied, as
+                // tiny-skia (and Skia) do: a bicubic filter at pixel
+                // centres still softens it.
+                let [a, b, c, d, e, f] = (ts * tile_ts).as_coeffs();
+                let whole = |v: f64| (v - v.round()).abs() < 1e-3;
+                let aligned = (a - 1.0).abs() < 1e-6
+                    && (d - 1.0).abs() < 1e-6
+                    && b.abs() < 1e-6
+                    && c.abs() < 1e-6
+                    && whole(e)
+                    && whole(f);
                 ctx.set_paint(Image {
                     image: ImageSource::Pixmap(std::sync::Arc::new(tile)),
                     sampler: ImageSampler::new()
                         .with_extend(Extend::Repeat)
-                        .with_quality(ImageQuality::High),
+                        .with_quality(if aligned {
+                            ImageQuality::Low
+                        } else {
+                            ImageQuality::High
+                        }),
                 });
                 ctx.set_paint_transform(tile_ts);
                 let fade = opacity.get() < 1.0;
@@ -275,11 +395,7 @@ impl Svg {
         if !(1.0..=u16::MAX as f64).contains(&w) || !(1.0..=u16::MAX as f64).contains(&h) {
             return None;
         }
-        let mut tile = Svg {
-            w: w as u16,
-            h: h as u16,
-            res: Resources::new(),
-        };
+        let mut tile = Svg::new(w as u16, h as u16);
         let pix = tile.render(pattern.root(), Affine::scale_non_uniform(sx, sy));
         let place = affine(pattern.transform())
             * Affine::translate((rect.x() as f64, rect.y() as f64))
@@ -464,6 +580,26 @@ fn mix(mode: usvg::BlendMode) -> Mix {
         usvg::BlendMode::Color => Mix::Color,
         usvg::BlendMode::Luminosity => Mix::Luminosity,
     }
+}
+
+fn to_buf(pix: &Pixmap) -> crate::svg_filter::Buf {
+    crate::svg_filter::Buf {
+        w: pix.width() as u32,
+        h: pix.height() as u32,
+        px: pix.data().iter().map(|p| [p.r, p.g, p.b, p.a]).collect(),
+    }
+}
+
+fn from_buf(buf: crate::svg_filter::Buf) -> Pixmap {
+    Pixmap::from_parts(
+        buf.px.into_flattened(),
+        buf.w as u16,
+        buf.h as u16,
+        PixelMetadata {
+            may_have_transparency: true,
+            alpha_type: ImageAlphaType::AlphaPremultiplied,
+        },
+    )
 }
 
 fn alpha(pix: &Pixmap) -> Coverage {
