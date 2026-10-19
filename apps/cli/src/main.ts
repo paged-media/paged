@@ -157,6 +157,7 @@ export async function main(
         return session;
       },
     });
+    if (result.silent) return result.exit ?? EXIT.ok;
     io.stdout(
       text && result.text !== undefined
         ? result.text

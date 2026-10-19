@@ -140,6 +140,23 @@ rows with a value: [
     }
   },
   {
+    "path": "textWrapInvert",
+    "value": {
+      "type": "bool",
+      "value": false
+    }
+  },
+  {
+    "path": "framePath",
+    "value": {
+      "type": "framePath",
+      "value": {
+        "anchors": [],
+        "subpathStarts": []
+      }
+    }
+  },
+  {
     "path": "frameInnerShadowEnabled",
     "value": {
       "type": "bool",

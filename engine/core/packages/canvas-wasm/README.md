@@ -1,5 +1,10 @@
 # @paged-media/canvas-wasm
 
+_Private since PM-0008 amendment 3 (2026-10-19): this is the engine's workspace package,
+imported under this name inside the repository. On npm the same files are
+[`@paged-media/paged`](../../../../packages/paged/README.md), assembled from this directory
+(with the `paged` command line); the last published `canvas-wasm` is 0.73.4, deprecated._
+
 The paged engine for the browser, as wasm-bindgen modules. One package, three entry points,
 each its own wasm module, so a page loads only the one it imports:
 
@@ -20,8 +25,8 @@ import repoWasmUrl from "@paged-media/canvas-wasm/repo/paged_repo_wasm_bg.wasm?u
 await init({ module_or_path: repoWasmUrl });
 ```
 
-These replace `@paged-media/introspect-wasm` (now `./introspect`) and
-`@paged-media/repo-wasm` (now `./repo`). The renderer-only viewer session is
+These replace `@paged-media/introspect-wasm` (now `@paged-media/paged/introspect`) and
+`@paged-media/repo-wasm` (now `@paged-media/paged/repo`). The renderer-only viewer session is
 `@paged-media/viewer/session`.
 
 The version is `0.<protocol>.<patch>`: its minor is the engine's wire protocol

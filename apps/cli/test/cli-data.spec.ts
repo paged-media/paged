@@ -174,7 +174,7 @@ describe("paged merge — InDesign Data Merge oracle (long-record-set)", () => {
     }
   });
 
-  it("merge without the data bundle is a usage error naming what to install", async () => {
+  it("merge without the data bundle is a usage error saying what is missing and where it is", async () => {
     const r = await cli([
       "merge",
       LONG_RECORD_SET.idml,
@@ -185,7 +185,9 @@ describe("paged merge — InDesign Data Merge oracle (long-record-set)", () => {
       "--no-plugins",
     ]);
     expect(r.code).toBe(2);
-    expect(r.json.error.message).toMatch(/install @paged-media\/data/);
+    expect(r.json.error.message).toMatch(
+      /needs the paged\.data bundle .*does not include it/,
+    );
   });
 });
 

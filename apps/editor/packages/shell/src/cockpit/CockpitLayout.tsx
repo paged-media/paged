@@ -28,8 +28,16 @@
 // Mode slots resolve through the mode registry; panel ids resolve
 // through the panel registry (PanelHost) — the same contracts
 // plugins use, so a custom panel renders here untouched.
+//
+// What is hidden stays mounted (ADR 233): Tab / Shift+Tab hides the side
+// columns in an <Activity>, the left panel of every mode visited so far
+// stays mounted beside the current one, and an export-style mode hides
+// the document viewport instead of unmounting it. A hidden subtree keeps
+// its state and DOM and has its effects unmounted, so it holds no
+// subscription while hidden; showing it again does not mount it again
+// (the viewport keeps its transferred canvas and its camera).
 
-import type { ComponentType } from "react";
+import { Activity, useState, type ComponentType } from "react";
 
 import { canvasViewportSurfaceProps } from "../focus/canvas-surface";
 import type { PanelProps } from "../registries/panel";
@@ -67,6 +75,15 @@ export function CockpitLayout({
   const slots = modes.get(mode)?.slots;
 
   const leftId = slots?.left;
+  // The left panels of the modes visited so far, the current one included
+  // (state adjusted during render: the list is ready in the same render
+  // as the mode).
+  const [visitedLeft, setVisitedLeft] = useState<readonly string[]>(() =>
+    leftId ? [leftId] : [],
+  );
+  if (leftId && !visitedLeft.includes(leftId)) {
+    setVisitedLeft([...visitedLeft, leftId]);
+  }
   const canvasOverride = slots?.canvas?.startsWith("panel:")
     ? slots.canvas.slice("panel:".length)
     : undefined;
@@ -84,7 +101,10 @@ export function CockpitLayout({
         display: "flex",
       }}
     >
-      {!panelsHidden && leftId && (
+      <Activity
+        mode={!panelsHidden && leftId ? "visible" : "hidden"}
+        name="left column"
+      >
         <div
           data-left-panel={leftId}
           style={{
@@ -98,9 +118,17 @@ export function CockpitLayout({
             overflow: "hidden",
           }}
         >
-          <PanelHost id={leftId} />
+          {visitedLeft.map((id) => (
+            <Activity
+              key={id}
+              mode={id === leftId ? "visible" : "hidden"}
+              name={id}
+            >
+              <PanelHost id={id} />
+            </Activity>
+          ))}
         </div>
-      )}
+      </Activity>
 
       {/* Canvas column */}
       <div
@@ -146,11 +174,10 @@ export function CockpitLayout({
             {...(isOverride ? null : canvasViewportSurfaceProps)}
             style={{ flex: 1, minWidth: 0, position: "relative" }}
           >
-            {isOverride ? (
-              <PanelHost id={canvasOverride} />
-            ) : (
+            <Activity mode={isOverride ? "hidden" : "visible"} name="canvas">
               <CanvasComponent paged={paged} api={{ id: "paged.canvas" }} />
-            )}
+            </Activity>
+            {isOverride && <PanelHost id={canvasOverride} />}
           </div>
         </div>
         {/* W2.8 — headless guide-drag controller (ruler → drag →
@@ -163,7 +190,7 @@ export function CockpitLayout({
         {!isOverride && <ThumbnailRail />}
       </div>
 
-      {!panelsHidden && (
+      <Activity mode={panelsHidden ? "hidden" : "visible"} name="right column">
         <div
           style={{
             width: 320,
@@ -178,7 +205,7 @@ export function CockpitLayout({
         >
           <RightDock />
         </div>
-      )}
+      </Activity>
     </div>
   );
 }

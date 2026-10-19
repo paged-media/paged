@@ -1,7 +1,7 @@
 #!/usr/bin/env node
-// The dist-tag assertion of a release (PM-0008): after release.yml publishes,
-// npm must serve the release from the dist-tag it was published under, for
-// each of the four public packages.
+// The dist-tag assertion of a release (PM-0008, amendment 3): after
+// release.yml publishes, npm must serve the release from the dist-tag it was
+// published under, for each of the three public packages.
 //
 //   node tooling/release/assert-dist-tags.mjs <version> <dist-tag>
 //   node tooling/release/assert-dist-tags.mjs --audit
@@ -12,21 +12,21 @@
 // - `latest` never points at a prerelease (a bare `npm install` would hand it
 //   out). A prerelease release publishes under `next` and leaves `latest` as
 //   it found it, so there this is a warning; a release to `latest` sets it,
-//   and the first one corrects the June 0.2.8-canary.0 of plugin-api and
-//   plugin-sdk.
+//   and the first one corrects the June 0.2.8-canary.0 of plugin-sdk.
 // - A `canary` dist-tag is left over from the canary lane the release workflow
 //   replaced; the owner removes it (docs/migration/npm-release-runbook.md). It
 //   is reported, not failed, so the first release does not depend on that.
 //
-// --audit prints the four packages' dist-tags and checks only the `latest`
-// rule. Read-only: it runs `npm view`, never anything that writes.
+// --audit prints the three packages' dist-tags and checks only the `latest`
+// rule (a package not on npm yet, as the two new names are before the first
+// release, is reported, not failed). Read-only: it runs `npm view`, never
+// anything that writes.
 
 import { execFileSync } from "node:child_process";
 
 const PACKAGES = [
-  "@paged-media/canvas-wasm",
+  "@paged-media/paged",
   "@paged-media/viewer",
-  "@paged-media/plugin-api",
   "@paged-media/plugin-sdk",
 ];
 const args = process.argv.slice(2);
@@ -94,5 +94,5 @@ if (failures.length) {
 console.log(
   audit
     ? "dist-tags audit OK"
-    : `dist-tags OK — ${tag} is ${version} for all four`,
+    : `dist-tags OK — ${tag} is ${version} for all three`,
 );

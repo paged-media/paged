@@ -38,5 +38,8 @@
   "devDependencies": {
     "typescript": "catalog:",
     "@types/bun": "catalog:"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }
