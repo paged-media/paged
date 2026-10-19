@@ -274,6 +274,13 @@ jobs:
       - name: built-in command handlers (apps/canvas unit)
         run: bun run test:canvas-unit
 
+      # The canvas app's DOM lane (every *.dom.test.tsx under apps/canvas):
+      # each built-in panel rendered in happy-dom over the real engine wasm
+      # (docs/reference/testing-panels.md), its states, the exact mutation
+      # each control sends, and the basics of keyboard and name reach.
+      - name: panels and components, DOM lane (apps/canvas)
+        run: bun run test:dom
+
       # Every gated fidelity pack must carry a threshold entry, or the
       # fidelity gate silently skips it.
       - name: fidelity thresholds schema

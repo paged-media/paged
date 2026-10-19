@@ -24,7 +24,7 @@ import {
   type HeadlessHost,
   type ToolSettingsBackend,
 } from "@paged-media/plugin-sdk";
-import { gestures, waitFor } from "@paged-media/test-kit";
+import { waitFor } from "@paged-media/test-kit";
 
 import { imageBundle, PANEL_ID } from "../src";
 import { bootEngine, type ImageEngine } from "../src/engine";
@@ -50,7 +50,10 @@ let engine: Promise<ImageEngine> | null = null;
 /** The image-js engine (the same wasm instance the session boots, so a
  *  session's handles are readable through it). */
 export const imageEngine = (): Promise<ImageEngine> =>
-  (engine ??= bootEngine());
+  (engine ??= bootEngine().catch((err: unknown) => {
+    engine = null; // a failed boot is not cached
+    throw err;
+  }));
 
 /** The W×H RGBA8 pixels: columns 0–1 red, 2–3 blue. */
 export function twoColourRgba(w = W, h = H): Uint8Array {
@@ -177,20 +180,29 @@ export async function bundleOnFake(
       (m) => (m as { op?: string }).op !== "setPluginMetadata",
     ) as Array<{ op: string; args: Record<string, unknown> }>;
   const dispose = () => loaded.dispose();
-  /** The gesture DSL over the REGISTERED tools (`g.tool(<tool id>)`
-   *  mounts the contribution's own gesture), on the frame's page `pg1`.
-   *  The frame is 200×100 pt holding 4×2 px: 50 pt per pixel, origin
-   *  (0, 0). */
-  const tools = () =>
-    gestures({
-      editor: fake.editor as PagedEditor,
-      pages: [{ id: "pg1", origin: [0, 0], size: [612, 792] }],
-      tools: () =>
-        fake.tools
-          .ids()
-          .map((id) => fake.tools.get(id) as unknown as ToolContribution),
-    });
-  return { fake, loaded, session, run, ingest, opened, docOps, tools, dispose };
+  /** The unit backend's target over the REGISTERED tools: hand it to
+   *  `gestures(...)` and `g.tool(<tool id>)` mounts the contribution's
+   *  own gesture, on the frame's page `pg1`. The frame is 200×100 pt
+   *  holding 4×2 px: 50 pt per pixel, origin (0, 0). */
+  const toolTarget = {
+    editor: fake.editor as PagedEditor,
+    pages: [{ id: "pg1", origin: [0, 0] as const, size: [612, 792] as const }],
+    tools: () =>
+      fake.tools
+        .ids()
+        .map((id) => fake.tools.get(id) as unknown as ToolContribution),
+  };
+  return {
+    fake,
+    loaded,
+    session,
+    run,
+    ingest,
+    opened,
+    docOps,
+    toolTarget,
+    dispose,
+  };
 }
 
 /** Replace session methods with recorders (optionally answering), so a
