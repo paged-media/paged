@@ -88,6 +88,7 @@ helper in `paged-gpu` (engine/core). Both honour `PAGED_FORCE_NO_GPU`.
 | `PAGED_SKIP_LOG`         | File every skip is appended to: `binary id`, `test name`, `resource`, `message`, tab-separated.                                                                                                | every Rust test lane                                                                  |
 | `PAGED_FORCE_NO_GPU`     | GPU tests behave as if there were no adapter (proves the REQUIRE path on a machine that has one).                                                                                              | you                                                                                   |
 | `PAGED_CMYK_PROFILE`     | The CMYK profile the colour tests and the fidelity scripts use (`paged_color::test_profiles`).                                                                                                 | the export-diff lane                                                                  |
+| `PAGED_REQUIRE_BROWSER`  | The root `tests/system/wasm-boot` checks fail instead of reporting `unavailable: browser` when no Chromium is found (`PAGED_CHROMIUM`, else playwright-core's).                                | `tests / contracts + system`                                                          |
 
 `PAGED_REQUIRE_<X>` accepts `1`, `true` or `yes`.
 
@@ -187,7 +188,7 @@ writes the job summary and fails the lane when fewer than `--min-executed`
   `platform/extensions/packages/plugin-sdk/test/react-free-import.spec.ts` (2) builds the
   bundle it asserts on (the bundling step of the package's own `build` script, into a
   temporary directory); `modules/image/glue/test/type.spec.ts` (2) reads a committed font
-  (`test/fixtures/fonts/Roboto-Regular.ttf`, Apache-2.0, its licence beside it);
+  (`engine/core/corpus/fonts/Roboto-Regular.ttf`, Apache-2.0, its licence beside it);
   `modules/image/glue/test/retouch-tools.spec.ts` (4) skips with an `unavailable: build
 output` reason when the image-js wasm is not built and runs under `REQUIRE_REAL_WASM=1`,
   which image-ci sets after building it; `apps/editor/apps/canvas/tests/default-italic-face.spec.ts`

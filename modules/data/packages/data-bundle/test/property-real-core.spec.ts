@@ -23,12 +23,7 @@ import { fileURLToPath } from "node:url";
 import type { BundleHost } from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
 
-import {
-  ENGINE_ANCHOR,
-  fixedFrom,
-  openRealHost,
-  REQUIRE_REAL_CORE,
-} from "./real-core";
+import { ENGINE_ANCHOR, openRealHost, REQUIRE_REAL_CORE } from "./real-core";
 import {
   bootRealDuckDB,
   bootRealEngine,
@@ -275,25 +270,22 @@ describe.skipIf(!ready && !required)(
     // A core gap, pinned: the published engine (0.69, 0.70) keeps elementVisible in
     // its model but does not write `Visible="false"` into the exported IDML,
     // so a hidden item is baked for paged and NOT for InDesign; 0.70 still
-    // does not. Fixed in core → this flips to a plain pass.
-    fixedFrom(71, it)(
-      'a hidden item is baked into the exported IDML as Visible="false" [data.persist.labels]',
-      async () => {
-        const mod = await loadBundleModule();
-        const { host, s } = await open(mod);
-        await seed(s);
-        s.addVisibilityBinding("badge", "urect", "q", "shown", {
-          kind: "rectangle",
-        });
-        await s.previewRecord("badge", 1);
-        const xml = text(
-          readZip(await exportPaged(host)).find((e) =>
-            e.name.startsWith("Spreads/"),
-          ),
-        );
-        expect(xml).toMatch(/<Rectangle Self="urect"[^>]*Visible="false"/);
-      },
-    );
+    // does not. Fixed in core 0.71; the workspace engine has the fix.
+    it('a hidden item is baked into the exported IDML as Visible="false" [data.persist.labels]', async () => {
+      const mod = await loadBundleModule();
+      const { host, s } = await open(mod);
+      await seed(s);
+      s.addVisibilityBinding("badge", "urect", "q", "shown", {
+        kind: "rectangle",
+      });
+      await s.previewRecord("badge", 1);
+      const xml = text(
+        readZip(await exportPaged(host)).find((e) =>
+          e.name.startsWith("Spreads/"),
+        ),
+      );
+      expect(xml).toMatch(/<Rectangle Self="urect"[^>]*Visible="false"/);
+    });
 
     it("save, reopen; strip the parts like InDesign: the bindings come back from the labels [data.persist.labels]", async () => {
       const mod = await loadBundleModule();

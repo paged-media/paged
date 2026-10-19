@@ -128,8 +128,8 @@ static evaluator (`scripts/surface/static-eval.mjs`). It follows tables, `.map` 
   `DYNAMIC_SITES` entry with a reason.
 - The bundle count is pinned at nine.
 
-A runtime test checks the static reader. `apps/canvas/test/contracts/surface-enumeration.test.ts`,
-in the bundle-contract lane, activates every bundle against the headless engine, records what it
+A runtime test checks the static reader. `tests/contracts/surface-enumeration.test.ts` (repository
+root), in the contracts lane, activates every bundle against the headless engine, records what it
 registers through `contribute.menu`, `contribute.keybinding` and `contribute.tool`, and asserts
 that the gate's lists for that bundle are equal to it.
 
@@ -292,9 +292,10 @@ corpus, and is required:
 - `editor / tests`, job `checks`: the tool handlers (`test:tools`), the shell registries,
   stores, settings and loader (`test:shell`, `test:shell-dom`), the command handlers
   (`test:canvas-unit`), the DOM lane (`test:dom`: every panel, the mounted shell, the four
-  handler-less tools on a mounted canvas), the bundle contracts, and the headless editor
-  (`test:headless`: commands on the real engine, the BundleHost contract, the automation
-  layer, cross-surface parity, engine memory).
+  handler-less tools on a mounted canvas), and the headless editor (`test:headless`: commands
+  on the real engine, the automation layer, cross-surface parity, engine memory).
+- `tests / contracts + system` (the repository's root `tests/`): the bundle contracts, the
+  BundleHost contract, and the nine built-ins in the headless editor.
 - `editor / tests`, job `surface`: the gate's own tests and the gate.
 - The modules' workflows (`<module> / bun test`, `<module> / rust`): each bundle's commands,
   tools, panels, importers and exporters against its real wasm.

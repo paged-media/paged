@@ -70,6 +70,11 @@ const GESTURE_DSL =
  * The layers a test file counts in: one TIER (`unit`, `component`,
  * `headless`, `e2e`, `rust`) and any of the TAGS (`golden`, `script`,
  * `gesture`).
+ *
+ * The repository's root tests (`tests/`, tests/README.md) are named by what
+ * they are about (contracts, system, integration, fidelity), not by tier, so
+ * their names carry it: a `*.headless.test.ts` runs on the headless editor,
+ * and a `*.spec.ts` there is a Playwright spec (the editor's config runs it).
  */
 export function layersOf(file, text = "") {
   const layers = new Set();
@@ -80,6 +85,7 @@ export function layersOf(file, text = "") {
     layers.add("headless");
   else if (
     file.startsWith("apps/editor/apps/canvas/tests/") ||
+    (file.startsWith("tests/") && /\.spec\.[cm]?[jt]sx?$/.test(name)) ||
     segments.includes("e2e") ||
     /\.e2e\.[cm]?[jt]sx?$/.test(name)
   )

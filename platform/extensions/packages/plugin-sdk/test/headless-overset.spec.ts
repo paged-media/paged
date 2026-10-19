@@ -33,11 +33,14 @@ import { createHeadlessHost, type HeadlessHost } from "../src/harness";
 import { minimalIdml } from "./fixtures/minimal-idml";
 
 import { silentConsole as silent } from "../src/testing";
-// Space Grotesk (SIL OFL 1.1, test/fixtures/fonts/OFL-spacegrotesk.txt).
+// Space Grotesk (SIL OFL 1.1, engine/core/corpus/fonts/OFL-spacegrotesk.txt).
 const FONT = new Uint8Array(
   readFileSync(
     fileURLToPath(
-      new URL("./fixtures/fonts/SpaceGrotesk-VF.ttf", import.meta.url),
+      new URL(
+        "../../../../../engine/core/corpus/fonts/SpaceGrotesk-VF.ttf",
+        import.meta.url,
+      ),
     ),
   ),
 );

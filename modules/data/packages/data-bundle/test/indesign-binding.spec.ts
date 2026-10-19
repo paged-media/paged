@@ -29,7 +29,6 @@ import type { BundleHost } from "@paged-media/plugin-api";
 import {
   dataFields,
   ENGINE_ANCHOR,
-  ENGINE_PROTOCOL,
   openRealHost,
   REQUIRE_REAL_CORE,
 } from "./real-core";
@@ -54,8 +53,9 @@ const STAGE = "/tmp/paged-data-binding-stage";
 const CSV =
   'sku,name,weight_mm,tint,shown\nA-1,Grüne Äpfel,2,"cmyk(0,100,100,0)",yes\nB-2,Blue,4,Black,no\nC-3,Cyan,1,#00ffff,yes\n';
 const RECORD = process.env.PAGED_RECORD_INDESIGN_FIXTURES === "1";
-/** The fixture suffix of this engine: "71" from protocol 71 on (text variables). */
-const ERA = ENGINE_PROTOCOL >= 71 ? "71" : "";
+/** The fixture suffix of the text-variable era (protocol 71 on), which the
+ *  workspace engine is in; the earlier recordings carry no suffix. */
+const ERA = "71";
 
 const probe = await bootRealDuckDB();
 const ready =
@@ -219,7 +219,7 @@ describe.skipIf(!ready && !(REQUIRE_REAL_CORE || REQUIRE_REAL_DUCKDB))(
       },
     );
 
-    it.skipIf(ENGINE_PROTOCOL < 71 || !existsSync(recorded("bound71")))(
+    it.skipIf(!existsSync(recorded("bound71")))(
       "text variables (protocol 71): InDesign keeps paged:v_name with its value and the document label; paged restores every binding and drives the variable again [data.bind.text-variables] [data.persist.labels]",
       async () => {
         const rec = JSON.parse(readFileSync(recorded("bound71"), "utf8")) as {
@@ -285,7 +285,7 @@ describe.skipIf(!ready && !(REQUIRE_REAL_CORE || REQUIRE_REAL_DUCKDB))(
       },
     );
 
-    it.skipIf(ENGINE_PROTOCOL < 71 || !existsSync(recorded("dm-template71")))(
+    it.skipIf(!existsSync(recorded("dm-template71")))(
       "InDesign merges the Data Merge template of a text-variable document [data.export.datamerge]",
       () => {
         const rec = JSON.parse(

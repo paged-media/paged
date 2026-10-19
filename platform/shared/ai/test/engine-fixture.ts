@@ -35,7 +35,7 @@ const FONT = new Uint8Array(
   readFileSync(
     fileURLToPath(
       new URL(
-        "../../../extensions/packages/plugin-sdk/test/fixtures/fonts/SpaceGrotesk-VF.ttf",
+        "../../../../engine/core/corpus/fonts/SpaceGrotesk-VF.ttf",
         import.meta.url,
       ),
     ),
