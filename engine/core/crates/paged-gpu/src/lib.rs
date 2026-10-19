@@ -93,6 +93,8 @@ pub(crate) mod ink_planes;
 pub mod separations;
 #[cfg(all(feature = "vello-backend", target_arch = "wasm32"))]
 pub mod surface;
+#[cfg(feature = "svg")]
+pub mod svg;
 #[cfg(feature = "cpu")]
 pub mod vcpu;
 #[cfg(any(feature = "cpu", feature = "vello-backend"))]

@@ -30,7 +30,7 @@ confidence-threshold = 0.9
 # be distributed under both: the AGPL and the commercial PMEL. No GPL/AGPL
 # dependency can pass this gate.
 # Tighten/extend this list as `cargo deny check licenses` surfaces the
-# actual transitive set (wgpu, rustybuzz, ttf-parser, tiny-skia, Vello,
+# actual transitive set (wgpu, rustybuzz, ttf-parser, usvg, Vello,
 # lcms2, …).
 allow = [
     "MPL-2.0",
