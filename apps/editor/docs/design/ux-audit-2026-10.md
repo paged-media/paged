@@ -837,7 +837,7 @@ Text entry reads only `keydown` events whose `key` is one character, with Alt no
 
 **Screenshots:** `F-36-ime-option-chars-dropped.png`
 
-**Fixed (2026-10-19, `__SHA__`).** While a caret is in a story, focus sits on a text input
+**Fixed (2026-10-19, `88a11b537`).** While a caret is in a story, focus sits on a text input
 surface at the caret (ADR 234). Its `beforeinput` and composition events carry IME, dead-key,
 Option and AltGr text, the emoji picker and dictation into the story, with the marked text
 shown at the caret and the candidate window beside it; composition keys fire no binding, and
@@ -1059,7 +1059,7 @@ Tab and Shift+Tab are global keybindings for "Toggle panels and tool rail" (InDe
 
 **Screenshots:** `F-49-tab-hides-chrome.png`, `F-49-tab-stuck-in-dialog.png`
 
-**Fixed (2026-10-19, `__SHA__`).** As recommended (ADR 234): Tab moves focus in the chrome,
+**Fixed (2026-10-19, `88a11b537`).** As recommended (ADR 234): Tab moves focus in the chrome,
 panels and dialogs, and hides the chrome only on a canvas the user clicked into (the viewport
 is focusable and, reached by Tab, passes Tab on); Cmd/Ctrl+\ hides it from anywhere. A visible
 focus ring, roving-tabindex toolbars and menu bar, menus walked by the arrows, Home/End,
