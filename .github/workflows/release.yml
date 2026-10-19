@@ -5,7 +5,7 @@ name: release
 #
 #   npm     A tag v0.<protocol>.<patch>[-prerelease] (pushed, or a dispatch
 #           on the tag's ref): the four public npm packages at the tag's
-#           version — @paged-media/canvas-wasm, @paged-media/idml-viewer,
+#           version — @paged-media/canvas-wasm, @paged-media/viewer,
 #           @paged-media/plugin-api and @paged-media/plugin-sdk. It builds the
 #           engine wasm fresh, runs the checks, packs the packages with the
 #           workspace resolved, installs the tarballs in a clean room, and
@@ -140,7 +140,7 @@ jobs:
           set -euo pipefail
           V="${{ steps.ver.outputs.version }}"
           MISSING=0
-          for PKG in canvas-wasm idml-viewer plugin-api plugin-sdk; do
+          for PKG in canvas-wasm viewer plugin-api plugin-sdk; do
             if npm view "@paged-media/$PKG@$V" version >/dev/null 2>&1; then
               echo "already on npm: @paged-media/$PKG@$V"
             else
@@ -193,7 +193,7 @@ jobs:
             | jq '{repository, repository_owner, workflow_ref, job_workflow_ref, event_name, ref, environment, sub, aud}' \
             || echo "  (could not decode claims)"
           READY=true
-          for PKG in canvas-wasm idml-viewer plugin-api plugin-sdk; do
+          for PKG in canvas-wasm viewer plugin-api plugin-sdk; do
             CODE="$(curl -sS -o /tmp/exch.json -w '%{http_code}' -X POST \
               -H "Authorization: Bearer ${ID_TOKEN}" \
               "https://registry.npmjs.org/-/npm/v1/oidc/token/exchange/package/@paged-media%2f${PKG}")"
@@ -252,7 +252,7 @@ jobs:
 
       # A release never takes wasm from a cache: the four parts are built
       # from this tag (the `wasm-release` profile, wasm-bindgen --target web,
-      # wasm-opt -Oz) into canvas-wasm and the idml-viewer's wasm/.
+      # wasm-opt -Oz) into canvas-wasm and the viewer's wasm/.
       - name: engine wasm (built fresh)
         if: steps.have.outputs.missing != '0'
         uses: ./.github/actions/engine-wasm
@@ -267,7 +267,7 @@ jobs:
         working-directory: engine/core
         run: node scripts/viewer-subset-audit.mjs web/idml-viewer
 
-      - name: idml-viewer — typecheck, test, build
+      - name: viewer — typecheck, test, build
         if: steps.have.outputs.missing != '0'
         working-directory: engine/core/web/idml-viewer
         run: |
@@ -333,7 +333,7 @@ jobs:
           if [ -n "${NODE_AUTH_TOKEN}" ]; then
             printf '%s\n' "//registry.npmjs.org/:_authToken=\${NODE_AUTH_TOKEN}" >> "$NPM_CONFIG_USERCONFIG"
           fi
-          for PKG in canvas-wasm idml-viewer plugin-api plugin-sdk; do
+          for PKG in canvas-wasm viewer plugin-api plugin-sdk; do
             if npm view "@paged-media/$PKG@$V" version >/dev/null 2>&1; then
               echo "skip @paged-media/$PKG@$V (already on npm)"
               continue

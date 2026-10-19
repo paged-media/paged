@@ -12,7 +12,7 @@
 //   - no dependency of any kind is still `workspace:` or `catalog:`, and every
 //     @paged-media dependency is <version> (one version for the four);
 //   - main, types, bin and every `exports` target are files in the tarball;
-//   - for @paged-media/idml-viewer, the viewer subset audit holds for the files
+//   - for @paged-media/viewer, the viewer subset audit holds for the files
 //     (engine/core/scripts/viewer-subset-audit.mjs --no-cargo).
 //
 // Prints each tarball's file list with sizes. Exit 1 on any failure.
@@ -41,7 +41,7 @@ const LICENSE = "AGPL-3.0-only OR LicenseRef-PMEL";
 const REPOSITORY = "git+https://github.com/paged-media/paged.git";
 const NAMES = new Set([
   "@paged-media/canvas-wasm",
-  "@paged-media/idml-viewer",
+  "@paged-media/viewer",
   "@paged-media/plugin-api",
   "@paged-media/plugin-sdk",
 ]);
@@ -125,7 +125,7 @@ for (const tgz of tarballs) {
       if (p.includes("*")) continue;
       if (!has(p)) fail(`${p} (an entry point) is not in the tarball`);
     }
-    if (pkg.name === "@paged-media/idml-viewer") {
+    if (pkg.name === "@paged-media/viewer") {
       try {
         execFileSync(
           "node",

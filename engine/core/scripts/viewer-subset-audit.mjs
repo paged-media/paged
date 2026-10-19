@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// The viewer subset audit: @paged-media/idml-viewer and its `./session` entry
+// The viewer subset audit: @paged-media/viewer and its `./session` entry
 // carry the renderer core only (PM-0008; "sibling, not a shrunk app").
 //
 //   node scripts/viewer-subset-audit.mjs                       # the crate graph only
@@ -106,8 +106,8 @@ if (target) {
     const manifest = JSON.parse(
       readFileSync(join(pkgDir, "package.json"), "utf8"),
     );
-    if (manifest.name !== "@paged-media/idml-viewer") {
-      fail(`${target} is ${manifest.name}, not @paged-media/idml-viewer`);
+    if (manifest.name !== "@paged-media/viewer") {
+      fail(`${target} is ${manifest.name}, not @paged-media/viewer`);
     }
     const deps = Object.keys(manifest.dependencies ?? {});
     if (deps.length) {

@@ -40,7 +40,7 @@ audit, rejected alternatives, freeze policy — is in **`DESIGN.md`**.
 
 Note: the npm name `@paged-media/sdk` belonged to the **viewer session**
 (`engine/core/crates/paged-sdk`, WebGPU read-only renderer), now
-`@paged-media/idml-viewer/session` — the plugin runtime is `plugin-sdk`,
+`@paged-media/viewer/session` — the plugin runtime is `plugin-sdk`,
 deliberately.
 
 ## React 19
@@ -79,7 +79,7 @@ How the contract is designed and built is in [`docs/`](./docs/README.md) and in
 `plugin-api` and `plugin-sdk` are two of the four public npm packages of this
 repository ([PM-0008](../../docs/adr/PM-0008-npm-packages-and-release.md)): a
 release tag `v0.<protocol>.<patch>` publishes them, at the tag's version, with the
-engine's `@paged-media/canvas-wasm` and `@paged-media/idml-viewer`
+engine's `@paged-media/canvas-wasm` and `@paged-media/viewer`
 (`.github/workflows/release.yml`). `plugin-sdk` ships the `paged-plugin` bin, which
 was the `@paged-media/plugin-cli` package. The in-tree versions (`0.2.N-canary.0`)
 count contract changes for the contract guard; they are not the published versions.

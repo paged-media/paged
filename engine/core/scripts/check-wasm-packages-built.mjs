@@ -2,7 +2,7 @@
 // Every generated file the engine's two npm packages ship is present
 // (PM-0008): @paged-media/canvas-wasm (packages/canvas-wasm/: the canvas,
 // introspect/ and repo/ entries, and introspect/catalog.json) and the session
-// of @paged-media/idml-viewer (web/idml-viewer/wasm/). Each manifest's
+// of @paged-media/viewer (web/idml-viewer/wasm/). Each manifest's
 // `files` names them; `exports` targets that point into them must exist too.
 //
 //   node scripts/check-wasm-packages-built.mjs
