@@ -146,7 +146,7 @@ and `redoApplied`: `useCollection<T>(name)` and `useDocumentMeta()` for document
 and the binding hook (`packages/shell/src/catalog/binding-hook.ts`) for properties of the
 selection, written back as `setElementProperty` mutations.
 
-`BUILT_IN_PANELS` in `main.tsx` registers 73 panels. Thirteen `*.composition.ts` files
+`BUILT_IN_PANELS` (`apps/canvas/src/panels/built-in-panels.tsx`) registers 89 panels. Thirteen `*.composition.ts` files
 describe panel content as data: a tree of catalogue nodes with bindings, walked by one
 renderer over thirteen primitive leaves (`packages/shell/src/catalog/built-in.ts`). A
 binding is a literal or one property path of the selection; anything richer is a React
