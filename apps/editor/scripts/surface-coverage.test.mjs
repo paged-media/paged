@@ -225,6 +225,28 @@ describe("layers from the path", () => {
   });
 });
 
+describe("the gesture tag through a shared harness", () => {
+  it("tags a test that drives the DSL through a local helper it imports", () => {
+    const dir = fixture({
+      "pkg/test/support.ts": `export function harness() { return gestures(fake); }`,
+      "pkg/test/rect.test.ts": `import { harness } from "./support";\ncovers("tool:paged.tool.rectangle");`,
+      "pkg/test/plain.test.ts": `import { other } from "./other";\ncovers("tool:paged.tool.line");`,
+      "pkg/test/other.ts": `export const other = 1;`,
+    });
+    const r = readCovers(dir, [
+      "pkg/test/rect.test.ts",
+      "pkg/test/plain.test.ts",
+    ]);
+    const tags = Object.fromEntries(
+      r.calls.map((c) => [c.ids[0], [...c.layers].sort()]),
+    );
+    expect(tags).toEqual({
+      "tool:paged.tool.rectangle": ["gesture", "unit"],
+      "tool:paged.tool.line": ["unit"],
+    });
+  });
+});
+
 describe("the static evaluator", () => {
   const evalConst = (files, file, name) => {
     const dir = fixture(files);
