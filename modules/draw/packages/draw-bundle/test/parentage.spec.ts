@@ -32,7 +32,7 @@ import { describe, expect, it } from "bun:test";
 
 import type { ElementId, SceneTreeNode } from "@paged-media/plugin-api";
 
-import { parentGroupOf } from "../../src";
+import { parentGroupOf } from "../src";
 
 describe("draw conformance — tree parentage", () => {
   it("parentGroupOf resolves the NEAREST group ancestor (pure)", () => {

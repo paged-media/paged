@@ -54,8 +54,8 @@ import { editValue, type HeadlessHost } from "@paged-media/plugin-sdk";
 import { drawBundle, installStrokePanelBindings } from "../src";
 import { minimalIdml } from "./fixtures/minimal-idml";
 // The shared engine boot (it probes the editor-checkout layouts for the
-// wasm — see conformance/host.ts).
-import { openHost } from "./conformance/host";
+// wasm — see headless/host.ts).
+import { openHost } from "./headless/host";
 
 // The fixture's single rectangle leaf (Self="urect").
 const RECT = { kind: "rectangle", id: "urect" } as const;
@@ -157,7 +157,7 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
         // NO Layers panel — ADR 023 phase D retired it behind the
         // binding-provider seam. Its absence from this log IS the
         // assertion; the replacement's behaviour is pinned in
-        // `conformance/layers-provider.spec.ts`.
+        // `headless/layers-provider.spec.ts`.
         // The APPEARANCE panel (the metadata stack + its one-fill/
         // one-stroke honesty note) — likewise expert-leaf React.
         "panel",
