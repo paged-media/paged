@@ -100,9 +100,73 @@ export interface HeadlessEngineModule {
   /** The booted package version (`0.<protocol>.0-dev`). */
   readonly version: string;
   readonly protocolVersion: number;
+  /** The wasm instance's linear memory, in bytes (it only ever grows). */
+  memoryBytes(): number;
+}
+
+interface WasmGlue {
+  initSync(module: { module: BufferSource }): { memory: WebAssembly.Memory };
+  CanvasWorker: new () => EngineCanvasWorker;
 }
 
 let booted: Promise<HeadlessEngineModule> | null = null;
+/** Per process, not per module: a test runner may evaluate this module
+ *  once per test file. */
+const INSTANCES = Symbol.for("paged.test-kit.headless.instances");
+const nextInstance = () => {
+  const g = globalThis as { [INSTANCES]?: number };
+  g[INSTANCES] = (g[INSTANCES] ?? 0) + 1;
+  return g[INSTANCES];
+};
+
+let wasmBytes: Uint8Array<ArrayBuffer> | null = null;
+
+/** A copy of the wasm-bindgen glue under a name of its own: the glue keeps
+ *  its instance in module scope, and a module record is keyed by path (a
+ *  query string does not make a new one under Bun), so a fresh instance
+ *  needs a fresh file. */
+async function freshGlue(loaderUrl: string): Promise<string> {
+  const [{ readFileSync, writeFileSync, mkdtempSync }, { tmpdir }, path, url] =
+    await Promise.all([
+      import("node:fs"),
+      import("node:os"),
+      import("node:path"),
+      import("node:url"),
+    ]);
+  const source = readFileSync(url.fileURLToPath(loaderUrl), "utf8");
+  const dir = mkdtempSync(path.join(tmpdir(), "paged-headless-engine-"));
+  const file = path.join(dir, `paged_canvas_wasm.${nextInstance()}.js`);
+  writeFileSync(file, source);
+  return url.pathToFileURL(file).href;
+}
+
+async function instantiate(
+  first: { version: string; protocolVersion: number },
+  loaderUrl: string,
+  wasmPath: string,
+  fresh: boolean,
+): Promise<HeadlessEngineModule> {
+  // A fresh copy of the glue is a new module record, hence a new wasm
+  // instance with its own memory; the package's own glue is the record
+  // (and the instance) `loadHeadlessEngine` initialised.
+  const url = fresh ? await freshGlue(loaderUrl) : loaderUrl;
+  const glue = (await import(url)) as WasmGlue;
+  if (!wasmBytes) {
+    const { readFileSync } = await import("node:fs");
+    const file = readFileSync(wasmPath);
+    wasmBytes = new Uint8Array(file.byteLength);
+    wasmBytes.set(file);
+  }
+  // `initSync` instantiates once per module record and answers the same
+  // exports after that.
+  const exports = glue.initSync({ module: wasmBytes });
+  return {
+    create: () => new glue.CanvasWorker(),
+    version: first.version,
+    protocolVersion: first.protocolVersion,
+    memoryBytes: () => exports.memory.buffer.byteLength,
+  };
+}
 
 /**
  * The process-wide engine module (booted on first call, shared after).
@@ -113,17 +177,22 @@ export function headlessEngineModule(): Promise<HeadlessEngineModule> {
   booted ??= (async () => {
     const first = await loadHeadlessEngine();
     first.worker.free();
-    const { loaderUrl } = await resolveCanvasWasm();
-    // The same module record `loadHeadlessEngine` initialised (the import
-    // is cached), so the class below already has its wasm instance.
-    const mod = (await import(loaderUrl)) as {
-      CanvasWorker: new () => EngineCanvasWorker;
-    };
-    return {
-      create: () => new mod.CanvasWorker(),
-      version: first.version,
-      protocolVersion: first.protocolVersion,
-    };
+    const { loaderUrl, wasmPath } = await resolveCanvasWasm();
+    return instantiate(first, loaderUrl, wasmPath, false);
   })();
   return booted;
+}
+
+/**
+ * A NEW wasm instance, made the process's current one: editors created
+ * after it use it, editors created before keep theirs. For a long suite:
+ * wasm memory never shrinks, and an instance whose engine trapped (a Rust
+ * panic) cannot be trusted again.
+ */
+export async function rebootHeadlessEngine(): Promise<HeadlessEngineModule> {
+  const current = await headlessEngineModule();
+  const { loaderUrl, wasmPath } = await resolveCanvasWasm();
+  const next = instantiate(current, loaderUrl, wasmPath, true);
+  booted = next;
+  return next;
 }
