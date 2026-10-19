@@ -146,29 +146,18 @@ fn cell_count(m: &CanvasModel) -> usize {
 
 /// A delete of one row or column of the 3 × 3 table, then its undo.
 ///
-/// finding SCR-7: the undo brings every cell back, but not in the order the
-/// table held them (the cell list is reordered, so the table does not equal
-/// its before-state); it should restore the table exactly. Asserts the
-/// CURRENT behaviour: the same cells, sorted by name, in a different order.
+/// SCR-7 (fixed): the undo restores the table exactly — the same cells in
+/// the same order — and the redo deletes the line again.
 fn delete_then_undo(m: &mut CanvasModel, call: &str) {
-    let by_name = |t: &Value| {
-        let mut cells = t["cells"].as_array().cloned().unwrap_or_default();
-        cells.sort_by_key(|c| c["name"].as_str().unwrap_or_default().to_string());
-        cells
-    };
     let before = table_json(m);
     assert_eq!(ok(m, call), "true", "{call}");
     assert_eq!(cell_count(m), 6, "{call}: three cells go");
+    let deleted = table_json(m);
     assert_eq!(ok(m, "paged.undo()"), "true");
-    let undone = table_json(m);
-    assert_eq!(
-        by_name(&undone),
-        by_name(&before),
-        "{call}: every cell is back"
-    );
-    assert_ne!(undone["cells"], before["cells"], "{call}: in another order");
+    assert_eq!(table_json(m), before, "{call}: the table is restored exactly");
     assert_eq!(ok(m, "paged.redo()"), "true");
     assert_eq!(cell_count(m), 6);
+    assert_eq!(table_json(m), deleted, "{call}: redo deletes it again");
 }
 
 #[test]

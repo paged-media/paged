@@ -68,7 +68,15 @@ pub(super) fn apply_place_image(
                 prior_fit = Some(prev_type.unwrap_or_default());
                 let new_type = (!fit.is_empty()).then(|| fit.to_string());
                 match rect.frame_fitting.as_mut() {
-                    Some(f) => f.fitting_on_empty_frame = new_type,
+                    Some(f) => {
+                        f.fitting_on_empty_frame = new_type;
+                        // Clearing the last knob leaves no fitting option,
+                        // so undoing a fit on a frame that had none
+                        // restores none (finding SCR-5).
+                        if f.is_empty() {
+                            rect.frame_fitting = None;
+                        }
+                    }
                     None => {
                         if new_type.is_some() {
                             rect.frame_fitting = Some(paged_model::FrameFittingOption {

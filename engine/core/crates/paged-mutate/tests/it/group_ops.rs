@@ -635,6 +635,7 @@ fn group_transform_moves_members_hit_and_render_agree_and_undo_restores() {
             group: group_id.clone(),
             transform: Some(g_new),
             prev: None,
+            leaves: None,
         },
     )
     .expect("set group transform");
@@ -686,6 +687,79 @@ fn group_transform_moves_members_hit_and_render_agree_and_undo_restores() {
 
     // Cleanup: dissolve the group we created.
     apply(&mut doc, &created.inverse).expect("cleanup dissolve");
+}
+
+/// Finding SH-203 (fixed): one undo of a group move restores the members'
+/// STORED transforms exactly — an explicit identity stays explicit and a
+/// turned member carries no rounding — and redo the moved ones.
+#[test]
+fn group_transform_undo_restores_the_stored_member_transforms() {
+    let mut doc = idml_import::import_idml_doc(&fixture_bytes()).expect("open");
+    let (si, members) = adjacent_leaf_pair(&doc);
+    // Give every member an explicit identity, as InDesign writes one.
+    {
+        let spread = &mut doc.spreads[si].spread;
+        let id = [1.0, 0.0, 0.0, 1.0, 0.0, 0.0];
+        for f in spread.text_frames.iter_mut() {
+            f.item_transform.get_or_insert(id);
+        }
+        for f in spread.rectangles.iter_mut() {
+            f.item_transform.get_or_insert(id);
+        }
+        for f in spread.ovals.iter_mut() {
+            f.item_transform.get_or_insert(id);
+        }
+        for f in spread.polygons.iter_mut() {
+            f.item_transform.get_or_insert(id);
+        }
+        for f in spread.graphic_lines.iter_mut() {
+            f.item_transform.get_or_insert(id);
+        }
+    }
+    let created = apply(
+        &mut doc,
+        &Operation::CreateGroup {
+            spec: GroupSpec {
+                self_id: None,
+                members,
+                parent: None,
+                item_transform: None,
+                opacity: None,
+                blend_mode: None,
+            },
+        },
+    )
+    .expect("create group");
+    let group_id = match &created.op {
+        Operation::CreateGroup { spec } => spec.self_id.clone().unwrap(),
+        _ => unreachable!(),
+    };
+    let snapshot = |doc: &Document| serde_json::to_string(&doc.spreads[si].spread).unwrap();
+    let before = snapshot(&doc);
+    // A nudge, then a turn (where rebasing back would round).
+    for transform in [
+        [1.0, 0.0, 0.0, 1.0, 1.0, 0.0],
+        [0.866_025_4, 0.5, -0.5, 0.866_025_4, 13.7, -4.2],
+    ] {
+        let moved = apply(
+            &mut doc,
+            &Operation::SetGroupTransform {
+                group: group_id.clone(),
+                transform: Some(transform),
+                prev: None,
+                leaves: None,
+            },
+        )
+        .expect("set group transform");
+        let after = snapshot(&doc);
+        assert_ne!(after, before);
+        let undone = apply(&mut doc, &moved.inverse).expect("undo");
+        assert_eq!(snapshot(&doc), before, "undo restores the spread exactly");
+        apply(&mut doc, &undone.inverse).expect("redo");
+        assert_eq!(snapshot(&doc), after, "redo restores the moved spread exactly");
+        apply(&mut doc, &moved.inverse).expect("undo again");
+        assert_eq!(snapshot(&doc), before);
+    }
 }
 
 #[test]
@@ -876,6 +950,7 @@ fn renderer_paints_group_members_at_the_composed_transform() {
             group: group_id.clone(),
             transform: Some(g_new),
             prev: None,
+            leaves: None,
         },
     )
     .expect("set group transform");

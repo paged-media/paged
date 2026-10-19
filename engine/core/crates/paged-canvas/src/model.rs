@@ -4293,6 +4293,7 @@ impl CanvasModel {
                 group: group_id.clone(),
                 transform: *transform,
                 prev: None,
+                leaves: None,
             }),
             Mutation::DissolveGroup { group_id } => Some(Operation::DissolveGroup {
                 group_id: group_id.clone(),
