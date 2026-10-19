@@ -1,3 +1,1 @@
-{
-  "importer:media.paged.draw.importer.svg": "Seeded 2026-10-19, when covers() became the measure: no test imports a file through media.paged.draw.importer.svg and asserts the document it produces; only mentioned, in 5 test files (e2e: apps/editor/apps/canvas/tests/journey/plugins/draw-svg.journey.spec.ts; e2e: apps/editor/apps/canvas/tests/plugin-surface/draw.spec.ts; …); declared in modules/draw/packages/draw-bundle/manifest.json."
-}
+{}
