@@ -75,6 +75,8 @@ on:
       # them (paged-gen, the fixture generator, is under crates/ too).
       - "modules/**"
       - "platform/extensions/packages/**"
+      # The internal test kit (the tools' gesture DSL, the headless editor).
+      - "platform/shared/**"
       - "engine/core/crates/**"
       - "engine/core/Cargo.*"
       - "engine/core/rust-toolchain.toml"
@@ -106,6 +108,8 @@ on:
       # them (paged-gen, the fixture generator, is under crates/ too).
       - "modules/**"
       - "platform/extensions/packages/**"
+      # The internal test kit (the tools' gesture DSL, the headless editor).
+      - "platform/shared/**"
       - "engine/core/crates/**"
       - "engine/core/Cargo.*"
       - "engine/core/rust-toolchain.toml"
@@ -309,6 +313,12 @@ jobs:
       # host adapter only ever refused the second kind.
       - name: bundle manifests match their registrations
         run: bun run test:bundle-contracts
+      # The headless editor (apps/canvas/tests/headless): the shell, the
+      # client and the real engine under bun test, no browser. Commands,
+      # editor.* automation, Boa scripts and plugin hosts asserted against
+      # the canonical model dump, and the cross-surface parity suite.
+      - name: headless editor
+        run: bun run test:headless
       # A seam may not outlive the gap it names: a capability lands and
       # the UI still says it is missing, which is the same lie as
       # claiming an unbuilt feature works, only harder to notice.
