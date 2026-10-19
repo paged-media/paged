@@ -35,7 +35,7 @@
 
 import { type CSSProperties, type ReactElement } from "react";
 import { onDidChangeOf, useLive } from "@paged-media/react-live";
-import { useConfirm } from "@paged-media/panel-kit";
+import { color, font, radius, space, useConfirm } from "@paged-media/panel-kit";
 
 import type { BundleHost } from "@paged-media/plugin-api";
 
@@ -44,16 +44,16 @@ import type { WorkbookSession } from "../session";
 // ---------------------------------------------------------------- styles
 
 const kicker: CSSProperties = {
-  font: "700 10px var(--font-sans, sans-serif)",
-  letterSpacing: "var(--tracking-wide, 0.14em)",
+  font: `700 10px ${font.sans}`,
+  letterSpacing: font.trackingWide,
   textTransform: "uppercase",
   color: "var(--pg-muted-fg)",
-  margin: "var(--space-3, 12px) 0 var(--space-1, 4px)",
+  margin: `${space[3]} 0 ${space[1]}`,
 };
 
 const note: CSSProperties = {
-  margin: "var(--space-3, 12px) 0 0",
-  font: "10px/1.5 var(--font-sans, sans-serif)",
+  margin: `${space[3]} 0 0`,
+  font: `10px/1.5 ${font.sans}`,
   color: "var(--pg-muted-fg)",
 };
 
@@ -61,15 +61,15 @@ const row: CSSProperties = {
   display: "flex",
   alignItems: "center",
   justifyContent: "space-between",
-  gap: "var(--space-2, 8px)",
+  gap: space[2],
   padding: "6px 8px",
   border: "1px solid var(--pg-border)",
-  borderRadius: "var(--radius-sm, 4px)",
+  borderRadius: radius.sm,
   background: "var(--pg-bg)",
 };
 
 const nameStyle: CSSProperties = {
-  font: "500 12px var(--font-sans, sans-serif)",
+  font: `500 12px ${font.sans}`,
   color: "var(--pg-fg)",
   overflow: "hidden",
   textOverflow: "ellipsis",
@@ -77,16 +77,16 @@ const nameStyle: CSSProperties = {
 };
 
 const metaStyle: CSSProperties = {
-  font: "10px var(--font-sans, sans-serif)",
+  font: `10px ${font.sans}`,
   color: "var(--pg-muted-fg)",
 };
 
 const sourceButton: CSSProperties = {
-  font: "500 12px var(--font-sans, sans-serif)",
-  color: "var(--primary-fg, #fff)",
+  font: `500 12px ${font.sans}`,
+  color: color.primaryFg,
   background: "var(--pg-primary)",
   border: "none",
-  borderRadius: "var(--radius-md, 6px)",
+  borderRadius: radius.md,
   padding: "4px 10px",
   cursor: "pointer",
   flex: "0 0 auto",
@@ -150,7 +150,7 @@ export function makeDatasetsPanel(
       <div
         data-sheet-panel="datasets"
         style={{
-          padding: "var(--space-3, 12px)",
+          padding: space[3],
           display: "flex",
           flexDirection: "column",
         }}
@@ -169,7 +169,7 @@ export function makeDatasetsPanel(
             style={{
               display: "flex",
               flexDirection: "column",
-              gap: "var(--space-2, 8px)",
+              gap: space[2],
             }}
           >
             {datasets.map((d) => {

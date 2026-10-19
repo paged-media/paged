@@ -26,6 +26,7 @@
 // the script runner — which lives outside React — can call it and await a promise.
 
 import { useEffect, useSyncExternalStore } from "react";
+import { chrome, color, radius } from "@paged-media/panel-kit";
 
 export interface DemoInfoRequest {
   title: string;
@@ -179,7 +180,7 @@ export function DemoSpotlight(): React.ReactElement | null {
           height: r.height + pad * 2,
           borderRadius: 6,
           boxShadow: "0 0 0 9999px rgba(0,0,0,0.55)",
-          outline: "2px solid var(--pg-primary, #6b5cff)",
+          outline: `2px solid ${color.primary}`,
         }}
       />
     </div>
@@ -214,10 +215,10 @@ export function DemoOverlay(): React.ReactElement | null {
         bottom: 24,
         zIndex: 9000,
         maxWidth: 360,
-        background: "var(--chrome-panel-bg, #1e1e22)",
-        color: "var(--pg-fg, #fff)",
-        border: "1px solid var(--pg-border, #333)",
-        borderRadius: "var(--radius-md, 8px)",
+        background: chrome.panelBg,
+        color: color.fg,
+        border: `1px solid ${color.border}`,
+        borderRadius: radius.md,
         boxShadow: "0 10px 30px rgba(0,0,0,0.35)",
         padding: "14px 16px",
         fontFamily: "var(--font-sans)",
@@ -229,7 +230,7 @@ export function DemoOverlay(): React.ReactElement | null {
             fontSize: 10.5,
             letterSpacing: "0.08em",
             textTransform: "uppercase",
-            color: "var(--pg-muted-fg, #999)",
+            color: color.mutedFg,
             marginBottom: 6,
           }}
         >
@@ -250,7 +251,7 @@ export function DemoOverlay(): React.ReactElement | null {
           style={{
             fontSize: 13,
             lineHeight: 1.45,
-            color: "var(--pg-muted-fg, #bbb)",
+            color: color.mutedFg,
             marginBottom: 12,
           }}
         >
@@ -267,10 +268,10 @@ export function DemoOverlay(): React.ReactElement | null {
             fontSize: 12.5,
             fontWeight: 600,
             cursor: "pointer",
-            color: "var(--pg-primary-fg, #fff)",
-            background: "var(--pg-primary, #6b5cff)",
+            color: color.primaryFg,
+            background: color.primary,
             border: "none",
-            borderRadius: "var(--radius-sm, 4px)",
+            borderRadius: radius.sm,
             padding: "5px 14px",
           }}
         >

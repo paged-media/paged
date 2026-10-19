@@ -34,6 +34,7 @@ import {
   sectionBlocks,
 } from "@paged-media/doc-host-model";
 import type { BundleHost, ElementId, Mutation } from "@paged-media/plugin-api";
+import { refusalText } from "@paged-media/panel-kit";
 
 import type { DocEngine } from "./engine.js";
 import { applyStyleOpsReporting, pourSteps } from "./pour.js";
@@ -116,7 +117,7 @@ export async function setGrowRules(
             message:
               `This editor version cannot add pages as text grows: ` +
               `${refused.length} of ${storyIds.length} Word section(s) stay on one page, ` +
-              `and text past it is overset. ${JSON.stringify(error)}`,
+              `and text past it is overset. ${error == null ? "" : refusalText(error)}`,
           },
         ],
   );

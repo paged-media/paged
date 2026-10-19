@@ -65,7 +65,10 @@ import {
 import { useFollowedDraft, usePanelReload } from "./use-panel-reload";
 import {
   About,
+  color,
+  font,
   humanize,
+  IconButton,
   Refusal,
   useActionFeedback,
 } from "@paged-media/panel-kit";
@@ -112,18 +115,18 @@ const rowStyle: React.CSSProperties = {
   alignItems: "center",
   gap: 6,
   padding: "3px 0",
-  font: "12px var(--font-sans, sans-serif)",
+  font: `12px ${font.sans}`,
 };
 const iconBtn: React.CSSProperties = {
   border: "none",
   background: "none",
   cursor: "pointer",
   padding: "0 3px",
-  font: "12px var(--font-sans, sans-serif)",
-  color: "var(--pg-fg, currentColor)",
+  font: `12px ${font.sans}`,
+  color: color.fg,
 };
 const sectionStyle: React.CSSProperties = {
-  font: "11px var(--font-sans, sans-serif)",
+  font: `11px ${font.sans}`,
   textTransform: "uppercase",
   letterSpacing: "0.04em",
   opacity: 0.65,
@@ -131,11 +134,11 @@ const sectionStyle: React.CSSProperties = {
 };
 const mutedStyle: React.CSSProperties = {
   opacity: 0.6,
-  font: "12px var(--font-sans, sans-serif)",
+  font: `12px ${font.sans}`,
 };
 const inputStyle: React.CSSProperties = {
   width: 64,
-  font: "12px var(--font-sans, sans-serif)",
+  font: `12px ${font.sans}`,
 };
 
 /** The one-line summary a blend row shows. Pure — exported so the
@@ -302,7 +305,7 @@ export function makeBlendPanel(host: BundleHost): {
         <div style={rowStyle}>
           <span style={{ flex: 1 }}>Mode</span>
           <select
-            style={{ font: "12px var(--font-sans, sans-serif)" }}
+            style={{ font: `12px ${font.sans}` }}
             data-draw-blend-spacing
             value={draft.spacing}
             onChange={(e) =>
@@ -344,7 +347,7 @@ export function makeBlendPanel(host: BundleHost): {
         <div style={rowStyle}>
           <span style={{ flex: 1 }}>Align to</span>
           <select
-            style={{ font: "12px var(--font-sans, sans-serif)" }}
+            style={{ font: `12px ${font.sans}` }}
             data-draw-blend-orientation
             value={draft.orientation}
             onChange={(e) =>
@@ -366,7 +369,7 @@ export function makeBlendPanel(host: BundleHost): {
         <div style={rowStyle}>
           <span style={{ flex: 1 }}>Shape</span>
           <select
-            style={{ font: "12px var(--font-sans, sans-serif)" }}
+            style={{ font: `12px ${font.sans}` }}
             data-draw-blend-easing
             value={draft.easing}
             onChange={(e) =>
@@ -398,7 +401,7 @@ export function makeBlendPanel(host: BundleHost): {
             <div style={rowStyle}>
               <span style={{ flex: 1 }}>Colour</span>
               <select
-                style={{ font: "12px var(--font-sans, sans-serif)" }}
+                style={{ font: `12px ${font.sans}` }}
                 data-draw-blend-color-easing
                 value={draft.colorEasing}
                 onChange={(e) =>
@@ -491,8 +494,8 @@ export function makeBlendPanel(host: BundleHost): {
                 >
                   Spine
                 </button>
-                <button
-                  type="button"
+                <IconButton
+                  label="Reverse spine"
                   style={iconBtn}
                   title="Travel the spine the other way (geometry moves)"
                   data-draw-blend-reverse-spine
@@ -503,9 +506,9 @@ export function makeBlendPanel(host: BundleHost): {
                   }
                 >
                   ⇄
-                </button>
-                <button
-                  type="button"
+                </IconButton>
+                <IconButton
+                  label="Reverse front to back"
                   style={iconBtn}
                   title="Flip paint order (nothing moves)"
                   data-draw-blend-reverse-order
@@ -516,7 +519,7 @@ export function makeBlendPanel(host: BundleHost): {
                   }
                 >
                   ⇅
-                </button>
+                </IconButton>
                 <button
                   type="button"
                   style={iconBtn}

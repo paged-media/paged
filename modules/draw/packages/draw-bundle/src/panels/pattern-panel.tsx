@@ -54,6 +54,8 @@ import {
 import { useFollowedDraft, usePanelReload } from "./use-panel-reload";
 import {
   About,
+  color,
+  font,
   humanize,
   Refusal,
   useActionFeedback,
@@ -83,18 +85,18 @@ const rowStyle: React.CSSProperties = {
   alignItems: "center",
   gap: 6,
   padding: "3px 0",
-  font: "12px var(--font-sans, sans-serif)",
+  font: `12px ${font.sans}`,
 };
 const iconBtn: React.CSSProperties = {
   border: "none",
   background: "none",
   cursor: "pointer",
   padding: "0 3px",
-  font: "12px var(--font-sans, sans-serif)",
-  color: "var(--pg-fg, currentColor)",
+  font: `12px ${font.sans}`,
+  color: color.fg,
 };
 const sectionStyle: React.CSSProperties = {
-  font: "11px var(--font-sans, sans-serif)",
+  font: `11px ${font.sans}`,
   textTransform: "uppercase",
   letterSpacing: "0.04em",
   opacity: 0.65,
@@ -102,11 +104,11 @@ const sectionStyle: React.CSSProperties = {
 };
 const mutedStyle: React.CSSProperties = {
   opacity: 0.6,
-  font: "12px var(--font-sans, sans-serif)",
+  font: `12px ${font.sans}`,
 };
 const inputStyle: React.CSSProperties = {
   width: 64,
-  font: "12px var(--font-sans, sans-serif)",
+  font: `12px ${font.sans}`,
 };
 
 /** The one-line summary a field row shows: its layout, its requested
@@ -228,7 +230,7 @@ export function makePatternPanel(host: BundleHost): {
         <div style={rowStyle}>
           <span style={{ flex: 1 }}>Layout</span>
           <select
-            style={{ font: "12px var(--font-sans, sans-serif)" }}
+            style={{ font: `12px ${font.sans}` }}
             data-draw-pattern-layout
             value={draft.layout}
             onChange={(e) =>
@@ -284,7 +286,7 @@ export function makePatternPanel(host: BundleHost): {
         <div style={rowStyle}>
           <span style={{ flex: 1 }}>Overlap (which copy is in front)</span>
           <select
-            style={{ font: "12px var(--font-sans, sans-serif)" }}
+            style={{ font: `12px ${font.sans}` }}
             data-draw-pattern-overlap-h
             value={draft.overlap.horizontal}
             onChange={(e) =>
@@ -302,7 +304,7 @@ export function makePatternPanel(host: BundleHost): {
             <option value="leftInFront">Left in front</option>
           </select>
           <select
-            style={{ font: "12px var(--font-sans, sans-serif)" }}
+            style={{ font: `12px ${font.sans}` }}
             data-draw-pattern-overlap-v
             value={draft.overlap.vertical}
             onChange={(e) =>

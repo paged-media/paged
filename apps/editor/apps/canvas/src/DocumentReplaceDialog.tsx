@@ -25,6 +25,7 @@
 import { useEffect, useSyncExternalStore } from "react";
 import type { CSSProperties } from "react";
 import type { PendingReplace, ReplaceController } from "./plugin-documents";
+import { color, font, radius } from "@paged-media/panel-kit";
 
 export function DocumentReplaceDialog({
   controller,
@@ -65,7 +66,7 @@ function ReplacePrompt({ pending }: { pending: PendingReplace }) {
         display: "grid",
         placeItems: "center",
         background: "rgba(0,0,0,0.6)",
-        font: "13px/1.5 var(--font-sans, system-ui, sans-serif)",
+        font: `13px/1.5 ${font.sans}`,
       }}
     >
       <div
@@ -77,10 +78,10 @@ function ReplacePrompt({ pending }: { pending: PendingReplace }) {
         style={{
           width: "min(440px, 92vw)",
           padding: 20,
-          borderRadius: "var(--radius-lg, 10px)",
-          border: "1px solid var(--border, #2a2a2a)",
-          background: "var(--elevated, var(--background, #161616))",
-          color: "var(--fg, #e7e7e7)",
+          borderRadius: radius.lg,
+          border: `1px solid ${color.border}`,
+          background: color.elevated,
+          color: color.fg,
           boxShadow: "0 16px 48px rgba(0,0,0,0.5)",
         }}
       >
@@ -92,18 +93,18 @@ function ReplacePrompt({ pending }: { pending: PendingReplace }) {
         </h2>
         <p
           id="replace-document-body"
-          style={{ margin: "0 0 16px", color: "var(--muted-fg, #9a9a9a)" }}
+          style={{ margin: "0 0 16px", color: color.mutedFg }}
         >
           <strong
             data-testid="replace-document-requester"
-            style={{ color: "var(--fg, #e7e7e7)" }}
+            style={{ color: color.fg }}
           >
             {pending.requester}
           </strong>{" "}
           wants to open{" "}
           <strong
             data-testid="replace-document-name"
-            style={{ color: "var(--fg, #e7e7e7)" }}
+            style={{ color: color.fg }}
           >
             {pending.documentName}
           </strong>{" "}
@@ -140,8 +141,8 @@ function btnStyle(primary: boolean): CSSProperties {
     borderRadius: 7,
     fontSize: 13,
     cursor: "pointer",
-    border: "1px solid var(--border, #2a2a2a)",
-    background: primary ? "var(--pg-primary, #4f7cff)" : "transparent",
-    color: primary ? "var(--pg-primary-fg, #fff)" : "var(--fg, #e7e7e7)",
+    border: `1px solid ${color.border}`,
+    background: primary ? color.primary : "transparent",
+    color: primary ? color.primaryFg : color.fg,
   };
 }

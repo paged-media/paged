@@ -59,7 +59,13 @@ import {
 import { getLivePaintFill, setLivePaintFill } from "../handlers/live-paint";
 import { linkIndex } from "../link-index";
 import { usePanelReload } from "./use-panel-reload";
-import { About, Refusal, useActionFeedback } from "@paged-media/panel-kit";
+import {
+  About,
+  color,
+  font,
+  Refusal,
+  useActionFeedback,
+} from "@paged-media/panel-kit";
 import { PanelIntro } from "./panel-parts";
 
 export const LIVE_PAINT_PANEL_ID = "media.paged.draw.panel.livePaint";
@@ -87,18 +93,18 @@ const rowStyle: React.CSSProperties = {
   alignItems: "center",
   gap: 6,
   padding: "3px 0",
-  font: "12px var(--font-sans, sans-serif)",
+  font: `12px ${font.sans}`,
 };
 const iconBtn: React.CSSProperties = {
   border: "none",
   background: "none",
   cursor: "pointer",
   padding: "0 3px",
-  font: "12px var(--font-sans, sans-serif)",
-  color: "var(--pg-fg, currentColor)",
+  font: `12px ${font.sans}`,
+  color: color.fg,
 };
 const sectionStyle: React.CSSProperties = {
-  font: "11px var(--font-sans, sans-serif)",
+  font: `11px ${font.sans}`,
   textTransform: "uppercase",
   letterSpacing: "0.04em",
   opacity: 0.65,
@@ -106,7 +112,7 @@ const sectionStyle: React.CSSProperties = {
 };
 const mutedStyle: React.CSSProperties = {
   opacity: 0.6,
-  font: "12px var(--font-sans, sans-serif)",
+  font: `12px ${font.sans}`,
 };
 
 /** The one-line summary a group row shows: how many members form the
@@ -217,7 +223,7 @@ export function makeLivePaintPanel(host: BundleHost): {
         <div style={rowStyle}>
           <span style={{ flex: 1 }}>Bucket fill</span>
           <select
-            style={{ font: "12px var(--font-sans, sans-serif)" }}
+            style={{ font: `12px ${font.sans}` }}
             data-draw-live-paint-fill
             value={fill ?? ""}
             onChange={(e) => {

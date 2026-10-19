@@ -34,6 +34,7 @@ import type {
   PendingSecret,
   SecretPromptController,
 } from "./plugin-secret-store";
+import { color, font, radius } from "@paged-media/panel-kit";
 
 export function SecretPromptDialog({
   controller,
@@ -85,7 +86,7 @@ function SecretPrompt({ pending }: { pending: PendingSecret }) {
         display: "grid",
         placeItems: "center",
         background: "rgba(0,0,0,0.6)",
-        font: "13px/1.5 var(--font-sans, system-ui, sans-serif)",
+        font: `13px/1.5 ${font.sans}`,
       }}
     >
       <div
@@ -98,23 +99,23 @@ function SecretPrompt({ pending }: { pending: PendingSecret }) {
           maxHeight: "82vh",
           overflow: "auto",
           padding: 20,
-          borderRadius: "var(--radius-lg, 10px)",
-          border: "1px solid var(--border, #2a2a2a)",
-          background: "var(--elevated, var(--background, #161616))",
-          color: "var(--fg, #e7e7e7)",
+          borderRadius: radius.lg,
+          border: `1px solid ${color.border}`,
+          background: color.elevated,
+          color: color.fg,
           boxShadow: "0 16px 48px rgba(0,0,0,0.5)",
         }}
       >
         <h2 id="secret-title" style={{ margin: "0 0 4px", fontSize: 15 }}>
           This source uses a stored credential
         </h2>
-        <p style={{ margin: "0 0 14px", color: "var(--muted-fg, #9a9a9a)" }}>
+        <p style={{ margin: "0 0 14px", color: color.mutedFg }}>
           A plugin asked to store a credential under{" "}
           <code
             data-testid="secret-ref"
             style={{
-              font: "12px var(--font-mono, monospace)",
-              color: "var(--fg, #e7e7e7)",
+              font: `12px ${font.mono}`,
+              color: color.fg,
             }}
           >
             {pending.ref}
@@ -126,7 +127,7 @@ function SecretPrompt({ pending }: { pending: PendingSecret }) {
           style={{
             display: "block",
             margin: "0 0 6px",
-            color: "var(--muted-fg, #9a9a9a)",
+            color: color.mutedFg,
           }}
         >
           Credential
@@ -145,10 +146,10 @@ function SecretPrompt({ pending }: { pending: PendingSecret }) {
               marginTop: 6,
               padding: "8px 10px",
               borderRadius: 7,
-              border: "1px solid var(--border, #2a2a2a)",
-              background: "var(--background, #111)",
-              color: "var(--fg, #e7e7e7)",
-              font: "12px var(--font-mono, monospace)",
+              border: `1px solid ${color.border}`,
+              background: color.bg,
+              color: color.fg,
+              font: `12px ${font.mono}`,
               boxSizing: "border-box",
             }}
           />
@@ -159,7 +160,7 @@ function SecretPrompt({ pending }: { pending: PendingSecret }) {
           style={{
             margin: "8px 0 16px",
             fontSize: 12,
-            color: "var(--muted-fg, #9a9a9a)",
+            color: color.mutedFg,
           }}
         >
           {tierNote}
@@ -196,8 +197,8 @@ function btnStyle(primary: boolean, disabled = false): CSSProperties {
     fontSize: 13,
     cursor: disabled ? "not-allowed" : "pointer",
     opacity: disabled ? 0.5 : 1,
-    border: "1px solid var(--border, #2a2a2a)",
-    background: primary ? "var(--pg-primary, #4f7cff)" : "transparent",
-    color: primary ? "var(--pg-primary-fg, #fff)" : "var(--fg, #e7e7e7)",
+    border: `1px solid ${color.border}`,
+    background: primary ? color.primary : "transparent",
+    color: primary ? color.primaryFg : color.fg,
   };
 }

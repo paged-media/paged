@@ -7,16 +7,17 @@
 import type { CSSProperties, ReactElement } from "react";
 
 import type { SessionDiagnostic } from "../session";
+import { color, space, status } from "@paged-media/panel-kit";
 
 const COLOR: Record<SessionDiagnostic["level"], string> = {
-  error: "var(--status-error, #c33)",
-  warn: "var(--status-warn, #c80)",
-  info: "var(--pg-muted-fg, #999)",
+  error: status.error,
+  warn: status.warn,
+  info: color.mutedFg,
 };
 
 const list: CSSProperties = {
   margin: 0,
-  paddingLeft: "var(--space-3, 12px)",
+  paddingLeft: space[3],
   fontSize: "11px",
   lineHeight: 1.5,
 };

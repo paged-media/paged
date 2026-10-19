@@ -53,6 +53,7 @@ import { defineBinding } from "../object-model";
 import { hasDocumentsDoors, NO_NEW_DOCUMENT_DOOR } from "../session";
 import { DiagnosticsList } from "./diagnostics";
 import { useSessionSnapshot } from "./use-session";
+import { color, font, space, status } from "@paged-media/panel-kit";
 
 /** The binding kinds the panel defines. */
 type BindKind =
@@ -108,11 +109,11 @@ const SYNC_LABEL: Record<SyncStatus, string> = {
   error: "error",
 };
 const SYNC_COLOR: Record<SyncStatus, string> = {
-  linked: "var(--status-ok, #2a2)",
-  stale: "var(--status-warn, #c80)",
-  pinned: "var(--pg-muted-fg, #999)",
-  overridden: "var(--status-warn, #c80)",
-  error: "var(--status-error, #c33)",
+  linked: status.ok,
+  stale: status.warn,
+  pinned: color.mutedFg,
+  overridden: status.warn,
+  error: status.error,
 };
 
 /** The display patterns a variable field can take. */
@@ -201,21 +202,21 @@ const SYMBOLOGY_OPTIONS: { value: BarcodeSymbology; label: string }[] = [
 const wrap: CSSProperties = {
   display: "flex",
   flexDirection: "column",
-  gap: "var(--space-3, 12px)",
-  padding: "var(--space-3, 12px)",
+  gap: space[3],
+  padding: space[3],
   fontSize: "12px",
-  color: "var(--pg-fg, #ddd)",
+  color: color.fg,
 };
 
 const note: CSSProperties = {
-  color: "var(--pg-muted-fg, #999)",
+  color: color.mutedFg,
   fontSize: "11px",
   lineHeight: 1.5,
 };
 
 /** Values/ids stay mono; prose is the host's sans. */
 const mono: CSSProperties = {
-  fontFamily: "var(--font-mono, ui-monospace, monospace)",
+  fontFamily: font.mono,
 };
 
 /** The panel the empty state sends the user to (activate.ts registers it). */
@@ -287,7 +288,7 @@ export function queryOptions(
 
 const row: CSSProperties = {
   display: "flex",
-  gap: "var(--space-2, 8px)",
+  gap: space[2],
   flexWrap: "wrap",
 };
 
@@ -1101,12 +1102,12 @@ export function makeBindingsPanel(
             {bindKind === "rule" && (ruleCheck || rulePreview) && (
               <p style={note} data-data-rule-preview-out>
                 {ruleCheck && !ruleCheck.ok ? (
-                  <span style={{ color: "var(--status-error, #c33)" }}>
+                  <span style={{ color: status.error }}>
                     {ruleCheck.error ?? "the condition does not parse"}
                   </span>
                 ) : rulePreview ? (
                   rulePreview.error ? (
-                    <span style={{ color: "var(--status-error, #c33)" }}>
+                    <span style={{ color: status.error }}>
                       {rulePreview.error}
                     </span>
                   ) : (
@@ -1363,7 +1364,7 @@ export function makeBindingsPanel(
                     {m.mappable ? (
                       <code>{m.expr}</code>
                     ) : (
-                      <span style={{ color: "var(--status-warn, #c80)" }}>
+                      <span style={{ color: status.warn }}>
                         manual expr needed
                       </span>
                     )}
@@ -1393,10 +1394,10 @@ export function makeBindingsPanel(
                   style={{
                     color:
                       c.kind === "changed"
-                        ? "var(--status-warn, #c80)"
+                        ? status.warn
                         : c.kind === "added"
-                          ? "var(--status-ok, #2a2)"
-                          : "var(--status-error, #c33)",
+                          ? status.ok
+                          : status.error,
                   }}
                 >
                   {c.binding}: {c.kind}
@@ -1466,7 +1467,7 @@ export function makeBindingsPanel(
                     <span
                       key={`i${r.index}`}
                       data-row-change="inserted"
-                      style={{ ...mono, color: "var(--status-ok, #2a2)" }}
+                      style={{ ...mono, color: status.ok }}
                     >
                       + {r.key}: {r.values.join(" · ")}
                     </span>
@@ -1475,7 +1476,7 @@ export function makeBindingsPanel(
                   <span
                     key={`r${r.index}`}
                     data-row-change="removed"
-                    style={{ ...mono, color: "var(--status-error, #c33)" }}
+                    style={{ ...mono, color: status.error }}
                   >
                     − {r.key}: {r.values.join(" · ")}
                   </span>
@@ -1521,7 +1522,7 @@ export function makeBindingsPanel(
           {snapshot.bindings.length === 0 ? (
             <span style={note}>none</span>
           ) : (
-            <ul style={{ margin: 0, paddingLeft: "var(--space-3, 12px)" }}>
+            <ul style={{ margin: 0, paddingLeft: space[3] }}>
               {(live.listBindings() ?? []).map((b) => {
                 const sync = syncRows?.find((r) => r.id === b.id) ?? null;
                 const status = sync?.status ?? null;

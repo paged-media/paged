@@ -41,6 +41,7 @@ import {
   type FillStrokeWell,
 } from "../state/formatting-affects-context";
 import { contentSelectionInactive } from "../state/commands/tool-commands";
+import { IconButton } from "@paged-media/panel-kit";
 
 // Concept 1 (T3) — the fill/stroke/apply foot cluster. NOT a tool: a
 // small composition over Concept 2's colour model. The wells read +
@@ -430,17 +431,17 @@ export function FillStrokeCluster() {
 
       {/* Swap (X) + default (D). */}
       <div style={miniRow}>
-        <button
-          type="button"
+        <IconButton
+          label="Swap fill and stroke"
           title="Swap fill and stroke (X)"
           data-fs-swap
           onClick={swap}
           style={miniBtn}
         >
           ⇄
-        </button>
-        <button
-          type="button"
+        </IconButton>
+        <IconButton
+          label="Default fill and stroke"
           title="Default fill and stroke (D)"
           data-fs-default
           disabled={!fill.onCommit && !stroke.onCommit && !docDefaults}
@@ -448,13 +449,13 @@ export function FillStrokeCluster() {
           style={miniBtn}
         >
           ▣
-        </button>
+        </IconButton>
       </div>
 
       {/* Apply: [colour] · [gradient (disabled)] · [None]. */}
       <div style={miniRow}>
-        <button
-          type="button"
+        <IconButton
+          label="Apply last colour"
           title="Apply last colour"
           data-fs-apply-color
           disabled={!canApply}
@@ -466,7 +467,7 @@ export function FillStrokeCluster() {
           }}
         >
           ◼
-        </button>
+        </IconButton>
         <button
           type="button"
           title={
@@ -501,8 +502,8 @@ export function FillStrokeCluster() {
       </div>
 
       {/* J — formatting affects container vs. text. */}
-      <button
-        type="button"
+      <IconButton
+        label={`Formatting affects ${affects}`}
         title={`Formatting affects: ${affects} (J)`}
         data-fs-affects={affects}
         onClick={toggleAffects}
@@ -519,7 +520,7 @@ export function FillStrokeCluster() {
         }}
       >
         {affects === "text" ? "T" : "□"}
-      </button>
+      </IconButton>
 
       {!canApply && (
         <div style={hintStyle} title="Waiting for the document to load">
