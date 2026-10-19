@@ -206,36 +206,33 @@ describe("loading a file", () => {
   // the document state, but the first pass keeps going: its pages' thumbnails
   // land in the NEW document's map, and its closing "loaded N pages" status
   // and snapshotsReady=true arrive after the new document's reset.
-  test(
-    "SH-105: a newer load stops the older load's snapshot pass",
-    async () => {
-      serveFont(TRUETYPE);
-      let release!: () => void;
-      const gate = new Promise<void>((r) => (release = r));
-      const { log, cb } = recorder();
-      const first = client({ handle: handleOf("old", ["o1", "o2"]), gate });
-      const second = client({ handle: handleOf("new", ["n1"]) });
-      const a = loadDocumentFile(
-        first.c,
-        new File([new Uint8Array(1)], "old.idml"),
-        cb,
-      );
-      // Let the first load reach its snapshot pass.
-      await new Promise((r) => setTimeout(r, 10));
-      const b = loadDocumentFile(
-        second.c,
-        new File([new Uint8Array(1)], "new.idml"),
-        cb,
-      );
-      await b;
-      release();
-      await a;
-      const afterSecondReset = log.slice(log.lastIndexOf("reset"));
-      expect(afterSecondReset.filter((l) => l.startsWith("snapshot"))).toEqual([
-        "snapshot n1",
-      ]);
-    },
-  );
+  test("SH-105: a newer load stops the older load's snapshot pass", async () => {
+    serveFont(TRUETYPE);
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    const { log, cb } = recorder();
+    const first = client({ handle: handleOf("old", ["o1", "o2"]), gate });
+    const second = client({ handle: handleOf("new", ["n1"]) });
+    const a = loadDocumentFile(
+      first.c,
+      new File([new Uint8Array(1)], "old.idml"),
+      cb,
+    );
+    // Let the first load reach its snapshot pass.
+    await new Promise((r) => setTimeout(r, 10));
+    const b = loadDocumentFile(
+      second.c,
+      new File([new Uint8Array(1)], "new.idml"),
+      cb,
+    );
+    await b;
+    release();
+    await a;
+    const afterSecondReset = log.slice(log.lastIndexOf("reset"));
+    expect(afterSecondReset.filter((l) => l.startsWith("snapshot"))).toEqual([
+      "snapshot n1",
+    ]);
+  });
 });
 
 describe("File > New", () => {

@@ -200,22 +200,19 @@ describe("Publication health: findings", () => {
   // UX audit F-44: "Publication health stays at '0 Stories, 0 Frames'
   // after the insert". The tiles read the stats the engine sends at load
   // and in reply to a content selection; an edit sends none.
-  test(
-    "PN-300 (UX F-44): the Frames and Stories tiles follow an edit that adds a text frame",
-    async () => {
-      covers("panel:paged.publication-health");
-      const h = await mountPanel(PublicationHealthPanel, {
-        id: "paged.publication-health",
-        document: linksDocument(),
-      });
-      expect(tiles(h).Frames).toBe("2");
-      await h.mutate({
-        op: "insertTextFrame",
-        args: { pageId: "cp2", bounds: [72, 72, 200, 300] },
-      } as never);
-      expect(tiles(h)).toMatchObject({ Frames: "3", Stories: "1" });
-    },
-  );
+  test("PN-300 (UX F-44): the Frames and Stories tiles follow an edit that adds a text frame", async () => {
+    covers("panel:paged.publication-health");
+    const h = await mountPanel(PublicationHealthPanel, {
+      id: "paged.publication-health",
+      document: linksDocument(),
+    });
+    expect(tiles(h).Frames).toBe("2");
+    await h.mutate({
+      op: "insertTextFrame",
+      args: { pageId: "cp2", bounds: [72, 72, 200, 300] },
+    } as never);
+    expect(tiles(h)).toMatchObject({ Frames: "3", Stories: "1" });
+  });
 
   // A row with a count shows a chevron, the panel's "go there" sign (the
   // header says preflight "chevrons into the Preflight panel's

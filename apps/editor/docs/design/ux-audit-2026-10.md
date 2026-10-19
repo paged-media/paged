@@ -415,6 +415,11 @@ With an empty selection, every Object item is enabled: Bring to front, Group, Un
 
 **Screenshots:** `F-14-object-menu-no-selection.png`, `F-14-group-nothing-selected.png`
 
+**Fixed (2026-10-19, `b5cc7328a`).** As recommended (ADR 249): each Object command's `when` asks
+for a selection and the menu reads the command's own `when`, so with nothing selected the verbs
+are greyed (SH-8); the same rule greys a bundle's entries whose command does not apply (MNU-1)
+and Color Groups' New group without a document (PN-157).
+
 <a id="f-15"></a>
 
 #### F-15 · Layout menu calls working features "soon"
@@ -457,6 +462,10 @@ Layout ▸ Margins and columns…, Ruler guides…, Create guides… and Numberi
 **Recommendation:** Move the ⌘0/⌘1/PageUp/PageDown/Home/End handlers into the keybinding registry. Show chords in the palette and drop the ids. Group the shortcuts panel by context.
 
 **Screenshots:** `F-16-palette-ids-not-shortcuts.png`, `F-16-shortcuts-panel-duplicates.png`
+
+**Partly fixed (2026-10-19, `907b1b153`).** ⌘0 and ⌘1 are registry bindings (ADR 246), so the
+View menu shows their chords and a bundle can rebind them (SH-9). The page keys, the palette's
+right column and the shortcuts panel's grouping are not changed.
 
 <a id="f-18"></a>
 
@@ -753,6 +762,10 @@ With the Selection tool, a pointer 5–8 pt outside a corner still shows `nesw-r
 
 **Screenshots:** `F-31-min-zoom-rulers.png`, `F-31-zoom-menu.png`
 
+**Partly fixed (2026-10-19, `907b1b153`).** One range for every zoom input, 5 % to 4,000 %, held
+where the camera is set (ADR 246); the % field takes the same range. Fit page, Fit spread, Fit
+selection, presets and ruler thinning are not added.
+
 <a id="f-32"></a>
 
 #### F-32 · Documents open at "fit whole document": pages as slivers, page indicator mid-document
@@ -797,6 +810,9 @@ Shift+wheel moved the camera by Δy = −200 and Δx = 0. With a mouse wheel on 
 **Evidence:** Camera delta measured: shift-wheel dtx 0 / dty −200; horizontal wheel dtx −200.
 
 **Screenshots:** `F-33-shift-wheel.png`
+
+**Fixed (2026-10-19, `907b1b153`).** As recommended (ADR 246): Shift+wheel with no `deltaX` pans
+sideways.
 
 <a id="f-34"></a>
 
@@ -997,6 +1013,9 @@ After Insert ▸ Word document… (and on open), the centred heading's line coll
 **Recommendation:** Check paragraph spacing in the DOCX lowering (space-before/leading on headings). Refresh health on the documents door.
 
 **Screenshots:** `F-44-docx-heading-overlap.png`, `F-08-docx-marked-edited.png`
+
+**Partly fixed (2026-10-19, `9e1659754`).** The health counts follow every edit (ADR 248, PN-300,
+PN-304). The heading overlap is not changed.
 
 <a id="f-45"></a>
 

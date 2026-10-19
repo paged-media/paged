@@ -359,18 +359,13 @@ describe("Object/Transform panel: findings", () => {
   // frameOpacity reads as an unset length (null) on a frame nobody has
   // made transparent. The panel unwraps null as 0 and shows "0 %"; the
   // Effects panel reads the same frame as the schema default, "100 %".
-  test(
-    "PN-250: an untouched frame's opacity reads 100 %, as the Effects panel shows it",
-    async () => {
-      covers("panel:paged.object-transform");
-      const h = await mount();
-      await h.select([h.scene.rect]);
-      expect(await h.get(addr(h.scene.rect), "frameOpacity")).toEqual(
-        len(null),
-      );
-      expect(byLabel(h, "opacity").value).toBe("100 %");
-    },
-  );
+  test("PN-250: an untouched frame's opacity reads 100 %, as the Effects panel shows it", async () => {
+    covers("panel:paged.object-transform");
+    const h = await mount();
+    await h.select([h.scene.rect]);
+    expect(await h.get(addr(h.scene.rect), "frameOpacity")).toEqual(len(null));
+    expect(byLabel(h, "opacity").value).toBe("100 %");
+  });
 
   // Flip V was a seam "the editor can set it but cannot read it back",
   // but the engine reads frameFlipV (a bool on every frame, engine ADR

@@ -56,6 +56,10 @@ and 024 predate that scheme and keep their numbers. Records 200–217 were writt
 | [238](238-the-default-pdf-is-one-the-document-can-meet.md) | The default PDF is one the document can meet | Accepted 2026-10-19 |
 | [240](240-react-19-features.md) | The editor uses React 19's effect events, Activity, view transitions, Fragment refs and Trusted Types | Accepted 2026-10-19 |
 | [245](245-one-document-unit.md) | One document unit for every length | Accepted 2026-10-19 |
+| [246](246-one-zoom-range.md) | One zoom range, and the view chords in the keybinding registry | Accepted 2026-10-19 |
+| [247](247-stored-settings-are-shape-checked.md) | Stored settings are read with a shape check | Accepted 2026-10-19 |
+| [248](248-an-answer-is-what-is-true.md) | An answer says what is true: failures fail, late answers are dropped, readers follow | Accepted 2026-10-19 |
+| [249](249-offered-only-where-it-applies.md) | A control is offered only where it applies: the command's when, the field's kind | Accepted 2026-10-19 |
 
 Decisions made in other repositories that this editor's code rests on are listed in
 [`../README.md`](../README.md). Comments in the source also cite ADR 025 (the journal) and

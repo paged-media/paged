@@ -319,22 +319,19 @@ describe("Object Options: findings", () => {
   // The engine answers noSuchPath for the arrowheads on a rectangle; the
   // fields show the mixed face, as the Stroke panel's join and miter do
   // on an oval (PN-3): one object cannot disagree with itself.
-  test(
-    "PN-200: a rectangle's arrowhead fields read as not applicable, not as mixed",
-    async () => {
-      covers("panel:paged.object-options");
-      const h = await mount();
-      await h.select([h.scene.rect]);
-      for (const path of [
-        "frameStrokeStartArrowhead",
-        "frameStrokeEndArrowhead",
-      ]) {
-        expect(h.field(path).getAttribute("data-binding-state")).not.toBe(
-          "mixed",
-        );
-      }
-    },
-  );
+  test("PN-200: a rectangle's arrowhead fields read as not applicable, not as mixed", async () => {
+    covers("panel:paged.object-options");
+    const h = await mount();
+    await h.select([h.scene.rect]);
+    for (const path of [
+      "frameStrokeStartArrowhead",
+      "frameStrokeEndArrowhead",
+    ]) {
+      expect(h.field(path).getAttribute("data-binding-state")).not.toBe(
+        "mixed",
+      );
+    }
+  });
 
   // PN-202 (fixed, R1, engine ADR 192): the write landed (the transform
   // turns to [1 0 0 -1 0 0]) but frameFlipV read back false, the matrix

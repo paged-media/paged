@@ -265,8 +265,8 @@ function ImagesCheck({
           className="pg-ui-xs"
           data-preflight-low-res
         >
-          {l.uri.split("/").pop() ?? l.uri} ·{" "}
-          {Math.round(l.effectivePpi ?? 0)} ppi
+          {l.uri.split("/").pop() ?? l.uri} · {Math.round(l.effectivePpi ?? 0)}{" "}
+          ppi
         </span>
       ))}
       <span className="pg-ui-xs" style={{ color: "var(--pg-muted-fg)" }}>

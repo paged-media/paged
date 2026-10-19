@@ -273,19 +273,16 @@ describe("Stroke panel: every control writes the model", () => {
 describe("Stroke panel: findings", () => {
   // The engine answers noSuchPath for join and miter on an oval (they
   // are rectangle-only); a single object cannot disagree with itself.
-  test(
-    "PN-3: an oval's Join and Miter limit read as not applicable, not as mixed",
-    async () => {
-      covers("panel:paged.stroke");
-      const h = await mount();
-      await h.select([h.scene.oval]);
-      for (const path of ["frameStrokeJoin", "frameStrokeMiterLimit"]) {
-        expect(h.field(path).getAttribute("data-binding-state")).not.toBe(
-          "mixed",
-        );
-      }
-    },
-  );
+  test("PN-3: an oval's Join and Miter limit read as not applicable, not as mixed", async () => {
+    covers("panel:paged.stroke");
+    const h = await mount();
+    await h.select([h.scene.oval]);
+    for (const path of ["frameStrokeJoin", "frameStrokeMiterLimit"]) {
+      expect(h.field(path).getAttribute("data-binding-state")).not.toBe(
+        "mixed",
+      );
+    }
+  });
 
   // UX audit F-22 / F-37: "Properties ▸ Stroke Type lists
   // StrokeStyle/$ID/Japanese Dots" — the panel shows the engine's ids.

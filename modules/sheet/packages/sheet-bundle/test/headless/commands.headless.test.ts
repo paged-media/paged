@@ -189,16 +189,13 @@ describe.skipIf(!ENGINE_BUILT)(
     });
     // Findings: the behaviour the command should have, failing until the
     // product does it (expected failures; fixing them flips these red).
-    it(
-      "SHT-1 — importXlsx (typed) rejects bytes that are not a workbook, even with one open",
-      async () => {
-        // Fixed: it resolved with the workbook address whether or not the
-        // bytes loaded (the command's only check was that an engine
-        // existed). Now the load's own answer decides; the open workbook
-        // stays.
-        await S.importXlsxRefusesGarbage(env);
-      },
-    );
+    it("SHT-1 — importXlsx (typed) rejects bytes that are not a workbook, even with one open", async () => {
+      // Fixed: it resolved with the workbook address whether or not the
+      // bytes loaded (the command's only check was that an engine
+      // existed). Now the load's own answer decides; the open workbook
+      // stays.
+      await S.importXlsxRefusesGarbage(env);
+    });
 
     it.failing(
       "SHT-2 — findReplace (typed) that matches nothing writes no undo step",

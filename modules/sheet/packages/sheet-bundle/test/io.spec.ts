@@ -116,22 +116,19 @@ describe.skipIf(!ENGINE_BUILT)(
       ).toBe(true);
     });
 
-    it(
-      "SHT-3 — after a failed import no workbook verb is offered",
-      async () => {
-        // Fixed: the engine had booted, so `when` (engine !== null) answered
-        // true and the palette offered Copy, Paste, Fill, … over an empty
-        // default Sheet1 the user never opened. The gate now asks what the
-        // handlers ask (an engine and an active sheet).
-        await env.importer("media.paged.sheet.importer.xlsx").import({
-          name: "x.xlsx",
-          bytes: enc.encode("nope"),
-          mimeType: XLSX,
-        });
-        await env.settle();
-        expect(workbookOpen(env)).toBe(false);
-      },
-    );
+    it("SHT-3 — after a failed import no workbook verb is offered", async () => {
+      // Fixed: the engine had booted, so `when` (engine !== null) answered
+      // true and the palette offered Copy, Paste, Fill, … over an empty
+      // default Sheet1 the user never opened. The gate now asks what the
+      // handlers ask (an engine and an active sheet).
+      await env.importer("media.paged.sheet.importer.xlsx").import({
+        name: "x.xlsx",
+        bytes: enc.encode("nope"),
+        mimeType: XLSX,
+      });
+      await env.settle();
+      expect(workbookOpen(env)).toBe(false);
+    });
 
     it("the .csv importer types each value, names the sheet after the file, and takes .tsv too", async () => {
       covers("importer:media.paged.sheet.importer.csv");

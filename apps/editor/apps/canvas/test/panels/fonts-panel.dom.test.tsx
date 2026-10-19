@@ -142,17 +142,14 @@ describe("Fonts panel: findings", () => {
   // useCollection re-reads on mutation / undo / redo / script / load, not
   // on fontRegistered: a family the user just supplied still reads
   // "missing" until something else edits the document.
-  test(
-    "PN-106: registering a missing family's font updates the list at once",
-    async () => {
-      covers("panel:paged.fonts");
-      const h = await mountPanel(FontsPanel, {
-        id: "paged.fonts",
-        document: structureIdml({ font: "Inter" }),
-      });
-      expect(rows(h.root)[0].badge).toBe("missing");
-      await registerInter(h);
-      expect(rows(h.root)[0].badge).toBeNull();
-    },
-  );
+  test("PN-106: registering a missing family's font updates the list at once", async () => {
+    covers("panel:paged.fonts");
+    const h = await mountPanel(FontsPanel, {
+      id: "paged.fonts",
+      document: structureIdml({ font: "Inter" }),
+    });
+    expect(rows(h.root)[0].badge).toBe("missing");
+    await registerInter(h);
+    expect(rows(h.root)[0].badge).toBeNull();
+  });
 });

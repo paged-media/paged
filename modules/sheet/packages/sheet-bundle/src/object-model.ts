@@ -1630,7 +1630,9 @@ export function contributeObjectModel(
         // A failure is answered as one (SHT-1): bytes that are not a
         // workbook reject, also while another workbook is open.
         if (!(await session.import(bytes, name)) || !bridge.engine())
-          throw new Error(`${name} is not a workbook (.xlsx) the engine can read`);
+          throw new Error(
+            `${name} is not a workbook (.xlsx) the engine can read`,
+          );
         return addressOf("workbook", WORKBOOK_ID);
       },
     },

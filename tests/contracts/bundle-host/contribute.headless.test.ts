@@ -273,18 +273,15 @@ describe("host.contribute — what the editor does with a contribution", () => {
   // checked the manifest's declaration only, so an entry onto a declared
   // command the bundle had not registered was accepted and sat in the
   // menu bar, doing nothing (HOST-7, fixed: ADR 249).
-  test(
-    "HOST-7 — a menu entry onto a declared but unregistered command is refused",
-    () => {
-      expect(t.registered().commands).not.toContain(`${PROBE_ID}.command.two`);
-      expect(() =>
-        h.contribute.menu({
-          path: "Probe/Nothing",
-          command: `${PROBE_ID}.command.two`,
-        }),
-      ).toThrow();
-    },
-  );
+  test("HOST-7 — a menu entry onto a declared but unregistered command is refused", () => {
+    expect(t.registered().commands).not.toContain(`${PROBE_ID}.command.two`);
+    expect(() =>
+      h.contribute.menu({
+        path: "Probe/Nothing",
+        command: `${PROBE_ID}.command.two`,
+      }),
+    ).toThrow();
+  });
 
   test("an importer claims its extension and MIME type in File ▸ Open", async () => {
     const got: string[] = [];

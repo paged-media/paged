@@ -3,9 +3,9 @@
   "package": "@paged-media/client",
   "protocol": 74,
   "counts": {
-    "clientMembers": 78,
+    "clientMembers": 80,
     "wireKinds": 52,
-    "exports": 73
+    "exports": 74
   },
   "wireKinds": [
     "beginGesture",
@@ -135,6 +135,12 @@
           "summary": "Phase 3 — replace the worker's selection state."
         },
         {
+          "name": "CanvasClient.documentStats",
+          "kind": "method",
+          "signature": "async documentStats(): Promise<DocumentStats | null>",
+          "summary": "The document's counts now (spreads, pages, frames, stories, …), or null without a document."
+        },
+        {
           "name": "CanvasClient.setElementSelection",
           "kind": "method",
           "signature": "async setElementSelection(ids: ElementId[], mode: SelectionMode): Promise<ElementId[]>",
@@ -229,6 +235,12 @@
           "kind": "method",
           "signature": "async gradientDetail(gradientId: string): Promise<GradientDetail | null>",
           "summary": "Concept 2 — full stop detail for one gradient (the ramp editor + faithful gradient chips)."
+        },
+        {
+          "name": "CanvasClient.colorProfileNames",
+          "kind": "method",
+          "signature": "colorProfileNames(): readonly string[]",
+          "summary": "The names of the colour profiles registered with this worker, in registration order: a view that lists them seeds from here and follows `colorProfileRegistered` (PN-158: a list built only from the messages a panel saw while mounted missed the earlier ones)."
         },
         {
           "name": "CanvasClient.registerColorProfile",
@@ -541,6 +553,12 @@
           "kind": "method",
           "signature": "dispose(): void",
           "summary": "Tear the session down: stop listening and terminate the worker."
+        },
+        {
+          "name": "changesTheDocument",
+          "kind": "value",
+          "signature": "changesTheDocument",
+          "summary": null
         },
         {
           "name": "CanvasClientOptions",

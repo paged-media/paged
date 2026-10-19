@@ -15,6 +15,7 @@
  *
  *  @copyright  Copyright (c) And The Next GmbH
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
+ */
 
 // Stored settings, read with a shape check (ADR 247). A value in
 // localStorage outlives the code that wrote it and can be edited by hand,

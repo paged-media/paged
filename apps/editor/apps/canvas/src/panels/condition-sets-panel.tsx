@@ -43,7 +43,10 @@ export function ConditionSetsPanel() {
   const apply = async (set: string) => {
     const reply = (await client
       .mutate({ op: "activateConditionSet", args: { set } })
-      .catch((err: unknown) => ({ kind: "failed", payload: { error: err } }))) as {
+      .catch((err: unknown) => ({
+        kind: "failed",
+        payload: { error: err },
+      }))) as {
       kind: string;
       payload?: { error?: unknown };
     };
@@ -86,7 +89,6 @@ export function ConditionSetsPanel() {
                 <CockpitBtn
                   sm
                   tone="soft"
-                  title={`Show the conditions as ${set.name} records them`}
                   onClick={() => void apply(set.selfId)}
                 >
                   Apply

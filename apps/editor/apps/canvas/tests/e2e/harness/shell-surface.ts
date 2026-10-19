@@ -294,7 +294,8 @@ export const menuFamily = (row: {
 
 /** Every registered menu item, evaluated against the live editor (the
  *  state the bar evaluates `when` with: the `PagedEditor` the command
- *  registry hands handlers, fetched through a probe command). */
+ *  registry hands handlers, fetched through a probe command), by the bar's
+ *  rule: the item's `when` and its command's (ADR 249). */
 export async function liveMenu(page: Page): Promise<MenuRow[]> {
   return page.evaluate(async () => {
     type Item = {
@@ -313,6 +314,7 @@ export async function liveMenu(page: Page): Promise<MenuRow[]> {
             commands: {
               register(c: unknown): { dispose(): void };
               invoke(id: string): Promise<unknown>;
+              get(id: string): { when?: unknown } | undefined;
             };
           };
         };
@@ -348,7 +350,14 @@ export async function liveMenu(page: Page): Promise<MenuRow[]> {
       return {
         path: m.path,
         command: m.command,
-        enabled: !m.disabled && kind === "item" && applies(m.when),
+        // ADR 249: the item's own `when`, its command registered, and the
+        // command's `when` (`entryApplies`).
+        enabled:
+          !m.disabled &&
+          kind === "item" &&
+          applies(m.when) &&
+          r.commands.get(m.command) !== undefined &&
+          applies(r.commands.get(m.command)?.when),
         label,
         kind,
         seam: Boolean(m.disabled),
