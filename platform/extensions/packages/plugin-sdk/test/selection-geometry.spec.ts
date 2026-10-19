@@ -29,19 +29,13 @@ import type { ElementId, PluginManifest } from "@paged-media/plugin-api";
 import { createBundleHost } from "../src/host-impl";
 import { makeFakeEditor } from "./fake-editor";
 
+import { silentConsole as silent } from "../src/testing";
 const MANIFEST: PluginManifest = {
   id: "media.paged.selgeom",
   name: "selgeom",
   version: "1.0.0",
   apiVersion: "^0.2",
   capabilities: { document: { write: "broad" } },
-};
-
-const silent = {
-  debug: () => {},
-  info: () => {},
-  warn: () => {},
-  error: () => {},
 };
 
 function setup() {

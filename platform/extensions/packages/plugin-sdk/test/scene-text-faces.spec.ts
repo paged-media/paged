@@ -33,8 +33,7 @@ import type {
 import { createBundleHost } from "../src/host-impl";
 import { makeFakeEditor } from "./fake-editor";
 
-const silent = { debug() {}, info() {}, warn() {}, error() {} };
-
+import { silentConsole as silent } from "../src/testing";
 const MANIFEST: PluginManifest = {
   id: "media.paged.web",
   name: "web",

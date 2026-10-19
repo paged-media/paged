@@ -132,7 +132,7 @@ impl ScriptBudgetKind {
 ///
 /// ## Wall-clock guarantee (and the wasm limitation, stated precisely)
 ///
-/// Boa 0.21 runs scripts to completion **synchronously** inside
+/// Boa 0.22 runs scripts to completion **synchronously** inside
 /// `Context::eval`. Its bytecode loop consults no clock and exposes no
 /// host interrupt hook on the synchronous path (the only instruction
 /// counter, `instructions_remaining`, is `#[cfg(feature = "fuzz")]`
@@ -243,7 +243,7 @@ thread_local! {
     /// Set once when the deadline first trips, so every subsequent host
     /// call in the same execution short-circuits to the same typed
     /// abort (and so the classifier can recover the kind even though
-    /// Boa's `RuntimeLimit` message is opaque).
+    /// Boa's runtime-limit errors carry no message of ours).
     static DEADLINE_TRIPPED: Cell<bool> = const { Cell::new(false) };
 }
 
@@ -260,14 +260,14 @@ struct DeadlineState {
 
 /// Sentinel embedded in the wall-clock abort message so `classify_*`
 /// can tell a deadline breach apart from Boa's own loop/recursion
-/// `RuntimeLimit` messages (both arrive as opaque native errors).
+/// runtime limits.
 const WALL_CLOCK_SENTINEL: &str = "paged:wall-clock-deadline";
 
-/// Returns `Err(non-catchable RuntimeLimit)` when the wall-clock
+/// Returns `Err(non-catchable engine error)` when the wall-clock
 /// deadline has passed; `Ok(())` otherwise (or when no deadline is
 /// set). Called at the top of every host function — the only place a
 /// single-threaded synchronous engine can observe the clock without a
-/// native VM interrupt hook (which Boa 0.21 does not expose). Once
+/// native VM interrupt hook (which Boa 0.22 does not expose). Once
 /// tripped it stays tripped for the rest of the execution.
 fn check_deadline() -> JsResult<()> {
     if DEADLINE_TRIPPED.with(Cell::get) {
@@ -286,16 +286,17 @@ fn check_deadline() -> JsResult<()> {
 }
 
 fn deadline_error() -> boa_engine::JsError {
-    // `RuntimeLimit` is NON-catchable in Boa (see `JsNativeErrorKind::
-    // is_catchable`), so a user `try { ... } catch {}` cannot swallow
-    // the abort — it unwinds straight back to the embedder, exactly
-    // like the native loop/recursion limits. The sentinel lets the
-    // classifier recover the `WallClock` kind.
-    JsNativeError::runtime_limit()
-        .with_message(format!(
-            "{WALL_CLOCK_SENTINEL}: script exceeded its time budget"
-        ))
-        .into()
+    // Boa's engine errors are NON-catchable, so a user `try { ... }
+    // catch {}` cannot swallow the abort — it unwinds straight back to
+    // the embedder, exactly like the native loop/recursion limits
+    // (`EngineError::RuntimeLimit`). Their kinds are a closed set with
+    // no wall clock, so the deadline travels as the engine error that
+    // carries a message; the sentinel lets the classifier recover the
+    // `WallClock` kind.
+    boa_engine::error::PanicError::new(format!(
+        "{WALL_CLOCK_SENTINEL}: script exceeded its time budget"
+    ))
+    .into()
 }
 
 fn with_model<R>(f: impl FnOnce(&mut CanvasModel) -> R) -> R {
@@ -347,6 +348,12 @@ struct FixedClock;
 impl boa_engine::context::time::Clock for FixedClock {
     fn now(&self) -> boa_engine::context::time::JsInstant {
         boa_engine::context::time::JsInstant::new(0, 0)
+    }
+
+    /// `Date` reads this since Boa 0.22 (it read `now` before): the epoch,
+    /// as before.
+    fn system_time_millis(&self) -> i64 {
+        0
     }
 }
 
@@ -672,12 +679,12 @@ impl ScriptSession {
 }
 
 /// Recover the typed `ScriptBudgetKind` from a budget-abort message.
-/// Boa surfaces every `RuntimeLimit` as an opaque string, so we match
-/// on the (stable) message text + our own wall-clock sentinel. Returns
-/// `None` for ordinary script errors.
+/// The error crosses to the hosts as a string, so we match on the
+/// (stable) message text `budget_abort_message` writes + our own
+/// wall-clock sentinel. Returns `None` for ordinary script errors.
 fn classify_budget_message(msg: &str) -> Option<ScriptBudgetKind> {
     // Only "runtime budget exceeded: ..." lines are budget aborts;
-    // `format_error` prefixes exactly that for native RuntimeLimits.
+    // `format_error` prefixes exactly that for Boa's runtime limits.
     if !msg.contains("runtime budget exceeded") {
         return None;
     }
@@ -760,7 +767,7 @@ fn outcome_of(v: JsValue) -> Outcome {
 
 /// Wrap a host function pointer so the wall-clock deadline is checked
 /// before it runs. This is the single point where the synchronous
-/// engine observes the clock (Boa 0.21 has no native per-instruction
+/// engine observes the clock (Boa 0.22 has no native per-instruction
 /// interrupt on its sync run loop): every `paged.*` / `console.*` call
 /// — the only way a script reaches the document or blocks on a slow
 /// native — passes through here. A fn pointer is `Copy`, so the `move`
@@ -5669,7 +5676,7 @@ fn format_value(value: &JsValue, ctx: &mut Context) -> String {
                 return rendered;
             }
         }
-        // Error-shaped objects: pull `.name`, `.message`, `.stack`.
+        // Error-shaped objects: pull `.name`, `.message` and an own `.stack`.
         let name_v = obj.get(js_string!("name"), ctx).ok();
         let msg_v = obj.get(js_string!("message"), ctx).ok();
         let has_msg = msg_v
@@ -5687,9 +5694,17 @@ fn format_value(value: &JsValue, ctx: &mut Context) -> String {
                 head.push_str(": ");
             }
             head.push_str(&msg_s);
-            if let Ok(stack) = obj.get(js_string!("stack"), ctx) {
-                if !stack.is_undefined() && !stack.is_null() {
-                    return format!("{head}\n{}", format_value(&stack, ctx));
+            // Only a `stack` the script set itself. Since 0.22 Boa gives every
+            // Error a `stack` accessor on `Error.prototype` (its own trace);
+            // reading only an OWN property prints Boa's errors as before.
+            if obj
+                .has_own_property(js_string!("stack"), ctx)
+                .unwrap_or(false)
+            {
+                if let Ok(stack) = obj.get(js_string!("stack"), ctx) {
+                    if !stack.is_undefined() && !stack.is_null() {
+                        return format!("{head}\n{}", format_value(&stack, ctx));
+                    }
                 }
             }
             return head;
@@ -5703,20 +5718,48 @@ fn format_value(value: &JsValue, ctx: &mut Context) -> String {
 }
 
 fn format_error(err: &boa_engine::JsError, ctx: &mut Context) -> String {
-    // B-09 — a tripped RuntimeLimit is a NATIVE error that Boa
-    // refuses to convert to an opaque JS value (`to_opaque` PANICS on
-    // it — which would abort the wasm worker, the exact hang-class
-    // the budget exists to prevent). Surface it as a plain string
-    // before touching the opaque path.
-    if let Some(native) = err.as_native() {
-        if native.is_runtime_limit() {
-            return format!("runtime budget exceeded: {native}");
-        }
+    // B-09 — a tripped runtime limit is an ENGINE error, which Boa
+    // refuses to convert to a JS value. Surface it as a plain string
+    // before touching the value path.
+    if let Some(engine) = err.as_engine() {
+        let loop_limit = ctx.runtime_limits().loop_iteration_limit();
+        return match budget_abort_message(engine, loop_limit) {
+            Some(message) => format!("runtime budget exceeded: {message}"),
+            None => format!("engine error: {engine}"),
+        };
     }
-    // Boa exposes the thrown value via `to_opaque(ctx)`; reuse the
+    // Boa exposes the thrown value via `into_opaque(ctx)`; reuse the
     // value formatter so Error objects come out as "Name: message".
-    let opaque = err.to_opaque(ctx);
-    format_value(&opaque, ctx)
+    match err.clone().into_opaque(ctx) {
+        Ok(opaque) => format_value(&opaque, ctx),
+        Err(e) => format!("engine error: {e}"),
+    }
+}
+
+/// What a budget abort reports: the text Boa 0.21's `RuntimeLimit`
+/// native error displayed (`RuntimeLimit: <message>`, its messages word
+/// for word), which `classify_budget_message`, the hosts and the CLI's
+/// output read, and the wall-clock deadline's message in the same form.
+/// `None` for an engine error that is not a budget (an internal Boa
+/// panic).
+fn budget_abort_message(engine: &boa_engine::EngineError, loop_limit: u64) -> Option<String> {
+    use boa_engine::{EngineError, RuntimeLimitError};
+    let message = match engine {
+        EngineError::RuntimeLimit(RuntimeLimitError::LoopIteration) => {
+            format!("Maximum loop iteration limit {loop_limit} exceeded")
+        }
+        EngineError::RuntimeLimit(RuntimeLimitError::Recursion) => {
+            "exceeded maximum number of recursive calls".to_string()
+        }
+        EngineError::RuntimeLimit(RuntimeLimitError::StackSize) => {
+            "exceeded maximum call stack length".to_string()
+        }
+        EngineError::Panic(panic) if panic.message().starts_with(WALL_CLOCK_SENTINEL) => {
+            panic.message().to_string()
+        }
+        _ => return None,
+    };
+    Some(format!("RuntimeLimit: {message}"))
 }
 
 #[cfg(test)]

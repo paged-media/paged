@@ -17,7 +17,7 @@
 
 use base64::engine::general_purpose::URL_SAFE_NO_PAD as B64;
 use base64::Engine;
-use hmac::{Hmac, Mac};
+use hmac::{Hmac, KeyInit, Mac};
 use sha2::{Digest, Sha256};
 
 pub fn b64(bytes: &[u8]) -> String {
@@ -31,7 +31,7 @@ pub fn unb64(s: &str) -> Option<Vec<u8>> {
 /// `n` random bytes from the platform's CSPRNG, base64url.
 pub fn random(n: usize) -> String {
     let mut buf = vec![0u8; n];
-    getrandom::getrandom(&mut buf).expect("the platform has a CSPRNG");
+    getrandom::fill(&mut buf).expect("the platform has a CSPRNG");
     b64(&buf)
 }
 
@@ -72,26 +72,30 @@ pub fn unb64_std(s: &str) -> Option<Vec<u8>> {
 /// derived from the key and the object's address: one address is one
 /// plaintext, so a nonce never meets two plaintexts.
 pub fn seal(key: &[u8], address: &[u8], plaintext: &[u8]) -> Vec<u8> {
-    use aes_gcm::aead::{Aead, KeyInit};
+    use aes_gcm::aead::Aead;
     let cipher = aes_gcm::Aes256Gcm::new_from_slice(key).expect("a 32-byte key");
-    let nonce = sha256(&[key, address].concat());
     cipher
-        .encrypt(aes_gcm::Nonce::from_slice(&nonce[..12]), plaintext)
+        .encrypt(&nonce(key, address), plaintext)
         .expect("encryption does not fail")
 }
 
 /// Opens what `seal` sealed; None when the key or the bytes are wrong.
 pub fn open(key: &[u8], address: &[u8], sealed: &[u8]) -> Option<Vec<u8>> {
-    use aes_gcm::aead::{Aead, KeyInit};
+    use aes_gcm::aead::Aead;
     let cipher = aes_gcm::Aes256Gcm::new_from_slice(key).ok()?;
-    let nonce = sha256(&[key, address].concat());
-    cipher
-        .decrypt(aes_gcm::Nonce::from_slice(&nonce[..12]), sealed)
-        .ok()
+    cipher.decrypt(&nonce(key, address), sealed).ok()
+}
+
+/// The nonce `seal` and `open` use: the first 12 bytes of
+/// SHA-256(key ‖ address).
+fn nonce(key: &[u8], address: &[u8]) -> aes_gcm::aead::Nonce<aes_gcm::Aes256Gcm> {
+    let digest = sha256(&[key, address].concat());
+    aes_gcm::aead::Nonce::<aes_gcm::Aes256Gcm>::try_from(&digest[..12])
+        .expect("a SHA-256 digest has 12 bytes to spare")
 }
 
 pub fn random_bytes(n: usize) -> Vec<u8> {
     let mut buf = vec![0u8; n];
-    getrandom::getrandom(&mut buf).expect("the platform has a CSPRNG");
+    getrandom::fill(&mut buf).expect("the platform has a CSPRNG");
     buf
 }

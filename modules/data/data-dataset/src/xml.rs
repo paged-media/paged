@@ -72,7 +72,9 @@
 //! from the palette or embedded in a document, and a prefix-sensitive reader
 //! silently reads such a file as empty.
 
-use quick_xml::escape::{escape, unescape};
+use std::borrow::Cow;
+
+use quick_xml::escape::unescape;
 use quick_xml::events::Event;
 use quick_xml::Reader;
 use thiserror::Error;
@@ -120,12 +122,32 @@ pub enum XmlError {
 
 /// The local name of a tag — everything after the last `:` (see the
 /// namespace-insensitivity note in the module docs).
-fn local(name: &[u8]) -> &str {
-    let s = std::str::from_utf8(name).unwrap_or("");
-    match s.rfind(':') {
-        Some(i) => &s[i + 1..],
-        None => s,
+fn local(name: &str) -> &str {
+    match name.rfind(':') {
+        Some(i) => &name[i + 1..],
+        None => name,
     }
+}
+
+/// Escape `<`, `>`, `&`, `'` and `"`, and nothing else. quick-xml's `escape`
+/// also writes a carriage return as `&#13;` since 0.42; this writer keeps the
+/// bytes it wrote before, so a value that carries one is written as it was.
+fn escape(raw: &str) -> Cow<'_, str> {
+    if !raw.contains(['<', '>', '&', '\'', '"']) {
+        return Cow::Borrowed(raw);
+    }
+    let mut out = String::with_capacity(raw.len() + 16);
+    for c in raw.chars() {
+        match c {
+            '<' => out.push_str("&lt;"),
+            '>' => out.push_str("&gt;"),
+            '&' => out.push_str("&amp;"),
+            '\'' => out.push_str("&apos;"),
+            '"' => out.push_str("&quot;"),
+            c => out.push(c),
+        }
+    }
+    Cow::Owned(out)
 }
 
 /// Read an attribute by LOCAL name, raw (never unescaped): the values we care
@@ -136,7 +158,7 @@ fn local(name: &[u8]) -> &str {
 fn attr(e: &quick_xml::events::BytesStart<'_>, want: &str) -> Option<String> {
     for a in e.attributes().with_checks(false).flatten() {
         if local(a.key.as_ref()).eq_ignore_ascii_case(want) {
-            return Some(String::from_utf8_lossy(a.value.as_ref()).into_owned());
+            return Some(a.value.into_owned());
         }
     }
     None
@@ -233,13 +255,11 @@ pub fn from_xml(src: &str) -> Result<VariableSet, XmlError> {
             }
             Event::Text(ref t) => {
                 if state == Where::InValue {
-                    let raw = t
-                        .decode()
-                        .map(|c| c.into_owned())
-                        .unwrap_or_else(|_| String::from_utf8_lossy(t.as_ref()).into_owned());
+                    // The raw text, as written (no end-of-line normalization).
+                    let raw: &str = t.as_ref();
                     // An undefined entity inside a value body must not abort the
                     // whole library — keep the raw text when unescaping fails.
-                    let s = unescape(&raw).map(|c| c.into_owned()).unwrap_or(raw);
+                    let s = unescape(raw).map_or_else(|_| raw.to_owned(), Cow::into_owned);
                     if !s.is_empty() {
                         current_lines.push(s);
                     }

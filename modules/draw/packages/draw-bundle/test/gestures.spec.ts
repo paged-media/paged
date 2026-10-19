@@ -26,7 +26,11 @@
 import { describe, expect, it } from "bun:test";
 
 import type { ElementId } from "@paged-media/plugin-api";
-import { loadBundle } from "@paged-media/plugin-sdk";
+import {
+  loadBundle,
+  mapBacking,
+  silentConsole as silent,
+} from "@paged-media/plugin-sdk";
 import {
   commitsSince,
   createFakeEditor,
@@ -37,17 +41,6 @@ import {
 } from "@paged-media/test-kit";
 
 import { drawBundle } from "../src";
-
-const silent = { debug() {}, info() {}, warn() {}, error() {} };
-const mapBacking = () => {
-  const m = new Map<string, string>();
-  return {
-    getItem: (k: string) => m.get(k) ?? null,
-    setItem: (k: string, v: string) => void m.set(k, v),
-    removeItem: (k: string) => void m.delete(k),
-    keys: () => Array.from(m.keys()),
-  };
-};
 
 const PATH = { kind: "polygon", id: "p1" } as ElementId;
 const SQUARE = {

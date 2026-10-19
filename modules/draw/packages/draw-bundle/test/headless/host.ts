@@ -25,26 +25,16 @@ import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { createHeadlessHost, type HeadlessHost } from "@paged-media/plugin-sdk";
+import {
+  createHeadlessHost,
+  type HeadlessHost,
+  mapBacking,
+  silentConsole as silent,
+} from "@paged-media/plugin-sdk";
 
 import { forgetAllLinks } from "../../src/link-index";
 
-export const silent = {
-  debug: () => {},
-  info: () => {},
-  warn: () => {},
-  error: () => {},
-};
-
-export const mapBacking = () => {
-  const m = new Map<string, string>();
-  return {
-    getItem: (k: string) => m.get(k) ?? null,
-    setItem: (k: string, v: string) => void m.set(k, v),
-    removeItem: (k: string) => void m.delete(k),
-    keys: () => Array.from(m.keys()),
-  };
-};
+export { mapBacking, silent };
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 

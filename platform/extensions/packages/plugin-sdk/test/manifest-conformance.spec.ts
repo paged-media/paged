@@ -38,14 +38,8 @@ import {
   type RegisteredContributions,
 } from "../src/harness";
 
+import { silentConsole as silent } from "../src/testing";
 const ID = "media.paged.proof";
-
-const silent = {
-  debug: () => {},
-  info: () => {},
-  warn: () => {},
-  error: () => {},
-};
 
 const nothing = (): RegisteredContributions => ({
   tools: [],

@@ -81,7 +81,7 @@ fn export(built: &Built) -> Vec<u8> {
 fn all_content(doc: &lopdf::Document) -> String {
     let mut out = Vec::new();
     for (_, page_id) in doc.get_pages() {
-        out.extend(doc.get_page_content(page_id).unwrap_or_default());
+        out.extend(doc.get_page_content(page_id));
     }
     for obj in doc.objects.values() {
         if let Ok(stream) = obj.as_stream() {

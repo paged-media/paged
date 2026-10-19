@@ -35,8 +35,7 @@ import { createHeadlessHost, type HeadlessHost } from "../src/harness";
 import { makeFakeEditor } from "./fake-editor";
 import { minimalIdml } from "./fixtures/minimal-idml";
 
-const silent = { debug() {}, info() {}, warn() {}, error() {} };
-
+import { silentConsole as silent } from "../src/testing";
 const manifest = (
   capabilities: PluginManifest["capabilities"] = {
     document: { read: "broad" },

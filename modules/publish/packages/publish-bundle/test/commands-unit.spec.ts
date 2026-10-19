@@ -33,6 +33,7 @@ import type {
 import {
   createBundleHost,
   type CreateBundleHostOptions,
+  silentConsole as silent,
 } from "@paged-media/plugin-sdk";
 import {
   covers,
@@ -50,8 +51,6 @@ import {
   pdfExportArgs,
   type ExportResult,
 } from "../src/commands";
-
-const silent = { debug() {}, info() {}, warn() {}, error() {} };
 
 type Reply = { kind: string; payload?: unknown };
 

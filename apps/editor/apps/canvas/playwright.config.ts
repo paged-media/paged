@@ -87,12 +87,17 @@ export default defineConfig({
     toHaveScreenshot: { maxDiffPixelRatio: 0.01, animations: "disabled" },
     toMatchSnapshot: { maxDiffPixelRatio: 0.01 },
   },
-  // The GPU/Vello path occasionally trips a wasm-bindgen "recursive
-  // use of an object" race when the prior test's worker hasn't
-  // finished tearing down before this one's initGpu fires. The
-  // single-test runs always pass; one retry is enough to absorb the
-  // flake without masking real regressions (a real bug repeats).
+  // One retry, to TELL a flake from a failure, not to hide it: a test
+  // that fails and then passes is reported `flaky`, and in CI
+  // `failOnFlakyTests` turns that into a red run. A known flake is
+  // quarantined instead (tests/quarantine.json: owner, reason, expiry;
+  // `{ tag: "@quarantine" }` on the test), which takes it out of the
+  // gating run and into an advisory one (ADR 228). Locally a flake prints
+  // as `flaky` and does not fail the run. (The retry was added for the
+  // GPU path's wasm-bindgen "recursive use of an object" teardown race,
+  // seen on the local journeys-gpu lane; it now reports that as flaky.)
   retries: 1,
+  failOnFlakyTests: !!process.env.CI,
   use: {
     baseURL: BASE_URL,
     trace: "retain-on-failure",

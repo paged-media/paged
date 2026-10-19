@@ -36,7 +36,7 @@ import {
 } from "../src";
 import { makeFakeEditor } from "./fake-editor";
 
-const silent = { debug() {}, info() {}, warn() {}, error() {} };
+import { silentConsole as silent } from "../src/testing";
 const SRI_A = "sha384-" + "A".repeat(64);
 const SRI_B = "sha384-" + "B".repeat(64);
 

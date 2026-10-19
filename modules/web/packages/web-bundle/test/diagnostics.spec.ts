@@ -30,23 +30,16 @@
 import { describe, expect, it } from "bun:test";
 
 import type { Diagnostic, PagedEditor } from "@paged-media/plugin-api";
-import { createBundleHost } from "@paged-media/plugin-sdk";
+import {
+  createBundleHost,
+  mapBacking,
+  silentConsole as silent,
+} from "@paged-media/plugin-sdk";
 import { diagnoseHtml, sourceKeyFor } from "@paged-media/web-model";
 
 import { webBundle } from "../src";
 
 const manifest = webBundle.manifest;
-
-const silent = { debug() {}, info() {}, warn() {}, error() {} };
-const mapBacking = () => {
-  const m = new Map<string, string>();
-  return {
-    getItem: (k: string) => m.get(k) ?? null,
-    setItem: (k: string, v: string) => void m.set(k, v),
-    removeItem: (k: string) => void m.delete(k),
-    keys: () => Array.from(m.keys()),
-  };
-};
 
 // Minimal editor handle — diagnostics never touch the engine.
 const fakeEditor = {} as unknown as PagedEditor;

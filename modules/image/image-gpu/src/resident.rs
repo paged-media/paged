@@ -224,6 +224,33 @@ fn wrap(
     }))
 }
 
+/// Check that `bytes` holds at least the `w`×`h` tightly packed texels
+/// of `format` an upload into a `w`×`h` texture copies. A shorter slice
+/// is a wgpu validation error at `write_texture`: a panic natively, a
+/// console message and a texture of garbage on the web. Every lane that
+/// uploads caller bytes checks first and returns the mismatch as a
+/// typed error instead (GPU audit I-1).
+pub(crate) fn check_texels(
+    kernel: &'static str,
+    what: &str,
+    bytes: &[u8],
+    w: u32,
+    h: u32,
+    format: TexFormat,
+) -> Result<(), GpuError> {
+    let want = texture_bytes(w, h, format);
+    if bytes.len() as u64 >= want {
+        return Ok(());
+    }
+    Err(GpuError::Kernel {
+        kernel,
+        detail: format!(
+            "{what}: {} bytes for a {w}x{h} {format:?} upload of {want} bytes",
+            bytes.len()
+        ),
+    })
+}
+
 fn write_whole(ctx: &GpuContext, r: &Resident, bytes: &[u8]) {
     crate::counters::bump(|c| c.bytes_uploaded += bytes.len() as u64);
     ctx.queue.write_texture(

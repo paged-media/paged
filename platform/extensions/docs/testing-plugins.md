@@ -94,9 +94,24 @@ tests the same way:
   `loadBundle`, `load(idml)` / `newBlank`, the recorded contributions, in-memory stores
   (blob, clipboard, secrets, tool settings, will-save), the shared object, data-provider and
   binding-provider registries, `exportDocument`, `runScript`.
+  The hosts it builds share one in-memory `host.storage` unless `storage` is given, so a
+  re-activated bundle reads what it stored.
 - `checkManifestConformance(bundle, options)`: the manifest against what the bundle registers.
 - The gesture kit (`@paged-media/plugin-sdk/gesture-kit`): `createFakeEditor()`, the DSL,
-  pointer tapes, the invariants.
+  pointer tapes, the invariants. `createFakeEditor()` is also the editor an activation test
+  passes to `loadBundle`: `fake.ids("commands")`, `fake.registered("panels")`,
+  `fake.mutations()`, `fake.selection()` read back what the bundle did.
+- `mapBacking()` and `silentConsole`: the `storage` and `console` of a host under test, so a
+  suite hand-rolls neither:
+
+  ```ts
+  const fake = createFakeEditor();
+  loadBundle(() => fake.editor, bundle, {
+    console: silentConsole,
+    storage: mapBacking(),
+  });
+  expect(fake.ids("commands")).toEqual(["com.example.hello.command.report"]);
+  ```
 
 Built-in modules also have `@paged-media/test-kit` (internal): the async shims, IDML fixtures
 built in code (`buildFixtureIdml`, `rect`, `textFrame`, `gestureFixture`), the fuzzer.
@@ -138,7 +153,6 @@ Findings so far, each an expected failure in those files:
 
 | Id     | Door                                  | What happens                                                                    | What the contract says                                                 |
 | ------ | ------------------------------------- | ------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
-| HOST-1 | `host.storage` (headless)             | a re-activated bundle reads an empty store: a fresh in-memory map per host      | persistence, as in the editor (localStorage)                           |
 | HOST-2 | `supports("storage.blob@1")` (editor) | true where OPFS is unavailable; every write then rejects                        | true means bytes persist                                               |
 | HOST-3 | `host.clipboard` (headless)           | a grid copy reads back without its TSV text                                     | a grid copy carries both halves                                        |
 | HOST-4 | `host.journal` (editor)               | inert: the editor keeps a journal but passes none to bundle hosts               | entries land in the host's journal; `supports("journal@1")`            |
@@ -149,7 +163,7 @@ Findings so far, each an expected failure in those files:
 ## Findings on record
 
 Every finding is an expected failure in the test named, and fails for the stated reason. The
-host findings (HOST-1 to HOST-7) are in the table above. All of the programme's findings, the
+host findings (HOST-2 to HOST-7; HOST-1 is fixed) are in the table above. All of the programme's findings, the
 plugins' included, are indexed with severities and shared root causes in
 [conformance-findings-2026-10.md](../../../docs/development/conformance-findings-2026-10.md).
 

@@ -50,7 +50,7 @@ import {
 import { checkValueType } from "../src/object-schema";
 import { minimalIdml } from "./fixtures/minimal-idml";
 
-const silent = { debug() {}, info() {}, warn() {}, error() {} };
+import { silentConsole as silent } from "../src/testing";
 const catalog = JSON.parse(
   readFileSync(
     fileURLToPath(

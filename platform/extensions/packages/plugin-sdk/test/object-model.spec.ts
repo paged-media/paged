@@ -35,8 +35,7 @@ import {
   NOTES_ID,
 } from "./fixtures/notes-bundle";
 
-const silent = { debug() {}, info() {}, warn() {}, error() {} };
-
+import { silentConsole as silent } from "../src/testing";
 let live: HeadlessHost | null = null;
 afterEach(() => {
   live?.dispose();

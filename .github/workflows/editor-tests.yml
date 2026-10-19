@@ -399,6 +399,13 @@ jobs:
       # `sync-feat-vocabulary.mjs --check` keeps the copy current.
       - name: feature-id vocabulary (@feat tags resolve)
         run: bun run test:feat-vocabulary
+      # A flaky test is quarantined, not retried until it passes (ADR 228):
+      # apps/canvas/tests/quarantine.json names it with an owner, a reason
+      # and an expiry, and the spec carries `{ tag: "@quarantine" }`. This
+      # fails an entry past its expiry, and a list that disagrees with the
+      # tags in either direction (the Playwright listing reads the specs).
+      - name: quarantine (owner, expiry, list = tags)
+        run: bun run test:quarantine
       # `packages/client` is the programmable SDK — the write surface the
       # read-only viewer SDK deliberately is not. Its api-catalog.json is
       # GENERATED from the source, so this step is two assertions at once:
@@ -725,8 +732,40 @@ jobs:
           npx playwright test \
             --project=chromium \
             --project=journeys \
+            --grep-invert @quarantine \
             --shard=${{ matrix.shard }}/${{ env.SHARDS }} \
             --reporter=blob
+
+      # The quarantined tests (apps/canvas/tests/quarantine.json, ADR 228)
+      # still run, apart and advisory: with retries, so their flake rate
+      # keeps being measured (the publish job reports it), and so a fix
+      # shows up as a quarantine that has gone green. Never gating, never
+      # in the playwright-results evidence.
+      - name: quarantined tests (advisory)
+        if: ${{ !cancelled() && matrix.shard == 1 }}
+        continue-on-error: true
+        working-directory: apps/editor/apps/canvas
+        env:
+          CI: "1"
+          PAGED_CI_LEAN: "1"
+          PLAYWRIGHT_BLOB_OUTPUT_DIR: blob-quarantine
+        run: |
+          npx playwright test \
+            --project=chromium \
+            --project=journeys \
+            --grep @quarantine \
+            --retries=2 \
+            --pass-with-no-tests \
+            --reporter=blob
+
+      - name: upload quarantine blob report
+        if: ${{ !cancelled() && matrix.shard == 1 }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: blob-quarantine
+          path: apps/editor/apps/canvas/blob-quarantine
+          retention-days: 7
+          if-no-files-found: ignore
 
       # No step here tests the editor on a GPU. A "journeys (GPU, advisory)"
       # step used to re-run the journey tier with BACKEND=gpu under xvfb, but
@@ -829,6 +868,47 @@ jobs:
           bunx --no-install playwright merge-reports --reporter=json ${{ github.workspace }}/all-blobs \
             > /dev/null
           test -s "${{ github.workspace }}/playwright-results.json"
+
+      # The flake rate per run (ADR 228): flaky / tests that ran, from the
+      # merged report, plus the quarantined tests' own outcome. Its own
+      # artifact, never inside playwright-results (cockpit parses every
+      # file there as a Playwright report). With retries 1 and
+      # failOnFlakyTests in CI, a flaky gating test also reddens its shard.
+      - name: download quarantine blobs
+        id: quarantine-blobs
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: blob-quarantine
+          path: quarantine-blobs
+      - name: merge quarantined tests → their own JSON
+        if: ${{ steps.quarantine-blobs.outcome == 'success' && hashFiles('quarantine-blobs/**') != '' }}
+        env:
+          PLAYWRIGHT_JSON_OUTPUT_NAME: ${{ github.workspace }}/playwright-quarantine.json
+        working-directory: apps/editor/apps/canvas
+        run: |
+          bunx --no-install playwright merge-reports --reporter=json ${{ github.workspace }}/quarantine-blobs \
+            > /dev/null
+      - name: flake rate
+        if: ${{ !cancelled() }}
+        run: |
+          reports=("$GITHUB_WORKSPACE/playwright-results.json")
+          if [ -s "$GITHUB_WORKSPACE/playwright-quarantine.json" ]; then
+            reports+=("$GITHUB_WORKSPACE/playwright-quarantine.json")
+          fi
+          bun scripts/flake-rate.mjs "${reports[@]}" \
+            --json-out "$GITHUB_WORKSPACE/flake-rate.json" \
+            --md-out "$GITHUB_STEP_SUMMARY"
+      - name: upload the flake rate
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-flake-rate
+          path: |
+            flake-rate.json
+            playwright-quarantine.json
+          if-no-files-found: warn
+          retention-days: 90
 
       # Evidence hand-off, INVERTED (2026-07-25, PR #16 on main; ported to
       # this branch 2026-08-17). This step used to call

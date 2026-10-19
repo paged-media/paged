@@ -37,6 +37,7 @@ import {
   createHeadlessHost,
   type HeadlessHost,
   type ShellBackend,
+  silentConsole as silent,
 } from "@paged-media/plugin-sdk";
 import { act, render } from "@testing-library/react";
 
@@ -45,7 +46,6 @@ import { fixture } from "../conformance/harness";
 import { schemaPanelComponent } from "./schema-renderer";
 
 const ENGINE_ANCHOR = fileURLToPath(new URL("..", import.meta.url));
-const silent = { debug() {}, info() {}, warn() {}, error() {} };
 export const DOCX_MIME =
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 

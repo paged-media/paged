@@ -35,17 +35,7 @@ import type {
 import { createBundleHost } from "../src/host-impl";
 import { makeFakeEditor, makeFakeImageChannel } from "./fake-editor";
 
-const silent = { debug() {}, info() {}, warn() {}, error() {} };
-const mapBacking = () => {
-  const m = new Map<string, string>();
-  return {
-    getItem: (k: string) => m.get(k) ?? null,
-    setItem: (k: string, v: string) => void m.set(k, v),
-    removeItem: (k: string) => void m.delete(k),
-    keys: () => Array.from(m.keys()),
-  };
-};
-
+import { mapBacking, silentConsole as silent } from "../src/testing";
 const MANIFEST = (rendering?: string[]): PluginManifest => ({
   id: "media.paged.c6",
   name: "c6",
