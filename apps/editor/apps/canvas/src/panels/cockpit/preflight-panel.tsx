@@ -222,11 +222,56 @@ export function PreflightPanel() {
       </CockpitSection>
 
       <CockpitSection title="Images & bleed" defaultOpen={false}>
-        <span className="pg-ui-xs">
-          Effective-PPI and bleed-coverage checks land with the engine's
-          preflight accessors.
-        </span>
+        <ImagesCheck links={links} loaded={loaded} />
       </CockpitSection>
+    </div>
+  );
+}
+
+/** Below this effective resolution a placed image reads as low
+ *  resolution: the 150-ppi convention Health and Output readiness count
+ *  by. */
+const LOW_RES_PPI = 150;
+
+/** The effective-PPI check, from the links collection, which carries each
+ *  placement's effective resolution (PN-302: the seam that said the check
+ *  waited for engine accessors outlived its gap). Bleed coverage is not
+ *  checked yet, and the section says so. */
+function ImagesCheck({
+  links,
+  loaded,
+}: {
+  links: readonly LinkSummary[] | null;
+  loaded: boolean;
+}) {
+  if (!links || !loaded)
+    return (
+      <span className="pg-ui-xs">Open a document to check its images.</span>
+    );
+  const measured = links.filter((l) => l.effectivePpi != null);
+  const low = measured.filter((l) => (l.effectivePpi ?? 0) < LOW_RES_PPI);
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+      <span className="pg-ui-xs" data-preflight-ppi={low.length}>
+        {measured.length === 0
+          ? "No placed image reports its resolution."
+          : low.length === 0
+            ? `Every placed image is at ${LOW_RES_PPI} ppi or more.`
+            : `${low.length} of ${measured.length} placed images below ${LOW_RES_PPI} ppi.`}
+      </span>
+      {low.map((l, i) => (
+        <span
+          key={`${l.hostSelfId}-${i}`}
+          className="pg-ui-xs"
+          data-preflight-low-res
+        >
+          {l.uri.split("/").pop() ?? l.uri} ·{" "}
+          {Math.round(l.effectivePpi ?? 0)} ppi
+        </span>
+      ))}
+      <span className="pg-ui-xs" style={{ color: "var(--pg-muted-fg)" }}>
+        Bleed coverage is not checked yet.
+      </span>
     </div>
   );
 }

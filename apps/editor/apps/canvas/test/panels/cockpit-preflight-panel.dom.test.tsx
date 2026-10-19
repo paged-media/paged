@@ -164,8 +164,8 @@ describe("Preflight: Validate output", () => {
 describe("Preflight: findings", () => {
   // The links collection carries every placement's effective PPI (Health
   // and Output readiness count the low-res ones from it), yet the section
-  // still says those checks wait for the engine.
-  test.failing(
+  // said those checks waited for the engine. Fixed: it runs the check.
+  test(
     "PN-302: Images & bleed reports the effective-PPI check the links already carry, not a seam",
     async () => {
       covers("panel:paged.preflight");
@@ -181,6 +181,8 @@ describe("Preflight: findings", () => {
       expect(h.root.textContent).not.toContain(
         "Effective-PPI and bleed-coverage checks land with the engine's preflight accessors.",
       );
+      // The check itself: the 72-ppi placement is the low one.
+      expect(h.root.textContent).toContain("1 of 2 placed images below 150 ppi");
     },
   );
 });

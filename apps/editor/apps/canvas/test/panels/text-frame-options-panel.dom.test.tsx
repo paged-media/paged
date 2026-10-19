@@ -278,7 +278,7 @@ describe("Text Frame panel: findings", () => {
   // single object cannot disagree with itself) and leaves it editable;
   // typing sends a write the engine refuses ("TextFrameColumnCount is not
   // supported on Rectangle").
-  test.failing(
+  test(
     "PN-253: on a rectangle the text-frame fields read as not applicable and send nothing",
     async () => {
       covers("panel:paged.text-frame-options");
@@ -286,7 +286,10 @@ describe("Text Frame panel: findings", () => {
       await h.select([h.scene.rect]);
       expect(state(h, "textFrameColumnCount")).not.toBe("mixed");
       const from = h.mark();
-      await h.typeInto("textFrameColumnCount", "2");
+      // Not live: the input takes no typing, so nothing is sent.
+      expect(
+        h.field("textFrameColumnCount").querySelector("input")?.disabled,
+      ).toBe(true);
       expect(h.mutations(from)).toEqual([]);
     },
   );

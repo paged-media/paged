@@ -96,9 +96,17 @@ function unwrapBounds(
   return v.value as [number, number, number, number];
 }
 
-function unwrapLength(v: Value | null): number | null {
+/** A length, or null (mixed / absent). An UNSET length reads as the
+ *  property's schema default (an untouched frame's opacity is 100 %, its
+ *  scale 100 %), and 0 only where the schema names none (R3, ADR 249). */
+function unwrapLength(
+  v: Value | null,
+  field?: { row: { default?: unknown } | null },
+): number | null {
   if (!v || v.type !== "length") return null;
-  return v.value ?? 0;
+  if (v.value != null) return v.value;
+  const d = field?.row?.default;
+  return typeof d === "number" ? d : 0;
 }
 
 function unwrapBool(v: Value | null): boolean | null {
@@ -119,17 +127,17 @@ export function ObjectTransformPanel() {
   const resolved = useObjectBindings(BINDINGS);
   const position = usePagePosition();
   const bounds = unwrapBounds(resolved.bounds.value);
-  const opacity = unwrapLength(resolved.opacity.value);
+  const opacity = unwrapLength(resolved.opacity.value, resolved.opacity);
   const canWrite = resolved.bounds.onCommit != null;
   const [rsOpen, setRsOpen] = useState(true);
   // W2.4 — reference-point anchor (UI state). Default top-left (0).
   const [anchorIdx, setAnchorIdx] = useState(0);
 
   // W2.3 transform-decompose reads (deg / multiplier / bool).
-  const rotation = unwrapLength(resolved.rotation.value);
+  const rotation = unwrapLength(resolved.rotation.value, resolved.rotation);
   // Scale is a 0..1+ multiplier engine-side; the kit shows percent.
-  const scaleX = unwrapLength(resolved.scaleX.value);
-  const scaleY = unwrapLength(resolved.scaleY.value);
+  const scaleX = unwrapLength(resolved.scaleX.value, resolved.scaleX);
+  const scaleY = unwrapLength(resolved.scaleY.value, resolved.scaleY);
   const flipH = unwrapBool(resolved.flipH.value);
   const flipV = unwrapBool(resolved.flipV.value);
   const canRotate = resolved.rotation.onCommit != null;

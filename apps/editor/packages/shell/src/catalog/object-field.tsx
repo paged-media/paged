@@ -138,16 +138,12 @@ export function useObjectField(req: ObjectPropertyRequest): ObjectField {
         void commit((next as { value?: unknown }).value ?? null);
       }
     : null;
-  // A refusal reads as `absent` (the control cannot work here); core's
-  // own `absent` (no such entry on this kind) reads as `mixed`, exactly
-  // as the selection binding reported it — `absent` stays the ADR 023
-  // provider verdict.
+  // A refusal reads as `absent` (the control cannot work here), and so
+  // does core's own `absent` (no such entry on this kind): one object
+  // cannot be mixed, it is not applicable (R2, ADR 249), and `commit` is
+  // then null, so the control sends nothing.
   const bindingState: ObjectBindingState =
-    s.state === "refused"
-      ? "absent"
-      : s.state === "absent" && !field.provider
-        ? "mixed"
-        : s.state;
+    s.state === "refused" ? "absent" : s.state;
   return {
     ...field,
     path: req.path,

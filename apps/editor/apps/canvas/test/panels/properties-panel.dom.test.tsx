@@ -255,8 +255,8 @@ describe("Properties panel: findings", () => {
   // The page summary says margins, bleed and columns "land with the
   // engine's page-geometry accessors", but the pages collection carries
   // them (marginTopPt, bleedTopPt, columnCount): a seam that outlived its
-  // gap.
-  test.failing(
+  // gap. Fixed: the summary reads them from the collection.
+  test(
     "PN-23: the page summary shows margins, bleed and columns the engine already reports",
     async () => {
       covers("panel:paged.properties");

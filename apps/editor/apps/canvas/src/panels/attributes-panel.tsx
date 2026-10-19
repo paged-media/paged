@@ -37,7 +37,6 @@
 import { useMemo, useState } from "react";
 
 import {
-  Icon,
   ObjectFieldFrame,
   PropertyField,
   TogglePill,
@@ -178,28 +177,15 @@ export function AttributesPanel() {
           }}
         />
       </div>
-      <div className="mt-1 grid grid-cols-[84px_1fr] items-center gap-2">
-        <span className="text-xs" style={{ color: "var(--pg-muted-fg)" }}>
-          Gap color
-        </span>
-        <span
-          data-seam
-          title="Gap colour — awaiting engine support"
-          className="flex h-[28px] w-full items-center gap-2 rounded-[6px] border border-input bg-background px-2 opacity-55"
-        >
-          <span className="h-4 w-4 shrink-0 rounded border border-input bg-transparent" />
-          <span
-            className="flex-1 text-left text-xs"
-            style={{ color: "var(--pg-muted-fg)" }}
-          >
-            [None]
-          </span>
-          <Icon
-            name="ui-chevron-down"
-            size={12}
-            style={{ color: "var(--pg-muted-fg)" }}
-          />
-        </span>
+      {/* Gap color is live (PN-258): the engine reads and writes
+          frameStrokeGapColor, as the Stroke panel does; it was a seam
+          "awaiting engine support" after the engine had it. */}
+      <div className="mt-1">
+        <PropertyField
+          path="frameStrokeGapColor"
+          label="Gap color"
+          scope="element"
+        />
       </div>
       <LabelsSection />
     </div>

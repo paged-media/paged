@@ -273,7 +273,7 @@ describe("Stroke panel: every control writes the model", () => {
 describe("Stroke panel: findings", () => {
   // The engine answers noSuchPath for join and miter on an oval (they
   // are rectangle-only); a single object cannot disagree with itself.
-  test.failing(
+  test(
     "PN-3: an oval's Join and Miter limit read as not applicable, not as mixed",
     async () => {
       covers("panel:paged.stroke");
@@ -302,13 +302,18 @@ describe("Stroke panel: findings", () => {
     },
   );
 
-  // Typing into that field anyway sends a write the engine refuses
+  // On an oval alone the field is not live (PN-3). With a rectangle and
+  // an oval selected it is, and a write reaching the oval is refused
   // ("FrameStrokeMiterLimit is not supported on Oval"); the field says so
   // in words (the panel kit's refusalText), not as the wire's JSON.
   test("PN-4: a refused write is reported in words, not as the wire's JSON", async () => {
     covers("panel:paged.stroke");
     const h = await mount();
     await h.select([h.scene.oval]);
+    expect(
+      h.field("frameStrokeMiterLimit").querySelector("input")?.disabled,
+    ).toBe(true);
+    await h.select([h.scene.rect, h.scene.oval]);
     await h.typeInto("frameStrokeMiterLimit", "9");
     const said = h.field("frameStrokeMiterLimit").textContent;
     expect(said).not.toContain('{"error"');

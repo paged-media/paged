@@ -330,7 +330,7 @@ describe("Character panel: findings", () => {
   // The engine reads auto leading as an unset length (null); the field
   // shows "0 pt", which is a leading that would set every line on top of
   // the last. InDesign shows Auto (and the computed value).
-  test.failing("PN-21: auto leading reads as Auto, not 0 pt", async () => {
+  test("PN-21: auto leading reads as Auto, not 0 pt", async () => {
     covers("panel:paged.character");
     const h = await mount();
     await h.caret(h.scene.storyId, 2);

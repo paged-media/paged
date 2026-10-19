@@ -307,6 +307,14 @@ export function useObjectProperty(req: ObjectPropertyRequest): ObjectProperty {
 
   const claimed = claim.source === "provider" ? claim : null;
   const readOnly = row?.access === "readOnly" || row?.access === "derived";
+  // Not applicable (R2, ADR 249): core answers `absent` when the object's
+  // kind carries no such entry (an oval has no join, a rectangle no
+  // arrowheads or columns, a text frame no fitting). With every target
+  // answering so, the field reads as not applicable and sends nothing,
+  // rather than offering a write the engine refuses. A list row is the
+  // exception: there `absent` reads as the empty list, which can grow.
+  const notApplicable =
+    !claimed && state.state === "absent" && row?.type.kind !== "list";
 
   // eslint-disable-next-line no-restricted-syntax -- a computed block, not a single expression (ADR 229)
   const commit = useMemo(() => {
@@ -329,7 +337,8 @@ export function useObjectProperty(req: ObjectPropertyRequest): ObjectProperty {
             };
       };
     }
-    if (!model || addresses.length === 0 || readOnly) return null;
+    if (!model || addresses.length === 0 || readOnly || notApplicable)
+      return null;
     return async (value: unknown): Promise<ShellObjectWriteResult> => {
       const ops = setOps(addresses, req.path, value);
       const r =
@@ -350,6 +359,7 @@ export function useObjectProperty(req: ObjectPropertyRequest): ObjectProperty {
     model,
     addresses,
     readOnly,
+    notApplicable,
     req.path,
     scope,
   ]);

@@ -254,14 +254,20 @@ pub const VIRTUAL_PATHS: &[VirtualPath] = &[
     v(
         "swatch",
         "tint",
-        pct().idml(idml![attr(Color | Tint, TintValue)]),
+        // An untinted swatch is at 100 % (InDesign's TintValue -1 / absent).
+        pct()
+            .default_num(100.0)
+            .idml(idml![attr(Color | Tint, TintValue)]),
         "editSwatch",
         "tint",
     ),
     v(
         "swatch",
         "alpha",
-        pct().idml(idml![attr(Color | Tint, AlphaPercentage)]),
+        // An opaque swatch: AlphaPercentage absent reads 100 %.
+        pct()
+            .default_num(100.0)
+            .idml(idml![attr(Color | Tint, AlphaPercentage)]),
         "editSwatch",
         "alpha",
     ),

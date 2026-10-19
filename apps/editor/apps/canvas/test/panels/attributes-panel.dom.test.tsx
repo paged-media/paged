@@ -192,7 +192,8 @@ describe("Attributes panel: findings", () => {
 
   // Gap color is a seam "awaiting engine support", but frameStrokeGapColor
   // is on the wire: the Stroke panel reads and writes it on this frame.
-  test.failing(
+  // Fixed: the field is live.
+  test(
     "PN-258: Gap color is live, as the engine reads and writes frameStrokeGapColor",
     async () => {
       covers("panel:paged.attributes");
@@ -205,6 +206,10 @@ describe("Attributes panel: findings", () => {
       expect(
         h.root.querySelector('[title="Gap colour — awaiting engine support"]'),
       ).toBeNull();
+      // …and the field is the live object-model field.
+      expect(
+        h.root.querySelector('[data-property-field="frameStrokeGapColor"]'),
+      ).not.toBeNull();
     },
   );
 });

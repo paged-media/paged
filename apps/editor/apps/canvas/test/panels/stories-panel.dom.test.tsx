@@ -171,7 +171,9 @@ describe("Stories panel: controls", () => {
     covers("panel:paged.stories");
     const h = await mount();
     await h.click(storyRow(h.root));
-    expect(grow(h.root).hasAttribute("data-mixed")).toBe(true);
+    // The model holds no rule: the pill reads off, not unknown (PN-111).
+    expect(grow(h.root).hasAttribute("data-mixed")).toBe(false);
+    expect(grow(h.root).getAttribute("aria-checked")).toBe("false");
     const from = h.mark();
     await h.click(grow(h.root));
     expect(h.mutations(from)).toEqual([
@@ -232,8 +234,8 @@ describe("Stories panel: findings", () => {
 
   // The reflow controls say the rule cannot be read back and show
   // "unknown" (a mixed pill); the engine reports it as
-  // StorySummary.growRule.
-  test.failing(
+  // StorySummary.growRule. Fixed: they read it.
+  test(
     "PN-111: the reflow controls show the story's grow rule as the model holds it",
     async () => {
       covers("panel:paged.stories");
