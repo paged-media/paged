@@ -388,6 +388,14 @@ jobs:
         env:
           REQUIRE_REAL_WASM: "1"
 
+      # The panel component specs (*.dom.test.tsx): their own task, which
+      # preloads happy-dom; the plain test run above skips them.
+      - name: test (DOM)
+        working-directory: modules/image/glue
+        run: bun run test:dom
+        env:
+          REQUIRE_REAL_WASM: "1"
+
       # Validate the bundle manifest with the in-tree paged-plugin bin (the same
       # binary the package.json validate:manifest script invokes).
       - name: validate manifest
