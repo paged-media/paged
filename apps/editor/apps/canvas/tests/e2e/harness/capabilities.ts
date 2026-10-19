@@ -133,6 +133,13 @@
 // the bookmark ops on the `navigation` fixture (its cross-reference
 // source and its two bookmarks). None has an editor UI of its own yet.
 
+// 2026-10-19: the workspace engine is at protocol 74. AC-E2E-CAPS-COVER
+// named two new Mutation ops (core ADR 184): acceptTrackedChange and
+// rejectTrackedChange. No generated fixture carries a tracked change and
+// no op makes one, so their probes run on a copy of the `text` fixture
+// repackaged with one tracked deletion, and address it by the place the
+// trackedChanges collection lists. No editor UI issues either op yet.
+
 export type CapabilityStatus = "supported" | "unsupported";
 
 export interface Capability {
@@ -511,6 +518,18 @@ export const CAPABILITIES: Capability[] = [
     op: "convertFootnoteToEndnote",
     status: "supported",
     note: "proto 73, ADR 174; {storyId, footnoteId}; the footnote's removal and an endnote of its text, one undo step; probed on a scratch footnote; no editor UI",
+  },
+  // tracked changes (protocol 74, core ADR 184). No editor UI issues
+  // either of them yet.
+  {
+    op: "acceptTrackedChange",
+    status: "supported",
+    note: "proto 74, ADR 184; {storyId, offset} of a tracked deletion's place, as the trackedChanges collection lists it; the text stays deleted, one undo step; probed on a copy of the text fixture with one deletion; no editor UI",
+  },
+  {
+    op: "rejectTrackedChange",
+    status: "supported",
+    note: "proto 74, ADR 184; {storyId, offset} of a tracked deletion's place; its text comes back where the place stood, one undo step; probed on a copy of the text fixture with one deletion; no editor UI",
   },
 ];
 
