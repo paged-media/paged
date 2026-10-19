@@ -27,6 +27,7 @@
 import { describe, expect, it, test } from "bun:test";
 
 import {
+  covers,
   expectNoCommit,
   expectOneCommit,
   expectOneUndoStep,
@@ -42,6 +43,7 @@ const STROKE_PAINT = ["setElementProperty", "setElementProperty"];
 
 describe("Rectangle tool", () => {
   it("DR-01: a drag previews the rubber band and commits ONE insertFrame wearing the graphic default @level:gesture", async () => {
+    covers("tool:paged.tool.rectangle");
     const { fake, g } = harness();
     const mark = fake.mark();
     await g
@@ -86,6 +88,7 @@ describe("Rectangle tool", () => {
   });
 
   it("the Frame variant commits a plain insertFrame (a placeholder stays unpainted) @level:gesture", async () => {
+    covers("tool:paged.tool.rectangleFrame");
     const { fake, g } = harness();
     await g
       .tool(() => createRectangleHandler({ frame: true }))
@@ -395,6 +398,7 @@ describe("Rectangle tool", () => {
 
 describe("Ellipse tool", () => {
   it("DR-01: previews the inscribed ellipse as a closed 48-point ring; commits ONE insertOval @level:gesture", async () => {
+    covers("tool:paged.tool.ellipse", "tool:paged.tool.ellipseFrame");
     const { fake, g } = harness();
     await g
       .tool(() => createEllipseHandler())
@@ -456,6 +460,7 @@ describe("Ellipse tool", () => {
 
 describe("Polygon tool", () => {
   it("draws the default hexagon (6 corner anchors, first at 12 o'clock) as ONE closed insertPath @level:gesture", async () => {
+    covers("tool:paged.tool.polygonFrame");
     const { fake, g } = harness();
     await g
       .tool(() => createPolygonHandler({ frame: true }))
@@ -485,6 +490,7 @@ describe("Polygon tool", () => {
   });
 
   it("reads sides and star inset from the tool settings: a 5-point star has 10 anchors, inner radius × (1 − inset) @level:gesture", async () => {
+    covers("tool:paged.tool.polygon");
     const { fake, g } = harness({
       toolSettings: { "paged.tool.polygon": { sides: 5, starInset: 40 } },
     });
@@ -536,6 +542,7 @@ describe("Polygon tool", () => {
 
 describe("Line tool", () => {
   it("previews the segment and commits ONE insertLine with a stroke but never a fill @level:gesture", async () => {
+    covers("tool:paged.tool.line");
     const { fake, g } = harness({
       reply: (m) =>
         m.kind === "requestStyleProperties"
