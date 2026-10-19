@@ -17,11 +17,12 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// plugin-sdk's library build: the two entry points with `bun build`, the
-// React Compiler run ahead of time over the sources first (the compiler's
-// library guidance: compile before publishing, `target: "19"`, the build's
-// one configuration in tooling/js/react-compiler.mjs; apps/editor ADR 228),
-// then the declarations with tsc 7.
+// plugin-sdk's library build, its JavaScript half: the two entry points with
+// `bun build`, the React Compiler run ahead of time over the sources first
+// (the compiler's library guidance: compile before publishing, `target:
+// "19"`, the build's one configuration in tooling/js/react-compiler.mjs;
+// apps/editor ADR 228). The package's `build` script then runs tsc for the
+// declarations.
 //
 // React is an OPTIONAL peer, and must stay optional at RUNTIME
 // (src/react-optional.ts): the loader path imports without React
@@ -32,7 +33,6 @@
 // react-optional, with no hooks and no JSX), and this build fails if the
 // output ever imports React statically, so the choice is made on purpose.
 
-import { execFileSync } from "node:child_process";
 import { readFileSync, readdirSync, rmSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
@@ -45,16 +45,22 @@ import {
 } from "../../../../../tooling/js/react-compiler.mjs";
 
 const pkg = join(dirname(fileURLToPath(import.meta.url)), "..");
+
+// `--outdir <dir>` builds elsewhere (test/react-free-import.spec.ts builds the
+// shipped JavaScript into a temporary directory).
+const args = process.argv.slice(2);
+const outAt = args.indexOf("--outdir");
+const outdir = outAt >= 0 ? args[outAt + 1] : join(pkg, "dist");
 const require = createRequire(join(pkg, "package.json"));
 const babel = require("@babel/core");
 const pluginPath = require.resolve("babel-plugin-react-compiler");
 const { logger, files } = createCollector();
 
-rmSync(join(pkg, "dist"), { recursive: true, force: true });
+rmSync(outdir, { recursive: true, force: true });
 
 const result = await Bun.build({
   entrypoints: [join(pkg, "src/index.ts"), join(pkg, "src/gesture-kit.ts")],
-  outdir: join(pkg, "dist"),
+  outdir,
   format: "esm",
   target: "node",
   packages: "external",
@@ -91,9 +97,9 @@ console.log(
 // react-optional is the one way in.
 const STATIC_REACT =
   /(?:^|[;\n])\s*import\s*(?:[^'";]*\sfrom\s*)?["']react(?:\/[^"']*)?["']/;
-for (const file of readdirSync(join(pkg, "dist"))) {
+for (const file of readdirSync(outdir)) {
   if (!file.endsWith(".js")) continue;
-  const code = readFileSync(join(pkg, "dist", file), "utf8");
+  const code = readFileSync(join(outdir, file), "utf8");
   if (STATIC_REACT.test(code)) {
     console.error(
       `plugin-sdk: dist/${file} imports React statically, so the package no longer loads without React (src/react-optional.ts). A compiled component is the likely cause: move it behind react-optional, or make React a required peer on purpose.`,
@@ -101,8 +107,3 @@ for (const file of readdirSync(join(pkg, "dist"))) {
     process.exit(1);
   }
 }
-
-execFileSync("tsc", ["-p", "tsconfig.build.json"], {
-  cwd: pkg,
-  stdio: "inherit",
-});
