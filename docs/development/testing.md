@@ -88,6 +88,7 @@ helper in `paged-gpu` (engine/core). Both honour `PAGED_FORCE_NO_GPU`.
 | `PAGED_SKIP_LOG`         | File every skip is appended to: `binary id`, `test name`, `resource`, `message`, tab-separated.                                                                                                | every Rust test lane                                                                  |
 | `PAGED_FORCE_NO_GPU`     | GPU tests behave as if there were no adapter (proves the REQUIRE path on a machine that has one).                                                                                              | you                                                                                   |
 | `PAGED_CMYK_PROFILE`     | The CMYK profile the colour tests and the fidelity scripts use (`paged_color::test_profiles`).                                                                                                 | the export-diff lane                                                                  |
+| `PAGED_REQUIRE_BROWSER`  | The root `tests/system/wasm-boot` checks fail instead of reporting `unavailable: browser` when no Chromium is found (`PAGED_CHROMIUM`, else playwright-core's).                                | `tests / contracts + system`                                                          |
 
 `PAGED_REQUIRE_<X>` accepts `1`, `true` or `yes`.
 
