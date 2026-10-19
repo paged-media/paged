@@ -205,7 +205,10 @@ export function MenuBar() {
 
 // ── model ──────────────────────────────────────────────────────────
 
-interface MenuLeaf {
+// The model is exported for its unit tests (packages/shell/test); the
+// MenuBar is its only product caller.
+
+export interface MenuLeaf {
   type: "leaf";
   label: string;
   command: string;
@@ -222,7 +225,7 @@ interface MenuLeaf {
   kind?: "item" | "label";
 }
 
-interface MenuSubmenu {
+export interface MenuSubmenu {
   type: "submenu";
   label: string;
   children: MenuNode[];
@@ -232,14 +235,14 @@ interface MenuSubmenu {
   groupLabel?: string;
 }
 
-type MenuNode = MenuLeaf | MenuSubmenu;
+export type MenuNode = MenuLeaf | MenuSubmenu;
 
 /** Capitalise a relocated leaf: `Insert spreadsheet…` → `Spreadsheet…`. */
 function capitalise(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
-function buildMenuTree(
+export function buildMenuTree(
   items: MenuItemContribution[],
 ): Array<[string, MenuNode[]]> {
   const tops = new Map<string, MenuNode[]>();
