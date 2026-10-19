@@ -30,6 +30,7 @@ import { useCollection } from "../../catalog/use-collection";
 import type { SpreadSummary } from "@paged-media/client";
 import { groupSpreads } from "../spread-grouping";
 import { navigateToPages } from "../cockpit-navigation";
+import { IconButton } from "@paged-media/panel-kit";
 
 export function ThumbnailRail() {
   const { handle, snapshots } = useDocument();
@@ -57,7 +58,11 @@ export function ThumbnailRail() {
         flexShrink: 0,
       }}
     >
-      <RailArrow name="ui-chevron-left" onClick={() => scrollBy(-1)} />
+      <RailArrow
+        name="ui-chevron-left"
+        label="Scroll pages left"
+        onClick={() => scrollBy(-1)}
+      />
       <div
         data-thumbnail-strip
         style={{
@@ -158,15 +163,27 @@ export function ThumbnailRail() {
           })
         )}
       </div>
-      <RailArrow name="ui-chevron-right" onClick={() => scrollBy(1)} />
+      <RailArrow
+        name="ui-chevron-right"
+        label="Scroll pages right"
+        onClick={() => scrollBy(1)}
+      />
     </div>
   );
 }
 
-function RailArrow({ name, onClick }: { name: string; onClick: () => void }) {
+function RailArrow({
+  name,
+  label,
+  onClick,
+}: {
+  name: string;
+  label: string;
+  onClick: () => void;
+}) {
   return (
-    <button
-      type="button"
+    <IconButton
+      label={label}
       onClick={onClick}
       style={{
         width: 26,
@@ -183,6 +200,6 @@ function RailArrow({ name, onClick }: { name: string; onClick: () => void }) {
       }}
     >
       <Icon name={name} size={15} />
-    </button>
+    </IconButton>
   );
 }

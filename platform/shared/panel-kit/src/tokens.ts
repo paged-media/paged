@@ -23,10 +23,11 @@
 // shell's test holds them equal, so a design refresh that moves a token
 // moves its fallback too.
 //
-// Before the kit, panels spelled their own: `--status-error` fell back to
-// six different reds (and to `currentColor`), and four names had no token
-// behind them at all (`--status-ok`, `--status-warn`, `--status-error-fg`,
-// `--pg-danger`), so their hex fallback always rendered.
+// Before the kit, panels spelled their own: an error colour seven ways
+// (four reds and `currentColor` behind `--status-error`, and two more
+// names), and twelve names had no token behind them at all (`--fg`,
+// `--muted-fg`, `--pg-danger`, `--warn`, …), so their dark fallback
+// rendered in both themes.
 
 /** Surfaces and text. */
 export const color = {

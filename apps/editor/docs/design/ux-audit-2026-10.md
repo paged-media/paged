@@ -1064,6 +1064,12 @@ The menu bar is a `nav` of ten separate drop-downs, not a `menubar`: ArrowRight 
 
 **Screenshots:** `F-50-menu-arrowright.png`
 
+**Partly fixed (2026-10-19, `f6c7836c1`, `5fd899bce` and the C10 docs commit):** every control of
+every built-in panel has an accessible name (the panel kit's field naming, ADR 233), glyph and
+icon buttons are named in words, toggle segments say which is on, the Style Options family row
+is a real tablist, and the page-strip arrows are named. The menubar, the dock's tablist, the
+landmarks and the headings remain.
+
 <a id="f-51"></a>
 
 #### F-51 · Menu shortcut hints and "soon" badges fail contrast
