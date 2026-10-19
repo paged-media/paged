@@ -38,6 +38,7 @@ import {
   createBundleHost,
   createHeadlessHost,
   type HeadlessHost,
+  silentConsole as silent,
 } from "@paged-media/plugin-sdk";
 import {
   covers,
@@ -51,8 +52,6 @@ import { activate } from "../../src/activate";
 import { IDML_EXPORTER_ID, IDML_IMPORTER_ID } from "../../src/io/idml";
 
 const ENGINE_ANCHOR = fileURLToPath(new URL("..", import.meta.url));
-const silent = { debug() {}, info() {}, warn() {}, error() {} };
-
 let h: HeadlessHost;
 let importer: ImporterContribution;
 let exporter: ExporterContribution;

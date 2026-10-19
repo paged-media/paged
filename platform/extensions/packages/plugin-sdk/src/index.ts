@@ -53,6 +53,9 @@ export {
   type LoadHeadlessEngineOptions,
 } from "./wasm-loader.js";
 export { DisposableStore, toDisposable } from "./disposables.js";
+// Test doubles beside the harness: an in-memory storage backing and a
+// silent console, so a bundle's suite hand-rolls neither.
+export { mapBacking, silentConsole } from "./testing.js";
 export { API_VERSION, satisfiesApiVersion } from "./version.js";
 export {
   createBundleHost,

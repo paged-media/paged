@@ -30,6 +30,7 @@ import {
 import { minimalIdml } from "../../../extensions/packages/plugin-sdk/test/fixtures/minimal-idml";
 import type { ScriptEngine } from "../src";
 
+import { silentConsole as silent } from "../../../extensions/packages/plugin-sdk/src/testing";
 const FONT = new Uint8Array(
   readFileSync(
     fileURLToPath(
@@ -40,12 +41,6 @@ const FONT = new Uint8Array(
     ),
   ),
 );
-const silent = {
-  debug() {},
-  info() {},
-  warn() {},
-  error() {},
-} as unknown as Console;
 
 export async function headlessEngine(): Promise<{
   engine: ScriptEngine;

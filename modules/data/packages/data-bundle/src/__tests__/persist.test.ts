@@ -14,8 +14,7 @@ import {
 } from "../persist";
 import { createSession } from "../session";
 
-const silent = { debug() {}, info() {}, warn() {}, error() {} };
-
+import { silentConsole as silent } from "@paged-media/plugin-sdk";
 describe("the session part schema [data.plugin.persistence]", () => {
   const sample: PersistedSession = {
     v: 1,

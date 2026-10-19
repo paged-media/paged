@@ -31,7 +31,11 @@
 import { existsSync, readFileSync } from "node:fs";
 
 import type { BundleHost } from "@paged-media/plugin-api";
-import { createHeadlessHost, type HeadlessHost } from "@paged-media/plugin-sdk";
+import {
+  createHeadlessHost,
+  type HeadlessHost,
+  silentConsole as silent,
+} from "@paged-media/plugin-sdk";
 
 import { docBundle } from "../../src";
 import { DocEngine } from "../../src/engine";
@@ -59,8 +63,6 @@ export function requireDocx(suite: string): void {
 
 export const fixture = (name: string): Uint8Array =>
   new Uint8Array(readFileSync(new URL(`../fixtures/${name}`, import.meta.url)));
-
-const silent = { debug() {}, info() {}, warn() {}, error() {} };
 
 export interface OpenedDoc {
   h: HeadlessHost;

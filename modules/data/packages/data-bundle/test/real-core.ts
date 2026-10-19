@@ -14,7 +14,11 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { createHeadlessHost, type HeadlessHost } from "@paged-media/plugin-sdk";
+import {
+  createHeadlessHost,
+  type HeadlessHost,
+  silentConsole as silent,
+} from "@paged-media/plugin-sdk";
 
 import { minimalIdml } from "./fixtures/minimal-idml";
 
@@ -66,8 +70,6 @@ export function fixedFrom<T extends { failing: unknown }>(
   return ENGINE_PROTOCOL >= min ? it : it.failing;
 }
 export const REQUIRE_REAL_CORE = process.env.REQUIRE_REAL_CORE === "1";
-
-const silent = { debug() {}, info() {}, warn() {}, error() {} };
 
 /** Boot a headless host over the real engine and load the minimal fixture
  *  (one page, Self="usp"). */

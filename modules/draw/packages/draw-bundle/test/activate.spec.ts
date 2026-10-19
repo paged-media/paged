@@ -26,126 +26,23 @@
 
 import { describe, expect, it } from "bun:test";
 
-import type { PagedEditor } from "@paged-media/plugin-api";
-import { loadBundle } from "@paged-media/plugin-sdk";
+import {
+  createFakeEditor,
+  loadBundle,
+  mapBacking,
+  silentConsole as silent,
+} from "@paged-media/plugin-sdk";
 
 import { drawBundle } from "../src";
 
-function fakeRegistry() {
-  const byId = new Map<string, unknown>();
-  return {
-    ids: () => Array.from(byId.keys()),
-    register(c: { id: string }) {
-      if (byId.has(c.id)) throw new Error(`duplicate id ${c.id}`);
-      byId.set(c.id, c);
-      return {
-        dispose() {
-          byId.delete(c.id);
-        },
-      };
-    },
-  };
-}
-
-function fakeKeybindings() {
-  const items: unknown[] = [];
-  return {
-    count: () => items.length,
-    register(c: unknown) {
-      items.push(c);
-      return {
-        dispose() {
-          const i = items.indexOf(c);
-          if (i >= 0) items.splice(i, 1);
-        },
-      };
-    },
-  };
-}
-
-// W3.2 — edit-context/object-type registries key off `type`, not `id`.
-function fakeTypeRegistry() {
-  const byType = new Map<string, { type: string }>();
-  return {
-    types: () => Array.from(byType.keys()),
-    get: (t: string) => byType.get(t),
-    register(c: { type: string }) {
-      byType.set(c.type, c);
-      return {
-        dispose() {
-          byType.delete(c.type);
-        },
-      };
-    },
-  };
-}
-
-function makeFakeEditor() {
-  const tools = fakeRegistry();
-  const commands = fakeRegistry();
-  const panels = fakeRegistry();
-  const keybindings = fakeKeybindings();
-  const editContexts = fakeTypeRegistry();
-  const objectTypes = fakeTypeRegistry();
-  // Minimal client for the schema panel's binding driver: it subscribes
-  // for selection changes and (on a non-empty selection) reads
-  // pathAnchors. At install over the empty fake selection it only
-  // publishes hasSelection=false, so the stubs below suffice.
-  let selectionIds: unknown[] = [];
-  const client = {
-    subscribe: (_l: (msg: unknown) => void) => () => {},
-    pathAnchors: async () => null,
-    setElementSelection: async (ids: unknown[]) => ids,
-  };
-  const editor = {
-    client,
-    registries: {
-      tools,
-      commands,
-      panels,
-      keybindings,
-      editContexts,
-      objectTypes,
-    },
-    selection: {
-      elementSelection: selectionIds,
-      setElementSelection: (ids: unknown[]) => {
-        selectionIds = ids;
-      },
-      setElementGeometry: () => {},
-    },
-    camera: { camera: { scale: 1, tx: 0, ty: 0 } },
-  };
-  return {
-    editor: editor as unknown as PagedEditor,
-    tools,
-    commands,
-    panels,
-    keybindings,
-    editContexts,
-    objectTypes,
-  };
-}
-
-const silent = { debug() {}, info() {}, warn() {}, error() {} };
-const mapBacking = () => {
-  const m = new Map<string, string>();
-  return {
-    getItem: (k: string) => m.get(k) ?? null,
-    setItem: (k: string, v: string) => void m.set(k, v),
-    removeItem: (k: string) => void m.delete(k),
-    keys: () => Array.from(m.keys()),
-  };
-};
-
 describe("drawBundle.activate", () => {
   it("registers the 3 anchor tools + the pro set + the v0 brushes + the wave-2 trio (pen built-in per W2.5; activation host-derived per B-15)", () => {
-    const fake = makeFakeEditor();
+    const fake = createFakeEditor();
     loadBundle(() => fake.editor, drawBundle, {
       console: silent,
       storage: mapBacking(),
     });
-    expect(fake.tools.ids()).toEqual([
+    expect(fake.ids("tools")).toEqual([
       "media.paged.draw.tool.addAnchor",
       "media.paged.draw.tool.deleteAnchor",
       "media.paged.draw.tool.convertAnchor",
@@ -190,7 +87,7 @@ describe("drawBundle.activate", () => {
     // (`paged.object.*`), because basic object operations are what
     // plugins build on. A `media.paged.draw.command.groupSelection`
     // reappearing here would be the duplication coming back.
-    expect(fake.commands.ids()).toEqual([
+    expect(fake.ids("commands")).toEqual([
       "media.paged.draw.command.strokeDashSolid",
       "media.paged.draw.command.strokeDashDashed",
       "media.paged.draw.command.strokeDashDotted",
@@ -337,11 +234,11 @@ describe("drawBundle.activate", () => {
       // Illustrator Phase 2 (last row) — Image Trace v0 (the wasm lane).
       "media.paged.draw.command.imageTrace",
     ]);
-    expect(fake.keybindings.count()).toBe(0);
+    expect(fake.ids("keybindings").length).toBe(0);
   });
 
   it("registers the stroke + fill SCHEMA panels and the appearance + graphic-styles + symbols + live-paint + pattern + repeat React panels — and NO Layers panel", () => {
-    const fake = makeFakeEditor();
+    const fake = createFakeEditor();
     loadBundle(() => fake.editor, drawBundle, {
       console: silent,
       storage: mapBacking(),
@@ -370,7 +267,7 @@ describe("drawBundle.activate", () => {
     // reappearing here would be the duplication coming back.
     // Vector stroke / Vector fill are not contributed any more: their
     // rows live in the host's Stroke, Object Options and Gradients panels.
-    expect(fake.panels.ids()).toEqual([
+    expect(fake.ids("panels")).toEqual([
       "media.paged.draw.panel.appearance",
       "media.paged.draw.panel.graphicStyles",
       "media.paged.draw.panel.symbols",
@@ -386,27 +283,29 @@ describe("drawBundle.activate", () => {
   });
 
   it("registered ids match the manifest's contributes declaration", () => {
-    const fake = makeFakeEditor();
+    const fake = createFakeEditor();
     loadBundle(() => fake.editor, drawBundle, {
       console: silent,
       storage: mapBacking(),
     });
-    expect(fake.tools.ids()).toEqual(drawBundle.manifest.contributes?.tools);
+    expect(fake.ids("tools")).toEqual(drawBundle.manifest.contributes?.tools);
     // The schema panel's id matches the manifest's panel declaration.
-    expect(fake.panels.ids()).toEqual(drawBundle.manifest.contributes?.panels);
-    expect(fake.commands.ids()).toEqual(
+    expect(fake.ids("panels")).toEqual(drawBundle.manifest.contributes?.panels);
+    expect(fake.ids("commands")).toEqual(
       drawBundle.manifest.contributes?.commands ?? [],
     );
   });
 
   it("registers the W3.2 vectorGraphic edit context (B-02 RESOLVED)", () => {
-    const fake = makeFakeEditor();
+    const fake = createFakeEditor();
     loadBundle(() => fake.editor, drawBundle, {
       console: silent,
       storage: mapBacking(),
     });
-    expect(fake.editContexts.types()).toEqual(["vectorGraphic"]);
-    const ec = fake.editContexts.get("vectorGraphic") as unknown as {
+    expect(fake.ids("editContexts")).toEqual(["vectorGraphic"]);
+    const ec = fake
+      .registered<{ type: string }>("editContexts")
+      .find((c) => c.type === "vectorGraphic") as unknown as {
       entry: string;
       toolIds: string[];
       panelIds: string[];
@@ -442,16 +341,16 @@ describe("drawBundle.activate", () => {
   });
 
   it("dispose leaves the shell exactly as found (honesty smoke test)", () => {
-    const fake = makeFakeEditor();
+    const fake = createFakeEditor();
     const loaded = loadBundle(() => fake.editor, drawBundle, {
       console: silent,
       storage: mapBacking(),
     });
     loaded.dispose();
-    expect(fake.tools.ids()).toHaveLength(0);
-    expect(fake.panels.ids()).toHaveLength(0);
-    expect(fake.commands.ids()).toHaveLength(0);
-    expect(fake.keybindings.count()).toBe(0);
-    expect(fake.editContexts.types()).toHaveLength(0);
+    expect(fake.ids("tools")).toHaveLength(0);
+    expect(fake.ids("panels")).toHaveLength(0);
+    expect(fake.ids("commands")).toHaveLength(0);
+    expect(fake.ids("keybindings").length).toBe(0);
+    expect(fake.ids("editContexts")).toHaveLength(0);
   });
 });

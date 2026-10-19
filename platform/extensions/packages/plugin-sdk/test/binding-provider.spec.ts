@@ -56,8 +56,7 @@ import {
 } from "../src/edit-context";
 import { makeFakeEditor } from "./fake-editor";
 
-const silent = { debug() {}, info() {}, warn() {}, error() {} };
-
+import { silentConsole as silent } from "../src/testing";
 const MANIFEST: PluginManifest = {
   id: "media.paged.test",
   name: "test",
