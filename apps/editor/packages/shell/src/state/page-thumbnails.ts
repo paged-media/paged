@@ -72,7 +72,7 @@ function changedPages(msg: WorkerToMain): readonly PageId[] | null {
 /** The drain: pages a reply names are queued, and after SETTLE_MS each
  *  gets a fresh thumbnail, unless the document moved on meanwhile. It runs
  *  outside the hook (the React Compiler does not compile a `try …
- *  finally`, ADR 228) and reads the document through `live`. Returns the
+ *  finally`, ADR 229) and reads the document through `live`. Returns the
  *  cleanup. */
 function startThumbnailQueue(
   client: ReturnType<typeof useCanvasClient>,

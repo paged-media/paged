@@ -89,7 +89,7 @@ interface StorySummaryLite {
  *  budget, a closed document: a diagnostic overlay must never take the
  *  canvas down, it draws nothing and tries again on the next push).
  *  Outside the component: the React Compiler does not compile a
- *  conditional inside a `try` (ADR 228). */
+ *  conditional inside a `try` (ADR 229). */
 async function readChains(
   client: ReturnType<typeof useCanvasClient>,
   current: () => boolean,

@@ -125,7 +125,7 @@ export function refusalText(message: string): string {
 
 /** Run `work` and resolve with the first warning it logged, or the message
  *  of what it threw (also logged), or null. Outside the hook: the React
- *  Compiler does not compile a `try … finally` (editor ADR 228). */
+ *  Compiler does not compile a `try … finally` (editor ADR 229). */
 async function firstWarning(
   host: BundleHost,
   work: () => Promise<unknown>,

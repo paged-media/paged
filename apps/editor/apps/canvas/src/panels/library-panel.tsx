@@ -102,7 +102,7 @@ function when(ts: number): string {
 // The library and the open document, as one snapshot per library version:
 // the store hands the render the values, not only the version beside them
 // (a value read from a getter next to a version that only triggers the
-// render is a value the React Compiler keeps; ADR 228).
+// render is a value the React Compiler keeps; ADR 229).
 type LibrarySnapshot = {
   version: number;
   library: ReturnType<typeof getLibrary>;

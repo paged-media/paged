@@ -36,7 +36,6 @@
 
 import {
   useCallback,
-  useEffect,
   useMemo,
   useRef,
   useState,
@@ -44,6 +43,7 @@ import {
   type ReactElement,
   type ReactNode,
 } from "react";
+import { onDidChangeOf, useLive } from "@paged-media/react-live";
 
 import type { BundleHost } from "@paged-media/plugin-api";
 
@@ -171,16 +171,16 @@ export function makeWorkbookPanel(
   host: BundleHost,
   session: WorkbookSession,
 ): () => ReactElement {
-  return function WorkbookPanel(): ReactElement {
-    // Re-render on every session change (import, sheet/range edits).
-    const [version, force] = useState(0);
+  // A declaration, so the React Compiler sees the component (it cannot
+  // see `return function WorkbookPanel()`, editor ADR 229).
+  function WorkbookPanel(): ReactElement {
+    // Re-render on every session change (import, sheet/range edits): the
+    // session as a render value (react-live, editor ADR 229), a new view
+    // after every change, so what is read from it is read again.
+    const live = useLive(session, onDidChangeOf);
     const fileRef = useRef<HTMLInputElement | null>(null);
-    useEffect(() => {
-      const sub = session.onDidChange(() => force((n) => n + 1));
-      return () => sub.dispose();
-    }, []);
 
-    const st = session.state();
+    const st = live.state();
     const { armed, confirm } = useConfirm();
 
     const onFile = useCallback(
@@ -335,12 +335,13 @@ export function makeWorkbookPanel(
     }, [styleName]);
 
     // Memoised in the session until the next change (not per render).
-    const sheets = session.sheets();
+    const sheets = live.sheets();
     // The engine's read-only inventories, read once per session change —
     // not on every render (a keystroke in any of this panel's inputs
     // re-renders it).
     const inventories = useMemo(() => {
-      const eng = st.engine;
+      // Read through the view, so the memo follows each session change.
+      const eng = live.state().engine;
       if (!eng) return null;
       return {
         freezes: eng.listFreezePanes(),
@@ -348,10 +349,10 @@ export function makeWorkbookPanel(
         comments: eng.listComments(),
         charts: eng.listCharts(),
       };
-    }, [st.engine, version]);
+    }, [live]);
     // The chart-kind vocabulary comes from the ENGINE (Rust owns which kinds
     // exist), never a literal list here.
-    const chartKinds = session.chartKinds();
+    const chartKinds = live.chartKinds();
     const hasRange = !!st.selectedRange;
     const deleteLabel = (key: string, label: string) =>
       armed === key ? "Confirm delete" : label;
@@ -991,7 +992,7 @@ export function makeWorkbookPanel(
                   if (!st.engine) return null;
                   // The registry, read ONCE per session (it is build-time
                   // fixed) — a filter keystroke re-filters, never re-reads.
-                  const all = session.functionList();
+                  const all = live.functionList();
                   const q = fnFilter.trim().toUpperCase();
                   const hitsFn = q
                     ? all.filter(
@@ -1147,5 +1148,6 @@ export function makeWorkbookPanel(
         </p>
       </div>
     );
-  };
+  }
+  return WorkbookPanel;
 }

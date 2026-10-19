@@ -49,7 +49,7 @@ export interface SelectionObjectType {
 
 /** The object type that claims `element`, and the context a double-click
  *  would enter; null when none does. Outside the hook: the React Compiler
- *  does not compile a conditional inside a `try` (ADR 228). */
+ *  does not compile a conditional inside a `try` (ADR 229). */
 async function classifySelection(
   client: ReturnType<typeof useCanvasClient>,
   element: ElementId,

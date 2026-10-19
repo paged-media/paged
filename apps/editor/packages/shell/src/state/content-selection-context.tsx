@@ -67,7 +67,7 @@ export function ContentSelectionProvider({ children }: PropsWithChildren) {
   const contentSelectionRef = useRef<ContentSelection | null>(null);
   // Written during render on purpose: the caret reader handed to plugins
   // (`getEditor().contentSelection.contentSelectionRef`) may be read by a
-  // panel while it renders. It keeps this provider uncompiled (ADR 228).
+  // panel while it renders. It keeps this provider uncompiled (ADR 229).
   contentSelectionRef.current = contentSelection;
 
   const setContentSelection = useCallback(

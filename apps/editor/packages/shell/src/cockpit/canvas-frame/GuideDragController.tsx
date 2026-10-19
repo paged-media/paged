@@ -111,7 +111,7 @@ function pageForDoc(
  *  (`pageIndex` is spread-local: mapped to a document page id through each
  *  spread's running page offset). Null when the read fails. Outside the
  *  component: the React Compiler does not compile a conditional inside a
- *  `try` (ADR 228). */
+ *  `try` (ADR 229). */
 async function guidesFromSpreads(
   client: ReturnType<typeof useCanvasClient>,
   handle: { pageIds: string[] } | null,

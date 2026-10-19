@@ -235,7 +235,7 @@ export function fromText(
 
 /** Run `work`; resolve with the message of what it threw, or null. The
  *  dialogs' submit handlers go through it because the React Compiler does
- *  not compile a component with a `try … finally` in it (ADR 228). */
+ *  not compile a component with a `try … finally` in it (ADR 229). */
 async function attempt(work: () => Promise<void>): Promise<string | null> {
   try {
     await work();

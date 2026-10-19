@@ -267,7 +267,7 @@ type ImagePhase =
   | { kind: "error"; message: string };
 
 // The two runs settle outside the components: the React Compiler does not
-// compile a component with a conditional inside a `try` (ADR 228).
+// compile a component with a conditional inside a `try` (ADR 229).
 
 /** A plugin exporter's run, as the outputs row shows it. */
 async function exporterOutcome(

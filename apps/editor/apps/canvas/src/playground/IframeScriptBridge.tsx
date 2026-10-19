@@ -68,7 +68,7 @@ function handle(): Handle | undefined {
 /** The bridge itself: listen to the embedding page, answer it, and stop
  *  on unmount. A plain function the effect calls, so the component stays
  *  compilable (the React Compiler does not lower a conditional inside a
- *  `try`, ADR 228). */
+ *  `try`, ADR 229). */
 function startBridge(): (() => void) | undefined {
   const params = new URLSearchParams(window.location.search);
   if (params.get("embed") !== "script") return;

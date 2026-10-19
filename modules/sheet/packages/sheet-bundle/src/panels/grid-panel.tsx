@@ -40,6 +40,7 @@ import {
   type CSSProperties,
   type ReactElement,
 } from "react";
+import { onDidChangeOf, useLive } from "@paged-media/react-live";
 
 import type { BundleHost } from "@paged-media/plugin-api";
 import {
@@ -175,13 +176,13 @@ export function makeGridPanel(
   _host: BundleHost,
   session: WorkbookSession,
 ): () => ReactElement {
-  return function GridPanel(): ReactElement {
+  // A declaration, so the React Compiler sees the component (it cannot
+  // see `return function GridPanel()`, editor ADR 229).
+  function GridPanel(): ReactElement {
     // Re-render on session changes (selection set, cell committed, import).
-    const [, force] = useState(0);
-    useEffect(() => {
-      const sub = session.onDidChange(() => force((n) => n + 1));
-      return () => sub.dispose();
-    }, []);
+    // The session as a render value (react-live, editor ADR 229): a new
+    // view after every change, so what is read from it is read again.
+    const live = useLive(session, onDidChangeOf);
 
     // Scroll origin (the window's top-left cell). The engine windows from
     // here; scrolling re-requests a new window (virtualization in Rust).
@@ -190,7 +191,7 @@ export function makeGridPanel(
     const [editor, setEditor] = useState<EditorState | null>(null);
     const editorRef = useRef<HTMLInputElement | null>(null);
 
-    const st = session.state();
+    const st = live.state();
 
     // The viewport width, measured from the panel (see DEFAULT_VIEWPORT_W_PT).
     // A callback ref, because the empty state and the grid render different
@@ -219,7 +220,7 @@ export function makeGridPanel(
     // paste (posted by the session, whichever caller asked), a refused fill
     // and an edit that did not commit.
     const [notice, setNotice] = useState<SessionNotice | null>(() =>
-      session.notice(),
+      live.notice(),
     );
     useEffect(() => {
       const sub = session.onNotice(setNotice);
@@ -282,7 +283,7 @@ export function makeGridPanel(
     const sel = st.gridSelection;
     // Wave 5 — the bar follows the ACTIVE cell (Tab/Enter walk inside a
     // multi-cell selection), not the selection's top-left.
-    const active = sel ? session.activeCell() : null;
+    const active = sel ? live.activeCell() : null;
     const fbRow = active?.row ?? null;
     const fbCol = active?.col ?? null;
     // The bar tracks the selected cell unless the user is actively editing it
@@ -308,9 +309,7 @@ export function makeGridPanel(
     );
     const fbValue =
       fbDraft ??
-      (fbRow !== null && fbCol !== null
-        ? session.cellInputAt(fbRow, fbCol)
-        : "");
+      (fbRow !== null && fbCol !== null ? live.cellInputAt(fbRow, fbCol) : "");
 
     const fbInputRef = useRef<HTMLInputElement | null>(null);
     const [fbCaret, setFbCaret] = useState(0);
@@ -319,7 +318,7 @@ export function makeGridPanel(
     // Completions for the token under the caret (pure prefix match over the
     // engine's registry table — empty when the token is empty / no engine).
     const functions: readonly FunctionEntry[] = st.engine
-      ? session.functionList()
+      ? live.functionList()
       : [];
     const token = completionTokenAt(fbValue, fbCaret);
     const completions: FunctionEntry[] =
@@ -406,7 +405,7 @@ export function makeGridPanel(
     // or when windowing fails — the panel says so).
     const scene: GridScene | null =
       st.activeSheet !== null
-        ? session.gridScene(firstRow, firstCol, viewW, VIEWPORT_H_PT)
+        ? live.gridScene(firstRow, firstCol, viewW, VIEWPORT_H_PT)
         : null;
 
     // Keep the editor focused while open.
@@ -1138,7 +1137,8 @@ export function makeGridPanel(
         </details>
       </div>
     );
-  };
+  }
+  return GridPanel;
 }
 
 const scrollBtn: CSSProperties = {
