@@ -119,14 +119,9 @@ jobs:
           prefix-key: v0-rust-sheet
           # Only main writes the cache; pull requests restore main's (A10).
           save-if: ${{ github.ref == 'refs/heads/main' }}
-      - name: install pinned wasm-bindgen-cli (Cargo.lock version)
-        run: |
-          V=$(grep -A1 '^name = "wasm-bindgen"$' Cargo.lock | grep version | head -1 | cut -d'"' -f2)
-          cargo install wasm-bindgen-cli --version "$V" --locked
-      - name: install pinned binaryen (reftypes-safe; old apt binaryen breaks externref table grow)
-        run: |
-          curl -sL https://github.com/WebAssembly/binaryen/releases/download/version_126/binaryen-version_126-x86_64-linux.tar.gz | tar xz
-          echo "$PWD/binaryen-version_126/bin" >> "$GITHUB_PATH"
+      # wasm-bindgen-cli and binaryen at the pins in tooling/bootstrap.sh
+      # (prebuilt; the build script checks the CLI against Cargo.lock).
+      - uses: ./.github/actions/wasm-tools
       - name: build the engine wasm artifact (100 MB app wasm budget gate)
         run: bash scripts/build-wasm.sh
       # Fail-not-skip belt at the JOB level too: a missing artifact reddens
