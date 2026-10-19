@@ -16,13 +16,14 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// Disclosure helpers for the image panel: a collapsible section, and the
-// collapsed "About" block that holds a section's longer explanation so the
-// panel itself reads as controls plus one plain sentence.
+// The image panel's collapsible section: the shared kit's Disclosure
+// (@paged-media/panel-kit), open by default, with the panel's section
+// title. Its notes use the kit's `About` directly.
 
+import { Disclosure } from "@paged-media/panel-kit";
 import type { ReactNode } from "react";
 
-import { note, sectionTitle } from "./styles";
+import { sectionTitle } from "./styles";
 
 /** A collapsible panel section. Open by default: the controls inside are
  *  the panel's working surface, and collapsing is the user's choice. */
@@ -38,19 +39,13 @@ export function Section({
   [data: `data-${string}`]: string | boolean | undefined;
 }) {
   return (
-    <details open={open} {...data}>
-      <summary style={{ ...sectionTitle, cursor: "pointer" }}>{title}</summary>
+    <Disclosure
+      summary={title}
+      defaultOpen={open}
+      summaryStyle={sectionTitle}
+      {...data}
+    >
       {children}
-    </details>
-  );
-}
-
-/** The longer explanation behind a section, collapsed. */
-export function About({ children }: { children: ReactNode }) {
-  return (
-    <details style={note}>
-      <summary style={{ cursor: "pointer" }}>About</summary>
-      {children}
-    </details>
+    </Disclosure>
   );
 }

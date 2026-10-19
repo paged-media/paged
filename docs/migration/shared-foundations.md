@@ -446,8 +446,8 @@ miniz_oxide 0.8 beside 0.9 (png 0.18, also in image's dev graph).
 paged.doc's standalone-open skeleton and paged.slide's deck are built as
 `paged_scene::Document`s with the engine's model crates and packaged by core's one `.paged`
 writer (`paged_store::package::wrap_document`), as the PDF mapper already did. The
-hand-written IDML writers are gone: `docx-skeleton`'s IDML half (408 → 0 lines of IDML
-templates) and `slide-idml` (1,363 lines). Decisions: doc ADR 606, slide ADR 708 (amending
+hand-written IDML writers are gone: `docx-skeleton`'s IDML half (237 lines) and `slide-idml`
+(1,363 lines), 1,600 lines in all. Decisions: doc ADR 606, slide ADR 708 (amending
 doc ADR 603 and slide ADR 700).
 
 ### Equivalence
@@ -593,3 +593,56 @@ private corpus and the modules' fixtures (280 `.docx`, 817 `.xlsx`, 17 `.pptx`) 
 output before and after: doc's verbatim save, lowering and package rewrite; slide's IR, IDML,
 report and package rewrite; sheet's session save, chart list and chart geometry, and
 `XlsxDocument` save, error messages included. All identical.
+
+## C3 — one DrawingML chart reader (Rust)
+
+`platform/shared/dml-chart` (`dml-chart`) reads a chart part, `c:chartSpace`, once for both
+modules that carry one; the record is slide ADR 709.
+
+- **One reader, one model.** `dml_chart::chart(root, props)` reads the plots in file order
+  (with each plot's element name, so a 3-D variant stays visible), the series with their cached
+  names, categories and values and the `c:f` formulas they are bound to, the axes, the title
+  and the legend. It is slide's reader (`pptx-import/src/chart.rs`), made generic over the
+  paint and text types and taught the formulas.
+- **The paints are the module's.** The reader hands every `c:spPr` and `a:rPr` / `a:defRPr` to
+  the module's `Props`, in file order, so slide's diagnostics come out in the order they always
+  did. slide reads them into `ShapeProps` / `RunProps` (`pptx-core::chart` is now type aliases
+  of the shared model); sheet reads them into `()`.
+- **The layout profiles stay in the modules.** `slide-chart` and `sheet-chart` are untouched.
+- **sheet's streaming scanner is gone.** `sheet-xlsx/src/parts/chart.rs` folds the shared
+  model into the frozen `ChartModel` with the rules the scanner had: the last plot of a
+  curated kind decides, a bar plot's own direction and grouping pick the variant, every
+  plot's series bind to their `c:f` ranges, a series' colour is its first `a:srgbClr`, and the
+  title is the first non-empty text run of the first title that has one (the last two read
+  the element tree, as the Excel profile's rules).
+- **The element tree is shared.** slide's `pptx-import/src/xml.rs` moved to `paged_ooxml::tree`
+  (slide ADR 702 amended). Two changes let it read what sheet's scanner read: the chart
+  namespace also matches the strict one, and element text has its line ends normalised as XML
+  1.0 requires (found by the harness: one corpus chart title written with CR LF).
+
+Duplicates before → after: DrawingML chart readers 2 → 1; chart models 2 → 1 shared plus
+sheet's frozen layout model (`ChartModel`, the Excel profile's input, unchanged).
+
+Measured (release / wasm-release, `wasm-opt -Oz`, both builds in the same checkout, since a
+crate outside a module's workspace is named by its absolute path):
+
+| Artifact | Before C3 | After C3 | Change | C1 + C3 |
+| --- | ---: | ---: | ---: | ---: |
+| `slide_js_bg.wasm` | 1,802,264 | 1,796,284 | −5,980 | −12,080 |
+| `sheet_js_bg.wasm` | 1,671,133 | 1,689,487 | +18,354 | −3,288 |
+| `docx_js_bg.wasm` | 6,828,946 | 6,828,821 | 0 (path length only) | −4,724 |
+
+sheet pays for reading charts with the element tree and the full reader (the namespace
+resolver, the tree, the reader's plot and series code: +18.4 KB, after a table-driven namespace
+lookup took 5.3 KB back and sheet's `Props` dropped the caches, axes and labels it never reads,
+another 3.9 KB). Its streaming scanner was smaller because it read almost nothing. C1's
+−21.6 KB covers it: across the two items no module grows. slide is smaller: its reader moved,
+and the namespace table replaced a string `match`.
+
+Tests (nextest, before → after C3): slide 67 → 65 (the element tree's 2 tests moved to
+`paged-ooxml`), sheet 1,496 → 1,497 (+1: the Excel-profile title and colour rules),
+`paged-ooxml` 26 → 29, `dml-chart` 0 → 4; bun suites unchanged (slide 69, sheet 193 + 404, 1
+skip); corpus lanes unchanged (slide 5, sheet 5). The harness compared, over 817 `.xlsx` and
+17 `.pptx`: sheet's chart lists, chart geometry and saves; slide's IR as JSON (without the two
+new fields), the resolved deck with its chart layout, and the report. All identical, after one
+fix the harness found (the line-end normalisation above).

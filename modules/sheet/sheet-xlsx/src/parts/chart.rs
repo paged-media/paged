@@ -17,18 +17,20 @@
  */
 
 //! `xl/charts/chartN.xml` — a DrawingML chart (ECMA-376 §21.2; the M2 charts
-//! track, spec §8.4). We parse the publishing-curated chart types
-//! (`c:barChart` → bar/column, `c:lineChart` → line/area, `c:pieChart`/
-//! `c:doughnutChart` → pie/donut, `c:scatterChart` → scatter) into the FROZEN
-//! [`sheet_chart::ChartModel`] so the engine (`sheet-js`) can list + render
-//! them on both surfaces (one geometry generator, two projections).
+//! track, spec §8.4), read by the shared DrawingML chart reader
+//! (`dml_chart`, `platform/shared/dml-chart`, which paged.slide reads its
+//! charts with too) and folded into the FROZEN [`sheet_chart::ChartModel`] so
+//! the engine (`sheet-js`) can list + render them on both surfaces (one
+//! geometry generator, two projections). The Excel layout profile —
+//! `sheet_chart`'s curated kinds and geometry — stays this module's.
 //!
 //! ## What we read (the T2 honest subset)
 //!
 //! - The chart KIND from the plot-area child element (`c:barChart` with
 //!   `c:barDir val="bar"|"col"` and `c:grouping val="stacked"|"percentStacked"`;
 //!   `c:areaChart`; `c:lineChart`; `c:pieChart` / `c:doughnutChart`;
-//!   `c:scatterChart`; `c:radarChart`).
+//!   `c:scatterChart`; `c:radarChart`). The last of these in the plot area
+//!   decides; a 3-D variant does not.
 //!   RULING (`sheet.chart.xlsx.grouping`): a bar/column chart's `c:grouping`
 //!   selects the STACKED kind — before this it was ignored, so an Excel
 //!   stacked chart imported as a GROUPED one and rendered wrong without
@@ -37,12 +39,13 @@
 //!   approximation, not a claim). `c:grouping` on a LINE or AREA chart is
 //!   still ignored: those kinds have no stacked variant in the curated set,
 //!   so they render unstacked — labelled here, never silently.
-//! - Each `c:ser` series: its title `c:tx` (a `c:strRef>c:v` cached string or
-//!   a literal), the category labels `c:cat` (a `c:f` range ref), the values
-//!   `c:val` (a `c:f` range ref), and a fixed `<a:srgbClr val="RRGGBB"/>` fill
-//!   from the series' shape properties (`c:spPr`) when present. A
-//!   `c:scatterChart` series pairs `c:xVal` (→ first series) + `c:yVal`.
-//! - The chart `c:title` text (a cached `c:strRef>c:v` or `a:t` rich-text run).
+//! - Each `c:ser` series of every plot, in file order: its title `c:tx` (the
+//!   cached string), the category labels `c:cat` (a `c:f` range ref), the
+//!   values `c:val` (a `c:f` range ref), and its fixed colour: the first
+//!   `<a:srgbClr val="RRGGBB"/>` in the series. A `c:scatterChart` series
+//!   pairs `c:xVal` (→ first series) + `c:yVal`.
+//! - The chart title: the first non-empty text run (`a:t`, or a cached
+//!   `c:v`) of the first `c:title` that has one.
 //! - Whether a `c:legend` is present.
 //!
 //! ## Range refs
@@ -64,8 +67,9 @@
 //! contract is parse-for-render + preserve-on-save.
 
 use crate::error::XlsxError;
-use crate::opc::attr;
 use compact_str::CompactString;
+use dml_chart::{PlotKind, Series as DmlSeries};
+use paged_ooxml::tree::{El, Ns};
 use sheet_chart::model::{Axis, ChartKind, ChartModel, Series};
 use sheet_core::{parse_a1, CellRef, RangeRef, SheetId};
 
@@ -89,19 +93,7 @@ pub struct ParsedChart {
     pub model: ChartModel,
 }
 
-/// Which value role a `c:f` range ref binds to within a `c:ser`.
-#[derive(Clone, Copy, PartialEq)]
-enum RefRole {
-    None,
-    Cat,
-    Val,
-    XVal,
-    YVal,
-    SerTx,
-}
-
-/// A series accumulator built across a `c:ser`'s children.
-#[derive(Default)]
+/// One series, read for the Excel profile.
 struct SeriesAccum {
     name: Option<CompactString>,
     categories: Option<RangeRef>,
@@ -120,185 +112,129 @@ pub fn parse(
     host_sheet: SheetId,
     resolver: &impl SheetResolver,
 ) -> Result<ParsedChart, XlsxError> {
-    use quick_xml::events::Event;
-    let mut reader = quick_xml::Reader::from_reader(xml);
-    reader.config_mut().trim_text(false);
-    reader.config_mut().expand_empty_elements = false;
-    let mut buf = Vec::new();
+    let root = paged_ooxml::tree::parse(xml).map_err(XlsxError::Structure)?;
+    let chart = dml_chart::chart(&root, &ExcelProfile);
 
+    // The kind: the last plot of a curated type (3-D variants are not);
+    // a bar plot's own direction and grouping pick its variant.
     let mut kind: Option<ChartKind> = None;
-    let mut bar_is_horizontal = false;
-    // `c:grouping` is shared by bar/line/area, so only honour it inside a
-    // `c:barChart` (the only family with a curated stacked kind).
-    let mut in_bar_chart = false;
-    let mut bar_stacked = false;
-    let mut legend = false;
-    let mut series: Vec<SeriesAccum> = Vec::new();
-    let mut title: Option<CompactString> = None;
-
-    // The current series accumulator (Some inside a <c:ser>).
-    let mut cur: Option<SeriesAccum> = None;
-    // The `c:f` role we are currently inside (set by the enclosing
-    // cat/val/xVal/yVal/tx element; consumed when the <c:f> text closes).
-    let mut role = RefRole::None;
-    // Nesting flags so a `c:v` (cached string) is only read inside a title /
-    // series-tx (not inside a data point).
-    let mut in_title = false;
-    let mut in_ser_tx = false;
-    // Text accumulation: the body of the current <c:f> or a cached <c:v>/<a:t>.
-    let mut in_f = false;
-    let mut f_text = String::new();
-    let mut in_text_run = false;
-    let mut run_text = String::new();
-
-    loop {
-        match reader.read_event_into(&mut buf)? {
-            Event::Start(e) | Event::Empty(e) => match e.local_name().as_ref() {
-                b"barChart" => {
-                    // bar vs column is decided by the nested c:barDir; default col.
-                    // Grouped vs stacked by the nested c:grouping.
-                    kind = Some(ChartKind::Column);
-                    in_bar_chart = true;
-                }
-                b"barDir" => {
-                    bar_is_horizontal = matches!(attr(&e, b"val")?.as_deref(), Some("bar"));
-                }
-                b"grouping" => {
-                    if in_bar_chart {
-                        bar_stacked = matches!(
-                            attr(&e, b"val")?.as_deref(),
-                            Some("stacked") | Some("percentStacked")
-                        );
-                    }
-                }
-                b"lineChart" => kind = Some(ChartKind::Line),
-                b"areaChart" => kind = Some(ChartKind::Area),
-                b"pieChart" => kind = Some(ChartKind::Pie),
-                b"doughnutChart" => kind = Some(ChartKind::Donut),
-                b"scatterChart" => kind = Some(ChartKind::Scatter),
-                b"radarChart" => kind = Some(ChartKind::Radar),
-                b"legend" => legend = true,
-                b"title" => in_title = true,
-                b"ser" => cur = Some(SeriesAccum::default()),
-                b"tx" => {
-                    if cur.is_some() {
-                        in_ser_tx = true;
-                        role = RefRole::SerTx;
-                    }
-                }
-                b"cat" => role = RefRole::Cat,
-                b"val" => role = RefRole::Val,
-                b"xVal" => role = RefRole::XVal,
-                b"yVal" => role = RefRole::YVal,
-                b"f" => {
-                    in_f = true;
-                    f_text.clear();
-                }
-                b"srgbClr" => {
-                    // A series fill color from c:spPr>a:solidFill>a:srgbClr.
-                    // Take the FIRST color seen in a series (its primary fill).
-                    if let Some(c) = cur.as_mut() {
-                        if c.color.is_none() {
-                            if let Some(rgb) = attr(&e, b"val")? {
-                                c.color = Some(rgb_to_hex(&rgb));
-                            }
-                        }
-                    }
-                }
-                b"v" => {
-                    // A cached string value: read it only for a title or a
-                    // series title (strRef cached text), not for data points.
-                    if in_title || in_ser_tx {
-                        in_text_run = true;
-                        run_text.clear();
-                    }
-                }
-                // Rich-text run (a:t) inside a title.
-                b"t" if in_title => {
-                    in_text_run = true;
-                    run_text.clear();
-                }
-                _ => {}
-            },
-            Event::Text(t) => {
-                if in_f {
-                    f_text.push_str(&t.xml10_content()?);
-                } else if in_text_run {
-                    run_text.push_str(&t.xml10_content()?);
-                }
+    for plot in &chart.plots {
+        kind = match (plot.element.as_str(), &plot.kind) {
+            (
+                "barChart",
+                PlotKind::Bar {
+                    horizontal,
+                    grouping,
+                    ..
+                },
+            ) => {
+                let stacked = matches!(grouping.as_str(), "stacked" | "percentStacked");
+                Some(match (*horizontal, stacked) {
+                    (false, false) => ChartKind::Column,
+                    (false, true) => ChartKind::StackedColumn,
+                    (true, false) => ChartKind::Bar,
+                    (true, true) => ChartKind::StackedBar,
+                })
             }
-            // 0.38+: `&…;` in element content arrives as its own event.
-            Event::GeneralRef(r) => {
-                if in_f {
-                    f_text.push_str(&crate::opc::general_ref(&r)?);
-                } else if in_text_run {
-                    run_text.push_str(&crate::opc::general_ref(&r)?);
-                }
-            }
-            Event::End(e) => match e.local_name().as_ref() {
-                b"f" => {
-                    in_f = false;
-                    let rr = parse_f_ref(f_text.trim(), host_sheet, resolver);
-                    if let (Some(rr), Some(c)) = (rr, cur.as_mut()) {
-                        match role {
-                            RefRole::Cat => c.categories = Some(rr),
-                            RefRole::Val => c.values = Some(rr),
-                            RefRole::XVal => c.x_values = Some(rr),
-                            RefRole::YVal => c.values = Some(rr),
-                            _ => {}
-                        }
-                    }
-                }
-                b"v" | b"t" => {
-                    if in_text_run {
-                        let text = run_text.trim();
-                        if !text.is_empty() {
-                            if in_title && title.is_none() {
-                                title = Some(CompactString::new(text));
-                            } else if in_ser_tx {
-                                if let Some(c) = cur.as_mut() {
-                                    if c.name.is_none() {
-                                        c.name = Some(CompactString::new(text));
-                                    }
-                                }
-                            }
-                        }
-                        in_text_run = false;
-                    }
-                }
-                b"tx" => {
-                    in_ser_tx = false;
-                    role = RefRole::None;
-                }
-                b"cat" | b"val" | b"xVal" | b"yVal" => role = RefRole::None,
-                b"barChart" => in_bar_chart = false,
-                b"title" => in_title = false,
-                b"ser" => {
-                    if let Some(c) = cur.take() {
-                        series.push(c);
-                    }
-                }
-                _ => {}
-            },
-            Event::Eof => break,
-            _ => {}
-        }
-        buf.clear();
+            ("lineChart", _) => Some(ChartKind::Line),
+            ("areaChart", _) => Some(ChartKind::Area),
+            ("pieChart", _) => Some(ChartKind::Pie),
+            ("doughnutChart", _) => Some(ChartKind::Donut),
+            ("scatterChart", _) => Some(ChartKind::Scatter),
+            ("radarChart", _) => Some(ChartKind::Radar),
+            _ => kind,
+        };
     }
-
-    // Resolve the bar orientation + grouping now that barDir/grouping are known.
-    if matches!(kind, Some(ChartKind::Column)) {
-        kind = Some(match (bar_is_horizontal, bar_stacked) {
-            (false, false) => ChartKind::Column,
-            (false, true) => ChartKind::StackedColumn,
-            (true, false) => ChartKind::Bar,
-            (true, true) => ChartKind::StackedBar,
-        });
-    }
-
     let kind = kind.unwrap_or(ChartKind::Column);
-    let model = build_model(kind, series, title, legend, host_sheet);
+
+    // The series of every plot, in file order, beside their elements (the
+    // colour is the first sRGB colour anywhere in the series).
+    let series_els = series_elements(&root);
+    let mut series = Vec::new();
+    for (i, s) in chart.plots.iter().flat_map(|p| &p.series).enumerate() {
+        series.push(accum(s, series_els.get(i).copied(), host_sheet, resolver));
+    }
+
+    let title = title_text(&root).map(CompactString::new);
+    let model = build_model(kind, series, title, chart.legend.is_some(), host_sheet);
     Ok(ParsedChart { host_sheet, model })
+}
+
+/// What the Excel profile reads of a chart: no paints, no cached values (a
+/// series binds to the cells its formulas name), no axes or data labels (the
+/// curated layout draws its own).
+struct ExcelProfile;
+
+impl dml_chart::Props for ExcelProfile {
+    type Shape = ();
+    type Text = ();
+    fn shape(&self, _: &El) {}
+    fn text(&self, _: &El) {}
+    const CACHES: bool = false;
+    const AXES_AND_LABELS: bool = false;
+}
+
+/// The `c:ser` elements of every plot, in the order the reader reads them.
+fn series_elements(root: &El) -> Vec<&El> {
+    let Some(pa) = root.path(&[(Ns::C, "chart"), (Ns::C, "plotArea")]) else {
+        return Vec::new();
+    };
+    pa.children
+        .iter()
+        .filter(|p| p.ns == Ns::C && p.local.ends_with("Chart"))
+        .flat_map(|p| p.children_named(Ns::C, "ser"))
+        .collect()
+}
+
+fn accum(
+    s: &DmlSeries,
+    el: Option<&El>,
+    host_sheet: SheetId,
+    resolver: &impl SheetResolver,
+) -> SeriesAccum {
+    let range = |f: &Option<String>| {
+        f.as_deref()
+            .and_then(|f| parse_f_ref(f.trim(), host_sheet, resolver))
+    };
+    let name = s.name.trim();
+    SeriesAccum {
+        name: (!name.is_empty()).then(|| CompactString::new(name)),
+        categories: range(&s.refs.categories),
+        values: range(&s.refs.values).or_else(|| range(&s.refs.y_values)),
+        x_values: range(&s.refs.x_values),
+        color: el.and_then(first_srgb).map(|v| rgb_to_hex(&v)),
+    }
+}
+
+/// The first `a:srgbClr` value in `el`, in document order.
+fn first_srgb(el: &El) -> Option<String> {
+    if el.local == "srgbClr" {
+        if let Some(v) = el.attr("val") {
+            return Some(v.to_string());
+        }
+    }
+    el.children.iter().find_map(first_srgb)
+}
+
+/// The chart's title text: the first non-empty `a:t` run or cached `c:v`
+/// (trimmed) inside a `c:title`, in document order.
+fn title_text(el: &El) -> Option<String> {
+    if el.local == "title" {
+        if let Some(t) = first_text(el) {
+            return Some(t);
+        }
+    }
+    el.children.iter().find_map(title_text)
+}
+
+fn first_text(el: &El) -> Option<String> {
+    if el.local == "t" || el.local == "v" {
+        let t = el.text.trim();
+        if !t.is_empty() {
+            return Some(t.to_string());
+        }
+    }
+    el.children.iter().find_map(first_text)
 }
 
 /// Fold the parsed series accumulators into the frozen [`ChartModel`]. Scatter
@@ -722,6 +658,47 @@ mod tests {
             assert_eq!(c.model.kind, ChartKind::Column);
             assert!(c.model.series.is_empty());
         }
+    }
+
+    /// The Excel-profile rules this reader kept from its streaming
+    /// predecessor, on the shapes the corpus has (multi-run titles, a title
+    /// only on an axis, a line series coloured by its outline).
+    #[test]
+    fn excel_profile_title_and_colour_rules() {
+        let xml = br#"<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+<c:chart>
+  <c:title><c:tx><c:rich><a:p><a:r><a:t> </a:t></a:r><a:r><a:t>North </a:t></a:r><a:r><a:t>Sales</a:t></a:r></a:p></c:rich></c:tx></c:title>
+  <c:plotArea>
+    <c:barChart><c:barDir val="bar"/><c:grouping val="clustered"/>
+      <c:ser><c:tx><c:v> Plan </c:v></c:tx><c:val><c:numRef><c:f>Sheet1!$B$1:$B$2</c:f></c:numRef></c:val></c:ser>
+    </c:barChart>
+    <c:lineChart>
+      <c:ser><c:spPr><a:ln><a:solidFill><a:srgbClr val="aa0000"/></a:solidFill></a:ln></c:spPr><c:marker><c:spPr><a:solidFill><a:srgbClr val="00AA00"/></a:solidFill></c:spPr></c:marker><c:val><c:numRef><c:f>Sheet1!$C$1:$C$2</c:f></c:numRef></c:val></c:ser>
+    </c:lineChart>
+    <c:catAx><c:title><c:tx><c:rich><a:p><a:r><a:t>Month</a:t></a:r></a:p></c:rich></c:tx></c:title></c:catAx>
+  </c:plotArea>
+</c:chart></c:chartSpace>"#;
+        let m = parse(xml, 0, &names()).unwrap().model;
+        // The last curated plot (the line) decides the kind.
+        assert_eq!(m.kind, ChartKind::Line);
+        // The first non-empty run, trimmed: not the whole title.
+        assert_eq!(m.title.as_deref(), Some("North"));
+        assert!(!m.legend);
+        assert_eq!(m.series.len(), 2);
+        assert_eq!(m.series[0].name.as_deref(), Some("Plan"));
+        assert_eq!(m.series[0].color, None);
+        // The first sRGB colour in the series: the outline's, upper-cased.
+        assert_eq!(m.series[1].color.as_deref(), Some("#AA0000"));
+        assert_eq!(m.series[1].values.start.col, 2);
+
+        // No chart title: the first titled axis names the chart.
+        let axis_only = br#"<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+<c:chart><c:plotArea><c:pieChart><c:ser><c:val><c:numRef><c:f>$A$1:$A$3</c:f></c:numRef></c:val></c:ser></c:pieChart>
+<c:valAx><c:title><c:tx><c:strRef><c:f>Sheet1!$D$1</c:f><c:strCache><c:pt idx="0"><c:v>Units</c:v></c:pt></c:strCache></c:strRef></c:tx></c:title></c:valAx>
+</c:plotArea></c:chart></c:chartSpace>"#;
+        let m = parse(axis_only, 0, &names()).unwrap().model;
+        assert_eq!(m.kind, ChartKind::Pie);
+        assert_eq!(m.title.as_deref(), Some("Units"));
     }
 
     #[test]

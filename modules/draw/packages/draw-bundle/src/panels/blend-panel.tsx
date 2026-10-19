@@ -64,12 +64,12 @@ import {
 } from "../commands/blend";
 import { useFollowedDraft, usePanelReload } from "./use-panel-reload";
 import {
+  About,
   humanize,
-  PanelAbout,
-  PanelIntro,
   Refusal,
   useActionFeedback,
-} from "./panel-kit";
+} from "@paged-media/panel-kit";
+import { PanelIntro } from "./panel-parts";
 
 export const BLEND_PANEL_ID = "media.paged.draw.panel.blend";
 
@@ -202,7 +202,7 @@ export function makeBlendPanel(host: BundleHost): {
       },
     );
 
-    const { refusal, run } = useActionFeedback(host, reload);
+    const { refusal, run } = useActionFeedback(host, reload, "draw panel");
 
     // The PLAN preview: the resolved count, its derivation, and the
     // spine length — the same pure function the commit uses, so what is
@@ -564,7 +564,7 @@ export function makeBlendPanel(host: BundleHost): {
           ))
         )}
 
-        <PanelAbout text={BLEND_PANEL_NOTE} attr="data-draw-blend-note" />
+        <About attr="data-draw-blend-note">{BLEND_PANEL_NOTE}</About>
       </div>
     );
   };

@@ -32,6 +32,9 @@ publish = false
 # tree, ADR 702). Its zip goes through flate2 (`deflate-flate2`), as this
 # workspace's does.
 paged-ooxml = { path = "../../platform/shared/ooxml", features = ["deflate-flate2"] }
+# The DrawingML chart model and reader, shared with sheet (slide ADR 709);
+# PowerPoint's chart layout stays in slide-chart.
+dml-chart = { path = "../../platform/shared/dml-chart", features = ["serde"] }
 # zip 9 deflates through flate2 alone, the declaration of engine/core, sheet,
 # publish and the server (and paged-store, which this workspace builds on):
 # zip's `deflate` feature would add zopfli (only for compression levels

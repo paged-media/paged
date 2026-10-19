@@ -99,6 +99,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "dml-chart"
+version = "0.0.0"
+dependencies = [
+ "paged-ooxml",
+]
+
+[[package]]
 name = "equivalent"
 version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -523,6 +530,7 @@ name = "sheet-xlsx"
 version = "0.0.0"
 dependencies = [
  "compact_str",
+ "dml-chart",
  "flate2",
  "paged-ooxml",
  "quick-xml",

@@ -168,3 +168,10 @@ manifest declares a tighter 8 MiB for this artifact.
 declared ceiling; what changed is that the budget governing the application is 100 MB. The
 bullet's first reason, that the dependency cannot be built for `wasm32-unknown-unknown`, does
 not depend on either number.
+
+## Amendment 2026-10-19
+
+The chart PART is read by the DrawingML chart reader shared with paged.slide (`dml_chart`,
+`platform/shared/dml-chart`, slide ADR 709); `sheet-xlsx/src/parts/chart.rs` folds its model into
+the frozen `ChartModel`, with this module's reading rules. The layout decision recorded here
+(plotters, the custom backend, `ChartGeometry`) is unchanged.
