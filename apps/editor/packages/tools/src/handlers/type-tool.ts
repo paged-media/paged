@@ -46,7 +46,13 @@ import type {
   PagedEditor,
 } from "@paged-media/shell";
 
-import { CLICK_DRAG_THRESHOLD_PX, mutateAndSelect } from "./shared";
+import {
+  beginPageDrag,
+  CLICK_DRAG_THRESHOLD_PX,
+  endLocalFor,
+  mutateAndSelect,
+  type PageDrag,
+} from "./shared";
 
 /** Smaller than a shape's minimum: a one-line frame is a legitimate
  *  thing to pull out, and rounding a deliberate small drag up to a
@@ -101,8 +107,10 @@ async function createAndEnter(
 
 export function createTypeHandler(): GestureHandler {
   let paged: PagedEditor | null = null;
-  let startPageId: string | null = null;
-  let startLocal: [number, number] | null = null;
+  /** The drag, anchored to the page it started on: the release point
+   *  is read in THAT page's space wherever it lands (the pasteboard,
+   *  another page), as the Rectangle tool does (GT-3). */
+  let drag: PageDrag | null = null;
   /** Set when pointer-down landed on an existing text frame: the drag is
    *  then inert (see the header note). Resolved asynchronously, so the
    *  drag may already be under way when the answer arrives — which is
@@ -110,8 +118,7 @@ export function createTypeHandler(): GestureHandler {
   let overExistingText = false;
 
   const reset = () => {
-    startPageId = null;
-    startLocal = null;
+    drag = null;
     overExistingText = false;
     paged?.overlaySignals.setToolPreview(null);
   };
@@ -119,7 +126,7 @@ export function createTypeHandler(): GestureHandler {
   const boundsFor = (
     end: [number, number],
   ): [number, number, number, number] => {
-    const [sx, sy] = startLocal!;
+    const [sx, sy] = drag!.startLocal;
     const [ex, ey] = end;
     return [
       Math.min(sy, ey),
@@ -140,18 +147,18 @@ export function createTypeHandler(): GestureHandler {
       reset();
     },
     onPointerDown(e: CanvasPointerEvent) {
-      if (e.button !== 0 || !paged || !e.pageId || !e.pagePoint) {
+      const started = paged ? beginPageDrag(e) : null;
+      if (!paged || !started || !e.pagePoint) {
         reset();
         return;
       }
-      startPageId = e.pageId;
-      startLocal = [e.pagePoint[0], e.pagePoint[1]];
+      drag = started;
       overExistingText = false;
       // Ask whether a text frame is already here. Filter "text" because
       // dragging across a rectangle to make a text frame is legitimate —
       // only an existing TEXT frame is the case we decline.
       const client = paged.client;
-      const pageId = e.pageId;
+      const pageId = started.pageId;
       const docPoint = e.pagePoint;
       void (async () => {
         try {
@@ -170,24 +177,25 @@ export function createTypeHandler(): GestureHandler {
       })();
     },
     onPointerMove(e: CanvasPointerEvent) {
-      if (!paged || !startLocal || !e.pagePoint) return;
+      if (!paged || !drag) return;
       if (e.maxDelta <= CLICK_DRAG_THRESHOLD_PX) return;
       if (overExistingText) return;
       paged.overlaySignals.setToolPreview({
-        pageId: startPageId!,
-        rect: boundsFor([e.pagePoint[0], e.pagePoint[1]]),
+        pageId: drag.pageId,
+        rect: boundsFor(endLocalFor(drag, e)),
       });
     },
     onPointerUp(e: CanvasPointerEvent) {
-      if (!paged || !startPageId || !startLocal || !e.pagePoint) {
+      if (!paged || !drag) {
         reset();
         return;
       }
-      const bounds = boundsFor([e.pagePoint[0], e.pagePoint[1]]);
-      const pageId = startPageId;
+      const bounds = boundsFor(endLocalFor(drag, e));
+      const pageId = drag.pageId;
       const declined = overExistingText;
       reset();
-      if (declined) return;
+      // A click is the caret's (the legacy path), never a frame.
+      if (declined || e.maxDelta <= CLICK_DRAG_THRESHOLD_PX) return;
       const [top, left, bottom, right] = bounds;
       if (
         bottom - top < MIN_TEXT_FRAME_PT ||

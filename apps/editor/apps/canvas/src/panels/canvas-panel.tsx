@@ -87,6 +87,9 @@ export function CanvasPanel(_props: PanelProps) {
   const tools = useRegistryView(useRegistries().tools);
   const legacyKeyForTool = tools.get(effectiveTool)?.legacyKey ?? null;
   const forcePan = effectiveTool === "paged.tool.hand";
+  // Direct Selection reaches the leaf: a click on a grouped item selects
+  // that item, not its group (F-29), as in InDesign.
+  const directSelect = effectiveTool === "paged.tool.directSelect";
   const zoomClick = effectiveTool === "paged.tool.zoom";
   const client = useCanvasClient();
   const { camera, setCamera, setViewportSize } = useCamera();
@@ -284,7 +287,9 @@ export function CanvasPanel(_props: PanelProps) {
           const chain = s.hit.groupChain ?? [];
           let target = s.hit.element;
           let nextActive = activeGroup;
-          if (activeGroup === null) {
+          if (directSelect) {
+            // The leaf, whatever group it is in; the active group stays.
+          } else if (activeGroup === null) {
             if (chain.length > 0) {
               target = { kind: "group" as const, id: chain[0] };
             }
@@ -300,15 +305,19 @@ export function CanvasPanel(_props: PanelProps) {
             }
           }
           if (nextActive !== activeGroup) setActiveGroup(nextActive);
-          void client
+          setContentSelection(null);
+          // Resolves to the selection made, which a press-drag then
+          // moves (F-26).
+          return client
             .setElementSelection([target], mode)
-            .then((ids) => {
+            .then(async (ids) => {
               setElementSelection(ids);
-              return client.elementGeometry(ids);
+              setElementGeometry(await client.elementGeometry(ids));
+              return ids;
             })
-            .then(setElementGeometry)
             .catch(() => {
               /* worker reload / disconnect — fine */
+              return null;
             });
         } else if (!modifiers?.shift && !modifiers?.cmd) {
           // Empty hit → clear selection AND exit any active
@@ -362,6 +371,7 @@ export function CanvasPanel(_props: PanelProps) {
       client,
       resolveTableCell,
       setActiveGroup,
+      directSelect,
       setContentSelection,
       setElementGeometry,
       setElementSelection,

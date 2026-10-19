@@ -35,6 +35,28 @@ import type {
 
 export class GestureSpine {
   private current: { id: ToolId; handler: GestureHandler } | null = null;
+  /** The editor handle as of the latest render. */
+  private latest: PagedEditor | null = null;
+  /**
+   * The handle a handler is activated with: LIVE, every member read
+   * from the latest render's editor. A `PagedEditor` is one render's
+   * snapshot, so a handler holding the one it was activated with read
+   * the selection (and camera, and settings) of the moment the tool was
+   * picked: with Rotate held, a selection made in the Layers panel or
+   * by Select All was ignored and the drag rotated the old one (GM-2).
+   */
+  private readonly live: PagedEditor = new Proxy({} as PagedEditor, {
+    get: (_target, key) => {
+      const editor = this.latest;
+      return editor ? Reflect.get(editor, key) : undefined;
+    },
+    has: (_target, key) => (this.latest ? key in this.latest : false),
+  });
+
+  /** Record the latest render's editor handle; handlers see it at once. */
+  setEditor(paged: PagedEditor): void {
+    this.latest = paged;
+  }
 
   get activeId(): ToolId | null {
     return this.current?.id ?? null;
@@ -56,11 +78,12 @@ export class GestureSpine {
     paged: PagedEditor,
     reason: DeactivateReason,
   ): void {
+    this.latest = paged;
     if (this.current?.id === id) return;
     if (this.current) this.current.handler.onDeactivate(reason);
     const handler = paged.registries.tools.get(id)?.gesture?.();
     if (handler) {
-      handler.onActivate(paged);
+      handler.onActivate(this.live);
       this.current = { id, handler };
     } else {
       this.current = null;

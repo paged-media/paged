@@ -102,11 +102,15 @@ export interface ViewportCanvasProps {
   pageSizesPt: ReadonlyArray<readonly [number, number]>;
   camera: Camera;
   onCameraChange: (cam: Camera) => void;
-  /** Called when the user clicks (not drags) on a page. */
+  /** Called when the user clicks (not drags) on a page, and when a
+   *  press-drag on an unselected item selects it before moving it
+   *  (F-26). With the Selection tool it resolves to the selection the
+   *  hit made (the item, or the group it belongs to), which that drag
+   *  then moves. */
   onHit?: (
     selection: SelectionState | null,
     modifiers?: PointerModifiers,
-  ) => void;
+  ) => Promise<ReadonlyArray<ElementId> | null> | void;
   /** Phase A — called when the user finishes a marquee drag with the
    * select tool. Payload is page-local `[top, left, bottom, right]`. */
   onMarquee?: (
@@ -202,7 +206,7 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
      * rect drag; `gesture` is an in-flight worker gesture (translate,
      * resize, …). Click-vs-drag still uses `maxDelta` for routing
      * through the hit tester. */
-    mode: "pan" | "marquee" | "gesture";
+    mode: "pan" | "marquee" | "gesture" | "press";
     startCam: Camera;
     /** Anchor in doc-space pt (already camera-inverted) — used so the
      * pointer→doc delta survives mid-gesture camera changes. */
@@ -224,7 +228,12 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
      * the worker confirms the gesture started; updates that arrive
      * before then are buffered into `pendingDelta`. */
     gestureState?: GestureState;
+    /** `press` mode: a Selection-tool press off the selection, waiting
+     *  for its hit test to say whether the drag moves an item or draws a
+     *  marquee. */
+    press?: PressState;
   } | null>(null);
+  type DragState = NonNullable<typeof dragStateRef.current>;
 
   // Phase 2 (Concept 1) — bookkeeping for a tool-gesture drag (the
   // active GestureHandler owns the semantics; we only track the
@@ -662,7 +671,8 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
     // landed inside a currently-selected element, start a Translate
     // gesture; otherwise fall through to marquee. Text tool stays
     // pan so the existing typing UX is undisturbed.
-    let mode: "pan" | "marquee" | "gesture" = "pan";
+    let mode: DragState["mode"] = "pan";
+    let press: PressState | undefined;
     let gestureState:
       NonNullable<typeof dragStateRef.current>["gestureState"] | undefined;
     // Path-edit mode — a primary press is the path's. The session
@@ -842,12 +852,24 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
           scale: scale ?? undefined,
         };
         beginWorkerGesture(gestureState, scale ? scaleAnchor(scale) : anchor);
+      } else if (containing && props.onHit && !modifiers.cmd) {
+        // F-26 — a press OFF the selection: what is under it decides
+        // the drag. On an item the drag selects it and moves it in one
+        // gesture (InDesign, Illustrator, Figma); on empty space it
+        // draws the marquee. Cmd keeps the marquee (a toggle-select).
+        mode = "press";
+        press = {
+          pageId: containing[0],
+          pagePoint: [docX - containing[1].x, docY - containing[1].y],
+          hit: undefined,
+          releaseDoc: null,
+        };
       } else {
         mode = "marquee";
       }
     }
     const marqueeAnchor =
-      mode === "marquee" && containing
+      (mode === "marquee" || mode === "press") && containing
         ? {
             pageId: containing[0],
             pageX: docX - containing[1].x,
@@ -863,7 +885,111 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
       modifiers,
       marqueeAnchor,
       gestureState,
+      press,
     };
+    if (press) resolvePress(dragStateRef.current);
+  };
+
+  // F-26 — the press's hit test. Fire-and-forget: the answer lands in
+  // `press.hit`; a drag already past the threshold starts as soon as it
+  // does, and one already released is finished then.
+  const resolvePress = (drag: DragState) => {
+    const press = drag.press;
+    if (!press) return;
+    void props.client
+      .send({
+        kind: "hitTest",
+        payload: {
+          pageId: press.pageId,
+          docPoint: press.pagePoint,
+          filter: "any",
+        },
+      })
+      .then((reply) => {
+        press.hit =
+          reply.kind === "hitResult" && reply.payload.element
+            ? reply.payload
+            : null;
+      })
+      .catch(() => {
+        press.hit = null;
+      })
+      .then(() => {
+        const live = dragStateRef.current === drag;
+        if (press.releaseDoc) finishPress(drag);
+        else if (live && drag.maxDelta > CLICK_DRAG_THRESHOLD_PX)
+          startPressDrag(drag);
+      });
+  };
+
+  /** A press drag past the threshold whose hit is known: on an item,
+   *  select it and translate the selection; on nothing, a marquee. */
+  const startPressDrag = (drag: DragState, docDelta: Pt = [0, 0]) => {
+    const press = drag.press;
+    if (!press || press.hit === undefined || drag.mode !== "press") return;
+    if (!press.hit) {
+      drag.mode = "marquee";
+      return;
+    }
+    const gs: GestureState = {
+      handle: null,
+      pendingDelta: docDelta,
+      target: [],
+      spec: { kind: "translate" },
+      modifiers: { shift: drag.modifiers.shift, alt: false },
+    };
+    drag.mode = "gesture";
+    drag.gestureState = gs;
+    const anchor: GestureAnchor = {
+      pageId: press.pageId,
+      pointInPage: press.pagePoint,
+    };
+    void Promise.resolve(
+      props.onHit?.(
+        { pageId: press.pageId, docPoint: press.pagePoint, hit: press.hit },
+        drag.modifiers,
+      ),
+    ).then((ids) => {
+      if (!ids || ids.length === 0) {
+        if (dragStateRef.current === drag) drag.mode = "pan";
+        return;
+      }
+      gs.target = ids.slice();
+      beginWorkerGesture(gs, anchor);
+    });
+  };
+
+  /** A press released past the threshold before its hit test answered:
+   *  do now what the drag would have done. */
+  const finishPress = (drag: DragState) => {
+    const press = drag.press;
+    const end = press?.releaseDoc;
+    if (!press || !end || press.hit === undefined) return;
+    if (press.hit) {
+      startPressDrag(drag, [
+        end[0] - drag.startDoc[0],
+        end[1] - drag.startDoc[1],
+      ]);
+      if (drag.gestureState) drag.gestureState.release = "commit";
+      return;
+    }
+    const anchor = drag.marqueeAnchor;
+    const pageRect = anchor
+      ? rects[props.pageIds.indexOf(anchor.pageId)]
+      : null;
+    if (!anchor || !pageRect || !props.onMarquee) return;
+    const x = clamp(end[0] - pageRect.x, 0, pageRect.w);
+    const y = clamp(end[1] - pageRect.y, 0, pageRect.h);
+    props.onMarquee(
+      anchor.pageId,
+      [
+        Math.min(anchor.pageY, y),
+        Math.min(anchor.pageX, x),
+        Math.max(anchor.pageY, y),
+        Math.max(anchor.pageX, x),
+      ],
+      drag.modifiers,
+    );
   };
 
   const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -916,6 +1042,16 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
     const dy = e.clientY - drag.startPointer[1];
     const delta = Math.hypot(dx, dy);
     if (delta > drag.maxDelta) drag.maxDelta = delta;
+    if (drag.mode === "press" && drag.maxDelta > CLICK_DRAG_THRESHOLD_PX) {
+      // The hit test has answered: become the move or the marquee.
+      const rect = e.currentTarget.getBoundingClientRect();
+      const [docX, docY] = viewportToDoc(
+        props.camera,
+        e.clientX - rect.left,
+        e.clientY - rect.top,
+      );
+      startPressDrag(drag, [docX - drag.startDoc[0], docY - drag.startDoc[1]]);
+    }
     if (drag.mode === "pan") {
       props.onCameraChange({
         scale: drag.startCam.scale,
@@ -1088,6 +1224,9 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
         });
         return;
       }
+      // GT-5 — the Hand (and its Space spring-load) only pans: a click
+      // with it selects nothing, as in InDesign.
+      if (props.forcePan) return;
       if (!props.onHit) return;
       const rect = e.currentTarget.getBoundingClientRect();
       const cx = e.clientX - rect.left;
@@ -1162,7 +1301,16 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
     }
     // Drag committed. Pan needs no commit work; marquee hands the
     // final rect to the caller; gesture commits via the worker.
-    if (drag.mode === "marquee") {
+    if (drag.mode === "press" && drag.press) {
+      // Released before the press's hit test answered: finish it then.
+      const rect = e.currentTarget.getBoundingClientRect();
+      drag.press.releaseDoc = viewportToDoc(
+        props.camera,
+        e.clientX - rect.left,
+        e.clientY - rect.top,
+      );
+      finishPress(drag);
+    } else if (drag.mode === "marquee") {
       if (marqueeRect && props.onMarquee) {
         props.onMarquee(marqueeRect.pageId, marqueeRect.rect, modifiers);
       }
@@ -1397,21 +1545,35 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
         });
         return;
       }
-      // W3.2 — consult the edit-context / object-type registries
-      // FIRST: a webFrame (object type) opens its source context, a
-      // polygon (edit context by kind) enters vectorGraphic. Only
-      // when nothing claims the double-click do we descend the group.
-      const claimed = await tryEnterEditContext({
+      // F-29 — resolve by what was double-clicked (ADR 235), as in
+      // InDesign. A shape inside a group the user is not yet in selects
+      // that shape (entering the group) before anything claims it; the
+      // next double-click, inside the group, reaches its content.
+      if (!inGroupScope) {
+        props.onDoubleClickGroup?.(chain[0], element);
+        return;
+      }
+      // A frame holding a placed image is content, not vector artwork:
+      // only the plugin that OWNS it (paged.image's raster context, by
+      // its metadata) may claim it. paged.draw's vector-graphic context
+      // claims every path-bearing kind, and used to take placed photos.
+      const holdsImage =
+        element != null &&
+        (await props.client
+          .elementGeometry([element])
+          .then((items) => items[0]?.hasImage === true)
+          .catch(() => false));
+      const at = {
         element,
         groupChain: chain,
         // W-19 — the entered context's onEnter gets the point too.
         pageId,
         pagePoint,
-      });
-      if (claimed) return;
-      if (chain.length > 0) {
-        props.onDoubleClickGroup?.(chain[0], element);
-      }
+      };
+      // W3.2 — consult the edit-context / object-type registries: a
+      // webFrame (object type) opens its source context, a polygon (edit
+      // context by kind) enters vectorGraphic.
+      await (holdsImage ? tryEnterOwnedContent(at) : tryEnterEditContext(at));
     };
     void resolveDoubleClick().catch((err: unknown) => {
       // Same fail-quiet approach as the click hitTest.
@@ -1480,6 +1642,20 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
 
 /** A worker gesture in flight (Phase B). `handle` is `null` until the
  *  worker confirms the begin. */
+/** F-26 — a Selection-tool press off the selection, in the space of
+ *  the page under it. */
+interface PressState {
+  pageId: PageId;
+  pagePoint: [number, number];
+  /** The hit test's answer: `undefined` while it is out, `null` for
+   *  nothing (the drag is a marquee), the hit for an item (the drag
+   *  selects and moves it). */
+  hit: SelectionState["hit"] | null | undefined;
+  /** Set when the pointer went up past the threshold before the hit
+   *  test answered: the release point, document pt. */
+  releaseDoc: [number, number] | null;
+}
+
 interface GestureState {
   handle: GestureHandle | null;
   pendingDelta: [number, number];
