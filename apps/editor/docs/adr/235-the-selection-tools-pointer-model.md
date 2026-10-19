@@ -36,10 +36,11 @@ under it (GT-3), and the transform tools began nothing on the pasteboard (GT-4).
    path-bearing kinds by kind, as before.
 3. **Direct Selection reaches the leaf.** A click selects the hit item itself, never its group,
    and leaves the active group as it is.
-4. **A rotate band outside each corner.** Each corner handle's hit area now ends at the edge of
-   its visible square. Beyond that, a 24 px band outside the corner carries
-   `data-handle="rotate"` and a rotate cursor, so a drag there rotates the selection and keeps
-   its size, as in InDesign and Illustrator. The top rotate handle stays.
+4. **A rotate band outside each corner.** A 24 px band outside each corner carries
+   `data-handle="rotate"` and a rotate cursor. It begins at the edge of the corner's visible
+   square and lies over the outer part of the corner's resize hit area. A drag there rotates
+   the selection and keeps its size, as in InDesign and Illustrator. A drag on the square, or
+   just inside it, still resizes. The top rotate handle stays.
 5. **The Hand only pans.** A Hand click (or a click with Space held) selects nothing.
 6. **Tool handlers hold a live editor.** The gesture spine activates each handler with a
    proxy that reads every member from the latest render's `PagedEditor`. A handler that holds

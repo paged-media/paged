@@ -39,9 +39,9 @@ import { groupByPage, unionAabb } from "./selection-chrome";
  *
  * Just OUTSIDE each corner lies a rotate band (`data-handle="rotate"`,
  * a rotate cursor), as in InDesign and Illustrator: a drag there rotates
- * the selection and keeps its size (F-30). The corner's own resize hit
- * area reaches only the visible square's outer edge, so the band starts
- * where the handle ends.
+ * the selection and keeps its size (F-30). The band lies over the outer
+ * part of the corner's resize hit area, so the corner resizes on its
+ * visible square and just inside it.
  */
 function ResizeHandlesRender(props: OverlayProps) {
   const { placedGeometry: elementGeometry, pathEditMode } = useSelection();
@@ -168,13 +168,14 @@ function renderHandle(
   // Outward signs; an edge handle's along-edge axis has none.
   const sx = corner ? Math.sign(outward[0]) : 0;
   const sy = corner ? Math.sign(outward[1]) : 0;
-  // A corner's resize hit area stops at the visible square's outer
-  // edge (it reaches further INTO the frame instead), so the rotate band
-  // beyond it is reachable (F-30).
-  const shift = corner ? (hitPx - visiblePx) / 2 : 0;
   // `data-handle-page`: the page whose space the handle's box is in —
   // the canvas names its gesture's anchor and pivot on that page, which
   // is not always the page under the pointer.
+  //
+  // Paint order is hit order: the resize hit area, then a corner's
+  // rotate band over its outer part, then the visible square over both.
+  // So a corner resizes on its square and just inside it, and rotates
+  // just outside it (F-30).
   return (
     <g
       key={key}
@@ -182,8 +183,16 @@ function renderHandle(
       data-selection-handle={name}
       data-handle-page={pageId}
     >
+      <rect
+        x={-hitPx / 2}
+        y={-hitPx / 2}
+        width={hitPx}
+        height={hitPx}
+        fill="transparent"
+        data-handle={name}
+        style={{ cursor, pointerEvents: "all" }}
+      />
       {corner ? (
-        // Drawn first, so the handle above it wins where they overlap.
         <rect
           x={sx * ROTATE_BAND_OFFSET_PX - ROTATE_BAND_PX / 2}
           y={sy * ROTATE_BAND_OFFSET_PX - ROTATE_BAND_PX / 2}
@@ -195,15 +204,6 @@ function renderHandle(
           style={{ cursor: ROTATE_CURSOR, pointerEvents: "all" }}
         />
       ) : null}
-      <rect
-        x={-hitPx / 2 - sx * shift}
-        y={-hitPx / 2 - sy * shift}
-        width={hitPx}
-        height={hitPx}
-        fill="transparent"
-        data-handle={name}
-        style={{ cursor, pointerEvents: "all" }}
-      />
       <rect
         x={-visiblePx / 2}
         y={-visiblePx / 2}
