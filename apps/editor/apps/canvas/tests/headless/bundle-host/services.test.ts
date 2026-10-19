@@ -46,7 +46,9 @@ describe("host.network — the editor's consent prompt", () => {
   beforeAll(async () => {
     t = await editorAdapter();
   });
-  afterAll(() => t.dispose());
+  afterAll(async () => {
+    await t.dispose();
+  });
 
   test("supports network.consent@1; nothing is consented before a request", () => {
     expect(t.host.supports("network.consent@1")).toBe(true);
@@ -135,7 +137,9 @@ describe.each([
   beforeAll(async () => {
     t = await make();
   });
-  afterAll(() => t.dispose());
+  afterAll(async () => {
+    await t.dispose();
+  });
 
   test("every origin is denied and supports(network.consent@1) is false", async () => {
     expect(t.host.supports("network.consent@1")).toBe(false);
@@ -173,7 +177,9 @@ describe.each([
   beforeAll(async () => {
     t = await make();
   });
-  afterAll(() => t.dispose());
+  afterAll(async () => {
+    await t.dispose();
+  });
 
   test("a provider one plugin registers is discovered and read by another, without rows in discovery", async () => {
     expect(t.host.supports("dataProviders@1")).toBe(true);
@@ -246,7 +252,9 @@ describe("host.dataProviders, no registry — bare", () => {
   beforeAll(async () => {
     t = await bareAdapter();
   });
-  afterAll(() => t.dispose());
+  afterAll(async () => {
+    await t.dispose();
+  });
 
   test("register is an inert handle, discover empty, get null, supports false", async () => {
     expect(t.host.supports("dataProviders@1")).toBe(false);
@@ -275,7 +283,9 @@ describe.each([
   beforeAll(async () => {
     t = await make();
   });
-  afterAll(() => t.dispose());
+  afterAll(async () => {
+    await t.dispose();
+  });
 
   test("bindings: publish/get/delete, each change named to subscribers, per bundle", () => {
     const b = t.host.bindings;
@@ -319,7 +329,9 @@ describe("host.diagnostics — the editor's Problems panel", () => {
   beforeAll(async () => {
     t = await editorAdapter();
   });
-  afterAll(() => t.dispose());
+  afterAll(async () => {
+    await t.dispose();
+  });
 
   test("a bundle's diagnostics are listed attributed to it, errors first, and leave with clear", () => {
     expect(t.host.supports("diagnostics.publish@1")).toBe(true);
@@ -346,7 +358,9 @@ describe.each([
   beforeAll(async () => {
     t = await make();
   });
-  afterAll(() => t.dispose());
+  afterAll(async () => {
+    await t.dispose();
+  });
 
   test("inert, never throwing, and supports(journal@1) false", async () => {
     expect(t.host.supports("journal@1")).toBe(false);
@@ -367,7 +381,9 @@ describe("host.journal — the editor", () => {
   beforeAll(async () => {
     t = await editorAdapter();
   });
-  afterAll(() => t.dispose());
+  afterAll(async () => {
+    await t.dispose();
+  });
 
   // The journal is "a local, in-memory flight recorder" a bundle records
   // into (ADR 025); the editor keeps one (the Journal panel, the bug-report
@@ -396,7 +412,9 @@ describe("host.tools — the editor's tool-options store", () => {
   beforeAll(async () => {
     t = await editorAdapter();
   });
-  afterAll(() => t.dispose());
+  afterAll(async () => {
+    await t.dispose();
+  });
 
   test("settings() reads what the tool-options popover wrote; onDidChangeSettings fires with the new values", () => {
     const tool = `${PROBE_ID}.tool.one`;
@@ -423,7 +441,9 @@ describe("host.tools, no store — bare", () => {
   beforeAll(async () => {
     t = await bareAdapter();
   });
-  afterAll(() => t.dispose());
+  afterAll(async () => {
+    await t.dispose();
+  });
 
   test("settings {} and supports(tools.settings@1) false", () => {
     expect(t.host.supports("tools.settings@1")).toBe(false);
@@ -438,7 +458,9 @@ describe("host.document.onWillSave — the editor's save", () => {
   beforeAll(async () => {
     t = await editorAdapter();
   });
-  afterAll(() => t.dispose());
+  afterAll(async () => {
+    await t.dispose();
+  });
 
   test("Save waits for the listener; a throwing listener does not stop the save", async () => {
     expect(t.host.supports("document.onWillSave@1")).toBe(true);
@@ -467,7 +489,9 @@ describe("host.document.onWillSave, no backend — bare", () => {
   beforeAll(async () => {
     t = await bareAdapter();
   });
-  afterAll(() => t.dispose());
+  afterAll(async () => {
+    await t.dispose();
+  });
 
   test("the listener is held, never called, and supports is false", () => {
     expect(t.host.supports("document.onWillSave@1")).toBe(false);
