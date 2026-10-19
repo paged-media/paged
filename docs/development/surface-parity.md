@@ -74,25 +74,28 @@ precondition, and asserts identical model dumps.
   checked against the operation's schema) or _generic_ (the surface's raw
   door for any mutation):
 
-  | Surface       | named                                                                           | typed                                                                                                           | generic                |
-  | ------------- | ------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- | ---------------------- |
-  | Editor UI     | a command run from a selection (`paged.object.group`)                           | the typed-command dialog submitting `core.<op>` (`paged.core.<op>` entries, the `paged.core.runCommand` picker) |                        |
-  | Plugin API    |                                                                                 | `host.objects.invoke("core.<op>")`                                                                              | `host.document.mutate` |
-  | Boa `paged.*` | `paged.<op>(…)`                                                                 | `paged.invoke("core.<op>")`                                                                                     | `paged.batch([…])`     |
-  | `editor.*`    | `editor.runCommand(id)`                                                         | `editor.batch([{ op: "invoke" }])`                                                                              | `editor.mutate`        |
-  | CLI `paged`   | `paged script` (the named function, natively)                                   | `paged invoke <doc> <op> <args>`                                                                                |                        |
-  | MCP           | the `run_script` tool (not executed: the same native session as `paged script`) |                                                                                                                 |                        |
-  | Viewer SDK    | none: it links no mutation crate                                                |                                                                                                                 |                        |
+  | Surface       | named                                                         | typed                                                                                                           | generic                |
+  | ------------- | ------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- | ---------------------- |
+  | Editor UI     | a command run from a selection (`paged.object.group`)         | the typed-command dialog submitting `core.<op>` (`paged.core.<op>` entries, the `paged.core.runCommand` picker) |                        |
+  | Plugin API    |                                                               | `host.objects.invoke("core.<op>")`                                                                              | `host.document.mutate` |
+  | Boa `paged.*` | `paged.<op>(…)`                                               | `paged.invoke("core.<op>")`                                                                                     | `paged.batch([…])`     |
+  | `editor.*`    | `editor.runCommand(id)`                                       | `editor.batch([{ op: "invoke" }])`                                                                              | `editor.mutate`        |
+  | CLI `paged`   | `paged script` (the named function, natively)                 | `paged invoke <doc> <op> <args>`                                                                                |                        |
+  | MCP           | the `run_script` tool of `paged mcp` (stdio, a local library) |                                                                                                                 |                        |
+  | Viewer SDK    | none: it links no mutation crate                              |                                                                                                                 |                        |
 
 - **In process**, every door starts from the fixture plus the case's setup
   and is compared with the reference dump. **The CLI** runs the real `paged`
   binary on the precondition saved as `.paged`, and its saved result is
-  compared with the reference saved and reloaded. Without a binary
+  compared with the reference saved and reloaded. **MCP** is `paged mcp` over
+  stdio, as a model drives it: the precondition imported into a local
+  library, `open_document`, `run_script` with the case's Boa call,
+  `save_document`, and the saved version fetched through `download_link`. Without a binary
   (`PAGED_CLI_BIN`, or `engine/core/target/{release,debug}/paged`, built with
   `cargo build -p paged-cli`), the CLI doors report
   `unavailable: paged-cli: …` (`PAGED_REQUIRE_PAGED_CLI=1` turns that into a
-  failure); CI's editor job has no binary, so the CLI column is measured
-  locally.
+  failure); CI's editor job has no binary, so the CLI and MCP columns are
+  measured locally.
 - **Findings.** A door that disagrees with the reference is a finding,
   recorded in `findings.ts` (`<case> <door>` → id, what happens, what should)
   and run as `test.failing`: it fails for the finding's reason today, and

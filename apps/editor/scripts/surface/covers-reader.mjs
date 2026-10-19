@@ -28,7 +28,7 @@
 // gate fails on: a call it cannot read must not pass as covering nothing.
 
 import { readFileSync } from "node:fs";
-import { basename, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 
 import { parseSource, walkAst } from "./static-eval.mjs";
 
@@ -149,40 +149,115 @@ function readTs(file, text, out) {
   });
 }
 
-function readRust(file, text, out) {
-  if (!/covers/.test(text)) return;
-  const lines = text.split("\n");
-  lines.forEach((l, i) => {
-    const line = i + 1;
-    const comment = /^\s*\/\/\s*covers:\s*(.+?)\s*$/.exec(l);
-    if (comment) {
-      const ids = comment[1]
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean);
-      out.calls.push({ file, line, ids });
-      return;
+/**
+ * The Rust source with comments blanked to spaces and the insides of
+ * string, raw-string and char literals blanked to \u0001, same length and
+ * same line breaks. A `covers!(` or `// covers:` inside a string (a test
+ * that FORMATS the form, say) is then not a call.
+ */
+export function rustCode(src) {
+  const out = [];
+  const n = src.length;
+  const ident = (ch) => ch !== undefined && /[A-Za-z0-9_]/.test(ch);
+  const blank = (from, to, fill) => {
+    for (let k = from; k < to; k++) out.push(src[k] === "\n" ? "\n" : fill);
+  };
+  let i = 0;
+  while (i < n) {
+    const c = src[i];
+    if (c === "/" && src[i + 1] === "/") {
+      let j = src.indexOf("\n", i);
+      if (j < 0) j = n;
+      blank(i, j, " ");
+      i = j;
+      continue;
     }
-    if (/macro_rules!\s*covers\b/.test(l)) return;
-    const stripped = l.replace(/\/\/.*$/, "");
-    const at = stripped.search(/\bcovers!\s*\(/);
-    if (at < 0) return;
-    // The call may span lines: read to the matching parenthesis.
-    let rest = lines.slice(i).join("\n").slice(stripped.indexOf("covers!", at));
-    const open = rest.indexOf("(");
-    let depth = 0;
-    let end = -1;
-    let inStr = false;
-    for (let k = open; k < rest.length; k++) {
-      const ch = rest[k];
-      if (inStr) {
-        if (ch === "\\") k++;
-        else if (ch === '"') inStr = false;
+    if (c === "/" && src[i + 1] === "*") {
+      let depth = 1;
+      let j = i + 2;
+      while (j < n && depth > 0) {
+        if (src[j] === "/" && src[j + 1] === "*") (depth++, (j += 2));
+        else if (src[j] === "*" && src[j + 1] === "/") (depth--, (j += 2));
+        else j++;
+      }
+      blank(i, j, " ");
+      i = j;
+      continue;
+    }
+    if (
+      c === "r" &&
+      !ident(src[i - 1]) &&
+      (src[i + 1] === '"' || src[i + 1] === "#")
+    ) {
+      let j = i + 1;
+      let hashes = 0;
+      while (src[j] === "#") (hashes++, j++);
+      if (src[j] === '"') {
+        const close = `"${"#".repeat(hashes)}`;
+        let end = src.indexOf(close, j + 1);
+        if (end < 0) end = n;
+        out.push(...src.slice(i, j + 1));
+        blank(j + 1, end, "\u0001");
+        out.push(...src.slice(end, end + close.length));
+        i = end + close.length;
         continue;
       }
-      if (ch === '"') inStr = true;
-      else if (ch === "(") depth++;
-      else if (ch === ")" && --depth === 0) {
+    }
+    if (c === '"') {
+      let j = i + 1;
+      while (j < n && src[j] !== '"') j += src[j] === "\\" ? 2 : 1;
+      out.push('"');
+      blank(i + 1, Math.min(j, n), "\u0001");
+      if (j < n) out.push('"');
+      i = j + 1;
+      continue;
+    }
+    if (c === "'") {
+      // A char literal ('x', '\n', '\''), or a lifetime ('a): only the
+      // literal is blanked.
+      const m = /^'(?:\\(?:x[0-9a-fA-F]{2}|u\{[0-9a-fA-F]+\}|.)|[^\\'])'/.exec(
+        src.slice(i, i + 12),
+      );
+      if (m) {
+        out.push("'");
+        blank(i + 1, i + m[0].length - 1, "\u0001");
+        out.push("'");
+        i += m[0].length;
+        continue;
+      }
+    }
+    out.push(c);
+    i++;
+  }
+  return out.join("");
+}
+
+function readRust(file, text, out) {
+  if (!/covers/.test(text)) return;
+  const code = rustCode(text);
+  const found = [];
+  const lineOf = (offset) => text.slice(0, offset).split("\n").length;
+  // The comment form: a line that is a comment (blank in `code`).
+  const lines = text.split("\n");
+  const codeLines = code.split("\n");
+  lines.forEach((l, i) => {
+    const m = /^\s*\/\/\s*covers:\s*(.+?)\s*$/.exec(l);
+    if (!m || codeLines[i].trim() !== "") return;
+    const ids = m[1]
+      .split(",")
+      .map((x) => x.trim())
+      .filter(Boolean);
+    found.push({ file, line: i + 1, ids });
+  });
+  // The macro form: `covers!(` in code, its arguments read from the text.
+  for (const m of code.matchAll(/\bcovers!\s*\(/g)) {
+    const line = lineOf(m.index);
+    const open = m.index + m[0].length - 1;
+    let depth = 0;
+    let end = -1;
+    for (let k = open; k < code.length; k++) {
+      if (code[k] === "(") depth++;
+      else if (code[k] === ")" && --depth === 0) {
         end = k;
         break;
       }
@@ -193,17 +268,17 @@ function readRust(file, text, out) {
         line,
         message: "covers!( without a closing parenthesis",
       });
-      return;
+      continue;
     }
-    const inner = rest.slice(open + 1, end);
+    const inner = text.slice(open + 1, end);
     const ids = [];
     const parts = inner
       .split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/)
-      .map((s) => s.trim())
+      .map((x) => x.trim())
       .filter(Boolean);
     for (const p of parts) {
-      const m = /^"((?:[^"\\]|\\.)*)"$/.exec(p);
-      if (!m) {
+      const lit = /^"((?:[^"\\]|\\.)*)"$/.exec(p);
+      if (!lit) {
         out.errors.push({
           file,
           line,
@@ -211,15 +286,48 @@ function readRust(file, text, out) {
         });
         continue;
       }
-      ids.push(m[1].replace(/\\(.)/g, "$1"));
+      ids.push(lit[1].replace(/\\(.)/g, "$1"));
     }
-    if (ids.length === 0 && parts.length === 0)
+    if (parts.length === 0)
       out.errors.push({ file, line, message: "covers!() with no ids" });
-    out.calls.push({ file, line, ids });
-  });
+    found.push({ file, line, ids });
+  }
+  // In source order, whichever form each call takes.
+  out.calls.push(...found.sort((a, b) => a.line - b.line));
+}
+
+const helperDrives = new Map();
+
+/** Does a test file drive the gesture DSL through a local helper it
+ *  imports (`harness()` in a `test/support.ts` that calls `gestures(…)`)?
+ *  One level of relative imports, which is how the suites share a harness. */
+function drivesGesturesThroughImport(root, file, text) {
+  for (const m of text.matchAll(/\bfrom\s+["'](\.{1,2}\/[^"']+)["']/g)) {
+    const base = join(dirname(join(root, file)), m[1]);
+    const stripped = base.replace(/\.(js|mjs|jsx)$/, "");
+    for (const cand of [
+      base,
+      `${stripped}.ts`,
+      `${stripped}.tsx`,
+      join(base, "index.ts"),
+    ]) {
+      if (!helperDrives.has(cand)) {
+        let drives = false;
+        try {
+          drives = GESTURE_DSL.test(readFileSync(cand, "utf8"));
+        } catch {
+          drives = false;
+        }
+        helperDrives.set(cand, drives);
+      }
+      if (helperDrives.get(cand)) return true;
+    }
+  }
+  return false;
 }
 
 /**
+ * Read `files` (repo-relative)./**
  * Read `files` (repo-relative). Returns `{ calls, errors, testFiles,
  * mentionText }`: each call with its ids and layers; every unreadable or
  * malformed call; the test files read; and their concatenated text for
@@ -281,6 +389,8 @@ export function readCovers(root, files, options = {}) {
     if (isRust) readRust(file, text, out);
     else readTs(file, text, out);
     const layers = layersOf(file, text);
+    if (!layers.has("gesture") && drivesGesturesThroughImport(root, file, text))
+      layers.add("gesture");
     for (let i = before; i < out.calls.length; i++)
       out.calls[i].layers = layers;
   }
