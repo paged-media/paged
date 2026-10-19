@@ -25,7 +25,7 @@
 // state: the field shows an em-dash (and carries `data-mixed`); a
 // typed commit write-replaces (the binding layer fans out).
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { useFieldName } from "@paged-media/panel-kit";
 import { Icon, useScrubGesture } from "@paged-media/shell";
 
@@ -118,12 +118,17 @@ export function NumberInput(props: NumberInputProps) {
   const lastCommittedRef = useRef<number | null>(value);
 
   const inputRef = useRef<HTMLInputElement | null>(null);
-  useEffect(() => {
+  // A new controlled value (or display form) re-syncs the text unless the
+  // user is typing in the field; the precision it is formatted with is
+  // read as it is now, and changing it alone does not re-sync.
+  const syncText = useEffectEvent(() => {
     if (document.activeElement !== inputRef.current) {
       setText(displayFor(value));
       lastCommittedRef.current = value;
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  });
+  useEffect(() => {
+    syncText();
   }, [value, suffix, displayText]);
 
   const scrub = useScrubGesture({

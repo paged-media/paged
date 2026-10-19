@@ -52,7 +52,13 @@
 //     rather than guessing a page. The missing reads are named in the
 //     chip tooltips and become W2.7 core follow-ups.
 
-import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import {
+  useEffect,
+  useEffectEvent,
+  useMemo,
+  useState,
+  type CSSProperties,
+} from "react";
 
 import {
   Icon,
@@ -122,19 +128,19 @@ function useMissingLinksByPage(
 
   // Identity of the missing-link host set — re-resolve only when the
   // set of missing hosts (or the page order) actually changes.
-  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
-  const missingKey = useMemo(() => {
-    if (!links) return null;
-    return links
-      .filter((l) => l.status === "missing")
-      .map((l) => `${l.hostKind}:${l.hostSelfId}`)
-      .sort()
-      .join("|");
-  }, [links]);
+  const missingKey = links
+    ? links
+        .filter((l) => l.status === "missing")
+        .map((l) => `${l.hostKind}:${l.hostSelfId}`)
+        .sort()
+        .join("|")
+    : null;
   const pageKey = pageIds.join("|");
 
-  useEffect(() => {
-    let cancelled = false;
+  // The resolve reads the links and pages of the render it runs after;
+  // it runs when the missing hosts or the page order change, not when the
+  // collections hand back new arrays with the same contents.
+  const resolve = useEffectEvent((isCancelled: () => boolean) => {
     if (!links) {
       setByPage(null);
       return;
@@ -157,7 +163,7 @@ function useMissingLinksByPage(
     void client
       .elementGeometry(ids)
       .then((geoms) => {
-        if (cancelled) return;
+        if (isCancelled()) return;
         const next = new Map<number, number>();
         for (const g of geoms) {
           // C-23 — a pasteboard element belongs to no page, so it is
@@ -171,15 +177,16 @@ function useMissingLinksByPage(
         setByPage(next);
       })
       .catch(() => {
-        if (cancelled) return;
+        if (isCancelled()) return;
         setByPage(new Map());
       });
+  });
+  useEffect(() => {
+    let cancelled = false;
+    resolve(() => cancelled);
     return () => {
       cancelled = true;
     };
-    // `missingKey`/`pageKey` capture the inputs that change the result;
-    // `links`/`pageIds` themselves are stable-by-content via those keys.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [client, missingKey, pageKey]);
 
   return byPage;

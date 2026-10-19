@@ -28,7 +28,12 @@
 // app layer (main.tsx wires `hostOptions.secrets`), so the prompt does too,
 // styled with the brand tokens the rest of the app uses.
 
-import { useEffect, useState, useSyncExternalStore } from "react";
+import {
+  useEffect,
+  useEffectEvent,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import type { CSSProperties } from "react";
 import type {
   PendingSecret,
@@ -59,14 +64,14 @@ function SecretPrompt({ pending }: { pending: PendingSecret }) {
   const save = (): void => pending.decide(value);
 
   // Esc cancels (nothing stored — the safe default).
+  const onEscape = useEffectEvent(() => cancel());
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
-      if (e.key === "Escape") cancel();
+      if (e.key === "Escape") onEscape();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pending.id]);
+  }, []);
 
   const tierNote =
     pending.tier === "webcrypto"

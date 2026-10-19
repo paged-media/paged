@@ -41,6 +41,7 @@ import {
 
 import { useWorkflowMode } from "../state/workflow-mode-context";
 import { useRegistries } from "../state/registries-context";
+import { useRegistryView } from "../state/live";
 import type { WorkflowMode } from "../state/workflow-mode-context";
 import {
   loadCockpitStore,
@@ -104,8 +105,10 @@ function seedTabs(
 export function CockpitStateProvider({ children }: PropsWithChildren) {
   const { mode } = useWorkflowMode();
   const registries = useRegistries();
-  const storeRef = useRef<CockpitStore | null>(null);
-  if (storeRef.current === null) storeRef.current = loadCockpitStore();
+  // What was persisted when the cockpit mounted, for a mode's first visit;
+  // every later change of a mode's state is in `byMode` as well.
+  const [persisted] = useState(loadCockpitStore);
+  const storeRef = useRef<CockpitStore>(persisted);
 
   // Per-mode state map kept in a single useState so a mode switch is
   // one render. Lazy: a mode materialises on first visit (persisted
@@ -116,42 +119,23 @@ export function CockpitStateProvider({ children }: PropsWithChildren) {
   const [inspectorContext, setInspectorContext] =
     useState<InspectorContext | null>(null);
 
-  // Modes + panels register in app effects AFTER the first render —
-  // re-derive the slot seed (and re-resolve tab contributions) when
-  // either registry changes. Also how late-registered plugin panels
-  // become resolvable.
-  const [registryVersion, setRegistryVersion] = useState(0);
-  useEffect(() => {
-    const bump = () => setRegistryVersion((v) => v + 1);
-    const d1 = registries.modes.onChange(bump);
-    const d2 = registries.panels.onChange(bump);
-    return () => {
-      d1.dispose();
-      d2.dispose();
-    };
-  }, [registries]);
+  // Modes register in app effects AFTER the first render: the slot seed
+  // is read through a view of the mode registry (state/live.ts), so it
+  // is derived again once the app's modes land.
+  const modes = useRegistryView(registries.modes);
+  const current: ModeUiState =
+    byMode[mode] ?? persisted[mode] ?? seedTabs(mode, modes);
 
-  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
-  const current: ModeUiState = useMemo(() => {
-    return (
-      byMode[mode] ??
-      storeRef.current?.[mode] ??
-      seedTabs(mode, registries.modes)
-    );
-    // registryVersion re-derives the seed once the app's modes land.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [byMode, mode, registries.modes, registryVersion]);
-
-  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
+  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
   const commit = useCallback(
     (next: ModeUiState) => {
       setByMode((prev) => ({ ...prev, [mode]: next }));
-      storeRef.current = saveModeUiState(storeRef.current ?? {}, mode, next);
+      storeRef.current = saveModeUiState(storeRef.current, mode, next);
     },
     [mode],
   );
 
-  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
+  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable; context consumers compare it (ADR 229)
   const activateTab = useCallback(
     (id: string) => {
       if (!current.rightTabs.includes(id)) return;
@@ -160,7 +144,7 @@ export function CockpitStateProvider({ children }: PropsWithChildren) {
     [commit, current],
   );
 
-  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
+  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable; context consumers compare it (ADR 229)
   const openPanel = useCallback(
     (id: string, options?: { activate?: boolean }) => {
       // Any REGISTERED panel may open; unknown ids are ignored so a
@@ -183,7 +167,7 @@ export function CockpitStateProvider({ children }: PropsWithChildren) {
     [commit, current, registries.panels],
   );
 
-  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
+  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable; context consumers compare it (ADR 229)
   const closeTab = useCallback(
     (id: string) => {
       const idx = current.rightTabs.indexOf(id);
@@ -211,7 +195,7 @@ export function CockpitStateProvider({ children }: PropsWithChildren) {
     };
   }, [activeTab, closeTab, openPanel]);
 
-  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
+  // eslint-disable-next-line no-restricted-syntax -- a context value its consumers compare; its type argument types it (ADR 229)
   const value = useMemo<CockpitState>(
     () => ({
       rightTabs: current.rightTabs,

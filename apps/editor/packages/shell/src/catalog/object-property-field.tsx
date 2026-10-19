@@ -93,8 +93,14 @@ export function useFieldTargets(
 ): ResolvedFieldTargets {
   const model = useObjectModel();
   const { elementSelection } = useSelection();
-  const addressKey =
-    typeof address === "string" ? address : JSON.stringify(address);
+  // The address forms as values that compare by content: a plugin's
+  // React panel may hand a new address object on every render.
+  const isSelection = address === "selection";
+  const selector = typeof address === "string" && !isSelection ? address : null;
+  const fixedKey =
+    typeof address === "object" && "addresses" in address
+      ? JSON.stringify(address.addresses)
+      : null;
 
   // Change ticks: the object model (a layer added, a frame removed) and
   // the plugin's published bindings.
@@ -126,8 +132,8 @@ export function useFieldTargets(
   }, [bindName, bindings]);
 
   // Selection hosts (core addresses + their elements), for a scoped kind.
-  const scopedToKind = address === "selection" && !!kind;
-  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
+  const scopedToKind = isSelection && !!kind;
+  // eslint-disable-next-line no-restricted-syntax -- a dependency of the hook's result, which callers compare (ADR 229)
   const hosts = useMemo((): { address: string; element: ElementId }[] => {
     if (!scopedToKind || !model) return [];
     return elementSelection.map((id) => ({
@@ -137,7 +143,7 @@ export function useFieldTargets(
   }, [scopedToKind, model, elementSelection]);
   const hostsKey = hosts.map((h) => h.address).join("\n");
   // Every selected object as a possible host (for `{ bind }` addresses).
-  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
+  // eslint-disable-next-line no-restricted-syntax -- a dependency of the hook's result, which callers compare (ADR 229)
   const selectionHosts = useMemo(
     (): { address: string; element: ElementId }[] =>
       model
@@ -157,9 +163,8 @@ export function useFieldTargets(
     list: [],
     hostOf: new Map(),
   });
-  const isSelector = typeof address === "string" && address !== "selection";
   useEffect(() => {
-    if (!model || (!isSelector && !scopedToKind)) {
+    if (!model || (selector === null && !scopedToKind)) {
       setQueried((prev) =>
         prev.list.length === 0 ? prev : { list: [], hostOf: new Map() },
       );
@@ -169,11 +174,9 @@ export function useFieldTargets(
     void (async () => {
       const list: string[] = [];
       const hostOf = new Map<string, number>();
-      if (isSelector) {
+      if (selector !== null) {
         list.push(
-          ...(await model.objects
-            .query(address as string)
-            .catch(() => [] as string[])),
+          ...(await model.objects.query(selector).catch(() => [] as string[])),
         );
       } else {
         const hostList = hostsKey ? hostsKey.split("\n") : [];
@@ -198,16 +201,17 @@ export function useFieldTargets(
     return () => {
       cancelled = true;
     };
-    // `addressKey` stands for `address`.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [model, addressKey, isSelector, scopedToKind, hostsKey, kind, tick]);
+  }, [model, selector, scopedToKind, hostsKey, kind, tick]);
 
   // eslint-disable-next-line no-restricted-syntax -- not a plain binding (ADR 229)
   return useMemo((): ResolvedFieldTargets => {
-    if (address === "selection" && !kind)
+    if (isSelection && !kind)
       return { targets: undefined, bindScope: undefined };
-    if (typeof address === "object" && "addresses" in address) {
-      return { targets: [...address.addresses], bindScope: undefined };
+    if (fixedKey !== null) {
+      return {
+        targets: JSON.parse(fixedKey) as string[],
+        bindScope: undefined,
+      };
     }
     if (bindName) {
       // A published address (the picked layer): durable through the
@@ -222,8 +226,7 @@ export function useFieldTargets(
         },
       };
     }
-    if (isSelector) {
-      const selector = address as string;
+    if (selector !== null) {
       return {
         targets: queried.list,
         bindScope: () => ({ selector, ...(kind ? { kind } : {}) }),
@@ -238,13 +241,13 @@ export function useFieldTargets(
         return host ? { host, kind } : null;
       },
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
-    addressKey,
+    isSelection,
+    fixedKey,
     kind,
     bindName,
     bound,
-    isSelector,
+    selector,
     queried,
     hosts,
     selectionHosts,

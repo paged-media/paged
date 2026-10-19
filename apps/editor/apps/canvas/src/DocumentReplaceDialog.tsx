@@ -22,7 +22,7 @@
 // Dismissing (Esc / backdrop / Keep) KEEPS the document: the safe answer is
 // the one an unacknowledged prompt gets. Styled like <ConsentDialog>.
 
-import { useEffect, useSyncExternalStore } from "react";
+import { useEffect, useEffectEvent, useSyncExternalStore } from "react";
 import type { CSSProperties } from "react";
 import type { PendingReplace, ReplaceController } from "./plugin-documents";
 import { color, font, radius } from "@paged-media/panel-kit";
@@ -44,14 +44,14 @@ function ReplacePrompt({ pending }: { pending: PendingReplace }) {
   const keep = (): void => pending.decide(false);
   const discard = (): void => pending.decide(true);
 
+  const onEscape = useEffectEvent(() => keep());
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
-      if (e.key === "Escape") keep();
+      if (e.key === "Escape") onEscape();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pending.id]);
+  }, []);
 
   return (
     <div
