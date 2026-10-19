@@ -38,7 +38,7 @@ use std::task::{Context, Poll, Waker};
 
 use image_kernels::{abi, KernelDef};
 
-use crate::resident::Resident;
+use crate::resident::{check_texels, Resident};
 use crate::{GpuContext, GpuError, KernelPipeline};
 
 /// One input tile: rgba16float texel bytes (8 bytes/px, tightly packed
@@ -82,6 +82,14 @@ pub fn execute_windowed_once(
             ),
         });
     }
+    check_texels(
+        def.id,
+        "input window",
+        win_bytes,
+        win_w,
+        win_h,
+        crate::TexFormat::Rgba16Float,
+    )?;
     let pipeline = ctx.pipeline(def);
     // Held until the dispatch is submitted, so the pool cannot hand the
     // texture out again before the dispatch has read it.
@@ -122,6 +130,14 @@ pub async fn execute_windowed_once_async(
             ),
         });
     }
+    check_texels(
+        def.id,
+        "input window",
+        win_bytes,
+        win_w,
+        win_h,
+        crate::TexFormat::Rgba16Float,
+    )?;
     let pipeline = ctx.pipeline(def);
     // Held until the dispatch is submitted, so the pool cannot hand the
     // texture out again before the dispatch has read it.
@@ -202,6 +218,17 @@ fn prepare_tile(
                 def.params.size
             ),
         });
+    }
+
+    for (i, t) in inputs.iter().enumerate() {
+        check_texels(
+            def.id,
+            &format!("input {i}"),
+            t.f16_bytes,
+            w,
+            h,
+            crate::TexFormat::Rgba16Float,
+        )?;
     }
 
     let pipeline = ctx.pipeline(def);
@@ -350,7 +377,10 @@ fn record_common(
     // per size on the device and shared, rather than uploaded per
     // dispatch.
     let mask_res = match mask {
-        Some(m) => ctx.upload(w, h, crate::TexFormat::R16Float, m),
+        Some(m) => {
+            check_texels(def.id, "mask", m, w, h, crate::TexFormat::R16Float)?;
+            ctx.upload(w, h, crate::TexFormat::R16Float, m)
+        }
         None => ctx.one_mask(w, h),
     };
     let mask_view = mask_res.view().clone();
