@@ -1,0 +1,17 @@
+$ paged-node mcp --help
+# exit 0
+# stdout
+paged-node mcp
+
+serve the paged MCP tools over stdio, as the engine's Rust `paged mcp` does: a library's documents (store tools), and the engine run here (open_document, run_script, render_page, save_document)
+
+options:
+  --library <dir>                    the library directory (default: $PAGED_LIBRARY, else ~/.paged/library)
+  --plugins <a,b>                    load exactly these bundles (package names or paths) instead of discovering them
+  --no-plugins                       load no plugin bundles (core objects only)
+  --font <file.ttf>                  default font every load lays text out with
+  --engine-from <dir>                resolve the engine (@paged-media/paged) from this directory
+  --text                             human-readable output instead of JSON
+  -h, --help                         show help
+# stderr
+(empty)

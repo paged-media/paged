@@ -43,7 +43,8 @@ $ paged-node describe --no-plugins
     "apply <doc>",
     "merge <template>",
     "plugins [doc]",
-    "describe [doc]"
+    "describe [doc]",
+    "mcp "
   ]
 }
 # stderr

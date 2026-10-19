@@ -502,14 +502,15 @@ fn paged_inspect_story_range_returns_character_entries() {
     // ADR 028 keep / start paths (4) + span / split columns paths (6)
     // + list-marker override paths (6) + the composer (1) + the line
     // setting (4) and no-break (1) of ADR 153 + the list level (2) of
-    // ADR 158 = 61 entries.
-    assert!(entries_line.contains("61"), "got: {entries_line}");
+    // ADR 158 + the hyphenation zone, the applied numbering list and the
+    // applied conditions, written and now read too (R1) = 64 entries.
+    assert!(entries_line.contains("64"), "got: {entries_line}");
     let path_lines: Vec<&String> = result
         .output
         .iter()
         .filter(|l| l.starts_with("[log] path"))
         .collect();
-    assert_eq!(path_lines.len(), 61, "got: {:?}", path_lines);
+    assert_eq!(path_lines.len(), 64, "got: {:?}", path_lines);
     for needle in [
         "characterFontSize",
         "characterLeading",

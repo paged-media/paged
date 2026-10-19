@@ -205,7 +205,7 @@ test.describe("chrome surface — the keybindings, commands and panels nothing n
     await expect(rail).toBeVisible();
 
     // Shift+Tab is the half-measure, and the two flags are NOT the same
-    // axis: `panelsHidden` unmounts the cockpit's dock COLUMNS, while
+    // axis: `panelsHidden` hides the cockpit's dock COLUMNS, while
     // `railHidden` hides the tool rail and the panel rail. So Shift+Tab
     // takes the left panel away and leaves BOTH rails standing — the
     // rails are navigation, the columns are content.

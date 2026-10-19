@@ -201,34 +201,29 @@ describe("Text Wrap panel: every control writes the selected frame", () => {
 });
 
 describe("Text Wrap panel: findings", () => {
-  // The engine answers noSuchPath for textWrapInvert on a rectangle (it
-  // reads it on a text frame); the panel shows a single rectangle's
-  // Invert as "mixed", and the switch stays live.
-  test.failing(
-    "PN-254: a rectangle's Invert reads as not applicable, not as mixed",
-    async () => {
-      covers("panel:paged.text-wrap");
-      const h = await mount();
-      await h.select([h.scene.rect]);
-      expect(state(h, "textWrapInvert")).not.toBe("mixed");
-    },
-  );
+  // PN-254 (fixed, R1): the engine answered noSuchPath for
+  // textWrapInvert on a rectangle (it read it on a text frame only) and
+  // the panel showed a single rectangle's Invert as "mixed". A
+  // rectangle's wrap inverts as any item's does, so it reads its value.
+  test("PN-254: a rectangle's Invert reads its value, not mixed", async () => {
+    covers("panel:paged.text-wrap");
+    const h = await mount();
+    await h.select([h.scene.rect]);
+    expect(state(h, "textWrapInvert")).not.toBe("mixed");
+  });
 
-  // InDesign wraps text around any page item. The engine has no wrap
-  // path on an oval (noSuchPath for every frameTextWrap* read), so a
-  // selected oval shows the whole panel as "mixed".
-  test.failing(
-    "PN-255: an oval can be given a text wrap, as any page item",
-    async () => {
-      covers("panel:paged.text-wrap");
-      const h = await mount();
-      await h.select([h.scene.oval]);
-      expect(state(h, "frameTextWrapMode")).toBe("value");
-      expect(await h.get(addr(h.scene.oval), "frameTextWrapMode")).toEqual(
-        text(""),
-      );
-    },
-  );
+  // PN-255 (fixed, R1): InDesign wraps text around any page item. The
+  // engine wrote an oval's wrap and read none of it (noSuchPath for every
+  // frameTextWrap* read), so a selected oval showed the panel as "mixed".
+  test("PN-255: an oval can be given a text wrap, as any page item", async () => {
+    covers("panel:paged.text-wrap");
+    const h = await mount();
+    await h.select([h.scene.oval]);
+    expect(state(h, "frameTextWrapMode")).toBe("value");
+    expect(await h.get(addr(h.scene.oval), "frameTextWrapMode")).toEqual(
+      text(""),
+    );
+  });
 
   // UX audit F-22 (internal identifiers shown to users): the Contour list
   // carries the schema's raw members "BoundingBox" and "UserModifiedPath"
