@@ -118,9 +118,11 @@ The DSL is a thenable: `await g.drag(…)` runs the queue. An async function
 must not return it bare (the `await` of its caller would run it and get
 `undefined`); return it inside an object, as `gestureEditor` does.
 
-## The headless editor's engine half
+## The headless editor's engine half (`@paged-media/test-kit/headless`)
 
-`headlessEngineModule()` boots the editor's canvas-wasm once per process
+Its own entry point: it loads the plugin SDK's Node engine loader, which the
+root entry must not (Playwright specs import the root entry under Node ESM,
+which refuses the SDK's JSON import). `headlessEngineModule()` boots the editor's canvas-wasm once per process
 (through the plugin SDK's Node loader, which refuses a protocol skew) and
 hands out a fresh engine per editor. `createEngineWorker(engine)` is the
 render worker in process: a `Worker`-shaped object the real `CanvasClient`

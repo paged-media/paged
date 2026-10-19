@@ -80,7 +80,6 @@ import {
 import {
   createBundleHost,
   createBindingProviderRegistry,
-  createDataProviderRegistry,
   loadBundle as sdkLoadBundle,
   type CreateBundleHostOptions,
 } from "@paged-media/plugin-sdk";
@@ -98,7 +97,7 @@ import {
   type EngineWorker,
   type ModelDump,
   type ModelDumpOptions,
-} from "@paged-media/test-kit";
+} from "@paged-media/test-kit/headless";
 
 import {
   buildAppCommands,
@@ -158,6 +157,28 @@ import {
 } from "../../src/align-plan";
 import { objectRegistry, setObjectModelEditor } from "../../src/object-model";
 import {
+  createEditorHostOptions,
+  hostOptionsForPlugin,
+  type EditorHostOptions,
+} from "../../src/plugin-host-options";
+import {
+  createEditorConsentBackend,
+  type EditorConsent,
+} from "../../src/plugin-consent";
+import {
+  createEditorSecretStore,
+  type EditorSecretStore,
+} from "../../src/plugin-secret-store";
+import { createEditorDocuments } from "../../src/plugin-documents";
+import { createEditorNativeDocumentBackend } from "../../src/plugin-native-document";
+import {
+  createWillSaveRegistry,
+  type WillSaveRegistry,
+} from "../../src/plugin-will-save";
+import type { ModuleManifest } from "../../src/plugin-modules";
+import type { BundleWorkerModuleResolver } from "../../src/plugin-worker";
+import { PLUGIN_BUNDLES } from "../../src/plugin-bundle-table";
+import {
   getProblemsSnapshot,
   problemsSink,
   resetProblems,
@@ -203,6 +224,53 @@ function recordingSlice(seed: Record<string, unknown> = {}) {
       return null;
     },
   });
+}
+
+/** The overlay signals (shell/src/state/overlay-signals-context.tsx), the
+ *  same members with the same semantics: both preview writers land in one
+ *  slot (an empty list clears it), the retained layers keep their stack
+ *  order and a re-set keeps its place. */
+function headlessOverlaySignals() {
+  type Shape = unknown;
+  const o = {
+    hitSelection: null as unknown,
+    setHitSelection(v: unknown) {
+      o.hitSelection = v;
+    },
+    marqueeRect: null as unknown,
+    setMarqueeRect(v: unknown) {
+      o.marqueeRect = v;
+    },
+    snapLines: [] as readonly unknown[],
+    setSnapLines(v: readonly unknown[]) {
+      o.snapLines = v;
+    },
+    /** One shape (`setToolPreview`) or a list (`setToolPreviews`). */
+    toolPreview: null as Shape | readonly Shape[] | null,
+    setToolPreview(v: Shape | null) {
+      o.toolPreview = v;
+    },
+    setToolPreviews(v: readonly Shape[] | null) {
+      o.toolPreview = v && v.length > 0 ? v : null;
+    },
+    overlayLayers: [] as ReadonlyArray<{
+      key: string;
+      shapes: readonly Shape[];
+    }>,
+    setOverlayLayer(key: string, shapes: readonly Shape[]) {
+      const i = o.overlayLayers.findIndex((l) => l.key === key);
+      if (i < 0) o.overlayLayers = [...o.overlayLayers, { key, shapes }];
+      else {
+        const next = o.overlayLayers.slice();
+        next[i] = { key, shapes };
+        o.overlayLayers = next;
+      }
+    },
+    removeOverlayLayer(key: string) {
+      o.overlayLayers = o.overlayLayers.filter((l) => l.key !== key);
+    },
+  };
+  return o;
 }
 
 /** What the headless editor holds in place of the shell's React state. */
@@ -417,7 +485,7 @@ function headlessState(): HeadlessState {
     contentSelection,
     toolSettings,
     screenMode,
-    overlaySignals: recordingSlice(),
+    overlaySignals: headlessOverlaySignals(),
     editContext: null,
   };
 }
@@ -434,6 +502,11 @@ export interface HeadlessEditorOptions {
   /** Extra options for every plugin host this editor builds, merged over
    *  the defaults (see {@link HeadlessEditor.host}). */
   hostOptions?: (ed: HeadlessEditor) => Partial<CreateBundleHostOptions>;
+  /** The build's module manifest the module door answers from (main.tsx:
+   *  `virtual:paged-modules`); default a build that serves no module. */
+  moduleManifest?: ModuleManifest;
+  /** The page origin the module door's dev URLs are absolute against. */
+  origin?: string;
 }
 
 /** The `__canvas`-shaped handle `editor.*` automation runs against. */
@@ -472,11 +545,23 @@ export interface HeadlessEditor {
   runDemo(source: string): Promise<RunResult>;
   /** Run a typed core command as its dialog / panel button does. */
   invokeCore(op: string, args: Record<string, unknown>): Promise<unknown>;
+  /** The app-level pieces behind every plugin host's options: the
+   *  options themselves (`createEditorHostOptions`, what main.tsx passes)
+   *  and the controllers a user answers through (the consent, secret and
+   *  replace-document prompts), the will-save registry Save runs, and the
+   *  stand-ins for what needs the browser shell (`opened` records panel
+   *  placement and edit-context entries). */
+  readonly hostApp: HeadlessHostApp;
   /** A plugin host over this editor (createBundleHost). */
   host(manifest?: Partial<PluginManifest>): BundleHost;
   /** Load a bundle through the SDK's `loadBundle`, as the editor's
    *  `__loadTestBundle` does; resolves to the host its activate got. */
   loadBundle(bundle: PagedBundle): Promise<BundleHost>;
+  /** Activate the editor's built-in bundles (`PLUGIN_BUNDLES`, the table
+   *  main.tsx boots, in its order; `ids` narrows it), each through
+   *  `loadBundle` with the editor's host options, as main.tsx does. Resolves
+   *  to the host each bundle's activate received, by bundle id. */
+  loadBuiltInBundles(ids?: readonly string[]): Promise<Map<string, BundleHost>>;
   /** The engine's raw channel (the client's `send`). */
   send(message: MainToWorkerKind): Promise<WorkerToMain>;
   /** The canonical model dump (test-kit `modelDump`). */
@@ -493,6 +578,22 @@ export interface HeadlessEditor {
   idle(): Promise<void>;
   dispose(): Promise<void>;
 }
+
+/** See {@link HeadlessEditor.hostApp}. */
+export interface HeadlessHostApp {
+  options: EditorHostOptions;
+  consent: EditorConsent;
+  secrets: EditorSecretStore;
+  documents: ReturnType<typeof createEditorDocuments>;
+  willSave: WillSaveRegistry;
+  /** Bundle worker modules per plugin id (main.tsx: Vite's `?worker&url`
+   *  imports); a test adds its own. */
+  workerResolvers: Record<string, BundleWorkerModuleResolver>;
+}
+
+/** The module manifest the headless editor answers the module door from:
+ *  a build that serves no module (every answer null). */
+const NO_MODULES: ModuleManifest = { host: null, packages: {}, plugins: {} };
 
 /** Combo names → `KeyboardEvent.key`. */
 const KEY_NAMES: Record<string, string> = {
@@ -658,6 +759,12 @@ export async function createHeadlessEditor(
   // The object registry reads the editor lazily and arms the Boa host
   // bridge on the client (main.tsx: setObjectModelEditor(paged)).
   setObjectModelEditor(editor as unknown as ContractEditor);
+  // The registry is a module singleton (one per app) and its core seam
+  // subscribes to the FIRST client it meets; the app has one client per
+  // page life, a test process has one per editor. Release the previous
+  // editor's subscription so the seam follows this one.
+  objectRegistry.core?.dispose();
+  objectRegistry.core?.invalidate();
 
   const setSelection = async (ids: ElementId[]) => {
     const applied = await client.setElementSelection(ids, "replace");
@@ -892,20 +999,66 @@ export async function createHeadlessEditor(
   const automation = buildAutomation(canvas, { isSilent: () => true });
 
   const hosts: Array<{ dispose(): void }> = [];
-  const sharedHost = {
-    objects: objectRegistry,
-    dataProviders: createDataProviderRegistry(),
-    bindingProviders: createBindingProviderRegistry(),
-  };
   const silent = { debug() {}, info() {}, warn() {}, error() {} };
-  const hostOptionsFor = (): CreateBundleHostOptions => ({
-    ...sharedHost,
-    toolSettings: state.toolSettings as never,
-    diagnosticsSink: {
-      publish: (source: string, key: string, diagnostics: unknown) =>
-        problemsSink.publish(source, key, diagnostics as never),
-      clear: (source: string) => problemsSink.clear(source),
+  // The options every plugin host gets: the editor's own
+  // (`createEditorHostOptions`, what main.tsx passes), over this editor.
+  // What needs the browser shell is a stand-in: panel placement and
+  // edit-context entry are recorded in `opened`; the widgets and the
+  // schema-panel renderer render nothing (no panel renders headlessly).
+  const consent = createEditorConsentBackend();
+  const secrets = createEditorSecretStore();
+  const documents = createEditorDocuments();
+  documents.attach({
+    getClient: () => client,
+    openBytes: (bytes) => ed.load(bytes),
+  });
+  const willSave = createWillSaveRegistry();
+  const workerResolvers: Record<string, BundleWorkerModuleResolver> = {};
+  const renderNothing = () => null;
+  const hostOptions = createEditorHostOptions({
+    getEditor: () => editor as never,
+    panels: {
+      openPanel: (id) => void opened.push({ kind: "openPanel", detail: id }),
+      closeTab: (id) => void opened.push({ kind: "closePanel", detail: id }),
+    },
+    enterEditContext: async (type, elementId) => {
+      opened.push({ kind: "enterEditContext", detail: { type, elementId } });
+      return true;
+    },
+    widgets: {
+      CodeEditor: renderNothing,
+      ColorPicker: renderNothing,
+      PropertyField: renderNothing,
+      PropertyFrame: renderNothing,
     } as never,
+    schemaPanelRenderer: renderNothing as never,
+    workerResolvers,
+    moduleManifest: options.moduleManifest ?? NO_MODULES,
+    origin: options.origin ?? "http://localhost",
+    consent: consent.backend,
+    secrets: secrets.backend,
+    documents: documents.backend,
+    nativeDocument: createEditorNativeDocumentBackend(
+      () => client,
+      async (bytes) => {
+        await ed.load(bytes);
+      },
+    ),
+    bindingProviders: createBindingProviderRegistry(),
+    willSave,
+    objects: objectRegistry,
+    diagnosticsSink: problemsSink,
+  });
+  const hostApp: HeadlessHostApp = {
+    options: hostOptions,
+    consent,
+    secrets,
+    documents,
+    willSave,
+    workerResolvers,
+  };
+  const hostOptionsFor = (pluginId: string): CreateBundleHostOptions => ({
+    ...hostOptionsForPlugin(hostOptions.shared, pluginId),
     console: silent,
     ...(options.hostOptions?.(ed) ?? {}),
   });
@@ -938,11 +1091,13 @@ export async function createHeadlessEditor(
     script: (source) => client.executeScript(source),
     runDemo: (source) => runDemoScript(source, automation),
     invokeCore: (op, args) => invokeCoreCommand(op, args as never),
+    hostApp,
     host(manifest = {}) {
+      const full = { ...DEFAULT_MANIFEST, ...manifest } as PluginManifest;
       const handle = createBundleHost(
         () => editor as unknown as ContractEditor,
-        { ...DEFAULT_MANIFEST, ...manifest } as PluginManifest,
-        hostOptionsFor(),
+        full,
+        hostOptionsFor(full.id),
       );
       hosts.push(handle);
       return handle.host;
@@ -959,7 +1114,7 @@ export async function createHeadlessEditor(
       const loaded = sdkLoadBundle(
         () => editor as unknown as ContractEditor,
         wrapped,
-        hostOptionsFor(),
+        hostOptionsFor(bundle.manifest.id),
       );
       hosts.push(loaded);
       if (!loaded.active) {
@@ -969,6 +1124,15 @@ export async function createHeadlessEditor(
       }
       if (!received) throw new Error("loadBundle: activate never ran");
       return received;
+    },
+    async loadBuiltInBundles(ids) {
+      const out = new Map<string, BundleHost>();
+      for (const entry of PLUGIN_BUNDLES) {
+        if (ids && !ids.includes(entry.id)) continue;
+        const bundle = (await entry.load()) as unknown as PagedBundle;
+        out.set(entry.id, await ed.loadBundle(bundle));
+      }
+      return out;
     },
     send: (message) => client.send(message),
     dump: (opts) => modelDump(client.send.bind(client) as never, opts),
@@ -1004,6 +1168,7 @@ export async function createHeadlessEditor(
       setAssistantOpener(null);
       if (live === ed) {
         live = null;
+        objectRegistry.core?.dispose();
         setObjectModelEditor(null);
         delete (globalThis as { __canvas?: unknown }).__canvas;
       }
