@@ -43,6 +43,19 @@ fn json<T: Serialize>(v: &T) -> String {
     serde_json::to_string(v).expect("serializes")
 }
 
+fn agent_ctx(agent: &str, client: &str, run: &str, on_behalf_of: &str, ts: f64) -> Ctx {
+    Ctx {
+        actor: Actor::agent(agent),
+        ts: ts as i64,
+        provenance: Some(paged_repo::Provenance {
+            client: client.to_string(),
+            model: None,
+            run: run.to_string(),
+            on_behalf_of: on_behalf_of.to_string(),
+        }),
+    }
+}
+
 #[derive(Serialize)]
 struct LocJs {
     hash: String,
@@ -458,6 +471,124 @@ impl Repository {
         }
         self.repo
             .commit(snap.objects, snap.tree, branch, &ctx, message, None)
+            .map(|h| h.to_hex())
+            .map_err(js)
+    }
+
+    /// The parts of a version (a ref or a commit address), as JSON
+    /// `[{path, size}]`, sorted by path.
+    pub fn tree(&self, target: &str) -> Result<String, JsError> {
+        let commit = match self.repo.head(target) {
+            Some(h) => h,
+            None => hash(target)?,
+        };
+        let tree = self
+            .repo
+            .read_tree(&self.repo.read_commit(&commit).map_err(js)?.tree)
+            .map_err(js)?;
+        #[derive(Serialize)]
+        struct EntryJs<'a> {
+            path: &'a str,
+            size: u64,
+        }
+        let entries: Vec<EntryJs> = tree
+            .entries
+            .iter()
+            .map(|e| EntryJs {
+                path: &e.path,
+                size: e.size,
+            })
+            .collect();
+        Ok(json(&entries))
+    }
+
+    /// Starts the branch `to` at the head of `from`, as an agent acting for
+    /// `on_behalf_of` (provenance on the ref's evidence). Returns the head.
+    #[wasm_bindgen(js_name = branchAgent)]
+    #[allow(clippy::too_many_arguments)]
+    pub fn branch_agent(
+        &mut self,
+        from: &str,
+        to: &str,
+        agent: &str,
+        client: &str,
+        run: &str,
+        on_behalf_of: &str,
+        ts: f64,
+    ) -> Result<String, JsError> {
+        let ctx = agent_ctx(agent, client, run, on_behalf_of, ts);
+        self.repo
+            .branch(from, to, &ctx)
+            .map(|h| h.to_hex())
+            .map_err(js)
+    }
+
+    /// Writes parts on `branch` as ONE agent version over its head: `manifest`
+    /// is JSON `[{path, offset, len}]` into `bytes` for a part written, or
+    /// `[{path, delete: true}]` for one removed; every other part is kept.
+    /// Returns the new head.
+    #[wasm_bindgen(js_name = commitParts)]
+    #[allow(clippy::too_many_arguments)]
+    pub fn commit_parts(
+        &mut self,
+        branch: &str,
+        manifest: &str,
+        bytes: &[u8],
+        agent: &str,
+        client: &str,
+        run: &str,
+        on_behalf_of: &str,
+        message: &str,
+        ts: f64,
+    ) -> Result<String, JsError> {
+        #[derive(serde::Deserialize)]
+        struct Part {
+            path: String,
+            #[serde(default)]
+            offset: usize,
+            #[serde(default)]
+            len: usize,
+            #[serde(default)]
+            delete: bool,
+        }
+        let parts: Vec<Part> =
+            serde_json::from_str(manifest).map_err(|e| JsError::new(&e.to_string()))?;
+        let head = self
+            .repo
+            .head(branch)
+            .ok_or_else(|| JsError::new("no such branch: start one first"))?;
+        let base = self
+            .repo
+            .read_tree(&self.repo.read_commit(&head).map_err(js)?.tree)
+            .map_err(js)?;
+        let mut entries: std::collections::BTreeMap<String, paged_repo::TreeEntry> = base
+            .entries
+            .into_iter()
+            .map(|e| (e.path.clone(), e))
+            .collect();
+        let mut objects = std::collections::BTreeMap::new();
+        for p in parts {
+            if p.delete {
+                entries.remove(&p.path);
+                continue;
+            }
+            let slice = bytes
+                .get(p.offset..p.offset + p.len)
+                .ok_or_else(|| JsError::new(&format!("{} lies outside the bytes", p.path)))?;
+            let entry = paged_repo::part_entry(p.path.clone(), slice.to_vec(), &mut objects);
+            entries.insert(p.path, entry);
+        }
+        let tree = paged_repo::Tree {
+            v: 1,
+            entries: entries.into_values().collect(),
+        };
+        tree.validate().map_err(js)?;
+        let tree_bytes = paged_repo::encode(&tree);
+        let tree_hash = paged_repo::address(paged_repo::Kind::Tree, &tree_bytes);
+        objects.insert(tree_hash, (paged_repo::Kind::Tree, tree_bytes));
+        let ctx = agent_ctx(agent, client, run, on_behalf_of, ts);
+        self.repo
+            .commit(objects, tree_hash, branch, &ctx, message, None)
             .map(|h| h.to_hex())
             .map_err(js)
     }
