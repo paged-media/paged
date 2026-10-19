@@ -81,7 +81,7 @@ import type { HeadlessHost } from "@paged-media/plugin-sdk";
 
 import { drawBundle, offsetPathMutationFor } from "../../src";
 import { F1_MULTI_SHAPE } from "../fixtures/corpus";
-import { openHost } from "../conformance/host";
+import { openHost } from "../headless/host";
 import {
   AREA_REL_TOL,
   BOUNDS_ABS_TOL,

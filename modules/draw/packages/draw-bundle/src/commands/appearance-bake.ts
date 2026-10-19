@@ -61,7 +61,7 @@
 //     (`appearanceBake.layers`), an envelope is a JSON string, and a
 //     `$h:` handle inside TEXT is content — the engine stores it as
 //     written and never resolves it (measured; pinned in
-//     `test/conformance/minted.spec.ts`). So the record can only be
+//     `test/headless/minted.spec.ts`). So the record can only be
 //     written once the ids exist, which is after a first mutation has
 //     answered. The record's shape is what release and a reopened
 //     document read, so it is not changed to dodge that.

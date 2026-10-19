@@ -1,0 +1,316 @@
+{
+  "description": "Every configuration option the editor declares: persisted preferences and UI state, export options, feature flags, in-memory view options and URL flags. The source of truth for the setting: surface ids (setting:<id>). apps/canvas/test/unit/settings/storage-inventory.test.ts keeps it honest: every browser-storage call site in apps/editor (localStorage/sessionStorage getItem/setItem/removeItem/key/clear, indexedDB.open, navigator.storage.getDirectory) must be claimed by exactly one entry below (settings or excluded), and every entry's source must still hold its marker and its call sites. Tool options (<toolId>.<key>) are not listed: the gate enumerates them from the tool declarations. `sites` lists [method, first-argument expression] as written at the call site, comments ignored, whitespace collapsed.",
+  "settings": [
+    {
+      "id": "paged.theme",
+      "kind": "preference",
+      "storage": "localStorage",
+      "key": "paged.theme",
+      "default": "dark",
+      "values": ["dark", "light"],
+      "effect": "the `dark` class on <html>",
+      "source": "apps/editor/packages/shell/src/state/theme-context.tsx",
+      "marker": "\"paged.theme\"",
+      "sites": [
+        ["getItem", "STORAGE_KEY"],
+        ["setItem", "STORAGE_KEY"]
+      ]
+    },
+    {
+      "id": "paged.workflowMode",
+      "kind": "preference",
+      "storage": "localStorage",
+      "key": "paged.workflowMode",
+      "scoped": true,
+      "default": "design",
+      "values": ["design", "content", "prepress", "data", "review", "export"],
+      "effect": "the active workflow mode (cockpit slots, context toolbar, panel sets)",
+      "source": "apps/editor/packages/shell/src/state/workflow-mode-context.tsx",
+      "marker": "\"paged.workflowMode\"",
+      "sites": [
+        ["getItem", "storageKey()"],
+        ["setItem", "storageKey()"]
+      ]
+    },
+    {
+      "id": "paged.cockpit.v1",
+      "kind": "persisted-ui-state",
+      "storage": "localStorage",
+      "key": "paged.cockpit.v1",
+      "scoped": true,
+      "default": {},
+      "effect": "per mode: the right dock's open tabs and the active tab",
+      "migration": "the legacy dockview layout keys (paged.layout.*) are deleted on load",
+      "source": "apps/editor/packages/shell/src/cockpit/cockpit-persistence.ts",
+      "marker": "\"paged.cockpit.v1\"",
+      "sites": [
+        ["removeItem", "k"],
+        ["getItem", "KEY()"],
+        ["setItem", "KEY()"]
+      ]
+    },
+    {
+      "id": "paged.toolRail.lastUsed",
+      "kind": "persisted-ui-state",
+      "storage": "localStorage",
+      "key": "paged.toolRail.lastUsed",
+      "default": {},
+      "effect": "per tool group: the tool its rail slot shows",
+      "source": "apps/editor/packages/shell/src/chrome/ToolRail.tsx",
+      "marker": "\"paged.toolRail.lastUsed\"",
+      "sites": [
+        ["getItem", "LAST_USED_STORAGE_KEY"],
+        ["setItem", "LAST_USED_STORAGE_KEY"]
+      ]
+    },
+    {
+      "id": "paged.palette.recents.v1",
+      "kind": "persisted-ui-state",
+      "storage": "localStorage",
+      "key": "paged.palette.recents.v1",
+      "default": [],
+      "effect": "the command palette's Recent group (at most five ids, newest first)",
+      "source": "apps/editor/packages/shell/src/chrome/CommandPalette.tsx",
+      "marker": "\"paged.palette.recents.v1\"",
+      "sites": [
+        ["getItem", "RECENTS_KEY"],
+        ["setItem", "RECENTS_KEY"]
+      ]
+    },
+    {
+      "id": "paged.exportPdf.options.v1",
+      "kind": "export-option",
+      "storage": "localStorage",
+      "key": "paged.exportPdf.options.v1",
+      "default": {
+        "standard": "pdfx4",
+        "outputIntentProfile": "",
+        "colorPolicy": "preserveNumbers",
+        "allPages": true,
+        "pageFrom": "1",
+        "pageTo": "1",
+        "useDocumentBleed": true,
+        "bleedPt": "0",
+        "cropMarks": false,
+        "registrationMarks": false,
+        "colorBars": false,
+        "downsample": "off",
+        "bookmarks": false,
+        "tagged": false
+      },
+      "effect": "the Export PDF dialog's form, and the options the export sends",
+      "source": "apps/editor/packages/shell/src/chrome/ExportPdfDialog.tsx",
+      "marker": "\"paged.exportPdf.options.v1\"",
+      "sites": [
+        ["getItem", "OPTIONS_KEY"],
+        ["setItem", "OPTIONS_KEY"]
+      ]
+    },
+    {
+      "id": "paged.export.image.v1",
+      "kind": "export-option",
+      "storage": "localStorage",
+      "key": "paged.export.image.v1",
+      "default": {
+        "dpi": 150,
+        "scope": "all",
+        "range": "",
+        "format": "png",
+        "quality": 0.9
+      },
+      "effect": "the image output's resolution, page scope, format and quality",
+      "source": "apps/editor/apps/canvas/src/panels/cockpit/export-targets.ts",
+      "marker": "\"paged.export.image.v1\"",
+      "sites": [
+        ["getItem", "IMAGE_KEY"],
+        ["setItem", "IMAGE_KEY"]
+      ]
+    },
+    {
+      "id": "paged.actions.v1",
+      "kind": "user-library",
+      "storage": "localStorage",
+      "key": "paged.actions.v1",
+      "default": {
+        "schema": 1,
+        "actions": []
+      },
+      "effect": "the recorded actions the Actions panel lists and replays",
+      "migration": "a library of another schema version is dropped, not repaired; invalid actions are filtered out",
+      "source": "apps/editor/packages/shell/src/actions/store.ts",
+      "marker": "\"paged.actions.v1\"",
+      "sites": [
+        ["getItem", "ACTIONS_STORAGE_KEY"],
+        ["setItem", "ACTIONS_STORAGE_KEY"]
+      ]
+    },
+    {
+      "id": "paged.library",
+      "kind": "feature-flag",
+      "storage": "localStorage",
+      "key": "paged.library",
+      "default": "on (absent)",
+      "values": ["off"],
+      "effect": "\"off\" keeps the local document library (origin-private file system) from starting",
+      "source": "apps/editor/apps/canvas/src/main.tsx",
+      "marker": "\"paged.library\"",
+      "sites": [["getItem", "\"paged.library\""]]
+    },
+    {
+      "id": "view.textThreads",
+      "kind": "view-option",
+      "storage": "memory",
+      "default": false,
+      "effect": "View > Show text threads: the thread lines overlay",
+      "source": "apps/editor/packages/shell/src/state/view-toggles.ts",
+      "marker": "textThreads: false",
+      "sites": []
+    },
+    {
+      "id": "view.snapToPoints",
+      "kind": "view-option",
+      "storage": "memory",
+      "default": true,
+      "effect": "View > Snap to points: the Pen and Direct Selection snap to page edges, centre and anchors",
+      "source": "apps/editor/packages/shell/src/state/view-toggles.ts",
+      "marker": "snapToPoints: true",
+      "sites": []
+    },
+    {
+      "id": "view.headingAnchors",
+      "kind": "view-option",
+      "storage": "memory",
+      "default": false,
+      "effect": "View > Show heading anchors: the resolver's anchor badges",
+      "source": "apps/editor/packages/shell/src/state/view-toggles.ts",
+      "marker": "headingAnchors: false",
+      "sites": []
+    },
+    {
+      "id": "view.screenMode",
+      "kind": "view-option",
+      "storage": "memory",
+      "default": "normal",
+      "values": ["normal", "preview", "bleed", "slug", "presentation"],
+      "effect": "the screen mode the overlays render (W toggles Normal and Preview)",
+      "source": "apps/editor/packages/shell/src/state/screen-mode-context.tsx",
+      "marker": "useState<ScreenMode>(\"normal\")",
+      "sites": []
+    },
+    {
+      "id": "view.formattingAffects",
+      "kind": "ui-state",
+      "storage": "memory",
+      "default": "container",
+      "values": ["container", "text"],
+      "effect": "whether fill and stroke edits apply to the frame or to its text",
+      "source": "apps/editor/packages/shell/src/state/formatting-affects-context.tsx",
+      "marker": "useState<FormattingAffects>(\"container\")",
+      "sites": []
+    },
+    {
+      "id": "view.activeWell",
+      "kind": "ui-state",
+      "storage": "memory",
+      "default": "fill",
+      "values": ["fill", "stroke"],
+      "effect": "which of the fill and stroke wells a swatch click colours",
+      "source": "apps/editor/packages/shell/src/state/formatting-affects-context.tsx",
+      "marker": "useState<FillStrokeWell>(\"fill\")",
+      "sites": []
+    },
+    {
+      "id": "url.solo",
+      "kind": "url-flag",
+      "storage": "url",
+      "key": "?solo=<profile>",
+      "default": "absent: the ordinary editor",
+      "values": [
+        "paged.draw",
+        "paged.image",
+        "paged.sheet",
+        "paged.doc",
+        "paged.web",
+        "paged.data"
+      ],
+      "effect": "boots a single-plugin application; its chrome storage keys are scoped `.solo.<profile>`",
+      "source": "apps/editor/apps/canvas/src/solo/profiles.ts",
+      "marker": "get(\"solo\")",
+      "sites": []
+    },
+    {
+      "id": "url.debug",
+      "kind": "url-flag",
+      "storage": "url",
+      "key": "?debug=<flag>[,<flag>…]",
+      "default": "absent: no diagnostics",
+      "effect": "turns on per-load developer diagnostics (`debugFlag(name)`)",
+      "source": "apps/editor/apps/canvas/src/debug-flags.ts",
+      "marker": "get(\"debug\",)",
+      "sites": []
+    },
+    {
+      "id": "url.script",
+      "kind": "url-flag",
+      "storage": "url",
+      "key": "?script=<id>[&embed][&autoplay]",
+      "default": "absent: no live script",
+      "effect": "the live-script playground loads /scripts/<id>.js; `embed` hides its chrome, `autoplay` plays it",
+      "source": "apps/editor/apps/canvas/src/playground/PlaygroundController.tsx",
+      "marker": "p.get(\"script\")",
+      "sites": []
+    },
+    {
+      "id": "url.embed",
+      "kind": "url-flag",
+      "storage": "url",
+      "key": "?embed=script[&seed=<name>]",
+      "default": "absent: no iframe bridge",
+      "effect": "the documentation iframe bridge: accepts scripts from allowed parent origins over postMessage, seeded by `seed`",
+      "source": "apps/editor/apps/canvas/src/playground/IframeScriptBridge.tsx",
+      "marker": "params.get(\"embed\") !== \"script\"",
+      "sites": []
+    }
+  ],
+  "excluded": [
+    {
+      "key": "paged.server.<origin>.tokens, paged.server.<origin>.client:<redirectUri>",
+      "storage": "localStorage",
+      "reason": "repository sign-in: the OAuth tokens and the registered client id per server. Credentials and session state, not configuration a user sets; asserted by packages/repository's own tests.",
+      "source": "apps/editor/packages/repository/src/signin.ts",
+      "marker": "`paged.server.${new URL(server).origin}.${what}`",
+      "sites": [
+        ["getItem", "key(server, \"tokens\")"],
+        ["setItem", "key(server, \"tokens\")"],
+        ["removeItem", "key(server, \"tokens\")"],
+        ["getItem", "key(server, `client:${redirectUri}`)"],
+        ["setItem", "key(server, `client:${redirectUri}`)"],
+        ["getItem", "key(server, `client:${redirectUri}`)"]
+      ]
+    },
+    {
+      "key": "IndexedDB paged-secrets",
+      "storage": "indexedDB",
+      "reason": "the plugin credential store behind host.secrets (passphrase-wrapped secrets per plugin reference). User data a plugin asks for through a prompt, not an editor setting.",
+      "source": "apps/editor/apps/canvas/src/plugin-secret-store.ts",
+      "marker": "\"paged-secrets\"",
+      "sites": [["indexedDB.open", "DB_NAME"]]
+    },
+    {
+      "key": "OPFS plugin-blobs/<plugin id>",
+      "storage": "opfs",
+      "reason": "host.storage blob tier: plugin content bytes in the origin-private file system, not configuration.",
+      "source": "apps/editor/apps/canvas/src/plugin-blob-store.ts",
+      "marker": "\"plugin-blobs\"",
+      "sites": [["getDirectory", ""]]
+    },
+    {
+      "key": "OPFS <library root>",
+      "storage": "opfs",
+      "reason": "the local document library's repositories (documents and their versions), not configuration.",
+      "source": "apps/editor/packages/repository/src/fs.ts",
+      "marker": "storage.getDirectory()",
+      "sites": [["getDirectory", ""]]
+    }
+  ]
+}

@@ -78,7 +78,7 @@ import {
   readRepeatLibrary,
   symbolInstanceOf,
 } from "../../src";
-import { openHost } from "../conformance/host";
+import { openHost } from "../headless/host";
 import { F4_OVERLAP, type CorpusFixture } from "../fixtures/corpus";
 
 // ------------------------------------------------------------- geometry

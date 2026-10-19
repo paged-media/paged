@@ -1,0 +1,9 @@
+{
+  "keybinding:*→paged.tool.activate.*": "Seeded 2026-10-19, when covers() became the measure: no test presses every tool shortcut of *→paged.tool.activate.* (19 today) and asserts the tool it activates; 0 of its members are named by a covers() call; declared in apps/editor/packages/shell/src/state/commands/registry-derived.ts.",
+  "keybinding:cmd+shift+h→paged.sample.hello": "Seeded 2026-10-19, when covers() became the measure: no test presses cmd+shift+h and asserts that it runs paged.sample.hello; no test file names it at all; declared in apps/editor/packages/shell/src/bundles/sample-bundle.worker.ts.",
+  "keybinding:d→paged.fillStroke.default": "Seeded 2026-10-19, when covers() became the measure: no test presses d and asserts that it runs paged.fillStroke.default; no test file names it at all; declared in apps/editor/packages/shell/src/chrome/FillStrokeCluster.tsx.",
+  "keybinding:j→paged.fillStroke.toggleAffects": "Seeded 2026-10-19, when covers() became the measure: no test presses j and asserts that it runs paged.fillStroke.toggleAffects; no test file names it at all; declared in apps/editor/packages/shell/src/chrome/FillStrokeCluster.tsx.",
+  "keybinding:shift+tab→paged.chrome.togglePanels": "Seeded 2026-10-19, when covers() became the measure: no test presses shift+tab and asserts that it runs paged.chrome.togglePanels; no test file names it at all; declared in apps/editor/packages/shell/src/PagedShell.tsx.",
+  "keybinding:tab→paged.chrome.toggleAll": "Seeded 2026-10-19, when covers() became the measure: no test presses tab and asserts that it runs paged.chrome.toggleAll; no test file names it at all; declared in apps/editor/packages/shell/src/PagedShell.tsx.",
+  "keybinding:x→paged.fillStroke.swap": "Seeded 2026-10-19, when covers() became the measure: no test presses x and asserts that it runs paged.fillStroke.swap; no test file names it at all; declared in apps/editor/packages/shell/src/chrome/FillStrokeCluster.tsx."
+}

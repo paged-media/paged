@@ -138,7 +138,7 @@
 //
 // THE ORDER INSIDE THE BATCH is the only one the engine accepts, and it
 // is why ANY number of rebuilds fits in one (each rule measured; the
-// sentences are pinned in `test/conformance/minted.spec.ts`):
+// sentences are pinned in `test/headless/minted.spec.ts`):
 //   1. EVERY insert first. Up to core 0.71.7 a batch that DELETES and
 //      then INSERTS is refused ("position N out of range for parent
 //      Spread"): the insert's z-position resolves against the spread

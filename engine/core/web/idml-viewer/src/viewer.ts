@@ -125,7 +125,9 @@ const ZOOM_STEP = Math.SQRT2;
 function mapDiagnostics(diags: SessionDiagnostics): ViewerError {
   const first = diags.messages.find((m) => m.severity === "error");
   const code: ViewerErrorCode =
-    first?.code === "no_gpu" || first?.code === "gpu_init"
+    first?.code === "no_gpu" ||
+    first?.code === "gpu_init" ||
+    first?.code === "gpu_lost"
       ? "GPU_UNAVAILABLE"
       : first?.code === "open" || first?.code === "build"
         ? "PARSE_ERROR"
@@ -220,8 +222,32 @@ export async function createViewer(
         dpr,
         mode === "single" ? page : null,
       );
-      if (!diags.ok) events.emit("error", mapDiagnostics(diags));
+      if (diags.ok) return;
+      if (diags.messages.some((m) => m.code === "gpu_lost")) {
+        void recoverFromGpuLoss(diags);
+        return;
+      }
+      events.emit("error", mapDiagnostics(diags));
     });
+  }
+
+  // A lost device (a GPU-process crash, a driver reset) fails every
+  // present until a new one is bound. Ask for one once; when the browser
+  // grants it the page draws again, otherwise the viewer says the GPU is
+  // gone rather than leaving a stale canvas.
+  let recovering = false;
+  async function recoverFromGpuLoss(diags: SessionDiagnostics): Promise<void> {
+    if (recovering) return;
+    recovering = true;
+    const recovered =
+      (await session.recoverGpu?.().catch(() => false)) ?? false;
+    recovering = false;
+    if (disposed) return;
+    if (recovered) {
+      requestFrame();
+      return;
+    }
+    events.emit("error", mapDiagnostics(diags));
   }
 
   function applyCamera(next: Camera, force = false): void {

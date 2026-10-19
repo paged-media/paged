@@ -34,6 +34,11 @@ modules/image/glue/object-model/
 modules/image/manifest/object-model/
 # web-conformance test/indesign-bake.spec.ts (scripts and expected answers)
 modules/web/packages/web-conformance/indesign/scripts/
+# the surface-parity run writes these (PARITY_WRITE=1 bun run test:headless)
+# and its matrix test compares the JSON with what it measured
+docs/development/surface-parity-matrix.json
+docs/development/surface-parity-matrix.md
+apps/editor/apps/canvas/tests/headless/parity/script-door.covers.generated.ts
 
 # --- Machine-written records: a tool rewrites them on every run. ----------
 # showcase ledgers and coverage, written by the showcase chapters

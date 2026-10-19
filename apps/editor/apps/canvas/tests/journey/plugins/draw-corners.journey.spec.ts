@@ -36,7 +36,7 @@
 // by 2,019 px. paged.draw's own `supportsLiveCorners` gate kept saying
 // "rectangle" long after, so the presets were a silent no-op on a
 // polygon; that is fixed in the bundle and pinned there, against the
-// real engine, in `draw-bundle/test/conformance/live-corners.spec.ts`.
+// real engine, in `draw-bundle/test/headless/live-corners.spec.ts`.
 // It is NOT exercised here because the editor loads the PUBLISHED
 // `@paged-media/draw` canary — a journey for it would be red until that
 // package ships.

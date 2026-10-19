@@ -94,7 +94,7 @@ import {
   TRACE_DEFAULTS,
   type AppearanceStack,
 } from "../../src";
-import { treeShapeOf } from "../conformance/one-batch";
+import { treeShapeOf } from "../headless/one-batch";
 import { F7_PLACED_IMAGE, ringPixels } from "../fixtures/corpus";
 import {
   BUDGET_TIMEOUT_MS,
@@ -952,7 +952,7 @@ describe("perf budgets — commands over a busy document", () => {
       // conversion left undone: the carrier's bake record names its
       // layers by element id inside its JSON metadata, and a `$h:`
       // handle in text is stored as written, never resolved (measured,
-      // `test/conformance/minted.spec.ts`). The record can only be
+      // `test/headless/minted.spec.ts`). The record can only be
       // written once a first mutation has answered with the ids.
       expect(work.mutations).toEqual([
         { op: "batch", ops: 3 },
@@ -1046,7 +1046,7 @@ describe("perf budgets — Image Trace over a busy document", () => {
     // STILL two batches, and that is the floor the rules allow: the
     // source's trace record names its regions by element id inside its
     // JSON metadata, and a `$h:` handle in text is stored as written,
-    // never resolved (measured, `test/conformance/minted.spec.ts`).
+    // never resolved (measured, `test/headless/minted.spec.ts`).
     expect(work.mutations.map((m) => m.op)).toEqual(["batch", "batch"]);
     expect(undoSteps).toBe(2);
     expect(restored).toBe(true);

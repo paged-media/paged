@@ -50,7 +50,7 @@ import {
   PATH_OPTIONS_DEFAULTS,
   PATH_OPTIONS_PANEL_ID,
 } from "../../src";
-import { openHost } from "../conformance/host";
+import { openHost } from "../headless/host";
 import {
   drive,
   mountPanel,

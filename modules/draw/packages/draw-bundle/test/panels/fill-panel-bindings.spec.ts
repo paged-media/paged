@@ -23,7 +23,7 @@
 // the host doors (the perf-budgets.spec.ts rules: a COUNT, MEASURED,
 // target beside it, only lowered).
 //
-// `conformance/fill-panel.spec.ts` already proves the gate END TO END
+// `headless/fill-panel.spec.ts` already proves the gate END TO END
 // through the loaded bundle. This file is the driver alone: installed
 // HERE over a counting host, on a headless host that was given the
 // bundle's MANIFEST with an empty `activate`, so the bundle's own copy of
@@ -54,7 +54,7 @@ import {
   BIND_GRADIENT_CONTROLS_VISIBLE,
   FILL_GRADIENT_PRESETS,
 } from "../../src";
-import { openHost } from "../conformance/host";
+import { openHost } from "../headless/host";
 import { countingHost, type WorkLog } from "../perf/counting-host";
 import {
   documentChanges,

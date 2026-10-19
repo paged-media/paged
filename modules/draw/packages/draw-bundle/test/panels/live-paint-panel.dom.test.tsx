@@ -52,7 +52,7 @@ import {
   LIVE_PAINT_NOTE,
   LIVE_PAINT_PANEL_ID,
 } from "../../src";
-import { openHost } from "../conformance/host";
+import { openHost } from "../headless/host";
 import {
   documentBurst,
   drive,
@@ -71,6 +71,7 @@ import {
   PLAIN_LEAVES,
   RECORDS,
 } from "./harness";
+import { covers } from "@paged-media/test-kit";
 
 /** `count` overlapping pairs: a 40 pt square `a<i>` and `b<i>`, the same
  *  square shifted 20 pt right and down — three faces per pair. */
@@ -183,6 +184,7 @@ describe("Live paint panel — rendered against the engine", () => {
     });
 
     it("+ From selection records the selected paths as a recipe, through the engine", async () => {
+      covers("panel:media.paged.draw.panel.livePaint");
       await h.host.selection.set(pair(0));
       const panel = await mountPanel(h, makeLivePaintPanel);
       panel.reset();
@@ -271,6 +273,7 @@ describe("Live paint panel — rendered against the engine", () => {
     });
 
     it("a face row's Delete removes the artwork and forgets the paint", async () => {
+      covers("panel:media.paged.draw.panel.livePaint");
       const panel = await mountPanel(h, makeLivePaintPanel);
       await panel.click("[data-draw-live-paint-face-delete]");
 
@@ -344,6 +347,7 @@ describe("Live paint panel — rendered against the engine", () => {
     });
 
     it("Release drops the recipe and every link, and keeps the artwork", async () => {
+      covers("panel:media.paged.draw.panel.livePaint");
       const panel = await mountPanel(h, makeLivePaintPanel);
       await panel.click(`${ROW} [data-draw-live-paint-release]`);
 

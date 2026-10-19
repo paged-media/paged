@@ -1,0 +1,3 @@
+{
+  "setting:paged.library": "The flag is read only by startLibrary() in apps/canvas/src/main.tsx, the app's entry module: importing it boots the editor (createRoot at module scope, Vite ?worker imports), so no unit or component test can load it. Covering it needs the check moved into an importable module, a product change this test programme does not make."
+}

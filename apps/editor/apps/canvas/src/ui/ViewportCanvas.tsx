@@ -34,7 +34,7 @@
 // `<canvas>` is opaque from React's perspective after the
 // `transferControlToOffscreen` call.
 
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   OverlayHost,
@@ -190,6 +190,11 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   /** Set once we've transferred to the worker — guards against re-transfer (illegal). */
   const transferredRef = useRef(false);
+  // Bumped when the worker asks for a NEW canvas: after a GPU device is
+  // lost and none replaces it, the old canvas keeps its WebGPU context
+  // and cannot draw 2D, so a fresh element is transferred and the worker
+  // draws it on the CPU.
+  const [canvasGeneration, setCanvasGeneration] = useState(0);
 
   const dragStateRef = useRef<{
     /** `pan` is camera-translate; `marquee` is the element-selection
@@ -306,15 +311,20 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
     const offscreen = canvas.transferControlToOffscreen();
     props.client.attachCanvas(offscreen, dpr, width, height);
     transferredRef.current = true;
-    // Trigger initial fit-to-document.
-    if (rects.length > 0 && width > 10 && height > 10) {
+    // Trigger initial fit-to-document (a replacement canvas keeps the view).
+    if (
+      canvasGeneration === 0 &&
+      rects.length > 0 &&
+      width > 10 &&
+      height > 10
+    ) {
       props.onCameraChange(fitCamera(width, height, documentBounds(rects)));
     }
     // We deliberately depend on `client` only — fit-to-document
     // takes the current rects/dims; subsequent re-fits are driven
     // by the document-id effect below.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [props.client]);
+  }, [props.client, canvasGeneration]);
 
   // ResizeObserver: post size updates to the worker so the
   // OffscreenCanvas bitmap matches the device-pixel viewport.
@@ -346,6 +356,12 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
     return props.client.subscribe((msg) => {
       if (msg.kind === "gestureSnapLines") {
         setSnapLines(msg.payload.snapLines);
+      } else if (
+        msg.kind === "warning" &&
+        msg.payload.kind === "canvasNeeded"
+      ) {
+        transferredRef.current = false;
+        setCanvasGeneration((g) => g + 1);
       }
     });
   }, [props.client, setSnapLines]);
@@ -1613,7 +1629,12 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
       onDoubleClick={onDoubleClick}
     >
       {/* data-paged-canvas: a stable selector for the document canvas (specs use it). */}
-      <canvas ref={canvasRef} style={canvasStyle} data-paged-canvas="" />
+      <canvas
+        key={canvasGeneration}
+        ref={canvasRef}
+        style={canvasStyle}
+        data-paged-canvas=""
+      />
       <OverlayHost
         camera={props.camera}
         pageIds={props.pageIds}

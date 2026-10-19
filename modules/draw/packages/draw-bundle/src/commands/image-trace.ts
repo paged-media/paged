@@ -72,7 +72,7 @@
 // cannot: it names the traced regions by element id inside the source's
 // JSON metadata (`imageTrace.regions`), and a `$h:` handle in text is
 // stored as written, never resolved (measured, pinned in
-// `test/conformance/minted.spec.ts`). The appearance bake's record hits
+// `test/headless/minted.spec.ts`). The appearance bake's record hits
 // the same wall. The record is what tells traced artwork from drawn
 // artwork in a reopened document, so its shape is not changed to dodge
 // that.
