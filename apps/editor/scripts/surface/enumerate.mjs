@@ -531,7 +531,13 @@ function pluginScan(ev, root, bundle) {
       }
     });
   }
-  const shapes = scanShapes(ev, root, files, "plugin", bundle.name);
+  const shapes = scanShapes(
+    ev,
+    root,
+    files,
+    "plugin",
+    bundle.id ?? bundle.name,
+  );
   out.toolOptions = shapes.toolOptions;
   return out;
 }
@@ -959,6 +965,11 @@ export function enumerateSurface(root) {
     ["importers", count("importer"), 8],
     ["exporters", count("exporter"), 6],
     ["tool options", toolOptions.reduce((n, o) => n + o.keys.length, 0), 30],
+    [
+      "editor settings (settings-inventory.json)",
+      inventory ? inventory.length : 0,
+      10,
+    ],
     [
       "paged CLI commands (cli.json)",
       cli.items.filter((c) => c.id.startsWith("paged ")).length,

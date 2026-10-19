@@ -33,6 +33,7 @@ export {
   type HostObjectsAnswerer,
   type HostObjectsRound,
   type JournalDrain,
+  type SnapshotBackendInfo,
 } from "./client";
 
 // Wire-format types — re-exports of the tsify-generated types from
