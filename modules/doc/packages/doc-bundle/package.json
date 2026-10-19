@@ -20,6 +20,7 @@
     "test:dom": "bun test --parallel --preload ../../../../tooling/js/bun-test-setup.ts --timeout 30000 --preload ./test/happydom.ts .dom.test."
   },
   "dependencies": {
+    "@paged-media/helpers": "workspace:*",
     "@paged-media/wasm-boot": "workspace:*"
   },
   "peerDependencies": {

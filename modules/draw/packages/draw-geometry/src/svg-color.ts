@@ -118,25 +118,8 @@ export function parseCssColor(input: string): Rgb | null {
   return NAMED.get(s) ?? null;
 }
 
-const hex2 = (n: number): string => clamp255(n).toString(16).padStart(2, "0");
-
-/** Format an RGB triple as a lowercase `#rrggbb` string. */
-export function rgbToHex(rgb: Rgb): string {
-  return `#${hex2(rgb[0])}${hex2(rgb[1])}${hex2(rgb[2])}`;
-}
-
-/** Convert CMYK (0–100 each, the IDML/engine swatch convention) to an
- *  RGB triple via the naive subtractive model — good enough for an
- *  interchange round-trip preview, NOT colour-managed (that lives in the
- *  engine; the SVG lane is sRGB). */
-export function cmykToRgb(c: number, m: number, y: number, k: number): Rgb {
-  const cc = c / 100;
-  const mm = m / 100;
-  const yy = y / 100;
-  const kk = k / 100;
-  return [
-    clamp255(255 * (1 - cc) * (1 - kk)),
-    clamp255(255 * (1 - mm) * (1 - kk)),
-    clamp255(255 * (1 - yy) * (1 - kk)),
-  ];
-}
+// The inverse (`rgbToHex`, a lowercase `#rrggbb`) and the naive CMYK
+// conversion (0–100 inks, the IDML/engine swatch convention; NOT
+// colour-managed, that lives in the engine, and the SVG lane is sRGB) are
+// the shared ones: one implementation for the editor and the built-ins.
+export { cmykToRgb, rgbToHex } from "@paged-media/helpers";

@@ -24,8 +24,9 @@ on:
       # The extension contract the bundle builds against (workspace:*).
       - "platform/extensions/packages/plugin-api/**"
       - "platform/extensions/packages/plugin-sdk/**"
-      # The internal shared code the bundle boots its wasm with (workspace:*).
+      # The internal shared code the bundle uses (workspace:*).
       - "platform/shared/wasm-boot/**"
+      - "platform/shared/helpers/**"
       # The engine wasm packages this workflow builds against (workspace:*),
       # and what builds them, so an engine change re-tests its consumers.
       - "engine/core/crates/**"
@@ -34,6 +35,8 @@ on:
       - "engine/core/scripts/build-wasm-packages.sh"
       - "engine/core/packages/**"
       - ".cargo/config.toml"
+      # The shared module wasm build every scripts/build-wasm.sh calls.
+      - "tooling/rust/build-wasm.sh"
       # The source hash the wasm is stamped with and its wasm-fresh spec checks.
       - "tooling/js/source-hash.mjs"
       - "tooling/bootstrap.sh"
@@ -54,8 +57,9 @@ on:
       # The extension contract the bundle builds against (workspace:*).
       - "platform/extensions/packages/plugin-api/**"
       - "platform/extensions/packages/plugin-sdk/**"
-      # The internal shared code the bundle boots its wasm with (workspace:*).
+      # The internal shared code the bundle uses (workspace:*).
       - "platform/shared/wasm-boot/**"
+      - "platform/shared/helpers/**"
       # The engine wasm packages this workflow builds against (workspace:*),
       # and what builds them, so an engine change re-tests its consumers.
       - "engine/core/crates/**"
@@ -64,6 +68,8 @@ on:
       - "engine/core/scripts/build-wasm-packages.sh"
       - "engine/core/packages/**"
       - ".cargo/config.toml"
+      # The shared module wasm build every scripts/build-wasm.sh calls.
+      - "tooling/rust/build-wasm.sh"
       # The source hash the wasm is stamped with and its wasm-fresh spec checks.
       - "tooling/js/source-hash.mjs"
       - "tooling/bootstrap.sh"
@@ -114,14 +120,9 @@ jobs:
           prefix-key: v0-rust-web
           # Only main writes the cache; pull requests restore main's (A10).
           save-if: ${{ github.ref == 'refs/heads/main' }}
-      - name: install pinned wasm-bindgen-cli (web-render Cargo.lock version)
-        run: |
-          V=$(grep -A1 '^name = "wasm-bindgen"$' packages/web-render/Cargo.lock | grep version | head -1 | cut -d'"' -f2)
-          cargo install wasm-bindgen-cli --version "$V" --locked
-      - name: install pinned binaryen (reftypes-safe; old apt binaryen breaks externref table grow)
-        run: |
-          curl -sL https://github.com/WebAssembly/binaryen/releases/download/version_126/binaryen-version_126-x86_64-linux.tar.gz | tar xz
-          echo "$PWD/binaryen-version_126/bin" >> "$GITHUB_PATH"
+      # wasm-bindgen-cli and binaryen at the pins in tooling/bootstrap.sh
+      # (prebuilt; the build script checks the CLI against Cargo.lock).
+      - uses: ./.github/actions/wasm-tools
       - name: build the Blitz ENGINE wasm artifact (manifest maxBytes budget gate; stamps bin/SOURCE_HASH)
         run: bash scripts/build-wasm.sh --engine
       # ------------------------------------------------------------------

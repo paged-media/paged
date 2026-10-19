@@ -90,11 +90,12 @@ import type {
   PluginMetadataEnvelope,
   SceneTreeNode,
 } from "@paged-media/plugin-api";
+import { labelKey } from "@paged-media/helpers";
 
 import manifest from "../manifest.json";
 
 /** This plugin's Label key — the one the facade's `getMetadata` reads. */
-const OWN_KEY = `x-paged:${manifest.id}`;
+const OWN_KEY = labelKey(manifest.id);
 
 /** RFI C-65 — the envelope a TREE ROW carries for this plugin, read
  *  exactly as `getMetadata` reads it (the JSON value of this plugin's

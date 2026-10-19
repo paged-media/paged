@@ -38,7 +38,7 @@ import {
 import { readPgil, writePgil } from "../src/object-model/pgil";
 import { readAdjust } from "../src/object-model/adjust";
 import { IMAGE_PANEL_FIELDS } from "../src/panels/properties-panel";
-import { sha256Hex } from "../src/session-store";
+import { sha256Hex } from "@paged-media/helpers";
 import { minimalIdml } from "./fixtures/minimal-idml";
 
 // The engine is this package's own @paged-media/canvas-wasm devDependency.

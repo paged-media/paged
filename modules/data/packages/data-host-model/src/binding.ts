@@ -16,6 +16,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
+import { decodeEnvelope } from "@paged-media/helpers";
 // The binding-payload envelope. Binding definitions + source manifests are the
 // plugin's document-scoped payload (spec §5.1), stamped via setPluginMetadata
 // under this plugin's namespace and round-tripped with the document. The
@@ -48,17 +49,5 @@ export function makeEnvelope(payload: unknown): string {
 /** Parse an envelope JSON, returning `null` on anything malformed (the panel
  *  shows a diagnostic rather than throwing). */
 export function parseEnvelope(json: string): BindingEnvelope | null {
-  try {
-    const parsed = JSON.parse(json) as unknown;
-    if (
-      parsed &&
-      typeof parsed === "object" &&
-      typeof (parsed as { v?: unknown }).v === "number"
-    ) {
-      return parsed as BindingEnvelope;
-    }
-    return null;
-  } catch {
-    return null;
-  }
+  return decodeEnvelope(json);
 }
