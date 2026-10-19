@@ -76,8 +76,8 @@ The gate enforces these rules:
   a call the gate cannot read must not pass as covering nothing. A table-driven test writes
   its ids out.
 - **Known kind and id.** Every id needs a known kind and must name a surface the gate
-  enumerated. An unknown id is reported. It becomes an error once the enumeration has
-  settled (`ORPHANS_FAIL`).
+  enumerated. An unknown id (a typo, a renamed command) is an error, not a quiet zero. If the
+  surface is real and the gate does not know it, the enumeration is missing an extractor.
 - **Test files only.** The call must sit in a test file: `*.test.*`, `*.spec.*`, `*.film.ts`,
   or a file under `test/`, `tests/` or `__tests__/`. For Rust, a file under `tests/` or one
   with a `#[cfg(test)]` module.
