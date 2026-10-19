@@ -33,41 +33,25 @@
 //!   under 1900.
 //! - **1904** (legacy Mac epoch). Serial `0` = 1904-01-01. No leap bug.
 //!
-//! Conversions use Howard Hinnant's branchless `days_from_civil` /
-//! `civil_from_days` algorithm, which is valid across the whole proleptic
-//! Gregorian calendar. The valid serial domain is the date range
-//! `[epoch .. 9999-12-31]`; anything outside maps to `None`.
+//! The calendar arithmetic is paged-fmt's (Howard Hinnant's `days_from_civil`
+//! / `civil_from_days`, exact across the whole proleptic Gregorian calendar);
+//! this module adds the two epochs and the 1900 leap-year rule. The valid
+//! serial domain is the date range `[epoch .. 9999-12-31]`; anything outside
+//! maps to `None`.
 
+use paged_fmt::calendar;
 use sheet_core::DateSystem;
 
-/// Days from the Unix-style civil epoch (0000-03-01 reckoning) used as a
-/// stable integer axis. Hinnant's algorithm; correct for any proleptic
-/// Gregorian (y, m, d) with `1 <= m <= 12` and a valid day. Returns days
-/// relative to 1970-01-01.
+/// Days since 1970-01-01 of a civil date.
 fn days_from_civil(y: i32, m: u32, d: u32) -> i64 {
-    let y = if m <= 2 { y - 1 } else { y };
-    let era = (if y >= 0 { y } else { y - 399 }) / 400;
-    let yoe = (y - era * 400) as i64; // [0, 399]
-    let m = m as i64;
-    let d = d as i64;
-    let doy = (153 * (if m > 2 { m - 3 } else { m + 9 }) + 2) / 5 + d - 1; // [0, 365]
-    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy; // [0, 146096]
-    era as i64 * 146097 + doe - 719468
+    calendar::days_from_civil(y as i64, m, d)
 }
 
-/// Inverse of [`days_from_civil`]: days-since-1970-01-01 -> (y, m, d).
+/// Inverse of [`days_from_civil`]: days-since-1970-01-01 -> (y, m, d). Every
+/// day count reaching it lies in the serial domain, so the year fits `i32`.
 fn civil_from_days(z: i64) -> (i32, u32, u32) {
-    let z = z + 719468;
-    let era = (if z >= 0 { z } else { z - 146096 }) / 146097;
-    let doe = z - era * 146097; // [0, 146096]
-    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365; // [0, 399]
-    let y = yoe + era * 400;
-    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100); // [0, 365]
-    let mp = (5 * doy + 2) / 153; // [0, 11]
-    let d = doy - (153 * mp + 2) / 5 + 1; // [1, 31]
-    let m = if mp < 10 { mp + 3 } else { mp - 9 }; // [1, 12]
-    let y = if m <= 2 { y + 1 } else { y };
-    (y as i32, m as u32, d as u32)
+    let (y, m, d) = calendar::civil_from_days(z);
+    (y as i32, m, d)
 }
 
 // The civil-day index of the two epochs (relative to 1970-01-01).
@@ -203,22 +187,7 @@ fn is_valid_civil(y: i32, m: u32, d: u32) -> bool {
 }
 
 fn days_in_month(y: i32, m: u32) -> u32 {
-    match m {
-        1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
-        4 | 6 | 9 | 11 => 30,
-        2 => {
-            if is_leap(y) {
-                29
-            } else {
-                28
-            }
-        }
-        _ => 0,
-    }
-}
-
-fn is_leap(y: i32) -> bool {
-    (y % 4 == 0 && y % 100 != 0) || y % 400 == 0
+    calendar::days_in_month(y as i64, m)
 }
 
 /// Fractional day for a time-of-day. `0.5` == noon. Seconds may be

@@ -253,6 +253,7 @@ export function useBindToData(
   const readLabels = useElementLabels();
   const [notice, setNotice] = useState<BindNotice | null>(null);
 
+  // eslint-disable-next-line no-restricted-syntax -- a hook's result: callers may compare it (ADR 229)
   const open = useCallback(async () => {
     if (!model || !field.row) return;
     const address = field.addresses[0];

@@ -98,7 +98,7 @@ export async function build(ctx: PageContext): Promise<PageReport> {
       "bundles a user drives, then saved as a .paged container.",
     "",
     `Engine protocol: ${protocol ?? "unreported"}.`,
-    `Render backend: ${gpu ? "WebGPU (Vello)" : "CPU (tiny-skia fallback)"}.`,
+    `Render backend: ${gpu ? "WebGPU (Vello)" : "CPU (vello_cpu fallback)"}.`,
     `Plugin bundles loaded: ${
       plugins.length > 0
         ? plugins.map((p) => `${p.id} ${p.version}`).join(", ")

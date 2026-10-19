@@ -27,8 +27,8 @@ until 2026-06-22, when it was opened.)
 Tailwind.
 
 - `apps/canvas` (`paged-canvas`) — the editor app. React shell →
-  Web Worker → engine wasm on `OffscreenCanvas` (Vello/WebGPU, tiny-skia
-  CPU fallback). Owns `src/panels/*`, the REPL (`src/repl/`), the
+  Web Worker → engine wasm on `OffscreenCanvas` (Vello/WebGPU, `vello_cpu`
+  CPU fallback — one rendering model on both). Owns `src/panels/*`, the REPL (`src/repl/`), the
   script editor, and the Playwright suite (`tests/`).
 - `apps/devtools` (`paged-devtools`) — standalone scene-graph
   inspector over `paged-introspect-wasm` (its own `build-wasm.sh`).
@@ -109,6 +109,18 @@ so:
   a value beside a version counter that only triggers the render.
 - **Name a component** with a declaration or a `const`: the compiler
   cannot see `return function Panel()`.
+- **Write a "latest value" ref in a layout effect**, not during render
+  (`useLayoutEffect(() => { ref.current = value; })`); a ref written in
+  render keeps the whole component uncompiled. Inside a `try`, no
+  `finally` and no conditional or `??`: move the work to a function
+  that returns its outcome, or use a promise chain.
+- **No new `useMemo` / `useCallback`.** The compiler memoizes compiled
+  components with the dependencies it can prove. Keep one only where
+  identity is the point (an effect dependency it stabilises, a value a
+  caller or a context consumer compares, a component the compiler does
+  not compile yet) and say so on the line above:
+  `// eslint-disable-next-line no-restricted-syntax -- <reason>`
+  (`bun lint` fails on one without it).
 - `bun run test:dom:compiled` (canvas, shell) runs the DOM lane on
   compiled code; CI does too. Fixing a bailout, or adding a component,
   updates `compiler-coverage.json`:

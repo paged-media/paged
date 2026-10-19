@@ -66,6 +66,9 @@ shared packages (`ai`, `helpers`, `ooxml`, `test-kit`, `test-resources`, `wasm-b
 - Read a registry, store, session or host surface during render through a view
   (`@paged-media/react-live`'s `useLive`, the shell's `useRegistryView`) or a
   `useSyncExternalStore` snapshot, never on the object itself.
+- No new `useMemo` / `useCallback`: the compiler memoizes compiled code. One that stays
+  says why in a `no-restricted-syntax` disable comment on the line above (it keeps an
+  effect dependency stable, say); `bun lint` enforces it.
 - Each package's `compiler-coverage.json` lists what the compiler leaves uncompiled; CI
   fails on a new entry. Fixing a bailout means running the ratchet with `--write` in the
   same commit (`bun tooling/js/react-compiler-coverage.mjs --write`).

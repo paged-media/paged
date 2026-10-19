@@ -29,7 +29,7 @@
 //     → undo → model deep-equals baseline AND pixels BYTE-IDENTICAL
 //     → redo → model assertions again
 //
-// Byte-identical undo is an ENGINE GUARANTEE (CPU renderer: tiny-skia,
+// Byte-identical undo is an ENGINE GUARANTEE (CPU renderer: vello_cpu,
 // single-threaded, signature-keyed layout cache — see core's
 // paged-canvas AC-E-7 determinism test). A violation here is an
 // engine bug, not test flake.

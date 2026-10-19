@@ -42,6 +42,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -118,6 +119,26 @@ export interface ActionsApi {
 
 const Context = createContext<ActionsApi | null>(null);
 
+/** Run a replay's steps in order through the command registry; a step
+ *  that throws is recorded with its message and the replay goes on.
+ *  Outside the provider: the React Compiler does not compile a component
+ *  with a `try` it cannot lower (ADR 229). */
+async function replaySteps(
+  commands: { invoke(id: string, payload?: unknown): Promise<unknown> },
+  steps: ReturnType<typeof planReplay>["run"],
+): Promise<ReplayStepResult[]> {
+  const ran: ReplayStepResult[] = [];
+  for (const { index, step } of steps) {
+    let error: string | null = null;
+    try {
+      await commands.invoke(step.command, step.payload);
+    } catch (err) {
+      error = err instanceof Error ? err.message : String(err);
+    }
+    ran.push({ index, command: step.command, title: step.title, error });
+  }
+  return ran;
+}
 export function ActionsProvider({ children }: PropsWithChildren) {
   const registries = useRegistries();
   const client = useCanvasClient();
@@ -137,6 +158,7 @@ export function ActionsProvider({ children }: PropsWithChildren) {
   const replayingRef = useRef(false);
   const replayMutations = useRef(0);
 
+  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
   const commit = useCallback((next: ActionLibrary) => {
     setLibrary(next);
     setPersisted(saveLibrary(next));
@@ -146,6 +168,7 @@ export function ActionsProvider({ children }: PropsWithChildren) {
   // updaters during the render phase, so writing localStorage and
   // another component's state from inside one is a side effect in
   // render. Every caller already has the current library in scope.
+  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
   const patch = useCallback(
     (actionId: string, fn: (action: PagedAction) => PagedAction) => {
       commit({
@@ -236,6 +259,7 @@ export function ActionsProvider({ children }: PropsWithChildren) {
     return () => off();
   }, [client]);
 
+  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
   const startRecording = useCallback(() => {
     setLastReport(null);
     recordingRef.current = true;
@@ -246,11 +270,13 @@ export function ActionsProvider({ children }: PropsWithChildren) {
     });
   }, []);
 
+  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
   const cancelRecording = useCallback(() => {
     recordingRef.current = false;
     setRecording(null);
   }, []);
 
+  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
   const stopRecording = useCallback(
     (name: string): PagedAction | null => {
       recordingRef.current = false;
@@ -274,6 +300,7 @@ export function ActionsProvider({ children }: PropsWithChildren) {
     [recording, library, commit],
   );
 
+  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
   const play = useCallback(
     async (actionId: string): Promise<ReplayReport | null> => {
       const action = library.actions.find((a) => a.id === actionId);
@@ -283,26 +310,12 @@ export function ActionsProvider({ children }: PropsWithChildren) {
       setLastReport(null);
       replayingRef.current = true;
       replayMutations.current = 0;
-      const ran: ReplayStepResult[] = [];
-      try {
-        for (const { index, step } of plan.run) {
-          let error: string | null = null;
-          try {
-            await registries.commands.invoke(step.command, step.payload);
-          } catch (err) {
-            error = err instanceof Error ? err.message : String(err);
-          }
-          ran.push({
-            index,
-            command: step.command,
-            title: step.title,
-            error,
-          });
-        }
-      } finally {
-        replayingRef.current = false;
-        setPlayingId(null);
-      }
+      const ran = await replaySteps(registries.commands, plan.run).finally(
+        () => {
+          replayingRef.current = false;
+          setPlayingId(null);
+        },
+      );
       const report: ReplayReport = {
         actionId,
         actionName: action.name,
@@ -321,6 +334,7 @@ export function ActionsProvider({ children }: PropsWithChildren) {
     [library, playingId, registries],
   );
 
+  // eslint-disable-next-line no-restricted-syntax -- its type argument types the value (ADR 229)
   const api = useMemo<ActionsApi>(
     () => ({
       actions: library.actions,
@@ -391,7 +405,11 @@ export function ActionsProvider({ children }: PropsWithChildren) {
   // without it, invoking `paged.actions.play` while recording would
   // record the act of replaying.
   const apiRef = useRef<ActionsApi | null>(null);
-  apiRef.current = api;
+  // Kept current after each commit (a ref written during render keeps the
+  // provider uncompiled, ADR 229).
+  useLayoutEffect(() => {
+    apiRef.current = api;
+  });
   useEffect(() => {
     const disposers = [
       registries.commands.register({

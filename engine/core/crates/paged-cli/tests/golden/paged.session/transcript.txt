@@ -8,7 +8,7 @@ $ paged session
 {"ok":true,"result":{"error":null,"output":["[log] 1"],"pageIds":[],"writes":0}}
 {"combined":"<DIGEST>","ok":true,"pageDigests":{"usp":"<DIGEST>"},"stateHash":"<DIGEST>"}
 {"heightPx":50,"ok":true,"out":"p.png","pageId":"usp","widthPx":100}
-{"error":"backend 'vello' is not available headlessly: core's only headless rasterizer is the CPU/tiny-skia one (it also backs the fidelity gate). Omit `backend`, or pass \"cpu\".","ok":false}
+{"error":"backend 'vello' is not available headlessly: core's headless rasterizer is the CPU one, vello_cpu (it also backs the fidelity gate). Omit `backend`, or pass \"cpu\".","ok":false}
 {"bytes":5593,"format":"paged","ok":true,"out":"s.paged"}
 {"error":"bad request: unknown variant `nope`, expected one of `load`, `new-blank`, `register-font`, `register-color-profile`, `run-script`, `inspect`, `pages`, `digest`, `describe`, `render`, `export`, `quit` at line 1 column 13","ok":false}
 {"error":"bad request: expected ident at line 1 column 2","ok":false}

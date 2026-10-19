@@ -12,6 +12,8 @@ workspace = true
 
 [dependencies]
 sheet-core = { path = "../sheet-core" }
+# The calendar, the locale table and digit grouping (platform/shared/fmt).
+paged-fmt = { path = "../../../platform/shared/fmt" }
 compact_str.workspace = true
 ryu.workspace = true
 rustc-hash.workspace = true

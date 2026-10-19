@@ -23,7 +23,7 @@
 // enabled). The worker's `initGpu` claims the OffscreenCanvas's WebGPU context
 // and wires the present path; success surfaces as `attachReady.gpuActive`,
 // mirrored onto `__canvas.gpuActive`. Asserting it is true proves the Vello/
-// WebGPU backend ran — not the CPU/tiny-skia fallback every other journey
+// WebGPU backend ran — not the CPU (`vello_cpu`) fallback every other journey
 // exercises. (The deterministic CPU snapshot path stays the assertion engine
 // for content; this one is purely about which renderer claimed the canvas.)
 

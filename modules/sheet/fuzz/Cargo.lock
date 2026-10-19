@@ -258,6 +258,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9f7c3e4beb33f85d45ae3e3a1792185706c8e16d043238c593331cc7cd313b50"
 
 [[package]]
+name = "paged-fmt"
+version = "0.0.0"
+
+[[package]]
 name = "paged-ooxml"
 version = "0.0.0"
 dependencies = [
@@ -434,6 +438,7 @@ name = "sheet-fn"
 version = "0.0.0"
 dependencies = [
  "compact_str",
+ "paged-fmt",
  "serde",
  "serde_norway",
  "sheet-core",
@@ -445,6 +450,7 @@ name = "sheet-format"
 version = "0.0.0"
 dependencies = [
  "compact_str",
+ "paged-fmt",
  "rustc-hash",
  "ryu",
  "sheet-core",
@@ -477,6 +483,7 @@ name = "sheet-js"
 version = "0.0.0"
 dependencies = [
  "console_error_panic_hook",
+ "paged-fmt",
  "serde",
  "serde-wasm-bindgen",
  "sheet-calc",

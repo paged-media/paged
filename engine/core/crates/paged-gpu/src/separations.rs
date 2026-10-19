@@ -20,8 +20,7 @@
 //!
 //! The rasterizer already maintains, per page pixel, one 8-bit plane
 //! per process ink (C/M/Y/K) plus one per named spot ink — that state
-//! is what makes per-channel CMYK overprint work (`cpu.rs`, Stage
-//! 4A/4B/4C). Those planes ARE a separation; until now they were
+//! is what makes per-channel CMYK overprint work (`ink_planes.rs`). Those planes ARE a separation; until now they were
 //! allocated, written, read by the overprint composite, and then
 //! dropped at the end of `rasterize`. This module gives them a name, a
 //! public shape, and the two prepress readings a print operator wants:
@@ -43,7 +42,7 @@
 //!    PDF exporter embeds them in their own colour space for the RIP to
 //!    separate;
 //!  * anything drawn inside a blend group / layer buffer, because the
-//!    plane state is page-level only (see `cpu.rs`'s Stage B note).
+//!    plane state is page-level only (see `ink_planes.rs`).
 //!
 //! Those pixels are *unknown*, not *blank*. [`Separation::separated`]
 //! marks which pixels carry plane truth, and every report here carries
@@ -58,7 +57,7 @@
 //! headline TAC number confidently wrong in exactly the place operators
 //! check it. An honest hole beats a plausible fabrication.
 
-use crate::cpu::CmykPlanes;
+use crate::ink_planes::CmykPlanes;
 use image::{Rgba, RgbaImage};
 use paged_compose::DisplayList;
 
@@ -87,7 +86,7 @@ impl InkChannel {
 /// process ink, `SpotInk::cmyk_alternate` for a spot. Carrying it on
 /// the plate lets [`Separation::plate_preview`] composite process and
 /// spot plates through one uniform rule, the same one
-/// `cpu::compose_spot_overprint_via_plane` uses for the live render.
+/// `ink_planes::compose_overprint` uses for the live render.
 #[derive(Debug, Clone)]
 pub struct InkPlate {
     pub channel: InkChannel,
@@ -300,7 +299,7 @@ impl Separation {
     /// Separations preview: composite only the plates at the given
     /// indices, exactly the way the renderer composites overlapping
     /// inks (per-channel max of each ink's DeviceCMYK contribution,
-    /// then the naive CMYK→RGB map that `cpu.rs` uses as its
+    /// then the naive CMYK→RGB map that `ink_planes.rs` uses as its
     /// definition of "what these inks look like together").
     ///
     /// Unknown pixels — those outside [`Separation::separated`] —
@@ -331,7 +330,7 @@ impl Separation {
                 y = y.max(contrib(plate.alternate[2]));
                 k = k.max(contrib(plate.alternate[3]));
             }
-            let (r, g, b) = crate::cpu::naive_cmyk_to_rgb_8bit(
+            let (r, g, b) = crate::ink_planes::naive_cmyk_to_rgb_8bit(
                 c.min(255) as u8,
                 m.min(255) as u8,
                 y.min(255) as u8,
@@ -473,7 +472,7 @@ mod tests {
 
     fn separate(list: &DisplayList, w: f32, h: f32) -> Separation {
         let opts = crate::RasterOptions::new(w, h);
-        crate::cpu::rasterize_with_separation(list, &opts).1
+        crate::vcpu::rasterize_with_separation(list, &opts).1
     }
 
     #[test]
@@ -681,8 +680,8 @@ mod tests {
             &mut list,
         );
         let opts = crate::RasterOptions::new(50.0, 50.0);
-        let plain = crate::cpu::rasterize(&list, &opts);
-        let (with_sep, _) = crate::cpu::rasterize_with_separation(&list, &opts);
+        let plain = crate::vcpu::rasterize(&list, &opts);
+        let (with_sep, _) = crate::vcpu::rasterize_with_separation(&list, &opts);
         assert_eq!(plain.as_raw(), with_sep.as_raw());
     }
 

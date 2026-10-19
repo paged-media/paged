@@ -19,12 +19,16 @@ on:
     branches: [main]
     paths:
       - "engine/core/**"
+      # The shared formatting crate (platform/shared/fmt), a path dependency.
+      - "platform/shared/fmt/**"
       - ".github/workflows/core-licenses.yml"
       # Prose under docs/ builds and tests nothing (test inputs are not .md there).
       - "!engine/core/docs/**/*.md"
   pull_request:
     paths:
       - "engine/core/**"
+      # The shared formatting crate (platform/shared/fmt), a path dependency.
+      - "platform/shared/fmt/**"
       - ".github/workflows/core-licenses.yml"
       # Prose under docs/ builds and tests nothing (test inputs are not .md there).
       - "!engine/core/docs/**/*.md"

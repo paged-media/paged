@@ -580,6 +580,7 @@ export function useProviderFirstMutate(): (
   const host = useBindingProviderHost();
   const client = useCanvasClient();
   const model = useObjectModel();
+  // eslint-disable-next-line no-restricted-syntax -- not a plain binding (ADR 229)
   return useCallback(
     async (
       mutation: Mutation,

@@ -61,7 +61,7 @@
 // a contract-level gap, recorded in the report for this slice, not a
 // panel bug.
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import {
@@ -96,8 +96,8 @@ function SwatchCollection() {
     useProvidedCollection<SwatchSummary>("swatches");
   const { rows: groupRows } =
     useProvidedCollection<ColorGroupSummary>("colorGroups");
-  const swatches = useMemo(() => swatchRows ?? [], [swatchRows]);
-  const groups = useMemo(() => groupRows ?? [], [groupRows]);
+  const swatches = swatchRows ?? [];
+  const groups = groupRows ?? [];
 
   const mutate = useProviderFirstMutate();
   const active = useActiveBindingProviders();
@@ -132,21 +132,18 @@ function SwatchCollection() {
   // providers, send it to the engine only if nobody claimed it. The
   // panel speaks one vocabulary; translating it into a plugin's own
   // realm is that plugin's business.
-  const run = useCallback(
-    async (mutation: Mutation, what: string) => {
-      const out = await mutate(mutation);
-      if (!out.applied) {
-        // A claimed-but-refused write names its owner; an unclaimed one
-        // the engine rejected does not. Reporting both is the point — a
-        // silent no-op is the class of lie the platform refuses.
-        console.warn(
-          `paged.swatches: ${what} refused by ${out.provider ?? "the engine"}`,
-          out.error,
-        );
-      }
-    },
-    [mutate],
-  );
+  const run = async (mutation: Mutation, what: string) => {
+    const out = await mutate(mutation);
+    if (!out.applied) {
+      // A claimed-but-refused write names its owner; an unclaimed one
+      // the engine rejected does not. Reporting both is the point — a
+      // silent no-op is the class of lie the platform refuses.
+      console.warn(
+        `paged.swatches: ${what} refused by ${out.provider ?? "the engine"}`,
+        out.error,
+      );
+    }
+  };
 
   const onAdd = () => {
     void run(
@@ -240,6 +237,7 @@ function SwatchCollection() {
 
   // "Provided by" — the ADR's own affordance, and DISPLAY ONLY: the user
   // is told which content type they are looking at, and no code reads it.
+  // eslint-disable-next-line no-restricted-syntax -- a computed block, not a single expression (ADR 229)
   const ownerNote = useMemo(() => {
     if (!provider) return null;
     const owner = active.find((p) => p.plugin === provider);

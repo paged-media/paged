@@ -70,10 +70,12 @@ export function ThemeProvider({ children }: PropsWithChildren) {
     }
   }, [theme]);
 
+  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
   const toggleTheme = useCallback(
     () => setTheme((t) => (t === "dark" ? "light" : "dark")),
     [],
   );
+  // eslint-disable-next-line no-restricted-syntax -- its type argument types the value (ADR 229)
   const value = useMemo<ThemeValue>(
     () => ({ theme, setTheme, toggleTheme }),
     [theme, toggleTheme],

@@ -1,0 +1,18 @@
+[package]
+name = "paged-fmt"
+version = "0.0.0"
+edition = "2021"
+rust-version = "1.99"
+license = "AGPL-3.0-only OR LicenseRef-PMEL"
+publish = false
+description = "Shared formatting facts of the built-ins: the proleptic-Gregorian calendar, the locale table and digit grouping."
+
+# Standard library only. The modules (sheet, data, slide through sheet-format)
+# and the engine take it as a path dependency (docs/adr/PM-0002, PM-0005), so
+# it adds one line to each consumer's Cargo.lock and nothing else.
+[dependencies]
+
+# A workspace of its own: this directory is not inside any other Cargo
+# workspace, and the consumers ignore this table (cargo reads only the
+# root workspace's).
+[workspace]

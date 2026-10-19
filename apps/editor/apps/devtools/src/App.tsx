@@ -17,7 +17,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   InspectorClient,
   Mutation,
@@ -44,7 +44,7 @@ export function App() {
     null,
   );
 
-  const handleFile = useCallback(async (file: File) => {
+  const handleFile = async (file: File) => {
     try {
       setError(null);
       const bytes = new Uint8Array(await file.arrayBuffer());
@@ -58,7 +58,7 @@ export function App() {
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
-  }, []);
+  };
 
   useEffect(() => {
     if (!client || !selected) {
@@ -72,23 +72,20 @@ export function App() {
     }
   }, [client, selected, renderEpoch]);
 
-  const applyMutation = useCallback(
-    (mutation: Mutation) => {
-      if (!client) return;
-      try {
-        client.apply(mutation);
-        setTree(client.tree());
-        // Trigger re-fetch of descriptors + re-render of PNG. This is
-        // the "live, not snapshot" stand-in for M0; a real subscription
-        // path lands once paged-mutate's Notifier surfaces through the
-        // bridge.
-        setRenderEpoch((e) => e + 1);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : String(err));
-      }
-    },
-    [client],
-  );
+  const applyMutation = (mutation: Mutation) => {
+    if (!client) return;
+    try {
+      client.apply(mutation);
+      setTree(client.tree());
+      // Trigger re-fetch of descriptors + re-render of PNG. This is
+      // the "live, not snapshot" stand-in for M0; a real subscription
+      // path lands once paged-mutate's Notifier surfaces through the
+      // bridge.
+      setRenderEpoch((e) => e + 1);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  };
 
   return (
     <div className="app">

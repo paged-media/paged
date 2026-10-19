@@ -532,6 +532,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "paged-fmt"
+version = "0.0.0"
+
+[[package]]
 name = "paged-ooxml"
 version = "0.0.0"
 dependencies = [
@@ -966,6 +970,7 @@ name = "sheet-fn"
 version = "0.0.0"
 dependencies = [
  "compact_str",
+ "paged-fmt",
  "rust_decimal",
  "serde",
  "serde_norway",
@@ -978,6 +983,7 @@ name = "sheet-format"
 version = "0.0.0"
 dependencies = [
  "compact_str",
+ "paged-fmt",
  "proptest",
  "rustc-hash",
  "ryu",
@@ -1002,6 +1008,7 @@ version = "0.0.0"
 dependencies = [
  "console_error_panic_hook",
  "criterion",
+ "paged-fmt",
  "serde",
  "serde-wasm-bindgen",
  "serde_json",

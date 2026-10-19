@@ -3,9 +3,8 @@
 Wave C moves code that every built-in module had its own copy of into one internal
 implementation under `platform/shared/*` (PM-0002: importable by the built-ins and the
 editor, never by `platform/extensions`), and slims what the public SDK carries. This page
-records the TypeScript items C6–C9, C11 and C12, measured on 2026-10-19, and the Rust items C1
-(the OOXML foundation) and C3 (the DrawingML chart model) further down. C10 (`panel-kit`), C2, C4
-and C5 are separate.
+records the TypeScript items C6–C9, C11 and C12, measured on 2026-10-19, and after them the
+Rust items as they land (C2 and C5 at the end). C10 (`panel-kit`) is separate.
 
 How it was measured:
 
@@ -257,6 +256,169 @@ main at `4be5f0eba`:
     The pre-71 dispatch (unreachable: the floor is the vendored wire's protocol, 74) stays until
     the seam next changes.
 
+## Left, with reasons
+
+- **The 89 partial `BundleHost` stubs:** see C8.
+- **The domain fakes:** image, sheet and plugin-sdk keep theirs.
+- **Moon:** it does not replace the per-module workflows (C7).
+- **C9's open points:**
+  - the View ▸ Snap to points toggle still does not reach draw's Curvature;
+  - the graphic-default code is duplicated between the host and draw.
+- **Test-only path dependencies:** `ai` and `cli` still read fixtures from
+  `platform/extensions/packages/plugin-sdk/test` by path, and `ai` reads plugin-api's vendored
+  catalog by path.
+- **Outside this repository:** the cockpit feature registry maps some tests by path. The
+  moved `ai` and `cli` suites and the retired draw Pencil tests need re-pointing there.
+
+## C2 — `platform/shared/fmt` (Rust)
+
+`paged-fmt` holds the formatting facts more than one Rust formatter needs: the proleptic
+Gregorian calendar, the locale table and digit grouping. It is standard library only and a
+Cargo workspace of its own, like `test-resources`; every consumer takes it as a path
+dependency, so it adds one line to each `Cargo.lock`. It has no number-format or date-format
+grammar: each formatter keeps its own and reads its facts from here.
+
+- **Consumers:** sheet-format, sheet-fn and sheet-js; data-core and data-expr; the engine's
+  `paged-renderer` (the date variables).
+- **Tests:** 11 of its own. Calendar: both directions for every date from 1600 to 2400, the
+  fixed points of the sheet and data epochs, day 0 and day overflow, and the `i32` extremes of
+  data's DuckDB range. A weekday test checks it against Sakamoto's formula, which two of the
+  copies used, for every date of every seventh year from 1 to 10000, and 1899, 1900, 1904,
+  2000 and 2100. Locale: unique tags and lookups. Digits: grouping and CLDR's minimum.
+  `core / ci` runs its fmt, clippy (native and wasm32) and tests, as it does for
+  `test-resources`.
+
+### Duplicates found, before → after
+
+The search covered every Cargo workspace (engine/core, the modules, web-render, the server):
+civil-date arithmetic, weekday formulas, leap-year and month-length helpers, month and day
+name tables, separator tables and digit grouping.
+
+| What | Copies before | After |
+| --- | --- | --- |
+| `days_from_civil` (Hinnant) | 3: sheet-format `serial.rs`, sheet-fn `date2.rs` (inline), data-core `temporal.rs` | 1 |
+| `civil_from_days` (Hinnant) | 2: sheet-format, data-core | 1 |
+| weekday | 4: sheet-format `datetime.rs` and the engine's `datefmt.rs` (Sakamoto), sheet-fn `date2.rs` and data-expr `temporal.rs` (day count mod 7) | 1 |
+| leap year, month length | 2 each: sheet-format, sheet-fn | 1 each |
+| locale separator tables | 2: sheet-format (5 rows), data-core (9 rows) | 1 (9 rows) |
+| month and day name arrays | 32: sheet-format 20, the engine 4 (English), sheet-js's fill 8 (English, German) | 20, plus the fill's one German exception |
+| digit grouping | 3: sheet-format `number.rs`, data-expr `format.rs`, slide-chart | 1 (slide-chart: below) |
+
+data-core and sheet-format keep one-line wrappers that convert to their own integer widths
+(`i32` days and years); they hold no arithmetic.
+
+### What stays with its formatter
+
+- **paged.sheet:** Excel's own facts on top of the shared rows: the list separator, the
+  default short-date code, the AM/PM ruling, Excel's French group separator (a space where
+  CLDR has U+202F) and Excel's grouping from four digits in every locale (CLDR leaves Spanish
+  `1234` ungrouped). Excel's `WEEKDAY` counts serials, phantom 1900-02-29 included
+  (sheet-fn `date.rs`); that is Excel's rule, not calendar arithmetic, and stays.
+- **paged.data:** the currency symbol and pattern and the `DATEFMT` default per locale, with
+  the two rows kept for existing documents (ISO dates for `en`, an ASCII space before `€` for
+  `de`). Its separators and grouping are the shared rows, which carry the values its table had.
+- **sheet-js's fill:** its German short months say `Mär`, where the format names say `Mrz`.
+  The fill keeps reading `Mär`, as before; whether Excel's German fill list does is not
+  recorded.
+- **Not merged:** the formula engines (modules/data ADR 550 D-9); sheet-chart's tick label
+  (a placeholder until its number formats arrive, C3's area); web-model's digit grouping
+  (TypeScript).
+
+### Behaviour
+
+The outputs are the same, by construction and by test:
+
+- **sheet:** nextest 1501 passed / 5 skipped before and after, which includes the
+  number-format, locale and date conformance corpora. The corpus lane
+  (`--profile corpus`, the private XLSX corpus) passes with the same report.
+- **data:** nextest 318 passed before and after, the locale and merge conformance included.
+- **The engine:** its date-variable tests pass unchanged. Sakamoto's formula and the civil day
+  count agree from year 1 on; before year 1, Sakamoto's truncating division was wrong, and the
+  engine now counts those years right too. A month outside 1–12 still counts as the nearest
+  valid one.
+
+### slide-chart and sheet-format
+
+slide-chart's `format_number` read a subset of Excel's format codes with its own grouping. It
+moves onto sheet-format (the plan's "slide-chart uses sheet-format"), which makes slide depend
+on modules/sheet's sheet-format and sheet-core by path. On its own that grows
+`slide_js_bg.wasm` by 55,234 B (1,559,562 → 1,614,796); with slide's zip move (zopfli leaves,
+C5) the module is smaller than before (1,553,953). So both land together, after C1.
+
+### The engine and `platform/shared`
+
+PM-0002 names the built-ins and the editor as the users of `platform/shared/*`. The engine is
+now one too, for this crate only: `paged-fmt` depends on nothing, so the engine, and the
+public viewer built from it, gain no internal dependency beyond it. The amendment is in
+PM-0002.
+
+### wasm (wasm-release, `wasm-bindgen --target web`, `wasm-opt -Oz`)
+
+| Artifact | Before | After C2 | Change |
+| --- | ---: | ---: | ---: |
+| `sheet_js_bg.wasm` | 1,695,106 | 1,692,360 | −2,746 |
+| `data_js_bg.wasm` | 1,494,268 | 1,493,224 | −1,044 |
+| `paged_canvas_wasm_bg.wasm` | 29,675,295 | 29,675,376 | +81 |
+| `paged_sdk_bg.wasm` (the viewer's session) | 12,416,183 | 12,416,269 | +86 |
+
+The month and day names sit beside the locale rows, not in them. A first version kept them in
+the rows; paged.data, which prints no names, then linked all five name tables, and its wasm
+grew by 6,987 B instead of shrinking.
+
+## C5 — dependency alignment (Rust)
+
+### zip and the deflate backend
+
+Every workspace that reads or writes a package is on zip 9:
+
+| Workspace | zip features | flate2 backend asked for | Backend in the shipped graph |
+| --- | --- | --- | --- |
+| engine/core | `deflate-flate2` | `rust_backend` | zlib-rs, see below |
+| modules/publish | `deflate-flate2` | `rust_backend` | miniz_oxide |
+| modules/sheet | `deflate-flate2` | `rust_backend` | miniz_oxide |
+| apps/server | `deflate-flate2` | `rust_backend` | miniz_oxide |
+| modules/doc, modules/slide | `deflate` | none | zlib-rs (and zopfli is compiled in) |
+| modules/data | through calamine (`deflate`) | none | zlib-rs; data only reads |
+
+- **zlib-rs wins where it is on at all.** flate2 picks zlib-rs over miniz_oxide when both
+  features are on. In engine/core, hayro-syntax (placed PDFs, through `hayro-interpret`, which
+  enables its `unsafe` feature) turns `zlib-rs` on. Every build that includes paged-renderer
+  (the canvas wasm, paged-cli, a workspace test run) deflates with zlib-rs; only a build
+  without it (`-p idml-export` alone) uses miniz_oxide. hayro arrived on 2026-10-14, before
+  the zip 9 change, so zip 9 changed no byte, as recorded; the workspace comment now says so.
+- **zip 8 remains** in doc and slide, through ooxmlsdk 0.12: its `parts` feature, which `mce`
+  needs, depends on zip 8 with `deflate-flate2-zlib-rs`. That is why doc's and slide's
+  packages are deflated by zlib-rs whatever their own zip line says.
+- **doc and slide move to `deflate-flate2`** with C1, which rewrites the same lines (the
+  shared OOXML crate forwards the zip backend as a feature). Measured on the tree before C1:
+  zopfli serves only compression levels above 9, which nothing asks for, so the written bytes
+  stay the same, and it leaves the wasm: `docx_js_bg.wasm` 6,660,701 → 6,585,217 B (−75,484),
+  `slide_js_bg.wasm` about −61 KB.
+
+### harfrust
+
+image was aligned by U3: image-js and engine/core's paged-text both require harfrust 0.14, the
+newest release. engine/core's second copy (0.12, through usvg's text feature) left with usvg's
+text feature on main. The one other copy is web-render's 0.8, which parley 0.10 requires
+(Blitz 0.3.0-alpha.6, held: rust-majors.md).
+
+### Other crates on different majors
+
+The scan: `cargo metadata --no-deps` per workspace for every direct crates.io dependency and its
+requirement, compared across the eleven workspaces and paged-fmt. Three crates differ, and
+all three are the documented holds of [rust-majors.md](rust-majors.md):
+
+| Crate | Versions | Hold |
+| --- | --- | --- |
+| quick-xml | 0.41 (core, doc, sheet, slide), 0.42 (data) | ooxmlsdk requires 0.41; core's move rewrites its IDML reader and writer and changes written bytes |
+| kurbo | 0.11 (core), 0.13 (web-render; core's hayro as `kurbo13`) | 0.12+ rewrote the stroker and offsetter (draw's Illustrator oracle) |
+| skrifa | 0.48 (image, slide), 0.42 (web-render) | the version parley 0.10 builds (Blitz) |
+
+moxcms (0.8, held) and ooxmlsdk (0.12, held) are on one version wherever they are direct.
+The transitive duplicates are third-party crates' own requirements, none of them ours to
+move: in the engine, skrifa 0.42 (subsetter), 0.44 (vello) and 0.46 (hayro), and
+miniz_oxide 0.8 beside 0.9 (png 0.18, also in image's dev graph).
+
 ## C1 — the OOXML foundation (Rust)
 
 `paged-ooxml` moved from `modules/doc/paged-ooxml` to `platform/shared/ooxml`, a Cargo
@@ -339,17 +501,3 @@ private corpus and the modules' fixtures (280 `.docx`, 817 `.xlsx`, 17 `.pptx`) 
 output before and after: doc's verbatim save, lowering and package rewrite; slide's IR, IDML,
 report and package rewrite; sheet's session save, chart list and chart geometry, and
 `XlsxDocument` save, error messages included. All identical.
-
-## Left, with reasons
-
-- **The 89 partial `BundleHost` stubs:** see C8.
-- **The domain fakes:** image, sheet and plugin-sdk keep theirs.
-- **Moon:** it does not replace the per-module workflows (C7).
-- **C9's open points:**
-  - the View ▸ Snap to points toggle still does not reach draw's Curvature;
-  - the graphic-default code is duplicated between the host and draw.
-- **Test-only path dependencies:** `ai` and `cli` still read fixtures from
-  `platform/extensions/packages/plugin-sdk/test` by path, and `ai` reads plugin-api's vendored
-  catalog by path.
-- **Outside this repository:** the cockpit feature registry maps some tests by path. The
-  moved `ai` and `cli` suites and the retired draw Pencil tests need re-pointing there.
