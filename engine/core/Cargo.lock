@@ -2463,6 +2463,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "paged-fmt"
+version = "0.0.0"
+
+[[package]]
 name = "paged-gen"
 version = "0.0.0"
 dependencies = [
@@ -2606,6 +2610,7 @@ dependencies = [
  "paged-compose",
  "paged-fidelity",
  "paged-flow",
+ "paged-fmt",
  "paged-gen",
  "paged-gpu",
  "paged-model",

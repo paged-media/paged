@@ -23,6 +23,8 @@ on:
   pull_request:
     paths:
       - "engine/core/crates/**"
+      # The shared formatting crate (platform/shared/fmt), compiled into the engine.
+      - "platform/shared/fmt/**"
       - "engine/core/corpus/**"
       # A toolchain or dependency update can change rendered output without
       # touching a crate.
