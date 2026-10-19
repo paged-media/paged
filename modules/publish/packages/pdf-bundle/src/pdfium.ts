@@ -28,6 +28,7 @@
 // API through Emscripten `cwrap` + the HEAP views.
 
 import { singleFlight, wasmBytes } from "@paged-media/wasm-boot";
+import { bytesToBase64 } from "@paged-media/helpers";
 
 import type {
   DocumentIr,
@@ -630,7 +631,7 @@ async function extractImage(
       y_pt: top,
       width_pt: right - left,
       height_pt: bottom - top,
-      png_b64: toBase64(png),
+      png_b64: bytesToBase64(png),
     };
   }
   const len = f.ImgDataRaw(obj, 0, 0);
@@ -646,7 +647,7 @@ async function extractImage(
     y_pt: top,
     width_pt: right - left,
     height_pt: bottom - top,
-    png_b64: toBase64(raw), // JPEG bytes; the engine sniffs the format
+    png_b64: bytesToBase64(raw), // JPEG bytes; the engine sniffs the format
   };
 }
 
@@ -716,15 +717,4 @@ function isJpeg(f: Fpdf, obj: number): boolean {
   }
   f.free(bufP);
   return name === "DCTDecode";
-}
-
-function toBase64(bytes: Uint8Array): string {
-  if (typeof Buffer !== "undefined")
-    return Buffer.from(bytes).toString("base64");
-  let binary = "";
-  const chunk = 0x8000;
-  for (let i = 0; i < bytes.length; i += chunk) {
-    binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
-  }
-  return btoa(binary);
 }

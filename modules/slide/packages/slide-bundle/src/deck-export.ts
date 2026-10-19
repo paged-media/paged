@@ -23,6 +23,7 @@
 // written in Rust (pptx-export) from the original the importer kept.
 
 import type { BundleHost } from "@paged-media/plugin-api";
+import { sha256Hex } from "@paged-media/helpers";
 
 import type { SlidePlan } from "./engine.js";
 import { parseState, type PluginMetadataEntry } from "./slides-model.js";
@@ -48,16 +49,6 @@ function leaves(nodes: readonly TreeNode[], out: TreeNode[] = []): TreeNode[] {
 }
 
 const r1 = (v: number) => Math.round(v * 10) / 10;
-
-async function sha256(text: string): Promise<string> {
-  const digest = await crypto.subtle.digest(
-    "SHA-256",
-    new TextEncoder().encode(text),
-  );
-  return Array.from(new Uint8Array(digest), (b) =>
-    b.toString(16).padStart(2, "0"),
-  ).join("");
-}
 
 /**
  * A fingerprint of what is on each page, in page order: every item's kind
@@ -97,7 +88,7 @@ export async function pageFingerprints(host: BundleHost): Promise<string[]> {
         : null;
       parts.push([n.kind, id ? (geometry.get(id) ?? null) : null, text]);
     }
-    out.push(await sha256(JSON.stringify(parts)));
+    out.push(await sha256Hex(JSON.stringify(parts)));
   }
   return out;
 }

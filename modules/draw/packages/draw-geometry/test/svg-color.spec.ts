@@ -159,29 +159,29 @@ describe("rgbToHex", () => {
 
 describe("cmykToRgb — the naive subtractive model", () => {
   it("no ink is paper white, full black is black", () => {
-    expect(cmykToRgb(0, 0, 0, 0)).toEqual([255, 255, 255]);
-    expect(cmykToRgb(0, 0, 0, 100)).toEqual([0, 0, 0]);
-    expect(cmykToRgb(100, 100, 100, 0)).toEqual([0, 0, 0]);
+    expect(cmykToRgb([0, 0, 0, 0])).toEqual([255, 255, 255]);
+    expect(cmykToRgb([0, 0, 0, 100])).toEqual([0, 0, 0]);
+    expect(cmykToRgb([100, 100, 100, 0])).toEqual([0, 0, 0]);
   });
 
   it("each process ink removes its complement", () => {
-    expect(cmykToRgb(100, 0, 0, 0)).toEqual([0, 255, 255]); // cyan
-    expect(cmykToRgb(0, 100, 0, 0)).toEqual([255, 0, 255]); // magenta
-    expect(cmykToRgb(0, 0, 100, 0)).toEqual([255, 255, 0]); // yellow
+    expect(cmykToRgb([100, 0, 0, 0])).toEqual([0, 255, 255]); // cyan
+    expect(cmykToRgb([0, 100, 0, 0])).toEqual([255, 0, 255]); // magenta
+    expect(cmykToRgb([0, 0, 100, 0])).toEqual([255, 255, 0]); // yellow
   });
 
   it("K darkens every channel proportionally", () => {
-    expect(cmykToRgb(0, 0, 0, 50)).toEqual([128, 128, 128]);
-    expect(cmykToRgb(100, 0, 0, 50)).toEqual([0, 128, 128]);
+    expect(cmykToRgb([0, 0, 0, 50])).toEqual([128, 128, 128]);
+    expect(cmykToRgb([100, 0, 0, 50])).toEqual([0, 128, 128]);
   });
 
   it("takes 0–100 (the IDML swatch convention), not 0–1", () => {
-    expect(cmykToRgb(50, 0, 0, 0)).toEqual([128, 255, 255]);
-    expect(cmykToRgb(0.5, 0, 0, 0)).toEqual([254, 255, 255]);
+    expect(cmykToRgb([50, 0, 0, 0])).toEqual([128, 255, 255]);
+    expect(cmykToRgb([0.5, 0, 0, 0])).toEqual([254, 255, 255]);
   });
 
   it("clamps out-of-range ink values", () => {
-    expect(cmykToRgb(150, -20, 0, 0)).toEqual([0, 255, 255]);
-    expect(cmykToRgb(0, 0, 0, 250)).toEqual([0, 0, 0]);
+    expect(cmykToRgb([150, -20, 0, 0])).toEqual([0, 255, 255]);
+    expect(cmykToRgb([0, 0, 0, 250])).toEqual([0, 0, 0]);
   });
 });

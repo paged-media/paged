@@ -38,6 +38,8 @@
 // is the W-06 asset-store dependency. The scanner is a scanner, not a
 // parser — it must never crash on garbage CSS.
 
+import { dataUrl } from "@paged-media/helpers";
+
 import type { WebDiagnostic } from "./diagnose";
 
 /** Generic CSS font families — never "missing from the document":
@@ -283,26 +285,6 @@ export interface ResolvedFontFace {
   format?: "truetype" | "opentype" | "woff" | "woff2";
 }
 
-// Base64 without `btoa`/`Buffer` — web-model is pure TS with no DOM
-// and no node built-ins, and the input may be a SharedArrayBuffer-
-// backed view (the worker's served bytes): plain indexed reads work on
-// those where `Blob`/`btoa` paths reject or require copies.
-const B64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-
-function toBase64(bytes: Uint8Array): string {
-  let out = "";
-  for (let i = 0; i < bytes.length; i += 3) {
-    const a = bytes[i];
-    const b = i + 1 < bytes.length ? bytes[i + 1] : 0;
-    const c = i + 2 < bytes.length ? bytes[i + 2] : 0;
-    out += B64[a >> 2];
-    out += B64[((a & 3) << 4) | (b >> 4)];
-    out += i + 1 < bytes.length ? B64[((b & 15) << 2) | (c >> 6)] : "=";
-    out += i + 2 < bytes.length ? B64[c & 63] : "=";
-  }
-  return out;
-}
-
 /** The data-url MIME for a face container format. */
 function fontMime(format: ResolvedFontFace["format"]): string {
   switch (format) {
@@ -333,7 +315,9 @@ export function fontFaceDataUrl(
   format?: ResolvedFontFace["format"],
 ): string {
   if (!(bytes instanceof Uint8Array) || bytes.length === 0) return "";
-  return `data:${fontMime(format)};base64,${toBase64(bytes)}`;
+  // The bytes may be a SharedArrayBuffer-backed view (the worker's served
+  // bytes); the shared encoder reads those like any other.
+  return dataUrl(fontMime(format), bytes);
 }
 
 /** Map an asset `format` to the CSS `format()` keyword. */

@@ -16,6 +16,7 @@
     "test:dom": "bun test --parallel --preload ../../../../tooling/js/bun-test-setup.ts --preload ./test/happydom.ts .dom.test."
   },
   "dependencies": {
+    "@paged-media/helpers": "workspace:*",
     "@paged-media/wasm-boot": "workspace:*"
   },
   "peerDependencies": {

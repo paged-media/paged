@@ -24,3 +24,4 @@ keeps its text.
 | [PM-0006](PM-0006-proto-moon-mcp.md) | proto, Moon and the Moon MCP server |
 | [PM-0008](PM-0008-npm-packages-and-release.md) | Four public npm packages, one release workflow |
 | [PM-0010](PM-0010-history-import.md) | The repository was assembled from twelve repositories, with their history |
+| [PM-0011](PM-0011-dependency-updates-and-supply-chain.md) | Dependency updates by Renovate; licences and advisories checked daily over every workspace |

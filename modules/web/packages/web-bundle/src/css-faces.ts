@@ -206,33 +206,6 @@ export function sfntFamily(bytes: Uint8Array): string | null {
   }
 }
 
-/** The bytes of a `data:` URL (base64 or percent-encoded), or `null`. */
-export function dataUrlBytes(url: string): Uint8Array | null {
-  const m = /^data:([^,]*),(.*)$/is.exec(url.trim());
-  if (!m) return null;
-  try {
-    if (/;base64$/i.test(m[1])) {
-      const bin = atob(m[2].replace(/\s+/g, ""));
-      const out = new Uint8Array(bin.length);
-      for (let i = 0; i < bin.length; i += 1) out[i] = bin.charCodeAt(i);
-      return out;
-    }
-    const out: number[] = [];
-    const s = m[2];
-    for (let i = 0; i < s.length; i += 1) {
-      if (s[i] === "%" && /^[0-9a-f]{2}$/i.test(s.slice(i + 1, i + 3))) {
-        out.push(Number.parseInt(s.slice(i + 1, i + 3), 16));
-        i += 2;
-      } else {
-        out.push(...new TextEncoder().encode(s[i]));
-      }
-    }
-    return new Uint8Array(out);
-  } catch {
-    return null;
-  }
-}
-
 /** FNV-1a over the bytes: the identity of a face's bytes. */
 export function bytesHash(bytes: Uint8Array): string {
   let h = 0x811c9dc5;
