@@ -27,6 +27,9 @@
 // glued via the `?url` asset the editor's Vite serves), and we call the FPDF C
 // API through Emscripten `cwrap` + the HEAP views.
 
+import { singleFlight, wasmBytes } from "@paged-media/wasm-boot";
+import { bytesToBase64 } from "@paged-media/helpers";
+
 import type {
   DocumentIr,
   ImageFrameIr,
@@ -74,179 +77,167 @@ interface Fpdf {
   [fn: string]: any;
 }
 
-let cached: Promise<Fpdf | null> | undefined;
-
-/** Load + memoize the PDFium wasm engine, or `null` if it can't load. */
 /** The PDFium wasm bytes. BROWSER: the bundler's `?url` asset, fetched and
  *  handed in so the module never does its own relative fetch (which 404s
  *  under Vite). NODE (the headless host, the Node CLI): read beside the
  *  glue, as the slide and canvas engines boot under Node. */
-async function pdfiumWasmBytes(): Promise<Uint8Array> {
-  if (typeof process !== "undefined" && process.versions?.node != null) {
-    const { readFile } = await import("node:fs/promises");
-    const { fileURLToPath } = await import("node:url");
-    const b = await readFile(
-      fileURLToPath(new URL("../bin/pdfium.esm.wasm", import.meta.url)),
-    );
-    return new Uint8Array(b.buffer, b.byteOffset, b.byteLength);
-  }
-  // @ts-ignore — `?url` asset the bundler serves.
-  const wasmUrl = (await import("../bin/pdfium.esm.wasm?url"))
-    .default as string;
-  return new Uint8Array(await (await fetch(wasmUrl)).arrayBuffer());
+const pdfiumWasmBytes = (): Promise<Uint8Array> =>
+  wasmBytes({
+    // @ts-ignore — `?url` asset the bundler serves.
+    wasmUrl: () => import("../bin/pdfium.esm.wasm?url"),
+    wasmFile: () => new URL("../bin/pdfium.esm.wasm", import.meta.url),
+  });
+
+/** Load + memoize the PDFium wasm engine, or `null` if it can't load (one
+ *  load per realm: every caller shares it). */
+export function loadPdfium(): Promise<Fpdf | null> {
+  return pdfiumOnce();
 }
 
-export async function loadPdfium(): Promise<Fpdf | null> {
-  if (cached) return cached;
-  cached = (async (): Promise<Fpdf | null> => {
-    try {
-      // @ts-ignore — committed Emscripten glue (bin/, gitignored from tsc).
-      const factory = (await import("../bin/pdfium.esm.js")).default as (
-        arg: Record<string, unknown>,
-      ) => Promise<unknown>;
-      const wasmBinary = await pdfiumWasmBytes();
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const M = (await factory({ wasmBinary })) as any;
-      const cw = (n: string, ret: string | null, args: string[]) =>
-        M.cwrap(n, ret, args);
-      const f: Fpdf = {
-        M,
-        malloc: (n: number) => M.wasmExports.malloc(n),
-        free: (p: number) => M.wasmExports.free(p),
-        InitLibrary: cw("FPDF_InitLibrary", null, []),
-        LoadMemDocument: cw("FPDF_LoadMemDocument", "number", [
-          "number",
-          "number",
-          "number",
-        ]),
-        LoadPage: cw("FPDF_LoadPage", "number", ["number", "number"]),
-        ClosePage: cw("FPDF_ClosePage", null, ["number"]),
-        CloseDoc: cw("FPDF_CloseDocument", null, ["number"]),
-        PageCount: cw("FPDF_GetPageCount", "number", ["number"]),
-        PageWidth: cw("FPDF_GetPageWidthF", "number", ["number"]),
-        PageHeight: cw("FPDF_GetPageHeightF", "number", ["number"]),
-        CountObjects: cw("FPDFPage_CountObjects", "number", ["number"]),
-        GetObject: cw("FPDFPage_GetObject", "number", ["number", "number"]),
-        ObjType: cw("FPDFPageObj_GetType", "number", ["number"]),
-        GetMatrix: cw("FPDFPageObj_GetMatrix", "number", ["number", "number"]),
-        GetBounds: cw("FPDFPageObj_GetBounds", "number", [
-          "number",
-          "number",
-          "number",
-          "number",
-          "number",
-        ]),
-        GetFillColor: cw("FPDFPageObj_GetFillColor", "number", [
-          "number",
-          "number",
-          "number",
-          "number",
-          "number",
-        ]),
-        GetStrokeColor: cw("FPDFPageObj_GetStrokeColor", "number", [
-          "number",
-          "number",
-          "number",
-          "number",
-          "number",
-        ]),
-        GetStrokeWidth: cw("FPDFPageObj_GetStrokeWidth", "number", [
-          "number",
-          "number",
-        ]),
-        PathCount: cw("FPDFPath_CountSegments", "number", ["number"]),
-        PathSeg: cw("FPDFPath_GetPathSegment", "number", ["number", "number"]),
-        SegPoint: cw("FPDFPathSegment_GetPoint", "number", [
-          "number",
-          "number",
-          "number",
-        ]),
-        SegType: cw("FPDFPathSegment_GetType", "number", ["number"]),
-        SegClose: cw("FPDFPathSegment_GetClose", "number", ["number"]),
-        TextLoadPage: cw("FPDFText_LoadPage", "number", ["number"]),
-        TextClosePage: cw("FPDFText_ClosePage", null, ["number"]),
-        // Char-level text API (Unicode via ToUnicode; per-object text is
-        // glyph-encoded/empty, so we extract chars + group them ourselves).
-        TextCountChars: cw("FPDFText_CountChars", "number", ["number"]),
-        TextUnicode: cw("FPDFText_GetUnicode", "number", ["number", "number"]),
-        TextCharBox: cw("FPDFText_GetCharBox", null, [
-          "number",
-          "number",
-          "number",
-          "number",
-          "number",
-          "number",
-        ]),
-        TextCharSize: cw("FPDFText_GetFontSize", "number", [
-          "number",
-          "number",
-        ]),
-        TextCharFill: cw("FPDFText_GetFillColor", "number", [
-          "number",
-          "number",
-          "number",
-          "number",
-          "number",
-          "number",
-        ]),
-        ImgDataRaw: cw("FPDFImageObj_GetImageDataRaw", "number", [
-          "number",
-          "number",
-          "number",
-        ]),
-        ImgFilterCount: cw("FPDFImageObj_GetImageFilterCount", "number", [
-          "number",
-        ]),
-        ImgFilter: cw("FPDFImageObj_GetImageFilter", "number", [
-          "number",
-          "number",
-          "number",
-          "number",
-        ]),
-        // Page → bitmap raster (the fallback path; replaces pdf.js render).
-        BitmapCreate: cw("FPDFBitmap_Create", "number", [
-          "number",
-          "number",
-          "number",
-        ]),
-        BitmapFillRect: cw("FPDFBitmap_FillRect", "number", [
-          "number",
-          "number",
-          "number",
-          "number",
-          "number",
-          "number",
-        ]),
-        RenderPageBitmap: cw("FPDF_RenderPageBitmap", null, [
-          "number",
-          "number",
-          "number",
-          "number",
-          "number",
-          "number",
-          "number",
-          "number",
-        ]),
-        BitmapGetBuffer: cw("FPDFBitmap_GetBuffer", "number", ["number"]),
-        BitmapGetStride: cw("FPDFBitmap_GetStride", "number", ["number"]),
-        BitmapGetWidth: cw("FPDFBitmap_GetWidth", "number", ["number"]),
-        BitmapGetHeight: cw("FPDFBitmap_GetHeight", "number", ["number"]),
-        BitmapGetFormat: cw("FPDFBitmap_GetFormat", "number", ["number"]),
-        ImgGetBitmap: cw("FPDFImageObj_GetBitmap", "number", ["number"]),
-        BitmapDestroy: cw("FPDFBitmap_Destroy", null, ["number"]),
-      };
-      f.InitLibrary();
-      return f;
-    } catch {
-      return null;
-    }
-  })();
-  return cached;
-}
+const pdfiumOnce = singleFlight(async (): Promise<Fpdf | null> => {
+  try {
+    // @ts-ignore — committed Emscripten glue (bin/, gitignored from tsc).
+    const factory = (await import("../bin/pdfium.esm.js")).default as (
+      arg: Record<string, unknown>,
+    ) => Promise<unknown>;
+    const wasmBinary = await pdfiumWasmBytes();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const M = (await factory({ wasmBinary })) as any;
+    const cw = (n: string, ret: string | null, args: string[]) =>
+      M.cwrap(n, ret, args);
+    const f: Fpdf = {
+      M,
+      malloc: (n: number) => M.wasmExports.malloc(n),
+      free: (p: number) => M.wasmExports.free(p),
+      InitLibrary: cw("FPDF_InitLibrary", null, []),
+      LoadMemDocument: cw("FPDF_LoadMemDocument", "number", [
+        "number",
+        "number",
+        "number",
+      ]),
+      LoadPage: cw("FPDF_LoadPage", "number", ["number", "number"]),
+      ClosePage: cw("FPDF_ClosePage", null, ["number"]),
+      CloseDoc: cw("FPDF_CloseDocument", null, ["number"]),
+      PageCount: cw("FPDF_GetPageCount", "number", ["number"]),
+      PageWidth: cw("FPDF_GetPageWidthF", "number", ["number"]),
+      PageHeight: cw("FPDF_GetPageHeightF", "number", ["number"]),
+      CountObjects: cw("FPDFPage_CountObjects", "number", ["number"]),
+      GetObject: cw("FPDFPage_GetObject", "number", ["number", "number"]),
+      ObjType: cw("FPDFPageObj_GetType", "number", ["number"]),
+      GetMatrix: cw("FPDFPageObj_GetMatrix", "number", ["number", "number"]),
+      GetBounds: cw("FPDFPageObj_GetBounds", "number", [
+        "number",
+        "number",
+        "number",
+        "number",
+        "number",
+      ]),
+      GetFillColor: cw("FPDFPageObj_GetFillColor", "number", [
+        "number",
+        "number",
+        "number",
+        "number",
+        "number",
+      ]),
+      GetStrokeColor: cw("FPDFPageObj_GetStrokeColor", "number", [
+        "number",
+        "number",
+        "number",
+        "number",
+        "number",
+      ]),
+      GetStrokeWidth: cw("FPDFPageObj_GetStrokeWidth", "number", [
+        "number",
+        "number",
+      ]),
+      PathCount: cw("FPDFPath_CountSegments", "number", ["number"]),
+      PathSeg: cw("FPDFPath_GetPathSegment", "number", ["number", "number"]),
+      SegPoint: cw("FPDFPathSegment_GetPoint", "number", [
+        "number",
+        "number",
+        "number",
+      ]),
+      SegType: cw("FPDFPathSegment_GetType", "number", ["number"]),
+      SegClose: cw("FPDFPathSegment_GetClose", "number", ["number"]),
+      TextLoadPage: cw("FPDFText_LoadPage", "number", ["number"]),
+      TextClosePage: cw("FPDFText_ClosePage", null, ["number"]),
+      // Char-level text API (Unicode via ToUnicode; per-object text is
+      // glyph-encoded/empty, so we extract chars + group them ourselves).
+      TextCountChars: cw("FPDFText_CountChars", "number", ["number"]),
+      TextUnicode: cw("FPDFText_GetUnicode", "number", ["number", "number"]),
+      TextCharBox: cw("FPDFText_GetCharBox", null, [
+        "number",
+        "number",
+        "number",
+        "number",
+        "number",
+        "number",
+      ]),
+      TextCharSize: cw("FPDFText_GetFontSize", "number", ["number", "number"]),
+      TextCharFill: cw("FPDFText_GetFillColor", "number", [
+        "number",
+        "number",
+        "number",
+        "number",
+        "number",
+        "number",
+      ]),
+      ImgDataRaw: cw("FPDFImageObj_GetImageDataRaw", "number", [
+        "number",
+        "number",
+        "number",
+      ]),
+      ImgFilterCount: cw("FPDFImageObj_GetImageFilterCount", "number", [
+        "number",
+      ]),
+      ImgFilter: cw("FPDFImageObj_GetImageFilter", "number", [
+        "number",
+        "number",
+        "number",
+        "number",
+      ]),
+      // Page → bitmap raster (the fallback path; replaces pdf.js render).
+      BitmapCreate: cw("FPDFBitmap_Create", "number", [
+        "number",
+        "number",
+        "number",
+      ]),
+      BitmapFillRect: cw("FPDFBitmap_FillRect", "number", [
+        "number",
+        "number",
+        "number",
+        "number",
+        "number",
+        "number",
+      ]),
+      RenderPageBitmap: cw("FPDF_RenderPageBitmap", null, [
+        "number",
+        "number",
+        "number",
+        "number",
+        "number",
+        "number",
+        "number",
+        "number",
+      ]),
+      BitmapGetBuffer: cw("FPDFBitmap_GetBuffer", "number", ["number"]),
+      BitmapGetStride: cw("FPDFBitmap_GetStride", "number", ["number"]),
+      BitmapGetWidth: cw("FPDFBitmap_GetWidth", "number", ["number"]),
+      BitmapGetHeight: cw("FPDFBitmap_GetHeight", "number", ["number"]),
+      BitmapGetFormat: cw("FPDFBitmap_GetFormat", "number", ["number"]),
+      ImgGetBitmap: cw("FPDFImageObj_GetBitmap", "number", ["number"]),
+      BitmapDestroy: cw("FPDFBitmap_Destroy", null, ["number"]),
+    };
+    f.InitLibrary();
+    return f;
+  } catch {
+    return null;
+  }
+});
 
 /** For tests — drop the memoized engine. */
 export function _resetPdfium(): void {
-  cached = undefined;
+  pdfiumOnce.reset();
 }
 
 export interface RasterOptions {
@@ -640,7 +631,7 @@ async function extractImage(
       y_pt: top,
       width_pt: right - left,
       height_pt: bottom - top,
-      png_b64: toBase64(png),
+      png_b64: bytesToBase64(png),
     };
   }
   const len = f.ImgDataRaw(obj, 0, 0);
@@ -656,7 +647,7 @@ async function extractImage(
     y_pt: top,
     width_pt: right - left,
     height_pt: bottom - top,
-    png_b64: toBase64(raw), // JPEG bytes; the engine sniffs the format
+    png_b64: bytesToBase64(raw), // JPEG bytes; the engine sniffs the format
   };
 }
 
@@ -726,15 +717,4 @@ function isJpeg(f: Fpdf, obj: number): boolean {
   }
   f.free(bufP);
   return name === "DCTDecode";
-}
-
-function toBase64(bytes: Uint8Array): string {
-  if (typeof Buffer !== "undefined")
-    return Buffer.from(bytes).toString("base64");
-  let binary = "";
-  const chunk = 0x8000;
-  for (let i = 0; i < bytes.length; i += chunk) {
-    binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
-  }
-  return btoa(binary);
 }

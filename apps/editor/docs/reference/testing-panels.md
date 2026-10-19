@@ -148,4 +148,11 @@ All 89 built-in panels have their own file: 76 files in `test/panels`, 1,069 tes
 130 are expected failures (88 written per finding, 42 from the reach table), naming 99 findings
 between `PN-1` and `PN-357`; the Playwright flows add PN-358. Panels that register commands while mounted (Layers, the
 schema demos) and panels that run typed core commands (style lists, options panels) assert
-those commands too, under `command:` ids.
+those commands too, under `command:` ids. The commands a panel registers while mounted also
+need the gate's `integration` clause, which only a browser can give them (the headless editor
+mounts no panel): the Layers commands are asserted in `tests/e2e/panels-browser.spec.ts`
+(New layer, each row action, Move selection here, each with one undo), the schema demos' in
+`tests/e2e/schema-list-panel.spec.ts` and `schema-tree-panel.spec.ts`.
+
+Every panel finding, with the other layers' findings, severities and shared root causes:
+[conformance-findings-2026-10.md](../../../../docs/development/conformance-findings-2026-10.md).

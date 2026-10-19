@@ -30,6 +30,7 @@
     "@paged-media/ai": "workspace:*",
     "@paged-media/catalog": "workspace:*",
     "@paged-media/client": "workspace:*",
+    "@paged-media/helpers": "workspace:*",
     "@paged-media/plugin-api": "workspace:*",
     "@paged-media/react-live": "workspace:*",
     "@paged-media/repository": "workspace:*",

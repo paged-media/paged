@@ -12,6 +12,9 @@
     "typecheck": "bun check -p tsconfig.json",
     "test": "bun test --parallel --preload ../../../../tooling/js/bun-test-setup.ts"
   },
+  "dependencies": {
+    "@paged-media/helpers": "workspace:*"
+  },
   "devDependencies": {
     "fast-check": "4.10.2",
     "typescript": "catalog:",

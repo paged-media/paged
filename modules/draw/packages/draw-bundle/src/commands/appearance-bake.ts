@@ -132,6 +132,7 @@ import type {
   SceneTreeNode,
 } from "@paged-media/plugin-api";
 import { applyAffine } from "@paged-media/draw-geometry";
+import { labelKey } from "@paged-media/helpers";
 
 import manifest from "../../manifest.json";
 import {
@@ -166,7 +167,7 @@ export const APPEARANCE_BAKE_COMMAND_IDS = [
  *  mutation, i.e. its own undo step, and the bake would otherwise cost
  *  N+2 of them). The SDK's namespace gate still checks the key on the
  *  way through — a foreign key is refused before the engine sees it. */
-export const DRAW_METADATA_KEY = `x-paged:${manifest.id}`;
+export const DRAW_METADATA_KEY = labelKey(manifest.id);
 
 // ---------------------------------------------------------------- model
 

@@ -17,6 +17,7 @@
 // composite — the page renders, prints and exports without this plugin.
 
 import type { PartsSurface } from "@paged-media/plugin-api";
+import { sha256Hex } from "@paged-media/helpers";
 
 /** One stored revision (`f/<frameId>/r<rev>.json`). */
 export interface SessionRecord {
@@ -37,16 +38,6 @@ export interface CommittedMarker {
   rev: number;
   record: string;
   baked: string;
-}
-
-export async function sha256Hex(bytes: Uint8Array): Promise<string> {
-  const d = await globalThis.crypto.subtle.digest(
-    "SHA-256",
-    bytes as Uint8Array<ArrayBuffer>,
-  );
-  return Array.from(new Uint8Array(d), (b) =>
-    b.toString(16).padStart(2, "0"),
-  ).join("");
 }
 
 export const blobPath = (sha: string) => `px/${sha}.bin`;

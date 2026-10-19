@@ -735,7 +735,7 @@ mod wasm {
     }
 
     /// The hash of the sources this wasm was built from
-    /// (`scripts/source-hash.mjs`, stamped by `scripts/build-wasm.sh`;
+    /// (`tooling/js/source-hash.mjs`, stamped by `scripts/build-wasm.sh`;
     /// "unstamped" for any other build). `packages/data-bundle/test/
     /// wasm-fresh.spec.ts` compares it with the checkout, so a stale wasm
     /// fails the suite instead of being tested in place of the code.

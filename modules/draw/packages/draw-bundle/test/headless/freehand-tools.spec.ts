@@ -20,58 +20,23 @@
 // machines' commits feed `insertPathMutationFor` (the exported builder
 // the live handlers send — no second copy to drift from), the engine
 // accepts the insertPath, the created element's anchor table matches
-// the committed run, and undo removes it. The pencil's full GESTURE
-// handler is additionally driven pointer-by-pointer against the real
-// host (the host-handler.spec pattern) to prove the wiring, preview
-// channel included.
+// the committed run, and undo removes it. The Pencil's GESTURE handler is
+// the host's now (`paged.tool.pencil`, ADR 359); it is driven pointer by
+// pointer against the real engine in the editor's headless tier
+// (apps/editor/apps/canvas/tests/headless/pencil.test.ts). Its machine
+// stays here, and so does this proof that the engine takes its commit.
 
 import { describe, expect, it, beforeAll, afterAll } from "bun:test";
 
-import type {
-  CanvasPointerEvent,
-  ElementId,
-  Mutation,
-} from "@paged-media/plugin-api";
+import type { Mutation } from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
 import { CurvatureMachine, PencilMachine } from "@paged-media/draw-tools";
 
-import {
-  drawBundle,
-  insertPathMutationFor,
-  createPencilHandler,
-} from "../../src";
+import { drawBundle, insertPathMutationFor } from "../../src";
 import { F1_MULTI_SHAPE } from "../fixtures/corpus";
 import { openHost } from "./host";
 
 const PAGE = F1_MULTI_SHAPE.pageId;
-
-function pointer(
-  pageId: string,
-  point: [number, number],
-  maxDelta = 0,
-): CanvasPointerEvent {
-  return {
-    pageId,
-    pagePoint: point,
-    docPoint: point,
-    modifiers: { shift: false, alt: false, cmd: false, ctrl: false },
-    maxDelta,
-    button: 0,
-    target: null,
-    pressure: 0.5,
-    tiltX: 0,
-    tiltY: 0,
-    pointerType: "mouse",
-  };
-}
-
-async function until(predicate: () => Promise<boolean>): Promise<void> {
-  for (let i = 0; i < 50; i++) {
-    if (await predicate()) return;
-    await new Promise((r) => setTimeout(r, 2));
-  }
-  throw new Error("timed out waiting for the host-routed mutation to land");
-}
 
 async function leafCount(h: HeadlessHost): Promise<number> {
   const roots = await h.host.document.tree();
@@ -201,36 +166,5 @@ describe("draw conformance — curvature + pencil authoring (Phase 4c)", () => {
     expect(table!.anchors.length).toBe(snap.commit!.anchors.length);
     await h.host.document.undo();
     expect(await leafCount(h)).toBe(before);
-  });
-
-  it("the LIVE pencil gesture handler authors end-to-end through host.* facades", async () => {
-    const handler = createPencilHandler(h.host);
-    handler.onActivate(undefined as never);
-    const before = await leafCount(h);
-
-    handler.onPointerDown(pointer(PAGE, [500, 100]));
-    handler.onPointerMove(pointer(PAGE, [520, 110], 20));
-    // The in-flight stroke previews as a POLYLINE on the recorded
-    // overlay channel.
-    const preview = h.lastToolPreview();
-    expect(preview).not.toBeNull();
-    expect(preview && "points" in preview).toBe(true);
-    handler.onPointerMove(pointer(PAGE, [560, 140], 60));
-    handler.onPointerUp(pointer(PAGE, [560, 140], 60));
-
-    await until(async () => (await leafCount(h)) === before + 1);
-    // Commit clears the preview and selects the created path (the
-    // selection lands a tick after the insert — poll it too).
-    expect(h.lastToolPreview()).toBeNull();
-    await until(async () => h.host.selection.get().length === 1);
-    const sel = h.host.selection.get();
-    expect(sel).toHaveLength(1);
-    const table = await h.host.document.pathAnchors(sel[0] as ElementId);
-    expect(table).not.toBeNull();
-    expect(table!.anchors[0].anchor).toEqual([500, 100]);
-
-    await h.host.document.undo();
-    expect(await leafCount(h)).toBe(before);
-    handler.onDeactivate("switch");
   });
 });

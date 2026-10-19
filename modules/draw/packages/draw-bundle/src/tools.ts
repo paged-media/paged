@@ -54,7 +54,6 @@ import {
   createLivePaintSelectHandler,
 } from "./handlers/live-paint";
 import { createMeasureHandler } from "./handlers/measure";
-import { createPencilHandler } from "./handlers/pencil";
 import { createRepeatHandler } from "./handlers/repeat";
 import { createScissorsHandler } from "./handlers/scissors";
 import { createShapeBuilderHandler } from "./handlers/shape-builder";
@@ -65,7 +64,6 @@ import {
   ERASER_OPTIONS,
   LASSO_OPTIONS,
   PAINTBRUSH_OPTIONS,
-  PENCIL_OPTIONS,
   WIDTH_OPTIONS,
   toolOptionsSpecOf,
 } from "./tool-options";
@@ -86,7 +84,6 @@ export const DRAW_TOOL_IDS = [
  *  B) appends the Shape Builder gesture tool. */
 export const PRO_TOOL_IDS = [
   "media.paged.draw.tool.curvature",
-  "media.paged.draw.tool.pencil",
   "media.paged.draw.tool.gradientAnnotator",
   "media.paged.draw.tool.measure",
   "media.paged.draw.tool.shapeBuilder",
@@ -171,10 +168,11 @@ export function drawTools(host: BundleHost): ToolContribution[] {
       cursor: CROSS,
       gesture: () => createAnchorEditHandler("convert", host),
     },
-    // Phase 4c — the pro toolset. Curvature + Pencil AUTHOR new paths
-    // (machine → one insertPath), so they join the pen flyout slot;
-    // the gradient annotator + measure are inspection/steering tools
-    // in their own slots.
+    // Phase 4c — the pro toolset. Curvature AUTHORS new paths (machine →
+    // one insertPath), so it joins the pen flyout slot; the gradient
+    // annotator + measure are inspection/steering tools in their own
+    // slots. The Pencil that stood here was retired into the host's one
+    // Pencil (`paged.tool.pencil`, ADR 359).
     {
       id: "media.paged.draw.tool.curvature",
       title: "Curvature",
@@ -187,19 +185,6 @@ export function drawTools(host: BundleHost): ToolContribution[] {
       order: 4,
       cursor: CROSS,
       gesture: () => createCurvatureHandler(host),
-    },
-    {
-      id: "media.paged.draw.tool.pencil",
-      title: "Pencil",
-      icon: "tool-pencil",
-      shortcut: "shift+n",
-      group: "pen",
-      section: "drawType",
-      order: 5,
-      cursor: CROSS,
-      gesture: () => createPencilHandler(host),
-      // Double-click the slot: fidelity / smoothing / close distance.
-      options: toolOptionsSpecOf(PENCIL_OPTIONS),
     },
     {
       id: "media.paged.draw.tool.gradientAnnotator",
@@ -259,7 +244,7 @@ export function drawTools(host: BundleHost): ToolContribution[] {
     // outline ops (handlers/brush.ts): BrushMachine centerline +
     // per-anchor calligraphic widths → insertPath →
     // outlineStrokeVariable = a filled swept shape. They AUTHOR new
-    // paths, so they join the pen flyout slot with Pencil/Curvature.
+    // paths, so they join the pen flyout slot with Curvature.
     // The nib is a TOOL OPTION (./tool-options.ts — double-click the
     // slot): size / angle / roundness / fidelity, defaulting to what
     // these tools shipped with (6pt, 45°, roundness 30%, 2px); the

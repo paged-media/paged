@@ -110,8 +110,8 @@ tooling/import/
 # --- TOML: every TOML file here belongs to Rust tooling (Cargo.toml,
 # --- rust-toolchain.toml, .cargo/config.toml, deny.toml, nextest.toml) or
 # --- to a Rust tool's data, except bunfig.toml. ---------------------------
-# cargo and toml_edit write 4-space arrays; source-hash.mjs reads Cargo.toml
-# line by line.
+# cargo and toml_edit write 4-space arrays; tooling/js/source-hash.mjs reads
+# Cargo.toml line by line.
 *.toml
 !/bunfig.toml
 

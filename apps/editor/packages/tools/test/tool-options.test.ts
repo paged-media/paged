@@ -32,6 +32,11 @@ import type { ElementId } from "@paged-media/client";
 import { covers } from "@paged-media/test-kit";
 
 import { BUILT_IN_TOOLS } from "../src/built-in-tools";
+import {
+  createPencilHandler,
+  PENCIL_DEFAULTS,
+  PENCIL_TOOL_ID,
+} from "../src/handlers/pencil-tool";
 import { createPolygonHandler } from "../src/handlers/polygon-tool";
 import { createSmoothHandler } from "../src/handlers/smooth-tool";
 import { harness, leaves } from "./support";
@@ -98,11 +103,17 @@ const radii = (anchors: Array<{ anchor: number[] }>) =>
 describe("the host tool options", () => {
   it("are exactly the options this file covers", () => {
     expect(DECLARED.map((d) => `${d.toolId}.${d.field.key}`).sort()).toEqual([
+      "paged.tool.pencil.closeDistance",
+      "paged.tool.pencil.fidelity",
+      "paged.tool.pencil.smoothing",
       "paged.tool.polygon.sides",
       "paged.tool.polygon.starInset",
       "paged.tool.smooth.tolerance",
     ]);
-    for (const d of DECLARED) expect(d.field.kind).toBe("number");
+    for (const d of DECLARED)
+      expect(d.field.kind).toBe(
+        d.field.key === "smoothing" ? "select" : "number",
+      );
   });
 });
 
@@ -222,5 +233,169 @@ describe("setting paged.tool.smooth.tolerance", () => {
         .mutations()
         .map((m) => (m as { args: { tolerance: number } }).args.tolerance),
     ).toEqual([1.5, 3]);
+  });
+});
+
+// ------------------------------------------------------------ the Pencil
+//
+// The one Pencil (draw ADR 359) carries the options paged.draw's Pencil
+// had. These read the COMMIT the fake records; the real engine's answer
+// to it is asserted in apps/canvas/tests/headless/pencil.test.ts.
+
+type Anchor = { anchor: number[]; left: number[]; right: number[] };
+
+/** A zig-zag whose wobble is 8 pt: it survives a 2 px fidelity and
+ *  collapses under a 10 px one. */
+const WOBBLE = {
+  from: [420, 60] as [number, number],
+  via: [
+    [440, 68],
+    [460, 60],
+    [480, 68],
+    [500, 60],
+    [520, 68],
+  ] as [number, number][],
+  to: [540, 60] as [number, number],
+  steps: 1,
+};
+/** A loop that ends 5 pt from where it began. */
+const LOOP = {
+  from: [450, 150] as [number, number],
+  via: [
+    [520, 150],
+    [520, 220],
+    [450, 220],
+  ] as [number, number][],
+  to: [453, 154] as [number, number],
+  steps: 1,
+};
+
+/** The `insertPath` arguments of one Pencil stroke with these settings. */
+async function pencilInsert(
+  settings: Record<string, unknown> | undefined,
+  stroke: typeof WOBBLE = WOBBLE,
+): Promise<{ anchors: Anchor[]; open: boolean; smooth: boolean }> {
+  const { fake, g } = harness({
+    toolSettings: settings
+      ? { [PENCIL_TOOL_ID]: settings as Record<string, number> }
+      : undefined,
+  });
+  await g.tool(createPencilHandler).drag(stroke).settle();
+  const insert = leaves(fake).find((m) => m.op === "insertPath");
+  return insert!.args as { anchors: Anchor[]; open: boolean; smooth: boolean };
+}
+
+describe("setting paged.tool.pencil.fidelity", () => {
+  const declared = DECLARED.find(
+    (d) => d.toolId === PENCIL_TOOL_ID && d.field.key === "fidelity",
+  )!.field;
+
+  it("default: 1.5 px — the 8 pt wobble survives", async () => {
+    covers("setting:paged.tool.pencil.fidelity");
+    expect(PENCIL_DEFAULTS.fidelity).toBe(1.5);
+    expect((await pencilInsert(undefined)).anchors).toHaveLength(7);
+  });
+
+  it("a coarser fidelity keeps fewer anchors of the same stroke; the declared 0.5…20 px is the clamp", async () => {
+    covers("setting:paged.tool.pencil.fidelity");
+    expect(declared.min).toBe(0.5);
+    expect(declared.max).toBe(20);
+    expect((await pencilInsert({ fidelity: 10 })).anchors).toHaveLength(2);
+    // Clamped to 20 px: still the straight line.
+    expect((await pencilInsert({ fidelity: 500 })).anchors).toHaveLength(2);
+    // Clamped to 0.5 px: every corner of the wobble kept.
+    expect((await pencilInsert({ fidelity: 0 })).anchors).toHaveLength(7);
+  });
+
+  it("a non-number falls back to the default", async () => {
+    covers("setting:paged.tool.pencil.fidelity");
+    for (const fidelity of ["10", null, Number.NaN])
+      expect({
+        fidelity,
+        n: (await pencilInsert({ fidelity })).anchors.length,
+      }).toEqual({ fidelity, n: 7 });
+  });
+
+  it("a value written while the tool is active is what the next stroke uses", async () => {
+    covers("setting:paged.tool.pencil.fidelity");
+    const { fake, g } = harness();
+    const dsl = g.tool(createPencilHandler);
+    await dsl.drag(WOBBLE).settle();
+    fake.setToolSetting(PENCIL_TOOL_ID, "fidelity", 10);
+    await dsl.drag(WOBBLE).settle();
+    expect(
+      leaves(fake)
+        .filter((m) => m.op === "insertPath")
+        .map((m) => (m.args as { anchors: unknown[] }).anchors.length),
+    ).toEqual([7, 2]);
+  });
+});
+
+describe("setting paged.tool.pencil.smoothing", () => {
+  it("default: smooth curves — the engine fits the simplified corners (`smooth: true`)", async () => {
+    covers("setting:paged.tool.pencil.smoothing");
+    const insert = await pencilInsert(undefined);
+    expect(insert.smooth).toBe(true);
+  });
+
+  it("corner points: the same simplified anchors, committed as a polyline (`smooth: false`); an unknown value is the default", async () => {
+    covers("setting:paged.tool.pencil.smoothing");
+    const smooth = await pencilInsert(undefined);
+    const corners = await pencilInsert({ smoothing: "corners" });
+    expect(corners.smooth).toBe(false);
+    expect(corners.anchors).toEqual(smooth.anchors);
+    for (const a of corners.anchors) {
+      expect(a.left).toEqual(a.anchor);
+      expect(a.right).toEqual(a.anchor);
+    }
+    expect((await pencilInsert({ smoothing: "wobbly" })).smooth).toBe(true);
+    expect((await pencilInsert({ smoothing: 1 })).smooth).toBe(true);
+  });
+});
+
+describe("setting paged.tool.pencil.closeDistance", () => {
+  const declared = DECLARED.find(
+    (d) => d.toolId === PENCIL_TOOL_ID && d.field.key === "closeDistance",
+  )!.field;
+
+  it("default: 8 px — a loop lifted 5 pt from its start closes", async () => {
+    covers("setting:paged.tool.pencil.closeDistance");
+    expect(PENCIL_DEFAULTS.closeDistance).toBe(8);
+    expect((await pencilInsert(undefined, LOOP)).open).toBe(false);
+  });
+
+  it("0 never closes; 4 px is too short for a 5 pt gap; the declared 0…50 px is the clamp", async () => {
+    covers("setting:paged.tool.pencil.closeDistance");
+    expect(declared.min).toBe(0);
+    expect(declared.max).toBe(50);
+    expect((await pencilInsert({ closeDistance: 0 }, LOOP)).open).toBe(true);
+    expect((await pencilInsert({ closeDistance: 4 }, LOOP)).open).toBe(true);
+    expect((await pencilInsert({ closeDistance: -5 }, LOOP)).open).toBe(true);
+    expect((await pencilInsert({ closeDistance: 999 }, LOOP)).open).toBe(false);
+    expect(
+      (await pencilInsert({ closeDistance: "0" as never }, LOOP)).open,
+    ).toBe(false);
+  });
+});
+
+describe("the Pencil seeds its unset defaults on activate", () => {
+  it("so the popover shows what the next stroke uses; a set value is never overwritten", async () => {
+    covers(
+      "setting:paged.tool.pencil.fidelity",
+      "setting:paged.tool.pencil.smoothing",
+      "setting:paged.tool.pencil.closeDistance",
+    );
+    const { fake } = harness({
+      toolSettings: { [PENCIL_TOOL_ID]: { fidelity: 4 } },
+    });
+    const shell = fake.shell as unknown as {
+      toolSettings: { get(id: string): Record<string, unknown> };
+    };
+    createPencilHandler().onActivate(fake.shell as never);
+    expect(shell.toolSettings.get(PENCIL_TOOL_ID)).toEqual({
+      fidelity: 4,
+      smoothing: "smooth",
+      closeDistance: 8,
+    });
   });
 });
