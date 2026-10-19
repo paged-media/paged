@@ -59,7 +59,14 @@ import {
   type Rule,
   UPDATE_GOLDEN,
 } from "../../../platform/extensions/packages/plugin-sdk/test/golden-kit";
-import { cli, FIXTURES, tempDir, writeFixture } from "./helpers";
+import {
+  cli,
+  FIXTURES,
+  LONG_RECORD_SET,
+  REPO_ROOT,
+  tempDir,
+  writeFixture,
+} from "./helpers";
 
 // The surface-conformance marker (a no-op; the gate reads it statically).
 const covers = (..._ids: string[]): void => {};
@@ -70,7 +77,6 @@ const BIN_SRC = join(CLI_ROOT, "src", "bin.ts");
 const NP = "--no-plugins";
 const NOTES = `--plugins=${join(FIXTURES, "notes-plugin.ts")}`;
 const DATA = "--plugins=@paged-media/data";
-const MERGE_LANE = join(FIXTURES, "indesign-merge");
 
 /** Whether every wasm artifact the workspace's paged.data bundle declares is
  *  built: its own engine (modules/data/scripts/build-wasm.sh) and DuckDB
@@ -162,6 +168,7 @@ beforeAll(async () => {
   rules = [
     ...pathRules(tmp.dir, "<TMP>"),
     ...pathRules(CLI_ROOT, "<CLI>"),
+    ...pathRules(REPO_ROOT.replace(/\/$/, ""), "<REPO>"),
     { from: cliVersion(), to: "<CLI_VERSION>" },
     ...(engineVersionOnDisk()
       ? [{ from: engineVersionOnDisk()!, to: "<ENGINE_VERSION>" }]
@@ -836,9 +843,9 @@ const CASES: Record<string, Case[]> = {
       needs: "data-engine",
       argv: () => [
         "merge",
-        join(MERGE_LANE, "long-record-set.idml"),
+        LONG_RECORD_SET.idml,
         "--data",
-        join(MERGE_LANE, "long-record-set.csv"),
+        LONG_RECORD_SET.csv,
         "--out",
         T("merged"),
         "--format",

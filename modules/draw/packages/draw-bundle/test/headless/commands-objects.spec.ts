@@ -55,7 +55,9 @@ const F4 = () => F4_OVERLAP.bytes();
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const LORA = new Uint8Array(
-  readFileSync(join(HERE, "../fixtures/fonts/Lora.ttf")),
+  readFileSync(
+    join(HERE, "../../../../../../engine/core/corpus/fonts/Lora.ttf"),
+  ),
 );
 
 /** One text frame (`tf`) of two glyph runs in Lora, for Create Outlines. */

@@ -187,7 +187,7 @@ writes the job summary and fails the lane when fewer than `--min-executed`
   `platform/extensions/packages/plugin-sdk/test/react-free-import.spec.ts` (2) builds the
   bundle it asserts on (the bundling step of the package's own `build` script, into a
   temporary directory); `modules/image/glue/test/type.spec.ts` (2) reads a committed font
-  (`test/fixtures/fonts/Roboto-Regular.ttf`, Apache-2.0, its licence beside it);
+  (`engine/core/corpus/fonts/Roboto-Regular.ttf`, Apache-2.0, its licence beside it);
   `modules/image/glue/test/retouch-tools.spec.ts` (4) skips with an `unavailable: build
 output` reason when the image-js wasm is not built and runs under `REQUIRE_REAL_WASM=1`,
   which image-ci sets after building it; `apps/editor/apps/canvas/tests/default-italic-face.spec.ts`
