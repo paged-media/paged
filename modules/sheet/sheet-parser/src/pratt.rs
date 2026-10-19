@@ -168,6 +168,7 @@ impl Parser<'_> {
             }
 
             let Some(tok) = self.peek() else { break };
+            let op_span = tok.span.clone();
             let (op, (lbp, rbp)) = match infix_op(&tok.kind) {
                 Some(x) => x,
                 None => break,
@@ -183,6 +184,10 @@ impl Parser<'_> {
             }
             self.bump();
             let rhs = self.parse_bp(rbp)?;
+            if op == BinOp::Range {
+                range_operand(&lhs, &op_span)?;
+                range_operand(&rhs, &op_span)?;
+            }
             lhs = fold_binary(op, lhs, rhs);
         }
 
@@ -590,6 +595,26 @@ fn fold_binary(op: BinOp, lhs: Expr, rhs: Expr) -> Expr {
         }
     }
     Expr::Binary(op, Box::new(lhs), Box::new(rhs))
+}
+
+/// An operand of the range operator `:` must be able to be a reference
+/// (Excel: both operands of `:` must evaluate to references). A literal
+/// never is one. A whole-row band such as `89:3` is a single token with
+/// nothing inside it (the lexer's `whole_band`); with whitespace inside,
+/// `89:\n3` is the operator over two numbers, which Excel refuses — and
+/// which printed back as `89:3`, the band, so print/parse was not a
+/// fixpoint (found by the parse_formula fuzz target). An error literal
+/// stays: `#REF!` is Excel's reference error. Computed operands (a
+/// function, a name, an expression) are decided when they evaluate.
+fn range_operand(e: &Expr, op_span: &std::ops::Range<usize>) -> Result<(), ParseError> {
+    match e {
+        Expr::Lit(LitValue::Error(_)) => Ok(()),
+        Expr::Lit(_) | Expr::Array(_) => Err(ParseError::new(
+            "':' joins two references; a literal is not a reference",
+            op_span.clone(),
+        )),
+        _ => Ok(()),
+    }
 }
 
 /// True if a token can begin an operand (used for space-intersection).
