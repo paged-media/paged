@@ -14,6 +14,8 @@ on:
     branches: [main]
     paths:
       - "engine/core/**"
+      # The shared formatting crate (platform/shared/fmt), a path dependency.
+      - "platform/shared/fmt/**"
       - ".github/workflows/core-ci.yml"
       # The root Cargo config and its linker/wrapper scripts apply to every build.
       - ".cargo/config.toml"
@@ -25,6 +27,8 @@ on:
   pull_request:
     paths:
       - "engine/core/**"
+      # The shared formatting crate (platform/shared/fmt), a path dependency.
+      - "platform/shared/fmt/**"
       - ".github/workflows/core-ci.yml"
       # The root Cargo config and its linker/wrapper scripts apply to every build.
       - ".cargo/config.toml"
@@ -112,6 +116,20 @@ jobs:
           cargo fmt --manifest-path "$m" --check
           cargo clippy --manifest-path "$m" --target-dir target/test-resources --all-targets -- -D warnings
           cargo test --manifest-path "$m" --target-dir target/test-resources
+
+      # The shared formatting crate (calendar, locale table, digit grouping):
+      # a path dependency of the engine, sheet, data and slide, so like
+      # test-resources its own tests and lints run nowhere else. It is
+      # compiled into wasm, hence the wasm32 clippy.
+      - name: paged-fmt (fmt, clippy, tests)
+        if: runner.os == 'Linux'
+        run: |
+          set -euo pipefail
+          m=../../platform/shared/fmt/Cargo.toml
+          cargo fmt --manifest-path "$m" --check
+          cargo clippy --manifest-path "$m" --target-dir target/paged-fmt --all-targets -- -D warnings
+          cargo clippy --manifest-path "$m" --target-dir target/paged-fmt --target wasm32-unknown-unknown -- -D warnings
+          cargo test --manifest-path "$m" --target-dir target/paged-fmt
 
       # Tests that miss a resource print `unavailable: <resource>: <reason>`
       # and append it here; the lane report below turns the lines into
