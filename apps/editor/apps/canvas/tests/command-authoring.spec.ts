@@ -621,9 +621,10 @@ test.describe("U7 — paged.insert.* command authoring", () => {
     await openCanvas(page);
     await loadFixture(page, TEXT_FIXTURE);
 
+    // The menu bar is a WAI-ARIA menubar of menuitems (ADR 234).
     await page
-      .locator('nav[aria-label="Main menu"]')
-      .getByRole("button", { name: "File" })
+      .getByRole("menubar")
+      .getByRole("menuitem", { name: "File", exact: true })
       .click();
     const place = page.getByRole("menuitem", { name: /^Place…/ });
     await expect(place).toBeVisible();
