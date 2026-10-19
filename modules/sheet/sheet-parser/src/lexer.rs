@@ -280,27 +280,36 @@ impl Lexer<'_> {
         }
     }
 
-    /// `#DIV/0!`, `#N/A`, etc. — reuse [`sheet_core::CellError::parse`].
+    /// `#DIV/0!`, `#N/A`, etc.: the longest of Excel's error codes
+    /// ([`ERROR_CODES`]) that the text at `#` spells, case-insensitively, and
+    /// nothing after it, so `#N/A/1` is `#N/A` divided by 1. A code the
+    /// engine's values cannot hold (`#CALC!`, …) is an error naming it.
     fn lex_error_literal(&mut self) -> Result<TokKind, ParseError> {
         let start = self.pos;
-        self.pos += 1; // '#'
-                       // Error tokens are short; consume the maximal run of allowed bytes
-                       // then try the longest matching error code (some are prefixes:
-                       // `#NULL!` vs nothing, `#N/A` ends in a letter not `!`).
-        while let Some(c) = self.peek() {
-            if c.is_ascii_alphanumeric() || matches!(c, b'/' | b'!' | b'?') {
-                self.pos += 1;
-            } else {
-                break;
+        let rest = &self.bytes[start..];
+        let code = ERROR_CODES
+            .iter()
+            .filter(|c| rest.len() >= c.len() && rest[..c.len()].eq_ignore_ascii_case(c.as_bytes()))
+            .max_by_key(|c| c.len());
+        let Some(code) = code else {
+            // Span the run an error literal could have been, for the message.
+            let mut end = start + 1;
+            while self.bytes.get(end).is_some_and(|c| {
+                c.is_ascii_alphanumeric() || matches!(c, b'/' | b'!' | b'?' | b'_')
+            }) {
+                end += 1;
             }
-        }
-        let raw = &self.src[start..self.pos];
-        // `#N/A` has no trailing punctuation; the run above already stops at
-        // the right place because the following char is not in the set.
-        match sheet_core::CellError::parse(raw) {
+            self.pos = end;
+            return Err(ParseError::new(
+                format!("invalid error literal {:?}", &self.src[start..end]),
+                start..end,
+            ));
+        };
+        self.pos = start + code.len();
+        match sheet_core::CellError::parse(code) {
             Some(e) => Ok(TokKind::Error(e)),
             None => Err(ParseError::new(
-                format!("invalid error literal {raw:?}"),
+                format!("error literal {code} is not supported"),
                 start..self.pos,
             )),
         }
@@ -569,6 +578,32 @@ impl Lexer<'_> {
         Ok(kind)
     }
 }
+
+/// Excel's error codes, as a formula spells them: the seven of ECMA-376
+/// §18.17.2 and `#GETTING_DATA` ([MS-XLSX] 2.2.2; ERROR.TYPE 1–8), then the
+/// dynamic-array and service errors of Excel's `ErrorCellValueType`. The
+/// engine's values hold the first seven and `#SPILL!`
+/// ([`sheet_core::CellError`]); the lexer knows them all, so a literal
+/// ends where its code ends.
+const ERROR_CODES: [&str; 17] = [
+    "#NULL!",
+    "#DIV/0!",
+    "#VALUE!",
+    "#REF!",
+    "#NAME?",
+    "#NUM!",
+    "#N/A",
+    "#GETTING_DATA",
+    "#SPILL!",
+    "#CALC!",
+    "#FIELD!",
+    "#BLOCKED!",
+    "#CONNECT!",
+    "#BUSY!",
+    "#UNKNOWN!",
+    "#EXTERNAL!",
+    "#PYTHON!",
+];
 
 /// Byte length of the UTF-8 char starting with lead byte `b`.
 fn utf8_len(b: u8) -> usize {
