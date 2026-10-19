@@ -143,3 +143,24 @@ engine's catalog (the Node CLI's own `describe` verb is `paged-node describe`).
 - [ADR 325](325-claude-agent-package.md) — `paged ai` and `paged.ai.complete`
 - Core [ADR 113](https://github.com/paged-media/core/blob/main/docs/adr/113-one-typed-door.md) —
   one typed door for wasm, CLI, session and scripts
+
+## Amendment — 2026-10-19: on npm the bin is `paged`, in `@paged-media/paged`
+
+[PM-0008, amendment 3](../../../../docs/adr/PM-0008-npm-packages-and-release.md) publishes this
+CLI, as the `paged` bin of `@paged-media/paged` (`packages/paged`), the engine package. The
+2026-10-16 amendment holds in the repository and is narrowed on npm:
+
+- In the workspace the package stays `@paged-media/cli` (private, `apps/cli`) and the bin
+  stays `paged-node`, so a checkout with core's Rust `paged` on its `PATH` runs either by name.
+- `apps/cli/scripts/bundle.mjs --bin paged` bundles `src/bin.ts` into one file that imports
+  only `node:` builtins, with every first-party module and the third-party code it uses inlined
+  (their licences in `THIRD-PARTY-NOTICES.md` beside it), and defines `__PAGED_CLI_BIN__`, so
+  `BIN` (`src/errors.ts`) and every help, usage and error line say `paged`. React stays
+  outside, optional, as plugin-sdk loads it. The Rust CLI is not on npm, so the npm `paged`
+  shadows nothing an npm user installs.
+- The engine the bundled CLI boots is its own package's wasm: plugin-sdk's headless loader and
+  `--engine-from` resolve `@paged-media/paged` first, then the workspace's
+  `@paged-media/canvas-wasm`.
+- `apply` and `merge` need paged.data, which is built into the editor and runs on DuckDB-WASM
+  (34 MiB; its own engine wasm is 1.4 MiB), so the npm package does not carry it, and the verbs
+  say so.
