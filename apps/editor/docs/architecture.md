@@ -7,8 +7,9 @@ Where the repository's `README.md` or `CLAUDE.md` differ, this page follows the 
 
 ## Workspace
 
-A pnpm workspace (`apps/*`, `packages/*`): TypeScript, React 19, Vite, Tailwind. There is
-no Rust here. The engine and the plugins arrive as npm packages that carry their own wasm.
+`apps/*` and `packages/*`, members of the repository's root Bun workspace: TypeScript,
+React 19, Vite, Tailwind. There is no Rust here. The engine and the built-in modules arrive
+as workspace packages (`workspace:*`) that carry their own wasm, built in the repository.
 
 | Path               | Package                | What it owns                                                                                                                                                                                                                                               |
 | ------------------ | ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -42,14 +43,20 @@ and the React side need, such as the journal, lives in `client`.
 
 ## The engine boundary
 
-The engine is the Rust workspace in the `core` repository. The editor takes it only as the
-published package `@paged-media/canvas-wasm`, pinned exactly (`0.64.0`) in the manifests of
-`packages/client` and `apps/canvas` ([ADR 200](adr/200-engine-as-npm-wasm-packages.md)).
+The engine is the Rust workspace in `engine/core`. The editor takes it only as the
+engine's workspace package `@paged-media/canvas-wasm` (`engine/core/packages/canvas-wasm`),
+a `workspace:*` dependency of `packages/client` and `apps/canvas`, built by
+`moon run core:wasm-pkg` at the same revision
+([ADR 200](adr/200-engine-as-npm-wasm-packages.md), amended by
+[core ADR 185](../../../engine/core/docs/adr/185-the-wasm-packages-are-workspace-packages.md)
+and [PM-0008](../../../docs/adr/PM-0008-npm-packages-and-release.md)). The package is
+private; on npm the same files ship as `@paged-media/paged`, which the editor does not use.
 
 - Every wire type in `packages/client/src/protocol.ts` is a re-export from the package's
   generated declarations; the file's header forbids hand-written types there.
-- `PROTOCOL_VERSION` is parsed from the minor of the installed package's version
-  ([core ADR 006](https://github.com/paged-media/core/blob/main/docs/adr/006-protocol-coupled-versioning.md)).
+- `PROTOCOL_VERSION` is parsed from the minor of the workspace package's version
+  (`0.<protocol>.0-dev`)
+  ([core ADR 006](https://github.com/paged-media/paged/blob/main/engine/core/docs/adr/006-protocol-coupled-versioning.md)).
 - At start-up the worker compares the wasm's `protocolVersion` and shared-memory layouts
   with the TypeScript side and posts a `protocolMismatch` warning on any difference
   (`apps/canvas/src/worker/worker.ts:264-300`). The client treats it as fatal and rejects
@@ -75,7 +82,7 @@ it to `CanvasClient` as a `workerFactory`. `ViewportCanvas`
 once. From then on the main thread draws no document pixels: it writes the camera, forwards
 input, and draws overlays (selection chrome, handles, snap lines, caret) as DOM and SVG.
 See [ADR 202](adr/202-render-worker-owns-the-canvas.md); the engine's side is
-[core ADR 115](https://github.com/paged-media/core/blob/main/docs/adr/115-worker-boundary-transports.md).
+[core ADR 115](https://github.com/paged-media/paged/blob/main/engine/core/docs/adr/115-worker-boundary-transports.md).
 
 - All incoming messages go through one queue and one asynchronous pump, because GPU
   initialisation awaits and a second message would re-enter the wasm (`worker.ts:321-386`).
@@ -91,7 +98,7 @@ See [ADR 202](adr/202-render-worker-owns-the-canvas.md); the engine's side is
 ## Input: pointer, gestures, text
 
 The application decides what a pointer event means; the engine does the geometry
-([core ADR 114](https://github.com/paged-media/core/blob/main/docs/adr/114-interaction-lives-in-the-engine.md)):
+([core ADR 114](https://github.com/paged-media/paged/blob/main/engine/core/docs/adr/114-interaction-lives-in-the-engine.md)):
 
 - A click sends `hitTest` and receives the element, or the story offset for text.
 - A drag is `client.beginGesture`, deltas written to the gesture buffer, then
@@ -142,7 +149,7 @@ the worker owns: the selection is written to the worker first, the mirror from i
 
 Panels read the engine through shell hooks that refetch on `mutationApplied`, `undoApplied`
 and `redoApplied`: `useCollection<T>(name)` and `useDocumentMeta()` for document collections
-([core ADR 008](https://github.com/paged-media/core/blob/main/docs/adr/008-read-surfaces-first-class-wire-collections.md)),
+([core ADR 008](https://github.com/paged-media/paged/blob/main/engine/core/docs/adr/008-read-surfaces-first-class-wire-collections.md)),
 and the binding hook (`packages/shell/src/catalog/binding-hook.ts`) for properties of the
 selection, written back as `setElementProperty` mutations.
 
@@ -158,7 +165,8 @@ when it declines ([ADR 023](adr/023-shared-panels-binding-providers.md)).
 ## Plugin hosting
 
 The editor ships eight bundles (`draw`, `web`, `data`, `sheet`, `image`, `publish`, `pdf`,
-`doc`), each pinned to an exact version in `apps/canvas/package.json`. Each is a dynamic
+`doc`), each a `workspace:*` dependency in `apps/canvas/package.json` (the built-in modules
+are not published to npm). Each is a dynamic
 `import()` in `apps/canvas/src/plugin-bundle-table.ts`, so each is its own chunk of the build
 and none is in the entry chunk ([ADR 222](adr/222-code-split-plugin-bundles.md)). After the
 shell mounts, `PluginBundles` fetches the seven boot bundles in parallel and activates them,
@@ -190,7 +198,7 @@ application on the main thread; no bundle is discovered or loaded from a URL at 
   (`.github/actions/engine-wasm`).
 - `scripts/wasm-budget.mjs` fails when the distinct `.wasm` files the application can
   resolve sum to more than 100 MB
-  ([plugin-sdk ADR 308](https://github.com/paged-media/plugin-sdk/blob/main/docs/adr/308-plugin-wasm.md)).
+  ([plugin-sdk ADR 308](https://github.com/paged-media/paged/blob/main/platform/extensions/docs/adr/308-plugin-wasm.md)).
 
 `?solo=<profile>` boots the same application with one bundle activated and an allow-listed
 subset of host panels, tools and menus (six profiles, `apps/canvas/src/solo/profiles.ts`).
@@ -205,11 +213,11 @@ There is no server component in this repository; documents are local files
 - **Open.** The "Open…" command and the drag-drop handler first ask
   `registries.importers.resolve(name, mime)` (extension, then MIME type, first registered
   wins); a matching importer receives the bytes and decides what the file becomes
-  ([plugin-sdk ADR 017](https://github.com/paged-media/plugin-sdk/blob/main/docs/adr/017-importer-exporter-door-shape.md)).
+  ([plugin-sdk ADR 017](https://github.com/paged-media/paged/blob/main/platform/extensions/docs/adr/017-importer-exporter-door-shape.md)).
   With no importer, `loadDocumentFile` (`packages/shell/src/state/document-loader.ts`)
   sends the bytes to the engine with a default font, sets the document handle and requests
   one snapshot per page. A `.paged` file takes this path; the engine decides how to read it
-  ([core ADR 118](https://github.com/paged-media/core/blob/main/docs/adr/118-paged-file-is-a-valid-idml-package.md)).
+  ([core ADR 118](https://github.com/paged-media/paged/blob/main/engine/core/docs/adr/118-paged-file-is-a-valid-idml-package.md)).
   An importer that opens a whole document calls `host.nativeDocument.open`, whose backend
   runs the same `loadDocumentFile`. File ▸ New asks the engine for a blank document.
 - **Save.** `savePaged` (`main.tsx:1600-1638`) takes the `.paged` container from
