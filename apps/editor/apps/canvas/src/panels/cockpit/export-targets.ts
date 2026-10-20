@@ -69,7 +69,7 @@ export interface ExportTarget {
 /** A target's readiness pill. The print PDF is the strictest standard
  *  the document can meet (finding PN-305, UX audit F-11): PDF/X-4 when
  *  the working space has an output intent, PDF 1.7 otherwise, and either
- *  one exports. The standard is the shared print-output fact (ADR 265),
+ *  one exports. The standard is the shared print-output fact (ADR 266),
  *  so Health and the Document Map read the same words. The other LIVE
  *  targets are ready the moment a document is open; HONEST targets read
  *  `soon`. */

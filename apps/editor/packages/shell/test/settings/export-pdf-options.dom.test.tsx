@@ -276,7 +276,7 @@ describe("setting paged.exportPdf.options.v1", () => {
   });
 });
 
-// The print-output facts (ADR 265): the dialog's default standard and its
+// The print-output facts (ADR 266): the dialog's default standard and its
 // "Document working space" choice read the same derivation as the Export
 // Center's pill and the Prepress bar.
 describe("Export PDF dialog: the print-output facts", () => {

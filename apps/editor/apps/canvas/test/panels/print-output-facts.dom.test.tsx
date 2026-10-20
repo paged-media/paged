@@ -17,7 +17,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// The print-output facts (ADR 265), surface by surface. Three documents:
+// The print-output facts (ADR 266), surface by surface. Three documents:
 // one with no CMYK working space, one that DECLARES a profile the editor
 // has no bytes for, and one whose profile is registered and active. For
 // each, every surface that names the working profile, the output intent

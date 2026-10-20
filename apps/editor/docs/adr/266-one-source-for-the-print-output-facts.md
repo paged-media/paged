@@ -1,4 +1,4 @@
-# ADR 265 — One source for the print-output facts
+# ADR 266 — One source for the print-output facts
 
 - **Status:** Accepted 2026-10-20.
 - **Scope:** `packages/shell/src/lib/print-output.ts` (new), `chrome/ExportPdfDialog.tsx`,

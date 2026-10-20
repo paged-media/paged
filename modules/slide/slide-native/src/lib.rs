@@ -250,6 +250,39 @@ pub fn slide_label(s: &SlidePage) -> Option<String> {
     Some(serde_json::json!({ "v": 1, "data": data }).to_string())
 }
 
+/// The deck's own state as the document's plugin metadata, under
+/// [`SLIDE_LABEL_KEY`]: its name, page size and fonts (slide ADR 703). The
+/// importer writes it into the package, so opening an imported deck makes
+/// no edit (UX audit F-08). Non-ASCII characters are `\uXXXX` escapes, as
+/// the bundle's envelope writes them (labels travel through InDesign as
+/// XML attribute text).
+pub fn deck_label(name: &str, width: f64, height: f64, fonts: &[String]) -> String {
+    let text = serde_json::json!({
+        "v": 1,
+        "data": {
+            "deck": {
+                "name": name,
+                "width": width,
+                "height": height,
+                "fonts": fonts,
+            },
+        },
+    })
+    .to_string();
+    let mut out = String::with_capacity(text.len());
+    for c in text.chars() {
+        if c.is_ascii() {
+            out.push(c);
+        } else {
+            let mut units = [0u16; 2];
+            for u in c.encode_utf16(&mut units) {
+                out.push_str(&format!("\\u{u:04x}"));
+            }
+        }
+    }
+    out
+}
+
 /// A placeholder item's metadata: its PowerPoint type and index.
 pub fn placeholder_label(it: &Item) -> Option<String> {
     if matches!(it.kind, ItemKind::Group { .. }) {
@@ -1649,6 +1682,10 @@ pub fn build(deck: &Deck, images: &dyn Fn(&str) -> Option<Vec<u8>>, name: &str) 
         master_spreads: master_srcs,
         dom_version: Some(DOM_VERSION.into()),
         document_name: Some(name.to_string()),
+        labels: vec![(
+            SLIDE_LABEL_KEY.to_string(),
+            deck_label(name, deck.width, deck.height, &deck.fonts),
+        )],
         document_preference: DocumentPreference {
             page_width: Some(n(deck.width)),
             page_height: Some(n(deck.height)),
@@ -1706,6 +1743,21 @@ pub fn write(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_deck_label_is_an_ascii_envelope_of_the_deck() {
+        let label = deck_label("Präsentation 🎉", 960.0, 540.0, &["Calibri".into()]);
+        assert!(label.is_ascii(), "{label}");
+        assert!(
+            label.contains("Pr\\u00e4sentation \\ud83c\\udf89"),
+            "{label}"
+        );
+        let v: serde_json::Value = serde_json::from_str(&label).unwrap();
+        assert_eq!(v["v"], 1);
+        assert_eq!(v["data"]["deck"]["name"], "Präsentation 🎉");
+        assert_eq!(v["data"]["deck"]["width"], 960.0);
+        assert_eq!(v["data"]["deck"]["fonts"][0], "Calibri");
+    }
 
     fn stroke(compound: Option<&str>, dash: Option<&str>) -> Stroke {
         Stroke {

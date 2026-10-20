@@ -131,7 +131,7 @@ export function ExportPdfDialog() {
   const [form, setForm] = useState<FormState>(loadSaved);
   const [profiles, setProfiles] = useState<string[]>([]);
   const [docName, setDocName] = useState("document");
-  // The print-output facts (ADR 265): the Export Center's pill and this
+  // The print-output facts (ADR 266): the Export Center's pill and this
   // dialog's default standard come from the one derivation.
   const [print, setPrint] = useState<PrintOutputFacts>(() =>
     printOutputFacts(null),

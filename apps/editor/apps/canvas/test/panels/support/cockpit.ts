@@ -79,7 +79,7 @@ export function linksDocument(): Uint8Array {
   });
 }
 
-/** The CMYK working space the print-output tests name (ADR 265). */
+/** The CMYK working space the print-output tests name (ADR 266). */
 export const PRESS_PROFILE = "Coated Test Press";
 
 /** One page whose designmap DECLARES `PRESS_PROFILE` as its CMYK working

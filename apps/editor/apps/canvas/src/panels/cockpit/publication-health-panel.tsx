@@ -72,7 +72,7 @@ export function PublicationHealthPanel() {
   const links = useCollection<LinkSummary>("links");
   const { findings, runCount } = usePreflightFindings(client);
   const loaded = meta != null && meta.pageCount > 0;
-  // The print PDF's readiness is the Export Center's own pill (ADR 265):
+  // The print PDF's readiness is the Export Center's own pill (ADR 266):
   // the standard the export will meet, not a PDF/X-4 warning for a
   // document that exports PDF 1.7.
   const print = exportReadiness(

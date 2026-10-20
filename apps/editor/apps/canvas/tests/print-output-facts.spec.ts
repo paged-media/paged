@@ -17,7 +17,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// The print-output facts in the running editor (ADR 265): register a CMYK
+// The print-output facts in the running editor (ADR 266): register a CMYK
 // profile, make it the working space the way Color settings does, and
 // every surface that names the working profile or the print PDF's
 // standard switches together: the Prepress bar's chip, the PDF/X-4
@@ -73,7 +73,7 @@ const setMode = (page: Page, mode: string) =>
     mode,
   );
 
-test.describe("Print-output facts (ADR 265)", () => {
+test.describe("Print-output facts (ADR 266)", () => {
   test("AC-PRINT-1 — a registered working profile: the bar, the checklist, Health, the Map and Export agree @feat:editor-shell.panels.output-readiness @level:happy", async ({
     page,
   }) => {

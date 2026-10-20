@@ -17,7 +17,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// The print-output facts (ADR 265): ONE derivation from the document
+// The print-output facts (ADR 266): ONE derivation from the document
 // meta that every surface naming the working CMYK profile, the output
 // intent or the print PDF's standard reads — the Prepress bar, the
 // PDF/X-4 checklist, Publication health, the Document Map, the Export

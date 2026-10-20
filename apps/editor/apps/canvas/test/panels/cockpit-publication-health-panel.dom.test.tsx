@@ -105,7 +105,7 @@ describe("Publication health: states", () => {
       "Color mode": "—",
     });
     // No CMYK working space, so no output intent: the print PDF is
-    // PDF 1.7 and exports, the Export Center's own words (ADR 265).
+    // PDF 1.7 and exports, the Export Center's own words (ADR 266).
     expect(pill(h.root, "print-readiness")).toEqual({
       text: "Ready · PDF 1.7",
       tone: "ready",
