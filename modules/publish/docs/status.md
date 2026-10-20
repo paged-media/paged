@@ -135,7 +135,7 @@ The two repositories pin each other by git revision, so the steps run in this or
 
 - PDF export. The PDF bundle contributes no exporter and nothing here writes PDF; the
   engine has its own exporter
-  ([core ADR 119](https://github.com/paged-media/core/blob/main/docs/adr/119-pdf-export-backend.md)).
+  ([core ADR 119](https://github.com/paged-media/paged/blob/main/engine/core/docs/adr/119-pdf-export-backend.md)).
 - A host door for IDML export, or the IDML crates shipped as wasm inside
   `@paged-media/publish`; the bundle's comments name both as the successors of the raw
   handle ([ADR 651](adr/651-idml-compiled-into-engine-wasm.md)).

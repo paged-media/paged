@@ -5,7 +5,7 @@ Design note, written before the implementation. What was built is recorded in
 
 **2026-06-13 · design note · status: FROZEN (the deferral condition is now MET).**
 Companion to the C-1 Stage B GPU design
-([ADR 018](https://github.com/paged-media/core/blob/main/docs/adr/018-stage-b-gpu-texture-defer-record-only.md)).
+([ADR 018](https://github.com/paged-media/paged/blob/main/engine/core/docs/adr/018-stage-b-gpu-texture-defer-record-only.md)).
 K-3 is SDK + editor — NO
 core wire change. K-3, S-07 and I-02 are the ids this door carries in
 `packages/plugin-api/src/host.ts` and `DESIGN.md` §15.

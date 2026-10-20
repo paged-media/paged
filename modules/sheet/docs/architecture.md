@@ -19,7 +19,7 @@ under [`adr/`](adr/README.md), linked where it applies.
 
 Formula parsing and evaluation, number formatting and XLSX reading and writing are in these
 crates; the TypeScript side calls them and translates their results
-([ADR 314](https://github.com/paged-media/plugin-sdk/blob/main/docs/adr/314-plugin-shape.md)).
+([ADR 314](https://github.com/paged-media/paged/blob/main/platform/extensions/docs/adr/314-plugin-shape.md)).
 The engine is written in this repo and depends on no third-party spreadsheet engine
 ([ADR 500](adr/500-own-calculation-engine.md)).
 
@@ -40,7 +40,7 @@ The engine is written in this repo and depends on no third-party spreadsheet eng
 The function table is generated: `sheet-core/build.rs` and `sheet-fn/build.rs` both read
 `registry/functions/*.yaml` and sort by id, so a function without a registry row has no id
 and no dispatch arm
-([ADR 317](https://github.com/paged-media/plugin-sdk/blob/main/docs/adr/317-registry-driven-dispatch.md)).
+([ADR 317](https://github.com/paged-media/paged/blob/main/platform/extensions/docs/adr/317-registry-driven-dispatch.md)).
 `.github/workflows/rust.yml` fails if `sheet-fn` reaches `sheet-calc`, `sheet-parser`,
 `sheet-xlsx`, `sheet-lower` or `sheet-js`, or if the wasm build of `sheet-js` contains
 `sheet-conformance` or `proptest`. `sheet-lower`, `sheet-grid` and `sheet-chart` do not
@@ -74,7 +74,7 @@ are private workspace packages (PM-0008); the editor builds them from source.
 `@paged-media/plugin-api`, `@paged-media/plugin-sdk` and `react` are peer dependencies, and
 the contract-import lint rule (`/bunfig.toml`, PM-0003) fails on a package import in `packages/*/src` that is none of
 these, not an internal shared package (`platform/shared/*`) and not one of this repo's own
-`@paged-media/sheet-*` packages ([ADR 315](https://github.com/paged-media/plugin-sdk/blob/main/docs/adr/315-isolation-contract.md)).
+`@paged-media/sheet-*` packages ([ADR 315](https://github.com/paged-media/paged/blob/main/platform/extensions/docs/adr/315-isolation-contract.md)).
 
 ## The wasm boundary
 

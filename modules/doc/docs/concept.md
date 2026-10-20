@@ -3,14 +3,14 @@
 2026-07-23. Concept paper. Sections describe intent; where the implementation differs, `status.md` and the ADRs in `adr/` are authoritative.
 
 **Sources (platform truth this design binds to):**
-[ADR-021](https://github.com/paged-media/core/blob/main/docs/adr/021-paged-native-document-model-idml-as-format.md) (Paged-native model; `.paged`
+[ADR-021](https://github.com/paged-media/paged/blob/main/engine/core/docs/adr/021-paged-native-document-model-idml-as-format.md) (Paged-native model; `.paged`
 is a _container of native parts_ + one core-owned _composition_ part; each content engine stores its
 own native format; IDML byte-perfect as a native part) and its addendum (multi-surface renderer/
 compositor; the "native document model" is the _composition_ model, small and clean);
-[ADR-022](https://github.com/paged-media/plugin-publish/blob/main/docs/adr/022-idml-relocates-to-plugin-publish.md) (format adapters live in plugin repos — `idml-import`/`idml-export` in `plugin-publish`);
-[ADR-017](https://github.com/paged-media/plugin-sdk/blob/main/docs/adr/017-importer-exporter-door-shape.md) (K-2 importer door: resolve-by-extension **before** the default IDML load; `import(bytes)` loads into the plugin's own engine and **replaces the load target**; the clean "open into a fresh host document" door — `host.document.open(bytes)` — **does not exist yet**);
-[ADR-020](https://github.com/paged-media/plugin-web/blob/main/docs/adr/020-paged-web-native-engine-defer-frame-threading.md) (the renderer-neutral `FlowId`/region-chain/overset seam "shared with IDML stories"; W-frag rungs 1–2 proven for web);
-[ADR-007](https://github.com/paged-media/core/blob/main/docs/adr/007-carry-through-rendering-honesty.md) (carry-through + render honesty);
+[ADR-022](https://github.com/paged-media/paged/blob/main/modules/publish/docs/adr/022-idml-relocates-to-plugin-publish.md) (format adapters live in plugin repos — `idml-import`/`idml-export` in `plugin-publish`);
+[ADR-017](https://github.com/paged-media/paged/blob/main/platform/extensions/docs/adr/017-importer-exporter-door-shape.md) (K-2 importer door: resolve-by-extension **before** the default IDML load; `import(bytes)` loads into the plugin's own engine and **replaces the load target**; the clean "open into a fresh host document" door — `host.document.open(bytes)` — **does not exist yet**);
+[ADR-020](https://github.com/paged-media/paged/blob/main/modules/web/docs/adr/020-paged-web-native-engine-defer-frame-threading.md) (the renderer-neutral `FlowId`/region-chain/overset seam "shared with IDML stories"; W-frag rungs 1–2 proven for web);
+[ADR-007](https://github.com/paged-media/paged/blob/main/engine/core/docs/adr/007-carry-through-rendering-honesty.md) (carry-through + render honesty);
 `core: docs/reference/paged-file-format.md` (the `.paged` ZIP/OPC container; unknown parts round-trip untouched — "the single most important guarantee"; the three-role spec/source/derived storage model);
 `plugin-sheets: docs/concept.md` (the closest engine-plugin precedent: own Rust crates, XLSX **preservation invariant**, dual compiled-`<Table>`/in-frame-C-1 surfaces, K-1 editing);
 `plugin-web: docs/concept.md` + `plugin-web: packages/web-render/src/{lib,flow}.rs` (foreign flowing-document model; Blitz→C-1; fragmentation as the open hard axis);
@@ -75,7 +75,7 @@ so the standalone mode is the content type's most natural form.
 
 ## 3. Where `paged.doc` sits — the three precedents it inherits from
 
-_Status note (2026-10-02): this section predates the implementation; see [ADR 404](https://github.com/paged-media/plugin-web/blob/main/docs/adr/404-fragmentation-by-relayout.md) (`plugin-web` has since built fragmentation of one flow across linked frames) and [ADR 102](https://github.com/paged-media/core/blob/main/docs/adr/102-text-stack.md) (the engine's shaper is now harfrust)._
+_Status note (2026-10-02): this section predates the implementation; see [ADR 404](https://github.com/paged-media/paged/blob/main/modules/web/docs/adr/404-fragmentation-by-relayout.md) (`plugin-web` has since built fragmentation of one flow across linked frames) and [ADR 102](https://github.com/paged-media/paged/blob/main/engine/core/docs/adr/102-text-stack.md) (the engine's shaper is now harfrust)._
 
 1. **`plugin-sheets` — the engine-plugin shape.** Own Rust crates compiling to **one** wasm module; a
    thin TS `*-host-model` doing pure `Lowered → Mutation[]` translation + a `*-bundle` (manifest +
@@ -188,7 +188,7 @@ X's _only_ structural advantage is round-trip ease (the foreign model stays the 
 for that with the mapping/save-back layer but wins on editing quality, reuse, and by dodging two open
 platform gaps. **The recommendation is Y**, with X retained as the pre-authorized escalation _iff_ a
 measured fidelity requirement proves the native mapping cannot express Word layout faithfully enough —
-the same "revisit only on that evidence" posture [ADR-011](https://github.com/paged-media/plugin-web/blob/main/docs/adr/011-web-rendering-fork-defer-to-scenelayer.md)/020 hold for web. The most likely real-world
+the same "revisit only on that evidence" posture [ADR-011](https://github.com/paged-media/paged/blob/main/modules/web/docs/adr/011-web-rendering-fork-defer-to-scenelayer.md)/020 hold for web. The most likely real-world
 middle path is **hybrid**: lower the 95% that maps cleanly to native, and fall back to a **fixed,
 non-editable faithful render** (a placed PDF/PNG derived, §7) for pages containing features the mapping
 doesn't yet reach — never a fake, always either native-editable or an honest flat rendering.
@@ -397,7 +397,7 @@ _Status note (2026-10-02): this section predates the implementation; see [ADR 60
   span several frames of the host layout). Constructs past the current tier → C-1 fixed render.
 - **Edit:** double-click enters editing. **Preferred: native text editing** on the poured story (native
   caret/tools — no C-9), scoped by the `editContext` breadcrumb; the `editContext` exists mainly to
-  bound the scope, own Cmd-Z coalescing ([ADR-012](https://github.com/paged-media/plugin-sdk/blob/main/docs/adr/012-k1-modal-session-undo-coalescing.md)), and offer doc-specific panels (styles, outline). A
+  bound the scope, own Cmd-Z coalescing ([ADR-012](https://github.com/paged-media/paged/blob/main/platform/extensions/docs/adr/012-k1-modal-session-undo-coalescing.md)), and offer doc-specific panels (styles, outline). A
   pure-C-1/K-1 modal surface (like the sheets grid) is the fallback for constructs edited as a unit.
 - **Persist / round-trip:** edits update the native model and, through the provenance bindings, patch
   `source.docx` on save; untouched parts carry through verbatim.
@@ -472,7 +472,7 @@ _Status note (2026-10-02): this section predates the implementation; see [ADR 60
 
 ## 11. Learnings that flow back to `plugin-web`
 
-_Status note (2026-10-02): this section predates the implementation; see [ADR 404](https://github.com/paged-media/plugin-web/blob/main/docs/adr/404-fragmentation-by-relayout.md) (`plugin-web` has since built fragmentation across linked frames) and [ADR 604](adr/604-word-is-the-oracle.md) (the fidelity method this plugin adopted)._
+_Status note (2026-10-02): this section predates the implementation; see [ADR 404](https://github.com/paged-media/paged/blob/main/modules/web/docs/adr/404-fragmentation-by-relayout.md) (`plugin-web` has since built fragmentation across linked frames) and [ADR 604](adr/604-word-is-the-oracle.md) (the fidelity method this plugin adopted)._
 
 `paged.doc` is not just a consumer of platform work — done right, it feeds `plugin-web` on several axes:
 

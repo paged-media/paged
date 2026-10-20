@@ -124,7 +124,7 @@ overset_; the content engine owns _the content and how it fragments_ (compositio
 views/region-chain; the part owns the story/content).
 
 - **Content-agnostic:** the same protocol threads an IDML/publishing story, an HTML flow, or a long
-  table across frames — it is exactly [ADR 020](https://github.com/paged-media/plugin-web/blob/main/docs/adr/020-paged-web-native-engine-defer-frame-threading.md)'s `FlowId` and the paged.web fragmentation work,
+  table across frames — it is exactly [ADR 020](https://github.com/paged-media/paged/blob/main/modules/web/docs/adr/020-paged-web-native-engine-defer-frame-threading.md)'s `FlowId` and the paged.web fragmentation work,
   generalized. The engine is asked "fragment `part:selector` across these region geometries, in this
   order" and returns per-region content + overset.
 - **Overset** (content past the last region) is a first-class composition state, surfaced (not hidden).
@@ -173,7 +173,7 @@ across an IDML story and a web frame is won.
 
 ## 9. IDML ↔ composition (the adapter boundary)
 
-_Status note (2026-10-02): this section predates the implementation; the import direction exists in part: `Document::to_composition` in `crates/paged-scene/src/lib.rs` maps pages and each story's frame chain (a flow plus text-frame regions with their content-box geometry); rectangles, groups, layers, master spreads, anchored objects and resource references are not mapped. The export direction is not built: the IDML package is written from the document model by `plugin-publish: crates/idml-export` ([ADR 022](https://github.com/paged-media/plugin-publish/blob/main/docs/adr/022-idml-relocates-to-plugin-publish.md))._
+_Status note (2026-10-02): this section predates the implementation; the import direction exists in part: `Document::to_composition` in `crates/paged-scene/src/lib.rs` maps pages and each story's frame chain (a flow plus text-frame regions with their content-box geometry); rectangles, groups, layers, master spreads, anchored objects and resource references are not mapped. The export direction is not built: the IDML package is written from the document model by `plugin-publish: crates/idml-export` ([ADR 022](https://github.com/paged-media/paged/blob/main/modules/publish/docs/adr/022-idml-relocates-to-plugin-publish.md))._
 
 The composition is where the IDML _arrangement_ maps in and out; IDML _content_ maps to the publishing
 part (separate spec).

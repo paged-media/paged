@@ -167,7 +167,7 @@ fill tint, engine 0.71.11); each applies only while the SDK's rows disagree.
 
 - A server, accounts, sharing or real-time collaboration ([ADR 211](adr/211-no-backend.md)).
 - Loading a plugin at run time, and any isolation between a bundle and the application
-  ([plugin-sdk ADR 319](https://github.com/paged-media/plugin-sdk/blob/main/docs/adr/319-trust-line.md)).
+  ([plugin-sdk ADR 319](https://github.com/paged-media/paged/blob/main/platform/extensions/docs/adr/319-trust-line.md)).
 - A unit-test runner for the application: apart from three Node scripts under `scripts/`,
   every test is a Playwright spec.
 - A use for the worker-based bundle loader in `packages/shell/src/bundles/`: it is exported

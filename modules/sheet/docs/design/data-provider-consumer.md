@@ -1,6 +1,6 @@
 # RFC: data-provider consumer — source a sheet from a governed dataset (S-15)
 
-_Design note, written in June 2026 as a proposal, before the implementation; it was then built. What was built is recorded in [ADR 014](https://github.com/paged-media/plugin-data/blob/main/docs/adr/014-data-provider-arrow-seam.md) (in plugin-data); where this plugin's consumer differs from the proposal, a status note says so._
+_Design note, written in June 2026 as a proposal, before the implementation; it was then built. What was built is recorded in [ADR 014](https://github.com/paged-media/paged/blob/main/modules/data/docs/adr/014-data-provider-arrow-seam.md) (in plugin-data); where this plugin's consumer differs from the proposal, a status note says so._
 
 **Origin:** the plugin-data concept §7.1 (`plugin-data: docs/concept.md`), which names the
 sheets plugin as the canonical consumer, so that a sheet can be sourced from a governed
