@@ -36,7 +36,8 @@ records a take against it:
 
 **Live scripts run hands-free.** `public/scripts/*-live.js` narrate with `autoMs` and must run
 from top to bottom with no click; `tests/live-scripts.spec.ts` runs each one in the
-playground and fails on any error. The playground chip carries the run status.
+playground and fails on any error. The demo guide's root carries the run status
+(`data-playground-status`, [ADR 267](267-the-demo-guide-floats-over-the-editor.md)).
 
 ## Consequences
 

@@ -20,8 +20,9 @@
 // The playground's URL flags, read once when their component mounts:
 //
 //   · `url.script` (PlaygroundController): `?script=<id>` loads the live
-//     script /scripts/<id>.js and its manifest entry; `&embed` starts with
-//     the source panel closed; `&autoplay` plays it at once.
+//     script /scripts/<id>.js and its manifest entry into the demo guide;
+//     `&embed` starts the guide collapsed to its pill; `&autoplay` plays it
+//     at once.
 //   · `url.embed` (IframeScriptBridge): `?embed=script` opens a blank
 //     document once the editor is up, announces `paged:ready` to the
 //     allowed parent origins, and runs `paged:run` messages from them —
@@ -135,7 +136,7 @@ describe("setting url.script", () => {
     expect(asked).toEqual([]);
   });
 
-  test("?script=<id> loads the script and its manifest title, panel open", async () => {
+  test("?script=<id> loads the script and its manifest title, guide open", async () => {
     covers("setting:url.script");
     const asked = serveScripts(
       { intro: "const a = 1;" },
@@ -153,19 +154,23 @@ describe("setting url.script", () => {
       "/scripts/manifest.json",
     ]);
     expect(
-      document.querySelector("[data-playground-toggle]")?.textContent,
-    ).toBe("× script");
+      document
+        .querySelector("[data-playground-toggle]")
+        ?.getAttribute("aria-expanded"),
+    ).toBe("true");
   });
 
-  test("&embed starts with the source panel closed", async () => {
+  test("&embed starts with the guide collapsed to its pill", async () => {
     covers("setting:url.script");
     serveScripts({ intro: "const a = 1;" }, { scripts: [] });
     at("?script=intro&embed");
     render(<PlaygroundController />);
     await waitFor(() =>
       expect(
-        document.querySelector("[data-playground-toggle]")?.textContent,
-      ).toBe("</> script"),
+        document
+          .querySelector("[data-playground-toggle]")
+          ?.getAttribute("aria-expanded"),
+      ).toBe("false"),
     );
     expect(document.querySelector("[data-playground-source]")).toBeNull();
   });
@@ -176,7 +181,7 @@ describe("setting url.script", () => {
     (window as unknown as { __canvas?: unknown }).__canvas = {};
     const status = () =>
       document
-        .querySelector("[data-playground-toggle]")
+        .querySelector("[data-playground]")
         ?.getAttribute("data-playground-status");
     at("?script=intro");
     const idle = render(<PlaygroundController />);

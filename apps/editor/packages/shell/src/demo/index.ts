@@ -23,6 +23,8 @@ export {
   demoShowInfo,
   demoHighlight,
   demoResetOverlay,
+  demoSetGuideSide,
+  type DemoGuideSide,
   type DemoInfoRequest,
 } from "./overlay";
 export {

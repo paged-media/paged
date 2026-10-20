@@ -131,6 +131,9 @@ film("developers", async (k) => {
     await designer.newDocument();
     await expect(page.locator("[data-playground-source]")).toBeVisible();
     await expect(page.locator("[data-playground-chapter]")).toHaveCount(5);
+    // This film is about the script: the guide shows it from the start.
+    await page.locator("[data-playground-script-toggle]").click();
+    await expect(page.locator("[data-playground-code]")).toBeVisible();
     await k.hold(800);
   });
   await k.roll();

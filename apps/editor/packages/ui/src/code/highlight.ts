@@ -29,7 +29,7 @@
 // Token classes map to `--code-*` token-layer colours (theme.css), so
 // the highlighter reads native in both themes and never hardcodes hex.
 
-export type CodeLanguage = "html" | "css" | "text";
+export type CodeLanguage = "html" | "css" | "js" | "text";
 
 const ESC: Record<string, string> = {
   "&": "&amp;",
@@ -43,7 +43,7 @@ export function escapeHtml(s: string): string {
   return s.replace(/[&<>"']/g, (c) => ESC[c]);
 }
 
-interface Token {
+export interface Token {
   /** Class suffix (`tag`, `attr`, `string`, `comment`, …) or null
    *  for plain text. */
   cls: string | null;
@@ -117,6 +117,46 @@ function tokenizeCss(src: string): Token[] {
   return tokens;
 }
 
+// --- JavaScript ----------------------------------------------------
+// Line and block comments, strings (template literals included, without
+// nested `${}` tracking), keywords, numbers, and the name before a call
+// or after a dot. Enough to read a script; not a parser.
+const JS_KEYWORDS = new Set(
+  "async await break case catch class const continue default delete do else export extends false finally for function if import in instanceof let new null of return switch this throw true try typeof undefined var void while yield".split(
+    " ",
+  ),
+);
+const JS_RULE =
+  /(\/\/[^\n]*|\/\*[\s\S]*?\*\/)|("(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*'|`(?:[^`\\]|\\.)*`)|(\b\d[\d_]*(?:\.\d+)?\b)|([A-Za-z_$][\w$]*)(\s*\()?/g;
+
+/** The tokens of one JavaScript source string, in order; joined, their
+ *  texts are the source. Comments and strings are matched whole, so a
+ *  caller splitting by line splits the tokens' texts too. */
+export function tokenizeJs(src: string): Token[] {
+  const tokens: Token[] = [];
+  let last = 0;
+  JS_RULE.lastIndex = 0;
+  let m: RegExpExecArray | null;
+  while ((m = JS_RULE.exec(src)) !== null) {
+    if (m.index > last)
+      tokens.push({ cls: null, text: src.slice(last, m.index) });
+    if (m[1]) tokens.push({ cls: "comment", text: m[1] });
+    else if (m[2]) tokens.push({ cls: "string", text: m[2] });
+    else if (m[3]) tokens.push({ cls: "number", text: m[3] });
+    else if (m[4]) {
+      const word = m[4];
+      tokens.push({
+        cls: JS_KEYWORDS.has(word) ? "keyword" : m[5] ? "call" : null,
+        text: word,
+      });
+      if (m[5]) tokens.push({ cls: null, text: m[5] });
+    }
+    last = JS_RULE.lastIndex;
+  }
+  if (last < src.length) tokens.push({ cls: null, text: src.slice(last) });
+  return tokens;
+}
+
 /** Produce highlighted HTML for one source string. The output is
  *  rendered into a `<pre>` UNDERLAY beneath a transparent textarea, so
  *  metrics must match exactly — callers must use the same font/size on
@@ -128,7 +168,9 @@ export function highlight(src: string, language: CodeLanguage): string {
       ? tokenizeHtml(src)
       : language === "css"
         ? tokenizeCss(src)
-        : [{ cls: null, text: src }];
+        : language === "js"
+          ? tokenizeJs(src)
+          : [{ cls: null, text: src }];
   // Trailing-newline guard: a textarea keeps height for a final empty
   // line; mirror it so the underlay doesn't shift.
   return wrap(tokens) + "\n";
