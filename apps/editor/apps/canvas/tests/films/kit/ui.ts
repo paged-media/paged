@@ -61,6 +61,18 @@ const menuItem = (k: Kit, label: string) => {
     .first();
 };
 
+/** Move sideways onto a submenu item's column, at the pointer's height. */
+async function intoColumn(k: Kit, item: Locator): Promise<void> {
+  await item.waitFor({ state: "visible", timeout: 10_000 });
+  const b = await item.boundingBox();
+  const at = k.pointer.position;
+  if (!b || at.x >= b.x + 8) return;
+  await k.pointer.moveTo(
+    { x: b.x + Math.min(40, b.width / 2), y: at.y },
+    { targetWidth: b.width },
+  );
+}
+
 /** Open a menu path: the top-level entry by its label in the menu bar, each
  *  submenu by hovering, the last entry by a click. After each hover the
  *  pointer rests a moment and nudges right, the way a hand settles into a
@@ -74,6 +86,10 @@ export async function menu(k: Kit, path: string[]): Promise<void> {
   await press(k, scope.getByText(top, { exact: true }).first());
   await k.hold(250);
   for (const [i, label] of rest.entries()) {
+    // Into a submenu's column first, then along it: a diagonal crosses the
+    // parent menu's other rows, and a slow one leaves the submenu's grace
+    // area and closes it.
+    if (i > 0) await intoColumn(k, menuItem(k, label));
     if (i === rest.length - 1) {
       // A menu fades in: an item clicked mid-animation can miss, so the
       // pointer settles on it first, the way a hand does.
