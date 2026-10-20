@@ -108,6 +108,9 @@ export function CockpitLayout({
       >
         <div
           data-left-panel={leftId}
+          // F-50 (ADR 259): the docks are complementary landmarks.
+          role="complementary"
+          aria-label="Left panels"
           style={{
             width: 262,
             flexShrink: 0,
@@ -131,8 +134,10 @@ export function CockpitLayout({
         </div>
       </Activity>
 
-      {/* Canvas column */}
-      <div
+      {/* Canvas column — the main landmark (F-50, ADR 259). */}
+      <main
+        data-cockpit-main
+        aria-label="Document"
         style={{
           flex: 1,
           minWidth: 0,
@@ -189,10 +194,12 @@ export function CockpitLayout({
             cursor → linkFrames / insertTextFrame; overset badge set). */}
         {!isOverride && <ThreadingController />}
         {!isOverride && <ThumbnailRail />}
-      </div>
+      </main>
 
       <Activity mode={panelsHidden ? "hidden" : "visible"} name="right column">
         <div
+          role="complementary"
+          aria-label="Panels"
           style={{
             width: 320,
             flexShrink: 0,

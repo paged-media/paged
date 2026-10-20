@@ -18,6 +18,7 @@
  */
 
 import {
+  useEffect,
   useRef,
   useState,
   type CSSProperties,
@@ -132,6 +133,24 @@ export function MenuBar() {
   const [openMenu, setOpenMenu] = useState<string | null>(null);
   // How the open menu was opened and where focus was before it: read
   // and written by the event handlers below, never during render.
+  // F-50 (ADR 259): F10 puts focus on the menu bar's first menu, the
+  // Windows and GNOME route into an application's menus; the arrows then
+  // walk the bar and ArrowDown opens a menu.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "F10" || e.shiftKey || e.altKey || e.metaKey || e.ctrlKey)
+        return;
+      if (e.defaultPrevented) return;
+      const first = document.querySelector<HTMLElement>(
+        '[role="menubar"] [data-menu-trigger]',
+      );
+      if (!first) return;
+      e.preventDefault();
+      first.focus();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
   const navRef = useRef<MenuNavigation>({
     origin: "keyboard",
     returnTo: null,

@@ -44,8 +44,11 @@ export function PanelHeader({
         padding: "12px 14px 8px",
       }}
     >
-      <span
+      {/* A heading (UX audit F-50, ADR 259): the panel's title is what a
+          screen reader's heading list names it by. */}
+      <h2
         style={{
+          margin: 0,
           fontSize: 14,
           fontWeight: 600,
           whiteSpace: "nowrap",
@@ -53,7 +56,7 @@ export function PanelHeader({
         }}
       >
         {title}
-      </span>
+      </h2>
       {action}
     </div>
   );

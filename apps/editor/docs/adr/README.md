@@ -66,6 +66,7 @@ and 024 predate that scheme and keep their numbers. Records 200–217 were writt
 | [253](253-one-action-one-batch.md) | One user action is one batch | Accepted 2026-10-19 |
 | [257](257-indesigns-fits-and-page-keys.md) | InDesign's fit commands and page keys, in the registry | Accepted 2026-10-20 |
 | [258](258-a-dropped-picture-is-placed-where-it-lands.md) | A picture dropped on an open document is placed where it lands | Accepted 2026-10-20 |
+| [259](259-landmarks-tabs-and-headings.md) | Landmarks, the dock's tabs and panel headings | Accepted 2026-10-20 |
 
 Decisions made in other repositories that this editor's code rests on are listed in
 [`../README.md`](../README.md). Comments in the source also cite ADR 025 (the journal) and
