@@ -972,6 +972,8 @@ test.describe("plugin surface · paged.sheet", () => {
     // is entered": copy, paste, fill down/right and find. Cmd+D shares its
     // chord with the host's Place and wins only inside the sheet (a
     // satisfied guard beats an unguarded binding — keybinding.ts).
+    // Ctrl+D joined it with the editor's panel minors (2026-10-20): fill
+    // down has both chords, like copy, paste, fill right and find.
     expect(
       [...reach.keybindings].sort(),
       "paged.sheet binds its grid chords",
@@ -982,6 +984,7 @@ test.describe("plugin surface · paged.sheet", () => {
         "cmd+v",
         "ctrl+v",
         "cmd+d",
+        "ctrl+d",
         "cmd+r",
         "ctrl+r",
         "cmd+f",

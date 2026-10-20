@@ -58,7 +58,7 @@ Checked by shared helpers at every layer: INV-1 one gesture is exactly one commi
 
 ### Findings as expected failures
 
-A finding becomes a test that fails today, titled with its id, as an expected failure (`test.failing` in bun, `test.fail` in Playwright, a `known` marker on a matrix cell). The fix flips it, and the marker comes off in the same change.
+A finding becomes a test that fails today, titled with its id as a prefix (`GF-2: …`; square brackets in a test title are a feature tag, so not `[GF-2]`), as an expected failure (`test.failing` in bun, `test.fail` in Playwright, a `known` marker on a matrix cell). The fix flips it, and the marker comes off in the same change.
 
 | Id                                            | Finding                                                                                                                          | Test                                                                                                                                                                                                      |
 | --------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

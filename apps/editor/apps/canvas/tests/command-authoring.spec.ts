@@ -295,7 +295,7 @@ test.describe("U7 — paged.insert.* command authoring", () => {
     }
   });
 
-  test("insert table with NO caret mints frame + table; two undos unwind both halves @feat:editor-shell.command-authoring @level:happy", async ({
+  test("insert table with NO caret mints frame + table; one undo unwinds both halves @feat:editor-shell.command-authoring @level:happy", async ({
     page,
   }) => {
     await openCanvas(page);
@@ -313,12 +313,10 @@ test.describe("U7 — paged.insert.* command authoring", () => {
     // …and exactly one new addressable node (the text frame) exists.
     expect(await sceneNodeCount(page)).toBe(before + 1);
 
-    // Sequential compound (insert-commands.ts fact 3): undo #1 removes
-    // the table, the frame survives; undo #2 removes the frame.
+    // One batch (SH-202: the minted frame's story is addressed through a
+    // batch handle), so ONE undo removes the table and the frame together.
     await undoOnce(page);
     expect(await elementProperties(page, outcome.createdId!)).toBeNull();
-    expect(await sceneNodeCount(page)).toBe(before + 1);
-    await undoOnce(page);
     expect(await sceneNodeCount(page)).toBe(before);
   });
 

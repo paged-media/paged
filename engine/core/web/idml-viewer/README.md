@@ -66,7 +66,7 @@ const session = await ViewerSession.new();
 
 The session is renderer-core only: it links none of the engine's editing,
 canvas, scripting or introspection crates. The release workflow checks
-that (`engine/core/scripts/viewer-subset-audit.sh`) before it publishes.
+that (`engine/core/scripts/viewer-subset-audit.mjs`) before it publishes.
 
 ## In the repository
 

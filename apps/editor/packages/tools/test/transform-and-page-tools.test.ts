@@ -129,7 +129,7 @@ describe.each([
 // anchor names one); a press on the pasteboard did nothing. InDesign's
 // Rotate / Scale / Shear take the drag anywhere. Found by the gesture
 // matrix at 25 % (GT-4); the anchor is now named on the selection's page.
-test("[GT-4] a transform tool drag that starts on the pasteboard still transforms the selection @level:gesture", async () => {
+test("GT-4: a transform tool drag that starts on the pasteboard still transforms the selection @level:gesture", async () => {
   const { fake, g } = harness({ selection: [FRAME] });
   await g
     .tool(createRotateHandler)

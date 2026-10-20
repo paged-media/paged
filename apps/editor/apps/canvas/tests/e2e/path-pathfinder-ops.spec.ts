@@ -95,19 +95,34 @@ test.describe("E2E path + pathfinder ops", () => {
   }) => {
     const pageInfo = fx.pages[0];
     // The union of two overlapping rectangles has the same silhouette as
-    // the pair, so with the fill and the stroke in one colour (the
-    // beforeEach's defaults) it renders pixel-identical and the sandwich
-    // cannot see it. A Paper stroke makes the merge visible: the front
-    // rectangle's outline across the back one is there before and gone
-    // after, and back again on undo.
-    await mutate(page, {
-      op: "setDocumentDefaults",
-      args: { strokeColor: "Color/Paper", strokeWeight: 2 },
-    });
+    // the pair, so painted in one colour it renders pixel-identical and
+    // the sandwich cannot see it. A Paper stroke over a Black fill makes
+    // the merge visible: the front rectangle's outline across the back
+    // one is there before and gone after, and back again on undo.
+    //
+    // Painted on each rectangle, not through `setDocumentDefaults`: the
+    // defaults are the editor's to apply when ITS tools create an object
+    // (a raw `insertFrame` mints an unpainted frame), and the call
+    // replaces the whole triple. The rectangles this test used to make
+    // were unpainted with a Paper outline — visible only where a CMYK
+    // profile tints Paper off page-white (a designer's machine with an
+    // Adobe install), invisible on a runner without one.
     // Two overlapping scratch rectangles (setup; not undone by the
     // sandwich).
     const a = await insertRect(page, pageInfo.pageId, [40, 40, 120, 120]);
     const b = await insertRect(page, pageInfo.pageId, [90, 90, 180, 180]);
+    for (const el of [a, b]) {
+      for (const [path, value] of [
+        ["frameFillColor", { type: "colorRef", value: "Color/Black" }],
+        ["frameStrokeColor", { type: "colorRef", value: "Color/Paper" }],
+        ["frameStrokeWeight", { type: "length", value: 2 }],
+      ] as const) {
+        await mutate(page, {
+          op: "setElementProperty",
+          args: { elementId: el, path, value },
+        });
+      }
+    }
     const region: PtRect = { top: 40, left: 40, bottom: 180, right: 180 };
 
     await opSandwich(page, {
