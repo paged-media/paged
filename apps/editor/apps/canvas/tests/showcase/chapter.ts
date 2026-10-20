@@ -73,14 +73,26 @@ export const REPO_ROOT = pathResolve(APP_ROOT, "..", "..", "..", "..");
 /** The engine, in-repo at `engine/core`. */
 export const CORE = pathResolve(REPO_ROOT, "engine", "core");
 /**
- * The feature registry (`registry/features/*.yaml`) is PRIVATE and not part
- * of this repository. `PAGED_FEATURE_REGISTRY` names its directory; unset,
- * this is `null` and the assembly reports the registry axis as
- * UNAVAILABLE (never as a pass).
+ * The capability record — the feature registry's export
+ * (`exports/public.json`, schema `cockpit.export.v1`), the same record the
+ * docs and the website are built from. It is PRIVATE and not part of this
+ * repository. `PAGED_CAPABILITY_RECORD` names the file; unset, a sibling
+ * checkout's `../cockpit/exports/public.json` next to the repository is used
+ * when present; otherwise this is `null` and the assembly reports the
+ * registry axis as UNAVAILABLE (never as a pass).
  */
-export const REGISTRY: string | null = process.env.PAGED_FEATURE_REGISTRY
-  ? pathResolve(process.env.PAGED_FEATURE_REGISTRY)
-  : null;
+const SIBLING_RECORD = pathResolve(
+  REPO_ROOT,
+  "..",
+  "cockpit",
+  "exports",
+  "public.json",
+);
+export const REGISTRY: string | null = process.env.PAGED_CAPABILITY_RECORD
+  ? pathResolve(process.env.PAGED_CAPABILITY_RECORD)
+  : existsSync(SIBLING_RECORD)
+    ? SIBLING_RECORD
+    : null;
 export const CORPUS_FONTS = pathResolve(CORE, "corpus", "fonts");
 export const OUT = pathResolve(APP_ROOT, "showcase");
 export const CHECKPOINTS = join(OUT, "checkpoints");

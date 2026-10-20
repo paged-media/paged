@@ -324,7 +324,14 @@ export async function build(ctx: PageContext): Promise<PageReport> {
         "    (a bare CSV travels with no metadata sidecar — every column " +
           "arrives undocumented, and the catalog says so)",
       );
-      covers.push("data.governed.extract");
+      // Demonstrated, not claimed: the capability record marks
+      // data.governed.extract PARTIAL (no sidecar is read from a source
+      // location, which is exactly what this readout shows).
+      notes.push(
+        "the governed catalog is demonstrated with an empty sidecar; " +
+          "data.governed.extract is partial in the capability record and " +
+          "is not claimed.",
+      );
     } else {
       notes.push("the governed catalog never rendered its readout.");
     }

@@ -526,14 +526,16 @@ test.describe("annual assembly", () => {
     }
 
     // ── axis a: registry rows ───────────────────────────────────────
-    // The feature registry is private (outside this repository) and is
-    // reached through PAGED_FEATURE_REGISTRY. Unset, the axis is reported
-    // UNAVAILABLE — in the log, the test annotations and the report notes —
-    // never as a pass. Set but missing is a configuration error.
+    // The capability record (the feature registry's export) is private
+    // (outside this repository) and is reached through
+    // PAGED_CAPABILITY_RECORD or a sibling checkout (chapter.ts REGISTRY).
+    // Absent, the axis is reported UNAVAILABLE — in the log, the test
+    // annotations and the report notes — never as a pass. Set but missing
+    // is a configuration error.
     if (REGISTRY === null) {
       const msg =
-        "feature registry unavailable (set PAGED_FEATURE_REGISTRY to its " +
-        "registry/features directory) — registry axis NOT checked";
+        "capability record unavailable (set PAGED_CAPABILITY_RECORD to the " +
+        "feature registry's exports/public.json) — registry axis NOT checked";
       // eslint-disable-next-line no-console
       console.log(`[assemble] ${msg}`);
       test.info().annotations.push({ type: "unavailable", description: msg });
@@ -541,18 +543,24 @@ test.describe("annual assembly", () => {
     } else {
       expect(
         existsSync(REGISTRY),
-        `PAGED_FEATURE_REGISTRY points at ${REGISTRY}, which does not exist`,
+        `PAGED_CAPABILITY_RECORD points at ${REGISTRY}, which does not exist`,
       ).toBe(true);
     }
     const coverage = buildCoverage(REGISTRY, merged.claims);
     expect(
       coverage.unknown,
-      `claimed registry rows that do not exist:\n${coverage.unknown.join("\n")}`,
+      `claimed features the capability record does not list:\n${coverage.unknown.join("\n")}`,
     ).toEqual([]);
     expect(
       coverage.notShipped,
-      `claimed rows the registry does not mark shipped:\n${coverage.notShipped.join("\n")}`,
+      `claimed features no component claim marks shipped:\n${coverage.notShipped.join("\n")}`,
     ).toEqual([]);
+    if (coverage.broken.length > 0) {
+      notes.push(
+        `claimed features whose CI evidence the record reports broken: ` +
+          coverage.broken.join(", "),
+      );
+    }
     // Closure over the WHOLE registry: every shipped row claimed or
     // excluded-with-reason. Report-only until the annual lands.
     const registry = loadRegistry(REGISTRY);

@@ -20,32 +20,42 @@
 // The coverage manifest — what makes "shows all the functionality" a
 // checkable claim instead of a slogan.
 //
-// `state/registry/features/*.yaml` is the project's own enumeration of
-// what exists: 39 families, ~571 rows, each with a per-stage status.
-// Every showcase page module declares the rows it demonstrates; this
-// resolves those ids against the registry and refuses two things:
+// The project's own enumeration of what exists is the capability record:
+// the feature registry's export (`exports/public.json`, schema
+// `cockpit.export.v1`), every feature with its lifecycle, a status per
+// component claim and the health its CI evidence gives it. It is the same
+// record docs.paged.media and paged.media build their capability statements
+// from. Every showcase page module declares the features it demonstrates;
+// this resolves those ids against the record and refuses two things:
 //
-//   · a claimed row that does not exist — a typo, or a row that was
+//   · a claimed feature that does not exist — a typo, or a feature that was
 //     renamed out from under the page;
-//   · a claimed row that the registry does not mark `shipped` in any
-//     stage — the document must not advertise something the project
-//     itself records as planned.
+//   · a claimed feature that no component claim marks `shipped` — the
+//     document must not advertise something the project itself records as
+//     planned.
+//
+// Health (`broken` evidence) is reported, not gated: the showcase proves
+// its own pages; a red test elsewhere is the record's to report.
 //
 // The result is written next to the artifacts so a reader can ask the
 // document what it proves and get an answer that was checked.
 //
-// The registry lives in a SIBLING repo, so the whole gate degrades to
-// a warning when that checkout is absent (a fresh clone of the editor
-// alone). Absent evidence is reported as absent, never as a pass.
+// The record lives in a PRIVATE repository, so the whole gate degrades to
+// a warning when it is not available. Absent evidence is reported as
+// absent, never as a pass.
 
-import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
+
+/** The capability record's schema this reader understands. */
+export const RECORD_SCHEMA = "cockpit.export.v1";
 
 export interface RegistryRow {
   id: string;
   title?: string;
-  /** True when ANY stage records `shipped`. See `loadRegistry`. */
+  /** True when ANY component claim records `shipped`. */
   shipped: boolean;
+  /** The record's health state for the feature (`healthy`, `broken`, …). */
+  health?: string;
 }
 
 export interface CoverageClaim {
@@ -58,75 +68,89 @@ export interface CoverageClaim {
 }
 
 export interface CoverageReport {
+  /** Which record the report was checked against, or `unavailable`. */
   generatedFrom: string;
+  /** When the record was exported (its `generated_at`), if it was read. */
+  recordExportedAt: string | null;
   registryFound: boolean;
   registryRows: number;
   claimedRows: number;
   claims: CoverageClaim[];
-  /** Claimed ids absent from the registry — always a failure. */
+  /** Claimed ids absent from the record — always a failure. */
   unknown: string[];
-  /** Claimed ids the registry does not mark shipped anywhere. */
+  /** Claimed ids no component claim marks shipped. */
   notShipped: string[];
+  /** Claimed ids whose evidence the record reports `broken` (not gated). */
+  broken: string[];
   /** Families the showcase touches, with how many rows in each. */
   families: Record<string, number>;
 }
 
+interface RecordFeature {
+  id?: unknown;
+  title?: unknown;
+  claims?: { status?: unknown }[];
+  health?: { state?: unknown };
+}
+
+export interface CapabilityRecord {
+  exportedAt: string | null;
+  rows: Map<string, RegistryRow>;
+}
+
 /**
- * Load every registry row, keyed by id. Empty when the registry is
- * unavailable (`PAGED_FEATURE_REGISTRY` unset — the registry is private
- * and not part of this repository).
- *
- * This reads the registry files by SPLITTING them into per-row blocks
- * and asking two questions of each: what is the `id`, and does any
- * stage say `shipped`. That is deliberately narrower than parsing
- * YAML, and it is narrow because the files mix block maps, flow maps
- * (`core.parser: { status: shipped }`) and multi-line block scalars in
- * the notes — a line-oriented reader that looked for `^\s+status:`
- * would silently miss every flow-style stage and report almost nothing
- * as shipped. Searching the whole block for `status: shipped` handles
- * every style the registry actually uses.
- *
- * The cost of the shortcut is stated rather than hidden: this cannot
- * tell you WHICH stage shipped, only that one did, and a `note:` whose
- * prose contained the literal text `status: shipped` would fool it. No
- * note does today, and the alternative was adding a YAML parser to the
- * editor's dependency tree to answer a yes/no question in a test.
+ * Read the capability record at `recordPath`. Empty (`rows.size === 0`)
+ * when there is no record (`null` or a missing file). A file that is not a
+ * `cockpit.export.v1` record throws: a wrong path is a configuration error,
+ * not an absent axis.
  */
-export function loadRegistry(
-  registryDir: string | null,
-): Map<string, RegistryRow> {
-  const out = new Map<string, RegistryRow>();
-  if (registryDir === null || !existsSync(registryDir)) return out;
-  for (const file of readdirSync(registryDir)) {
-    if (!file.endsWith(".yaml")) continue;
-    const text = readFileSync(join(registryDir, file), "utf8");
-    // Rows start at column 0 with `- id:`; everything up to the next
-    // such line belongs to that row, notes and all.
-    const parts = text.split(/^- id:[ \t]*/m).slice(1);
-    for (const part of parts) {
-      const id = (/^\S+/.exec(part)?.[0] ?? "").replace(/^["']|["']$/g, "");
-      if (!id) continue;
-      const title = /^\s+title:[ \t]*(.+)$/m
-        .exec(part)?.[1]
-        ?.trim()
-        .replace(/^["']|["']$/g, "");
-      out.set(id, {
-        id,
-        title,
-        shipped: /status:\s*["']?shipped/.test(part),
-      });
-    }
+export function loadRecord(recordPath: string | null): CapabilityRecord {
+  const rows = new Map<string, RegistryRow>();
+  if (recordPath === null || !existsSync(recordPath)) {
+    return { exportedAt: null, rows };
   }
-  return out;
+  const record = JSON.parse(readFileSync(recordPath, "utf8")) as {
+    schema?: unknown;
+    generated_at?: unknown;
+    features?: RecordFeature[];
+  };
+  if (record.schema !== RECORD_SCHEMA || !Array.isArray(record.features)) {
+    throw new Error(
+      `${recordPath} is not a ${RECORD_SCHEMA} capability record ` +
+        `(schema ${JSON.stringify(record.schema)})`,
+    );
+  }
+  for (const f of record.features) {
+    if (typeof f.id !== "string" || f.id === "") continue;
+    rows.set(f.id, {
+      id: f.id,
+      title: typeof f.title === "string" ? f.title : undefined,
+      shipped: (f.claims ?? []).some((c) => c.status === "shipped"),
+      health: typeof f.health?.state === "string" ? f.health.state : undefined,
+    });
+  }
+  return {
+    exportedAt:
+      typeof record.generated_at === "string" ? record.generated_at : null,
+    rows,
+  };
+}
+
+/** Every feature of the record, keyed by id (see `loadRecord`). */
+export function loadRegistry(
+  recordPath: string | null,
+): Map<string, RegistryRow> {
+  return loadRecord(recordPath).rows;
 }
 
 export function buildCoverage(
-  registryDir: string | null,
+  recordPath: string | null,
   claims: CoverageClaim[],
 ): CoverageReport {
-  const registry = loadRegistry(registryDir);
+  const { exportedAt, rows: registry } = loadRecord(recordPath);
   const unknown: string[] = [];
   const notShipped: string[] = [];
+  const broken: string[] = [];
   const families: Record<string, number> = {};
   const seen = new Set<string>();
 
@@ -142,17 +166,24 @@ export function buildCoverage(
         continue;
       }
       if (!row.shipped) notShipped.push(`${claim.module} → ${id}`);
+      if (row.health === "broken") broken.push(`${claim.module} → ${id}`);
     }
   }
 
   return {
-    generatedFrom: registryDir ?? "unavailable",
+    // A label, never the path: the report is committed with the artifacts.
+    generatedFrom:
+      registry.size > 0
+        ? `${RECORD_SCHEMA} capability record${exportedAt ? ` exported ${exportedAt}` : ""}`
+        : "unavailable",
+    recordExportedAt: exportedAt,
     registryFound: registry.size > 0,
     registryRows: registry.size,
     claimedRows: seen.size,
     claims,
     unknown,
     notShipped,
+    broken,
     families,
   };
 }
