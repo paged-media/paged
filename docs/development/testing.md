@@ -151,6 +151,10 @@ reference.pdf}`, selected from `<corpus>/config/manifest.json` by namespaced
 id (`idml/<slug>`); it never reads an archive and never writes into the
 corpus. Files are identified by their bytes (`PK`, `%PDF`), not their
 extension. Gated packs are checked against `config/fidelity-thresholds.json`.
+The render and the reference raster go through one CMYK profile (Coated
+FOGRA39, or `PAGED_CMYK_PROFILE`): the render takes it as `--cmyk-profile`,
+over the profile the document declares, because pdftoppm reads the PDF's
+DeviceCMYK through it.
 
 ```sh
 PAGED_CORPUS_DIR=~/path/to/corpus python3 engine/core/scripts/pack-fidelity.py           # every pack

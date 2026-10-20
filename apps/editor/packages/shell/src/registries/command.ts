@@ -107,6 +107,12 @@ export interface CommandRegistry extends Api.CommandRegistry {
    *  registries do: a component that lists commands during render reads
    *  them through `useRegistryView` (state/live.ts, ADR 229). */
   onChange(handler: () => void): Disposable;
+  /** The editor a command invoked NOW would run against: the live one,
+   *  not a value captured at some earlier render. A flow that changes the
+   *  document and then goes on (File ▸ Open of a picture with nothing
+   *  open: mint the page, then place onto it, ADR 262) waits on it. Null
+   *  when the registry has no editor to hand out (a bare test registry). */
+  liveEditor(): unknown;
 }
 
 /**
@@ -209,6 +215,14 @@ export function createCommandRegistry(
     },
     get(id) {
       return byId.get(id);
+    },
+    liveEditor() {
+      try {
+        return getEditor() ?? null;
+      } catch {
+        // Accessed before the editor mounted.
+        return null;
+      }
     },
     list() {
       return Array.from(byId.values());

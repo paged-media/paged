@@ -23,6 +23,8 @@
 //! * Ascent (the default) is not the face's `hhea` ascender for a CJK
 //!   face: a static one takes the top of its `d`, a variable one (Noto
 //!   Sans JP) one em below the top of its ideographic character face.
+//! * A Latin face's Ascent is its `OS/2` typographic ascender, not its
+//!   `hhea` one, where the two differ (Roboto 2, Lato).
 //! * Em Box Height is one em above the `BASE` table's ideographic baseline,
 //!   or, with no `BASE`, one em centred on the face's 永.
 //!
@@ -146,12 +148,49 @@ fn a_static_cjk_face_takes_its_ascent_from_its_d_and_its_em_box_from_its_ideogra
 }
 
 #[test]
-fn a_latin_face_keeps_its_hhea() {
-    // Open Sans: its hhea ascender, 32.065 pt; its em box centred on half
-    // its cap height, 25.708 pt.
+fn a_latin_face_whose_tables_agree_keeps_that_ascent() {
+    // Open Sans: its ascender (hhea and OS/2 both say 2189), 32.065 pt; its
+    // em box centred on half its cap height, 25.708 pt.
     let font = std::fs::read(
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../corpus/fonts/OpenSans.ttf"),
     )
     .unwrap();
     assert_as_indesign("Open Sans", &font, "Hxg", 32.065, 25.708);
+}
+
+/// `font` with its `OS/2` typographic ascender and descender set to
+/// `ascender` / `descender` (font units), `hhea` left as it is.
+fn with_typo_metrics(font: &[u8], ascender: i16, descender: i16) -> Vec<u8> {
+    let mut out = font.to_vec();
+    let tables = u16::from_be_bytes([font[4], font[5]]) as usize;
+    for i in 0..tables {
+        let rec = 12 + 16 * i;
+        if &font[rec..rec + 4] == b"OS/2" {
+            let off = u32::from_be_bytes(font[rec + 8..rec + 12].try_into().unwrap()) as usize;
+            out[off + 68..off + 70].copy_from_slice(&ascender.to_be_bytes());
+            out[off + 70..off + 72].copy_from_slice(&descender.to_be_bytes());
+            return out;
+        }
+    }
+    panic!("no OS/2 table");
+}
+
+#[test]
+fn a_latin_face_takes_its_ascent_from_os2_not_hhea() {
+    // InDesign 20.0.1, 30 pt, Ascent: Roboto 2.000980 (hhea 1900/-500, typo
+    // 1536/-512 of 2048) 22.5 pt, ascent 22.5 and descent 7.5 reported;
+    // Lato 1.104 (hhea 1974/-426, typo 1610/-390 of 2000) 24.15 pt. Both
+    // are the typo values; the hhea ones would be 27.83 and 29.61 pt. The
+    // corpus Roboto states 2146 in both tables, so stamp the old typo
+    // values into it and leave hhea at 2146 (31.44 pt).
+    let roboto = std::fs::read(
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../corpus/fonts/Roboto-Regular.ttf"),
+    )
+    .unwrap();
+    let font = with_typo_metrics(&roboto, 1536, -512);
+    let got = first_baseline("Roboto", &font, "Hxg", None);
+    assert!(
+        (got - 22.5).abs() < 0.02,
+        "first baseline {got} pt, InDesign 22.5 pt"
+    );
 }

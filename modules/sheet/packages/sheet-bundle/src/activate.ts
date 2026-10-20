@@ -49,6 +49,7 @@ import {
   DELIMITED_MIMES,
   importBytes,
   pickAndImport,
+  placeIntoNewDocument,
   XLSX_MIME,
 } from "./import-xlsx";
 import { makeSwatchesBindingProvider } from "./binding-provider/swatches-provider";
@@ -631,8 +632,9 @@ export function activate(host: BundleHost): BundleHandle {
       title: "Spreadsheet",
       extensions: [".xlsx"],
       mimeTypes: [XLSX_MIME],
-      import: async ({ name, bytes }) => {
+      import: async ({ name, bytes, newDocument }) => {
         await session.import(bytes, name);
+        await placeIntoNewDocument(session, newDocument);
         host.shell.openPanel(PANEL_ID);
       },
     });
@@ -643,8 +645,9 @@ export function activate(host: BundleHost): BundleHandle {
       title: "Delimited text (CSV/TSV)",
       extensions: [".csv", ".tsv"],
       mimeTypes: DELIMITED_MIMES,
-      import: async ({ name, bytes }) => {
+      import: async ({ name, bytes, newDocument }) => {
         await importBytes(session, bytes, name);
+        await placeIntoNewDocument(session, newDocument);
         host.shell.openPanel(PANEL_ID);
       },
     });

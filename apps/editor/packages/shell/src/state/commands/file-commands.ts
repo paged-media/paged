@@ -23,10 +23,13 @@
 
 import { getAiAvailability } from "../../ai/availability";
 import { createBlankDocument, loadDocumentFile } from "../document-loader";
-import { setPendingImportSource } from "../import-source";
+import { importReplaceAllowed, setPendingImportSource } from "../import-source";
+import { pageForPicture, pictureSize } from "../picture-size";
 import { confirmDiscard, isReplaceDeclined } from "../replace-guard";
 
 export { confirmDiscard };
+import type { DocumentHandle } from "@paged-media/client";
+import type { ImporterContribution } from "../../registries";
 import type { PagedEditor } from "../paged-editor";
 import type { CommandContribution } from "../../registries";
 
@@ -88,9 +91,9 @@ export async function mintBlankDocument(
     setStatus: (s: string) => void;
     pushWarning: (w: string) => void;
   },
-): Promise<void> {
+): Promise<DocumentHandle | null> {
   const [widthPt, heightPt] = sizePt;
-  await createBlankDocument(
+  return createBlankDocument(
     editor.client,
     { widthPt, heightPt },
     {
@@ -162,34 +165,26 @@ export async function openFile(
     pushWarning: (w: string) => void;
   },
 ): Promise<void> {
+  const nothingOpen = !hasDocument(editor);
+  // UX audit F-03 (ADR 262): a picture opened with nothing open becomes a
+  // document, one page the picture's size with the picture placed on it,
+  // rather than a panel beside an empty canvas.
+  if (nothingOpen && (await openPictureAsDocument(editor, file, sinks))) {
+    return;
+  }
   const importer = editor.registries.importers.resolve(file.name, file.type);
   if (importer) {
-    sinks.setStatus(`importing ${file.name} via ${importer.title}…`);
-    try {
-      const bytes = new Uint8Array(await file.arrayBuffer());
-      // U14 — park the file name for the open orchestration: an
-      // importer that OPENS a document does so through
-      // `nativeDocument.open(bytes)`, which carries no name.
-      setPendingImportSource(file.name);
-      await importer.import({
-        name: file.name,
-        bytes,
-        mimeType: file.type,
-      });
-      sinks.setStatus(`imported ${file.name}`);
-    } catch (err) {
-      if (isReplaceDeclined(err)) {
-        // The user kept the open document at the replace question: an
-        // answer, not a failure.
-        sinks.setStatus(`kept the open document; ${file.name} not opened`);
-      } else {
-        sinks.pushWarning(
-          `import of ${file.name} via ${importer.title} failed: ` +
-            (err instanceof Error ? err.message : String(err)),
-        );
-      }
-    } finally {
-      setPendingImportSource(null);
+    const outcome = await runImporter(importer, file, sinks);
+    // An importer that only ADDS content (a workbook's range, …) and found
+    // nothing open left the canvas empty: give it a document and run it
+    // again, told the document is new so it places its content there
+    // (F-03, ADR 262). One that opened a document, failed or was declined
+    // is done.
+    if (nothingOpen && outcome === "added") {
+      const handle = await mintBlankDocument(editor, LETTER_PT, sinks);
+      if (!handle) return;
+      await liveEditorWith(editor, handle);
+      await runImporter(importer, file, sinks, { newDocument: true });
     }
     return;
   }
@@ -217,11 +212,15 @@ export async function openFile(
   });
 }
 
-/** A file dropped on the canvas and the point it was dropped at, handed to
- *  Place (UX audit F-03, ADR 258). */
+/** A picture handed to Place without a picker (UX audit F-03): dropped on
+ *  the canvas at a point (ADR 258), or opened with nothing open, to fill
+ *  the page minted for it (ADR 262). One of `at` and `fillPage` is set. */
 export interface PlaceDropPayload {
   file: { name: string; bytes: Uint8Array; mimeType: string };
-  at: { clientX: number; clientY: number };
+  /** Where it was dropped: the picture's top-left lands there. */
+  at?: { clientX: number; clientY: number };
+  /** The page it fills, edge to edge. */
+  fillPage?: { pageId: string; widthPt: number; heightPt: number };
 }
 
 /** The command a dropped picture is placed through. */
@@ -270,6 +269,116 @@ export async function dropFile(
     return;
   }
   await openFile(editor, file, sinks);
+}
+
+/** Is a document with pages open? */
+function hasDocument(editor: PagedEditor): boolean {
+  return (editor.document.handle?.pageCount ?? 0) > 0;
+}
+
+/** Run `importer` on `file`, the import session parked around it. Says
+ *  what came of it: the importer opened a document (`opened`), only added
+ *  to whatever is open (`added`), failed, or the user kept the open
+ *  document at the replace question (`declined`). */
+async function runImporter(
+  importer: ImporterContribution,
+  file: File,
+  sinks: {
+    setStatus: (s: string) => void;
+    pushWarning: (w: string) => void;
+  },
+  extra: { newDocument?: boolean } = {},
+): Promise<"opened" | "added" | "failed" | "declined"> {
+  sinks.setStatus(`importing ${file.name} via ${importer.title}…`);
+  try {
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    // U14 — park the file name for the open orchestration: an
+    // importer that OPENS a document does so through
+    // `nativeDocument.open(bytes)`, which carries no name.
+    setPendingImportSource(file.name);
+    await importer.import({
+      name: file.name,
+      bytes,
+      mimeType: file.type,
+      ...extra,
+    });
+    sinks.setStatus(`imported ${file.name}`);
+    // The open orchestration marks the session when the importer replaced
+    // (or first opened) the document.
+    return importReplaceAllowed() ? "opened" : "added";
+  } catch (err) {
+    if (isReplaceDeclined(err)) {
+      // The user kept the open document at the replace question: an
+      // answer, not a failure.
+      sinks.setStatus(`kept the open document; ${file.name} not opened`);
+      return "declined";
+    }
+    sinks.pushWarning(
+      `import of ${file.name} via ${importer.title} failed: ` +
+        (err instanceof Error ? err.message : String(err)),
+    );
+    return "failed";
+  } finally {
+    setPendingImportSource(null);
+  }
+}
+
+/** How long a just-minted document may take to reach the live editor. */
+const LIVE_DOCUMENT_TIMEOUT_MS = 10_000;
+
+/**
+ * The live editor once it shows `handle`. A minted document reaches the
+ * editor's state on the next render, not when the mint resolves, and a
+ * command invoked before then would find nothing open. Without a live
+ * editor to watch (a bare registry) the editor passed in is the answer.
+ */
+async function liveEditorWith(
+  editor: PagedEditor,
+  handle: DocumentHandle,
+): Promise<PagedEditor> {
+  const deadline = Date.now() + LIVE_DOCUMENT_TIMEOUT_MS;
+  for (;;) {
+    const live = editor.registries.commands.liveEditor() as PagedEditor | null;
+    if (!live) return editor;
+    if (live.document.handle?.docId === handle.docId) return live;
+    if (Date.now() > deadline) return live;
+    await new Promise((resolve) => setTimeout(resolve, 16));
+  }
+}
+
+/**
+ * Open a picture with nothing open (UX audit F-03, ADR 262): mint one page
+ * the picture's size (a point per pixel, as Place sizes a picture at its
+ * natural size) and place the picture on it, edge to edge. False when this
+ * is no picture, its size cannot be read, or Place is not available; the
+ * caller then opens it the ordinary way.
+ */
+async function openPictureAsDocument(
+  editor: PagedEditor,
+  file: File,
+  sinks: {
+    setStatus: (s: string) => void;
+    pushWarning: (w: string) => void;
+  },
+): Promise<boolean> {
+  if (!dropPlaces(file)) return false;
+  if (!editor.registries.commands.get(PLACE_DROPPED_COMMAND)) return false;
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const size = await pictureSize(bytes, file.type);
+  if (!size) return false;
+  const [widthPt, heightPt] = pageForPicture(size);
+  const handle = await mintBlankDocument(editor, [widthPt, heightPt], sinks);
+  const pageId = handle?.pageIds[0];
+  if (!handle || !pageId) return true; // the mint said why in the status
+  // The document is named after the picture, as an opened file is.
+  editor.document.setSourceName(file.name);
+  const live = await liveEditorWith(editor, handle);
+  const payload: PlaceDropPayload = {
+    file: { name: file.name, bytes, mimeType: file.type },
+    fillPage: { pageId, widthPt, heightPt },
+  };
+  await live.registries.commands.invoke(PLACE_DROPPED_COMMAND, payload);
+  return true;
 }
 
 /** File ▸ New from a brief… (ADR 221) — opens the AI Assistant panel in

@@ -129,6 +129,8 @@ is not written yet.
 | [198](198-a-link-that-resolves-to-nothing-is-missing.md) | A link that resolves to nothing is missing, however it was placed | Accepted 2026-10-20 |
 | [199](199-a-changed-number-is-written-as-the-f32-it-is.md) | The IDML writer spells a changed number as the f32 it is | Accepted 2026-10-20 |
 | [200](200-threading-returns-and-unset-margins.md) | Threading drops the target's empty story; "\r" is a paragraph return; an unset margin reads as laid out | Accepted 2026-10-20 |
+| [201](201-ascent-is-the-os2-typographic-ascender.md) | A face's ascent is its OS/2 typographic ascender | Accepted 2026-10-20 |
+| [202](202-the-outer-cells-edges-are-the-table-border.md) | A table's outer cells' edges are its border | Accepted 2026-10-20 |
 
 Decisions made in other repositories that this engine's code rests on are listed in
 [`../README.md`](../README.md).

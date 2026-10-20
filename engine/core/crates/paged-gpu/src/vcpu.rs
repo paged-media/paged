@@ -126,8 +126,13 @@ pub fn rasterize_with_separation(
     (image, separation)
 }
 
-/// The largest buffer side `vello_cpu` addresses (its sizes are `u16`).
-const MAX_SIDE: u32 = u16::MAX as u32;
+/// The largest buffer side `vello_cpu` takes. Its sizes are `u16`, and it
+/// rounds a viewport UP to whole 4 px tiles in `u16` arithmetic (an
+/// `unwrap` in `vello_common`), so a side above 65 532 panics: the cap is
+/// `u16::MAX` rounded DOWN to a tile.
+const MAX_SIDE: u32 = (u16::MAX as u32 / TILE) * TILE;
+/// `vello_common`'s tile side (`Tile::WIDTH == Tile::HEIGHT`).
+const TILE: u32 = 4;
 
 fn render_settings() -> RenderSettings {
     RenderSettings {
@@ -1352,8 +1357,36 @@ impl Raster<'_> {
         let off_y = ((bounds.y - pad_pt) * scale).floor() as i32;
         let max_x = ((bounds.x + bounds.w + pad_pt) * scale).ceil() as i32;
         let max_y = ((bounds.y + bounds.h + pad_pt) * scale).ceil() as i32;
-        let w = (max_x - off_x).max(1) as u32;
-        let h = (max_y - off_y).max(1) as u32;
+        // A buffer side `vello_cpu` cannot address is cut to the part of
+        // the group that can reach the surface it lands on: that
+        // surface's extent plus the slack. A group with no bounds of its
+        // own (a placed PDF's transparency group arrives as a +-1e6 pt
+        // box) otherwise asked for a buffer millions of pixels wide, and
+        // the clamp in `Surface::new` kept its far top-left corner, none
+        // of the page. A buffer that fits keeps its own origin: moving
+        // it moves where resampled images land by a rounding, which
+        // changes pixels on a grainy photo for no reason.
+        let (off_x, off_y, max_x, max_y) = {
+            let parent = self.active();
+            let slack = (pad_pt * scale).ceil() as i32 + 1;
+            let (px0, py0) = parent.offset;
+            let px1 = px0.saturating_add(parent.w as i32);
+            let py1 = py0.saturating_add(parent.h as i32);
+            let fits = |lo: i32, hi: i32| hi.saturating_sub(lo) as i64 <= MAX_SIDE as i64;
+            let (x0, x1) = if fits(off_x, max_x) {
+                (off_x, max_x)
+            } else {
+                (off_x.max(px0 - slack), max_x.min(px1 + slack))
+            };
+            let (y0, y1) = if fits(off_y, max_y) {
+                (off_y, max_y)
+            } else {
+                (off_y.max(py0 - slack), max_y.min(py1 + slack))
+            };
+            (x0, y0, x1, y1)
+        };
+        let w = (max_x.saturating_sub(off_x)).max(1) as u32;
+        let h = (max_y.saturating_sub(off_y)).max(1) as u32;
         let mut surface = self.new_surface(w, h, (off_x, off_y));
 
         // R-10: a non-isolated Normal group outside a knockout group whose
@@ -1704,14 +1737,18 @@ impl Raster<'_> {
             }
             FeatherKind::Gradient(_) => 1.0,
         };
-        let (xform, id) = {
+        let (xform, id, surface_off) = {
             let s = self.active();
-            (s.xform, s.id)
+            (s.xform, s.id, s.offset)
         };
         let Some((ox, oy, w, h)) = effect_scratch_bounds(xform, path.bounding_box(), pad_pt as f64)
         else {
             return;
         };
+        // The scratch's top-left in PAGE pixels: the directional and
+        // gradient feathers place their ramps in page points, and the
+        // active target may be a group buffer that starts elsewhere.
+        let page_off = (ox + surface_off.0, oy + surface_off.1);
         let to_scratch = Affine::translate((-ox as f64, -oy as f64)) * xform;
         let Some(interior) = self.scratch.render(&mut self.res, w, h, |ctx| {
             ctx.set_transform(to_scratch);
@@ -1728,7 +1765,7 @@ impl Raster<'_> {
                 .map(|m| m as f32 / 255.0)
                 .collect(),
             FeatherKind::Directional(p) => {
-                directional_feather_mask(interior, w, h, (ox, oy), bbox, p, scale)
+                directional_feather_mask(interior, w, h, page_off, bbox, p, scale)
                     .into_iter()
                     .map(|m| m as f32 / 255.0)
                     .collect()
@@ -1737,7 +1774,7 @@ impl Raster<'_> {
                 if p.stops.is_empty() {
                     return;
                 }
-                gradient_feather_factors(&interior, w, h, (ox, oy), transform, p, scale)
+                gradient_feather_factors(&interior, w, h, page_off, transform, p, scale)
             }
         };
         let backdrop = backdrop.filter(|b| b.surface == id);
@@ -2371,6 +2408,68 @@ mod tests {
         // And the group did paint: 35 % red over white.
         let inside = with.get_pixel(31, 31).0;
         assert!(inside[0] == 255 && inside[1] < 255, "{inside:?}");
+    }
+
+    /// A placed PDF's transparency group carries no bounds of its own,
+    /// so it reaches the list as a ±1e6 pt box. Its buffer was that box
+    /// in pixels clamped to `u16::MAX` from its top-left corner: a side
+    /// `vello_cpu` cannot round to whole tiles (a panic in
+    /// `vello_common`), and a buffer that held none of the page anyway.
+    /// The buffer is the part of the group that can reach the page.
+    #[test]
+    fn an_unbounded_group_renders_the_part_on_the_page() {
+        let page = |opacity: f32| {
+            let mut list = DisplayList::new();
+            list.commands
+                .push(paged_compose::DisplayCommand::BeginBlendGroup {
+                    bounds: Rect {
+                        x: -1.0e6,
+                        y: -1.0e6,
+                        w: 2.0e6,
+                        h: 2.0e6,
+                    },
+                    blend_mode: paged_compose::BlendMode::Normal,
+                    opacity,
+                    isolated: true,
+                    knockout: false,
+                    transform: paged_compose::Transform::IDENTITY,
+                });
+            emit_rect(
+                Rect {
+                    x: 10.0,
+                    y: 10.0,
+                    w: 20.0,
+                    h: 20.0,
+                },
+                Paint::Solid(Color::rgba(1.0, 0.0, 0.0, 1.0)),
+                &mut list,
+            );
+            list.commands
+                .push(paged_compose::DisplayCommand::EndBlendGroup(
+                    paged_compose::Transform::IDENTITY,
+                ));
+            let mut opts = RasterOptions::new(40.0, 40.0);
+            opts.dpi = 144.0;
+            rasterize(&list, &opts)
+        };
+        let half = page(0.5);
+        let inside = half.get_pixel(40, 40).0;
+        assert!(
+            inside[0] == 255 && inside[1] > 100 && inside[1] < 160,
+            "half red over white: {inside:?}"
+        );
+        assert_eq!(half.get_pixel(5, 5).0, [255, 255, 255, 255]);
+        assert_eq!(page(1.0).get_pixel(40, 40).0, [255, 0, 0, 255]);
+    }
+
+    /// Every buffer side `vello_cpu` is handed rounds up to a whole tile
+    /// inside `u16`.
+    #[test]
+    fn the_largest_buffer_side_is_whole_tiles_inside_u16() {
+        assert_eq!(MAX_SIDE % TILE, 0);
+        assert!(MAX_SIDE + TILE > u16::MAX as u32);
+        let s = Surface::new(u32::MAX, 1, (0, 0), 1.0, 1);
+        assert_eq!((s.w, s.h), (MAX_SIDE, 1));
     }
 
     #[test]
@@ -3745,6 +3844,93 @@ mod tests {
         );
         let far = at(&img, 2, 2);
         assert!(far[0] > 240, "outside the object stays paper; got {far:?}");
+    }
+
+    /// A feather inside a group draws into the group's buffer, whose
+    /// origin is not the page's. The gradient's ramp is in page points,
+    /// so it was read off by the buffer's offset: in a group starting
+    /// 100 pt up and left of the page the fade sat 100 pt away and
+    /// erased the backdrop the group had copied (a feathered placed
+    /// graphic in a corpus flyer lost its whole page).
+    #[test]
+    fn a_gradient_feather_in_a_group_fades_where_it_does_on_the_page() {
+        use paged_compose::{
+            BlendMode, DisplayCommand as Cmd, GradientFeather, GradientFeatherKind,
+            GradientFeatherStop, Transform,
+        };
+        let page = |group: Option<Rect>| {
+            let mut list = DisplayList::new();
+            emit_rect(
+                Rect {
+                    x: 0.0,
+                    y: 0.0,
+                    w: 60.0,
+                    h: 40.0,
+                },
+                Paint::Solid(Color::rgba(1.0, 0.5, 0.0, 1.0)),
+                &mut list,
+            );
+            if let Some(bounds) = group {
+                list.commands.push(Cmd::BeginBlendGroup {
+                    bounds,
+                    blend_mode: BlendMode::Normal,
+                    opacity: 1.0,
+                    isolated: true,
+                    knockout: false,
+                    transform: Transform::IDENTITY,
+                });
+            }
+            let (path_id, xform) = unit_rect_at(&mut list, 10.0, 10.0, 40.0, 20.0);
+            list.commands.push(Cmd::FillPath {
+                path_id,
+                paint: Paint::Solid(Color::rgba(0.0, 0.0, 0.6, 1.0)),
+                transform: xform,
+            });
+            list.commands.push(Cmd::GradientFeather {
+                path_id,
+                transform: xform,
+                params: GradientFeather {
+                    kind: GradientFeatherKind::Linear,
+                    start_x: 0.0,
+                    start_y: 0.5,
+                    end_x: 1.0,
+                    end_y: 0.5,
+                    stops: vec![
+                        GradientFeatherStop {
+                            location: 0.0,
+                            alpha: 1.0,
+                        },
+                        GradientFeatherStop {
+                            location: 1.0,
+                            alpha: 0.0,
+                        },
+                    ],
+                    radial_aspect: 1.0,
+                },
+            });
+            if group.is_some() {
+                list.commands.push(Cmd::EndBlendGroup(Transform::IDENTITY));
+            }
+            let mut opts = RasterOptions::new(60.0, 40.0);
+            opts.dpi = 72.0;
+            rasterize(&list, &opts)
+        };
+        let flat = page(None);
+        let grouped = page(Some(Rect {
+            x: -100.0,
+            y: -100.0,
+            w: 260.0,
+            h: 240.0,
+        }));
+        for x in [12, 20, 30, 40, 48] {
+            let (a, b) = (at(&flat, x, 20), at(&grouped, x, 20));
+            for ch in 0..4 {
+                assert!(
+                    a[ch].abs_diff(b[ch]) <= 2,
+                    "x={x}: on the page {a:?}, in the group {b:?}"
+                );
+            }
+        }
     }
 
     #[test]
