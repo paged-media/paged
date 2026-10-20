@@ -134,6 +134,7 @@ is not written yet.
 | [203](203-a-frames-effects-apply-to-its-picture.md) | A frame's feathers and interior effects apply to its picture | Accepted 2026-10-20 |
 | [204](204-a-feather-fades-the-stroke-and-the-text.md) | A feather fades the frame's stroke and a text frame's text | Accepted 2026-10-20 |
 | [205](205-a-snapshot-is-drawn-as-the-exports-draw-it.md) | A snapshot is drawn as the exports draw it; only the canvas shows its markers | Accepted 2026-10-20 |
+| [206](206-a-text-read-reports-the-effective-value.md) | A caret or text range reads the effective value, not the local override | Accepted 2026-10-20 |
 
 Decisions made in other repositories that this engine's code rests on are listed in
 [`../README.md`](../README.md).
