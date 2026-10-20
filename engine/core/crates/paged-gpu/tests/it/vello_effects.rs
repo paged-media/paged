@@ -114,3 +114,69 @@ fn a_feather_takes_alpha_away_it_does_not_add_white_ink() {
         );
     }
 }
+
+/// A feathered object's run opens at its `BeginFeatheredObject` marker,
+/// so the feather masks what the object paints between the marker and
+/// the feather even when that paint addresses another path: a picture
+/// frame's picture. Both lanes fade the "picture" (a dark fill on its
+/// own path) toward the ground at the frame's edge, and agree.
+#[test]
+fn a_feather_masks_the_picture_between_its_marker_and_itself() {
+    let mut list = DisplayList::new();
+    let rect = unit_rect(&mut list);
+    let picture_path = unit_rect(&mut list);
+    let ground = XF([60.0, 0.0, 0.0, 30.0, 0.0, 0.0]);
+    let frame = XF([24.0, 0.0, 0.0, 18.0, 6.0, 6.0]);
+    list.commands.push(Cmd::FillPath {
+        path_id: rect,
+        paint: Paint::Solid(Color::rgba(0.5, 0.5, 0.5, 1.0)),
+        transform: ground,
+    });
+    list.commands.push(Cmd::BeginFeatheredObject {
+        path_id: rect,
+        transform: frame,
+    });
+    // The picture: another path, so no contiguous run reaches it.
+    list.commands.push(Cmd::FillPath {
+        path_id: picture_path,
+        paint: Paint::Solid(Color::rgba(0.05, 0.05, 0.05, 1.0)),
+        transform: frame,
+    });
+    list.commands.push(Cmd::Feather {
+        path_id: rect,
+        transform: frame,
+        params: Feather {
+            width: 6.0,
+            corner_type: FeatherCornerType::Sharp,
+            noise: 0.0,
+            choke: 0.0,
+        },
+    });
+    let mut opts = RasterOptions::new(60.0, 30.0);
+    opts.dpi = 72.0;
+    let cpu = CpuRasterizer.rasterize(&list, &opts);
+    let (w, _h) = opts.pixel_size();
+    let ground_level = px(&cpu, w, 50, 25)[0] as i32;
+    let centre = px(&cpu, w, 18, 15)[0] as i32;
+    let edge = px(&cpu, w, 7, 15)[0] as i32;
+    assert!(centre < 80, "the picture's middle stays dark, got {centre}");
+    assert!(
+        edge > centre + 30 && edge <= ground_level + 8,
+        "the CPU lane fades the picture toward the ground at its edge: edge {edge}, centre {centre}, ground {ground_level}"
+    );
+    let vello = VelloRasterizer::new().rasterize(&list, &opts);
+    if paged_test_resources::gpu_forced_off() {
+        skip!(Resource::Gpu, "PAGED_FORCE_NO_GPU=1");
+    }
+    if vello.iter().all(|b| *b == 0) {
+        skip!(
+            Resource::Gpu,
+            "no wgpu adapter: Vello returned its zero-fill fallback"
+        );
+    }
+    for (x, y) in [(7u32, 15u32), (9, 15), (18, 15), (50, 25)] {
+        let c = px(&cpu, w, x, y)[0] as i32;
+        let v = px(&vello, w, x, y)[0] as i32;
+        assert!((c - v).abs() <= 12, "({x},{y}): cpu {c} vs vello {v}");
+    }
+}

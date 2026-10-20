@@ -378,6 +378,7 @@ mod tests {
             DisplayCommand::Feather { transform, .. } => *transform,
             DisplayCommand::DirectionalFeather { transform, .. } => *transform,
             DisplayCommand::GradientFeather { transform, .. } => *transform,
+            DisplayCommand::BeginFeatheredObject { transform, .. } => *transform,
             DisplayCommand::PushLayer { transform, .. } => *transform,
             DisplayCommand::PopLayer(transform) => *transform,
             DisplayCommand::FillPathOverprint { transform, .. } => *transform,

@@ -2442,6 +2442,7 @@ dependencies = [
  "tracing",
  "ttf-parser",
  "xmp-writer",
+ "zip",
 ]
 
 [[package]]

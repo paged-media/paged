@@ -191,6 +191,7 @@ pub(super) fn rebase_path_ids(cmd: &mut paged_compose::DisplayCommand, offset: i
         Feather { path_id, .. } => add(path_id),
         DirectionalFeather { path_id, .. } => add(path_id),
         GradientFeather { path_id, .. } => add(path_id),
+        BeginFeatheredObject { path_id, .. } => add(path_id),
         FillPathOverprint { path_id, .. } => add(path_id),
         StrokePathOverprint { path_id, .. } => add(path_id),
         // Variants without a path_id field — no-op. The C-28

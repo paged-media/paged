@@ -28,9 +28,11 @@
 //! Rendering order matches Photoshop / InDesign's layer-effect stack:
 //! `OuterGlow` first (the halo lands behind the fill), then
 //! `InnerShadow` / `InnerGlow` / `BevelEmboss` / `Satin` / `Feather`
-//! after the fill (they composite onto the path's interior). The fill
-//! is emitted by `fill_paint_module` between these two groups — the
-//! caller bookends the call accordingly.
+//! after the fill and the frame's placed picture (they composite onto
+//! the object's interior, picture included). The fill and the picture
+//! are emitted between these two groups — the caller bookends the call
+//! accordingly, and opens the run with [`begin_feathered_object`] so
+//! a feather masks the picture with the fill.
 //!
 //! `directional_feather` / `gradient_feather` go through their own
 //! parser-to-compose converters (`directional_feather_from_parser` /
@@ -94,6 +96,31 @@ pub(crate) fn emit_effects_pre_fill(
             transform,
             params,
         });
+    }
+}
+
+/// Open a feathered object: when `effects` carries a feather, emit the
+/// marker that tells every lane where the object's paint begins
+/// ([`DisplayCommand::BeginFeatheredObject`]). Call it before the fill;
+/// the feather emitted by [`emit_effects_post_fill`] then masks the
+/// fill, the frame's picture and the interior effects together, as
+/// InDesign feathers a picture frame with its content.
+pub(crate) fn begin_feathered_object(
+    page: &mut BuiltPage,
+    effects: &FrameEffects,
+    fill_path_id: PathId,
+    transform: Transform,
+) {
+    if effects.feather.is_some()
+        || effects.directional_feather.is_some()
+        || effects.gradient_feather.is_some()
+    {
+        page.list
+            .commands
+            .push(DisplayCommand::BeginFeatheredObject {
+                path_id: fill_path_id,
+                transform,
+            });
     }
 }
 

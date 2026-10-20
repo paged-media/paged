@@ -1132,6 +1132,23 @@ pub enum DisplayCommand {
         transform: Transform,
         params: GradientFeather,
     },
+    /// Marks where a feathered object's paint begins. Paints nothing.
+    ///
+    /// A feather masks everything its object paints: the fill, the
+    /// placed picture and the interior effects (InDesign feathers a
+    /// picture frame's content with it). The feather commands come
+    /// after all of that, and a picture's own commands address other
+    /// paths, so the run cannot be found by walking back over commands
+    /// that share the feather's `(path_id, transform)` alone. The
+    /// marker carries that pair: a feather whose pair matches an
+    /// earlier marker's masks from the marker on
+    /// ([`crate::mask::feather_run_starts`]). Emitters bracket only
+    /// objects that carry a feather; a list without markers keeps the
+    /// contiguous-run reading.
+    BeginFeatheredObject {
+        path_id: PathId,
+        transform: Transform,
+    },
     /// Push a generic transparency / effect layer. Subsequent drawing
     /// commands emit into an offscreen buffer sized to `bounds` (page
     /// coords, padded internally by `3σ + 1px` so a Gaussian-blur
@@ -1297,6 +1314,7 @@ impl DisplayCommand {
             | DisplayCommand::Feather { transform, .. }
             | DisplayCommand::DirectionalFeather { transform, .. }
             | DisplayCommand::GradientFeather { transform, .. }
+            | DisplayCommand::BeginFeatheredObject { transform, .. }
             | DisplayCommand::PushLayer { transform, .. }
             | DisplayCommand::PopLayer(transform)
             | DisplayCommand::FillPathOverprint { transform, .. }

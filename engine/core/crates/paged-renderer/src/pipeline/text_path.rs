@@ -240,6 +240,7 @@ pub(super) fn emit_polygon_into(
     // effects module reads coordinates from the path directly).
     if let (Some(pid), Some(effects)) = (path_id, poly.effects.as_ref()) {
         crate::module::emit_effects_pre_fill(page, effects, pid, outer, palette, color_ctx);
+        crate::module::begin_feathered_object(page, effects, pid, outer);
     }
     let fill_group = push_target_group(page, resolved.fill_target, bbox, outer);
     crate::module::fill_shadow_module(&resolved, page, palette, color_ctx, outer);
@@ -248,11 +249,6 @@ pub(super) fn emit_polygon_into(
     );
     if fill_group {
         pop_blend_group(page);
-    }
-    if let (Some(pid), Some(effects)) = (path_id, poly.effects.as_ref()) {
-        crate::module::emit_effects_post_fill(
-            page, effects, pid, outer, palette, color_ctx, None, 0.0,
-        );
     }
     // W1.5 — Inside/Outside StrokeAlignment on the polygon outline:
     // offset each closed contour inward / outward by weight/2 and
@@ -285,6 +281,14 @@ pub(super) fn emit_polygon_into(
     content(page);
     if content_group {
         pop_blend_group(page);
+    }
+    // The interior effects and the feathers composite over the picture
+    // too: InDesign applies an object's effects to the object, content
+    // included.
+    if let (Some(pid), Some(effects)) = (path_id, poly.effects.as_ref()) {
+        crate::module::emit_effects_post_fill(
+            page, effects, pid, outer, palette, color_ctx, None, 0.0,
+        );
     }
     let stroke_group = push_target_group(page, resolved.stroke_target, bbox, outer);
     crate::module::stroke_paint_module(

@@ -381,20 +381,43 @@ impl Walker<'_, '_> {
     ///
     /// Returns `(feather index, last index of the run)` when the run
     /// carries a feather.
+    ///
+    /// A run may also open at a [`DisplayCommand::BeginFeatheredObject`]:
+    /// a picture frame paints its picture between its fill and its
+    /// effects, so the run reaches from the marker over the picture to
+    /// the feather that carries the marker's path.
     fn feathered_run(&self, at: usize, range_end: usize) -> Option<(usize, usize)> {
         let commands = &self.list.commands;
-        let fill_path = match commands.get(at)? {
-            DisplayCommand::FillPath { path_id, .. }
-            | DisplayCommand::FillPathBlend { path_id, .. }
-            | DisplayCommand::FillPathOverprint { path_id, .. } => *path_id,
-            _ => return None,
-        };
         if self.feather_consumed.contains(&at) {
             return None;
         }
+        let (fill_path, mut j) = match commands.get(at)? {
+            DisplayCommand::FillPath { path_id, .. }
+            | DisplayCommand::FillPathBlend { path_id, .. }
+            | DisplayCommand::FillPathOverprint { path_id, .. } => (*path_id, at + 1),
+            DisplayCommand::BeginFeatheredObject { path_id, .. } => {
+                // The object's first effect command after its picture.
+                let first = (at + 1..range_end).find(|&k| match &commands[k] {
+                    DisplayCommand::InnerShadow { path_id: p, .. }
+                    | DisplayCommand::InnerGlow { path_id: p, .. }
+                    | DisplayCommand::BevelEmboss { path_id: p, .. }
+                    | DisplayCommand::Satin { path_id: p, .. }
+                    | DisplayCommand::Feather { path_id: p, .. }
+                    | DisplayCommand::DirectionalFeather { path_id: p, .. }
+                    | DisplayCommand::GradientFeather { path_id: p, .. } => p == path_id,
+                    _ => false,
+                })?;
+                if (at + 1..first)
+                    .any(|k| matches!(commands[k], DisplayCommand::BeginFeatheredObject { .. }))
+                {
+                    return None;
+                }
+                (*path_id, first)
+            }
+            _ => return None,
+        };
         let mut feather = None;
         let mut end = at;
-        let mut j = at + 1;
         while j < range_end {
             let same = |p: &paged_compose::PathId| *p == fill_path;
             match &commands[j] {
@@ -453,7 +476,9 @@ impl Walker<'_, '_> {
             _ => None,
         };
         let Some(mask) = mask else { return false };
-        self.feather_consumed.insert(at);
+        // The whole run: a marker-opened one holds the fill, which must
+        // not open a run of its own inside the masked walk.
+        self.feather_consumed.extend(at..=end);
 
         let mask_ref = crate::transparency::write_gray_mask_image(self.state, &mask);
         // The mask form paints just that image; everything the form does
@@ -985,6 +1010,8 @@ impl Walker<'_, '_> {
                 DisplayCommand::Feather { .. } | DisplayCommand::DirectionalFeather { .. } => {
                     tracing::debug!("paged-export-pdf: feather with no fill to mask");
                 }
+                // Opens a feathered run (`feathered_run`); paints nothing.
+                DisplayCommand::BeginFeatheredObject { .. } => {}
             }
             i += 1;
         }

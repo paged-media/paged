@@ -497,7 +497,8 @@ fn painted_extent(
         | C::PopLayer(_)
         | C::BeginSoftMask { .. }
         | C::BeginMaskedContent(_)
-        | C::EndSoftMask(_) => None,
+        | C::EndSoftMask(_)
+        | C::BeginFeatheredObject { .. } => None,
     }
 }
 

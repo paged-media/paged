@@ -99,24 +99,13 @@ pub(super) fn emit_oval_into(
     };
     if let (Some(pid), Some(effects)) = (effects_path, oval.effects.as_ref()) {
         crate::module::emit_effects_pre_fill(page, effects, pid, effects_xform, palette, color_ctx);
+        crate::module::begin_feathered_object(page, effects, pid, effects_xform);
     }
     let fill_group = push_target_group(page, frame.fill_target, oval_rect, outer);
     crate::module::fill_shadow_module(&frame, page, palette, color_ctx, outer);
     crate::module::fill_paint_module(&frame, page, palette, color_ctx, fallback, outer, None);
     if fill_group {
         pop_blend_group(page);
-    }
-    if let (Some(pid), Some(effects)) = (effects_path, oval.effects.as_ref()) {
-        crate::module::emit_effects_post_fill(
-            page,
-            effects,
-            pid,
-            effects_xform,
-            palette,
-            color_ctx,
-            effects_unit_normalize,
-            frame.stroke_outset_pt(),
-        );
     }
     // W1.5 — Inside/Outside StrokeAlignment on the ellipse: offset the
     // elliptical outline inward / outward by weight/2 and stroke that
@@ -144,6 +133,21 @@ pub(super) fn emit_oval_into(
     content(page);
     if content_group {
         pop_blend_group(page);
+    }
+    // The interior effects and the feathers composite over the picture
+    // too: InDesign applies an object's effects to the object, content
+    // included.
+    if let (Some(pid), Some(effects)) = (effects_path, oval.effects.as_ref()) {
+        crate::module::emit_effects_post_fill(
+            page,
+            effects,
+            pid,
+            effects_xform,
+            palette,
+            color_ctx,
+            effects_unit_normalize,
+            frame.stroke_outset_pt(),
+        );
     }
     let stroke_group = push_target_group(page, frame.stroke_target, oval_rect, outer);
     crate::module::stroke_shadow_module(&frame, page, palette, color_ctx, outer);
@@ -1017,6 +1021,7 @@ pub(super) fn emit_rectangle_into(
             palette,
             color_ctx,
         );
+        crate::module::begin_feathered_object(page, effects, effects_path, effects_xform);
     }
 
     let fill_group = push_target_group(page, resolved.fill_target, r, outer);
@@ -1034,6 +1039,16 @@ pub(super) fn emit_rectangle_into(
         pop_blend_group(page);
     }
 
+    // The picture, between the fill and the stroke, in its own target.
+    let content_group = push_target_group(page, resolved.content_target, r, outer);
+    content(page);
+    if content_group {
+        pop_blend_group(page);
+    }
+
+    // The interior effects and the feathers composite over the picture
+    // too: InDesign applies an object's effects to the object, content
+    // included, so a feathered picture frame fades its picture.
     if let (Some(effects), Some((effects_path, effects_xform, effects_unit_normalize))) =
         (rect.effects.as_ref(), effects_target)
     {
@@ -1047,13 +1062,6 @@ pub(super) fn emit_rectangle_into(
             effects_unit_normalize,
             resolved.stroke_outset_pt(),
         );
-    }
-
-    // The picture, between the fill and the stroke, in its own target.
-    let content_group = push_target_group(page, resolved.content_target, r, outer);
-    content(page);
-    if content_group {
-        pop_blend_group(page);
     }
     let stroke_group = push_target_group(page, resolved.stroke_target, r, outer);
     crate::module::stroke_shadow_module(&resolved, page, palette, color_ctx, outer);
