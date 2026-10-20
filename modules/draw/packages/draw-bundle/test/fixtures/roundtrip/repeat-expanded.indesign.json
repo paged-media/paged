@@ -7,13 +7,13 @@
     "script": "scripts/indesign/lib/read-document.jsx",
     "script_sha256": "4486a78fdd3b45a88c6ef6b18911bc34b94f6cf7ddc3c4d433d3d5e256f4dc08",
     "runner": "scripts/indesign/run-roundtrip.sh",
-    "recorded_at": "2026-10-03T06:04:12.349Z",
+    "recorded_at": "2026-10-20T01:20:37.307Z",
     "host_os": "macOS 26.4",
     "pdf_preset": "[Qualitativ hochwertiger Druck]"
   },
   "idml": {
     "path": "packages/draw-bundle/test/fixtures/roundtrip/repeat-expanded.idml",
-    "sha256": "f50d3962df0bc11596820f48f131b50976d4172673508975bb1da32cb8f1e340"
+    "sha256": "c43e3df0e8773aca35b8ce3fc128f3fe127e0026d63c7f9306af31d5cf86bc7e"
   },
   "units": "pt",
   "coordinates": "page-local, origin top-left of the page, Y down (ruler origin PAGE, zero point 0,0, script measurement unit POINTS); bounds as [minX, minY, maxX, maxY]",
@@ -51,8 +51,8 @@
       "layer": "Layer 1",
       "visible": true,
       "locked": false,
-      "geometricBounds": [150.693856,194.45033,449.306144,525.54967],
-      "visibleBounds": [150.193856,193.95033,449.806144,526.04967],
+      "geometricBounds": [150.693862,194.45033,449.306134,525.54967],
+      "visibleBounds": [150.193862,193.95033,449.806134,526.04967],
       "z": 0
     },
     {
@@ -67,8 +67,8 @@
       "layer": "Layer 1",
       "visible": true,
       "locked": false,
-      "geometricBounds": [160.475764,264.726137,248.998636,345.273863],
-      "visibleBounds": [159.975764,264.226137,249.498636,345.773863],
+      "geometricBounds": [160.475784,264.726158,248.998624,345.273846],
+      "visibleBounds": [159.975784,264.226158,249.498624,345.773846],
       "fill": {"name":"rt-violet","type":"Color","model":"PROCESS","space":"RGB","value":[130,60,180]},
       "fillTint": -1,
       "gradientFillAngle": 0,
@@ -100,8 +100,8 @@
           "closed": true,
           "pathType": "CLOSED_PATH",
           "anchors": [
-            {"anchor":[248.0385,330],"left":[259.0192,370.9808],"right":[237.0577,289.0192]},
-            {"anchor":[161.4359,280],"left":[150.4552,239.0192],"right":[172.4167,320.9808]}
+            {"anchor":[248.03848,330],"left":[259.01923,370.98077],"right":[237.05771,289.01923]},
+            {"anchor":[161.43593,280],"left":[150.45517,239.01924],"right":[172.4167,320.98077]}
           ]
         }
       ]
@@ -118,8 +118,8 @@
       "layer": "Layer 1",
       "visible": true,
       "locked": false,
-      "geometricBounds": [150.693856,388.434503,258.780544,441.565497],
-      "visibleBounds": [150.193856,387.934503,259.280544,442.065497],
+      "geometricBounds": [150.693862,388.434511,258.780545,441.565489],
+      "visibleBounds": [150.193862,387.934511,259.280545,442.065489],
       "fill": {"name":"rt-violet","type":"Color","model":"PROCESS","space":"RGB","value":[130,60,180]},
       "fillTint": -1,
       "gradientFillAngle": 0,
@@ -151,8 +151,8 @@
           "closed": true,
           "pathType": "CLOSED_PATH",
           "anchors": [
-            {"anchor":[248.0385,390],"left":[289.0192,400.9808],"right":[207.0577,379.0192]},
-            {"anchor":[161.4359,440],"left":[120.4552,429.0192],"right":[202.4167,450.9808]}
+            {"anchor":[248.03848,390],"left":[289.01923,400.98077],"right":[207.05771,379.01923]},
+            {"anchor":[161.43593,440],"left":[120.45517,429.01923],"right":[202.4167,450.98077]}
           ]
         }
       ]
@@ -220,8 +220,8 @@
       "layer": "Layer 1",
       "visible": true,
       "locked": false,
-      "geometricBounds": [351.001364,374.726137,439.524236,455.273863],
-      "visibleBounds": [350.501364,374.226137,440.024236,455.773863],
+      "geometricBounds": [351.001376,374.726154,439.524207,455.273846],
+      "visibleBounds": [350.501376,374.226154,440.024207,455.773846],
       "fill": {"name":"rt-violet","type":"Color","model":"PROCESS","space":"RGB","value":[130,60,180]},
       "fillTint": -1,
       "gradientFillAngle": 0,
@@ -253,8 +253,8 @@
           "closed": true,
           "pathType": "CLOSED_PATH",
           "anchors": [
-            {"anchor":[351.9615,390],"left":[340.9808,349.0192],"right":[362.9423,430.9808]},
-            {"anchor":[438.5641,440],"left":[449.5448,480.9808],"right":[427.5833,399.0192]}
+            {"anchor":[351.96152,390],"left":[340.98077,349.01923],"right":[362.9423,430.98077]},
+            {"anchor":[438.56406,440],"left":[449.54483,480.98077],"right":[427.5833,399.01923]}
           ]
         }
       ]
@@ -271,8 +271,8 @@
       "layer": "Layer 1",
       "visible": true,
       "locked": false,
-      "geometricBounds": [341.219456,278.434503,449.306144,331.565497],
-      "visibleBounds": [340.719456,277.934503,449.806144,332.065497],
+      "geometricBounds": [341.219455,278.434511,449.306134,331.565489],
+      "visibleBounds": [340.719455,277.934511,449.806134,332.065489],
       "fill": {"name":"rt-violet","type":"Color","model":"PROCESS","space":"RGB","value":[130,60,180]},
       "fillTint": -1,
       "gradientFillAngle": 0,
@@ -304,8 +304,8 @@
           "closed": true,
           "pathType": "CLOSED_PATH",
           "anchors": [
-            {"anchor":[351.9615,330],"left":[310.9808,319.0192],"right":[392.9423,340.9808]},
-            {"anchor":[438.5641,280],"left":[479.5448,290.9808],"right":[397.5833,269.0192]}
+            {"anchor":[351.96152,330],"left":[310.98077,319.01923],"right":[392.9423,340.98077]},
+            {"anchor":[438.56406,280],"left":[479.54483,290.98077],"right":[397.5833,269.01923]}
           ]
         }
       ]

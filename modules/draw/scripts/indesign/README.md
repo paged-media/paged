@@ -50,7 +50,14 @@ Color/Paper, a `<TextPath>`), which were regenerated and re-recorded on
 `<TextPath>` alignment in InDesign's spelling (`TextAlignment=
 "BaselineTextAlignment"`, where it wrote `PathTypeAlignment=
 "BaselinePathType"`), regenerated and re-recorded on 0.71.8 on 2026-10-13,
-still identical. Each
+still identical; and on 2026-10-20 `appearance-bake` (its bake record no
+longer lists its layers, draw ADR 360) and the seventeen cases whose IDML
+the writer now spells at full `f32` precision (`blend-expanded`,
+`compound-hole`, `gradient-radial`, `group`, `offset-path`,
+`opacity-blend`, `opacity-mask`, `outline-stroke`, the five pathfinder
+cases, `pen-closed`, `repeat-expanded`, `svg-import`, `text-on-path`;
+engine ADR 199), still identical: InDesign reads the full-precision
+handles. Each
 recording's `produced_by` is the authority: app, version, locale, the
 reader's sha256 and the IDML's sha256 — the replay refuses a recording
 made by another reader or from another IDML.
