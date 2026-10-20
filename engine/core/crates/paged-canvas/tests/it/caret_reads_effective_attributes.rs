@@ -202,3 +202,41 @@ fn unstyled_text_reads_the_size_it_is_set_at() {
     // Nothing names a leading: auto, which reads as no length.
     assert_eq!(get(&m, 2, 2, "characterLeading"), Ok(Value::Length(None)));
 }
+
+/// The snapshot (`RequestElementProperties`) still reports what the range
+/// itself sets: a consumer that copies a range's formatting (the data
+/// merge) must copy the overrides, not bake the style's values in.
+#[test]
+fn the_snapshot_reports_what_the_range_itself_sets() {
+    use paged_canvas::element_selection::ElementId;
+    use paged_mutate::PropertyPath;
+    let m = load(STYLED);
+    let b = body_start(&m);
+    let snapshot = |start: u32, end: u32, path: PropertyPath| {
+        let id = ElementId::StoryRange {
+            story_id: "st1".into(),
+            start,
+            end,
+        };
+        m.element_properties(&id)
+            .expect("a range")
+            .entries
+            .into_iter()
+            .find(|e| e.path == path)
+            .and_then(|e| e.value)
+    };
+    assert_eq!(
+        snapshot(0, 7, PropertyPath::CharacterFontSize),
+        Some(Value::Length(None)),
+        "the heading inherits its size"
+    );
+    assert_eq!(
+        snapshot(0, 7, PropertyPath::ParagraphJustification),
+        Some(Value::Text(String::new()))
+    );
+    assert_eq!(
+        snapshot(b + 10, b + 14, PropertyPath::CharacterFontSize),
+        Some(Value::Length(Some(14.0))),
+        "a local size is the range's own"
+    );
+}

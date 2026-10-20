@@ -5152,8 +5152,10 @@ fn paged_get(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<J
     let Some(element_id) = parse_element_id(&id) else {
         return Ok(JsValue::null());
     };
+    // The read twin of `RequestGet`: a story range answers the values its
+    // text is set with (ADR 206).
     let entry = with_model(|m| {
-        m.element_properties(&element_id).and_then(|props| {
+        m.element_read_properties(&element_id).and_then(|props| {
             props
                 .entries
                 .into_iter()
