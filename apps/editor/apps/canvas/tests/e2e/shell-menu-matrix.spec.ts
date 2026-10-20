@@ -679,6 +679,11 @@ test.describe("the host menu bar", () => {
       "menu:Data/Bindings…",
       "menu:Data/Dataset preview…",
     );
+    // An AI service answers (its proxy refuses a bare GET as anything but
+    // 503): New from a brief is offered only with one (ADR 252, F-25).
+    await page.route("**/api/ai/**", (route) =>
+      route.fulfill({ status: 405, body: "" }),
+    );
     await openShell(page, { doc: true });
     const rows = hostRows(await liveMenu(page));
     const recorder = await recordCommands(page, [

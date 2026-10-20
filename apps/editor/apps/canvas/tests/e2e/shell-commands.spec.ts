@@ -156,13 +156,32 @@ test.describe("view commands", () => {
         .toBe(true);
       return camera();
     };
-    await invoke(page, "paged.view.zoomFit");
-    const whole = (await settled()).scale;
-    expect(whole).toBeLessThan(0.99);
-    // One page fills more of the window than the whole document.
+    // What a page fit is: the page inside the viewport less a 40 px
+    // margin, on its tighter axis (the layout's `fitCamera`).
+    const want = await page.evaluate(async () => {
+      const c = (
+        globalThis as unknown as {
+          __canvas: {
+            client: {
+              collection(
+                n: string,
+              ): Promise<Array<{ sizePt: [number, number] }>>;
+            };
+          };
+        }
+      ).__canvas.client;
+      const [first] = await c.collection("pages");
+      const r = document
+        .querySelector("[data-paged-viewport]")!
+        .getBoundingClientRect();
+      const [w, h] = first!.sizePt;
+      return Math.min((r.width - 80) / w, (r.height - 80) / h);
+    });
+    await invoke(page, "paged.view.zoom100");
+    await settled();
     await invoke(page, "paged.view.fitPage");
     const onePage = await settled();
-    expect(onePage.scale).toBeGreaterThan(whole + 0.01);
+    expect(onePage.scale).toBeCloseTo(want, 3);
     // Each page of this document is a spread of its own.
     await invoke(page, "paged.view.fitSpread");
     expect((await settled()).scale).toBeCloseTo(onePage.scale, 3);
