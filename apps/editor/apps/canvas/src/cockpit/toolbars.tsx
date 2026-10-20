@@ -50,12 +50,15 @@ import { useState, type ReactNode } from "react";
 import {
   Icon,
   notifyExportPdfDialog,
+  printOutputFacts,
+  printStandardReason,
   useCanvasClient,
   useContentSelection,
   useDocument,
   useDocumentMeta,
   useOptionalCockpitState,
   useScreenMode,
+  workingProfileLabel,
   type ModeToolbarProps,
 } from "@paged-media/shell";
 
@@ -327,8 +330,13 @@ export function PrepressToolbar(_props: ModeToolbarProps) {
   const { findings, runCount } = usePreflightFindings(client);
   const [running, setRunning] = useState(false);
 
-  const profile = meta?.cmykProfileName ?? "No CMYK profile";
-  const profileActive = meta?.cmykProfileActive ?? false;
+  // The print-output facts (ADR 266): the PDF/X-4 checklist's "CMYK
+  // working space active" row reads the same derivation. A profile the
+  // document names but the editor has no bytes for reads "not loaded",
+  // never as the bare name of a working space.
+  const print = printOutputFacts(meta);
+  const profile = workingProfileLabel(print);
+  const profileActive = print.profileActive;
   const loaded = meta != null && meta.pageCount > 0;
   const bleedOn = screenMode.screenMode === "bleed";
 
@@ -371,7 +379,9 @@ export function PrepressToolbar(_props: ModeToolbarProps) {
         icon="ui-target"
         testId="output-profile"
         title={
-          profileActive ? "Working CMYK profile" : "No working CMYK profile"
+          profileActive
+            ? "Working CMYK profile"
+            : (printStandardReason(print) ?? "No working CMYK profile")
         }
         disabled
       >

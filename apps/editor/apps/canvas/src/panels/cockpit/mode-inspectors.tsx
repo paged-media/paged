@@ -28,9 +28,11 @@ import {
   ComingSoon,
   Icon,
   StatusPill,
+  printOutputFacts,
   useCollection,
   useDocumentMeta,
   useDocumentStats,
+  workingProfileLabel,
   type PanelProps,
 } from "@paged-media/shell";
 import type { FontSummary, LinkSummary } from "@paged-media/client";
@@ -99,7 +101,9 @@ export function OutputReadinessPanel(_props: PanelProps) {
   const fonts = useCollection<FontSummary>("fonts");
   const links = useCollection<LinkSummary>("links");
   const loaded = meta != null && meta.pageCount > 0;
-  const cmyk = meta?.cmykProfileActive ?? false;
+  // The print-output facts (ADR 266): the Prepress bar's chip reads the
+  // same derivation, so the row and the chip cannot disagree.
+  const print = printOutputFacts(meta);
 
   const missingFonts = fonts ? fonts.filter((f) => f.isMissing).length : null;
   const missingLinks = links
@@ -128,7 +132,8 @@ export function OutputReadinessPanel(_props: PanelProps) {
     {
       key: "cmyk",
       label: "CMYK working space active",
-      pass: loaded ? cmyk : null,
+      pass: loaded ? print.profileActive : null,
+      detail: loaded ? workingProfileLabel(print) : undefined,
     },
     {
       key: "fonts",

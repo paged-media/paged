@@ -238,6 +238,9 @@ export interface FixtureSpec {
   masterItems?: readonly string[];
   /** Stories, each a list of paragraphs (a text frame names one by id). */
   stories?: ReadonlyArray<{ id: string; paragraphs: readonly string[] }>;
+  /** The CMYK working space the document declares (the designmap's
+   *  `CMYKProfile`), by name only: no profile bytes travel with it. */
+  cmykProfile?: string;
 }
 
 /** Package a fixture spec as an IDML document. */
@@ -261,7 +264,7 @@ export function buildFixtureIdml(spec: FixtureSpec): Uint8Array {
   const designmap =
     XML +
     `<?aid style="50" type="document" readerVersion="6.0" featureSet="257" product="20.0(32)"?>\n` +
-    `<Document ${NS} Self="d" StoryList="${(spec.stories ?? []).map((st) => st.id).join(" ")}" Name="${spec.name}.indd">\n` +
+    `<Document ${NS} Self="d" StoryList="${(spec.stories ?? []).map((st) => st.id).join(" ")}" Name="${spec.name}.indd"${spec.cmykProfile ? ` CMYKProfile="${spec.cmykProfile}"` : ""}>\n` +
     `<idPkg:Graphic src="Resources/Graphic.xml"/>\n<idPkg:Fonts src="Resources/Fonts.xml"/>\n` +
     `<idPkg:Styles src="Resources/Styles.xml"/>\n<idPkg:Preferences src="Resources/Preferences.xml"/>\n` +
     `<idPkg:MasterSpread src="MasterSpreads/MasterSpread_um.xml"/>\n` +

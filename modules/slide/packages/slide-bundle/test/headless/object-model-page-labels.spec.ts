@@ -132,6 +132,20 @@ describe("[plugin-slide.object-model] slide data on page labels (protocol 70)", 
     );
   });
 
+  it("an imported deck opens clean: not edited, nothing to undo, the deck label already in the package (UX audit F-08)", async () => {
+    covers("command:media.paged.slide.importPptx");
+    const meta = (await h.host.document.meta()) as { dirty?: boolean };
+    expect(meta.dirty).toBe(false);
+    const before = await labelOf("doc");
+    expect(before?.data["deck"]).toMatchObject({ name: "placeholders" });
+    // Undo has nothing to take back: the deck label stays.
+    await h.host.document.undo();
+    expect(await labelOf("doc")).toEqual(before);
+    expect(((await h.host.document.meta()) as { dirty?: boolean }).dirty).toBe(
+      false,
+    );
+  });
+
   it("a slide is hosted by its page: a page scope selects it", async () => {
     expect(await h.objects.query(`page:#2 > ${P}/slide`)).toEqual([slides[1]]);
   });
