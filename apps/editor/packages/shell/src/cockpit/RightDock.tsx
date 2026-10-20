@@ -31,6 +31,11 @@
 // Switching tabs reveals a panel instead of mounting it again. Each panel
 // scrolls in its own container, so each keeps its scroll position.
 //
+// The strip is an ARIA tablist (UX audit F-50, ADR 259): each tab a
+// `tab` with `aria-selected`, one tab stop (the active tab), the arrows,
+// Home and End moving to and opening a neighbour, Delete closing the tab;
+// the panel under it is the `tabpanel` it controls.
+//
 // A switch from the strip is a view transition (ADR 240): the incoming
 // panel comes in from the side its tab is on, the outgoing one leaves the
 // other way; under reduced motion it just switches.
@@ -75,6 +80,36 @@ export function RightDock() {
   // out of sight to the right — the panel changed and its tab did not
   // appear. Bring the active tab into view; let the wheel scroll the strip.
   const stripRef = useRef<HTMLDivElement | null>(null);
+  const tabDomId = (id: string) => `pg-dock-tab-${id.replace(/[^\w-]/g, "_")}`;
+  const panelDomId = (id: string) =>
+    `pg-dock-panel-${id.replace(/[^\w-]/g, "_")}`;
+  /** The tablist's keys (WAI-ARIA tabs, automatic activation). */
+  const onStripKey = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    const order = tabs.map((t) => t.id);
+    const at = order.indexOf(active ?? "");
+    if (at < 0 || order.length === 0) return;
+    let next: number | null = null;
+    if (e.key === "ArrowRight") next = (at + 1) % order.length;
+    else if (e.key === "ArrowLeft")
+      next = (at - 1 + order.length) % order.length;
+    else if (e.key === "Home") next = 0;
+    else if (e.key === "End") next = order.length - 1;
+    else if (e.key === "Delete") {
+      const t = tabs[at];
+      if (t && t.closable !== false) {
+        e.preventDefault();
+        closeTab(t.id);
+      }
+      return;
+    }
+    if (next === null) return;
+    e.preventDefault();
+    const id = order[next]!;
+    switchTo(id);
+    stripRef.current
+      ?.querySelector<HTMLElement>(`[data-dock-tab="${CSS.escape(id)}"]`)
+      ?.focus();
+  };
   useEffect(() => {
     const strip = stripRef.current;
     if (!strip || !active) return;
@@ -98,6 +133,9 @@ export function RightDock() {
         <div
           ref={stripRef}
           data-dock-strip
+          role="tablist"
+          aria-label="Panels"
+          onKeyDown={onStripKey}
           onWheel={(e) => {
             if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
               e.currentTarget.scrollLeft += e.deltaY;
@@ -124,9 +162,13 @@ export function RightDock() {
               <button
                 key={t.id}
                 type="button"
+                role="tab"
+                id={tabDomId(t.id)}
+                aria-selected={a}
+                aria-controls={panelDomId(t.id)}
+                tabIndex={a ? 0 : -1}
                 data-dock-tab={t.id}
                 data-active={a || undefined}
-                aria-pressed={a}
                 onClick={() => switchTo(t.id)}
                 style={{
                   display: "inline-flex",
@@ -198,6 +240,10 @@ export function RightDock() {
             >
               <div
                 data-dock-panel={t.id}
+                id={panelDomId(t.id)}
+                {...(tabs.length > 1
+                  ? { role: "tabpanel", "aria-labelledby": tabDomId(t.id) }
+                  : null)}
                 style={{
                   flex: 1,
                   minWidth: 0,

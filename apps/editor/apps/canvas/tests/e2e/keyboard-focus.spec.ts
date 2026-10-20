@@ -139,6 +139,24 @@ test.describe("focus: the ring, the menus, the toolbars, the dialogs", () => {
     await expect(page.locator('[data-menu-trigger="View"]')).toBeFocused();
   });
 
+  // F-50 (ADR 259): F10 is the route into the menus; the page has a main
+  // landmark for the canvas, complementary landmarks for the docks, and
+  // panel titles that are headings.
+  test("F10 focuses the menu bar; the canvas is main, the docks complementary, panel titles headings", async ({
+    page,
+  }) => {
+    covers("menu:View/Zoom in");
+    await openShell(page, { doc: true });
+    await page.locator("[data-paged-viewport]").click();
+    await page.keyboard.press("F10");
+    await expect(page.locator('[data-menu-trigger="File"]')).toBeFocused();
+    await page.keyboard.press("ArrowRight");
+    await expect(page.locator('[data-menu-trigger="Edit"]')).toBeFocused();
+    await expect(page.getByRole("main")).toHaveCount(1);
+    expect(await page.getByRole("complementary").count()).toBeGreaterThan(0);
+    expect(await page.getByRole("heading").count()).toBeGreaterThan(0);
+  });
+
   test("a menu opened with the pointer hands focus back to the canvas, so the next arrow nudges", async ({
     page,
   }) => {
