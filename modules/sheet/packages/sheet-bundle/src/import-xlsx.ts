@@ -54,6 +54,22 @@ export async function importBytes(
   }
 }
 
+/** A workbook opened onto the document the editor made for it (nothing
+ *  was open: `ImportRequest.newDocument`, UX audit F-03, editor ADR 262) is
+ *  placed on it: opening a spreadsheet gives a document of the workbook's
+ *  used range, not a panel beside an empty canvas. Into an open document
+ *  the workbook only opens in its panel; "Place selection on page" puts a
+ *  range where the user wants it. */
+export async function placeIntoNewDocument(
+  session: WorkbookSession,
+  newDocument: boolean | undefined,
+): Promise<void> {
+  if (!newDocument) return;
+  const s = session.state();
+  if (!s.engine || s.activeSheet === null || !s.selectedRange) return;
+  await session.lowerSelection();
+}
+
 /** Open the workbook panel (the "show me the workbook" affordance + the
  *  no-picker fallback target). */
 export function importXlsx(host: BundleHost, panelId: string): void {

@@ -97,6 +97,39 @@ describe.skipIf(!ENGINE_BUILT)(
       ).toEqual([]);
     });
 
+    // UX audit F-03 (editor ADR 262): with nothing open the editor makes a
+    // document for the workbook and says so (`newDocument`); the used range
+    // is placed on it, so the spreadsheet arrives on the page.
+    it("onto the document the editor made for it, the .xlsx importer places the used range", async () => {
+      covers("importer:media.paged.sheet.importer.xlsx");
+      const bytes = await authorWorkbook(3, 2, (r, c) =>
+        r === 0 ? ["k", "n"][c]! : String(r * 10 + c),
+      );
+      const m = env.mark();
+      await env
+        .importer("media.paged.sheet.importer.xlsx")
+        .import({ name: "q3.xlsx", bytes, mimeType: XLSX, newDocument: true });
+      await env.settle();
+      expect(workbookOpen(env)).toBe(true);
+      expect(env.opened).toEqual([PANEL.workbook]);
+      // One batch carrying the frame and the native table, as "Place
+      // selection on page" emits.
+      expect(env.mutationsSince(m).map((e) => e.op)).toContain("batch");
+    });
+
+    it("the .csv importer places onto a new document too", async () => {
+      covers("importer:media.paged.sheet.importer.csv");
+      const m = env.mark();
+      await env.importer("media.paged.sheet.importer.csv").import({
+        name: "fruit.csv",
+        bytes: enc.encode("name,n\nApples,3\nPears,4\n"),
+        mimeType: "text/csv",
+        newDocument: true,
+      });
+      await env.settle();
+      expect(env.mutationsSince(m).map((e) => e.op)).toContain("batch");
+    });
+
     it("the .xlsx importer refuses bytes that are not a workbook, and says so", async () => {
       covers("importer:media.paged.sheet.importer.xlsx");
       await env

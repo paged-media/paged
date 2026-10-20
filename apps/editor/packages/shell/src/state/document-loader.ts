@@ -128,13 +128,15 @@ export interface BlankDocumentOptions {
  * post-load orchestration as {@link loadDocumentFile} (reset, snapshot,
  * ready). The blank package is minted by the engine
  * ([`CanvasClient.newBlankDocument`]); the editor only orchestrates the
- * surrounding UI state, exactly like opening a file.
+ * surrounding UI state, exactly like opening a file. Resolves to the new
+ * document's handle, or null when the engine refused or a later load took
+ * over.
  */
 export async function createBlankDocument(
   client: CanvasClient,
   opts: BlankDocumentOptions,
   cb: DocumentLoaderCallbacks,
-): Promise<void> {
+): Promise<DocumentHandle | null> {
   const load = ++newestLoad;
   cb.setStatus("creating new document…");
   cb.setLoading({ name: "Untitled", bytes: 0 });
@@ -156,17 +158,18 @@ export async function createBlankDocument(
       fontBytes,
     );
   } catch (err) {
-    if (load !== newestLoad) return;
+    if (load !== newestLoad) return null;
     cb.setLoading(null);
     cb.setStatus(`new document failed: ${String(err)}`);
-    return;
+    return null;
   }
-  if (load !== newestLoad) return;
+  if (load !== newestLoad) return null;
 
   cb.setHandle(handle);
   cb.setLoading(null);
   cb.setStatus(`new ${handle.pageCount}-page document; snapshotting…`);
   await snapshotAllPages(client, handle, cb, load);
+  return handle;
 }
 
 /**
