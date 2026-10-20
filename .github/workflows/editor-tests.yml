@@ -796,7 +796,19 @@ jobs:
         env:
           CI: "1"
           PAGED_CI_LEAN: "1"
+        # Three shards lost their runner to a shutdown signal on 2026-10-20,
+        # each after a minute of silence mid-suite: the signature of a runner
+        # out of memory. Every 30 s the step logs the memory left and the
+        # largest processes, so the next loss shows what grew.
         run: |
+          (while sleep 30; do
+            echo "::group::memory $(date -u +%H:%M:%S)"
+            free -m | sed -n 2p
+            ps -eo rss=,comm= --sort=-rss | head -5 | awk '{printf "%7.0f MB %s\n", $1/1024, $2}'
+            echo "::endgroup::"
+          done) >&2 &
+          logger=$!
+          set +e
           npx playwright test \
             --project=chromium \
             --project=journeys \
@@ -805,6 +817,9 @@ jobs:
             --shard=${{ matrix.shard }}/${{ env.SHARDS }} \
             --global-timeout=3300000 \
             --reporter=blob
+          status=$?
+          kill "$logger"
+          exit "$status"
 
       # The quarantined tests (apps/canvas/tests/quarantine.json, ADR 228)
       # still run, apart and advisory: with retries, so their flake rate
