@@ -105,6 +105,12 @@ import {
   insideKeyOwningContainer,
   isCanvasSurface,
   isFormField,
+  DIRECT_SELECT_TOOL_ID,
+  HAND_TOOL_ID,
+  SELECT_TOOL_ID,
+  TEXT_TOOL_ID,
+  ZOOM_TOOL_ID,
+  useOptionalTool,
 } from "@paged-media/shell";
 
 import { textInputSurface } from "./TextInputSurface";
@@ -143,6 +149,31 @@ export function byteLength(text: string): number {
  *  story's last paragraph, whose end is then the story's end. */
 const PAST_THE_END = 0x7fff_ffff;
 
+/** The tools a live caret survives being picked with: the Type tool, the
+ *  two selection tools, the tools you look with, and the two that work
+ *  ON the text selection (the Eyedropper samples into it, a Note is
+ *  placed at the caret). */
+const TOOLS_THAT_KEEP_THE_CARET: ReadonlySet<string> = new Set([
+  TEXT_TOOL_ID,
+  SELECT_TOOL_ID,
+  DIRECT_SELECT_TOOL_ID,
+  HAND_TOOL_ID,
+  ZOOM_TOOL_ID,
+  "paged.tool.eyedropper",
+  "paged.tool.note",
+]);
+
+/**
+ * Whether picking `toolId` leaves text editing (InDesign: reaching for the
+ * Pen, a frame or a shape tool ends the text selection). The caret used
+ * to outlive the switch, so the keys meant for the new tool were typed
+ * into the story — Enter that commits a Pen path became a paragraph break
+ * and the path was never placed.
+ */
+export function toolEndsTextEditing(toolId: string): boolean {
+  return !TOOLS_THAT_KEEP_THE_CARET.has(toolId);
+}
+
 export function useTextEditing(ctx: TextEditingContext) {
   // Shift-extend anchor: the offset that stays fixed while the focus
   // end moves. Reset to the caret offset on any non-extending move so a
@@ -164,6 +195,22 @@ export function useTextEditing(ctx: TextEditingContext) {
     leavingRef.current = false;
   }, [ctx.selection]);
   const queueRef = useRef<Promise<void>>(Promise.resolve());
+
+  // A deliberate switch to a tool that does not edit text ends the text
+  // selection (a spring-loaded hold, a "suspend", keeps it: the caret is
+  // there when the key comes up).
+  const tool = useOptionalTool();
+  const effectiveTool = tool?.effectiveTool ?? null;
+  const toolChange = tool?.lastReason ?? "switch";
+  const seenToolRef = useRef(effectiveTool);
+  useEffect(() => {
+    if (seenToolRef.current === effectiveTool) return;
+    seenToolRef.current = effectiveTool;
+    if (effectiveTool === null || toolChange !== "switch") return;
+    if (!toolEndsTextEditing(effectiveTool) || !selRef.current) return;
+    selRef.current = null;
+    latest().setSelection(null);
+  }, [effectiveTool, toolChange]);
 
   useEffect(() => {
     const setSel = (s: ContentSelection | null) => {
