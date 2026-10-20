@@ -176,13 +176,15 @@ export function tableStyleSuite(c: TableStyleCase): void {
       await runCoreCommand(h);
       const sent = h.mutations(from) as unknown as Array<{
         op: string;
-        args: { selfId: string; name: string };
+        args: { selfId?: string; name: string };
       }>;
       expect(sent).toHaveLength(1);
       expect(sent[0].op).toBe(c.createOp);
       expect(sent[0].args.name).toBe(c.newName);
-      const created = sent[0].args.selfId;
-      expect((await rowsByName(h, c.collection)).get(c.newName)).toBe(created);
+      // The form asks for no internal id (PN-154): the engine mints it.
+      expect(sent[0].args.selfId).toBeUndefined();
+      const created = (await rowsByName(h, c.collection)).get(c.newName)!;
+      expect(created).toBeTruthy();
       expect(row(h, created)?.textContent).toContain(c.newName);
       expect(h.root.querySelector("[data-core-command-dialog]")).toBeNull();
     });
@@ -211,19 +213,16 @@ export function tableStyleSuite(c: TableStyleCase): void {
   describe(`${c.id}: findings`, () => {
     // UX audit F-22: internal identifiers shown to users. The New form
     // is generated from the command's args, so it asks for a self id.
-    test.failing(
-      "PN-154 (UX F-22): the New form asks for a name, not for an internal self id",
-      async () => {
-        c.tag();
-        const h = await mount();
-        await h.click(
-          h.root.querySelector(`[data-core-command-button="${c.createOp}"]`)!,
-        );
-        const args = [
-          ...h.root.querySelectorAll("[data-core-command-arg]"),
-        ].map((f) => f.getAttribute("data-core-command-arg"));
-        expect(args).not.toContain("selfId");
-      },
-    );
+    test("PN-154 (UX F-22): the New form asks for a name, not for an internal self id", async () => {
+      c.tag();
+      const h = await mount();
+      await h.click(
+        h.root.querySelector(`[data-core-command-button="${c.createOp}"]`)!,
+      );
+      const args = [...h.root.querySelectorAll("[data-core-command-arg]")].map(
+        (f) => f.getAttribute("data-core-command-arg"),
+      );
+      expect(args).not.toContain("selfId");
+    });
   });
 }

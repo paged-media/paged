@@ -228,16 +228,13 @@ describe("Text Wrap panel: findings", () => {
   // UX audit F-22 (internal identifiers shown to users): the Contour list
   // carries the schema's raw members "BoundingBox" and "UserModifiedPath"
   // as labels.
-  test.failing(
-    "PN-256 (UX F-22): every Contour option has a human label",
-    async () => {
-      covers("panel:paged.text-wrap");
-      const h = await mount();
-      await h.select([h.scene.rect]);
-      const labels = [
-        ...h.field("frameTextWrapContourType").querySelectorAll("option"),
-      ].map((o) => o.textContent ?? "");
-      expect(labels.filter((l) => /^[A-Z][a-z]+[A-Z]/.test(l))).toEqual([]);
-    },
-  );
+  test("PN-256 (UX F-22): every Contour option has a human label", async () => {
+    covers("panel:paged.text-wrap");
+    const h = await mount();
+    await h.select([h.scene.rect]);
+    const labels = [
+      ...h.field("frameTextWrapContourType").querySelectorAll("option"),
+    ].map((o) => o.textContent ?? "");
+    expect(labels.filter((l) => /^[A-Z][a-z]+[A-Z]/.test(l))).toEqual([]);
+  });
 });

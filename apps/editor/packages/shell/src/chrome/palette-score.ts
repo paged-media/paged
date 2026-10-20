@@ -73,10 +73,13 @@ export function paletteScore(
     if (s === 0) return 0;
     sum += s;
   }
-  let score = sum / tokens.length;
+  // The word matches fill at most 0.9, so the bonus and the word-count
+  // nudge below never push two scores into the cap of 1 together (a tie
+  // there would lose the "fewer words edge ahead" rule).
+  let score = (sum / tokens.length) * 0.9;
   // The whole query opening the title ("export" → "Export PDF…") is the
   // strongest single signal there is.
-  if (title.startsWith(search.trim().toLowerCase())) score += 0.1;
+  if (title.startsWith(search.trim().toLowerCase())) score += 0.09;
   // Fewer words in the title = a more specific hit, a hair ahead.
   score -= Math.min(titleWords.length, 10) * 0.002;
   return Math.max(0.0001, Math.min(1, score));

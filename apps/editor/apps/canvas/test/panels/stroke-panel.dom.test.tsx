@@ -286,18 +286,15 @@ describe("Stroke panel: findings", () => {
 
   // UX audit F-22 / F-37: "Properties ▸ Stroke Type lists
   // StrokeStyle/$ID/Japanese Dots" — the panel shows the engine's ids.
-  test.failing(
-    "PN-1: Stroke Type option labels are human names, not StrokeStyle ids",
-    async () => {
-      covers("panel:paged.stroke");
-      const h = await mount();
-      await h.select([h.scene.rect]);
-      const labels = [
-        ...h.field("frameStrokeType").querySelectorAll("option"),
-      ].map((o) => o.textContent ?? "");
-      expect(labels.filter((l) => l.startsWith("StrokeStyle/"))).toEqual([]);
-    },
-  );
+  test("PN-1: Stroke Type option labels are human names, not StrokeStyle ids", async () => {
+    covers("panel:paged.stroke");
+    const h = await mount();
+    await h.select([h.scene.rect]);
+    const labels = [
+      ...h.field("frameStrokeType").querySelectorAll("option"),
+    ].map((o) => o.textContent ?? "");
+    expect(labels.filter((l) => l.startsWith("StrokeStyle/"))).toEqual([]);
+  });
 
   // On an oval alone the field is not live (PN-3). With a rectangle and
   // an oval selected it is, and a write reaching the oval is refused

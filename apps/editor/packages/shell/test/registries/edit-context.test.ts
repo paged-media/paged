@@ -194,16 +194,12 @@ describe("panelBelongsHere (ADR 024)", () => {
     expect(panelBelongsHere(editor("sheet"), "draw.shared")).toBe(false);
   });
 
-  // Finding SH-6 (latent: no two shipped contexts share a panel today).
-  // The rule says the ACTIVE context's own panels stay offered, but the
-  // loop decides at the FIRST claimant: inside the second claimant it
-  // meets the first one's claim (not active) and hides the panel.
-  test.failing(
-    "SH-6: a panel two contexts claim is offered inside each of them",
-    () => {
-      expect(panelBelongsHere(editor("raster"), "draw.shared")).toBe(true);
-    },
-  );
+  // Finding SH-6 (fixed; latent: no two shipped contexts share a panel
+  // today). The ACTIVE context's own panels stay offered, whichever
+  // claimant it is; the loop no longer decides at the first claimant.
+  test("SH-6: a panel two contexts claim is offered inside each of them", () => {
+    expect(panelBelongsHere(editor("raster"), "draw.shared")).toBe(true);
+  });
 
   test("no registry to ask (a standalone mount, no editor): offered", () => {
     expect(panelBelongsHere(null, "draw.stroke")).toBe(true);

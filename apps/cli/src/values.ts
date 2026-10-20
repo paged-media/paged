@@ -55,6 +55,10 @@ export function describeType(t: ValueType): string {
     case "map":
       return `map of ${describeType(t.of)} (JSON)`;
     case "struct":
+      // An open record (no declared fields) is named by its shape, as
+      // `commands` names it; core checks it (NCLI-2).
+      if (Object.keys(t.fields).length === 0)
+        return t.shape ? `${t.shape} (JSON, checked by core)` : "record (JSON)";
       return `record { ${Object.entries(t.fields)
         .map(
           ([k, v]) =>
