@@ -18,7 +18,8 @@
  */
 
 // The right dock's tab strip is an ARIA tablist and a panel's title is a
-// heading (UX audit F-50, ADR 259).
+// heading (UX audit F-50, ADR 259); its tabs fit the dock, and what does
+// not fit is one menu away (F-20, ADR 265).
 
 import { fireEvent } from "@testing-library/react";
 import { afterEach, describe, expect, test } from "bun:test";
@@ -102,5 +103,75 @@ describe("the right dock (F-50)", () => {
     expect(selected(h)).toEqual(["t.a"]);
     await key(h, "Delete");
     expect(tabs(h).map((t) => t.dataset.dockTab)).toEqual(["t.b", "t.c"]);
+  });
+});
+
+/** Make every element report `scroll` px of content in `client` px. */
+function stubWidths(scroll: number, client: number) {
+  const proto = HTMLElement.prototype;
+  const prev = {
+    scroll: Object.getOwnPropertyDescriptor(proto, "scrollWidth"),
+    client: Object.getOwnPropertyDescriptor(proto, "clientWidth"),
+  };
+  Object.defineProperty(proto, "scrollWidth", {
+    configurable: true,
+    get: () => scroll,
+  });
+  Object.defineProperty(proto, "clientWidth", {
+    configurable: true,
+    get: () => client,
+  });
+  return () => {
+    for (const [k, d] of [
+      ["scrollWidth", prev.scroll],
+      ["clientWidth", prev.client],
+    ] as const) {
+      if (d) Object.defineProperty(proto, k, d);
+      else delete (proto as unknown as Record<string, unknown>)[k];
+    }
+  };
+}
+
+describe("the right dock's tabs fit (F-20)", () => {
+  test("an inactive tab shrinks to an ellipsis and names itself in a tooltip; the active one keeps its label", async () => {
+    const h = await mount();
+    const [a, b] = tabs(h);
+    expect(a!.title).toBe("Alpha");
+    expect(b!.title).toBe("Beta");
+    expect(a!.style.flex).toBe("0 0 auto");
+    expect(b!.style.flex).toBe("0 1 auto");
+    expect(b!.style.minWidth).not.toBe("");
+    const label = b!.querySelector<HTMLElement>("[data-dock-tab-label]")!;
+    expect(label.textContent).toBe("Beta");
+    expect(label.style.textOverflow).toBe("ellipsis");
+    expect(label.style.overflow).toBe("hidden");
+    expect(label.style.minWidth).toBe("0");
+  });
+
+  test("tabs that fit need no menu", async () => {
+    const restore = stubWidths(200, 320);
+    const h = await mount();
+    expect(h.root.querySelector("[data-dock-overflow]")).toBeNull();
+    restore();
+  });
+
+  test("tabs that overflow get a More panels menu that lists and opens every tab", async () => {
+    const restore = stubWidths(600, 320);
+    const h = await mount();
+    const more = h.root.querySelector<HTMLElement>("[data-dock-overflow]");
+    expect(more?.getAttribute("aria-label")).toBe("More panels");
+    await h.act(() => {
+      fireEvent.keyDown(more!, { key: "Enter" });
+    });
+    const doc = h.root.ownerDocument;
+    const items = [
+      ...doc.querySelectorAll<HTMLElement>("[data-dock-overflow-item]"),
+    ];
+    expect(items.map((i) => i.textContent)).toEqual(["Alpha", "Beta", "Gamma"]);
+    await h.act(() => {
+      fireEvent.click(items[2]!);
+    });
+    expect(selected(h)).toEqual(["t.c"]);
+    restore();
   });
 });

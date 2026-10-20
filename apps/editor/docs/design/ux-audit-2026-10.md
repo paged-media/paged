@@ -290,6 +290,12 @@ Straight after opening a .docx or .pptx, the canvas title bar shows "Edited", so
 
 **Screenshots:** `F-08-docx-marked-edited.png`
 
+**Partly fixed (2026-10-20, `607de3ce2`).** A PowerPoint deck opens clean, with nothing to undo:
+the importer writes the deck label into the package instead of writing it after the open (slide
+ADR 703 amendment). A Word file still opens "Edited": paged.doc builds the document with
+mutations after the open (styles, grow rules, the pour), which needs a load-time baseline the
+engine does not have yet.
+
 <a id="f-09"></a>
 
 #### F-09 · Problems panel contradicts Publication health; nothing alerts on open
@@ -549,6 +555,10 @@ Opening several panels pushes the first tabs (Properties, Swatches) out of the t
 **Recommendation:** Add an overflow button listing every open tab, and fade the strip's edges.
 
 **Screenshots:** `F-20-dock-tab-overflow.png`, `F-03-xlsx-open-dead-end.png`
+
+**Fixed (2026-10-20, `02c9dfd53`).** Inactive tabs shrink to their icon and an ellipsis with the
+title as tooltip, the active tab keeps its label, and while the strip still overflows a "More
+panels" menu lists every open tab (ADR 265).
 
 <a id="f-21"></a>
 

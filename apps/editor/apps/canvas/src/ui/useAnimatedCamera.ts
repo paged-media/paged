@@ -29,6 +29,12 @@
 // camera updates flow through the same `setCamera` callback the
 // caller uses for direct writes — so the SAB stays the single
 // source of truth for the worker.
+//
+// `useCameraTween` also answers where the camera is heading
+// (`destination()`): the in-flight tween's target, or the camera itself
+// when none runs. A command that steps from "the page in view" (the page
+// keys, the fits) asks it, so a key pressed while the last one is still
+// travelling steps from where that one is going, not from a frame of it.
 
 import { useCallback, useEffect, useLayoutEffect, useRef } from "react";
 import type { Camera } from "@paged-media/client";
@@ -43,7 +49,17 @@ export function useAnimatedCamera(
   current: Camera,
   setCamera: (cam: Camera) => void,
 ) {
+  return useCameraTween(current, setCamera).animateTo;
+}
+
+/** The tween, and where the camera is heading. */
+export function useCameraTween(
+  current: Camera,
+  setCamera: (cam: Camera) => void,
+) {
   const rafRef = useRef<number | null>(null);
+  // The in-flight tween's target; null when none runs.
+  const goalRef = useRef<Camera | null>(null);
   // Track the latest `setCamera` + `current` via refs so the
   // animation callback always reads fresh values without
   // re-subscribing. Written after each commit (a layout effect, so before
@@ -64,6 +80,7 @@ export function useAnimatedCamera(
         cancelAnimationFrame(rafRef.current);
         rafRef.current = null;
       }
+      goalRef.current = null;
     };
   }, []);
 
@@ -74,6 +91,7 @@ export function useAnimatedCamera(
       cancelAnimationFrame(rafRef.current);
       rafRef.current = null;
     }
+    goalRef.current = null;
     const start = currentRef.current;
     // No-op if already at target (within float tolerance).
     if (
@@ -88,6 +106,7 @@ export function useAnimatedCamera(
       setCameraRef.current(target);
       return;
     }
+    goalRef.current = target;
     const t0 = performance.now();
     const step = (now: number) => {
       const t = Math.min(1, (now - t0) / duration);
@@ -101,12 +120,18 @@ export function useAnimatedCamera(
         rafRef.current = requestAnimationFrame(step);
       } else {
         rafRef.current = null;
+        goalRef.current = null;
       }
     };
     rafRef.current = requestAnimationFrame(step);
   }, []);
+  // eslint-disable-next-line no-restricted-syntax -- a hook's result, which callers may compare (ADR 229)
+  const destination = useCallback(
+    (): Camera => goalRef.current ?? currentRef.current,
+    [],
+  );
 
-  return animateTo;
+  return { animateTo, destination };
 }
 
 function easeOutCubic(t: number): number {

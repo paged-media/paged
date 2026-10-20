@@ -19,7 +19,7 @@
 
 // Playground controller (demo build): drives a DemoSession (the stepping
 // interpreter) and renders the demo GUIDE, a card floating over the editor
-// (editor ADR 267).
+// (editor ADR 269).
 //
 // The guide's first view is for anyone: the demo's title, one plain line
 // on what it shows, the step progress with the current step's name, and

@@ -1,4 +1,4 @@
-# ADR 267 — The demo guide floats over the editor, and the script waits behind a disclosure
+# ADR 269 — The demo guide floats over the editor, and the script waits behind a disclosure
 
 - **Status:** Accepted 2026-10-20.
 - **Scope:** `apps/canvas/src/playground/PlaygroundController.tsx`, `guide-prefs.ts`,

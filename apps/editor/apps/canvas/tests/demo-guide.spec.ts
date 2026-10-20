@@ -17,7 +17,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// The demo guide (editor ADR 267) in the real editor: a card floating over
+// The demo guide (editor ADR 269) in the real editor: a card floating over
 // the editor, friendly first (title, a plain line, steps, play / restart),
 // the script behind "Show the script", collapsible to a pill that the
 // next visit remembers, docked clear of the canvas.

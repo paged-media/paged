@@ -96,9 +96,10 @@ describe("Table: states", () => {
     covers("panel:paged.table");
     const h = await mount();
     await enter(h);
-    expect(text(h, "[data-table-cell-address]")).toBe("R0 · C1");
-    expect(text(h, "[data-cell-row]")).toBe("0");
-    expect(text(h, "[data-cell-col]")).toBe("1");
+    // Counted from 1, in words (the wire's row 0, column 1).
+    expect(text(h, "[data-table-cell-address]")).toBe("Row 1, Column 2");
+    expect(text(h, "[data-cell-row]")).toBe("1");
+    expect(text(h, "[data-cell-col]")).toBe("2");
     expect(text(h, "[data-table-dims]")).toBe("2 × 2");
     expect(q<HTMLSelectElement>(h, "[data-cell-fill-select]").value).toBe("");
     expect(q<HTMLSelectElement>(h, "[data-cell-vjustify-select]").value).toBe(
@@ -127,7 +128,7 @@ describe("Table: states", () => {
     await enter(h, 0, 1);
     expect(q<HTMLSelectElement>(h, "[data-cell-fill-select]").value).toBe("");
     await enter(h, 1, 0);
-    expect(text(h, "[data-table-cell-address]")).toBe("R1 · C0");
+    expect(text(h, "[data-table-cell-address]")).toBe("Row 2, Column 1");
     expect(q<HTMLSelectElement>(h, "[data-cell-fill-select]").value).toBe(
       h.scene.red,
     );

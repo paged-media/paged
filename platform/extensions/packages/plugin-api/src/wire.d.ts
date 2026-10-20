@@ -2020,11 +2020,13 @@ export interface LinkSummary {
     uri: string;
     /**
      * panels.md gap 2 — `\"ok\"` when the build resolved + decoded the
-     * link, `\"missing\"` when the renderer fell back to the grey
-     * missing-image placeholder (`ImageLinkMissing` /
-     * `ImageDecodeFailed` diagnostic for this frame). Derived from
-     * the build\'s render diagnostics, so it reflects the SAME
-     * resolution outcome the rendered page shows.
+     * link, `\"missing\"` when the link resolved to nothing and the
+     * renderer drew the grey missing-image placeholder
+     * (`ImageLinkMissing`), `\"undecoded\"` when the link resolved but no
+     * decoder reads its bytes (`ImageDecodeFailed` — an EPS; the frame
+     * paints its own fill, engine ADR 207). Derived from the build\'s
+     * render diagnostics, so it reflects the SAME resolution outcome
+     * the rendered page shows.
      */
     status?: string;
     /**

@@ -242,16 +242,20 @@ export function StatusPill({
   tone,
   children,
   testId,
+  title,
 }: {
   tone: StatusTone;
   children: ReactNode;
   testId?: string;
+  /** Why the pill reads as it does (a tooltip). */
+  title?: string;
 }) {
   const c = STATUS_COLOR[tone];
   return (
     <span
       data-status-pill={testId}
       data-tone={tone}
+      title={title}
       style={{
         display: "inline-flex",
         alignItems: "center",

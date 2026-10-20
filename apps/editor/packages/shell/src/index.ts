@@ -43,6 +43,15 @@ export {
   type FieldCheck,
 } from "./lib/stored-settings";
 export {
+  printOutputFacts,
+  printReadinessLabel,
+  printStandardLabel,
+  printStandardReason,
+  workingProfileLabel,
+  type PrintOutputFacts,
+  type PrintStandard,
+} from "./lib/print-output";
+export {
   clampCamera,
   zoomCameraTo,
   ZOOM_PRESET_SCALES,
@@ -481,6 +490,8 @@ export {
   pluginOverlayLayersContribution,
   renderPreviewShape,
   pageDecorationsContribution,
+  marginGuidesContribution,
+  marginGuides,
   pathEditContribution,
   resizeHandlesContribution,
   rotateHandleContribution,

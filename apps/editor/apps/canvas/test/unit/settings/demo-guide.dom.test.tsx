@@ -17,7 +17,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// The demo guide (editor ADR 267): the playground's card floating over the
+// The demo guide (editor ADR 269): the playground's card floating over the
 // editor. Its first view is the demo's title, a plain line, the steps and
 // play / restart; the script sits behind "Show the script". It collapses
 // to a pill and docks to either bottom corner, and remembers both (and the

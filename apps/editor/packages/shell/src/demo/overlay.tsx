@@ -96,7 +96,7 @@ export function demoResetOverlay(): void {
 }
 
 // ── The guide's corner ────────────────────────────────────────────────────────
-// The playground's demo guide floats in a bottom corner (editor ADR 267); the
+// The playground's demo guide floats in a bottom corner (editor ADR 269); the
 // narration box keeps to the other one so the two never stack. Null: no guide,
 // the box sits bottom-right.
 
