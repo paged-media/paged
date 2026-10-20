@@ -327,9 +327,7 @@ export function duckdbHandle(
       const twins = (await conn.query(
         `SELECT table_name FROM duckdb_tables() WHERE schema_name = 'main'`,
       )) as ArrowLikeTable;
-      const have = new Set(
-        arrowToTextRows(twins).rows.map((r) => r[0] ?? ""),
-      );
+      const have = new Set(arrowToTextRows(twins).rows.map((r) => r[0] ?? ""));
       const swap = sources.filter(
         (s) => have.has(csvTextTwin(s)) && have.has(s),
       );

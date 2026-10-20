@@ -180,7 +180,9 @@ for (const tgz of tarballs) {
       // The face text is set in when a run names none: without it the bin's
       // PDFs come out with blank text.
       if (!has("fonts/Inter.ttf") || !has("fonts/OFL-inter.txt"))
-        fail("fonts/Inter.ttf (and its licence) is missing: the bin has no default face");
+        fail(
+          "fonts/Inter.ttf (and its licence) is missing: the bin has no default face",
+        );
     }
     if (pkg.name === "@paged-media/plugin-sdk") {
       for (const f of files.filter((x) => /\.(js|mjs|d\.ts)$/.test(x))) {

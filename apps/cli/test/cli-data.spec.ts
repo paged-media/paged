@@ -42,10 +42,7 @@ import {
 } from "./helpers";
 
 const DATA = "--plugins=@paged-media/data";
-const SINGLE_RECORD = join(
-  dirname(LONG_RECORD_SET.idml),
-  "single-record.idml",
-);
+const SINGLE_RECORD = join(dirname(LONG_RECORD_SET.idml), "single-record.idml");
 // The version of the @paged-media/data this package resolves (the
 // workspace bundle), read beside its exported manifest.
 const DATA_VERSION = (
@@ -228,7 +225,7 @@ describe("paged merge — InDesign Data Merge oracle (long-record-set)", () => {
       "--out",
       out,
       "--query",
-      "SELECT * FROM \"data\" WHERE false",
+      'SELECT * FROM "data" WHERE false',
       DATA,
     ]);
     expect(none.code, none.out).toBe(1);

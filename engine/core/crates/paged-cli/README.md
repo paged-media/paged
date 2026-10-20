@@ -238,13 +238,13 @@ and takes back what the engine made of it, so any instance answers any call.
 
 `POST /run` takes JSON:
 
-| Field         | Meaning                                                                                    |
-| ------------- | ------------------------------------------------------------------------------------------ |
-| `file`        | the `.paged` or `.idml`, base64 (required)                                                 |
-| `script`      | a `paged.*` script to run first                                                            |
-| `render`      | `{page, dpi?}`: a page (1-based) as PNG                                                    |
+| Field         | Meaning                                                                                     |
+| ------------- | ------------------------------------------------------------------------------------------- |
+| `file`        | the `.paged` or `.idml`, base64 (required)                                                  |
+| `script`      | a `paged.*` script to run first                                                             |
+| `render`      | `{page, dpi?}`: a page (1-based) as PNG                                                     |
 | `export`      | `true` (the `.paged`), a format (`"paged"`, `"pdf"`, `"idml"`), `{format, pdf?}`, or a list |
-| `cmykProfile` | an ICC CMYK profile, base64: this call's working space and PDF/X output intent             |
+| `cmykProfile` | an ICC CMYK profile, base64: this call's working space and PDF/X output intent              |
 
 `export.pdf` is the PDF options as the session protocol spells them (`standard: "pdfx4"`,
 `pageFrom`/`pageTo` 0-based, `outputIntentProfile`, `cropMarks`, `bookmarks`, `tagged`, …).

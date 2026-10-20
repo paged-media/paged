@@ -43,7 +43,7 @@ Rust `paged` bundles: `--font <file.ttf>` names another fallback, `--no-default-
 without one (text no font answers for is then not set, and the run says so). For PDF/X,
 `--cmyk-profile <file.icc>` gives the CMYK working space and output intent:
 
-```sh
+````sh
 npx paged export brochure.idml -o print.pdf --pdf-standard pdfx4 --cmyk-profile CoatedFOGRA39.icc
 ``` It is the program the repository calls
 `paged-node` (`apps/cli`), bundled into `dist/paged.js` with its first-party modules and the
@@ -61,7 +61,7 @@ Claude Code or any MCP client, with nothing deployed:
     "paged": { "command": "npx", "args": ["-y", "@paged-media/paged", "mcp"] }
   }
 }
-```
+````
 
 It serves the tools of the engine's Rust `paged mcp`, with the same names and schemas: a
 library of documents on disk (`--library <dir>`, default `$PAGED_LIBRARY`, else
