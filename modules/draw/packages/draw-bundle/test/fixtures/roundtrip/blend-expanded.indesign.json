@@ -7,13 +7,13 @@
     "script": "scripts/indesign/lib/read-document.jsx",
     "script_sha256": "4486a78fdd3b45a88c6ef6b18911bc34b94f6cf7ddc3c4d433d3d5e256f4dc08",
     "runner": "scripts/indesign/run-roundtrip.sh",
-    "recorded_at": "2026-10-03T17:21:32.392Z",
+    "recorded_at": "2026-10-20T01:21:07.600Z",
     "host_os": "macOS 26.4",
     "pdf_preset": "[Qualitativ hochwertiger Druck]"
   },
   "idml": {
     "path": "packages/draw-bundle/test/fixtures/roundtrip/blend-expanded.idml",
-    "sha256": "c6feadfbe8af0495928a4a27edb1c2b31c650c84de8766a81a694b3de579b8d4"
+    "sha256": "fae98b56224966dbc35401cb207085e3b2e9cf281c610f757c7a7c4f25a4bfe5"
   },
   "units": "pt",
   "coordinates": "page-local, origin top-left of the page, Y down (ruler origin PAGE, zero point 0,0, script measurement unit POINTS); bounds as [minX, minY, maxX, maxY]",
@@ -67,8 +67,8 @@
       "layer": "Layer 1",
       "visible": true,
       "locked": false,
-      "geometricBounds": [337.320157,262.320157,392.679843,317.679843],
-      "visibleBounds": [336.820157,261.820157,393.179843,318.179843],
+      "geometricBounds": [337.320163,262.320163,392.679837,317.679837],
+      "visibleBounds": [336.820163,261.820163,393.179837,318.179837],
       "fill": {"name":"#4000bf","type":"Color","model":"PROCESS","space":"RGB","value":[64,0,191]},
       "fillTint": -1,
       "gradientFillAngle": 0,
@@ -100,10 +100,10 @@
           "closed": true,
           "pathType": "CLOSED_PATH",
           "anchors": [
-            {"anchor":[392.5,280],"left":[392.5,259.2893],"right":[392.5,300.7107]},
-            {"anchor":[375,317.5],"left":[395.7107,317.5],"right":[354.2893,317.5]},
-            {"anchor":[337.5,300],"left":[337.5,320.7107],"right":[337.5,279.2893]},
-            {"anchor":[355,262.5],"left":[334.2893,262.5],"right":[375.7107,262.5]}
+            {"anchor":[392.5,280],"left":[392.5,259.28934],"right":[392.5,300.71066]},
+            {"anchor":[375,317.5],"left":[395.71066,317.5],"right":[354.28934,317.5]},
+            {"anchor":[337.5,300],"left":[337.5,320.71066],"right":[337.5,279.28934]},
+            {"anchor":[355,262.5],"left":[334.28934,262.5],"right":[375.71066,262.5]}
           ]
         }
       ]
@@ -120,8 +120,8 @@
       "layer": "Layer 1",
       "visible": true,
       "locked": false,
-      "geometricBounds": [266.254238,216.254238,313.745762,263.745762],
-      "visibleBounds": [265.754238,215.754238,314.245762,264.245762],
+      "geometricBounds": [266.254226,216.254234,313.745774,263.745774],
+      "visibleBounds": [265.754226,215.754234,314.245774,264.245774],
       "fill": {"name":"#800080","type":"Color","model":"PROCESS","space":"RGB","value":[128,0,128]},
       "fillTint": -1,
       "gradientFillAngle": 0,
@@ -153,10 +153,10 @@
           "closed": true,
           "pathType": "CLOSED_PATH",
           "anchors": [
-            {"anchor":[295,220],"left":[295,206.1929],"right":[295,233.8071]},
-            {"anchor":[310,245],"left":[323.8071,245],"right":[296.1929,245]},
-            {"anchor":[285,260],"left":[285,273.8071],"right":[285,246.1929]},
-            {"anchor":[270,235],"left":[256.1929,235],"right":[283.8071,235]}
+            {"anchor":[295,220],"left":[295,206.19289],"right":[295,233.80711]},
+            {"anchor":[310,245],"left":[323.80713,245],"right":[296.19287,245]},
+            {"anchor":[285,260],"left":[285,273.80713],"right":[285,246.19289]},
+            {"anchor":[270,235],"left":[256.19287,235],"right":[283.80713,235]}
           ]
         }
       ]
@@ -173,8 +173,8 @@
       "layer": "Layer 1",
       "visible": true,
       "locked": false,
-      "geometricBounds": [184.394458,159.394458,245.605542,220.605542],
-      "visibleBounds": [183.894458,158.894458,246.105542,221.105542],
+      "geometricBounds": [184.394464,159.394464,245.605536,220.605536],
+      "visibleBounds": [183.894464,158.894464,246.105536,221.105536],
       "fill": {"name":"#bf0040","type":"Color","model":"PROCESS","space":"RGB","value":[191,0,64]},
       "fillTint": -1,
       "gradientFillAngle": 0,
@@ -206,10 +206,10 @@
           "closed": true,
           "pathType": "CLOSED_PATH",
           "anchors": [
-            {"anchor":[197.5,160],"left":[197.5,153.0964],"right":[197.5,166.9036]},
-            {"anchor":[245,172.5],"left":[251.9036,172.5],"right":[238.0964,172.5]},
-            {"anchor":[232.5,220],"left":[232.5,226.9036],"right":[232.5,213.0964]},
-            {"anchor":[185,207.5],"left":[178.0964,207.5],"right":[191.9036,207.5]}
+            {"anchor":[197.5,160],"left":[197.5,153.09644],"right":[197.5,166.90356]},
+            {"anchor":[245,172.5],"left":[251.90356,172.5],"right":[238.09644,172.5]},
+            {"anchor":[232.5,220],"left":[232.5,226.90356],"right":[232.5,213.09644]},
+            {"anchor":[185,207.5],"left":[178.09644,207.5],"right":[191.90356,207.5]}
           ]
         }
       ]
@@ -259,10 +259,10 @@
           "closed": true,
           "pathType": "CLOSED_PATH",
           "anchors": [
-            {"anchor":[490,340],"left":[490,312.3858],"right":[490,367.6142]},
-            {"anchor":[440,390],"left":[467.6142,390],"right":[412.3858,390]},
-            {"anchor":[390,340],"left":[390,367.6142],"right":[390,312.3858]},
-            {"anchor":[440,290],"left":[412.3858,290],"right":[467.6142,290]}
+            {"anchor":[490,340],"left":[490,312.38577],"right":[490,367.61423]},
+            {"anchor":[440,390],"left":[467.61423,390],"right":[412.38577,390]},
+            {"anchor":[390,340],"left":[390,367.61423],"right":[390,312.38577]},
+            {"anchor":[440,290],"left":[412.38577,290],"right":[467.61423,290]}
           ]
         }
       ]

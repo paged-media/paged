@@ -168,6 +168,10 @@ File ▸ Open (and drop) accept .xlsx and .psd/.png, but they do not open as doc
 
 **Screenshots:** `F-03-xlsx-open-dead-end.png`, `F-03-psd-open-dead-end.png`, `F-03-image-drop-not-placed.png`
 
+**Partly fixed (2026-10-20, `657163fe4`).** A picture dropped on an open document is placed at the
+drop point through Place, with no picker (ADR 258). With no document open, a spreadsheet or a
+picture still fills its panel rather than opening a document.
+
 <a id="f-04"></a>
 
 #### F-04 · "New document…" has no options: always one US Letter page in points
@@ -467,6 +471,11 @@ Layout ▸ Margins and columns…, Ruler guides…, Create guides… and Numberi
 View menu shows their chords and a bundle can rebind them (SH-9). The page keys, the palette's
 right column and the shortcuts panel's grouping are not changed.
 
+**Fixed (2026-10-20, `657163fe4`).** Home, PageUp, PageDown and End are registry bindings onto
+Layout ▸ First / Previous / Next / Last page; the palette's right column shows the chord and
+never the id; the shortcuts panel is grouped by context (command category), so ⌘D reads as
+Place under File and Fill down under Sheet (ADR 257).
+
 <a id="f-18"></a>
 
 #### F-18 · Window menu taxonomy is hard to scan and has duplicates
@@ -610,6 +619,8 @@ Share is disabled (opacity 0.45 on the brand fill), but on the dark header it st
 **Screenshots:** `F-25-ai-unavailable.png`
 
 **Partly fixed (2026-10-19, `89219f88e`).** The AI Assistant's Ask and the Script panel's Ask probe the proxy once per session and, with no service, are disabled and say why before a request is typed (ADR 252; PN-352, PN-355). The palette's "Ask Claude" and "New from a brief…" do not read the probe yet.
+
+**Fixed (2026-10-20, `657163fe4`).** The palette's "Ask Claude" row and File ▸ New from a brief… read the same probe: with no service the row is disabled and says why, and the brief command is hidden in the palette and greyed in the menu (ADR 252 amended).
 
 ### Canvas gestures and text editing
 
@@ -770,6 +781,10 @@ With the Selection tool, a pointer 5–8 pt outside a corner still shows `nesw-r
 **Partly fixed (2026-10-19, `907b1b153`).** One range for every zoom input, 5 % to 4,000 %, held
 where the camera is set (ADR 246); the % field takes the same range. Fit page, Fit spread, Fit
 selection, presets and ruler thinning are not added.
+
+**Fixed (2026-10-20, `657163fe4`).** Fit page in window (⌘0), Fit spread in window (⌥⌘0), Fit
+selection in window (⌥⌘=) and Fit document (⌥⇧⌘0) are commands in View and the zoom drop-down,
+which also lists presets from 25 % to 800 % (ADR 257). Ruler thinning is not changed.
 
 <a id="f-32"></a>
 
@@ -1022,6 +1037,10 @@ After Insert ▸ Word document… (and on open), the centred heading's line coll
 **Partly fixed (2026-10-19, `9e1659754`).** The health counts follow every edit (ADR 248, PN-300,
 PN-304). The heading overlap is not changed.
 
+**Fixed (2026-10-20, `8e5798be6`).** The heading overlap: Word stacks line boxes, so a line after
+a taller one sits the taller line's descent below it; the DOCX lowering adds the difference of
+the two descents to the next paragraph's space before.
+
 <a id="f-45"></a>
 
 #### F-45 · Module frames are labelled with host kinds
@@ -1144,6 +1163,11 @@ every built-in panel has an accessible name (the panel kit's field naming, ADR 2
 icon buttons are named in words, toggle segments say which is on, the Style Options family row
 is a real tablist, and the page-strip arrows are named. The menubar, the dock's tablist, the
 landmarks and the headings remain.
+
+**Fixed (2026-10-20, `d3cfb5a3e`).** F10 focuses the menu bar (already a menubar with arrow
+navigation, ADR 234); the canvas column is the `main` landmark and the docks are
+`complementary`; the right dock's strip is a tablist of tabs over tabpanels; panel titles are
+headings (ADR 259).
 
 <a id="f-51"></a>
 
