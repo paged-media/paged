@@ -1278,44 +1278,66 @@ fn emit_table(
             0.0
         }
     };
+    // The outer cells' own edges ARE the table's border in InDesign: Table
+    // Setup's border writes the outer edges of the outer cells, and a cell
+    // that states its edge (InDesign writes every edge of every cell into
+    // the IDML) is drawn by the cell pass above. A side whose cells all
+    // state that edge takes no second stroke from the table style; a
+    // `[Basic Table]` falls back to `[No Table Style]`'s 1 pt black, and
+    // drawing that over cells whose edges say 0 boxed tables InDesign
+    // shows without a line.
+    let cells_state = side_stated_by_cells(table);
+    let side = |stated: bool, w: f32| if stated { 0.0 } else { w };
     let top_color = effective_color(
         direct.top_color.as_deref(),
         resolved_table.top_border_stroke_color.as_deref(),
     );
-    let top_weight = effective_weight(
-        direct.top_weight,
-        resolved_table.top_border_stroke_weight,
-        top_color.is_some(),
+    let top_weight = side(
+        cells_state.top,
+        effective_weight(
+            direct.top_weight,
+            resolved_table.top_border_stroke_weight,
+            top_color.is_some(),
+        ),
     );
     let top_type = direct.top_type.clone();
     let bot_color = effective_color(
         direct.bottom_color.as_deref(),
         resolved_table.bottom_border_stroke_color.as_deref(),
     );
-    let bot_weight = effective_weight(
-        direct.bottom_weight,
-        resolved_table.bottom_border_stroke_weight,
-        bot_color.is_some(),
+    let bot_weight = side(
+        cells_state.bottom,
+        effective_weight(
+            direct.bottom_weight,
+            resolved_table.bottom_border_stroke_weight,
+            bot_color.is_some(),
+        ),
     );
     let bot_type = direct.bottom_type.clone();
     let left_color = effective_color(
         direct.left_color.as_deref(),
         resolved_table.left_border_stroke_color.as_deref(),
     );
-    let left_weight = effective_weight(
-        direct.left_weight,
-        resolved_table.left_border_stroke_weight,
-        left_color.is_some(),
+    let left_weight = side(
+        cells_state.left,
+        effective_weight(
+            direct.left_weight,
+            resolved_table.left_border_stroke_weight,
+            left_color.is_some(),
+        ),
     );
     let left_type = direct.left_type.clone();
     let right_color = effective_color(
         direct.right_color.as_deref(),
         resolved_table.right_border_stroke_color.as_deref(),
     );
-    let right_weight = effective_weight(
-        direct.right_weight,
-        resolved_table.right_border_stroke_weight,
-        right_color.is_some(),
+    let right_weight = side(
+        cells_state.right,
+        effective_weight(
+            direct.right_weight,
+            resolved_table.right_border_stroke_weight,
+            right_color.is_some(),
+        ),
     );
     let right_type = direct.right_type.clone();
 
@@ -1931,6 +1953,56 @@ fn normalise_stroke_type(name: Option<&str>) -> &str {
     let Some(name) = name else { return "Solid" };
     let suffix = name.strip_prefix("StrokeStyle/$ID/").unwrap_or(name);
     suffix.strip_prefix("Canned ").unwrap_or(suffix)
+}
+
+/// Which sides of `table` its outer cells state themselves: every cell on
+/// that side carries the edge's weight inline. Such a side is drawn by
+/// the cells, and the table's border (from its style) yields to them.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub(super) struct SidesStated {
+    pub top: bool,
+    pub bottom: bool,
+    pub left: bool,
+    pub right: bool,
+}
+
+pub(super) fn side_stated_by_cells(table: &paged_model::Table) -> SidesStated {
+    let rows = table
+        .rows
+        .len()
+        .max((table.header_row_count + table.body_row_count + table.footer_row_count) as usize)
+        as u32;
+    let cols = table.columns.len().max(table.column_count as usize) as u32;
+    if rows == 0 || cols == 0 {
+        return SidesStated::default();
+    }
+    // Each side: (any cell on it, every cell on it states the edge).
+    let mut seen = [false; 4];
+    let mut all = [true; 4];
+    for cell in &table.cells {
+        let Some((c, r)) = cell.coords() else {
+            continue;
+        };
+        let (rs, cs) = (cell.row_span.max(1), cell.column_span.max(1));
+        let sides = [
+            (r == 0, cell.top_edge_stroke_weight),
+            (r + rs >= rows, cell.bottom_edge_stroke_weight),
+            (c == 0, cell.left_edge_stroke_weight),
+            (c + cs >= cols, cell.right_edge_stroke_weight),
+        ];
+        for (k, (on, w)) in sides.into_iter().enumerate() {
+            if on {
+                seen[k] = true;
+                all[k] &= w.is_some();
+            }
+        }
+    }
+    SidesStated {
+        top: seen[0] && all[0],
+        bottom: seen[1] && all[1],
+        left: seen[2] && all[2],
+        right: seen[3] && all[3],
+    }
 }
 
 /// Emit a horizontal table-edge segment of length `length` starting

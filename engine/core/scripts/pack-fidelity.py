@@ -23,8 +23,10 @@ Selection follows the corpus's rules:
 
 Per pack, as the corpus harness does: fonts from
 `config/overrides/<slug>/fonts.sh` (else `_default/fonts.sh`), render through
-`paged-inspect --render` at the DPI, rasterise the reference with `pdftoppm`
-(Coated FOGRA39, the renderer's default), `paged-diff` every page, and for a
+`paged-inspect --render` at the DPI, rasterise the reference with `pdftoppm`,
+both through one CMYK profile (Coated FOGRA39 unless PAGED_CMYK_PROFILE names
+another; the render takes it as `--cmyk-profile`, overriding the profile the
+document declares), `paged-diff` every page, and for a
 `gated` pack check `config/fidelity-thresholds.json`.
 
 Environment:
@@ -35,7 +37,7 @@ Environment:
     PAGED_PACK_DPI          render + rasterise DPI (default 144)
     PAGED_PACK_JOBS         packs in parallel (default: half the CPUs)
     PAGED_PACK_TIMEOUT      seconds per render (default 900)
-    PAGED_CMYK_PROFILE      CMYK profile for pdftoppm (default: Adobe FOGRA39)
+    PAGED_CMYK_PROFILE      CMYK profile for the render and pdftoppm (default: Adobe FOGRA39)
     PAGED_PACK_GATE=advisory  report gated failures but exit 0
     CARGO_TARGET_DIR        where paged-inspect / paged-diff are built
 
@@ -187,6 +189,13 @@ def run_pack(pack: dict, ctx: dict) -> dict:
     default_font, flags = font_flags(corpus, slug)
     cmd = [str(ctx["inspect"]), str(idml), "--render", str(out / "cand.png")]
     cmd += ["--default-font", default_font, *flags, "--dpi", str(ctx["dpi"])]
+    # The reference is rasterised through `icc` below, so the render goes
+    # through it too. Left alone, the renderer takes the document's
+    # declared profile (U.S. Web Coated SWOP, say) while pdftoppm reads the
+    # PDF's DeviceCMYK through FOGRA39, and every flat CMYK area differs
+    # by the two profiles: a 30 % black measured meanΔE 4.3 on its own.
+    if ctx["icc"]:
+        cmd += ["--cmyk-profile", str(ctx["icc"])]
     try:
         r = subprocess.run(
             cmd, cwd=CORE, stdout=log, stderr=subprocess.STDOUT, timeout=ctx["timeout"]
