@@ -69,6 +69,7 @@ export type {
   StructField,
   ValueTypeKind,
   PropertySchema,
+  IdmlSpelling,
   ContentSchema,
   ObjectErrorCode,
   ObjectValue,

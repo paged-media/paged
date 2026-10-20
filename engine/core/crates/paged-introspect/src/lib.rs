@@ -32,6 +32,7 @@
 
 pub mod catalog;
 pub mod descriptor;
+pub mod object_schema;
 pub mod schema;
 pub mod tree;
 pub mod virtual_paths;

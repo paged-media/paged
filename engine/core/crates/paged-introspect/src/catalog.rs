@@ -120,6 +120,12 @@ pub struct ApiCatalog {
     /// op-backed virtual paths `Mutation::Set` resolves. `settablePaths`
     /// stays the name projection of the element rows.
     pub property_schemas: Vec<crate::virtual_paths::SchemaRow>,
+    /// Extensions ADR 332 — the same rows in the plugin contract's
+    /// `PropertySchema` shape, keyed by OBJECT kind (`frame`, `story`,
+    /// `style:paragraph`, …): what `host.objects.schema(kind)` and
+    /// `paged.schema(kind)` answer, verbatim. Operation rows are absent.
+    pub object_schemas:
+        std::collections::BTreeMap<String, Vec<crate::object_schema::ObjectSchemaRow>>,
 }
 
 /// One settable path that answers to two names.
@@ -146,6 +152,7 @@ pub fn api_catalog() -> ApiCatalog {
         elements: elements(),
         path_aliases: path_aliases(),
         property_schemas: crate::virtual_paths::property_schemas(),
+        object_schemas: crate::object_schema::object_schemas(),
     }
 }
 
@@ -275,7 +282,7 @@ fn host_functions() -> Vec<HostFn> {
         f!("paged.query", "(selector)", "string[] JSON", "read",
            "Canonical addresses of every object a selector matches, document order (ADR 131): `page:#3 > frame`, `frame[name=\"price\"]`, `[label.x-paged:oid=a1b2]`, `textFrame[style=Price]` (a style matches a page item's object style and, on a text frame or story, the paragraph and character styles its story applies), unions with `,`. Throws SyntaxError (with the offset) on a malformed selector. A selector naming plugin: kinds or objects is evaluated by the host's object registry and returns a Promise of the same JSON."),
         f!("paged.schema", "(addressOrKind)", "PropertySchema[] JSON", "read",
-           "The typed property schema rows (ADR 132) of an address's kind (frame:u1, swatch:Color/Red) or a kind name (frame, page). A plugin: address or kind asks the host's object registry: a Promise of its PropertySchema[] JSON."),
+           "The typed property schema rows (ADR 132) of an address's object kind (frame:u1, swatch:Color/Red, style:paragraph/<id>) or a kind name (frame, story, style:paragraph), in the plugin contract's PropertySchema shape: the catalog's objectSchemas rows, the same ones host.objects.schema answers (extensions ADR 332). A plugin: address or kind asks the host's object registry: a Promise of its PropertySchema[] JSON."),
         f!("paged.invoke", "(id, args?)", "Promise<command result JSON>", "write",
            "Run a typed command — core.<op> (every catalog operation, args as the op's typed struct; id positions take addresses) or a plugin's — through the host's object registry (RequestHostObjects invoke): a Promise of its result JSON ({ created, undoSteps } for a core command). Commands live in the host's registry only: with no host it throws code noHost; a refusal rejects with .code. Inside paged.batch use { op: \"invoke\", id, args, handle? }."),
         f!("paged.commands", "(owner?)", "Promise<CommandInfo[] JSON>", "read",

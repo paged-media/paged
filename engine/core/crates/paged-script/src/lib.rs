@@ -5008,16 +5008,20 @@ fn paged_schema(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResul
             ctx,
         );
     }
+    // Extensions ADR 332 — the rows of the target's OBJECT kind, in the
+    // plugin contract's shape: what `host.objects.schema` answers.
     let kind = match paged_wire::Address::parse(&target) {
         Ok(address) => with_model(|m| m.target_of(&address))
-            .map(|t| t.address_kind().to_string())
+            .map(|t| match t {
+                paged_wire::VirtualTarget::Style { family, .. } => {
+                    format!("style:{}", family.as_str())
+                }
+                t => t.address_kind().to_string(),
+            })
             .unwrap_or_else(|_| address.kind().prefix().to_string()),
         Err(_) => target,
     };
-    let rows: Vec<_> = paged_introspect::virtual_paths::property_schemas()
-        .into_iter()
-        .filter(|r| r.address_kind == kind)
-        .collect();
+    let rows = paged_introspect::object_schema::object_schemas_for(&kind);
     Ok(JsValue::from(js_string!(
         serde_json::to_string(&rows).unwrap_or_default()
     )))

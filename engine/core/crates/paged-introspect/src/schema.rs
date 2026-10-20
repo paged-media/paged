@@ -107,6 +107,8 @@ pub enum RefKind {
     /// Any page item (an opacity mask's artwork): its `Self` id or an
     /// address (`rectangle:<id>`, `frame:<id>`).
     PageItem,
+    /// A style of the target's own family (a definition's `basedOn`).
+    Style,
 }
 
 /// The `paged_mutate::Value` variant the apply layer takes, spelled as

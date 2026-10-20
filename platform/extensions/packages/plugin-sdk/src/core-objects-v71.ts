@@ -28,16 +28,15 @@
 //            insertPage / insertFrame / insertTextFrame / insertOval
 //   delete   the matching delete op (core-ops.ts)
 //
-// and the rows are the vendored catalog's `propertySchemas`
-// (core-schema.ts `coreSchema71`). What core does NOT model as a property
-// stays on the pre-71 seam, which this one wraps: story `content` and its
-// counts, the `labels` map, page `index`, doc `pageCount` / `documentName`
-// / `dirty`, swatch `swatchKind`, style `basedOn`, spread and
-// master `label` / `pageCount`; and the two wire paths core's catalog
-// gives no row (CORE_ROWLESS_PATHS: `tableRowCount`, `tableColumnCount`),
-// which `RequestGet` cannot read. (`nextTextFrame` / `previousTextFrame`
-// became catalog rows in core 15f51e3, with `imageBytes`, `opacityMask`
-// and the indexed `points[i].*` rows.)
+// and the rows are the vendored catalog's `objectSchemas`, served as they
+// are (core-schema.ts `coreSchema71`; extensions ADR 332): the SDK adds no
+// row. The derived reads it used to add from other wire reads (story
+// counts and `content`, page `index`, doc `pageCount` / `dirty`, swatch
+// `swatchKind`, style `basedOn`, spread and master `label` / `pageCount`,
+// the table counts) are core's rows now and go through `RequestGet` like
+// every other row. One read stays on the pre-71 seam, which this one
+// wraps: the whole `labels` map (`labels` with no key, the read of the
+// `labels[]` row as one record), which no wire `Value` carries.
 // Labels and the commit go through it too (they are the same ops at 71).
 
 import type {
@@ -77,19 +76,9 @@ const refuse = (code: ObjectErrorCode, reason: string): ObjectValue => ({
   reason,
 });
 
-/** Paths the SDK serves on top of core's rows (core has no such property). */
-const EXTRA: Record<string, ReadonlySet<string>> = {
-  doc: new Set(["labels", "pageCount", "documentName", "dirty"]),
-  page: new Set(["labels", "index"]),
-  frame: new Set(["labels"]),
-  story: new Set(["characterCount", "paragraphCount", "overset", "content"]),
-  swatch: new Set(["swatchKind"]),
-  // A style's `name` is core's (the `rename<Family>Style` row, finding
-  // PN-168: served here it fell to the pre-71 table, which writes no name).
-  style: new Set(["basedOn"]),
-  spread: new Set(["label", "pageCount"]),
-  master: new Set(["label", "pageCount"]),
-};
+/** Reads the pre-71 seam answers: the whole label map of a label host
+ *  (`labels`, the `labels[]` row read as one record). Not schema rows. */
+const WHOLE_LABELS: ReadonlySet<string> = new Set(["doc", "page", "frame"]);
 
 const MORE_KINDS: ObjectKindInfo[] = [
   {
@@ -302,17 +291,11 @@ export function createCoreObjectsV71(
     kind.startsWith("style:") ? "style" : kind;
 
   function rowsOf(kind: string): ReadonlyMap<string, CoreRow71> {
-    const all = coreSchema71();
-    if (kind !== "style") return all.get(kind) ?? new Map();
-    const union = new Map<string, CoreRow71>();
-    for (const f of Object.keys(STYLE_CREATE))
-      for (const [p, r] of all.get(`style:${f}`) ?? [])
-        if (!union.has(p)) union.set(p, r);
-    return union;
+    return coreSchema71().get(kind) ?? new Map();
   }
 
   const extra = (kind: string, path: string): boolean =>
-    EXTRA[baseOf(kind)]?.has(path) ?? false;
+    path === "labels" && WHOLE_LABELS.has(baseOf(kind));
 
   async function swatchSelfId(name: string): Promise<string | null> {
     const list = await collection<{ selfId: string; name: string }>("swatches");
@@ -343,6 +326,9 @@ export function createCoreObjectsV71(
         await collection<{ selfId: string; characterCount: number }>("stories")
       ).find((x) => x.selfId === a.id);
       if (!s) return formatAddress(a); // core answers "names nothing"
+      // The reserved `content` path reads and writes a whole story itself
+      // (an empty one has no range to name).
+      if (row.schema.path === "content") return formatAddress(a);
       return s.characterCount > 0
         ? formatAddress({
             kind: "storyRange",
@@ -394,14 +380,7 @@ export function createCoreObjectsV71(
     },
 
     schema(kind) {
-      const base = baseOf(kind);
-      const rows = [...rowsOf(kind).values()].map((r) => r.schema);
-      const have = new Set(rows.map((r) => r.path));
-      const extras = v70
-        .schema(base)
-        .filter((r) => EXTRA[base]?.has(r.path) && !have.has(r.path))
-        .map((r) => ({ ...r, addressKind: base }));
-      return [...rows, ...extras];
+      return [...rowsOf(kind).values()].map((r) => r.schema);
     },
 
     async get(a, path) {

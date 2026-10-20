@@ -50,11 +50,4 @@ export const KNOWN_FINDINGS: Readonly<Record<string, Finding>> = {
       },
     ]),
   ),
-  "read:paged.schema boa": {
-    id: "PAR-3",
-    actual:
-      "paged.schema(kind) answers the engine catalog's rows (access, wire, idml; no since) while host.objects.schema and editor.schema answer the object registry's (since; no access, wire, idml)",
-    expected:
-      "one PropertySchema row shape for a kind on every surface (ADR 323 names one type)",
-  },
 };

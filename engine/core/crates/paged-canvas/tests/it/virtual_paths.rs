@@ -1195,3 +1195,200 @@ fn null_unlinks_releases_and_clears_content() {
         Value::Text("Smooth".into())
     );
 }
+
+/// Extensions ADR 332 — every derived row reads, on its target, what the
+/// collection the plugin SDK used to read it from reports, and a `Set`
+/// on one is refused as read-only.
+#[test]
+fn every_derived_row_reads_what_its_collection_reports() {
+    use paged_introspect::virtual_paths::DERIVED_PATHS;
+    let (mut m, t) = build();
+    let spread = m.spreads().into_iter().next().expect("a spread");
+    let page = m
+        .pages()
+        .into_iter()
+        .find(|p| p.self_id == t.page)
+        .expect("the page");
+    let master = m
+        .master_pages()
+        .into_iter()
+        .find(|p| p.self_id == t.master)
+        .expect("the master");
+    let story = m
+        .stories()
+        .into_iter()
+        .find(|s| s.self_id == t.story)
+        .expect("the story");
+    let swatch = m
+        .swatches()
+        .into_iter()
+        .find(|s| s.self_id == t.swatch)
+        .expect("the swatch");
+    let n = |n: u32| Value::Length(Some(n as f32));
+    let spread_target = VirtualTarget::Spread {
+        spread_id: spread.self_id.clone(),
+    };
+    let story_target = VirtualTarget::Story {
+        story_id: t.story.clone(),
+    };
+    let table_target = VirtualTarget::Table {
+        story_id: t.table.0.clone(),
+        table_id: t.table.1.clone(),
+    };
+    let mut checked = 0usize;
+    for row in DERIVED_PATHS {
+        let (target, want): (VirtualTarget, Option<Value>) = match (row.address_kind, row.path) {
+            ("doc", "pageCount") => (t.doc.clone(), Some(n(m.pages().len() as u32))),
+            ("doc", "dirty") => (t.doc.clone(), Some(Value::Bool(m.document_meta().dirty))),
+            ("page", "index") => (
+                VirtualTarget::Page {
+                    page_id: t.page.clone(),
+                },
+                Some(n(page.index)),
+            ),
+            ("spread", "label") => (
+                spread_target.clone(),
+                Some(Value::Text(spread.label.clone())),
+            ),
+            ("spread", "pageCount") => (spread_target.clone(), Some(n(spread.page_count))),
+            ("master", "label") => (
+                VirtualTarget::Master {
+                    master_id: t.master.clone(),
+                },
+                Some(Value::Text(master.label.clone())),
+            ),
+            ("master", "pageCount") => (
+                VirtualTarget::Master {
+                    master_id: t.master.clone(),
+                },
+                Some(n(master.page_count)),
+            ),
+            ("story", "characterCount") => (story_target.clone(), Some(n(story.character_count))),
+            ("story", "paragraphCount") => (story_target.clone(), Some(n(story.paragraph_count))),
+            ("story", "overset") => (story_target.clone(), Some(Value::Bool(story.overset))),
+            ("swatch", "swatchKind") => (
+                VirtualTarget::Swatch {
+                    swatch_id: t.swatch.clone(),
+                },
+                Some(Value::Text(swatch.kind.clone())),
+            ),
+            ("table", _) => (table_target.clone(), None),
+            ("style", "basedOn") => {
+                // Every family's definition answers it; probed on each.
+                for (family, id) in &t.styles {
+                    let target = VirtualTarget::Style {
+                        family: *family,
+                        style_id: id.clone(),
+                    };
+                    let collection = match family {
+                        StyleFamily::Paragraph => paged_mutate::StyleCollection::Paragraph,
+                        StyleFamily::Character => paged_mutate::StyleCollection::Character,
+                        StyleFamily::Object => paged_mutate::StyleCollection::Object,
+                        StyleFamily::Cell => paged_mutate::StyleCollection::Cell,
+                        StyleFamily::Table => paged_mutate::StyleCollection::Table,
+                    };
+                    let want = m
+                        .style_properties(collection, id)
+                        .and_then(|p| p.based_on)
+                        .unwrap_or_default();
+                    assert_eq!(
+                        m.get_property(&target, "basedOn"),
+                        Ok(Value::Text(want)),
+                        "{family:?} basedOn"
+                    );
+                }
+                let (family, id) = t.styles.first().expect("a style");
+                (
+                    VirtualTarget::Style {
+                        family: *family,
+                        style_id: id.clone(),
+                    },
+                    None,
+                )
+            }
+            other => panic!("derived row {other:?} has no probe here"),
+        };
+        let label = format!("{} {}", row.address_kind, row.path);
+        let read = m
+            .get_property(&target, row.path)
+            .unwrap_or_else(|e| panic!("{label}: {e}"));
+        if let Some(want) = want {
+            assert_eq!(read, want, "{label}");
+        }
+        let set = Mutation::Set {
+            address: target.clone().into(),
+            path: row.path.to_string(),
+            value: read.clone(),
+        };
+        let refused = m.apply_mutation(&set).expect_err(&label);
+        assert!(
+            format!("{refused:?}").contains("read-only"),
+            "{label}: {refused:?}"
+        );
+        checked += 1;
+    }
+    assert_eq!(checked, DERIVED_PATHS.len());
+    // A freshly loaded document is clean; an edit makes it dirty.
+    let mut fresh = CanvasModel::load("vp", &fixture("annual-base.idml"), CanvasOptions::default())
+        .expect("load annual-base");
+    let doc = VirtualTarget::Doc;
+    assert_eq!(fresh.get_property(&doc, "dirty"), Ok(Value::Bool(false)));
+    fresh
+        .apply_mutation(&Mutation::Set {
+            address: VirtualTarget::Swatch {
+                swatch_id: t.swatch.clone(),
+            }
+            .into(),
+            path: "tint".into(),
+            value: Value::Length(Some(50.0)),
+        })
+        .expect("a swatch write");
+    assert_eq!(fresh.get_property(&doc, "dirty"), Ok(Value::Bool(true)));
+}
+
+/// Extensions ADR 332 — the reserved `content` path: a story's text and a
+/// range's read; a write replaces the characters (paragraphs split on
+/// `\n`) in one undo step; `null` empties them. The probe story ends in
+/// an empty paragraph, which sits past its last character: a text write
+/// cannot address it (offsets count characters, not paragraph marks), so
+/// it stays — what the SDK's `deleteRange` + `insertText` did before.
+#[test]
+fn content_reads_writes_and_undoes_as_one_step() {
+    let (mut m, t) = build();
+    let story = VirtualTarget::Story {
+        story_id: t.story.clone(),
+    };
+    let before = m.get_property(&story, "content").expect("content");
+    assert_eq!(m.get_property(&story, "text"), Ok(before.clone()));
+    let Value::Text(before_text) = &before else {
+        panic!("content is text: {before:?}")
+    };
+    assert!(before_text.ends_with('\n'), "{before_text:?}");
+    let set = |m: &mut CanvasModel, target: &VirtualTarget, v: Value| {
+        m.apply_mutation(&Mutation::Set {
+            address: target.clone().into(),
+            path: "content".into(),
+            value: v,
+        })
+        .unwrap_or_else(|e| panic!("set content: {e:?}"));
+    };
+    let text = |s: &str| Ok(Value::Text(s.into()));
+    set(&mut m, &story, Value::Text("Hello\nworld".into()));
+    assert_eq!(m.get_property(&story, "content"), text("Hello\nworld\n"));
+    let range = VirtualTarget::Element {
+        element_id: ElementId::StoryRange {
+            story_id: t.story.clone(),
+            start: 0,
+            end: 5,
+        },
+    };
+    assert_eq!(m.get_property(&range, "content"), text("Hello"));
+    set(&mut m, &range, Value::Text("Howdy".into()));
+    assert_eq!(m.get_property(&story, "content"), text("Howdy\nworld\n"));
+    m.undo();
+    assert_eq!(m.get_property(&story, "content"), text("Hello\nworld\n"));
+    m.undo();
+    assert_eq!(m.get_property(&story, "content"), Ok(before));
+    set(&mut m, &story, Value::Length(None));
+    assert_eq!(m.get_property(&story, "content"), text("\n"));
+}

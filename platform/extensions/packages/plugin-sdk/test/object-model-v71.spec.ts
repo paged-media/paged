@@ -36,9 +36,10 @@ import { createCoreObjects } from "../src/core-objects";
 import { codeOfEngineRefusal } from "../src/core-objects-v71";
 import {
   CORE_CATALOG_ROWS,
+  CORE_OBJECT_SCHEMAS,
   CORE_PATHS,
-  CORE_ROWLESS_PATHS,
   coreSchema71,
+  normalizeCoreType,
 } from "../src/core-schema";
 import { assetFromBytes, validateValue } from "../src/object-schema";
 import { createHeadlessHost, type HeadlessHost } from "../src/harness";
@@ -418,8 +419,9 @@ describe("protocol 71 — schemas come from core's catalog", () => {
     const rowless = [...wire].filter((p) => !catalogPaths.has(p));
     // pluginMetadata is the label door (`labels[key]` rows), not a value
     // Operations (path edits) and the label door have no value row; the
-    // catalog lists a few paths under their Boa alias; four wire paths
-    // have no row in core's catalog at all (CORE_ROWLESS_PATHS).
+    // catalog lists a few paths under their Boa alias. Every other wire
+    // path is a row: the four read-only table counts are the table's
+    // derived rows since extensions ADR 332.
     const aliases = new Map(
       (
         JSON.parse(
@@ -442,15 +444,20 @@ describe("protocol 71 — schemas come from core's catalog", () => {
     const unexplained = rowless.filter(
       (p) => !ops.has(p) && !catalogPaths.has(aliases.get(p) ?? ""),
     );
-    expect(unexplained.sort()).toEqual([...CORE_ROWLESS_PATHS].sort());
     // (`nextTextFrame` / `previousTextFrame` became catalog rows in core 15f51e3;
     // the band counts joined the read-only, unadvertised counts in 0.71.13)
-    expect([...CORE_ROWLESS_PATHS].sort()).toEqual([
+    expect(unexplained).toEqual([]);
+    const table = coreSchema71().get("table")!;
+    for (const p of [
       "tableColumnCount",
       "tableFooterRowCount",
       "tableHeaderRowCount",
       "tableRowCount",
-    ]);
+    ])
+      expect(table.get(p)?.schema, p).toMatchObject({
+        access: "derived",
+        type: { kind: "number", integer: true },
+      });
     const catalog = JSON.parse(
       readFileSync(
         fileURLToPath(
@@ -971,5 +978,60 @@ describe("protocol fallback — below 71 the interim table answers", () => {
       code: "unmapped",
     });
     expect(sent).toEqual([]);
+  });
+});
+
+describe("one row shape (extensions ADR 332): the catalog's objectSchemas are the engine's rows in the contract's spelling", () => {
+  it("every value row of propertySchemas is a contract row of its object kind, typed as the SDK typed it", () => {
+    const objectKind = (k: string): string =>
+      k === "storyRange" ? "story" : k === "group" ? "frame" : k;
+    const aliases = new Map(
+      (
+        JSON.parse(
+          readFileSync(
+            fileURLToPath(
+              new URL("../../plugin-api/src/catalog.json", import.meta.url),
+            ),
+            "utf8",
+          ),
+        ) as { pathAliases: { name: string; wire: string }[] }
+      ).pathAliases.map((a) => [a.name, a.wire]),
+    );
+    let checked = 0;
+    for (const r of CORE_CATALOG_ROWS) {
+      const type = normalizeCoreType(r.type);
+      if (!type) continue;
+      const path = (aliases.get(r.path) ?? r.path).replace(/\[[^\]]*\]/g, "[]");
+      const kind = r.addressKind === "style" ? "style" : objectKind(r.addressKind);
+      const row = CORE_OBJECT_SCHEMAS[kind]?.find((x) => x.path === path);
+      expect(row, `${kind} ${path}`).toBeDefined();
+      const want =
+        path === "content" ? { kind: "text", multiline: true } : type;
+      expect(row!.type, `${kind} ${path}`).toEqual(want as never);
+      expect(row!.addressKind).toBe(r.addressKind);
+      expect(row!.wire).toBe(r.wire);
+      expect(row!.access).toBe(r.access ?? "readWrite");
+      expect("since" in row!, `${kind} ${path} carries since`).toBe(false);
+      checked++;
+    }
+    expect(checked).toBeGreaterThan(400);
+  });
+
+  it("host.objects.schema serves the catalog rows verbatim: no SDK row, no since", () => {
+    for (const [kind, rows] of Object.entries(CORE_OBJECT_SCHEMAS)) {
+      const served = [...(coreSchema71().get(kind)?.values() ?? [])].map(
+        (r) => r.schema,
+      );
+      expect(served, kind).toEqual(rows as never);
+    }
+    const para = [...coreSchema71().get("style:paragraph")!.values()];
+    expect(para.length).toBeGreaterThan(40);
+    for (const r of para)
+      expect(r.schema.appliesTo, r.schema.path).toContain("paragraph");
+    const swatch = coreSchema71().get("swatch")!;
+    expect(swatch.get("swatchKind")!.schema).toMatchObject({
+      access: "derived",
+      type: { kind: "enum" },
+    });
   });
 });
