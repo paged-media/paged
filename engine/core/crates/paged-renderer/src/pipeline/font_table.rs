@@ -181,7 +181,8 @@ pub(super) struct FontMetrics {
     /// `OS/2.sxHeight`, fraction of em.
     pub(super) x_height: Option<f32>,
     /// The face's ascent as InDesign takes it, fraction of em: its
-    /// `hhea.ascender`, or a CJK face's own measure (`cjk_ascent_descent`).
+    /// `OS/2.sTypoAscender` (`typo_ascent_descent`), or a CJK face's own
+    /// measure (`cjk_ascent_descent`).
     /// Always present.
     pub(super) ascender: f32,
     /// The matching descent, fraction of em, stored as a POSITIVE distance
@@ -787,12 +788,10 @@ pub(super) fn parse_font_metrics(bytes: &[u8]) -> Option<FontMetrics> {
     if upem <= 0.0 {
         return None;
     }
-    // `hhea.descender` is negative (below the baseline); store the
+    // The descender is negative (below the baseline); store the
     // magnitude so the leading-split math reads naturally.
-    let (ascender, descender) = cjk_ascent_descent(&face).unwrap_or((
-        face.ascender() as f32 / upem,
-        (face.descender() as f32 / upem).abs(),
-    ));
+    let (ascender, descender) =
+        cjk_ascent_descent(&face).unwrap_or_else(|| typo_ascent_descent(&face, upem));
     Some(FontMetrics {
         cap_height: face.capital_height().map(|v| v as f32 / upem),
         x_height: face.x_height().map(|v| v as f32 / upem),
@@ -802,9 +801,28 @@ pub(super) fn parse_font_metrics(bytes: &[u8]) -> Option<FontMetrics> {
     })
 }
 
+/// A face's ascent and descent as InDesign takes them, fractions of em:
+/// `OS/2.sTypoAscender` / `sTypoDescender`, whatever `hhea` says, with
+/// `hhea` only for a face without a usable `OS/2`. A 127 pt Roboto Bold
+/// headline (`hhea` 1900, typo 1536 of 2048) in an `AscentOffset` frame
+/// sits with its baseline 95.0 pt below the frame's top in InDesign's PDF:
+/// typo gives 95.25, `hhea` 117.8. Every face measured before (Minion Pro,
+/// Open Sans, Lora) states the same value in both tables.
+fn typo_ascent_descent(face: &ttf_parser::Face, upem: f32) -> (f32, f32) {
+    match (face.typographic_ascender(), face.typographic_descender()) {
+        (Some(a), Some(d)) if a > 0 && i32::from(a) - i32::from(d) > 0 => {
+            (f32::from(a) / upem, (f32::from(d) / upem).abs())
+        }
+        _ => (
+            face.ascender() as f32 / upem,
+            (face.descender() as f32 / upem).abs(),
+        ),
+    }
+}
+
 /// A CJK face's ascent and descent as InDesign takes them (fractions of
 /// em), where its `hhea` says something else; `None` for any other face,
-/// whose `hhea` InDesign uses as it stands. Asked of InDesign 20.0.1
+/// whose `typo_ascent_descent` InDesign uses. Asked of InDesign 20.0.1
 /// (`tools/indesign-export/cjk-first-baseline-probe`: the first baseline
 /// of a 30 pt frame, `Ascent` offset, and the ascent and descent it
 /// reports):
