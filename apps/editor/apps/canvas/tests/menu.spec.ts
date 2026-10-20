@@ -47,23 +47,24 @@ test.describe("Phase 4 — menu via commands", () => {
   test("AC-MENU-1 — File / Edit / View menu buttons render @feat:editor-shell.menus @level:happy", async ({
     page,
   }) => {
-    // The MenuBar renders one top-level button per registered
+    // The MenuBar renders one top-level trigger (a menubar `menuitem`,
+    // editor ADR 234) per registered
     // top-level menu path. With File/Open, Edit/Undo+Redo, and
     // View/Zoom* registered, all three menu buttons must appear.
     await expect(
       page
         .locator('nav[aria-label="Main menu"]')
-        .getByRole("button", { name: "File" }),
+        .getByRole("menuitem", { name: "File", exact: true }),
     ).toBeVisible();
     await expect(
       page
         .locator('nav[aria-label="Main menu"]')
-        .getByRole("button", { name: "Edit" }),
+        .getByRole("menuitem", { name: "Edit", exact: true }),
     ).toBeVisible();
     await expect(
       page
         .locator('nav[aria-label="Main menu"]')
-        .getByRole("button", { name: "View" }),
+        .getByRole("menuitem", { name: "View", exact: true }),
     ).toBeVisible();
   });
 
@@ -72,7 +73,7 @@ test.describe("Phase 4 — menu via commands", () => {
   }) => {
     await page
       .locator('nav[aria-label="Main menu"]')
-      .getByRole("button", { name: "View" })
+      .getByRole("menuitem", { name: "View", exact: true })
       .click();
     // Radix DropdownMenuContent renders into a portal; the visible
     // items should include the four zoom entries.
@@ -98,7 +99,7 @@ test.describe("Phase 4 — menu via commands", () => {
     // click doesn't throw and the menu closes.
     await page
       .locator('nav[aria-label="Main menu"]')
-      .getByRole("button", { name: "View" })
+      .getByRole("menuitem", { name: "View", exact: true })
       .click();
     await page.getByRole("menuitem", { name: "Fit document" }).click();
     // Menu closes after invocation.
@@ -112,7 +113,7 @@ test.describe("Phase 4 — menu via commands", () => {
   }) => {
     await page
       .locator('nav[aria-label="Main menu"]')
-      .getByRole("button", { name: "Edit" })
+      .getByRole("menuitem", { name: "Edit", exact: true })
       .click();
     await expect(page.getByRole("menuitem", { name: "Undo" })).toBeVisible();
     await expect(page.getByRole("menuitem", { name: "Redo" })).toBeVisible();
@@ -126,7 +127,7 @@ test.describe("Phase 4 — menu via commands", () => {
     // convergence — same command id, different consumer surface.
     await page
       .locator('nav[aria-label="Main menu"]')
-      .getByRole("button", { name: "File" })
+      .getByRole("menuitem", { name: "File", exact: true })
       .click();
     await expect(page.getByRole("menuitem", { name: "Open…" })).toBeVisible();
   });
@@ -140,7 +141,7 @@ test.describe("Phase 4 — menu via commands", () => {
     // of ~110 panels was taller than the screen.
     await page
       .locator('nav[aria-label="Main menu"]')
-      .getByRole("button", { name: "Window" })
+      .getByRole("menuitem", { name: "Window", exact: true })
       .click();
     const menu = page.getByRole("menu").first();
     await expect(menu).toBeVisible();

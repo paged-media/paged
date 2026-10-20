@@ -228,7 +228,7 @@ test.describe("Concept 3 — Export PDF dialog", () => {
   async function openDialog(page: Page) {
     await page
       .locator('nav[aria-label="Main menu"]')
-      .getByRole("button", { name: "File" })
+      .getByRole("menuitem", { name: "File", exact: true })
       .click();
     await page.getByRole("menuitem", { name: "Export PDF…" }).click();
     await expect(page.locator("[data-export-dialog]")).toBeVisible();

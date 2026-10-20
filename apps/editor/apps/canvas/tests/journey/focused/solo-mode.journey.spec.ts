@@ -113,9 +113,9 @@ test.describe("journey · solo mode (paged.draw)", () => {
     expect(p.drawMenuItems).toBeGreaterThan(50);
     await page
       .locator('nav[aria-label="Main menu"]')
-      .getByRole("button", { name: "Draw" })
+      .getByRole("menuitem", { name: "Draw", exact: true })
       .click();
-    const items = page.getByRole("menuitem");
+    const items = page.getByRole("menu").getByRole("menuitem");
     await expect(items.first()).toBeVisible();
     // ENABLED, not merely rendered. A greyed menu is what a missing boot
     // document produces, and it looks identical to a working one in a

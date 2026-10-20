@@ -122,12 +122,32 @@ test.describe("focus: the ring, the menus, the toolbars, the dialogs", () => {
       page.locator('[data-menu-trigger="Edit"][data-state="open"]'),
     ).toHaveCount(1);
     await expect.poll(highlighted).not.toBeNull();
-    // Typeahead in the View menu: "z" lands on a Zoom row.
-    await page.keyboard.press("ArrowRight");
-    await page.keyboard.press("ArrowRight");
-    await page.keyboard.press("ArrowRight");
-    await page.keyboard.press("ArrowRight");
-    await page.keyboard.press("ArrowRight");
+    // Typeahead in the View menu: "z" lands on a Zoom row. Right walks on
+    // to it; a menu whose highlighted first row is a submenu trigger
+    // (Object ▸ Opacity mask) takes one Right to open the submenu and the
+    // next to move on, as the menubar pattern has it — so walk until View
+    // is open rather than count presses.
+    const open = () =>
+      page.evaluate(
+        () =>
+          document
+            .querySelector('[data-menu-trigger][data-state="open"]')
+            ?.getAttribute("data-menu-trigger") ?? null,
+      );
+    const walked: (string | null)[] = [await open()];
+    for (let i = 0; i < 12 && walked.at(-1) !== "View"; i++) {
+      await page.keyboard.press("ArrowRight");
+      await expect.poll(highlighted).not.toBeNull();
+      walked.push(await open());
+    }
+    // In bar order, never skipping one and never going back.
+    const bar = await page.$$eval("[data-menu-trigger]", (els) =>
+      els.map((e) => e.getAttribute("data-menu-trigger")),
+    );
+    const visited = walked.filter((m, i) => m !== walked[i - 1]);
+    expect(visited).toEqual(
+      bar.slice(bar.indexOf("Edit"), bar.indexOf("View") + 1),
+    );
     await expect(
       page.locator('[data-menu-trigger="View"][data-state="open"]'),
     ).toHaveCount(1);

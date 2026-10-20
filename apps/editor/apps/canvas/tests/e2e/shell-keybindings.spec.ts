@@ -97,6 +97,24 @@ const HOST_KEYS = [
   "w→paged.view.toggleScreenPreview",
   "cmd+k→paged.palette.toggle",
   "ctrl+k→paged.palette.toggle",
+  "cmd+0→paged.view.zoomFit",
+  "ctrl+0→paged.view.zoomFit",
+  "cmd+1→paged.view.zoom100",
+  "ctrl+1→paged.view.zoom100",
+  "cmd+c→paged.edit.copy",
+  "ctrl+c→paged.edit.copy",
+  "cmd+x→paged.edit.cut",
+  "ctrl+x→paged.edit.cut",
+  "cmd+v→paged.edit.paste",
+  "ctrl+v→paged.edit.paste",
+  "cmd+alt+shift+v→paged.edit.pasteInPlace",
+  "ctrl+alt+shift+v→paged.edit.pasteInPlace",
+  "cmd+alt+shift+d→paged.edit.duplicate",
+  "ctrl+alt+shift+d→paged.edit.duplicate",
+  "cmd+l→paged.object.lock",
+  "ctrl+l→paged.object.lock",
+  "shift+f10→paged.edit.contextMenu",
+  "contextmenu→paged.edit.contextMenu",
 ] as const;
 
 const split = (sig: string) => {
@@ -141,6 +159,8 @@ function pressable(combo: string): string | null {
     backspace: "Backspace",
     delete: "Delete",
     tab: "Tab",
+    f10: "F10",
+    contextmenu: "ContextMenu",
   };
   // `{` / `}` are Shift+bracket on the US layout.
   const name =
@@ -233,6 +253,24 @@ test.describe("host keybindings", () => {
       "keybinding:w→paged.view.toggleScreenPreview",
       "keybinding:cmd+k→paged.palette.toggle",
       "keybinding:ctrl+k→paged.palette.toggle",
+      "keybinding:cmd+0→paged.view.zoomFit",
+      "keybinding:ctrl+0→paged.view.zoomFit",
+      "keybinding:cmd+1→paged.view.zoom100",
+      "keybinding:ctrl+1→paged.view.zoom100",
+      "keybinding:cmd+c→paged.edit.copy",
+      "keybinding:ctrl+c→paged.edit.copy",
+      "keybinding:cmd+x→paged.edit.cut",
+      "keybinding:ctrl+x→paged.edit.cut",
+      "keybinding:cmd+v→paged.edit.paste",
+      "keybinding:ctrl+v→paged.edit.paste",
+      "keybinding:cmd+alt+shift+v→paged.edit.pasteInPlace",
+      "keybinding:ctrl+alt+shift+v→paged.edit.pasteInPlace",
+      "keybinding:cmd+alt+shift+d→paged.edit.duplicate",
+      "keybinding:ctrl+alt+shift+d→paged.edit.duplicate",
+      "keybinding:cmd+l→paged.object.lock",
+      "keybinding:ctrl+l→paged.object.lock",
+      "keybinding:shift+f10→paged.edit.contextMenu",
+      "keybinding:contextmenu→paged.edit.contextMenu",
     );
     await openShell(page, { doc: true });
     // One context every binding applies in: a document, a frame selected,

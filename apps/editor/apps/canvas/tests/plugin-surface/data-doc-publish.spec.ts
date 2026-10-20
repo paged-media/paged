@@ -1526,15 +1526,19 @@ test.describe("plugin surface · host-hardcoded chrome", () => {
     await page.evaluate(() =>
       (globalThis as unknown as CanvasProbe).__canvas.setMode("data"),
     );
+    // The bar is a WAI-ARIA menubar (editor ADR 234): its triggers are
+    // `menuitem`s of the bar, so the open menu's rows are counted inside
+    // the menu, not page-wide.
     await page
       .locator('nav[aria-label="Main menu"]')
-      .getByRole("button", { name: "Data" })
+      .getByRole("menuitem", { name: "Data", exact: true })
       .click();
-    const items = page.getByRole("menuitem");
+    const open = page.getByRole("menu");
+    const items = open.getByRole("menuitem");
     await expect(items).toHaveCount(dataMenu.length);
     // No longer greyed, and no longer badged `soon`.
     await expect(
-      page.getByRole("menuitem").filter({ hasText: "soon" }),
+      open.getByRole("menuitem").filter({ hasText: "soon" }),
     ).toHaveCount(0);
     await page.keyboard.press("Escape");
 
