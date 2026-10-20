@@ -51,8 +51,10 @@ Everything about how the plugin is designed and built is in [`docs/`](./docs/REA
 
 ## Setup
 
-`@paged-media/plugin-api` and `@paged-media/plugin-sdk` come from npm (exact pins);
-no sibling checkout is needed.
+`@paged-media/plugin-api` and `@paged-media/plugin-sdk` come from the workspace
+(`workspace:*`); no sibling checkout is needed. The module is built into the editor and is not
+published to npm; a plugin outside this repository takes the contract from
+`@paged-media/plugin-sdk` (types from `@paged-media/plugin-sdk/api`).
 
 ```bash
 bun install
