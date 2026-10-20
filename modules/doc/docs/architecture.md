@@ -35,11 +35,11 @@ after the table gives the dependency direction.
   source files that is outside the contract packages `@paged-media/plugin-api` and
   `@paged-media/plugin-sdk`, the internal shared packages (`platform/shared/*`), this repo's
   packages and `react`
-  ([ADR 315](https://github.com/paged-media/plugin-sdk/blob/main/docs/adr/315-isolation-contract.md)).
+  ([ADR 315](https://github.com/paged-media/paged/blob/main/platform/extensions/docs/adr/315-isolation-contract.md)).
 - `doc-bundle` takes the two contract packages and `react` as peer dependencies and
   imports `doc-host-model` through the workspace; the editor builds both from source. The split into Rust semantics, a
   forwarding wasm class and a translating TypeScript package is the shape of
-  [ADR 314](https://github.com/paged-media/plugin-sdk/blob/main/docs/adr/314-plugin-shape.md).
+  [ADR 314](https://github.com/paged-media/paged/blob/main/platform/extensions/docs/adr/314-plugin-shape.md).
 - Third-party Rust: `ooxmlsdk` 0.12 (feature `mce`), `zip` 2, `quick-xml` 0.41, `wasm-bindgen`
   0.2. `ooxmlsdk` comes from crates.io: the README and several comments call it "vendored",
   but there is no `vendor/` directory and no patch ([ADR 601](adr/601-own-package-container.md)).
@@ -134,7 +134,7 @@ is the subject of ADR 029, a proposal that is not published yet.
 ## One build, several engine versions
 
 Optional doors are probed with `host.supports(...)`
-([ADR 305](https://github.com/paged-media/plugin-sdk/blob/main/docs/adr/305-doors-always-present.md)).
+([ADR 305](https://github.com/paged-media/paged/blob/main/platform/extensions/docs/adr/305-doors-always-present.md)).
 No flag reports whether an engine knows a single operation or property path, so the bundle
 sends the batch and reads the outcome: a refused batch applies nothing, and the operations
 are replayed one by one. A refused style operation becomes a warning under

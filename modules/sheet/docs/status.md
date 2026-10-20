@@ -105,7 +105,7 @@ each published canary added is under [Releases](#releases).
   spilled values) reads those values back as the spill when they match.
 
 - **Object model.** On `main` and published since 0.1.0-canary.15. The contract is plugin-sdk's
-  [`DESIGN.md`](https://github.com/paged-media/plugin-sdk/blob/main/DESIGN.md) §21, with the
+  [`DESIGN.md`](https://github.com/paged-media/paged/blob/main/platform/extensions/DESIGN.md) §21, with the
   fix-ups from its first consumers in §21.8 and the panel property row in §12.7. Seven
   kinds under `plugin:media.paged.sheet/…`: `workbook/main`, `sheet/<name>`,
   `cell/<sheet>!<A1>` (value, formula, input, display, number format, font, fill, alignment,

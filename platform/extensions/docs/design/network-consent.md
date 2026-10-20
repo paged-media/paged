@@ -1,7 +1,7 @@
 # RFC: network capability + per-origin consent + data-source manifest (D-03)
 
 Design note, written before the implementation. What was built is recorded in
-[ADR 556](https://github.com/paged-media/plugin-data/blob/main/docs/adr/556-secrets-never-enter-the-plugin.md)
+[ADR 556](https://github.com/paged-media/paged/blob/main/modules/data/docs/adr/556-secrets-never-enter-the-plugin.md)
 and in `DESIGN.md` §4.6b.
 
 **Origin:** the paged.data concept paper (`plugin-data: docs/concept.md`) §11 (the threat

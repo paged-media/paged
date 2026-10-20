@@ -92,7 +92,7 @@ canary added is under [Releases](#releases).
 binding, a script, the command-line tool and a schema-driven panel field reach draw's objects
 through `host.objects` (code: `packages/draw-bundle/src/object-model/`). Addresses are
 `plugin:media.paged.draw/<kind>/<id>`. The contract is the object model of plugin-sdk
-[`DESIGN.md`](https://github.com/paged-media/plugin-sdk/blob/main/DESIGN.md) §21 (§21.8 the
+[`DESIGN.md`](https://github.com/paged-media/paged/blob/main/platform/extensions/DESIGN.md) §21 (§21.8 the
 first consumers' fix-ups, §12.7 the panel property row). It is on `main` and published since
 `@paged-media/draw` 0.1.0-canary.16.
 

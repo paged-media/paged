@@ -46,7 +46,7 @@ every call to the host and to the engine; `tile-provider.ts`, which it calls, al
 TypeScript. The contract-import lint rule (`/bunfig.toml`, PM-0003) rejects any import or re-export whose
 specifier is not `@paged-media/plugin-api`, `@paged-media/plugin-sdk`, an internal shared package
 (`platform/shared/*`), one of this repository's own packages, `react` or a relative path: the plugin takes no code from the engine or the editor
-([plugin-sdk ADR 315](https://github.com/paged-media/plugin-sdk/blob/main/docs/adr/315-isolation-contract.md)).
+([plugin-sdk ADR 315](https://github.com/paged-media/paged/blob/main/platform/extensions/docs/adr/315-isolation-contract.md)).
 
 There are two manifest files with the same content. `glue/manifest.json` is the one the
 bundle uses: `index.ts` and `activate.ts` import it, and `glue/package.json` lists it in
@@ -67,7 +67,7 @@ The engine is one module, `glue/wasm/image_js_bg.wasm` (2,743,131 bytes), built 
 JavaScript and instantiates the module itself, in the bundle's own realm, because the
 engine creates its WebGPU device from `navigator.gpu` (`image-js/src/lib.rs:22-26`). The
 manifest declares `gpu: { realm: "bundle" }` and one `wasm` entry
-([plugin-sdk ADR 308](https://github.com/paged-media/plugin-sdk/blob/main/docs/adr/308-plugin-wasm.md)).
+([plugin-sdk ADR 308](https://github.com/paged-media/paged/blob/main/platform/extensions/docs/adr/308-plugin-wasm.md)).
 
 The surface is 125 exported functions and one small class (`glue/wasm/image_js.d.ts`),
 taking numbers, strings, typed arrays and packed `f32` blocks. State stays in thread-locals
@@ -134,7 +134,7 @@ prefixes (`adjust`, `band`, `bool`, `cast`, `compose`, `conv`, `gallery`, `gen`,
 `math`, `morph`, `rank`, `rel`, `resample`). `image-kernels/build.rs` generates the lookup
 table from the rows of `registry/kernels.yaml`, so a definition without a row cannot be
 looked up, and a unit test asserts that registry and code define the same set
-([plugin-sdk ADR 317](https://github.com/paged-media/plugin-sdk/blob/main/docs/adr/317-registry-driven-dispatch.md)).
+([plugin-sdk ADR 317](https://github.com/paged-media/paged/blob/main/platform/extensions/docs/adr/317-registry-driven-dispatch.md)).
 Every kernel uses one binding interface: inputs in group 0, parameters in group 1, a
 selection mask in group 2, an `rgba16float` output in group 3
 ([ADR 452](adr/452-kernel-abi.md)). Kernels that fit a small expression language are

@@ -43,9 +43,9 @@ The spec does not mention any of this. It is the load-bearing context.
   **rejected Option A** (a core paint hook), keeping it only as _"the fallback if C-1
   lowering proves infeasible… revisit only on that evidence."_ Its addendum explicitly says
   **do NOT fork Blitz** to force features ("the alpha engine's bugs become our bugs").
-- **[ADR-013](https://github.com/paged-media/core/blob/main/docs/adr/013-in-frame-scenelayer.md)** shipped the C-1 seam: plugins render
+- **[ADR-013](https://github.com/paged-media/paged/blob/main/engine/core/docs/adr/013-in-frame-scenelayer.md)** shipped the C-1 seam: plugins render
   inside a frame by submitting a display-list subset core lowers at compose time (v0.39
-  vector, v0.40 text). **[ADR-018](https://github.com/paged-media/core/blob/main/docs/adr/018-stage-b-gpu-texture-defer-record-only.md)**
+  vector, v0.40 text). **[ADR-018](https://github.com/paged-media/paged/blob/main/engine/core/docs/adr/018-stage-b-gpu-texture-defer-record-only.md)**
   governs the raw-GPU-texture escape hatch (record-only until Vello has an external-texture
   path).
 - **It is running.** `CLAUDE.md`: _"On-canvas rendering NOW SHIPS (ADR-011
