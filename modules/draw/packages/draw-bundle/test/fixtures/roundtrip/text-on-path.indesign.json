@@ -7,13 +7,13 @@
     "script": "scripts/indesign/lib/read-document.jsx",
     "script_sha256": "4486a78fdd3b45a88c6ef6b18911bc34b94f6cf7ddc3c4d433d3d5e256f4dc08",
     "runner": "scripts/indesign/run-roundtrip.sh",
-    "recorded_at": "2026-10-13T14:51:33.223Z",
+    "recorded_at": "2026-10-20T01:20:33.207Z",
     "host_os": "macOS 26.4",
     "pdf_preset": "[Qualitativ hochwertiger Druck]"
   },
   "idml": {
     "path": "packages/draw-bundle/test/fixtures/roundtrip/text-on-path.idml",
-    "sha256": "0def043cc70983b1ddcad18300911af809704dd3029c98fcc2660ced7b3fbd29"
+    "sha256": "ae25001db9b0f8de0d1d77e860af4c3b82140a2fe3545408b1112558ecf38186"
   },
   "units": "pt",
   "coordinates": "page-local, origin top-left of the page, Y down (ruler origin PAGE, zero point 0,0, script measurement unit POINTS); bounds as [minX, minY, maxX, maxY]",
@@ -85,7 +85,7 @@
       "strokeTransparency": {"opacity":100,"blendMode":"NORMAL"},
       "overprintFill": {"unreadable":"Diese Eigenschaft ist im aktuellen Status nicht zutreffend."},
       "overprintStroke": false,
-      "textPaths": [{"contents":"Type on a path","storyContents":"Type on a path","pathEffect":"#RAINBOW_PATH_EFFECT","flipPathEffect":"NOT_FLIPPED","startBracket":10,"endBracket":433.5544,"overflows":false}],
+      "textPaths": [{"contents":"Type on a path","storyContents":"Type on a path","pathEffect":"#RAINBOW_PATH_EFFECT","flipPathEffect":"NOT_FLIPPED","startBracket":10,"endBracket":433.55444,"overflows":false}],
       "z": 0,
       "paths": [
         {

@@ -7,13 +7,13 @@
     "script": "scripts/indesign/lib/read-document.jsx",
     "script_sha256": "4486a78fdd3b45a88c6ef6b18911bc34b94f6cf7ddc3c4d433d3d5e256f4dc08",
     "runner": "scripts/indesign/run-roundtrip.sh",
-    "recorded_at": "2026-10-03T06:04:06.546Z",
+    "recorded_at": "2026-10-20T01:20:43.605Z",
     "host_os": "macOS 26.4",
     "pdf_preset": "[Qualitativ hochwertiger Druck]"
   },
   "idml": {
     "path": "packages/draw-bundle/test/fixtures/roundtrip/pathfinder-subtract.idml",
-    "sha256": "c0a31b0971d664ba0bf320b4989f2717033908e333142b4849a0803d4bb78021"
+    "sha256": "72ce3dc752338eb7c7e2aa88b374378897ba7ce6c025c85bef98e0f31210e8f3"
   },
   "units": "pt",
   "coordinates": "page-local, origin top-left of the page, Y down (ruler origin PAGE, zero point 0,0, script measurement unit POINTS); bounds as [minX, minY, maxX, maxY]",
@@ -51,8 +51,8 @@
       "layer": "Layer 1",
       "visible": true,
       "locked": false,
-      "geometricBounds": [110,110,200.0007,210],
-      "visibleBounds": [109.5,109.5,201.00171,210.5],
+      "geometricBounds": [110,110,200.00066,210],
+      "visibleBounds": [109.5,109.5,201.001669,210.5],
       "fill": {"name":"rt-blue","type":"Color","model":"PROCESS","space":"RGB","value":[40,90,200]},
       "fillTint": -1,
       "gradientFillAngle": 0,
@@ -84,13 +84,13 @@
           "closed": true,
           "pathType": "CLOSED_PATH",
           "anchors": [
-            {"anchor":[110,160],"left":[110,132.3906],"right":[110,187.6094]},
-            {"anchor":[160,210],"left":[132.3906,210],"right":[176.3544,210]},
-            {"anchor":[200.0007,190],"left":[190.8776,202.1437],"right":[174.2642,190]},
+            {"anchor":[110,160],"left":[110,132.39063],"right":[110,187.60938]},
+            {"anchor":[160,210],"left":[132.39063,210],"right":[176.35435,210]},
+            {"anchor":[200.00066,190],"left":[190.8776,202.14366],"right":[174.26424,190]},
             {"anchor":[150,190],"left":[150,190],"right":[150,190]},
             {"anchor":[150,130],"left":[150,130],"right":[150,130]},
-            {"anchor":[200.0007,130],"left":[174.2642,130],"right":[190.8776,117.8563]},
-            {"anchor":[160,110],"left":[176.3544,110],"right":[132.3906,110]}
+            {"anchor":[200.00066,130],"left":[174.26424,130],"right":[190.8776,117.85634]},
+            {"anchor":[160,110],"left":[176.35435,110],"right":[132.39063,110]}
           ]
         }
       ]

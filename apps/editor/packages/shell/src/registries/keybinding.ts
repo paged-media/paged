@@ -151,12 +151,22 @@ export type KeyEventLike = Pick<
 > &
   Partial<Pick<KeyboardEvent, "code">>;
 
-/** A letter or digit binding with Alt in it matches by the physical key
- *  as well: on a Mac, Option changes `key` (Option+Shift+V types "◊"), so
- *  InDesign's ⌥⇧⌘V and ⌥⇧⌘D would otherwise never match. */
+/** The physical key of the punctuation an Alt binding may name. */
+const PUNCTUATION_CODES: Readonly<Record<string, string>> = {
+  "=": "equal",
+  "-": "minus",
+};
+
+/** A letter, digit, `=` or `-` binding with Alt in it matches by the
+ *  physical key as well: on a Mac, Option changes `key` (Option+Shift+V
+ *  types "◊", Option+= types "≠"), so InDesign's ⌥⇧⌘V, ⌥⇧⌘D and ⌥⌘=
+ *  would otherwise never match. */
 function codeMatches(combo: KeyCombo, event: KeyEventLike): boolean {
-  if (!combo.alt || !event.code || !/^[a-z0-9]$/.test(combo.key)) return false;
+  if (!combo.alt || !event.code) return false;
   const code = event.code.toLowerCase();
+  const punctuation = PUNCTUATION_CODES[combo.key];
+  if (punctuation) return code === punctuation;
+  if (!/^[a-z0-9]$/.test(combo.key)) return false;
   return code === `key${combo.key}` || code === `digit${combo.key}`;
 }
 

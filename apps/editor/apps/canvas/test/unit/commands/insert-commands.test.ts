@@ -61,7 +61,7 @@ const LETTER: [number, number] = [612, 792];
 
 interface InsertHarness {
   fake: ShellFakeEditor;
-  invoke: (command: string) => Promise<unknown>;
+  invoke: (command: string, payload?: unknown) => Promise<unknown>;
   reports: Report[];
   paged: Record<string, unknown> & {
     contentSelection: { current: unknown };
@@ -157,14 +157,14 @@ function inserts(
     line: (p) => insertLine(p, report),
     table: (p) => insertTable(p, report),
     deletePage: (p) => deleteCurrentPage(p, report),
-    placeImage: (p) => placeImage(p, report),
+    placeImage: (p, dropped) => placeImage(p, report, dropped),
     newPage: (p) => addPage(p, report),
   }))
     registry.register(c);
   return {
     fake,
-    invoke: async (command) => {
-      const r = await registry.invoke(command);
+    invoke: async (command, payload?: unknown) => {
+      const r = await registry.invoke(command, payload);
       await fake.settle();
       return r;
     },
@@ -466,6 +466,55 @@ describe("Place image", () => {
     ]);
     expectOneCommit(h.fake);
     expect(outcome).toEqual({ applied: true, createdId: frame });
+  });
+
+  // UX audit F-03 (ADR 258): a picture dropped on the page is placed where
+  // it lands — no picker, no second click.
+  test("F-03: a dropped picture is placed at the drop point, without a picker", async () => {
+    covers("command:paged.insert.placeImage");
+    let picked = 0;
+    stubGlobal("document", {
+      createElement: () => {
+        picked++;
+        return { click() {} };
+      },
+      // The viewport sits at (10, 20) in the window.
+      querySelector: (sel: string) =>
+        sel === "[data-paged-viewport]"
+          ? { getBoundingClientRect: () => ({ left: 10, top: 20 }) }
+          : null,
+    });
+    stubGlobal("createImageBitmap", async () => ({
+      width: 200,
+      height: 100,
+      close() {},
+    }));
+    const h = inserts({
+      geometry: (e) => ({
+        id: e,
+        pageId: "p1",
+        bounds: [100, 100, 200, 300],
+        itemTransform: null,
+        hasImage: false,
+      }),
+    });
+    const outcome = (await h.invoke("paged.insert.placeImage", {
+      file: { name: "photo.png", bytes: PNG, mimeType: "image/png" },
+      at: { clientX: 110, clientY: 120 },
+    })) as { applied: boolean };
+    expect(picked).toBe(0);
+    expect(outcome.applied).toBe(true);
+    const [frame, fill] = h.fake.mutations() as Array<{
+      op: string;
+      args: Record<string, unknown>;
+    }>;
+    // Camera at 1, no pan: the drop at (100, 100) in the viewport is
+    // (100, 100) on page 1, the frame's top-left; 200 × 100 at 1 px = 1 pt.
+    expect(frame).toEqual({
+      op: "insertFrame",
+      args: { pageId: "p1", bounds: [100, 100, 200, 300] },
+    });
+    expect(fill?.op).toBe("replaceImageBytes");
   });
 
   test("a cancelled picker places nothing and says nothing", async () => {

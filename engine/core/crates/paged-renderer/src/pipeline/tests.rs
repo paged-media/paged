@@ -2493,6 +2493,57 @@ fn missing_image_link_emits_diagnostic() {
     );
 }
 
+#[test]
+fn placed_link_without_image_element_reports_missing() {
+    // Finding SCR-14 (engine ADR 198): a picture placed through the
+    // authoring doors sets only the frame's link, not a parsed
+    // `<Image>`. A link that resolves to nothing is missing all the
+    // same, so the Links panel and `paged.links()` read "missing".
+    use std::io::Write;
+    use zip::{write::SimpleFileOptions, CompressionMethod, ZipWriter};
+
+    let buf = std::io::Cursor::new(Vec::new());
+    let mut zip = ZipWriter::new(buf);
+    let stored = SimpleFileOptions::default().compression_method(CompressionMethod::Stored);
+    let deflated = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
+    zip.start_file("mimetype", stored).unwrap();
+    zip.write_all(b"application/vnd.adobe.indesign-idml-package")
+        .unwrap();
+    zip.start_file("designmap.xml", deflated).unwrap();
+    zip.write_all(
+        br#"<?xml version="1.0" encoding="UTF-8"?>
+<Document xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging">
+  <idPkg:Spread src="Spreads/Spread_sp1.xml"/>
+</Document>"#,
+    )
+    .unwrap();
+    zip.start_file("Spreads/Spread_sp1.xml", deflated).unwrap();
+    zip.write_all(
+        br#"<?xml version="1.0" encoding="UTF-8"?>
+<idPkg:Spread xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging">
+  <Spread Self="sp1">
+    <Page Self="p1" GeometricBounds="0 0 200 200"/>
+    <Rectangle Self="r1" GeometricBounds="20 20 120 120"/>
+    <Rectangle Self="r2" GeometricBounds="20 140 60 180"/>
+  </Spread>
+</idPkg:Spread>"#,
+    )
+    .unwrap();
+    let bytes = zip.finish().unwrap().into_inner();
+    let mut doc = idml_import::import_idml_doc(&bytes).expect("open IDML");
+    let rect = &mut doc.spreads[0].spread.rectangles[0];
+    assert!(!rect.has_image_element);
+    rect.image_link = Some("file:///no/such/image.png".into());
+
+    let built = build_document(&doc, &PipelineOptions::default()).expect("build");
+    let missing = built.diagnostics.missing_image_frame_ids();
+    assert_eq!(
+        missing.into_iter().collect::<Vec<_>>(),
+        vec!["r1".to_string()],
+        "the placed link is missing; the plain frame is not an image frame"
+    );
+}
+
 fn test_section(
     self_id: &str,
     page_start: &str,

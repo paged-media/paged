@@ -125,6 +125,88 @@ test.describe("view commands", () => {
     await expect.poll(() => scale(page)).toBeLessThan(0.99);
   });
 
+  // F-31 / F-16 (ADR 257): InDesign's fits and the page keys.
+  test("fit page, fit spread, fit selection and the page keys move the camera", async ({
+    page,
+  }) => {
+    covers(
+      "command:paged.view.fitPage",
+      "command:paged.view.fitSpread",
+      "command:paged.view.fitSelection",
+      "command:paged.view.firstPage",
+      "command:paged.view.previousPage",
+      "command:paged.view.nextPage",
+      "command:paged.view.lastPage",
+    );
+    await openShell(page, { doc: true });
+    const camera = () =>
+      page.evaluate(() =>
+        (globalThis as unknown as G).__canvas.client.camera.read(),
+      );
+    /** The camera once its animation has stopped. */
+    const settled = async () => {
+      let last = JSON.stringify(await camera());
+      await expect
+        .poll(async () => {
+          const now = JSON.stringify(await camera());
+          const still = now === last;
+          last = now;
+          return still;
+        })
+        .toBe(true);
+      return camera();
+    };
+    // What a page fit is: the page inside the viewport less a 40 px
+    // margin, on its tighter axis (the layout's `fitCamera`).
+    const want = await page.evaluate(async () => {
+      const c = (
+        globalThis as unknown as {
+          __canvas: {
+            client: {
+              collection(
+                n: string,
+              ): Promise<Array<{ sizePt: [number, number] }>>;
+            };
+          };
+        }
+      ).__canvas.client;
+      const [first] = await c.collection("pages");
+      const r = document
+        .querySelector("[data-paged-viewport]")!
+        .getBoundingClientRect();
+      const [w, h] = first!.sizePt;
+      return Math.min((r.width - 80) / w, (r.height - 80) / h);
+    });
+    await invoke(page, "paged.view.zoom100");
+    await settled();
+    await invoke(page, "paged.view.fitPage");
+    const onePage = await settled();
+    expect(onePage.scale).toBeCloseTo(want, 3);
+    // Each page of this document is a spread of its own.
+    await invoke(page, "paged.view.fitSpread");
+    expect((await settled()).scale).toBeCloseTo(onePage.scale, 3);
+    // Nothing selected: Fit selection leaves the view alone.
+    await invoke(page, "paged.view.fitSelection");
+    expect(await camera()).toEqual(onePage);
+    // The page keys: the next page moves the view down, the first back.
+    await invoke(page, "paged.view.nextPage");
+    await expect
+      .poll(async () => (await camera()).ty)
+      .toBeLessThan(onePage.ty - 1);
+    await invoke(page, "paged.view.firstPage");
+    await expect
+      .poll(async () => (await camera()).ty)
+      .toBeCloseTo(onePage.ty, 0);
+    await invoke(page, "paged.view.lastPage");
+    await expect
+      .poll(async () => (await camera()).ty)
+      .toBeLessThan(onePage.ty - 1);
+    await invoke(page, "paged.view.previousPage");
+    await expect
+      .poll(async () => (await camera()).ty)
+      .toBeCloseTo(onePage.ty, 0);
+  });
+
   test("the View extras flip the store their overlays and tools read", async ({
     page,
   }) => {

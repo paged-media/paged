@@ -250,55 +250,29 @@ use idml_import::{
     Bounds, CharacterRun, Paragraph, PathAnchor, Spread, Story, TableCell, TextFrame,
 };
 
-/// Mirror of `paged_gen::xml::format_f32`: round to 4 decimals, drop
-/// trailing zeros + a dangling `.`, normalise `-0` to `0`. Kept as a
-/// small local copy rather than depending on `paged-gen` (a dev/CLI
-/// crate that pulls clap/anyhow) so this runtime crate stays minimal +
-/// wasm-clean. InDesign serialises floats this way, so patched values
-/// match the surrounding hand-written / exported numbers.
+/// The writer's spelling of a model number: the SHORTEST decimal that
+/// parses back to the very same `f32` (Rust's `Display` for `f32`, which
+/// never uses an exponent), `-0` normalised to `0`. Integers print bare
+/// (`72`), short values stay short (`0.5`), and a value with more digits
+/// keeps them (`0.8660254`), as InDesign's own exports spell transforms
+/// at full precision.
 ///
-/// # Why the rounding step is `f64`
-///
-/// `paged-gen`'s original rounds in `f32` — `(v * 10_000.0).round()` —
-/// and that multiply is never exact: an `f32` significand is 24 bits and
-/// the product needs up to 34, so the value `.round()` sees has already
-/// slipped. Below `2^24 / 10_000 = 1677.7216` the slip only ever moves
-/// the result across one `.5` boundary, i.e. a wrong LAST decimal
-/// (0.06 % of values around 1 pt, rising to 17 % around 300 pt). At
-/// and above that magnitude the product passes `2^24`, its own spacing
-/// exceeds 1, and `.round()` stops rounding anything at all: the
-/// documented "4 decimals" silently becomes coarser, by up to 3
-/// ten-thousandths at 2–4 kpt and 79 at 65–131 kpt. Real documents run
-/// there — an InDesign pasteboard coordinate is routinely five figures —
-/// and this function emits MUTATED values, so it is not only a
-/// byte-identity concern.
-///
-/// Widening to `f64` first makes the multiply exact (34 bits fits
-/// comfortably in 53), so the digits printed are the correctly-rounded
-/// ones at every magnitude. It buys precision the OUTPUT was throwing
-/// away, not precision the `f32` never had: above 1677.7216 pt the
-/// input's own ULP is already coarser than the 1e-4 being printed, and
-/// below it 4 decimals still discards most of what an `f32` holds. See
-/// `tests/it/format_f32_precision.rs`.
+/// It used to round to 4 decimals (`paged_gen::xml::format_f32`'s rule),
+/// so a turned item's transform drifted by up to ~1e-4 x its numbers on
+/// every save → load (finding GF-4, engine ADR 199). The model holds
+/// `f32`, so a spelling that re-parses to the same `f32` is lossless: a
+/// save → load gives back exactly the model that was saved. An UNTOUCHED
+/// value still saves as the bytes it arrived as (`TransformPlan`,
+/// `preserving_f32_patch`); this is the spelling of a value that changed.
 pub(crate) fn format_f32(v: f32) -> String {
-    let rounded = (f64::from(v) * 10_000.0).round() / 10_000.0;
-    if rounded == 0.0 {
+    if v == 0.0 {
         return "0".to_string();
     }
-    let mut s = format!("{rounded:.4}");
-    if s.contains('.') {
-        while s.ends_with('0') {
-            s.pop();
-        }
-        if s.ends_with('.') {
-            s.pop();
-        }
-    }
-    s
+    format!("{v}")
 }
 
 /// Format a `[a b c d tx ty]` matrix the IDML way (space-separated,
-/// fixed precision).
+/// each component through [`format_f32`]).
 pub(crate) fn format_matrix(m: &[f32; 6]) -> String {
     let parts: Vec<String> = m.iter().map(|v| format_f32(*v)).collect();
     parts.join(" ")
@@ -9296,13 +9270,14 @@ mod tests {
         let spread = idml_import::parse_spread(BOX_OVAL).expect("parse");
         let out = rewrite_spread(BOX_OVAL, &spread).expect("rewrite");
         let s = String::from_utf8(out).unwrap();
-        // 200 × 200 at (100, 200): centre (200, 300), κ·r = 55.2285 (four decimals on disk).
+        // 200 × 200 at (100, 200): centre (200, 300), κ·r = 55.2285, each
+        // handle spelled as the f32 it is (GF-4).
         assert!(
-            s.contains(r#"<PathPointType Anchor="200 400" LeftDirection="144.7715 400" RightDirection="255.2285 400"/>"#),
+            s.contains(r#"<PathPointType Anchor="200 400" LeftDirection="144.77151 400" RightDirection="255.22849 400"/>"#),
             "{s}"
         );
         assert!(
-            s.contains(r#"<PathPointType Anchor="300 300" LeftDirection="300 355.2285" RightDirection="300 244.7715"/>"#),
+            s.contains(r#"<PathPointType Anchor="300 300" LeftDirection="300 355.2285" RightDirection="300 244.77151"/>"#),
             "{s}"
         );
         assert!(
