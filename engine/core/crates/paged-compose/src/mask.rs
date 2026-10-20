@@ -591,7 +591,8 @@ pub fn cmd_path_and_transform(cmd: &crate::DisplayCommand) -> Option<(crate::Pat
         }
         | C::GradientFeather {
             path_id, transform, ..
-        } => Some((*path_id, transform)),
+        }
+        | C::BeginFeatheredObject { path_id, transform } => Some((*path_id, transform)),
         _ => None,
     }
 }
@@ -604,22 +605,48 @@ pub fn cmd_path_and_transform(cmd: &crate::DisplayCommand) -> Option<(crate::Pat
 /// sit inside the feather's padded rectangle, so both raster lanes
 /// isolate the run: the CPU photographs the target at the run start,
 /// the GPU opens a layer there.
+///
+/// The run is the contiguous stretch of commands sharing the feather's
+/// `(path_id, transform)`, walking back from the feather. When an
+/// earlier [`DisplayCommand::BeginFeatheredObject`] carries the same
+/// pair, the walk resumes from that marker instead: the object's
+/// picture sits between its fill and its feather and addresses other
+/// paths, and InDesign feathers it with the frame.
+///
+/// [`DisplayCommand::BeginFeatheredObject`]: crate::DisplayCommand::BeginFeatheredObject
 pub fn feather_run_starts(list: &crate::DisplayList) -> std::collections::HashMap<usize, usize> {
+    let commands = &list.commands;
     let mut out = std::collections::HashMap::new();
-    for (i, cmd) in list.commands.iter().enumerate() {
+    // The most recent marker. Objects do not nest (a picture carries no
+    // feather of its own), so only the latest one can be open.
+    let mut marker: Option<usize> = None;
+    let walk_back = |from: usize, pid: crate::PathId, xf: &Transform| {
+        let mut start = from;
+        while start > 0 {
+            match cmd_path_and_transform(&commands[start - 1]) {
+                Some((p, t)) if p == pid && t == xf => start -= 1,
+                _ => break,
+            }
+        }
+        start
+    };
+    for (i, cmd) in commands.iter().enumerate() {
+        if matches!(cmd, crate::DisplayCommand::BeginFeatheredObject { .. }) {
+            marker = Some(i);
+            continue;
+        }
         if feather_pad_pt(cmd).is_none() {
             continue;
         }
         let Some((pid, xf)) = cmd_path_and_transform(cmd) else {
             continue;
         };
-        let mut start = i;
-        while start > 0 {
-            match cmd_path_and_transform(&list.commands[start - 1]) {
-                Some((p, t)) if p == pid && t == xf => start -= 1,
-                _ => break,
-            }
-        }
+        let from = marker
+            .filter(|&m| {
+                cmd_path_and_transform(&commands[m]).is_some_and(|(p, t)| p == pid && t == xf)
+            })
+            .unwrap_or(i);
+        let start = walk_back(from, pid, xf);
         out.entry(start).or_insert(i);
     }
     out
@@ -1381,6 +1408,56 @@ pub fn gradient_feather_mask(
 
 #[cfg(test)]
 mod tests {
+    /// A `BeginFeatheredObject` marker opens the run of the feather
+    /// that carries its path, over commands that address other paths;
+    /// without one the run is the contiguous same-path stretch.
+    #[test]
+    fn a_marker_opens_the_feather_run_over_foreign_commands() {
+        use crate::{Color, DisplayCommand as C, DisplayList, Feather, Paint};
+        let mut list = DisplayList::new();
+        let rect = list.paths.push_anon(PathData::default());
+        let other = list.paths.push_anon(PathData::default());
+        let xf = Transform([10.0, 0.0, 0.0, 10.0, 5.0, 5.0]);
+        let fill = |path_id| C::FillPath {
+            path_id,
+            paint: Paint::Solid(Color::BLACK),
+            transform: xf,
+        };
+        let feather = C::Feather {
+            path_id: rect,
+            transform: xf,
+            params: Feather::default_soft(),
+        };
+        // Unmarked: fill(rect) picture(other) feather(rect) — the run
+        // reaches back only to the feather itself.
+        list.commands = vec![fill(rect), fill(other), feather.clone()];
+        assert_eq!(feather_run_starts(&list).get(&2), Some(&2));
+        // Marked: the run opens at the marker.
+        list.commands = vec![
+            C::BeginFeatheredObject {
+                path_id: rect,
+                transform: xf,
+            },
+            fill(rect),
+            fill(other),
+            feather.clone(),
+        ];
+        let runs = feather_run_starts(&list);
+        assert_eq!(runs.get(&0), Some(&3));
+        assert_eq!(runs.len(), 1);
+        // A marker for another object does not capture this feather.
+        list.commands = vec![
+            C::BeginFeatheredObject {
+                path_id: other,
+                transform: xf,
+            },
+            fill(other),
+            fill(rect),
+            feather,
+        ];
+        assert_eq!(feather_run_starts(&list).get(&2), Some(&3));
+    }
+
     use super::*;
     use crate::{BevelDirection, BevelEmboss, BevelStyle, BevelTechnique, Color, PathSegment};
 

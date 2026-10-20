@@ -45,3 +45,4 @@ anyhow = { workspace = true }
 lopdf = "0.45"
 paged-scene = { path = "../paged-scene" }
 paged-gen = { path = "../paged-gen" }
+zip = { workspace = true }

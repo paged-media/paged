@@ -131,6 +131,7 @@ is not written yet.
 | [200](200-threading-returns-and-unset-margins.md) | Threading drops the target's empty story; "\r" is a paragraph return; an unset margin reads as laid out | Accepted 2026-10-20 |
 | [201](201-ascent-is-the-os2-typographic-ascender.md) | A face's ascent is its OS/2 typographic ascender | Accepted 2026-10-20 |
 | [202](202-the-outer-cells-edges-are-the-table-border.md) | A table's outer cells' edges are its border | Accepted 2026-10-20 |
+| [203](203-a-frames-effects-apply-to-its-picture.md) | A frame's feathers and interior effects apply to its picture | Accepted 2026-10-20 |
 
 Decisions made in other repositories that this engine's code rests on are listed in
 [`../README.md`](../README.md).

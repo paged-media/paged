@@ -1201,6 +1201,8 @@ fn build_scene_with_transform_filtered(
                     feather_layer_open = false;
                 }
             }
+            // Paints nothing: the run it opens got its layer above.
+            DisplayCommand::BeginFeatheredObject { .. } => {}
             DisplayCommand::GradientFeather { .. } => {
                 // A gradient feather is a MASK over the object's own
                 // paint: alpha 1 keeps it, alpha 0 takes it away along

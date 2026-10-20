@@ -1275,6 +1275,8 @@ impl Raster<'_> {
                 DisplayCommand::EndBlendGroup(_) | DisplayCommand::PopLayer(_) => {
                     self.end_group();
                 }
+                // Paints nothing; its run's backdrop was taken above.
+                DisplayCommand::BeginFeatheredObject { .. } => {}
             }
         }
         // A malformed list can leave frames open; close them so their

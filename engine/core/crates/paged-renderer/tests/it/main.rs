@@ -22,6 +22,7 @@ mod corner_options;
 mod docx_pagination_pipeline;
 mod drop_cap_pipeline;
 mod element_visibility;
+mod feathered_picture;
 mod flow_parity;
 mod footnote_columns;
 mod footnote_growth;
