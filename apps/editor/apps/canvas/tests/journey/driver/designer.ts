@@ -55,6 +55,8 @@ interface CanvasGlobal {
       pageSizesPt: [number, number][];
     } | null;
     openPanel?: (id: string) => void;
+    /** The committed React selection mirror (re-published every commit). */
+    elementSelection?: Array<{ kind: string; id: string }>;
     setElementSelection?: (
       ids: Array<{ kind: string; id: string }>,
       mode: string,
@@ -295,6 +297,31 @@ export class Designer {
       c.setContentSelection?.(null);
       c.setElementSelection?.(refs, "replace");
     }, refs);
+    await this.selectionCommitted(refs);
+  }
+
+  /** Wait until the selection mirror has COMMITTED `refs`. The setter is a
+   *  React state update: a command invoked before the next commit reads
+   *  the PREVIOUS selection through the plugin host (`selection.get()`
+   *  reads the editor snapshot of the last render). On a slow runner
+   *  that window is wide enough for a plugin command to act on the last
+   *  page's selection. */
+  private async selectionCommitted(
+    refs: Array<{ kind: string; id: string }>,
+  ): Promise<void> {
+    await this.page.waitForFunction(
+      (refs) => {
+        const s = (globalThis as unknown as CanvasGlobal).__canvas
+          ?.elementSelection;
+        return (
+          Array.isArray(s) &&
+          s.length === refs.length &&
+          refs.every((r) => s.some((x) => x.kind === r.kind && x.id === r.id))
+        );
+      },
+      refs,
+      { timeout: 10_000 },
+    );
   }
 
   /** Apply a fill swatch to a frame. `colorRef` defaults to the blank
@@ -433,6 +460,7 @@ export class Designer {
       },
       { kind, id },
     );
+    await this.selectionCommitted([{ kind, id }]);
   }
 
   /**
