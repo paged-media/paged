@@ -58,7 +58,7 @@ Checked by shared helpers at every layer: INV-1 one gesture is exactly one commi
 
 ### Findings as expected failures
 
-A finding becomes a test that fails today, titled with its id, as an expected failure (`test.failing` in bun, `test.fail` in Playwright, a `known` marker on a matrix cell). The fix flips it, and the marker comes off in the same change.
+A finding becomes a test that fails today, titled with its id as a prefix (`GF-2: …`; square brackets in a test title are a feature tag, so not `[GF-2]`), as an expected failure (`test.failing` in bun, `test.fail` in Playwright, a `known` marker on a matrix cell). The fix flips it, and the marker comes off in the same change.
 
 | Id                                            | Finding                                                                                                                          | Test                                                                                                                                                                                                      |
 | --------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -117,7 +117,7 @@ cd apps/editor/apps/canvas && node node_modules/@playwright/test/cli.js test --p
 
 ## 2. Architecture Under Test & Test Seams
 
-_Status note (2026-10-02): this section predates the implementation. The Rust core is the engine, a separate repository consumed here as published wasm packages ([ADR 200](../adr/200-engine-as-npm-wasm-packages.md)); hit testing, gestures and snapping are implemented there (core [ADR 114](https://github.com/paged-media/core/blob/main/docs/adr/114-interaction-lives-in-the-engine.md)). This repository contains no Rust code._
+_Status note (2026-10-02): this section predates the implementation. The Rust core is the engine, a separate repository consumed here as published wasm packages ([ADR 200](../adr/200-engine-as-npm-wasm-packages.md)); hit testing, gestures and snapping are implemented there (core [ADR 114](https://github.com/paged-media/paged/blob/main/engine/core/docs/adr/114-interaction-lives-in-the-engine.md)). This repository contains no Rust code._
 
 The four-layer architecture gives us five natural seams. Each seam gets its own test layer so failures localize immediately.
 

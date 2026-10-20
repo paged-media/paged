@@ -132,7 +132,7 @@ plugin, length and hash. `write_idml` is the same writer with those entries drop
 engine calls `write_paged` on save and adds its native model part
 (`core: crates/paged-canvas/src/model.rs:4666-4686`). The format decision is recorded in
 the engine repository as
-[ADR 118](https://github.com/paged-media/core/blob/main/docs/adr/118-paged-file-is-a-valid-idml-package.md).
+[ADR 118](https://github.com/paged-media/paged/blob/main/engine/core/docs/adr/118-paged-file-is-a-valid-idml-package.md).
 A second `.paged` writer exists in the engine, `paged_store::package::wrap_document`, for
 documents that have no IDML source; the `pdf-import` crate source calls it.
 

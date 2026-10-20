@@ -8,7 +8,7 @@ Sections not relevant outside the original planning context have been removed; n
 
 ## 13. What a Modern Vector Illustration Application Must Do
 
-_Status note (2026-10-02): this section predates the implementation; the tiers and the v1/v2 labels record the original plan, not what ships (see `status.md`). Per-element plugin state is stored in one metadata envelope under the key `x-paged:media.paged.draw`, not under the `x-paged-draw:*` keys named below ([ADR 354](adr/354-multi-paint-bakes-to-a-group.md), with the general rule in [ADR 316](https://github.com/paged-media/plugin-sdk/blob/main/docs/adr/316-native-content-and-baking.md)); document-level libraries are stored in container parts ([ADR 355](adr/355-libraries-in-container-parts.md)). Capabilities that the host provides instead of this plugin are recorded in [ADR 352](adr/352-basic-operations-belong-to-the-host.md)._
+_Status note (2026-10-02): this section predates the implementation; the tiers and the v1/v2 labels record the original plan, not what ships (see `status.md`). Per-element plugin state is stored in one metadata envelope under the key `x-paged:media.paged.draw`, not under the `x-paged-draw:*` keys named below ([ADR 354](adr/354-multi-paint-bakes-to-a-group.md), with the general rule in [ADR 316](https://github.com/paged-media/paged/blob/main/platform/extensions/docs/adr/316-native-content-and-baking.md)); document-level libraries are stored in container parts ([ADR 355](adr/355-libraries-in-container-parts.md)). Capabilities that the host provides instead of this plugin are recorded in [ADR 352](adr/352-basic-operations-belong-to-the-host.md)._
 
 This section specifies the full capability surface expected of a professional vector illustration tool in 2026. Each capability is assigned an implementation tier:
 
@@ -61,7 +61,7 @@ _Status note (2026-10-02): this section predates the implementation; see [ADR 35
 
 ### 13.4 Boolean & Combinatorial Geometry
 
-_Status note (2026-10-02): this section predates the implementation; see [ADR 353](adr/353-path-algebra-runs-in-the-engine.md) (boolean and region operations run in the engine), [ADR 124](https://github.com/paged-media/core/blob/main/docs/adr/124-opacity-masks-native.md) (opacity masks, listed below as provisionally Tier B, are a native engine construct), and `status.md` (Shape Builder, listed below as Tier B, is built)._
+_Status note (2026-10-02): this section predates the implementation; see [ADR 353](adr/353-path-algebra-runs-in-the-engine.md) (boolean and region operations run in the engine), [ADR 124](https://github.com/paged-media/paged/blob/main/engine/core/docs/adr/124-opacity-masks-native.md) (opacity masks, listed below as provisionally Tier B, are a native engine construct), and `status.md` (Shape Builder, listed below as Tier B, is built)._
 
 | Capability                      | Tier  | Notes                                                                                         |
 | ------------------------------- | ----- | --------------------------------------------------------------------------------------------- |
@@ -114,7 +114,7 @@ _Status note (2026-10-02): this section predates the implementation; see [ADR 35
 
 ### 13.8 Organization & Structure
 
-_Status note (2026-10-02): this section predates the implementation; see [ADR 352](adr/352-basic-operations-belong-to-the-host.md) (grouping and the Layers panel belong to the host; this plugin supplies the values the host's panel shows, per [ADR 023](https://github.com/paged-media/editor/blob/main/docs/adr/023-shared-panels-binding-providers.md)), and [ADR 355](adr/355-libraries-in-container-parts.md) with [ADR 356](adr/356-live-constructs-are-recipes.md) (symbols and repeats, listed below as Tier B, are built: definitions and recipes in container parts, instances as artwork that can be regenerated)._
+_Status note (2026-10-02): this section predates the implementation; see [ADR 352](adr/352-basic-operations-belong-to-the-host.md) (grouping and the Layers panel belong to the host; this plugin supplies the values the host's panel shows, per [ADR 023](https://github.com/paged-media/paged/blob/main/apps/editor/docs/adr/023-shared-panels-binding-providers.md)), and [ADR 355](adr/355-libraries-in-container-parts.md) with [ADR 356](adr/356-live-constructs-are-recipes.md) (symbols and repeats, listed below as Tier B, are built: definitions and recipes in container parts, instances as artwork that can be regenerated)._
 
 | Capability              | Tier  | Notes                                                                                  |
 | ----------------------- | ----- | -------------------------------------------------------------------------------------- |
@@ -206,7 +206,7 @@ Every slice doubles as a plugin-API proof: v1 exercises edit contexts, overlays,
 
 ## 15. Roadmap
 
-_Status note (2026-10-02): this section predates the implementation. The plugin lives in this repository (`paged-media/plugin-draw`) and takes the plugin contract as published packages ([ADR 307](https://github.com/paged-media/plugin-sdk/blob/main/docs/adr/307-contract-as-peer-dependency.md)). The breakage log, the list of places where the public plugin API fell short, was a file in this repository until 2026-06-12 and remains in its git history. The baking that was built is recorded in [ADR 354](adr/354-multi-paint-bakes-to-a-group.md) and [ADR 316](https://github.com/paged-media/plugin-sdk/blob/main/docs/adr/316-native-content-and-baking.md)._
+_Status note (2026-10-02): this section predates the implementation. The plugin lives in this repository (`paged-media/plugin-draw`) and takes the plugin contract as published packages ([ADR 307](https://github.com/paged-media/paged/blob/main/platform/extensions/docs/adr/307-contract-as-peer-dependency.md)). The breakage log, the list of places where the public plugin API fell short, was a file in this repository until 2026-06-12 and remains in its git history. The baking that was built is recorded in [ADR 354](adr/354-multi-paint-bakes-to-a-group.md) and [ADR 316](https://github.com/paged-media/paged/blob/main/platform/extensions/docs/adr/316-native-content-and-baking.md)._
 
 | Phase  | Milestone                                                                                       | Exit criterion                                                               |
 | ------ | ----------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
@@ -217,7 +217,7 @@ _Status note (2026-10-02): this section predates the implementation. The plugin 
 
 ## 16. Open Questions
 
-_Status note (2026-10-02): this section predates the implementation. Question 7 is answered by [ADR 124](https://github.com/paged-media/core/blob/main/docs/adr/124-opacity-masks-native.md) (opacity masks are a native engine construct, and this plugin ships Make and Release commands over it). Question 8 is answered by [ADR 004](https://github.com/paged-media/core/blob/main/docs/adr/004-kurbo-geometry-kernel.md) and [ADR 353](adr/353-path-algebra-runs-in-the-engine.md) (the boolean kernel is in the engine; this plugin ships none). On question 6, the plugin stores no live shape parameters; corner editing writes the engine's native corner properties plus a marker in the plugin's metadata envelope (`packages/draw-bundle/src/commands/live-corners.ts`)._
+_Status note (2026-10-02): this section predates the implementation. Question 7 is answered by [ADR 124](https://github.com/paged-media/paged/blob/main/engine/core/docs/adr/124-opacity-masks-native.md) (opacity masks are a native engine construct, and this plugin ships Make and Release commands over it). Question 8 is answered by [ADR 004](https://github.com/paged-media/paged/blob/main/engine/core/docs/adr/004-kurbo-geometry-kernel.md) and [ADR 353](adr/353-path-algebra-runs-in-the-engine.md) (the boolean kernel is in the engine; this plugin ships none). On question 6, the plugin stores no live shape parameters; corner editing writes the engine's native corner properties plus a marker in the plugin's metadata envelope (`packages/draw-bundle/src/commands/live-corners.ts`)._
 
 6. **Live-shape liveness policy** — §13.2 proposes shipping live shapes in v1 with metadata + baked path. Confirm this doesn't violate the "v1 = pure Tier A" principle, or accept it as the single sanctioned exception (the metadata is trivially discardable).
 7. **Opacity-mask IDML mapping** — verify what IDML/InDesign transparency can represent before classifying §13.4 opacity masks as B vs. A.

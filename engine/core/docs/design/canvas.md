@@ -32,7 +32,7 @@ The canvas must serve as the foundation for the inspector. Hit-testing must retu
 
 ### 2.2 Non-goals
 
-_Status note (2026-10-02): `paged-parse` no longer exists in this repository; the IDML reader moved to the plugin-publish repository ([ADR 022](https://github.com/paged-media/plugin-publish/blob/main/docs/adr/022-idml-relocates-to-plugin-publish.md))._
+_Status note (2026-10-02): `paged-parse` no longer exists in this repository; the IDML reader moved to the plugin-publish repository ([ADR 022](https://github.com/paged-media/paged/blob/main/modules/publish/docs/adr/022-idml-relocates-to-plugin-publish.md))._
 
 This concept does not define the backend renderer itself. The renderer is the existing Rust pipeline through `paged-parse`, `paged-scene`, `paged-text`, `paged-compose`, and `paged-gpu`, with Vello as the GPU rasterizer. The concept defines the contract between that renderer and everything above it.
 

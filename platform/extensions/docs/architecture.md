@@ -201,7 +201,7 @@ through `PendingMutation` in `packages/plugin-api/src/mutations.ts`; at this com
 member is already part of `Mutation`.
 
 The engine package's minor version is the wire protocol number, a rule set in `core`
-([ADR 006](https://github.com/paged-media/core/blob/main/docs/adr/006-protocol-coupled-versioning.md)).
+([ADR 006](https://github.com/paged-media/paged/blob/main/engine/core/docs/adr/006-protocol-coupled-versioning.md)).
 `packages/plugin-sdk/src/wasm-loader.ts` derives the expected protocol from the stamp and
 refuses to run a wasm that reports another.
 

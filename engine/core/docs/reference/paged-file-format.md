@@ -10,7 +10,7 @@
 > versioning/extensibility model. The details are in an internal design note. This doc
 > remains the authoritative description of the shipped v1 container.
 
-_Status note (2026-10-02): the container as it ships today, including the core-owned native model part `paged/core/model/document.pgm` (`crates/paged-store/src/lib.rs`), is recorded in [ADR 118](../adr/118-paged-file-is-a-valid-idml-package.md). This document names the crates `paged-parse` and `paged-write`, which no longer exist in this repository: the IDML reader and writer moved to the plugin-publish repository ([ADR 022](https://github.com/paged-media/plugin-publish/blob/main/docs/adr/022-idml-relocates-to-plugin-publish.md)). The container writer `write_paged` is now `plugin-publish: crates/idml-export/src/paged.rs`, and the type that retains every ZIP entry is `SourceArchive` in `plugin-publish: crates/idml-import/src/lib.rs`._
+_Status note (2026-10-02): the container as it ships today, including the core-owned native model part `paged/core/model/document.pgm` (`crates/paged-store/src/lib.rs`), is recorded in [ADR 118](../adr/118-paged-file-is-a-valid-idml-package.md). This document names the crates `paged-parse` and `paged-write`, which no longer exist in this repository: the IDML reader and writer moved to the plugin-publish repository ([ADR 022](https://github.com/paged-media/paged/blob/main/modules/publish/docs/adr/022-idml-relocates-to-plugin-publish.md)). The container writer `write_paged` is now `plugin-publish: crates/idml-export/src/paged.rs`, and the type that retains every ZIP entry is `SourceArchive` in `plugin-publish: crates/idml-import/src/lib.rs`._
 
 ---
 

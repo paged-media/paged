@@ -8,7 +8,7 @@ added at the end.
 ADR numbers are unique across the paged-media repositories, so a number names the same
 record wherever it is cited. New records in this repository use 650–699. Record 022 predates
 that scheme and keeps its number; it amends ADR 021, which lives in the engine repository
-([core ADR 021](https://github.com/paged-media/core/blob/main/docs/adr/021-paged-native-document-model-idml-as-format.md)).
+([core ADR 021](https://github.com/paged-media/paged/blob/main/engine/core/docs/adr/021-paged-native-document-model-idml-as-format.md)).
 Records 650–657 were written on 2026-10-02 from the code as it stood, for decisions made
 earlier; their status says so.
 

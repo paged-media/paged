@@ -179,7 +179,7 @@ matches Excel."
 
 ## 2. Position in the Paged ecosystem: an independent plugin
 
-_Status note (2026-10-02): this section predates the implementation; see `architecture.md` (the repository is `paged-media/plugin-sheets`; the glue is the TypeScript package `packages/sheet-bundle`) and, in plugin-sdk, [ADR 314](https://github.com/paged-media/plugin-sdk/blob/main/docs/adr/314-plugin-shape.md) (the plugin shape) and [ADR 319](https://github.com/paged-media/plugin-sdk/blob/main/docs/adr/319-trust-line.md) (where a bundle runs)._
+_Status note (2026-10-02): this section predates the implementation; see `architecture.md` (the repository is `paged-media/plugin-sheets`; the glue is the TypeScript package `packages/sheet-bundle`) and, in plugin-sdk, [ADR 314](https://github.com/paged-media/paged/blob/main/platform/extensions/docs/adr/314-plugin-shape.md) (the plugin shape) and [ADR 319](https://github.com/paged-media/paged/blob/main/platform/extensions/docs/adr/319-trust-line.md) (where a bundle runs)._
 
 `paged.sheet` is a **Paged plugin bundle** in its own repository
 `paged-media/plugin-sheet`. First-party in authorship, third-party in
@@ -205,7 +205,7 @@ discipline — the same posture as `plugin-image`, with one rule added.
 
 ### 2.1 Isolation contract (superset of the plugin-image contract)
 
-_Status note (2026-10-02): this section predates the implementation; see [ADR 315](https://github.com/paged-media/plugin-sdk/blob/main/docs/adr/315-isolation-contract.md) in plugin-sdk (the isolation contract). In this repository the import rule is checked by a lint rule (`/bunfig.toml`, PM-0003) and `deny.toml`; the plugin spawns no workers; and data from another plugin arrives only through the host's data-provider door ([design/data-provider-consumer.md](design/data-provider-consumer.md))._
+_Status note (2026-10-02): this section predates the implementation; see [ADR 315](https://github.com/paged-media/paged/blob/main/platform/extensions/docs/adr/315-isolation-contract.md) in plugin-sdk (the isolation contract). In this repository the import rule is checked by a lint rule (`/bunfig.toml`, PM-0003) and `deny.toml`; the plugin spawns no workers; and data from another plugin arrives only through the host's data-provider door ([design/data-provider-consumer.md](design/data-provider-consumer.md))._
 
 1. **Zero core contact.** No imports from `core/` or `editor/` internals,
    no patched Paged builds, no core feature flags for this plugin. CI
@@ -235,7 +235,7 @@ provenance is another plugin's repo — fails the build.
 
 ### 2.2 Required SDK surface (gap analysis → RFCs, due before M0)
 
-_Status note (2026-10-02): this section predates the implementation; most rows of this table are now host doors the plugin uses. See [ADR 505](adr/505-native-table-and-edit-grid.md) (native table content, frame activation, the editing surface) and [ADR 506](adr/506-workbook-in-a-container-part.md) (storage), and in other repositories [ADR 012](https://github.com/paged-media/plugin-sdk/blob/main/docs/adr/012-k1-modal-session-undo-coalescing.md) (plugin-sdk: the modal editing session), [ADR 013](https://github.com/paged-media/core/blob/main/docs/adr/013-in-frame-scenelayer.md) (core: the rendering surface) and [ADR 017](https://github.com/paged-media/plugin-sdk/blob/main/docs/adr/017-importer-exporter-door-shape.md) (plugin-sdk: importer and exporter registration). The plugin declares no worker capability._
+_Status note (2026-10-02): this section predates the implementation; most rows of this table are now host doors the plugin uses. See [ADR 505](adr/505-native-table-and-edit-grid.md) (native table content, frame activation, the editing surface) and [ADR 506](adr/506-workbook-in-a-container-part.md) (storage), and in other repositories [ADR 012](https://github.com/paged-media/paged/blob/main/platform/extensions/docs/adr/012-k1-modal-session-undo-coalescing.md) (plugin-sdk: the modal editing session), [ADR 013](https://github.com/paged-media/paged/blob/main/engine/core/docs/adr/013-in-frame-scenelayer.md) (core: the rendering surface) and [ADR 017](https://github.com/paged-media/paged/blob/main/platform/extensions/docs/adr/017-importer-exporter-door-shape.md) (plugin-sdk: importer and exporter registration). The plugin declares no worker capability._
 
 | Need                                                                                                               | Likely status in plugin spec                               | If missing                                                                                                                                                                                                                                                                                                        |
 | ------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -282,7 +282,7 @@ _Status note (2026-10-02): this section predates the implementation; see [ADR 50
 
 ## 4. Crate architecture
 
-_Status note (2026-10-02): this section predates the implementation; see `architecture.md` (there is no `manifest/` or `glue/` directory: the bundle is `packages/sheet-bundle`, with the translation layer in `packages/sheet-host-model`; `sheet-lower`, `sheet-grid` and `sheet-chart` produce plain data and do not touch the SDK) and [ADR 314](https://github.com/paged-media/plugin-sdk/blob/main/docs/adr/314-plugin-shape.md) in plugin-sdk._
+_Status note (2026-10-02): this section predates the implementation; see `architecture.md` (there is no `manifest/` or `glue/` directory: the bundle is `packages/sheet-bundle`, with the translation layer in `packages/sheet-host-model`; `sheet-lower`, `sheet-grid` and `sheet-chart` produce plain data and do not touch the SDK) and [ADR 314](https://github.com/paged-media/paged/blob/main/platform/extensions/docs/adr/314-plugin-shape.md) in plugin-sdk._
 
 Repository `paged-media/plugin-sheet`:
 
@@ -421,7 +421,7 @@ _Status note (2026-10-02): this section predates the implementation; see [ADR 50
 
 ### 6.3 Mutation: Operations and Gestures
 
-_Status note (2026-10-02): this section predates the implementation; see [ADR 505](adr/505-native-table-and-edit-grid.md) and, in plugin-sdk, [ADR 012](https://github.com/paged-media/plugin-sdk/blob/main/docs/adr/012-k1-modal-session-undo-coalescing.md) (cell edits are written to the engine and kept in a session journal that is cleared on exit; they are not operations on the document's undo log, and committing one does not regenerate the page content)._
+_Status note (2026-10-02): this section predates the implementation; see [ADR 505](adr/505-native-table-and-edit-grid.md) and, in plugin-sdk, [ADR 012](https://github.com/paged-media/paged/blob/main/platform/extensions/docs/adr/012-k1-modal-session-undo-coalescing.md) (cell edits are written to the engine and kept in a session journal that is cleared on exit; they are not operations on the document's undo log, and committing one does not regenerate the page content)._
 
 | Paged concept             | sheet realization                                                                                                                                                                                                                 |
 | ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -472,7 +472,7 @@ re-implementing typesetting. Same data, two projections.
 
 ### 8.0 Sheets mode: the editing workflow
 
-_Status note (2026-10-02): this section predates the implementation; see [ADR 505](adr/505-native-table-and-edit-grid.md) and, in plugin-sdk, [ADR 012](https://github.com/paged-media/plugin-sdk/blob/main/docs/adr/012-k1-modal-session-undo-coalescing.md) (sheets mode is built as an edit context entered by double-click; while it is active, undo is the session's own journal, and leaving the mode does not re-lower the frame)._
+_Status note (2026-10-02): this section predates the implementation; see [ADR 505](adr/505-native-table-and-edit-grid.md) and, in plugin-sdk, [ADR 012](https://github.com/paged-media/paged/blob/main/platform/extensions/docs/adr/012-k1-modal-session-undo-coalescing.md) (sheets mode is built as an edit context entered by double-click; while it is active, undo is the session's own journal, and leaving the mode does not re-lower the frame)._
 
 The canonical interaction: **double-click a sheet frame → the editor
 switches into sheets mode** — a full Excel-like grid over the frame's
@@ -496,7 +496,7 @@ _contract_ specified here is core-layer scope because it drives SDK RFCs.
 
 ### 8.1 Grid rendering: direct vector on the SDK surface
 
-_Status note (2026-10-02): this section predates the implementation; see [ADR 505](adr/505-native-table-and-edit-grid.md) and, in core, [ADR 013](https://github.com/paged-media/core/blob/main/docs/adr/013-in-frame-scenelayer.md) (the preferred contract was built: the grid is submitted as a scene layer; the overlay fallback was not)._
+_Status note (2026-10-02): this section predates the implementation; see [ADR 505](adr/505-native-table-and-edit-grid.md) and, in core, [ADR 013](https://github.com/paged-media/paged/blob/main/engine/core/docs/adr/013-in-frame-scenelayer.md) (the preferred contract was built: the grid is submitted as a scene layer; the overlay fallback was not)._
 
 The sheets-mode grid is rendered by the plugin as **vector data** —
 virtualized rows/columns, cell text, rules, fills, selection chrome —
@@ -551,7 +551,7 @@ pages 7–9, one model, one recalc.
 
 ### 8.3 Document-coherent styling — the publishing principle
 
-_Status note (2026-10-02): this section predates the implementation; see [ADR 508](adr/508-content-addressed-swatches.md) (workbook colours become document swatches) and, in the editor, [ADR 023](https://github.com/paged-media/editor/blob/main/docs/adr/023-shared-panels-binding-providers.md) (host panels served by the plugin). Mapping imported workbook styles into a document style group is recorded as planned in `registry/features/stylemap.yaml`._
+_Status note (2026-10-02): this section predates the implementation; see [ADR 508](adr/508-content-addressed-swatches.md) (workbook colours become document swatches) and, in the editor, [ADR 023](https://github.com/paged-media/paged/blob/main/apps/editor/docs/adr/023-shared-panels-binding-providers.md) (host panels served by the plugin). Mapping imported workbook styles into a document style group is recorded as planned in `registry/features/stylemap.yaml`._
 
 For a publishing platform this is **the most important property of the
 whole plugin**, and it is a principle, not a feature:
@@ -773,7 +773,7 @@ one-way.
 
 ### 12.2 The 100% verification invariant
 
-_Status note (2026-10-02): this section predates the implementation; see [ADR 507](adr/507-golden-corpora-coverage-gate.md) and, in plugin-sdk, [ADR 317](https://github.com/paged-media/plugin-sdk/blob/main/docs/adr/317-registry-driven-dispatch.md) (dispatch is generated from the registry for functions only; XLSX part handlers and lowering rules are ordinary code whose registry rows are checked by the coverage gate)._
+_Status note (2026-10-02): this section predates the implementation; see [ADR 507](adr/507-golden-corpora-coverage-gate.md) and, in plugin-sdk, [ADR 317](https://github.com/paged-media/paged/blob/main/platform/extensions/docs/adr/317-registry-driven-dispatch.md) (dispatch is generated from the registry for functions only; XLSX part handlers and lowering rules are ordinary code whose registry rows are checked by the coverage gate)._
 
 1. **Registry-driven dispatch** (functions §7, XLSX part handlers §10,
    lowering rules §8): no registry row → no dispatch entry → unreachable

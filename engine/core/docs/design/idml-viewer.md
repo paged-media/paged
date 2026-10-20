@@ -91,7 +91,7 @@ The editor is deliberately Chrome/WebGPU-only. The viewer's embedding use cases 
 
 ## 5. SDK Layering
 
-_Status note (2026-10-02): this section predates the implementation, and the layering was built the other way round; see [ADR 112](../adr/112-viewer-sdk-is-a-sibling.md) and [ADR 123](../adr/123-viewer-ships-from-core.md). `@paged-media/sdk` is the wasm `ViewerSession`, and `@paged-media/idml-viewer` wraps a session it is handed (`web/idml-viewer/src/viewer.ts:71`). There is no `EditorSession` and no `/ui` export (`web/idml-viewer/package.json:14`). The editor's write SDK is a separate package in the editor repository ([ADR 205](https://github.com/paged-media/editor/blob/main/docs/adr/205-client-packaged-as-write-sdk.md))._
+_Status note (2026-10-02): this section predates the implementation, and the layering was built the other way round; see [ADR 112](../adr/112-viewer-sdk-is-a-sibling.md) and [ADR 123](../adr/123-viewer-ships-from-core.md). `@paged-media/sdk` is the wasm `ViewerSession`, and `@paged-media/idml-viewer` wraps a session it is handed (`web/idml-viewer/src/viewer.ts:71`). There is no `EditorSession` and no `/ui` export (`web/idml-viewer/package.json:14`). The editor's write SDK is a separate package in the editor repository ([ADR 205](https://github.com/paged-media/paged/blob/main/apps/editor/docs/adr/205-client-packaged-as-write-sdk.md))._
 
 The viewer is a **standalone package** — `@paged-media/idml-viewer` — and the **ground floor** of the SDK family. The editor SDK depends on it and extends it, never duplicates it:
 

@@ -84,7 +84,7 @@ vendored from `@paged-media/canvas-wasm` and `@paged-media/introspect-wasm` 0.73
   pages unknown) as well as mutations, undos and redos; the parent index, the core object
   model and the headless client follow the same set (`document.onDidChange@2`).
 - **The event follows what the reply says (0.2.58-canary.0, engine 0.71.13, core
-  [ADR 159](https://github.com/paged-media/core/blob/main/docs/adr/159-what-a-committed-change-reports.md)).**
+  [ADR 159](https://github.com/paged-media/paged/blob/main/engine/core/docs/adr/159-what-a-committed-change-reports.md)).**
   A gesture that resized one frame by its handles carries its `reflow`; a script that only
   read (`writes: 0`) is no change; a script that wrote reports the reply's `pageIds`.
   Keyed off presence: a reply without the fields (an older engine) keeps `pagesUnknown`

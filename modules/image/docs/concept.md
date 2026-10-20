@@ -103,7 +103,7 @@ plugin platform has.
 
 ### 2.1 Isolation contract
 
-_Status note (2026-10-02): this section predates the implementation; see [ADR 460](adr/460-document-is-not-the-store.md) (edits live in the plugin session and leave through save-back, not as document Operations) and, in plugin-sdk, [ADR 315](https://github.com/paged-media/plugin-sdk/blob/main/docs/adr/315-isolation-contract.md) (the isolation contract) and [ADR 319](https://github.com/paged-media/plugin-sdk/blob/main/docs/adr/319-trust-line.md) (first-party bundles run in-process; the glue here is a TypeScript bundle, not Boa-side script)._
+_Status note (2026-10-02): this section predates the implementation; see [ADR 460](adr/460-document-is-not-the-store.md) (edits live in the plugin session and leave through save-back, not as document Operations) and, in plugin-sdk, [ADR 315](https://github.com/paged-media/paged/blob/main/platform/extensions/docs/adr/315-isolation-contract.md) (the isolation contract) and [ADR 319](https://github.com/paged-media/paged/blob/main/platform/extensions/docs/adr/319-trust-line.md) (first-party bundles run in-process; the glue here is a TypeScript bundle, not Boa-side script)._
 
 1. **Zero core contact.** No imports from `core/` or `editor/` internals, no
    patched Paged builds, no feature flags inside Paged existing for this
@@ -131,7 +131,7 @@ _Status note (2026-10-02): this section predates the implementation; see [ADR 46
 
 ### 2.2 Required SDK surface (gap analysis → RFCs)
 
-_Status note (2026-10-02): this section predates the implementation; see [ADR 459](adr/459-scene-layer-image-and-tiles.md) for how results reach the page (a scene-layer image plus a tile provider; the shared-GPU-texture row was deferred, see core [ADR 018](https://github.com/paged-media/core/blob/main/docs/adr/018-stage-b-gpu-texture-defer-record-only.md)), and, in plugin-sdk, [ADR 017](https://github.com/paged-media/plugin-sdk/blob/main/docs/adr/017-importer-exporter-door-shape.md) (importer/exporter registration) and [ADR 318](https://github.com/paged-media/plugin-sdk/blob/main/docs/adr/318-host-spawned-workers.md) (workers). The OPFS tier is a stub, and the viewer-grade bundle described at the end of this section is not built._
+_Status note (2026-10-02): this section predates the implementation; see [ADR 459](adr/459-scene-layer-image-and-tiles.md) for how results reach the page (a scene-layer image plus a tile provider; the shared-GPU-texture row was deferred, see core [ADR 018](https://github.com/paged-media/paged/blob/main/engine/core/docs/adr/018-stage-b-gpu-texture-defer-record-only.md)), and, in plugin-sdk, [ADR 017](https://github.com/paged-media/paged/blob/main/platform/extensions/docs/adr/017-importer-exporter-door-shape.md) (importer/exporter registration) and [ADR 318](https://github.com/paged-media/paged/blob/main/platform/extensions/docs/adr/318-host-spawned-workers.md) (workers). The OPFS tier is a stub, and the viewer-grade bundle described at the end of this section is not built._
 
 | Need                                                                    | Likely status in plugin spec                              | If missing                                                                                                                                                                     |
 | ----------------------------------------------------------------------- | --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -420,7 +420,7 @@ speed.
 
 ## 7. Engine A — streaming pipeline (`image-pipeline`)
 
-_Status note (2026-10-02): this section predates the implementation; see [ADR 454](adr/454-two-evaluation-engines.md). Decode workers are spawned through the host's worker door (plugin-sdk [ADR 318](https://github.com/paged-media/plugin-sdk/blob/main/docs/adr/318-host-spawned-workers.md)), not `wasm-bindgen-rayon`; the `to_pyramid` sink and the native ingest tool are not built._
+_Status note (2026-10-02): this section predates the implementation; see [ADR 454](adr/454-two-evaluation-engines.md). Decode workers are spawned through the host's worker door (plugin-sdk [ADR 318](https://github.com/paged-media/paged/blob/main/platform/extensions/docs/adr/318-host-spawned-workers.md)), not `wasm-bindgen-rayon`; the `to_pyramid` sink and the native ingest tool are not built._
 
 The libvips-shaped engine: bounded memory, one pass, source → sink.
 
@@ -753,7 +753,7 @@ Operations live in the registry as `image.*` features (§12.3). Tiers:
 
 ## 12. Conformance, testing, and the verification invariant
 
-_Status note (2026-10-02): this section predates the implementation; see [ADR 453](adr/453-tolerance-not-golden-bytes.md) for how output is verified and plugin-sdk [ADR 317](https://github.com/paged-media/plugin-sdk/blob/main/docs/adr/317-registry-driven-dispatch.md) for registry-driven dispatch. The build-consumed registry is `registry/*.yaml` in this repo, and the test harness is the Rust crate `image-conformance`. This repo has no Playwright suite and no `#[feature_test]` macro; no libvips or GEGL oracle runner exists; CI runs the GPU parity tests without an adapter, so they skip._
+_Status note (2026-10-02): this section predates the implementation; see [ADR 453](adr/453-tolerance-not-golden-bytes.md) for how output is verified and plugin-sdk [ADR 317](https://github.com/paged-media/paged/blob/main/platform/extensions/docs/adr/317-registry-driven-dispatch.md) for registry-driven dispatch. The build-consumed registry is `registry/*.yaml` in this repo, and the test harness is the Rust crate `image-conformance`. This repo has no Playwright suite and no `#[feature_test]` macro; no libvips or GEGL oracle runner exists; CI runs the GPU parity tests without an adapter, so they skip._
 
 ### 12.1 Identical environment to Paged core
 
