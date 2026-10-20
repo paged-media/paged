@@ -83,8 +83,13 @@ else
 fi
 
 # The engine must be the version the extensions are built for: DuckDB refuses
-# an extension built for another engine version.
-if ! grep -aq "$DUCKDB_ENGINE_VERSION" "$DIST/duckdb-eh.wasm"; then
+# an extension built for another engine version. A byte search in Bun, not
+# `grep -a`: on the macos-14 runner grep found no match in the same 35 MB
+# binary that passes on Linux, and failed the showcase nightly there.
+if ! ENGINE="$DUCKDB_ENGINE_VERSION" WASM="$DIST/duckdb-eh.wasm" bun -e '
+  const buf = require("fs").readFileSync(process.env.WASM);
+  process.exit(buf.includes(Buffer.from(process.env.ENGINE)) ? 0 : 1);
+'; then
   echo "error: $DIST/duckdb-eh.wasm does not name engine $DUCKDB_ENGINE_VERSION — set DUCKDB_ENGINE_VERSION for this DuckDB-WASM" >&2
   exit 1
 fi
