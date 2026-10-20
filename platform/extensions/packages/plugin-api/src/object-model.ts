@@ -178,11 +178,15 @@ export type ValueTypeKind = ValueType["kind"];
  */
 export type StructField = ValueType & { optional?: true; default?: unknown };
 
-/** ADR 132's schema ROW (the JSON shape the core catalog publishes, and
- *  the one plugins publish). One row per (address kind, path). */
+/** ADR 132's schema ROW: the one shape every surface answers — what the
+ *  core catalog publishes as `objectSchemas` (extensions ADR 332),
+ *  `host.objects.schema` serves and `paged.schema` returns, and what
+ *  plugins publish. One row per (address kind, path). */
 export interface PropertySchema {
-  /** ADR 131 kind (`frame`, `swatch`, …); plugin rows: `plugin:<id>/<kind>`
-   *  (the registry fills it in when a kind omits it). */
+  /** ADR 131 kind (`frame`, `swatch`, `storyRange`, `group`, `style`, …);
+   *  plugin rows: `plugin:<id>/<kind>` (the registry fills it in when a
+   *  kind omits it). An object kind's rows may span several address kinds:
+   *  `story` lists `storyRange` rows, `frame` a `group` row. */
   addressKind?: string;
   /** Item kinds the row applies to; omitted = all. */
   appliesTo?: readonly string[];
@@ -199,9 +203,17 @@ export interface PropertySchema {
    *  op (`nextTextFrame` → `unlinkFrames`, `opacityMask` →
    *  `releaseOpacityMask`). */
   virtual?: { op: string; field?: string; clearOp?: string } | null;
-  idml?: { element: string; attribute: string } | null;
+  /** Core rows: the IDML attributes the value is read from, one per
+   *  element it applies on (`kind`: an XML attribute, or a child of the
+   *  element's `<Properties>`). */
+  idml?: readonly IdmlSpelling[] | null;
+  /** Core rows: the wire `Value` variant a write carries (`length`,
+   *  `colorRef`, `text`, …), for a caller composing a raw `{ type, value }`. */
+  wire?: string;
   /** Default: `access === "readWrite"`. */
   bindable?: boolean;
+  /** Plugin rows: the plugin version that added the row. Core rows carry
+   *  none. */
   since?: number;
   summary?: string;
   title?: string;
@@ -209,6 +221,14 @@ export interface PropertySchema {
    *  skips it unless asked (`getAll(address, { content: true })`). The
    *  `content` row is always heavy. */
   heavy?: boolean;
+}
+
+/** One IDML spelling of a core property: `attribute` on `element` (an XML
+ *  attribute, or a child of its `<Properties>`). */
+export interface IdmlSpelling {
+  element: string;
+  attribute: string;
+  kind?: "attr" | "properties-child";
 }
 
 /** What an object's CONTENT is; drives content ops and `get … --content`. */

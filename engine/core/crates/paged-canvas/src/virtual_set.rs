@@ -39,7 +39,9 @@ use paged_introspect::catalog::{
     addressed_on, lookup_path, schema, wire_name, ADDRESSED_PATHS, ALL_PATHS,
 };
 use paged_introspect::schema::{validate, PropertySchema};
-use paged_introspect::virtual_paths::{lookup_virtual, segment, style_paths};
+use paged_introspect::virtual_paths::{
+    lookup_derived, lookup_virtual, segment, style_paths, CONTENT_PATH,
+};
 use paged_mutate::{NodeId, Operation, PathPointRole, PropertyPath, StyleCollection, Value};
 use paged_wire::{Address, ByteBuf, ElementId, PageId, StyleFamily, VirtualTarget};
 
@@ -214,6 +216,15 @@ impl CanvasModel {
         let kind = address.address_kind();
         let what = format!("{kind}.{path}");
         let unknown = || format!("{what}: no such settable path on a {kind}");
+        // Extensions ADR 332 — a derived row reads, nothing writes it.
+        if lookup_derived(kind, path).is_some() {
+            return Err(format!("{what}: read-only (derived from the document)"));
+        }
+        if path == CONTENT_PATH {
+            if let Some(m) = self.resolve_content(address, value, &what)? {
+                return Ok(Resolved::Mutation(m));
+            }
+        }
         // Op-backed rows first: they are named by the table.
         let row = lookup_virtual(kind, path).or_else(|| match kind {
             // a page item's row also answers on its specific kind
@@ -1045,7 +1056,10 @@ impl CanvasModel {
         // A story's text, read-only: a story answers its paragraphs joined
         // by `\n` (the separator `insertText` splits on), a text frame its
         // story's (the whole thread), a range its characters.
-        if path == "text" {
+        if let Some(read) = self.derived_row(address, path) {
+            return read;
+        }
+        if path == "text" || path == CONTENT_PATH {
             let read = |story_id: &str, range: Option<(u32, u32)>| {
                 scene
                     .stories
@@ -1531,6 +1545,127 @@ impl CanvasModel {
                 self.get_property(&VirtualTarget::Element { element_id: id }, path)
             }
         }
+    }
+
+    /// Extensions ADR 332 — the reserved `content` path written: the
+    /// story's text (or a range's) replaced, `\n` splitting paragraphs,
+    /// as ONE batch (`deleteRange` then `insertText`), one undo step.
+    /// `None` when the target has no content (the caller's "no such
+    /// path").
+    fn resolve_content(
+        &self,
+        address: &VirtualTarget,
+        value: &Value,
+        what: &str,
+    ) -> Result<Option<Mutation>, String> {
+        let (story_id, range) = match address {
+            VirtualTarget::Story { story_id } => (story_id.as_str(), None),
+            VirtualTarget::Element {
+                element_id:
+                    ElementId::StoryRange {
+                        story_id,
+                        start,
+                        end,
+                    },
+            } => (story_id.as_str(), Some((*start, *end))),
+            _ => return Ok(None),
+        };
+        let text = text_of(value)
+            .ok_or_else(|| format!("{what}: expects text (or null to empty it)"))?
+            .unwrap_or_default();
+        let story = self
+            .scene
+            .stories
+            .iter()
+            .find(|s| s.self_id == story_id)
+            .ok_or_else(|| format!("{what}: the story {story_id} does not exist"))?;
+        let len: u32 = story
+            .story
+            .paragraphs
+            .iter()
+            .flat_map(|p| p.runs.iter())
+            .map(|r| r.text.chars().count() as u32)
+            .sum();
+        let (start, end) = range.map_or((0, len), |(a, b)| (a.min(len), b.min(len)));
+        let mut ops = Vec::new();
+        if end > start {
+            ops.push(Mutation::DeleteRange {
+                story_id: story_id.to_string(),
+                start,
+                end,
+                cell: None,
+            });
+        }
+        if !text.is_empty() {
+            ops.push(Mutation::InsertText {
+                story_id: story_id.to_string(),
+                offset: start,
+                text,
+                cell: None,
+            });
+        }
+        Ok(Some(Mutation::Batch { ops }))
+    }
+
+    /// Extensions ADR 332 — the derived rows (`DERIVED_PATHS`): what the
+    /// collections report, read as properties. `None` for any other path
+    /// (and for the table counts, which the table arm reads).
+    fn derived_row(&self, address: &VirtualTarget, path: &str) -> Option<Result<Value, ReadError>> {
+        lookup_derived(address.address_kind(), path)?;
+        let what = format!("{}.{path}", address.address_kind());
+        let missing = || ReadError::NotFound(format!("{what}: the target does not exist"));
+        let count = |n: u32| Value::Length(Some(n as f32));
+        Some(match address {
+            VirtualTarget::Doc => Ok(match path {
+                "pageCount" => count(self.built.pages.len() as u32),
+                _ => Value::Bool(!self.applied_log.is_empty()),
+            }),
+            VirtualTarget::Page { page_id } => self
+                .pages()
+                .into_iter()
+                .find(|p| p.self_id == *page_id)
+                .map(|p| count(p.index))
+                .ok_or_else(missing),
+            VirtualTarget::Spread { spread_id } => self
+                .spreads()
+                .into_iter()
+                .find(|s| s.self_id == *spread_id)
+                .map(|s| match path {
+                    "label" => Value::Text(s.label),
+                    _ => count(s.page_count),
+                })
+                .ok_or_else(missing),
+            VirtualTarget::Master { master_id } => self
+                .master_pages()
+                .into_iter()
+                .find(|m| m.self_id == *master_id)
+                .map(|m| match path {
+                    "label" => Value::Text(m.label),
+                    _ => count(m.page_count),
+                })
+                .ok_or_else(missing),
+            VirtualTarget::Story { story_id } => self
+                .stories()
+                .into_iter()
+                .find(|s| s.self_id == *story_id)
+                .map(|s| match path {
+                    "characterCount" => count(s.character_count),
+                    "paragraphCount" => count(s.paragraph_count),
+                    _ => Value::Bool(s.overset),
+                })
+                .ok_or_else(missing),
+            VirtualTarget::Swatch { swatch_id } => self
+                .swatches()
+                .into_iter()
+                .find(|s| s.self_id == *swatch_id)
+                .map(|s| Value::Text(s.kind))
+                .ok_or_else(missing),
+            VirtualTarget::Style { family, style_id } => self
+                .style_properties(family_collection(*family), style_id)
+                .map(|p| Value::Text(p.based_on.unwrap_or_default()))
+                .ok_or_else(missing),
+            _ => return None,
+        })
     }
 
     fn label_list(&self, self_id: &str) -> Option<&[(String, String)]> {

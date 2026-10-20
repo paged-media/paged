@@ -571,6 +571,86 @@ pub const VIRTUAL_PATHS: &[VirtualPath] = &[
     ),
 ];
 
+/// One row the engine DERIVES and no op writes: a count, a flag, a
+/// label the document's structure answers (extensions ADR 332). Read by
+/// `RequestGet` / `paged.get`; a `Set` on one is refused as read-only.
+#[derive(Debug, Clone, Copy)]
+pub struct DerivedPath {
+    /// ADR 131 address kind.
+    pub address_kind: &'static str,
+    /// The style family a `style` row belongs to; empty otherwise.
+    pub family: &'static str,
+    pub path: &'static str,
+    pub schema: PropertySchema,
+}
+
+const fn d(address_kind: &'static str, path: &'static str, schema: PropertySchema) -> DerivedPath {
+    DerivedPath {
+        address_kind,
+        family: "",
+        path,
+        schema,
+    }
+}
+
+/// What a swatch IS (`collection("swatches")`'s `kind`): a process or
+/// spot colour, a mixed ink, or one of the four reserved swatches.
+pub const SWATCH_KINDS: &[&str] = &[
+    "process",
+    "spot",
+    "mixedInk",
+    "unknown",
+    "none",
+    "paper",
+    "black",
+    "registration",
+];
+
+/// The derived rows (extensions ADR 332): what the plugin SDK used to add
+/// to core's schema from other reads (the collections, `documentMeta`),
+/// now the engine's own rows, read where every other row is read.
+pub const DERIVED_PATHS: &[DerivedPath] = &[
+    d("doc", "pageCount", count().derived().required()),
+    d("doc", "dirty", bool_().derived()),
+    d("page", "index", count().derived().required()),
+    d("spread", "label", text().derived().required()),
+    d("spread", "pageCount", count().derived().required()),
+    d("master", "label", text().derived().required()),
+    d("master", "pageCount", count().derived().required()),
+    d("story", "characterCount", count().derived().required()),
+    d("story", "paragraphCount", count().derived().required()),
+    d("story", "overset", bool_().derived()),
+    d(
+        "swatch",
+        "swatchKind",
+        enum_(SWATCH_KINDS).derived().required(),
+    ),
+    d("table", "tableRowCount", count().derived().required()),
+    d("table", "tableColumnCount", count().derived().required()),
+    d("table", "tableHeaderRowCount", count().derived().required()),
+    d("table", "tableFooterRowCount", count().derived().required()),
+    // Every family's: a style of the same family, or "" at the root.
+    d("style", "basedOn", reference(RefKind::Style).read_only()),
+];
+
+/// A derived row of `(address kind, path)`.
+pub fn lookup_derived(address_kind: &str, path: &str) -> Option<&'static DerivedPath> {
+    DERIVED_PATHS
+        .iter()
+        .find(|row| row.address_kind == address_kind && row.path == path)
+}
+
+/// The reserved `content` path (plugin-api `PropertyPathName`): a story's
+/// text — its paragraphs joined by `\n`, the separator `insertText`
+/// splits on — on a story or a range of one. A `Set` replaces the text
+/// (one `deleteRange` + `insertText`, one undo step).
+pub const CONTENT_PATH: &str = "content";
+
+/// The `content` row's schema: text, cleared to the empty story by `null`.
+pub const fn content_schema() -> PropertySchema {
+    text()
+}
+
 /// Find the op-backed row for `(address kind, path)`. A concrete indexed
 /// or keyed path (`rows[3].height`, `labels[x-paged:a]`) matches its
 /// pattern row; the caller parses the segment with [`segment`].
@@ -592,6 +672,14 @@ pub fn schema_for(address_kind: &str, family: Option<&str>, path: &str) -> Optio
             .flatten()
     }) {
         return Some(row.schema);
+    }
+    if let Some(row) = lookup_derived(address_kind, path)
+        .filter(|r| r.family.is_empty() || family.is_none_or(|f| f == r.family))
+    {
+        return Some(row.schema);
+    }
+    if path == CONTENT_PATH && matches!(address_kind, "story" | "storyRange") {
+        return Some(content_schema());
     }
     let kind = match (address_kind, family) {
         ("style", Some(f)) => format!("style:{f}"),
@@ -969,6 +1057,21 @@ pub fn property_schemas() -> Vec<SchemaRow> {
             }),
         ));
     }
+    for dp in DERIVED_PATHS {
+        let applies_to = if dp.family.is_empty() {
+            Vec::new()
+        } else {
+            vec![dp.family]
+        };
+        out.push(row(dp.address_kind, applies_to, dp.path, dp.schema, None));
+    }
+    out.push(row(
+        "storyRange",
+        Vec::new(),
+        CONTENT_PATH,
+        content_schema(),
+        None,
+    ));
     out
 }
 

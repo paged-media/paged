@@ -168,6 +168,7 @@ export {
 } from "./core-commands.generated.js";
 export {
   CORE_CATALOG_ROWS,
+  CORE_OBJECT_SCHEMAS,
   CORE_PATHS,
   CORE_PATH_ALIASES,
   coreSchema71,

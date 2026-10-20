@@ -18,11 +18,11 @@
 
 // Core's property schemas, two ways:
 //
-// * Protocol 71 and later (`CORE_SCHEMA_71`, below): core publishes ADR
-//   132's typed `propertySchemas` in the catalog, and this file only
-//   NORMALISES the vendored catalog's rows into the SDK's `PropertySchema`
-//   (enums with their members, struct shapes, list item types, ranges,
-//   defaults). Nothing is inferred.
+// * Protocol 71 and later (`coreSchema71`, below): core publishes its rows
+//   in the plugin contract's `PropertySchema` shape, keyed by object kind,
+//   as the catalog's `objectSchemas` (extensions ADR 332), and this file
+//   serves them VERBATIM — the rows `paged.schema(kind)` answers too. The
+//   SDK adds no row, re-types none and stamps nothing (`since`) on them.
 // * Below protocol 71 (`CORE_PATHS`): the interim table the 0.70 seam
 //   (core-objects-v70.ts) writes through, kept so an editor on a published
 //   engine below 71 still works. One row per `PropertyPath` of the vendored
@@ -42,9 +42,8 @@
 // `type` is now only a FALLBACK: wherever core's catalog types the same
 // path, the pre-71 seam serves the catalog's type, range and default
 // (enum members included) — the wire variant is the same on the older
-// engine. `inferred: true` is left only on the four paths core's catalog
-// gives no row (`tableRowCount`, `tableColumnCount`, and since 0.71.13
-// `tableHeaderRowCount`, `tableFooterRowCount`): read-only counts.
+// engine. Every path is a catalog row now (the four read-only table
+// counts since extensions ADR 332), so none is `inferred`.
 //
 // `wire` is the `Value` variant a WRITE must carry. Rows without `type`
 // are structured values (gradient feather, paragraph rules, tab stops) or
@@ -57,9 +56,9 @@ import type {
   ValueType,
 } from "@paged-media/plugin-api";
 
-// Named imports, so the bundler keeps only these two keys of the catalog.
+// Named imports, so the bundler keeps only these keys of the catalog.
 import {
-  pathAliases,
+  objectSchemas,
   propertySchemas,
 } from "../../plugin-api/src/catalog.json";
 
@@ -848,14 +847,12 @@ export const CORE_PATHS: Record<
     scope: "table",
     wire: "length",
     type: { kind: "number", integer: true },
-    inferred: true,
     readOnly: true,
   },
   tableColumnCount: {
     scope: "table",
     wire: "length",
     type: { kind: "number", integer: true },
-    inferred: true,
     readOnly: true,
   },
   // Core v0.71.13 (ADR 159): a table's header and footer bands, read-only and
@@ -866,14 +863,12 @@ export const CORE_PATHS: Record<
     scope: "table",
     wire: "length",
     type: { kind: "number", integer: true },
-    inferred: true,
     readOnly: true,
   },
   tableFooterRowCount: {
     scope: "table",
     wire: "length",
     type: { kind: "number", integer: true },
-    inferred: true,
     readOnly: true,
   },
   pluginMetadata: OP,
@@ -1056,7 +1051,10 @@ export const canonicalCorePath = (path: string): string =>
 
 // ------------------------------------------------- protocol 71: the catalog
 
-/** One `propertySchemas` row as core's catalog publishes it (protocol 71). */
+/** One `propertySchemas` row as core's catalog publishes it (ADR 132, the
+ *  engine's own row: a flat `type`, the engine's address kinds, operation
+ *  rows, every IDML spelling). The SDK serves `objectSchemas` instead;
+ *  this shape stays exported for tools that read the engine's table. */
 export interface CoreCatalogRow {
   addressKind: string;
   appliesTo?: readonly string[];
@@ -1078,14 +1076,16 @@ export interface CoreCatalogRow {
   bindable?: boolean;
 }
 
-/** A normalised core row: the SDK schema row, the wire `Value` variant a
- *  write carries, and the CORE address kind the row belongs to (the SDK
- *  folds `storyRange` into `story` and `group` into `frame`). */
+/** A core row as the seam routes it: the contract row, the wire `Value`
+ *  variant a write carries, and the CORE address kind it belongs to (an
+ *  object kind holds several: `story` holds `storyRange` rows, `frame` a
+ *  `group` row). */
 export interface CoreRow71 {
   schema: PropertySchema;
   wire: string;
   coreKind: string;
-  /** Not in core's catalog: typed from the interim table (CORE_ROWLESS_PATHS). */
+  /** Not in core's catalog. Never set since extensions ADR 332 (every
+   *  core path is a catalog row); kept for the shape's consumers. */
   inferred?: true;
 }
 
@@ -1097,9 +1097,10 @@ const UNIT: Record<string, "pt" | "deg" | "percent" | "em1000" | "ppi"> = {
   ppi: "ppi",
 };
 
-/** Core's catalog type → the SDK's `ValueType`; null for an OPERATION row
- *  (path-point edits, outline / offset / simplify): those are geometry
- *  ops, not values, and stay reachable as a raw wire `{ type, value }`. */
+/** Core's ENGINE row type (`propertySchemas`) → the contract's
+ *  `ValueType`; null for an operation row. The engine makes the same
+ *  translation for `objectSchemas` (extensions ADR 332); this is the
+ *  reference the SDK's tests hold the engine's to. */
 export function normalizeCoreType(t: CoreCatalogRow["type"]): ValueType | null {
   switch (t.kind) {
     case "operation":
@@ -1156,132 +1157,55 @@ export function normalizeCoreType(t: CoreCatalogRow["type"]): ValueType | null {
   }
 }
 
-/** The SDK kind a core catalog row serves (`style` rows split by family). */
-function sdkKindsOf(row: CoreCatalogRow): string[] {
-  switch (row.addressKind) {
-    case "storyRange":
-    case "story":
-      return ["story"];
-    case "group":
-      return ["frame"];
-    case "style":
-      return (
-        row.appliesTo ?? ["paragraph", "character", "object", "cell", "table"]
-      ).map((f) => `style:${f}`);
-    default:
-      return [row.addressKind];
-  }
-}
-
-/** The raw rows of the vendored catalog (empty before protocol 71). */
+/** The raw engine rows of the vendored catalog (`propertySchemas`). */
 export const CORE_CATALOG_ROWS: readonly CoreCatalogRow[] =
   propertySchemas as unknown as CoreCatalogRow[];
 
+/** The vendored catalog's contract rows, keyed by object kind (`style`
+ *  holds every family's definitions; a family's are the rows whose
+ *  `appliesTo` names it). */
+export const CORE_OBJECT_SCHEMAS: Readonly<
+  Record<string, readonly (PropertySchema & { wire: string })[]>
+> = objectSchemas as unknown as Record<
+  string,
+  readonly (PropertySchema & { wire: string })[]
+>;
+
+const STYLE_FAMILIES = [
+  "paragraph",
+  "character",
+  "object",
+  "cell",
+  "table",
+] as const;
+
 let schema71: Map<string, Map<string, CoreRow71>> | null = null;
 
-/** Catalog rows core lists as read-write but does not STORE: the engine
- *  accepts the `Set` and drops it, and `RequestGet` answers null. The SDK
- *  marks them read-only (and unbindable) so a field or a binding cannot
- *  claim a write that never lands. Remove an entry when core models the
- *  value (or flips the row itself). Empty since engine 0.71.11, which
- *  stores a cell's fill tint (`cell|cellFillTint`, the only entry it had). */
-export const CORE_UNSTORED_ROWS: ReadonlyMap<string, string> = new Map<
-  string,
-  string
->([]);
-
-/** The catalog names a few rows by their Boa ALIAS (`frameInnerShadow`);
- *  the SDK lists every core row under its WIRE path, as the registry
- *  canonicalises input (`canonicalCorePath`). */
-const CATALOG_ALIASES: ReadonlyMap<string, string> = new Map(
-  (pathAliases as { name: string; wire: string }[]).map((a) => [
-    a.name,
-    a.wire,
-  ]),
-);
-
-/** Wire PropertyPaths core's catalog gives NO row (protocol 71): still
- *  reachable through `Set` / `RequestGet`, typed from the interim table
- *  and marked so. The SDK infers nothing else. */
-export const CORE_ROWLESS_PATHS: readonly string[] = Object.keys(
-  CORE_PATHS,
-).filter((p) => {
-  const row = (
-    CORE_PATHS as Record<string, CorePathRow | { op: true } | { since: 71 }>
-  )[p]!;
-  if ("op" in row || "since" in row || !row.type) return false;
-  return !CORE_CATALOG_ROWS.some(
-    (r) => (CATALOG_ALIASES.get(r.path) ?? r.path) === p,
-  );
-});
-
-/** SDK kind → path → normalised row, from the vendored catalog. Indexed
- *  core paths (`labels[key]`, `rows[i].height`) become `[]` rows. */
+/** SDK kind → path → row, from the vendored catalog's `objectSchemas`
+ *  (verbatim; one `style:<family>` entry per family besides `style`). */
 export function coreSchema71(): ReadonlyMap<
   string,
   ReadonlyMap<string, CoreRow71>
 > {
   if (schema71) return schema71;
   const out = new Map<string, Map<string, CoreRow71>>();
-  for (const row of CORE_CATALOG_ROWS) {
-    const type = normalizeCoreType(row.type);
-    if (!type) continue;
-    const path = (CATALOG_ALIASES.get(row.path) ?? row.path).replace(
-      /\[[^\]]*\]/g,
-      "[]",
-    );
-    for (const kind of sdkKindsOf(row)) {
-      const base = kind.startsWith("style:") ? "style" : kind;
-      const schema: PropertySchema = { addressKind: base, path, type };
-      if (row.appliesTo && row.addressKind !== "style")
-        schema.appliesTo = row.appliesTo;
-      if (row.addressKind === "group") schema.appliesTo = ["group"];
-      if (row.nullable !== undefined) schema.nullable = row.nullable;
-      if (row.range) schema.range = row.range;
-      if (row.default !== undefined) schema.default = row.default;
-      if (row.access && row.access !== "readWrite") schema.access = row.access;
-      if (row.virtual) schema.virtual = row.virtual;
-      if (row.bindable !== undefined) schema.bindable = row.bindable;
-      schema.since = 71;
-      const unstored = CORE_UNSTORED_ROWS.get(`${row.addressKind}|${path}`);
-      if (unstored && (schema.access ?? "readWrite") === "readWrite") {
-        schema.access = "readOnly";
-        schema.bindable = false;
-        schema.summary = unstored;
-      }
-      const m = out.get(kind) ?? new Map<string, CoreRow71>();
-      if (!m.has(path))
-        m.set(path, { schema, wire: row.wire, coreKind: row.addressKind });
-      out.set(kind, m);
-    }
-  }
-  const coreKindOfScope: Record<CorePathScope, string> = {
-    frame: "frame",
-    story: "storyRange",
-    cell: "cell",
-    table: "table",
-    layer: "layer",
-    page: "page",
+  const add = (kind: string, row: PropertySchema & { wire: string }) => {
+    const m = out.get(kind) ?? new Map<string, CoreRow71>();
+    if (!m.has(row.path))
+      m.set(row.path, {
+        schema: row,
+        wire: row.wire,
+        coreKind: row.addressKind ?? kind,
+      });
+    out.set(kind, m);
   };
-  for (const path of CORE_ROWLESS_PATHS) {
-    const row = (CORE_PATHS as Record<string, CorePathRow>)[path]!;
-    const schema: PropertySchema = {
-      addressKind: row.scope,
-      path,
-      type: row.type!,
-      nullable: true,
-      summary:
-        "Not typed by core's catalog (protocol 71): typed from the SDK's interim table.",
-    };
-    if (row.readOnly) schema.access = "readOnly";
-    const m = out.get(row.scope) ?? new Map<string, CoreRow71>();
-    m.set(path, {
-      schema,
-      wire: row.wire,
-      coreKind: coreKindOfScope[row.scope],
-      inferred: true,
-    });
-    out.set(row.scope, m);
+  for (const [kind, rows] of Object.entries(CORE_OBJECT_SCHEMAS)) {
+    for (const row of rows) {
+      add(kind, row);
+      if (kind === "style")
+        for (const f of STYLE_FAMILIES)
+          if (row.appliesTo?.includes(f)) add(`style:${f}`, row);
+    }
   }
   schema71 = out;
   return out;
