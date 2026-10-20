@@ -72,18 +72,15 @@ describe("Spreads panel", () => {
   // The panel's rule is that a folio is not a name ("Spread n" instead);
   // a folio with a section prefix slips through it, so the second spread
   // of the rich scene (section "B-") reads "B-1" beside "Spread 1".
-  test.failing(
-    "PN-107: a spread whose folio has a section prefix also reads as Spread n",
-    async () => {
-      covers("panel:paged.spreads");
-      const h = await mountPanel(SpreadsPanel, {
-        id: "paged.spreads",
-        scene: richScene,
-      });
-      expect(rows(h.root).map((r) => r.primary)).toEqual([
-        "Spread 1",
-        "Spread 2",
-      ]);
-    },
-  );
+  test("PN-107: a spread whose folio has a section prefix also reads as Spread n", async () => {
+    covers("panel:paged.spreads");
+    const h = await mountPanel(SpreadsPanel, {
+      id: "paged.spreads",
+      scene: richScene,
+    });
+    expect(rows(h.root).map((r) => r.primary)).toEqual([
+      "Spread 1",
+      "Spread 2",
+    ]);
+  });
 });

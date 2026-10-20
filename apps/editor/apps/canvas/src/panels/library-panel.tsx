@@ -158,6 +158,11 @@ export function LibraryPanel() {
     SERVER ? signedInAs(SERVER) : null,
   );
   const [syncNote, setSyncNote] = useState<string | null>(null);
+  // The version a release is being named for, and the name typed so far:
+  // the name is asked in the panel, beside the version (PN-354), not in a
+  // window.prompt.
+  const [releasing, setReleasing] = useState<string | null>(null);
+  const [releaseName, setReleaseName] = useState("");
   // A live save adds a branch: the refs below are read again when the relay moves.
   const liveVersion = useSyncExternalStore(
     live.subscribe,
@@ -370,8 +375,16 @@ export function LibraryPanel() {
                       alignItems: "center",
                     }}
                   >
-                    <span style={{ ...mono, color: "var(--pg-muted-fg)" }}>
-                      {c.hash.slice(0, 10)}
+                    {/* Labelled for people (PN-353): the version's
+                        number and who made it; the hash is only the
+                        tooltip. */}
+                    <span
+                      style={{ ...mono, color: "var(--pg-muted-fg)" }}
+                      title={c.hash}
+                      data-library-version-label
+                    >
+                      Version {log.length - i}
+                      {c.author ? ` · ${c.author}` : ""}
                     </span>
                     {i > 0 && (
                       <button
@@ -406,22 +419,63 @@ export function LibraryPanel() {
                       data-library-release
                       style={button}
                       title="Name this version; a release never moves"
-                      onClick={act(async () => {
-                        const name = globalThis.prompt(
-                          "Release name (it never moves once given):",
-                          "",
-                        );
-                        if (name?.trim())
-                          await library.release(
-                            current.id,
-                            name.trim().replace(/\s+/g, "-"),
-                            c.hash,
-                          );
-                      })}
+                      aria-expanded={releasing === c.hash}
+                      onClick={() => {
+                        setReleasing(releasing === c.hash ? null : c.hash);
+                        setReleaseName("");
+                      }}
                     >
                       Release
                     </button>
                   </div>
+                  {releasing === c.hash && (
+                    <form
+                      data-library-release-form
+                      style={{
+                        display: "flex",
+                        gap: 6,
+                        marginTop: 4,
+                        alignItems: "center",
+                      }}
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        const name = releaseName.trim().replace(/\s+/g, "-");
+                        if (!name) return;
+                        setReleasing(null);
+                        void act(async () => {
+                          await library.release(current.id, name, c.hash);
+                        })();
+                      }}
+                    >
+                      <input
+                        autoFocus
+                        aria-label="Release name"
+                        placeholder="Release name (it never moves)"
+                        data-library-release-name
+                        value={releaseName}
+                        onChange={(e) => setReleaseName(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Escape") setReleasing(null);
+                        }}
+                        style={{ ...button, flex: 1, minWidth: 0 }}
+                      />
+                      <button
+                        type="submit"
+                        data-library-release-confirm
+                        style={button}
+                        disabled={!releaseName.trim()}
+                      >
+                        Release
+                      </button>
+                      <button
+                        type="button"
+                        style={button}
+                        onClick={() => setReleasing(null)}
+                      >
+                        Cancel
+                      </button>
+                    </form>
+                  )}
                 </li>
               </ViewTransition>
             ))}

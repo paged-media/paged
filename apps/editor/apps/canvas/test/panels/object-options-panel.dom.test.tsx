@@ -347,19 +347,16 @@ describe("Object Options: findings", () => {
   // UX audit F-22: internal identifiers shown to users. The Stroke panel
   // names the same arrowheads ("Simple", "Triangle"); here the options
   // are the engine's enum strings.
-  test.failing(
-    "PN-201 (UX F-22): corner and arrowhead options are named in words, not enum ids",
-    async () => {
-      covers("panel:paged.object-options");
-      const h = await mount();
-      await h.select([h.scene.rect]);
-      const labels = [
-        ...h.field("frameCornerOptionTopLeft").querySelectorAll("option"),
-        ...h.field("frameStrokeStartArrowhead").querySelectorAll("option"),
-      ].map((o) => o.textContent ?? "");
-      expect(labels.filter((l) => /[a-z](Corner|ArrowHead)$/.test(l))).toEqual(
-        [],
-      );
-    },
-  );
+  test("PN-201 (UX F-22): corner and arrowhead options are named in words, not enum ids", async () => {
+    covers("panel:paged.object-options");
+    const h = await mount();
+    await h.select([h.scene.rect]);
+    const labels = [
+      ...h.field("frameCornerOptionTopLeft").querySelectorAll("option"),
+      ...h.field("frameStrokeStartArrowhead").querySelectorAll("option"),
+    ].map((o) => o.textContent ?? "");
+    expect(labels.filter((l) => /[a-z](Corner|ArrowHead)$/.test(l))).toEqual(
+      [],
+    );
+  });
 });

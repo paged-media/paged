@@ -816,7 +816,7 @@ const exportVerb: Verb = {
       name: "option",
       value: "key=value",
       repeat: true,
-      help: "a PDF option of the typed exporter, typed by its args (repeatable); the rest take their defaults",
+      help: "a PDF option of the typed exporter, typed by its args; the rest take their defaults",
     },
     {
       name: "via",

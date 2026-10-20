@@ -40,10 +40,11 @@
 import { useEffect, useId, useState } from "react";
 
 import type { LeafProps } from "@paged-media/catalog";
-import type { Value } from "@paged-media/client";
+import type { CollectionName, Value } from "@paged-media/client";
 import { IconButton, LabelledBy, NamedAs } from "@paged-media/panel-kit";
 
 import { Input } from "../components/ui/input";
+import { useCollectionNames } from "./use-collection";
 import { useOptionalCanvasClient } from "../state/canvas-client-context";
 import {
   BoundsLeaf,
@@ -69,7 +70,9 @@ import type {
 } from "./object-model-types";
 import {
   formatValue,
+  itemLabelCollection,
   itemTitle,
+  applyValueEdit,
   listAffordances,
   listItems,
   optionValue,
@@ -449,6 +452,8 @@ function ItemsField({
   state,
   edit,
   items,
+  collection,
+  commit,
   label,
   adornment,
 }: {
@@ -457,25 +462,44 @@ function ItemsField({
   state: FieldState;
   edit: Edit;
   items?: ListPresentation;
+  /** The collection a list of bare references picks from. */
+  collection?: string;
+  /** The field's whole-value write (a reference list read as text). */
+  commit?: ((value: unknown) => unknown) | null;
   label?: string;
   adornment: React.ReactNode;
 }) {
   const of: ShellValueType = type.kind === "list" ? type.of : { kind: "text" };
-  const value =
+  const read =
     state.state === "value"
       ? state.value
       : state.state === "absent"
         ? []
         : null;
+  // A list of references the engine reads as ONE text value, the ids
+  // space-separated as IDML writes them (a colour group's swatches): shown
+  // and edited as items, written back as that text.
+  const refText = collection !== undefined && typeof read === "string";
+  const value = refText ? (read as string).split(/\s+/).filter(Boolean) : read;
   const shown = value === null ? [] : listItems(value, items);
   const length = Array.isArray(value) ? value.length : 0;
+  // Items that reference a collection's members are titled by the
+  // member's name, not its id (R13, ADR 254).
+  const names = useCollectionNames(
+    (itemLabelCollection(items) ?? collection ?? null) as CollectionName | null,
+  );
   const can = listAffordances(
     type,
     length,
-    edit !== null && value !== null,
+    (refText ? Boolean(commit) : edit !== null) && value !== null,
     items,
   );
   const run = (e: ShellValueEdit) => {
+    if (refText) {
+      const r = applyValueEdit(value, e, type);
+      if (r.ok && commit) void commit((r.value as unknown[]).filter(Boolean));
+      return;
+    }
     if (edit) void edit(e);
   };
   return (
@@ -537,7 +561,7 @@ function ItemsField({
                   className="text-[11px] font-medium"
                   data-list-item-title=""
                 >
-                  {itemTitle(item, index, items)}
+                  {itemTitle(item, index, items, names)}
                 </span>
                 <span className="flex gap-1">
                   {can.reorder ? (
@@ -593,16 +617,27 @@ function ItemsField({
                   }
                 />
               ) : (
-                <ValueControl
-                  type={of}
-                  presentation={{}}
-                  value={item}
-                  onCommit={
-                    edit
-                      ? (v) => run({ edit: "itemSet", index, value: v })
-                      : null
-                  }
-                />
+                <NamedAs name={`${label ?? "Item"} ${index + 1}`}>
+                  <ValueControl
+                    type={
+                      collection &&
+                      of.kind !== "color" &&
+                      of.kind !== "ref" &&
+                      of.kind !== "text"
+                        ? { kind: "text" }
+                        : of
+                    }
+                    presentation={
+                      collection ? { style: "collection", collection } : {}
+                    }
+                    value={item}
+                    onCommit={
+                      edit
+                        ? (v) => run({ edit: "itemSet", index, value: v })
+                        : null
+                    }
+                  />
+                </NamedAs>
               )}
             </div>
           );
@@ -747,6 +782,8 @@ export function PropertyField(props: PropertyFieldProps) {
           state={state}
           edit={write ? field.edit : null}
           items={props.items}
+          collection={props.collection}
+          commit={write}
           label={label}
           adornment={adornment}
         />

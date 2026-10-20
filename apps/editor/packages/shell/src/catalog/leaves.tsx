@@ -1356,6 +1356,21 @@ export function ListLeaf({ props }: LeafProps) {
                         }
                       : undefined
                   }
+                  // PN-357 (R22, ADR 255): F2 starts the same inline
+                  // rename from the keyboard (Enter stays "select").
+                  aria-keyshortcuts={
+                    rename && !rename.disabled ? "F2" : undefined
+                  }
+                  onKeyDown={
+                    rename && !rename.disabled
+                      ? (e) => {
+                          if (e.key !== "F2") return;
+                          e.preventDefault();
+                          setDraft(fieldText(row, rename.field) ?? label);
+                          setEditingId(id);
+                        }
+                      : undefined
+                  }
                 >
                   <span
                     className="block truncate text-[12.5px]"

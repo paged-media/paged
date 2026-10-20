@@ -64,6 +64,8 @@ and 024 predate that scheme and keep their numbers. Records 200–217 were writt
 | [251](251-object-lock-and-hide.md) | Object lock and hide | Accepted 2026-10-19 |
 | [252](252-ask-affordances-know-the-ai-service.md) | The ask affordances know whether there is an AI service | Accepted 2026-10-19 |
 | [253](253-one-action-one-batch.md) | One user action is one batch | Accepted 2026-10-19 |
+| [254](254-engine-values-read-in-words.md) | Engine values read in words: enum members, references, ids | Accepted 2026-10-20 |
+| [255](255-every-choice-is-a-control.md) | Every choice is a control with its state | Accepted 2026-10-20 |
 
 Decisions made in other repositories that this editor's code rests on are listed in
 [`../README.md`](../README.md). Comments in the source also cite ADR 025 (the journal) and

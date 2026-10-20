@@ -34,6 +34,7 @@ import {
   CockpitPanelHeader,
   CockpitSection,
   Icon,
+  cockpitActions,
   MetricTile,
   StatusPill,
   useCanvasClient,
@@ -53,6 +54,8 @@ const LOW_RES_PPI = 150;
 interface RiskRow {
   key: string;
   label: string;
+  /** The panel that lists this risk's findings, opened by the row. */
+  panel: string;
   /** `null` when the data source for this risk isn't available yet
    *  (renders the em-dash seam); a number renders the live count. */
   count: number | null;
@@ -83,11 +86,36 @@ export function PublicationHealthPanel() {
   const preflightCount = runCount > 0 ? errors + warnings : null;
 
   const riskRows: RiskRow[] = [
-    { key: "overset", label: "Overset stories", count: oversetStories },
-    { key: "missing-links", label: "Missing links", count: missingLinks },
-    { key: "low-res", label: "Low-res images", count: lowRes },
-    { key: "fonts", label: "Missing fonts", count: missingFonts },
-    { key: "preflight", label: "Preflight findings", count: preflightCount },
+    {
+      key: "overset",
+      label: "Overset stories",
+      count: oversetStories,
+      panel: "paged.stories",
+    },
+    {
+      key: "missing-links",
+      label: "Missing links",
+      count: missingLinks,
+      panel: "paged.links",
+    },
+    {
+      key: "low-res",
+      label: "Low-res images",
+      count: lowRes,
+      panel: "paged.links",
+    },
+    {
+      key: "fonts",
+      label: "Missing fonts",
+      count: missingFonts,
+      panel: "paged.fonts",
+    },
+    {
+      key: "preflight",
+      label: "Preflight findings",
+      count: preflightCount,
+      panel: "paged.preflight",
+    },
   ];
 
   return (
@@ -161,21 +189,8 @@ function RiskRowView({ row }: { row: RiskRow }) {
   const seam = row.count == null;
   const clean = row.count === 0;
   const danger = (row.count ?? 0) > 0;
-  return (
-    <div
-      data-risk-row={row.key}
-      data-risk-count={seam ? undefined : row.count}
-      data-seam={seam ? "" : undefined}
-      title={seam ? "This risk's data source isn't wired yet" : `${row.count}`}
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: 8,
-        padding: "6px 0",
-        borderBottom: "1px solid var(--pg-border)",
-        opacity: seam ? 0.55 : 1,
-      }}
-    >
+  const content = (
+    <>
       <span
         className="pg-value"
         style={{
@@ -194,13 +209,58 @@ function RiskRowView({ row }: { row: RiskRow }) {
           size={13}
           style={{ color: "var(--status-approved)", flexShrink: 0 }}
         />
-      ) : (
+      ) : danger ? (
         <Icon
           name="ui-chevron-right"
           size={13}
           style={{ color: "var(--pg-muted-fg)", flexShrink: 0 }}
         />
-      )}
+      ) : null}
+    </>
+  );
+  const common = {
+    "data-risk-row": row.key,
+    "data-risk-count": seam ? undefined : row.count,
+    "data-seam": seam ? "" : undefined,
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: 8,
+      padding: "6px 0",
+      borderBottom: "1px solid var(--pg-border)",
+      opacity: seam ? 0.55 : 1,
+    } as const,
+  };
+  // A row with findings is the way to them (PN-301): a button that opens
+  // the panel listing them, as the chevron promises.
+  if (danger)
+    return (
+      <button
+        type="button"
+        {...common}
+        title={`Show the ${row.label.toLowerCase()}`}
+        onClick={() => cockpitActions.openPanel?.(row.panel)}
+        style={{
+          ...common.style,
+          width: "100%",
+          background: "transparent",
+          border: "none",
+          borderBottom: common.style.borderBottom,
+          color: "inherit",
+          font: "inherit",
+          textAlign: "left",
+          cursor: "pointer",
+        }}
+      >
+        {content}
+      </button>
+    );
+  return (
+    <div
+      {...common}
+      title={seam ? "This risk's data source isn't wired yet" : `${row.count}`}
+    >
+      {content}
     </div>
   );
 }

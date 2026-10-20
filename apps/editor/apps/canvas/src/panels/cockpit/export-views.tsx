@@ -30,6 +30,8 @@
 
 import { useState } from "react";
 
+import { ChoiceGroup, ChoiceRow } from "@paged-media/panel-kit";
+
 import {
   CockpitBtn,
   CockpitPanelHeader,
@@ -112,63 +114,66 @@ export function OutputsPanel(_props: PanelProps) {
     >
       <CockpitPanelHeader title="Outputs" />
       <div style={{ flex: 1, overflowY: "auto", padding: "2px 8px" }}>
-        {EXPORT_TARGETS.map((t) => {
-          const sel = selected === t.id;
-          const r = readiness(t, loaded, profileReady);
-          const dot =
-            r.tone === "ready"
-              ? "var(--status-approved)"
-              : r.tone === "warn"
-                ? "var(--status-review)"
-                : "var(--status-draft)";
-          return (
-            <div
-              key={t.id}
-              data-output-nav={t.id}
-              data-output-live={t.live ? "" : undefined}
-              data-selected={sel || undefined}
-              onClick={() => setSelectedExportTarget(t.id)}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 10,
-                padding: "9px 10px",
-                borderRadius: "var(--radius-lg)",
-                cursor: "pointer",
-                background: sel ? "var(--selected-bg)" : "transparent",
-                marginBottom: 1,
-                opacity: t.live ? 1 : 0.6,
-              }}
-            >
-              <Icon
-                name={t.icon}
-                size={16}
-                style={{ color: "var(--pg-muted-fg)", flexShrink: 0 }}
-              />
-              <span
+        <ChoiceGroup label="Outputs">
+          {EXPORT_TARGETS.map((t) => {
+            const sel = selected === t.id;
+            const r = readiness(t, loaded, profileReady);
+            const dot =
+              r.tone === "ready"
+                ? "var(--status-approved)"
+                : r.tone === "warn"
+                  ? "var(--status-review)"
+                  : "var(--status-draft)";
+            return (
+              <ChoiceRow
+                key={t.id}
+                data-output-nav={t.id}
+                data-output-live={t.live ? "" : undefined}
+                data-selected={sel || undefined}
+                checked={sel}
+                onChoose={() => setSelectedExportTarget(t.id)}
                 style={{
-                  flex: 1,
-                  fontSize: 12.5,
-                  whiteSpace: "nowrap",
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 10,
+                  padding: "9px 10px",
+                  borderRadius: "var(--radius-lg)",
+                  cursor: "pointer",
+                  background: sel ? "var(--selected-bg)" : "transparent",
+                  marginBottom: 1,
+                  opacity: t.live ? 1 : 0.6,
                 }}
               >
-                {t.title}
-              </span>
-              <span
-                data-output-dot={r.tone}
-                style={{
-                  width: 7,
-                  height: 7,
-                  borderRadius: "50%",
-                  background: dot,
-                  flexShrink: 0,
-                }}
-              />
-            </div>
-          );
-        })}
+                <Icon
+                  name={t.icon}
+                  size={16}
+                  style={{ color: "var(--pg-muted-fg)", flexShrink: 0 }}
+                />
+                <span
+                  style={{
+                    flex: 1,
+                    fontSize: 12.5,
+                    whiteSpace: "nowrap",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                  }}
+                >
+                  {t.title}
+                </span>
+                <span
+                  data-output-dot={r.tone}
+                  style={{
+                    width: 7,
+                    height: 7,
+                    borderRadius: "50%",
+                    background: dot,
+                    flexShrink: 0,
+                  }}
+                />
+              </ChoiceRow>
+            );
+          })}
+        </ChoiceGroup>
 
         {pluginExporters.length > 0 && (
           <div data-plugin-exports style={{ marginTop: 10 }}>

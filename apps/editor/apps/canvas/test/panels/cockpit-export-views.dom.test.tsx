@@ -178,20 +178,17 @@ describe("Outputs nav", () => {
     ).not.toBeNull();
   });
 
-  test.failing(
-    "PN-307: an output can be chosen with the keyboard",
-    async () => {
-      covers("panel:paged.outputs");
-      const h = await mountPanel(OutputsPanel, { id: "paged.outputs" });
-      const target = nav(h, "image");
-      expect(
-        target.matches(
-          "button, a[href], [role=option], [role=tab], [role=radio]",
-        ),
-      ).toBe(true);
-      expect(target.tabIndex).toBeGreaterThanOrEqual(0);
-    },
-  );
+  test("PN-307: an output can be chosen with the keyboard", async () => {
+    covers("panel:paged.outputs");
+    const h = await mountPanel(OutputsPanel, { id: "paged.outputs" });
+    const target = nav(h, "image");
+    expect(
+      target.matches(
+        "button, a[href], [role=option], [role=tab], [role=radio]",
+      ),
+    ).toBe(true);
+    expect(target.tabIndex).toBeGreaterThanOrEqual(0);
+  });
 });
 
 describe("Export inspector", () => {

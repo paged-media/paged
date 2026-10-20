@@ -213,7 +213,7 @@ fn summary(read: &str, sample_name: &str, want: &[&str]) {
         reads(&mut m, &format!("paged.{read}()"))
     );
     // The generic read answers the same rows (its numbers may print as
-    // floats where the typed read prints integers; see `links` for SCR-11).
+    // floats where the typed read prints integers).
     let generic = numbers_as_floats(json_of(&reads(
         &mut m,
         &format!("paged.collection('{read}')"),
@@ -285,9 +285,9 @@ fn links() {
         "images",
         &["hostSelfId", "hostKind", "uri", "status"],
     );
-    // finding SCR-11: the generic read widens the engine's f32 numbers
-    // (`0.1` → `0.10000000149011612`) where `paged.links()` prints them as
-    // written; both reads should print the same value.
+    // finding SCR-11 (fixed): the generic read widened the engine's f32
+    // numbers (`0.1` → `0.10000000149011612`) where `paged.links()` prints
+    // them as written; both reads print the same value now.
     let mut m = sample("images");
     let typed = reads(&mut m, "paged.links()");
     let generic = reads(&mut m, "paged.collection('links')");
@@ -295,7 +295,10 @@ fn links() {
         typed.contains("0.1,") && !typed.contains("0.10000000149011612"),
         "{typed}"
     );
-    assert!(generic.contains("0.10000000149011612"), "{generic}");
+    assert!(
+        generic.contains("0.1,") && !generic.contains("0.10000000149011612"),
+        "{generic}"
+    );
 }
 
 #[test]
