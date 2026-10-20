@@ -178,8 +178,13 @@ test.describe("view commands", () => {
       return Math.min((r.width - 80) / w, (r.height - 80) / h);
     });
     await invoke(page, "paged.view.zoom100");
+    await expect.poll(async () => (await camera()).scale).toBeCloseTo(1, 3);
     await settled();
     await invoke(page, "paged.view.fitPage");
+    // The camera animates to the fit: wait for it to arrive, not merely to
+    // hold still (two equal reads before the animation's first frame are
+    // "still" at the old scale — what a slower runner saw).
+    await expect.poll(async () => (await camera()).scale).toBeCloseTo(want, 3);
     const onePage = await settled();
     expect(onePage.scale).toBeCloseTo(want, 3);
     // Each page of this document is a spread of its own.

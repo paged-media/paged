@@ -19,9 +19,16 @@
 
 // Per-pack ΔE/SSIM thresholds for the canvas fidelity gate.
 //
-// Schema mirrors `corpus/idml/generated/fidelity-thresholds.json` so the
-// existing tooling (and human understanding) carries over directly.
-// We store these alongside the manifest in `corpus/idml/`.
+// The file is the corpus's `config/canvas-fidelity-thresholds.json`, beside
+// `fidelity-thresholds.json` (the engine's gate) and `break-thresholds.json`,
+// whose schema it mirrors so the tooling (and human understanding) carries
+// over directly. It used to be looked for at `corpus/idml/`, where it does
+// not live, and a missing file read as "no thresholds": every gated pack then
+// passed without a single comparison.
+//
+// A missing or unreadable file now FAILS when the corpus is present. Without
+// a corpus the gate has nothing to compare and says so (`unavailable`); it
+// never passes silently.
 //
 // `FIDELITY_MODE=capture` writes a fresh thresholds JSON from the
 // most-recent run's worst-page metric per pack, rounded up to give
@@ -31,10 +38,12 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-import { ENVATO_DIR } from "./fixtures";
+import { REPO_ROOT } from "./fixtures";
 
+export const CORPUS_DIR = resolve(REPO_ROOT, "corpus");
 export const THRESHOLDS_PATH = resolve(
-  ENVATO_DIR,
+  CORPUS_DIR,
+  "config",
   "canvas-fidelity-thresholds.json",
 );
 
@@ -50,25 +59,54 @@ export interface PackThreshold {
 
 export interface ThresholdsFile {
   fixtures: PackThreshold[];
+  /** Set when there is no corpus to read: the gate reports this and
+   *  compares nothing. Absent whenever the file was read. */
+  unavailable?: string;
 }
 
-export function loadThresholds(): ThresholdsFile {
-  if (!existsSync(THRESHOLDS_PATH)) return { fixtures: [] };
-  try {
-    return JSON.parse(readFileSync(THRESHOLDS_PATH, "utf8")) as ThresholdsFile;
-  } catch (err) {
-    process.stderr.write(
-      `[thresholds] failed to parse ${THRESHOLDS_PATH}: ${String(err)}\n`,
-    );
-    return { fixtures: [] };
+/**
+ * The thresholds the gate compares against. Throws when the corpus is
+ * present but the file is missing or unreadable (a gate with no
+ * thresholds would pass every pack); returns `unavailable` when there is
+ * no corpus at all. `allowMissing` is for capture mode, which may write
+ * the file for the first time.
+ */
+export function loadThresholds(
+  opts: { allowMissing?: boolean } = {},
+): ThresholdsFile {
+  if (!existsSync(CORPUS_DIR)) {
+    return {
+      fixtures: [],
+      unavailable: `no corpus at ${CORPUS_DIR}: the canvas fidelity thresholds are unavailable`,
+    };
   }
+  if (!existsSync(THRESHOLDS_PATH)) {
+    if (opts.allowMissing) return { fixtures: [] };
+    throw new Error(
+      `[thresholds] the corpus is present but ${THRESHOLDS_PATH} is missing: the canvas fidelity gate has nothing to compare against`,
+    );
+  }
+  let parsed: ThresholdsFile;
+  try {
+    parsed = JSON.parse(
+      readFileSync(THRESHOLDS_PATH, "utf8"),
+    ) as ThresholdsFile;
+  } catch (err) {
+    throw new Error(
+      `[thresholds] ${THRESHOLDS_PATH} is not valid JSON: ${String(err)}`,
+    );
+  }
+  if (!Array.isArray(parsed.fixtures) || parsed.fixtures.length === 0) {
+    throw new Error(`[thresholds] ${THRESHOLDS_PATH} lists no fixtures`);
+  }
+  return parsed;
 }
 
 /**
  * Per-pack baseline collected by a `FIDELITY_MODE=capture` run. The
  * caller passes the worst-page metric across the pack; we apply a
  * 25 % headroom on the ΔE values and round SSIM down to two decimal
- * places (matches the `corpus/idml/generated/fidelity-thresholds.json`
+ * places (matches the `corpus/config/fidelity-thresholds.json`
  * convention).
  */
 export interface CapturedBaseline {
@@ -90,7 +128,8 @@ export function writeThresholds(
   opts: { overwrite?: boolean } = {},
 ): number {
   const overwrite = opts.overwrite ?? false;
-  const cur = loadThresholds();
+  const cur = loadThresholds({ allowMissing: true });
+  if (cur.unavailable) throw new Error(`[thresholds] ${cur.unavailable}`);
   const byName = new Map(cur.fixtures.map((f) => [f.name, f]));
   let written = 0;
   for (const b of baselines) {

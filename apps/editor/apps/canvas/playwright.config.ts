@@ -82,7 +82,12 @@ export default defineConfig({
     ["html", { outputFolder: "playwright-report", open: "never" }],
     ["json", { outputFile: "test-results/results.json" }],
   ],
-  timeout: 5 * 60_000,
+  // Five minutes locally (a cold first build, the fidelity packs); three in
+  // CI, where the slowest passing test measured 72 s and a hung one costs
+  // the timeout twice (the retry). The first CI run with the corpus spent
+  // 50 of shard 1's 80 minutes on five tests waiting out five minutes each.
+  // A spec that needs longer says so with `test.setTimeout`.
+  timeout: process.env.CI ? 3 * 60_000 : 5 * 60_000,
   expect: {
     timeout: 30_000,
     // Journey visual baselines. A real regression moves far more than

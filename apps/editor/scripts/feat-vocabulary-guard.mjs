@@ -64,15 +64,7 @@ const MIN_VOCAB = 500;
  * run: the alternatives are to fix the tag, or to add the row in
  * cockpit/docs/features and re-publish the vocabulary.
  */
-const ACKNOWLEDGED = Object.freeze({
-  // The Library panel (ADR 225) is a new surface with no feature row yet,
-  // and no existing row describes it. The registry that owns the
-  // vocabulary lives outside this repository, so the row is added there;
-  // once the re-published vocabulary carries it, this entry fails as
-  // STALE and goes.
-  "editor-shell.panels.library":
-    "the Library panel (ADR 225) awaits its feature row",
-});
+const ACKNOWLEDGED = Object.freeze({});
 
 const TAG = /@feat:([A-Za-z0-9_.-]+)/g;
 

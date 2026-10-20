@@ -37,6 +37,24 @@ export const TEXT_FRAME_ID = "ua365e1";
 export const SCRIPT = `if (!paged.set("textFrame:${TEXT_FRAME_ID}", "frameOpacity", 40)) throw new Error("refused");
 console.log("opacity set");`;
 
+/**
+ * Say the AI service is there. The editor probes `/api/ai` once per page
+ * session with a bare GET before anyone asks (UX audit F-25, editor ADR
+ * 252) and greys every ask affordance when the answer is 503 — which is
+ * what the dev server answers without an ANTHROPIC_API_KEY, as in CI. A
+ * deployed proxy refuses the GET with anything but 503, so this answers it
+ * 405, the way `shell-menu-matrix.spec` does. Register it BEFORE the page
+ * loads (the probe runs as the first ask affordance mounts); every other
+ * request falls through to the spec's own route, registered later.
+ */
+export async function aiServiceIsThere(page: Page): Promise<void> {
+  await page.route("**/api/ai/**", (route) =>
+    route.request().method() === "GET"
+      ? route.fulfill({ status: 405, body: "" })
+      : route.fallback(),
+  );
+}
+
 function sse(events: Array<[string, unknown]>): string {
   return events
     .map(([e, d]) => `event: ${e}\ndata: ${JSON.stringify(d)}\n\n`)

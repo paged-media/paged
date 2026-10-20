@@ -2,11 +2,13 @@
 
 Quick orientation for Claude sessions working on this repo. Covers
 mechanics (commands, layout, conventions). This is the **public, open
-engine** (`paged-media/core`).
+engine**, at `engine/core` in the monorepo `paged-media/paged` (it was the
+`paged-media/core` repository until 2026-10-18).
 
 ## What this is
 
-Pixel-faithful Adobe IDML renderer in Rust. 22-crate workspace, parses
+Pixel-faithful Adobe IDML renderer in Rust. A 31-crate workspace (plus three
+spikes; `Cargo.toml` lists the members) that parses
 IDML packages, lays out text with InDesign-calibrated Knuth-Plass, emits a
 versioned display list, rasterises through Vello: `vello_cpu` on the CPU
 (default) or Vello on wgpu (GPU), from one mapping. Public APIs target both native and WASM.
@@ -20,10 +22,11 @@ idml-import → paged-scene → paged-text → paged-compose → paged-gpu
 **Engine/app split.** This repo is the open engine, dual-licensed
 **AGPL-3.0-only OR PMEL** like the rest of the monorepo (ADR PM-0001;
 every source file carries the AGPL/PMEL header; new files must too — copy
-from any `crates/**/*.rs`). The editor is a _separate_ repo
-(`paged-media/editor`, public, **AGPL-3.0 OR PMEL**) that consumes the published `@paged-media` SDK/wasm packages
-across a package boundary — there is **no Cargo path dependency** from the
-editor into this code. Design documents,
+from any `crates/**/*.rs`). The editor (`apps/editor` in the same
+repository, under the same licence) consumes the engine's wasm as workspace
+packages (`packages/canvas-wasm`, ADR 185) across a package
+boundary — there is **no Cargo path dependency** from the editor into this
+code. Design documents,
 decision records and status live in `docs/` (proposals and the ADR register
 stay in a private notes repo); the full Envato
 fidelity corpus lives in the private `paged-media/corpus` repo.

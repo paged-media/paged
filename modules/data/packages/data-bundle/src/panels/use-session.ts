@@ -18,52 +18,52 @@ interface Read {
   view: DataSourceSession;
 }
 
-// A panel the dock hides sits in a hidden <Activity> (editor ADR 240): its
-// effects are unmounted, so a subscription made in an effect misses every
-// change while it is hidden and shows the old snapshot when it is shown
-// again (a source imported while Dataset preview was a background tab). So
-// every session carries ONE counter, bumped by a listener that lives as long
-// as the session; a panel reads the counter through useSyncExternalStore,
-// which compares it again whenever the panel subscribes.
-interface Changes {
-  count: number;
-  subscribe(onChange: () => void): () => void;
-  current(): number;
-  bump(): void;
+function readSession(session: DataSourceSession): Read {
+  return { state: session.getState(), view: freshView(session) };
 }
 
-const changes = new WeakMap<DataSourceSession, Changes>();
-
-function changesOf(session: DataSourceSession): Changes {
-  const known = changes.get(session);
-  if (known) return known;
+/** The session as an external store. A dock tab the user is not looking at
+ *  sits in a hidden <Activity>, which keeps the component's state but
+ *  unmounts its subscription, so a change made while it was hidden (a save,
+ *  a whole document opened) was never heard: the tab showed the old session
+ *  until something else happened to change. React reads the snapshot again
+ *  when it subscribes, and a fresh subscription marks it stale, because
+ *  anything may have changed while nobody listened. */
+function sessionStore(session: DataSourceSession) {
+  let current = readSession(session);
+  let stale = false;
   const listeners = new Set<() => void>();
-  const c: Changes = {
-    count: 0,
-    subscribe(onChange) {
-      listeners.add(onChange);
-      return () => listeners.delete(onChange);
+  return {
+    subscribe(listener: () => void): () => void {
+      listeners.add(listener);
+      const sub = session.onDidChange(() => {
+        stale = true;
+        listener();
+      });
+      stale = true;
+      return () => {
+        listeners.delete(listener);
+        sub.dispose();
+      };
     },
-    current: () => c.count,
-    bump() {
-      c.count += 1;
+    read(): Read {
+      if (stale) {
+        stale = false;
+        current = readSession(session);
+      }
+      return current;
+    },
+    refresh(): void {
+      stale = true;
       for (const l of [...listeners]) l();
     },
   };
-  session.onDidChange(() => c.bump());
-  changes.set(session, c);
-  return c;
-}
-
-function readSession(session: DataSourceSession, _count: number): Read {
-  return { state: session.getState(), view: freshView(session) };
 }
 
 export function useSessionSnapshot(
   session: DataSourceSession,
 ): [SessionState, () => void, DataSourceSession] {
-  const c = changesOf(session);
-  const count = useSyncExternalStore(c.subscribe, c.current);
-  const read = useMemo(() => readSession(session, count), [session, count]);
-  return [read.state, c.bump, read.view];
+  const store = useMemo(() => sessionStore(session), [session]);
+  const read = useSyncExternalStore(store.subscribe, store.read);
+  return [read.state, store.refresh, read.view];
 }

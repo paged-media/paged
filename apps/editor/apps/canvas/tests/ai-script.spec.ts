@@ -34,10 +34,12 @@ import {
   SUMMARY_TURN,
   textTurn,
   TOOL_TURN,
+  aiServiceIsThere,
 } from "./ai-fixtures";
 
 test.describe("Script panel — Ask Claude", () => {
   test.beforeEach(async ({ page }) => {
+    await aiServiceIsThere(page);
     await openCanvas(page);
     await loadIdml(page, FIXTURE);
     await openPanel(page, "paged.script-editor");
@@ -216,4 +218,23 @@ test.describe("Script panel — Ask Claude", () => {
       { mode: "complete", content: "A four-word headline" },
     ]);
   });
+});
+
+test("without an AI service the Ask is greyed before anyone types, and says why @feat:scripting.ai-script-writing @level:edge", async ({
+  page,
+}) => {
+  // The proxy answers 503 when the deployment has no key: the session's
+  // one probe reads it, and the ask affordance says so up front (F-25).
+  await page.route("**/api/ai/**", (route) =>
+    route.fulfill({ status: 503, contentType: "application/json", body: "{}" }),
+  );
+  await openCanvas(page);
+  await loadIdml(page, FIXTURE);
+  await openPanel(page, "paged.script-editor");
+  const ask = page.locator("[data-script-editor] [data-action=ask]");
+  await expect(ask).toBeDisabled();
+  await expect(ask).toHaveAttribute(
+    "title",
+    "Claude is not available here: this deployment has no AI service.",
+  );
 });

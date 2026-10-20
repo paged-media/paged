@@ -38,9 +38,10 @@ mock.module("react", () => ({
   },
   // No renderer here: effects (the session subscription) do not run.
   useEffect: () => {},
-  // The session snapshot (panels/use-session.ts): read on every call.
-  useSyncExternalStore: (_subscribe: unknown, get: () => unknown) => get(),
-  useMemo: (fn: () => unknown) => fn(),
+  // Each call recomputes: a render reads the session as it is now.
+  useMemo: (make: () => unknown) => make(),
+  useSyncExternalStore: (_subscribe: unknown, getSnapshot: () => unknown) =>
+    getSnapshot(),
 }));
 
 type El = {

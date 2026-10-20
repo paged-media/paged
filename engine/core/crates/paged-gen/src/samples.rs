@@ -32,6 +32,7 @@ pub mod docx_pagination;
 pub mod effects;
 pub mod effects_attrs;
 pub mod endnotes;
+pub mod feather_strokes;
 pub mod footnote_columns;
 pub mod footnote_numbering;
 pub mod footnote_references;
@@ -207,6 +208,7 @@ pub const SAMPLES: &[&str] = &[
     "footnote-references",
     "transparency-targets",
     "effects-attrs",
+    "feather-strokes",
     "justification",
     "kerning",
     "nested-styles",
@@ -335,6 +337,7 @@ pub fn build(name: &str) -> Option<crate::Sample> {
         "footnote-references" => footnote_references::build(),
         "transparency-targets" => transparency_targets::build(),
         "effects-attrs" => effects_attrs::build(),
+        "feather-strokes" => feather_strokes::build(),
         "justification" => justification::build(),
         "kerning" => kerning::build(),
         "nested-styles" => nested_styles::build(),
@@ -373,7 +376,7 @@ mod tests {
     fn the_list_is_not_missing_a_sample() {
         assert_eq!(
             SAMPLES.len(),
-            104,
+            105,
             "sample count changed — add the new name to SAMPLES (and only then \
              update this number), or the editor's CI silently stops emitting it"
         );
