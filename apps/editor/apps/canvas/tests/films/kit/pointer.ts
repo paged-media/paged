@@ -60,6 +60,10 @@ export class Pointer {
   private at: Point;
   private down = false;
   private readonly rand: () => number;
+  /** How brisk the hand is: every travel's duration is divided by it. A
+   *  film that does many things in one take (the home film) moves a little
+   *  faster than one that dwells on a single tool. */
+  pace = 1;
 
   constructor(
     private readonly page: Page,
@@ -102,7 +106,8 @@ export class Pointer {
     const dist = Math.hypot(dx, dy);
     if (dist < 0.5) return;
     const w = Math.max(opts.targetWidth ?? 24, 4);
-    const ms = (250 + 150 * Math.log2(dist / w + 1)) / (opts.speed ?? 1);
+    const ms =
+      (250 + 150 * Math.log2(dist / w + 1)) / ((opts.speed ?? 1) * this.pace);
     // The arc bows to one side by 6–10% of the distance.
     const bow =
       (0.06 + this.rand() * 0.04) * dist * (this.rand() < 0.5 ? -1 : 1);

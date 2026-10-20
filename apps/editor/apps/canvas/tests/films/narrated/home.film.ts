@@ -17,623 +17,956 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// The home film (ADR 224): the website's `films/home.yaml`, on the editor's
-// own 134-page showcase annual. Everything the voice describes happens
-// through the editor's controls: File ▸ Open…, the Document Map's search,
-// the Type tool, Window ▸ Developer ▸ Script, the AI Assistant card and the
-// export centre. Each step is asserted against the engine.
+// The home film (ADR 224): the website's `films/home.yaml`. One document,
+// made from nothing on camera, and every kind of content in a frame of its
+// own. File ▸ New, Layout ▸ Add page and the Margins and Columns panel; a
+// headline typed with the Type tool; the copy placed from a Word document
+// (paged.doc), set in its own styles, in two columns, with a drop cap and
+// justified; the story threaded onto page two and reflowed; then a frame
+// each for a photograph (paged.image), a pen drawing (paged.draw), a chart
+// from an Excel workbook (paged.sheet), HTML (paged.web) and a barcode
+// drawn from a product list in DuckDB (paged.data); preflight, a PDF and
+// the saved .paged file. Every step goes through the editor's own controls
+// and is asserted against the engine or the written bytes.
 //
-// Claude's replies come from a tape (kit/ai-tape.ts): recorded once from the
-// dev server's /api/ai proxy with AI_TAPE=record and the user's own key, and
-// streamed back at their own pace in every take.
-//
-// Off camera, the annual's open-licensed typefaces (core's corpus/fonts, the
-// faces the showcase was built with) are given to the engine, the way the
-// showcase build does: the .paged file names its fonts but does not carry
-// them, and the editor has no user path to add fonts yet.
+// Off camera: the two OFL faces the Word document's styles name (core's
+// corpus/fonts; the editor has no user path to add a font yet) are given to
+// the engine, and the spreadsheet and image engines are started, so their
+// first boot does not stall the film.
 
-import { expect, type Page } from "@playwright/test";
+import { expect, type Locator, type Page } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { film, type Kit } from "../kit/film";
-import { hover, menu, press, screenPoint } from "../kit/ui";
 import { typeHuman } from "../kit/pointer";
-import { aiTape } from "../kit/ai-tape";
-import { ShowcaseDoc } from "../../showcase/driver";
-import { CORPUS_FONTS } from "../../showcase/chapter";
+import { hover, menu, press, screenPoint } from "../kit/ui";
+import { decodeEan13, type Bounds } from "../kit/ean";
+import { openPanel } from "../../fidelity/canvas-driver";
+import { readZipText, zipEntryNames } from "../../e2e/harness/read-zip";
 
-const ROOT = process.env.PAGED_MEDIA_ROOT ?? "";
-const DOC = join(
+const MEDIA = process.env.PAGED_MEDIA_ROOT ?? "";
+const ASSETS = join(MEDIA, "assets");
+const FONTS = join(
   import.meta.dirname,
   "..",
   "..",
   "..",
-  "showcase",
-  "showcase.paged",
+  "..",
+  "..",
+  "..",
+  "..",
+  "engine",
+  "core",
+  "corpus",
+  "fonts",
 );
-/** Pages stack vertically, 540 × 720 pt, 24 pt apart (ui/layout.ts). */
-const PAGE_STEP = 744;
-const pageTop = (n: number) => (n - 1) * PAGE_STEP;
-/** The contact sheet's middle-left photo, page 88 (spread 88–89), in the
- *  spread's own coordinates: top, left, bottom, right. */
-const PHOTO_BOUNDS = [304, -480, 391, -350];
 
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+/** Pages stack vertically, 24 pt apart (ui/layout.ts): page 2's top. */
+const P2 = 792 + 24;
+const HEADLINE = "The quiet page";
 
-interface TreeNode {
-  id?: { kind: string; id: string } | null;
-  kind?: string;
-  children?: TreeNode[];
-  pluginMetadata?: unknown[];
+type Rect = [number, number, number, number]; // x0, y0, x1, y1 (pt) for focus()
+/** The pieces of the layout, in page-1 points (page 2 is P2 lower). */
+const HEAD_BOX = { x0: 48, y0: 48, x1: 430, y1: 132 };
+const BODY_TOP = 300;
+const BODY_TOP_AFTER = 412;
+const PHOTO = { x0: 48, y0: 140, x1: 564, y1: 400 };
+const MARK = [
+  [452, 124],
+  [492, 62],
+  [514, 96],
+  [532, 76],
+  [564, 124],
+] as const;
+const P2_BODY = { x0: 48, y0: P2 + 48, x1: 564, y1: P2 + 330 };
+const WEB = { left: 390, top: 342, width: 174, height: 229 };
+const CODE = { x0: 390, y0: P2 + 600, x1: 564, y1: P2 + 700 };
+
+const PAGE1: Rect = [-30, -20, 642, 812];
+const TOP1: Rect = [20, 20, 592, 420];
+const LOWER1: Rect = [20, 280, 592, 760];
+const SPREAD: Rect = [-40, -30, 652, P2 + 822];
+const PAGE2: Rect = [-30, P2 - 20, 642, P2 + 812];
+
+const pt = (k: Kit, x: number, y: number) => screenPoint(k.page, x, y);
+
+interface Item {
+  id: { kind: string; id: string };
+  pageId: string;
+  bounds: Bounds;
+  hasImage?: boolean;
+  storyId?: string;
 }
 
-async function tree(page: Page): Promise<TreeNode[]> {
+/** Every page item with its page, bounds, image and story. */
+async function items(page: Page): Promise<Item[]> {
   return page.evaluate(async () => {
+    type Node = { id?: { kind: string; id: string } | null; children?: Node[] };
     const c = (
+      globalThis as unknown as {
+        __canvas: {
+          client: {
+            executeScript(s: string): Promise<{ output: string[] }>;
+            send(m: unknown): Promise<{ payload: { items?: unknown[] } }>;
+          };
+        };
+      }
+    ).__canvas.client;
+    const r = await c.executeScript("JSON.stringify(paged.tree())");
+    const ids: { kind: string; id: string }[] = [];
+    const walk = (n: Node) => {
+      if (n.id) ids.push(n.id);
+      for (const ch of n.children ?? []) walk(ch);
+    };
+    for (const root of JSON.parse(JSON.parse(r.output[0])) as Node[])
+      walk(root);
+    const g = await c.send({
+      kind: "requestElementGeometry",
+      payload: { ids },
+    });
+    return (g.payload.items ?? []) as Item[];
+  });
+}
+
+/** The stories: id, length, overset. */
+async function stories(
+  page: Page,
+): Promise<
+  Array<{ selfId: string; characterCount: number; overset: boolean }>
+> {
+  return page.evaluate(async () => {
+    const r = await (
       globalThis as unknown as {
         __canvas: {
           client: { executeScript(s: string): Promise<{ output: string[] }> };
         };
       }
-    ).__canvas;
-    const r = await c.client.executeScript("JSON.stringify(paged.tree())");
-    return JSON.parse(JSON.parse(r.output[0])) as TreeNode[];
+    ).__canvas.client.executeScript("paged.stories()");
+    return JSON.parse(r.output[0]);
   });
 }
 
-/** Kinds and plugin envelopes on one spread (the tree lists a spread's
- *  items under its first page). */
-function census(spread: TreeNode): {
-  kinds: Record<string, number>;
-  plugins: string[];
-} {
-  const kinds: Record<string, number> = {};
-  const plugins = new Set<string>();
-  const walk = (n: TreeNode) => {
-    if (n.kind && n.id) kinds[n.kind] = (kinds[n.kind] ?? 0) + 1;
-    for (const m of n.pluginMetadata ?? []) {
-      const key = typeof m === "string" ? m : JSON.stringify(m);
-      const hit = /x-paged:media\.paged\.([a-z]+)/.exec(key);
-      if (hit) plugins.add(hit[1]);
-    }
-    for (const ch of n.children ?? []) walk(ch);
-  };
-  for (const ch of spread.children ?? []) walk(ch);
-  return { kinds, plugins: [...plugins] };
-}
-
-async function props(
-  page: Page,
-  kind: string,
-  id: string,
-): Promise<Record<string, string>> {
-  return page.evaluate(
-    async ({ kind, id }) => {
-      const c = (
-        globalThis as unknown as {
-          __canvas: {
-            client: {
-              elementProperties(r: unknown): Promise<{
-                entries: Array<{ path: string; value?: { value?: unknown } }>;
-              } | null>;
-            };
-          };
-        }
-      ).__canvas;
-      const r = await c.client.elementProperties({ kind, id });
-      return Object.fromEntries(
-        (r?.entries ?? []).map((e) => [
-          e.path,
-          JSON.stringify(e.value?.value ?? null),
-        ]),
-      );
-    },
-    { kind, id },
+/** What the control bar's pickers show (the style and face of the text
+ *  the caret is in). */
+const controlBar = (page: Page) =>
+  page.$$eval("select", (els) =>
+    els
+      .filter((e) => e.getBoundingClientRect().top < 110)
+      .map(
+        (e) =>
+          (e as HTMLSelectElement).selectedOptions[0]?.textContent?.trim() ??
+          "",
+      ),
   );
-}
 
-/** The story the text caret is in. */
-async function caretStory(page: Page): Promise<string> {
-  return page.evaluate(
+const caret = (page: Page) =>
+  page.evaluate(
     () =>
       (
         globalThis as unknown as {
           __canvas: { contentSelection?: { storyId: string } | null };
         }
-      ).__canvas.contentSelection?.storyId ?? "",
+      ).__canvas.contentSelection ?? null,
   );
-}
 
-/** A story's character count (paged.stories, the script door's own list):
- *  a stray keystroke in the text changes it. */
-async function storyLength(page: Page, storyId: string): Promise<string> {
-  return page.evaluate(async (id) => {
+const selection = (page: Page) =>
+  page.evaluate(
+    () =>
+      (
+        globalThis as unknown as {
+          __canvas: { elementSelection?: Array<{ kind: string; id: string }> };
+        }
+      ).__canvas.elementSelection ?? [],
+  );
+
+const imageStatus = async (page: Page) =>
+  (
+    (await page
+      .locator("[data-image-status]")
+      .allTextContents()
+      .catch(() => [])) as string[]
+  ).join(" | ");
+
+const editContext = (page: Page) =>
+  page.evaluate(
+    () =>
+      (
+        globalThis as unknown as {
+          __canvas: {
+            debugContext(): { editContext: { type: string } | null };
+          };
+        }
+      ).__canvas.debugContext().editContext?.type ?? null,
+  );
+
+async function registerFonts(page: Page): Promise<void> {
+  const faces = [
+    { family: "Fraunces", file: "Fraunces-VF.ttf" },
+    { family: "Source Serif 4", file: "SourceSerif4.ttf" },
+  ];
+  await page.route("**/__film-fonts/*", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "font/ttf",
+      body: readFileSync(
+        join(
+          FONTS,
+          decodeURIComponent(route.request().url().split("/__film-fonts/")[1]),
+        ),
+      ),
+    }),
+  );
+  await page.evaluate(async (list) => {
     const c = (
       globalThis as unknown as {
         __canvas: {
           client: {
-            executeScript(
-              s: string,
-            ): Promise<{ output: string[]; error: string | null }>;
+            registerFont(
+              f: string,
+              b: Uint8Array,
+              s: string | null,
+            ): Promise<void>;
           };
         };
       }
-    ).__canvas;
-    const r = await c.client.executeScript("paged.stories()");
-    if (r.error) return `error: ${r.error}`;
-    const list = JSON.parse(r.output[0]) as Array<{
-      selfId: string;
-      characterCount: number;
-    }>;
-    const s = list.find(
-      (x) =>
-        x.selfId === id ||
-        x.selfId.endsWith(`/${id}`) ||
-        id.endsWith(`/${x.selfId}`),
-    );
-    return s ? `${s.selfId}: ${s.characterCount} chars` : `no story ${id}`;
-  }, storyId);
+    ).__canvas.client;
+    for (const f of list) {
+      const res = await fetch(`/__film-fonts/${encodeURIComponent(f.file)}`);
+      if (!res.ok) throw new Error(`font ${f.file}: ${res.status}`);
+      await c.registerFont(
+        f.family,
+        new Uint8Array(await res.arrayBuffer()),
+        null,
+      );
+    }
+  }, faces);
+  await page.unroute("**/__film-fonts/*");
 }
 
-/** Punch in on a rectangle of the recording in CSS px, aimed through the
- *  camera as it is now (call after k.recamera()). */
-async function aimCss(
-  k: Kit,
-  [x0, y0, x1, y1]: [number, number, number, number],
-  max?: number,
-): Promise<void> {
-  const o = await screenPoint(k.page, 0, 0);
-  const s = (await screenPoint(k.page, 100, 0)).x - o.x;
-  const doc = (x: number, y: number) => [
-    (x - o.x) / (s / 100),
-    (y - o.y) / (s / 100),
-  ];
-  const [a, b] = doc(x0, y0);
-  const [c, d] = doc(x1, y1);
-  k.focus([a, b, c, d], max);
-}
-
-/** Hold until a scene's line has been spoken (the kit's plan: the voice
- *  starts leadMs into the scene and speaks for speechMs), so a move to the
- *  next subject never starts under the line about this one. */
-async function afterLine(
-  k: Kit,
-  id: string,
-  sceneStart: number,
-): Promise<void> {
-  const plan = JSON.parse(
-    readFileSync(join(ROOT, ".build", "plans", "home.json"), "utf8"),
-  ) as {
-    scenes: Array<{ id: string; leadMs: number; speechMs: number }>;
-  };
-  const s = plan.scenes.find((x) => x.id === id)!;
-  await k.hold(
-    Math.max(0, sceneStart + s.leadMs + s.speechMs + 200 - Date.now()),
-  );
-}
-
-/** Jump to a spread with the Document Map's search: type the page number,
- *  click its entry, let the camera settle, log the new camera. */
-async function go(k: Kit, n: number | "Cover"): Promise<void> {
-  const search = k.page
-    .locator(
-      "[data-document-map-search] input, input[data-document-map-search]",
-    )
-    .first();
-  await press(k, search);
-  await k.page.keyboard.press("Meta+a");
-  await typeHuman(
-    k.page,
-    n === "Cover" ? "1" : String(n),
-    n === "Cover" ? 3 : n,
-  );
+/** Type into a panel or control-bar field the way a person does: click it,
+ *  select what is there, type, press Enter. */
+async function retype(k: Kit, field: Locator, value: string): Promise<void> {
+  await press(k, field);
+  await expect(field).toBeFocused();
+  await k.page.keyboard.press("ControlOrMeta+a");
+  await typeHuman(k.page, value, 13);
   await k.hold(120);
-  const entry = k.page
-    .locator("[data-document-map-spread]")
-    .filter({ hasText: n === "Cover" ? /^Cover/ : new RegExp(`Pages ${n}–`) })
-    .first();
-  await press(k, entry);
-  // The page is on screen when its middle sits inside the canvas.
-  const target = n === "Cover" ? 1 : n;
-  await expect
-    .poll(
-      async () => {
-        const p = await screenPoint(k.page, 270, pageTop(target) + 360);
-        return p.y > 150 && p.y < 900 && p.x > 300 && p.x < 1300;
-      },
-      { timeout: 8000 },
-    )
-    .toBe(true);
-  await k.hold(600);
-  await k.recamera();
+  await k.page.keyboard.press("Enter");
+  await k.hold(200);
+}
+
+/** Fill fields that follow each other with Tab, the way a person does:
+ *  click the first, then type each value and Tab on; Enter after the last. */
+async function tabChain(
+  k: Kit,
+  first: Locator,
+  values: readonly string[],
+): Promise<void> {
+  await press(k, first);
+  await expect(first).toBeFocused();
+  for (const [i, v] of values.entries()) {
+    await k.page.keyboard.press("ControlOrMeta+a");
+    await typeHuman(k.page, v, 17 + i);
+    await k.hold(80);
+    await k.page.keyboard.press(i === values.length - 1 ? "Enter" : "Tab");
+  }
+  await k.hold(200);
+}
+
+/** Pick an option the way a person does: rest on the select, then choose. */
+async function choose(k: Kit, field: Locator, value: string): Promise<void> {
+  await hover(k, field);
+  await k.hold(250);
+  await field.selectOption(value);
+  await k.hold(250);
+}
+
+/** Back to the Selection tool with nothing selected: Escape and V, as a
+ *  hand does; a click on the pasteboard only when something is still
+ *  selected. */
+async function deselect(k: Kit, y = 400): Promise<void> {
+  await k.key("Escape");
+  await k.hold(150);
+  if (await caret(k.page)) {
+    // Out of the text first: a caret would take the V as a letter.
+    await press(k, k.page.locator('[data-tool-slot="select"]').first());
+  } else {
+    await k.key("v");
+  }
+  await k.key("Escape");
+  if ((await selection(k.page)).length > 0) {
+    await k.pointer.click(await pt(k, -90, y), { targetWidth: 80 });
+    await k.hold(150);
+  }
 }
 
 film("home", async (k) => {
+  // A lot happens in this take: the hand moves a little briskly.
+  k.pointer.pace = 1.3;
   const { page, designer, pointer } = k;
-  const doc = new ShowcaseDoc(page);
-  let spreads: TreeNode[] = [];
-  let photoId = "";
-  let typedStory = "";
-  let typedLength = "";
-  let before: Record<string, string> = {};
+  let bodyStory = "";
+  let bodyFrame = "";
+  let p2Frame = "";
+  page.setDefaultTimeout(30_000);
 
   await k.setup(async () => {
-    await aiTape(page, ROOT, "home");
     await designer.open();
     await designer.newDocument();
-    await doc.registerFonts(CORPUS_FONTS);
+    await registerFonts(page);
+    // Start the spreadsheet engine: its first workbook otherwise spends
+    // seconds booting it, on screen.
+    await openPanel(page, "media.paged.sheet.panel.workbook");
+    await page.locator("[data-sheet-new]").click();
+    await expect(page.locator("[data-sheet-range]")).toBeVisible({
+      timeout: 30_000,
+    });
+    await designer.newDocument();
+    await openPanel(page, "paged.properties");
     await k.key("v");
-    await k.hold(600);
+    await k.hold(800);
   });
   await k.roll();
 
-  // Each scene starts on its subject: the move to the next subject (a page,
-  // a panel) happens at the end of the scene before, inside its tail, so the
-  // voice never describes a page the camera has not reached.
-
-  // ── A whole book from one file. The load and the editor's fit-all view
-  //    are cut: at 1 % the cover renders far too large (reported). ──
-  await k.scene("open", async () => {
-    const chooser = page.waitForEvent("filechooser");
-    await menu(k, ["File", "Open…"]);
-    k.chip("showcase.paged", "file");
-    await (await chooser).setFiles(DOC);
-    // The last frame before a cut is what shows until a new one arrives (a
-    // still screen sends none): let the menu close, but not long enough for
-    // the book to land in the fit-all view.
-    await k.hold(250);
-    await k.cut("load", async () => {
-      await page.waitForFunction(
-        () =>
-          ((
-            globalThis as unknown as {
-              __canvas?: { handle?: { pageCount?: number } };
-            }
-          ).__canvas?.handle?.pageCount ?? 0) > 100,
-        null,
-        {
-          timeout: 120_000,
-        },
-      );
-      expect(
-        await page.evaluate(
-          () =>
-            (
-              globalThis as unknown as {
-                __canvas: { handle: { pageCount: number } };
-              }
-            ).__canvas.handle.pageCount,
-        ),
-      ).toBe(134);
-      // What the montage's spreads hold, read while the book settles.
-      spreads = await tree(page);
-      expect(spreads.length).toBe(68);
-      const draw = census(spreads[39]);
-      const image = census(spreads[44]);
-      expect(
-        (draw.kinds.Polygon ?? 0) + (draw.kinds.GraphicLine ?? 0),
-        "the drawing office has vector paths",
-      ).toBeGreaterThan(20);
-      expect(
-        image.kinds.Rectangle ?? 0,
-        "the contact sheet has its photo frames",
-      ).toBeGreaterThanOrEqual(6);
-      expect(
-        census(spreads[48]).plugins,
-        "the chart wall is paged.sheet's",
-      ).toContain("sheet");
-      expect(
-        census(spreads[52]).plugins,
-        "the long read's frame is paged.web's",
-      ).toContain("web");
-      expect(
-        census(spreads[55]).plugins,
-        "the record card is paged.data's",
-      ).toContain("data");
-      // The photo Claude will frame, by its place on the contact sheet.
-      const rects = (spreads[44].children ?? [])
-        .flatMap((p) => p.children ?? [])
-        .filter((c) => c.id?.kind === "rectangle");
-      for (const r of rects) {
-        const b = JSON.parse(
-          (await props(page, "rectangle", r.id!.id)).frameBounds ?? "null",
-        ) as number[] | null;
-        if (b && b.every((v, i) => Math.abs(v - PHOTO_BOUNDS[i]) < 1))
-          photoId = r.id!.id;
-      }
-      expect(photoId, "found the contact sheet photo").not.toBe("");
-      const cover = page
-        .locator("[data-document-map-spread]")
-        .filter({ hasText: /^Cover/ })
-        .first();
-      await cover.click();
-      await expect
-        .poll(
-          async () =>
-            (await screenPoint(page, 270, 360)).y > 150 &&
-            (await screenPoint(page, 270, 360)).y < 900,
-          { timeout: 8000 },
-        )
-        .toBe(true);
-      await sleep(1200);
-      // A caret in the map's search blinks, so frames keep coming after the
-      // cut; the next move types there anyway.
-      await page
-        .locator(
-          "[data-document-map-search] input, input[data-document-map-search]",
-        )
-        .first()
-        .focus();
-    });
-    await k.recamera();
-  });
-
-  // ── 134 pages, laid out live; then to the paragraph composer's spread. ──
-  await k.scene("cover", async () => {
-    const t0 = Date.now();
-    expect(await designer.gpuActive(), "the book renders on WebGPU").toBe(true);
-    k.focus([-40, -30, 580, 750], 1.4);
-    await k.hold(2600);
-    await afterLine(k, "cover", t0);
-    k.unfocus();
-    await go(k, 24);
-  });
-
-  // ── Type, set like print: the caret in a body paragraph shows its style
-  //    and face in the control bar. Then out of the text by the rail's
-  //    Selection tool (a key would land in the story) and on to the
-  //    drawing office. ──
-  await k.scene("type", async () => {
-    const t0 = Date.now();
-    await k.key("t", "Type tool");
-    await pointer.click(await screenPoint(page, 200, pageTop(24) + 300), {
-      targetWidth: 40,
-    });
-    // The control bar's style and face pickers now name the paragraph's.
-    const picked = () =>
-      page.$$eval("select", (els) =>
-        els
-          .filter((e) => e.getBoundingClientRect().top < 110)
-          .map(
-            (e) =>
-              (
-                e as HTMLSelectElement
-              ).selectedOptions[0]?.textContent?.trim() ?? "",
-          ),
-      );
-    await expect
-      .poll(picked)
-      .toEqual(expect.arrayContaining(["Annual Body", "EB Garamond"]));
-    typedStory = await caretStory(page);
-    expect(typedStory, "the caret is in a story").not.toBe("");
-    [typedLength] = await Promise.all([
-      storyLength(page, typedStory),
-      k.hold(700),
-    ]);
-    k.focus([30, pageTop(24) + 60, 510, pageTop(24) + 420], 1.8);
-    await k.hold(1500);
-    await afterLine(k, "type", t0);
-    k.unfocus();
-    await press(k, page.locator('[data-tool-slot="select"]'));
-    await go(k, 78);
-  });
-
-  // ── Drawings, photographs, charts and web pages, a page each; every
-  //    scene arrives on its page before its line, the last on the record
-  //    card. ──
-  for (const [id, next] of [
-    ["plugins", 88],
-    ["photos", 96],
-    ["charts", 104],
-    ["web", 110],
-  ] as const) {
-    await k.scene(id, async () => {
-      const t0 = Date.now();
-      await k.hold(1000);
-      await afterLine(k, id, t0);
-      await go(k, next);
-    });
-  }
-
-  // ── Records merged into the layout (experimental); then the Script panel. ──
-  await k.scene("records", async () => {
-    const t0 = Date.now();
-    await k.hold(1000);
-    await afterLine(k, "records", t0);
-    await menu(k, ["Window", "Developer", "Script"]);
-    await expect(page.locator("[data-script-editor]")).toBeVisible();
-  });
-
-  // ── One line of script; then to the contact sheet, a photo selected and
-  //    the AI Assistant open. ──
-  await k.scene("script", async () => {
-    const panel = page.locator("[data-script-editor]");
-    const source = panel.locator("[data-script-source]");
-    await press(k, source);
-    await page.keyboard.press("Meta+a");
-    await page.keyboard.press("Backspace");
-    const box = await source.boundingBox();
-    if (box)
-      await aimCss(
-        k,
-        [box.x - 40, box.y - 90, box.x + box.width + 30, box.y + 260],
-        2,
-      );
-    await typeHuman(page, "console.log(JSON.parse(paged.pages()).length)", 11);
+  // ── File ▸ New document, and a second page. ──
+  await k.scene("new", async () => {
     await k.hold(300);
-    await press(k, panel.locator("[data-action=run]"));
-    const log = panel.locator("[data-script-log]");
-    await expect(log).toContainText("134");
-    // The answer prints at the panel's foot, far below the source.
-    const logBox = await log.boundingBox();
-    if (logBox)
-      await aimCss(
-        k,
-        [
-          logBox.x - 40,
-          logBox.y - 120,
-          logBox.x + logBox.width + 30,
-          logBox.y + 60,
-        ],
-        2,
-      );
-    await k.hold(1800);
+    await menu(k, ["File", "New document…"]);
+    await expect.poll(async () => (await designer.handle()).pageCount).toBe(1);
+    await k.hold(500);
+    await menu(k, ["Layout", "Add page"]);
+    await expect.poll(async () => (await designer.handle()).pageCount).toBe(2);
+    await k.hold(600);
+  });
+
+  // ── Margins and two columns on every page. ──
+  await k.scene("margins", async () => {
+    await menu(k, ["Window", "Structure", "Margins and Columns"]);
+    const panel = page
+      .locator('[role="tabpanel"]:visible')
+      .filter({ has: page.locator("[data-page-select]") })
+      .first();
+    await choose(k, panel.locator("[data-page-select]"), "All pages");
+    const fields = panel.locator('input[type="text"]');
+    // Bounds (4), then Top, Bottom, Inside, Outside, column Number, Gutter.
+    await tabChain(k, fields.nth(4), ["48", "48", "48", "48"]);
+    await tabChain(k, fields.nth(8), ["2", "18"]);
+    await expect
+      .poll(async () =>
+        page.evaluate(async () => {
+          const r = await (
+            globalThis as unknown as {
+              __canvas: {
+                client: {
+                  executeScript(s: string): Promise<{ output: string[] }>;
+                };
+              };
+            }
+          ).__canvas.client.executeScript("paged.pages()");
+          return (
+            JSON.parse(r.output[0]) as Array<{
+              marginTopPt: number;
+              columnCount: number;
+            }>
+          )
+            .map((p) => `${p.marginTopPt}/${p.columnCount}`)
+            .join(" ");
+        }),
+      )
+      .toBe("48/2 48/2");
+    await expect(page.locator("[data-margin-guides]")).toHaveCount(2);
+    k.focus(PAGE1);
+    await k.hold(1200);
+  });
+
+  // ── The headline: a frame drawn with the Type tool, typed into. ──
+  await k.scene("headline", async () => {
     k.unfocus();
-    await go(k, 88);
-    before = await props(page, "rectangle", photoId);
-    await press(k, page.locator('[data-tool-slot="select"]'));
-    // Page-local centre of the photo: spread x + 540, on page 88.
-    await pointer.click(
-      await screenPoint(
-        page,
-        (-480 + -350) / 2 + 540,
-        pageTop(88) + (304 + 391) / 2,
-      ),
-      { targetWidth: 60 },
+    await k.key("t", "Type tool");
+    await pointer.drag(
+      await pt(k, HEAD_BOX.x0, HEAD_BOX.y0),
+      await pt(k, HEAD_BOX.x1, HEAD_BOX.y1),
+      { speed: 1.2 },
+    );
+    k.focus(TOP1);
+    await k.hold(300);
+    await typeHuman(page, HEADLINE, 3);
+    await expect
+      .poll(async () => (await stories(page))[0]?.characterCount ?? 0)
+      .toBe(HEADLINE.length);
+    await k.hold(500);
+  });
+
+  // ── The copy, placed from Word into a frame of its own. ──
+  await k.scene("word", async () => {
+    k.unfocus();
+    await deselect(k);
+    const chooser = page.waitForEvent("filechooser", { timeout: 120_000 });
+    await menu(k, ["Insert", "Word document…"]);
+    k.chip("the-page.docx", "file");
+    await (await chooser).setFiles(join(ASSETS, "the-page.docx"));
+    await expect
+      .poll(async () => (await stories(page)).length, { timeout: 20_000 })
+      .toBe(2);
+    const body = (await stories(page)).find((s) => s.characterCount > 1000)!;
+    bodyStory = body.selfId;
+    const frame = (await items(page)).find(
+      (i) =>
+        i.id.kind === "textFrame" &&
+        Math.round(i.bounds[0]) === BODY_TOP &&
+        Math.round(i.bounds[1]) === 48,
+    );
+    expect(frame, "the Word copy sits in its own frame").toBeTruthy();
+    bodyFrame = frame!.id.id;
+    expect(body.overset, "the copy runs longer than its frame").toBe(true);
+    k.focus(LOWER1);
+    await k.hold(1500);
+  });
+
+  // ── The headline takes the Title style the Word document brought. ──
+  await k.scene("style", async () => {
+    k.unfocus();
+    await k.key("t");
+    await pointer.click(await pt(k, 120, 90), { targetWidth: 40 });
+    await expect
+      .poll(async () => (await caret(page))?.storyId ?? "")
+      .not.toBe(bodyStory);
+    // The control bar's paragraph-style picker, where Word's styles now are.
+    const styles = page
+      .locator("select")
+      .filter({ has: page.locator("option", { hasText: /^Title$/ }) })
+      .first();
+    await hover(k, styles);
+    await k.hold(250);
+    await styles.selectOption({ label: "Title" });
+    // The control bar names the caret's paragraph style and face.
+    await expect
+      .poll(() => controlBar(page))
+      .toEqual(expect.arrayContaining(["Title", "Fraunces"]));
+    k.focus(TOP1);
+    await k.hold(1800);
+  });
+
+  // ── Two columns for the copy's frame. ──
+  await k.scene("columns", async () => {
+    k.unfocus();
+    await deselect(k);
+    await pointer.click(await pt(k, 300, 560), { targetWidth: 120 });
+    await expect
+      .poll(async () => (await selection(page)).map((s) => s.id))
+      .toEqual([bodyFrame]);
+    await openPanel(page, "paged.text-frame-options");
+    const count = page
+      .locator('input[aria-label="Text frame column count"]:visible')
+      .first();
+    const gutter = page
+      .locator('input[aria-label="Text frame column gutter"]:visible')
+      .first();
+    await retype(k, count, "2");
+    await retype(k, gutter, "18");
+    // The panel reads the frame back: two columns, an 18 pt gutter.
+    await expect(count).toHaveValue("2");
+    await expect(gutter).toHaveValue(/^18/);
+    k.focus(LOWER1);
+    await k.hold(1400);
+  });
+
+  // ── A drop cap, then the whole story justified. ──
+  await k.scene("paragraph", async () => {
+    k.unfocus();
+    await k.key("t");
+    await pointer.click(await pt(k, 110, BODY_TOP + 24), { targetWidth: 40 });
+    await expect
+      .poll(async () => (await caret(page))?.storyId ?? "")
+      .toBe(bodyStory);
+    await openPanel(page, "paged.paragraph");
+    await retype(
+      k,
+      page
+        .locator('input[aria-label="Paragraph drop cap lines"]:visible')
+        .first(),
+      "3",
+    );
+    await retype(
+      k,
+      page
+        .locator('input[aria-label="Paragraph drop cap characters"]:visible')
+        .first(),
+      "1",
+    );
+    // The caret goes back to the text, and every paragraph is selected.
+    await pointer.click(await pt(k, 110, BODY_TOP + 24), { targetWidth: 40 });
+    await k.key("Meta+a", "Select all", "⌘A");
+    await press(
+      k,
+      page.locator('[data-option-value="LeftJustified"]:visible').first(),
+    );
+    k.focus(LOWER1);
+    await k.hold(2200);
+  });
+
+  // ── The story threads onto page two. ──
+  await k.scene("thread", async () => {
+    k.unfocus();
+    await deselect(k);
+    await k.key("Alt+Shift+Meta+0", "Fit document", "⌥⇧⌘0");
+    await k.hold(700);
+    await k.recamera();
+    // The frame on page two, drawn with the Type tool.
+    await k.key("t", "Type tool");
+    await pointer.drag(
+      await pt(k, P2_BODY.x0, P2_BODY.y0),
+      await pt(k, P2_BODY.x1, P2_BODY.y1),
+      { speed: 1.3 },
+    );
+    await deselect(k, 700);
+    const p2 = (await items(page)).find(
+      (i) =>
+        i.id.kind === "textFrame" &&
+        i.id.id !== bodyFrame &&
+        Math.round(i.bounds[0]) === 48 &&
+        Math.round(i.bounds[2]) === 330,
+    );
+    expect(p2, "the frame on page two").toBeTruthy();
+    p2Frame = p2!.id.id;
+    await pointer.click(await pt(k, 300, 560), { targetWidth: 80 });
+    const port = page.locator('[data-thread-port="out"]').first();
+    await expect(port).toHaveAttribute("data-thread-state", "overset");
+    await press(k, port);
+    await k.hold(300);
+    await pointer.click(await pt(k, 300, P2 + 180), { targetWidth: 120 });
+    await expect
+      .poll(
+        async () =>
+          (await items(page)).filter(
+            (i) => i.id.kind === "textFrame" && i.storyId === bodyStory,
+          ).length,
+      )
+      .toBe(2);
+    await expect
+      .poll(
+        async () =>
+          (await stories(page)).find((s) => s.selfId === bodyStory)?.overset,
+      )
+      .toBe(false);
+    k.focus(SPREAD, 1.2);
+    await k.hold(1200);
+  });
+
+  // ── Room for a picture: the frame's top edge comes down, the text moves on. ──
+  await k.scene("reflow", async () => {
+    await pointer.drag(
+      await pt(k, 306, BODY_TOP),
+      await pt(k, 306, BODY_TOP_AFTER),
+      { speed: 0.8 },
     );
     await expect
-      .poll(() =>
-        page.evaluate(() =>
-          JSON.stringify(
-            (
-              globalThis as unknown as {
-                __canvas: { elementSelection: unknown };
-              }
-            ).__canvas.elementSelection,
-          ),
+      .poll(async () =>
+        Math.round(
+          (await items(page)).find((i) => i.id.id === bodyFrame)?.bounds[0] ??
+            0,
         ),
       )
-      .toContain(photoId);
-    await press(k, page.getByText("Properties", { exact: true }).first());
-    // The button sits at the foot of the Properties panel, below the fold
-    // for a picture: the panel scrolls to it, as it would for a person.
-    const askButton = page
-      .getByText("Ask the AI Assistant…", { exact: true })
-      .first();
-    await askButton.scrollIntoViewIfNeeded();
-    await k.hold(300);
-    await press(k, askButton);
-    await expect(page.locator("[data-ai-assistant]")).toBeVisible();
-  });
-
-  // ── The request, typed in plain words. ──
-  await k.scene("ask", async () => {
-    const card = page.locator("[data-ai-assistant]");
-    const photo = await screenPoint(
-      page,
-      -480 + 540 - 30,
-      pageTop(88) + 304 - 60,
-    );
-    const cardBox = await card.boundingBox();
-    if (cardBox)
-      await aimCss(
-        k,
-        [
-          photo.x - 20,
-          photo.y - 20,
-          cardBox.x + cardBox.width,
-          cardBox.y + cardBox.height * 0.75,
-        ],
-        1.6,
-      );
-    await press(k, card.locator("[data-ai-input]"));
-    await typeHuman(page, "Frame this photo with a six point black border.", 5);
-    await k.hold(300);
-  });
-
-  // ── Claude reads the page, writes a script and runs it. ──
-  await k.scene("claude", async () => {
-    const card = page.locator("[data-ai-assistant]");
-    await press(k, card.getByRole("button", { name: "Ask Claude" }));
-    // Claude's reply streams at its own pace; a long wait is cut, and the
-    // film says by how much.
-    // An error (no key on the dev server) ends the take at once, not after
-    // the long wait.
-    const summary = card.locator("[data-ai-summary]");
-    const settled = card.locator("[data-ai-summary], [data-ai-error]").first();
-    const quick = await settled.waitFor({ timeout: 7000 }).then(
-      () => true,
-      () => false,
-    );
-    if (!quick)
-      await k.cut("claude", () => settled.waitFor({ timeout: 180_000 }));
-    const error = card.locator("[data-ai-error]");
-    if (await error.count())
-      throw new Error(
-        `the AI Assistant reported: ${await error.first().innerText()}`,
-      );
-    await expect(summary).toBeVisible();
-    await expect(card.locator("[data-ai-step=ok]").first()).toBeVisible();
-    const after = await props(page, "rectangle", photoId);
-    expect(
-      Number(after.frameStrokeWeight),
-      "Claude gave the photo a border",
-    ).toBeGreaterThan(0);
-    expect(after.frameStrokeWeight).not.toBe(before.frameStrokeWeight);
+      .toBe(BODY_TOP_AFTER);
+    await expect
+      .poll(
+        async () =>
+          (await stories(page)).find((s) => s.selfId === bodyStory)?.overset,
+      )
+      .toBe(false);
+    await deselect(k, 700);
     await k.hold(1600);
   });
 
-  // ── One undo takes all of it back. ──
-  await k.scene("undo", async () => {
-    const card = page.locator("[data-ai-assistant]");
-    await press(k, card.locator("[data-cockpit-action=ai-undo]"));
-    await expect(card).toHaveAttribute("data-ai-assistant-state", "idle");
-    const undone = await props(page, "rectangle", photoId);
-    const differ = Object.keys(before).filter(
-      (key) => undone[key] !== before[key],
+  // ── A photograph in a frame, enhanced where it sits. ──
+  await k.scene("photo", async () => {
+    k.unfocus();
+    await k.key("Home");
+    await k.key("Meta+0", "Fit page", "⌘0");
+    await k.hold(600);
+    await k.recamera();
+    await k.key("f", "Rectangle frame tool");
+    await pointer.drag(
+      await pt(k, PHOTO.x0, PHOTO.y0),
+      await pt(k, PHOTO.x1, PHOTO.y1),
+      { speed: 1.3 },
     );
-    expect(differ, "one undo restored every property Claude changed").toEqual(
-      [],
+    await k.hold(400);
+    const chooser = page.waitForEvent("filechooser", { timeout: 120_000 });
+    await k.key("Meta+d", "Place", "⌘D");
+    k.chip("dolomites.jpg", "file");
+    await (await chooser).setFiles(join(ASSETS, "pexels-618833-dolomites.jpg"));
+    await expect
+      .poll(async () => (await items(page)).some((i) => i.hasImage), {
+        timeout: 15_000,
+      })
+      .toBe(true);
+    await openPanel(page, "paged.frame-fitting");
+    await press(
+      k,
+      page.getByRole("button", { name: "Fill frame proportionally" }).first(),
     );
+    await k.hold(500);
+    await menu(k, ["Plugins", "Image", "Adjust…"]);
+    await expect
+      .poll(() => editContext(page), { timeout: 20_000 })
+      .toBe("rasterImage");
+    await expect
+      .poll(() => imageStatus(page), { timeout: 20_000 })
+      .toContain("decoded");
+    await press(k, page.locator("[data-image-auto-enhance]"));
     await k.hold(900);
+    await press(
+      k,
+      page.getByRole("button", { name: "Apply", exact: true }).first(),
+    );
+    await expect
+      .poll(() => imageStatus(page), { timeout: 20_000 })
+      .toContain("Composited");
+    await menu(k, ["Image", "Commit edits to the document"]);
+    await expect
+      .poll(() => imageStatus(page), { timeout: 20_000 })
+      .toContain("Committed revision");
+    await k.key("Escape");
+    await expect.poll(() => editContext(page)).toBe(null);
+    // Done with the picture: its panel closes.
+    await press(
+      k,
+      page.getByRole("button", { name: "Close Image", exact: true }).first(),
+    );
+    k.focus(TOP1);
+    await k.hold(1600);
   });
 
-  // ── Out as IDML and as PDF, from the export centre. ──
-  await k.scene("export", async () => {
+  // ── A mark beside the headline, drawn with the pen and filled. ──
+  await k.scene("draw", async () => {
+    k.unfocus();
+    await deselect(k);
+    const before = (await items(page)).filter(
+      (i) => i.id.kind === "polygon",
+    ).length;
+    await press(k, page.locator('[data-tool-slot="pen"]'));
+    k.focus(TOP1);
+    for (const [x, y] of MARK) {
+      await pointer.click(await pt(k, x, y), { targetWidth: 28 });
+      await k.hold(120);
+    }
+    await pointer.click(await pt(k, MARK[0][0], MARK[0][1]), {
+      targetWidth: 20,
+    });
+    await expect
+      .poll(
+        async () =>
+          (await items(page)).filter((i) => i.id.kind === "polygon").length,
+      )
+      .toBe(before + 1);
+    // Filled black from the tool rail's fill swatch.
+    const mark = (await items(page))
+      .filter((i) => i.id.kind === "polygon")
+      .at(-1)!;
+    await press(
+      k,
+      page
+        .getByRole("button", { name: "Fill — click to choose a colour" })
+        .first(),
+    );
+    await press(
+      k,
+      page.locator('[data-swatch-picker] [title="Black"]').first(),
+    );
+    await expect
+      .poll(() =>
+        page.evaluate(async (ref) => {
+          const p = await (
+            globalThis as unknown as {
+              __canvas: {
+                client: {
+                  elementProperties(r: unknown): Promise<{
+                    entries: Array<{
+                      path: string;
+                      value?: { value?: unknown };
+                    }>;
+                  } | null>;
+                };
+              };
+            }
+          ).__canvas.client.elementProperties(ref);
+          return JSON.stringify(
+            p?.entries.find((e) => e.path === "frameFillColor")?.value?.value ??
+              null,
+          );
+        }, mark.id),
+      )
+      .toContain("Black");
+    await k.hold(400);
+    await deselect(k);
+    await k.hold(1200);
+  });
+
+  // ── Page two: the Excel workbook's chart, placed as vector shapes. ──
+  let chartParts = 0;
+  await k.scene("sheet", async () => {
+    k.unfocus();
+    await k.key("PageDown");
+    await k.key("Meta+0", "Fit page", "⌘0");
+    await k.hold(600);
+    await k.recamera();
+    // The chart lands beside the selection: under the story's frame.
+    await press(k, page.locator('[data-tool-slot="select"]').first());
+    await pointer.click(await pt(k, 300, P2 + 180), { targetWidth: 120 });
+    const before = (await items(page)).length;
+    const chooser = page.waitForEvent("filechooser", { timeout: 120_000 });
+    await menu(k, ["Insert", "Spreadsheet…"]);
+    k.chip("price-list.xlsx", "file");
+    await (await chooser).setFiles(join(ASSETS, "price-list.xlsx"));
+    const charts = page.locator('[data-sheet-section="charts"]');
+    await expect(charts).toBeVisible({ timeout: 20_000 });
+    await press(k, charts.locator("summary"));
+    await expect(page.locator("[data-sheet-chart-list]")).toContainText(
+      "Amount by item",
+    );
+    await press(k, page.locator("[data-sheet-chart-lower]").first());
+    await expect
+      .poll(async () => (await items(page)).length - before, {
+        timeout: 15_000,
+      })
+      .toBeGreaterThan(5);
+    chartParts = (await items(page)).length - before;
+    await deselect(k, P2 + 400);
+    k.focus(PAGE2);
+    await k.hold(1200);
+  });
+
+  // ── A web frame: HTML and CSS, laid out on the page. ──
+  await k.scene("web", async () => {
+    k.unfocus();
+    const before = (await items(page)).filter(
+      (i) => i.id.kind === "rectangle",
+    ).length;
+    const chooser = page.waitForEvent("filechooser", { timeout: 120_000 });
+    await menu(k, ["File", "Open…"]);
+    k.chip("paper-goods.html", "file");
+    await (await chooser).setFiles(join(ASSETS, "paper-goods.html"));
+    await expect
+      .poll(
+        async () =>
+          (await items(page)).filter((i) => i.id.kind === "rectangle").length,
+        { timeout: 20_000 },
+      )
+      .toBe(before + 1);
+    // It lands at the page's top left; moved beside the chart, then sized
+    // to the chart's height by its corner handle.
+    const web = (await items(page))
+      .filter((i) => i.id.kind === "rectangle")
+      .at(-1)!;
+    const [t, l, b, r] = web.bounds;
+    await pointer.drag(
+      await pt(k, (l + r) / 2, P2 + (t + b) / 2),
+      await pt(k, WEB.left + (r - l) / 2, P2 + WEB.top + (b - t) / 2),
+      { speed: 1.2 },
+    );
+    await pointer.drag(
+      await pt(k, WEB.left + (r - l), P2 + WEB.top + (b - t)),
+      await pt(k, WEB.left + WEB.width, P2 + WEB.top + WEB.height),
+      { speed: 1.2 },
+    );
+    // Beside the chart, within a point or two of where the hand aimed.
+    const want = [
+      WEB.top,
+      WEB.left,
+      WEB.top + WEB.height,
+      WEB.left + WEB.width,
+    ];
+    await expect
+      .poll(async () => {
+        const got = (await items(page)).find((i) => i.id.id === web.id.id);
+        return got
+          ? Math.max(...got.bounds.map((v, j) => Math.abs(v - want[j])))
+          : 99;
+      })
+      .toBeLessThan(3);
+    await deselect(k, P2 + 400);
+    k.focus(PAGE2);
+    await k.hold(1600);
+  });
+
+  // ── Data: the product list, into DuckDB, in the Data layout. ──
+  await k.scene("data", async () => {
     k.unfocus();
     await press(
       k,
-      page.getByRole("button", { name: "Export", exact: true }).last(),
+      page.getByRole("button", { name: "Data layout", exact: true }).last(),
     );
-    await k.hold(500);
-    const idml = page.waitForEvent("download");
+    await k.hold(600);
+    const chooser = page.waitForEvent("filechooser", { timeout: 120_000 });
+    await press(k, page.locator("[data-data-import-csv]:visible").first());
+    k.chip("catalogue.csv", "file");
+    await (await chooser).setFiles(join(ASSETS, "catalogue.csv"));
+    const status = page.locator("[data-status]").last();
+    const ready = async () =>
+      (await status.getAttribute("data-status").catch(() => null)) ?? "?";
+    const quick = await expect
+      .poll(ready, { timeout: 4000 })
+      .toBe("ready")
+      .then(
+        () => true,
+        () => false,
+      );
+    if (!quick)
+      await k.cut("duckdb", () =>
+        expect.poll(ready, { timeout: 60_000 }).toBe("ready"),
+      );
+    await expect(
+      page.getByText("catalogue", { exact: true }).first(),
+    ).toBeVisible();
+    await k.hold(800);
+  });
+
+  // ── A frame bound to the EAN column, lowered to a vector barcode. ──
+  await k.scene("barcode", async () => {
+    const polys = new Set(
+      (await items(page))
+        .filter((i) => i.id.kind === "polygon")
+        .map((i) => i.id.id),
+    );
+    await k.key("m", "Rectangle tool");
+    await pointer.drag(
+      await pt(k, CODE.x0, CODE.y0),
+      await pt(k, CODE.x1, CODE.y1),
+      { speed: 1.4 },
+    );
+    await press(k, page.getByText("Bindings", { exact: true }).last());
+    const author = page.locator("[data-data-bind-author]");
+    await choose(k, author.locator("[data-data-bind-kind]"), "barcode");
+    await choose(
+      k,
+      author
+        .locator("select")
+        .filter({ has: page.locator('option[value="ean13"]') })
+        .first(),
+      "ean13",
+    );
+    await press(k, author.locator("[data-data-bind-field]"));
+    await page.keyboard.type("ean", { delay: 90 });
+    await press(k, author.locator("[data-data-bind-add]"));
+    await expect(page.locator("[data-data-bind-msg]").first()).toContainText(
+      "(ean13)",
+    );
+    await press(k, page.getByRole("button", { name: /lower to document/i }));
+    await expect
+      .poll(
+        async () =>
+          (await items(page)).filter(
+            (i) => i.id.kind === "polygon" && !polys.has(i.id.id),
+          ).length,
+        { timeout: 10_000 },
+      )
+      .toBeGreaterThan(20);
+    const bars = (await items(page))
+      .filter((i) => i.id.kind === "polygon" && !polys.has(i.id.id))
+      .map((i) => i.bounds);
+    const eans = readFileSync(join(ASSETS, "catalogue.csv"), "utf8")
+      .trim()
+      .split("\n")
+      .slice(1)
+      .map((l) => l.split(",").at(-1)!.trim());
+    expect(eans, "the barcode encodes an EAN from the data").toContain(
+      decodeEan13(bars),
+    );
+    await deselect(k, P2 + 400);
+    k.focus([CODE.x0 - 60, CODE.y0 - 60, CODE.x1 + 30, CODE.y1 + 40]);
+    await k.hold(1600);
+  });
+
+  // ── Prepress: preflight, the whole document. ──
+  await k.scene("preflight", async () => {
+    k.unfocus();
     await press(
       k,
-      page.locator('[data-plugin-export="media.paged.publish.exporter.idml"]'),
+      page.getByRole("button", { name: "Prepress", exact: true }).last(),
     );
-    const idmlFile = await idml;
-    k.chip(`${idmlFile.suggestedFilename()} saved`, "save");
-    await idmlFile.saveAs(join(k.dir, "exported.idml"));
-    const idmlBytes = readFileSync(join(k.dir, "exported.idml"));
-    expect(idmlBytes.subarray(0, 2).toString()).toBe("PK");
-    expect(
-      idmlBytes.includes(Buffer.from("designmap.xml")),
-      "an IDML package",
-    ).toBe(true);
-    await k.hold(600);
-    await press(k, page.getByRole("button", { name: /^Export…$/ }).first());
+    await k.hold(500);
+    await openPanel(page, "paged.preflight");
+    await press(
+      k,
+      page.locator('[data-cockpit-action="run-validation"]:visible').first(),
+    );
+    await expect(
+      page.getByText("No findings — the document exports cleanly.").first(),
+    ).toBeVisible({ timeout: 30_000 });
+    await k.hold(1200);
+  });
+
+  // ── A PDF for print. ──
+  await k.scene("pdf", async () => {
+    await menu(k, ["File", "Export PDF…"]);
     const dialog = page.locator("[role=dialog], dialog").first();
     await expect(dialog).toBeVisible();
-    // PDF/X-4 needs an output-intent profile this document has not got;
-    // PDF 1.7 does not.
     const conformance = dialog.locator("select").first();
     await hover(k, conformance);
     await conformance.selectOption({ label: "PDF 1.7" });
-    await k.hold(400);
-    const pdf = page.waitForEvent("download");
+    await k.hold(300);
+    const pdf = page.waitForEvent("download", { timeout: 120_000 });
     await press(k, dialog.getByRole("button", { name: /^Export$/ }));
-    let pdfFile = await Promise.race([pdf, sleep(3000).then(() => null)]);
-    if (!pdfFile) await k.cut("pdf", async () => void (pdfFile = await pdf));
-    k.chip(`${pdfFile!.suggestedFilename()} saved`, "save");
-    await pdfFile!.saveAs(join(k.dir, "exported.pdf"));
-    expect(
-      readFileSync(join(k.dir, "exported.pdf")).subarray(0, 5).toString(),
-    ).toBe("%PDF-");
-    // The type scene changed no text (checked while the shot holds).
-    const [typedAfter] = await Promise.all([
-      storyLength(page, typedStory),
-      k.hold(1400),
+    let file = await Promise.race([
+      pdf,
+      new Promise<null>((r) => setTimeout(() => r(null), 3000)),
     ]);
-    expect(typedAfter, "the type scene changed no text").toBe(typedLength);
+    if (!file) await k.cut("pdf", async () => void (file = await pdf));
+    k.chip(`${file!.suggestedFilename()} saved`, "save");
+    await press(k, dialog.getByRole("button", { name: "Close" }).first());
+    await expect(dialog).toBeHidden();
+    await file!.saveAs(join(k.dir, "home.pdf"));
+    const bytes = readFileSync(join(k.dir, "home.pdf"));
+    expect(bytes.subarray(0, 5).toString()).toBe("%PDF-");
+    expect(
+      (bytes.toString("latin1").match(/\/Type\s*\/Page[^s]/g) ?? []).length,
+      "a page each",
+    ).toBe(2);
+    await k.hold(800);
+  });
+
+  // ── One .paged file, every plugin's content inside. ──
+  await k.scene("save", async () => {
+    const download = page.waitForEvent("download", { timeout: 120_000 });
+    await k.key("Meta+s", "Save", "⌘S");
+    const file = await download;
+    const saved = join(k.dir, file.suggestedFilename());
+    await file.saveAs(saved);
+    k.chip(`${file.suggestedFilename()} saved`, "save");
+    const zip = readFileSync(saved);
+    expect(zip.subarray(0, 2).toString()).toBe("PK");
+    // Each plugin's own parts travel inside the one file, and the web
+    // frame's source rides on its frame in the spread.
+    const names = zipEntryNames(zip);
+    for (const ns of [
+      "media.paged.doc",
+      "media.paged.image",
+      "media.paged.sheet",
+      "media.paged.data",
+    ])
+      expect(
+        names.some((n) => n.startsWith(`paged/${ns}/`)),
+        `${ns} travels in the file`,
+      ).toBe(true);
+    expect(
+      names
+        .filter((n) => n.startsWith("Spreads/"))
+        .some((n) => readZipText(zip, n)?.includes("media.paged.web")),
+      "the web frame's source travels in the file",
+    ).toBe(true);
+    expect(chartParts).toBeGreaterThan(5);
+    expect(p2Frame).not.toBe("");
+    // The finished pages, as they print: back in the Design workspace, the
+    // whole document, and Preview hides the guides and frame edges.
+    await press(
+      k,
+      page.getByRole("button", { name: "Design", exact: true }).last(),
+    );
+    await k.key("Alt+Shift+Meta+0", "Fit document", "⌥⇧⌘0");
+    await press(k, page.getByRole("button", { name: "Preview" }).first());
+    await k.hold(300);
+    await k.recamera();
+    k.focus(SPREAD, 1.3);
+    await k.hold(1800);
   });
 });
