@@ -1734,6 +1734,12 @@ export interface BookmarkSummary {
     name: string;
     destination: string;
     /**
+     * The page a page destination goes to (its `Self` id), so a panel
+     * can say \"Page 3\" rather than the destination\'s id. Absent for a
+     * text-anchor or URL destination. Additive.
+     */
+    destinationPage?: string | null;
+    /**
      * The bookmark it stands under (ADR 173); `None` at the top level.
      * The collection lists the bookmarks in document order, a parent
      * before its children.
@@ -1800,6 +1806,12 @@ export interface CrossReferenceSummary {
     selfId: string;
     name: string;
     format: string;
+    /**
+     * The format\'s own name (\"Page Number\"), so a panel never shows the
+     * format\'s id. Absent when the format is unnamed or not found.
+     * Additive.
+     */
+    formatName?: string | null;
     destination: string;
 }
 

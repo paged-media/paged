@@ -380,17 +380,14 @@ describe("Gradient Options panel", () => {
   });
 
   // UX audit F-22: the stops list titles each stop by its swatch's id.
-  test.failing(
-    "PN-166 (UX F-22): each stop is titled by its swatch's name, not its id",
-    async () => {
-      covers("panel:paged.gradient-options");
-      const h = await mount();
-      const titles = [
-        ...h.field("stops").querySelectorAll("[data-list-item-title]"),
-      ].map((t) => t.textContent ?? "");
-      expect(titles.some((t) => t.startsWith("Color/"))).toBe(false);
-    },
-  );
+  test("PN-166 (UX F-22): each stop is titled by its swatch's name, not its id", async () => {
+    covers("panel:paged.gradient-options");
+    const h = await mount();
+    const titles = [
+      ...h.field("stops").querySelectorAll("[data-list-item-title]"),
+    ].map((t) => t.textContent ?? "");
+    expect(titles.some((t) => t.startsWith("Color/"))).toBe(false);
+  });
 });
 
 // ------------------------------------------------------- colour group options
@@ -434,19 +431,34 @@ describe("Color Group Options panel", () => {
     );
   });
 
-  // UX audit F-22: the members field is the raw JSON of swatch ids.
-  test.failing(
-    "PN-167 (UX F-22): the group's swatches read as names, not as JSON of ids",
-    async () => {
-      covers("panel:paged.color-group-options");
-      const h = await mount();
-      const shown =
-        h.field("members").querySelector("input")?.value ??
-        h.field("members").textContent ??
-        "";
-      expect(shown).not.toContain("Color/");
-    },
-  );
+  // The swatches are items now; an edit writes the members back as the
+  // engine's space-separated text.
+  test("adding a swatch to the group writes its members as text", async () => {
+    covers("panel:paged.color-group-options");
+    const h = await mount();
+    const from = h.mark();
+    await h.click(h.field("members").querySelector("[data-list-add]")!);
+    const sent = sentSets(h, from);
+    expect(sent).toHaveLength(1);
+    expect(sent[0].args.path).toBe("members");
+    expect(sent[0].args.value.type).toBe("text");
+    expect(String(sent[0].args.value.value)).toMatch(/ Color\/Black$/);
+    const groups = (await h.client.collection("colorGroups")) as Array<{
+      members: string[];
+    }>;
+    expect(groups[0].members.at(-1)).toBe("Color/Black");
+  });
+
+  // UX audit F-22 (fixed): the members field was the raw JSON of swatch ids.
+  test("PN-167 (UX F-22): the group's swatches read as names, not as JSON of ids", async () => {
+    covers("panel:paged.color-group-options");
+    const h = await mount();
+    const shown =
+      h.field("members").querySelector("input")?.value ??
+      h.field("members").textContent ??
+      "";
+    expect(shown).not.toContain("Color/");
+  });
 });
 
 // ----------------------------------------------------- numbering list options

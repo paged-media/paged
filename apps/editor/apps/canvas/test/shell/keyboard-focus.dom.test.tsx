@@ -432,3 +432,42 @@ describe("keyboard focus across the main chrome", () => {
     expect(document.activeElement).toBe(opener);
   });
 });
+
+describe("the menu bar's toggles", () => {
+  // Finding SH-4: a View toggle is a menuitemcheckbox whose aria-checked
+  // follows its state (the e2e matrix asserts the shipped View items).
+  test("SH-4: a toggle item renders as a menuitemcheckbox with its state", async () => {
+    const s = await mountShell();
+    let on = true;
+    s.registries.commands.register({
+      id: "test.view.toggle",
+      title: "Snap",
+      handler: () => {
+        on = !on;
+      },
+    });
+    s.registries.menus.register({
+      path: "View/Snap to points",
+      command: "test.view.toggle",
+      checked: () => on,
+    });
+    await s.settle();
+    const trigger = s.root.querySelector<HTMLElement>(
+      '[data-menu-trigger="View"]',
+    )!;
+    const openView = async () => {
+      await act(async () => trigger.focus());
+      await s.key({ key: "Enter" }, trigger);
+    };
+    await openView();
+    const item = () =>
+      [...document.querySelectorAll('[role="menuitemcheckbox"]')].find((el) =>
+        el.textContent?.includes("Snap to points"),
+      );
+    expect(item()?.getAttribute("aria-checked")).toBe("true");
+    await s.key({ key: "Escape" }, item() ?? document.body);
+    on = false;
+    await openView();
+    expect(item()?.getAttribute("aria-checked")).toBe("false");
+  });
+});

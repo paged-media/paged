@@ -265,17 +265,14 @@ describe("Style Options panel: findings", () => {
 
   // UX audit F-22 (internal identifiers shown to users): enum fields list
   // the engine's member names ("LeftAlign", "NextColumn").
-  test.failing(
-    "PN-161 (UX F-22): enum options read as words, not engine member names",
-    async () => {
-      covers("panel:paged.style-options");
-      const h = await mount();
-      const labels = optionLabels(
-        h.field("paragraphJustification").querySelector("select")!,
-      );
-      expect(labels).not.toContain("LeftAlign");
-    },
-  );
+  test("PN-161 (UX F-22): enum options read as words, not engine member names", async () => {
+    covers("panel:paged.style-options");
+    const h = await mount();
+    const labels = optionLabels(
+      h.field("paragraphJustification").querySelector("select")!,
+    );
+    expect(labels).not.toContain("LeftAlign");
+  });
 
   // The family row is a tablist of real tabs (the panel kit's Tab): exactly
   // one says it is selected.

@@ -26,6 +26,7 @@ import {
 } from "react";
 import {
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
@@ -319,6 +320,8 @@ export interface MenuLeaf {
   /** ADR 024 — an inapplicable item greys and refuses the click. */
   when?: VisibilityPredicate;
   labelFor?: (state: unknown) => string | null;
+  /** A toggle's state: the leaf renders as a menuitemcheckbox. */
+  checked?: (state: unknown) => boolean;
   icon?: string;
   accelerator?: string;
   kind?: "item" | "label";
@@ -370,6 +373,7 @@ export function buildMenuTree(
       disabled: item.disabled,
       when: item.when,
       labelFor: item.labelFor,
+      checked: item.checked,
       icon: item.icon,
       accelerator: item.accelerator,
       kind: item.kind,
@@ -730,38 +734,58 @@ function renderLeaf(
   const accel =
     ctx.keyFor(item.command) ??
     (item.accelerator ? prettyKey(item.accelerator) : null);
-  return (
-    <DropdownMenuItem
-      key={item.command}
-      disabled={greyed}
-      onSelect={() => {
-        // Re-checked at invoke: a menu can stay open across a context
-        // change, and the click must not run against the old surface.
-        if (!greyed) ctx.invoke(item.command);
-      }}
+  // Re-checked at invoke: a menu can stay open across a context change,
+  // and the click must not run against the old surface.
+  const onSelect = () => {
+    if (!greyed) ctx.invoke(item.command);
+  };
+  const trailing = item.disabled ? (
+    <span
+      className="pg-mono-meta"
+      style={{ marginLeft: "auto", paddingLeft: 16 }}
     >
+      soon
+    </span>
+  ) : (
+    accel && (
+      <span
+        className="pg-mono-meta"
+        style={{ marginLeft: "auto", paddingLeft: 16, opacity: 0.6 }}
+        data-menu-accelerator={item.command}
+      >
+        {accel}
+      </span>
+    )
+  );
+  if (item.checked) {
+    // A toggle says whether it is on (SH-4): a menuitemcheckbox with
+    // aria-checked and a tick in the leading column, as InDesign's
+    // View ▸ Extras items carry a check mark.
+    let on = false;
+    try {
+      on = item.checked(ctx.state);
+    } catch {
+      on = false;
+    }
+    return (
+      <DropdownMenuCheckboxItem
+        key={item.command}
+        disabled={greyed}
+        checked={on}
+        onSelect={onSelect}
+      >
+        {displayLabel(item, ctx.state)}
+        {trailing}
+      </DropdownMenuCheckboxItem>
+    );
+  }
+  return (
+    <DropdownMenuItem key={item.command} disabled={greyed} onSelect={onSelect}>
       {iconSlot}
       {displayLabel(item, ctx.state)}
       {/* E2 — the accelerator column; a seam shows `soon` instead, since
           a blank column beside a greyed item reads as a missing key. */}
-      {item.disabled ? (
-        <span
-          className="pg-mono-meta"
-          style={{ marginLeft: "auto", paddingLeft: 16 }}
-        >
-          soon
-        </span>
-      ) : (
-        accel && (
-          <span
-            className="pg-mono-meta"
-            style={{ marginLeft: "auto", paddingLeft: 16, opacity: 0.6 }}
-            data-menu-accelerator={item.command}
-          >
-            {accel}
-          </span>
-        )
-      )}
+      {trailing}
     </DropdownMenuItem>
   );
 }

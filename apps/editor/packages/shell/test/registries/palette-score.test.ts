@@ -111,21 +111,14 @@ describe("paletteScore", () => {
     expect(short).toBeGreaterThan(long);
   });
 
-  // Finding SH-7 (polish): the opening bonus pushes both scores past the
-  // cap of 1, so two titles that both open with the query tie and the
-  // "fewer words edge ahead" rule the scorer documents is lost; cmdk
-  // then keeps registration order.
-  test.failing(
-    "SH-7: a shorter title that opens with the query still edges ahead",
-    () => {
-      const short = paletteScore("x", "zoom", ["Zoom", "View"]);
-      const long = paletteScore("x", "zoom", [
-        "Zoom to the page width",
-        "View",
-      ]);
-      expect(short).toBeGreaterThan(long);
-    },
-  );
+  // Finding SH-7 (fixed): the opening bonus used to push both scores
+  // past the cap of 1, so two titles that both open with the query tied
+  // and cmdk kept registration order.
+  test("SH-7: a shorter title that opens with the query still edges ahead", () => {
+    const short = paletteScore("x", "zoom", ["Zoom", "View"]);
+    const long = paletteScore("x", "zoom", ["Zoom to the page width", "View"]);
+    expect(short).toBeGreaterThan(long);
+  });
 
   test("scores stay inside (0, 1]", () => {
     for (const [id, title, category] of COMMANDS) {

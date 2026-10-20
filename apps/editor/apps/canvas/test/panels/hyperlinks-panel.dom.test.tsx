@@ -74,29 +74,23 @@ describe("Hyperlinks panel", () => {
   // HyperlinkSummary carries destinationUrl; the panel prints
   // `destination`, the destination OBJECT's id
   // ("HyperlinkURLDestination/u…").
-  test.failing(
-    "PN-102: a URL hyperlink's destination reads as its URL",
-    async () => {
-      covers("panel:paged.hyperlinks");
-      const h = await mountPanel(HyperlinksPanel, {
-        id: "paged.hyperlinks",
-        scene: richScene,
-      });
-      expect(rows(h.root)[0].secondary).toBe("→ https://example.com");
-    },
-  );
+  test("PN-102: a URL hyperlink's destination reads as its URL", async () => {
+    covers("panel:paged.hyperlinks");
+    const h = await mountPanel(HyperlinksPanel, {
+      id: "paged.hyperlinks",
+      scene: richScene,
+    });
+    expect(rows(h.root)[0].secondary).toBe("→ https://example.com");
+  });
 
   // A hyperlink made in the editor is named by its id ("Hyperlink/u…");
   // InDesign names it after the link ("Hyperlink 1" or the URL).
-  test.failing(
-    "PN-103: a hyperlink made in the editor is listed by a name, not its id",
-    async () => {
-      covers("panel:paged.hyperlinks");
-      const h = await mountPanel(HyperlinksPanel, {
-        id: "paged.hyperlinks",
-        scene: richScene,
-      });
-      expect(rows(h.root)[0].primary).not.toContain("Hyperlink/");
-    },
-  );
+  test("PN-103: a hyperlink made in the editor is listed by a name, not its id", async () => {
+    covers("panel:paged.hyperlinks");
+    const h = await mountPanel(HyperlinksPanel, {
+      id: "paged.hyperlinks",
+      scene: richScene,
+    });
+    expect(rows(h.root)[0].primary).not.toContain("Hyperlink/");
+  });
 });

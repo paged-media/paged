@@ -293,6 +293,7 @@ export function GradientEditor() {
 
       <GradientRamp
         stops={stops}
+        stopName={(ref) => swatches.find((w) => w.selfId === ref)?.name}
         kind={kind}
         selectedIndex={selected}
         onSelectStop={setSelected}

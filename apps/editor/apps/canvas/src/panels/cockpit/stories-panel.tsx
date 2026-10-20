@@ -213,7 +213,9 @@ export function StoriesPanel() {
     primary: `Story ${i + 1}`,
     secondary: `${s.characterCount} char${
       s.characterCount === 1 ? "" : "s"
-    } · ${s.paragraphCount} ¶ · ${s.selfId}`,
+    } · ${s.paragraphCount} ¶`,
+    // The id stays out of sight (R13): searchable, never printed.
+    searchText: `Story ${i + 1} ${s.selfId}`,
     badge: s.overset ? { label: "overset", tone: "error" } : undefined,
     selected: s.selfId === activeStoryId,
     // Selecting a story = a caret at its head (the same

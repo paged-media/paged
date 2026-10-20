@@ -328,15 +328,12 @@ describe("Gradients panel: findings", () => {
 
   // UX audit F-22 (internal identifiers shown to users): the ramp's stop
   // handles are named by the swatch's IDML id.
-  test.failing(
-    "PN-156 (UX F-22): the ramp's stops are named by their swatch's name, not its id",
-    async () => {
-      covers("panel:paged.gradients");
-      const h = await mount();
-      const names = [...h.root.querySelectorAll("[data-ramp-stop]")].map(
-        (b) => b.getAttribute("title") ?? "",
-      );
-      expect(names.some((n) => n.startsWith("Color/"))).toBe(false);
-    },
-  );
+  test("PN-156 (UX F-22): the ramp's stops are named by their swatch's name, not its id", async () => {
+    covers("panel:paged.gradients");
+    const h = await mount();
+    const names = [...h.root.querySelectorAll("[data-ramp-stop]")].map(
+      (b) => b.getAttribute("title") ?? "",
+    );
+    expect(names.some((n) => n.startsWith("Color/"))).toBe(false);
+  });
 });
