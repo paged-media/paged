@@ -929,6 +929,7 @@ mod wasm {
                 target_width_px,
                 dpi,
                 hide_items,
+                markers,
             } = msg.kind
             else {
                 return None;
@@ -943,6 +944,7 @@ mod wasm {
                 target_width_px,
                 dpi,
                 &hide_items,
+                markers,
             ) {
                 Ok(found) => found,
                 Err(error) => return Some(SnapshotJob::Failed { seq, error }),
@@ -991,7 +993,10 @@ mod wasm {
             let mut presenter = self.presenter.borrow_mut();
             let presenter = presenter.as_mut()?;
             let model = self.core.model.as_ref()?;
-            let page = model.page(pid)?;
+            // ADR 205 — the page as the exports draw it: the fidelity
+            // suite compares this against InDesign's PDF.
+            let (page, _) =
+                paged_canvas::snapshot_page(model, pid, 0, Some(dpi), &[], false).ok()?;
             let page_scene = paged_gpu::SurfacePresenter::build_page_scene(
                 &page.list,
                 page.width_pt,
