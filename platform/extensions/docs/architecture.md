@@ -16,7 +16,8 @@ A pnpm workspace with five packages under `packages/`: the contract, the runtime
 manifest CLI described below, and two packages built on them, the Node CLI and the model
 package. No wasm is built here.
 
-**`packages/plugin-api`** — published as `@paged-media/plugin-api`. The contract, as types
+**`packages/plugin-api`** — private; published inlined into plugin-sdk as
+`@paged-media/plugin-sdk/api` (PM-0008, amendment 3). The contract, as types
 only: every hand-written file exports only `type` and `interface` declarations, and the
 build writes `export {};` as the package's only JavaScript
 ([ADR 300](adr/300-type-only-contract.md)). It holds the manifest (`src/manifest.ts`,

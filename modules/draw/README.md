@@ -37,8 +37,9 @@ host).
 
 No sibling checkout is needed: the plugin contract
 (`@paged-media/plugin-api`, `@paged-media/plugin-sdk`) and the engine
-(`@paged-media/canvas-wasm`) are published packages, pinned in
-`packages/draw-bundle/package.json`.
+(`@paged-media/canvas-wasm`) are workspace packages (`workspace:*` in
+`packages/draw-bundle/package.json`). The module is built into the editor and is not
+published to npm.
 
 ```bash
 bun install

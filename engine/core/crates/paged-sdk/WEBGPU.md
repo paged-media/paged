@@ -36,9 +36,10 @@ and the editor's snapshot fallback without WebGPU. This note is the design spec.
 `paged-renderer` + `paged-gpu` and **nothing from the editor** (no
 `paged-mutate`, `paged-canvas`, `paged-script`). It is:
 
-- the published SDK (`@paged-media/sdk`), and
-- the engine the slim public viewer (`paged-media/viewer`) wraps, which is in
-  turn the `<live preview>` embedded by the docs site (`paged-media/docs`).
+- the viewer session, published as the `./session` entry of `@paged-media/viewer`
+  (it was the `@paged-media/sdk` package before v0.74), and
+- the engine the slim public viewer (`engine/core/web/idml-viewer`, `@paged-media/viewer`)
+  wraps, which is in turn the `<live preview>` embedded by the docs site (`paged-media/docs`).
 
 It is distinct from `paged-canvas-wasm`, which is the editor's GPU surface and
 _does_ pull the mutation/canvas crates. Keeping `paged-sdk` renderer-core-only is
