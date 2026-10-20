@@ -112,9 +112,7 @@ export async function writeToOpenFile(
     await writable.close();
     // Editor ADR 264 — the file changed under the editor's own hand: a
     // grant remembered for the document it holds keeps holding.
-    const written = await (
-      handle as unknown as { getFile?(): Promise<File> }
-    )
+    const written = await (handle as unknown as { getFile?(): Promise<File> })
       .getFile?.()
       .catch(() => null);
     if (written)

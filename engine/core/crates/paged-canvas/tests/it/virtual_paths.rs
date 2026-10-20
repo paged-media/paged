@@ -1239,7 +1239,6 @@ fn every_derived_row_reads_what_its_collection_reports() {
     for row in DERIVED_PATHS {
         let (target, want): (VirtualTarget, Option<Value>) = match (row.address_kind, row.path) {
             ("doc", "pageCount") => (t.doc.clone(), Some(n(m.pages().len() as u32))),
-            ("doc", "dirty") => (t.doc.clone(), Some(Value::Bool(m.document_meta().dirty))),
             ("page", "index") => (
                 VirtualTarget::Page {
                     page_id: t.page.clone(),
@@ -1328,22 +1327,8 @@ fn every_derived_row_reads_what_its_collection_reports() {
         checked += 1;
     }
     assert_eq!(checked, DERIVED_PATHS.len());
-    // A freshly loaded document is clean; an edit makes it dirty.
-    let mut fresh = CanvasModel::load("vp", &fixture("annual-base.idml"), CanvasOptions::default())
-        .expect("load annual-base");
-    let doc = VirtualTarget::Doc;
-    assert_eq!(fresh.get_property(&doc, "dirty"), Ok(Value::Bool(false)));
-    fresh
-        .apply_mutation(&Mutation::Set {
-            address: VirtualTarget::Swatch {
-                swatch_id: t.swatch.clone(),
-            }
-            .into(),
-            path: "tint".into(),
-            value: Value::Length(Some(50.0)),
-        })
-        .expect("a swatch write");
-    assert_eq!(fresh.get_property(&doc, "dirty"), Ok(Value::Bool(true)));
+    // Edit state is not a document property: the doc has no `dirty` row.
+    assert!(m.get_property(&t.doc, "dirty").is_err());
 }
 
 /// Extensions ADR 332 — the reserved `content` path: a story's text and a

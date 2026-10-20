@@ -13717,17 +13717,6 @@
       "bindable": false
     },
     {
-      "addressKind": "doc",
-      "path": "dirty",
-      "type": {
-        "kind": "bool"
-      },
-      "wire": "bool",
-      "nullable": false,
-      "access": "derived",
-      "bindable": false
-    },
-    {
       "addressKind": "page",
       "path": "index",
       "type": {
@@ -13918,73 +13907,10 @@
     },
     {
       "addressKind": "style",
-      "appliesTo": [
-        "paragraph"
-      ],
       "path": "basedOn",
       "type": {
         "kind": "ref",
-        "to": "paragraphStyle"
-      },
-      "wire": "text",
-      "nullable": true,
-      "access": "readOnly",
-      "bindable": false
-    },
-    {
-      "addressKind": "style",
-      "appliesTo": [
-        "character"
-      ],
-      "path": "basedOn",
-      "type": {
-        "kind": "ref",
-        "to": "characterStyle"
-      },
-      "wire": "text",
-      "nullable": true,
-      "access": "readOnly",
-      "bindable": false
-    },
-    {
-      "addressKind": "style",
-      "appliesTo": [
-        "object"
-      ],
-      "path": "basedOn",
-      "type": {
-        "kind": "ref",
-        "to": "objectStyle"
-      },
-      "wire": "text",
-      "nullable": true,
-      "access": "readOnly",
-      "bindable": false
-    },
-    {
-      "addressKind": "style",
-      "appliesTo": [
-        "cell"
-      ],
-      "path": "basedOn",
-      "type": {
-        "kind": "ref",
-        "to": "cellStyle"
-      },
-      "wire": "text",
-      "nullable": true,
-      "access": "readOnly",
-      "bindable": false
-    },
-    {
-      "addressKind": "style",
-      "appliesTo": [
-        "table"
-      ],
-      "path": "basedOn",
-      "type": {
-        "kind": "ref",
-        "to": "tableStyle"
+        "to": "style"
       },
       "wire": "text",
       "nullable": true,
@@ -15418,17 +15344,6 @@
         "access": "derived",
         "bindable": false,
         "wire": "length"
-      },
-      {
-        "addressKind": "doc",
-        "path": "dirty",
-        "type": {
-          "kind": "bool"
-        },
-        "nullable": false,
-        "access": "derived",
-        "bindable": false,
-        "wire": "bool"
       }
     ],
     "field": [
@@ -21903,6 +21818,11 @@
             "element": "ParagraphStyle",
             "attribute": "PointSize",
             "kind": "attr"
+          },
+          {
+            "element": "CharacterStyle",
+            "attribute": "PointSize",
+            "kind": "attr"
           }
         ]
       },
@@ -21934,6 +21854,11 @@
             "element": "ParagraphStyle",
             "attribute": "Tracking",
             "kind": "attr"
+          },
+          {
+            "element": "CharacterStyle",
+            "attribute": "Tracking",
+            "kind": "attr"
           }
         ]
       },
@@ -21958,6 +21883,11 @@
         "idml": [
           {
             "element": "ParagraphStyle",
+            "attribute": "FillColor",
+            "kind": "attr"
+          },
+          {
+            "element": "CharacterStyle",
             "attribute": "FillColor",
             "kind": "attr"
           }
@@ -21992,6 +21922,16 @@
             "element": "ParagraphStyle",
             "attribute": "AppliedFont",
             "kind": "properties-child"
+          },
+          {
+            "element": "CharacterStyle",
+            "attribute": "AppliedFont",
+            "kind": "attr"
+          },
+          {
+            "element": "CharacterStyle",
+            "attribute": "AppliedFont",
+            "kind": "properties-child"
           }
         ]
       },
@@ -22016,6 +21956,11 @@
         "idml": [
           {
             "element": "ParagraphStyle",
+            "attribute": "FontStyle",
+            "kind": "attr"
+          },
+          {
+            "element": "CharacterStyle",
             "attribute": "FontStyle",
             "kind": "attr"
           }
@@ -22050,6 +21995,16 @@
           },
           {
             "element": "ParagraphStyle",
+            "attribute": "Leading",
+            "kind": "properties-child"
+          },
+          {
+            "element": "CharacterStyle",
+            "attribute": "Leading",
+            "kind": "attr"
+          },
+          {
+            "element": "CharacterStyle",
             "attribute": "Leading",
             "kind": "properties-child"
           }
@@ -23092,6 +23047,11 @@
             "element": "ParagraphStyle",
             "attribute": "Capitalization",
             "kind": "attr"
+          },
+          {
+            "element": "CharacterStyle",
+            "attribute": "Capitalization",
+            "kind": "attr"
           }
         ]
       },
@@ -23128,6 +23088,11 @@
             "element": "ParagraphStyle",
             "attribute": "Position",
             "kind": "attr"
+          },
+          {
+            "element": "CharacterStyle",
+            "attribute": "Position",
+            "kind": "attr"
           }
         ]
       },
@@ -23153,6 +23118,11 @@
         "idml": [
           {
             "element": "ParagraphStyle",
+            "attribute": "BaselineShift",
+            "kind": "attr"
+          },
+          {
+            "element": "CharacterStyle",
             "attribute": "BaselineShift",
             "kind": "attr"
           }
@@ -23182,6 +23152,11 @@
             "element": "ParagraphStyle",
             "attribute": "Underline",
             "kind": "attr"
+          },
+          {
+            "element": "CharacterStyle",
+            "attribute": "Underline",
+            "kind": "attr"
           }
         ]
       },
@@ -23209,6 +23184,11 @@
             "element": "ParagraphStyle",
             "attribute": "StrikeThru",
             "kind": "attr"
+          },
+          {
+            "element": "CharacterStyle",
+            "attribute": "StrikeThru",
+            "kind": "attr"
           }
         ]
       },
@@ -23230,7 +23210,14 @@
           "field": "value"
         },
         "bindable": true,
-        "wire": "bool"
+        "wire": "bool",
+        "idml": [
+          {
+            "element": "CharacterStyle",
+            "attribute": "Ligatures",
+            "kind": "attr"
+          }
+        ]
       },
       {
         "addressKind": "style",
@@ -23255,7 +23242,14 @@
           "field": "value"
         },
         "bindable": true,
-        "wire": "text"
+        "wire": "text",
+        "idml": [
+          {
+            "element": "CharacterStyle",
+            "attribute": "KerningMethod",
+            "kind": "attr"
+          }
+        ]
       },
       {
         "addressKind": "style",
@@ -24536,7 +24530,7 @@
         "path": "basedOn",
         "type": {
           "kind": "ref",
-          "to": "paragraphStyle"
+          "to": "style"
         },
         "nullable": true,
         "access": "readOnly",

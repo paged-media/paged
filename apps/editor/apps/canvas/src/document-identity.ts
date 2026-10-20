@@ -193,17 +193,17 @@ export function createDocumentIdentity(options: {
       const docId = documentId();
       const k = docId === null ? null : byDoc.get(docId);
       queue(async () => {
-          const records = await options.store.list();
-          for (const r of records) {
-            if (!(await sameEntry(r.handle, handle))) continue;
-            // The open document is the one this file was recognised as:
-            // it reads as it does now. Any other document written over it
-            // makes the file a new document — forget the record.
-            if (k && r.key === k.key)
-              await options.store.put({ ...r, ...file, handle: r.handle });
-            else await options.store.remove(r.key);
-          }
-        }, "recording a save");
+        const records = await options.store.list();
+        for (const r of records) {
+          if (!(await sameEntry(r.handle, handle))) continue;
+          // The open document is the one this file was recognised as:
+          // it reads as it does now. Any other document written over it
+          // makes the file a new document — forget the record.
+          if (k && r.key === k.key)
+            await options.store.put({ ...r, ...file, handle: r.handle });
+          else await options.store.remove(r.key);
+        }
+      }, "recording a save");
     },
   };
   return self;

@@ -7,7 +7,7 @@ $ paged-node get <TMP>/fixture.paged page:#9 index --no-plugins
   "result": {
     "kind": "refused",
     "code": "unknownAddress",
-    "reason": "no page page:#9"
+    "reason": "page:#9 names nothing in this document"
   }
 }
 # stderr

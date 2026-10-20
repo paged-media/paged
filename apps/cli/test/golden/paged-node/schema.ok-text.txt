@@ -12,6 +12,6 @@ tint                             number (percent)
 alpha                            number (percent)
 convertToProcess                 bool
 inkAliasTo                       ref to swatch
-swatchKind                       text [readOnly]
+swatchKind                       enum (process | spot | mixedInk | unknown | none | paper | black | registration) [derived]
 # stderr
 (empty)

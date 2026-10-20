@@ -207,4 +207,4 @@ The catalog's read functions, asked through each surface on the fixture and comp
 | `paged.get/frame` | – | = | = | = | = | · | – |
 | `paged.get/swatch` | – | = | = | = | = | · | – |
 | `paged.get/page` | – | = | = | = | = | · | – |
-| `paged.schema` | – | = | ≠ PAR-3 | = | – | · | – |
+| `paged.schema` | – | = | = | = | – | · | – |

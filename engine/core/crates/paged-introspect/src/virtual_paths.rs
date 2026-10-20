@@ -611,7 +611,6 @@ pub const SWATCH_KINDS: &[&str] = &[
 /// now the engine's own rows, read where every other row is read.
 pub const DERIVED_PATHS: &[DerivedPath] = &[
     d("doc", "pageCount", count().derived().required()),
-    d("doc", "dirty", bool_().derived()),
     d("page", "index", count().derived().required()),
     d("spread", "label", text().derived().required()),
     d("spread", "pageCount", count().derived().required()),

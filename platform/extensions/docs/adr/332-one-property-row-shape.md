@@ -47,14 +47,15 @@ its flat `type` and its full IDML list.
    same list from the engine. The editor's own stopgap rows (`withEngineRows`) are removed.
 4. **The rows the SDK added become engine rows where they are properties**, read by
    `RequestGet` like every other row, and refused by `Set` as read-only:
-   `swatch` `swatchKind`; `doc` `pageCount`, `dirty`; `page` `index`; `spread` and `master`
+   `swatch` `swatchKind`; `doc` `pageCount`; `page` `index`; `spread` and `master`
    `label`, `pageCount`; `story` `characterCount`, `paragraphCount`, `overset`; `style`
    `basedOn` (per family); `table` `tableRowCount`, `tableColumnCount`, `tableHeaderRowCount`,
    `tableFooterRowCount`. The reserved `content` path is a `storyRange` row (heavy, multiline
    text) the engine reads and writes: a write is one `deleteRange` and one `insertText` in one
    batch, one undo step, the same as the SDK planned before.
 5. **What is not a property is not a row.** `documentName` is the editor's tab name (the engine
-   always answered `""`); it is dropped from `doc`. The whole `labels` map is the read of the
+   always answered `""`) and `dirty` is the edit session's state (whether the undo log holds an
+   edit), not the document's: both are dropped from `doc` (`documentMeta` still answers them). The whole `labels` map is the read of the
    `labels[]` row with no key; no wire value carries a map, so the SDK keeps answering it from
    the old seam, and it is not listed.
 
@@ -63,7 +64,7 @@ its flat `type` and its full IDML list.
 - Finding PAR-3 is fixed: the parity suite's `paged.schema` read agrees on every door.
 - `host.objects.schema` changes visibly: `storyRange` and `group` rows keep the engine's ADR 131
   `addressKind`; style rows name their families in `appliesTo` (the editor's "More" rows for a
-  style family now list them); `labels`, `documentName` and `since` are gone; `access`, `wire`
+  style family now list them); `labels`, `documentName`, `dirty` and `since` are gone; `access`, `wire`
   and `idml` are present. `getAll` still reads `labels` through `get`.
 - The catalog is larger (`objectSchemas` beside `propertySchemas`). The SDK keeps importing
   `propertySchemas` for `CORE_CATALOG_ROWS` and the operation paths.
