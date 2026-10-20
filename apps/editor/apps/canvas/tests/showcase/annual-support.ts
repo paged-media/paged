@@ -113,11 +113,15 @@ export async function specLabel(
   const pageId = ctx.pageIds[ctx.pageIndexes.indexOf(pageIndex)];
   // The apparatus BAND: spec citations live in the deep bottom margin
   // (81 pt — the annual's designed home for them), full content width,
-  // one joined line. The outside-margin sliver wrapped 6.5 pt mono
-  // character-by-character; a pro moves the apparatus, not the margin.
+  // under the folio (master frame, 647–661). The outside-margin sliver
+  // wrapped 6.5 pt mono character-by-character; a pro moves the
+  // apparatus, not the margin. The band holds TWO lines of citation
+  // (664–688, 13 pt leading) above the margin note's two (690–718):
+  // about 200 characters of 6.5 pt mono. A longer citation is overset —
+  // the chapter runner's fit check fails it, and the copy is cut to fit.
   const cb = contentBox(pageIndex);
-  const y0 = TRIM_H_PT - 46;
-  const box: [number, number, number, number] = [cb[0], y0, cb[2], y0 + 15];
+  const y0 = TRIM_H_PT - 56;
+  const box: [number, number, number, number] = [cb[0], y0, cb[2], y0 + 24];
   const frameId = await doc.textFrame(pageId, box);
   const storyId = await doc.storyOf(pageId, box);
   const text = lines.join("  \u00b7  ");
@@ -151,7 +155,10 @@ export async function marginNote(
 ): Promise<string> {
   const { doc } = ctx;
   const pageId = ctx.pageIds[ctx.pageIndexes.indexOf(pageIndex)];
-  // Second line of the apparatus band (below the spec citation).
+  // The foot of the apparatus band, below the spec citation: two lines
+  // of 7.5 pt italic (690–718), about 270 characters. A longer note is
+  // overset and fails the chapter's fit check; what does not fit here
+  // belongs in Appendix A, which every note points to.
   const cb = contentBox(pageIndex);
   const y0 = TRIM_H_PT - 30;
   const box: [number, number, number, number] = [cb[0], y0, cb[2], y0 + 28];

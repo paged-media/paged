@@ -358,10 +358,10 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   elements.push(
     await specLabel(ctx, pg, [
       "Specimen No. 181",
-      "registry/functions/*.yaml — 42 fns, 5 families",
-      `authoring row: barcode expr ${C128_EXPR}`,
-      `authoring row: qr expr ${QR_EXPR}`,
-      "lowerAll → insertPath modules (vector lane)",
+      "42 functions, 5 families",
+      `barcode ${C128_EXPR}`,
+      `qr ${QR_EXPR}`,
+      "lowerAll → insertPath (vector lane)",
     ]),
   );
 

@@ -360,7 +360,7 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     await marginNote(
       ctx,
       p(20),
-      "characterOtfFeatures stores an opaque authoring tag list the shaper never reads; the raster obeys only the discrete OTF toggles carried by runs and character styles, and no wire door writes those. Small caps pass through with original case (P-12). Rows so marked print both states identically → Appendix A.",
+      "characterOtfFeatures stores a tag list the shaper never reads; the raster obeys only the discrete OTF toggles of runs and styles, which no wire door writes. Rows so marked print both states alike → Appendix A.",
     ),
   );
   elements.push(

@@ -268,7 +268,9 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   const batteryFrame = await proseFrame(
     ctx,
     page,
-    [286, 540, 492, 636],
+    // Deep enough for the battery's own spacing: 13 pt before and after
+    // plus seven lines (at 540 it oversat by two).
+    [286, 506, 492, 636],
     battery.map((b) => ({ text: b.text, style: STYLE.bodySmall })),
   );
   elements.push(batteryFrame.frameId);

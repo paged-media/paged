@@ -370,7 +370,7 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     await marginNote(
       ctx,
       page,
-      "Live Paint here is REGENERABLE, not live (RFI C-30): no persistent face objects, no gap tolerance, no edge strokes; a painted face inserts at the top of the z-order, above the strokes that bound it. On this facing-spread verso the fill inserts land one page width off (reads answer spread coordinates, inserts re-base page-local) and were re-homed by one transform batch → Appendix A",
+      "Live Paint here is regenerable, not live: no persistent faces, gap tolerance or edge strokes, and a painted face lands above the strokes that bound it. On this verso the fills landed a page width off and were re-homed → Appendix A",
     ),
   );
   notes.push(

@@ -382,17 +382,16 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   await marginNote(
     ctx,
     p(70),
-    "Live-created table/cell styles carry no arms: setStyleProperty refuses the cell/table collections (" +
-      (refusal ? refusal.slice(0, 120) : "no refusal recorded") +
-      "). Decimal-character tab stops are not addressable inside cells (paragraphTabStops is a storyRange path, and storyRange carries no cell arm) — the figures use tabular lining + right alignment instead. Scratch styles: demonstrated, not resident. → Appendix A",
+    "setStyleProperty refuses the cell and table style collections (" +
+      (refusal ? refusal.slice(0, 60) : "no refusal recorded") +
+      "…), and decimal tab stops are not addressable in cells, so the figures align right in tabular lining. → Appendix A",
   );
   elements.push(
     await specLabel(ctx, p(70), [
       "Specimen No. 105",
-      "createTableStyle · renameTableStyle · deleteTableStyle (transient)",
-      "createCellStyle · renameCellStyle · deleteCellStyle (transient)",
+      "create/rename/deleteTableStyle · create/rename/deleteCellStyle",
       "appliedTableStyle ×3 · appliedCellStyle ×8",
-      "setStyleProperty (cell) — refused, quoted in margin",
+      "setStyleProperty (cell) refused",
     ]),
   );
 

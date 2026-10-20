@@ -255,23 +255,20 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     await marginNote(
       ctx,
       pg,
-      "Two shipped edges met here. The mapping wizard confirms bindings " +
-        "in batches and every new binding's field lands at the one caret, " +
-        "so this card took one wizard pass per line. And the order book's " +
-        "date column is WITHHELD from the session: the query seam decodes " +
-        "a DATE column as epoch-milliseconds where the engine expects " +
-        "days, so any dated result refuses to ingest whole — found by " +
-        "this page, driven around, not papered over. → Appendix A",
+      "Every new binding's field lands at the one caret, so this card " +
+        "took one wizard pass per line. The order book's date column is " +
+        "withheld: the query seam reads a DATE as epoch milliseconds where " +
+        "the engine expects days. → Appendix A",
     ),
   );
 
   elements.push(
     await specLabel(ctx, pg, [
       "Specimen No. 177",
-      "importData · shell.pickFile · DuckDB-WASM → ready",
-      "Map fields… ×3 (engine-computed exprs)",
-      "lowerAll → insertField at the C-9 caret",
-      "fields read back via document.placeholders",
+      "importData · shell.pickFile · DuckDB-WASM",
+      "Map fields… ×3",
+      "lowerAll → insertField at the caret",
+      "read back via document.placeholders",
     ]),
   );
 

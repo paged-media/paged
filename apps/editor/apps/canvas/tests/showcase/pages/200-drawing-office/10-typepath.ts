@@ -281,7 +281,7 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     [left, 532, right, 572],
     [
       {
-        text: `Eight tiles, three of them vermilion. One vermilion tile was selected by hand; Edit > Select same > Fill grew the selection to ${selectedCount} elements - not just the three tiles but every carrier of that swatch reference in the DOCUMENT, because select-same reads the fill reference, not the neighbourhood. The page looks unchanged: pure selection mutates nothing, and the count printed here is the evidence.`,
+        text: `Eight tiles, three of them vermilion. One was selected by hand; Edit > Select same > Fill grew the selection to ${selectedCount} elements — every carrier of that swatch in the document, not just these tiles. Selection mutates nothing; this count is the evidence.`,
         style: STYLE.caption,
       },
     ],

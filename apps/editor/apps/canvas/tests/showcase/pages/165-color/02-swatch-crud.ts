@@ -298,12 +298,9 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   elements.push(
     await specLabel(ctx, page, [
       "Specimen No. 91",
-      "createSwatch ×3",
-      "editSwatch",
-      "deleteSwatch (transient)",
-      "createColorGroup ×2 · editColorGroup · deleteColorGroup (transient)",
-      "characterFillColor",
-      "frameOverprintFill/Stroke",
+      "create/edit/deleteSwatch",
+      "create/edit/deleteColorGroup (deletes transient)",
+      "characterFillColor · frameOverprintFill/Stroke",
     ]),
   );
 

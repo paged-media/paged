@@ -35,12 +35,22 @@ const GROW_TEXT =
   "holding whichever edges the mode pins in place.";
 
 // mode → where its starting box sits. `Off` is the control: same text,
-// same box, no growth — it clips exactly like the overset page.
+// authored at the depth the text needs, and nothing moves it. (It used
+// to start as small as the others and clip, which left a deliberately
+// overset story in the finished book.)
+//
+// The second row sits below 448 pt on purpose. The facing recto carries
+// a NextColumn wrap tile at 408–448 pt, and InDesign fits a WidthOnly
+// frame by composing it at unbounded width first: a NextColumn obstacle
+// anywhere in the same band on the spread stalls that fit, stretches the
+// frame to the obstacle and composes nothing (measured; the engine
+// reproduces it, pipeline/auto_size.rs). In the 400–442 band the
+// WidthOnly exhibit drew a hairline across the spread and oversat.
 const EXHIBITS: Array<{ mode: string; box: Bounds; label: string }> = [
   {
     mode: "Off",
-    box: [60, 210, 190, 252],
-    label: "Off — the control: no growth, the box clips.",
+    box: [60, 210, 190, 300],
+    label: "Off — the control: authored to fit; it stays put.",
   },
   {
     mode: "HeightOnly",
@@ -54,12 +64,12 @@ const EXHIBITS: Array<{ mode: string; box: Bounds; label: string }> = [
   },
   {
     mode: "WidthOnly",
-    box: [60, 400, 190, 442],
+    box: [85, 490, 215, 532],
     label: "WidthOnly — the right edge gives way.",
   },
   {
     mode: "HeightAndWidthProportionally",
-    box: [260, 400, 390, 442],
+    box: [330, 490, 460, 532],
     label: "HeightAndWidthProportionally — the box keeps its shape.",
   },
 ];
@@ -82,11 +92,11 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     [
       {
         text:
-          "Five identical boxes, the same paragraph poured into each, and " +
-          "five auto-sizing modes: the control stays put and clips; the rest " +
-          "grow in the directions their mode allows. The page's own proof is " +
-          "a render taken before and after the five property writes — only " +
-          "the growth lies between.",
+          "The same paragraph poured into five boxes, and five auto-sizing " +
+          "modes: the control is authored to fit and stays put; the rest " +
+          "start too small and grow in the directions their mode allows. The " +
+          "page's own proof is a render taken before and after the five " +
+          "property writes — only the growth lies between.",
         style: STYLE.bodySmall,
       },
     ],

@@ -49,16 +49,13 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     [
       {
         text:
-          "A spreadsheet in a page document leads two lives, and this chapter " +
-          "refuses to blur them. The live grid you can type into — the one " +
-          "that recalculates under your fingers — is a scene-layer session: " +
-          "it dies the moment the file is saved and reopened. What persists " +
-          "is the workbook itself, travelling in the container as a part, and " +
-          "everything the plugin LOWERS to native content: tables that are " +
-          "real tables, charts that are real paths and label frames. The " +
-          "pages that follow lower ten charts, pour a range, spill a formula, " +
-          "walk a day-book across a gutter, and end by asking the container " +
-          "what it actually carries.",
+          "A spreadsheet in a page document leads two lives, and this " +
+          "chapter keeps them apart. The live grid that recalculates " +
+          "under your fingers is session state; what persists is the " +
+          "workbook and everything the plugin lowers to native content: " +
+          "real tables, charts drawn as real paths. The pages that follow " +
+          "lower ten charts, pour a range, spill a formula, and walk a " +
+          "day-book across a gutter.",
         style: STYLE.deck,
       },
     ],

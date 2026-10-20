@@ -19,10 +19,11 @@
 
 // Bidirectional text (p42): real Arabic and Hebrew sentences, plus a
 // mixed line with Latin and digits nested inside the RTL run. The
-// Arabic is the primary exhibit, set in the registered Noto Sans
-// Arabic face; the Hebrew line asks for a face this build does not
-// register, and the fonts read-out is the honest oracle for what the
-// renderer substituted.
+// Arabic is set in the registered Noto Sans Arabic face, the Hebrew in
+// Open Sans, whose shipped face carries the Hebrew block (all 27
+// letters); the fonts read-out is the oracle that both resolved. (The
+// Hebrew line used to ask for Noto Sans Hebrew, which the build does
+// not ship, and left a missing font in the finished book.)
 
 import { expect } from "@playwright/test";
 
@@ -40,7 +41,7 @@ const HEBREW = "כתיבה עברית רצה מימין לשמאל.";
 const MIXED =
   "يمزج هذا السطر العربية مع الكلمة paged 2.0 والأرقام 123 في اتجاهين.";
 
-const HEBREW_FAMILY = "Noto Sans Hebrew";
+const HEBREW_FAMILY = "Open Sans";
 
 interface FontRead {
   family: string;
@@ -120,7 +121,7 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     ),
   );
 
-  // ── Hebrew: the honest substitution ───────────────────────────────
+  // ── Hebrew: a shipped face that carries the script ────────────────
   const hebrew = await pourOne(
     ctx,
     page,
@@ -132,7 +133,7 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   await rightAlign(hebrew.storyId, HEBREW.length);
   elements.push(hebrew.frameId);
   // Compose, then ask the fonts collection what happened: the family
-  // the Hebrew asks for is not registered, and the engine says so.
+  // the Hebrew asks for is registered, and the engine says so.
   await doc.renderPage(page);
   const fonts = (await doc.designer.collection(
     "fonts",
@@ -144,17 +145,15 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   ).toBeTruthy();
   expect(
     hebrewFont?.isMissing,
-    "the build unexpectedly resolved a Hebrew face — update this exhibit " +
-      "to assert the real rendering instead of a substitution",
-  ).toBe(true);
+    `${HEBREW_FAMILY} reads missing — the Hebrew would paint in a substitute`,
+  ).toBe(false);
   elements.push(
     await caption(
       ctx,
       page,
       [60, 352, 492, 382],
-      "Hebrew — asks for Noto Sans Hebrew, which this build does not " +
-        "register; the fonts read-out reports the family missing, so what " +
-        "paints is the renderer's substitute. See the margin.",
+      "Hebrew — Open Sans, right-aligned. The shipped face carries the " +
+        "Hebrew block, and the fonts read-out reports the family resolved.",
     ),
   );
 
@@ -183,9 +182,9 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   const note = await marginNote(
     ctx,
     page,
-    "No Hebrew face ships with this build: the Hebrew line is set by a " +
-      "substitute the engine reports as a missing-font diagnostic. The " +
-      "Arabic is the primary exhibit of this page. → Appendix A",
+    "Two scripts, two shipped faces: Noto Sans Arabic for the Arabic and " +
+      "the mixed line, Open Sans for the Hebrew. Reordering is the " +
+      "renderer's; the faces only supply the glyphs. → Appendix A",
   );
   elements.push(note);
 

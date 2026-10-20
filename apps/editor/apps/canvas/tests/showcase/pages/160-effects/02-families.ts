@@ -147,9 +147,9 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   elements.push(
     await specLabel(ctx, VERSO, [
       "Specimen No. 85",
-      "8 families · the full battery each",
-      "frameDropShadow* / frameInnerShadow* / frameOuterGlow* / frameInnerGlow*",
-      "frameBevel* / frameSatin* / frameFeather* / frameDirectionalFeather*",
+      "8 families, the full battery each",
+      "frame DropShadow · InnerShadow · OuterGlow · InnerGlow",
+      "Bevel · Satin · Feather · DirectionalFeather",
     ]),
   );
 

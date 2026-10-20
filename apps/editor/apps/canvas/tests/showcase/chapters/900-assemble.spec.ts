@@ -51,6 +51,7 @@ import {
   readZipText,
   zipEntryNames,
 } from "../../e2e/harness/read-zip";
+import { missingFonts, missingLinks, oversetStories } from "../health";
 import {
   CORE,
   CORPUS_FONTS,
@@ -471,6 +472,27 @@ test.describe("annual assembly", () => {
         png,
       );
     }
+
+    // ── the health report the editor shows ───────────────────────────
+    // Every page is composed now, so the overset flags are current. The
+    // book opens with a clean Publication health panel: no overset story,
+    // no link to nothing, no face the build does not ship. Nothing is
+    // excused here — an exhibit that needs one of these demonstrates it
+    // and puts the page right again (AUTHORING.md, "demonstrated, not
+    // resident").
+    const overset = await oversetStories(page);
+    expect(
+      overset,
+      `the finished book has overset stories:\n${overset.map((o) => `  ${o.id}  ${o.text}`).join("\n")}`,
+    ).toEqual([]);
+    expect(
+      await missingLinks(page),
+      "the finished book has missing links",
+    ).toEqual([]);
+    expect(
+      await missingFonts(page),
+      "the finished book has missing fonts",
+    ).toEqual([]);
 
     // ── the baked twin stands on its own — HARD gate ────────────────
     const reloaded = await doc.load(join(OUT, "showcase.idml"));

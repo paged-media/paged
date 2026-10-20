@@ -51,7 +51,7 @@ import {
 import type { PageContext, PageReport } from "../../types";
 import { dataTable } from "./00-support";
 
-const MAX_ROWS = 4;
+const MAX_ROWS = 2;
 
 export async function build(ctx: PageContext): Promise<PageReport> {
   const { doc } = ctx;
@@ -131,31 +131,29 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     "the ledger names this page's own resident mask",
   ).toBe(true);
 
+  // At most two entries and the count of the rest, and the frame takes
+  // all the room down to y 600: four 52 pt rows under the caption and
+  // header oversat the table past its frame.
+  const tableTop = top + 296;
   const shown = lost.slice(0, MAX_ROWS);
   const rows: string[][] = shown.map((l, i) => [String(i + 1), l]);
-  if (lost.length > MAX_ROWS) {
+  if (lost.length > shown.length) {
     rows.push([
       "…",
-      `${lost.length - MAX_ROWS} further entr(ies), same construct`,
+      `${lost.length - shown.length} further entr(ies), same construct`,
     ]);
   }
-  const tableTop = top + 296;
-  const table = await dataTable(
-    ctx,
-    page,
-    [left, tableTop, right, Math.min(600, tableTop + 66 + rows.length * 52)],
-    {
-      caption:
-        "Table 20·3 — idmlExported.lost, verbatim: every paged-native construct the IDML projection leaves behind.",
-      colWidths: [26, 406],
-      headers: ["No.", "WHAT THE INTERCHANGE TWIN CANNOT CARRY"],
-      rows,
-      numberCols: [0],
-      rowHeight: 52,
-    },
-  );
+  const table = await dataTable(ctx, page, [left, tableTop, right, 600], {
+    caption:
+      "Table 20·3 — idmlExported.lost, verbatim: every paged-native construct the IDML projection leaves behind.",
+    colWidths: [26, 406],
+    headers: ["No.", "WHAT THE INTERCHANGE TWIN CANNOT CARRY"],
+    rows,
+    numberCols: [0],
+    rowHeight: 52,
+  });
   elements.push(table.frameId);
-  const tableBottom = Math.min(600, tableTop + 66 + rows.length * 52);
+  const tableBottom = 600;
 
   const closing = await proseFrame(
     ctx,
@@ -163,7 +161,7 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     [left, tableBottom + 12, right, 640],
     [
       {
-        text: `Each entry names its target, its mask artwork, and the lossless path (.paged). ${lost.length === 1 ? "The single entry above is this page's own specimen" : "Among the entries above is this page's own specimen"} — the ledger is reporting the rectangle beside it, which is what an honest loss report looks like: specific, addressed, and printed where the loss lives.`,
+        text: `Each entry names its target, its mask artwork and the lossless path (.paged). ${lost.length === 1 ? "The single entry is this page's own specimen" : "Among them is this page's own specimen"}: the ledger reports the rectangle beside it, specific and addressed.`,
         style: STYLE.bodySmall,
       },
     ],

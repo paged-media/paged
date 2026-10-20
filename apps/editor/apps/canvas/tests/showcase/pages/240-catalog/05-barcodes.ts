@@ -346,11 +346,10 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     await marginNote(
       ctx,
       pg,
-      "A re-lower draws every bound symbol afresh onto the active page " +
-        "instead of replacing it in place — this page removed the re-drawn " +
-        "copies of the expression page's two symbols and says so. The " +
-        "raster barcode lane stays blocked by design: placeImage needs a " +
-        "resolvable URI and the vector lane needs nothing. → Appendix A",
+      "A re-lower draws every bound symbol afresh instead of replacing it " +
+        "in place; this page removed the re-drawn copies of the expression " +
+        "page's two symbols. The raster barcode lane stays closed by " +
+        "design. → Appendix A",
     ),
   );
 

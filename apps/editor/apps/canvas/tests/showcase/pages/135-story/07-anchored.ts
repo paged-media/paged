@@ -181,12 +181,9 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   const note = await marginNote(
     ctx,
     page,
-    "The wire-minted anchored frame paints nothing (the sweep's KNOWN " +
-      "red, met live); a second insert used to collide (the id minter " +
-      "scanned spread items only; core v0.63.0 fixed it); and " +
-      "property writes on it are FLAKY — node-not-found in some runs, " +
-      "clean application in others (stale-cache-family resolution). " +
-      "Anchored RENDERING is proven from parsed documents. → Appendix A",
+    "The wire-minted anchored frame paints nothing, and property writes " +
+      "on it land in some runs and not in others. Anchored rendering is " +
+      "proven from parsed documents. → Appendix A",
   );
   elements.push(note);
 

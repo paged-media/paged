@@ -267,9 +267,8 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   elements.push(
     await specLabel(ctx, p(69), [
       "Specimen No. 104",
-      "insertTableRow · insertTableColumn",
-      "deleteTableRow · deleteTableColumn (transient)",
-      "insertHeaderRow · removeHeaderRow · insertFooterRow · removeFooterRow",
+      "insert/deleteTableRow · insert/deleteTableColumn (deletes transient)",
+      "insert/removeHeaderRow · insert/removeFooterRow",
       "setColumnWidth",
     ]),
   );

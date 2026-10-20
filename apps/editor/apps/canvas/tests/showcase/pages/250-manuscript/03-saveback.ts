@@ -302,10 +302,9 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     await marginNote(
       ctx,
       pg,
-      "The report's two footnotes are in its story apparatus but not on " +
-        "these pages: the lowering diagnoses them instead of faking a " +
-        `placement — the panel's own line reads “${footnoteQuote}”. They ` +
-        "survive untouched in the source part and in every save-back. " +
+      "The report's two footnotes are not on these pages: the lowering " +
+        `reports them (“${footnoteQuote.length > 48 ? `${footnoteQuote.slice(0, 47)}…` : footnoteQuote}”) ` +
+        "rather than fake a placement; they survive in every save-back. " +
         "→ Appendix A",
     ),
   );
@@ -314,8 +313,8 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     await specLabel(ctx, pg, [
       "Specimen No. 185",
       `readiness: ${readiness ?? "unread"} (the panel's own verdict)`,
-      "export center → media.paged.doc.exporter.docx → download door",
-      "byte-splice patcher: locator-only quick-xml, LCS identity diff",
+      "export center → docx exporter → download",
+      "byte-splice patcher, LCS identity diff",
     ]),
   );
 

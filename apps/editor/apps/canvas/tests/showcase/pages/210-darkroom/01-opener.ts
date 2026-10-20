@@ -65,13 +65,11 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     [
       {
         text:
-          "Every correction in this chapter is honest about where it lives. " +
-          "An adjustment in paged.image is session state — a scene layer " +
-          "composited over the frame, gone the moment the document reloads. " +
-          "What persists is the loop: adjust the pixels, export them through " +
-          "the bundle's own encoder, and commit the exported bytes back into " +
-          "the frame as inline image data. Every photograph on the pages " +
-          "that follow went through that loop before it was allowed to stay.",
+          "Every correction in this chapter is honest about where it " +
+          "lives. An adjustment is session state, gone when the document " +
+          "reloads; what persists is the loop: adjust, export through the " +
+          "bundle's own encoder, and commit the bytes back into the " +
+          "frame.",
         style: STYLE.deck,
       },
     ],

@@ -187,7 +187,7 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     [left, 246, right, 278],
     [
       {
-        text: "Left to right: Insert arc, Insert spiral, Insert rectangular grid, Insert polar grid — the wave-2 parametric generators at their v0 defaults, each re-seated into its tile by one frameTransform batch. The arc and spiral carry real cubic handles from the bezier kernel; the grids are independent sibling lines.",
+        text: "Left to right: Insert arc, spiral, rectangular grid, polar grid — the parametric generators at their defaults, each re-seated into its tile. The arc and spiral carry real cubic handles; the grids are sibling lines.",
         style: STYLE.caption,
       },
     ],
@@ -523,7 +523,7 @@ export async function build(ctx: PageContext): Promise<PageReport> {
       ctx,
       page,
       penWorked
-        ? "the anchor editors compare the pointer's page-local position against spread-stored anchors - on this facing-spread verso the two differ by one page width, so the surgery ran as a transient scratch on the facing recto (demonstrated, not resident); the v0 insert commands take no parameters - fixed defaults, re-seated by transform → Appendix A"
+        ? "The anchor editors compare a page-local pointer with spread-stored anchors, one page width apart on this verso, so the surgery ran as a transient scratch on the recto; the insert commands take fixed defaults → Appendix A"
         : "the pen and anchor exhibits are pointer gestures; on this lane the pointer never reached the page and the band records the attempt instead of the artwork → Appendix A",
     ),
   );

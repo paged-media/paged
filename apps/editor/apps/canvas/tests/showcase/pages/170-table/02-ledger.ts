@@ -296,11 +296,9 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   elements.push(
     await specLabel(ctx, p(66), [
       "Specimen No. 101",
-      "insertTable (structured id)",
-      "insertHeaderRow · insertFooterRow",
+      "insertTable · insertHeaderRow · insertFooterRow",
       "setRowHeight ×2 · setColumnWidth ×2 · setCellSpan",
-      "insertText.cell · applyStyle.cell",
-      "appliedTableStyle",
+      "insertText/applyStyle in cells · appliedTableStyle",
     ]),
     await specLabel(ctx, p(67), [
       "Specimen No. 102",

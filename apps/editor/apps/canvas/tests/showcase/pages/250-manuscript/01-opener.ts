@@ -50,16 +50,12 @@ export async function build(ctx: PageContext): Promise<PageReport> {
       {
         text:
           "A manuscript arrives as a .docx, and this chapter treats that " +
-          "arrival as a PLACE, not an open: the Word file is poured into the " +
-          "open layout as native Paged content — real paragraphs, real " +
-          "character runs, styles synthesized from the document's own " +
-          "word/styles.xml — while the source bytes travel beside it as a " +
-          "container part. Nothing about the result needs the plugin to " +
-          "render, and nothing about the source is thrown away. The spread " +
-          "that follows pours a full circulation report and reads it here, " +
-          "tier by tier; the closing page tells the save-back story straight " +
-          "— what patches, what carries verbatim, and how to tell which " +
-          "happened.",
+          "arrival as a place, not an open: the Word file is poured into " +
+          "the layout as native content — real paragraphs and runs, " +
+          "styles synthesized from its own word/styles.xml — while the " +
+          "source bytes travel beside it as a container part. The spread " +
+          "that follows pours a full circulation report and reads it tier " +
+          "by tier; the closing page tells the save-back story straight.",
         style: STYLE.deck,
       },
     ],

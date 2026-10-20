@@ -136,8 +136,7 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   await bandCaption(
     234,
     "frameStrokeType: Solid, Dashed, Dotted, Dashed4-4 - then " +
-      "frameStrokeDashArray, a per-frame 6/3 pt override in absolute " +
-      "points.",
+      "frameStrokeDashArray, a 6/3 pt override.",
   );
 
   // ── band 3: end caps, on dashed rectangle strokes ────────────────
@@ -166,9 +165,8 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   }
   await bandCaption(
     312,
-    "frameStrokeEndCap on dashed rectangle strokes, left to right: " +
-      "ButtEndCap, RoundEndCap, ProjectingEndCap - each dash segment " +
-      "wears the cap.",
+    "frameStrokeEndCap on dashed strokes: Butt, Round, Projecting - " +
+      "every dash segment wears the cap.",
   );
 
   // ── band 4: joins, and the miter limit biting ────────────────────
@@ -253,9 +251,8 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   }
   await bandCaption(
     484,
-    "frameStrokeAlignment on identical bounds, left to right: inside, " +
-      "centre, outside - the six-point vermilion stroke sits within, " +
-      "astride, or around the same rectangle.",
+    "frameStrokeAlignment: inside, centre, outside - a 6 pt stroke " +
+      "within, astride, around the box.",
   );
 
   // ── band 6: gap colour and tint ──────────────────────────────────

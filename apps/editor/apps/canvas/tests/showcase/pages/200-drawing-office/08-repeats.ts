@@ -368,8 +368,8 @@ export async function build(ctx: PageContext): Promise<PageReport> {
       page,
       (updateWorked
         ? ""
-        : 'updateRepeat\'s one-batch dissolve-and-regroup is refused by this engine ("a member already belongs to another group") - measured green on the protocol-60 wasm, refused on 0.62; ') +
-        "symbols v0 refuses TEXT (no wire op copies a story) and has no symbol-set tools, nine-slice or 3D mapping; Redefine's per-instance rebuild rides the same refused batch shape and is deliberately not run here → Appendix A",
+        : "updateRepeat's dissolve-and-regroup batch is refused by this engine; ") +
+        "symbols refuse text and have no symbol sets, nine-slice or 3D mapping; Redefine rides the same refused batch and is not run here → Appendix A",
     ),
   );
   notes.push(
