@@ -34,7 +34,7 @@ Output lands in `/tmp/paged-canvas-fidelity/<pack>/`:
 - `pack.json` — per-page mean ΔE / p99 ΔE / SSIM + worst-of-pack
 
 `/tmp/paged-canvas-fidelity/results.json` rolls every pack into one
-file for downstream analysis. `corpus/idml/canvas-fidelity-thresholds.json`,
+file for downstream analysis. `corpus/config/canvas-fidelity-thresholds.json`,
 under the corpus checkout at `apps/editor/corpus` (`fidelity/thresholds.ts`,
 `THRESHOLDS_PATH`), is the gate spec — captured by
 `bun run test:fidelity:capture`. A missing file reads as no thresholds.

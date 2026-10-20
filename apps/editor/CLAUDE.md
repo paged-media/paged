@@ -192,7 +192,7 @@ the clean-room icon system, and the cockpit UI kit
 ## Conventions
 
 - **Don't loosen fidelity thresholds to hide a regression.** Thresholds
-  (`corpus/envato/canvas-fidelity-thresholds.json`) are sized to
+  (`corpus/config/canvas-fidelity-thresholds.json`) are sized to
   measurements + headroom. Fix the regression; tighten after, never
   before.
 - **`bun fmt` formats everything; CI checks it.** Run
