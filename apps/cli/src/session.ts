@@ -61,8 +61,16 @@ export interface SessionOptions {
   cwd?: string;
   /** Explicit bundle list; `[]` = none; undefined = auto discovery. */
   plugins?: readonly string[];
-  /** A TTF/OTF every load lays text out with (the editor's default font). */
+  /** A TTF/OTF every load lays text out with (the editor's default font).
+   *  Absent: the face the CLI ships (Inter, see `bundledFont`). */
   font?: string;
+  /** No fallback face at all: text no font answers for is not set. */
+  noDefaultFont?: boolean;
+  /** An ICC CMYK profile file every load uses as its working space (the
+   *  output intent of a PDF/X export). */
+  cmykProfile?: string;
+  /** Where the session says what the caller should know (stderr). */
+  warn?: (text: string) => void;
   /** Where to resolve the engine from (else this package). */
   engineFrom?: string;
   log?: {
@@ -203,6 +211,47 @@ export function docFormatOf(path: string): DocFormat {
   throw new CliError(EXIT.usage, `${path}: not a .paged or .idml document`);
 }
 
+/** The face the CLI ships, as the Rust CLI does: Inter (SIL Open Font
+ *  License 1.1). The npm package carries it as fonts/Inter.ttf; in a
+ *  checkout it is the engine's own copy (engine/core/corpus/fonts). */
+export const BUNDLED_FONT = "Inter.ttf";
+
+/** The path of the bundled face, looked for beside `roots` (the CLI's
+ *  package and the engine's): `<root>/fonts/Inter.ttf`, else a checkout's
+ *  `engine/core/corpus/fonts/Inter.ttf` above it. Null: not found. */
+export function bundledFont(roots: readonly string[]): string | null {
+  for (const root of roots) {
+    const shipped = join(root, "fonts", BUNDLED_FONT);
+    if (existsSync(shipped)) return shipped;
+    let dir = root;
+    for (let i = 0; i < 6; i++) {
+      const inRepo = join(dir, "engine/core/corpus/fonts", BUNDLED_FONT);
+      if (existsSync(inRepo)) return inRepo;
+      dir = dirname(dir);
+    }
+  }
+  return null;
+}
+
+/** An ICC profile file whose data colour space is CMYK, or a usage error
+ *  saying what it is instead. */
+export function readCmykProfile(path: string): Uint8Array {
+  const bytes = readInput(path);
+  const tag = (at: number) =>
+    String.fromCharCode(...bytes.subarray(at, at + 4));
+  if (bytes.byteLength < 128 || tag(36) !== "acsp")
+    throw new CliError(
+      EXIT.usage,
+      `--cmyk-profile: ${path} is not an ICC profile`,
+    );
+  if (tag(16) !== "CMYK")
+    throw new CliError(
+      EXIT.usage,
+      `--cmyk-profile: ${path} is a ${tag(16).trim()} profile, not CMYK`,
+    );
+  return bytes;
+}
+
 function readInput(path: string): Uint8Array {
   try {
     return readFileSync(path);
@@ -239,11 +288,29 @@ export async function openSession(
   const log = options.log ?? silent;
   const format = docPath ? docFormatOf(docPath) : null;
   const docBytes = docPath ? readInput(resolve(cwd, docPath)) : null;
-  const font = options.font ? readInput(resolve(cwd, options.font)) : undefined;
-
   installNodeShims();
   const resolveFrom =
     options.engineFrom ?? process.env["PAGED_ENGINE_FROM"] ?? packageRoot();
+  // Without a face the engine sets no text at all and a PDF's pages come out
+  // blank, so a run without --font takes the bundled one, as the Rust CLI
+  // does; only --no-default-font goes without, and that is said out loud.
+  let font: Uint8Array | undefined;
+  if (options.font) font = readInput(resolve(cwd, options.font));
+  else if (options.noDefaultFont)
+    options.warn?.(
+      "--no-default-font: text no registered font answers for is not set (exported pages may be blank)",
+    );
+  else {
+    const path = bundledFont([packageRoot(), resolve(cwd, resolveFrom)]);
+    if (path) font = readInput(path);
+    else
+      options.warn?.(
+        `the bundled ${BUNDLED_FONT} is missing, so text is not set and exported pages may be blank — pass --font <file.ttf>`,
+      );
+  }
+  const cmykProfile = options.cmykProfile
+    ? readCmykProfile(resolve(cwd, options.cmykProfile))
+    : undefined;
   let h: HeadlessHost;
   try {
     const { protocol } = await engineProtocolOnDisk(resolveFrom);
@@ -252,6 +319,7 @@ export async function openSession(
       resolveFrom,
       expectedProtocol: protocol,
       ...(font ? { defaultFont: font, engineShaper: true } : {}),
+      ...(cmykProfile ? { cmykProfile } : {}),
     });
   } catch (err) {
     if (err instanceof CliError) throw err;
