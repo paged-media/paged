@@ -101,7 +101,9 @@ no private one. `.github/workflows/release.yml` publishes the three from a tag.
 - Any edit under `platform/extensions/packages/{plugin-api,plugin-sdk}/src`,
   comments included, bumps plugin-sdk's version (the contract's one public
   number), and plugin-api's private version moves with it to the same value
-  (`extensions / contract-guard`).
+  (`extensions / contract-guard`). Between releases the in-tree number is the next
+  release's canary (`0.74.2-canary.N` after `v0.74.1`); a release stamps all three
+  packages with the tag's version (`tooling/release/stage.mjs`).
 
 ## Invariants
 
