@@ -1002,7 +1002,8 @@ describe("one row shape (extensions ADR 332): the catalog's objectSchemas are th
       const type = normalizeCoreType(r.type);
       if (!type) continue;
       const path = (aliases.get(r.path) ?? r.path).replace(/\[[^\]]*\]/g, "[]");
-      const kind = r.addressKind === "style" ? "style" : objectKind(r.addressKind);
+      const kind =
+        r.addressKind === "style" ? "style" : objectKind(r.addressKind);
       const row = CORE_OBJECT_SCHEMAS[kind]?.find((x) => x.path === path);
       expect(row, `${kind} ${path}`).toBeDefined();
       const want =

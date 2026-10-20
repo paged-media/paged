@@ -31,7 +31,7 @@
 // and the rows are the vendored catalog's `objectSchemas`, served as they
 // are (core-schema.ts `coreSchema71`; extensions ADR 332): the SDK adds no
 // row. The derived reads it used to add from other wire reads (story
-// counts and `content`, page `index`, doc `pageCount` / `dirty`, swatch
+// counts and `content`, page `index`, doc `pageCount`, swatch
 // `swatchKind`, style `basedOn`, spread and master `label` / `pageCount`,
 // the table counts) are core's rows now and go through `RequestGet` like
 // every other row. One read stays on the pre-71 seam, which this one

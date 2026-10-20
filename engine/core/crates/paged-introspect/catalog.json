@@ -13717,17 +13717,6 @@
       "bindable": false
     },
     {
-      "addressKind": "doc",
-      "path": "dirty",
-      "type": {
-        "kind": "bool"
-      },
-      "wire": "bool",
-      "nullable": false,
-      "access": "derived",
-      "bindable": false
-    },
-    {
       "addressKind": "page",
       "path": "index",
       "type": {
@@ -15355,17 +15344,6 @@
         "access": "derived",
         "bindable": false,
         "wire": "length"
-      },
-      {
-        "addressKind": "doc",
-        "path": "dirty",
-        "type": {
-          "kind": "bool"
-        },
-        "nullable": false,
-        "access": "derived",
-        "bindable": false,
-        "wire": "bool"
       }
     ],
     "field": [

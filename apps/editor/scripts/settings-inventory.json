@@ -326,6 +326,25 @@
       "source": "apps/editor/packages/repository/src/fs.ts",
       "marker": "storage.getDirectory()",
       "sites": [["getDirectory", ""]]
+    },
+    {
+      "key": "paged.consent.grants.v1",
+      "storage": "localStorage",
+      "reason": "network grants the user remembered for a document (editor ADR 264), keyed by the identity the editor minted for it: a consent decision about one document, not configuration a user sets; asserted by test/unit/document-identity.test.ts and the bundle-host contract.",
+      "source": "apps/editor/apps/canvas/src/plugin-consent.ts",
+      "marker": "\"paged.consent.grants.v1\"",
+      "sites": [
+        ["getItem", "REMEMBERED_GRANTS_KEY"],
+        ["setItem", "REMEMBERED_GRANTS_KEY"]
+      ]
+    },
+    {
+      "key": "IndexedDB paged.documentIdentity",
+      "storage": "indexedDB",
+      "reason": "the file handles the editor recognises a reopened document by (editor ADR 264): host-held identity for remembered grants, not configuration.",
+      "source": "apps/editor/apps/canvas/src/document-identity.ts",
+      "marker": "\"paged.documentIdentity\"",
+      "sites": [["indexedDB.open", "DB"]]
     }
   ]
 }

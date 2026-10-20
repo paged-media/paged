@@ -1616,10 +1616,7 @@ impl CanvasModel {
         let missing = || ReadError::NotFound(format!("{what}: the target does not exist"));
         let count = |n: u32| Value::Length(Some(n as f32));
         Some(match address {
-            VirtualTarget::Doc => Ok(match path {
-                "pageCount" => count(self.built.pages.len() as u32),
-                _ => Value::Bool(!self.applied_log.is_empty()),
-            }),
+            VirtualTarget::Doc => Ok(count(self.built.pages.len() as u32)),
             VirtualTarget::Page { page_id } => self
                 .pages()
                 .into_iter()

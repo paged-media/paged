@@ -8,7 +8,11 @@
   (`virtual_set.rs`, `RequestGet`), `crates/paged-script` (`paged.set`/`paged.get`),
   `crates/paged-cli` (`paged set`/`paged get`).
 - **Depends on:** [ADR 131](131-one-address-grammar-and-selectors.md). **Extends:**
-  [ADR 019](019-capability-catalog-one-contract.md).
+  [ADR 019](019-capability-catalog-one-contract.md). **Amended by** extensions ADR 332
+  (`platform/extensions/docs/adr/332-one-property-row-shape.md`, 2026-10-20): the catalog also
+  publishes the rows in the plugin contract's shape (`objectSchemas`, what `paged.schema` and
+  `host.objects.schema` answer), with derived read-only rows (`DERIVED_PATHS`) and the reserved
+  `content` path.
 
 ## Context
 

@@ -107,7 +107,10 @@ describe("host.network — the editor's consent prompt", () => {
   test("HOST-5 — a grant remembered for one document is not consented for the next", async () => {
     const app = t.editorApp!;
     const docId = () => app.ed.client.openDocument!;
-    const handle = { name: "catalog.paged", isSameEntry: async (o: unknown) => o === handle };
+    const handle = {
+      name: "catalog.paged",
+      isSameEntry: async (o: unknown) => o === handle,
+    };
     const openFrom = async (
       h: { name: string; isSameEntry(o: unknown): Promise<boolean> },
       lastModified = 1,

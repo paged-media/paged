@@ -12,12 +12,20 @@ $ paged-node schema <TMP>/fixture.paged layer --no-plugins
       },
       "nullable": false,
       "default": true,
+      "access": "readWrite",
       "virtual": {
         "op": "setProperty",
         "field": "value"
       },
       "bindable": true,
-      "since": 71
+      "wire": "bool",
+      "idml": [
+        {
+          "element": "Layer",
+          "attribute": "Visible",
+          "kind": "attr"
+        }
+      ]
     },
     {
       "addressKind": "layer",
@@ -27,12 +35,20 @@ $ paged-node schema <TMP>/fixture.paged layer --no-plugins
       },
       "nullable": false,
       "default": false,
+      "access": "readWrite",
       "virtual": {
         "op": "setProperty",
         "field": "value"
       },
       "bindable": true,
-      "since": 71
+      "wire": "bool",
+      "idml": [
+        {
+          "element": "Layer",
+          "attribute": "Locked",
+          "kind": "attr"
+        }
+      ]
     },
     {
       "addressKind": "layer",
@@ -42,12 +58,20 @@ $ paged-node schema <TMP>/fixture.paged layer --no-plugins
       },
       "nullable": false,
       "default": true,
+      "access": "readWrite",
       "virtual": {
         "op": "setProperty",
         "field": "value"
       },
       "bindable": true,
-      "since": 71
+      "wire": "bool",
+      "idml": [
+        {
+          "element": "Layer",
+          "attribute": "Printable",
+          "kind": "attr"
+        }
+      ]
     },
     {
       "addressKind": "layer",
@@ -56,12 +80,20 @@ $ paged-node schema <TMP>/fixture.paged layer --no-plugins
         "kind": "text"
       },
       "nullable": false,
+      "access": "readWrite",
       "virtual": {
         "op": "setProperty",
         "field": "value"
       },
       "bindable": true,
-      "since": 71
+      "wire": "text",
+      "idml": [
+        {
+          "element": "Layer",
+          "attribute": "Name",
+          "kind": "attr"
+        }
+      ]
     }
   ]
 }

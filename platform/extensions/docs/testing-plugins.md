@@ -156,14 +156,14 @@ Findings so far, each an expected failure in those files:
 | HOST-2 | `supports("storage.blob@1")` (editor) | **Fixed 2026-10-19 (`b5cc7328a`, editor ADR 248).** true where OPFS is unavailable; every write then rejects                        | true means bytes persist                                               |
 | HOST-3 | `host.clipboard` (headless)           | **Fixed 2026-10-20 (`95bbba254`).** a grid copy reads back without its TSV text                                                     | a grid copy carries both halves                                        |
 | HOST-4 | `host.journal` (editor)               | **Fixed 2026-10-20 (`95bbba254`).** inert: the editor keeps a journal but passes none to bundle hosts                               | entries land in the host's journal; `supports("journal@1")`            |
-| HOST-5 | `host.network` remembered grants      | a grant remembered for one document holds for every later one                                                                       | remembered "for this document"                                         |
+| HOST-5 | `host.network` remembered grants      | **Fixed 2026-10-20 (`d495e8278`, editor ADR 264).** a grant remembered for one document holds for every later one                   | remembered "for this document"                                         |
 | HOST-6 | `host.parts`                          | **Fixed 2026-10-20 (`95bbba254`).** an absolute path is accepted (relativised)                                                      | `..` and absolute paths are rejected                                   |
 | HOST-7 | `contribute.menu`                     | **Fixed 2026-10-19 (`b5cc7328a`, editor ADR 249).** an entry onto a declared but unregistered command is accepted, and does nothing | the host refuses an entry onto a command the bundle has not registered |
 
 ## Findings on record
 
 Every finding is an expected failure in the test named, and fails for the stated reason. The
-host findings (HOST-2 to HOST-7; HOST-5 is the one still open) are in the table above. All of the programme's findings, the
+host findings (HOST-2 to HOST-7, all fixed) are in the table above. All of the programme's findings, the
 plugins' included, are indexed with severities and shared root causes in
 [conformance-findings-2026-10.md](../../../docs/development/conformance-findings-2026-10.md).
 

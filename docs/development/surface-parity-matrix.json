@@ -585,10 +585,7 @@
           "status": "parity"
         },
         "boa": {
-          "findings": [
-            "PAR-3"
-          ],
-          "status": "differs"
+          "status": "parity"
         },
         "cli": {
           "status": "gap"
