@@ -250,6 +250,18 @@ test.afterAll(() => {
 
 test("stills · from the showcase annual", async ({ page }) => {
   test.setTimeout(600_000);
+  // The command bar as play.paged.media serves it, where the Claude proxy
+  // is deployed: its availability probe (editor ADR 252) is answered the
+  // way that proxy answers a bare GET. The still asks Claude nothing.
+  await page.route("**/api/ai/**", (route) =>
+    route.request().method() === "GET"
+      ? route.fulfill({
+          status: 405,
+          contentType: "application/json",
+          body: '{"type":"error","error":{"type":"invalid_request_error","message":"POST only"}}',
+        })
+      : route.abort(),
+  );
   await openShowcase(page);
 
   // ── type: page 29, a caret in a styled paragraph, the paragraph styles. ──
