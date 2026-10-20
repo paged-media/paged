@@ -61,7 +61,10 @@ jobs:
               *.webm) type=video/webm ;;
               *) echo "::error::$name is not a video"; exit 1 ;;
             esac
-            code=$(curl -s -o /dev/null -w '%{http_code}' -I "$host/$key")
+            # Asked with a query of its own: the host's cache keeps a 404,
+            # and a bare URL asked before the upload would answer readers
+            # with it for minutes after.
+            code=$(curl -s -o /dev/null -w '%{http_code}' -I "$host/$key?probe=$GITHUB_RUN_ID")
             if [ "$code" = 200 ]; then
               echo "= $key"; there=$((there + 1))
             else
@@ -72,7 +75,14 @@ jobs:
                 --cache-control "public, max-age=31536000, immutable"
               echo "+ $key"; up=$((up + 1))
             fi
-            range=$(curl -s -o /dev/null -w '%{http_code}' -H 'Range: bytes=0-1' "$host/$key")
+            # A 404 cached before this run (an earlier probe) ages out in
+            # minutes: the range check waits for it.
+            range=000
+            for wait in 0 10 20 40 60 90 120; do
+              sleep "$wait"
+              range=$(curl -s -o /dev/null -w '%{http_code}' -H 'Range: bytes=0-1' "$host/$key")
+              [ "$range" = 206 ] && break
+            done
             if [ "$range" != 206 ]; then
               echo "::error::$host/$key answers a range request with $range"; exit 1
             fi
