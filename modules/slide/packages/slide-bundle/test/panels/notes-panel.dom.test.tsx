@@ -23,7 +23,8 @@
 
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
-import { cleanup, fireEvent, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, waitFor } from "@testing-library/react";
+import { Activity } from "react";
 import { covers } from "@paged-media/test-kit";
 
 import { NOTES_PANEL_ID } from "../../src/activate";
@@ -115,6 +116,32 @@ describe("the Notes panel", () => {
     await waitFor(() =>
       expect(view.container.textContent).toContain("Slide 1"),
     );
+  });
+
+  it("catches up with a slide changed while its dock tab was hidden (ADR 240)", async () => {
+    covers("panel:media.paged.slide.panel.notes");
+    const ids = await d.pageIds();
+    const Panel = d.panel(NOTES_PANEL_ID).component;
+    const tree = (mode: "visible" | "hidden") => (
+      <Activity mode={mode}>
+        <Panel paged={undefined as never} api={undefined as never} />
+      </Activity>
+    );
+    const view = render(tree("visible"));
+    await waitFor(() =>
+      expect(view.container.textContent).toContain("Slide 1"),
+    );
+    // Another tab is chosen: the panel stays mounted, its effects do not.
+    await drive(() => view.rerender(tree("hidden")));
+    await drive(() => d.setActivePage(ids[1]!));
+    await drive(() => view.rerender(tree("visible")));
+    await waitFor(() =>
+      expect(view.container.textContent).toContain("Slide 2"),
+    );
+    expect(
+      view.container.querySelector<HTMLTextAreaElement>("[data-notes-text]")!
+        .value,
+    ).toBe((await notesOf(ids[1]!)) ?? "");
   });
 
   it("says so when no slide is active", async () => {

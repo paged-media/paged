@@ -338,11 +338,12 @@ film("slide", async (k) => {
     await menu(k, ["File", "Open…"]);
     k.chip(basename(saved), "file");
     await (await chooser).setFiles(saved);
-    // If the open deck still counts as edited, the editor asks before
-    // replacing it; the answer is the reader's own click.
+    // The open deck has unsaved edits, so the editor asks before replacing
+    // it (ADR 230); the answer is the viewer's own click.
     const discard = page.getByTestId("replace-document-discard");
-    if (await discard.isVisible({ timeout: 1500 }).catch(() => false))
-      await press(k, discard);
+    await expect(discard).toBeVisible({ timeout: 10_000 });
+    await k.hold(700);
+    await press(k, discard);
     await expect
       .poll(async () => (await designer.handle()).pageCount, {
         timeout: 20_000,

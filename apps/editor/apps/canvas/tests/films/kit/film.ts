@@ -172,6 +172,29 @@ export function film(slug: string, body: (k: Kit) => Promise<void>): void {
 
     await dressStage(page);
     const designer = new Designer(page);
+    // A question the editor asks ("Save changes first?", ADR 230) is
+    // answered on camera by the film, never by the test harness's silent
+    // auto-answer, which would show a document replaced without a word.
+    const openEditor = designer.open.bind(designer);
+    designer.open = (o = {}) =>
+      openEditor({ answerReplacePrompts: false, ...o });
+    // File ▸ New off camera (in setup, or inside a cut the edit removes)
+    // discards on purpose: it answers the question itself, and only while
+    // its own command runs.
+    const newDocument = designer.newDocument.bind(designer);
+    designer.newDocument = async () => {
+      let finished = false;
+      const done = newDocument().finally(() => {
+        finished = true;
+      });
+      const discard = page.getByTestId("replace-document-discard");
+      while (!finished) {
+        if (await discard.isVisible().catch(() => false))
+          await discard.click().catch(() => {});
+        await sleep(100);
+      }
+      await done;
+    };
     const pointer = new Pointer(page, join(dir, "cursor.jsonl"), {
       x: VIEW.width / 2,
       y: VIEW.height / 2,

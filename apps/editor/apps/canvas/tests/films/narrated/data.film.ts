@@ -32,7 +32,7 @@ import { expect, type Locator, type Page } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { film, type Kit } from "../kit/film";
-import { hover, press, screenPoint } from "../kit/ui";
+import { hover, menu, press, screenPoint } from "../kit/ui";
 
 const MEDIA = process.env.PAGED_MEDIA_ROOT ?? "";
 const CSV = join(MEDIA, "assets", "catalogue.csv");
@@ -556,10 +556,8 @@ film("data", async (k) => {
     k.unfocus();
     await press(
       k,
-      page
-        .getByRole("tab", { name: /Dataset preview/ })
-        .first()
-        .or(page.getByText("Dataset preview", { exact: true }).first()),
+      // The dock's strip is a tablist (editor ADR 259).
+      page.getByRole("tab", { name: /Dataset preview/ }).first(),
     );
     await k.hold(500);
     await press(k, page.getByRole("button", { name: "Open Data query" }));
@@ -621,12 +619,7 @@ film("data", async (k) => {
   await k.scene("barcode", async () => {
     // Back to the whole document, then a frame below page 2's cards.
     await k.key("v");
-    await press(
-      k,
-      page.locator("header").getByText("View", { exact: true }).first(),
-    );
-    await k.hold(250);
-    await press(k, page.getByRole("menuitem", { name: "Fit document" }));
+    await menu(k, ["View", "Fit document"]);
     await k.hold(800);
     const rects = async () =>
       page.evaluate(async () => {

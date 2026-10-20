@@ -139,6 +139,38 @@ describe("selection mirror", () => {
     expect(result.current.activeGroup).toBe("g-7");
   });
 
+  test("another document clears the selection: an old id must not name an element of the new one", () => {
+    const wrapper = ({ children }: PropsWithChildren) => (
+      <DocumentProvider>
+        <SelectionProvider>{children}</SelectionProvider>
+      </DocumentProvider>
+    );
+    const { result } = renderHook(
+      () => ({ sel: useSelection(), doc: useDocument() }),
+      { wrapper },
+    );
+    const handle = (docId: string) =>
+      ({
+        docId,
+        pageIds: ["p1"],
+        pageCount: 1,
+        pageSizesPt: [[612, 792]],
+      }) as unknown as DocumentHandle;
+    act(() => result.current.doc.setHandle(handle("d1")));
+    act(() => {
+      result.current.sel.setElementSelection([B]);
+      result.current.sel.setActiveGroup("g-7");
+    });
+    // The same document again (a page added) keeps the selection.
+    act(() => result.current.doc.setHandle(handle("d1")));
+    expect(result.current.sel.elementSelection).toEqual([B]);
+    // A different document starts with nothing selected.
+    act(() => result.current.doc.setHandle(handle("d2")));
+    expect(result.current.sel.elementSelection).toEqual([]);
+    expect(result.current.sel.elementGeometry).toEqual([]);
+    expect(result.current.sel.activeGroup).toBeNull();
+  });
+
   test("a script's selection change reaches the mirror through the client", async () => {
     const listeners = new Set<(m: WorkerToMain) => void>();
     const client = {

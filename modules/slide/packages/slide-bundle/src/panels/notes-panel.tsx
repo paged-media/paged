@@ -87,7 +87,13 @@ export function makeNotesPanel(
         setShown(next);
       });
     });
-    React.useEffect(() => store.subscribe(() => follow()), []);
+    // A hidden dock tab sits in a hidden <Activity> (editor ADR 240), whose
+    // effects are unmounted: the slide changed while the panel was hidden
+    // is caught up when it subscribes again, not only on the next change.
+    React.useEffect(() => {
+      follow();
+      return store.subscribe(() => follow());
+    }, []);
     const slide = list.find((s) => s.pageId === shown) ?? slides.activeSlide();
     const at = slide ? list.indexOf(slide) : -1;
     const step = (delta: -1 | 1) => {
