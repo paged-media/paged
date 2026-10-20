@@ -76,7 +76,7 @@ const side = (cs: Array<[number, number]>) =>
   Math.hypot(cs[1][0] - cs[0][0], cs[1][1] - cs[0][1]);
 
 test.describe("UX audit 2026-10 — canvas gestures (expected failures until fixed)", () => {
-  test("[F-26] a press-drag on an UNSELECTED frame selects it and moves it in one gesture @level:gesture", async ({
+  test("F-26: a press-drag on an UNSELECTED frame selects it and moves it in one gesture @level:gesture", async ({
     page,
   }) => {
     const { g } = await gestureEditor(page);
@@ -92,7 +92,7 @@ test.describe("UX audit 2026-10 — canvas gestures (expected failures until fix
     expect(after[0][1] - before[0][1]).toBeGreaterThan(60);
   });
 
-  test("[F-29] a double-click on a shape inside a group selects that shape, not the vector-graphic context @level:gesture", async ({
+  test("F-29: a double-click on a shape inside a group selects that shape, not the vector-graphic context @level:gesture", async ({
     page,
   }) => {
     const { g } = await gestureEditor(page);
@@ -101,7 +101,7 @@ test.describe("UX audit 2026-10 — canvas gestures (expected failures until fix
     expect(await selectedIds(page)).toEqual(["ugA"]);
   });
 
-  test("[F-29] Direct Selection on a grouped shape selects the shape, not the group @level:gesture", async ({
+  test("F-29: Direct Selection on a grouped shape selects the shape, not the group @level:gesture", async ({
     page,
   }) => {
     const { g } = await gestureEditor(page);
@@ -109,7 +109,7 @@ test.describe("UX audit 2026-10 — canvas gestures (expected failures until fix
     expect(await selectedIds(page)).toEqual(["ugA"]);
   });
 
-  test("[F-29] a double-click on a placed image does not open the vector-graphic context @level:gesture", async ({
+  test("F-29: a double-click on a placed image does not open the vector-graphic context @level:gesture", async ({
     page,
   }) => {
     await openCanvas(page);
@@ -163,7 +163,7 @@ test.describe("UX audit 2026-10 — canvas gestures (expected failures until fix
     expect(await editContext(page)).not.toBe("vectorGraphic");
   });
 
-  test("[F-30] just outside a selected frame's corner, a drag ROTATES it @level:gesture", async ({
+  test("F-30: just outside a selected frame's corner, a drag ROTATES it @level:gesture", async ({
     page,
   }) => {
     const { g } = await gestureEditor(page);
@@ -179,7 +179,7 @@ test.describe("UX audit 2026-10 — canvas gestures (expected failures until fix
     expect(side(after)).toBeCloseTo(side(before), 0);
   });
 
-  test("[F-31] keyboard zoom and ctrl+wheel zoom share one range @level:gesture", async ({
+  test("F-31: keyboard zoom and ctrl+wheel zoom share one range @level:gesture", async ({
     page,
   }) => {
     const { g } = await gestureEditor(page);
@@ -195,7 +195,7 @@ test.describe("UX audit 2026-10 — canvas gestures (expected failures until fix
     expect(keyboardMax).toBeLessThanOrEqual(40);
   });
 
-  test("[F-32] a multi-page document opens with page 1 fitted, not the whole document @level:gesture", async ({
+  test("F-32: a multi-page document opens with page 1 fitted, not the whole document @level:gesture", async ({
     page,
   }) => {
     await openCanvas(page);
@@ -232,7 +232,7 @@ test.describe("UX audit 2026-10 — canvas gestures (expected failures until fix
     expect(fill).toBeGreaterThan(0.8);
   });
 
-  test("[F-33] Shift + wheel pans horizontally @level:gesture", async ({
+  test("F-33: Shift + wheel pans horizontally @level:gesture", async ({
     page,
   }) => {
     const { g } = await gestureEditor(page);
@@ -249,7 +249,7 @@ test.describe("UX audit 2026-10 — canvas gestures (expected failures until fix
   // after Enter (and after Escape). The audit read `__canvas.activeTool`,
   // the legacy key that reports "select" for every tool but Type. So this
   // one is a passing guard of the behaviour the finding asks for.
-  test("[F-35] the Pen stays the active tool after Enter finishes a path (not reproduced: a guard) @level:gesture", async ({
+  test("F-35: the Pen stays the active tool after Enter finishes a path (not reproduced: a guard) @level:gesture", async ({
     page,
   }) => {
     const { g } = await gestureEditor(page);
@@ -285,7 +285,7 @@ test.describe("UX audit 2026-10 — canvas gestures (expected failures until fix
     expect(await tools()).toEqual(["paged.tool.pen", "paged.tool.pen"]);
   });
 
-  test("[F-27] a right-click on a frame opens a context menu @level:gesture", async ({
+  test("F-27: a right-click on a frame opens a context menu @level:gesture", async ({
     page,
   }) => {
     covers("command:paged.edit.contextMenu");
@@ -303,7 +303,7 @@ test.describe("UX audit 2026-10 — canvas gestures (expected failures until fix
     await expect(menu).toHaveCount(0);
   });
 
-  test("[F-27] a right-click on an unselected frame selects it first, as InDesign does @level:gesture", async ({
+  test("F-27: a right-click on an unselected frame selects it first, as InDesign does @level:gesture", async ({
     page,
   }) => {
     covers("command:paged.edit.contextMenu");
@@ -325,7 +325,7 @@ test.describe("UX audit 2026-10 — canvas gestures (expected failures until fix
       .toEqual([T.frame.id.id]);
   });
 
-  test("[GM-2] a transform tool acts on the selection made AFTER it was picked (the Layers panel, Select All) @level:gesture", async ({
+  test("GM-2: a transform tool acts on the selection made AFTER it was picked (the Layers panel, Select All) @level:gesture", async ({
     page,
   }) => {
     const { g } = await gestureEditor(page);

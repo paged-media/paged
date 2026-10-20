@@ -75,10 +75,22 @@ test.describe("Export Center panel", () => {
       page.locator('[data-status-pill="readiness-pdf-x4"]'),
     ).toHaveText(/^Ready · (X-4|PDF 1\.7)$/);
 
-    // With a document loaded, the loaded-state readout is live too.
-    await expect(page.locator("[data-export-center]")).toContainText(
-      "2 outputs available",
-    );
+    // With a document loaded, the loaded-state readout is live too: the
+    // two live built-in targets plus every plugin exporter row.
+    // Polled together, because plugin exporters register as their bundles
+    // activate.
+    await expect
+      .poll(
+        async () => {
+          const plugins = await page.locator("[data-export-plugin]").count();
+          const readout = /(\d+) outputs available/.exec(
+            (await page.locator("[data-export-center]").textContent()) ?? "",
+          );
+          return readout ? Number(readout[1]) - plugins : null;
+        },
+        { message: "N outputs available = 2 live built-ins + plugin rows" },
+      )
+      .toBe(2);
 
     // Primary action: the PDF row's Export… opens the REAL
     // ExportPdfDialog (the full export→download loop is covered by

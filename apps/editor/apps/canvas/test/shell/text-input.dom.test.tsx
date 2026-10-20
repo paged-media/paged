@@ -28,7 +28,7 @@
 
 import { act, cleanup, render } from "@testing-library/react";
 import { afterEach, describe, expect, test } from "bun:test";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 
 import {
   CanvasClient,
@@ -39,7 +39,9 @@ import {
   PagedShell,
   useContentSelection,
   useRegistries,
+  useTool,
   type ShellRegistries,
+  type ToolContextValue,
 } from "@paged-media/shell";
 import { BUILT_IN_TOOLS } from "@paged-media/tools";
 import { covers } from "@paged-media/test-kit";
@@ -55,6 +57,7 @@ interface Probe {
   registries: ShellRegistries;
   setSelection(sel: ContentSelection | null): void;
   selection(): ContentSelection | null;
+  tool(): ToolContextValue;
 }
 
 function Integration({
@@ -65,6 +68,11 @@ function Integration({
   onProbe(p: Probe): void;
 }) {
   const registries = useRegistries();
+  const tool = useTool();
+  const toolRef = useRef(tool);
+  useEffect(() => {
+    toolRef.current = tool;
+  });
   const { contentSelection, setContentSelection, contentSelectionRef } =
     useContentSelection();
   useTextEditing({
@@ -77,6 +85,7 @@ function Integration({
       registries,
       setSelection: setContentSelection,
       selection: () => contentSelectionRef.current,
+      tool: () => toolRef.current,
     });
   }, [registries, setContentSelection, contentSelectionRef, onProbe]);
   return null;
@@ -346,6 +355,41 @@ describe("text entry with a caret in a story", () => {
     await t.dispatch(t.surface(), paste);
     expect(paste.defaultPrevented).toBe(true);
     await t.storyIs(`Pasted ${before}`);
+  });
+
+  test("picking a drawing tool ends the text selection, so Enter is the tool's (a Pen path commits) and not a paragraph break", async () => {
+    const t = await mount();
+    await t.caretAt(0);
+    const before = await t.story();
+    await act(async () => t.probe.tool().setBaseTool("paged.tool.pen"));
+    await t.settle();
+    expect(t.probe.selection()).toBeNull();
+    // Enter no longer reaches the story.
+    await t.dispatch(document.body, keydown({ key: "Enter" }));
+    await t.settle();
+    expect(await t.story()).toBe(before);
+  });
+
+  test("the caret survives the tools that work with text and a spring-loaded hold", async () => {
+    const t = await mount();
+    await t.caretAt(0);
+    for (const id of [
+      "paged.tool.type",
+      "paged.tool.select",
+      "paged.tool.eyedropper",
+    ]) {
+      await act(async () => t.probe.tool().setBaseTool(id));
+      await t.settle();
+      expect(t.probe.selection(), id).not.toBeNull();
+    }
+    // Held Space: the Hand comes and goes as a suspend, never a switch.
+    await act(async () => t.probe.tool().setBaseTool("paged.tool.type"));
+    await act(async () => t.probe.tool().pushOverride("paged.tool.pen"));
+    await t.settle();
+    expect(t.probe.selection()).not.toBeNull();
+    await act(async () => t.probe.tool().popOverride("paged.tool.pen"));
+    await t.settle();
+    expect(t.probe.selection()).not.toBeNull();
   });
 
   test("Enter is a paragraph break, Shift+Enter a forced line break, Tab a tab character", async () => {

@@ -961,8 +961,10 @@ test.describe("E2E paragraph flow (protocol 64) — Smart text reflow", () => {
     const inspector = page.locator(`[data-story-reflow="${chain.storyId}"]`);
     await expect(inspector).toBeVisible();
     const pill = inspector.locator('[data-toggle-switch="story-reflow-grow"]');
-    // No read-back on the wire: the state starts UNKNOWN, not "off".
-    await expect(pill).toHaveAttribute("data-mixed", "");
+    // The rule is read back from the stories collection (PN-111): a story
+    // with no rule reads "off", never an unknown mixed state.
+    await expect(pill).toHaveAttribute("data-on", "false");
+    await expect(pill).not.toHaveAttribute("data-mixed");
 
     // Max added pages = 1: the rule goes on with a cap — one generated
     // page, and the story still oversets past it.
@@ -974,14 +976,14 @@ test.describe("E2E paragraph flow (protocol 64) — Smart text reflow", () => {
     await expect.poll(overset).toBe(true);
 
     // Undo the capped rule: the generated page is gone, and the panel
-    // admits it no longer knows the rule.
+    // follows the undo back to no rule.
     await page.evaluate(async () => {
       await (
         globalThis as unknown as CanvasClientGlobal
       ).__canvas.client.undo();
     });
     await expect.poll(async () => (await meta()).pageCount).toBe(basePages);
-    await expect(pill).toHaveAttribute("data-mixed", "");
+    await expect(pill).toHaveAttribute("data-on", "false");
 
     // The pill alone: uncapped, the chain grows until the story fits.
     await pill.click();

@@ -356,6 +356,12 @@ export const CAPABILITIES: Capability[] = [
     status: "supported",
     note: "proto 65; a whole clone of each element directly above its source, moved by `offset`; probed on a scratch frame",
   },
+  // the page-item clipboard (Edit ▸ Cut / Copy / Paste / Paste in place)
+  {
+    op: "pasteElements",
+    status: "supported",
+    note: "a page-item snippet (the worker's exportElements answer for Copy) placed on a page, centred on `center` or in place when null; Edit ▸ Paste issues it; probed by exporting and pasting a scratch frame",
+  },
   // whole-table removal (v66, core f3bfefe + de297f5 — the sheet campaign)
   {
     op: "deleteTable",

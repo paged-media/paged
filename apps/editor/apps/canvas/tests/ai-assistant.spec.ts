@@ -31,6 +31,7 @@ import {
   SUMMARY_TURN,
   TEXT_FRAME_ID,
   TOOL_TURN,
+  aiServiceIsThere,
 } from "./ai-fixtures";
 
 async function selectFrame(page: Page): Promise<void> {
@@ -50,6 +51,7 @@ async function stubClaude(
 ): Promise<void> {
   await page.route("**/api/ai/v1/messages", async (route: Route) => {
     const req = route.request();
+    if (req.method() !== "POST") return route.fallback();
     const body = req.postDataJSON() as {
       messages: Array<{ content: unknown }>;
     };
@@ -67,6 +69,7 @@ async function stubClaude(
 
 test.describe("AI Assistant panel", () => {
   test.beforeEach(async ({ page }) => {
+    await aiServiceIsThere(page);
     await openCanvas(page);
     await loadIdml(page, FIXTURE);
     await openPanel(page, "paged.ai-assistant");
