@@ -292,12 +292,14 @@ export class Designer {
   async selectElements(
     refs: Array<{ kind: string; id: string }>,
   ): Promise<void> {
-    await this.page.evaluate((refs) => {
+    const before = await this.page.evaluate((refs) => {
       const c = (globalThis as unknown as CanvasGlobal).__canvas;
+      const prev = c.elementSelection ?? null;
       c.setContentSelection?.(null);
       c.setElementSelection?.(refs, "replace");
+      return prev;
     }, refs);
-    await this.selectionCommitted(refs);
+    await this.selectionCommitted(refs, before);
   }
 
   /** Wait until the selection mirror has COMMITTED `refs`. The setter is a
@@ -305,24 +307,48 @@ export class Designer {
    *  the PREVIOUS selection through the plugin host (`selection.get()`
    *  reads the editor snapshot of the last render). On a slow runner
    *  that window is wide enough for a plugin command to act on the last
-   *  page's selection. */
+   *  page's selection.
+   *
+   *  A ref may be a batch handle (`$h:…`) that the mirror holds as the
+   *  element id it resolved to, so "committed" is: the mirror holds the
+   *  refs themselves, or it has moved off `before` to as many resolved
+   *  ids. When `before` already was that resolution nothing moves; the
+   *  deadline then accepts a mirror of the right size with no handle in
+   *  it. */
   private async selectionCommitted(
     refs: Array<{ kind: string; id: string }>,
+    before: Array<{ kind: string; id: string }> | null,
   ): Promise<void> {
-    await this.page.waitForFunction(
-      (refs) => {
-        const s = (globalThis as unknown as CanvasGlobal).__canvas
-          ?.elementSelection;
-        return (
-          Array.isArray(s) &&
-          s.length === refs.length &&
-          refs.every((r) => s.some((x) => x.kind === r.kind && x.id === r.id))
-        );
-      },
-      refs,
-      { timeout: 10_000 },
+    type Ref = { kind: string; id: string };
+    const same = (a: Ref[] | null, b: Ref[]): boolean =>
+      Array.isArray(a) &&
+      a.length === b.length &&
+      b.every((r) => a.some((x) => x.kind === r.kind && x.id === r.id));
+    const resolved = (s: Ref[] | null): s is Ref[] =>
+      Array.isArray(s) &&
+      s.length === refs.length &&
+      s.every((x) => !x.id.startsWith("$h:"));
+    let seen: Ref[] | null = null;
+    const deadline = Date.now() + 10_000;
+    for (;;) {
+      seen = await this.page.evaluate(
+        () =>
+          (globalThis as unknown as CanvasGlobal).__canvas?.elementSelection ??
+          null,
+      );
+      if (same(seen, refs)) return;
+      if (resolved(seen) && !(before !== null && same(before, seen))) return;
+      if (Date.now() > deadline) break;
+      await this.page.waitForTimeout(50);
+    }
+    if (resolved(seen)) return;
+    throw new Error(
+      `the selection mirror did not commit ${JSON.stringify(refs)} within 10 s ` +
+        `(it holds ${JSON.stringify(seen)})`,
     );
   }
+
+
 
   /** Apply a fill swatch to a frame. `colorRef` defaults to the blank
    *  document's built-in Black swatch so the shape becomes visible. */
@@ -443,9 +469,10 @@ export class Designer {
    *  does (otherwise the Properties router, which prioritises a live
    *  caret, would stay in the Text context). */
   async selectElement(kind: string, id: string): Promise<void> {
-    await this.page.evaluate(
+    const before = await this.page.evaluate(
       async ({ kind, id }) => {
         const c = (globalThis as unknown as CanvasGlobal).__canvas;
+        const prev = c.elementSelection ?? null;
         c.setContentSelection?.(null);
         c.setElementSelection?.([{ kind, id }], "replace");
         // Populate the geometry mirror the Properties panel reads — its
@@ -457,10 +484,11 @@ export class Designer {
         } catch {
           // best-effort — frame context still resolves from selection.
         }
+        return prev;
       },
       { kind, id },
     );
-    await this.selectionCommitted([{ kind, id }]);
+    await this.selectionCommitted([{ kind, id }], before);
   }
 
   /**
