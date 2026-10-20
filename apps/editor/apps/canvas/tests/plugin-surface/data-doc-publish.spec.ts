@@ -1081,13 +1081,18 @@ test.describe("plugin surface · paged.doc", () => {
       page.locator("[cmdk-group]").filter({
         has: page.locator("[cmdk-group-heading]", { hasText: heading }),
       });
+    // A row shows its title and its chord, not its id (F-16); the id is
+    // the row's cmdk value.
+    const row = (id: string) => `[cmdk-item][data-value="${id}"]`;
 
     await expect(
-      groupWithHeading("Other").getByText("media.paged.doc.command.placeDoc"),
+      groupWithHeading("Other").locator(
+        row("media.paged.doc.command.placeDoc"),
+      ),
       "D2: 'Insert Word document…' lands in the Other junk drawer",
     ).toBeVisible({ timeout: 10_000 });
     await expect(
-      groupWithHeading("Insert").getByText("paged.insert.placeImage"),
+      groupWithHeading("Insert").locator(row("paged.insert.placeImage")),
       "…while 'Place image…' — the same verb — sits under Insert",
     ).toBeVisible({ timeout: 10_000 });
 

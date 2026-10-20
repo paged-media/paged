@@ -2320,7 +2320,7 @@ mod tests {
                     h: 12.0,
                 },
                 paged_compose::Transform([0.940, 0.342, -0.342, 0.940, 8.3, 4.7]),
-                grey.clone(),
+                grey,
                 &mut list,
             );
             if with_group {
