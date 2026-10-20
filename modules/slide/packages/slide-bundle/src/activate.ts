@@ -46,10 +46,7 @@ import type {
 import { exportPlan, pageFingerprints } from "./deck-export.js";
 import { slideEngine, type ImportReport } from "./engine.js";
 import { giveDocumentEmbeddedFonts } from "./fonts.js";
-import {
-  contributeSlideObjectModel,
-  importLabelMutations,
-} from "./object-model.js";
+import { contributeSlideObjectModel } from "./object-model.js";
 import { SLIDE_PANELS } from "./panels.js";
 import { makeNotesPanel } from "./panels/notes-panel.js";
 import { makeSlidesPanel } from "./panels/slides-panel.js";
@@ -214,23 +211,11 @@ export function activate(host: BundleHost): BundleHandle {
     } finally {
       importing = false;
     }
-    // The importer already wrote each slide's page label and every
-    // placeholder's label into the package; the deck label goes on the
-    // document the object model reads (ADR 703).
-    const labels = importLabelMutations(report, documentName(name));
-    const written = await host.document.mutate({
-      op: "batch",
-      args: { ops: labels.mutations as never },
-    });
+    // The importer wrote every label into the package (each slide's page
+    // label, each placeholder's, and the deck label on the document, ADR
+    // 703), so the open makes no edit: the deck opens clean, with nothing
+    // to undo (UX audit F-08).
     const diagnostics = [...reportDiagnostics(report), ...fontDiagnostics];
-    if (!written.applied) {
-      diagnostics.push({
-        severity: "warning",
-        message:
-          "The deck label could not be written; deck data is read from the import cache.",
-        source: "pptx",
-      });
-    }
     host.diagnostics.set(IMPORT_DIAGNOSTICS, diagnostics);
     host.log.info(
       `paged.slide: opened ${name}: ${report.slides.length} slide(s), ` +
