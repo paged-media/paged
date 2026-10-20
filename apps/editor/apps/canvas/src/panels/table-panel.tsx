@@ -393,21 +393,23 @@ export function TablePanel() {
       <CockpitPanelHeader
         title="Table"
         action={
+          // Counted from 1, in words, as InDesign's Table panel and a
+          // spreadsheet's row headers count (the wire's indices are 0-based).
           <span className="pg-mono-meta" data-table-cell-address>
-            R{cell.row} · C{cell.col}
+            Row {cell.row + 1}, Column {cell.col + 1}
           </span>
         }
       />
 
       <CockpitSection title="Selected cell">
-        <CockpitRow label="Row index">
+        <CockpitRow label="Row">
           <span className="pg-mono-meta" data-cell-row>
-            {cell.row}
+            {cell.row + 1}
           </span>
         </CockpitRow>
-        <CockpitRow label="Column index">
+        <CockpitRow label="Column">
           <span className="pg-mono-meta" data-cell-col>
-            {cell.col}
+            {cell.col + 1}
           </span>
         </CockpitRow>
         {/* Aftercare-C: row / column totals now read back from the Table
