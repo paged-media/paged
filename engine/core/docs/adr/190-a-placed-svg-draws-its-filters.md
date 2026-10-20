@@ -1,6 +1,6 @@
 # ADR 190 — A placed SVG draws its filters
 
-- **Status:** Accepted 2026-10-19.
+- **Status:** Accepted 2026-10-19; amended 2026-10-20 (a placed SVG is drawn as vectors).
 - **Scope:**
   - `crates/paged-gpu`: `svg_filter.rs` (new: the filter graph and its seventeen primitives),
     `svg.rs` (a filtered group, straight-alpha gradients, pattern tiles on whole pixels),
@@ -183,3 +183,56 @@ time. A placed SVG stays a raster at one pixel per user unit (decision 6).
   fixtures without an InDesign reference too.
 - [ADR 154](154-a-placed-pdf-is-drawn-from-its-own-operations.md): a placed PDF, drawn as
   vectors.
+
+## Amendment — 2026-10-20: a placed SVG is drawn as vectors
+
+Decision 6 is superseded where the display list can say what the SVG says.
+
+**Decision.** `pipeline/placed_svg.rs` (`paged-renderer`) walks the `usvg` tree into the
+page's display list, as a placed PDF is walked ([ADR 154](154-a-placed-pdf-is-drawn-from-its-own-operations.md)):
+paths become `FillPath` / `StrokePath` (width, cap, join, miter limit, dashes), clip paths
+`PushClip` / `PopClip`, groups with an opacity, a blend mode or `isolation` an isolated
+`BeginBlendGroup`, solid paints `Paint::Solid` and pad-spread linear and radial gradients the
+list's gradients. Everything rides the transform the raster took (`images.rs`,
+`Placed::Svg`), inside the frame's clip and a clip to the SVG's own canvas, so the art stays
+vector on the CPU lane, on Vello and in the PDF export at every zoom. The natural size stays
+the raster's (the SVG's size rounded up), so no placement moves.
+
+- **One meaning for every reader of a gradient.** The rasterizers map a gradient's endpoints
+  through the path's transform; the PDF export reads a fill's endpoints as fractions of the
+  path's local box and a stroke's as fractions of its page box. Paths therefore go into the
+  list in page space: a gradient fill is a square under a clip by the path, its unit square
+  the gradient's space, and a gradient stroke is its path in the unit box of its page bounds.
+  A linear gradient is an affine ramp, so its page-space endpoints are exact under any
+  placement, a skewed or stretched one included.
+- **Even-odd as non-zero.** The list fills and clips non-zero. An even-odd shape whose contours
+  cross neither themselves nor each other turns each contour by its nesting depth, which fills
+  the same area under both rules.
+- **What keeps the raster, whole.** A filter or a mask (decisions 1 to 5 still hold for those
+  SVGs), a pattern, a reflected or repeated gradient, a focal radial gradient, gradient stops
+  of differing opacity (the list interpolates premultiplied, SVG straight), a dash offset, a
+  nested SVG image, an even-odd shape whose contours cross, a radial gradient on a stroke, and
+  a clip path of several shapes that are not each one contour. A stroke or a radial gradient
+  under a skewed or unevenly scaled placement draws the raster too, decided per placement (the
+  list strokes one width and paints circles). Every fixture of `svg-filters` uses at least one
+  of these, so that sample's pixels are unchanged.
+- **The placed-asset door.** The vector SVG leaves an encoded-only entry in the decode cache,
+  so `placed_asset_bytes` still hands its bytes out and the next frame placing it finds it.
+
+**Evidence** (2026-10-20, Apple M3 Max):
+
+- `paged-renderer/tests/it/placed_svg_vectors.rs`: the fixture
+  `corpus/generated-fixtures/svg-vectors/art.svg` (a dashed stroke, an even-odd ring, both
+  gradients, a clip, a group at 50 %, a multiply group) placed in a frame emits eight fills, a
+  dashed stroke, the clip and both groups, and no image. Rendered at 216 dpi it is within a
+  mean channel difference of 0.0014 (of 255) of the SVG rasterized at 3× and placed at a
+  third; the 1× raster it replaces measures 4.75 against the same render.
+- `svg-vectors` (new `paged-gen` sample, `parity_only`): the art at 100 %, 200 %, 50 %, turned
+  20° and stretched 150 % × 100 % (the raster). CPU ↔ Vello worst mean ΔE 0.015; exported PDF
+  against the CPU render mean ΔE 0.074, SSIM 0.997, with eight shadings and one image (the
+  stretched placement's raster; `paged-export-pdf/tests/it/placed_svg.rs`). `svg-filters`
+  measures as before: parity 0.052, export worst 0.272.
+- **Size** (`scripts/build-wasm-packages.sh`, against main at the same commit; no new
+  dependency, `usvg` was already linked): `paged_canvas_wasm_bg.wasm` 29,442,406 →
+  29,472,434 bytes (+30,028), the viewer's `paged_sdk_bg.wasm` 11,563,246 → 11,591,718
+  (+28,472). The app-wide budget grows by the canvas-wasm delta, 0.03 MB.

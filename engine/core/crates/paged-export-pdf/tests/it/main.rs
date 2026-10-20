@@ -9,6 +9,7 @@ mod export_x4;
 mod links;
 mod opacity_mask;
 mod pdf_fragments;
+mod placed_svg;
 mod tagged_styles;
 mod tagged_tables;
 mod transparency_groups;

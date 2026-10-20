@@ -101,7 +101,7 @@ fn peek_image_lazy(bytes: &[u8], max_px: u32) -> Option<paged_compose::DecodedIm
 /// XML preamble or a bare `<svg` root. Adobe-embedded SVGs always
 /// carry the XML declaration; loose-format SVGs in arbitrary IDMLs
 /// may not.
-fn is_svg_magic(bytes: &[u8]) -> bool {
+pub(super) fn is_svg_magic(bytes: &[u8]) -> bool {
     let head = &bytes[..bytes.len().min(512)];
     let Ok(s) = std::str::from_utf8(head) else {
         return false;
@@ -135,6 +135,13 @@ fn decode_svg_bytes(bytes: &[u8], max_px: u32) -> Option<paged_compose::DecodedI
         rgba: bytes::Bytes::from(rgba),
         icc: None,
     })
+}
+
+/// An SVG's raster at one pixel per user unit (the longest edge capped
+/// as every placed raster is), for a placed SVG whose vectors a placement
+/// cannot follow exactly (`placed_svg`).
+pub(super) fn decode_svg_raster(bytes: &[u8]) -> Option<paged_compose::DecodedImage> {
+    decode_svg_bytes(bytes, DECODE_MAX_RASTER_PX)
 }
 
 /// Read width / height from the image header without materialising
