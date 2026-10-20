@@ -37,7 +37,6 @@ import {
   F7_PLACED_IMAGE,
 } from "../fixtures/corpus";
 import {
-  brokenInvariant,
   commandRig,
   el,
   expectApplies,
@@ -711,26 +710,21 @@ describe("paged.draw commands — recipes (real engine)", () => {
       });
     });
 
-    // DRW-5: a bake is two batches and two undo steps (ADR 354 names the
-    // cost: the bake has not been moved onto `bindCreated`).
+    // DRW-5 (fixed, ADR 360): the bake is one batch, its layers addressed
+    // by handle and found again by their markers.
     it("Bake appearance refuses an empty selection", async () => {
       covers("command:media.paged.draw.command.bakeAppearance");
       await expectRefuses(rig, F1(), [], `${C}.bakeAppearance`);
     });
 
-    it.failing(
-      "DRW-5 — Bake appearance is ONE undo step (it is two)",
-      async () => {
-        covers("command:media.paged.draw.command.bakeAppearance");
-        await rig.open(F1(), [RECT]);
-        await rig.run(`${C}.appearanceAddFill`);
-        await rig.run(`${C}.appearanceAddStroke`);
-        await rig.h.host.selection.set([RECT]);
-        await brokenInvariant("INV-4", () =>
-          expectApplies(rig, `${C}.bakeAppearance`),
-        );
-      },
-    );
+    it("DRW-5 — Bake appearance is ONE undo step", async () => {
+      covers("command:media.paged.draw.command.bakeAppearance");
+      await rig.open(F1(), [RECT]);
+      await rig.run(`${C}.appearanceAddFill`);
+      await rig.run(`${C}.appearanceAddStroke`);
+      await rig.h.host.selection.set([RECT]);
+      await expectApplies(rig, `${C}.bakeAppearance`);
+    });
 
     it("Release appearance gives the baked stack back; nothing selected is refused", async () => {
       covers("command:media.paged.draw.command.releaseAppearance");
@@ -745,15 +739,15 @@ describe("paged.draw commands — recipes (real engine)", () => {
     });
   });
 
-  // DRW-6: a trace is TWO batches — the paths, then their paint and the
-  // group — so two undo steps (the module header states it).
+  // DRW-6 (fixed, ADR 360): a trace is ONE batch — the paths, their
+  // paint, their markers and the group — so one undo step.
   describe("Image Trace", () => {
     it("refuses a selection with no placed image", async () => {
       covers("command:media.paged.draw.command.imageTrace");
       await expectRefuses(rig, F1(), [POLY], `${C}.imageTrace`);
     });
 
-    it("DRW-6, measured: tracing the selected ring takes two undo steps to take back", async () => {
+    it("DRW-6, measured: tracing the selected ring takes one undo step to take back", async () => {
       covers("command:media.paged.draw.command.imageTrace");
       const uninstall = installPngRealm();
       try {
@@ -764,8 +758,7 @@ describe("paged.draw commands — recipes (real engine)", () => {
           await undoStepsOf(rig, () =>
             rig.run(`${C}.imageTrace`, { mode: "bw" }),
           ),
-        ).toBe(2);
-        await rig.h.host.editor.client.send({ kind: "redo" });
+        ).toBe(1);
         await rig.h.host.editor.client.send({ kind: "redo" });
         expect(await rig.channel.dump()).not.toBe(before);
       } finally {
@@ -773,15 +766,13 @@ describe("paged.draw commands — recipes (real engine)", () => {
       }
     });
 
-    it.failing("DRW-6 — Image Trace is ONE undo step (it is two)", async () => {
+    it("DRW-6 — Image Trace is ONE undo step", async () => {
       covers("command:media.paged.draw.command.imageTrace");
       const uninstall = installPngRealm();
       try {
         const image = el("rectangle", F7_PLACED_IMAGE.ids.rectangle!);
         await rig.open(F7_PLACED_IMAGE.bytes(), [image]);
-        await brokenInvariant("INV-4", () =>
-          expectApplies(rig, `${C}.imageTrace`, { mode: "bw" }),
-        );
+        await expectApplies(rig, `${C}.imageTrace`, { mode: "bw" });
       } finally {
         uninstall();
       }

@@ -60,8 +60,9 @@ export interface CockpitLayoutProps {
   /** Tab / Shift+Tab chrome hiding — when true the side panels
    *  disappear and the canvas column fills the row. */
   panelsHidden?: boolean;
-  /** IDML intake — the canvas column is the drag-drop target. */
-  onFile?: (file: File) => void;
+  /** IDML intake — the canvas column is the drag-drop target. `at` is
+   *  where the file was dropped (a picture is placed there, F-03). */
+  onFile?: (file: File, at?: { clientX: number; clientY: number }) => void;
 }
 
 export function CockpitLayout({
@@ -107,6 +108,9 @@ export function CockpitLayout({
       >
         <div
           data-left-panel={leftId}
+          // F-50 (ADR 259): the docks are complementary landmarks.
+          role="complementary"
+          aria-label="Left panels"
           style={{
             width: 262,
             flexShrink: 0,
@@ -130,8 +134,10 @@ export function CockpitLayout({
         </div>
       </Activity>
 
-      {/* Canvas column */}
-      <div
+      {/* Canvas column — the main landmark (F-50, ADR 259). */}
+      <main
+        data-cockpit-main
+        aria-label="Document"
         style={{
           flex: 1,
           minWidth: 0,
@@ -152,7 +158,7 @@ export function CockpitLayout({
             if (!onFile) return;
             e.preventDefault();
             const file = e.dataTransfer.files[0];
-            if (file) onFile(file);
+            if (file) onFile(file, { clientX: e.clientX, clientY: e.clientY });
           }}
           style={{
             flex: 1,
@@ -188,10 +194,12 @@ export function CockpitLayout({
             cursor → linkFrames / insertTextFrame; overset badge set). */}
         {!isOverride && <ThreadingController />}
         {!isOverride && <ThumbnailRail />}
-      </div>
+      </main>
 
       <Activity mode={panelsHidden ? "hidden" : "visible"} name="right column">
         <div
+          role="complementary"
+          aria-label="Panels"
           style={{
             width: 320,
             flexShrink: 0,

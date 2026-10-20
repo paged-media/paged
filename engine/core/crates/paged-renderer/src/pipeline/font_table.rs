@@ -830,6 +830,12 @@ fn cjk_ascent_descent(face: &ttf_parser::Face) -> Option<(f32, f32)> {
     Some((f32::from(d.y_max) / upem, -f32::from(p.y_min) / upem))
 }
 
+thread_local! {
+    /// [`font_id`]'s memo: buffer identity → (a clone of the buffer, id).
+    static FONT_IDS: std::cell::RefCell<HashMap<(usize, usize), (Bytes, u32)>> =
+        std::cell::RefCell::new(HashMap::new());
+}
+
 /// The font id of a face buffer: `fnv_1a_u32` of its bytes, computed once
 /// per buffer instead of once per call.
 ///
@@ -847,19 +853,20 @@ fn cjk_ascent_descent(face: &ttf_parser::Face) -> Option<(f32, f32)> {
 /// pointer and length means the same content, and the id is the same value
 /// `fnv_1a_u32` returns: output is unchanged.
 pub(super) fn font_id(bytes: &Bytes) -> u32 {
-    use std::cell::RefCell;
-    thread_local! {
-        static IDS: RefCell<HashMap<(usize, usize), (Bytes, u32)>> =
-            RefCell::new(HashMap::new());
-    }
     let key = (bytes.as_ptr() as usize, bytes.len());
-    IDS.with(|ids| {
+    FONT_IDS.with(|ids| {
         if let Some((_, id)) = ids.borrow().get(&key) {
             return *id;
         }
         let id = fnv_1a_u32(bytes.as_ref());
         paged_compose::perf::count(|c| c.font_bytes_hashed += bytes.len() as u64);
         let mut ids = ids.borrow_mut();
+        // An entry whose clone is the buffer's last reference names a font
+        // nothing else holds any more (the previous document's fallback
+        // font, say): drop it, or every load pins a copy of its font until
+        // the bound below (PAR-1). A `'static` buffer never
+        // reads unique and is never freed, so it stays.
+        ids.retain(|_, (held, _)| !held.is_unique());
         // Bounded: a long session that loads many documents must not pin
         // every font buffer it ever saw. Clearing only costs re-hashing.
         if ids.len() >= 256 {
@@ -881,4 +888,31 @@ pub(super) fn fnv_1a_u32(bytes: &[u8]) -> u32 {
         h = h.wrapping_mul(FNV_PRIME);
     }
     h
+}
+
+#[cfg(test)]
+mod font_id_memo_tests {
+    use super::*;
+
+    /// Finding PAR-1 (engine ADR 199): each document load hands the
+    /// pipeline a fresh copy of its fallback font. The memo must not keep
+    /// the previous copy alive once nothing else holds it.
+    #[test]
+    fn font_id_memo_keeps_no_buffer_nothing_else_holds() {
+        let held = |b: &Bytes| {
+            FONT_IDS.with(|ids| ids.borrow().contains_key(&(b.as_ptr() as usize, b.len())))
+        };
+        let first = Bytes::from(vec![1u8; 4096]);
+        let first_id = font_id(&first);
+        assert!(held(&first));
+        let first_key = (first.as_ptr() as usize, first.len());
+        drop(first);
+        let second = Bytes::from(vec![2u8; 4096]);
+        assert_ne!(font_id(&second), first_id);
+        assert!(held(&second), "a live buffer stays memoised");
+        assert!(
+            FONT_IDS.with(|ids| !ids.borrow().contains_key(&first_key)),
+            "the dropped buffer's entry must go"
+        );
+    }
 }

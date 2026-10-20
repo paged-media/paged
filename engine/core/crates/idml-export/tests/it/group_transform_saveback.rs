@@ -225,7 +225,7 @@ fn a_moved_nested_group_saves_relative_to_its_parent() {
     let xml = String::from_utf8(out.clone()).expect("utf8");
     assert_eq!(
         tag(&xml, "gi"),
-        r#"<Group Self="gi" ItemTransform="0.866 0.5 -0.5 0.866 60 0">"#
+        r#"<Group Self="gi" ItemTransform="0.8660254 0.5 -0.5 0.8660254 60 0">"#
     );
     for id in ["go", "lo", "li", "gu", "ou"] {
         assert_eq!(tag(&xml, id), tag(source(), id), "{id} keeps its bytes");

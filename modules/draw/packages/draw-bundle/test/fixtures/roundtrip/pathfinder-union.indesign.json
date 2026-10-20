@@ -7,13 +7,13 @@
     "script": "scripts/indesign/lib/read-document.jsx",
     "script_sha256": "4486a78fdd3b45a88c6ef6b18911bc34b94f6cf7ddc3c4d433d3d5e256f4dc08",
     "runner": "scripts/indesign/run-roundtrip.sh",
-    "recorded_at": "2026-10-03T06:04:07.940Z",
+    "recorded_at": "2026-10-20T01:20:41.545Z",
     "host_os": "macOS 26.4",
     "pdf_preset": "[Qualitativ hochwertiger Druck]"
   },
   "idml": {
     "path": "packages/draw-bundle/test/fixtures/roundtrip/pathfinder-union.idml",
-    "sha256": "672d62916d10b7a4032b763129a98bf4799705ed10d37cecf2e870bc103ffd77"
+    "sha256": "d2d1d5d4f6a3a5e429ea2997c10aad4f8ec4b8dac5c2dbb6a045a1d618608df0"
   },
   "units": "pt",
   "coordinates": "page-local, origin top-left of the page, Y down (ruler origin PAGE, zero point 0,0, script measurement unit POINTS); bounds as [minX, minY, maxX, maxY]",
@@ -84,13 +84,13 @@
           "closed": true,
           "pathType": "CLOSED_PATH",
           "anchors": [
-            {"anchor":[110,160],"left":[110,132.3906],"right":[110,187.6094]},
-            {"anchor":[160,210],"left":[132.3906,210],"right":[176.3544,210]},
-            {"anchor":[200.0007,190],"left":[190.8776,202.1437],"right":[229.0618,190]},
+            {"anchor":[110,160],"left":[110,132.39063],"right":[110,187.60938]},
+            {"anchor":[160,210],"left":[132.39063,210],"right":[176.35435,210]},
+            {"anchor":[200.00066,190],"left":[190.8776,202.14366],"right":[229.06178,190]},
             {"anchor":[260,190],"left":[260,190],"right":[260,190]},
             {"anchor":[260,130],"left":[260,130],"right":[260,130]},
-            {"anchor":[200.0007,130],"left":[229.0618,130],"right":[190.8776,117.8563]},
-            {"anchor":[160,110],"left":[176.3544,110],"right":[132.3906,110]}
+            {"anchor":[200.00066,130],"left":[229.06178,130],"right":[190.8776,117.85634]},
+            {"anchor":[160,110],"left":[176.35435,110],"right":[132.39063,110]}
           ]
         }
       ]

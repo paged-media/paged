@@ -7,13 +7,13 @@
     "script": "scripts/indesign/lib/read-document.jsx",
     "script_sha256": "4486a78fdd3b45a88c6ef6b18911bc34b94f6cf7ddc3c4d433d3d5e256f4dc08",
     "runner": "scripts/indesign/run-roundtrip.sh",
-    "recorded_at": "2026-10-06T07:43:57.739Z",
+    "recorded_at": "2026-10-20T00:26:29.604Z",
     "host_os": "macOS 26.4",
     "pdf_preset": "[Qualitativ hochwertiger Druck]"
   },
   "idml": {
     "path": "packages/draw-bundle/test/fixtures/roundtrip/appearance-bake.idml",
-    "sha256": "65815280f1f62fd033ff9fc74345f9bff6c092cf932652fab2c9c01057282d0c"
+    "sha256": "7ed84ba358b4bd0d7173651aaa13ca1a9a3402e703b25f46891480a848cc5a1b"
   },
   "units": "pt",
   "coordinates": "page-local, origin top-left of the page, Y down (ruler origin PAGE, zero point 0,0, script measurement unit POINTS); bounds as [minX, minY, maxX, maxY]",
@@ -63,7 +63,7 @@
       "index": 0,
       "name": "",
       "label": "",
-      "labels": {"x-paged:media.paged.draw":"{\"v\":1,\"data\":{\"appearance\":{\"fills\":[{\"color\":\"Color/Black\",\"tint\":40,\"blendMode\":\"Multiply\"},{\"color\":\"Color/Paper\"}],\"strokes\":[{\"color\":\"Color/Black\",\"weight\":6,\"opacity\":55}]},\"appearanceBake\":{\"layers\":[\"u1\",\"u2\",\"u3\"],\"restore\":{\"fill\":\"Color/Paper\",\"stroke\":\"Color/Black\",\"weight\":6}}}}"},
+      "labels": {"x-paged:media.paged.draw":"{\"v\":1,\"data\":{\"appearance\":{\"fills\":[{\"color\":\"Color/Black\",\"tint\":40,\"blendMode\":\"Multiply\"},{\"color\":\"Color/Paper\"}],\"strokes\":[{\"color\":\"Color/Black\",\"weight\":6,\"opacity\":55}]},\"appearanceBake\":{\"restore\":{\"fill\":\"Color/Paper\",\"stroke\":\"Color/Black\",\"weight\":6}}}}"},
       "layer": "Layer 1",
       "visible": true,
       "locked": false,

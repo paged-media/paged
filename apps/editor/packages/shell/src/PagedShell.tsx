@@ -127,7 +127,7 @@ import {
   buildNewFromBriefCommand,
   mintBlankDocument,
   buildOpenIdmlCommand,
-  openFile,
+  dropFile,
 } from "./state/commands/file-commands";
 import {
   buildExportAseCommand,
@@ -1249,9 +1249,11 @@ function ShellChrome({
   // A file dropped on the canvas or handed to the shell's file input takes
   // File ▸ Open's own path (`openFile`): the importer routing, and the
   // replace question before an edited document is replaced (F-01, ADR 230).
-  const onFile = (file: File) => {
+  const onFile = (file: File, at?: { clientX: number; clientY: number }) => {
     if (!paged) return;
-    void openFile(paged as PagedEditor, file, {
+    // A picture dropped on an open document is placed where it lands
+    // (F-03, ADR 258); the header's picker and everything else open.
+    void dropFile(paged as PagedEditor, file, at ?? null, {
       setStatus,
       pushWarning: (w) => setWarnings((prev) => [...prev, w]),
     });

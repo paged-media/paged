@@ -21,6 +21,7 @@
 // picker and (3h+) the Cmd+K palette both resolve through this
 // contribution so there's a single load path.
 
+import { getAiAvailability } from "../../ai/availability";
 import { createBlankDocument, loadDocumentFile } from "../document-loader";
 import { setPendingImportSource } from "../import-source";
 import { confirmDiscard, isReplaceDeclined } from "../replace-guard";
@@ -216,8 +217,66 @@ export async function openFile(
   });
 }
 
+/** A file dropped on the canvas and the point it was dropped at, handed to
+ *  Place (UX audit F-03, ADR 258). */
+export interface PlaceDropPayload {
+  file: { name: string; bytes: Uint8Array; mimeType: string };
+  at: { clientX: number; clientY: number };
+}
+
+/** The command a dropped picture is placed through. */
+export const PLACE_DROPPED_COMMAND = "paged.insert.placeImage";
+
+/** Raster pictures a drop places rather than opens. An SVG stays with its
+ *  importer (it opens or is drawn as native paths), as does every other
+ *  file. */
+const PLACEABLE = /\.(png|jpe?g|gif|webp|bmp|tiff?|psd|psb)$/i;
+
+/** Does a drop of `file` onto an open document mean Place, as it does in
+ *  InDesign? */
+export function dropPlaces(file: { name: string; type: string }): boolean {
+  if (/svg/i.test(file.type) || /\.svg$/i.test(file.name)) return false;
+  return PLACEABLE.test(file.name) || /^image\//i.test(file.type);
+}
+
+/** Route a file dropped at `at` (UX audit F-03): with a document open and
+ *  a picture dropped, Place it there; anything else opens as before. */
+export async function dropFile(
+  editor: PagedEditor,
+  file: File,
+  at: { clientX: number; clientY: number } | null,
+  sinks: {
+    setStatus: (s: string) => void;
+    pushWarning: (w: string) => void;
+  },
+): Promise<void> {
+  const handle = editor.document.handle;
+  if (
+    at &&
+    handle &&
+    handle.pageCount > 0 &&
+    dropPlaces(file) &&
+    editor.registries.commands.get(PLACE_DROPPED_COMMAND)
+  ) {
+    const payload: PlaceDropPayload = {
+      file: {
+        name: file.name,
+        bytes: new Uint8Array(await file.arrayBuffer()),
+        mimeType: file.type,
+      },
+      at,
+    };
+    await editor.registries.commands.invoke(PLACE_DROPPED_COMMAND, payload);
+    return;
+  }
+  await openFile(editor, file, sinks);
+}
+
 /** File ▸ New from a brief… (ADR 221) — opens the AI Assistant panel in
- *  its "New document" view, which mints the blank page and runs Claude. */
+ *  its "New document" view, which mints the blank page and runs Claude.
+ *  Offered only while the AI service is not known to be missing (UX
+ *  audit F-25, ADR 252): the palette hides it and the menu greys it, as
+ *  for any command whose `when` does not hold (ADR 249). */
 export function buildNewFromBriefCommand(
   open: () => void,
 ): CommandContribution {
@@ -225,6 +284,10 @@ export function buildNewFromBriefCommand(
     id: PAGED_FILE_NEW_FROM_BRIEF,
     title: "New document from a brief…",
     category: "File",
-    handler: () => open(),
+    when: () => getAiAvailability() !== "unavailable",
+    handler: () => {
+      if (getAiAvailability() === "unavailable") return;
+      open();
+    },
   };
 }

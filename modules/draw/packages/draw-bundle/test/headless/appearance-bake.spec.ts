@@ -27,11 +27,11 @@
 //       the CARRIER (the source frame, paint cleared, metadata intact)
 //       followed by one derived path per paint layer, back-to-front,
 //       every one of them carrying the source geometry;
-//   (3) the real MUTATION/UNDO count: TWO batches, so exactly two undos
-//       return the document to its pre-bake state (RFI C-15 — assert the
-//       count, never claim "one undo"). Two is still the floor after
-//       `bindCreated`: the bake record names its layers by id INSIDE the
-//       carrier's JSON metadata, and a handle in text is never resolved.
+//   (3) the real MUTATION/UNDO count: ONE batch, so exactly one undo
+//       returns the document to its pre-bake state (RFI C-15 — assert the
+//       count). It was two while the bake record named its layers by id
+//       inside the carrier's JSON metadata, where a handle is never
+//       resolved; the record names no ids now (DRW-5, ADR 360).
 //       What the first batch created comes off the engine's reply now,
 //       not a tree diff — and every lane of that seam must leave the
 //       same document;
@@ -74,6 +74,8 @@ import {
   bakeAppearance,
   bakeGeometryOf,
   bakeInsertBatchFor,
+  bakeLayerHandle,
+  bakedLayersOf,
   bakeLayerPaintFor,
   bakePaintBatchFor,
   commitAppearance,
@@ -270,7 +272,7 @@ describe("draw conformance — the appearance GROUP BAKE (gap B-24)", () => {
       expect(appearanceBakeLayers({ fills: [], strokes: [] })).toEqual([]);
     });
 
-    it("bakeInsertBatchFor emits ONE batch of N identical insertPath ops", () => {
+    it("bakeInsertBatchFor emits ONE batch of N identical insertPath ops, each named", () => {
       const geometry = {
         pageId: "usp",
         anchors: RECT_CORNERS.map((c) => ({ anchor: c, left: c, right: c })),
@@ -281,13 +283,23 @@ describe("draw conformance — the appearance GROUP BAKE (gap B-24)", () => {
         { op: "batch" }
       >;
       expect(batch.op).toBe("batch");
-      expect(batch.args.ops).toHaveLength(2);
+      expect(batch.args.ops).toHaveLength(4);
       expect(batch.args.ops[0]).toEqual({
         op: "insertPath",
         args: { pageId: "usp", anchors: geometry.anchors, open: false },
       });
+      // Each insert is named right after it, so the rest of the one bake
+      // batch addresses it by handle (ADR 360).
+      expect(batch.args.ops[1]).toEqual({
+        op: "bindCreated",
+        args: { handle: bakeLayerHandle(0) },
+      });
+      expect(batch.args.ops[3]).toEqual({
+        op: "bindCreated",
+        args: { handle: bakeLayerHandle(1) },
+      });
       // Both copies are the SAME contour — that is the whole point.
-      expect(batch.args.ops[0]).toEqual(batch.args.ops[1]);
+      expect(batch.args.ops[0]).toEqual(batch.args.ops[2]);
     });
 
     it("a derived layer carries exactly ONE paint, with its modifiers", () => {
@@ -500,6 +512,14 @@ describe("draw conformance — the appearance GROUP BAKE (gap B-24)", () => {
       expect(appearanceBakeOf(next)).toEqual(record);
       expect(appearanceOf(next)).toEqual(STACK);
       expect(appearanceBakeOf(withAppearanceBake(next, null))).toBeNull();
+      // A record written since ADR 360 names no layer ids: it is written
+      // without the list and reads back with an empty one.
+      const fresh = { layers: [], restore: record.restore };
+      const written = withAppearanceBake(prev, fresh)!;
+      expect(
+        (written.data.appearanceBake as Record<string, unknown>).layers,
+      ).toBeUndefined();
+      expect(appearanceBakeOf(written)).toEqual(fresh);
       expect(appearanceBakeOf(null)).toBeNull();
       expect(
         appearanceBakeOf({ v: 1, data: { appearanceBake: 7 } }),
@@ -592,9 +612,20 @@ describe("draw conformance — the appearance GROUP BAKE (gap B-24)", () => {
       });
       const env = await h.host.document.getMetadata(RECT);
       expect(appearanceOf(env)).toEqual(STACK);
-      expect(appearanceBakeOf(env)!.layers).toEqual(
+      // The layers are found by their markers in the carrier's group
+      // (ADR 360): the record names no ids.
+      expect(appearanceBakeOf(env)!.layers).toEqual([]);
+      expect(await bakedLayersOf(h.host, RECT)).toEqual(
         created.map((c) => c.id as string),
       );
+      // A record written before ADR 360 lists its layers: a listed id that
+      // is still alive is a layer too (once), a dead one is not.
+      expect(
+        await bakedLayersOf(h.host, RECT, {
+          layers: [created[0]!.id as string, "u-no-such-layer"],
+          restore: { fill: null, stroke: null, weight: null },
+        }),
+      ).toEqual(created.map((c) => c.id as string));
       // The pre-bake paint is remembered for the release.
       expect(appearanceBakeOf(env)!.restore.fill).toBe("Color/Paper");
 
@@ -612,22 +643,18 @@ describe("draw conformance — the appearance GROUP BAKE (gap B-24)", () => {
       ).toEqual(RECT);
     });
 
-    it("UNDO — the bake is exactly TWO batches (C-15: assert, never claim one)", async () => {
+    it("UNDO — the bake is exactly ONE batch (C-15: assert the count; DRW-5)", async () => {
       // Fresh state: release whatever the previous test left baked.
       await releaseAppearance(h.host, RECT);
       const before = await leafIds(h);
 
       const created = await bakeAppearance(h.host, RECT);
       expect(created).toHaveLength(3);
+      expect(await groupShape(h)).not.toBeNull();
 
-      // Undo #1 unwinds the paint/metadata/group batch: the group is
-      // gone, the three inserted paths are still there.
+      // ONE undo unwinds the whole bake: back to the pre-bake document.
       await h.host.document.undo();
       expect(await groupShape(h)).toBeNull();
-      expect(await leafIds(h)).toHaveLength(before.length + 3);
-
-      // Undo #2 unwinds the insert batch: back to the pre-bake document.
-      await h.host.document.undo();
       expect(await leafIds(h)).toEqual(before);
       expect(
         appearanceBakeOf(await h.host.document.getMetadata(RECT)),
@@ -639,13 +666,13 @@ describe("draw conformance — the appearance GROUP BAKE (gap B-24)", () => {
       });
     });
 
-    // What batch 1 created used to cost two reads of the whole scene tree
-    // (before and after, diffed). It comes off the engine's reply now
+    // What the bake created used to cost two reads of the whole scene
+    // tree (before and after, diffed). It comes off the engine's reply now
     // (`commands/minted.ts`). A batch can apply and the ids still be
     // wrong, so the bake runs through every lane of that seam and each
-    // must leave the SAME document — the group, every layer's paint and
-    // outline, the carrier's record naming its layers, the selection —
-    // in the same two undo steps, which restore it exactly.
+    // must leave the SAME document — the group, every layer's paint,
+    // outline and marker, the carrier's record, the selection — in the
+    // same one undo step, which restores it exactly.
     it("the created ids off the reply: no tree read, and the document every other lane leaves", async () => {
       const through = (lane: LaneName) =>
         runThrough(h, lane, {
@@ -654,11 +681,8 @@ describe("draw conformance — the appearance GROUP BAKE (gap B-24)", () => {
         });
       const shipped = await through("oneBatch");
       expect(shipped.result).toHaveLength(3);
-      expect(shipped.work.mutations.map((m) => m.op)).toEqual([
-        "batch",
-        "batch",
-      ]);
-      expect(shipped.undoSteps).toBe(2);
+      expect(shipped.work.mutations.map((m) => m.op)).toEqual(["batch"]);
+      expect(shipped.undoSteps).toBe(1);
       expect(shipped.restored).toBe(true);
       // As found: 2 — the before/after diff.
       expect(shipped.work.count("document.tree")).toBe(0);
@@ -727,15 +751,18 @@ describe("draw conformance — the appearance GROUP BAKE (gap B-24)", () => {
       // new stack (not the stale one).
       const record = appearanceBakeOf(env);
       expect(record).not.toBeNull();
-      expect(record!.layers).toHaveLength(2);
+      const layers = await bakedLayersOf(h.host, RECT, record);
+      expect(layers).toHaveLength(2);
       const group = await groupShape(h);
-      expect(group!.members).toEqual([RECT.id, ...record!.layers]);
-      expect(
-        await readProp(h, poly(record!.layers[0]), "frameFillColor"),
-      ).toEqual({ type: "colorRef", value: "Color/Black" });
-      expect(
-        await readProp(h, poly(record!.layers[1]), "frameStrokeColor"),
-      ).toEqual({ type: "colorRef", value: "Color/Black" });
+      expect(group!.members).toEqual([RECT.id, ...layers]);
+      expect(await readProp(h, poly(layers[0]!), "frameFillColor")).toEqual({
+        type: "colorRef",
+        value: "Color/Black",
+      });
+      expect(await readProp(h, poly(layers[1]!), "frameStrokeColor")).toEqual({
+        type: "colorRef",
+        value: "Color/Black",
+      });
 
       // Restore the fixture for the export tests below.
       await releaseAppearance(h.host, RECT);
@@ -842,7 +869,9 @@ describe("draw conformance — the appearance GROUP BAKE (gap B-24)", () => {
         // the editable stack AND the bake record reopen intact.
         const env = await reopened.host.document.getMetadata(RECT);
         expect(appearanceOf(env)).toEqual(STACK);
-        expect(appearanceBakeOf(env)!.layers).toEqual(
+        expect(appearanceBakeOf(env)).not.toBeNull();
+        // The reopened document finds the layers by their markers.
+        expect(await bakedLayersOf(reopened.host, RECT)).toEqual(
           created.map((c) => c.id as string),
         );
         // Each derived layer keeps its ONE paint, and its own envelope

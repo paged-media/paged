@@ -1005,6 +1005,11 @@ struct Lowering {
     /// The `characterLeading` each lowered paragraph style resolves to (its
     /// own or inherited), so a paragraph only overrides when it differs.
     style_leading: HashMap<String, f32>,
+    /// The part of the previous body paragraph's last line below its
+    /// baseline, in pt, as Word lays it (UX audit F-44,
+    /// [`Lowering::line_descent`]). `None` at the top of a page or
+    /// after anything but a body paragraph.
+    prev_line_descent: Option<f32>,
     /// Faces a line-spacing computation needed but Word was not measured on.
     unmeasured_faces: BTreeSet<String>,
     /// Page/column breaks (`w:br`) seen in body paragraphs.
@@ -1386,6 +1391,47 @@ impl Lowering {
                         props.push(len("paragraphSpaceBefore", before + extra));
                     }
                 }
+            }
+        }
+        // UX audit F-44: Word STACKS line boxes, so a line sits below the
+        // previous one by the previous line's part under its baseline plus
+        // its own part above; the engine (InDesign's rule) steps a line by
+        // its own leading from the previous baseline. The two agree while
+        // the faces agree; after a taller line (a 24 pt heading over 10 pt
+        // body) the engine puts the next line higher by the difference of
+        // the two descents, into the heading. That difference goes into the
+        // space before.
+        {
+            let style = self.style_of(p).map(str::to_owned);
+            let exact_here = self
+                .resolve_spacing(p.props.line_spacing, style.as_deref())
+                .is_some_and(|ls| ls.rule == LineRule::Exact);
+            let page_top = own_page
+                || props.iter().any(|sp| {
+                    sp.path == START_PARAGRAPH
+                        && matches!(&sp.value, PropValue::Text(t) if t != "Anywhere")
+                });
+            let prev = std::mem::take(&mut self.prev_line_descent);
+            if let (Some(prev), Some(_), false, false) = (prev, can_carry, exact_here, page_top) {
+                let extra = prev - self.line_descent(p, style.as_deref(), true);
+                if extra > 0.01 {
+                    let before = props
+                        .iter()
+                        .find(|sp| sp.path == "paragraphSpaceBefore")
+                        .and_then(|sp| match sp.value {
+                            PropValue::Length(pt) => Some(pt),
+                            _ => None,
+                        })
+                        .unwrap_or_else(|| {
+                            self.resolved_para(p, |pp| pp.space_before)
+                                .map_or(0.0, twip_to_pt)
+                        });
+                    props.retain(|sp| sp.path != "paragraphSpaceBefore");
+                    props.push(len("paragraphSpaceBefore", before + extra));
+                }
+            }
+            if can_carry.is_some() && !exact_here && tail.is_none() {
+                self.prev_line_descent = Some(self.line_descent(p, style.as_deref(), false));
             }
         }
         if let Some(list) = &p.list {
@@ -2278,6 +2324,25 @@ impl Lowering {
         line_height::single_line_pt(font, half_pts.map_or(10.0, half_pt_to_pt))
     }
 
+    /// The part of a paragraph's first (`first`) or last line below its
+    /// baseline, as Word lays it: the tallest face's single line less its
+    /// ascent (Word puts a multiple's extra space above the text). The
+    /// line's face is its first or last run with text, else the mark's.
+    fn line_descent(&mut self, p: &docx_core::Paragraph, style: Option<&str>, first: bool) -> f32 {
+        let mut runs = p.runs.iter().filter(|r| !r.text.trim().is_empty());
+        let run = if first { runs.next() } else { runs.next_back() };
+        let (font, size) = match run {
+            Some(r) => self.resolve_face(Some(r), style),
+            None => {
+                let (font, size) = self.resolve_face(None, style);
+                (p.mark_font.clone().or(font), p.mark_half_pts.or(size))
+            }
+        };
+        let size_pt = size.map_or(10.0, half_pt_to_pt);
+        let single = self.single_line(font.as_deref(), size);
+        single - line_height::ascent_em(font.as_deref()) * size_pt
+    }
+
     /// The leading a paragraph style resolves to, if line spacing is set
     /// anywhere in its chain (or in docDefaults).
     fn style_pitch(&mut self, style_id: &str) -> Option<f32> {
@@ -2760,6 +2825,68 @@ mod tests {
             before(0)
         );
         assert_eq!(before(1), 0.0, "the plain paragraph");
+    }
+
+    /// UX audit F-44: Word stacks line boxes, so a 10 pt line after a 24 pt
+    /// heading sits the heading's descent below it; the engine steps it by
+    /// its own leading from the heading's baseline, which put it into the
+    /// heading. The difference of the two descents goes into the space
+    /// before; a line after a line of its own face needs none.
+    #[test]
+    fn a_line_after_a_taller_one_keeps_clear_of_it() {
+        let mut doc = DocxDocument::default();
+        let para = |size: u32| {
+            Block::Paragraph(Paragraph {
+                style_id: None,
+                props: ParaProps::default(),
+                runs: vec![run(
+                    "text",
+                    RunProps {
+                        size_half_pts: Some(size),
+                        ..Default::default()
+                    },
+                )],
+                list: None,
+                mark_font: None,
+                mark_half_pts: None,
+                source_para_ord: 0,
+                source_cell: None,
+            })
+        };
+        // Body, a 24 pt heading, body, body.
+        for size in [20, 48, 20, 20] {
+            doc.body.push(para(size));
+        }
+        let lowered = lower(&doc);
+        let before = |i: usize| {
+            let mut next = lowered.story.paragraphs()[i].para_style_id.clone();
+            for _ in 0..32 {
+                let Some(style) = lowered.styles.iter().find(|s| Some(&s.id) == next.as_ref())
+                else {
+                    break;
+                };
+                if let Some(PropValue::Length(pt)) = style
+                    .props
+                    .iter()
+                    .find(|p| p.path == "paragraphSpaceBefore")
+                    .map(|p| &p.value)
+                {
+                    return *pt;
+                }
+                next = style.based_on.clone();
+            }
+            0.0
+        };
+        // The fallback face: single line 2500/2048 em, ascent 1950/2048 em.
+        let descent_em = (2500.0 - 1950.0) / 2048.0;
+        let want = descent_em * (24.0 - 10.0);
+        assert!(
+            (before(2) - want).abs() < 0.01,
+            "after the heading: {} pt before, want {want}",
+            before(2)
+        );
+        assert_eq!(before(1), 0.0, "a taller line after a shorter one");
+        assert_eq!(before(3), 0.0, "a line after one of its own face");
     }
 
     /// A floating picture with a band of its own, anchored in a paragraph

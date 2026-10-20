@@ -34,11 +34,15 @@
 // source.
 //
 // THE HONEST LIMIT, stated in the panel itself rather than only here:
-// roughly two dozen bindings never reach the registry. Undo/redo, zoom
-// to fit and 100%, page navigation, caret motion and the spring-loaded
-// tool holds are bound with ad-hoc `window`/`document` listeners in
-// `useKeyboardShortcuts`, `useTextEditing`, `usePathEditMode` and
-// `use-spring-loaded-tools`. A panel that silently omitted them would
+// a dozen bindings never reach the registry. Undo/redo, caret motion,
+// path-edit keys and the spring-loaded tool holds are bound with ad-hoc
+// `window`/`document` listeners in `useTextEditing`, `usePathEditMode`
+// and `use-spring-loaded-tools` (the zoom fits and the page keys are
+// registry bindings since ADR 246 and ADR 257).
+//
+// GROUPED BY CONTEXT (UX audit F-16): one section per command category,
+// so a chord two contexts share (Cmd+D places an image, and fills down
+// inside a sheet) reads as two contexts, not as a duplicate. A panel that silently omitted them would
 // be a worse lie than the seam it replaces — it would look complete.
 // They are listed from a maintained table below, and marked as such.
 
@@ -65,10 +69,6 @@ export const KEYBOARD_SHORTCUTS_PANEL_ID = "paged.keyboard-shortcuts";
 const AD_HOC: { key: string; what: string; where: string }[] = [
   { key: prettyKey("cmd+z"), what: "Undo", where: "useTextEditing" },
   { key: prettyKey("cmd+shift+z"), what: "Redo", where: "useTextEditing" },
-  { key: "Home", what: "First page", where: "useKeyboardShortcuts" },
-  { key: "End", what: "Last page", where: "useKeyboardShortcuts" },
-  { key: "PageUp", what: "Previous page", where: "useKeyboardShortcuts" },
-  { key: "PageDown", what: "Next page", where: "useKeyboardShortcuts" },
   {
     key: "Space (hold)",
     what: "Pan — spring-loaded Hand",
@@ -117,6 +117,9 @@ export function KeyboardShortcutsPanel(_props: PanelProps) {
   // eslint-disable-next-line no-restricted-syntax -- a computed block, not a single expression (ADR 229)
   const rows = useMemo(() => {
     const titles = new Map(commands.list().map((c) => [c.id, c.title]));
+    const categories = new Map(
+      commands.list().map((c) => [c.id, c.category ?? "General"]),
+    );
     // One row per COMMAND. cmd+ and ctrl+ are separate contributions for
     // the same thing; show the one for this platform (the menus do the
     // same), and any genuinely different second chord beside it.
@@ -141,36 +144,50 @@ export function KeyboardShortcutsPanel(_props: PanelProps) {
             [...chords.values()].map((ks) => prettyKey(nativeKey(ks))),
           ),
         ];
-        return { id, title: v.title, keys };
+        return {
+          id,
+          title: v.title,
+          keys,
+          category: categories.get(id) ?? "General",
+        };
       })
       .sort((a, b) => a.title.localeCompare(b.title));
   }, [keybindings, commands]);
+  const groups = new Map<string, typeof rows>();
+  for (const r of rows) {
+    groups.set(r.category, [...(groups.get(r.category) ?? []), r]);
+  }
+  const sections = [...groups.entries()].sort(([a], [b]) => a.localeCompare(b));
 
   return (
     <div data-keyboard-shortcuts-panel="ready">
       <CockpitPanelHeader title="Keyboard shortcuts" />
-      <CockpitSection title={`Commands (${rows.length})`}>
-        <div data-shortcut-rows>
-          {rows.map((r) => (
-            <div
-              key={r.id}
-              data-shortcut-row={r.id}
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                gap: 12,
-                padding: "3px 14px",
-                fontSize: 12,
-              }}
-            >
-              <span>{r.title}</span>
-              <span className="pg-mono-meta" style={{ opacity: 0.75 }}>
-                {r.keys.join("  ")}
-              </span>
+      <div data-shortcut-rows>
+        {sections.map(([category, list]) => (
+          <CockpitSection key={category} title={`${category} (${list.length})`}>
+            <div data-shortcut-group={category}>
+              {list.map((r) => (
+                <div
+                  key={r.id}
+                  data-shortcut-row={r.id}
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    gap: 12,
+                    padding: "3px 14px",
+                    fontSize: 12,
+                  }}
+                >
+                  <span>{r.title}</span>
+                  <span className="pg-mono-meta" style={{ opacity: 0.75 }}>
+                    {r.keys.join("  ")}
+                  </span>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
-      </CockpitSection>
+          </CockpitSection>
+        ))}
+      </div>
       <CockpitSection title={`Not in the registry (${AD_HOC.length})`}>
         <div
           className="pg-ui-xs"
@@ -179,7 +196,7 @@ export function KeyboardShortcutsPanel(_props: PanelProps) {
         >
           These are bound with their own listeners rather than through the
           keybinding registry, so they are listed from a maintained table. Undo
-          and page navigation live here.
+          and the caret keys live here.
         </div>
         {AD_HOC.map((r) => (
           <div

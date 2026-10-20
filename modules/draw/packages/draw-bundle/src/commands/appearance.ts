@@ -278,7 +278,7 @@ export function bakeAppearanceMutations(
  *  BAKED target (a `data.appearanceBake` record on the envelope): the
  *  derived layers ARE what renders, so a metadata-only write would let
  *  the model and the page diverge. The edit therefore RE-BAKES — release
- *  the old layers with the new stack, then bake it again (three undo
+ *  the old layers with the new stack, then bake it again (two undo
  *  steps; see `appearance-bake.ts`).
  *
  *  Exported for the conformance spec. Returns the metadata outcome (the

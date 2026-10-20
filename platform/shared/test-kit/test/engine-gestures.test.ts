@@ -552,38 +552,36 @@ describe("findings: the fuzzer's (GF) and the gesture matrix's (GM)", () => {
     expect((await sceneElementIds(send)).length).toBe(before + 1);
   });
 
-  test.failing(
-    "[GF-4] a rotated frame survives IDML save → load to a micro-point @level:gesture",
-    async () => {
-      await rotateBy(30);
-      const exported = await send({
-        kind: "exportIdml",
-        payload: { linkBase: null },
-      });
-      expect(exported.kind).toBe("idmlExported");
-      const reload = await createHeadlessHost({ console: silent });
-      try {
-        await reload.load(
-          Uint8Array.from(
-            (exported.payload as { idmlBytes: number[] }).idmlBytes,
-          ),
-        );
-        const client = (
-          reload.host.editor as unknown as { client: { send: Send } }
-        ).client;
-        const diff = compareDigests(
-          await geometryDigest(send),
-          await geometryDigest(client.send.bind(client)),
-        );
-        // Today: "precision" — the writer prints the transform to 4 decimals.
-        expect(diff).toBeNull();
-      } finally {
-        reload.dispose();
-      }
-    },
-  );
+  // GF-4 (fixed, engine ADR 199): the writer printed every changed number to
+  // 4 decimals; it spells it as the f32 it is now.
+  test("[GF-4] a rotated frame survives IDML save → load to a micro-point @level:gesture", async () => {
+    await rotateBy(30);
+    const exported = await send({
+      kind: "exportIdml",
+      payload: { linkBase: null },
+    });
+    expect(exported.kind).toBe("idmlExported");
+    const reload = await createHeadlessHost({ console: silent });
+    try {
+      await reload.load(
+        Uint8Array.from(
+          (exported.payload as { idmlBytes: number[] }).idmlBytes,
+        ),
+      );
+      const client = (
+        reload.host.editor as unknown as { client: { send: Send } }
+      ).client;
+      const diff = compareDigests(
+        await geometryDigest(send),
+        await geometryDigest(client.send.bind(client)),
+      );
+      expect(diff).toBeNull();
+    } finally {
+      reload.dispose();
+    }
+  });
 
-  it("the 4-decimal drift stays within its bound, and nothing else moves on save → load @level:gesture", async () => {
+  it("a turned and sheared group survives save → load exactly (GF-4) @level:gesture", async () => {
     await rotateBy(30);
     await gesture({
       nodes: [GROUP],
@@ -609,7 +607,7 @@ describe("findings: the fuzzer's (GF) and the gesture matrix's (GM)", () => {
         await geometryDigest(send),
         await geometryDigest(client.send.bind(client)),
       );
-      expect(diff === null || diff.verdict === "precision").toBe(true);
+      expect(diff).toBeNull();
     } finally {
       reload.dispose();
     }

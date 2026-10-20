@@ -7,13 +7,13 @@
     "script": "scripts/indesign/lib/read-document.jsx",
     "script_sha256": "4486a78fdd3b45a88c6ef6b18911bc34b94f6cf7ddc3c4d433d3d5e256f4dc08",
     "runner": "scripts/indesign/run-roundtrip.sh",
-    "recorded_at": "2026-10-03T06:03:25.233Z",
+    "recorded_at": "2026-10-20T01:21:03.075Z",
     "host_os": "macOS 26.4",
     "pdf_preset": "[Qualitativ hochwertiger Druck]"
   },
   "idml": {
     "path": "packages/draw-bundle/test/fixtures/roundtrip/gradient-radial.idml",
-    "sha256": "0207b11596d4589196875c5846d500f48603dd4854cb44c149b90e2ab41fd26a"
+    "sha256": "ee65b001e7c57e3870baa52300fe86fc34dbf5aa3d15c1b620c1329e44d12e6a"
   },
   "units": "pt",
   "coordinates": "page-local, origin top-left of the page, Y down (ruler origin PAGE, zero point 0,0, script measurement unit POINTS); bounds as [minX, minY, maxX, maxY]",
@@ -84,10 +84,10 @@
           "closed": true,
           "pathType": "CLOSED_PATH",
           "anchors": [
-            {"anchor":[420,300],"left":[420,233.7258],"right":[420,366.2742]},
-            {"anchor":[300,420],"left":[366.2742,420],"right":[233.7258,420]},
-            {"anchor":[180,300],"left":[180,366.2742],"right":[180,233.7258]},
-            {"anchor":[300,180],"left":[233.7258,180],"right":[366.2742,180]}
+            {"anchor":[420,300],"left":[420,233.72583],"right":[420,366.27417]},
+            {"anchor":[300,420],"left":[366.27417,420],"right":[233.72583,420]},
+            {"anchor":[180,300],"left":[180,366.27417],"right":[180,233.72583]},
+            {"anchor":[300,180],"left":[233.72583,180],"right":[366.27417,180]}
           ]
         }
       ]

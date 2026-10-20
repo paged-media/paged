@@ -49,31 +49,26 @@
 //
 // MUTATION / UNDO SHAPE (measured against the booted engine, 0.64.0 —
 // the RFI C-15 rule: assert the real count, never claim "one undo"):
-//   · bake    = TWO batches ⇒ 2 undo steps. Batch 1 inserts the N
-//     derived paths; batch 2 paints them, clears the carrier, stamps
-//     every envelope and wraps the group.
+//   · bake    = ONE batch ⇒ 1 undo step (DRW-5, ADR 360). The batch
+//     inserts the N derived paths, names each with `bindCreated`, paints
+//     and marks them by handle, clears the carrier, stamps its envelope
+//     and wraps the group.
 //
-//     TWO IS STILL THE FLOOR HERE, and the reason CHANGED. It used to be
-//     that a batch could not address an id it had just minted; C-15's
-//     `bindCreated` ended that, and the paint, the markers and the group
-//     COULD all ride the insert batch by handle now. What cannot is the
-//     BAKE RECORD: the carrier's envelope names its layers by element id
+//     It used to be TWO: the bake record named its layers by element id
 //     (`appearanceBake.layers`), an envelope is a JSON string, and a
-//     `$h:` handle inside TEXT is content — the engine stores it as
-//     written and never resolves it (measured; pinned in
-//     `test/headless/minted.spec.ts`). So the record can only be
-//     written once the ids exist, which is after a first mutation has
-//     answered. The record's shape is what release and a reopened
-//     document read, so it is not changed to dodge that.
-//
-//     What DID change: the ids batch 1 minted come off the engine's
-//     reply (`commands/minted.ts`) instead of two reads of the whole
-//     scene tree.
+//     `$h:` handle inside TEXT is content the engine never resolves
+//     (pinned in `test/headless/minted.spec.ts`), so the record waited
+//     for a first batch's ids. The record no longer names them: each
+//     layer already carries a marker naming its carrier
+//     (`appearanceLayer.of`, an id that exists before the batch), and the
+//     layers are the carrier's group members carrying that marker
+//     (`bakedLayersOf`). A record written before ADR 360 still lists
+//     `layers`; release reads those too.
 //   · release = ONE batch ⇒ 1 undo step (dissolve + delete + restore +
 //     re-stamp all ride together; the group and the layers already
 //     exist, so nothing is forward-referenced).
 //   · an edit on an ALREADY-BAKED stack re-bakes = release + bake =
-//     THREE undo steps.
+//     TWO undo steps.
 //
 // WHAT SURVIVES THE LOWERING — and what does not (probed, not assumed):
 //   ✔ geometry: the derived paths carry the source's anchors + open
@@ -143,7 +138,12 @@ import {
   type FillLayer,
   type StrokeLayer,
 } from "./appearance";
-import { mintedLeaves, mutateMinting } from "./minted";
+import { bindMinted, mutateMinting } from "./minted";
+import {
+  bindCreatedMutationFor,
+  handleElementId,
+  oneBatchFor,
+} from "./batch-handles";
 import { leafIdsOf } from "./select-same";
 import { parentGroupOf } from "./parentage";
 import { linkIndex } from "../link-index";
@@ -174,7 +174,10 @@ export const DRAW_METADATA_KEY = labelKey(manifest.id);
 /** The bake RECORD stamped on the carrier alongside `data.appearance`.
  *  Its presence is what makes a baked object recognizable on reopen. */
 export interface AppearanceBakeRecord {
-  /** The derived layer element ids, BACK-TO-FRONT (paint order). */
+  /** The derived layer element ids, BACK-TO-FRONT (paint order), as a
+   *  record written before ADR 360 listed them; empty for a newer bake,
+   *  whose layers are found by their markers ({@link bakedLayersOf}).
+   *  Never written by a new bake. */
   layers: string[];
   /** The carrier's own paint BEFORE the bake — restored on release so a
    *  bake→release round-trip is exact even for an empty stack. */
@@ -203,10 +206,15 @@ export function appearanceBakeOf(
     ?.appearanceBake;
   if (!raw || typeof raw !== "object") return null;
   const r = raw as Partial<AppearanceBakeRecord>;
-  if (!Array.isArray(r.layers)) return null;
+  // A record is its `restore` (ADR 360) or, written before it, its
+  // `layers` list.
+  const legacy = Array.isArray(r.layers);
+  if (!legacy && (!r.restore || typeof r.restore !== "object")) return null;
   const restore = (r.restore ?? {}) as Partial<AppearanceBakeRecord["restore"]>;
   return {
-    layers: r.layers.filter((id): id is string => typeof id === "string"),
+    layers: legacy
+      ? r.layers!.filter((id): id is string => typeof id === "string")
+      : [],
     restore: {
       fill: typeof restore.fill === "string" ? restore.fill : null,
       stroke: typeof restore.stroke === "string" ? restore.stroke : null,
@@ -243,7 +251,11 @@ export function withAppearanceBake(
     delete data.appearanceBake;
     if (Object.keys(data).length === 0) return null;
   } else {
-    data.appearanceBake = record;
+    // A new record names no layer ids (ADR 360): only a legacy record
+    // being carried forward keeps its list.
+    const { layers, ...rest } = record;
+    data.appearanceBake =
+      Array.isArray(layers) && layers.length > 0 ? record : rest;
   }
   return {
     v: prev?.v ?? 1,
@@ -405,9 +417,13 @@ export const stampDrawMetadata = (
 
 const stamp = stampDrawMetadata;
 
-/** BATCH 1 of the bake — `count` copies of the source contour, inserted
- *  bottom-to-top. One batch ⇒ one undo step for the whole geometry.
- *  Exported so the conformance spec asserts the EXACT wire shape. */
+/** The batch handle the bake names its `i`-th derived layer by. */
+export const bakeLayerHandle = (i: number): string => `bake-layer-${i}`;
+
+/** The first half of the bake batch — `count` copies of the source
+ *  contour, inserted bottom-to-top, each named by
+ *  {@link bakeLayerHandle} right after it. Exported so the conformance
+ *  spec asserts the EXACT wire shape. */
 export function bakeInsertBatchFor(
   geometry: BakeGeometry,
   count: number,
@@ -426,6 +442,7 @@ export function bakeInsertBatchFor(
         open: geometry.open,
       },
     });
+    ops.push(bindCreatedMutationFor(bakeLayerHandle(i)));
   }
   return { op: "batch", args: { ops } };
 }
@@ -463,10 +480,11 @@ export function bakeLayerPaintFor(
   return ops;
 }
 
-/** BATCH 2 of the bake — paint every derived layer, stamp its marker,
- *  clear the carrier's own paint, write the carrier's envelope (stack +
- *  bake record) and wrap the whole thing in a group. One batch ⇒ one
- *  undo step. `created` is back-to-front, parallel to `layers`.
+/** The second half of the bake batch — paint every derived layer, stamp
+ *  its marker, clear the carrier's own paint, write the carrier's
+ *  envelope (stack + bake record) and wrap the whole thing in a group.
+ *  `created` is back-to-front, parallel to `layers`: the layers' batch
+ *  handles inside the one bake batch ({@link bakeBatchFor}), or ids.
  *  Exported so the conformance spec asserts the EXACT wire shape. */
 export function bakePaintBatchFor(args: {
   carrier: ElementId;
@@ -503,6 +521,25 @@ export function bakePaintBatchFor(args: {
     args: { memberIds: [args.carrier, ...args.created] },
   });
   return { op: "batch", args: { ops } };
+}
+
+/** The whole bake as ONE batch, one undo step (DRW-5, ADR 360): insert
+ *  and name the layers, then paint, mark and group them by handle. */
+export function bakeBatchFor(args: {
+  carrier: ElementId;
+  geometry: BakeGeometry;
+  layers: readonly BakeLayer[];
+  carrierEnvelope: PluginMetadataEnvelope | null;
+}): Mutation {
+  return oneBatchFor([
+    bakeInsertBatchFor(args.geometry, args.layers.length),
+    bakePaintBatchFor({
+      carrier: args.carrier,
+      created: args.layers.map((_, i) => handleElementId(bakeLayerHandle(i))),
+      layers: args.layers,
+      carrierEnvelope: args.carrierEnvelope,
+    }),
+  ]);
 }
 
 /** The RELEASE batch — dissolve the group, delete every derived layer,
@@ -625,6 +662,33 @@ export function groupChildren(
   return [];
 }
 
+/** The derived layers of the baked carrier `carrier`, back-to-front: the
+ *  members of its group whose marker names it (ADR 360), then any id a
+ *  record written before ADR 360 lists that is still alive and not among
+ *  them. */
+export async function bakedLayersOf(
+  host: BundleHost,
+  carrier: ElementId,
+  record: AppearanceBakeRecord | null = null,
+): Promise<string[]> {
+  const index = linkIndex(host);
+  const roots = await index.tree();
+  const group = parentGroupOf(roots, carrier);
+  const out: string[] = [];
+  if (group) {
+    for (const member of groupChildren(roots, group)) {
+      if (typeof member.id !== "string" || member.id === carrier.id) continue;
+      const marker = appearanceLayerOf(await index.envelopeOf(member));
+      if (marker && marker.of.id === carrier.id) out.push(member.id);
+    }
+  }
+  const alive = idsOf(leafIdsOf(roots));
+  for (const id of record?.layers ?? []) {
+    if (alive.has(id) && !out.includes(id)) out.push(id);
+  }
+  return out;
+}
+
 /** Lower `id`'s metadata stack onto a real group of derived paths.
  *  Returns the created layer ids (empty on a refusal — always logged,
  *  never thrown: the dash-command convention). */
@@ -662,50 +726,36 @@ export async function bakeAppearance(
   }
 
   const restore = await carrierPaint(host, id);
-  const inserted = await mutateMinting(
-    host,
-    bakeInsertBatchFor(geometry.geometry, layers.length),
-  );
-  if (!inserted.outcome.applied) {
+  // The record names no layer ids (ADR 360), so the whole bake is one
+  // batch: the layers are addressed by handle and found again by marker.
+  const record: AppearanceBakeRecord = { layers: [], restore };
+  const batch = bakeBatchFor({
+    carrier: id,
+    geometry: geometry.geometry,
+    layers,
+    carrierEnvelope: withAppearanceBake(withAppearance(prev, stack), record),
+  });
+  const baked = await mutateMinting(host, batch);
+  if (!baked.outcome.applied) {
     host.log.warn(
-      `${label}: derived-layer insert rejected by engine: ${JSON.stringify(
-        inserted.outcome.error,
+      `${label}: bake batch rejected by engine: ${JSON.stringify(
+        baked.outcome.error,
       )}`,
     );
     return [];
   }
-  // What the batch minted, in mint order — which is insertion order,
-  // which is paint order. Off the engine's reply, not a tree diff
-  // (`commands/minted.ts`).
-  const created = mintedLeaves(inserted).filter(
-    (e) => typeof e.id === "string",
-  );
+  // What each handle minted, off the engine's reply (`commands/minted.ts`).
+  // The batch has applied either way; a reply that does not match the
+  // batch only leaves the ids unknown here.
+  const bound = bindMinted(baked, batch);
+  const created = layers
+    .map((_, i) => bound?.byHandle.get(bakeLayerHandle(i)))
+    .filter((e): e is ElementId => e !== undefined);
   if (created.length !== layers.length) {
     host.log.warn(
-      `${label}: expected ${layers.length} derived layers, found ` +
-        `${created.length} — leaving the insert in place, not grouping`,
+      `${label}: the engine's reply names ${created.length} of ` +
+        `${layers.length} derived layers`,
     );
-    return [];
-  }
-  const record: AppearanceBakeRecord = {
-    layers: created.map((e) => e.id as string),
-    restore,
-  };
-  const painted = await host.document.mutate(
-    bakePaintBatchFor({
-      carrier: id,
-      created,
-      layers,
-      carrierEnvelope: withAppearanceBake(withAppearance(prev, stack), record),
-    }),
-  );
-  if (!painted.applied) {
-    host.log.warn(
-      `${label}: layer paint/group batch rejected by engine: ${JSON.stringify(
-        painted.error,
-      )}`,
-    );
-    return [];
   }
   return created;
 }
@@ -728,13 +778,13 @@ export async function releaseAppearance(
   // to back): which group holds the carrier, and which layers are alive.
   const roots = await linkIndex(host).tree();
   const group = parentGroupOf(roots, id);
-  const alive = idsOf(leafIdsOf(roots));
+  const layers = await bakedLayersOf(host, id, record);
   const stack = appearanceOf(prev);
   const outcome = await host.document.mutate(
     releaseBatchFor({
       carrier: id,
       group,
-      layers: record.layers.filter((layerId) => alive.has(layerId)),
+      layers,
       record,
       stack,
       carrierEnvelope: withAppearanceBake(withAppearance(prev, stack), null),
@@ -750,7 +800,7 @@ export async function releaseAppearance(
 }
 
 /** Re-bake an already-baked object after a stack edit: release, then
- *  bake the NEW stack. THREE undo steps (1 + 2) — the panel's edit cost
+ *  bake the NEW stack. TWO undo steps (1 + 1) — the panel's edit cost
  *  on a baked object, named rather than hidden. Returns the metadata
  *  outcome shape `commitAppearance` promises. */
 export async function rebakeAppearance(
@@ -765,14 +815,14 @@ export async function rebakeAppearance(
   }
   const roots = await linkIndex(host).tree();
   const group = parentGroupOf(roots, id);
-  const alive = idsOf(leafIdsOf(roots));
+  const layers = await bakedLayersOf(host, id, record);
   // Release carries the NEW stack straight into the carrier's envelope,
   // so the released state is already the edited one.
   const released = await host.document.mutate(
     releaseBatchFor({
       carrier: id,
       group,
-      layers: record.layers.filter((layerId) => alive.has(layerId)),
+      layers,
       record,
       stack,
       carrierEnvelope: withAppearanceBake(withAppearance(prev, stack), null),

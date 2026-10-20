@@ -91,6 +91,7 @@ import {
 
 import { layoutPages, type PageRect } from "./ui/layout";
 import { pickFiles } from "./shell-file-picker";
+import type { PlaceDropPayload } from "@paged-media/shell";
 import { refusalOf } from "./object-commands";
 
 export const PAGED_INSERT_TEXT_FRAME = "paged.insert.textFrame";
@@ -659,6 +660,23 @@ export function psdHeaderSize(
   return width > 0 && height > 0 ? { width, height } : null;
 }
 
+/** Is `payload` a dropped file to place (F-03)? Anything else (a palette
+ *  run passes none) is an ordinary Place. */
+export function isPlaceDropPayload(
+  payload: unknown,
+): payload is PlaceDropPayload {
+  const p = payload as Partial<PlaceDropPayload> | null | undefined;
+  return (
+    !!p &&
+    !!p.file &&
+    typeof p.file.name === "string" &&
+    p.file.bytes instanceof Uint8Array &&
+    !!p.at &&
+    Number.isFinite(p.at.clientX) &&
+    Number.isFinite(p.at.clientY)
+  );
+}
+
 /** Smallest frame (pt) a place drag draws; a smaller box is a click. */
 const PLACE_MIN_DRAG_PT = 4;
 
@@ -743,9 +761,14 @@ async function selectedEmptyFrame(
 export async function placeImage(
   paged: PagedEditor,
   report: InsertReport,
+  dropped?: PlaceDropPayload,
 ): Promise<InsertOutcome> {
   if (blockedFor(paged, report, "Place image")) return REFUSED;
-  const [file] = await pickFiles({ accept: ["image/*", ".psd", ".psb"] });
+  // A file dropped on the canvas (UX audit F-03, ADR 258) is placed where
+  // it was dropped: no picker, no second click.
+  const [file] = dropped
+    ? [dropped.file]
+    : await pickFiles({ accept: ["image/*", ".psd", ".psb"] });
   if (!file) return REFUSED; // cancelled — an ordinary answer, no report.
 
   // The browser decodes PNG, JPEG and the like itself. What it cannot
@@ -823,29 +846,36 @@ export async function placeImage(
   const h = size.height * scale;
   const natural = size;
 
-  // Ask where. Cancelling is an ordinary answer — no report, exactly
-  // like cancelling the picker above. A drag previews the frame it draws.
-  const point = await awaitPlacementPoint({
-    onDrag: (from, to) => {
-      const a = to ? clientPointToDoc(paged, from.clientX, from.clientY) : null;
-      const b = to ? clientPointToDoc(paged, to.clientX, to.clientY) : null;
-      const box = a && b ? placeDragBox(a, b, natural) : null;
-      const page = a ? (pageContaining(paged, a[0], a[1]) ?? target) : target;
-      paged.overlaySignals.setToolPreview(
-        box
-          ? {
-              pageId: page.pageId,
-              rect: [
-                box.top - page.rect.y,
-                box.left - page.rect.x,
-                box.top - page.rect.y + box.h,
-                box.left - page.rect.x + box.w,
-              ],
-            }
-          : null,
-      );
-    },
-  });
+  // Ask where — unless the drop already said. Cancelling is an ordinary
+  // answer — no report, exactly like cancelling the picker above. A drag
+  // previews the frame it draws.
+  const point = dropped
+    ? { clientX: dropped.at.clientX, clientY: dropped.at.clientY }
+    : await awaitPlacementPoint({
+        onDrag: (from, to) => {
+          const a = to
+            ? clientPointToDoc(paged, from.clientX, from.clientY)
+            : null;
+          const b = to ? clientPointToDoc(paged, to.clientX, to.clientY) : null;
+          const box = a && b ? placeDragBox(a, b, natural) : null;
+          const page = a
+            ? (pageContaining(paged, a[0], a[1]) ?? target)
+            : target;
+          paged.overlaySignals.setToolPreview(
+            box
+              ? {
+                  pageId: page.pageId,
+                  rect: [
+                    box.top - page.rect.y,
+                    box.left - page.rect.x,
+                    box.top - page.rect.y + box.h,
+                    box.left - page.rect.x + box.w,
+                  ],
+                }
+              : null,
+          );
+        },
+      });
   if (!point) return REFUSED;
 
   const doc = clientPointToDoc(paged, point.clientX, point.clientY);
@@ -922,7 +952,11 @@ export interface InsertCommandHandlers {
   ellipse: (paged: PagedEditor) => unknown | Promise<unknown>;
   line: (paged: PagedEditor) => unknown | Promise<unknown>;
   table: (paged: PagedEditor) => unknown | Promise<unknown>;
-  placeImage: (paged: PagedEditor) => unknown | Promise<unknown>;
+  /** `dropped`: a file dropped on the canvas and where (F-03). */
+  placeImage: (
+    paged: PagedEditor,
+    dropped?: PlaceDropPayload,
+  ) => unknown | Promise<unknown>;
   newPage: (paged: PagedEditor) => unknown | Promise<unknown>;
   deletePage: (paged: PagedEditor) => unknown | Promise<unknown>;
 }
@@ -950,7 +984,14 @@ export function buildInsertCommands(
     cmd(PAGED_INSERT_LINE, "Insert line", handlers.line),
     cmd(PAGED_INSERT_TABLE, "Insert table", handlers.table),
     cmd(PAGED_INSERT_DELETE_PAGE, "Delete page", handlers.deletePage),
-    cmd(PAGED_INSERT_PLACE_IMAGE, "Place image…", handlers.placeImage),
+    {
+      ...cmd(PAGED_INSERT_PLACE_IMAGE, "Place image…", handlers.placeImage),
+      handler: (paged, payload) =>
+        handlers.placeImage(
+          paged as PagedEditor,
+          isPlaceDropPayload(payload) ? payload : undefined,
+        ),
+    },
     cmd(PAGED_INSERT_NEW_PAGE, "Add page", handlers.newPage),
   ];
 }

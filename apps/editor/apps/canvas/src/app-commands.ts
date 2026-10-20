@@ -52,6 +52,14 @@ export const PAGED_VIEW_ZOOM_IN = "paged.view.zoomIn";
 export const PAGED_VIEW_ZOOM_OUT = "paged.view.zoomOut";
 export const PAGED_VIEW_ZOOM_100 = "paged.view.zoom100";
 export const PAGED_VIEW_ZOOM_FIT = "paged.view.zoomFit";
+// The fit commands and the page keys (UX audit F-31, F-16; ADR 257).
+export const PAGED_VIEW_FIT_PAGE = "paged.view.fitPage";
+export const PAGED_VIEW_FIT_SPREAD = "paged.view.fitSpread";
+export const PAGED_VIEW_FIT_SELECTION = "paged.view.fitSelection";
+export const PAGED_VIEW_FIRST_PAGE = "paged.view.firstPage";
+export const PAGED_VIEW_PREVIOUS_PAGE = "paged.view.previousPage";
+export const PAGED_VIEW_NEXT_PAGE = "paged.view.nextPage";
+export const PAGED_VIEW_LAST_PAGE = "paged.view.lastPage";
 /** B4 — View ▸ Show text threads. Flips a module-scope view toggle the
  *  thread-line overlay subscribes to. The menu item carries a tick while
  *  it is on (`checked`, SH-4), as InDesign's View ▸ Extras items do. */
@@ -111,6 +119,10 @@ export interface AppCommandHandlers {
   zoomOut: () => void;
   zoom100: () => void;
   zoomFit: () => void;
+  fitPage: () => void;
+  fitSpread: () => void | Promise<void>;
+  fitSelection: () => void | Promise<void>;
+  goToPage: (which: "first" | "previous" | "next" | "last") => void;
 }
 
 /** The undo hooks an active edit context may declare (ADR-012 Tier 1). */
@@ -217,6 +229,48 @@ export function buildAppCommands(
       title: "Fit document",
       category: "View",
       handler: () => handlers.zoomFit(),
+    },
+    {
+      id: PAGED_VIEW_FIT_PAGE,
+      title: "Fit page in window",
+      category: "View",
+      handler: () => handlers.fitPage(),
+    },
+    {
+      id: PAGED_VIEW_FIT_SPREAD,
+      title: "Fit spread in window",
+      category: "View",
+      handler: () => handlers.fitSpread(),
+    },
+    {
+      id: PAGED_VIEW_FIT_SELECTION,
+      title: "Fit selection in window",
+      category: "View",
+      handler: () => handlers.fitSelection(),
+    },
+    {
+      id: PAGED_VIEW_FIRST_PAGE,
+      title: "First page",
+      category: "Layout",
+      handler: () => handlers.goToPage("first"),
+    },
+    {
+      id: PAGED_VIEW_PREVIOUS_PAGE,
+      title: "Previous page",
+      category: "Layout",
+      handler: () => handlers.goToPage("previous"),
+    },
+    {
+      id: PAGED_VIEW_NEXT_PAGE,
+      title: "Next page",
+      category: "Layout",
+      handler: () => handlers.goToPage("next"),
+    },
+    {
+      id: PAGED_VIEW_LAST_PAGE,
+      title: "Last page",
+      category: "Layout",
+      handler: () => handlers.goToPage("last"),
     },
     {
       id: PAGED_VIEW_TOGGLE_TEXT_THREADS,
@@ -343,11 +397,56 @@ export const APP_MENU_ITEMS: MenuItemContribution[] = [
     order: 40,
     group: "zoom",
   },
+  // InDesign's View menu order: the three fits, then the whole
+  // document (its "Entire pasteboard").
+  {
+    path: "View/Fit page in window",
+    command: PAGED_VIEW_FIT_PAGE,
+    order: 42,
+    group: "zoom",
+  },
+  {
+    path: "View/Fit spread in window",
+    command: PAGED_VIEW_FIT_SPREAD,
+    order: 44,
+    group: "zoom",
+  },
+  {
+    path: "View/Fit selection in window",
+    command: PAGED_VIEW_FIT_SELECTION,
+    order: 46,
+    group: "zoom",
+  },
   {
     path: "View/Fit document",
     command: PAGED_VIEW_ZOOM_FIT,
     order: 50,
     group: "zoom",
+  },
+  // Layout ▸ the page keys, as InDesign's Layout menu lists them.
+  {
+    path: "Layout/First page",
+    command: PAGED_VIEW_FIRST_PAGE,
+    order: 20,
+    group: "navigate",
+  },
+  {
+    path: "Layout/Previous page",
+    command: PAGED_VIEW_PREVIOUS_PAGE,
+    order: 21,
+    group: "navigate",
+  },
+  {
+    path: "Layout/Next page",
+    command: PAGED_VIEW_NEXT_PAGE,
+    order: 22,
+    group: "navigate",
+  },
+  {
+    path: "Layout/Last page",
+    command: PAGED_VIEW_LAST_PAGE,
+    order: 23,
+    group: "navigate",
   },
   {
     path: "View/Show text threads",
@@ -391,10 +490,25 @@ export const APP_KEYBINDINGS: KeybindingContribution[] = [
   { key: "ctrl+-", command: PAGED_VIEW_ZOOM_OUT },
   // Fit and 100 % (F-16, SH-9). They lived in a canvas hook, so the View
   // menu showed no chord and a bundle could neither see nor rebind them.
-  { key: "cmd+0", command: PAGED_VIEW_ZOOM_FIT },
-  { key: "ctrl+0", command: PAGED_VIEW_ZOOM_FIT },
+  // InDesign's chords (F-31, ADR 257): Cmd+0 fits the PAGE, Alt+Cmd+0 the
+  // spread, Alt+Cmd+= the selection; the whole document takes the chord
+  // InDesign gives its pasteboard view.
+  { key: "cmd+0", command: PAGED_VIEW_FIT_PAGE },
+  { key: "ctrl+0", command: PAGED_VIEW_FIT_PAGE },
+  { key: "alt+cmd+0", command: PAGED_VIEW_FIT_SPREAD },
+  { key: "alt+ctrl+0", command: PAGED_VIEW_FIT_SPREAD },
+  { key: "alt+cmd+=", command: PAGED_VIEW_FIT_SELECTION },
+  { key: "alt+ctrl+=", command: PAGED_VIEW_FIT_SELECTION },
+  { key: "alt+shift+cmd+0", command: PAGED_VIEW_ZOOM_FIT },
+  { key: "alt+shift+ctrl+0", command: PAGED_VIEW_ZOOM_FIT },
   { key: "cmd+1", command: PAGED_VIEW_ZOOM_100 },
   { key: "ctrl+1", command: PAGED_VIEW_ZOOM_100 },
+  // The page keys (F-16): they lived in a canvas hook too. A text caret
+  // keeps Home and End (useTextEditing consumes them first, in capture).
+  { key: "home", command: PAGED_VIEW_FIRST_PAGE },
+  { key: "pageup", command: PAGED_VIEW_PREVIOUS_PAGE },
+  { key: "pagedown", command: PAGED_VIEW_NEXT_PAGE },
+  { key: "end", command: PAGED_VIEW_LAST_PAGE },
   // Save. Both commands shipped without a key, so the single most
   // reflexive gesture in any editor did nothing at all — and the app has
   // no autosave, so the reflex failing is not a small matter. Cmd+S is

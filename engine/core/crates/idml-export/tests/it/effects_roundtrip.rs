@@ -105,7 +105,7 @@ fn an_inserted_frame_carries_its_effects_and_reads_them_back() {
     let out = write_idml(&doc, &src).expect("write");
     let xml = pkg::entry(&out, "Spreads/Spread_s1.xml").expect("spread");
     assert!(
-        xml.contains(r#"<TransparencySetting><BlendingSetting Opacity="80"/><DropShadowSetting Mode="Drop" Opacity="75" XOffset="4" YOffset="4" Size="6" Distance="5.6569" Angle="135" UseGlobalLight="false" KnockedOut="true" EffectColor="Color/Black"/><InnerShadowSetting Applied="true" Opacity="50" XOffset="2" YOffset="2" Size="5" Distance="2.83" Angle="135" ChokeAmount="10" Noise="0" BlendMode="Multiply" EffectColor="Color/Black"/><OuterGlowSetting Applied="true" Opacity="60" Size="9" Spread="20" Noise="0" BlendMode="Screen" EffectColor="Color/Red"/><FeatherSetting Mode="Standard" Width="7" ChokeAmount="0" Noise="0" CornerType="Diffusion"/></TransparencySetting>"#),
+        xml.contains(r#"<TransparencySetting><BlendingSetting Opacity="80"/><DropShadowSetting Mode="Drop" Opacity="75" XOffset="4" YOffset="4" Size="6" Distance="5.656854" Angle="135" UseGlobalLight="false" KnockedOut="true" EffectColor="Color/Black"/><InnerShadowSetting Applied="true" Opacity="50" XOffset="2" YOffset="2" Size="5" Distance="2.83" Angle="135" ChokeAmount="10" Noise="0" BlendMode="Multiply" EffectColor="Color/Black"/><OuterGlowSetting Applied="true" Opacity="60" Size="9" Spread="20" Noise="0" BlendMode="Screen" EffectColor="Color/Red"/><FeatherSetting Mode="Standard" Width="7" ChokeAmount="0" Noise="0" CornerType="Diffusion"/></TransparencySetting>"#),
         "{xml}"
     );
     let re = pkg::open(&out);

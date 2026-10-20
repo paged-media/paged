@@ -90,3 +90,9 @@ survives an IDML save and re-import with the envelope on the carrier
 - [ADR 316](https://github.com/paged-media/plugin-sdk/blob/main/docs/adr/316-native-content-and-baking.md), [ADR 311](https://github.com/paged-media/plugin-sdk/blob/main/docs/adr/311-plugin-state-under-own-id.md) — the general rule for native content and baking; state under the plugin's own id
 - [ADR 310](https://github.com/paged-media/plugin-sdk/blob/main/docs/adr/310-one-write-door.md), [ADR 010](https://github.com/paged-media/plugin-sdk/blob/main/docs/adr/010-raw-mutate-gate-capability-enforcement.md), [ADR 309](https://github.com/paged-media/plugin-sdk/blob/main/docs/adr/309-conformance-against-real-engine.md) — the write door; the gate a raw `setPluginMetadata` passes; the real engine behind the measured counts
 - [ADR 351](351-shapes-are-native-page-items.md), [ADR 355](355-libraries-in-container-parts.md), [ADR 356](356-live-constructs-are-recipes.md) — native items; document-level state; recipes
+
+## Amendment 2026-10-20
+
+A bake is one batch and one undo step, and a re-bake two
+([ADR 360](360-records-name-no-minted-ids.md)): the bake record no longer lists its layers; they
+are the carrier's group members whose `appearanceLayer` marker names the carrier.
