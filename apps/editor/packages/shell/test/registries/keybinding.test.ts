@@ -481,6 +481,18 @@ describe("the focused widget keeps the keys it consumes (targetOwnsKey)", () => 
     ).toBe(false);
   });
 
+  test("a menu key a focused control already took is the control's (a rail tool's flyout, not the canvas context menu)", () => {
+    expect(
+      keyIn("F10", el("BUTTON"), { defaultPrevented: true, shiftKey: true }),
+    ).toBe(true);
+    expect(keyIn("ContextMenu", el("BUTTON"), { defaultPrevented: true })).toBe(
+      true,
+    );
+    // Not taken: the binding still fires (the canvas context menu).
+    expect(keyIn("F10", el("BUTTON"), { shiftKey: true })).toBe(false);
+    expect(keyIn("ContextMenu", el("BUTTON"))).toBe(false);
+  });
+
   test("no target, or a target with no tag (the window), owns nothing", () => {
     expect(keyIn("v", null)).toBe(false);
     expect(keyIn("ArrowLeft", {} as HTMLElement)).toBe(false);

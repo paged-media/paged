@@ -583,6 +583,11 @@ export function useTextEditing(ctx: TextEditingContext) {
         surface.focus({ preventScroll: true });
       }
     } else if (active === surface) {
+      // The surface sits INSIDE the viewport, and focusCanvasViewport
+      // leaves focus alone that is already within it — so without the
+      // blur the caretless textarea kept focus and ate the arrows and
+      // Backspace that are the selected frame's again (AC-OBJ-24).
+      surface.blur();
       focusCanvasViewport();
     }
   }, [hasCaret, ctx.selection]);

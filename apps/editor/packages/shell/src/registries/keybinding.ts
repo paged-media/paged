@@ -20,6 +20,7 @@
 import type * as Api from "@paged-media/plugin-api";
 
 import {
+  MENU_KEYS,
   WIDGET_KEYS,
   insideKeyOwningContainer,
   isActivatable,
@@ -245,6 +246,10 @@ export function targetOwnsKey(
   // keys — applying it to every binding would change what happens to
   // chords other hooks already `preventDefault` today.
   if (isWidgetKey && event.defaultPrevented) return true;
+  // The same for the menu keys: a focused rail tool opens its flyout on
+  // Shift+F10 and prevents the default, so the canvas context menu bound
+  // to that key does not open over the flyout and take its focus.
+  if (MENU_KEYS.has(key) && event.defaultPrevented) return true;
   const target = event.target as HTMLElement | null;
   if (!target || !target.tagName) return false;
   // Tab moves focus (F-49): from a field, a button, a dialog, the page.
