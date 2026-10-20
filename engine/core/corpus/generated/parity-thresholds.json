@@ -13,6 +13,12 @@
       "parity_only": true,
       "measured": 0.051,
       "rationale": "The placed-SVG fixtures (ADR 190), no InDesign reference. Both lanes draw the same pixels, the SVG drawn and filtered on the CPU when it is decoded; what differs is how each samples the image at 144 dpi."
+    },
+    {
+      "name": "svg-vectors",
+      "parity_only": true,
+      "measured": 0.015,
+      "rationale": "A placed SVG drawn as vectors (ADR 190, amendment of 2026-10-20), no InDesign reference: four placements emit the SVG's paths, gradients, clips and groups into the display list, the fifth (stretched) keeps the SVG's raster."
     }
   ]
 }
