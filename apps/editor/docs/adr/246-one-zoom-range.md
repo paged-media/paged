@@ -29,3 +29,9 @@ and on Windows and Linux a Shift+wheel is the horizontal scroll.
 
 SH-9, F-31 and F-33 close (`test/unit/keybindings.test.ts`, `tests/e2e/ux-audit-gestures.spec.ts`).
 Fit page, Fit spread and Fit selection (the rest of F-31's recommendation) are not added here.
+
+## Amendment 2026-10-20
+
+Cmd/Ctrl+0 fits the page now and Fit document moved to Alt+Shift+Cmd/Ctrl+0; Fit page, Fit
+spread, Fit selection, zoom presets and the page keys are added as commands
+([ADR 257](257-indesigns-fits-and-page-keys.md)).

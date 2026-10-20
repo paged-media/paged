@@ -44,6 +44,8 @@ export {
 } from "./lib/stored-settings";
 export {
   clampCamera,
+  zoomCameraTo,
+  ZOOM_PRESET_SCALES,
   clampScale,
   ZOOM_MAX_SCALE,
   ZOOM_MIN_SCALE,
@@ -329,6 +331,10 @@ export {
   buildNewDocumentCommand,
   buildNewFromBriefCommand,
   openFile,
+  dropFile,
+  dropPlaces,
+  PLACE_DROPPED_COMMAND,
+  type PlaceDropPayload,
   PAGED_FILE_NEW_FROM_BRIEF,
   buildOpenIdmlCommand,
   PAGED_FILE_NEW,

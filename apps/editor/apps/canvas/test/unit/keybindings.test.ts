@@ -358,21 +358,56 @@ describe("the tables as a whole", () => {
     );
   });
 
-  // Finding SH-9 (UX F-16), fixed: Cmd+0 (Fit document) and Cmd+1 (Zoom
-  // to 100%) worked through a canvas hook, not the registry, so the View
-  // menu showed no chord for them and a plugin could not see or rebind them.
-  test("SH-9 (F-16): Fit document and Zoom to 100% are registry bindings", () => {
+  // Finding SH-9 (UX F-16), fixed: Cmd+0 and Cmd+1 (Zoom to 100%) worked
+  // through a canvas hook, not the registry, so the View menu showed no
+  // chord for them and a plugin could not see or rebind them. F-31 (ADR
+  // 257) gave Cmd+0 InDesign's meaning, Fit page; Fit document moved to
+  // the chord InDesign gives its whole-pasteboard view.
+  test("SH-9 (F-16), F-31: the fits and Zoom to 100% are registry bindings, on InDesign's chords", () => {
     covers(
       "command:paged.view.zoomFit",
       "command:paged.view.zoom100",
-      "keybinding:cmd+0→paged.view.zoomFit",
-      "keybinding:ctrl+0→paged.view.zoomFit",
+      "command:paged.view.fitPage",
+      "command:paged.view.fitSpread",
+      "command:paged.view.fitSelection",
+      "keybinding:cmd+0→paged.view.fitPage",
+      "keybinding:ctrl+0→paged.view.fitPage",
+      "keybinding:alt+cmd+0→paged.view.fitSpread",
+      "keybinding:alt+ctrl+0→paged.view.fitSpread",
+      "keybinding:alt+cmd+=→paged.view.fitSelection",
+      "keybinding:alt+ctrl+=→paged.view.fitSelection",
+      "keybinding:alt+shift+cmd+0→paged.view.zoomFit",
+      "keybinding:alt+shift+ctrl+0→paged.view.zoomFit",
       "keybinding:cmd+1→paged.view.zoom100",
       "keybinding:ctrl+1→paged.view.zoom100",
     );
-    expect(fires("cmd+0")).toBe("paged.view.zoomFit");
-    expect(fires("ctrl+0")).toBe("paged.view.zoomFit");
+    expect(fires("cmd+0")).toBe("paged.view.fitPage");
+    expect(fires("ctrl+0")).toBe("paged.view.fitPage");
+    expect(fires("alt+cmd+0")).toBe("paged.view.fitSpread");
+    expect(fires("alt+ctrl+0")).toBe("paged.view.fitSpread");
+    expect(fires("alt+cmd+=")).toBe("paged.view.fitSelection");
+    expect(fires("alt+ctrl+=")).toBe("paged.view.fitSelection");
+    expect(fires("alt+shift+cmd+0")).toBe("paged.view.zoomFit");
+    expect(fires("alt+shift+ctrl+0")).toBe("paged.view.zoomFit");
     expect(fires("cmd+1")).toBe("paged.view.zoom100");
     expect(fires("ctrl+1")).toBe("paged.view.zoom100");
+  });
+
+  // F-16 (ADR 257): the page keys lived in a canvas hook as well.
+  test("F-16: the page keys are registry bindings", () => {
+    covers(
+      "command:paged.view.firstPage",
+      "command:paged.view.previousPage",
+      "command:paged.view.nextPage",
+      "command:paged.view.lastPage",
+      "keybinding:home→paged.view.firstPage",
+      "keybinding:pageup→paged.view.previousPage",
+      "keybinding:pagedown→paged.view.nextPage",
+      "keybinding:end→paged.view.lastPage",
+    );
+    expect(fires("home")).toBe("paged.view.firstPage");
+    expect(fires("pageup")).toBe("paged.view.previousPage");
+    expect(fires("pagedown")).toBe("paged.view.nextPage");
+    expect(fires("end")).toBe("paged.view.lastPage");
   });
 });

@@ -55,3 +55,28 @@ export function clampCamera(
   const docY = (cy - cam.ty) / cam.scale;
   return { scale, tx: cx - docX * scale, ty: cy - docY * scale };
 }
+
+/** The zoom presets of the zoom drop-down (UX audit F-31, ADR 257), as
+ *  camera scales, all inside the range. InDesign's menu, trimmed to the
+ *  steps that are not one keyboard zoom apart. */
+export const ZOOM_PRESET_SCALES: readonly number[] = [
+  0.25, 0.5, 0.75, 1, 1.5, 2, 4, 8,
+];
+
+/**
+ * The camera at `scale` (clamped to the range) with the document point
+ * at the viewport's centre kept where it is: a preset zooms about what
+ * the user is looking at, as a keyboard zoom does.
+ */
+export function zoomCameraTo(
+  cam: Camera,
+  scale: number,
+  viewport: readonly [number, number],
+): Camera {
+  const next = clampScale(scale);
+  const cx = viewport[0] / 2;
+  const cy = viewport[1] / 2;
+  const docX = (cx - cam.tx) / cam.scale;
+  const docY = (cy - cam.ty) / cam.scale;
+  return { scale: next, tx: cx - docX * next, ty: cy - docY * next };
+}

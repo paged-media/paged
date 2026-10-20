@@ -227,6 +227,21 @@ describe("an Alt chord on a Mac, where Option changes the key", () => {
       ),
     ).toBeNull();
   });
+
+  test("Option+Cmd+= matches by the physical key (InDesign's Fit selection, F-31)", () => {
+    covers("keybinding:alt+cmd+=→paged.view.fitSelection");
+    const b: KeybindingContribution[] = [
+      { key: "alt+cmd+=", command: "paged.view.fitSelection" },
+    ];
+    // macOS reports key "≠" for Option+=, code "Equal".
+    expect(
+      resolveBinding(b, press("cmd+alt+≠", { code: "Equal" }))?.command,
+    ).toBe("paged.view.fitSelection");
+    // Another physical key with the same character does not.
+    expect(
+      resolveBinding(b, press("cmd+alt+≠", { code: "Minus" }))?.command,
+    ).toBeUndefined();
+  });
 });
 
 describe("the dispatch rule among bindings on one key", () => {

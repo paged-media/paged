@@ -44,14 +44,16 @@ describe("Keyboard shortcuts panel", () => {
     const h = await mountPanel(KeyboardShortcutsPanel, {
       id: "paged.keyboard-shortcuts",
     });
-    expect(h.root.textContent).toContain("Commands (0)");
+    expect(h.root.querySelector("[data-shortcut-group]")).toBeNull();
     expect(rows(h)).toEqual([]);
     expect(
       h.root.querySelector('[data-shortcut-adhoc="Undo"]')?.textContent,
     ).toContain(prettyKey("cmd+z"));
+    // The page keys are registry bindings now (F-16, ADR 257): listed
+    // with the commands, not in the maintained table.
     expect(
       h.root.querySelector('[data-shortcut-adhoc="First page"]'),
-    ).not.toBeNull();
+    ).toBeNull();
   });
 
   test("registered bindings: under the command's title, sorted, Cmd and Ctrl twins once", async () => {
@@ -76,11 +78,50 @@ describe("Keyboard shortcuts panel", () => {
         r.keybindings.register({ key: "f5", command: "test.unregistered" });
       },
     });
-    expect(h.root.textContent).toContain("Commands (3)");
+    // No category: one "General" context.
+    expect(h.root.textContent).toContain("General (3)");
     expect(rows(h)).toEqual([
       ["Align left", prettyKey(nativeKey(["shift+l"]))],
       ["test.unregistered", prettyKey(nativeKey(["f5"]))],
       ["Zoom in", prettyKey(nativeKey(["cmd+=", "ctrl+="]))],
+    ]);
+  });
+
+  // F-16: the panel is grouped by context, so one chord in two contexts
+  // (Cmd+D places an image, and fills down inside a sheet) reads as two
+  // contexts rather than a duplicate.
+  test("F-16: grouped by context, a chord two contexts share is listed under each", async () => {
+    covers("panel:paged.keyboard-shortcuts");
+    const h = await mountPanel(KeyboardShortcutsPanel, {
+      id: "paged.keyboard-shortcuts",
+      registries: (r) => {
+        r.commands.register({
+          id: "test.place",
+          title: "Place image…",
+          category: "File",
+          handler: noop,
+        });
+        r.commands.register({
+          id: "test.fillDown",
+          title: "Fill down",
+          category: "Sheet",
+          handler: noop,
+        });
+        r.keybindings.register({ key: "cmd+d", command: "test.place" });
+        r.keybindings.register({ key: "cmd+d", command: "test.fillDown" });
+      },
+    });
+    const groups = [
+      ...h.root.querySelectorAll<HTMLElement>("[data-shortcut-group]"),
+    ].map((g) => [
+      g.dataset.shortcutGroup,
+      [...g.querySelectorAll("[data-shortcut-row]")].map(
+        (r) => r.querySelector("span")?.textContent,
+      ),
+    ]);
+    expect(groups).toEqual([
+      ["File", ["Place image…"]],
+      ["Sheet", ["Fill down"]],
     ]);
   });
 

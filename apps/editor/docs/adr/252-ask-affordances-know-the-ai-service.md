@@ -28,3 +28,10 @@ it has no key, no usage store or no budget left.
 - PN-352 and PN-355 close.
 - The palette's "Ask Claude" and "New from a brief…" do not read the probe yet; they are the
   rest of F-25.
+
+## Amendment 2026-10-20
+
+The palette's "Ask Claude" row and File ▸ New from a brief… read the probe too (the rest of
+F-25): with no service the ask row is disabled and says why, the footer's attribution is not
+shown, and the brief command's `when` does not hold, so the palette hides it and the menu greys
+it (ADR 249).
