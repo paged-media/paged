@@ -16,6 +16,14 @@ Options:
           
           [default: 127.0.0.1]
 
+      --workers <WORKERS>
+          Calls answered at once, each with its own engine session. Default: the machine's parallelism
+
+      --queue <QUEUE>
+          Calls that wait for a worker; one more is answered 503 at once
+          
+          [default: 64]
+
       --fonts <DIR|FILE>
           Font file or directory to make available, repeatable.
           

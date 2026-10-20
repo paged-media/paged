@@ -17,7 +17,9 @@
  */
 
 //! `paged engine-serve` end to end: the real binary on a port, one stateless
-//! call that loads a document, runs a script, renders and exports.
+//! call that loads a document, runs a script, renders and exports; PDF and
+//! PDF/X exports; concurrent calls answered in parallel, each on its own
+//! engine.
 
 use std::io::{Read, Write};
 use std::net::TcpStream;
@@ -91,4 +93,177 @@ fn one_call_loads_scripts_renders_and_exports() {
     let _ = child.kill();
     let _ = child.wait();
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// A server on its own port with `extra` flags, and a blank A5 document.
+struct Served {
+    child: std::process::Child,
+    port: u16,
+    dir: std::path::PathBuf,
+    file: String,
+}
+
+impl Drop for Served {
+    fn drop(&mut self) {
+        let _ = self.child.kill();
+        let _ = self.child.wait();
+        let _ = std::fs::remove_dir_all(&self.dir);
+    }
+}
+
+fn serve(tag: &str, offset: u16, extra: &[&str]) -> Served {
+    let dir = std::env::temp_dir().join(format!("paged-engine-serve-{tag}-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let doc = dir.join("d.paged");
+    assert!(Command::new(env!("CARGO_BIN_EXE_paged"))
+        .args(["new", "--size", "a5", "--out", doc.to_str().unwrap()])
+        .status()
+        .unwrap()
+        .success());
+    let port = 20000 + ((std::process::id() + u32::from(offset)) % 20000) as u16;
+    let child = Command::new(env!("CARGO_BIN_EXE_paged"))
+        .args(["engine-serve", "--port", &port.to_string()])
+        .args(extra)
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+    for _ in 0..100 {
+        if TcpStream::connect(("127.0.0.1", port)).is_ok() {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    let file = base64::engine::general_purpose::STANDARD.encode(std::fs::read(&doc).unwrap());
+    Served {
+        child,
+        port,
+        dir,
+        file,
+    }
+}
+
+const TEXT_SCRIPT: &str = r#"
+    const p = paged.pages(); const list = typeof p === "string" ? JSON.parse(p) : p;
+    const f = paged.insertTextFrame(list[0].selfId, [72, 72, 200, 300]);
+    console.log("frame:" + f);
+"#;
+
+#[test]
+fn exports_pdf_alone_and_beside_the_paged() {
+    let s = serve("pdf", 7, &[]);
+    let b64 = base64::engine::general_purpose::STANDARD;
+    let (status, out) = call(
+        s.port,
+        &json!({ "file": s.file, "script": TEXT_SCRIPT, "export": "pdf" }),
+    );
+    assert_eq!(status, 200, "{out}");
+    assert_eq!(out["format"], "pdf");
+    let pdf = b64.decode(out["file"].as_str().unwrap()).unwrap();
+    assert!(pdf.starts_with(b"%PDF-"), "a PDF comes back");
+
+    let (status, out) = call(
+        s.port,
+        &json!({ "file": s.file, "export": [ "paged", { "format": "pdf", "pdf": { "standard": "pdf17" } } ] }),
+    );
+    assert_eq!(status, 200, "{out}");
+    let files = out["files"]
+        .as_array()
+        .expect("an array of exports answers files");
+    assert_eq!(files.len(), 2);
+    assert_eq!(files[0]["format"], "paged");
+    assert!(b64
+        .decode(files[0]["file"].as_str().unwrap())
+        .unwrap()
+        .starts_with(b"PK"));
+    assert_eq!(files[1]["format"], "pdf");
+    assert!(b64
+        .decode(files[1]["file"].as_str().unwrap())
+        .unwrap()
+        .starts_with(b"%PDF-"));
+
+    let (status, out) = call(s.port, &json!({ "file": s.file, "export": "docx" }));
+    assert_eq!(status, 422, "an unknown export format is refused: {out}");
+    assert!(out["error"].as_str().unwrap().contains("docx"), "{out}");
+}
+
+#[test]
+fn exports_pdf_x4_with_the_calls_own_profile() {
+    let Some(icc) = paged_color::test_profiles::read_cmyk_profile(env!("CARGO_MANIFEST_DIR"))
+    else {
+        paged_test_resources::skip!(
+            paged_test_resources::Resource::Icc,
+            "{}",
+            paged_color::test_profiles::NO_PROFILE_HINT
+        );
+    };
+    let s = serve("pdfx", 13, &[]);
+    let b64 = base64::engine::general_purpose::STANDARD;
+    let (status, out) = call(
+        s.port,
+        &json!({
+            "file": s.file,
+            "cmykProfile": b64.encode(&icc),
+            "export": { "format": "pdf", "pdf": { "standard": "pdfx4" } },
+        }),
+    );
+    assert_eq!(status, 200, "{out}");
+    let pdf = b64.decode(out["file"].as_str().unwrap()).unwrap();
+    let text = String::from_utf8_lossy(&pdf);
+    assert!(
+        text.contains("/OutputIntent"),
+        "PDF/X-4 carries an output intent"
+    );
+    assert!(text.contains("PDF/X-4"), "and says it is PDF/X-4");
+}
+
+#[test]
+fn concurrent_calls_each_run_on_an_engine_of_their_own() {
+    let s = serve("conc", 19, &["--workers", "4"]);
+    let b64 = base64::engine::general_purpose::STANDARD;
+    let port = s.port;
+    let base_script = r#"const t = paged.stories(); console.log("stories:" + (typeof t === "string" ? JSON.parse(t) : t).length);"#;
+    let (status, out) = call(port, &json!({ "file": s.file, "script": base_script }));
+    assert_eq!(status, 200, "{out}");
+    let base: usize = out["output"]
+        .to_string()
+        .split("stories:")
+        .nth(1)
+        .and_then(|t| t.split(|c: char| !c.is_ascii_digit()).next())
+        .and_then(|n| n.parse().ok())
+        .unwrap_or_else(|| panic!("no story count in {out}"));
+    let calls: Vec<_> = (0..8)
+        .map(|i| {
+            let file = s.file.clone();
+            std::thread::spawn(move || {
+                // Each call adds a different number of frames; a shared
+                // engine would leak one call's frames into another's count.
+                let script = format!(
+                    r#"
+                    const p = paged.pages(); const list = typeof p === "string" ? JSON.parse(p) : p;
+                    for (let k = 0; k < {n}; k++) paged.insertTextFrame(list[0].selfId, [72 + k, 72, 200 + k, 300]);
+                    const t = paged.stories(); const stories = typeof t === "string" ? JSON.parse(t) : t;
+                    console.log("stories:" + stories.length);
+                "#,
+                    n = i + 1
+                );
+                let (status, out) = call(port, &json!({ "file": file, "script": script, "export": "pdf" }));
+                (i, status, out)
+            })
+        })
+        .collect();
+    for c in calls {
+        let (i, status, out) = c.join().unwrap();
+        assert_eq!(status, 200, "call {i}: {out}");
+        assert!(out["error"].is_null(), "call {i}: {out}");
+        assert!(
+            out["output"]
+                .to_string()
+                .contains(&format!("stories:{}", base + i + 1)),
+            "call {i} sees only its own frames: {out}"
+        );
+        assert!(b64
+            .decode(out["file"].as_str().unwrap())
+            .unwrap()
+            .starts_with(b"%PDF-"));
+    }
 }
