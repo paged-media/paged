@@ -111,31 +111,27 @@ describe("paged.links and a link that does not resolve", () => {
     expect(await status(e, STRUCTURE.imageFrame.id)).toBe("missing");
   });
 
-  // Finding SCR-14: `placeImage` sets only the frame's link (by design it
-  // does not mark the frame as holding an image), and the build records a
-  // missing image only for a frame that holds one, so a placed link that
-  // never resolves reads "ok" and the frame draws nothing. The command
-  // line's `paged place` refuses a missing file up front; the script door
-  // takes any uri.
-  test.failing(
-    "SCR-14: an image placed from a file that does not exist reports its link missing",
-    async () => {
-      covers("script:paged.placeImage", "script:paged.links");
-      const e = (ed = await createHeadlessEditor({ blank: [612, 792] }));
-      const frame = (await run(
-        e,
-        `const pid = JSON.parse(paged.pages())[0].selfId;
+  // Finding SCR-14 (fixed, engine ADR 198): `placeImage` sets only the
+  // frame's link, and the build recorded a missing image only for a frame
+  // that held a parsed <Image>, so a placed link that never resolved read
+  // "ok". A link that resolves to nothing reads "missing" now, however it
+  // was placed.
+  test("SCR-14: an image placed from a file that does not exist reports its link missing", async () => {
+    covers("script:paged.placeImage", "script:paged.links");
+    const e = (ed = await createHeadlessEditor({ blank: [612, 792] }));
+    const frame = (await run(
+      e,
+      `const pid = JSON.parse(paged.pages())[0].selfId;
          const f = paged.insertFrame(pid, [72, 72, 200, 200]);
          console.log(JSON.stringify(f.split(":").pop()));`,
-      )) as string;
-      // The bare id: the address `insertFrame` answers is refused (SCR-4).
-      expect(
-        await run(
-          e,
-          `console.log(paged.placeImage(${JSON.stringify(frame)}, "file:///no/such/image.png"))`,
-        ),
-      ).toBe(true);
-      expect(await status(e, frame)).toBe("missing");
-    },
-  );
+    )) as string;
+    // The bare id: the address `insertFrame` answers is refused (SCR-4).
+    expect(
+      await run(
+        e,
+        `console.log(paged.placeImage(${JSON.stringify(frame)}, "file:///no/such/image.png"))`,
+      ),
+    ).toBe(true);
+    expect(await status(e, frame)).toBe("missing");
+  });
 });

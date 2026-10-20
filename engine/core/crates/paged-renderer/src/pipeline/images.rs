@@ -42,10 +42,19 @@ fn report_image_resolution(
             DiagnosticCode::ImageDecodeFailed,
             "placed image could not be decoded; frame fill used instead",
         ),
-        ImageResolution::LinkMissing if has_image_element && !has_inline_unrasterizable => (
-            DiagnosticCode::ImageLinkMissing,
-            "placed image link could not be resolved; placeholder drawn",
-        ),
+        // A frame that names a link is an image frame for this report
+        // whether or not it nests a parsed `<Image>`: a picture placed
+        // through the authoring doors (`PlaceImage`) sets only the link,
+        // and a link that resolves to nothing is missing either way
+        // (SCR-14, engine ADR 198).
+        ImageResolution::LinkMissing
+            if (has_image_element || uri.is_some()) && !has_inline_unrasterizable =>
+        {
+            (
+                DiagnosticCode::ImageLinkMissing,
+                "placed image link could not be resolved; placeholder drawn",
+            )
+        }
         _ => return,
     };
     let mut d = Diagnostic::new(code, msg);

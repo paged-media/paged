@@ -109,6 +109,16 @@ describe("Story inspector", () => {
   });
 });
 
+/** A 2 × 2 RGBA PNG (solid green). */
+const PNG_2X2 = new Uint8Array([
+  0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49,
+  0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x02, 0x08, 0x06,
+  0x00, 0x00, 0x00, 0x72, 0xb6, 0x0d, 0x24, 0x00, 0x00, 0x00, 0x11, 0x49, 0x44,
+  0x41, 0x54, 0x78, 0xda, 0x63, 0x50, 0x3a, 0x1a, 0xf7, 0x1f, 0x84, 0x19, 0x60,
+  0x0c, 0x00, 0x4d, 0x42, 0x09, 0x11, 0x4f, 0x30, 0xb7, 0xb3, 0x00, 0x00, 0x00,
+  0x00, 0x49, 0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82,
+]);
+
 describe("Output readiness", () => {
   test("no document: every row is a seam and there is no verdict", async () => {
     covers("panel:paged.output-readiness");
@@ -155,14 +165,24 @@ describe("Output readiness", () => {
       id: "paged.output-readiness",
       scene: richScene,
     });
-    // An image placed in the editor: the link resolves (ok), its PPI is
-    // not recorded.
-    await h.act(() =>
-      apply(h.client, {
+    // An image placed in the editor, its link named and its bytes inline:
+    // it resolves (ok) and its PPI is not recorded. A link nothing resolves
+    // reads missing instead (SCR-14, engine ADR 198), and a missing link
+    // has no PPI to be unknown.
+    await h.act(async () => {
+      await apply(h.client, {
         op: "placeImage",
-        args: { elementId: String(h.scene.rect.id), uri: "file:///p/x.jpg" },
-      } as never),
-    );
+        args: { elementId: String(h.scene.rect.id), uri: "file:///p/x.png" },
+      } as never);
+      await apply(h.client, {
+        op: "replaceImageBytes",
+        args: {
+          elementId: String(h.scene.rect.id),
+          bytes: Array.from(PNG_2X2),
+        },
+      } as never);
+    });
+    expect(checks(h).links).toEqual({ pass: "true", detail: "ok" });
     expect(checks(h).ppi).toEqual({ pass: "unknown", detail: "1 unknown" });
   });
 
