@@ -33,6 +33,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { film, type Kit } from "../kit/film";
 import { hover, menu, press, screenPoint } from "../kit/ui";
+import { decodeEan13 } from "../kit/ean";
 
 const MEDIA = process.env.PAGED_MEDIA_ROOT ?? "";
 const CSV = join(MEDIA, "assets", "catalogue.csv");
@@ -409,74 +410,6 @@ async function elements(
       ).items ?? []
     ).map((it) => ({ id: it.id.id, bounds: it.bounds }));
   }, kind);
-}
-
-/** Read an EAN-13 back from its bars: 95 modules between the outer guards,
- *  each dark when a bar covers its centre, decoded with the L/G/R tables. */
-function decodeEan13(bars: Bounds[]): string {
-  const left = Math.min(...bars.map((b) => b[1]));
-  const right = Math.max(...bars.map((b) => b[3]));
-  const unit = (right - left) / 95;
-  let bits = "";
-  for (let m = 0; m < 95; m++) {
-    const x = left + (m + 0.5) * unit;
-    bits += bars.some((b) => x > b[1] && x < b[3]) ? "1" : "0";
-  }
-  const L = [
-    "0001101",
-    "0011001",
-    "0010011",
-    "0111101",
-    "0100011",
-    "0110001",
-    "0101111",
-    "0111011",
-    "0110111",
-    "0001011",
-  ];
-  const G = L.map((c) =>
-    [...c]
-      .map((x) => (x === "1" ? "0" : "1"))
-      .reverse()
-      .join(""),
-  );
-  const R = L.map((c) => [...c].map((x) => (x === "1" ? "0" : "1")).join(""));
-  const FIRST = [
-    "LLLLLL",
-    "LLGLGG",
-    "LLGGLG",
-    "LLGGGL",
-    "LGLLGG",
-    "LGGLLG",
-    "LGGGLL",
-    "LGLGLG",
-    "LGLGGL",
-    "LGGLGL",
-  ];
-  if (
-    bits.slice(0, 3) !== "101" ||
-    bits.slice(45, 50) !== "01010" ||
-    bits.slice(92) !== "101"
-  )
-    throw new Error(`not an EAN-13 bar pattern: ${bits}`);
-  let parity = "";
-  let digits = "";
-  for (let i = 0; i < 6; i++) {
-    const c = bits.slice(3 + i * 7, 10 + i * 7);
-    const l = L.indexOf(c);
-    const g = G.indexOf(c);
-    if (l >= 0) ((digits += l), (parity += "L"));
-    else if (g >= 0) ((digits += g), (parity += "G"));
-    else throw new Error(`left digit ${i}: ${c}`);
-  }
-  for (let i = 0; i < 6; i++) {
-    const r = R.indexOf(bits.slice(50 + i * 7, 57 + i * 7));
-    if (r < 0) throw new Error(`right digit ${i}`);
-    digits += r;
-  }
-  const first = FIRST.indexOf(parity);
-  if (first < 0) throw new Error(`parity ${parity}`);
-  return `${first}${digits}`;
 }
 
 /** Choose an option in a native select: the pointer goes to the field and
