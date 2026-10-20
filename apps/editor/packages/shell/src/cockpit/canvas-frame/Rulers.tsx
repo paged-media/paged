@@ -32,29 +32,14 @@
 
 import { useCamera } from "../../state/camera-context";
 import { useOptionalGuideDrag } from "../../state/guide-drag-context";
-
-/** Pick a "nice" doc-space step so marks sit 60–140 px apart. */
-function rulerStep(scale: number): number {
-  const steps = [1, 2, 5, 10, 25, 50, 100, 250, 500, 1000, 2500, 5000];
-  for (const s of steps) {
-    if (s * scale >= 60) return s;
-  }
-  return steps[steps.length - 1];
-}
+import { RULER_LABEL_INSET, rulerMarks } from "./ruler-marks";
 
 export function HRuler() {
   const { camera, viewportSize } = useCamera();
   const guideDrag = useOptionalGuideDrag();
-  const width = viewportSize[0] || 0;
-  const step = rulerStep(camera.scale);
-  const marks: Array<{ px: number; label: number }> = [];
-  if (width > 0 && camera.scale > 0) {
-    const docStart = (0 - camera.tx) / camera.scale;
-    const first = Math.floor(docStart / step) * step;
-    for (let d = first; d * camera.scale + camera.tx < width; d += step) {
-      marks.push({ px: d * camera.scale + camera.tx, label: d });
-    }
-  }
+  // Labels thinned so the widest one in view fits between two marks
+  // (UX audit F-31, ADR 263).
+  const marks = rulerMarks(camera.scale, camera.tx, viewportSize[0] || 0);
   return (
     <div
       data-h-ruler
@@ -81,7 +66,8 @@ export function HRuler() {
     >
       {marks.map((m) => (
         <div
-          key={m.label}
+          key={m.value}
+          data-ruler-mark={m.value}
           style={{
             position: "absolute",
             left: m.px,
@@ -90,19 +76,22 @@ export function HRuler() {
             borderLeft: "1px solid var(--chrome-divider)",
           }}
         >
-          <span
-            style={{
-              position: "absolute",
-              left: 3,
-              top: 4,
-              fontFamily: "var(--font-mono)",
-              fontSize: 9,
-              color: "var(--pg-muted-fg)",
-              whiteSpace: "nowrap",
-            }}
-          >
-            {m.label}
-          </span>
+          {m.label !== null && (
+            <span
+              data-ruler-label
+              style={{
+                position: "absolute",
+                left: RULER_LABEL_INSET,
+                top: 4,
+                fontFamily: "var(--font-mono)",
+                fontSize: 9,
+                color: "var(--pg-muted-fg)",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {m.label}
+            </span>
+          )}
         </div>
       ))}
     </div>
@@ -114,16 +103,7 @@ export function HRuler() {
 export function VRulerStrip() {
   const { camera, viewportSize } = useCamera();
   const guideDrag = useOptionalGuideDrag();
-  const height = viewportSize[1] || 0;
-  const step = rulerStep(camera.scale);
-  const marks: Array<{ px: number; label: number }> = [];
-  if (height > 0 && camera.scale > 0) {
-    const docStart = (0 - camera.ty) / camera.scale;
-    const first = Math.floor(docStart / step) * step;
-    for (let d = first; d * camera.scale + camera.ty < height; d += step) {
-      marks.push({ px: d * camera.scale + camera.ty, label: d });
-    }
-  }
+  const marks = rulerMarks(camera.scale, camera.ty, viewportSize[1] || 0);
   return (
     <div
       data-v-ruler
@@ -149,7 +129,7 @@ export function VRulerStrip() {
     >
       {marks.map((m) => (
         <div
-          key={m.label}
+          key={m.value}
           style={{
             position: "absolute",
             top: m.px,

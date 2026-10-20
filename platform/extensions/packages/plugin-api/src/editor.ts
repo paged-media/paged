@@ -344,6 +344,12 @@ export interface ImportRequest {
   bytes: Uint8Array;
   /** MIME type the host reported (may be `""` when the OS gave none). */
   mimeType: string;
+  /** The host opened a new, empty document for this file because nothing
+   *  was open (editor ADR 262): an importer that adds content rather than
+   *  opening a document of its own places that content on it, so the file
+   *  arrives on the page and not only in a panel. Absent or false: add as
+   *  usual. An importer that opens its own document ignores it. */
+  newDocument?: boolean;
 }
 
 export interface ImporterContribution {

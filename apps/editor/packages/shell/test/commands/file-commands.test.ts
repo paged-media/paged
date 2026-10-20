@@ -45,7 +45,10 @@ import {
   dropPlaces,
   PLACE_DROPPED_COMMAND,
 } from "../../src/state/commands/file-commands";
-import { takePendingImportSource } from "../../src/state/import-source";
+import {
+  allowImportReplace,
+  takePendingImportSource,
+} from "../../src/state/import-source";
 
 const SFNT = new Uint8Array([0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 9]);
 
@@ -97,9 +100,16 @@ function harness(opts: {
   let snapshots = new Map<string, string>();
   const editor = {
     client,
-    registries: { importers: createImporterRegistry() },
+    registries: {
+      importers: createImporterRegistry(),
+      commands: null as unknown as ReturnType<typeof createCommandRegistry>,
+    },
     document: {
-      setHandle: log("setHandle"),
+      handle: (opts.noDocument ? null : handle) as typeof handle | null,
+      setHandle: (h: typeof handle) => {
+        log("setHandle")(h);
+        editor.document.handle = h;
+      },
       setSourceName: log("setSourceName"),
       setLoading: log("setLoading"),
       setSnapshotsReady: log("setSnapshotsReady"),
@@ -123,6 +133,7 @@ function harness(opts: {
   );
   let picked: File | null = null;
   const registry = createCommandRegistry(() => editor);
+  editor.registries.commands = registry;
   const sinks = {
     setStatus: (s: string) => void statuses.push(s),
     pushWarning: (w: string) => void warnings.push(w),
@@ -425,14 +436,155 @@ describe("a file dropped on the canvas (F-03)", () => {
     expect([...payload.file.bytes]).toEqual([1, 2, 3]);
   });
 
-  test("with no document, or from the picker, the file opens through its importer", async () => {
-    const none = editor(null);
-    await dropFile(none.e, png(), { clientX: 30, clientY: 40 }, sinks);
-    expect(none.placed).toEqual([]);
-    expect(none.imported).toEqual(["photo.png"]);
+  test("from the picker, with a document open, a picture opens through its importer", async () => {
     const picked = editor(2);
     await dropFile(picked.e, png(), null, sinks);
     expect(picked.placed).toEqual([]);
     expect(picked.imported).toEqual(["photo.png"]);
+  });
+});
+
+// UX audit F-03, no document open (ADR 262): every accepted file gives a
+// document. A picture opens as one page its own size with the picture
+// placed edge to edge; a file whose importer only adds content (a
+// workbook) gets a US Letter document and is imported into it; an importer
+// that opens a document of its own (Word, PowerPoint, PDF, IDML) is left
+// to do so.
+describe("a file opened with no document (F-03)", () => {
+  /** A PNG header declaring `w` × `h` pixels. */
+  const pngOf = (w: number, h: number, name = "photo.png") => {
+    const b = new Uint8Array(24);
+    b.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13]);
+    b.set([0x49, 0x48, 0x44, 0x52], 12);
+    const v = new DataView(b.buffer);
+    v.setUint32(16, w);
+    v.setUint32(20, h);
+    return new File([b], name, { type: "image/png" });
+  };
+  const withPlace = (h: ReturnType<typeof harness>) => {
+    const placed: Array<Record<string, unknown>> = [];
+    h.registry.register({
+      id: PLACE_DROPPED_COMMAND,
+      title: "Place image…",
+      handler: (_e, payload) =>
+        void placed.push(payload as Record<string, unknown>),
+    });
+    return placed;
+  };
+  const importerInto = (
+    h: ReturnType<typeof harness>,
+    ext: string,
+    opens: boolean,
+  ) => {
+    const runs: Array<string | null> = [];
+    h.editor.registries.importers.register({
+      id: `t${ext}`,
+      title: ext,
+      extensions: [ext],
+      async import() {
+        runs.push(h.editor.document.handle?.docId ?? null);
+        // An importer that opens a document goes through the open
+        // orchestration, which marks the import session.
+        if (opens) allowImportReplace();
+      },
+    } as never);
+    return runs;
+  };
+  const sinks = { setStatus: () => {}, pushWarning: () => {} };
+
+  test("a dropped picture opens as a page its own size, the picture filling it", async () => {
+    covers("command:paged.insert.placeImage");
+    const h = harness({ noDocument: true });
+    const placed = withPlace(h);
+    const imported = importerInto(h, ".png", false);
+    await dropFile(
+      h.editor as never,
+      pngOf(800, 600),
+      { clientX: 30, clientY: 40 },
+      sinks,
+    );
+    expect(h.calls.newBlankDocument?.map((c) => c.slice(0, 2))).toEqual([
+      [800, 600],
+    ]);
+    expect(h.calls.setSourceName?.at(-1)).toEqual(["photo.png"]);
+    expect(imported).toEqual([]);
+    expect(placed).toHaveLength(1);
+    expect(placed[0]!.fillPage).toEqual({
+      pageId: "p1",
+      widthPt: 800,
+      heightPt: 600,
+    });
+    expect(placed[0]!.at).toBeUndefined();
+    expect(h.prompts).toEqual([]);
+  });
+
+  test("File ▸ Open… of a picture with nothing open does the same", async () => {
+    covers("command:paged.file.openIdml");
+    const h = harness({ noDocument: true });
+    const placed = withPlace(h);
+    h.pick(pngOf(300, 900, "tall.png"));
+    await h.registry.invoke("paged.file.openIdml");
+    expect(h.calls.newBlankDocument?.map((c) => c.slice(0, 2))).toEqual([
+      [300, 900],
+    ]);
+    expect(placed).toHaveLength(1);
+  });
+
+  test("a picture larger than InDesign's largest page opens scaled down whole", async () => {
+    const h = harness({ noDocument: true });
+    withPlace(h);
+    await dropFile(h.editor as never, pngOf(31104, 7776), null, sinks);
+    expect(h.calls.newBlankDocument?.map((c) => c.slice(0, 2))).toEqual([
+      [15552, 3888],
+    ]);
+  });
+
+  test("a workbook gets a US Letter document and is imported into it", async () => {
+    covers("command:paged.file.openIdml");
+    const h = harness({ noDocument: true });
+    const runs = importerInto(h, ".xlsx", false);
+    h.pick(new File([new Uint8Array([7])], "Budget.xlsx"));
+    await h.registry.invoke("paged.file.openIdml");
+    // Once with nothing open (it lands in its panel), once into the new
+    // document, where it places its range.
+    expect(runs).toEqual([null, "d1"]);
+    expect(h.calls.newBlankDocument?.map((c) => c.slice(0, 2))).toEqual([
+      [612, 792],
+    ]);
+    expect(h.prompts).toEqual([]);
+  });
+
+  test("an importer that opens its own document is not given a blank one", async () => {
+    const h = harness({ noDocument: true });
+    const runs = importerInto(h, ".docx", true);
+    h.pick(new File([new Uint8Array([7])], "Letter.docx"));
+    await h.registry.invoke("paged.file.openIdml");
+    expect(runs).toEqual([null]);
+    expect(h.calls.newBlankDocument).toBeUndefined();
+  });
+
+  test("with a document open, a workbook only goes to its importer", async () => {
+    const h = harness({});
+    const runs = importerInto(h, ".xlsx", false);
+    h.pick(new File([new Uint8Array([7])], "Budget.xlsx"));
+    await h.registry.invoke("paged.file.openIdml");
+    expect(runs).toEqual(["d1"]);
+    expect(h.calls.newBlankDocument).toBeUndefined();
+  });
+
+  test("a file that is no picture after all opens the ordinary way", async () => {
+    const h = harness({ noDocument: true });
+    const placed = withPlace(h);
+    const imported = importerInto(h, ".png", true);
+    await dropFile(
+      h.editor as never,
+      new File([new Uint8Array([1, 2, 3])], "broken.png", {
+        type: "image/png",
+      }),
+      null,
+      sinks,
+    );
+    expect(placed).toEqual([]);
+    expect(imported).toEqual([null]);
   });
 });

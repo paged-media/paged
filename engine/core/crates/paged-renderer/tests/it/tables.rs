@@ -43,6 +43,16 @@ fn read_font(name: &str) -> Vec<u8> {
 /// the `<Table>` element (e.g. `AppliedTableStyle="TableStyle/Alt"`)
 /// and `cell00_attrs` onto the first `<Cell>` (for diagonals).
 fn build_table_idml(styles_body: &str, table_attrs: &str, cell00_attrs: &str) -> Vec<u8> {
+    build_table_idml_with(styles_body, table_attrs, cell00_attrs, "")
+}
+
+/// [`build_table_idml`] with `cell_attrs` spliced onto EVERY `<Cell>`.
+fn build_table_idml_with(
+    styles_body: &str,
+    table_attrs: &str,
+    cell00_attrs: &str,
+    cell_attrs: &str,
+) -> Vec<u8> {
     let buf = std::io::Cursor::new(Vec::new());
     let mut zip = ZipWriter::new(buf);
     let stored = SimpleFileOptions::default().compression_method(CompressionMethod::Stored);
@@ -115,12 +125,12 @@ fn build_table_idml(styles_body: &str, table_attrs: &str, cell00_attrs: &str) ->
           <Row Self="r2" Name="2" SingleRowHeight="30"/>
           <Column Self="c0" Name="0" SingleColumnWidth="100"/>
           <Column Self="c1" Name="1" SingleColumnWidth="100"/>
-          <Cell Self="c00" Name="0:0" {cell00_attrs}><ParagraphStyleRange><CharacterStyleRange><Content>a</Content></CharacterStyleRange></ParagraphStyleRange></Cell>
-          <Cell Self="c01" Name="0:1"><ParagraphStyleRange><CharacterStyleRange><Content>b</Content></CharacterStyleRange></ParagraphStyleRange></Cell>
-          <Cell Self="c02" Name="0:2"><ParagraphStyleRange><CharacterStyleRange><Content>c</Content></CharacterStyleRange></ParagraphStyleRange></Cell>
-          <Cell Self="c10" Name="1:0"><ParagraphStyleRange><CharacterStyleRange><Content>d</Content></CharacterStyleRange></ParagraphStyleRange></Cell>
-          <Cell Self="c11" Name="1:1"><ParagraphStyleRange><CharacterStyleRange><Content>e</Content></CharacterStyleRange></ParagraphStyleRange></Cell>
-          <Cell Self="c12" Name="1:2"><ParagraphStyleRange><CharacterStyleRange><Content>f</Content></CharacterStyleRange></ParagraphStyleRange></Cell>
+          <Cell Self="c00" Name="0:0" {cell00_attrs} {cell_attrs}><ParagraphStyleRange><CharacterStyleRange><Content>a</Content></CharacterStyleRange></ParagraphStyleRange></Cell>
+          <Cell Self="c01" Name="0:1" {cell_attrs}><ParagraphStyleRange><CharacterStyleRange><Content>b</Content></CharacterStyleRange></ParagraphStyleRange></Cell>
+          <Cell Self="c02" Name="0:2" {cell_attrs}><ParagraphStyleRange><CharacterStyleRange><Content>c</Content></CharacterStyleRange></ParagraphStyleRange></Cell>
+          <Cell Self="c10" Name="1:0" {cell_attrs}><ParagraphStyleRange><CharacterStyleRange><Content>d</Content></CharacterStyleRange></ParagraphStyleRange></Cell>
+          <Cell Self="c11" Name="1:1" {cell_attrs}><ParagraphStyleRange><CharacterStyleRange><Content>e</Content></CharacterStyleRange></ParagraphStyleRange></Cell>
+          <Cell Self="c12" Name="1:2" {cell_attrs}><ParagraphStyleRange><CharacterStyleRange><Content>f</Content></CharacterStyleRange></ParagraphStyleRange></Cell>
         </Table>
       </CharacterStyleRange>
     </ParagraphStyleRange>
@@ -1012,4 +1022,30 @@ fn a_double_cell_edge_draws_two_rules() {
         &format!(r#"{edge} AppliedCellStyle="CellStyle/Dbl""#),
     );
     assert_eq!(styled, solid + 1, "through the cell style");
+}
+
+/// A table's border is its outer cells' edges in InDesign. A `[Basic
+/// Table]` inherits `[No Table Style]`'s 1 pt black border, and InDesign
+/// writes every cell's four edges into the IDML; where the outer cells
+/// say 0 the table shows no line, so the style's border must not be drawn
+/// over them. Cells that state nothing still take the style's border.
+#[test]
+fn the_outer_cells_own_edges_replace_the_table_styles_border() {
+    let styles = r#"  <RootTableStyleGroup>
+    <TableStyle Self="TableStyle/Boxed" Name="Boxed"
+                TopBorderStrokeWeight="1" TopBorderStrokeColor="Color/Magenta"
+                BottomBorderStrokeWeight="1" BottomBorderStrokeColor="Color/Magenta"
+                LeftBorderStrokeWeight="1" LeftBorderStrokeColor="Color/Magenta"
+                RightBorderStrokeWeight="1" RightBorderStrokeColor="Color/Magenta"/>
+  </RootTableStyleGroup>"#;
+    let table = r#"AppliedTableStyle="TableStyle/Boxed""#;
+    let unstated = build_commands(&build_table_idml(styles, table, ""));
+    assert_eq!(count_fills(&unstated), 4, "the style's four border sides");
+    let zero = r#"TopEdgeStrokeWeight="0" BottomEdgeStrokeWeight="0" LeftEdgeStrokeWeight="0" RightEdgeStrokeWeight="0""#;
+    let stated = build_commands(&build_table_idml_with(styles, table, "", zero));
+    assert_eq!(
+        count_fills(&stated),
+        0,
+        "outer edges of 0 draw no border, got {stated:#?}"
+    );
 }

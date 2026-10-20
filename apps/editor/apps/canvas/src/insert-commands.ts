@@ -660,21 +660,29 @@ export function psdHeaderSize(
   return width > 0 && height > 0 ? { width, height } : null;
 }
 
-/** Is `payload` a dropped file to place (F-03)? Anything else (a palette
- *  run passes none) is an ordinary Place. */
+/** Is `payload` a file to place without a picker (F-03): dropped at a
+ *  point (ADR 258) or filling a page minted for it (ADR 262)? Anything
+ *  else (a palette run passes none) is an ordinary Place. */
 export function isPlaceDropPayload(
   payload: unknown,
 ): payload is PlaceDropPayload {
   const p = payload as Partial<PlaceDropPayload> | null | undefined;
-  return (
-    !!p &&
-    !!p.file &&
-    typeof p.file.name === "string" &&
-    p.file.bytes instanceof Uint8Array &&
-    !!p.at &&
-    Number.isFinite(p.at.clientX) &&
-    Number.isFinite(p.at.clientY)
-  );
+  if (
+    !p ||
+    !p.file ||
+    typeof p.file.name !== "string" ||
+    !(p.file.bytes instanceof Uint8Array)
+  ) {
+    return false;
+  }
+  const at =
+    !!p.at && Number.isFinite(p.at.clientX) && Number.isFinite(p.at.clientY);
+  const fill =
+    !!p.fillPage &&
+    typeof p.fillPage.pageId === "string" &&
+    p.fillPage.widthPt > 0 &&
+    p.fillPage.heightPt > 0;
+  return at || fill;
 }
 
 /** Smallest frame (pt) a place drag draws; a smaller box is a click. */
@@ -831,6 +839,28 @@ export async function placeImage(
     return outcomeOf(reply).applied;
   };
 
+  // A picture opened with nothing open (F-03, ADR 262) fills the page
+  // minted for it, edge to edge.
+  if (dropped?.fillPage) {
+    const { pageId, widthPt, heightPt } = dropped.fillPage;
+    const reply = await mutateAndSelect(
+      paged,
+      {
+        op: "insertFrame",
+        args: { pageId, bounds: [0, 0, heightPt, widthPt] },
+      },
+      "placeImage(frame)",
+      refusedTap(report, "Place image"),
+    );
+    const frame = outcomeOf(reply);
+    if (!frame.applied || !frame.createdId) return REFUSED;
+    if (!(await fill(frame.createdId))) {
+      await rollBackFirstStep(paged);
+      return REFUSED;
+    }
+    return frame;
+  }
+
   // An empty frame is selected: that is where it goes.
   const into = await selectedEmptyFrame(paged);
   if (into) {
@@ -849,7 +879,7 @@ export async function placeImage(
   // Ask where — unless the drop already said. Cancelling is an ordinary
   // answer — no report, exactly like cancelling the picker above. A drag
   // previews the frame it draws.
-  const point = dropped
+  const point = dropped?.at
     ? { clientX: dropped.at.clientX, clientY: dropped.at.clientY }
     : await awaitPlacementPoint({
         onDrag: (from, to) => {
