@@ -39,12 +39,14 @@ import {
   Icon,
   StatusPill,
   notifyExportPdfDialog,
+  printOutputFacts,
   useCanvasClient,
   useDocument,
   useDocumentMeta,
   useRegistries,
   useRegistryView,
   type PanelProps,
+  type PrintOutputFacts,
 } from "@paged-media/shell";
 
 import {
@@ -73,9 +75,9 @@ export {
 function readiness(
   target: ExportTarget,
   loaded: boolean,
-  profileReady: boolean,
-): { tone: "ready" | "warn" | "draft"; label: string } {
-  return exportReadiness(target, loaded, profileReady);
+  facts: PrintOutputFacts,
+): ReturnType<typeof exportReadiness> {
+  return exportReadiness(target, loaded, facts);
 }
 
 /** Export mode — LEFT panel: outputs navigation (kit ExportNavPanel).
@@ -83,7 +85,7 @@ function readiness(
 export function OutputsPanel(_props: PanelProps) {
   const meta = useDocumentMeta();
   const loaded = meta != null && meta.pageCount > 0;
-  const profileReady = meta?.cmykProfileActive ?? false;
+  const facts = printOutputFacts(meta);
   const selected = useSelectedExportTarget();
   // K-2 / S-06 — plugin-registered exporters surface as one-click
   // outputs here (the host owns blob→download). The Export Center is the
@@ -117,7 +119,7 @@ export function OutputsPanel(_props: PanelProps) {
         <ChoiceGroup label="Outputs">
           {EXPORT_TARGETS.map((t) => {
             const sel = selected === t.id;
-            const r = readiness(t, loaded, profileReady);
+            const r = readiness(t, loaded, facts);
             const dot =
               r.tone === "ready"
                 ? "var(--status-approved)"
@@ -316,14 +318,14 @@ export function ExportInspectorPanel(_props: PanelProps) {
   const meta = useDocumentMeta();
   const { handle } = useDocument();
   const loaded = meta != null && meta.pageCount > 0;
-  const profileReady = meta?.cmykProfileActive ?? false;
+  const facts = printOutputFacts(meta);
   const selected = useSelectedExportTarget();
   const target = exportTargetById(selected);
   const image = useImageSettings();
   const [imagePhase, setImagePhase] = useState<ImagePhase>({ kind: "idle" });
   // IDML export moved to the paged.publish plugin exporter (ADR-022 Phase 5) —
   // it renders in the plugin-exporters section below, no longer a built-in target.
-  const r = readiness(target, loaded, profileReady);
+  const r = readiness(target, loaded, facts);
 
   const onRunImage = async () => {
     if (!handle) return;
@@ -340,7 +342,11 @@ export function ExportInspectorPanel(_props: PanelProps) {
     >
       <CockpitPanelHeader title={target.title} />
       <div style={{ padding: "0 14px 12px" }}>
-        <StatusPill tone={r.tone} testId="export-inspector-readiness">
+        <StatusPill
+          tone={r.tone}
+          testId="export-inspector-readiness"
+          title={r.reason}
+        >
           {r.label}
         </StatusPill>
       </div>

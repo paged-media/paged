@@ -296,31 +296,6 @@ export function flatLabel(label: PageLabel | null, rec: SlideData): PageLabel {
   return next;
 }
 
-/** The mutations that write an import's labels. The importer already wrote
- *  each slide's page label and every placeholder's label into the package;
- *  what is left is the deck label on the document. */
-export function importLabelMutations(
-  report: ImportReport,
-  name: string | null,
-): { mutations: MutationInput[] } {
-  const deck: DeckLabel = {
-    deck: {
-      name,
-      width: report.width,
-      height: report.height,
-      fonts: report.fonts,
-    },
-  };
-  return {
-    mutations: [
-      {
-        op: "setDocumentMetadata",
-        args: { key: LABEL_KEY, value: envelope(deck), caller: PLUGIN_ID },
-      },
-    ],
-  };
-}
-
 // ------------------------------------------------------------ state
 
 /** Where the import report cache is read from (activate.ts writes it, as `REPORT_PART`). */

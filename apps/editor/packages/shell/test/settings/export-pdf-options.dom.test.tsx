@@ -72,14 +72,18 @@ const HANDLE = {
   ],
 } as unknown as DocumentHandle;
 
-function fakeClient() {
+function fakeClient(
+  profile: { cmykProfileName: string | null; cmykProfileActive: boolean } = {
+    cmykProfileName: null,
+    cmykProfileActive: false,
+  },
+) {
   const exports: Record<string, unknown>[] = [];
   const client = {
     subscribe: () => () => {},
     documentMeta: async () => ({
       documentName: "brochure",
-      cmykProfileName: null,
-      cmykProfileActive: false,
+      ...profile,
       pageCount: 2,
     }),
     exportPdf: async (options: Record<string, unknown>) => {
@@ -269,5 +273,56 @@ describe("setting paged.exportPdf.options.v1", () => {
     fireEvent.click(confirm);
     await waitFor(() => expect(exports).toHaveLength(1));
     expect(exports[0].standard).toBe("pdfx4");
+  });
+});
+
+// The print-output facts (ADR 266): the dialog's default standard and its
+// "Document working space" choice read the same derivation as the Export
+// Center's pill and the Prepress bar.
+describe("Export PDF dialog: the print-output facts", () => {
+  const intentLabel = () =>
+    field<HTMLSelectElement>("select[data-export-profile]").options[0]
+      ?.textContent;
+
+  test("a declared profile with no bytes: PDF 1.7, and the working space says not loaded", async () => {
+    covers("setting:paged.exportPdf.options.v1");
+    mount(
+      fakeClient({ cmykProfileName: "Coated Test", cmykProfileActive: false })
+        .client,
+    );
+    await waitFor(() =>
+      expect(intentLabel()).toBe(
+        "Document working space (Coated Test · not loaded)",
+      ),
+    );
+    expect(field<HTMLSelectElement>("select[data-export-standard]").value).toBe(
+      "pdf17",
+    );
+  });
+
+  test("an active working space: PDF/X-4 with it as the output condition", async () => {
+    covers("setting:paged.exportPdf.options.v1");
+    const { client, exports } = fakeClient({
+      cmykProfileName: "Coated Test",
+      cmykProfileActive: true,
+    });
+    mount(client);
+    await waitFor(() =>
+      expect(intentLabel()).toBe("Document working space (Coated Test)"),
+    );
+    expect(field<HTMLSelectElement>("select[data-export-standard]").value).toBe(
+      "pdfx4",
+    );
+    const confirm = await waitFor(() => {
+      const b = field<HTMLButtonElement>("[data-export-confirm]");
+      if (b.disabled) throw new Error("export not ready");
+      return b;
+    });
+    fireEvent.click(confirm);
+    await waitFor(() => expect(exports).toHaveLength(1));
+    expect(exports[0]).toMatchObject({
+      standard: "pdfx4",
+      outputCondition: "Coated Test",
+    });
   });
 });
