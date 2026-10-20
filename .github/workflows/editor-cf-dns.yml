@@ -37,10 +37,10 @@ jobs:
             rid=$(curl -fsS "$api/zones/$zid/dns_records?name=$name" -H "Authorization: Bearer $T" \
               | python3 -c "import json,sys;r=json.load(sys.stdin).get('result') or [];print(r[0]['id'] if r else '')")
             if [ -n "$rid" ]; then
-              echo "== update $name → $target"
+              echo "== update $name → $target" >&2
               curl -fsS -X PUT "$api/zones/$zid/dns_records/$rid" -H "Authorization: Bearer $T" -H "Content-Type: application/json" -d "$body"
             else
-              echo "== create $name → $target"
+              echo "== create $name → $target" >&2
               curl -fsS -X POST "$api/zones/$zid/dns_records" -H "Authorization: Bearer $T" -H "Content-Type: application/json" -d "$body"
             fi | python3 -c "import json,sys;d=json.load(sys.stdin);print('  ok' if d.get('success') else ('  ERR '+str(d.get('errors'))))"
           done
