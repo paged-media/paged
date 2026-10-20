@@ -359,7 +359,7 @@ describe("Rectangle tool", () => {
   // 4 px threshold) drew a 12 × 8 pt frame where InDesign would open the
   // size dialog. Found by these tests (GT-1). (A 3 × 3 px jitter is
   // 4.2 px of travel, past the threshold: a drag.)
-  test("[GT-1] a click within the screen-px threshold draws nothing at 25% zoom @level:gesture", async () => {
+  test("GT-1: a click within the screen-px threshold draws nothing at 25% zoom @level:gesture", async () => {
     for (const create of [
       () => createRectangleHandler({ frame: true }),
       () => createRectangleHandler(),
