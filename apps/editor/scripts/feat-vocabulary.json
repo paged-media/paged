@@ -3,9 +3,9 @@
     "repo": "paged-media/cockpit",
     "path": "docs/features/*/*.md",
     "by": "scripts/sync-feat-vocabulary.mjs",
-    "commit": "1ba548f9b1250da7ee8d2ec1ed7532efaaea8309"
+    "commit": "fb90c2575ef83c81bcc6b46bc5de41b8ac8b6a55"
   },
-  "count": 707,
+  "count": 708,
   "ids": [
     "anchored-inline-objects.anchor-alignment",
     "anchored-inline-objects.anchored-frames",
@@ -116,6 +116,7 @@
     "editor-shell.panels.journal",
     "editor-shell.panels.keyboard-shortcuts",
     "editor-shell.panels.layers",
+    "editor-shell.panels.library",
     "editor-shell.panels.links",
     "editor-shell.panels.list-collections",
     "editor-shell.panels.master-pages",
