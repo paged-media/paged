@@ -26,3 +26,12 @@ metadata on pages is added by engine protocol 68.
 - Notes and transitions follow a slide through every operation the host's undo covers.
 - Deck-level parts are not undoable; they change only on import, on export and when a layout is
   created, so this is acceptable.
+
+## Amendment (2026-10-20): the deck label is written by the importer
+
+The deck's own label on the document (`x-paged:media.paged.slide`: name, page size, fonts) was
+written by the bundle as a mutation right after the open, so every imported deck opened
+"Edited", with that write on the undo stack. The importer now writes it into the package with
+the page and placeholder labels (`slide_native::deck_label`), and the open makes no edit: an
+imported deck opens clean, with nothing to undo (UX audit F-08). The container parts written
+after the open are not edits (they are outside the undo log).
