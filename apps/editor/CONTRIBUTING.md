@@ -21,11 +21,15 @@ from the top of any existing source file in this repo.
 
 ## Engine boundary
 
-This repo consumes the engine **across a package boundary** — the published
-`@paged-media` wasm/SDK packages (`@paged-media/canvas-wasm`,
-`@paged-media/introspect-wasm`) — **never** a Rust path dependency, and never
-by reaching into core's source tree. `bun install` suffices; there is no
-build-from-core step.
+The editor consumes the engine **across a package boundary**: the engine's
+workspace package `@paged-media/canvas-wasm` (`engine/core/packages/canvas-wasm`,
+with its `./introspect` and `./repo` entries), a `workspace:*` dependency, is
+**never** a Rust path dependency, and the editor never reaches into the engine's
+source tree. The package's wasm and generated files are gitignored, so build them
+before the editor: `moon run core:wasm-pkg` (see the README's wasm prerequisite).
+On npm the same files are `@paged-media/paged`
+([PM-0008](../../docs/adr/PM-0008-npm-packages-and-release.md)); the editor does
+not use the npm package.
 
 ## Building & testing
 

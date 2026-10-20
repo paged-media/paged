@@ -243,8 +243,8 @@ beside the wasm), `@paged-media/sdk` and `@paged-media/idml-viewer` (with the SD
 copied in). Only the last has a `package.json` in the tree; the workflow writes the other
 three. CI fails a push to `main` that changes `PROTOCOL_VERSION` without the matching tag
 ([ADR 006](adr/006-protocol-coupled-versioning.md)). The consuming half is the editor's
-[ADR 200](https://github.com/paged-media/editor/blob/main/docs/adr/200-engine-as-npm-wasm-packages.md)
-and [ADR 202](https://github.com/paged-media/editor/blob/main/docs/adr/202-render-worker-owns-the-canvas.md).
+[ADR 200](https://github.com/paged-media/paged/blob/main/apps/editor/docs/adr/200-engine-as-npm-wasm-packages.md)
+and [ADR 202](https://github.com/paged-media/paged/blob/main/apps/editor/docs/adr/202-render-worker-owns-the-canvas.md).
 
 _Amendment (2026-10-18): the wasm packages, `@paged-media/repo-wasm` among them, now have
 directories in the tree: `packages/<pkg>/`, members of the root Bun workspace, each with a

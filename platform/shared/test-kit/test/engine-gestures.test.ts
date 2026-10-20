@@ -504,7 +504,7 @@ describe("findings: the fuzzer's (GF) and the gesture matrix's (GM)", () => {
 
   // GF-1 (fixed, R6, engine ADR 191): the resize wrote FrameBounds on
   // the Group node, which has none, and failed at commit.
-  test("[GF-1] resizing a group by a handle commits and widens the group @level:gesture", async () => {
+  test("GF-1: resizing a group by a handle commits and widens the group @level:gesture", async () => {
     const w0 = await groupWidth();
     const reply = await gesture({
       nodes: [GROUP],
@@ -515,7 +515,7 @@ describe("findings: the fuzzer's (GF) and the gesture matrix's (GM)", () => {
     expect(await groupWidth()).toBeCloseTo(w0 + 40, 1);
   });
 
-  test("[GF-2] Alt-dragging a group duplicates the group @level:gesture", async () => {
+  test("GF-2: Alt-dragging a group duplicates the group @level:gesture", async () => {
     const before = (await sceneElementIds(send)).filter(
       (id) => id.kind === "group",
     ).length;
@@ -531,7 +531,7 @@ describe("findings: the fuzzer's (GF) and the gesture matrix's (GM)", () => {
     ).toBe(before + 1);
   });
 
-  test("[GF-3] Alt pressed, released and pressed again while dragging a grouped item duplicates it @level:gesture", async () => {
+  test("GF-3: Alt pressed, released and pressed again while dragging a grouped item duplicates it @level:gesture", async () => {
     const before = (await sceneElementIds(send)).length;
     const alt = (on: boolean) => ({
       shift: false,
@@ -554,7 +554,7 @@ describe("findings: the fuzzer's (GF) and the gesture matrix's (GM)", () => {
 
   // GF-4 (fixed, engine ADR 199): the writer printed every changed number to
   // 4 decimals; it spells it as the f32 it is now.
-  test("[GF-4] a rotated frame survives IDML save → load to a micro-point @level:gesture", async () => {
+  test("GF-4: a rotated frame survives IDML save → load to a micro-point @level:gesture", async () => {
     await rotateBy(30);
     const exported = await send({
       kind: "exportIdml",
@@ -618,7 +618,7 @@ describe("findings: the fuzzer's (GF) and the gesture matrix's (GM)", () => {
   // the group turned ~37° about (260, 90) — the mean of its members'
   // centres AND a phantom point at the origin: (0 + 340 + 440) / 3,
   // (0 + 130 + 140) / 3. It turns about the centre of its box now.
-  test("[GM-1] a group turns about its centre, as a frame does @level:gesture", async () => {
+  test("GM-1: a group turns about its centre, as a frame does @level:gesture", async () => {
     const centre = (cs: Pt[]): Pt => [
       (cs[0][0] + cs[2][0]) / 2,
       (cs[0][1] + cs[2][1]) / 2,

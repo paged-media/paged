@@ -1,7 +1,7 @@
 # RFC: core data-provider contract (publish / discover / snapshot / refresh) (D-09)
 
 Design note, written before the implementation. What was built is recorded in
-[ADR 014](https://github.com/paged-media/plugin-data/blob/main/docs/adr/014-data-provider-arrow-seam.md)
+[ADR 014](https://github.com/paged-media/paged/blob/main/modules/data/docs/adr/014-data-provider-arrow-seam.md)
 and in `DESIGN.md` §4.6c.
 
 Sections not relevant outside the original planning context have been removed; numbering is unchanged.

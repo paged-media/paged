@@ -1,7 +1,7 @@
 # RFC — D-11 credential store for DB/remote sources
 
 Design note, written before the implementation. What was built is recorded in
-[ADR 556](https://github.com/paged-media/plugin-data/blob/main/docs/adr/556-secrets-never-enter-the-plugin.md)
+[ADR 556](https://github.com/paged-media/paged/blob/main/modules/data/docs/adr/556-secrets-never-enter-the-plugin.md)
 and in `DESIGN.md` §16.
 
 Sections not relevant outside the original planning context have been removed; numbering is unchanged.

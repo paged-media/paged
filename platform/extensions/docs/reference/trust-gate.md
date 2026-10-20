@@ -28,7 +28,7 @@ Any third-party / external plugin loading requires, as a hard prerequisite:
    the engine is now **Boa**, which has **no** per-plugin isolate primitive — so
    this becomes a Boa-context-per-plugin or, more likely, worker-per-plugin
    boundary; the isolate story has to be re-derived for Boa, see
-   [ADR 001](https://github.com/paged-media/core/blob/main/docs/adr/001-boa-over-quickjs.md)).
+   [ADR 001](https://github.com/paged-media/paged/blob/main/engine/core/docs/adr/001-boa-over-quickjs.md)).
    The bundle source is unchanged; the _host object_ is what gets proxied. This
    is the one structural change that retires `host.editor` (§4.9: "dies at the
    boundary, by design").

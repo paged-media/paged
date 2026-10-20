@@ -132,7 +132,7 @@ with the inter-plugin rule that defines the suite.
 
 ### 2.1 Isolation contract (same superset as plugin-sheet)
 
-_Status note (2026-10-02): this section predates the implementation; see [ADR 315](https://github.com/paged-media/plugin-sdk/blob/main/docs/adr/315-isolation-contract.md) in plugin-sdk (the isolation contract). In this repository the import rule is checked by a lint rule (`/bunfig.toml`, PM-0003) and `deny.toml`; the glue is the TypeScript package `packages/data-bundle`; the one worker is the DuckDB worker the bundle spawns ([ADR 015](adr/015-duckdb-wasm-vendored.md)); and the Boa sandbox exists only in the native `data-script` crate ([ADR 555](adr/555-batch-reuses-the-engine.md))._
+_Status note (2026-10-02): this section predates the implementation; see [ADR 315](https://github.com/paged-media/paged/blob/main/platform/extensions/docs/adr/315-isolation-contract.md) in plugin-sdk (the isolation contract). In this repository the import rule is checked by a lint rule (`/bunfig.toml`, PM-0003) and `deny.toml`; the glue is the TypeScript package `packages/data-bundle`; the one worker is the DuckDB worker the bundle spawns ([ADR 015](adr/015-duckdb-wasm-vendored.md)); and the Boa sandbox exists only in the native `data-script` crate ([ADR 555](adr/555-batch-reuses-the-engine.md))._
 
 1. **Zero core contact** beyond the published SDK; CI builds against SDK
    canaries only.
@@ -164,7 +164,7 @@ build.
 
 ### 2.2 Required SDK surface (gap analysis → RFCs, due before M0)
 
-_Status note (2026-10-02): this section predates the implementation; most rows of this table are now host doors the plugin uses. See [ADR 552](adr/552-binding-is-a-recipe.md) (placeholder fields and per-element plugin metadata), [ADR 551](adr/551-compiled-to-native-content.md) (table, image and style content written through host mutations), [ADR 554](adr/554-record-flow-pagination.md) (the frame-chain read), [ADR 556](adr/556-secrets-never-enter-the-plugin.md) (network consent), [ADR 014](adr/014-data-provider-arrow-seam.md) (the data-provider registry) and, in the editor, [ADR 024](https://github.com/paged-media/editor/blob/main/docs/adr/024-context-sensitivity-is-a-core-concept.md) (double-click entry into the edit context the plugin contributes). The designs behind the network, credential and data-provider rows are in `plugin-sdk: docs/design/`. The plugin uses no OPFS storage, registers no importer, and spawns its DuckDB worker itself ([ADR 015](adr/015-duckdb-wasm-vendored.md))._
+_Status note (2026-10-02): this section predates the implementation; most rows of this table are now host doors the plugin uses. See [ADR 552](adr/552-binding-is-a-recipe.md) (placeholder fields and per-element plugin metadata), [ADR 551](adr/551-compiled-to-native-content.md) (table, image and style content written through host mutations), [ADR 554](adr/554-record-flow-pagination.md) (the frame-chain read), [ADR 556](adr/556-secrets-never-enter-the-plugin.md) (network consent), [ADR 014](adr/014-data-provider-arrow-seam.md) (the data-provider registry) and, in the editor, [ADR 024](https://github.com/paged-media/paged/blob/main/apps/editor/docs/adr/024-context-sensitivity-is-a-core-concept.md) (double-click entry into the edit context the plugin contributes). The designs behind the network, credential and data-provider rows are in `plugin-sdk: docs/design/`. The plugin uses no OPFS storage, registers no importer, and spawns its DuckDB worker itself ([ADR 015](adr/015-duckdb-wasm-vendored.md))._
 
 | Need                                                                                                                | Likely status                                               | If missing                                                                                                                                                                 |
 | ------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -655,7 +655,7 @@ Projects.
 
 ### 12.2 The 100% verification invariant
 
-_Status note (2026-10-02): this section predates the implementation; see [ADR 317](https://github.com/paged-media/plugin-sdk/blob/main/docs/adr/317-registry-driven-dispatch.md) in plugin-sdk (dispatch is generated from the registry for expression functions only; the other registry rows are checked by the coverage gate, which requires a test on disk for every row marked implemented)._
+_Status note (2026-10-02): this section predates the implementation; see [ADR 317](https://github.com/paged-media/paged/blob/main/platform/extensions/docs/adr/317-registry-driven-dispatch.md) in plugin-sdk (dispatch is generated from the registry for expression functions only; the other registry rows are checked by the coverage gate, which requires a test on disk for every row marked implemented)._
 
 1. **Registry-driven dispatch** for source adapters, expression functions,
    binding kinds, and lowering rules — no row, no dispatch entry,

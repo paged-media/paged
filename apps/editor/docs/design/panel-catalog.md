@@ -142,7 +142,7 @@ Five classes. The next section shows that four of them need **no SDK change** an
 
 ## 5. The SDK extension (one read kind; everything else is expert-leaf)
 
-_Status note (2026-10-02): this section predates the implementation; see [ADR 204](../adr/204-declarative-property-panels.md) and, for the engine side of collection reads, [ADR 008](https://github.com/paged-media/core/blob/main/docs/adr/008-read-surfaces-first-class-wire-collections.md). Decision D1 is built: `ReadSpec`, `WriteSpec` and `CollectionName` are in `packages/catalog/src/types.ts` (`CollectionName` also has `"inks"`; `WriteSpec` also has the audit tag `"zOrder"`), and `collection()` and `documentMeta()` are methods of `CanvasClient` (`packages/client/src/client.ts`). The mixed state of §5.6 is resolved in `packages/shell/src/catalog/binding-hook.ts`, not in a `packages/catalog/src/binding.ts`._
+_Status note (2026-10-02): this section predates the implementation; see [ADR 204](../adr/204-declarative-property-panels.md) and, for the engine side of collection reads, [ADR 008](https://github.com/paged-media/paged/blob/main/engine/core/docs/adr/008-read-surfaces-first-class-wire-collections.md). Decision D1 is built: `ReadSpec`, `WriteSpec` and `CollectionName` are in `packages/catalog/src/types.ts` (`CollectionName` also has `"inks"`; `WriteSpec` also has the audit tag `"zOrder"`), and `collection()` and `documentMeta()` are methods of `CanvasClient` (`packages/client/src/client.ts`). The mixed state of §5.6 is resolved in `packages/shell/src/catalog/binding-hook.ts`, not in a `packages/catalog/src/binding.ts`._
 
 ### 5.1 G1 — Collection reads → **one new read kind**
 

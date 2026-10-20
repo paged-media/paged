@@ -19,11 +19,11 @@ _Status note (2026-10-02): checked against this repository at `9f933f1` and
 built as the header says. Three things differ from the text. The IDML reader and
 writer it calls `paged-parse` and `paged-write` have moved to `plugin-publish`
 (crates `idml-import` and `idml-export`; see
-[ADR 022](https://github.com/paged-media/plugin-publish/blob/main/docs/adr/022-idml-relocates-to-plugin-publish.md)).
+[ADR 022](https://github.com/paged-media/paged/blob/main/modules/publish/docs/adr/022-idml-relocates-to-plugin-publish.md)).
 The engine gate has gained an optional caller check
 (`crates/paged-mutate/src/apply/layer.rs:565`). And the host bake loop of §4 is
 still not built: what plugins leave in a document today is recorded in
-[ADR 316](https://github.com/paged-media/plugin-sdk/blob/main/docs/adr/316-native-content-and-baking.md)
+[ADR 316](https://github.com/paged-media/paged/blob/main/platform/extensions/docs/adr/316-native-content-and-baking.md)
 of plugin-sdk._
 
 ## 1. Contract (the fidelity doctrine, made mechanical)
@@ -109,7 +109,7 @@ registers an object type and its matcher
 `ObjectTypeBaker` and `BakeContext` are exported types
 (`plugin-sdk: packages/plugin-api/src/host.ts:1015`, `:1019`) that no host code
 calls, so nothing below about when the host calls `bake()` happens today; see
-[ADR 316](https://github.com/paged-media/plugin-sdk/blob/main/docs/adr/316-native-content-and-baking.md)
+[ADR 316](https://github.com/paged-media/paged/blob/main/platform/extensions/docs/adr/316-native-content-and-baking.md)
 of plugin-sdk._
 
 ```ts
@@ -147,11 +147,11 @@ children regenerated" half depends on the bake loop of §4, which is not built._
 _Status note (2026-10-02): this section predates the implementation. paged.web
 marks its frame with this metadata and keeps the source in a container part as
 well
-([ADR 406](https://github.com/paged-media/plugin-web/blob/main/docs/adr/406-web-frame-and-source-storage.md));
+([ADR 406](https://github.com/paged-media/paged/blob/main/modules/web/docs/adr/406-web-frame-and-source-storage.md));
 its bake is an explicit command
-([ADR 407](https://github.com/paged-media/plugin-web/blob/main/docs/adr/407-baking-flattens-to-native-items.md)).
+([ADR 407](https://github.com/paged-media/paged/blob/main/modules/web/docs/adr/407-baking-flattens-to-native-items.md)).
 paged.draw stores live constructs as recipes in container parts
-([ADR 356](https://github.com/paged-media/plugin-draw/blob/main/docs/adr/356-live-constructs-are-recipes.md))._
+([ADR 356](https://github.com/paged-media/paged/blob/main/modules/draw/docs/adr/356-live-constructs-are-recipes.md))._
 
 1. **paged.web** first (simplest bake: source → nothing yet /
    placeholder rectangle is already the baked form; later vector
