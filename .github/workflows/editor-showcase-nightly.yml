@@ -119,14 +119,15 @@ jobs:
       # The registry axis: the showcase's claimed features are checked
       # against the capability record (the feature registry's export, the
       # same record the docs and the website are built from). The registry
-      # is a private repository, read with the org token that already reads
-      # the private corpus. Unreadable, the step warns and the assembly
-      # reports the axis UNAVAILABLE — never a pass, never a red build for
-      # a missing secret.
+      # is a private repository: DOCS_SOURCES_TOKEN is the token the docs
+      # build reads the same file with, when it is shared with this
+      # repository. Unreadable (the org token that reads the corpus answers
+      # 404 for it), the step warns and the assembly reports the axis
+      # UNAVAILABLE — never a pass, never a red build for a missing secret.
       - name: fetch the capability record
         working-directory: .
         env:
-          GH_TOKEN: ${{ secrets.STATE_DISPATCH_TOKEN || github.token }}
+          GH_TOKEN: ${{ secrets.DOCS_SOURCES_TOKEN || secrets.STATE_DISPATCH_TOKEN || github.token }}
         run: |
           OUT="$RUNNER_TEMP/capability-record.json"
           if gh api repos/paged-media/cockpit/contents/exports/public.json \
