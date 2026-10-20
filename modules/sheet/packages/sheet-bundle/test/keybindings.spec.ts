@@ -140,13 +140,14 @@ describe.skipIf(!ENGINE_BUILT)(
       env.dispose();
     });
 
-    it("exactly the nine grid keys are bound, all gated on the grid", () => {
+    it("exactly the ten grid keys are bound, all gated on the grid", () => {
       expect(env.keybindings().map((k) => `${k.key} ${k.command}`)).toEqual([
         "cmd+c media.paged.sheet.command.copySelection",
         "ctrl+c media.paged.sheet.command.copySelection",
         "cmd+v media.paged.sheet.command.pasteSelection",
         "ctrl+v media.paged.sheet.command.pasteSelection",
         "cmd+d media.paged.sheet.command.fillDown",
+        "ctrl+d media.paged.sheet.command.fillDown",
         "cmd+r media.paged.sheet.command.fillRight",
         "ctrl+r media.paged.sheet.command.fillRight",
         "cmd+f media.paged.sheet.command.findInSheet",
@@ -198,6 +199,18 @@ describe.skipIf(!ENGINE_BUILT)(
     it("cmd+d → fillDown: live only inside an entered sheet frame, and it does what fillDown does", async () => {
       covers("keybinding:cmd+d→media.paged.sheet.command.fillDown");
       const b = await bound(env, "cmd+d", "media.paged.sheet.command.fillDown");
+      await effect.fillDown(env, b);
+    });
+
+    // SH-5: Fill down has its ctrl twin, so a PC's Ctrl+D fills down in the
+    // grid (as Excel's does) instead of running Place.
+    it("ctrl+d → fillDown: live only inside an entered sheet frame, and it does what fillDown does", async () => {
+      covers("keybinding:ctrl+d→media.paged.sheet.command.fillDown");
+      const b = await bound(
+        env,
+        "ctrl+d",
+        "media.paged.sheet.command.fillDown",
+      );
       await effect.fillDown(env, b);
     });
 

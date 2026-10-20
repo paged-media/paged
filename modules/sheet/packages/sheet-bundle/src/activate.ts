@@ -451,6 +451,7 @@ export function activate(host: BundleHost): BundleHandle {
     ["cmd+v", "media.paged.sheet.command.pasteSelection"],
     ["ctrl+v", "media.paged.sheet.command.pasteSelection"],
     ["cmd+d", "media.paged.sheet.command.fillDown"],
+    ["ctrl+d", "media.paged.sheet.command.fillDown"],
     ["cmd+r", "media.paged.sheet.command.fillRight"],
     ["ctrl+r", "media.paged.sheet.command.fillRight"],
     ["cmd+f", "media.paged.sheet.command.findInSheet"],

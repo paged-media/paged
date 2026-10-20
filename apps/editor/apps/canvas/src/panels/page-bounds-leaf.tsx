@@ -17,61 +17,116 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// `paged.input.pageBounds` — the Object section's Bounds row (Properties
+// `paged.input.pageBounds` — the Object section's geometry row (Properties
 // and the Control panel), reading where the selection IS rather than its
 // inner `frameBounds` (see `page-position.ts`).
 //
-// It renders through the built-in Bounds leaf, so the four cells look and
-// behave exactly as before; only the VALUE and the WRITE change. The
-// cells are editable where an edge write is the edge the user sees (one
-// rectangle, ellipse or text frame with no rotation, scale or shear) and
-// read-only otherwise — a rotated frame, a line, a path, a group, a
-// multi-selection — where a `frameBounds` write would land somewhere
-// other than the number typed. Those move through Transform ▸ X / Y.
+// UX audit F-38 / PN-252: it reads as the Transform panel does, X / Y / W
+// / H with a reference point, not Top / Left / Bottom / Right. X / Y move
+// the selection (rigidly, one undo step, any selection); W / H resize
+// about the reference point and are editable where an edge write is the
+// edge the user sees (one rectangle, ellipse or text frame with no
+// rotation, scale or shear), read-only otherwise: a rotated frame, a line,
+// a path, a group, a multi-selection, where a `frameBounds` write would
+// land somewhere other than the number typed.
 
-import type { ComponentType } from "react";
+import { useState } from "react";
 import type { CatalogEntry, LeafProps } from "@paged-media/catalog";
-import type { Value } from "@paged-media/client";
+import { ReferencePointGrid } from "@paged-media/shell";
+import { LengthInput } from "@paged-media/ui";
 
 import { usePagePosition } from "./page-position";
 
 export const PAGED_INPUT_PAGE_BOUNDS = "paged.input.pageBounds";
 
-/** The catalog entry, rendering through `boundsLeaf` — the built-in
- *  `paged.input.bounds` leaf, handed in by the registry that owns it. */
-export function pageBoundsEntry(
-  boundsLeaf: ComponentType<LeafProps>,
-): CatalogEntry {
-  const BoundsLeaf = boundsLeaf;
-  function PageBoundsLeaf({ props }: LeafProps) {
-    const { box, edgeLeaf, setEdges } = usePagePosition();
-    const value: Value | null = box
-      ? {
-          type: "bounds",
-          value: [box.top, box.left, box.bottom, box.right],
-        }
-      : null;
-    return (
-      <span
-        className="contents"
-        data-page-bounds={edgeLeaf ? "edges" : "readout"}
-      >
-        <BoundsLeaf
-          value={value}
-          props={props}
-          onCommit={
-            edgeLeaf
-              ? (next) => {
-                  if (next.type !== "bounds") return;
-                  const [top, left, bottom, right] = next.value;
-                  void setEdges({ top, left, bottom, right });
-                }
-              : undefined
-          }
+/** The 9-point anchor (row-major, 0 = top-left) as fractions of the box. */
+function anchorFractions(index: number): { fx: number; fy: number } {
+  return { fx: (index % 3) / 2, fy: Math.floor(index / 3) / 2 };
+}
+
+function PageBoundsLeaf({ props }: LeafProps) {
+  const { box, edgeLeaf, moveBy, setEdges } = usePagePosition();
+  const [anchor, setAnchor] = useState(0);
+  const label = typeof props?.label === "string" ? props.label : null;
+  const x = box ? box.left : null;
+  const y = box ? box.top : null;
+  const w = box ? box.right - box.left : null;
+  const h = box ? box.bottom - box.top : null;
+  const resize = (nw: number, nh: number) => {
+    if (!box || w === null || h === null) return;
+    const { fx, fy } = anchorFractions(anchor);
+    const left = box.left + fx * w - fx * nw;
+    const top = box.top + fy * h - fy * nh;
+    void setEdges({ top, left, bottom: top + nh, right: left + nw });
+  };
+  return (
+    <div
+      className="flex flex-col gap-[6px]"
+      data-page-bounds={edgeLeaf ? "edges" : "readout"}
+      data-reference-point-anchor={anchor}
+    >
+      {label ? (
+        <div className="text-[11.5px]" style={{ color: "var(--pg-muted-fg)" }}>
+          {label}
+        </div>
+      ) : null}
+      <div className="flex items-start gap-2">
+        <ReferencePointGrid
+          value={anchor}
+          disabled={!edgeLeaf}
+          onChange={(i) => setAnchor(i)}
         />
-      </span>
-    );
-  }
+        <div className="grid min-w-0 flex-1 grid-cols-2 gap-2">
+          <LengthInput
+            prefix="X"
+            valuePt={x}
+            disabled={!box}
+            onChangePt={() => {}}
+            onCommitPt={(nx) => {
+              if (x !== null) void moveBy(nx - x, 0);
+            }}
+            aria-label="x"
+          />
+          <LengthInput
+            prefix="Y"
+            valuePt={y}
+            disabled={!box}
+            onChangePt={() => {}}
+            onCommitPt={(ny) => {
+              if (y !== null) void moveBy(0, ny - y);
+            }}
+            aria-label="y"
+          />
+          <LengthInput
+            prefix="W"
+            valuePt={w}
+            min={0}
+            disabled={!edgeLeaf}
+            onChangePt={() => {}}
+            onCommitPt={(nw) => {
+              if (h !== null) resize(nw, h);
+            }}
+            aria-label="width"
+          />
+          <LengthInput
+            prefix="H"
+            valuePt={h}
+            min={0}
+            disabled={!edgeLeaf}
+            onChangePt={() => {}}
+            onCommitPt={(nh) => {
+              if (w !== null) resize(w, nh);
+            }}
+            aria-label="height"
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** The catalog entry. */
+export function pageBoundsEntry(): CatalogEntry {
   return {
     id: PAGED_INPUT_PAGE_BOUNDS,
     kind: "leaf",

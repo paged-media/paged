@@ -387,34 +387,39 @@ describe("Object/Transform panel: findings", () => {
     expect(flip.getAttribute("data-on")).toBe("true");
   });
 
-  // UX audit F-38: geometry reads differently in two places. This panel
-  // shows X / Y / W / H; the Object section the Properties panel and the
-  // control strip render for the same frame shows Top / Left / Bottom /
-  // Right, with no reference point.
-  test.failing(
-    "PN-252 (UX F-38): the Object section shows the frame as X / Y / W / H too",
-    async () => {
-      covers("panel:paged.object-transform");
-      function Both() {
-        return (
-          <>
-            <ObjectTransformPanel />
-            <CatalogRegistryProvider registry={appCatalogRegistry()}>
-              <div data-object-section="">
-                <CompositionRenderer composition={objectTransformComposition} />
-              </div>
-            </CatalogRegistryProvider>
-          </>
-        );
-      }
-      const h = await mountPanel(Both, {
-        id: "paged.object-transform",
-        scene: richScene,
-      });
-      await h.select([h.scene.rect]);
-      const section = h.root.querySelector("[data-object-section]")!;
-      expect(byLabel(h, "width").value).toBe("128 pt");
-      expect(section.querySelector('input[aria-label="width"]')).not.toBeNull();
-    },
-  );
+  // UX audit F-38 (fixed): geometry read differently in two places. This
+  // panel shows X / Y / W / H; the Object section the Properties panel and
+  // the control strip render for the same frame showed Top / Left / Bottom
+  // / Right, with no reference point. Both read X / Y / W / H now.
+  test("PN-252 (UX F-38): the Object section shows the frame as X / Y / W / H too", async () => {
+    covers("panel:paged.object-transform");
+    function Both() {
+      return (
+        <>
+          <ObjectTransformPanel />
+          <CatalogRegistryProvider registry={appCatalogRegistry()}>
+            <div data-object-section="">
+              <CompositionRenderer composition={objectTransformComposition} />
+            </div>
+          </CatalogRegistryProvider>
+        </>
+      );
+    }
+    const h = await mountPanel(Both, {
+      id: "paged.object-transform",
+      scene: richScene,
+    });
+    await h.select([h.scene.rect]);
+    const section = h.root.querySelector("[data-object-section]")!;
+    expect(byLabel(h, "width").value).toBe("128 pt");
+    const width = section.querySelector<HTMLInputElement>(
+      'input[aria-label="width"]',
+    );
+    expect(width).not.toBeNull();
+    expect(width!.value).toBe("128 pt");
+    expect(section.querySelector('input[aria-label="top"]')).toBeNull();
+    expect(
+      section.querySelector("[data-reference-point-anchor]"),
+    ).not.toBeNull();
+  });
 });

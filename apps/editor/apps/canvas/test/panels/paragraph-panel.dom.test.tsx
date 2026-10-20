@@ -337,27 +337,24 @@ describe("Paragraph panel: every control writes the paragraph", () => {
 
 describe("Paragraph panel: findings", () => {
   // The engine reads "no rule" as a spec whose every field is null, and the
-  // pill turns that on as {...spec, on: true}: a rule with no weight and no
-  // offset, while the row shows 1 pt. The panel's own comment says a pill
-  // over no rule writes the default rule (1 pt, offset 0).
-  test.failing(
-    "PN-25: turning Rule above on over no rule writes the default 1 pt rule",
-    async () => {
-      covers("panel:paged.paragraph");
-      const h = await mount();
-      await h.caret(h.scene.storyId, 2);
-      const from = h.mark();
-      await h.click(
-        h.root.querySelector<HTMLButtonElement>(
-          '[data-toggle-switch="rule-above"]',
-        )!,
-      );
-      const sent = h.mutations(from) as unknown as Sent;
-      expect(sent[0].args.value.value).toMatchObject({
-        on: true,
-        weight: 1,
-        offset: 0,
-      });
-    },
-  );
+  // pill turned that on as {...spec, on: true}: a rule with no weight and no
+  // offset, while the row showed 1 pt. Fixed: a pill over no rule writes the
+  // default rule (1 pt, offset 0).
+  test("PN-25: turning Rule above on over no rule writes the default 1 pt rule", async () => {
+    covers("panel:paged.paragraph");
+    const h = await mount();
+    await h.caret(h.scene.storyId, 2);
+    const from = h.mark();
+    await h.click(
+      h.root.querySelector<HTMLButtonElement>(
+        '[data-toggle-switch="rule-above"]',
+      )!,
+    );
+    const sent = h.mutations(from) as unknown as Sent;
+    expect(sent[0].args.value.value).toMatchObject({
+      on: true,
+      weight: 1,
+      offset: 0,
+    });
+  });
 });

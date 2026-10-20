@@ -48,8 +48,12 @@ export interface ApplyStyleGroup {
   items: ApplyStyleItem[];
 }
 
+/** The select's value while the selection is mixed; never a style id. */
+const MIXED_VALUE = "__mixed__";
+
 export function ApplyList({
   appliedId,
+  mixed = false,
   groups,
   itemIcon,
   next,
@@ -64,6 +68,9 @@ export function ApplyList({
 }: {
   /** Currently applied style's selfId ("" = [None] / unresolved). */
   appliedId: string;
+  /** The selection carries more than one style (PN-153): the select shows
+   *  a mixed state, never [None], and no row is marked applied. */
+  mixed?: boolean;
   groups: ApplyStyleGroup[];
   /** Glyph for unselected rows (the panel's own glyph). */
   itemIcon: string;
@@ -89,18 +96,26 @@ export function ApplyList({
         <div className="flex items-center gap-[6px]">
           <span className="relative inline-flex min-w-0 flex-1">
             <select
-              value={appliedId}
+              value={mixed ? MIXED_VALUE : appliedId}
+              data-mixed={mixed ? "" : undefined}
               disabled={readonly || onApply == null}
               aria-label="Applied style"
               data-apply-select
               data-collection={collection}
-              onChange={(e) => onApply?.(e.target.value)}
+              onChange={(e) => {
+                if (e.target.value !== MIXED_VALUE) onApply?.(e.target.value);
+              }}
               className="h-[30px] w-full appearance-none overflow-hidden text-ellipsis whitespace-nowrap rounded-[6px] border border-input bg-background pl-2.5 pr-7 text-[12.5px] disabled:opacity-55"
               style={{
                 fontFamily: "var(--font-sans)",
                 color: "var(--pg-fg)",
               }}
             >
+              {mixed && (
+                <option value={MIXED_VALUE} disabled>
+                  (Mixed)
+                </option>
+              )}
               <option value="">[None]</option>
               {flat.map((i) => (
                 <option key={i.selfId} value={i.selfId}>
@@ -157,7 +172,7 @@ export function ApplyList({
               </div>
             )}
             {g.items.map((it) => {
-              const on = it.selfId === appliedId;
+              const on = !mixed && it.selfId === appliedId;
               const interactive = !readonly && onApply != null;
               return (
                 <button
