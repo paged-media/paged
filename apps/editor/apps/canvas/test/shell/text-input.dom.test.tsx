@@ -221,6 +221,21 @@ describe("text entry with a caret in a story", () => {
     expect(document.activeElement).toBe(t.surface());
   });
 
+  test("a caret that goes away hands keyboard focus back to the canvas viewport the surface sits in", async () => {
+    const t = await mount();
+    await t.caretAt(0);
+    expect(document.activeElement).toBe(t.surface());
+    const viewport = t.surface().closest('[data-canvas-surface="viewport"]');
+    expect(viewport, "the surface is laid over the canvas viewport").not.toBe(
+      null,
+    );
+    await act(async () => t.probe.setSelection(null));
+    await t.settle();
+    // Not the caretless textarea: there the arrows and Backspace would
+    // stay the text field's, and the selected frame would not nudge.
+    expect(document.activeElement).toBe(viewport);
+  });
+
   test("SH-3 (F-36): text an input method commits (insertText) lands in the story, emoji included", async () => {
     const t = await mount();
     await t.caretAt(0);

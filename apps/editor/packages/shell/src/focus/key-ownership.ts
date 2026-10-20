@@ -53,6 +53,12 @@ export const WIDGET_KEYS: ReadonlySet<string> = new Set([
   "end",
 ]);
 
+/** The keys that open the focused thing's menu: Shift+F10 and the
+ *  context-menu key. A control with a menu of its own (a rail tool's
+ *  flyout) claims them by preventing the default, and the canvas context
+ *  menu bound to the same keys must then stay shut. */
+export const MENU_KEYS: ReadonlySet<string> = new Set(["f10", "contextmenu"]);
+
 /** Containers that own EVERY key pressed inside them except a Cmd/Ctrl
  *  chord: a dialog (modal or not, the rest of the editor is not where
  *  the user is) and an open menu (its arrows, Home/End, typeahead,
