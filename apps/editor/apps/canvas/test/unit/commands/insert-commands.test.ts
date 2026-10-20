@@ -425,6 +425,8 @@ describe("Place image", () => {
     stubGlobal("document", {
       createElement: () => {
         const input: Record<string, unknown> = {
+          setAttribute() {},
+          remove() {},
           click: () => {
             input.files = files.map(
               (f) => new File([f.bytes.slice()], f.name, { type: f.type }),
@@ -434,6 +436,7 @@ describe("Place image", () => {
         };
         return input;
       },
+      body: { append() {} },
       querySelector: () => null,
     });
   };
@@ -476,8 +479,9 @@ describe("Place image", () => {
     stubGlobal("document", {
       createElement: () => {
         picked++;
-        return { click() {} };
+        return { click() {}, setAttribute() {}, remove() {} };
       },
+      body: { append() {} },
       // The viewport sits at (10, 20) in the window.
       querySelector: (sel: string) =>
         sel === "[data-paged-viewport]"

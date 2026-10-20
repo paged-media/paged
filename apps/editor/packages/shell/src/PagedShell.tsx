@@ -158,6 +158,7 @@ import { panelBelongsHere } from "./registries/types";
 import type { ToolContribution } from "./registries/tool";
 import type { Disposable } from "./registries/types";
 import { useFps } from "./hooks/useFps";
+import { chooseFiles } from "./lib/file-chooser";
 
 export interface PagedShellProps {
   client: CanvasClient;
@@ -874,8 +875,6 @@ function ShellChrome({
                 if (handled) return;
               }
 
-              const input = document.createElement("input");
-              input.type = "file";
               // K-2 / S-06 — also offer the file types registered plugin
               // importers claim (e.g. paged.sheet's .xlsx), resolved at
               // click time so late-registered importers are included.
@@ -889,22 +888,26 @@ function ShellChrome({
               // written by an incompatible version. Listing it here is
               // the whole change; leaving it out only meant the picker
               // hid files it could already open.
-              input.accept = [
-                ".idml",
-                ".paged",
-                "application/vnd.adobe.indesign-idml-package",
-                "application/x-paged+zip",
-                ...registries.importers.acceptExtensions(),
-              ].join(",");
-              input.onchange = () => {
+              void chooseFiles({
+                accept: [
+                  ".idml",
+                  ".paged",
+                  "application/vnd.adobe.indesign-idml-package",
+                  "application/x-paged+zip",
+                  ...registries.importers.acceptExtensions(),
+                ],
+              }).then((files) => {
+                if (files.length === 0) {
+                  resolve(null); // cancelled — as the handle path answers it
+                  return;
+                }
                 // The input fallback yields no handle. CLEAR any previous
                 // one: keeping it would make the next Save write this new
                 // document over the file the LAST one came from, silently
                 // and with no undo.
                 setOpenFileHandle(null);
-                resolve(input.files?.[0] ?? null);
-              };
-              input.click();
+                resolve(files[0] ?? null);
+              });
             })();
           }),
         setStatus,
@@ -929,11 +932,9 @@ function ShellChrome({
       buildImportAseCommand({
         pickFile: async () =>
           new Promise<File | null>((resolve) => {
-            const input = document.createElement("input");
-            input.type = "file";
-            input.accept = ".ase";
-            input.onchange = () => resolve(input.files?.[0] ?? null);
-            input.click();
+            void chooseFiles({ accept: [".ase"] }).then((files) =>
+              resolve(files[0] ?? null),
+            );
           }),
         setStatus,
       }),
@@ -1325,7 +1326,11 @@ function ShellChrome({
           </div>
         )}
         {!railHidden && panelRail && panelRail.length > 0 && (
-          <PanelRail items={panelRail} />
+          <PanelRail
+            items={panelRail}
+            panelsHidden={panelsHidden}
+            onRevealPanels={() => setPanelsHidden(false)}
+          />
         )}
       </div>
 
