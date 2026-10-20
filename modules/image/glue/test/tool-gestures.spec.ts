@@ -14,8 +14,8 @@
 //     Commit, commands.spec.ts);
 //   · INV-2 (apps/editor/docs/reference/gestures.md): Escape mid-gesture
 //     commits nothing. The editor delivers Escape — and a lost pointer
-//     capture — to `onKey`; only the polygonal lasso handles it. The
-//     others are finding IMG-2, one expected failure per tool.
+//     capture — to `onKey`; every drag tool abandons its gesture there
+//     (IMG-2, fixed).
 //
 // The stroke tools paint through WGSL, so in Node `brushBegin` declines
 // for the GPU and nothing is painted; the tests assert that refusal, and
@@ -399,12 +399,12 @@ describe("raster type", () => {
   });
 });
 
-// ── FINDING IMG-2: Escape mid-gesture commits ───────────────────────
+// ── IMG-2 (fixed): Escape mid-gesture commits nothing ───────────────
 //
 // The editor routes Escape (and a lost pointer capture) to the active
 // tool's `onKey` as THE zero-mutation cancel (useGestureSpine, INV-2 /
-// INV-8). The image tools other than the polygonal lasso have no Escape
-// handling, so the gesture runs on and commits on release.
+// INV-8). Every drag tool abandons its gesture there, as the polygonal
+// lasso always did, and the release that follows commits nothing.
 
 async function escapeThenRelease(k: K, tool: string) {
   await gestures(k.toolTarget)
@@ -418,27 +418,21 @@ async function escapeThenRelease(k: K, tool: string) {
 }
 
 describe("IMG-2 — Escape cancels the gesture (INV-2)", () => {
-  it.failing(
-    "IMG-2 — marquee (rectangle): Escape mid-drag selects nothing",
-    async () => {
-      const k = await ingested();
-      await escapeThenRelease(k, `${T}.marqueeRect`);
-      expect(k.session.state().selection).toBeNull();
-      k.dispose();
-    },
-  );
+  it("IMG-2 — marquee (rectangle): Escape mid-drag selects nothing", async () => {
+    const k = await ingested();
+    await escapeThenRelease(k, `${T}.marqueeRect`);
+    expect(k.session.state().selection).toBeNull();
+    k.dispose();
+  });
 
-  it.failing(
-    "IMG-2 — marquee (ellipse): Escape mid-drag selects nothing",
-    async () => {
-      const k = await ingested();
-      await escapeThenRelease(k, `${T}.marqueeEllipse`);
-      expect(k.session.state().selection).toBeNull();
-      k.dispose();
-    },
-  );
+  it("IMG-2 — marquee (ellipse): Escape mid-drag selects nothing", async () => {
+    const k = await ingested();
+    await escapeThenRelease(k, `${T}.marqueeEllipse`);
+    expect(k.session.state().selection).toBeNull();
+    k.dispose();
+  });
 
-  it.failing("IMG-2 — lasso: Escape mid-drag selects nothing", async () => {
+  it("IMG-2 — lasso: Escape mid-drag selects nothing", async () => {
     const k = await ingested();
     await gestures(k.toolTarget)
       .tool(`${T}.lasso`)
@@ -453,17 +447,14 @@ describe("IMG-2 — Escape cancels the gesture (INV-2)", () => {
     k.dispose();
   });
 
-  it.failing(
-    "IMG-2 — quick selection: Escape mid-drag selects nothing",
-    async () => {
-      const k = await ingested();
-      await escapeThenRelease(k, `${T}.quickSelect`);
-      expect(k.session.state().selection).toBeNull();
-      k.dispose();
-    },
-  );
+  it("IMG-2 — quick selection: Escape mid-drag selects nothing", async () => {
+    const k = await ingested();
+    await escapeThenRelease(k, `${T}.quickSelect`);
+    expect(k.session.state().selection).toBeNull();
+    k.dispose();
+  });
 
-  it.failing("IMG-2 — patch: Escape mid-drag patches nothing", async () => {
+  it("IMG-2 — patch: Escape mid-drag patches nothing", async () => {
     const k = await ingested();
     await k.run(`${C}.selectAll`);
     const calls = spyOn(k.session, { patchSelection: true });
@@ -472,7 +463,7 @@ describe("IMG-2 — Escape cancels the gesture (INV-2)", () => {
     k.dispose();
   });
 
-  it.failing("IMG-2 — brush: Escape mid-stroke commits no stroke", async () => {
+  it("IMG-2 — brush: Escape mid-stroke commits no stroke", async () => {
     const k = await ingested();
     const calls = spyOn(k.session, {
       brushBegin: true,
@@ -484,7 +475,7 @@ describe("IMG-2 — Escape cancels the gesture (INV-2)", () => {
     k.dispose();
   });
 
-  it.failing("IMG-2 — move pixels: Escape mid-drag moves nothing", async () => {
+  it("IMG-2 — move pixels: Escape mid-drag moves nothing", async () => {
     const k = await ingested();
     const calls = spyOn(k.session, { offsetLayer: true, moveSelection: true });
     await escapeThenRelease(k, `${T}.move`);
@@ -492,7 +483,7 @@ describe("IMG-2 — Escape cancels the gesture (INV-2)", () => {
     k.dispose();
   });
 
-  it.failing("IMG-2 — gradient: Escape mid-drag fills nothing", async () => {
+  it("IMG-2 — gradient: Escape mid-drag fills nothing", async () => {
     const k = await ingested();
     const calls = spyOn(k.session, { fillGradientLine: true });
     await escapeThenRelease(k, `${T}.gradient`);
@@ -500,7 +491,7 @@ describe("IMG-2 — Escape cancels the gesture (INV-2)", () => {
     k.dispose();
   });
 
-  it.failing("IMG-2 — red eye: Escape mid-drag corrects nothing", async () => {
+  it("IMG-2 — red eye: Escape mid-drag corrects nothing", async () => {
     const k = await ingested();
     const calls = spyOn(k.session, { applyRedEye: true });
     await escapeThenRelease(k, `${T}.redEye`);

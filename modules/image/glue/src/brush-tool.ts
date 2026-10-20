@@ -81,6 +81,19 @@ export function makeBrushGesture(
    *  re-checked after every await, so a tool switch mid-drag cannot be
    *  followed by a commit. */
   let opened = false;
+  /** Bumped by every abandon (Escape, a tool switch): a `brushBegin` that
+   *  resolves after its stroke was abandoned closes it instead of
+   *  painting. */
+  let stroke = 0;
+
+  /** Abandon the stroke in flight: the engine-held pixels were never
+   *  mutated, so nothing is lost but the preview. */
+  const abandon = () => {
+    stroke++;
+    opened = false;
+    session.brushCancel();
+    session.brushMachine()?.cancel();
+  };
 
   /** Publish the brush-tip ring at an image-px point (null clears). The
    *  ring is the NOMINAL tip size mapped into page pt, so it tracks the
@@ -144,11 +157,8 @@ export function makeBrushGesture(
     },
 
     onDeactivate(_reason: DeactivateReason) {
-      // A tool switch mid-drag abandons the stroke; the engine-held
-      // pixels were never mutated, so nothing is lost but the preview.
-      opened = false;
-      session.brushCancel();
-      session.brushMachine()?.cancel();
+      // A tool switch mid-drag abandons the stroke.
+      abandon();
       host.overlay.setToolPreview(null);
       fit = null;
     },
@@ -177,9 +187,15 @@ export function makeBrushGesture(
       if (!machine.down(point, e.pressure, e.pointerType as BrushPointerType))
         return;
       renderTip(point);
+      const mine = ++stroke;
       void (async () => {
         if (!(await session.brushBegin(tool))) {
-          machine.cancel();
+          if (mine === stroke) machine.cancel();
+          return;
+        }
+        if (mine !== stroke) {
+          // Abandoned while it began: close the stroke, paint nothing.
+          session.brushCancel();
           return;
         }
         opened = true;
@@ -206,6 +222,16 @@ export function makeBrushGesture(
       if (!machine || !machine.state().drawing) return;
       machine.up();
       void pump();
+    },
+
+    // IMG-2 / INV-2: Escape (and a lost pointer capture) mid-stroke
+    // commits no stroke; the release that follows finds none drawing.
+    onKey(e: KeyboardEvent) {
+      const machine = session.brushMachine();
+      if (e.key !== "Escape" || !machine?.state().drawing) return;
+      abandon();
+      host.overlay.setToolPreview(null);
+      e.preventDefault();
     },
 
     cursorAt() {

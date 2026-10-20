@@ -3819,11 +3819,15 @@ export function createBundleHost(
   // door is always live against a v51 worker (the handshake guarantees that).
   const partsBase = `paged/${manifest.id}/`;
   const partsFull = (rel: string): string => {
-    const clean = rel.replace(/^\/+/, "");
-    if (clean.split("/").includes("..")) {
+    // HOST-6: an absolute path is rejected, as `..` is (PartsSurface), not
+    // quietly made relative.
+    if (rel.startsWith("/")) {
+      throw new Error(`host.parts: path "${rel}" must be relative`);
+    }
+    if (rel.split("/").includes("..")) {
       throw new Error(`host.parts: path "${rel}" must not contain ".."`);
     }
-    return partsBase + clean;
+    return partsBase + rel;
   };
   const parts: PartsSurface = {
     async write(path, bytes) {
