@@ -33,7 +33,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-import { useCanvasClient } from "@paged-media/shell";
+import { chooseFiles, useCanvasClient } from "@paged-media/shell";
 
 const INTENTS = [
   "Perceptual",
@@ -144,11 +144,7 @@ export function ColorSettingsPanel() {
   };
 
   const addProfile = () => {
-    const input = document.createElement("input");
-    input.type = "file";
-    input.accept = ".icc,.icm";
-    input.onchange = async () => {
-      const file = input.files?.[0];
+    void chooseFiles({ accept: [".icc", ".icm"] }).then(async ([file]) => {
       if (!file) return;
       const name = file.name.replace(/\.(icc|icm)$/i, "");
       const bytes = new Uint8Array(await file.arrayBuffer());
@@ -159,8 +155,7 @@ export function ColorSettingsPanel() {
       }
       setProfileError(null);
       await client.registerColorProfile(name, bytes);
-    };
-    input.click();
+    });
   };
 
   return (

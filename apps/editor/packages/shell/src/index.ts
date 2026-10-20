@@ -52,6 +52,11 @@ export {
   type PrintStandard,
 } from "./lib/print-output";
 export {
+  chooseFiles,
+  openFileChooserCount,
+  type FileChooserOptions,
+} from "./lib/file-chooser";
+export {
   clampCamera,
   zoomCameraTo,
   ZOOM_PRESET_SCALES,
