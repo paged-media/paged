@@ -266,9 +266,10 @@ test.describe("Concept 3 — Export PDF dialog", () => {
     await page.locator("[data-export-confirm]").click();
     const download = await downloadPromise;
     expect(download.suggestedFilename()).toMatch(/\.pdf$/);
-    await expect(page.locator("[data-export-dialog]")).toHaveAttribute(
-      "data-export-status",
-      "done",
+    // Done: the dialog closes and the notice names the file (ADR 272).
+    await expect(page.locator("[data-export-dialog]")).toHaveCount(0);
+    await expect(page.locator("[data-export-notice]")).toContainText(
+      download.suggestedFilename(),
     );
   });
 });

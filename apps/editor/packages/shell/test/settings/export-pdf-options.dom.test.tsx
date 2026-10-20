@@ -326,3 +326,67 @@ describe("Export PDF dialog: the print-output facts", () => {
     });
   });
 });
+
+// ADR 272 — a finished export closes the dialog and a notice names the
+// file; a failed one keeps the dialog open with the error.
+describe("Export PDF dialog: after the export", () => {
+  const ready = () =>
+    waitFor(() => {
+      const b = field<HTMLButtonElement>("[data-export-confirm]");
+      if (b.disabled) throw new Error("export not ready");
+      return b;
+    });
+
+  test("a finished export closes the dialog and the notice names the file and its pages", async () => {
+    covers("command:paged.file.exportPdf");
+    const { client, exports } = fakeClient();
+    mount(client);
+    fireEvent.click(await ready());
+    await waitFor(() => expect(exports).toHaveLength(1));
+    await waitFor(() =>
+      expect(document.body.querySelector("[data-export-dialog]")).toBeNull(),
+    );
+    const notice = field<HTMLElement>("[data-export-notice]");
+    expect(notice.getAttribute("role")).toBe("status");
+    expect(notice.textContent).toContain("Exported brochure.pdf · 2 pages");
+    fireEvent.click(field("[data-export-notice-close]"));
+    expect(document.body.querySelector("[data-export-notice]")).toBeNull();
+  });
+
+  test("findings travel in the notice, which stays until it is closed", async () => {
+    covers("command:paged.file.exportPdf");
+    const { client } = fakeClient();
+    (client as unknown as { exportPdf: () => Promise<unknown> }).exportPdf =
+      async () => ({
+        bytes: new Uint8Array([37, 80, 68, 70]),
+        diagnostics: ["a font was substituted"],
+      });
+    mount(client);
+    fireEvent.click(await ready());
+    const notice = await waitFor(() =>
+      field<HTMLElement>("[data-export-notice]"),
+    );
+    expect(notice.textContent).toContain("1 finding: a font was substituted");
+  });
+
+  test("a failed export keeps the dialog open with the error, and no notice", async () => {
+    covers("command:paged.file.exportPdf");
+    const { client } = fakeClient();
+    (client as unknown as { exportPdf: () => Promise<unknown> }).exportPdf =
+      async () => {
+        throw new Error("the worker went away");
+      };
+    mount(client);
+    fireEvent.click(await ready());
+    const error = await waitFor(() =>
+      field<HTMLElement>("[data-export-error]"),
+    );
+    expect(error.textContent).toContain("the worker went away");
+    expect(
+      field<HTMLElement>("[data-export-dialog]").getAttribute(
+        "data-export-status",
+      ),
+    ).toBe("error");
+    expect(document.body.querySelector("[data-export-notice]")).toBeNull();
+  });
+});
