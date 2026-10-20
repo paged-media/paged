@@ -28,7 +28,10 @@ rendered. How the parts fit is in [`architecture.md`](architecture.md).
   `vello_cpu` when the document is built, all seventeen filter primitives included, so both
   lanes and the PDF export draw the same pixels. Eighteen fixtures hold it to the `resvg`
   renders it replaced (`paged-gpu/tests/it/svg_reference.rs`) and the GPU lane to the CPU lane
-  (`svg-filters`; [ADR 190](adr/190-a-placed-svg-draws-its-filters.md)).
+  (`svg-filters`; [ADR 190](adr/190-a-placed-svg-draws-its-filters.md)). An SVG without filters,
+  masks or patterns is drawn as vectors: its paths, strokes, gradients, clips and groups go
+  into the display list under the placement, so it stays sharp at every zoom and in the PDF
+  export (`svg-vectors`; ADR 190, amendment of 2026-10-20).
 - **Edit.** 137 mutation operations over the wire, batches that are atomic and cost one
   rebuild and one undo step, undo and redo, and engine-minted ids reported in the reply.
 - **Locks and deletes follow InDesign.** A locked item, and the content of a locked container,
