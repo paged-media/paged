@@ -60,7 +60,7 @@ BACKEND=gpu bun run test:fidelity  # WebGPU/Vello path (headed; CPU fallback)
 ```
 
 Don't loosen the per-fixture thresholds
-(`corpus/envato/canvas-fidelity-thresholds.json`) to make a regression
+(`corpus/config/canvas-fidelity-thresholds.json`) to make a regression
 pass — fix the regression first, then tighten the threshold.
 
 ## Scope note
