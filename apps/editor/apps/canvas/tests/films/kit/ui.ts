@@ -22,7 +22,7 @@
 // the viewer sees the cursor travel there. Menus open item by item, the way
 // a hand opens them.
 
-import type { Locator } from "@playwright/test";
+import { expect, type Locator } from "@playwright/test";
 import type { Kit } from "./film";
 
 async function centre(
@@ -52,12 +52,14 @@ export async function hover(k: Kit, l: Locator): Promise<void> {
 
 /** A menu item by the start of its accessible name, so "Place…" finds
  *  "Place… ⌘D" (the name carries the shortcut). */
-const menuItem = (k: Kit, label: string) =>
-  k.page
-    .getByRole("menuitem", {
-      name: new RegExp(`^${label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`),
-    })
+const menuItem = (k: Kit, label: string) => {
+  const name = new RegExp(`^${label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`);
+  // A toggle is a menuitemcheckbox (editor ADR 255).
+  return k.page
+    .getByRole("menuitem", { name })
+    .or(k.page.getByRole("menuitemcheckbox", { name }))
     .first();
+};
 
 /** Open a menu path: the top-level entry by its label in the menu bar, each
  *  submenu by hovering, the last entry by a click. After each hover the
@@ -73,7 +75,13 @@ export async function menu(k: Kit, path: string[]): Promise<void> {
   await k.hold(250);
   for (const [i, label] of rest.entries()) {
     if (i === rest.length - 1) {
-      await press(k, menuItem(k, label));
+      // A menu fades in: an item clicked mid-animation can miss, so the
+      // pointer settles on it first, the way a hand does.
+      const item = menuItem(k, label);
+      await expect(item).toBeEnabled();
+      await hover(k, item);
+      await k.hold(200);
+      await press(k, item);
       break;
     }
     await hover(k, menuItem(k, label));

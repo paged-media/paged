@@ -34,7 +34,7 @@ import { expect, type Page } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { film, type Kit } from "../kit/film";
-import { hover, press, screenPoint } from "../kit/ui";
+import { hover, menu, press, screenPoint } from "../kit/ui";
 
 const ASSETS = join(process.env.PAGED_MEDIA_ROOT ?? "", "assets");
 const PHOTO = "pexels-618833-dolomites.jpg";
@@ -99,38 +99,6 @@ async function sample(
   await k.page.keyboard.down("Alt");
   await k.pointer.click();
   await k.page.keyboard.up("Alt");
-}
-
-/** A menu path, opened the way a hand does it. The submenu library keeps the
- *  previous submenu open while the pointer could be heading for it, and it
- *  opens a submenu on pointer MOVEMENT: a pointer that comes to rest on
- *  "Image" after crossing "Draw" opens nothing. So each submenu parent is
- *  rested on and then nudged. Items are matched by their label's start,
- *  because an item's accessible name includes its shortcut ("Place… ⌘D"). */
-async function menuWalk(k: Kit, path: string[]): Promise<void> {
-  const item = (label: string) =>
-    k.page
-      .getByRole("menuitem", {
-        name: new RegExp(`^${label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`),
-      })
-      .first();
-  const [top, ...rest] = path;
-  await press(
-    k,
-    k.page.locator("header").getByText(top, { exact: true }).first(),
-  );
-  await k.hold(250);
-  for (const [i, label] of rest.entries()) {
-    if (i === rest.length - 1) {
-      await press(k, item(label));
-      break;
-    }
-    await hover(k, item(label));
-    await k.hold(400);
-    const at = k.pointer.position;
-    await k.pointer.moveTo({ x: at.x + 10, y: at.y }, { targetWidth: 60 });
-    await expect(item(rest[i + 1])).toBeVisible();
-  }
 }
 
 async function status(page: Page): Promise<string> {
@@ -232,7 +200,7 @@ film("image", async (k) => {
   await k.scene("place", async () => {
     const before = await rectangles(page);
     const chooser = page.waitForEvent("filechooser");
-    await menuWalk(k, ["File", "Place…"]);
+    await menu(k, ["File", "Place…"]);
     k.chip(PHOTO, "file");
     await (await chooser).setFiles(join(ASSETS, PHOTO));
     await k.hold(600);
@@ -245,7 +213,7 @@ film("image", async (k) => {
 
   // ── Open it for editing where it sits: the raster context. ──
   await k.scene("open", async () => {
-    await menuWalk(k, ["Plugins", "Image", "Adjust…"]);
+    await menu(k, ["Plugins", "Image", "Adjust…"]);
     await expect
       .poll(() => status(page), { timeout: 20_000 })
       .toContain("2200×1469 decoded");
@@ -321,7 +289,7 @@ film("image", async (k) => {
   // ── A luminosity selection, the exposure lowered inside it. ──
   await k.scene("luma", async () => {
     k.unfocus();
-    await menuWalk(k, ["Image", "Selection", "From luminosity channel"]);
+    await menu(k, ["Image", "Selection", "From luminosity channel"]);
     await expect
       .poll(() => status(page), { timeout: 10_000 })
       .toContain("luma channel");
@@ -344,7 +312,7 @@ film("image", async (k) => {
   // ── Commit into the document. ──
   await k.scene("commit", async () => {
     k.unfocus();
-    await menuWalk(k, ["Image", "Commit edits to the document"]);
+    await menu(k, ["Image", "Commit edits to the document"]);
     await expect
       .poll(() => status(page), { timeout: 20_000 })
       .toContain("Committed revision");
@@ -362,7 +330,7 @@ film("image", async (k) => {
       { speed: 1.3 },
     );
     const chooser = page.waitForEvent("filechooser");
-    await menuWalk(k, ["File", "Open…"]);
+    await menu(k, ["File", "Open…"]);
     k.chip(PSD, "file");
     await (await chooser).setFiles(join(ASSETS, PSD));
     await expect

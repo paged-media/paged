@@ -297,7 +297,7 @@ film("developers", async (k) => {
       .toContain('"id":"u1"');
     await press(
       k,
-      page.locator("header").getByText("Plugins", { exact: true }).first(),
+      page.getByRole("menubar").getByText("Plugins", { exact: true }).first(),
     );
     await k.hold(250);
     await hover(k, page.getByRole("menuitem", { name: /^Draw/ }).first());

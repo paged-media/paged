@@ -205,6 +205,24 @@ export function SelectionProvider({ children }: PropsWithChildren) {
     useState<PathEditSession | null>(null);
   const [activeGroup, setActiveGroup] = useState<string | null>(null);
 
+  // A selection belongs to its document. When another document replaces
+  // it, the engine starts with nothing selected; the mirror must too, or
+  // an id the old document selected names whatever element carries it in
+  // the new one (an imported deck reuses its ids), and the control bar and
+  // panels show a selection nobody made. Reset during render, the way
+  // React resets state on a changed input.
+  const docId = useOptionalDocument()?.handle?.docId ?? null;
+  const [selectionDoc, setSelectionDoc] = useState(docId);
+  if (selectionDoc !== docId) {
+    setSelectionDoc(docId);
+    setElementSelection([]);
+    setElementGeometry([]);
+    setPathEditMode(false);
+    setSelectedAnchorsState(NO_ANCHORS);
+    setPathEditSession(null);
+    setActiveGroup(null);
+  }
+
   // eslint-disable-next-line no-restricted-syntax -- its type argument types the value (ADR 229)
   const value = useMemo<SelectionContextValue>(
     () => ({

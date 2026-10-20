@@ -79,7 +79,13 @@ export async function aiTape(
             : input instanceof URL
               ? input.href
               : input.url;
-        if (!url.includes("/api/ai/")) return real(input, init);
+        // The availability probe (a bare GET, editor ADR 252) is not a
+        // reply: it goes to the proxy and is not taped.
+        const method = (
+          init?.method ?? (input instanceof Request ? input.method : "GET")
+        ).toUpperCase();
+        if (!url.includes("/api/ai/") || method !== "POST")
+          return real(input, init);
         const t0 = performance.now();
         const res = await real(input, init);
         const chunks: Array<{ t: number; text: string }> = [];
@@ -131,6 +137,19 @@ export async function aiTape(
             ? input.href
             : input.url;
       if (!url.includes("/api/ai/")) return real(input, init);
+      // The availability probe (ADR 252): answered as a proxy that serves
+      // the editor's POSTs answers a bare GET, without using a tape.
+      const method = (
+        init?.method ?? (input instanceof Request ? input.method : "GET")
+      ).toUpperCase();
+      if (method !== "POST")
+        return new Response(
+          JSON.stringify({
+            type: "error",
+            error: { type: "invalid_request_error", message: "POST only" },
+          }),
+          { status: 405, headers: { "content-type": "application/json" } },
+        );
       const tape = list[next++];
       if (!tape)
         throw new Error(`film tape: call ${next} to ${url} has no recording`);
