@@ -104,9 +104,20 @@ function RuleRow({
   const disabled = field.commit == null;
   const write = (next: ParagraphRuleSpec | null) => void field.commit?.(next);
   const on = ruleIsOn(spec);
+  // PN-25: a spec whose weight or offset is null (no rule, read through
+  // host.objects) turns on as the default rule the row shows (1 pt,
+  // offset 0), keeping every field the spec does carry.
+  const withDefaults = (base: ParagraphRuleSpec | null): ParagraphRuleSpec =>
+    base
+      ? {
+          ...base,
+          on: true,
+          weight: base.weight ?? DEFAULT_RULE.weight,
+          offset: base.offset ?? DEFAULT_RULE.offset,
+        }
+      : DEFAULT_RULE;
   const patch = (delta: Partial<ParagraphRuleSpec>) => {
-    const base = spec ?? DEFAULT_RULE;
-    write({ ...base, on: true, ...delta });
+    write({ ...withDefaults(spec), ...delta });
   };
   const absent = field.bindingState === "absent";
   return (
@@ -124,9 +135,7 @@ function RuleRow({
             label={name}
             onToggle={(next) => {
               // On → write the spec; off → clear the whole rule (null).
-              write(
-                next ? (spec ? { ...spec, on: true } : DEFAULT_RULE) : null,
-              );
+              write(next ? withDefaults(spec) : null);
             }}
           />
           <span

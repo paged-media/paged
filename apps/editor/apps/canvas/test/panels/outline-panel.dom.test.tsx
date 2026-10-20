@@ -116,10 +116,10 @@ describe("Outline panel: controls", () => {
 });
 
 describe("Outline panel: findings", () => {
-  // Entries are sorted by page, then by LEVEL: every level-1 heading on a
-  // page comes before every level-2 one, so a page with two chapters
-  // reads Alpha, Beta, Alpha one, Beta one.
-  test.failing("PN-109: headings on one page keep document order", async () => {
+  // Entries were sorted by page, then by LEVEL: every level-1 heading on a
+  // page came before every level-2 one, so a page with two chapters read
+  // Alpha, Beta, Alpha one, Beta one. Fixed: document order within a page.
+  test("PN-109: headings on one page keep document order", async () => {
     covers("panel:paged.outline");
     const h = await mount(
       structureIdml({

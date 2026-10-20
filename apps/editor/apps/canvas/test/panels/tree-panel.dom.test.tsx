@@ -144,17 +144,14 @@ describe("Tree panel: controls", () => {
 });
 
 describe("Tree panel: findings", () => {
-  // The highlight keys off a ONE-element selection only: select two
-  // frames on the canvas and the Tree marks neither.
-  test.failing(
-    "PN-108: every selected item's row is highlighted, not only a lone one",
-    async () => {
-      covers("panel:paged.tree");
-      const h = await mount();
-      await h.select([h.scene.rect, h.scene.oval]);
-      expect(highlighted(h).sort()).toEqual(
-        [key(h.scene.rect), key(h.scene.oval)].sort(),
-      );
-    },
-  );
+  // The highlight keyed off a ONE-element selection only: select two
+  // frames on the canvas and the Tree marked neither. Fixed.
+  test("PN-108: every selected item's row is highlighted, not only a lone one", async () => {
+    covers("panel:paged.tree");
+    const h = await mount();
+    await h.select([h.scene.rect, h.scene.oval]);
+    expect(highlighted(h).sort()).toEqual(
+      [key(h.scene.rect), key(h.scene.oval)].sort(),
+    );
+  });
 });

@@ -177,6 +177,17 @@ export function PropertiesPanel() {
             .join(" · ")
         : null;
 
+  const typeSections = hasContent ? (
+    <>
+      <div data-properties-section="character">
+        <CompositionRenderer composition={characterComposition} />
+      </div>
+      <div data-properties-section="paragraph">
+        <CompositionRenderer composition={paragraphComposition} />
+      </div>
+    </>
+  ) : null;
+
   return (
     <CatalogRegistryProvider registry={appCatalogRegistry()}>
       <div
@@ -252,6 +263,11 @@ export function PropertiesPanel() {
         {kind === "page" && <PageSummary />}
 
         <div className="p-3 pt-0 flex flex-col gap-3">
+          {/* PN-22 (UX F-37): with a caret or a text range the type
+              settings lead, as InDesign's Properties panel puts Character
+              and Paragraph first in text context; the frame's Object and
+              Stroke sections follow. */}
+          {kind === "text" ? typeSections : null}
           {kind === "frame" && owned ? (
             <div
               data-properties-section="object-type"
@@ -305,16 +321,7 @@ export function PropertiesPanel() {
               <CompositionRenderer composition={strokeComposition} />
             </div>
           ) : null}
-          {hasContent ? (
-            <div data-properties-section="character">
-              <CompositionRenderer composition={characterComposition} />
-            </div>
-          ) : null}
-          {hasContent ? (
-            <div data-properties-section="paragraph">
-              <CompositionRenderer composition={paragraphComposition} />
-            </div>
-          ) : null}
+          {hasContent && kind !== "text" ? typeSections : null}
         </div>
 
         {kind !== "none" && (
