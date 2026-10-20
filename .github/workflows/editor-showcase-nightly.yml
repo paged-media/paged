@@ -116,6 +116,27 @@ jobs:
         uses: ./.github/actions/module-wasm
         with: { module: publish }
 
+      # The registry axis: the showcase's claimed features are checked
+      # against the capability record (the feature registry's export, the
+      # same record the docs and the website are built from). The registry
+      # is a private repository, read with the org token that already reads
+      # the private corpus. Unreadable, the step warns and the assembly
+      # reports the axis UNAVAILABLE — never a pass, never a red build for
+      # a missing secret.
+      - name: fetch the capability record
+        working-directory: .
+        env:
+          GH_TOKEN: ${{ secrets.STATE_DISPATCH_TOKEN || github.token }}
+        run: |
+          OUT="$RUNNER_TEMP/capability-record.json"
+          if gh api repos/paged-media/cockpit/contents/exports/public.json \
+               -H "Accept: application/vnd.github.raw" > "$OUT" \
+             && bun -e 'const r=require(process.argv[1]);if(r.schema!=="cockpit.export.v1")process.exit(1);console.log(`capability record: ${r.features.length} features, exported ${r.generated_at}`)' "$OUT"; then
+            echo "PAGED_CAPABILITY_RECORD=$OUT" >> "$GITHUB_ENV"
+          else
+            echo "::warning::capability record unreadable — the showcase reports the registry axis as unavailable"
+          fi
+
       - name: install real Chrome
         run: npx playwright install chrome
         working-directory: apps/editor/apps/canvas

@@ -63,7 +63,8 @@ not re-convert on top of the helpers.
    refs (`removeRefs`) and note `demonstrated, not resident` in the
    spec label.
 6. **Claims discipline**: `covers` ids must exist in
-   the feature registry (`$PAGED_FEATURE_REGISTRY/*.yaml`, private) AND be shipped — grep
+   the capability record (the feature registry's `exports/public.json`, private;
+   `$PAGED_CAPABILITY_RECORD`) AND have a `shipped` component claim — check
    before claiming; an unknown or unshipped row fails assembly for
    everyone. Claim what the page VISIBLY exercises, nothing more.
    Known trap: `plugin-web.bake-to-native` is NOT shipped — do not
