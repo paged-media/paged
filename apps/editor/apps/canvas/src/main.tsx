@@ -265,7 +265,7 @@ import { BUILT_IN_PANELS } from "./panels/built-in-panels";
 import { PlaygroundController } from "./playground/PlaygroundController";
 import { debugFlag } from "./debug-flags";
 import { IframeScriptBridge } from "./playground/IframeScriptBridge";
-import { useAnimatedCamera } from "./ui/useAnimatedCamera";
+import { useCameraTween } from "./ui/useAnimatedCamera";
 import {
   pageAtViewportCentre,
   pageStep,
@@ -903,7 +903,10 @@ function CanvasAppIntegration() {
   const selection = useSelection();
   const currentSelection = useEffectEvent(() => selection);
 
-  const animateCamera = useAnimatedCamera(camera, setCamera);
+  // `cameraDestination`: where the camera is heading while a tween runs
+  // (the page keys and the fits step from there).
+  const { animateTo: animateCamera, destination: cameraDestination } =
+    useCameraTween(camera, setCamera);
   useTextEditing({
     client,
     selection: contentSelection,
@@ -1231,14 +1234,17 @@ function CanvasAppIntegration() {
         animateCamera(fitCamera(vw, vh, documentBounds(rects)));
       },
       // The fit commands and the page keys (F-31, F-16, ADR 257). The
-      // current page is the one at the viewport's centre.
+      // current page is the one at the viewport's centre once the camera
+      // arrives: a key pressed while the last one's tween runs steps from
+      // where that tween is going (Next, First pressed quickly lands on
+      // the first page, not on the second the tween went on to).
       fitPage: () => {
-        const at = pageAtViewportCentre(rects, camera, [vw, vh]);
+        const at = pageAtViewportCentre(rects, cameraDestination(), [vw, vh]);
         if (at < 0) return;
         animateCamera(fitCamera(vw, vh, rects[at]!));
       },
       fitSpread: async () => {
-        const at = pageAtViewportCentre(rects, camera, [vw, vh]);
+        const at = pageAtViewportCentre(rects, cameraDestination(), [vw, vh]);
         if (at < 0 || !handle) return;
         let spreads: (string | null)[] = [];
         try {
@@ -1288,7 +1294,7 @@ function CanvasAppIntegration() {
         );
       },
       goToPage: (which) => {
-        const at = pageAtViewportCentre(rects, camera, [vw, vh]);
+        const at = pageAtViewportCentre(rects, cameraDestination(), [vw, vh]);
         const target = pageStep(which, at, rects.length);
         if (target === null) return;
         animateCamera(fitCamera(vw, vh, rects[target]!));
@@ -1507,6 +1513,7 @@ function CanvasAppIntegration() {
     handle,
     sourceName,
     animateCamera,
+    cameraDestination,
   ]);
 
   return null;

@@ -23,7 +23,7 @@
 // prints clean JSON, and its exit codes are the CLI's.
 
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -32,6 +32,27 @@ import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { tempDir, writeFixture } from "./helpers";
 
 const PKG = fileURLToPath(new URL("..", import.meta.url));
+
+/** A CMYK ICC profile on this machine, as the engine's tests find one:
+ *  `$PAGED_CMYK_PROFILE`, the engine's corpus/profiles (fetch-profiles.sh),
+ *  else the ones macOS installs. Null: none here. */
+function cmykProfile(): string | null {
+  const env = process.env["PAGED_CMYK_PROFILE"];
+  if (env && existsSync(env)) return env;
+  const corpus = join(PKG, "../../engine/core/corpus/profiles");
+  if (existsSync(corpus)) {
+    const icc = readdirSync(corpus)
+      .filter((f) => f.toLowerCase().endsWith(".icc"))
+      .sort();
+    if (icc[0]) return join(corpus, icc[0]);
+  }
+  for (const p of [
+    "/Library/Application Support/Adobe/Color/Profiles/Recommended/CoatedFOGRA39.icc",
+    "/System/Library/ColorSync/Profiles/Generic CMYK Profile.icc",
+  ])
+    if (existsSync(p)) return p;
+  return null;
+}
 const NODE = process.env["PAGED_TEST_NODE"] ?? "node";
 
 describe("the npm bundle (dist/paged.js of @paged-media/paged)", () => {
@@ -81,6 +102,98 @@ describe("the npm bundle (dist/paged.js of @paged-media/paged)", () => {
     });
     expect(usage.status).toBe(2);
     expect(usage.stderr).toMatch(/^paged: usage: paged get /m);
+  });
+
+  it("does not end before the verb finishes (an await no handle holds)", () => {
+    const r = run([
+      "get",
+      fx.paged,
+      "swatch:Black",
+      "value",
+      `--plugins=${join(PKG, "test/fixtures/late-plugin.mjs")}`,
+    ]);
+    expect(r.status, r.stderr).toBe(0);
+    expect(JSON.parse(r.stdout).value).toEqual([0, 0, 0, 100]);
+  });
+
+  it("sets text in the bundled Inter when no --font is given, and says so when told not to", () => {
+    const pdf = join(tmp.dir, "text.pdf");
+    const r = run(["export", fx.paged, "-o", pdf, "--no-plugins"]);
+    expect(r.status, r.stdout + r.stderr).toBe(0);
+    const bytes = readFileSync(pdf, "latin1");
+    // The fixture's "Hello" is set, so the PDF embeds the face it is set in.
+    expect(bytes).toMatch(/\/FontFile2|\/FontFile3/);
+    expect(bytes).toContain("<0048>"); // "H" in the ToUnicode map
+
+    const bare = join(tmp.dir, "bare.pdf");
+    const without = run([
+      "export",
+      fx.paged,
+      "-o",
+      bare,
+      "--no-plugins",
+      "--no-default-font",
+      "--text",
+    ]);
+    expect(without.status).toBe(0);
+    expect(without.stderr).toContain("--no-default-font");
+    expect(readFileSync(bare, "latin1")).not.toMatch(/\/FontFile2/);
+  });
+
+  it("exports PDF/X-4 with --cmyk-profile, and says what is missing without one", () => {
+    const x4 = join(tmp.dir, "x4.pdf");
+    const without = run([
+      "export",
+      fx.paged,
+      "-o",
+      x4,
+      "--pdf-standard",
+      "pdfx4",
+      "--no-plugins",
+    ]);
+    expect(without.status).toBe(1);
+    expect(JSON.parse(without.stdout).error.message).toContain(
+      "--cmyk-profile",
+    );
+
+    const notIcc = run([
+      "export",
+      fx.paged,
+      "-o",
+      x4,
+      "--pdf-standard",
+      "pdfx4",
+      "--cmyk-profile",
+      fx.paged,
+      "--no-plugins",
+    ]);
+    expect(notIcc.status).toBe(2);
+    expect(JSON.parse(notIcc.stdout).error.message).toContain(
+      "is not an ICC profile",
+    );
+
+    const icc = cmykProfile();
+    if (!icc) {
+      console.warn(
+        "skip: no CMYK profile (set PAGED_CMYK_PROFILE, or run engine/core/scripts/fetch-profiles.sh)",
+      );
+      return;
+    }
+    const r = run([
+      "export",
+      fx.paged,
+      "-o",
+      x4,
+      "--pdf-standard",
+      "pdfx4",
+      "--cmyk-profile",
+      icc,
+      "--no-plugins",
+    ]);
+    expect(r.status, r.stdout + r.stderr).toBe(0);
+    const pdf = readFileSync(x4, "latin1");
+    expect(pdf).toContain("/OutputIntents");
+    expect(pdf).toContain("GTS_PDFX");
   });
 
   it("reads through the engine and exits 0", () => {

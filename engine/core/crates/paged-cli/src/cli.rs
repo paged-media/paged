@@ -340,6 +340,13 @@ pub enum Command {
         /// Address to bind. A container binds every address; local use, loopback.
         #[arg(long, default_value = "127.0.0.1")]
         bind: String,
+        /// Calls answered at once, each with its own engine session. Default:
+        /// the machine's parallelism.
+        #[arg(long)]
+        workers: Option<usize>,
+        /// Calls that wait for a worker; one more is answered 503 at once.
+        #[arg(long, default_value_t = 64)]
+        queue: usize,
         #[command(flatten)]
         assets: DocumentOptions,
     },

@@ -79,4 +79,10 @@ export {
   type CodeEditorProps,
   type CodeEditorDiagnostic,
 } from "./code/CodeEditor";
-export { highlight, escapeHtml, type CodeLanguage } from "./code/highlight";
+export {
+  highlight,
+  escapeHtml,
+  tokenizeJs,
+  type CodeLanguage,
+  type Token as CodeToken,
+} from "./code/highlight";

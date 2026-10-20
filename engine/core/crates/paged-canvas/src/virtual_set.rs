@@ -1157,7 +1157,9 @@ impl CanvasModel {
             }
             VirtualTarget::Element { element_id } => {
                 let p = lookup_path(path).ok_or_else(unknown)?;
-                let props = self.element_properties(element_id).ok_or_else(missing)?;
+                let props = self
+                    .element_read_properties(element_id)
+                    .ok_or_else(missing)?;
                 // An entry with no value is MIXED (a range whose runs
                 // disagree); no entry is a path this element lacks.
                 match props.entries.into_iter().find(|e| e.path == p) {

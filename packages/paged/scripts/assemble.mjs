@@ -30,6 +30,10 @@
 //      it imports inlined (apps/cli/scripts/bundle.mjs), and the licences of
 //      the third-party code in it in dist/THIRD-PARTY-NOTICES.md. The bundle
 //      finds its engine in this package at run time.
+//   3. the face the bin sets text in when a run names none: Inter
+//      (fonts/Inter.ttf, SIL Open Font License 1.1 in fonts/OFL-inter.txt),
+//      the face the Rust CLI bundles, from engine/core/corpus/fonts (ADR 324,
+//      amendment 2026-10-20). Without it a PDF's text pages come out blank.
 //
 //   bun scripts/assemble.mjs        (the package's `build` script)
 //
@@ -69,6 +73,14 @@ for (const f of engineFiles) {
 }
 console.log(
   `assemble: the engine, ${engineFiles.length} files (${(bytes / 1048576).toFixed(1)} MiB)`,
+);
+
+const fonts = join(repo, "engine/core/corpus/fonts");
+mkdirSync(join(pkg, "fonts"), { recursive: true });
+for (const f of ["Inter.ttf", "OFL-inter.txt"])
+  copyFileSync(join(fonts, f), join(pkg, "fonts", f));
+console.log(
+  `assemble: the default face, fonts/Inter.ttf (${(statSync(join(pkg, "fonts/Inter.ttf")).size / 1048576).toFixed(2)} MiB)`,
 );
 
 execFileSync(

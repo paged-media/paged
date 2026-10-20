@@ -130,7 +130,16 @@ export const GLOBAL_OPTIONS: readonly OptionSpec[] = [
   {
     name: "font",
     value: "file.ttf",
-    help: "default font every load lays text out with",
+    help: "fallback face for text no registered font answers for (default: the bundled Inter)",
+  },
+  {
+    name: "no-default-font",
+    help: "no fallback face: text no font answers for is not set (to see what a document is missing)",
+  },
+  {
+    name: "cmyk-profile",
+    value: "file.icc",
+    help: "CMYK working space and PDF/X output intent (an ICC file)",
   },
   {
     name: "engine-from",
@@ -805,7 +814,7 @@ const exportVerb: Verb = {
     {
       name: "pdf-standard",
       value: "pdf17|pdfx4",
-      help: "PDF standard (default pdf17)",
+      help: "PDF standard (default pdf17); pdfx4 needs a CMYK output profile: --cmyk-profile, or one the document declares",
     },
     {
       name: "pages",
@@ -890,7 +899,24 @@ const exportVerb: Verb = {
       pdf["pageFrom"] = Number(m[1]);
       pdf["pageTo"] = Number(m[2] ?? m[1]);
     }
-    const done = await s.exportBytes(format, { pdf });
+    let done: Awaited<ReturnType<typeof s.exportBytes>>;
+    try {
+      done = await s.exportBytes(format, { pdf });
+    } catch (err) {
+      // PDF/X names an output intent; without --cmyk-profile only a profile
+      // the document declares (and the engine knows) can be one.
+      if (
+        err instanceof CliError &&
+        std === "pdfx4" &&
+        !flagStr(args, "cmyk-profile") &&
+        /output intent/i.test(err.message)
+      )
+        throw new CliError(
+          err.exit,
+          `${err.message} — pass --cmyk-profile <file.icc>`,
+        );
+      throw err;
+    }
     writeOutput(path, done.bytes);
     return {
       json: {
@@ -1066,11 +1092,32 @@ const merge: Verb = {
       dataPath,
       flagStr(args, "query"),
     );
+    // A merge that makes nothing is a failure, said as one: never exit 0
+    // with an empty --out.
+    if (total === 0)
+      throw new CliError(
+        EXIT.failed,
+        `merge: the query selects no records from ${data} (${sql})`,
+      );
+    if (total === null && flagBool(args, "per-record"))
+      throw new CliError(
+        EXIT.failed,
+        `merge --per-record: the records of ${data} could not be counted (${sql})`,
+      );
     const dir = resolve(cwd, outDir);
     const stem = baseName(template);
     const outputs: Array<Record<string, unknown>> = [];
+    const placedNothing = (r: { records: unknown[]; pages: string[] }) =>
+      r.records.length === 0 || r.pages.length === 0
+        ? new CliError(
+            EXIT.failed,
+            `merge: ${total ?? "some"} record(s) selected, but the merge placed ${r.records.length} on ${r.pages.length} page(s) — does the template's first page hold <<field>> placeholders?`,
+          )
+        : null;
     if (!flagBool(args, "per-record")) {
       const r = await mergeOnce(ds, flags);
+      const nothing = placedNothing(r);
+      if (nothing) throw nothing;
       const done = await s.exportBytes(format);
       const path = join(dir, `${stem}-merged.${format}`);
       writeOutput(path, done.bytes);
@@ -1087,6 +1134,8 @@ const merge: Verb = {
       for (let i = 0; i < n; i++) {
         const q = await selectRecord(ds, sql, i);
         const r = await mergeOnce(ds, flags, q);
+        const nothing = placedNothing(r);
+        if (nothing) throw nothing;
         const done = await s.exportBytes(format);
         const path = join(
           dir,
@@ -1383,11 +1432,20 @@ export function sessionOptions(args: ParsedArgs, cwd: string): SessionOptions {
           .filter(Boolean)
       : undefined;
   const font = flagStr(args, "font");
+  const noDefaultFont = flagBool(args, "no-default-font");
+  if (font && noDefaultFont)
+    throw new CliError(
+      EXIT.usage,
+      "--font and --no-default-font contradict each other",
+    );
+  const cmykProfile = flagStr(args, "cmyk-profile");
   const engineFrom = flagStr(args, "engine-from");
   return {
     cwd,
     ...(plugins ? { plugins } : {}),
     ...(font ? { font } : {}),
+    ...(noDefaultFont ? { noDefaultFont } : {}),
+    ...(cmykProfile ? { cmykProfile } : {}),
     ...(engineFrom ? { engineFrom } : {}),
   };
 }

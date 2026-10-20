@@ -11,6 +11,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "bun:test";
+import { ingestColumnBatch } from "../src/engine";
 import { BIN, PKG, tryBootNodeDuckDB } from "./duckdb-node-boot";
 import { bootEngine } from "./pipeline-parts.mjs";
 
@@ -65,79 +66,123 @@ describe.skipIf(!boot.duck || !engineBuilt)(
     for (const fx of spec.fixtures as any[]) {
       const pin = PINS[fx.id];
       it(`${fx.id}: ${pin.agree} record texts agree with InDesign${pin.why ? ` (${pin.why})` : ""}`, async () => {
-        const duck = boot.duck!;
-        const table = `dm_${fx.id.replace(/-/g, "_")}`;
-        await duck.handle.registerCsv(
-          table,
-          readFileSync(join(LANE, "csv", `${fx.id}.csv`), "utf8"),
-        );
-        const rs = await duck.handle.query(`SELECT * FROM ${table}`);
-
-        const text = fx.frames.find((f: any) => f.kind === "text");
-        const fields = text.lines.map((line: string) => {
-          const at = line.indexOf("<<");
-          return { label: line.slice(0, at), expr: line.slice(at + 2, -2) };
-        });
-        const engine = await bootEngine();
-        engine.define_source({
-          id: "s",
-          kind: { kind: "inlineSeed", table },
-          capability: "inline",
-        });
-        engine.define_query({
-          id: "q",
-          sql: `SELECT * FROM ${table}`,
-          params: [],
-          shape: { shape: "recordStream" },
-        });
-        engine.define_template({
-          id: "t",
-          fields,
-          lineHeightPt: spec.text.leading,
-        });
-        engine.define_binding({
-          id: "rf",
-          kind: "recordFlow",
-          chain: "c",
-          query: "q",
-          template: "t",
-          options: {},
-        });
-        engine.ingest_result("q", rs);
-        const chain = Array.from({ length: rs.row_count }, (_, i) => ({
-          frame: `f${i}`,
-          page: `p${i}`,
-          heightPt: 1e6,
-        }));
-        const flow = engine.lower_record_flow("rf", chain, undefined);
-        const ours: string[] = flow.frames.flatMap((f: any) =>
-          f.blocks
-            .filter((b: any) => b.block === "record")
-            .map((b: any) => b.cells.join("\n")),
-        );
-        expect(ours.length).toBe(rs.row_count);
-
-        const theirs = indesignTexts(fx.id);
-        const used = new Set<number>();
-        let agree = 0;
-        const disagree: string[] = [];
-        for (const t of theirs) {
-          const i = ours.findIndex(
-            (o, j) =>
-              !used.has(j) &&
-              (t.overset ? o.startsWith(t.text.trimEnd()) : o === t.text),
-          );
-          if (i >= 0) {
-            used.add(i);
-            agree++;
-          } else disagree.push(JSON.stringify(t.text));
-        }
-        if (agree !== pin.agree) console.log(fx.id, { ours, disagree });
-        expect(
-          agree,
-          `${fx.id}: InDesign texts with no match: ${disagree.join(", ")}`,
-        ).toBe(pin.agree);
+        await agreeing(fx, pin.agree, "typed");
       });
     }
   },
 );
+
+/** What a Data Merge reads (session.ts `asWritten`): the CSV fields as the
+ *  file has them. DM-8 is closed here; DM-5 (Remove Blank Lines) is the
+ *  record flow's, which the merge writer closes on its own lane. */
+const AS_WRITTEN_PINS: Record<string, { agree: number; why?: string }> = {
+  ...Object.fromEntries(
+    Object.entries(PINS).map(([id, p]) => [id, { agree: p.agree }]),
+  ),
+  "single-record": { agree: 3 },
+  "multi-record-column": { agree: 12 },
+  "empty-field-lines": {
+    agree: 2,
+    why: "DEFECT DM-5 the empty field's line is kept (the record flow's; the merge writer removes it)",
+  },
+};
+
+describe.skipIf(!boot.duck || !engineBuilt)(
+  "InDesign Data Merge texts over the merge's as-written read (DM-8 closed) [data.lower.content]",
+  () => {
+    for (const fx of spec.fixtures as any[]) {
+      const pin = AS_WRITTEN_PINS[fx.id]!;
+      it(`${fx.id}: ${pin.agree} record texts agree with InDesign${pin.why ? ` (${pin.why})` : ""}`, async () => {
+        await agreeing(fx, pin.agree, "asWritten");
+      });
+    }
+  },
+);
+
+async function agreeing(
+  fx: any,
+  expected: number,
+  read: "typed" | "asWritten",
+): Promise<void> {
+  const duck = boot.duck!;
+  const table = `dm_${fx.id.replace(/-/g, "_")}`;
+  await duck.handle.registerCsv(
+    table,
+    readFileSync(join(LANE, "csv", `${fx.id}.csv`), "utf8"),
+  );
+  const sql = `SELECT * FROM ${table}`;
+  const batch =
+    read === "asWritten"
+      ? await duck.handle.queryColumnsAsWritten!(sql, [table])
+      : null;
+  if (read === "asWritten" && !batch) throw new Error(`${table}: no text twin`);
+  const rs = batch
+    ? { row_count: batch.row_count }
+    : await duck.handle.query(sql);
+
+  const text = fx.frames.find((f: any) => f.kind === "text");
+  const fields = text.lines.map((line: string) => {
+    const at = line.indexOf("<<");
+    return { label: line.slice(0, at), expr: line.slice(at + 2, -2) };
+  });
+  const engine = await bootEngine();
+  engine.define_source({
+    id: "s",
+    kind: { kind: "inlineSeed", table },
+    capability: "inline",
+  });
+  engine.define_query({
+    id: "q",
+    sql: `SELECT * FROM ${table}`,
+    params: [],
+    shape: { shape: "recordStream" },
+  });
+  engine.define_template({
+    id: "t",
+    fields,
+    lineHeightPt: spec.text.leading,
+  });
+  engine.define_binding({
+    id: "rf",
+    kind: "recordFlow",
+    chain: "c",
+    query: "q",
+    template: "t",
+    options: {},
+  });
+  if (batch) ingestColumnBatch(engine, "q", batch);
+  else engine.ingest_result("q", rs as never);
+  const chain = Array.from({ length: rs.row_count }, (_, i) => ({
+    frame: `f${i}`,
+    page: `p${i}`,
+    heightPt: 1e6,
+  }));
+  const flow = engine.lower_record_flow("rf", chain, undefined);
+  const ours: string[] = flow.frames.flatMap((f: any) =>
+    f.blocks
+      .filter((b: any) => b.block === "record")
+      .map((b: any) => b.cells.join("\n")),
+  );
+  expect(ours.length).toBe(rs.row_count);
+
+  const theirs = indesignTexts(fx.id);
+  const used = new Set<number>();
+  let agree = 0;
+  const disagree: string[] = [];
+  for (const t of theirs) {
+    const i = ours.findIndex(
+      (o, j) =>
+        !used.has(j) &&
+        (t.overset ? o.startsWith(t.text.trimEnd()) : o === t.text),
+    );
+    if (i >= 0) {
+      used.add(i);
+      agree++;
+    } else disagree.push(JSON.stringify(t.text));
+  }
+  if (agree !== expected) console.log(fx.id, read, { ours, disagree });
+  expect(
+    agree,
+    `${fx.id}: InDesign texts with no match: ${disagree.join(", ")}`,
+  ).toBe(expected);
+}

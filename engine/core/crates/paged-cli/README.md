@@ -39,6 +39,7 @@ paged parts   list|read|write <doc> …     # a .paged container's content parts
 paged describe [--compact]                # the capability catalog, no document
 paged digest  <doc> [--compact]           # the verification oracle, as JSON
 paged session                       # the paged-run NDJSON protocol
+paged engine-serve [--port N] [--workers N] [--queue N]   # the engine over HTTP
 ```
 
 Every document command takes the same asset flags:
@@ -228,6 +229,36 @@ Two behaviours worth knowing:
   that never happened.
 
 `run-script` keeps the shipped 2 s budget — see above.
+
+## `paged engine-serve`
+
+The engine as a small HTTP service (paged.server's headless lane runs it in a container;
+locally it runs on a port). It keeps nothing between calls: each call brings the document
+and takes back what the engine made of it, so any instance answers any call.
+
+`POST /run` takes JSON:
+
+| Field         | Meaning                                                                                     |
+| ------------- | ------------------------------------------------------------------------------------------- |
+| `file`        | the `.paged` or `.idml`, base64 (required)                                                  |
+| `script`      | a `paged.*` script to run first                                                             |
+| `render`      | `{page, dpi?}`: a page (1-based) as PNG                                                     |
+| `export`      | `true` (the `.paged`), a format (`"paged"`, `"pdf"`, `"idml"`), `{format, pdf?}`, or a list |
+| `cmykProfile` | an ICC CMYK profile, base64: this call's working space and PDF/X output intent              |
+
+`export.pdf` is the PDF options as the session protocol spells them (`standard: "pdfx4"`,
+`pageFrom`/`pageTo` 0-based, `outputIntentProfile`, `cropMarks`, `bookmarks`, `tagged`, …).
+The answer is `{output, error, png?, file?, format?}`; a list of exports answers
+`files: [{format, file}]` in the order asked. A PDF/X-4 export needs a CMYK profile: the
+server's `--cmyk-profile`, the call's `cmykProfile` (which wins for that call), or the one
+the document declares. A call the engine cannot answer is `422 {error}`, a body that is not
+JSON `400`. `GET /healthz` answers `ok`.
+
+Concurrency: `--workers` threads (default: the machine's parallelism) each answer one call
+at a time, every call on an engine session and scratch directory of its own, so concurrent
+calls share no document state. Calls beyond the workers wait in a queue of `--queue`
+connections (default 64); one more is answered `503` at once, for the caller to retry. A
+caller that stops sending for 60 s is dropped.
 
 ## What it is not
 

@@ -147,7 +147,10 @@ export async function main(
         `usage: ${BIN} ${verb.name} ${verb.usage}`,
       );
     }
-    const options = sessionOptions(args, cwd);
+    const options = {
+      ...sessionOptions(args, cwd),
+      warn: (t: string) => io.stderr(`${BIN}: warning: ${t}`),
+    };
     const result = await verb.run({
       args,
       cwd,

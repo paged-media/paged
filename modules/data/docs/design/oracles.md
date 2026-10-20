@@ -240,8 +240,17 @@ lane still shows them, by design):
 - **DM-8.** A CSV column that DuckDB sniffs as DOUBLE loses its trailing zeros (`1234.50` prints
   as `1234.5`). Data Merge prints the field text. PARTLY FIXED (Step 2): a DECIMAL(p, s) column
   now carries its scale (`Field.scale`), and a bare reference to it displays `1234.50`. A
-  DOUBLE-sniffed CSV column has no scale left to carry, so this lane stays pinned until the CSV
-  import keeps the text or declares the column type (a sources change).
+  DOUBLE-sniffed CSV column has no scale left to carry, so the record-flow lane stays pinned.
+  FIXED FOR DATA MERGE (2026-10-20): the CSV import keeps a text twin of every CSV source (the
+  same file read with every column VARCHAR, `csvTextTwin` in `query/duckdb.ts`), and a merge
+  (`session.ts`, `asWritten`) runs its query once more over the twins and plans from that
+  result, so a field is the text as written (`9.90`, `1234.50`, `01/02/2026`); a value is typed
+  only where the query asks for one (a `CAST`, a computation). The typed result the bindings
+  read is unchanged. A query that does not run over text (arithmetic without a `CAST`) merges
+  the typed values and says so. `indesign-merge-duckdb.spec.ts` runs both reads: the typed one
+  keeps its DM-8 pins, the merge's as-written one agrees with every InDesign text except the
+  record flow's own DM-5. A sort over a twin is a text sort: `ORDER BY CAST(price AS DOUBLE)`
+  sorts numbers.
 
 ## 3. Property lane
 
