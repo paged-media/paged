@@ -238,9 +238,21 @@ pub(super) fn emit_polygon_into(
     // coord space and `outer` carries the frame's ItemTransform plus
     // the page-origin shift, so `effects_unit_normalize = None` (the
     // effects module reads coordinates from the path directly).
-    if let (Some(pid), Some(effects)) = (path_id, poly.effects.as_ref()) {
+    // The feathers' own outline: the polygon grown to the stroke's outer
+    // edge, from which InDesign measures a feather (ADR 204).
+    let feather_path = match (path_id, poly.effects.as_ref()) {
+        (Some(pid), Some(effects)) => Some(crate::module::feather_outline(
+            page,
+            effects,
+            pid,
+            None,
+            resolved.stroke_outset_pt(),
+        )),
+        _ => None,
+    };
+    if let (Some(pid), Some(fpid), Some(effects)) = (path_id, feather_path, poly.effects.as_ref()) {
         crate::module::emit_effects_pre_fill(page, effects, pid, outer, palette, color_ctx);
-        crate::module::begin_feathered_object(page, effects, pid, outer);
+        crate::module::begin_feathered_object(page, effects, fpid, outer, false);
     }
     let fill_group = push_target_group(page, resolved.fill_target, bbox, outer);
     crate::module::fill_shadow_module(&resolved, page, palette, color_ctx, outer);
@@ -282,13 +294,11 @@ pub(super) fn emit_polygon_into(
     if content_group {
         pop_blend_group(page);
     }
-    // The interior effects and the feathers composite over the picture
-    // too: InDesign applies an object's effects to the object, content
-    // included.
+    // The interior effects composite over the picture too: InDesign
+    // applies an object's effects to the object, content included. The
+    // feathers wait for the stroke and its line ends.
     if let (Some(pid), Some(effects)) = (path_id, poly.effects.as_ref()) {
-        crate::module::emit_effects_post_fill(
-            page, effects, pid, outer, palette, color_ctx, None, 0.0,
-        );
+        crate::module::emit_interior_effects(page, effects, pid, outer, palette, color_ctx);
     }
     let stroke_group = push_target_group(page, resolved.stroke_target, bbox, outer);
     crate::module::stroke_paint_module(
@@ -357,6 +367,18 @@ pub(super) fn emit_polygon_into(
     }
     if stroke_group {
         pop_blend_group(page);
+    }
+    // The feathers come last, over the stroke as well (ADR 204).
+    if let (Some(pid), Some(fpid), Some(effects)) = (path_id, feather_path, poly.effects.as_ref()) {
+        crate::module::emit_feathers(
+            page,
+            effects,
+            fpid,
+            pid,
+            outer,
+            None,
+            resolved.stroke_outset_pt(),
+        );
     }
     if needs_group {
         pop_blend_group(page);
