@@ -89,3 +89,9 @@ re-check the `flo_curves` note.
 - [ADR 308](https://github.com/paged-media/plugin-sdk/blob/main/docs/adr/308-plugin-wasm.md), [ADR 314](https://github.com/paged-media/plugin-sdk/blob/main/docs/adr/314-plugin-shape.md) — plugin wasm as a declared capability under one size budget; the general plugin shape
 - [ADR 318](https://github.com/paged-media/plugin-sdk/blob/main/docs/adr/318-host-spawned-workers.md) — the worker door this lane does not use yet
 - [ADR 353](353-path-algebra-runs-in-the-engine.md), [ADR 356](356-live-constructs-are-recipes.md) — the one winding implementation; one-shot results as artwork
+
+## Amendment 2026-10-20
+
+A trace commits in one batch and one undo step ([ADR 360](360-records-name-no-minted-ids.md)):
+the trace record no longer lists its regions; each region carries a `tracedRegion` marker naming
+its source.

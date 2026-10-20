@@ -23,6 +23,7 @@ their status says so.
 | [357](357-image-trace-rust-lane.md) | Image Trace is the one Rust lane | Accepted, recorded retroactively 2026-10-02 |
 | [358](358-one-snapper-the-engine-resolves.md) | One snapper for the point-placing tools; the engine resolves | Accepted 2026-10-19 |
 | [359](359-the-host-owns-the-pencil.md) | The host owns the Pencil; it runs this repo's PencilMachine | Accepted 2026-10-19 |
+| [360](360-records-name-no-minted-ids.md) | A bake or trace record names no id its own batch mints | Accepted 2026-10-20 |
 
 Decisions made in other repositories that this plugin's code rests on are listed in
 [`../README.md`](../README.md).

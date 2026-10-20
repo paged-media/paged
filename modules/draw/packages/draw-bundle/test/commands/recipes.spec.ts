@@ -769,7 +769,7 @@ describe("paged.draw commands, no engine — the appearance stack", () => {
     });
   });
 
-  it("Bake appearance inserts one path per layer and groups them (DRW-5: two writes); with no stack it sends nothing", async () => {
+  it("Bake appearance inserts one path per layer and groups them in one write (DRW-5); with no stack it sends nothing", async () => {
     covers("command:media.paged.draw.command.bakeAppearance");
     const r = unitRig(doc(), { selection: [A] });
     await r.run(`${C}.appearanceAddFill`);
@@ -777,7 +777,7 @@ describe("paged.draw commands, no engine — the appearance stack", () => {
     r.fake.setSelection([A]);
     r.reset();
     await r.run(`${C}.bakeAppearance`);
-    expect(r.steps()).toBe(2);
+    expect(r.steps()).toBe(1);
     expect(count(r.leaves(), "insertPath")).toBe(2);
     expect(ops(r.leaves()).at(-1)).toBe("createGroup");
     await refuses([A], `${C}.bakeAppearance`);
@@ -805,7 +805,7 @@ describe("paged.draw commands, no engine — Image Trace", () => {
   const PNG = pngBytes(48, 48, ringPixels(48));
   const image: FakeElement = rectEl("rectangle", "uimg", [100, 100, 196, 196]);
 
-  it("traces the selected image's own pixels into paths (DRW-6: two batches); a path sends nothing", async () => {
+  it("traces the selected image's own pixels into paths in one batch (DRW-6); a path sends nothing", async () => {
     covers("command:media.paged.draw.command.imageTrace");
     const uninstall = installPngRealm();
     try {
@@ -833,7 +833,7 @@ describe("paged.draw commands, no engine — Image Trace", () => {
       r.fake.editor.client.elementGeometry = async (ids) =>
         (await geometry(ids)).map((g) => ({ ...g, hasImage: true }));
       await r.run(`${C}.imageTrace`, { mode: "bw" });
-      expect(r.steps()).toBe(2);
+      expect(r.steps()).toBe(1);
       // The ring traces to one compound region: one path, then its paint.
       expect(count(r.leaves(), "insertPath")).toBeGreaterThan(0);
       const path = unitRig(doc(), { selection: [POLY] });

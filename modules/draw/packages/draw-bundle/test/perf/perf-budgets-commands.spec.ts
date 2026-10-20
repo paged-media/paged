@@ -948,21 +948,15 @@ describe("perf budgets — commands over a busy document", () => {
         },
       );
       expect(result).toHaveLength(3);
-      // STILL two batches, and that is the floor the rules allow, not a
-      // conversion left undone: the carrier's bake record names its
-      // layers by element id inside its JSON metadata, and a `$h:`
-      // handle in text is stored as written, never resolved (measured,
-      // `test/headless/minted.spec.ts`). The record can only be
-      // written once a first mutation has answered with the ids.
-      expect(work.mutations).toEqual([
-        { op: "batch", ops: 3 },
-        { op: "batch", ops: 14 },
-      ]);
-      expect(undoSteps).toBe(2);
-      // Three layers and their group, and both steps restore it.
+      // ONE batch (DRW-5, ADR 360): three inserts, each named, then the
+      // 14 paint, marker, carrier and group ops by handle. The record
+      // names no layer ids, so nothing waits for a first answer.
+      expect(work.mutations).toEqual([{ op: "batch", ops: 20 }]);
+      expect(undoSteps).toBe(1);
+      // Three layers and their group, and the one step restores it.
       expect(added.sort()).toEqual(["group", "polygon", "polygon", "polygon"]);
       expect(restored).toBe(true);
-      // What batch 1 minted comes off the engine's reply. As found: 2,
+      // What the batch minted comes off the engine's reply. As found: 2,
       // the before/after diff.
       expect(work.count("document.tree")).toBe(0);
     });
@@ -1010,7 +1004,7 @@ describe("perf budgets — Image Trace over a busy document", () => {
   }, 180_000);
   afterAll(() => w?.h.dispose());
 
-  it("committing a traced ring: the reply says what two inserts created — no tree read", async () => {
+  it("committing a traced ring: the reply says what the two inserts created — no tree read", async () => {
     expect(w.refusals).toEqual([]);
     expect(await leafIds(w.h)).toHaveLength(502);
 
@@ -1043,14 +1037,12 @@ describe("perf budgets — Image Trace over a busy document", () => {
     // One region, two contours: a ring — ONE element once re-merged.
     expect(result).toHaveLength(1);
     expect(added).toEqual(["polygon"]);
-    // STILL two batches, and that is the floor the rules allow: the
-    // source's trace record names its regions by element id inside its
-    // JSON metadata, and a `$h:` handle in text is stored as written,
-    // never resolved (measured, `test/headless/minted.spec.ts`).
-    expect(work.mutations.map((m) => m.op)).toEqual(["batch", "batch"]);
-    expect(undoSteps).toBe(2);
+    // ONE batch (DRW-6, ADR 360): the record names no region ids, each
+    // region carries a marker naming its source instead.
+    expect(work.mutations.map((m) => m.op)).toEqual(["batch"]);
+    expect(undoSteps).toBe(1);
     expect(restored).toBe(true);
-    // What batch 1 minted comes off the engine's reply. As found: 2 —
+    // What the batch minted comes off the engine's reply. As found: 2 —
     // the before/after diff (3 when a group has to be found too).
     expect(work.count("document.tree")).toBe(0);
     expect(work.count("document.getMetadata")).toBe(1);
