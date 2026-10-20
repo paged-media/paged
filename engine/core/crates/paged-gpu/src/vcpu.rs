@@ -2188,17 +2188,33 @@ fn sample_gradient_alpha(stops: &[(f32, f32)], t: f32) -> f32 {
 }
 
 /// Is every command on the page a plain draw — a `Normal` fill or
-/// stroke, an image, a clip? Then nothing reads the page's backdrop, and
+/// stroke, an image, a clip, or a `Normal` transparency group of them
+/// (an object's opacity)? Then nothing reads the page's backdrop, and
 /// drawing straight onto the paper is the isolated page composited over
 /// it (source-over is associative), without a pass over every pixel to
 /// composite it. A sparse page is mostly that pass.
+///
+/// The group belongs here for exactness, not only speed: the two paths
+/// round an antialiased edge differently (premultiplied into the page
+/// buffer, then over the paper, is two roundings), so a page that left
+/// this path because one frame got an opacity moved edge pixels by one
+/// level everywhere else on it — far from anything that changed.
 fn plain_page(list: &DisplayList) -> bool {
     list.commands.iter().all(|c| match c {
         DisplayCommand::FillPath { .. }
         | DisplayCommand::StrokePath { .. }
         | DisplayCommand::Image { .. }
         | DisplayCommand::PushClip { .. }
-        | DisplayCommand::PopClip(_) => true,
+        | DisplayCommand::PopClip(_)
+        | DisplayCommand::EndBlendGroup(_) => true,
+        // Its members are held to this same test, so none of them blends
+        // with the backdrop and the group never copies it in; a knockout
+        // group composites onto its initial backdrop and stays out.
+        DisplayCommand::BeginBlendGroup {
+            blend_mode,
+            knockout,
+            ..
+        } => *blend_mode == BlendMode::Normal && !*knockout,
         DisplayCommand::FillPathBlend { blend_mode, .. } => *blend_mode == BlendMode::Normal,
         _ => false,
     })
@@ -2286,6 +2302,76 @@ fn composite_over_paper(data: &mut [u8], paper: [u8; 4]) {
 mod tests {
     use super::*;
     use crate::rgb_to_naive_cmyk_8bit;
+
+    /// An object's opacity changes the object, not the antialiased
+    /// edges of everything else on the page.
+    #[test]
+    fn an_opacity_group_leaves_the_rest_of_the_page_byte_identical() {
+        let grey = Paint::Solid(Color::rgba(0.3, 0.3, 0.3, 1.0));
+        let page = |with_group: bool| {
+            let mut list = DisplayList::new();
+            // A rotated square: antialiased edges, which the rectangle
+            // snapping does not touch.
+            paged_compose::emit_rect_transformed(
+                Rect {
+                    x: 0.0,
+                    y: 0.0,
+                    w: 12.0,
+                    h: 12.0,
+                },
+                paged_compose::Transform([0.940, 0.342, -0.342, 0.940, 8.3, 4.7]),
+                grey.clone(),
+                &mut list,
+            );
+            if with_group {
+                let bounds = Rect {
+                    x: 26.0,
+                    y: 26.0,
+                    w: 10.0,
+                    h: 10.0,
+                };
+                list.commands
+                    .push(paged_compose::DisplayCommand::BeginBlendGroup {
+                        bounds,
+                        blend_mode: paged_compose::BlendMode::Normal,
+                        opacity: 0.35,
+                        isolated: false,
+                        knockout: false,
+                        transform: paged_compose::Transform::IDENTITY,
+                    });
+                emit_rect(
+                    bounds,
+                    Paint::Solid(Color::rgba(1.0, 0.0, 0.0, 1.0)),
+                    &mut list,
+                );
+                list.commands
+                    .push(paged_compose::DisplayCommand::EndBlendGroup(
+                        paged_compose::Transform::IDENTITY,
+                    ));
+            }
+            let mut opts = RasterOptions::new(40.0, 40.0);
+            opts.dpi = 72.0;
+            rasterize(&list, &opts)
+        };
+        let (without, with) = (page(false), page(true));
+        let mut edge = 0;
+        for y in 0..24 {
+            for x in 0..24 {
+                let p = without.get_pixel(x, y).0;
+                assert_eq!(p, with.get_pixel(x, y).0, "pixel ({x}, {y}) moved");
+                if p[0] > 77 && p[0] < 255 {
+                    edge += 1;
+                }
+            }
+        }
+        assert!(
+            edge > 0,
+            "the square has antialiased edge pixels to compare"
+        );
+        // And the group did paint: 35 % red over white.
+        let inside = with.get_pixel(31, 31).0;
+        assert!(inside[0] == 255 && inside[1] < 255, "{inside:?}");
+    }
 
     #[test]
     fn composite_over_paper_rounds_as_the_division_does() {
