@@ -92,6 +92,34 @@ describe("Links panel: states", () => {
       "second.png",
     ]);
   });
+
+  test("an EPS whose bytes are there is not drawn, not missing (engine ADR 207)", async () => {
+    covers("panel:paged.links");
+    const h = await mount();
+    const placed = await h.mutate({
+      op: "insertFrame",
+      args: { pageId: STRUCTURE.page2, bounds: [72, 72, 200, 200] },
+    } as never);
+    const frame = (placed as { payload: { createdId: { id: string } } }).payload
+      .createdId;
+    await h.mutate({
+      op: "placeImage",
+      args: { elementId: frame.id, uri: "file:///assets/legacy.eps" },
+    } as never);
+    const eps = new TextEncoder().encode(
+      "%!PS-Adobe-3.0 EPSF-3.0\n%%BoundingBox: 0 0 72 72\n%%EOF\n",
+    );
+    await h.mutate({
+      op: "replaceImageBytes",
+      args: { elementId: frame.id, bytes: Array.from(eps) },
+    } as never);
+    expect(
+      rows(h.root).map((r) => ({ primary: r.primary, badge: r.badge })),
+    ).toEqual([
+      { primary: "photo.jpg", badge: "missing" },
+      { primary: "legacy.eps", badge: "not drawn" },
+    ]);
+  });
 });
 
 describe("Links panel: controls", () => {

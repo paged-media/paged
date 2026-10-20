@@ -267,11 +267,6 @@ impl RenderDiagnostics {
             .collect()
     }
 
-    /// Distinct host-frame `Self` ids whose placed image could not be
-    /// resolved or decoded at build time (`ImageLinkMissing` /
-    /// `ImageDecodeFailed`). The build draws the grey missing-image
-    /// placeholder for these, so they're exactly the links the Links
-    /// panel should mark `"missing"` (panels.md gap 2).
     /// v68 — the faces a frame's plugin scene layer asked for that did
     /// not resolve (each drawn in the document default font), in report
     /// order without duplicates. Empty when every named family resolved.
@@ -291,15 +286,32 @@ impl RenderDiagnostics {
         out
     }
 
+    /// Distinct host-frame `Self` ids whose placed image's link resolved
+    /// to nothing at build time (`ImageLinkMissing`). The build draws the
+    /// grey missing-image placeholder for these, so they are exactly the
+    /// links the Links panel marks `"missing"` (panels.md gap 2).
+    ///
+    /// A link that DID resolve but whose bytes no decoder reads (an EPS —
+    /// there is no PostScript interpreter, by declaration — or a payload
+    /// the raster decoders reject) is not missing: the frame paints its
+    /// own fill, not the placeholder (Q-14), and the file is there. Those
+    /// are [`Self::undecoded_image_frame_ids`] (engine ADR 207).
     pub fn missing_image_frame_ids(&self) -> std::collections::BTreeSet<String> {
+        self.frame_ids_with(DiagnosticCode::ImageLinkMissing)
+    }
+
+    /// Distinct host-frame `Self` ids whose placed image resolved but
+    /// could not be decoded (`ImageDecodeFailed`): the content exists and
+    /// this engine does not draw it. The Links panel marks them
+    /// `"undecoded"` (engine ADR 207).
+    pub fn undecoded_image_frame_ids(&self) -> std::collections::BTreeSet<String> {
+        self.frame_ids_with(DiagnosticCode::ImageDecodeFailed)
+    }
+
+    fn frame_ids_with(&self, code: DiagnosticCode) -> std::collections::BTreeSet<String> {
         self.items
             .iter()
-            .filter(|d| {
-                matches!(
-                    d.code,
-                    DiagnosticCode::ImageLinkMissing | DiagnosticCode::ImageDecodeFailed
-                )
-            })
+            .filter(|d| d.code == code)
             .filter_map(|d| d.frame_id.clone())
             .collect()
     }

@@ -82,16 +82,21 @@ export function LinksPanel() {
               // legibility — full URI lives in searchText.
               const filename = link.uri.split("/").pop() ?? link.uri;
               const missing = link.status === "missing";
+              // The file is there but this engine has no decoder for it
+              // (an EPS): not missing, and not drawn either (engine ADR 207).
+              const undecoded = link.status === "undecoded";
               const lowRes =
                 link.effectivePpi != null && link.effectivePpi < LOW_RES_PPI;
-              // status dot: missing → error, resolved → ready, unknown
-              // (older wasm) → no dot.
+              // status dot: missing → error, undecoded → warn, resolved →
+              // ready, unknown (older wasm) → no dot.
               const dot =
                 link.status === "missing"
                   ? ("error" as const)
-                  : link.status === "ok"
-                    ? ("ok" as const)
-                    : undefined;
+                  : undecoded
+                    ? ("warn" as const)
+                    : link.status === "ok"
+                      ? ("ok" as const)
+                      : undefined;
               // The mono secondary line carries colourspace + PPI when
               // the IDML baked them (synthetic fixtures omit both).
               const meta: string[] = [];
@@ -101,12 +106,15 @@ export function LinksPanel() {
               }
               const secondary =
                 meta.length > 0 ? meta.join(" · ") : `${link.hostKind}`;
-              // A single trailing badge — missing wins over lo-res.
+              // A single trailing badge — missing wins over not drawn,
+              // which wins over lo-res.
               const badge: ListRowBadge | undefined = missing
                 ? { label: "missing", tone: "error" }
-                : lowRes
-                  ? { label: "lo-res", tone: "warn" }
-                  : undefined;
+                : undecoded
+                  ? { label: "not drawn", tone: "warn" }
+                  : lowRes
+                    ? { label: "lo-res", tone: "warn" }
+                    : undefined;
               return {
                 key: link.hostSelfId,
                 dot,
