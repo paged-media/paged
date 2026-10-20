@@ -799,6 +799,17 @@ export {
 } from "./state/open-file-handle";
 
 export {
+  attachFileSource,
+  declareDocumentSource,
+  noteFileWritten,
+  setDocumentSourceSink,
+  sourceOfFile,
+  type DocumentSource,
+  type DocumentSourceSink,
+  type IdentifiableFileHandle,
+} from "./state/document-source";
+
+export {
   commitSave,
   currentLibraryDocument,
   getLibrary,

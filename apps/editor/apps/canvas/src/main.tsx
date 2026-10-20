@@ -71,6 +71,7 @@ import {
   AI_ASK_COMMAND,
   openAssistant,
   setAssistantOpener,
+  setDocumentSourceSink,
 } from "@paged-media/shell";
 import "@paged-media/shell/styles/globals.css";
 
@@ -153,6 +154,10 @@ import imageDecodeWorkerUrl from "@paged-media/image/decode-worker?worker&url";
 // @ts-ignore — `?worker&url` is a Vite affordance (string URL).
 import drawTraceWorkerUrl from "@paged-media/draw/trace-worker?worker&url";
 import { createEditorConsentBackend } from "./plugin-consent";
+import {
+  createDocumentIdentity,
+  indexedDbHandleStore,
+} from "./document-identity";
 import { ConsentDialog } from "./ConsentDialog";
 import { createEditorDocuments } from "./plugin-documents";
 import { createEditorSecretStore } from "./plugin-secret-store";
@@ -325,7 +330,17 @@ const BUILT_IN_OVERLAYS: OverlayContribution[] = [
 // `PluginBundles` injects `backend` into every bundle host (the SDK door calls
 // it), and `<ConsentDialog>` renders + resolves prompts from the same
 // `controller`. Module scope so the two stay in sync across StrictMode remounts.
-const editorConsent = createEditorConsentBackend();
+// Editor ADR 264 — the open document's identity, as this host knows it: the
+// key a remembered grant is kept under (never the file's own bytes). The
+// shell's loader declares each load's source to it; PluginBundles attaches
+// the live engine client so it follows the open document.
+const documentIdentity = createDocumentIdentity({
+  store: indexedDbHandleStore(),
+});
+setDocumentSourceSink(documentIdentity);
+const editorConsent = createEditorConsentBackend({
+  identity: documentIdentity,
+});
 if (!import.meta.env.PROD) {
   // Test affordance (mirrors `window.__canvas`): drive a synthetic prompt and
   // observe/resolve it without a network-declaring bundle (none exist yet).
@@ -471,6 +486,9 @@ function PluginBundles() {
     // `network: false`, so the door is dormant but correctly wired for the
     // first bundle that asks (paged.data's remote adapter, M1).
     const consent = editorConsent.backend;
+    const detachIdentity = documentIdentity.attach(
+      () => pagedRef.current?.client.openDocument ?? null,
+    );
     // D-11 (rfc-credential-store): the reference-only credential store behind
     // host.secrets — lets a bundle (paged.data's authenticated DB-attach /
     // remote sources) have the host HOLD a credential by ref. set/exists/forget
@@ -684,6 +702,7 @@ function PluginBundles() {
       activator.dispose();
       if (liveActivator === activator) liveActivator = null;
       detachDocuments();
+      detachIdentity();
       delete (globalThis as unknown as { __shellDoors?: unknown }).__shellDoors;
       delete (globalThis as unknown as { __loadTestBundle?: unknown })
         .__loadTestBundle;

@@ -59,6 +59,7 @@ import {
 
 import type { EditorHostOptions } from "../../../apps/editor/apps/canvas/src/plugin-host-options";
 import type { EditorConsent } from "../../../apps/editor/apps/canvas/src/plugin-consent";
+import type { DocumentIdentity } from "../../../apps/editor/apps/canvas/src/document-identity";
 import type { EditorSecretStore } from "../../../apps/editor/apps/canvas/src/plugin-secret-store";
 import type { createEditorDocuments } from "../../../apps/editor/apps/canvas/src/plugin-documents";
 import type { WillSaveRegistry } from "../../../apps/editor/apps/canvas/src/plugin-will-save";
@@ -234,6 +235,8 @@ export interface EditorApp {
   ed: HeadlessEditor;
   options: EditorHostOptions;
   consent: EditorConsent;
+  /** Where each open document came from (editor ADR 264). */
+  identity: DocumentIdentity;
   secrets: EditorSecretStore;
   documents: ReturnType<typeof createEditorDocuments>;
   /** The replace question every open asks (ADR 230): attach a prompt
@@ -335,6 +338,7 @@ export async function editorAdapter(): Promise<HostUnderTest> {
       ed,
       options: app.options,
       consent: app.consent,
+      identity: app.identity,
       secrets: app.secrets,
       documents: app.documents,
       replace: app.replace,

@@ -31,6 +31,7 @@ import type { DocumentHandle, PageId } from "@paged-media/client";
 import type { DocumentEntry } from "@paged-media/repository";
 
 import type { LoadingState } from "./document-context";
+import { declareDocumentSource, sourceOfFile } from "./document-source";
 import {
   rememberOpenedFile,
   setCurrentLibraryDocument,
@@ -109,6 +110,15 @@ export async function loadDocumentFile(
 
   if (cb.libraryDocument) setCurrentLibraryDocument(cb.libraryDocument);
   else if (forLibrary) rememberOpenedFile(forLibrary, file.name);
+  // Editor ADR 264 — the source this document came from, which a grant
+  // remembered for it is keyed by: the library document it is, the file
+  // handle the picker attached to `file`, else nothing (transient).
+  declareDocumentSource(
+    handle.docId,
+    cb.libraryDocument
+      ? { kind: "library", documentId: cb.libraryDocument.id }
+      : sourceOfFile(file),
+  );
   cb.setHandle(handle);
   cb.setLoading(null);
   cb.setStatus(
@@ -163,6 +173,7 @@ export async function createBlankDocument(
   }
   if (load !== newestLoad) return;
 
+  declareDocumentSource(handle.docId, { kind: "transient" });
   cb.setHandle(handle);
   cb.setLoading(null);
   cb.setStatus(`new ${handle.pageCount}-page document; snapshotting…`);

@@ -181,6 +181,11 @@ import {
   type EditorConsent,
 } from "../../src/plugin-consent";
 import {
+  createDocumentIdentity,
+  memoryHandleStore,
+  type DocumentIdentity,
+} from "../../src/document-identity";
+import {
   createEditorSecretStore,
   type EditorSecretStore,
 } from "../../src/plugin-secret-store";
@@ -608,6 +613,9 @@ export interface FakeSystemClipboard extends SystemClipboard {
 export interface HeadlessHostApp {
   options: EditorHostOptions;
   consent: EditorConsent;
+  /** Where each open document came from (editor ADR 264): the key a
+   *  remembered grant is kept under. `declare` plays an opener. */
+  identity: DocumentIdentity;
   secrets: EditorSecretStore;
   documents: ReturnType<typeof createEditorDocuments>;
   /** The system clipboard the page-item clipboard reads and writes
@@ -1089,7 +1097,11 @@ export async function createHeadlessEditor(
   // What needs the browser shell is a stand-in: panel placement and
   // edit-context entry are recorded in `opened`; the widgets and the
   // schema-panel renderer render nothing (no panel renders headlessly).
-  const consent = createEditorConsentBackend();
+  const identity = createDocumentIdentity({
+    store: memoryHandleStore(),
+    documentId: () => client.openDocument,
+  });
+  const consent = createEditorConsentBackend({ identity });
   const secrets = createEditorSecretStore();
   const documents = createEditorDocuments();
   documents.attach({
@@ -1134,6 +1146,7 @@ export async function createHeadlessEditor(
     diagnosticsSink: problemsSink,
   });
   const hostApp: HeadlessHostApp = {
+    identity,
     options: hostOptions,
     consent,
     secrets,

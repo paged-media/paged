@@ -110,14 +110,17 @@ test.describe("D-03 — network-consent enforcement", () => {
     );
     await expect(page.getByTestId("consent-origin")).toHaveCount(2);
 
-    // Grant only the first origin + remember. The `consent-origin` testid is
-    // on the checkbox input, keyed by `data-origin`.
+    // Grant only the first origin. The `consent-origin` testid is on the
+    // checkbox input, keyed by `data-origin`. The document was not opened
+    // from a file or the library, so the grant cannot be remembered for it
+    // (editor ADR 264): the checkbox is off and says why.
     await page
       .locator(
         '[data-testid="consent-origin"][data-origin="https://data.example.com"]',
       )
       .check();
-    await page.getByTestId("consent-remember").check();
+    await expect(page.getByTestId("consent-remember")).toBeDisabled();
+    await expect(page.getByTestId("consent-remember-why")).toBeVisible();
     await page.getByTestId("consent-allow").click();
 
     const result = await page.evaluate(
@@ -125,7 +128,7 @@ test.describe("D-03 — network-consent enforcement", () => {
     );
     expect(result.granted).toEqual(["https://data.example.com"]);
     expect(result.denied).toEqual(["https://cdn.example.com"]);
-    expect(result.remembered).toBe(true);
+    expect(result.remembered).toBe(false);
     await expect(page.getByTestId("consent-dialog")).toBeHidden();
   });
 

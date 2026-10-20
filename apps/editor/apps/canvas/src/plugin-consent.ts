@@ -22,10 +22,14 @@
 // NOTHING reaches the network until the user reviews the data-source manifest
 // (the requesting origins + the stated purpose) and consents, per-origin.
 //
-// The SDK door (plugin-sdk `host-impl.ts`) owns the capability gate, the
-// `capabilities.network` allow-list filter, and remembered-grant persistence
-// (the bundle's own storage namespace). This module owns only what the SDK
-// cannot: the consent DECISION and the data-source-manifest UI. Injected via
+// The SDK door (plugin-sdk `host-impl.ts`) owns the capability gate and the
+// `capabilities.network` allow-list filter. This module owns what the SDK
+// cannot: the consent DECISION, the data-source-manifest UI, and the GRANTS
+// (editor ADR 264) — kept here, on the host, per document: a grant made for
+// one document is that document's, for this session; a remembered one is
+// stored in this browser under the document's host-minted identity
+// (`document-identity.ts`), never in the file, and only for a document the
+// host can recognise again (a picked file, a library document). Injected via
 // `loadBundle({ consent })`, it flips `supports("network.consent@1")` true;
 // absent it the door denies every origin (the honest no-consent posture).
 //
@@ -44,6 +48,7 @@ import type { ConsentBackend } from "@paged-media/plugin-sdk";
 import type { ConsentResult } from "@paged-media/plugin-api";
 
 import { wallAdmits } from "./boot/network-policy";
+import type { DocumentIdentity, DocumentKey } from "./document-identity";
 
 /** Replaced at build time by vite (`define`, ADR 218): the data origins this
  *  build's CSP admits beyond the same-origin floor. */
@@ -71,9 +76,13 @@ export interface PendingConsent {
   readonly origins: readonly string[];
   /** The human-readable reason the bundle stated for the reach. */
   readonly purpose: string;
+  /** Whether a grant can be remembered: the document came from a file the
+   *  user picked or from the library, so the editor will know it again. */
+  readonly rememberable: boolean;
   /** Settle this request. `granted` is the subset the user allowed (anything
-   *  outside `origins` is ignored); the remainder is denied. `remember` asks the
-   *  SDK door to persist the grant for this document (survives reopen). */
+   *  outside `origins` is ignored); the remainder is denied. `remember` keeps
+   *  the grant for this document past its closing (ignored when not
+   *  `rememberable`). */
   decide(decision: { granted: readonly string[]; remember: boolean }): void;
 }
 
@@ -91,18 +100,87 @@ export interface EditorConsent {
   controller: ConsentController;
 }
 
+/** Where remembered grants are kept (`localStorage` in the browser). */
+export interface GrantStorage {
+  getItem(key: string): string | null;
+  setItem(key: string, value: string): void;
+}
+
+/** The localStorage key of the remembered grants: document key → plugin id
+ *  → origins. */
+export const REMEMBERED_GRANTS_KEY = "paged.consent.grants.v1";
+
+type GrantTable = Record<string, Record<string, string[]>>;
+
+function defaultGrantStorage(): GrantStorage | null {
+  try {
+    return typeof localStorage === "undefined" ? null : localStorage;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Build the editor's consent backend + its UI controller. The backend queues a
  * pending request per `requestConsent` call and resolves it when the dialog
  * (or, in tests, the `__consent` handle) decides. Closing the dialog without a
  * grant denies every origin — default-deny is the dismissal, not a special path.
+ *
+ * Grants are the backend's (editor ADR 264): `grants(pluginId)` answers the
+ * origins the plugin holds for the OPEN document. Without an `identity` every
+ * document is one transient document (nothing is remembered).
  */
-export function createEditorConsentBackend(): EditorConsent {
+export function createEditorConsentBackend(
+  options: {
+    identity?: DocumentIdentity;
+    storage?: GrantStorage | null;
+  } = {},
+): EditorConsent {
+  const identity = options.identity ?? null;
+  const storage =
+    options.storage === undefined ? defaultGrantStorage() : options.storage;
   let seq = 0;
   const queue: PendingConsent[] = [];
   const listeners = new Set<() => void>();
   const notify = (): void => {
     for (const l of listeners) l();
+  };
+  const session = new Map<string, Map<string, Set<string>>>();
+  const noIdentity: DocumentKey = { key: "session", stable: false };
+  const keyNow = (): DocumentKey => identity?.current() ?? noIdentity;
+
+  const readRemembered = (): GrantTable => {
+    try {
+      const raw = storage?.getItem(REMEMBERED_GRANTS_KEY);
+      const t = raw ? (JSON.parse(raw) as unknown) : null;
+      return t && typeof t === "object" ? (t as GrantTable) : {};
+    } catch {
+      return {};
+    }
+  };
+  const remember = (doc: string, plugin: string, origins: string[]): void => {
+    if (!storage) return;
+    const t = readRemembered();
+    const held = new Set([...(t[doc]?.[plugin] ?? []), ...origins]);
+    t[doc] = { ...(t[doc] ?? {}), [plugin]: [...held] };
+    try {
+      storage.setItem(REMEMBERED_GRANTS_KEY, JSON.stringify(t));
+    } catch (err) {
+      console.warn("consent: could not remember the grant:", err);
+    }
+  };
+  const held = (k: DocumentKey, plugin: string): Set<string> => {
+    const out = new Set(session.get(k.key)?.get(plugin) ?? []);
+    if (k.stable)
+      for (const o of readRemembered()[k.key]?.[plugin] ?? []) out.add(o);
+    return out;
+  };
+  const record = (k: DocumentKey, plugin: string, origins: string[]): void => {
+    const perDoc = session.get(k.key) ?? new Map<string, Set<string>>();
+    const set = perDoc.get(plugin) ?? new Set<string>();
+    for (const o of origins) set.add(o);
+    perDoc.set(plugin, set);
+    session.set(k.key, perDoc);
   };
 
   const controller: ConsentController = {
@@ -120,25 +198,42 @@ export function createEditorConsentBackend(): EditorConsent {
   };
 
   const backend: ConsentBackend = {
-    request(origins, purpose): Promise<ConsentResult> {
+    grants(pluginId) {
+      return [...held(keyNow(), pluginId)];
+    },
+    async request(origins, purpose, pluginId = ""): Promise<ConsentResult> {
+      // A file's handle is matched asynchronously: ask once it is known
+      // (and synchronously when nothing is being matched).
+      if (identity && !identity.settled()) await identity.ready();
+      const k = keyNow();
+      const have = held(k, pluginId);
+      const requested = origins.filter((o) => !have.has(o));
+      if (requested.length === 0)
+        return { granted: [...origins], denied: [], remembered: false };
       return new Promise<ConsentResult>((resolve) => {
         const id = ++seq;
-        const requested = [...origins];
         const pending: PendingConsent = {
           id,
           origins: requested,
           purpose,
-          decide({ granted, remember }) {
+          rememberable: k.stable,
+          decide({ granted, remember: keep }) {
             const idx = queue.findIndex((p) => p.id === id);
             if (idx === -1) return; // already settled
             queue.splice(idx, 1);
             const grantedSet = new Set(
               granted.filter((o) => requested.includes(o)),
             );
+            const allowed = requested.filter((o) => grantedSet.has(o));
+            // The grant belongs to the document that asked (`k`), even if
+            // another one opened while the prompt was up.
+            record(k, pluginId, allowed);
+            const remembered = keep && k.stable && allowed.length > 0;
+            if (remembered) remember(k.key, pluginId, allowed);
             resolve({
-              granted: requested.filter((o) => grantedSet.has(o)),
+              granted: origins.filter((o) => have.has(o) || grantedSet.has(o)),
               denied: requested.filter((o) => !grantedSet.has(o)),
-              remembered: remember && grantedSet.size > 0,
+              remembered,
             });
             notify();
           },

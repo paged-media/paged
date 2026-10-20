@@ -44,6 +44,8 @@
 // the OLD file — silently, and with no undo. That failure is worse than
 // no feature, so absence is the safe default everywhere it is unclear.
 
+import { noteFileWritten } from "./document-source";
+
 /** The subset of FileSystemFileHandle this uses. Declared rather than
  *  relying on lib.dom, whose typings for the File System Access API vary
  *  by TS version. */
@@ -108,6 +110,18 @@ export async function writeToOpenFile(
     // buffer is not detached by the write.
     await writable.write(new Blob([bytes.slice()], { type: mimeType }));
     await writable.close();
+    // Editor ADR 264 — the file changed under the editor's own hand: a
+    // grant remembered for the document it holds keeps holding.
+    const written = await (
+      handle as unknown as { getFile?(): Promise<File> }
+    )
+      .getFile?.()
+      .catch(() => null);
+    if (written)
+      noteFileWritten(handle as never, {
+        lastModified: written.lastModified,
+        size: written.size,
+      });
     return true;
   } catch {
     // A revoked permission, a removed file, a locked file. The caller

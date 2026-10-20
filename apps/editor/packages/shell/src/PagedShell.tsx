@@ -62,6 +62,7 @@ import {
   setOpenFileHandle,
   type WritableFileHandle,
 } from "./state/open-file-handle";
+import { attachFileSource } from "./state/document-source";
 import { DocumentProvider, useDocument } from "./state/document-context";
 import { usePageThumbnails } from "./state/page-thumbnails";
 import {
@@ -832,7 +833,10 @@ function ShellChrome({
                       picked as unknown as { getFile(): Promise<File> }
                     ).getFile();
                     handled = true;
-                    resolve(file);
+                    // Editor ADR 264 — the handle rides with the file, so
+                    // the document it loads into can be recognised when
+                    // the same file is opened again.
+                    resolve(attachFileSource(file, picked));
                     return;
                   }
                   // No handle and no throw: the platform answered with
