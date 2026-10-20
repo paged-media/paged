@@ -62,6 +62,13 @@ pub const INK_COVERAGE_DPI: f32 = 72.0;
 /// costs nothing.
 pub const INK_COVERAGE_LIMIT_PCT: f32 = 300.0;
 
+/// The type size a run takes when nothing in its cascade names one: the
+/// renderer's own default (`PipelineOptions::default_point_size`), so a
+/// read reports the size the text is set at (ADR 206).
+fn default_point_size() -> f32 {
+    PipelineOptions::default().default_point_size
+}
+
 /// Options that flow through to `paged-renderer::PipelineOptions`.
 /// Mirrors the subset of the renderer's options the worker needs
 /// to surface to the main thread on `LoadDocument`.
@@ -8247,19 +8254,22 @@ impl CanvasModel {
 
     /// SDK Phase 3 — `(StoryRange, Character*)` snapshot. Walks the
     /// story's runs that intersect `[start, end)`, collects the
-    /// resolved per-run value for each character path, and collapses:
+    /// EFFECTIVE per-run value for each character path (and per
+    /// paragraph for each paragraph path), and collapses:
     ///
     /// - All runs share the same value → `PropertyEntry.value =
     ///   Some(Value::Length(uniform))` (or `Some(Value::ColorRef(uniform))`).
     /// - Runs disagree → `PropertyEntry.value = None` (the catalog
     ///   renderer shows "—").
     ///
-    /// Note: a uniform `None` (every run has `point_size: None`,
-    /// i.e. inherits) collapses to `Some(Value::Length(None))` — the
-    /// "they all agree on inherit" case, distinct from "they
-    /// disagree". This matches the apply layer's semantics where
-    /// `Value::Length(None)` is a meaningful "clear the override"
-    /// payload, not just absence.
+    /// ADR 206: the value is the one the text is set with — the run's
+    /// own attribute over its character style, nested style and
+    /// paragraph style chain (`resolved_run_attrs`), the paragraph's own
+    /// over its style chain (`resolved_paragraph_attrs`) — not the local
+    /// override alone. Mixed therefore means "set two ways". A path the
+    /// cascade still leaves unset keeps its unset spelling (an Auto
+    /// leading is `Length(None)`, an unset string `""`); the type size
+    /// falls back to the renderer's default.
     fn story_range_properties(
         &self,
         story_id: &str,
@@ -8392,46 +8402,50 @@ impl CanvasModel {
                 None => para_end > start && para_start < end,
             };
             if in_range {
-                space_before.push(para.space_before);
-                space_after.push(para.space_after);
-                first_line_indent.push(para.first_line_indent);
+                // The EFFECTIVE value (ADR 206): the paragraph's own
+                // attribute over its style's based-on chain, as the
+                // composer lays the paragraph out.
+                let rp = self.scene.resolved_paragraph_attrs(para);
+                space_before.push(rp.space_before);
+                space_after.push(rp.space_after);
+                first_line_indent.push(rp.first_line_indent);
                 applied_paragraph_styles.push(para.paragraph_style.clone().unwrap_or_default());
                 justifications.push(
-                    para.justification
+                    rp.justification
                         .map(|j| j.as_idml().to_string())
                         .unwrap_or_default(),
                 );
                 // W0.2 — paragraph formatting.
-                left_indent.push(para.left_indent);
-                right_indent.push(para.right_indent);
+                left_indent.push(rp.left_indent);
+                right_indent.push(rp.right_indent);
                 drop_cap_characters.push(para.drop_cap_characters);
                 drop_cap_lines.push(para.drop_cap_lines);
-                hyphenations.push(para.hyphenation);
-                hyphenation_zones.push(para.hyphenation_zone);
-                applied_numbering_lists.push(para.applied_numbering_list.clone());
-                keep_lines_together.push(para.keep_lines_together);
-                keep_with_next.push(para.keep_with_next);
-                keep_all_lines_together.push(para.keep_all_lines_together);
-                keep_first_lines.push(para.keep_first_lines);
-                keep_last_lines.push(para.keep_last_lines);
-                start_paragraphs.push(para.start_paragraph);
-                span_columns.push(para.span_columns);
-                line_settings.push(para.line_setting);
-                list_levels.push(para.list_level);
-                list_types.push(para.bullets_list_type.clone());
-                bullet_characters.push(para.bullet_character);
-                numbering_formats.push(para.numbering_format.clone());
-                bullets_text_afters.push(para.bullets_text_after.clone());
-                numbering_expressions.push(para.numbering_expression.clone());
-                numbering_start_ats.push(para.numbering_start_at);
-                numbering_continues.push(para.numbering_continue);
-                bullets_character_styles.push(para.bullets_character_style.clone());
+                hyphenations.push(rp.hyphenation);
+                hyphenation_zones.push(rp.hyphenation_zone);
+                applied_numbering_lists.push(rp.applied_numbering_list.clone());
+                keep_lines_together.push(rp.keep_lines_together);
+                keep_with_next.push(rp.keep_with_next);
+                keep_all_lines_together.push(rp.keep_all_lines_together);
+                keep_first_lines.push(rp.keep_first_lines);
+                keep_last_lines.push(rp.keep_last_lines);
+                start_paragraphs.push(rp.start_paragraph);
+                span_columns.push(rp.span_columns);
+                line_settings.push(rp.line_setting);
+                list_levels.push(rp.list_level);
+                list_types.push(rp.bullets_list_type.clone());
+                bullet_characters.push(rp.bullet_character);
+                numbering_formats.push(rp.numbering_format.clone());
+                bullets_text_afters.push(rp.bullets_text_after.clone());
+                numbering_expressions.push(rp.numbering_expression.clone());
+                numbering_start_ats.push(rp.numbering_start_at);
+                numbering_continues.push(rp.numbering_continue);
+                bullets_character_styles.push(rp.bullets_character_style.clone());
                 numbering_character_styles
-                    .push(para.bullets_and_numbering_digits_character_style.clone());
-                composers.push(para.composer.clone());
-                rule_aboves.push(para.rule_above.clone());
-                rule_belows.push(para.rule_below.clone());
-                tab_lists.push(para.tab_list.clone());
+                    .push(rp.bullets_and_numbering_digits_character_style.clone());
+                composers.push(rp.composer.clone());
+                rule_aboves.push(rp.rule_above.clone());
+                rule_belows.push(rp.rule_below.clone());
+                tab_lists.push(rp.tab_list.clone());
             }
 
             // Character-level walk: per run inside the paragraph.
@@ -8443,26 +8457,30 @@ impl CanvasModel {
                 if run_end <= char_start || run_start >= char_end {
                     continue;
                 }
-                font_sizes.push(run.point_size);
-                leadings.push(run.leading);
-                trackings.push(run.tracking);
-                fill_colors.push(run.fill_color.clone());
+                // The EFFECTIVE value (ADR 206): the run's own attribute
+                // over its character style, nested style and paragraph
+                // style chain — the cascade the composer sets it with.
+                let rr = self.scene.resolved_run_attrs(para, run);
+                font_sizes.push(Some(rr.point_size.unwrap_or_else(default_point_size)));
+                leadings.push(rr.leading);
+                trackings.push(rr.tracking);
+                fill_colors.push(rr.fill_color.clone());
                 applied_character_styles.push(run.character_style.clone().unwrap_or_default());
-                font_families.push(run.font.clone());
-                font_styles.push(run.font_style.clone());
-                kerning_methods.push(run.kerning_method.clone());
-                capitalizations.push(run.capitalization.clone());
-                positions.push(run.position.clone());
-                languages.push(run.applied_language.clone());
+                font_families.push(rr.font.clone());
+                font_styles.push(rr.font_style.clone());
+                kerning_methods.push(rr.kerning_method.clone());
+                capitalizations.push(rr.capitalization.clone());
+                positions.push(rr.position.clone());
+                languages.push(rr.applied_language.clone());
                 otf_features.push(run.otf_features.clone());
-                baseline_shifts.push(run.baseline_shift);
-                horizontal_scales.push(run.horizontal_scale);
-                vertical_scales.push(run.vertical_scale);
-                skews.push(run.skew);
-                underlines.push(run.underline);
-                strikethrus.push(run.strikethru);
-                no_breaks.push(run.no_break);
-                ligatures.push(run.ligatures_on);
+                baseline_shifts.push(rr.baseline_shift);
+                horizontal_scales.push(rr.horizontal_scale);
+                vertical_scales.push(rr.vertical_scale);
+                skews.push(rr.skew);
+                underlines.push(rr.underline);
+                strikethrus.push(rr.strikethru);
+                no_breaks.push(rr.no_break);
+                ligatures.push(rr.ligatures_on);
                 applied_conditions.push(run.applied_conditions.join(" "));
             }
         }
