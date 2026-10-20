@@ -392,6 +392,11 @@ Each version shows a hash ("cfd9a99bd0") as its secondary label. "Release" (and,
 
 **Screenshots:** `F-13-library-hashes.png`
 
+**Fixed (2026-10-20, `a6274341f`).** A version reads "Version n · author", with the hash only
+in its tooltip (PN-353); Release and Open from server ask for the name in an inline field
+beside the control, with Release / Open and Cancel, and no `window.prompt` is left in the
+panel (PN-354, editor ADR 255). "Export with history" is a bordered button like the others.
+
 ### Chrome: menus, header, dock, palette
 
 <a id="f-14"></a>
@@ -914,6 +919,10 @@ With a caret in new text, the control bar's font-family select is empty and the 
 
 **Screenshots:** `F-37-text-control-bar.png`
 
+**Partly fixed (2026-10-20, `a6274341f`).** The Stroke Type list names every stroke style in
+words (PN-1, editor ADR 254). The blank family at a caret (PN-20) and the section order in text
+context (PN-22) stay open.
+
 <a id="f-38"></a>
 
 #### F-38 · Geometry reads differently in the control bar and in Properties
@@ -1323,6 +1332,15 @@ Content mode's Stories list shows "u240c3b". Properties ▸ Stroke Type lists "S
 **Recommendation:** Route these labels through the existing `displayName` helper.
 
 **Screenshots:** `F-22-internal-ids.png`
+
+**Fixed (2026-10-20, `a6274341f`).** Done in the panel kit rather than per label (editor
+ADR 254): every enum member a schema-driven field lists reads in InDesign's words (Stroke Type
+"Japanese Dots", "Wavy"; Justification "Left", "Full justify"; Contour "User-modified path"),
+references read as the referenced object's name (gradient stops, colour-group swatches, the
+options pickers), hyperlinks, bookmarks and cross-references say their URL, page and format,
+and the Stories list, create forms and Library no longer print ids or hashes (PN-1, PN-102 to
+PN-105, PN-110, PN-154, PN-156, PN-161, PN-166, PN-167, PN-201, PN-205 to PN-207, PN-256,
+PN-353). The Inspector still shows ids, as recommended. The HUD's frame ids are F-21.
 
 <a id="f-48"></a>
 

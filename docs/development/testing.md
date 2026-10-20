@@ -141,6 +141,28 @@ it fails.
 
 A new lane test joins its profile's filter in the same change.
 
+### The vendor-pack fidelity lane (script, not a test binary)
+
+`engine/core/scripts/pack-fidelity.py` renders every IDML pack of the private
+corpus through `paged-inspect` and diffs each page against the pack's
+InDesign reference PDF with `paged-diff` (ΔE2000 + SSIM). It reads the corpus
+as UNPACKED directories, `<corpus>/<group>/packs/<slug>/{template.idml,
+reference.pdf}`, selected from `<corpus>/config/manifest.json` by namespaced
+id (`idml/<slug>`); it never reads an archive and never writes into the
+corpus. Files are identified by their bytes (`PK`, `%PDF`), not their
+extension. Gated packs are checked against `config/fidelity-thresholds.json`.
+
+```sh
+PAGED_CORPUS_DIR=~/path/to/corpus python3 engine/core/scripts/pack-fidelity.py           # every pack
+PAGED_CORPUS_DIR=~/path/to/corpus python3 engine/core/scripts/pack-fidelity.py idml/<slug>
+```
+
+Reports land in `engine/core/target/pack-fidelity/` (`PAGED_PACK_FIDELITY_OUT`):
+`summary.json` plus `<slug>/{pack.json,report.json,test.log}` and the worst
+page's heatmap. The script's docstring lists the other variables (DPI, jobs,
+timeout, `PAGED_PACK_GATE=advisory`). Exit 3 without a corpus, 2 with
+`PAGED_REQUIRE_CORPUS=1`, 1 when a gated pack is over budget.
+
 ## Proving the REQUIRE paths locally
 
 ```sh

@@ -70,12 +70,9 @@ describe("Bookmarks panel", () => {
 
   // The secondary line prints the destination object's id
   // ("→ HyperlinkPageDestination/u…"); the user needs the page.
-  test.failing(
-    "PN-104: a page bookmark's destination reads as its page",
-    async () => {
-      covers("panel:paged.bookmarks");
-      const h = await mount();
-      expect(rows(h.root)[0].secondary).toBe("→ Page 1");
-    },
-  );
+  test("PN-104: a page bookmark's destination reads as its page", async () => {
+    covers("panel:paged.bookmarks");
+    const h = await mount();
+    expect(rows(h.root)[0].secondary).toBe("→ Page 1");
+  });
 });

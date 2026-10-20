@@ -53,7 +53,8 @@ export function CrossReferencesPanel() {
               key: x.selfId,
               icon: "panel-cross-references",
               primary: x.name,
-              secondary: x.format ?? undefined,
+              // The format by its name (R13, ADR 254), never its id.
+              secondary: x.formatName ?? undefined,
             }))}
           />
         </div>

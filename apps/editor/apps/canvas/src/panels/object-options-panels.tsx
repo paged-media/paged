@@ -53,7 +53,13 @@ import {
 } from "@paged-media/shell";
 import { FieldInput, FieldSelect } from "@paged-media/panel-kit";
 import { formatAddress } from "@paged-media/plugin-sdk";
-import type { SectionSummary, SwatchSummary } from "@paged-media/client";
+import type {
+  ConditionSummary,
+  GuideSummary,
+  SectionSummary,
+  SpreadSummary,
+  SwatchSummary,
+} from "@paged-media/client";
 
 import { SchemaSections, type SectionSpec } from "./schema-sections";
 import { CoreCommandButton, newMasterPrefill } from "../core-command-dialog";
@@ -100,7 +106,10 @@ function pickerLabel(title: string): string {
 
 /** Each address's own `name`, when it has one: the picker listed raw ids
  *  ("ua400f2") for objects whose names the document carries. */
-function useObjectNames(list: readonly string[] | null): Map<string, string> {
+function useObjectNames(
+  list: readonly string[] | null,
+  namePath: string,
+): Map<string, string> {
   const model = useObjectModel();
   const [names, setNames] = useState<Map<string, string>>(new Map());
   // The addresses by value: the effect reads them back from the key, so a
@@ -121,7 +130,7 @@ function useObjectNames(list: readonly string[] | null): Map<string, string> {
       return;
     }
     let cancelled = false;
-    void Promise.all(addresses.map((a) => objectName(model, a))).then(
+    void Promise.all(addresses.map((a) => objectName(model, a, namePath))).then(
       (pairs) => {
         if (!cancelled)
           setNames(
@@ -134,7 +143,7 @@ function useObjectNames(list: readonly string[] | null): Map<string, string> {
     return () => {
       cancelled = true;
     };
-  }, [model, key, tick]);
+  }, [model, key, tick, namePath]);
   return names;
 }
 
@@ -144,9 +153,10 @@ function useObjectNames(list: readonly string[] | null): Map<string, string> {
 async function objectName(
   model: NonNullable<ReturnType<typeof useObjectModel>>,
   address: string,
+  namePath: string,
 ): Promise<readonly [string, string] | null> {
   try {
-    const v = await model.objects.get(address, "name");
+    const v = await model.objects.get(address, namePath);
     return v.kind === "value" && typeof v.value === "string" && v.value !== ""
       ? ([address, v.value] as const)
       : null;
@@ -383,10 +393,18 @@ function AddressListPanel({
   sections,
   empty,
   actions,
+  namePath = "name",
+  labelOf,
 }: {
   title: string;
   testId: string;
   selector: string;
+  /** The path that holds the object's name, where it is not `name`
+   *  (a text variable's is `textVariableName`). */
+  namePath?: string;
+  /** Words for an address whose kind has no name path (a condition is
+   *  named in its collection, a guide is described): R13, ADR 254. */
+  labelOf?: (address: string) => string | undefined;
   sections: readonly SectionSpec[];
   empty: string;
   /** Create / delete / … buttons over typed core commands (the picked
@@ -394,7 +412,7 @@ function AddressListPanel({
   actions?: (address: string | null) => ReactNode;
 }) {
   const list = useQuery(selector);
-  const names = useObjectNames(list);
+  const names = useObjectNames(list, namePath);
   const [pick, setPick] = useState("");
   const address = pick && list?.includes(pick) ? pick : (list?.[0] ?? null);
   const targets = address ? [address] : [];
@@ -421,7 +439,7 @@ function AddressListPanel({
                 value={address}
                 options={(list ?? []).map((a) => ({
                   value: a,
-                  label: displayName(names.get(a) ?? idOf(a)),
+                  label: displayName(names.get(a) ?? labelOf?.(a) ?? idOf(a)),
                 }))}
                 onChange={setPick}
               />
@@ -447,6 +465,7 @@ export function TextVariablesPanel() {
       title="Text Variables"
       testId="textVariable"
       selector="textVariable"
+      namePath="textVariableName"
       sections={TEXT_VARIABLE_SECTIONS}
       empty="No text variables (or this engine does not list them yet)."
       actions={(address) => (
@@ -617,12 +636,28 @@ const GUIDE_SECTIONS: readonly SectionSpec[] = [
   { title: "Guide", fields: [{ path: "position", label: "Position" }] },
 ];
 
+/** A guide has no name; it is described as InDesign's Guides dialog
+ *  would place it ("Vertical guide at 100 pt, page 1"). */
+function guideLabel(guide: GuideSummary): string {
+  const at = Math.round(guide.position * 100) / 100;
+  const side = guide.orientation === "vertical" ? "Vertical" : "Horizontal";
+  return `${side} guide at ${at} pt, page ${guide.pageIndex + 1}`;
+}
+
 export function GuidesPanel() {
+  const spreads = useCollection<SpreadSummary>("spreads");
+  const labelOf = (address: string) => {
+    const id = idOf(address);
+    for (const s of spreads ?? [])
+      for (const g of s.guides ?? []) if (g.id === id) return guideLabel(g);
+    return undefined;
+  };
   return (
     <AddressListPanel
       title="Guides"
       testId="guide"
       selector="guide"
+      labelOf={labelOf}
       sections={GUIDE_SECTIONS}
       empty="No ruler guides (or this engine does not list them yet)."
     />
@@ -643,7 +678,12 @@ const COLOR_GROUP_SECTIONS: readonly SectionSpec[] = [
     title: "Color group",
     fields: [
       { path: "name", label: "Name" },
-      { path: "members", label: "Swatches" },
+      {
+        path: "members",
+        label: "Swatches",
+        collection: "swatches",
+        items: { newItem: "Color/Black" },
+      },
     ],
   },
 ];
@@ -688,11 +728,16 @@ const CONDITION_SECTIONS: readonly SectionSpec[] = [
 ];
 
 export function ConditionOptionsPanel() {
+  // A condition's name lives in its collection (the kind has no name path).
+  const conditions = useCollection<ConditionSummary>("conditions");
+  const labelOf = (address: string) =>
+    conditions?.find((c) => c.selfId === idOf(address))?.name || undefined;
   return (
     <AddressListPanel
       title="Condition Options"
       testId="condition"
       selector="condition"
+      labelOf={labelOf}
       sections={CONDITION_SECTIONS}
       empty="This document has no conditions."
     />

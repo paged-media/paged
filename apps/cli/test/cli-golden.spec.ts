@@ -1160,32 +1160,19 @@ describe("paged-node golden transcripts", () => {
 // Each fails for its reason until the product is fixed (then it is flipped
 // to a plain test, and its golden is updated).
 describe("paged-node findings", () => {
-  test.failing(
-    "NCLI-1: export --help names --option repeatable once, not twice",
-    async () => {
-      covers("cli:paged-node export");
-      const r = await cli(["export", "--help"]);
-      const line = r.out.split("\n").find((l) => l.includes("--option"))!;
-      expect(line.match(/\(repeatable\)/g)).toHaveLength(1);
-    },
-  );
+  test("NCLI-1: export --help names --option repeatable once, not twice", async () => {
+    covers("cli:paged-node export");
+    const r = await cli(["export", "--help"]);
+    const line = r.out.split("\n").find((l) => l.includes("--option"))!;
+    expect(line.match(/\(repeatable\)/g)).toHaveLength(1);
+  });
 
-  test.failing(
-    "NCLI-2: schema --format text names an open record's shape, as commands does",
-    async () => {
-      covers("cli:paged-node schema");
-      const r = await cli([
-        "schema",
-        fx.paged,
-        "swatch",
-        "--format",
-        "text",
-        NP,
-      ]);
-      const line = r.out.split("\n").find((l) => l.startsWith("color "))!;
-      expect(line).toMatch(/SwatchColorSpec \(JSON, checked by core\)/);
-    },
-  );
+  test("NCLI-2: schema --format text names an open record's shape, as commands does", async () => {
+    covers("cli:paged-node schema");
+    const r = await cli(["schema", fx.paged, "swatch", "--format", "text", NP]);
+    const line = r.out.split("\n").find((l) => l.startsWith("color "))!;
+    expect(line).toMatch(/SwatchColorSpec \(JSON, checked by core\)/);
+  });
 });
 
 // Last, so an update run has written every golden before it is checked.

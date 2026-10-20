@@ -298,8 +298,11 @@ function CommandForm({ pending: p }: { pending: Pending }) {
         : null,
     [commands, op],
   );
+  // Never asked: the document handle, and an OPTIONAL self id (the
+  // engine mints one; an internal id is nothing a user should type, R13,
+  // ADR 254).
   const fields = Object.entries(info?.args.fields ?? {}).filter(
-    ([name]) => name !== "handle",
+    ([name, t]) => name !== "handle" && !(name === "selfId" && t.optional),
   );
 
   // Seed the form: the selection / caret, then the entry's own prefill.
