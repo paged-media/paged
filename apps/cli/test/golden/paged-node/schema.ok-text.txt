@@ -7,7 +7,7 @@ value                            list of length (pt; or with a unit: 3mm, 0.5in,
 model                            enum (Process | Spot)
 alternateSpace                   enum (CMYK | RGB | LAB | Gray)
 alternateValue                   list of length (pt; or with a unit: 3mm, 0.5in, 12pt) (JSON)
-color                            record {  } (JSON)
+color                            SwatchColorSpec (JSON, checked by core)
 tint                             number (percent)
 alpha                            number (percent)
 convertToProcess                 bool

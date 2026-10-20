@@ -520,7 +520,8 @@ async function walk(
         disabled: true,
         kind: "label",
       });
-    } else if (row.role === "menuitem") {
+    } else if (row.role === "menuitem" || row.role === "menuitemcheckbox") {
+      // A toggle (View ▸ Snap to points) is a menuitemcheckbox (SH-4).
       out.set(`${prefix}/${row.text}`, {
         path: `${prefix}/${row.text}`,
         disabled: row.disabled,
@@ -569,7 +570,8 @@ export async function menuRow(
   const index = await content.evaluate((el, want) => {
     const rows = Array.from(el.children);
     return rows.findIndex((c) => {
-      if (c.getAttribute("role") !== "menuitem") return false;
+      const role = c.getAttribute("role");
+      if (role !== "menuitem" && role !== "menuitemcheckbox") return false;
       if (c.hasAttribute("data-menu-submenu")) return false;
       const clone = c.cloneNode(true) as HTMLElement;
       clone

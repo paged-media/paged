@@ -205,14 +205,11 @@ describe("Text Variables (paged.text-variables)", () => {
   // UX audit F-22: internal identifiers shown to users. The picker asks
   // each address for `name`; a text variable's name path is
   // `textVariableName`, so it falls back to the id.
-  test.failing(
-    "PN-205 (UX F-22): the variable picker names it Client, not by its id",
-    async () => {
-      covers("panel:paged.text-variables");
-      const h = await mount();
-      expect(pickerLabels(h, "textVariable")).toEqual(["Client"]);
-    },
-  );
+  test("PN-205 (UX F-22): the variable picker names it Client, not by its id", async () => {
+    covers("panel:paged.text-variables");
+    const h = await mount();
+    expect(pickerLabels(h, "textVariable")).toEqual(["Client"]);
+  });
 });
 
 // ------------------------------------------------------ condition options
@@ -267,14 +264,11 @@ describe("Condition Options (paged.condition-options)", () => {
     expect(shown(h, "visible")).toBe("false");
   });
 
-  test.failing(
-    "PN-206 (UX F-22): the condition picker names them Draft and Print-only",
-    async () => {
-      covers("panel:paged.condition-options");
-      const h = await mount();
-      expect(pickerLabels(h, "condition")).toEqual(["Draft", "Print-only"]);
-    },
-  );
+  test("PN-206 (UX F-22): the condition picker names them Draft and Print-only", async () => {
+    covers("panel:paged.condition-options");
+    const h = await mount();
+    expect(pickerLabels(h, "condition")).toEqual(["Draft", "Print-only"]);
+  });
 });
 
 // --------------------------------------------------------- master options
@@ -528,12 +522,9 @@ describe("Guides (paged.guides)", () => {
     expect(shown(h, "position")).toBe("150 pt");
   });
 
-  test.failing(
-    "PN-207 (UX F-22): the guide picker describes the guide, not its id",
-    async () => {
-      covers("panel:paged.guides");
-      const h = await mount();
-      expect(pickerLabels(h, "guide").join()).not.toContain("Guide/");
-    },
-  );
+  test("PN-207 (UX F-22): the guide picker describes the guide, not its id", async () => {
+    covers("panel:paged.guides");
+    const h = await mount();
+    expect(pickerLabels(h, "guide").join()).not.toContain("Guide/");
+  });
 });

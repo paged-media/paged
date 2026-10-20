@@ -3574,6 +3574,11 @@ pub struct BookmarkSummary {
     pub self_id: String,
     pub name: String,
     pub destination: String,
+    /// The page a page destination goes to (its `Self` id), so a panel
+    /// can say "Page 3" rather than the destination's id. Absent for a
+    /// text-anchor or URL destination. Additive.
+    #[serde(default)]
+    pub destination_page: Option<String>,
     /// The bookmark it stands under (ADR 173); `None` at the top level.
     /// The collection lists the bookmarks in document order, a parent
     /// before its children.
@@ -3589,6 +3594,11 @@ pub struct CrossReferenceSummary {
     pub self_id: String,
     pub name: String,
     pub format: String,
+    /// The format's own name ("Page Number"), so a panel never shows the
+    /// format's id. Absent when the format is unnamed or not found.
+    /// Additive.
+    #[serde(default)]
+    pub format_name: Option<String>,
     pub destination: String,
 }
 

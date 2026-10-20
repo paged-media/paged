@@ -179,20 +179,17 @@ describe("Help opens the documentation in a new, unlinked tab", () => {
     expect(opened[0].slice(1)).toEqual(["_blank", "noopener,noreferrer"]);
   });
 
-  // Finding SH-1: the product's code moved into the paged-media/paged
-  // monorepo; the pre-monorepo editor repository is frozen ("moved"
-  // README, archive pending), so an issue filed there reaches nobody.
-  test.failing(
-    "SH-1: Report an issue files into the monorepo's tracker",
-    async () => {
-      covers("command:paged.help.reportIssue");
-      expect(await openedBy("paged.help.reportIssue")).toEqual([
-        [
-          "https://github.com/paged-media/paged/issues/new",
-          "_blank",
-          "noopener,noreferrer",
-        ],
-      ]);
-    },
-  );
+  // Finding SH-1 (fixed): the product's code moved into the
+  // paged-media/paged monorepo; the pre-monorepo editor repository is
+  // archived, so an issue filed there would reach nobody.
+  test("SH-1: Report an issue files into the monorepo's tracker", async () => {
+    covers("command:paged.help.reportIssue");
+    expect(await openedBy("paged.help.reportIssue")).toEqual([
+      [
+        "https://github.com/paged-media/paged/issues/new",
+        "_blank",
+        "noopener,noreferrer",
+      ],
+    ]);
+  });
 });

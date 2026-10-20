@@ -303,6 +303,11 @@ pub(super) fn emit_rectangle_image(
                     .compose(&Transform::scale(1.0 / img_w, 1.0 / img_h));
                 let _ = super::placed_pdf::draw_placed_pdf(bytes, 0, t, &mut page.list);
             }
+            Placed::Svg(art) => {
+                let t = Transform::for_rect_in(r, outer)
+                    .compose(&Transform::scale(1.0 / img_w, 1.0 / img_h));
+                super::placed_svg::draw(art, t, &mut page.list);
+            }
         }
     }
 }
@@ -773,6 +778,8 @@ fn emit_image_under_clip(
         Placed::Pdf(bytes) => {
             let _ = super::placed_pdf::draw_placed_pdf(bytes, 0, image_transform, list);
         }
+        // So do an SVG's user units, as its raster's pixels would.
+        Placed::Svg(art) => super::placed_svg::draw(art, image_transform, list),
     }
     if extra_clip.is_some() {
         list.push(DisplayCommand::PopClip(Transform::IDENTITY));
@@ -801,12 +808,14 @@ enum ImageResolution {
     LinkMissing,
 }
 
-/// What a frame places: a raster in the list's image pool, or a PDF page
-/// drawn from its own operations (ADR 154).
+/// What a frame places: a raster in the list's image pool, a PDF page
+/// drawn from its own operations (ADR 154), or an SVG drawn as vectors
+/// (ADR 190, amendment of 2026-10-20).
 #[derive(Clone)]
 enum Placed {
     Raster(paged_compose::ImageId),
     Pdf(std::sync::Arc<[u8]>),
+    Svg(std::sync::Arc<super::placed_svg::SvgArt>),
 }
 
 /// A placed PDF (an Illustrator `.ai` is one) resolved to its page box,
@@ -823,6 +832,52 @@ fn placed_pdf(bytes: &[u8]) -> Option<ImageResolution> {
     })
 }
 
+/// A placed SVG the display list can draw as vectors, resolved to its
+/// natural size, or `None` for bytes that are not one (another image, or
+/// an SVG that keeps its raster). The vectors' SVG is remembered in
+/// `decoded_cache` under `key` as an encoded-only entry, so the next
+/// frame placing it finds it there and the placed-asset door
+/// (`placed_asset_bytes`) can still hand its bytes out.
+fn placed_svg(
+    bytes: &[u8],
+    key: &str,
+    decoded_cache: &mut HashMap<String, paged_compose::DecodedImage>,
+) -> Option<ImageResolution> {
+    if !super::image_decode::is_svg_magic(bytes) {
+        return None;
+    }
+    let art = super::placed_svg::prepare(bytes)?;
+    let (w, h) = (art.width, art.height);
+    decoded_cache
+        .entry(key.to_string())
+        .or_insert_with(|| paged_compose::DecodedImage {
+            width: w as u32,
+            height: h as u32,
+            encoded: bytes::Bytes::copy_from_slice(bytes),
+            rgba: bytes::Bytes::new(),
+            icc: None,
+        });
+    Some(ImageResolution::Resolved(
+        Placed::Svg(std::sync::Arc::new(art)),
+        w,
+        h,
+    ))
+}
+
+/// The vector SVG a `decoded_cache` entry stands for: an encoded-only SVG
+/// entry, as [`placed_svg`] leaves one.
+fn cached_svg(
+    key: &str,
+    decoded_cache: &mut HashMap<String, paged_compose::DecodedImage>,
+) -> Option<ImageResolution> {
+    let d = decoded_cache.get(key)?;
+    if !d.rgba.is_empty() {
+        return None;
+    }
+    let encoded = d.encoded.clone();
+    placed_svg(&encoded, key, decoded_cache)
+}
+
 fn resolve_image_id(
     uri: &str,
     options: &PipelineOptions,
@@ -833,6 +888,9 @@ fn resolve_image_id(
     let id = match page_image_cache.get(uri).copied() {
         Some(id) => id,
         None => {
+            if let Some(svg) = cached_svg(uri, decoded_cache) {
+                return svg;
+            }
             let decoded = if let Some(d) = decoded_cache.get(uri) {
                 d.clone()
             } else {
@@ -845,6 +903,9 @@ fn resolve_image_id(
                 };
                 if let Some(pdf) = placed_pdf(bytes.as_ref()) {
                     return pdf;
+                }
+                if let Some(svg) = placed_svg(bytes.as_ref(), uri, decoded_cache) {
+                    return svg;
                 }
                 let Some(d) = decode_image_bytes(bytes.as_ref()) else {
                     tracing::warn!(uri, "image decode failed; skipping");
@@ -905,11 +966,17 @@ fn resolve_inline_image_bytes(
     let id = match page_image_cache.get(&key).copied() {
         Some(id) => id,
         None => {
+            if let Some(svg) = cached_svg(&key, decoded_cache) {
+                return svg;
+            }
             let decoded = if let Some(d) = decoded_cache.get(&key) {
                 d.clone()
             } else {
                 if let Some(pdf) = placed_pdf(bytes) {
                     return pdf;
+                }
+                if let Some(svg) = placed_svg(bytes, &key, decoded_cache) {
+                    return svg;
                 }
                 let Some(d) = decode_image_bytes(bytes) else {
                     tracing::warn!(len = bytes.len(), "inline image decode failed; skipping");

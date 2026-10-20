@@ -112,37 +112,34 @@ describe("the sample worker bundle, through the shell's loader", () => {
     }
   });
 
-  // Finding SH-13: the manifest declares "Tools/Sample Bundle Hello", the
-  // kernel registers "Tools/Sample bundle hello". Menu paths are keys, so
-  // anything that checks a manifest against its registrations (as
-  // plugin-sdk's checkManifestConformance does for the plugin bundles)
-  // reports the declared item missing and the registered one undeclared.
-  test.failing(
-    "SH-13: the manifest declares exactly the contributions the kernel registers",
-    async () => {
-      covers("command:paged.sample.hello");
-      const registries = createShellRegistries(() => null);
-      const manifest = sampleBundleManifest();
-      const handle = await loadBundle(manifest, registries);
-      try {
-        expect({
-          commands: registries.commands
-            .list()
-            .map((c) => c.id)
-            .filter((id) => id.startsWith("paged.sample.")),
-          keybindings: registries.keybindings.list().map((k) => k.key),
-          menus: registries.menus.list().map((m) => m.path),
-        }).toEqual({
-          commands: [...(manifest.contributes?.commands ?? [])],
-          keybindings: [...(manifest.contributes?.keybindings ?? [])],
-          menus: [...(manifest.contributes?.menus ?? [])],
-        });
-      } finally {
-        handle.dispose();
-        registries.keybindings.detach();
-      }
-    },
-  );
+  // Finding SH-13 (fixed): the manifest declared "Tools/Sample Bundle
+  // Hello" while the kernel registers "Tools/Sample bundle hello". Menu
+  // paths are keys, so anything that checks a manifest against its
+  // registrations (as plugin-sdk's checkManifestConformance does for the
+  // plugin bundles) reported one missing and one undeclared.
+  test("SH-13: the manifest declares exactly the contributions the kernel registers", async () => {
+    covers("command:paged.sample.hello");
+    const registries = createShellRegistries(() => null);
+    const manifest = sampleBundleManifest();
+    const handle = await loadBundle(manifest, registries);
+    try {
+      expect({
+        commands: registries.commands
+          .list()
+          .map((c) => c.id)
+          .filter((id) => id.startsWith("paged.sample.")),
+        keybindings: registries.keybindings.list().map((k) => k.key),
+        menus: registries.menus.list().map((m) => m.path),
+      }).toEqual({
+        commands: [...(manifest.contributes?.commands ?? [])],
+        keybindings: [...(manifest.contributes?.keybindings ?? [])],
+        menus: [...(manifest.contributes?.menus ?? [])],
+      });
+    } finally {
+      handle.dispose();
+      registries.keybindings.detach();
+    }
+  });
 
   test("invoking the command runs the worker's handler and resolves with its answer", async () => {
     covers("command:paged.sample.hello");

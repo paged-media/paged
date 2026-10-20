@@ -158,6 +158,14 @@ export function LibraryPanel() {
     SERVER ? signedInAs(SERVER) : null,
   );
   const [syncNote, setSyncNote] = useState<string | null>(null);
+  // The version a release is being named for, and the name typed so far:
+  // the name is asked in the panel, beside the version (PN-354), not in a
+  // window.prompt.
+  const [releasing, setReleasing] = useState<string | null>(null);
+  const [releaseName, setReleaseName] = useState("");
+  // Open from server asks for the repository in the panel too (UX F-13).
+  const [cloning, setCloning] = useState(false);
+  const [cloneRepo, setCloneRepo] = useState("");
   // A live save adds a branch: the refs below are read again when the relay moves.
   const liveVersion = useSyncExternalStore(
     live.subscribe,
@@ -370,8 +378,16 @@ export function LibraryPanel() {
                       alignItems: "center",
                     }}
                   >
-                    <span style={{ ...mono, color: "var(--pg-muted-fg)" }}>
-                      {c.hash.slice(0, 10)}
+                    {/* Labelled for people (PN-353): the version's
+                        number and who made it; the hash is only the
+                        tooltip. */}
+                    <span
+                      style={{ ...mono, color: "var(--pg-muted-fg)" }}
+                      title={c.hash}
+                      data-library-version-label
+                    >
+                      Version {log.length - i}
+                      {c.author ? ` · ${c.author}` : ""}
                     </span>
                     {i > 0 && (
                       <button
@@ -406,22 +422,63 @@ export function LibraryPanel() {
                       data-library-release
                       style={button}
                       title="Name this version; a release never moves"
-                      onClick={act(async () => {
-                        const name = globalThis.prompt(
-                          "Release name (it never moves once given):",
-                          "",
-                        );
-                        if (name?.trim())
-                          await library.release(
-                            current.id,
-                            name.trim().replace(/\s+/g, "-"),
-                            c.hash,
-                          );
-                      })}
+                      aria-expanded={releasing === c.hash}
+                      onClick={() => {
+                        setReleasing(releasing === c.hash ? null : c.hash);
+                        setReleaseName("");
+                      }}
                     >
                       Release
                     </button>
                   </div>
+                  {releasing === c.hash && (
+                    <form
+                      data-library-release-form
+                      style={{
+                        display: "flex",
+                        gap: 6,
+                        marginTop: 4,
+                        alignItems: "center",
+                      }}
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        const name = releaseName.trim().replace(/\s+/g, "-");
+                        if (!name) return;
+                        setReleasing(null);
+                        act(async () => {
+                          await library.release(current.id, name, c.hash);
+                        })();
+                      }}
+                    >
+                      <input
+                        autoFocus
+                        aria-label="Release name"
+                        placeholder="Release name (it never moves)"
+                        data-library-release-name
+                        value={releaseName}
+                        onChange={(e) => setReleaseName(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Escape") setReleasing(null);
+                        }}
+                        style={{ ...button, flex: 1, minWidth: 0 }}
+                      />
+                      <button
+                        type="submit"
+                        data-library-release-confirm
+                        style={button}
+                        disabled={!releaseName.trim()}
+                      >
+                        Release
+                      </button>
+                      <button
+                        type="button"
+                        style={button}
+                        onClick={() => setReleasing(null)}
+                      >
+                        Cancel
+                      </button>
+                    </form>
+                  )}
                 </li>
               </ViewTransition>
             ))}
@@ -532,20 +589,56 @@ export function LibraryPanel() {
               type="button"
               data-library-clone
               style={{ ...button, marginTop: 6 }}
-              onClick={act(async () => {
-                const repo = globalThis
-                  .prompt("Server repository to open:", "")
-                  ?.trim();
-                if (!repo) return;
-                const token = await accessToken(SERVER);
-                if (!token) throw new Error("Sign in to the server first.");
-                await open(
-                  await library.clone({ url: SERVER, repo, token }, repo),
-                );
-              })}
+              aria-expanded={cloning}
+              onClick={() => {
+                setCloning(!cloning);
+                setCloneRepo("");
+              }}
             >
               Open from server…
             </button>
+          )}
+          {who && cloning && (
+            <form
+              data-library-clone-form
+              style={{ display: "flex", gap: 6, marginTop: 4 }}
+              onSubmit={(e) => {
+                e.preventDefault();
+                const repo = cloneRepo.trim();
+                if (!repo) return;
+                setCloning(false);
+                act(async () => {
+                  const token = await accessToken(SERVER);
+                  if (!token) throw new Error("Sign in to the server first.");
+                  await open(
+                    await library.clone({ url: SERVER, repo, token }, repo),
+                  );
+                })();
+              }}
+            >
+              <input
+                autoFocus
+                aria-label="Server repository"
+                placeholder="Server repository"
+                data-library-clone-repo
+                value={cloneRepo}
+                onChange={(e) => setCloneRepo(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") setCloning(false);
+                }}
+                style={{ ...button, flex: 1, minWidth: 0 }}
+              />
+              <button type="submit" style={button} disabled={!cloneRepo.trim()}>
+                Open
+              </button>
+              <button
+                type="button"
+                style={button}
+                onClick={() => setCloning(false)}
+              >
+                Cancel
+              </button>
+            </form>
           )}
           {who && (
             <div data-library-claude style={{ marginTop: 10 }}>

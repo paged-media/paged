@@ -64,6 +64,8 @@ and 024 predate that scheme and keep their numbers. Records 200–217 were writt
 | [251](251-object-lock-and-hide.md) | Object lock and hide | Accepted 2026-10-19 |
 | [252](252-ask-affordances-know-the-ai-service.md) | The ask affordances know whether there is an AI service | Accepted 2026-10-19 |
 | [253](253-one-action-one-batch.md) | One user action is one batch | Accepted 2026-10-19 |
+| [254](254-engine-values-read-in-words.md) | Engine values read in words: enum members, references, ids | Accepted 2026-10-20 |
+| [255](255-every-choice-is-a-control.md) | Every choice is a control with its state | Accepted 2026-10-20 |
 | [257](257-indesigns-fits-and-page-keys.md) | InDesign's fit commands and page keys, in the registry | Accepted 2026-10-20 |
 | [258](258-a-dropped-picture-is-placed-where-it-lands.md) | A picture dropped on an open document is placed where it lands | Accepted 2026-10-20 |
 | [259](259-landmarks-tabs-and-headings.md) | Landmarks, the dock's tabs and panel headings | Accepted 2026-10-20 |

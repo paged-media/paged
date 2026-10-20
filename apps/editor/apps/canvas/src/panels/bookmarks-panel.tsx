@@ -23,10 +23,24 @@
 // CRUD + reorder + PDF-bookmark export land with their Operations.
 
 import { ListRows, useCollection } from "@paged-media/shell";
-import type { BookmarkSummary } from "@paged-media/client";
+import type { BookmarkSummary, PageSummary } from "@paged-media/client";
+
+// R13 (ADR 254) — a bookmark's destination in words: the page it goes to
+// by its folio, never the destination object's id.
+function destinationText(
+  b: BookmarkSummary,
+  pages: readonly PageSummary[] | null,
+): string | undefined {
+  if (b.destinationPage) {
+    const page = pages?.find((p) => p.selfId === b.destinationPage);
+    return page ? `Page ${page.name ?? page.index}` : "A page";
+  }
+  return b.destination ? "A text anchor" : undefined;
+}
 
 export function BookmarksPanel() {
   const items = useCollection<BookmarkSummary>("bookmarks");
+  const pages = useCollection<PageSummary>("pages");
   if (items === null) {
     return (
       <div
@@ -46,12 +60,15 @@ export function BookmarksPanel() {
       ) : (
         <div data-bookmark-list>
           <ListRows
-            rows={items.map((b) => ({
-              key: b.selfId,
-              icon: "panel-bookmarks",
-              primary: b.name,
-              secondary: b.destination ? `→ ${b.destination}` : undefined,
-            }))}
+            rows={items.map((b) => {
+              const to = destinationText(b, pages);
+              return {
+                key: b.selfId,
+                icon: "panel-bookmarks",
+                primary: b.name,
+                secondary: to ? `→ ${to}` : undefined,
+              };
+            })}
           />
         </div>
       )}

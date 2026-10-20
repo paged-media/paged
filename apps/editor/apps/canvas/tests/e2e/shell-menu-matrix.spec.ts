@@ -34,8 +34,7 @@
 //     member from the live registry.
 //
 // UX F-14 (object commands enabled with nothing selected) is SH-8, fixed
-// (ADR 249); the missing checked state of the View toggles is SH-4, an
-// expected failure.
+// (ADR 249); the View toggles' checked state is SH-4, fixed.
 
 import { expect, test, type Page } from "@playwright/test";
 
@@ -750,11 +749,10 @@ test.describe("the host menu bar", () => {
       expect({ p, on: on.get(p) }).toEqual({ p, on: false });
   });
 
-  // Finding SH-4: the View toggles (Show text threads, Snap to points,
-  // Show heading anchors) render as plain items: a menu item has no
-  // checked state, so the menu cannot say which extras are on.
+  // Finding SH-4 (fixed): the View toggles (Show text threads, Snap to
+  // points, Show heading anchors) rendered as plain items with no checked
+  // state; they are menuitemcheckbox rows now (`checked` on the item).
   test("SH-4: a View toggle shows its checked state", async ({ page }) => {
-    test.fail();
     covers("menu:View/Show text threads", "menu:View/Snap to points");
     await openShell(page, { doc: true });
     await page.locator('[data-menu-trigger="View"]').click();

@@ -597,6 +597,7 @@ export {
 } from "./catalog/binding-hook";
 export {
   useCollection,
+  useCollectionNames,
   useDocumentMeta,
   useDocumentStats,
 } from "./catalog/use-collection";

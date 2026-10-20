@@ -308,23 +308,20 @@ describe("Structure (schema tree), paged.schema-tree-demo", () => {
 
   // The inline rename opens only on a double-click; a keyboard user has
   // no way to start it.
-  test.failing(
-    "PN-357: a layer's inline rename can be started from the keyboard",
-    async () => {
-      covers("panel:paged.schema-tree-demo");
-      const h = await treeMount();
-      const layers = section(h, "Layers");
-      const select = layers.querySelector<HTMLElement>(
-        `[data-list-row="${h.scene.layer}"] [data-list-row-select]`,
-      )!;
-      select.focus();
-      await h.user.keyboard("{F2}");
+  test("PN-357: a layer's inline rename can be started from the keyboard", async () => {
+    covers("panel:paged.schema-tree-demo");
+    const h = await treeMount();
+    const layers = section(h, "Layers");
+    const select = layers.querySelector<HTMLElement>(
+      `[data-list-row="${h.scene.layer}"] [data-list-row-select]`,
+    )!;
+    select.focus();
+    await h.user.keyboard("{F2}");
+    await h.settle();
+    if (!layers.querySelector("[data-list-rename]")) {
+      await h.user.keyboard("{Enter}");
       await h.settle();
-      if (!layers.querySelector("[data-list-rename]")) {
-        await h.user.keyboard("{Enter}");
-        await h.settle();
-      }
-      expect(layers.querySelector("[data-list-rename]")).not.toBeNull();
-    },
-  );
+    }
+    expect(layers.querySelector("[data-list-rename]")).not.toBeNull();
+  });
 });
