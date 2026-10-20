@@ -53,7 +53,7 @@ import type {
 import { createDataProviderRegistry } from "@paged-media/plugin-sdk";
 import type { CanvasClient } from "@paged-media/client";
 
-import { createHostConsole } from "./journal-sink";
+import { createHostConsole, journal } from "./journal-sink";
 import { createEditorAssetSource } from "./plugin-asset-source";
 import { createEditorBlobStore } from "./plugin-blob-store";
 import { createEditorClipboardBackend } from "./plugin-clipboard";
@@ -257,6 +257,13 @@ export function createEditorHostOptions(
     // (`viewport.revealText@1`).
     text: textRevealBackend,
     diagnosticsSink: deps.diagnosticsSink,
+    // ADR 025 / HOST-4 — `host.journal` records into the editor's ONE
+    // journal (the Journal panel, the bug-report export). The SDK has
+    // checked the code is namespaced under the bundle's id; flips
+    // supports("journal@1") true.
+    journal: {
+      record: (_bundleId, entry) => journal.record(entry),
+    },
     schemaPanelRenderer: deps.schemaPanelRenderer,
     // W-19 — the shell's pointer entries (double-click, the Type-tool click
     // on owned content) hand the entering point to `onEnter`

@@ -61,12 +61,15 @@
 // inside an `ObjectFieldFrame` ("Bind to data…" + badges). The ADR 023
 // provider claim still answers first, inside `useObjectProperty`.
 
+import { useEffect, useState } from "react";
 import {
   CatalogRegistryProvider,
   CompositionRenderer,
+  DEFAULT_FONT_FAMILY,
   ObjectFieldFrame,
   useCollection,
   useObjectBindings,
+  useOptionalCanvasClient,
 } from "@paged-media/shell";
 import { KitSelect } from "@paged-media/ui";
 import type { FontSummary, Value } from "@paged-media/client";
@@ -159,7 +162,96 @@ function OpenTypeChips() {
 
 const FAMILY_BINDING = {
   family: { scope: "content" as const, path: "characterFontFamily" },
+  characterStyle: { scope: "content" as const, path: "appliedCharacterStyle" },
+  paragraphStyle: { scope: "content" as const, path: "appliedParagraphStyle" },
 };
+
+const NO_PARAGRAPH_STYLE = "ParagraphStyle/$ID/[No paragraph style]";
+
+interface StyleRow {
+  selfId: string;
+  basedOn: string | null;
+}
+
+/**
+ * PN-20 (UX F-37): the family that APPLIES to text with no family of its
+ * own. The engine reads a run's own override (`""` when there is none),
+ * so the panel walks the cascade InDesign resolves: the applied character
+ * style, the paragraph style and what it is based on, [No paragraph
+ * style], and last the editor's default face, which is what the text is
+ * set in when no style names a font. `null` while unresolved or when the
+ * run's own value is mixed or set.
+ */
+function useInheritedFamily(
+  own: string | null,
+  characterStyle: string | null,
+  paragraphStyle: string | null,
+): string | null {
+  const client = useOptionalCanvasClient();
+  const paragraphStyles = useCollection<StyleRow>("paragraphStyles");
+  const characterStyles = useCollection<StyleRow>("characterStyles");
+  const [resolved, setResolved] = useState<{
+    key: string;
+    family: string;
+  } | null>(null);
+  const wanted = own === "";
+  const key = `${characterStyle ?? ""}|${paragraphStyle ?? ""}`;
+  useEffect(() => {
+    if (!wanted || !client) return;
+    let cancelled = false;
+    const chain = (
+      rows: StyleRow[] | null,
+      family: "character" | "paragraph",
+      start: string | null,
+    ): string[] => {
+      const out: string[] = [];
+      let at = start;
+      while (at && !out.includes(at)) {
+        out.push(`style:${family}/${at}`);
+        at = rows?.find((r) => r.selfId === at)?.basedOn ?? null;
+      }
+      return out;
+    };
+    const addresses = [
+      ...chain(characterStyles, "character", characterStyle || null),
+      ...chain(paragraphStyles, "paragraph", paragraphStyle || null),
+      `style:paragraph/${NO_PARAGRAPH_STYLE}`,
+    ];
+    void (async () => {
+      let family = DEFAULT_FONT_FAMILY;
+      for (const address of addresses) {
+        const reply = (await client
+          .send({
+            kind: "requestGet",
+            payload: { address, path: "characterFontFamily" },
+          } as never)
+          .catch(() => null)) as {
+          kind: string;
+          payload?: { value?: Value | null };
+        } | null;
+        const v = reply?.kind === "propertyValue" ? reply.payload?.value : null;
+        const name = unwrapText(v ?? null);
+        if (name) {
+          family = name;
+          break;
+        }
+      }
+      if (!cancelled) setResolved({ key, family });
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    wanted,
+    client,
+    key,
+    characterStyle,
+    paragraphStyle,
+    characterStyles,
+    paragraphStyles,
+  ]);
+  return wanted && resolved?.key === key ? resolved.family : null;
+}
 
 function unwrapText(v: Value | null): string | null {
   if (!v || v.type !== "text") return null;
@@ -171,8 +263,17 @@ function unwrapText(v: Value | null): string | null {
  *  row shape, and the wire value is the family name string). */
 function FamilySelect() {
   const fonts = useCollection<FontSummary>("fonts");
-  const { family } = useObjectBindings(FAMILY_BINDING);
-  const current = unwrapText(family.value);
+  const { family, characterStyle, paragraphStyle } =
+    useObjectBindings(FAMILY_BINDING);
+  const own = unwrapText(family.value);
+  // A run with no family of its own shows the one it inherits, softened
+  // (choosing it writes the override, as in InDesign).
+  const inherited = useInheritedFamily(
+    own,
+    unwrapText(characterStyle.value),
+    unwrapText(paragraphStyle.value),
+  );
+  const current = own === "" ? inherited : own;
   const resolved = current !== null && current !== "";
   const families = fonts ?? [];
   const known = families.some((f) => f.family === current);
@@ -195,7 +296,8 @@ function FamilySelect() {
       <KitSelect
         aria-label="Family"
         value={resolved ? current : "__mixed__"}
-        soft={!resolved}
+        soft={!resolved || own === ""}
+        data-inherited={own === "" && resolved ? "" : undefined}
         disabled={family.onCommit == null}
         data-seam={absent ? "true" : undefined}
         data-mixed={resolved || absent ? undefined : ""}

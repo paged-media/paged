@@ -592,16 +592,33 @@ export function acceleratorLookup(
 }
 
 /** Of a command's bindings, the one for THIS platform (bundles register
- *  `cmd+…` and `ctrl+…` twins; the other twin is noise to show). */
+ *  `cmd+…` and `ctrl+…` twins; the other twin is noise to show).
+ *
+ *  A binding is `metaKey` exact on every platform (`cmd` aliases `meta`).
+ *  On a PC a `cmd+…` binding with no `ctrl+…` twin fires on the Windows
+ *  (Super) key, so it comes back spelled `meta+…`, which `prettyKey` shows
+ *  as Win+… / Super+…: a PC never reads Ctrl for a chord Ctrl does not fire
+ *  (SH-5). `cmd` in a display-only accelerator still reads as Ctrl. */
 export function nativeKey(keys: readonly string[]): string {
+  const mods = (k: string) => k.toLowerCase().split("+").slice(0, -1);
+  const isMacChord = (k: string) =>
+    mods(k).some((m) => m === "cmd" || m === "meta");
   const native = (k: string) => {
-    const mods = k.toLowerCase().split("+").slice(0, -1);
-    const mac = mods.some((m) => m === "cmd" || m === "meta");
-    const pc = mods.some((m) => m === "ctrl" || m === "control");
-    return IS_MAC ? !pc || mac : !mac;
+    const pc = mods(k).some((m) => m === "ctrl" || m === "control");
+    return IS_MAC ? !pc || isMacChord(k) : !isMacChord(k);
   };
-  return keys.find(native) ?? keys[0];
+  const key = keys.find(native) ?? keys[0];
+  if (IS_MAC || key === undefined || !isMacChord(key)) return key;
+  const parts = key.split("+");
+  return [
+    ...parts.slice(0, -1).map((m) => (m.toLowerCase() === "cmd" ? "meta" : m)),
+    parts[parts.length - 1],
+  ].join("+");
 }
+
+const IS_WINDOWS =
+  typeof navigator !== "undefined" &&
+  /Win/.test(navigator.platform || navigator.userAgent);
 
 /** Named keys that read as a glyph (`arrowleft` → ←). */
 const KEY_GLYPHS: Record<string, string> = {
@@ -614,7 +631,8 @@ const KEY_GLYPHS: Record<string, string> = {
 };
 
 /** `cmd+shift+s` → `⇧⌘S` on a Mac (Apple's modifier order), `Ctrl+Shift+S`
- *  elsewhere. Mirrors what the command palette shows. */
+ *  elsewhere (`meta+…`, the Windows key, as `Win+…` / `Super+…`). Mirrors
+ *  what the command palette shows. */
 export function prettyKey(combo: string): string {
   const parts = combo.toLowerCase().split("+");
   const key = parts.pop() ?? "";
@@ -631,7 +649,8 @@ export function prettyKey(combo: string): string {
     );
   }
   return [
-    has("ctrl", "control", "cmd", "meta") ? "Ctrl" : "",
+    has("ctrl", "control", "cmd") ? "Ctrl" : "",
+    has("meta") ? (IS_WINDOWS ? "Win" : "Super") : "",
     has("alt", "option") ? "Alt" : "",
     has("shift") ? "Shift" : "",
     glyph,

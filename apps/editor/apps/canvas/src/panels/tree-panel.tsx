@@ -67,7 +67,7 @@ export function TreePanel(_: PanelProps) {
     };
   }, [client]);
 
-  const selectedKey = useMemo_selectionKey(elementSelection);
+  const selectedKeys = selectionKeys(elementSelection);
 
   const onPick = (id: ElementId) => {
     void client
@@ -96,7 +96,7 @@ export function TreePanel(_: PanelProps) {
             key={i}
             node={node}
             depth={0}
-            selectedKey={selectedKey}
+            selectedKeys={selectedKeys}
             onPick={onPick}
           />
         ))}
@@ -108,12 +108,12 @@ export function TreePanel(_: PanelProps) {
 function TreeRow(props: {
   node: SceneTreeNode;
   depth: number;
-  selectedKey: string | null;
+  selectedKeys: ReadonlySet<string>;
   onPick: (id: ElementId) => void;
 }) {
-  const { node, depth, selectedKey, onPick } = props;
+  const { node, depth, selectedKeys, onPick } = props;
   const key = node.id ? `${node.id.kind}:${node.id.id}` : null;
-  const isSelected = key !== null && key === selectedKey;
+  const isSelected = key !== null && selectedKeys.has(key);
   const indent = { paddingLeft: 8 + depth * 12 } as const;
   return (
     <li>
@@ -137,7 +137,7 @@ function TreeRow(props: {
               key={i}
               node={child}
               depth={depth + 1}
-              selectedKey={selectedKey}
+              selectedKeys={selectedKeys}
               onPick={onPick}
             />
           ))}
@@ -147,9 +147,8 @@ function TreeRow(props: {
   );
 }
 
-// Single-element selection key so the row highlight short-circuits
-// when nothing meaningful changed.
-function useMemo_selectionKey(sel: ElementId[]): string | null {
-  if (sel.length !== 1) return null;
-  return `${sel[0].kind}:${sel[0].id}`;
+// Every selected item's key (PN-108): a multi-selection highlights each
+// of its rows, as InDesign's Layers panel marks every selected object.
+function selectionKeys(sel: ElementId[]): ReadonlySet<string> {
+  return new Set(sel.map((id) => `${id.kind}:${id.id}`));
 }

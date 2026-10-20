@@ -433,23 +433,24 @@ describe("Table: structure", () => {
         args: { storyId: h.scene.tableStoryId, tableId: h.scene.tableId },
       },
     ] as never);
-    expect(btn(h, "delete-table").getAttribute("data-command-error")).toBe(
-      null,
+    // It succeeded: the table is gone, and with it the cell selection.
+    await h.settle();
+    expect(q(h, "[data-table-panel]").getAttribute("data-table-panel")).toBe(
+      "empty",
     );
   });
 
-  // The table cell selection is not dropped when its table goes, so the
-  // panel keeps offering every control on a cell that no longer exists.
-  test.failing(
-    "PN-209: after Delete table the panel no longer edits the deleted cell",
-    async () => {
-      covers("panel:paged.table");
-      const h = await mount();
-      await enter(h);
-      await h.click(btn(h, "delete-table"));
-      expect(q(h, "[data-table-panel]").getAttribute("data-table-panel")).toBe(
-        "empty",
-      );
-    },
-  );
+  // The table cell selection was not dropped when its table went, so the
+  // panel kept offering every control on a cell that no longer existed.
+  // Fixed: the selection is dropped once the engine no longer has the cell.
+  test("PN-209: after Delete table the panel no longer edits the deleted cell", async () => {
+    covers("panel:paged.table");
+    const h = await mount();
+    await enter(h);
+    await h.click(btn(h, "delete-table"));
+    await h.settle();
+    expect(q(h, "[data-table-panel]").getAttribute("data-table-panel")).toBe(
+      "empty",
+    );
+  });
 });

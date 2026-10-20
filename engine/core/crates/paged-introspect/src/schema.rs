@@ -900,7 +900,10 @@ pub fn coerce(schema: &PropertySchema, input: Input<'_>) -> Result<Value, String
                         schema.members.join(" | ")
                     ));
                 }
-                if s.is_empty() && !schema.nullable {
+                // A list carried as text (a colour group's members, space
+                // separated) may be empty: "" is the empty list, not a
+                // missing value, so removing a group's last swatch lands.
+                if s.is_empty() && !schema.nullable && schema.value_type != ValueType::List {
                     return Err("an empty string is not accepted: the value is required".into());
                 }
                 Ok(Value::Text(s.to_string()))
@@ -1085,6 +1088,19 @@ fn format_number(n: f64) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_list_carried_as_text_may_be_empty() {
+        // A colour group's members (space-separated swatch refs): removing
+        // the last swatch writes "", the empty list, which must land.
+        let members = list_of("swatch ref", Wire::Text);
+        assert_eq!(
+            coerce(&members, Input::Text("")),
+            Ok(Value::Text(String::new()))
+        );
+        // A required plain text still refuses "".
+        assert!(coerce(&text().required(), Input::Text("")).is_err());
+    }
 
     #[test]
     fn closed_enums_refuse_strangers_and_open_ones_do_not() {

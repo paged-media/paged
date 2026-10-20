@@ -156,15 +156,12 @@ describe.skipIf(!gate.ready && !gate.required)(
 
     // Findings: the behaviour the command should have, failing until the
     // product does it.
-    it.failing(
-      "DAT-1 — propertyBindings (typed) lists an object's bindings without a path filter",
-      async () => {
-        // Today the declared args make `path` (and `address`) required, so
-        // `{ address }` is refused ("invalidValue: args.path is missing"),
-        // although the session filters by either and both are optional there.
-        await S.propertyBindingsByAddress(env);
-      },
-    );
+    it("DAT-1 — propertyBindings (typed) lists an object's bindings without a path filter", async () => {
+      // The declared args made `path` (and `address`) required, so
+      // `{ address }` was refused ("invalidValue: args.path is missing").
+      // Fixed: both are optional, as the session filters by either.
+      await S.propertyBindingsByAddress(env);
+    });
 
     it("DAT-2 — applyDataSet over a property and a visibility binding is ONE undo step", async () => {
       // The visibility write rides in the property lane's objects.batch as

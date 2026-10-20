@@ -414,20 +414,19 @@ describe("accelerators per platform", () => {
     // An unmodified key is native everywhere.
     expect(mac.nativeKey(["w"])).toBe("w");
     expect(pc.nativeKey(["w"])).toBe("w");
-    // A cmd-only binding is still the one picked on a PC (first key).
-    expect(pc.nativeKey(["cmd+d"])).toBe("cmd+d");
+    // A cmd-only binding fires on the Super key on a PC, and is spelled so.
+    expect(pc.nativeKey(["cmd+d"])).toBe("meta+d");
+    expect(pc.prettyKey("meta+d")).toBe("Super+D");
   });
 
-  // Finding SH-5: `cmd` is the Meta key in the registry on every
-  // platform (a binding is `metaKey` exact), but on Windows and Linux the
-  // display spells `cmd` as Ctrl. A binding registered without its ctrl
-  // twin (Sheet ▸ Fill down is cmd+d only) is shown as Ctrl+D, and Ctrl+D
-  // runs Place instead.
-  test.failing(
-    "SH-5: a PC never shows Ctrl for a binding Ctrl does not fire",
-    async () => {
-      const pc = await load("Win32", "pc2");
-      expect(pc.prettyKey(pc.nativeKey(["cmd+d"]))).not.toBe("Ctrl+D");
-    },
-  );
+  // Finding SH-5 (fixed): `cmd` is the Meta key in the registry on every
+  // platform (a binding is `metaKey` exact). A binding registered without
+  // its ctrl twin is shown on a PC as the chord that fires (Win+D), never
+  // as Ctrl+D; Sheet ▸ Fill down has its ctrl twin now.
+  test("SH-5: a PC never shows Ctrl for a binding Ctrl does not fire", async () => {
+    const pc = await load("Win32", "pc2");
+    expect(pc.prettyKey(pc.nativeKey(["cmd+d"]))).not.toBe("Ctrl+D");
+    expect(pc.prettyKey(pc.nativeKey(["cmd+d"]))).toBe("Win+D");
+    expect(pc.prettyKey(pc.nativeKey(["cmd+d", "ctrl+d"]))).toBe("Ctrl+D");
+  });
 });

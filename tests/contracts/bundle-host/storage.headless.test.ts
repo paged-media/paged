@@ -227,7 +227,7 @@ describe("host.blob — the editor's OPFS backing", () => {
 describe.each([
   ["editor", editorAdapter],
   ["headless", headlessAdapter],
-] as const)("host.clipboard, a backend wired — %s", (name, make) => {
+] as const)("host.clipboard, a backend wired — %s", (_name, make) => {
   let t: HostUnderTest;
   beforeAll(async () => {
     t = await make();
@@ -247,30 +247,24 @@ describe.each([
 
   // clipboard.ts: "a grid copy carries BOTH (the tabular grid AND a TSV
   // text fallback so a paste into a plain editor still lands something)".
-  // The editor writes the TSV for a grid copy that brought none; the
-  // headless in-memory clipboard hands back exactly what was written.
-  const both = name === "headless" ? test.failing : test;
-  both(
-    name === "headless"
-      ? "HOST-3 — a grid copy reads back the grid AND its TSV text (headless: no text half)"
-      : "a grid copy reads back the grid AND its TSV text",
-    async () => {
-      await t.host.clipboard.write({
-        tabular: {
-          rows: [
-            ["a", "b"],
-            ["1", "2"],
-          ],
-        },
-      });
-      const got = await t.host.clipboard.read();
-      expect(got?.tabular?.rows).toEqual([
-        ["a", "b"],
-        ["1", "2"],
-      ]);
-      expect(got?.text).toBe("a\tb\n1\t2");
-    },
-  );
+  // The editor writes the TSV for a grid copy that brought none, and so
+  // does the headless in-memory clipboard (HOST-3, fixed).
+  test("a grid copy reads back the grid AND its TSV text (HOST-3)", async () => {
+    await t.host.clipboard.write({
+      tabular: {
+        rows: [
+          ["a", "b"],
+          ["1", "2"],
+        ],
+      },
+    });
+    const got = await t.host.clipboard.read();
+    expect(got?.tabular?.rows).toEqual([
+      ["a", "b"],
+      ["1", "2"],
+    ]);
+    expect(got?.text).toBe("a\tb\n1\t2");
+  });
 
   test('a "vector" grant writes and reads text only', async () => {
     const vector = t.withManifest(

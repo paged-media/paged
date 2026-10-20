@@ -45,6 +45,14 @@ interface OutlineEntry {
   pageId: PageId | null;
 }
 
+/** `h:<story>:<paragraph index>` → its parts; null for other anchors. */
+function headingPosition(
+  anchorId: string,
+): { story: string; index: number } | null {
+  const m = /^h:(.*):(\d+)$/.exec(anchorId);
+  return m ? { story: m[1]!, index: Number(m[2]) } : null;
+}
+
 export function Outline(props: OutlineProps) {
   // eslint-disable-next-line no-restricted-syntax -- a computed block, not a single expression (ADR 229)
   const entries = useMemo<OutlineEntry[]>(() => {
@@ -62,12 +70,19 @@ export function Outline(props: OutlineProps) {
         pageId: pos.pageId,
       });
     }
-    // Stable order: pages first, then level within page. This puts
-    // the document in reading order so the panel mirrors the page
-    // sequence.
+    // Reading order: pages first, then document order within a page
+    // (PN-109). Sorting by level put every level-1 heading of a page
+    // before its level-2 ones. A heading anchor's id is
+    // `h:<story>:<paragraph index>`, so within a story the paragraph
+    // index is the order; other anchors keep their id order.
     out.sort((a, b) => {
       if (a.pageNumber !== b.pageNumber) return a.pageNumber - b.pageNumber;
-      return a.level - b.level;
+      const pa = headingPosition(a.anchorId);
+      const pb = headingPosition(b.anchorId);
+      if (pa && pb && pa.story === pb.story) return pa.index - pb.index;
+      const sa = pa?.story ?? a.anchorId;
+      const sb = pb?.story ?? b.anchorId;
+      return sa < sb ? -1 : sa > sb ? 1 : 0;
     });
     return out;
   }, [props.resolution]);

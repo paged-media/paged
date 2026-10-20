@@ -20,7 +20,9 @@
 // as an expected failure (`test.failing`) of `parity.test.ts`, keyed
 // `<case> <door>`. Each says what happens and what should. When the
 // product is fixed the test starts passing, `test.failing` fails, and the
-// entry is deleted in the same commit as the fix.
+// entry is deleted in the same commit as the fix. An entry whose
+// `expected` names an ADR is a difference decided there, kept marked so a
+// change that removed it comes back to the decision.
 
 export interface Finding {
   id: string;
@@ -42,9 +44,9 @@ export const KNOWN_FINDINGS: Readonly<Record<string, Finding>> = {
       {
         id: "PAR-6",
         actual:
-          "Insert ▸ Rectangle / Ellipse make the frame with a 1 pt Color/Black stroke (the editor's graphic default); insertFrame / insertOval on every other surface make it unstroked",
+          "Insert ▸ Rectangle / Ellipse make the frame with a 1 pt Color/Black stroke (the drawing tools' graphic default); insertFrame / insertOval on every other surface make it unstroked",
         expected:
-          "one capability, one object: the same frame from the menu as from host.objects, paged.insertFrame or paged invoke (either the engine applies the default, or the menu does not)",
+          "a documented difference, not a defect (editor ADR 261): the Insert menu draws what the drawing tools draw, as InDesign paints a tool-drawn shape in [Normal Graphics Frame], and the primitive Place, plugins and scripts mint through stays unpainted",
       },
     ]),
   ),

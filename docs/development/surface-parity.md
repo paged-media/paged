@@ -103,12 +103,12 @@ precondition, and asserts identical model dumps.
   entry is deleted with the fix. A disagreement not on record fails the
   suite. The findings so far:
 
-  | Id    | What happens                                                                                                                                       | Test                                   |
-  | ----- | -------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
-  | PAR-1 | each load with a fallback font keeps about 0.9 MB of wasm memory (a copy of the font)                                                              | `tests/headless/engine-memory.test.ts` |
-  | PAR-2 | **Fixed 2026-10-19 (`9e1659754`, editor ADR 248).** every document opened grows memory by about 4 MB: the client registers the default faces again | `tests/headless/engine-memory.test.ts` |
-  | PAR-3 | `paged.schema` answers the catalog's row shape, `host.objects.schema` and `editor.schema` another                                                  | `parity/findings.ts`                   |
-  | PAR-6 | Insert ▸ Rectangle and Insert ▸ Ellipse stroke the frame; every other surface's insert does not                                                    | `parity/findings.ts`                   |
+  | Id    | What happens                                                                                                                                                      | Test                                   |
+  | ----- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+  | PAR-1 | each load with a fallback font keeps about 0.9 MB of wasm memory (a copy of the font)                                                                             | `tests/headless/engine-memory.test.ts` |
+  | PAR-2 | **Fixed 2026-10-19 (`9e1659754`, editor ADR 248).** every document opened grows memory by about 4 MB: the client registers the default faces again                | `tests/headless/engine-memory.test.ts` |
+  | PAR-3 | `paged.schema` answers the catalog's row shape, `host.objects.schema` and `editor.schema` another                                                                 | `parity/findings.ts`                   |
+  | PAR-6 | **Decided 2026-10-20 (editor ADR 261): a documented difference.** Insert ▸ Rectangle and Insert ▸ Ellipse stroke the frame; every other surface's insert does not | `parity/findings.ts`                   |
 
   They sit with every other layer's in
   [conformance-findings-2026-10.md](conformance-findings-2026-10.md).

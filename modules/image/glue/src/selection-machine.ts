@@ -119,6 +119,9 @@ export interface SelectionMachine {
   polygonCommit(): boolean;
   /** Abandon the polygon without committing (Esc). */
   polygonCancel(): void;
+  /** Abandon the gesture in flight, of any kind, without committing
+   *  (Esc mid-drag, a lost pointer capture: INV-2). */
+  cancel(): void;
   /** True while a polygon is being placed, so a tool can route keys it
    *  would otherwise ignore. */
   placingPolygon(): boolean;
@@ -416,6 +419,10 @@ export function createSelectionMachine(
 
     polygonCancel() {
       if (active && active.kind === "polygon") active = null;
+    },
+
+    cancel() {
+      active = null;
     },
 
     placingPolygon: () => active !== null && active.kind === "polygon",

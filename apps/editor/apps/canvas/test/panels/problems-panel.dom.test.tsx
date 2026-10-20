@@ -134,23 +134,35 @@ describe("Problems panel", () => {
     expect(h.dock()).toMatchObject({ active: "media.paged.web.panel.html" });
   });
 
-  // UX audit F-09: in a document with missing links, Publication health
-  // counts them while Problems says "No problems detected". Nothing feeds
-  // the document's own findings (missing links, missing fonts) into it.
-  test.failing(
-    "PN-350 (UX F-09): a missing link in the document is listed as a problem",
-    async () => {
-      covers("panel:paged.problems");
-      // The structure fixture places an image whose file is not there.
-      const h = await mountPanel(ProblemsPanel, {
-        id: "paged.problems",
-        document: structureIdml(),
-      });
-      const links = (await h.client.collection("links")) as Array<{
-        status?: string;
-      }>;
-      expect(links.some((l) => l.status === "missing")).toBe(true);
-      expect(h.root.querySelector("[data-problems-empty]")).toBeNull();
-    },
-  );
+  // UX audit F-09 (fixed): in a document with missing links, Publication
+  // health counted them while Problems said "No problems detected". The
+  // document's own findings (missing links, missing fonts) are listed now.
+  test("PN-350 (UX F-09): a missing link in the document is listed as a problem", async () => {
+    covers("panel:paged.problems");
+    // The structure fixture places an image whose file is not there.
+    const h = await mountPanel(ProblemsPanel, {
+      id: "paged.problems",
+      document: structureIdml(),
+    });
+    const links = (await h.client.collection("links")) as Array<{
+      status?: string;
+    }>;
+    expect(links.some((l) => l.status === "missing")).toBe(true);
+    expect(h.root.querySelector("[data-problems-empty]")).toBeNull();
+    const listed = [...h.root.querySelectorAll("[data-problem-message]")].map(
+      (m) => m.textContent ?? "",
+    );
+    expect(listed.some((m) => m.startsWith("Missing link: "))).toBe(true);
+    // A click opens the panel that fixes it.
+    h.registerPanel({
+      id: "paged.links",
+      title: "Links",
+      component: () => null,
+    } as never);
+    const row = [
+      ...h.root.querySelectorAll<HTMLElement>("[data-problem]"),
+    ].find((r) => r.textContent?.includes("Missing link"))!;
+    await h.click(row);
+    expect(h.dock()).toMatchObject({ active: "paged.links" });
+  });
 });

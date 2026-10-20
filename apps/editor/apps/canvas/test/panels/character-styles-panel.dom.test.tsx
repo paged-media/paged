@@ -117,18 +117,17 @@ describe("paged.character-styles: findings", () => {
     ).toEqual({ type: "text", value: h.scene.characterStyle });
   });
 
-  // A mixed range shows the "[None]" option, which says no style is
-  // applied, when two different ones are.
-  test.failing(
-    "PN-153: a mixed range does not show [None] as the applied style",
-    async () => {
-      covers("panel:paged.character-styles");
-      const h = await mount();
-      await h.selectText(h.scene.storyId, 0, 11);
-      const select = applySelect(h);
-      expect(select.options[select.selectedIndex]?.textContent).not.toBe(
-        "[None]",
-      );
-    },
-  );
+  // A mixed range showed the "[None]" option, which says no style is
+  // applied, when two different ones are. Fixed: it shows (Mixed).
+  test("PN-153: a mixed range does not show [None] as the applied style", async () => {
+    covers("panel:paged.character-styles");
+    const h = await mount();
+    await h.selectText(h.scene.storyId, 0, 11);
+    const select = applySelect(h);
+    expect(select.options[select.selectedIndex]?.textContent).not.toBe(
+      "[None]",
+    );
+    expect(select.options[select.selectedIndex]?.textContent).toBe("(Mixed)");
+    expect(select.hasAttribute("data-mixed")).toBe(true);
+  });
 });

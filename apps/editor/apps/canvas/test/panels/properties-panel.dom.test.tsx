@@ -237,20 +237,18 @@ describe("Properties panel: each section writes the selection it shows", () => {
 });
 
 describe("Properties panel: findings", () => {
-  // UX audit F-37: "Properties shows Frame and stroke rows ... before the
-  // type settings". The text frame stays selected when the Type tool
-  // places a caret in it, and the Object and Stroke sections render first.
-  test.failing(
-    "PN-22 (UX F-37): with a caret in a selected text frame, the type sections come first",
-    async () => {
-      covers("panel:paged.properties");
-      const h = await mount();
-      await h.select([h.scene.textFrame]);
-      await h.caret(h.scene.storyId, 3);
-      expect(kind(h)).toBe("text");
-      expect(sections(h).slice(0, 2)).toEqual(["character", "paragraph"]);
-    },
-  );
+  // UX audit F-37 (fixed): "Properties shows Frame and stroke rows ...
+  // before the type settings". The text frame stays selected when the Type
+  // tool places a caret in it; the Character and Paragraph sections lead.
+  test("PN-22 (UX F-37): with a caret in a selected text frame, the type sections come first", async () => {
+    covers("panel:paged.properties");
+    const h = await mount();
+    await h.select([h.scene.textFrame]);
+    await h.caret(h.scene.storyId, 3);
+    expect(kind(h)).toBe("text");
+    expect(sections(h).slice(0, 2)).toEqual(["character", "paragraph"]);
+    expect(sections(h)).toContain("object");
+  });
 
   // The page summary says margins, bleed and columns "land with the
   // engine's page-geometry accessors", but the pages collection carries

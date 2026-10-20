@@ -302,8 +302,14 @@ export function inMemoryClipboard(): ClipboardBackend {
       };
     },
     async write(payload) {
+      // HOST-3: a grid copy that brings no text gets its TSV text half
+      // (tabs between cells, newlines between rows), as the editor's
+      // backend writes it, so a paste into a plain editor lands something.
+      const text =
+        payload.text ??
+        payload.tabular?.rows.map((r) => r.join("\t")).join("\n");
       slot = {
-        ...(payload.text !== undefined ? { text: payload.text } : {}),
+        ...(text !== undefined ? { text } : {}),
         ...(payload.tabular
           ? { tabular: { rows: payload.tabular.rows.map((r) => [...r]) } }
           : {}),

@@ -129,6 +129,15 @@ export function makeMoveGesture(
       void movePixels(session, dx, dy, e.modifiers.alt);
     },
     onKey(e: KeyboardEvent) {
+      // IMG-2 / INV-2: Escape (and a lost pointer capture) mid-drag moves
+      // nothing; the release that follows finds no drag.
+      if (e.key === "Escape" && start) {
+        start = null;
+        delta = [0, 0];
+        host.overlay.setToolPreview(null);
+        e.preventDefault();
+        return;
+      }
       if (e.type !== "keydown") return;
       const step = nudgeFor(e.key, e.shiftKey);
       if (!step) return;

@@ -45,12 +45,19 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useState,
   type PropsWithChildren,
 } from "react";
 
-import type { ElementId, PageId } from "@paged-media/client";
+import {
+  changesTheDocument,
+  type ElementId,
+  type PageId,
+} from "@paged-media/client";
+
+import { useOptionalCanvasClient } from "./canvas-client-context";
 
 /**
  * The selected table cell. `storyId` + `tableId` + `row` + `col`
@@ -120,6 +127,45 @@ export function TableSelectionProvider({ children }: PropsWithChildren) {
     () => (cell ? tableCellElementId(cell) : null),
     [cell],
   );
+
+  // PN-209: a cell selection does not outlive its cell. After any change
+  // to the document the engine is asked for the cell. A cell it no longer
+  // has moves to its nearest neighbour that is left (a deleted row or
+  // column, as InDesign moves the insertion point), and with no table left
+  // (Delete table, an undo of its insertion) the selection is dropped, so
+  // the Table panel and the overlay stop offering it.
+  const client = useOptionalCanvasClient();
+  useEffect(() => {
+    if (!client || !cell || !cellElementId) return;
+    let live = true;
+    const off = client.subscribe((msg) => {
+      if (!changesTheDocument(msg)) return;
+      void (async () => {
+        const here = await client.elementGeometry([cellElementId]);
+        if (!live || here.length > 0) return;
+        const near = [
+          [cell.row - 1, cell.col],
+          [cell.row, cell.col - 1],
+          [cell.row - 1, cell.col - 1],
+          [0, 0],
+        ].filter(([r, c]) => r! >= 0 && c! >= 0);
+        let next: TableCellSelection | null = null;
+        for (const [row, col] of near) {
+          const moved = { ...cell, row: row!, col: col!, cellRect: null };
+          const g = await client.elementGeometry([tableCellElementId(moved)]);
+          if (g.length > 0) {
+            next = moved;
+            break;
+          }
+        }
+        if (live) setCell((now) => (now === cell ? next : now));
+      })().catch(() => {});
+    });
+    return () => {
+      live = false;
+      off();
+    };
+  }, [client, cell, cellElementId]);
 
   // eslint-disable-next-line no-restricted-syntax -- its type argument types the value (ADR 229)
   const value = useMemo<TableSelectionContextValue>(
