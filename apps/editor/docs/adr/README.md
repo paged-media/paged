@@ -74,6 +74,7 @@ and 024 predate that scheme and keep their numbers. Records 200–217 were writt
 | [262](262-a-file-opened-with-nothing-open-becomes-a-document.md) | A file opened with nothing open becomes a document | Accepted 2026-10-20 |
 | [263](263-ruler-labels-thin-as-you-zoom-out.md) | Ruler labels thin as you zoom out | Accepted 2026-10-20 |
 | [264](264-a-remembered-grant-is-the-documents-own.md) | A remembered grant is the document's own, keyed by what the host opened | Accepted 2026-10-20 |
+| [265](265-dock-tabs-fit-the-dock.md) | The dock's tabs fit the dock | Accepted 2026-10-20 |
 
 Decisions made in other repositories that this editor's code rests on are listed in
 [`../README.md`](../README.md). Comments in the source also cite ADR 025 (the journal) and

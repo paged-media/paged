@@ -36,12 +36,23 @@
 // Home and End moving to and opening a neighbour, Delete closing the tab;
 // the panel under it is the `tabpanel` it controls.
 //
+// Tabs fit the dock (UX audit F-20, ADR 265): the active tab keeps its
+// whole label, the others shrink to their icon and an ellipsis (the
+// title is the tooltip), and once even that does not fit, a "More
+// panels" button at the strip's end lists every open tab.
+//
 // A switch from the strip is a view transition (ADR 240): the incoming
 // panel comes in from the side its tab is on, the outgoing one leaves the
 // other way; under reduced motion it just switches.
 
-import { Activity, ViewTransition, useEffect, useRef } from "react";
+import { Activity, ViewTransition, useEffect, useRef, useState } from "react";
 
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "../components/ui/dropdown-menu";
 import { Icon, hasIcon } from "../icons";
 import { PluginGlyph } from "../icons/plugin-glyph";
 import { useRegistries } from "../state/registries-context";
@@ -119,6 +130,26 @@ export function RightDock() {
     tab?.scrollIntoView({ block: "nearest", inline: "nearest" });
   }, [active, rightTabs]);
 
+  // Whether the shrunk tabs still overflow the strip: then the "More
+  // panels" menu shows. Measured on every resize of the strip and every
+  // change of the open tabs.
+  const [overflowing, setOverflowing] = useState(false);
+  const many = tabs.length > 1;
+  useEffect(() => {
+    const strip = stripRef.current;
+    if (!strip) {
+      setOverflowing(false);
+      return;
+    }
+    const measure = () =>
+      setOverflowing(strip.scrollWidth > strip.clientWidth + 1);
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(measure);
+    ro.observe(strip);
+    return () => ro.disconnect();
+  }, [rightTabs, active, many]);
+
   return (
     <div
       data-right-dock
@@ -129,18 +160,8 @@ export function RightDock() {
         height: "100%",
       }}
     >
-      {tabs.length > 1 && (
+      {many && (
         <div
-          ref={stripRef}
-          data-dock-strip
-          role="tablist"
-          aria-label="Panels"
-          onKeyDown={onStripKey}
-          onWheel={(e) => {
-            if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
-              e.currentTarget.scrollLeft += e.deltaY;
-            }
-          }}
           style={{
             display: "flex",
             alignItems: "stretch",
@@ -148,76 +169,153 @@ export function RightDock() {
             background: "var(--chrome-panel-bg)",
             borderBottom: "1px solid var(--chrome-border)",
             flexShrink: 0,
-            overflowX: "auto",
-            scrollbarWidth: "none",
+            minWidth: 0,
           }}
         >
-          {tabs.map((t) => {
-            const a = active === t.id;
-            const icon = t.icon && hasIcon(t.icon) ? t.icon : undefined;
-            // K-8 — a plugin-supplied sanitized glyph fills the gap a
-            // host-unknown icon name used to leave (an iconless tab).
-            const svg = !icon ? t.iconSvg : undefined;
-            return (
-              <button
-                key={t.id}
-                type="button"
-                role="tab"
-                id={tabDomId(t.id)}
-                aria-selected={a}
-                aria-controls={panelDomId(t.id)}
-                tabIndex={a ? 0 : -1}
-                data-dock-tab={t.id}
-                data-active={a || undefined}
-                onClick={() => switchTo(t.id)}
+          <div
+            ref={stripRef}
+            data-dock-strip
+            data-overflowing={overflowing || undefined}
+            role="tablist"
+            aria-label="Panels"
+            onKeyDown={onStripKey}
+            onWheel={(e) => {
+              if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+                e.currentTarget.scrollLeft += e.deltaY;
+              }
+            }}
+            style={{
+              display: "flex",
+              alignItems: "stretch",
+              flex: 1,
+              minWidth: 0,
+              overflowX: "auto",
+              scrollbarWidth: "none",
+            }}
+          >
+            {tabs.map((t) => {
+              const a = active === t.id;
+              const icon = t.icon && hasIcon(t.icon) ? t.icon : undefined;
+              // K-8 — a plugin-supplied sanitized glyph fills the gap a
+              // host-unknown icon name used to leave (an iconless tab).
+              const svg = !icon ? t.iconSvg : undefined;
+              return (
+                <button
+                  key={t.id}
+                  type="button"
+                  role="tab"
+                  id={tabDomId(t.id)}
+                  aria-selected={a}
+                  aria-controls={panelDomId(t.id)}
+                  tabIndex={a ? 0 : -1}
+                  data-dock-tab={t.id}
+                  data-active={a || undefined}
+                  title={t.title}
+                  onClick={() => switchTo(t.id)}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 6,
+                    padding: "0 12px",
+                    // The active tab keeps its whole label; the others give
+                    // way down to their icon and an ellipsis.
+                    flex: a ? "0 0 auto" : "0 1 auto",
+                    minWidth: a ? undefined : icon || svg ? 40 : 52,
+                    maxWidth: "100%",
+                    border: "none",
+                    cursor: "pointer",
+                    background: a ? "var(--pg-bg)" : "transparent",
+                    color: a ? "var(--pg-fg)" : "var(--pg-muted-fg)",
+                    fontFamily: "var(--font-sans)",
+                    fontSize: 12.5,
+                    fontWeight: a ? 600 : 500,
+                    borderBottom: a
+                      ? "2px solid var(--pg-primary)"
+                      : "2px solid transparent",
+                    borderRight: "1px solid var(--chrome-border)",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {icon && (
+                    <Icon
+                      name={icon}
+                      size={13}
+                      style={{ opacity: 0.85, flexShrink: 0 }}
+                    />
+                  )}
+                  {svg && <PluginGlyph svg={svg} size={13} />}
+                  <span
+                    data-dock-tab-label
+                    style={{
+                      minWidth: 0,
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                    }}
+                  >
+                    {t.title}
+                  </span>
+                  {a && t.closable !== false && (
+                    <span
+                      role="button"
+                      aria-label={`Close ${t.title}`}
+                      data-dock-tab-close={t.id}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        closeTab(t.id);
+                      }}
+                      style={{
+                        display: "inline-flex",
+                        opacity: 0.4,
+                        marginLeft: 2,
+                        cursor: "pointer",
+                        flexShrink: 0,
+                      }}
+                    >
+                      <Icon name="ui-x" size={12} />
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+            <div style={{ flex: 1 }} />
+          </div>
+          {overflowing && (
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                data-dock-overflow
+                aria-label="More panels"
+                title="More panels"
                 style={{
                   display: "inline-flex",
                   alignItems: "center",
-                  gap: 6,
-                  padding: "0 12px",
-                  border: "none",
-                  cursor: "pointer",
-                  background: a ? "var(--pg-bg)" : "transparent",
-                  color: a ? "var(--pg-fg)" : "var(--pg-muted-fg)",
-                  fontFamily: "var(--font-sans)",
-                  fontSize: 12.5,
-                  fontWeight: a ? 600 : 500,
-                  borderBottom: a
-                    ? "2px solid var(--pg-primary)"
-                    : "2px solid transparent",
-                  borderRight: "1px solid var(--chrome-border)",
-                  whiteSpace: "nowrap",
+                  justifyContent: "center",
+                  width: 28,
                   flexShrink: 0,
+                  border: "none",
+                  borderLeft: "1px solid var(--chrome-border)",
+                  background: "transparent",
+                  color: "var(--pg-muted-fg)",
+                  cursor: "pointer",
+                  padding: 0,
                 }}
               >
-                {icon && (
-                  <Icon name={icon} size={13} style={{ opacity: 0.85 }} />
-                )}
-                {svg && <PluginGlyph svg={svg} size={13} />}
-                {t.title}
-                {a && t.closable !== false && (
-                  <span
-                    role="button"
-                    aria-label={`Close ${t.title}`}
-                    data-dock-tab-close={t.id}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      closeTab(t.id);
-                    }}
-                    style={{
-                      display: "inline-flex",
-                      opacity: 0.4,
-                      marginLeft: 2,
-                      cursor: "pointer",
-                    }}
+                <Icon name="ui-chevron-down" size={13} />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" sideOffset={4}>
+                {tabs.map((t) => (
+                  <DropdownMenuItem
+                    key={t.id}
+                    data-dock-overflow-item={t.id}
+                    data-active={t.id === active || undefined}
+                    onSelect={() => switchTo(t.id)}
+                    style={t.id === active ? { fontWeight: 600 } : undefined}
                   >
-                    <Icon name="ui-x" size={12} />
-                  </span>
-                )}
-              </button>
-            );
-          })}
-          <div style={{ flex: 1 }} />
+                    {t.title}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
         </div>
       )}
       <div style={{ flex: 1, minHeight: 0, display: "flex" }}>
