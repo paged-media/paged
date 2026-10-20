@@ -99,34 +99,81 @@ describe("host.network — the editor's consent prompt", () => {
   });
 
   // ConsentResult.remembered: "Whether the grant was remembered for THIS
-  // DOCUMENT (survives reopen)". The SDK keeps a remembered grant in the
-  // plugin's own KV storage, which is per browser, so it holds for every
-  // document the bundle meets afterwards, not only the one that asked.
-  test.failing(
-    "HOST-5 — a grant remembered for one document is not consented for the next",
-    async () => {
-      const fresh = t.sibling(
-        probeManifest("media.paged.proberemember", {
-          capabilities: { network: { origins: [ORIGIN] } },
-        }),
-      );
-      const pending = fresh.network.requestConsent([ORIGIN], "remember me");
-      t.editorApp!.consent.controller.current()!.decide({
-        granted: [ORIGIN],
-        remember: true,
+  // DOCUMENT (survives reopen)". The grants are the editor's (editor ADR
+  // 262), kept under the identity it gives the document it opened: a file
+  // the user picked, recognised again by its handle, while it reads as it
+  // did. Another document, the same file changed elsewhere, or another file
+  // with the same name and bytes, asks again.
+  test("HOST-5 — a grant remembered for one document is not consented for the next", async () => {
+    const app = t.editorApp!;
+    const docId = () => app.ed.client.openDocument!;
+    const handle = { name: "catalog.paged", isSameEntry: async (o: unknown) => o === handle };
+    const openFrom = async (
+      h: { name: string; isSameEntry(o: unknown): Promise<boolean> },
+      lastModified = 1,
+    ) => {
+      app.identity.declare(docId(), {
+        kind: "fileHandle",
+        handle: h,
+        lastModified,
+        size: 10,
       });
-      expect((await pending).remembered).toBe(true);
-      // Another document, in a later session: the bundle is activated
-      // again (a reload) and meets a document that never asked.
-      await t.newBlank();
-      const later = t.sibling(
+      await app.identity.ready();
+    };
+    const probe = () =>
+      t.sibling(
         probeManifest("media.paged.proberemember", {
           capabilities: { network: { origins: [ORIGIN] } },
         }),
       );
-      expect(later.network.consentedOrigins()).toEqual([]);
-    },
-  );
+    await t.newBlank();
+    await openFrom(handle);
+    const fresh = probe();
+    const pending = fresh.network.requestConsent([ORIGIN], "remember me");
+    const prompt = app.consent.controller.current()!;
+    expect(prompt.rememberable).toBe(true);
+    prompt.decide({ granted: [ORIGIN], remember: true });
+    expect((await pending).remembered).toBe(true);
+    // Another document, in a later session: the bundle is activated
+    // again (a reload) and meets a document that never asked.
+    await t.newBlank();
+    const later = probe();
+    expect(later.network.consentedOrigins()).toEqual([]);
+    // The same file opened again: the grant is back.
+    await t.newBlank();
+    await openFrom(handle);
+    expect(probe().network.consentedOrigins()).toEqual([ORIGIN]);
+    // Another file with the same name and bytes: a fresh source.
+    await t.newBlank();
+    await openFrom({ name: "catalog.paged", isSameEntry: async () => false });
+    expect(probe().network.consentedOrigins()).toEqual([]);
+    // The same file, changed outside the editor: asked again.
+    await t.newBlank();
+    await openFrom(handle, 2);
+    expect(probe().network.consentedOrigins()).toEqual([]);
+  });
+
+  test("a document with nothing to recognise it by cannot remember a grant", async () => {
+    await t.newBlank();
+    const other = t.sibling(
+      probeManifest("media.paged.probetransient", {
+        capabilities: { network: { origins: [ORIGIN] } },
+      }),
+    );
+    const pending = other.network.requestConsent([ORIGIN], "x");
+    const prompt = t.editorApp!.consent.controller.current()!;
+    expect(prompt.rememberable).toBe(false);
+    prompt.decide({ granted: [ORIGIN], remember: true });
+    expect(await pending).toEqual({
+      granted: [ORIGIN],
+      denied: [],
+      remembered: false,
+    });
+    // Held while the document stays open, gone with it.
+    expect(other.network.consentedOrigins()).toEqual([ORIGIN]);
+    await t.newBlank();
+    expect(other.network.consentedOrigins()).toEqual([]);
+  });
 });
 
 describe.each([

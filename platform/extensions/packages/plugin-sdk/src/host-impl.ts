@@ -368,7 +368,19 @@ export interface StorageBacking {
  *  user. When absent, `host.network.requestConsent` DENIES every origin (the
  *  honest no-consent posture) and `supports("network.consent@1")` is false. */
 export interface ConsentBackend {
-  request(origins: readonly string[], purpose: string): Promise<ConsentResult>;
+  /** Ask the user for `origins` on behalf of plugin `pluginId`. */
+  request(
+    origins: readonly string[],
+    purpose: string,
+    pluginId?: string,
+  ): Promise<ConsentResult>;
+  /** The origins plugin `pluginId` holds for the OPEN document: this
+   *  session's grants for it and the ones remembered for it (editor ADR
+   *  262). A host that implements it keeps the grants, keyed by its own
+   *  identity of the document — the SDK then keeps none and stores
+   *  nothing. Without it the SDK keeps this host's session grants and
+   *  remembers none (it has no document identity to key them by). */
+  grants?(pluginId: string): readonly string[];
 }
 
 function defaultStorageBacking(): StorageBacking {
@@ -3114,11 +3126,13 @@ export function createBundleHost(
   // --------------------------------------------------- network (D-03)
   //
   // `capabilities.network` is the OUTER bound (the origins the bundle MAY ever
-  // request); per-origin user consent is the inner gate. Remembered grants
-  // persist in the bundle's own storage namespace. No consent backend wired →
-  // every request is denied (honest no-consent posture). The host never proxies
-  // bytes; a granted origin authorizes the BUNDLE's own reach (DuckDB httpfs),
-  // enforced at the realm boundary by the editor's CSP (the editor follow-up).
+  // request); per-origin user consent is the inner gate. The grants are the
+  // HOST's (editor ADR 264): kept per document under an identity the host
+  // mints, so a grant remembered for one document never reaches another. A
+  // backend without `grants` gets this host's session grants only. No consent
+  // backend wired → every request is denied (honest no-consent posture). The
+  // host never proxies bytes; a granted origin authorizes the BUNDLE's own
+  // reach (DuckDB httpfs), enforced at the realm boundary by the editor's CSP.
   const declaredNetwork = manifest.capabilities?.network;
   const networkDeclared =
     declaredNetwork === true ||
@@ -3131,8 +3145,17 @@ export function createBundleHost(
     }
     return false;
   };
+  // Before editor ADR 264 a remembered grant was written here, in the
+  // bundle's own storage — per browser, so every later document inherited
+  // it. That key is never read again, and is cleared.
   const CONSENT_KEY = "network.consentedOrigins";
-  const granted = new Set<string>(storage.get<string[]>(CONSENT_KEY) ?? []);
+  if (storage.get(CONSENT_KEY) !== undefined) storage.delete(CONSENT_KEY);
+  const consentBackend = options?.consent;
+  const sessionGranted = new Set<string>();
+  const heldOrigins = (): ReadonlySet<string> =>
+    consentBackend?.grants
+      ? new Set(consentBackend.grants(manifest.id))
+      : sessionGranted;
   const network: NetworkSurface = {
     async requestConsent(origins, purpose): Promise<ConsentResult> {
       requireDeclared(
@@ -3148,15 +3171,16 @@ export function createBundleHost(
             `declared capabilities.network allow-list — denied: ${outOfScope.join(", ")}`,
         );
       }
-      const need = inScope.filter((o) => !granted.has(o));
+      const before = heldOrigins();
+      const need = inScope.filter((o) => !before.has(o));
       let prompted: ConsentResult = {
         granted: [],
         denied: [],
         remembered: false,
       };
       if (need.length > 0) {
-        if (options?.consent) {
-          prompted = await options.consent.request(need, purpose);
+        if (consentBackend) {
+          prompted = await consentBackend.request(need, purpose, manifest.id);
         } else {
           log.warn(
             "network.requestConsent: no consent backend wired — denying " +
@@ -3165,16 +3189,18 @@ export function createBundleHost(
           prompted = { granted: [], denied: need, remembered: false };
         }
       }
-      for (const o of prompted.granted) granted.add(o);
-      if (prompted.remembered) storage.set(CONSENT_KEY, [...granted]);
+      const hostKeeps = consentBackend?.grants !== undefined;
+      if (!hostKeeps) for (const o of prompted.granted) sessionGranted.add(o);
+      const now = new Set([...heldOrigins(), ...prompted.granted]);
       return {
-        granted: inScope.filter((o) => granted.has(o)),
-        denied: [...outOfScope, ...inScope.filter((o) => !granted.has(o))],
-        remembered: prompted.remembered,
+        granted: inScope.filter((o) => now.has(o)),
+        denied: [...outOfScope, ...inScope.filter((o) => !now.has(o))],
+        // Only a host that keeps the grants can remember one.
+        remembered: hostKeeps && prompted.remembered,
       };
     },
     consentedOrigins() {
-      return [...granted];
+      return [...heldOrigins()].filter(mayRequest);
     },
   };
 

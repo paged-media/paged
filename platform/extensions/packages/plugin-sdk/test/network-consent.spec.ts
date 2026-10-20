@@ -27,7 +27,10 @@
 //      the backend would grant it (the OUTER bound);
 //   4. no backend wired → every origin denied + supports("network.consent@1")
 //      is false (the honest no-consent posture);
-//   5. remember: a remembered grant persists across hosts via storage.
+//   5. the grants are the host's (editor ADR 264): a backend that keeps them
+//      (`grants`) is asked what the plugin holds for the open document; the
+//      SDK writes nothing to the bundle's storage, and a backend that keeps
+//      none gets session grants only — never a remembered one.
 
 import { describe, expect, it } from "bun:test";
 
@@ -122,12 +125,53 @@ describe("host.network — consent door (D-03)", () => {
     expect(host.supports("network.consent@1")).toBe(true);
   });
 
-  it("a remembered grant persists across hosts via storage", async () => {
+  it("without a backend that keeps grants: session grants only, nothing remembered or stored", async () => {
     const storage = mapBacking();
     const a = makeHost(DECLARED, grantBackend([API], true), storage);
-    await a.host.network.requestConsent([API], "bind");
-    // A fresh host (no backend) over the same storage still sees the grant.
-    const b = makeHost(DECLARED, undefined, storage);
-    expect(b.host.network.consentedOrigins()).toContain(API);
+    const r = await a.host.network.requestConsent([API], "bind");
+    expect(r).toEqual({ granted: [API], denied: [], remembered: false });
+    expect(a.host.network.consentedOrigins()).toEqual([API]);
+    // A fresh host over the same storage holds nothing: no grant was
+    // written where another document's host would find it.
+    const b = makeHost(DECLARED, grantBackend([]), storage);
+    expect(b.host.network.consentedOrigins()).toEqual([]);
+    expect(storage.keys().filter((k) => k.includes("consent"))).toEqual([]);
+  });
+
+  it("a grant stored the old way (the bundle's storage) is ignored and cleared", () => {
+    const storage = mapBacking();
+    storage.setItem(
+      "paged.plugin.media.paged.test.network.consentedOrigins",
+      JSON.stringify([API]),
+    );
+    const { host } = makeHost(DECLARED, grantBackend([]), storage);
+    expect(host.network.consentedOrigins()).toEqual([]);
+    expect(storage.keys()).toEqual([]);
+  });
+
+  it("a backend that keeps the grants is asked what the plugin holds, per plugin", async () => {
+    const held = new Map<string, string[]>();
+    const asked: { origins: readonly string[]; plugin?: string }[] = [];
+    const backend: ConsentBackend = {
+      grants: (plugin) => held.get(plugin) ?? [],
+      async request(origins, _purpose, plugin) {
+        asked.push({ origins, plugin });
+        held.set(plugin!, [...(held.get(plugin!) ?? []), ...origins]);
+        return { granted: [...origins], denied: [], remembered: true };
+      },
+    };
+    const { host } = makeHost(DECLARED, backend);
+    expect(host.network.consentedOrigins()).toEqual([]);
+    const r = await host.network.requestConsent([API], "bind");
+    expect(r).toEqual({ granted: [API], denied: [], remembered: true });
+    expect(asked).toEqual([{ origins: [API], plugin: "media.paged.test" }]);
+    // Held: not asked again.
+    await host.network.requestConsent([API], "again");
+    expect(asked).toHaveLength(1);
+    // The host changed its mind (another document is open): asked again.
+    held.clear();
+    expect(host.network.consentedOrigins()).toEqual([]);
+    await host.network.requestConsent([API], "the next document");
+    expect(asked).toHaveLength(2);
   });
 });

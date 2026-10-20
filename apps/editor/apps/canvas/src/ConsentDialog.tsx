@@ -188,11 +188,27 @@ function ConsentPrompt({ pending }: { pending: PendingConsent }) {
             <input
               type="checkbox"
               data-testid="consent-remember"
-              checked={remember}
+              checked={remember && pending.rememberable}
+              disabled={!pending.rememberable}
+              aria-describedby={
+                pending.rememberable ? undefined : "consent-remember-why"
+              }
               onChange={(e) => setRemember(e.target.checked)}
             />
             Remember for this document
           </label>
+          {pending.rememberable ? null : (
+            // Editor ADR 264: a grant is remembered under the identity the
+            // editor gives a document it can recognise again.
+            <p
+              id="consent-remember-why"
+              data-testid="consent-remember-why"
+              style={{ margin: "-8px 0 16px", color: color.mutedFg }}
+            >
+              This document was not opened from a file or the library, so the
+              permission lasts until it is closed.
+            </p>
+          )}
 
           <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
             <button

@@ -889,6 +889,15 @@ export class CanvasClient {
   }
 
   /**
+   * The engine's id of the open document (`DocumentHandle.docId`), or null
+   * before the first load. Minted per load: opening the same file twice
+   * gives two ids, so it names a load, not a document (editor ADR 264).
+   */
+  get openDocument(): string | null {
+    return this.openDocId;
+  }
+
+  /**
    * SDK Phase 5 (v1 sweep) — resolved colour readout for a single
    * swatch. Powers the Color panel's CMYK/RGB display. Returns
    * `null` when the swatch id doesn't resolve.

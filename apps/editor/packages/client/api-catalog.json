@@ -3,7 +3,7 @@
   "package": "@paged-media/client",
   "protocol": 74,
   "counts": {
-    "clientMembers": 80,
+    "clientMembers": 81,
     "wireKinds": 52,
     "exports": 74
   },
@@ -217,6 +217,12 @@
           "kind": "property",
           "signature": "get activePage(): string | null",
           "summary": "The page most recently pushed by {@link setActivePage}."
+        },
+        {
+          "name": "CanvasClient.openDocument",
+          "kind": "property",
+          "signature": "get openDocument(): string | null",
+          "summary": "The engine's id of the open document (`DocumentHandle.docId`), or null before the first load."
         },
         {
           "name": "CanvasClient.colorPreview",
