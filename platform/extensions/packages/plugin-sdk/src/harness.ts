@@ -206,6 +206,12 @@ export interface HarnessOptions
    *  load, `load()` and `host.documents.open` alike. Absent: no font, as
    *  before. */
   defaultFont?: Uint8Array;
+  /** An ICC CMYK profile every load uses as its working space, as a
+   *  command line's `--cmyk-profile` does: it converts CMYK for display and
+   *  is the output intent of a PDF/X export. Passed to every load, like
+   *  `defaultFont`. Absent: the document's declared profile, else naive
+   *  CMYK, as before. */
+  cmykProfile?: Uint8Array;
 }
 
 /** A headless will-save registry: listeners register per plugin and
@@ -890,9 +896,16 @@ export async function createHeadlessHost(
   const loadDirect = (bytes: Uint8Array): WorkerToMain => {
     const dropped = loads.begin();
     const reply = JSON.parse(
-      options.defaultFont
-        ? worker.loadDocumentDirect(seqCounter++, bytes, options.defaultFont)
-        : worker.loadDocumentDirect(seqCounter++, bytes),
+      options.cmykProfile
+        ? worker.loadDocumentDirect(
+            seqCounter++,
+            bytes,
+            options.defaultFont,
+            options.cmykProfile,
+          )
+        : options.defaultFont
+          ? worker.loadDocumentDirect(seqCounter++, bytes, options.defaultFont)
+          : worker.loadDocumentDirect(seqCounter++, bytes),
     ) as WorkerToMain;
     loads.end(reply, dropped);
     if (reply.kind === "documentLoaded") {

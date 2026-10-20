@@ -14,7 +14,9 @@ options:
   --format <json|text>               output style (default json)
   --plugins <a,b>                    load exactly these bundles (package names or paths) instead of discovering them
   --no-plugins                       load no plugin bundles (core objects only)
-  --font <file.ttf>                  default font every load lays text out with
+  --font <file.ttf>                  fallback face for text no registered font answers for (default: the bundled Inter)
+  --no-default-font                  no fallback face: text no font answers for is not set (to see what a document is missing)
+  --cmyk-profile <file.icc>          CMYK working space and PDF/X output intent (an ICC file)
   --engine-from <dir>                resolve the engine (@paged-media/paged) from this directory
   --text                             human-readable output instead of JSON
   -h, --help                         show help
