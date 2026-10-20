@@ -21,3 +21,8 @@ takes precedence.
 
 F-32 closes (`tests/e2e/ux-audit-gestures.spec.ts`). Specs that read the camera after an open
 see page 1 fitted.
+
+## Amendment 2026-10-20
+
+Fit whole document is on Alt+Shift+Cmd+0 now; Cmd+0 fits the page, as in InDesign
+([ADR 257](257-indesigns-fits-and-page-keys.md)).

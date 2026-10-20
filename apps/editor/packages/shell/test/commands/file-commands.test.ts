@@ -27,6 +27,10 @@
 // when there is no document, and stop on "no". A load that fails says so
 // in the status line and leaves no half-open document.
 
+import {
+  resetAiAvailability,
+  setAiAvailability,
+} from "../../src/ai/availability";
 import { afterEach, describe, expect, test } from "bun:test";
 
 import { covers, stubGlobal, unstubAllGlobals } from "@paged-media/test-kit";
@@ -37,6 +41,9 @@ import {
   buildNewDocumentCommand,
   buildNewFromBriefCommand,
   buildOpenIdmlCommand,
+  dropFile,
+  dropPlaces,
+  PLACE_DROPPED_COMMAND,
 } from "../../src/state/commands/file-commands";
 import { takePendingImportSource } from "../../src/state/import-source";
 
@@ -333,6 +340,99 @@ describe("File ▸ New from a brief… (paged.file.newFromBrief)", () => {
     r.register(buildNewFromBriefCommand(() => void opened++));
     await r.invoke("paged.file.newFromBrief");
     expect(opened).toBe(1);
-    expect(r.get("paged.file.newFromBrief")?.when).toBeUndefined();
+  });
+
+  // UX audit F-25 (ADR 252): with no AI service the command is not
+  // offered — the palette hides it, the menu greys it — and does nothing.
+  test("F-25: offered only while the AI service is not known to be missing", async () => {
+    covers("command:paged.file.newFromBrief");
+    let opened = 0;
+    const r = createCommandRegistry(() => null);
+    r.register(buildNewFromBriefCommand(() => void opened++));
+    const when = r.get("paged.file.newFromBrief")?.when as
+      ((state: unknown) => boolean) | undefined;
+    try {
+      resetAiAvailability();
+      expect(when?.(null)).toBe(true);
+      setAiAvailability("available");
+      expect(when?.(null)).toBe(true);
+      setAiAvailability("unavailable");
+      expect(when?.(null)).toBe(false);
+      await r.invoke("paged.file.newFromBrief");
+      expect(opened).toBe(0);
+    } finally {
+      resetAiAvailability();
+    }
+  });
+});
+
+// UX audit F-03 (ADR 258): a picture dropped on an open document is placed
+// where it lands, as InDesign does; anything else, or a drop with no
+// document, opens as before.
+describe("a file dropped on the canvas (F-03)", () => {
+  const png = () =>
+    new File([new Uint8Array([1, 2, 3])], "photo.png", {
+      type: "image/png",
+    });
+
+  test("pictures place, SVG and documents do not", () => {
+    expect(dropPlaces({ name: "a.png", type: "image/png" })).toBe(true);
+    expect(dropPlaces({ name: "a.JPG", type: "" })).toBe(true);
+    expect(dropPlaces({ name: "layers.psd", type: "" })).toBe(true);
+    expect(dropPlaces({ name: "art.svg", type: "image/svg+xml" })).toBe(false);
+    expect(dropPlaces({ name: "doc.idml", type: "" })).toBe(false);
+    expect(dropPlaces({ name: "book.xlsx", type: "" })).toBe(false);
+  });
+
+  const editor = (pageCount: number | null) => {
+    const placed: unknown[] = [];
+    const imported: string[] = [];
+    const commands = createCommandRegistry(() => null);
+    commands.register({
+      id: PLACE_DROPPED_COMMAND,
+      title: "Place image…",
+      handler: (_e, payload) => void placed.push(payload),
+    });
+    const importers = createImporterRegistry();
+    importers.register({
+      id: "t.png",
+      title: "PNG",
+      extensions: [".png"],
+      import: async (f: { name: string }) => void imported.push(f.name),
+    } as never);
+    const e = {
+      document: {
+        handle: pageCount === null ? null : { pageCount },
+      },
+      registries: { commands, importers },
+    };
+    return { e: e as never, placed, imported };
+  };
+  const sinks = { setStatus: () => {}, pushWarning: () => {} };
+
+  test("a picture dropped on an open document is placed at the drop point", async () => {
+    covers("command:paged.insert.placeImage");
+    const { e, placed, imported } = editor(2);
+    await dropFile(e, png(), { clientX: 30, clientY: 40 }, sinks);
+    expect(imported).toEqual([]);
+    expect(placed).toHaveLength(1);
+    const [payload] = placed as Array<{
+      file: { name: string; bytes: Uint8Array; mimeType: string };
+      at: { clientX: number; clientY: number };
+    }>;
+    expect(payload.at).toEqual({ clientX: 30, clientY: 40 });
+    expect(payload.file.name).toBe("photo.png");
+    expect([...payload.file.bytes]).toEqual([1, 2, 3]);
+  });
+
+  test("with no document, or from the picker, the file opens through its importer", async () => {
+    const none = editor(null);
+    await dropFile(none.e, png(), { clientX: 30, clientY: 40 }, sinks);
+    expect(none.placed).toEqual([]);
+    expect(none.imported).toEqual(["photo.png"]);
+    const picked = editor(2);
+    await dropFile(picked.e, png(), null, sinks);
+    expect(picked.placed).toEqual([]);
+    expect(picked.imported).toEqual(["photo.png"]);
   });
 });

@@ -25,26 +25,33 @@
 
 import { Icon } from "../icons";
 import { useCamera } from "../state/camera-context";
+import { ZOOM_PRESET_SCALES, zoomCameraTo } from "../state/zoom-range";
 import { useRegistries } from "../state/registries-context";
 import { useRegistryView } from "../state/live";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "../components/ui/dropdown-menu";
 
+// The fits first, as InDesign's zoom menu lists them, then the steps;
+// the presets follow (UX audit F-31, ADR 257).
 const ZOOM_ITEMS: Array<[string, string]> = [
+  ["Fit page in window", "paged.view.fitPage"],
+  ["Fit spread in window", "paged.view.fitSpread"],
+  ["Fit selection in window", "paged.view.fitSelection"],
+  ["Fit document", "paged.view.zoomFit"],
   ["Zoom in", "paged.view.zoomIn"],
   ["Zoom out", "paged.view.zoomOut"],
   ["Zoom to 100%", "paged.view.zoom100"],
-  ["Fit document", "paged.view.zoomFit"],
 ];
 
 export function ZoomControl({
   side = "bottom",
 }: { side?: "top" | "bottom" } = {}) {
-  const { camera } = useCamera();
+  const { camera, setCamera, viewportSize } = useCamera();
   // Read through a view of the registry (state/live.ts, ADR 229). A
   // camera re-render alone would not do: compiled, `commands.get(id)` is
   // kept for as long as the registry object is the same, and it always is.
@@ -87,6 +94,18 @@ export function ZoomControl({
             </DropdownMenuItem>
           ) : null,
         )}
+        <DropdownMenuSeparator />
+        {ZOOM_PRESET_SCALES.map((scale) => (
+          <DropdownMenuItem
+            key={scale}
+            data-zoom-preset={scale}
+            onSelect={() =>
+              setCamera(zoomCameraTo(camera, scale, viewportSize))
+            }
+          >
+            {Math.round(scale * 100)}%
+          </DropdownMenuItem>
+        ))}
       </DropdownMenuContent>
     </DropdownMenu>
   );

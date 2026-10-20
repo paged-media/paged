@@ -74,7 +74,11 @@ import {
 } from "@paged-media/shell";
 import "@paged-media/shell/styles/globals.css";
 
-import { CanvasClient, type DocumentHandle } from "@paged-media/client";
+import {
+  CanvasClient,
+  type DocumentHandle,
+  type ElementId,
+} from "@paged-media/client";
 // Vite `?worker` import — constructs the render worker in THIS (app) module
 // graph so Vite emits the worker chunk AND follows its transitive `?url` wasm
 // import into a real `.wasm` asset. Passing only a worker URL across the
@@ -256,7 +260,12 @@ import { PlaygroundController } from "./playground/PlaygroundController";
 import { debugFlag } from "./debug-flags";
 import { IframeScriptBridge } from "./playground/IframeScriptBridge";
 import { useAnimatedCamera } from "./ui/useAnimatedCamera";
-import { useKeyboardShortcuts } from "./ui/useKeyboardShortcuts";
+import {
+  pageAtViewportCentre,
+  pageStep,
+  selectionRect,
+  spreadRect,
+} from "./ui/fit-views";
 import { documentBounds, fitCamera, layoutPages } from "./ui/layout";
 import { usePathEditMode } from "./ui/usePathEditMode";
 import { frameHoldingCaret, useTextEditing } from "./ui/useTextEditing";
@@ -874,13 +883,6 @@ function CanvasAppIntegration() {
   const currentSelection = useEffectEvent(() => selection);
 
   const animateCamera = useAnimatedCamera(camera, setCamera);
-  useKeyboardShortcuts({
-    pageIds: handle?.pageIds ?? [],
-    pageSizesPt: handle?.pageSizesPt ?? [],
-    camera,
-    viewportSize,
-    animateCamera,
-  });
   useTextEditing({
     client,
     selection: contentSelection,
@@ -1207,6 +1209,69 @@ function CanvasAppIntegration() {
         if (rects.length === 0) return;
         animateCamera(fitCamera(vw, vh, documentBounds(rects)));
       },
+      // The fit commands and the page keys (F-31, F-16, ADR 257). The
+      // current page is the one at the viewport's centre.
+      fitPage: () => {
+        const at = pageAtViewportCentre(rects, camera, [vw, vh]);
+        if (at < 0) return;
+        animateCamera(fitCamera(vw, vh, rects[at]!));
+      },
+      fitSpread: async () => {
+        const at = pageAtViewportCentre(rects, camera, [vw, vh]);
+        if (at < 0 || !handle) return;
+        let spreads: (string | null)[] = [];
+        try {
+          const pages = await client.collection<{
+            selfId: string;
+            spreadId?: string | null;
+          }>("pages");
+          const byId = new Map(pages.map((p) => [p.selfId, p.spreadId]));
+          spreads = handle.pageIds.map((id) => byId.get(id) ?? null);
+        } catch {
+          /* no spread map: the page is a spread of its own */
+        }
+        const rect = spreadRect(rects, spreads, at);
+        if (rect) animateCamera(fitCamera(vw, vh, rect));
+      },
+      fitSelection: async () => {
+        if (!handle) return;
+        const ids = currentSelection().elementSelection;
+        if (ids.length === 0) return;
+        // A group's box is its leaves' (the page-position readout's rule).
+        const leaves: ElementId[] = [];
+        for (const id of ids) {
+          if (id.kind !== "group") leaves.push(id);
+          else leaves.push(...(await client.groupLeaves(id.id as string)));
+        }
+        const items = await client.elementGeometry(leaves).catch(() => []);
+        const rect = selectionRect(
+          rects,
+          handle.pageIds.map(String),
+          items.map((g) => ({
+            pageId: g.pageId == null ? null : String(g.pageId),
+            bounds: g.bounds,
+            itemTransform: g.itemTransform,
+          })),
+        );
+        if (!rect) return;
+        // A line has no height (or width): fit a point of it, not nothing.
+        const w = Math.max(rect.w, 1);
+        const h = Math.max(rect.h, 1);
+        animateCamera(
+          fitCamera(vw, vh, {
+            x: rect.x - (w - rect.w) / 2,
+            y: rect.y - (h - rect.h) / 2,
+            w,
+            h,
+          }),
+        );
+      },
+      goToPage: (which) => {
+        const at = pageAtViewportCentre(rects, camera, [vw, vh]);
+        const target = pageStep(which, at, rects.length);
+        if (target === null) return;
+        animateCamera(fitCamera(vw, vh, rects[target]!));
+      },
     });
     // `paged.object.*` — the object verbs (Arrange ×4, Group, Ungroup,
     // Select parent group, Delete, Nudge ×8, Make / Release clipping
@@ -1307,14 +1372,21 @@ function CanvasAppIntegration() {
       table: freshInsert((p) => insertTable(p, insertReport)),
       // IMG-2 — Place's errors (a file it cannot read) are reported where
       // the user sees them, not only into a panel nobody has open.
-      placeImage: freshInsert((p) =>
-        placeImage(p, (severity, message) => {
-          insertReport(severity, message);
-          if (severity === "error") {
-            void registries.commands.invoke("paged.panel.show.paged.problems");
-          }
-        }),
-      ),
+      placeImage: (p, dropped) => {
+        problemsSink.clear(INSERT_DIAGNOSTIC_SOURCE);
+        return placeImage(
+          p,
+          (severity, message) => {
+            insertReport(severity, message);
+            if (severity === "error") {
+              void registries.commands.invoke(
+                "paged.panel.show.paged.problems",
+              );
+            }
+          },
+          dropped,
+        );
+      },
       newPage: freshInsert((p) => addPage(p, insertReport)),
     });
     // ADR 323 — Align / Distribute as a TYPED command over

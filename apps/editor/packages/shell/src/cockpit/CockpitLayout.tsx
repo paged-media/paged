@@ -60,8 +60,9 @@ export interface CockpitLayoutProps {
   /** Tab / Shift+Tab chrome hiding — when true the side panels
    *  disappear and the canvas column fills the row. */
   panelsHidden?: boolean;
-  /** IDML intake — the canvas column is the drag-drop target. */
-  onFile?: (file: File) => void;
+  /** IDML intake — the canvas column is the drag-drop target. `at` is
+   *  where the file was dropped (a picture is placed there, F-03). */
+  onFile?: (file: File, at?: { clientX: number; clientY: number }) => void;
 }
 
 export function CockpitLayout({
@@ -152,7 +153,7 @@ export function CockpitLayout({
             if (!onFile) return;
             e.preventDefault();
             const file = e.dataTransfer.files[0];
-            if (file) onFile(file);
+            if (file) onFile(file, { clientX: e.clientX, clientY: e.clientY });
           }}
           style={{
             flex: 1,

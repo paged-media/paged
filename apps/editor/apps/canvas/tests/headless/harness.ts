@@ -869,6 +869,20 @@ export async function createHeadlessEditor(
     zoomFit: () => {
       opened.push({ kind: "camera", detail: "fit" });
     },
+    // The fit commands and page keys record what they would fit; the
+    // pure geometry is asserted in test/unit/fit-views.test.ts.
+    fitPage: () => {
+      opened.push({ kind: "camera", detail: "fitPage" });
+    },
+    fitSpread: () => {
+      opened.push({ kind: "camera", detail: "fitSpread" });
+    },
+    fitSelection: () => {
+      opened.push({ kind: "camera", detail: "fitSelection" });
+    },
+    goToPage: (which) => {
+      opened.push({ kind: "camera", detail: `page:${which}` });
+    },
   });
   const objectDeps: ObjectCommandDeps = {
     client,

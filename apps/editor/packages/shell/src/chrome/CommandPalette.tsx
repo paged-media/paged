@@ -29,6 +29,8 @@ import {
   CommandSeparator,
 } from "../components/ui/command";
 import { AI_ASK_COMMAND } from "../ai/editor-ai";
+import { AI_UNAVAILABLE_TEXT, useAiAvailability } from "../ai/availability";
+import { acceleratorLookup } from "./MenuBar";
 import { PoweredByClaude } from "../ai/powered-by-claude";
 import { Icon } from "../icons";
 import { paletteScore } from "./palette-score";
@@ -118,40 +120,6 @@ function looksLikePrompt(query: string): boolean {
  * <Mode>" group from the active ModeContribution, and the AI-prompt
  * affordance.
  */
-/** Named keys that read as a glyph — kept identical to MenuBar's
- *  table, as the two formatters are. */
-const KEY_GLYPHS: Record<string, string> = {
-  arrowleft: "\u2190",
-  arrowright: "\u2192",
-  arrowup: "\u2191",
-  arrowdown: "\u2193",
-  backspace: "\u232b",
-  delete: "\u2326",
-};
-
-/** `cmd+shift+s` -> `\u2318\u21e7S`. Mac glyphs because the app is
- *  Chromium-only and the tool rail already spells its hints this way. */
-function prettyKey(combo: string): string {
-  const parts = combo.split("+");
-  const key = parts.pop() ?? "";
-  const mods = parts
-    .map((m) =>
-      m === "cmd" || m === "meta"
-        ? "\u2318"
-        : m === "shift"
-          ? "\u21e7"
-          : m === "alt" || m === "option"
-            ? "\u2325"
-            : m === "ctrl" || m === "control"
-              ? "\u2303"
-              : m,
-    )
-    .join("");
-  const glyph = KEY_GLYPHS[key];
-  if (glyph) return `${mods}${glyph}`;
-  return `${mods}${key.length === 1 ? key.toUpperCase() : key.charAt(0).toUpperCase() + key.slice(1)}`;
-}
-
 /** The commands the palette offers: those whose `when` applies where the
  *  user is. Evaluated while the palette is open, so each opening reads the
  *  editor state of that moment; a closed palette offers nothing. */
@@ -186,13 +154,10 @@ export function CommandPalette() {
   // binding, and never recomputes: that is exactly what happened once,
   // 82 bindings live and 0 accelerators drawn. The view is a new object
   // after every registration.
-  const keyFor = (() => {
-    const byCommand = new Map<string, string>();
-    for (const b of keybindings.list()) {
-      if (!byCommand.has(b.command)) byCommand.set(b.command, prettyKey(b.key));
-    }
-    return (id: string) => byCommand.get(id) ?? null;
-  })();
+  //
+  // The chord for THIS platform, spelled as the menus spell it (one
+  // formatter, MenuBar's `acceleratorLookup`).
+  const keyFor = acceleratorLookup(keybindings.list());
   const workflowMode = useOptionalWorkflowMode();
   const [recents, setRecents] = useState<string[]>(loadRecents);
 
@@ -245,6 +210,10 @@ export function CommandPalette() {
   const modeTitle = mode ? modes.get(mode)?.title : undefined;
 
   const showAiSeam = query.length > 0 && looksLikePrompt(query);
+  // F-25 (ADR 252): with no AI service the ask row says so before it is
+  // chosen, instead of failing after.
+  const aiAvailability = useAiAvailability();
+  const aiUnavailable = aiAvailability === "unavailable";
 
   // Zero state stays curated (kit): the per-panel Show/Hide pairs
   // (~100 ids) only surface once the user types.
@@ -289,11 +258,14 @@ export function CommandPalette() {
                 value={`assistant ${query}`}
                 // The assistant answers any query; ranking must not hide it.
                 forceMount
+                disabled={aiUnavailable}
                 onSelect={() => {
+                  if (aiUnavailable) return;
                   setOpen(false);
                   void registries.commands.invoke(AI_ASK_COMMAND, query);
                 }}
                 data-palette-ai
+                data-ai-availability={aiAvailability}
               >
                 <Icon
                   name="ui-wand"
@@ -302,7 +274,16 @@ export function CommandPalette() {
                 />
                 <span>Ask Claude: “{query}”</span>
                 <span className="ml-auto">
-                  <PoweredByClaude size={9} />
+                  {aiUnavailable ? (
+                    <span
+                      className="text-xs opacity-60"
+                      data-palette-ai-unavailable
+                    >
+                      {AI_UNAVAILABLE_TEXT}
+                    </span>
+                  ) : (
+                    <PoweredByClaude size={9} />
+                  )}
                 </span>
               </CommandItem>
             </CommandGroup>
@@ -348,13 +329,9 @@ export function CommandPalette() {
                       searching the palette was shown
                       `media.paged.data.command.lowerBinding` where every
                       other application puts the key, so the palette
-                      taught nobody a single accelerator. The id stays as
-                      the fallback: a command with no binding still needs
-                      something on the right, and for a plugin command
-                      the id is at least what a bug report can quote. */}
-                  <span className="ml-auto text-xs opacity-50">
-                    {keyFor(cmd.id) ?? cmd.id}
-                  </span>
+                      taught nobody a single accelerator. A command with
+                      no binding shows nothing there (F-16). */}
+                  <PaletteChord chord={keyFor(cmd.id)} />
                 </CommandItem>
               ))}
             </CommandGroup>
@@ -376,7 +353,8 @@ export function CommandPalette() {
                   onSelect={() => run(cmd)}
                 >
                   <span>{cmd.title}</span>
-                  <span className="ml-auto text-xs opacity-50">{cmd.id}</span>
+                  {/* The chord, not the id (UX audit F-16). */}
+                  <PaletteChord chord={keyFor(cmd.id)} />
                 </CommandItem>
               ))}
             </CommandGroup>
@@ -408,11 +386,24 @@ export function CommandPalette() {
         {/* E8 — the footer once claimed "AI-assisted" beside a
               disabled assistant row. The row is live now (ADR 221), so
               the attribution is true and sits where the claim was. */}
-        <span style={{ marginLeft: "auto" }}>
-          <PoweredByClaude size={9} />
-        </span>
+        {!aiUnavailable && (
+          <span style={{ marginLeft: "auto" }}>
+            <PoweredByClaude size={9} />
+          </span>
+        )}
       </div>
     </CommandDialog>
+  );
+}
+
+/** The right-hand column of a palette row: the command's chord, or
+ *  nothing. */
+function PaletteChord({ chord }: { chord: string | null }) {
+  if (!chord) return null;
+  return (
+    <span className="ml-auto text-xs opacity-50" data-palette-chord>
+      {chord}
+    </span>
   );
 }
 

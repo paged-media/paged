@@ -553,7 +553,7 @@ const IS_MAC =
 /** command → display string, preferring the binding for THIS platform.
  *  Bundles register `cmd+…` and `ctrl+…` twins; taking whichever came
  *  first showed ⌃S on a Mac. */
-function acceleratorLookup(
+export function acceleratorLookup(
   bindings: ReadonlyArray<{ key: string; command: string }>,
 ): (command: string) => string | null {
   const byCommand = new Map<string, string[]>();
