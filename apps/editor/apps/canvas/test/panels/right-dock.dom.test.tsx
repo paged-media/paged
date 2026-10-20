@@ -49,7 +49,7 @@ const mount = () =>
         title: "Design",
         icon: "x",
         order: 1,
-        slots: { tabs: ["t.a", "t.b", "t.c"] },
+        slots: { left: "t.a", tabs: ["t.a", "t.b", "t.c"] },
       });
     },
   });
