@@ -210,6 +210,23 @@ test.describe("view commands", () => {
     await expect
       .poll(async () => (await camera()).ty)
       .toBeCloseTo(onePage.ty, 0);
+    // A key pressed while the last one's tween runs steps from where the
+    // camera is going: Next, then First a frame later, is the first page
+    // (it stayed on the second when First read a frame of the tween).
+    await settled();
+    await page.evaluate(async () => {
+      const commands = (globalThis as unknown as G).__canvas.registries
+        .commands;
+      const frame = () => new Promise((r) => requestAnimationFrame(r));
+      await commands.invoke("paged.view.nextPage");
+      await frame();
+      await frame();
+      await commands.invoke("paged.view.firstPage");
+    });
+    await expect
+      .poll(async () => (await camera()).ty)
+      .toBeCloseTo(onePage.ty, 0);
+    expect((await settled()).ty).toBeCloseTo(onePage.ty, 0);
   });
 
   test("the View extras flip the store their overlays and tools read", async ({
