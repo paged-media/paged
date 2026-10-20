@@ -44,9 +44,6 @@ type DirHandle = FileSystemDirectoryHandle & {
   entries(): AsyncIterableIterator<[string, FileSystemHandle]>;
 };
 
-/** Whether the last attempt to reach the OPFS root was refused. */
-let rootRefused = false;
-
 type OpfsStorage = StorageManager & {
   getDirectory?: () => Promise<FileSystemDirectoryHandle>;
 };
@@ -55,14 +52,21 @@ function opfsStorage(): OpfsStorage | null {
   return (globalThis.navigator?.storage ?? null) as OpfsStorage | null;
 }
 
+/** Whether the last attempt to reach the OPFS root was refused: one per
+ *  store, so an editor learns it of its own origin. */
+interface RootState {
+  refused: boolean;
+}
+
 /** Bytes can persist: OPFS exists, the context is secure, and the root
  *  was not refused the last time it was asked for. */
-function opfsAvailable(): boolean {
+function opfsAvailable(root: RootState): boolean {
   if (globalThis.isSecureContext === false) return false;
-  return Boolean(opfsStorage()?.getDirectory) && !rootRefused;
+  return Boolean(opfsStorage()?.getDirectory) && !root.refused;
 }
 
 async function pluginDir(
+  state: RootState,
   pluginId: string,
   create: boolean,
 ): Promise<DirHandle | null> {
@@ -71,10 +75,10 @@ async function pluginDir(
   let root: FileSystemDirectoryHandle;
   try {
     root = await storage.getDirectory();
-    rootRefused = false;
+    state.refused = false;
   } catch {
     // OPFS access denied (an insecure context, a denied origin).
-    rootRefused = true;
+    state.refused = true;
     return null;
   }
   try {
@@ -87,10 +91,11 @@ async function pluginDir(
 }
 
 export function createEditorBlobStore(): BlobStore {
+  const root: RootState = { refused: false };
   return {
-    available: opfsAvailable,
+    available: () => opfsAvailable(root),
     async write(pluginId, key, bytes) {
-      const dir = await pluginDir(pluginId, true);
+      const dir = await pluginDir(root, pluginId, true);
       if (!dir) throw new Error("OPFS unavailable — cannot persist blob");
       const fh = await dir.getFileHandle(fileName(key), { create: true });
       const writable = await fh.createWritable();
@@ -103,7 +108,7 @@ export function createEditorBlobStore(): BlobStore {
     },
 
     async read(pluginId, key) {
-      const dir = await pluginDir(pluginId, false);
+      const dir = await pluginDir(root, pluginId, false);
       if (!dir) return null;
       try {
         const fh = await dir.getFileHandle(fileName(key));
@@ -115,7 +120,7 @@ export function createEditorBlobStore(): BlobStore {
     },
 
     async delete(pluginId, key) {
-      const dir = await pluginDir(pluginId, false);
+      const dir = await pluginDir(root, pluginId, false);
       if (!dir) return;
       try {
         await dir.removeEntry(fileName(key));
@@ -125,7 +130,7 @@ export function createEditorBlobStore(): BlobStore {
     },
 
     async keys(pluginId) {
-      const dir = await pluginDir(pluginId, false);
+      const dir = await pluginDir(root, pluginId, false);
       if (!dir) return [];
       const out: string[] = [];
       for await (const [name, handle] of dir.entries()) {
@@ -135,7 +140,7 @@ export function createEditorBlobStore(): BlobStore {
     },
 
     async used(pluginId) {
-      const dir = await pluginDir(pluginId, false);
+      const dir = await pluginDir(root, pluginId, false);
       if (!dir) return 0;
       let total = 0;
       for await (const [, handle] of dir.entries()) {
