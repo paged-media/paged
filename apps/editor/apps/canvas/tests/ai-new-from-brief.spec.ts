@@ -26,7 +26,7 @@
 import { test, expect, type Route } from "@playwright/test";
 
 import { openCanvas } from "./fidelity/canvas-driver";
-import { textTurn, toolTurn } from "./ai-fixtures";
+import { aiServiceIsThere, textTurn, toolTurn } from "./ai-fixtures";
 
 const BUILD = `
 const first = JSON.parse(paged.pages())[0].selfId;
@@ -46,8 +46,10 @@ test("a brief becomes a document @feat:editor-shell.ai-new-from-brief @feat:edit
   page,
 }) => {
   const sent: Array<{ mode: string | null; prompt: string }> = [];
+  await aiServiceIsThere(page);
   await page.route("**/api/ai/v1/messages", async (route: Route) => {
     const req = route.request();
+    if (req.method() !== "POST") return route.fallback();
     sent.push({
       mode: req.headers()["x-paged-ai-mode"] ?? null,
       prompt: String(

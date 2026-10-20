@@ -19,7 +19,7 @@
 
 // SDK Phase 5 (v1 sweep) — ColorGroups panel acceptance.
 
-import { test, expect } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
 import { dirname, resolve as pathResolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -29,6 +29,23 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const REPO_ROOT = pathResolve(__dirname, "..", "..", "..");
 const FIXTURE = `${REPO_ROOT}/corpus/idml/generated/geometry-groups.idml`;
+
+/** Load through the React file-input flow, so `useDocument().handle`
+ *  holds the document: New group is offered only with one open (it was
+ *  live against no document before), and `loadIdml` loads behind React's
+ *  back. Same idiom as export-center-panel.spec. */
+async function loadViaInput(page: Page, fixture: string): Promise<void> {
+  await page.setInputFiles('input[type="file"]', fixture);
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (globalThis as unknown as { __canvas: { ready: boolean } }).__canvas
+            .ready,
+      ),
+    )
+    .toBe(true);
+}
 
 test.describe("Phase 5 — Color Groups panel", () => {
   test("AC-CGROUPS-1 — panel mounts; lists groups or shows empty placeholder @feat:color-swatches.color-groups @feat:editor-shell.panels.color-groups @level:edge", async ({
@@ -55,7 +72,7 @@ test.describe("Phase 5 — Color Groups panel", () => {
     page,
   }) => {
     await openCanvas(page);
-    await loadIdml(page, FIXTURE);
+    await loadViaInput(page, FIXTURE);
     await openPanel(page, "paged.color-groups");
     const rows = page.locator(
       '[data-color-groups-panel="ready"] [data-group-id]',

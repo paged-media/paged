@@ -50,6 +50,7 @@ import { fileURLToPath } from "node:url";
 import { test, expect, type Page } from "@playwright/test";
 
 import { openCanvas, loadIdml } from "./fidelity/canvas-driver";
+import { treeIds } from "./e2e/harness/viewport";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -177,37 +178,35 @@ async function pickFrame(
   );
 }
 
-/** Probe the next duplicate suffix by performing a throwaway
- *  Alt-translate-cancel sequence on a known frame. The wasm-side
- *  duplicate counter increments per emitted clone op; this lets
- *  the spec predict the upcoming dup id without parsing the
- *  worker's reply log. */
-// (Not actually used — `duplicate_suffix` increments on COMMIT,
-// not on op-construction. Instead each test reads the duplicate
-// id by enumerating elementGeometry across a candidate range.)
+/** The ids of every element of `kind` in the document, before a
+ *  gesture: the duplicate is the one id that is new after it. Alt-drag
+ *  copies take their ids off the document's id line (engine ADR 193,
+ *  GF-3) — they used to be named `<source>_dup_<n>_0`, which could
+ *  collide. */
+async function idsOfKind(page: Page, kind: string): Promise<string[]> {
+  return (await treeIds(page, kind)).map((e) => e.id);
+}
 
-/** After a commit, walk a known set of candidate dup ids (one per
- *  expected suffix) and return the first one whose elementGeometry
- *  resolves. The wasm `duplicate_suffix()` static counter is
- *  monotonic but not test-isolated, so this scan covers reuse. */
+/** After a commit, the one element of the source's kind that was not
+ *  there before, with its geometry; `null` when there is none. */
 async function findDuplicateForSource(
   page: Page,
   srcId: ElementId,
+  before: string[],
 ): Promise<ElementGeometryItem | null> {
-  return page.evaluate(
-    async ({ srcId }) => {
-      const c = (globalThis as unknown as { __canvas: CanvasGlobal }).__canvas;
-      for (let suffix = 0; suffix < 32; suffix++) {
-        const candidate = `${srcId.id}_dup_${suffix}_0`;
-        const geom = await c.client.elementGeometry([
-          { kind: srcId.kind, id: candidate } as ElementId,
-        ]);
-        if (geom.length > 0) return geom[0];
-      }
-      return null;
-    },
-    { srcId },
+  const fresh = (await idsOfKind(page, srcId.kind)).filter(
+    (id) => !before.includes(id),
   );
+  expect(fresh.length, "at most one new element").toBeLessThanOrEqual(1);
+  if (fresh.length === 0) return null;
+  const geom = await page.evaluate(
+    async (id) => {
+      const c = (globalThis as unknown as { __canvas: CanvasGlobal }).__canvas;
+      return c.client.elementGeometry([id]);
+    },
+    { kind: srcId.kind, id: fresh[0]! } as ElementId,
+  );
+  return geom[0] ?? null;
 }
 
 test.describe("Track K — cross-spread Alt-duplicate", () => {
@@ -228,6 +227,7 @@ test.describe("Track K — cross-spread Alt-duplicate", () => {
     page,
   }) => {
     const src = await pickFrame(page, pageAId, pageAW, pageAH);
+    const ids = await idsOfKind(page, src.id.kind);
 
     // Tiny delta — well inside the source page so no cross-spread
     // routing fires.
@@ -243,7 +243,7 @@ test.describe("Track K — cross-spread Alt-duplicate", () => {
       { id: src.id, delta },
     );
 
-    const dup = await findDuplicateForSource(page, src.id);
+    const dup = await findDuplicateForSource(page, src.id, ids);
     expect(dup, "duplicate should exist").not.toBeNull();
     // Same page as the source: same-spread routing preserved.
     expect(dup!.pageId).toBe(src.pageId);
@@ -289,6 +289,7 @@ test.describe("Track K — cross-spread Alt-duplicate", () => {
       }
     });
     const src = await pickFrame(page, pageAId, pageAW, pageAH);
+    const ids = await idsOfKind(page, src.id.kind);
 
     // The source spread is identity, so world pointer = anchor
     // (the frame's centre, page-local == spread-local here) +
@@ -325,7 +326,7 @@ test.describe("Track K — cross-spread Alt-duplicate", () => {
       { id: src.id, delta, pageAId, anchorPoint },
     );
 
-    const dup = await findDuplicateForSource(page, src.id);
+    const dup = await findDuplicateForSource(page, src.id, ids);
     expect(dup, "duplicate should exist").not.toBeNull();
     // Gesture spine resolved a destination spread (i.e. cross-
     // spread routing fired, not the source-spread fallback). The
@@ -361,6 +362,7 @@ test.describe("Track K — cross-spread Alt-duplicate", () => {
     page,
   }) => {
     const src = await pickFrame(page, pageAId, pageAW, pageAH);
+    const ids = await idsOfKind(page, src.id.kind);
 
     const anchorPoint: [number, number] = [
       (src.bounds[1] + src.bounds[3]) / 2,
@@ -387,7 +389,7 @@ test.describe("Track K — cross-spread Alt-duplicate", () => {
       { id: src.id, delta, pageAId, anchorPoint },
     );
 
-    const before = await findDuplicateForSource(page, src.id);
+    const before = await findDuplicateForSource(page, src.id, ids);
     expect(before, "duplicate exists before undo").not.toBeNull();
 
     await page.evaluate(async () => {
@@ -395,7 +397,7 @@ test.describe("Track K — cross-spread Alt-duplicate", () => {
       await c.client.undo();
     });
 
-    const after = await findDuplicateForSource(page, src.id);
+    const after = await findDuplicateForSource(page, src.id, ids);
     expect(after, "duplicate gone after undo").toBeNull();
     // Source still on page A.
     const srcGeom = await page.evaluate(

@@ -1791,6 +1791,47 @@ const GEOMETRY_PROBES: Probe[] = [
     },
     setupUndo: 1, // the scratch insertFrame
   },
+  // ── pasteElements (page-item clipboard) ───────────────────────
+  // Edit ▸ Paste of a page-item copy: the engine's snippet (what the
+  // worker's `exportElements` answers for Copy) placed on a page, centred
+  // on `center`. One scratch frame is exported and pasted; the probe's own
+  // undo removes the pasted copy, the setup undo the frame.
+  {
+    op: "pasteElements",
+    build: async ({ page, fx }) => {
+      const pageId = fx.pages[0].pageId;
+      const made = await newFrames(page, pageId, [[10, 10, 60, 60]]);
+      if (!made) return null;
+      const snippet = await page.evaluate(async (elementIds) => {
+        const c = (
+          globalThis as unknown as {
+            __canvas: {
+              client: {
+                send: (m: unknown) => Promise<{
+                  kind: string;
+                  payload?: { snippet?: string | null };
+                }>;
+              };
+            };
+          }
+        ).__canvas;
+        const reply = await c.client.send({
+          kind: "exportElements",
+          payload: { elementIds },
+        });
+        return reply.kind === "elementsExported"
+          ? (reply.payload?.snippet ?? null)
+          : null;
+      }, made);
+      return snippet
+        ? {
+            op: "pasteElements",
+            args: { snippet, pageId, center: [120, 120] },
+          }
+        : null;
+    },
+    setupUndo: 1, // the scratch insertFrame
+  },
   // ── group transform (v40 re-capture) ──────────────────────────
   // setGroupTransform writes an affine onto an existing group — so
   // build a scratch group first (two frames + createGroup, same as
