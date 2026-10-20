@@ -296,7 +296,7 @@ describe("Pencil tool", () => {
   // release as two samples and commit a path whose two anchors coincide
   // (GT-2, found by these tests); the shared PencilMachine cancels a
   // stroke that simplifies to fewer than two anchors.
-  it("[GT-2] a click with the Pencil draws nothing @level:gesture", async () => {
+  it("GT-2: a click with the Pencil draws nothing @level:gesture", async () => {
     const { fake, g } = harness();
     await g.tool(createPencilHandler).click([100, 100]).settle();
     expect(fake.mutations()).toEqual([]);
@@ -414,7 +414,7 @@ describe("Type tool (the drag)", () => {
   // nothing, and one released over another page mixed the two pages'
   // coordinates. Found by the gesture matrix at 25% (GT-3); it now
   // anchors the drag to its start page too.
-  test("[GT-3] a drag released over the pasteboard still pulls out the frame, on the start page @level:gesture", async () => {
+  test("GT-3: a drag released over the pasteboard still pulls out the frame, on the start page @level:gesture", async () => {
     const { fake, g } = harness();
     await g
       .tool(createTypeHandler)
