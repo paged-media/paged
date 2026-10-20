@@ -1256,9 +1256,15 @@ impl CanvasModel {
                     let b = &page.bounds;
                     return Ok(Value::Bounds([b.top, b.left, b.bottom, b.right]));
                 }
-                let Some(m) = spread.page_margins.get(page_id) else {
-                    return Ok(Value::Length(None));
+                // A page with no margins of its own reads what the engine
+                // lays it out with: 0 pt margins in one column, the values
+                // the pages collection reports for it (PN-203). A first
+                // write takes a fresh entry from the same values.
+                let unset = paged_model::MarginPreference {
+                    column_count: 1,
+                    ..Default::default()
                 };
+                let m = spread.page_margins.get(page_id).unwrap_or(&unset);
                 Ok(Value::Length(Some(match p {
                     PropertyPath::PageMarginTop => m.top,
                     PropertyPath::PageMarginBottom => m.bottom,

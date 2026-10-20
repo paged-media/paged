@@ -77,23 +77,20 @@ describe("paged.insertText and paragraph breaks", () => {
     expect(await paragraphs(e, story)).toEqual(["HelloA", "B"]);
   });
 
-  // Finding SCR-13: the engine splits inserted text into paragraphs on
-  // "\n" only (`insert_segments`, paged-canvas mutate.rs), so "\r", the
-  // paragraph return of InDesign's own scripting and of every script
-  // ported from it, lands in the story as a literal character. The
-  // footnote and tracked-change paths already read "\r" as a break.
-  test.failing(
-    "SCR-13: a \\r in the text starts a new paragraph, as \\n does",
-    async () => {
-      covers("script:paged.insertText");
-      const { e, story } = await withStory();
-      await run(
-        e,
-        `console.log(paged.insertText(${JSON.stringify(story)}, 5, "A\\rB"))`,
-      );
-      expect(await paragraphs(e, story)).toEqual(["HelloA", "B"]);
-    },
-  );
+  // Finding SCR-13 (fixed, engine ADR 200): the engine split inserted text
+  // into paragraphs on "\n" only, so "\r", the paragraph return of
+  // InDesign's own scripting and of every script ported from it, landed in
+  // the story as a literal character. "\r", "\r\n" and U+2029 start a
+  // paragraph now, as on the footnote and tracked-change paths.
+  test("SCR-13: a \\r in the text starts a new paragraph, as \\n does", async () => {
+    covers("script:paged.insertText");
+    const { e, story } = await withStory();
+    await run(
+      e,
+      `console.log(paged.insertText(${JSON.stringify(story)}, 5, "A\\rB"))`,
+    );
+    expect(await paragraphs(e, story)).toEqual(["HelloA", "B"]);
+  });
 });
 
 describe("paged.links and a link that does not resolve", () => {

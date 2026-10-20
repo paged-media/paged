@@ -598,10 +598,15 @@ fn engine_serve() {
         refused_status, 422,
         "a call without a document is refused: {refused}"
     );
-    // finding CLI-9: a body that is not JSON gets no HTTP answer at all —
-    // the connection closes without a status line (the error goes to the
-    // server's stderr). It should be a 400 with an error body.
-    assert_eq!(bad_status, 0, "finding CLI-9: no response: {bad}");
+    // finding CLI-9 (fixed): a body that is not JSON got no HTTP answer at
+    // all. It is a 400 with a JSON error body.
+    assert_eq!(bad_status, 400, "a body that is not JSON: {bad}");
+    assert!(
+        bad["error"]
+            .as_str()
+            .is_some_and(|e| e.contains("not JSON")),
+        "{bad}"
+    );
     let mask = |v: &Value| {
         let mut v = v.clone();
         if let Some(obj) = v.as_object_mut() {

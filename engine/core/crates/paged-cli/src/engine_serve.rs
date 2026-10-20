@@ -139,7 +139,18 @@ fn handle(mut stream: TcpStream, assets: &DocumentOptions) -> Result<()> {
             }
             let mut body = vec![0u8; length];
             reader.read_exact(&mut body)?;
-            let call: Value = serde_json::from_slice(&body)?;
+            // CLI-9: a body that is not JSON is the caller's error, said
+            // as one (400 with a JSON error body), not a dropped connection.
+            let call: Value = match serde_json::from_slice(&body) {
+                Ok(call) => call,
+                Err(e) => {
+                    return respond(
+                        &mut stream,
+                        400,
+                        &json!({ "error": format!("the request body is not JSON: {e}") }),
+                    );
+                }
+            };
             match run_call(assets, &call) {
                 Ok(out) => respond(&mut stream, 200, &out),
                 Err(e) => respond(&mut stream, 422, &json!({ "error": e.to_string() })),

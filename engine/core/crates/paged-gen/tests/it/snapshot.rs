@@ -76,16 +76,18 @@ fn strokes_fills_round_trips_through_parser() {
     );
 }
 
-/// finding GEN-1: the "strokes · overprint" variant writes `StrokeOverprint`, but the
-/// attribute is `OverprintStroke` (InDesign's spelling, the one idml-import reads and
-/// idml-export writes), so the page imports with stroke overprint off and the fixture
-/// exercises nothing. Renaming it changes the generated `strokes-fills` sample, whose
-/// reference PDF is exported from InDesign, so the fixture and its reference move together.
+/// finding GEN-1 (fixed): the "strokes · overprint" variant wrote
+/// `StrokeOverprint`, but the attribute is `OverprintStroke` (InDesign's
+/// spelling, the one idml-import reads and idml-export writes), so the page
+/// imported with stroke overprint off and the fixture exercised nothing.
+/// Stroke overprint is a separation flag that leaves the composite (RGB)
+/// rendering the fidelity gate compares unchanged; the reference PDF's next
+/// InDesign export will carry the flag too.
 #[test]
 fn strokes_fills_overprint_variant_reaches_the_importer() {
     let bytes = paged_gen::write_idml(&paged_gen::samples::strokes_fills::build()).unwrap();
     let container = idml_import::open_source_archive(&bytes).expect("open_source_archive");
-    let needle = b"StrokeOverprint=\"true\"";
+    let needle = b"OverprintStroke=\"true\"";
     let mut written = 0;
     let mut imported = 0;
     for (path, xml) in &container.entries {
@@ -103,8 +105,10 @@ fn strokes_fills_overprint_variant_reaches_the_importer() {
             .count();
     }
     assert_eq!(written, 1, "the overprint variant is in the sample");
-    // finding GEN-1: no rectangle imports with stroke overprint on; it should be one.
-    assert_eq!(imported, 0);
+    assert_eq!(
+        imported, 1,
+        "one rectangle imports with stroke overprint on"
+    );
 }
 
 #[test]
