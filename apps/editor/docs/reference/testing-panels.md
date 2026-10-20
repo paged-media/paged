@@ -150,7 +150,8 @@ A new panel added to `BUILT_IN_PANELS` fails `registry.dom.test.tsx` until it ha
 All 89 built-in panels have their own file: 76 files in `test/panels`, 1,052 tests (on
 2026-10-19), of which 79 are expected failures, each written per finding (the 42 the reach
 table generated went when PN-5 to PN-16 were fixed, and PN-2, PN-4, PN-155, PN-162, PN-213 and
-PN-262 are ordinary tests now), out of 99 findings named between `PN-1` and `PN-357`; the Playwright flows add PN-358. Panels that register commands while mounted (Layers, the
+PN-262 are ordinary tests now; on 2026-10-20 the polish wave, editor ADRs 254 and 255, left
+14 expected failures in `test/panels`), out of 99 findings named between `PN-1` and `PN-357`; the Playwright flows add PN-358. Panels that register commands while mounted (Layers, the
 schema demos) and panels that run typed core commands (style lists, options panels) assert
 those commands too, under `command:` ids. The commands a panel registers while mounted also
 need the gate's `integration` clause, which only a browser can give them (the headless editor
