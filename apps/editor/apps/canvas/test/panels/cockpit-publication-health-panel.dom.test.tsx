@@ -81,7 +81,7 @@ describe("Publication health: states", () => {
       id: "paged.publication-health",
       document: "none",
     });
-    expect(pill(h.root, "x4-readiness")).toBeNull();
+    expect(pill(h.root, "print-readiness")).toBeNull();
     expect(tiles(h)).toMatchObject({
       Pages: "—",
       Stories: "—",
@@ -104,10 +104,11 @@ describe("Publication health: states", () => {
       "Placed links": "2",
       "Color mode": "—",
     });
-    // No CMYK working space: no output intent for PDF/X-4.
-    expect(pill(h.root, "x4-readiness")).toEqual({
-      text: "No output intent",
-      tone: "warn",
+    // No CMYK working space, so no output intent: the print PDF is
+    // PDF 1.7 and exports, the Export Center's own words (ADR 265).
+    expect(pill(h.root, "print-readiness")).toEqual({
+      text: "Ready · PDF 1.7",
+      tone: "ready",
     });
   });
 

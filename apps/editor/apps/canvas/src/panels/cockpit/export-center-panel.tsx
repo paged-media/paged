@@ -40,11 +40,13 @@ import {
   Icon,
   StatusPill,
   notifyExportPdfDialog,
+  printOutputFacts,
   useCanvasClient,
   useDocument,
   useDocumentMeta,
   useRegistries,
   useRegistryView,
+  type PrintOutputFacts,
 } from "@paged-media/shell";
 
 import {
@@ -63,9 +65,9 @@ import {
 function rowReadiness(
   t: ExportTarget,
   loaded: boolean,
-  profileReady: boolean,
-): { tone: "ready" | "warn" | "draft"; label: string } {
-  return exportReadiness(t, loaded, profileReady, "soon");
+  facts: PrintOutputFacts,
+): ReturnType<typeof exportReadiness> {
+  return exportReadiness(t, loaded, facts, "soon");
 }
 
 export function ExportCenterPanel() {
@@ -73,7 +75,9 @@ export function ExportCenterPanel() {
   const meta = useDocumentMeta();
   const { handle } = useDocument();
   const loaded = meta != null && meta.pageCount > 0;
-  const profileReady = meta?.cmykProfileActive ?? false;
+  // The print-output facts (ADR 265): the same derivation Health, the
+  // Document Map and the Prepress bar read.
+  const facts = printOutputFacts(meta);
   const selected = useSelectedExportTarget();
   const image = useImageSettings();
   const [busy, setBusy] = useState<ExportTargetId | null>(null);
@@ -183,7 +187,7 @@ export function ExportCenterPanel() {
           <ChoiceGroup label="Outputs">
             {EXPORT_TARGETS.map((t, i) => {
               const sel = selected === t.id;
-              const r = rowReadiness(t, loaded, profileReady);
+              const r = rowReadiness(t, loaded, facts);
               const running = busy === t.id;
               return (
                 <ChoiceRow
@@ -227,7 +231,11 @@ export function ExportCenterPanel() {
                         marginLeft: "auto",
                       }}
                     >
-                      <StatusPill tone={r.tone} testId={`readiness-${t.id}`}>
+                      <StatusPill
+                        tone={r.tone}
+                        testId={`readiness-${t.id}`}
+                        title={r.reason}
+                      >
                         {r.label}
                       </StatusPill>
                       <CockpitBtn

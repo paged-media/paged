@@ -79,6 +79,41 @@ export function linksDocument(): Uint8Array {
   });
 }
 
+/** The CMYK working space the print-output tests name (ADR 265). */
+export const PRESS_PROFILE = "Coated Test Press";
+
+/** One page whose designmap DECLARES `PRESS_PROFILE` as its CMYK working
+ *  space, with no profile bytes: what a file from another machine is. */
+export function declaredProfileDocument(): Uint8Array {
+  return buildFixtureIdml({
+    name: "cockpit-declared-profile",
+    pages: [{ id: "cp1", items: [] }],
+    cmykProfile: PRESS_PROFILE,
+  });
+}
+
+/** The smallest bytes that read as an ICC profile: a 132-byte file whose
+ *  header declares its size and carries the `acsp` signature at byte 36. */
+export function iccBytes(): Uint8Array<ArrayBuffer> {
+  const b = new Uint8Array(new ArrayBuffer(132));
+  b[3] = 132;
+  b.set([0x61, 0x63, 0x73, 0x70], 36);
+  return b;
+}
+
+/** Register `name`'s bytes and make it the working space, the way Color
+ *  settings does: after this the working space is ACTIVE. */
+export async function activateProfile(
+  client: CanvasClient,
+  name: string = PRESS_PROFILE,
+): Promise<void> {
+  await client.registerColorProfile(name, iccBytes());
+  await apply(client, {
+    op: "setColorSettings",
+    args: { cmykProfileName: name, rgbPolicy: null, intent: null, bpc: null },
+  } as Mutation);
+}
+
 /** Swatches for the ink-limit check: total area coverage 300 %, 400 %
  *  and an RGB swatch that has no ink breakdown. */
 export async function inkSwatches(client: CanvasClient): Promise<void> {
