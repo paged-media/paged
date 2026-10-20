@@ -109,6 +109,30 @@ describe("command palette rows", () => {
     expect(unbound.textContent).not.toContain("t.unbound");
   });
 
+  test('a prompt shows the ask row, not "No results."', async () => {
+    setAiAvailability("available");
+    mount();
+    act(() => notifyPalette("open"));
+    const input = await waitFor(() => {
+      const el = document.body.querySelector<HTMLInputElement>("[cmdk-input]");
+      if (!el) throw new Error("no input");
+      return el;
+    });
+    act(() => {
+      fireEvent.change(input, {
+        target: { value: "Make every chapter title one size larger" },
+      });
+    });
+    const ai = await waitFor(() => {
+      const el = document.body.querySelector<HTMLElement>("[data-palette-ai]");
+      if (!el) throw new Error("no ask row");
+      return el;
+    });
+    // Its group is shown: cmdk hides a group no registered item matches.
+    expect(ai.closest("[cmdk-group]")?.hasAttribute("hidden")).toBe(false);
+    expect(document.body.querySelector("[cmdk-empty]")).toBeNull();
+  });
+
   test("F-25: with no AI service the ask row says so and runs nothing", async () => {
     setAiAvailability("unavailable");
     let asked = 0;

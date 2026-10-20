@@ -249,11 +249,15 @@ export function CommandPalette() {
         onValueChange={setQuery}
       />
       <CommandList>
-        <CommandEmpty>No results.</CommandEmpty>
+        {/* The ask row answers any prompt, so a prompt is never "no results". */}
+        {!showAiSeam && <CommandEmpty>No results.</CommandEmpty>}
 
         {showAiSeam && (
           <>
-            <CommandGroup heading="Assistant">
+            {/* forceMount on the group too: cmdk does not register a
+                force-mounted item for filtering, so a group of only that
+                item never counts as matched and is hidden. */}
+            <CommandGroup heading="Assistant" forceMount>
               <CommandItem
                 value={`assistant ${query}`}
                 // The assistant answers any query; ranking must not hide it.
