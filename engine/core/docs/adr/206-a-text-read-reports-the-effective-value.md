@@ -1,9 +1,10 @@
 # ADR 206 — A caret or text range reads the effective value, not the local override
 
 - **Status:** Accepted 2026-10-20.
-- **Scope:** `CanvasModel::story_range_properties` (`crates/paged-canvas/src/model.rs`), and
-  through it every read of a `storyRange:` address: `RequestGet`, `paged.get`, `paged get`,
-  `paged.inspect` and the `RequestElementProperties` snapshot. No wire shape changes.
+- **Scope:** `CanvasModel::story_range_properties` and `CanvasModel::element_read_properties`
+  (`crates/paged-canvas/src/model.rs`); the reads of a `storyRange:` address that go through
+  them: `RequestGet` (`virtual_set.rs`), and so `host.objects.get`, `paged get`, and `paged.get`
+  (`crates/paged-script/src/lib.rs`). No wire shape changes.
 
 ## Context
 
@@ -21,12 +22,13 @@ inherited `null`.
 
 ## Decision
 
-1. **A `storyRange:` read reports the value the text is set with.** For a character path it is
-   the cascade the composer uses, `Document::resolved_run_attrs`: the run's own attribute, then
-   its character style, then its nested style, then its paragraph style's based-on chain down to
-   `[No paragraph style]`. For a paragraph path it is `Document::resolved_paragraph_attrs`: the
-   paragraph's own attribute over its style's chain. InDesign's scripting DOM answers the same
-   way: `insertionPoint.pointSize` is the size the text is set at.
+1. **A read of a `storyRange:` path reports the value the text is set with.** For a character
+   path it is the cascade the composer uses, `Document::resolved_run_attrs`: the run's own
+   attribute, then its character style, then its nested style, then its paragraph style's
+   based-on chain down to `[No paragraph style]`. For a paragraph path it is
+   `Document::resolved_paragraph_attrs`: the paragraph's own attribute over its style's chain.
+   InDesign's scripting DOM answers the same way: `insertionPoint.pointSize` is the size the text
+   is set at.
 
 2. **Mixed means the effective values differ.** The range's values are collapsed after the
    cascade, so a range is mixed exactly when its text is set in more than one way.
@@ -37,14 +39,20 @@ inherited `null`.
    12 pt run do not read as mixed. Other paths keep their unset spelling where unset is a value
    of its own: an unset leading is Auto (`Length(None)`), an unset string attribute reads `""`.
 
-4. **The applied styles stay as named.** `appliedParagraphStyle` and `appliedCharacterStyle` read
-   the style the text names, not a cascade.
+4. **The snapshot still reports what the range itself sets.** `RequestElementProperties` (and
+   `paged.inspect`) answers the range's own attributes, `None` / `""` where it inherits. Its
+   consumers copy formatting: the data merge copies a template story's overrides onto each merged
+   copy, and an effective snapshot made it bake every style value in as a local override (the
+   merge's mutation count went from 403 to 973, and the copies stopped following their styles).
+   One question per door: a read asks "what is it", the snapshot "what is set here".
+
+5. **The applied styles stay as named.** `appliedParagraphStyle` and `appliedCharacterStyle` read
+   the style the text names in both.
 
 ## Consequences
 
-- A read can no longer tell a local override from an inherited value. Nothing in the engine, the
-  SDK or the editor used it for that; an override indicator needs its own path.
 - A read followed by a write of the same value turns an inherited value into a local override.
   That is what InDesign does when a value is typed into the control panel.
 - The editor's `null` → schema-default fallback stays for paths that are still unset after the
   cascade.
+- A caller that needs to know whether a range overrides its style uses the snapshot.
