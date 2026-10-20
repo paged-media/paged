@@ -186,13 +186,14 @@ three silent failures and one missing flag. Each is now a decision:
   name against. It reaches the engine through `HarnessOptions.cmykProfile` (plugin-sdk),
   the load's `cmykIccProfile`.
 - **The bin outlives its verb.** `merge` (with or without `--query`) exited 0 having written
-  nothing, about one run in two. The cause was not the query: `bin.ts` let the verb's promise
-  alone keep the process alive, and while paged.data booted DuckDB the verb awaited work no
-  event-loop handle stood for (a 35 MiB WebAssembly module compiling), so the runtime found
-  the loop empty and ended the process, exit code 0, before the merge had run. The bin now
-  holds the loop open with a timer until the verb settles, for every verb, and a process that
-  ends before then (something calling `process.exit`) says so and exits 70.
-  `test/fixtures/late-plugin.mjs` is the deterministic case: a bundle whose module finishes
+  nothing. The cause was not the query: `bin.ts` let the verb's promise alone keep the process
+  alive, and while paged.data booted DuckDB the verb awaited the compilation of its 35 MiB
+  WebAssembly module, which holds no event-loop handle. With nothing else pending the runtime
+  found the loop empty and exited early, with code 0, before the merge had run. It is an early
+  exit, not a random one. The bin now holds the loop open with a timer until the verb
+  settles, for every verb, and a process that ends before then (something calling
+  `process.exit`) says so and exits 70.
+  `test/fixtures/late-plugin.mjs` reproduces it every time: a bundle whose module finishes
   loading on an unreferenced timer.
 - **`merge` never exits 0 with nothing written.** A query that selects no records, and a
   merge that places none (a template page without `<<field>>` placeholders), are failures
