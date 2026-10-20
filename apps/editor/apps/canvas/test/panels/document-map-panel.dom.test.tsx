@@ -121,11 +121,13 @@ describe("Document Map: states", () => {
       "0Overset stories",
     ])
       expect(text).toContain(part);
-    expect(
-      h.root
-        .querySelector('[data-status-pill="map-x4-readiness"]')
-        ?.getAttribute("data-tone"),
-    ).toBe("warn");
+    // No output intent: the print PDF is PDF 1.7 and exports, as the
+    // Export Center says (ADR 265), never a PDF/X-4 warning.
+    const print = h.root.querySelector(
+      '[data-status-pill="map-print-readiness"]',
+    );
+    expect(print?.textContent).toBe("Ready · PDF 1.7");
+    expect(print?.getAttribute("data-tone")).toBe("ready");
   });
 
   test("follows the model: a page inserted is a second row", async () => {

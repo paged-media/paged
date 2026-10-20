@@ -37,12 +37,15 @@ import {
   cockpitActions,
   MetricTile,
   StatusPill,
+  printOutputFacts,
   useCanvasClient,
   useCollection,
   useDocumentMeta,
   useDocumentStats,
 } from "@paged-media/shell";
 import type { FontSummary, LinkSummary } from "@paged-media/client";
+
+import { exportReadiness, exportTargetById } from "./export-targets";
 
 import { severityCounts, usePreflightFindings } from "./preflight-findings";
 
@@ -69,6 +72,14 @@ export function PublicationHealthPanel() {
   const links = useCollection<LinkSummary>("links");
   const { findings, runCount } = usePreflightFindings(client);
   const loaded = meta != null && meta.pageCount > 0;
+  // The print PDF's readiness is the Export Center's own pill (ADR 265):
+  // the standard the export will meet, not a PDF/X-4 warning for a
+  // document that exports PDF 1.7.
+  const print = exportReadiness(
+    exportTargetById("pdf-x4"),
+    loaded,
+    printOutputFacts(meta),
+  );
 
   const missingFonts = fonts ? fonts.filter((f) => f.isMissing).length : null;
   const missingLinks = links
@@ -125,10 +136,11 @@ export function PublicationHealthPanel() {
         action={
           loaded ? (
             <StatusPill
-              tone={meta.cmykProfileActive ? "ready" : "warn"}
-              testId="x4-readiness"
+              tone={print.tone}
+              testId="print-readiness"
+              title={print.reason}
             >
-              {meta.cmykProfileActive ? "PDF/X-4 ready" : "No output intent"}
+              {print.label}
             </StatusPill>
           ) : undefined
         }

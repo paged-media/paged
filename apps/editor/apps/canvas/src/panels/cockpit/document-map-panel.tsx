@@ -64,6 +64,7 @@ import {
   Icon,
   StatusPill,
   groupSpreads,
+  printOutputFacts,
   statusColor,
   useCamera,
   useCanvasClient,
@@ -88,6 +89,7 @@ import type {
 } from "@paged-media/client";
 
 import { layoutPages, fitCamera } from "../../ui/layout";
+import { exportReadiness, exportTargetById } from "./export-targets";
 import { useAnimatedCamera } from "../../ui/useAnimatedCamera";
 
 /** Map a `LinkSummary.hostKind` (parse-side frame kind: `"Rectangle"`,
@@ -712,7 +714,7 @@ function chipStyle(color: string, seam: boolean): CSSProperties {
   };
 }
 
-/** Kit Health footer — real document metrics + PDF/X-4 readiness +
+/** Kit Health footer — real document metrics + the print PDF's readiness +
  *  the live risk counts (overset stories, missing links, missing
  *  fonts) from the W0.6 wire summaries. Low-res / preflight findings
  *  live in the fuller Publication-health panel. */
@@ -738,6 +740,12 @@ function HealthFooter() {
     ? links.filter((l) => l.status === "missing").length
     : null;
   const missingFonts = fonts ? fonts.filter((f) => f.isMissing).length : null;
+  // The Export Center's own Print PDF pill (ADR 265).
+  const print = exportReadiness(
+    exportTargetById("pdf-x4"),
+    loaded,
+    printOutputFacts(meta),
+  );
   const riskRows: Array<[string, number | null]> = [
     ["Overset stories", overset],
     ["Missing links", missingLinks],
@@ -794,12 +802,13 @@ function HealthFooter() {
               padding: "2px 0",
             }}
           >
-            <span className="pg-ui-xs">PDF/X-4</span>
+            <span className="pg-ui-xs">Print PDF</span>
             <StatusPill
-              tone={meta.cmykProfileActive ? "ready" : "warn"}
-              testId="map-x4-readiness"
+              tone={print.tone}
+              testId="map-print-readiness"
+              title={print.reason}
             >
-              {meta.cmykProfileActive ? "Ready" : "No output intent"}
+              {print.label}
             </StatusPill>
           </div>
           <div
