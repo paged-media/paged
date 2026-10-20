@@ -26,7 +26,7 @@
 // (modules/data/conformance/indesign-merge): 57 records, 2 columns, columns
 // first, 3 pages.
 
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 
@@ -42,6 +42,10 @@ import {
 } from "./helpers";
 
 const DATA = "--plugins=@paged-media/data";
+const SINGLE_RECORD = join(
+  dirname(LONG_RECORD_SET.idml),
+  "single-record.idml",
+);
 // The version of the @paged-media/data this package resolves (the
 // workspace bundle), read beside its exported manifest.
 const DATA_VERSION = (
@@ -172,6 +176,77 @@ describe("paged merge — InDesign Data Merge oracle (long-record-set)", () => {
         "%PDF-",
       );
     }
+  });
+
+  it("--query selects the records, and each field is the CSV's text as written (9.90 stays 9.90)", async () => {
+    const csv = join(tmp.dir, "prices.csv");
+    writeFileSync(
+      csv,
+      "name,sku,price\nWidget,A-1,9.90\nGadget,B-2,19.99\nDoohickey,C-3,1234.50\n",
+    );
+    const contents = async (path: string): Promise<string> =>
+      (
+        (await cli(["get", path, "story", "content", "--no-plugins"])).json
+          .results as Array<{ value: string }>
+      )
+        .map((x) => x.value)
+        .join("\n");
+    for (const query of [
+      undefined,
+      'SELECT * FROM "data"',
+      "SELECT * FROM \"data\" WHERE sku <> 'B-2'",
+    ]) {
+      const out = join(tmp.dir, `query-${query ? query.length : 0}`);
+      const r = await cli([
+        "merge",
+        SINGLE_RECORD,
+        "--data",
+        csv,
+        "--out",
+        out,
+        ...(query ? ["--query", query] : []),
+        DATA,
+      ]);
+      expect(r.code, r.out).toBe(0);
+      const records = query?.includes("WHERE") ? 2 : 3;
+      expect(r.json.records).toBe(records);
+      expect(r.json.outputs[0]).toMatchObject({ records, pages: records });
+      const text = await contents(r.json.outputs[0].path);
+      expect(text).toContain("9.90");
+      expect(text).toContain("1234.50");
+      expect(text.includes("19.99")).toBe(records === 3);
+    }
+  });
+
+  it("a merge that selects or places nothing fails, and writes nothing", async () => {
+    const out = join(tmp.dir, "nothing");
+    const none = await cli([
+      "merge",
+      SINGLE_RECORD,
+      "--data",
+      join(dirname(SINGLE_RECORD), "../csv/single-record.csv"),
+      "--out",
+      out,
+      "--query",
+      "SELECT * FROM \"data\" WHERE false",
+      DATA,
+    ]);
+    expect(none.code, none.out).toBe(1);
+    expect(none.json.error.message).toContain("selects no records");
+    expect(existsSync(out)).toBe(false);
+
+    // A template whose page holds no <<field>> at all places no record.
+    const placed = await cli([
+      "merge",
+      fx.idml,
+      "--data",
+      join(dirname(SINGLE_RECORD), "../csv/single-record.csv"),
+      "--out",
+      out,
+      DATA,
+    ]);
+    expect(placed.code, placed.out).toBe(1);
+    expect(existsSync(out)).toBe(false);
   });
 
   it("merge without the data bundle is a usage error saying what is missing and where it is", async () => {

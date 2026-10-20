@@ -47,6 +47,8 @@
     "repo/paged_repo_wasm.d.ts",
     "dist/paged.js",
     "dist/THIRD-PARTY-NOTICES.md",
+    "fonts/Inter.ttf",
+    "fonts/OFL-inter.txt",
     "README.md"
   ],
   "engines": {

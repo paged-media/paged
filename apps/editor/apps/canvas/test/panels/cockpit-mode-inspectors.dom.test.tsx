@@ -137,7 +137,7 @@ describe("Output readiness", () => {
       id: "paged.output-readiness",
     });
     expect(checks(h)).toEqual({
-      cmyk: { pass: "false", detail: "" },
+      cmyk: { pass: "false", detail: "No CMYK profile" },
       fonts: { pass: "true", detail: "ok" },
       links: { pass: "true", detail: "ok" },
       ppi: { pass: "true", detail: "ok" },

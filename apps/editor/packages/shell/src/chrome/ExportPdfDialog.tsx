@@ -42,6 +42,11 @@ import { Input } from "../components/ui/input";
 import { useCanvasClient } from "../state/canvas-client-context";
 import { useDocument } from "../state/document-context";
 import { oneOf, parseStored, readStoredShape } from "../lib/stored-settings";
+import {
+  printOutputFacts,
+  workingProfileLabel,
+  type PrintOutputFacts,
+} from "../lib/print-output";
 
 type DialogAction = "open" | "close";
 const listeners = new Set<(action: DialogAction) => void>();
@@ -126,8 +131,13 @@ export function ExportPdfDialog() {
   const [form, setForm] = useState<FormState>(loadSaved);
   const [profiles, setProfiles] = useState<string[]>([]);
   const [docName, setDocName] = useState("document");
-  const [activeProfile, setActiveProfile] = useState<string | null>(null);
-  const [profileActive, setProfileActive] = useState(false);
+  // The print-output facts (ADR 266): the Export Center's pill and this
+  // dialog's default standard come from the one derivation.
+  const [print, setPrint] = useState<PrintOutputFacts>(() =>
+    printOutputFacts(null),
+  );
+  const activeProfile = print.profileName;
+  const profileActive = print.profileActive;
   const [phase, setPhase] = useState<Phase>({ kind: "idle" });
   const abortRef = useRef<AbortController | null>(null);
   const [pageCount, setPageCount] = useState(1);
@@ -162,10 +172,10 @@ export function ExportPdfDialog() {
     void client.documentMeta().then((meta) => {
       if (cancelled) return;
       setDocName(meta.documentName || "document");
-      setActiveProfile(meta.cmykProfileName ?? null);
-      setProfileActive(meta.cmykProfileActive ?? false);
+      const facts = printOutputFacts(meta);
+      setPrint(facts);
       setPageCount(meta.pageCount);
-      const canMeetX4 = meta.cmykProfileActive ?? false;
+      const canMeetX4 = facts.standard === "pdfx4";
       setForm((f) => ({
         ...f,
         pageTo: f.allPages ? String(meta.pageCount) : f.pageTo,
@@ -232,7 +242,7 @@ export function ExportPdfDialog() {
         form.outputIntentProfile === "" ? null : form.outputIntentProfile,
       outputCondition:
         form.standard === "pdfx4"
-          ? ((form.outputIntentProfile || activeProfile) ?? null)
+          ? ((form.outputIntentProfile || print.outputIntent) ?? null)
           : null,
       colorPolicy: form.colorPolicy,
       pageFrom: form.allPages ? null : Number(form.pageFrom) - 1,
@@ -350,8 +360,8 @@ export function ExportPdfDialog() {
               onChange={(e) => set("outputIntentProfile", e.target.value)}
             >
               <option value="">
-                {profileActive && activeProfile
-                  ? `Document working space (${activeProfile})`
+                {activeProfile
+                  ? `Document working space (${workingProfileLabel(print)})`
                   : "Document working space"}
               </option>
               {profiles.map((p) => (

@@ -244,20 +244,10 @@ describe("media.paged.slide.importPptx (unit)", () => {
     expect(
       out.slides.every((s) => s.startsWith("plugin:media.paged.slide/slide/")),
     ).toBe(true);
-    // The deck label, named after the file, in ONE batch.
-    const [batch] = b.fake.mutations();
-    expect(b.fake.mutations()).toHaveLength(1);
-    expect(batch!.op).toBe("batch");
-    const ops = (batch as Extract<Mutation, { op: "batch" }>).args.ops;
-    const label = ops.find((o) => o.op === "setDocumentMetadata") as Extract<
-      Mutation,
-      { op: "setDocumentMetadata" }
-    >;
-    expect(label.args.key).toBe(LABEL_KEY);
-    expect(
-      (JSON.parse(label.args.value!) as { data: { deck: { name: string } } })
-        .data.deck.name,
-    ).toBe("Pitch deck");
+    // The deck label is in the package the importer wrote: the open
+    // itself makes no edit (UX audit F-08; the headless spec reads the
+    // label back from the engine).
+    expect(b.fake.mutations()).toEqual([]);
     // The source deck rides along as a container part (export reads it).
     const part = (suffix: string) =>
       [...parts.entries()].find(([k]) => k.endsWith(suffix))?.[1];
