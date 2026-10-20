@@ -76,6 +76,8 @@ and 024 predate that scheme and keep their numbers. Records 200–217 were writt
 | [264](264-a-remembered-grant-is-the-documents-own.md) | A remembered grant is the document's own, keyed by what the host opened | Accepted 2026-10-20 |
 | [265](265-dock-tabs-fit-the-dock.md) | The dock's tabs fit the dock | Accepted 2026-10-20 |
 | [266](266-one-source-for-the-print-output-facts.md) | One source for the print-output facts | Accepted 2026-10-20 |
+| [267](267-margins-and-columns-on-the-page.md) | Margins and columns are drawn on the page | Accepted 2026-10-20 |
+| [268](268-owned-native-text-keeps-the-click.md) | Owned native text keeps the Type-tool click | Accepted 2026-10-20 |
 
 Decisions made in other repositories that this editor's code rests on are listed in
 [`../README.md`](../README.md). Comments in the source also cite ADR 025 (the journal) and

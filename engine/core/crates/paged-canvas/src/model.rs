@@ -10211,9 +10211,12 @@ impl CanvasModel {
     /// consumes this through `useCollection<LinkSummary>("links")`.
     pub fn links(&self) -> Vec<crate::channel::LinkSummary> {
         use crate::channel::LinkSummary;
-        // panels.md gap 2 — frames whose image the build couldn't
-        // resolve/decode (drew the placeholder) are "missing".
+        // panels.md gap 2 — frames whose link the build couldn't resolve
+        // (drew the placeholder) are "missing"; frames whose link resolved
+        // to bytes no decoder reads (an EPS) are "undecoded" — the file is
+        // there, the frame paints its own fill (engine ADR 207).
         let missing = self.built.diagnostics.missing_image_frame_ids();
+        let undecoded = self.built.diagnostics.undecoded_image_frame_ids();
         // panels.md gap 3 — placed-image colour space + ppi lives in
         // the per-spread side map keyed by host-frame self_id.
         let summary = |self_id: String,
@@ -10224,6 +10227,8 @@ impl CanvasModel {
             LinkSummary {
                 status: if missing.contains(&self_id) {
                     "missing"
+                } else if undecoded.contains(&self_id) {
+                    "undecoded"
                 } else {
                     "ok"
                 }
@@ -15170,6 +15175,58 @@ mod tests {
         // The link points at a non-existent asset and no resolver was
         // configured, so the build drew the placeholder → "missing".
         assert_eq!(l.status, "missing");
+    }
+
+    /// Engine ADR 207 — a placed image whose bytes are present but that no
+    /// decoder reads (an EPS: no PostScript interpreter, by declaration)
+    /// is `"undecoded"`, not `"missing"`; a link to nothing beside it is
+    /// still `"missing"`.
+    #[test]
+    fn undecodable_placed_bytes_are_undecoded_not_missing() {
+        use std::io::Write;
+        let mut buf = Vec::new();
+        {
+            let mut zip = zip::ZipWriter::new(std::io::Cursor::new(&mut buf));
+            let opts: zip::write::SimpleFileOptions = zip::write::SimpleFileOptions::default()
+                .compression_method(zip::CompressionMethod::Stored);
+            zip.start_file("mimetype", opts).unwrap();
+            zip.write_all(b"application/vnd.adobe.indesign-idml-package")
+                .unwrap();
+            zip.start_file("designmap.xml", opts).unwrap();
+            zip.write_all(
+                br#"<?xml version="1.0" encoding="UTF-8"?>
+<Document DOMVersion="13.1" Self="d1">
+<idPkg:Spread src="Spreads/Spread_s1.xml" xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging"/>
+</Document>"#,
+            )
+            .unwrap();
+            zip.start_file("Spreads/Spread_s1.xml", opts).unwrap();
+            zip.write_all(
+                br#"<?xml version="1.0" encoding="UTF-8"?>
+<idPkg:Spread xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging" DOMVersion="13.1">
+<Spread Self="s1" PageCount="1">
+<Page Self="p1" Name="1" GeometricBounds="0 0 792 612" ItemTransform="1 0 0 1 0 0"/>
+<Rectangle Self="eps" GeometricBounds="0 0 100 100" ItemTransform="1 0 0 1 50 50">
+<Image Self="img1" LinkResourceURI="file:///legacy.eps"><Properties><Contents><![CDATA[JSFQUy1BZG9iZS0zLjAgRVBTRi0zLjAKJSVCb3VuZGluZ0JveDogMCAwIDcyIDcyCm5ld3BhdGggMCAwIG1vdmV0byA3MiA3MiBsaW5ldG8gc3Ryb2tlCiUlRU9GCg==]]></Contents></Properties></Image>
+</Rectangle>
+<Rectangle Self="lost" GeometricBounds="0 0 100 100" ItemTransform="1 0 0 1 200 50">
+<Image Self="img2" LinkResourceURI="file:///lost-plate.tif"/>
+</Rectangle>
+</Spread></idPkg:Spread>"#,
+            )
+            .unwrap();
+            zip.finish().unwrap();
+        }
+        let model = CanvasModel::load("doc-eps", &buf, CanvasOptions::default()).unwrap();
+        let status = |id: &str| {
+            model
+                .links()
+                .into_iter()
+                .find(|l| l.host_self_id == id)
+                .map(|l| l.status)
+        };
+        assert_eq!(status("eps").as_deref(), Some("undecoded"));
+        assert_eq!(status("lost").as_deref(), Some("missing"));
     }
 
     #[test]

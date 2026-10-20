@@ -144,6 +144,34 @@ describe("Publication health: states", () => {
     });
   });
 
+  test("a placed EPS whose bytes are there is not a missing link (engine ADR 207)", async () => {
+    covers("panel:paged.publication-health");
+    const h = await mountPanel(PublicationHealthPanel, {
+      id: "paged.publication-health",
+    });
+    const pageId = h.handle?.pageIds[0];
+    const placed = await h.mutate({
+      op: "insertFrame",
+      args: { pageId, bounds: [72, 72, 200, 200] },
+    } as never);
+    const frame = (placed as { payload: { createdId: { id: string } } }).payload
+      .createdId;
+    await h.mutate({
+      op: "placeImage",
+      args: { elementId: frame.id, uri: "file:///assets/legacy.eps" },
+    } as never);
+    await h.mutate({
+      op: "replaceImageBytes",
+      args: {
+        elementId: frame.id,
+        bytes: Array.from(
+          new TextEncoder().encode("%!PS-Adobe-3.0 EPSF-3.0\n%%EOF\n"),
+        ),
+      },
+    } as never);
+    expect(risks(h)["missing-links"]).toBe("0");
+  });
+
   test("a font the text names and the session lacks is counted as it is applied", async () => {
     covers("panel:paged.publication-health");
     const h = await mountPanel(PublicationHealthPanel, {
