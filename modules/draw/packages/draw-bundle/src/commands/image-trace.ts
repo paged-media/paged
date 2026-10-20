@@ -59,27 +59,23 @@
 // hole, which the paint-order rule paints solid. Both rules live in
 // draw-geometry; no winding is written in this module.
 //
-// MUTATION / UNDO SHAPE (measured against the booted engine, 0.64.0; the
-// RFI C-15 rule — assert the real count, never claim "one undo"):
-// TWO batches ⇒ 2 undo steps. Batch 1 creates the colour swatches and
-// inserts every contour as its own path; batch 2 re-merges each region's
-// contours through the `framePath` door, deletes the surplus elements,
-// paints, stamps the record and groups.
+// MUTATION / UNDO SHAPE (the RFI C-15 rule — assert the real count,
+// never claim "one undo"): ONE batch ⇒ 1 undo step (DRW-6, ADR 360). The
+// batch creates the colour swatches, inserts every contour as its own
+// path and names it (`bindCreated`), then by handle re-merges each
+// region's contours through the `framePath` door, deletes the surplus
+// elements, paints and marks each region, stamps the record and groups.
 //
-// TWO IS STILL THE FLOOR, and the reason changed. A batch can name what
-// it just inserted now (C-15's `bindCreated`), so the re-merge, the
-// paint and the group COULD all ride batch 1 by handle. The RECORD
-// cannot: it names the traced regions by element id inside the source's
-// JSON metadata (`imageTrace.regions`), and a `$h:` handle in text is
-// stored as written, never resolved (measured, pinned in
-// `test/headless/minted.spec.ts`). The appearance bake's record hits
-// the same wall. The record is what tells traced artwork from drawn
-// artwork in a reopened document, so its shape is not changed to dodge
-// that.
-//
-// What DID change: what each batch created comes off the engine's reply
-// (`commands/minted.ts`) — the contours batch 1 minted, the group batch
-// 2 made — instead of three reads of the whole scene tree.
+// It used to be TWO: the record named the traced regions by element id
+// inside the source's JSON metadata (`imageTrace.regions`), where a `$h:`
+// handle is stored as written, never resolved (pinned in
+// `test/headless/minted.spec.ts`), so it waited for a first batch's ids.
+// The record no longer names them. Each region carries a marker naming
+// its source instead (`tracedRegion.of`, an id that exists before the
+// batch), which is what tells traced artwork from drawn artwork in a
+// reopened document. A record written before ADR 360 still lists
+// `regions`; `imageTraceOf` reads it. What the batch created comes off
+// the engine's reply (`commands/minted.ts`).
 //
 // KNOWN GAP, named rather than papered over: the trace is fitted to the
 // FRAME's bounds. A placed image's OWN transform inside its frame (fit,
@@ -143,7 +139,12 @@ import {
   type PageOrigin,
 } from "../page-origin";
 import { groupMutationFor } from "./group";
-import { bindMinted, mintedLeaves, mutateMinting } from "./minted";
+import { bindMinted, mutateMinting } from "./minted";
+import {
+  bindCreatedMutationFor,
+  handleElementId,
+  oneBatchFor,
+} from "./batch-handles";
 import { insertPathMutationFor } from "../handlers/insert-path";
 
 import { registerCommand } from "../command-registry";
@@ -177,7 +178,9 @@ export interface ImageTraceRecord {
   scale: number;
   /** The options the trace actually ran with. */
   options: Required<TraceOptions>;
-  /** Emitted region ids, in insertion order. */
+  /** Emitted region ids, in insertion order, as a record written before
+   *  ADR 360 listed them; empty for a newer trace, whose regions carry a
+   *  {@link TracedRegionMarker} instead. Never written by a new trace. */
   regions: string[];
   /** Regions dropped by `maxRegions` — non-zero means the artwork is an
    *  INCOMPLETE trace, and the value says by how much. */
@@ -214,6 +217,23 @@ export function imageTraceOf(
   };
 }
 
+/** The marker stamped on every traced region (ADR 360): which image it
+ *  was traced from. */
+export interface TracedRegionMarker {
+  of: ElementId;
+}
+
+/** Read the traced-region marker out of an envelope, or null. */
+export function tracedRegionOf(
+  env: PluginMetadataEnvelope | null,
+): TracedRegionMarker | null {
+  const raw = (env?.data as { tracedRegion?: unknown } | undefined)
+    ?.tracedRegion;
+  if (!raw || typeof raw !== "object") return null;
+  const of = (raw as { of?: ElementId }).of;
+  return of && typeof of.id === "string" ? { of } : null;
+}
+
 /** Merge (or, with `null`, drop) the trace record in an envelope,
  *  preserving every other draw metadata key. */
 export function withImageTrace(
@@ -225,7 +245,11 @@ export function withImageTrace(
     delete data.imageTrace;
     if (Object.keys(data).length === 0) return null;
   } else {
-    data.imageTrace = record;
+    // A new record names no region ids (ADR 360): only a legacy record
+    // being carried forward keeps its list.
+    const { regions, ...rest } = record;
+    data.imageTrace =
+      Array.isArray(regions) && regions.length > 0 ? record : rest;
   }
   return {
     v: prev?.v ?? 1,
@@ -249,7 +273,7 @@ export interface TracePlanRegion {
   color: Rgb;
 }
 
-/** Everything the two batches need, resolved once. Pure data — the
+/** Everything the trace batch needs, resolved once. Pure data — the
  *  conformance spec builds one from a real trace and drives the real
  *  engine with it. */
 export interface TracePlan {
@@ -418,7 +442,7 @@ export function traceSwatchMutationFor(id: string, color: Rgb): Mutation {
 
 /** Split a compound table back into its contours (the `insertPath` door
  *  carries ONE contour, so a region with holes is inserted as N paths and
- *  re-merged in batch 2). */
+ *  re-merged by handle later in the same batch). */
 function contoursOf(table: AnchorTable): AnchorTriple[][] {
   const starts = table.subpathStarts.length > 0 ? table.subpathStarts : [0];
   const out: AnchorTriple[][] = [];
@@ -430,22 +454,38 @@ function contoursOf(table: AnchorTable): AnchorTriple[][] {
   return out;
 }
 
-/** BATCH 1 — the colour swatches, then one `insertPath` per contour of
- *  every region, in plan order (which is how the minted ids are chunked
- *  back onto their regions afterwards). */
+/** The batch handle of contour `contour` of region `region`. */
+export const traceContourHandle = (region: number, contour: number): string =>
+  `trace-${region}-${contour}`;
+
+/** The first half of the trace batch — the colour swatches, then one
+ *  `insertPath` per contour of every region, in plan order, each named
+ *  by {@link traceContourHandle} right after it. */
 export function traceInsertBatchFor(plan: TracePlan): Mutation {
   const ops: Mutation[] = plan.swatches.map((s) =>
     traceSwatchMutationFor(s.id, s.color),
   );
-  for (const region of plan.regions) {
-    for (const contour of contoursOf(region.table)) {
+  plan.regions.forEach((region, r) => {
+    contoursOf(region.table).forEach((contour, c) => {
       ops.push(insertPathMutationFor(plan.pageId, contour, false));
-    }
-  }
+      ops.push(bindCreatedMutationFor(traceContourHandle(r, c)));
+    });
+  });
   return { op: "batch", args: { ops } };
 }
 
-/** What batch 2 resolved each region to: the surviving element id (a
+/** Every region bound to its contours' batch handles: what the one trace
+ *  batch addresses them by (ADR 360). */
+export function traceHandleBindings(plan: TracePlan): TraceRegionBinding[] {
+  return plan.regions.map((region, r) => {
+    const ids = Array.from({ length: region.contours }, (_, c) =>
+      handleElementId(traceContourHandle(r, c)),
+    );
+    return { region, keep: ids[0]!, absorb: ids.slice(1) };
+  });
+}
+
+/** What the finishing ops resolve each region to: the surviving element id (a
  *  region's first contour absorbs the rest) and the contour ids that get
  *  deleted again. */
 export interface TraceRegionBinding {
@@ -454,7 +494,7 @@ export interface TraceRegionBinding {
   absorb: ElementId[];
 }
 
-/** Chunk the ids minted by batch 1 back onto their regions. Insertion
+/** Chunk ids minted by an insert (in insertion order) onto their regions. Insertion
  *  order == tree order (the appearance-bake finding), so this is a walk,
  *  not a guess. Returns null when the count does not match — the caller
  *  then refuses rather than mis-binding. */
@@ -496,12 +536,12 @@ const stamp = (
   },
 });
 
-/** BATCH 2 — re-merge every multi-contour region through the SAME
- *  `framePath` door Make Compound Path uses, fill each survivor with its
- *  traced colour (and clear the stroke — a traced region is a FILL, and
- *  an inherited document default stroke would outline every shape),
- *  stamp the record on the source and wrap the artwork in one group.
- *  One batch ⇒ one undo step. */
+/** The second half of the trace batch — re-merge every multi-contour
+ *  region through the SAME `framePath` door Make Compound Path uses, fill
+ *  each survivor with its traced colour (and clear the stroke — a traced
+ *  region is a FILL, and an inherited document default stroke would
+ *  outline every shape), mark it as traced from the source, stamp the
+ *  record on the source and wrap the artwork in one group. */
 export function traceFinishBatchFor(args: {
   plan: TracePlan;
   bindings: readonly TraceRegionBinding[];
@@ -528,6 +568,12 @@ export function traceFinishBatchFor(args: {
     }
     ops.push(colorRef(binding.keep, "frameFillColor", binding.region.swatchId));
     ops.push(colorRef(binding.keep, "frameStrokeColor", null));
+    ops.push(
+      stamp(binding.keep, {
+        v: 1,
+        data: { tracedRegion: { of: args.plan.source } },
+      }),
+    );
   }
   ops.push(
     stamp(args.plan.source, withImageTrace(args.sourceEnvelope, args.record)),
@@ -540,8 +586,25 @@ export function traceFinishBatchFor(args: {
 
 // ------------------------------------------------------------ appliers
 
+/** The whole trace as ONE batch, one undo step (DRW-6, ADR 360). */
+export function traceBatchFor(args: {
+  plan: TracePlan;
+  record: ImageTraceRecord;
+  sourceEnvelope: PluginMetadataEnvelope | null;
+}): Mutation {
+  return oneBatchFor([
+    traceInsertBatchFor(args.plan),
+    traceFinishBatchFor({
+      plan: args.plan,
+      bindings: traceHandleBindings(args.plan),
+      record: args.record,
+      sourceEnvelope: args.sourceEnvelope,
+    }),
+  ]);
+}
+
 /**
- * Commit a resolved plan: TWO batches, the undo shape the module header
+ * Commit a resolved plan: ONE batch, the undo shape the module header
  * states. Returns the surviving element ids (empty on a refusal, always
  * logged, never thrown — the dash-command convention).
  *
@@ -560,30 +623,6 @@ export async function applyImageTracePlan(
     );
     return [];
   }
-  const inserted = await mutateMinting(host, traceInsertBatchFor(plan));
-  if (!inserted.outcome.applied) {
-    host.log.warn(
-      `${label}: contour insert rejected by engine: ${JSON.stringify(
-        inserted.outcome.error,
-      )}`,
-    );
-    return [];
-  }
-  // What batch 1 minted, in mint order — insertion order, which is how
-  // the ids are chunked back onto their regions. Off the engine's reply,
-  // not a tree diff (`commands/minted.ts`).
-  const minted = mintedLeaves(inserted).filter((e) => typeof e.id === "string");
-  const bindings = bindTraceRegions(plan, minted);
-  if (!bindings) {
-    host.log.warn(
-      `${label}: expected ${plan.regions.reduce(
-        (n, r) => n + r.contours,
-        0,
-      )} inserted paths, found ${minted.length} — leaving the insert in ` +
-        `place, not painting or grouping`,
-    );
-    return minted;
-  }
   const sourceEnvelope = await host.document
     .getMetadata(plan.source)
     .catch(() => null);
@@ -593,35 +632,33 @@ export async function applyImageTracePlan(
     traced: [plan.raster.width, plan.raster.height],
     scale: plan.raster.scale,
     options: plan.options,
-    regions: bindings.map((b) => b.keep.id as string),
+    regions: [],
     truncated: plan.truncated,
     oneShot: true,
   };
-  const finish = traceFinishBatchFor({
-    plan,
-    bindings,
-    record,
-    sourceEnvelope,
-  });
-  const keeps = bindings.map((b) => b.keep);
-  // Batch 2 creates ONE thing, and only with two or more regions: the
-  // group. Then the seam says which id it got; otherwise nothing is
-  // created and there is nothing to ask.
-  const grouped = keeps.length >= 2;
-  const finished = grouped
-    ? await mutateMinting(host, finish)
-    : { outcome: await host.document.mutate(finish), minted: [] };
-  if (!finished.outcome.applied) {
+  const batch = traceBatchFor({ plan, record, sourceEnvelope });
+  const traced = await mutateMinting(host, batch);
+  if (!traced.outcome.applied) {
     host.log.warn(
-      `${label}: paint/group batch rejected by engine: ${JSON.stringify(
-        finished.outcome.error,
+      `${label}: trace batch rejected by engine: ${JSON.stringify(
+        traced.outcome.error,
       )}`,
     );
-    return keeps;
+    return [];
   }
-  const group = grouped
-    ? (bindMinted(finished, finish)?.groups[0] ?? null)
-    : null;
+  // What each handle minted — and the group — off the engine's reply,
+  // not a tree diff (`commands/minted.ts`).
+  const bound = bindMinted(traced, batch);
+  const keeps = plan.regions
+    .map((_, r) => bound?.byHandle.get(traceContourHandle(r, 0)))
+    .filter((e): e is ElementId => e !== undefined);
+  if (keeps.length !== plan.regions.length) {
+    host.log.warn(
+      `${label}: the engine's reply names ${keeps.length} of ` +
+        `${plan.regions.length} traced regions`,
+    );
+  }
+  const group = bound?.groups[0] ?? null;
   await host.selection.set(group ? [group] : keeps);
   if (plan.truncated > 0) {
     host.log.warn(

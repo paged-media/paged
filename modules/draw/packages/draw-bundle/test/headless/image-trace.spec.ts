@@ -86,8 +86,11 @@ import {
   pixelToPageAffine,
   rasterDecoderAvailable,
   regionTableFor,
+  traceContourHandle,
   traceFinishBatchFor,
+  traceHandleBindings,
   traceInsertBatchFor,
+  tracedRegionOf,
   traceOptionsFrom,
   tracePlanFor,
   traceSwatchMutationFor,
@@ -557,14 +560,23 @@ describe("draw conformance — IMAGE TRACE v0", () => {
       // One swatch (black) + two contours (outer + hole).
       expect(plan.swatches).toHaveLength(1);
       expect(plan.regions[0].contours).toBe(2);
-      expect(batch.args.ops).toHaveLength(3);
+      expect(batch.args.ops).toHaveLength(5);
       expect(batch.args.ops[0]).toEqual(
         traceSwatchMutationFor(plan.swatches[0].id, plan.swatches[0].color),
       );
       expect((batch.args.ops[1] as { op: string }).op).toBe("insertPath");
-      expect((batch.args.ops[2] as { op: string }).op).toBe("insertPath");
+      // Each contour is named right after its insert (ADR 360).
+      expect(batch.args.ops[2]).toEqual({
+        op: "bindCreated",
+        args: { handle: traceContourHandle(0, 0) },
+      });
+      expect((batch.args.ops[3] as { op: string }).op).toBe("insertPath");
+      expect(batch.args.ops[4]).toEqual({
+        op: "bindCreated",
+        args: { handle: traceContourHandle(0, 1) },
+      });
       // `insertPath` carries ONE contour and no `subpathStarts`, which is
-      // exactly why batch 2 has to re-merge through `framePath`.
+      // exactly why the batch has to re-merge through `framePath`.
       const first = batch.args.ops[1] as {
         args: { pageId: string; anchors: unknown[]; open: boolean };
       };
@@ -586,7 +598,15 @@ describe("draw conformance — IMAGE TRACE v0", () => {
       ).toBeNull();
     });
 
-    it("batch 2 = re-merge + delete the surplus + fill + clear stroke + stamp", () => {
+    it("traceHandleBindings binds every region to its contours' handles", () => {
+      const plan = ringPlan();
+      const bound = traceHandleBindings(plan);
+      expect(bound).toHaveLength(1);
+      expect(bound[0].keep).toEqual(poly(`$h:${traceContourHandle(0, 0)}`));
+      expect(bound[0].absorb).toEqual([poly(`$h:${traceContourHandle(0, 1)}`)]);
+    });
+
+    it("the finishing ops = re-merge + delete the surplus + fill + clear stroke + mark + stamp", () => {
       const plan = ringPlan();
       const bindings = bindTraceRegions(plan, [poly("a"), poly("b")])!;
       const batch = traceFinishBatchFor({
@@ -606,15 +626,25 @@ describe("draw conformance — IMAGE TRACE v0", () => {
       }) as Extract<Mutation, { op: "batch" }>;
       const kinds = batch.args.ops.map((o) => (o as { op: string }).op);
       // framePath (re-merge) → deleteFrame (the absorbed contour) →
-      // fill → stroke:null → the record on the SOURCE. ONE region, so no
-      // group (a one-member group would be noise).
+      // fill → stroke:null → the region's marker → the record on the
+      // SOURCE. ONE region, so no group (a one-member group would be
+      // noise).
       expect(kinds).toEqual([
         "setElementProperty",
         "deleteFrame",
         "setElementProperty",
         "setElementProperty",
         "setPluginMetadata",
+        "setPluginMetadata",
       ]);
+      // The marker names the source the region was traced from.
+      const marker = batch.args.ops[4] as {
+        args: { elementId: ElementId; value: string };
+      };
+      expect(marker.args.elementId).toEqual(poly("a"));
+      expect(tracedRegionOf(JSON.parse(marker.args.value))).toEqual({
+        of: IMAGE,
+      });
       expect(batch.args.ops[2]).toEqual({
         op: "setElementProperty",
         args: {
@@ -685,6 +715,13 @@ describe("draw conformance — IMAGE TRACE v0", () => {
       expect(back.options).toEqual(TRACE_DEFAULTS);
       // Dropping the record leaves the other keys alone.
       expect(imageTraceOf(withImageTrace(env, null))).toBeNull();
+      // A record written since ADR 360 names no region ids: it is written
+      // without the list and reads back with an empty one.
+      const fresh = withImageTrace(null, { ...record, regions: [] })!;
+      expect(
+        (fresh.data.imageTrace as Record<string, unknown>).regions,
+      ).toBeUndefined();
+      expect(imageTraceOf(fresh)!.regions).toEqual([]);
       expect(imageTraceOf(null)).toBeNull();
       expect(imageTraceOf({ v: 1, data: { imageTrace: "nope" } })).toBeNull();
     });
@@ -762,7 +799,7 @@ describe("draw conformance — IMAGE TRACE v0", () => {
       expect(await leafIds(h)).toEqual(before);
     });
 
-    it("A TRACED RING LANDS AS ONE COMPOUND ELEMENT — TWO batches", async () => {
+    it("A TRACED RING LANDS AS ONE COMPOUND ELEMENT — ONE batch", async () => {
       const before = await leafIds(h);
       const plan = ringPlan();
       const created = await applyImageTracePlan(h.host, plan);
@@ -794,15 +831,13 @@ describe("draw conformance — IMAGE TRACE v0", () => {
       const record = imageTraceOf(await h.host.document.getMetadata(IMAGE));
       expect(record?.uri).toBe(F7_PLACED_IMAGE.uri);
       expect(record?.oneShot).toBe(true);
-      expect(record?.regions).toEqual([created[0].id]);
+      // The record names no region; the region names its source (ADR 360).
+      expect(record?.regions).toEqual([]);
+      expect(
+        tracedRegionOf(await h.host.document.getMetadata(created[0])),
+      ).toEqual({ of: IMAGE });
 
-      // TWO batches ⇒ TWO undos. The record above names the region by
-      // element id inside JSON metadata, where a `$h:` handle is never
-      // resolved — so it can only be written once a first batch has
-      // answered with the id (module header).
-      await h.host.document.undo();
-      // Batch 2 undone: the absorbed contour is back as its own element.
-      expect(await leafIds(h)).toHaveLength(before.length + 2);
+      // ONE batch ⇒ ONE undo (DRW-6).
       await h.host.document.undo();
       expect(await leafIds(h)).toEqual(before);
       expect(imageTraceOf(await h.host.document.getMetadata(IMAGE))).toBeNull();
@@ -831,7 +866,6 @@ describe("draw conformance — IMAGE TRACE v0", () => {
       expect(Math.abs(ringArea(innerRing))).toBeCloseTo(12 * 12 * 25, -1);
 
       await h.host.document.undo();
-      await h.host.document.undo();
     });
 
     it("SEVERAL regions land as a GROUP, each with its own swatch", async () => {
@@ -859,20 +893,17 @@ describe("draw conformance — IMAGE TRACE v0", () => {
       expect(selected[0].kind).toBe("group");
 
       await h.host.document.undo();
-      await h.host.document.undo();
       expect(await leafIds(h)).toEqual(before);
     });
 
-    // What each batch created used to cost reads of the whole scene tree:
-    // before and after batch 1, diffed, and once more to find the group.
-    // It comes off the engine's reply now (`commands/minted.ts`). A batch
-    // can apply and the ids still be wrong, so a commit runs through every
-    // lane of that seam and each must leave the SAME document — the
-    // regions' outlines and paint, the group, the record naming the
-    // regions, the selection — in the same two undo steps, which restore
-    // it exactly. Two is the floor: the record names the regions by id
-    // inside the source's JSON metadata, where a handle is never resolved
-    // (module header).
+    // What the trace created used to cost reads of the whole scene tree:
+    // before and after the insert, diffed, and once more to find the
+    // group. It comes off the engine's reply now (`commands/minted.ts`). A
+    // batch can apply and the ids still be wrong, so a commit runs through
+    // every lane of that seam and each must leave the SAME document — the
+    // regions' outlines, paint and markers, the group, the record, the
+    // selection — in the same one undo step, which restores it exactly
+    // (DRW-6, ADR 360).
     // [scenario, plan]
     for (const [name, plan] of [
       ["a ring (one region, no group)", () => ringPlan()],
@@ -887,11 +918,8 @@ describe("draw conformance — IMAGE TRACE v0", () => {
           });
         const shipped = await through("oneBatch");
         expect(shipped.result).toHaveLength(fixed.regions.length);
-        expect(shipped.work.mutations.map((m) => m.op)).toEqual([
-          "batch",
-          "batch",
-        ]);
-        expect(shipped.undoSteps).toBe(2);
+        expect(shipped.work.mutations.map((m) => m.op)).toEqual(["batch"]);
+        expect(shipped.undoSteps).toBe(1);
         expect(shipped.restored).toBe(true);
         // As found: 2 for the ring, 3 with a group to find.
         expect(shipped.work.count("document.tree")).toBe(0);
@@ -1375,8 +1403,7 @@ describe("draw conformance — IMAGE TRACE off the calling thread", () => {
       for (const id of created) {
         contours.push((await contoursOf(h, id))?.starts.length ?? 0);
       }
-      // TWO batches ⇒ two undo steps (unchanged by this lane).
-      await h.host.document.undo();
+      // ONE batch ⇒ one undo step (unchanged by this lane).
       await h.host.document.undo();
       expect(await leafIds(h)).toEqual(before);
       return { made: made.length, contours };

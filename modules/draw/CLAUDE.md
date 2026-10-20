@@ -359,14 +359,13 @@ fallback for an engine that refuses the one batch, and
 cannot say what a batch created — requiring the SAME document from each
 (`test/headless/one-batch.ts` has the hosts and the comparison).
 
-THE APPEARANCE BAKE STAYS TWO BATCHES, and that is the floor the rules
-allow, not a conversion left undone: the carrier's bake record names its
-derived layers by element id INSIDE its JSON metadata envelope
-(`appearanceBake.layers`, which release and a reopened document read),
-and a `$h:` handle in text is stored as written, never resolved
-(measured, `minted.spec.ts`). So the record can only be written once a
-first mutation has answered with the ids. What changed is that those ids
-come off the reply (`commands/minted.ts`): 0 tree reads, was 2.
+THE APPEARANCE BAKE AND IMAGE TRACE ARE ONE BATCH (ADR 360). Their
+records used to name the ids the batch minted inside JSON metadata, where
+a `$h:` handle is never resolved, so each took two. The records name no
+minted id now: a bake's layers carry `appearanceLayer.of` (the carrier)
+and are found in its group (`bakedLayersOf`); a trace's regions carry
+`tracedRegion.of` (the image). A record written before ADR 360 still
+lists its ids and is still read.
 
 COMPOUND-PATH RELEASE IS ONE BATCH FOR THE WHOLE SELECTION (`release
 BatchForAll`): per element, contour 0 back onto the survivor and every
