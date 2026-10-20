@@ -922,9 +922,8 @@ pub fn lower_with(doc: &DocxDocument, options: LowerOptions) -> LoweredDoc {
         endnote_numbering: lower_note_numbering(&doc.endnote_numbering(k)),
         ..lower_section(s)
     };
-    let section = full(0, doc.sections.first());
-    let sections = if doc.sections.is_empty() {
-        vec![section.clone()]
+    let sections: Vec<LoweredSection> = if doc.sections.is_empty() {
+        vec![full(0, None)]
     } else {
         doc.sections
             .iter()
@@ -932,10 +931,17 @@ pub fn lower_with(doc: &DocxDocument, options: LowerOptions) -> LoweredDoc {
             .zip(&placements)
             .map(|((k, s), p)| LoweredSection {
                 story: p.story,
+                frame_columns: p.frame.count.max(1),
+                frame_gutter_pt: if p.frame.count > 1 {
+                    p.frame.gutter_pt
+                } else {
+                    0.0
+                },
                 ..full(k, Some(s))
             })
             .collect()
     };
+    let section = sections[0].clone();
     let styles = ctx.ordered_styles();
 
     LoweredDoc {
@@ -2651,6 +2657,8 @@ fn lower_section(section: Option<&Section>) -> LoweredSection {
         margin_left_pt: twip_to_pt(s.margin_left),
         margin_right_pt: twip_to_pt(s.margin_right),
         columns: s.columns.max(1),
+        frame_columns: 1,
+        frame_gutter_pt: 0.0,
         first_block: s.first_block,
         story: 0,
         header_footer: None,

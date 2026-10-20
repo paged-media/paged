@@ -26,6 +26,13 @@
 // progress bar, and surfaces Cancel through an AbortController. The
 // command (`paged.file.exportPdf`) only opens it via the module
 // emitter below (the CommandPalette `notifyPalette` pattern).
+//
+// A finished export closes the dialog (ADR 272): the PDF is a download, so
+// the dialog has nothing left to offer, and a notice at the window's foot
+// names the file, its pages and any findings. A failed export keeps the
+// dialog open with the error beside the options that produced it, so the
+// user can change one and export again. Cancel during the export aborts it
+// and the dialog stays open, as it was.
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ExportPdfWireOptions } from "@paged-media/client";
@@ -39,6 +46,7 @@ import {
 } from "../components/ui/dialog";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
+import { Icon } from "../icons";
 import { useCanvasClient } from "../state/canvas-client-context";
 import { useDocument } from "../state/document-context";
 import { oneOf, parseStored, readStoredShape } from "../lib/stored-settings";
@@ -116,6 +124,17 @@ type Phase =
   | { kind: "error"; message: string }
   | { kind: "done"; pages: number; diagnostics: string[] };
 
+/** What the notice after a finished export says. */
+interface ExportNotice {
+  fileName: string;
+  pages: number;
+  diagnostics: string[];
+}
+
+/** How long the notice stays (ms); it also closes on its ✕. A notice with
+ *  findings stays until it is closed: the findings are worth reading. */
+const NOTICE_MS = 6000;
+
 const fieldRow: React.CSSProperties = {
   display: "flex",
   alignItems: "center",
@@ -141,12 +160,22 @@ export function ExportPdfDialog() {
   const [phase, setPhase] = useState<Phase>({ kind: "idle" });
   const abortRef = useRef<AbortController | null>(null);
   const [pageCount, setPageCount] = useState(1);
+  const [notice, setNotice] = useState<ExportNotice | null>(null);
+
+  useEffect(() => {
+    if (!notice || notice.diagnostics.length > 0) return;
+    const t = setTimeout(() => setNotice(null), NOTICE_MS);
+    return () => clearTimeout(t);
+  }, [notice]);
 
   // Module-emitter subscription (the notifyPalette pattern).
   useEffect(() => {
     const fn = (action: DialogAction) => {
       setOpen(action === "open");
-      if (action === "open") setPhase({ kind: "idle" });
+      if (action === "open") {
+        setPhase({ kind: "idle" });
+        setNotice(null);
+      }
     };
     listeners.add(fn);
     return () => {
@@ -264,6 +293,10 @@ export function ExportPdfDialog() {
       bookmarks: form.bookmarks,
       tagged: form.tagged,
     };
+    const fileName = `${docName}.pdf`;
+    const pages = form.allPages
+      ? pageCount
+      : Number(form.pageTo) - Number(form.pageFrom) + 1;
     const controller = new AbortController();
     abortRef.current = controller;
     setPhase({ kind: "exporting", done: 0, total: 1 });
@@ -280,10 +313,13 @@ export function ExportPdfDialog() {
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url;
-        a.download = `${docName}.pdf`;
+        a.download = fileName;
         a.click();
         URL.revokeObjectURL(url);
-        setPhase({ kind: "done", pages: pageCount, diagnostics });
+        setPhase({ kind: "done", pages, diagnostics });
+        // Done: the dialog closes and the notice says what was written.
+        setOpen(false);
+        setNotice({ fileName, pages, diagnostics });
       })
       .catch((err: unknown) => {
         if (err instanceof DOMException && err.name === "AbortError") {
@@ -318,278 +354,326 @@ export function ExportPdfDialog() {
           : "idle";
 
   return (
-    <Dialog
-      open={open}
-      onOpenChange={(next) => {
-        // Block closing via overlay/Escape mid-export; Cancel aborts.
-        if (!next && exporting) return;
-        setOpen(next);
-      }}
-    >
-      <DialogContent data-export-dialog data-export-status={statusAttr}>
-        <DialogHeader>
-          <DialogTitle>Export PDF</DialogTitle>
-          <DialogDescription>
-            Print-grade PDF from the live document — text stays text, CMYK and
-            spot inks keep their numbers.
-          </DialogDescription>
-        </DialogHeader>
+    <>
+      <Dialog
+        open={open}
+        onOpenChange={(next) => {
+          // Block closing via overlay/Escape mid-export; Cancel aborts.
+          if (!next && exporting) return;
+          setOpen(next);
+        }}
+      >
+        <DialogContent data-export-dialog data-export-status={statusAttr}>
+          <DialogHeader>
+            <DialogTitle>Export PDF</DialogTitle>
+            <DialogDescription>
+              Print-grade PDF from the live document — text stays text, CMYK and
+              spot inks keep their numbers.
+            </DialogDescription>
+          </DialogHeader>
 
-        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          <div style={fieldRow}>
-            <span style={labelStyle}>Conformance</span>
-            <select
-              data-export-standard
-              value={form.standard}
-              disabled={exporting}
-              onChange={(e) =>
-                set("standard", e.target.value as FormState["standard"])
-              }
-            >
-              <option value="pdfx4">PDF/X-4</option>
-              <option value="pdf17">PDF 1.7</option>
-            </select>
-          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            <div style={fieldRow}>
+              <span style={labelStyle}>Conformance</span>
+              <select
+                data-export-standard
+                value={form.standard}
+                disabled={exporting}
+                onChange={(e) =>
+                  set("standard", e.target.value as FormState["standard"])
+                }
+              >
+                <option value="pdfx4">PDF/X-4</option>
+                <option value="pdf17">PDF 1.7</option>
+              </select>
+            </div>
 
-          <div style={fieldRow}>
-            <span style={labelStyle}>Output intent</span>
-            <select
-              data-export-profile
-              value={form.outputIntentProfile}
-              disabled={exporting}
-              onChange={(e) => set("outputIntentProfile", e.target.value)}
-            >
-              <option value="">
-                {activeProfile
-                  ? `Document working space (${workingProfileLabel(print)})`
-                  : "Document working space"}
-              </option>
-              {profiles.map((p) => (
-                <option key={p} value={p}>
-                  {p}
+            <div style={fieldRow}>
+              <span style={labelStyle}>Output intent</span>
+              <select
+                data-export-profile
+                value={form.outputIntentProfile}
+                disabled={exporting}
+                onChange={(e) => set("outputIntentProfile", e.target.value)}
+              >
+                <option value="">
+                  {activeProfile
+                    ? `Document working space (${workingProfileLabel(print)})`
+                    : "Document working space"}
                 </option>
-              ))}
-            </select>
-          </div>
-          {x4ProfileMissing && (
-            <div
-              data-export-validation
-              style={{
-                color: "var(--status-error)",
-                fontSize: 12,
-                marginLeft: 138,
-              }}
-            >
-              PDF/X-4 requires an output-intent profile — register one in the
-              Color settings panel or switch to PDF 1.7.
+                {profiles.map((p) => (
+                  <option key={p} value={p}>
+                    {p}
+                  </option>
+                ))}
+              </select>
             </div>
-          )}
-
-          <div style={fieldRow}>
-            <span style={labelStyle}>Color</span>
-            <select
-              data-export-policy
-              value={form.colorPolicy}
-              disabled={exporting}
-              onChange={(e) =>
-                set("colorPolicy", e.target.value as FormState["colorPolicy"])
-              }
-            >
-              <option value="preserveNumbers">Preserve numbers</option>
-              <option value="convertToDestination">
-                Convert to destination
-              </option>
-            </select>
-          </div>
-
-          <div style={fieldRow}>
-            <span style={labelStyle}>Pages</span>
-            <label style={{ display: "flex", alignItems: "center", gap: 4 }}>
-              <input
-                type="checkbox"
-                checked={form.allPages}
-                disabled={exporting}
-                onChange={(e) => set("allPages", e.target.checked)}
-              />
-              All ({pageCount})
-            </label>
-            {!form.allPages && (
-              <>
-                <Input
-                  data-export-page-from
-                  style={{ width: 56 }}
-                  value={form.pageFrom}
-                  disabled={exporting}
-                  onChange={(e) => set("pageFrom", e.target.value)}
-                />
-                <span>–</span>
-                <Input
-                  data-export-page-to
-                  style={{ width: 56 }}
-                  value={form.pageTo}
-                  disabled={exporting}
-                  onChange={(e) => set("pageTo", e.target.value)}
-                />
-              </>
-            )}
-          </div>
-          {rangeInvalid && (
-            <div
-              style={{
-                color: "var(--status-error)",
-                fontSize: 12,
-                marginLeft: 138,
-              }}
-            >
-              Range must be within 1–{pageCount}.
-            </div>
-          )}
-
-          <div style={fieldRow}>
-            <span style={labelStyle}>Bleed</span>
-            <label style={{ display: "flex", alignItems: "center", gap: 4 }}>
-              <input
-                type="checkbox"
-                checked={form.useDocumentBleed}
-                disabled={exporting}
-                onChange={(e) => set("useDocumentBleed", e.target.checked)}
-              />
-              Use document bleed
-            </label>
-            {!form.useDocumentBleed && (
-              <>
-                <Input
-                  style={{ width: 64 }}
-                  value={form.bleedPt}
-                  disabled={exporting}
-                  onChange={(e) => set("bleedPt", e.target.value)}
-                />
-                <span style={{ opacity: 0.7 }}>pt (all sides)</span>
-              </>
-            )}
-          </div>
-
-          <div style={fieldRow}>
-            <span style={labelStyle}>Marks</span>
-            <label style={{ display: "flex", alignItems: "center", gap: 4 }}>
-              <input
-                type="checkbox"
-                checked={form.cropMarks}
-                disabled={exporting}
-                onChange={(e) => set("cropMarks", e.target.checked)}
-              />
-              Crop
-            </label>
-            <label style={{ display: "flex", alignItems: "center", gap: 4 }}>
-              <input
-                type="checkbox"
-                checked={form.registrationMarks}
-                disabled={exporting}
-                onChange={(e) => set("registrationMarks", e.target.checked)}
-              />
-              Registration
-            </label>
-            <label style={{ display: "flex", alignItems: "center", gap: 4 }}>
-              <input
-                type="checkbox"
-                checked={form.colorBars}
-                disabled={exporting}
-                onChange={(e) => set("colorBars", e.target.checked)}
-              />
-              Color bars
-            </label>
-          </div>
-
-          <div style={fieldRow}>
-            <span style={labelStyle}>Include</span>
-            <label style={{ display: "flex", alignItems: "center", gap: 4 }}>
-              <input
-                type="checkbox"
-                checked={form.bookmarks}
-                disabled={exporting}
-                onChange={(e) => set("bookmarks", e.target.checked)}
-              />
-              Bookmarks
-            </label>
-            <label style={{ display: "flex", alignItems: "center", gap: 4 }}>
-              <input
-                type="checkbox"
-                checked={form.tagged}
-                disabled={exporting}
-                onChange={(e) => set("tagged", e.target.checked)}
-              />
-              Create Tagged PDF
-            </label>
-          </div>
-
-          <div style={fieldRow}>
-            <span style={labelStyle}>Downsample images</span>
-            <select
-              value={form.downsample}
-              disabled={exporting}
-              onChange={(e) =>
-                set("downsample", e.target.value as FormState["downsample"])
-              }
-            >
-              <option value="off">Off (preserve)</option>
-              <option value="300">to 300 ppi</option>
-              <option value="150">to 150 ppi</option>
-            </select>
-          </div>
-
-          {phase.kind === "exporting" && (
-            <div data-export-progress style={{ marginTop: 4 }}>
-              <div style={{ fontSize: 12, marginBottom: 4 }}>
-                Exporting page {phase.done} / {phase.total}…
-              </div>
+            {x4ProfileMissing && (
               <div
+                data-export-validation
                 style={{
-                  height: 6,
-                  borderRadius: 3,
-                  background: "var(--muted)",
-                  overflow: "hidden",
+                  color: "var(--status-error)",
+                  fontSize: 12,
+                  marginLeft: 138,
                 }}
               >
+                PDF/X-4 requires an output-intent profile — register one in the
+                Color settings panel or switch to PDF 1.7.
+              </div>
+            )}
+
+            <div style={fieldRow}>
+              <span style={labelStyle}>Color</span>
+              <select
+                data-export-policy
+                value={form.colorPolicy}
+                disabled={exporting}
+                onChange={(e) =>
+                  set("colorPolicy", e.target.value as FormState["colorPolicy"])
+                }
+              >
+                <option value="preserveNumbers">Preserve numbers</option>
+                <option value="convertToDestination">
+                  Convert to destination
+                </option>
+              </select>
+            </div>
+
+            <div style={fieldRow}>
+              <span style={labelStyle}>Pages</span>
+              <label style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                <input
+                  type="checkbox"
+                  checked={form.allPages}
+                  disabled={exporting}
+                  onChange={(e) => set("allPages", e.target.checked)}
+                />
+                All ({pageCount})
+              </label>
+              {!form.allPages && (
+                <>
+                  <Input
+                    data-export-page-from
+                    style={{ width: 56 }}
+                    value={form.pageFrom}
+                    disabled={exporting}
+                    onChange={(e) => set("pageFrom", e.target.value)}
+                  />
+                  <span>–</span>
+                  <Input
+                    data-export-page-to
+                    style={{ width: 56 }}
+                    value={form.pageTo}
+                    disabled={exporting}
+                    onChange={(e) => set("pageTo", e.target.value)}
+                  />
+                </>
+              )}
+            </div>
+            {rangeInvalid && (
+              <div
+                style={{
+                  color: "var(--status-error)",
+                  fontSize: 12,
+                  marginLeft: 138,
+                }}
+              >
+                Range must be within 1–{pageCount}.
+              </div>
+            )}
+
+            <div style={fieldRow}>
+              <span style={labelStyle}>Bleed</span>
+              <label style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                <input
+                  type="checkbox"
+                  checked={form.useDocumentBleed}
+                  disabled={exporting}
+                  onChange={(e) => set("useDocumentBleed", e.target.checked)}
+                />
+                Use document bleed
+              </label>
+              {!form.useDocumentBleed && (
+                <>
+                  <Input
+                    style={{ width: 64 }}
+                    value={form.bleedPt}
+                    disabled={exporting}
+                    onChange={(e) => set("bleedPt", e.target.value)}
+                  />
+                  <span style={{ opacity: 0.7 }}>pt (all sides)</span>
+                </>
+              )}
+            </div>
+
+            <div style={fieldRow}>
+              <span style={labelStyle}>Marks</span>
+              <label style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                <input
+                  type="checkbox"
+                  checked={form.cropMarks}
+                  disabled={exporting}
+                  onChange={(e) => set("cropMarks", e.target.checked)}
+                />
+                Crop
+              </label>
+              <label style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                <input
+                  type="checkbox"
+                  checked={form.registrationMarks}
+                  disabled={exporting}
+                  onChange={(e) => set("registrationMarks", e.target.checked)}
+                />
+                Registration
+              </label>
+              <label style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                <input
+                  type="checkbox"
+                  checked={form.colorBars}
+                  disabled={exporting}
+                  onChange={(e) => set("colorBars", e.target.checked)}
+                />
+                Color bars
+              </label>
+            </div>
+
+            <div style={fieldRow}>
+              <span style={labelStyle}>Include</span>
+              <label style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                <input
+                  type="checkbox"
+                  checked={form.bookmarks}
+                  disabled={exporting}
+                  onChange={(e) => set("bookmarks", e.target.checked)}
+                />
+                Bookmarks
+              </label>
+              <label style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                <input
+                  type="checkbox"
+                  checked={form.tagged}
+                  disabled={exporting}
+                  onChange={(e) => set("tagged", e.target.checked)}
+                />
+                Create Tagged PDF
+              </label>
+            </div>
+
+            <div style={fieldRow}>
+              <span style={labelStyle}>Downsample images</span>
+              <select
+                value={form.downsample}
+                disabled={exporting}
+                onChange={(e) =>
+                  set("downsample", e.target.value as FormState["downsample"])
+                }
+              >
+                <option value="off">Off (preserve)</option>
+                <option value="300">to 300 ppi</option>
+                <option value="150">to 150 ppi</option>
+              </select>
+            </div>
+
+            {phase.kind === "exporting" && (
+              <div data-export-progress style={{ marginTop: 4 }}>
+                <div style={{ fontSize: 12, marginBottom: 4 }}>
+                  Exporting page {phase.done} / {phase.total}…
+                </div>
                 <div
                   style={{
-                    height: "100%",
-                    width: `${phase.total > 0 ? (phase.done / phase.total) * 100 : 0}%`,
-                    background: "var(--pg-primary)",
-                    transition: "width var(--dur-fast)",
+                    height: 6,
+                    borderRadius: 3,
+                    background: "var(--muted)",
+                    overflow: "hidden",
                   }}
-                />
+                >
+                  <div
+                    style={{
+                      height: "100%",
+                      width: `${phase.total > 0 ? (phase.done / phase.total) * 100 : 0}%`,
+                      background: "var(--pg-primary)",
+                      transition: "width var(--dur-fast)",
+                    }}
+                  />
+                </div>
               </div>
-            </div>
-          )}
-          {phase.kind === "error" && (
-            <div
-              data-export-error
-              style={{ color: "var(--status-error)", fontSize: 12 }}
+            )}
+            {phase.kind === "error" && (
+              <div
+                data-export-error
+                style={{ color: "var(--status-error)", fontSize: 12 }}
+              >
+                Export failed: {phase.message}
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" data-export-cancel onClick={onCancel}>
+              Cancel
+            </Button>
+            <Button
+              data-export-confirm
+              disabled={!canExport}
+              onClick={() => void onExport()}
             >
-              Export failed: {phase.message}
-            </div>
-          )}
-          {phase.kind === "done" && phase.diagnostics.length > 0 && (
-            <div style={{ fontSize: 12, opacity: 0.8 }}>
-              Exported with {phase.diagnostics.length} finding(s):{" "}
-              {phase.diagnostics.join("; ")}
+              Export
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      {notice && (
+        <div role="status" data-export-notice style={noticeStyle}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ flex: 1 }}>
+              Exported <strong>{notice.fileName}</strong> · {notice.pages}{" "}
+              {notice.pages === 1 ? "page" : "pages"}
+            </span>
+            <button
+              type="button"
+              aria-label="Dismiss"
+              data-export-notice-close
+              onClick={() => setNotice(null)}
+              style={noticeCloseStyle}
+            >
+              <Icon name="ui-x" size={12} />
+            </button>
+          </div>
+          {notice.diagnostics.length > 0 && (
+            <div style={{ marginTop: 4, opacity: 0.8 }}>
+              {notice.diagnostics.length === 1
+                ? "1 finding"
+                : `${notice.diagnostics.length} findings`}
+              : {notice.diagnostics.join("; ")}
             </div>
           )}
         </div>
-
-        <DialogFooter>
-          <Button variant="outline" data-export-cancel onClick={onCancel}>
-            Cancel
-          </Button>
-          <Button
-            data-export-confirm
-            disabled={!canExport}
-            onClick={() => void onExport()}
-          >
-            Export
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+      )}
+    </>
   );
 }
+
+const noticeStyle: React.CSSProperties = {
+  position: "fixed",
+  left: "50%",
+  bottom: 24,
+  transform: "translateX(-50%)",
+  zIndex: 60,
+  maxWidth: 480,
+  padding: "8px 12px",
+  borderRadius: "var(--radius-md)",
+  border: "1px solid var(--chrome-border)",
+  background: "var(--chrome-panel-bg)",
+  color: "var(--pg-fg)",
+  boxShadow: "0 6px 24px rgb(0 0 0 / 0.25)",
+  fontSize: 12.5,
+};
+
+const noticeCloseStyle: React.CSSProperties = {
+  border: "none",
+  background: "transparent",
+  color: "var(--pg-muted-fg)",
+  cursor: "pointer",
+  padding: 2,
+  lineHeight: 1,
+};

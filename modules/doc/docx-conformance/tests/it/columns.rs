@@ -305,3 +305,45 @@ fn without_span_columns_each_change_opens_a_page__feat__plugin_doc_word_paginati
         .count();
     assert_eq!(stories, page_starting + changes);
 }
+
+/// Embedded placement takes its frame's columns from the lowering: a Word
+/// document set in two columns 18 pt apart (`w:cols w:num="2"
+/// w:space="360"`) is placed in a two-column frame with an 18 pt gutter,
+/// not one column (the doc bundle's `placeEmbedded` reads these).
+#[test]
+fn a_two_column_section_gives_the_placed_frame_two_columns__feat__plugin_doc_word_pagination() {
+    let bytes = include_bytes!("../../../packages/doc-bundle/test/fixtures/two-columns.docx");
+    let doc = import_docx(bytes).expect("import");
+    assert_eq!(doc.sections.len(), 1);
+    assert_eq!(doc.sections[0].columns, 2);
+    assert_eq!(doc.sections[0].column_space, 360);
+    let ir = docx_lower::lower(&doc);
+    assert_eq!(ir.section.columns, 2);
+    assert_eq!(ir.section.frame_columns, 2);
+    assert_eq!(ir.section.frame_gutter_pt, 18.0);
+    assert_eq!(ir.sections[0].frame_columns, 2);
+    // No span or split columns: the paragraphs sit in the frame's own.
+    let json = serde_json::to_value(&ir).expect("json");
+    assert_eq!(json["section"]["frameColumns"], 2);
+    assert_eq!(json["section"]["frameGutterPt"], 18.0);
+}
+
+/// A one-column document keeps a one-column frame (and no gutter).
+#[test]
+fn a_one_column_section_keeps_one_column__feat__plugin_doc_word_pagination() {
+    let doc = import_docx(&docx_conformance::memo_docx()).expect("import");
+    let ir = docx_lower::lower(&doc);
+    assert_eq!(ir.section.frame_columns, 1);
+    assert_eq!(ir.section.frame_gutter_pt, 0.0);
+}
+
+/// Columns that change mid-page keep the story's frame columns the
+/// lowering chose (span/split columns carry the rest): the (i) story's
+/// frame has two columns, the (h) story's one.
+#[test]
+fn every_lowered_section_carries_its_storys_frame_columns__feat__plugin_doc_word_pagination() {
+    let (ir, placed) = lowered(LowerOptions::default());
+    for (s, p) in ir.sections.iter().zip(&placed) {
+        assert_eq!(s.frame_columns, p.frame.count.max(1));
+    }
+}

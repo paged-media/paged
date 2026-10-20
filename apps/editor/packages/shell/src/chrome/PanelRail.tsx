@@ -24,13 +24,21 @@
 // scattered. Config comes from the app
 // (`<PagedShell panelRail={...}>`) — the shell renders, never
 // hardcodes the list.
+//
+// A rail button always brings its panel into view (editor ADR 271). With
+// the panels hidden (Shift+Tab keeps this rail and hides the dock), it
+// shows the dock again with its panel active; it used to switch the tab of
+// the hidden dock, so the click did nothing anyone could see, and with
+// the panel already active it closed it. Only a panel the user can SEE
+// closes from its rail button. The open is not a transition either: a
+// transition waits behind any other work, and with many panels mounted
+// the switch could land seconds after the click, or look like none.
 
 import { hasIcon, Icon } from "../icons";
 import { useRovingFocus } from "../focus/roving-focus";
 import { PluginGlyph } from "../icons/plugin-glyph";
 import { useRegistries } from "../state/registries-context";
 import { useRegistryView } from "../state/live";
-import { directionOf, transitionWith } from "../view-transitions";
 import { useOptionalCockpitState } from "../cockpit/cockpit-state-context";
 import { Segment } from "@paged-media/panel-kit";
 
@@ -47,7 +55,16 @@ export interface PanelRailItem {
   inspectorContext?: "text" | "image" | "page";
 }
 
-export function PanelRail({ items }: { items: PanelRailItem[] }) {
+export function PanelRail({
+  items,
+  panelsHidden = false,
+  onRevealPanels,
+}: {
+  items: PanelRailItem[];
+  /** The dock is hidden (Shift+Tab): a rail button shows it again. */
+  panelsHidden?: boolean;
+  onRevealPanels?: () => void;
+}) {
   const cockpit = useOptionalCockpitState();
   // K-8 — the rail DOOR: registered panels that opted in (`rail: true`)
   // render as launcher items after the app's built-ins. Registry-derived
@@ -77,19 +94,19 @@ export function PanelRail({ items }: { items: PanelRailItem[] }) {
     // Active → close (and clear the steer); otherwise ensure +
     // activate, steering the Properties sub-inspector when the item
     // carries a context (kit Text/Image/Pages).
+    if (panelsHidden) {
+      onRevealPanels?.();
+      cockpit.openPanel(item.panelId);
+      cockpit.setInspectorContext(item.inspectorContext ?? null);
+      return;
+    }
     if (isActive(item)) {
       cockpit.closeTab(item.panelId);
       if (item.inspectorContext) cockpit.setInspectorContext(null);
       return;
     }
-    // A view transition (ADR 240), its direction the rail's order: the
-    // panel comes in from the side of the rail item that was active.
-    const order = [...items, ...pluginItems].map((i) => i.panelId);
-    const from = order.indexOf(cockpit.activeTab ?? "");
-    transitionWith(directionOf(from, order.indexOf(item.panelId)), () => {
-      cockpit.openPanel(item.panelId);
-      cockpit.setInspectorContext(item.inspectorContext ?? null);
-    });
+    cockpit.openPanel(item.panelId);
+    cockpit.setInspectorContext(item.inspectorContext ?? null);
   };
 
   const renderItem = (item: PanelRailItem, plugin: boolean) => {

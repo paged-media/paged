@@ -39,6 +39,7 @@ import { covers } from "@paged-media/test-kit";
 
 import { docBundle } from "../../src";
 import { DocEngine } from "../../src/engine";
+import { placeEmbedded } from "../../src/place";
 import {
   docxPresent,
   fixture,
@@ -183,6 +184,33 @@ describe.skipIf(!docxPresent)(
       } finally {
         engine.dispose();
       }
+    });
+
+    it("Insert ▸ Word document… of a two-column section places the copy in a two-column frame at Word's gap", async () => {
+      covers("command:media.paged.doc.command.placeDoc");
+      const bytes = fixture("two-columns.docx");
+      const engine = await DocEngine.boot();
+      let ir;
+      try {
+        engine.loadDocx(bytes);
+        ir = engine.lowered();
+      } finally {
+        engine.dispose();
+      }
+      expect(ir.section.frameColumns).toBe(2);
+      const placed = await placeEmbedded(host, ir, bytes, "two-columns.docx");
+      expect(placed).not.toBeNull();
+      const frame = `${placed!.frameId.kind}:${placed!.frameId.id}`;
+      // `w:cols w:num="2" w:space="360"`: two columns, 18 pt apart.
+      expect(await host.objects.get(frame, "textFrameColumnCount")).toEqual({
+        kind: "value",
+        value: 2,
+      });
+      expect(await host.objects.get(frame, "textFrameColumnGutter")).toEqual({
+        kind: "value",
+        value: 18,
+      });
+      expect(errors).toEqual([]);
     });
 
     it("with no Word document open there is nothing to export", async () => {

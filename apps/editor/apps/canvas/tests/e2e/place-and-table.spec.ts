@@ -240,6 +240,55 @@ const psdImports = (page: Page) =>
   );
 
 test.describe("File ▸ Place… (film defects ED-6, IMG-2)", () => {
+  // Filming the home film: File ▸ Place… sometimes opened no chooser at
+  // all. The chooser's input was a detached element nothing held, so a
+  // garbage collection between `click()` and the browser reporting the
+  // chooser lost it (editor ADR 270). Collected all the time here, the
+  // menu must open the chooser on every try.
+  test("File ▸ Place… from the menu opens the chooser every time, also while the page collects garbage @feat:images-graphics.placed-images @feat:editor-shell.command-authoring @level:edge", async ({
+    page,
+  }) => {
+    test.setTimeout(180_000);
+    await openText(page);
+    const cdp = await page.context().newCDPSession(page);
+    let collecting = true;
+    const gc = (async () => {
+      while (collecting) {
+        await cdp.send("HeapProfiler.collectGarbage").catch(() => undefined);
+      }
+    })();
+    const missed: number[] = [];
+    try {
+      for (let i = 0; i < 10; i++) {
+        await page
+          .getByRole("menubar")
+          .getByRole("menuitem", { name: "File", exact: true })
+          .click();
+        const place = page.getByRole("menuitem", { name: /^Place…/ });
+        await expect(place).toBeVisible();
+        const chooser = page
+          .waitForEvent("filechooser", { timeout: 5000 })
+          .catch(() => null);
+        await place.click();
+        const c = await chooser;
+        if (!c) {
+          missed.push(i);
+          await page.keyboard.press("Escape");
+          continue;
+        }
+        // Cancelled: Place answers nothing and arms nothing.
+        await c.setFiles([]);
+        await expect(page.locator("html[data-paged-placement]")).toHaveCount(0);
+      }
+    } finally {
+      collecting = false;
+      await gc;
+    }
+    expect(missed, "tries on which no chooser opened").toEqual([]);
+    // Every chooser settled: no input is left in the document.
+    await expect(page.locator("input[data-paged-file-chooser]")).toHaveCount(0);
+  });
+
   test("ED-6 — a drag with the place cursor sizes the frame to the drag, keeping the image's proportions @feat:images-graphics.placed-images @feat:editor-shell.command-authoring @level:gesture", async ({
     page,
   }) => {

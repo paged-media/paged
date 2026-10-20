@@ -900,8 +900,12 @@ film("home", async (k) => {
     ]);
     if (!file) await k.cut("pdf", async () => void (file = await pdf));
     k.chip(`${file!.suggestedFilename()} saved`, "save");
-    await press(k, dialog.getByRole("button", { name: "Close" }).first());
+    // A finished export closes the dialog; the notice names the file
+    // (editor ADR 272).
     await expect(dialog).toBeHidden();
+    await expect(page.locator("[data-export-notice]")).toContainText(
+      file!.suggestedFilename(),
+    );
     await file!.saveAs(join(k.dir, "home.pdf"));
     const bytes = readFileSync(join(k.dir, "home.pdf"));
     expect(bytes.subarray(0, 5).toString()).toBe("%PDF-");

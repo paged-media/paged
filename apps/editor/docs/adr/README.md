@@ -79,6 +79,9 @@ and 024 predate that scheme and keep their numbers. Records 200–217 were writt
 | [267](267-margins-and-columns-on-the-page.md) | Margins and columns are drawn on the page | Accepted 2026-10-20 |
 | [268](268-owned-native-text-keeps-the-click.md) | Owned native text keeps the Type-tool click | Accepted 2026-10-20 |
 | [269](269-the-demo-guide-floats-over-the-editor.md) | The demo guide floats over the editor, and the script waits behind a disclosure | Accepted 2026-10-20 |
+| [270](270-the-file-chooser-holds-its-input.md) | The file chooser holds its input until it answers | Accepted 2026-10-20 |
+| [271](271-a-rail-button-shows-its-panel.md) | A rail button shows its panel | Accepted 2026-10-20 |
+| [272](272-a-finished-export-closes-its-dialog.md) | A finished export closes its dialog | Accepted 2026-10-20 |
 
 Decisions made in other repositories that this editor's code rests on are listed in
 [`../README.md`](../README.md). Comments in the source also cite ADR 025 (the journal) and
