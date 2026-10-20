@@ -216,7 +216,7 @@ fn a_stroke_weight_edit_still_saves() {
     );
 }
 
-/// A weight nudged by LESS than the writer's 4-decimal output precision is
+/// A weight nudged by LESS than 4 decimals can show is
 /// still an edit, and still saves — the preserving check compares the
 /// model number against the source spelling's own parse, not against the
 /// rounded output, so it cannot swallow a sub-ten-thousandth change into
@@ -235,11 +235,14 @@ fn a_sub_precision_stroke_weight_edit_still_saves() {
 
     let out = rewrite_spread(STROKED, &spread).expect("rewrite");
     let xml = String::from_utf8(out).expect("utf8");
+    // The writer spells a changed number so it parses back to the same
+    // `f32` (GF-4), so the nudge is visible in the output now.
     assert_eq!(
         weights_in(&xml)[1],
-        fmt4(nudged),
-        "an edit the output format cannot show is still an edit:\n{xml}"
+        format!("{nudged}"),
+        "an edit invisible at 4 decimals is still an edit:\n{xml}"
     );
+    assert_eq!(weights_in(&xml)[1].parse::<f32>().expect("parses"), nudged);
     assert_ne!(
         weights_in(&xml)[1],
         "5.669291338582678",

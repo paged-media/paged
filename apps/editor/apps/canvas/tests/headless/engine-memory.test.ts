@@ -50,21 +50,20 @@ const font = (name: string) =>
   );
 
 describe("engine memory across document loads", () => {
-  test.failing(
-    "PAR-1: a load with a fallback font keeps none of the previous load's font (each load retains ~0.9 MB)",
-    async () => {
-      const engine = await rebootHeadlessEngine();
-      const w = engine.create();
-      const inter = font("Inter.ttf");
-      for (let i = 0; i < 5; i++) w.loadDocumentDirect(i, doc(), inter);
-      const before = engine.memoryBytes();
-      for (let i = 0; i < LOADS; i++)
-        w.loadDocumentDirect(100 + i, doc(), inter);
-      const grown = engine.memoryBytes() - before;
-      w.free();
-      expect(MB(grown)).toBe(MB(Math.min(grown, BOUND)));
-    },
-  );
+  // PAR-1 (fixed): the renderer's font-id memo held a clone of every
+  // fallback font it saw, so each load pinned a copy until the memo's bound.
+  // An entry nothing else holds is dropped now.
+  test("PAR-1: a load with a fallback font keeps none of the previous load's font", async () => {
+    const engine = await rebootHeadlessEngine();
+    const w = engine.create();
+    const inter = font("Inter.ttf");
+    for (let i = 0; i < 5; i++) w.loadDocumentDirect(i, doc(), inter);
+    const before = engine.memoryBytes();
+    for (let i = 0; i < LOADS; i++) w.loadDocumentDirect(100 + i, doc(), inter);
+    const grown = engine.memoryBytes() - before;
+    w.free();
+    expect(MB(grown)).toBe(MB(Math.min(grown, BOUND)));
+  });
 
   test("a load without a font grows nothing (the control)", async () => {
     const engine = await rebootHeadlessEngine();
@@ -103,22 +102,19 @@ describe("engine memory across document loads", () => {
     }
   });
 
-  // What is left of the editor's growth per open is PAR-1's (~0.85 MB, the
-  // load's fallback font kept by the engine): flat once PAR-1 is fixed.
-  test.failing(
-    "PAR-1 in the editor: opening documents keeps its memory flat (each open keeps the fallback font, PAR-1)",
-    async () => {
-      await rebootHeadlessEngine();
-      const ed = await createHeadlessEditor({ idml: doc() });
-      try {
-        for (let i = 0; i < 5; i++) await ed.load(doc());
-        const before = ed.engine.memoryBytes();
-        for (let i = 0; i < LOADS; i++) await ed.load(doc());
-        const grown = ed.engine.memoryBytes() - before;
-        expect(MB(grown)).toBe(MB(Math.min(grown, BOUND)));
-      } finally {
-        await ed.dispose();
-      }
-    },
-  );
+  // What was left of the editor's growth per open was PAR-1's (~0.85 MB,
+  // the load's fallback font kept by the engine): flat since PAR-1's fix.
+  test("PAR-1 in the editor: opening documents keeps its memory flat", async () => {
+    await rebootHeadlessEngine();
+    const ed = await createHeadlessEditor({ idml: doc() });
+    try {
+      for (let i = 0; i < 5; i++) await ed.load(doc());
+      const before = ed.engine.memoryBytes();
+      for (let i = 0; i < LOADS; i++) await ed.load(doc());
+      const grown = ed.engine.memoryBytes() - before;
+      expect(MB(grown)).toBe(MB(Math.min(grown, BOUND)));
+    } finally {
+      await ed.dispose();
+    }
+  });
 });

@@ -16,8 +16,18 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-//! The writer's "4 decimals" is a real contract at every magnitude — it
-//! used to stop being one at 1677.7216 pt.
+//! The writer's spelling of a changed number re-parses to the very same
+//! `f32` at every magnitude (finding GF-4, engine ADR 199). It used to
+//! round to 4 decimals, and that rounding used to stop being one at
+//! 1677.7216 pt; both halves of that history are recorded below.
+//!
+//! # GF-4 (2026-10-20)
+//!
+//! Rounding to 4 decimals made a turned frame drift by up to ~1e-4 x its
+//! numbers on every save → load. The writer now prints the shortest
+//! decimal that parses back to the same `f32` (`format_f32`), so a save →
+//! load gives back the model that was saved. The record of the old f32
+//! rounding defect stays, because its premise is a property of `f32`.
 //!
 //! # The defect
 //!
@@ -194,7 +204,7 @@ fn the_f32_multiply_gives_out_at_the_2_24_wall() {
 }
 
 /// THE DEFECT, closed, on the path a user reaches by dragging: a moved
-/// item's coordinate is emitted correctly rounded. The old code printed
+/// item's coordinate is emitted as the value it is. The old code printed
 /// `13421.7725` here — nine ten-thousandths off, and not even a value the
 /// `f32` can represent.
 #[test]
@@ -202,10 +212,10 @@ fn a_dragged_item_saves_its_pasteboard_coordinate_correctly() {
     let ty = 13_421.773f32;
     assert_eq!(
         saved_transform_ty(ty),
-        "13421.7734",
-        "a pasteboard-scale drag must save its correctly-rounded coordinate"
+        "13421.773",
+        "a pasteboard-scale drag must save the coordinate it holds"
     );
-    assert_eq!(saved_transform_ty(ty), correctly_rounded(ty));
+    assert_eq!(saved_transform_ty(ty).parse::<f32>().expect("parses"), ty);
     assert_ne!(
         saved_transform_ty(ty),
         "13421.7725",
@@ -232,54 +242,47 @@ fn a_resized_frame_saves_its_pasteboard_bounds_correctly() {
     );
 }
 
-/// ABOVE the wall the fix is exactly lossless: a ten-thousandth is finer
-/// than the input's own ULP there, so the spelling the writer emits
-/// re-parses to the very same `f32`. Swept across every octave from the
-/// wall to 33 kpt — an InDesign pasteboard does not reach further.
+/// The spelling the writer emits re-parses to the very same `f32`, at
+/// every magnitude from a thousandth of a point to 33 kpt — an InDesign
+/// pasteboard does not reach further (GF-4).
 #[test]
-fn the_emitted_spelling_reparses_to_the_same_f32_above_the_wall() {
+fn the_emitted_spelling_reparses_to_the_same_f32_at_every_magnitude() {
     let mut checked = 0usize;
-    let mut v = WALL;
+    let mut v = 0.001f32;
     // Every 8191st representable value: coprime with the stride between
     // octaves, so the samples do not line up with any binade boundary.
     while v < 33_554.43 {
         let saved = saved_transform_ty(v);
         assert_eq!(
-            saved,
-            correctly_rounded(v),
-            "the emitted spelling must be the correctly-rounded one"
-        );
-        assert_eq!(
             saved.parse::<f32>().expect("parses back"),
             v,
-            "above the wall the emitted spelling must recover the exact f32"
+            "the emitted spelling {saved} must recover the exact f32"
         );
+        assert_eq!(saved, format!("{v}"), "…and be the shortest that does");
         checked += 1;
         v = f32::from_bits(v.to_bits() + 8191);
     }
-    assert!(checked > 500, "the sweep covered the range ({checked})");
+    assert!(checked > 2000, "the sweep covered the range ({checked})");
 }
 
-/// The limit of the claim, stated so nobody reads more into the fix than
-/// it does. BELOW the wall an `f32` resolves far finer than a
-/// ten-thousandth, so rounding to 4 decimals throws information away — it
-/// did before this change and it still does. That is InDesign's output
-/// format, not a defect; the answer to it is preserving a source spelling
-/// rather than re-deriving it, which is a different lane.
+/// BELOW the wall an `f32` resolves far finer than a ten-thousandth, so
+/// rounding to 4 decimals threw information away; the writer prints what
+/// the `f32` holds now (GF-4).
 #[test]
-fn below_the_wall_four_decimals_is_still_lossy() {
+fn below_the_wall_the_spelling_is_lossless_too() {
     let v = 0.708_661_4f32; // a 0.25 mm hairline, in points
     assert!(
         ulp(v) < 1e-4,
-        "premise: down here the f32 resolves finer than the printed quantum"
+        "premise: down here the f32 resolves finer than a ten-thousandth"
+    );
+    assert_ne!(
+        correctly_rounded(v).parse::<f32>().expect("parses"),
+        v,
+        "premise: 4 decimals cannot recover it"
     );
     let saved = saved_transform_ty(v);
-    assert_eq!(saved, "0.7087", "still rounded to 4 decimals");
-    assert_ne!(
-        saved.parse::<f32>().expect("parses back"),
-        v,
-        "and still not recoverable from those 4 decimals"
-    );
+    assert_eq!(saved, "0.7086614");
+    assert_eq!(saved.parse::<f32>().expect("parses back"), v);
 }
 
 /// The other half of the honesty: above the wall the printed digits are

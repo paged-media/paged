@@ -126,6 +126,8 @@ is not written yet.
 | [195](195-the-state-hash-covers-the-whole-model.md) | The state hash covers the whole model | Accepted 2026-10-19 |
 | [196](196-fitting-alignment-takes-idml-anchor-names.md) | Fitting alignment takes IDML's anchor point names | Accepted 2026-10-19 |
 | [197](197-undo-restores-the-model-exactly.md) | Undo restores the model exactly | Accepted 2026-10-19 |
+| [198](198-a-link-that-resolves-to-nothing-is-missing.md) | A link that resolves to nothing is missing, however it was placed | Accepted 2026-10-20 |
+| [199](199-a-changed-number-is-written-as-the-f32-it-is.md) | The IDML writer spells a changed number as the f32 it is | Accepted 2026-10-20 |
 
 Decisions made in other repositories that this engine's code rests on are listed in
 [`../README.md`](../README.md).
