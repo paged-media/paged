@@ -128,6 +128,8 @@ runs:
         workspaces: ${{ steps.m.outputs.crate }} -> target
         prefix-key: v0-rust-${{ inputs.module }}-wasm
         shared-key: module-wasm
+        # Only main writes the cache; pull requests restore main's (A10).
+        save-if: ${{ github.ref == 'refs/heads/main' }}
 
     - name: module wasm (${{ inputs.module }}) — wasm-bindgen-cli and binaryen
       if: steps.restore.outputs.cache-hit != 'true'

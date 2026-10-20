@@ -311,10 +311,12 @@ test.describe("E2E paged.draw — Image Trace off the UI thread", () => {
     ).toBe(true);
 
     // 4. THE PAGE KEPT RUNNING. The command was long enough to matter,
-    //    and the page's own timer never waited a quarter of a second
-    //    inside it. Blocked, its longest gap IS the kernel call — most
-    //    of `tookMs` — so the two bounds cannot both hold on the calling
-    //    thread (`RASTER_PX` carries both lanes' measurements).
+    //    and the page's own timer never waited half of it. Blocked, its
+    //    longest gap IS the kernel call — over 90 % of `tookMs` — so the
+    //    two bounds cannot both hold on the calling thread (`RASTER_PX`
+    //    carries both lanes' measurements). Relative, not a fixed 250 ms:
+    //    a loaded CI runner stretches the spawn and the insert around the
+    //    trace (gaps of 300–400 ms in 2–3 s commands), never to half.
     expect(
       ran.tookMs,
       "the trace should be long enough for blocking to show",
@@ -323,7 +325,7 @@ test.describe("E2E paged.draw — Image Trace off the UI thread", () => {
       ran.longestGapMs,
       `the page thread stalled for ${Math.round(ran.longestGapMs)} ms of a ` +
         `${Math.round(ran.tookMs)} ms trace`,
-    ).toBeLessThan(250);
+    ).toBeLessThan(Math.max(250, ran.tookMs / 2));
     expect(ran.ticks).toBeGreaterThan(ran.tookMs / 40);
   });
 });
