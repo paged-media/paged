@@ -119,8 +119,8 @@
         {
           "name": "CanvasClient.requestSnapshot",
           "kind": "method",
-          "signature": "async requestSnapshot(pageId: PageId, targetWidthPx: number, dpi?: number): Promise<SnapshotPng>",
-          "summary": "Request a low-resolution snapshot for the navigator / overview."
+          "signature": "async requestSnapshot(pageId: PageId, targetWidthPx: number, dpi?: number, options?: { markers?: boolean }): Promise<SnapshotPng>",
+          "summary": "Render one page to a PNG."
         },
         {
           "name": "CanvasClient.mutate",

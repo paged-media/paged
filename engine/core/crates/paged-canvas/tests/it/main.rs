@@ -105,6 +105,7 @@ mod selection_after_blank_lines;
 mod shear_gesture;
 mod snap_engine;
 mod snapshot_hide;
+mod snapshot_markers;
 mod spread_transform_hit;
 mod story_grow_rule_read;
 mod style_paths_word_lowering;

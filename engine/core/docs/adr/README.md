@@ -133,6 +133,7 @@ is not written yet.
 | [202](202-the-outer-cells-edges-are-the-table-border.md) | A table's outer cells' edges are its border | Accepted 2026-10-20 |
 | [203](203-a-frames-effects-apply-to-its-picture.md) | A frame's feathers and interior effects apply to its picture | Accepted 2026-10-20 |
 | [204](204-a-feather-fades-the-stroke-and-the-text.md) | A feather fades the frame's stroke and a text frame's text | Accepted 2026-10-20 |
+| [205](205-a-snapshot-is-drawn-as-the-exports-draw-it.md) | A snapshot is drawn as the exports draw it; only the canvas shows its markers | Accepted 2026-10-20 |
 
 Decisions made in other repositories that this engine's code rests on are listed in
 [`../README.md`](../README.md).

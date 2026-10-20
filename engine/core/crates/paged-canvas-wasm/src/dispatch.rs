@@ -526,6 +526,7 @@ impl WorkerCore {
                 target_width_px,
                 dpi,
                 hide_items,
+                markers,
             } => {
                 let Some(model) = self.model.as_ref() else {
                     reply!(WorkerToMainKind::SnapshotFailed {
@@ -541,6 +542,7 @@ impl WorkerCore {
                     target_width_px,
                     dpi,
                     &hide_items,
+                    markers,
                 );
                 match res {
                     Ok(snap) => WorkerToMainKind::SnapshotReady(snap),

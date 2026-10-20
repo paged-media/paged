@@ -564,19 +564,31 @@ export class CanvasClient {
   }
 
   /**
-   * Request a low-resolution snapshot for the navigator / overview.
-   * Resolves to the PNG bytes; throws if the worker errors. When
-   * `dpi` is provided it wins over `targetWidthPx` — useful for the
-   * fidelity suite, which needs byte-exact dimensions vs `pdftoppm`.
+   * Render one page to a PNG. Resolves to the PNG bytes; throws if the
+   * worker errors. When `dpi` is provided it wins over `targetWidthPx` —
+   * useful for the fidelity suite, which needs byte-exact dimensions vs
+   * `pdftoppm`.
+   *
+   * The page is drawn as the exports draw it (engine ADR 205): without
+   * the canvas's editor-only markers (the pink highlight behind text in a
+   * substitute face, the cross over EPS/PDF content that cannot be drawn)
+   * and without the soft proof. `{ markers: true }` draws the page as the
+   * canvas shows it — for a view of the canvas, such as a page thumbnail.
    */
   async requestSnapshot(
     pageId: PageId,
     targetWidthPx: number,
     dpi?: number,
+    options?: { markers?: boolean },
   ): Promise<SnapshotPng> {
     const reply = await this.send({
       kind: "requestSnapshot",
-      payload: { pageId, targetWidthPx, dpi: dpi ?? null },
+      payload: {
+        pageId,
+        targetWidthPx,
+        dpi: dpi ?? null,
+        ...(options?.markers ? { markers: true } : {}),
+      },
     });
     if (reply.kind === "snapshotReady") {
       return reply.payload;

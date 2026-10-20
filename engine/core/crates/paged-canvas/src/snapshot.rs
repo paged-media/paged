@@ -100,6 +100,10 @@ pub enum SnapshotError {
 /// Render `page_id` at `target_width_px` wide. Height is derived
 /// from the page's aspect ratio. Background is white (matching the
 /// renderer's default for `render_document`).
+///
+/// This draws the canvas's own page, editor-only markers included (ADR
+/// 205): it backs the worker's tile loop. A snapshot for anything else
+/// goes through [`render_snapshot_png_hiding`] / [`snapshot_page`].
 #[cfg(feature = "cpu")]
 pub fn render_snapshot(
     model: &CanvasModel,
@@ -125,11 +129,14 @@ pub fn render_snapshot_at_dpi(
     render_snapshot_inner(model, page_id, SnapshotSize::Dpi(dpi))
 }
 
-/// The page a snapshot draws: the model's own, or a copy built with
-/// items hidden.
+/// The page a snapshot draws: the model's own, a copy built with items
+/// hidden, or a page of the export build (ADR 205).
 pub enum SnapshotPage<'a> {
     Built(&'a BuiltPage),
     Hiding(Box<BuiltPage>),
+    /// Page `.1` of the model's export build: the page without the
+    /// canvas's editor-only markers.
+    Export(std::rc::Rc<paged_renderer::BuiltDocument>, usize),
 }
 
 impl std::ops::Deref for SnapshotPage<'_> {
@@ -138,6 +145,7 @@ impl std::ops::Deref for SnapshotPage<'_> {
         match self {
             SnapshotPage::Built(p) => p,
             SnapshotPage::Hiding(p) => p,
+            SnapshotPage::Export(doc, i) => &doc.pages[*i],
         }
     }
 }
@@ -146,24 +154,43 @@ impl std::ops::Deref for SnapshotPage<'_> {
 /// both snapshot backends use. An explicit `dpi` (> 0) wins over
 /// `target_width_px`, which sets the dpi from the page width; `hide`
 /// draws the page without those items (a slideshow build step).
+///
+/// ADR 205 — `markers` says whose page it is. `false` (the wire's
+/// default) draws the page as the exports do: without the canvas's
+/// editor-only markers (the pink substituted-font highlight, the
+/// ghost-cross over undrawable EPS/PDF), in the working space and at
+/// full resource resolution. When the live build already draws that,
+/// its page is used; otherwise the model's export build is. `true`
+/// draws the page the canvas shows, markers and soft proof included (a
+/// page thumbnail). A page with items hidden is always built for
+/// export, so `markers` changes nothing there.
 pub fn snapshot_page<'a>(
     model: &'a CanvasModel,
     page_id: &PageId,
     target_width_px: u32,
     dpi: Option<f32>,
     hide: &[crate::element_selection::ElementId],
+    markers: bool,
 ) -> Result<(SnapshotPage<'a>, f32), SnapshotError> {
     let unknown = || SnapshotError::UnknownPage {
         page_id: page_id.clone(),
     };
-    let page = if hide.is_empty() {
-        SnapshotPage::Built(model.page(page_id).ok_or_else(unknown)?)
-    } else {
+    let page = if !hide.is_empty() {
         SnapshotPage::Hiding(Box::new(
             model
                 .build_page_hiding(page_id, hide)
                 .map_err(|_| unknown())?,
         ))
+    } else if markers || model.live_build_is_export_faithful() {
+        SnapshotPage::Built(model.page(page_id).ok_or_else(unknown)?)
+    } else {
+        let doc = model.export_build().map_err(|_| unknown())?;
+        let i = doc
+            .pages
+            .iter()
+            .position(|p| &p.id == page_id)
+            .ok_or_else(unknown)?;
+        SnapshotPage::Export(doc, i)
     };
     let dpi = match dpi {
         Some(d) if d > 0.0 && d.is_finite() => d,
@@ -173,9 +200,9 @@ pub fn snapshot_page<'a>(
     Ok((page, dpi))
 }
 
-/// v70 — a snapshot of the page with `hide` items hidden (a slideshow
-/// build step). `dpi` wins over `target_width_px` when given, as in
-/// `RequestSnapshot`. With nothing to hide it is the plain snapshot.
+/// A `RequestSnapshot` on the CPU rasterizer: the page [`snapshot_page`]
+/// resolves (v70 `hide` items hidden, ADR 205 `markers`), PNG-encoded.
+/// `dpi` wins over `target_width_px` when given.
 #[cfg(feature = "cpu")]
 pub fn render_snapshot_png_hiding(
     model: &CanvasModel,
@@ -183,8 +210,9 @@ pub fn render_snapshot_png_hiding(
     target_width_px: u32,
     dpi: Option<f32>,
     hide: &[crate::element_selection::ElementId],
+    markers: bool,
 ) -> Result<SnapshotPng, SnapshotError> {
-    let (page, dpi) = snapshot_page(model, page_id, target_width_px, dpi, hide)?;
+    let (page, dpi) = snapshot_page(model, page_id, target_width_px, dpi, hide, markers)?;
     let img = render_built_page(&page, dpi, paged_compose::Color::WHITE);
     encode_snapshot_png(Snapshot {
         page_id: page_id.clone(),

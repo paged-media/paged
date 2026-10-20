@@ -272,7 +272,16 @@ export async function requestPageThumbnail(
   client: CanvasClient,
   pageId: PageId,
 ): Promise<string> {
-  const snap = await client.requestSnapshot(pageId, SNAPSHOT_WIDTH_PX);
+  // A thumbnail shows the canvas, so it keeps the canvas's markers
+  // (engine ADR 205); every other snapshot is drawn as the exports draw it.
+  const snap = await client.requestSnapshot(
+    pageId,
+    SNAPSHOT_WIDTH_PX,
+    undefined,
+    {
+      markers: true,
+    },
+  );
   const blob = new Blob([new Uint8Array(snap.pngBytes)], { type: "image/png" });
   return URL.createObjectURL(blob);
 }
