@@ -294,12 +294,10 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     await marginNote(
       ctx,
       p(100),
-      "The sheets engine also owns a pagination lane of its own — " +
-        "lowerPaginatedToChain, greedy row packing with repeated headers, " +
-        "all threading math in Rust — but no editor command or panel " +
-        "reaches it today; it is exported for programmatic hosts. This " +
-        "spread therefore shows the HOST chain threading the lowered " +
-        "native table, and claims only that. → Appendix A",
+      "The sheets engine has a pagination lane of its own " +
+        "(lowerPaginatedToChain) that no editor command reaches yet, so " +
+        "this spread shows the host chain threading the lowered native " +
+        "table, and claims only that. → Appendix A",
     ),
   );
 

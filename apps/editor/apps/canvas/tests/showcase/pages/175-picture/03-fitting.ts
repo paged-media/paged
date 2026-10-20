@@ -40,6 +40,7 @@ import {
   proseFrame,
   specLabel,
 } from "../../annual-support";
+import { missingLinks } from "../../health";
 import { LAYER, STYLE, p } from "../../names-annual";
 import type { PageContext, PageReport } from "../../types";
 import {
@@ -212,19 +213,34 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   });
 
   // ── the bottom band: the placeholder, and the lane that lasts ────
-  // (e) the missing-image placeholder, authored live: the frame is an
-  // image element (bytes made it one), its bytes were then CLEARED,
-  // and its link resolves to nothing — the engine answers with the
-  // grey diagonal-X placeholder rather than silence.
+  // (e) the missing-image placeholder, authored live and then put
+  // right: the frame is an image element (bytes made it one), its bytes
+  // are CLEARED, and its link resolves to nothing — the engine answers
+  // with the grey diagonal-X placeholder and the Links read-out says
+  // "missing". The frame is then relinked to a file that exists, so the
+  // finished book carries no missing link: demonstrated, not resident.
+  const LOST_URI = "assets/photos/annual-lost-plate.tif";
   const lost = await doc.rectangle(pg, [60, 578, 160, 638]);
   await assignLayer(ctx, "rectangle", lost, LAYER.content);
-  await doc.mutate("placeImage", {
-    elementId: lost,
-    uri: "assets/photos/annual-lost-plate.tif",
-    fit: null,
-  });
+  await doc.mutate("placeImage", { elementId: lost, uri: LOST_URI, fit: null });
   await replaceBytesFromFile(ctx, lost, derived("apples.webp"));
   await clearImageBytes(ctx, lost);
+  await doc.renderPage(page);
+  expect(
+    await missingLinks(ctx.page),
+    "a link to nothing reads missing — the placeholder is the engine saying so",
+  ).toContain(LOST_URI);
+  await doc.mutate("placeImage", {
+    elementId: lost,
+    uri: RIDGE_URI,
+    fit: null,
+  });
+  await replaceBytesFromFile(ctx, lost, RIDGELINES);
+  await doc.renderPage(page);
+  expect(
+    await missingLinks(ctx.page),
+    "relinked to a file that exists, the frame is no longer missing",
+  ).not.toContain(LOST_URI);
   elements.push(lost);
 
   // (f) the same unresolvable-link start, rescued by the inline lane.
@@ -252,12 +268,10 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     [
       {
         text:
-          "Left: an image element whose link resolves to nothing — the " +
-          "placeholder is the engine saying so. Right: the same start, then " +
-          `${inlineBytes.toLocaleString("en-US")} bytes inline through ` +
-          "replaceImageBytes. The inline lane needs no resolver and " +
-          "survives the container round trip; every photograph in this " +
-          "chapter rides it.",
+          "Left: born linked to nothing, it drew the grey placeholder, " +
+          "then was relinked. Right: the same start, then " +
+          `${inlineBytes.toLocaleString("en-US")} bytes inline — the lane ` +
+          "every photograph in this chapter rides.",
         style: STYLE.specValue,
       },
     ],
@@ -273,10 +287,9 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   elements.push(
     await specLabel(ctx, page, [
       "Specimen No. 113",
-      "frameFittingType ×3 · frameFittingCrops ×2",
-      "frameFittingReferencePoint · frameAutoFit",
+      "frameFittingType ×3 · Crops ×2 · ReferencePoint · AutoFit",
       "imageContentTransform",
-      "replaceImageBytes (inline + clear) · the placeholder, live",
+      "replaceImageBytes inline + clear",
     ]),
   );
 

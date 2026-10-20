@@ -207,12 +207,10 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     await marginNote(
       ctx,
       page,
-      "Bookmarks, cross-references and index markers are fixture-authored " +
-        "- no wire op creates them; only hyperlinks are live-authorable " +
-        "(v53). The crossReferences collection reads a designmap vector " +
-        "nothing populates - it answers empty while the xref above " +
-        "demonstrably exists. TOC resolution is not demonstrated here " +
-        "→ Appendix A.",
+      "Bookmarks, cross-references and index markers are fixture-authored; " +
+        "only hyperlinks are live-authorable. The crossReferences " +
+        "collection answers empty while the xref above exists. TOC " +
+        "resolution is not shown here → Appendix A.",
     ),
   );
 

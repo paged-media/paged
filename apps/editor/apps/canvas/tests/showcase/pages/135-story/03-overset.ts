@@ -20,15 +20,22 @@
 // Overset, honestly (p36): a frame deliberately two sizes too small
 // for its story, asserted through the engine's own diagnostic — the
 // model holds every character, the render clips, and the stories
-// read-out says so. Plus the jump line: pageNumber and nextPageNumber
-// fields inserted as live markers.
+// read-out says so. Then the frame is threaded onward to a second stand
+// and the flag clears: the overset is demonstrated, not resident, so the
+// finished book's health report stays clean. Plus the jump line:
+// pageNumber and nextPageNumber fields inserted as live markers.
 
 import { expect } from "@playwright/test";
 
-import { marginNote, plate, specLabel } from "../../annual-support";
-import { STYLE, SWATCH, p } from "../../names-annual";
+import {
+  assignLayer,
+  marginNote,
+  plate,
+  specLabel,
+} from "../../annual-support";
+import { LAYER, STYLE, SWATCH, p } from "../../names-annual";
 import type { PageContext, PageReport } from "../../types";
-import { pourOne, prose, storySummaries } from "./00-support";
+import { pageIdOf, pourOne, prose, storySummaries } from "./00-support";
 
 const OVERSET_TEXT =
   "An overset is not a loss; it is a fact about fit, recorded rather than " +
@@ -43,9 +50,9 @@ const OVERSET_TEXT =
   "hundred points of depth, or thread it onward to a second stand, and the " +
   "hidden text returns without being retyped, because it never left. The " +
   "red badge a designer sees on an overset frame is this same diagnostic " +
-  "wearing its working clothes. Everything below this line that you cannot " +
-  "read is the point of the specimen: the count says one thing, the clip " +
-  "says less, and the difference is the overset.";
+  "wearing its working clothes. This page did the second: the overset was " +
+  "read while the tinted frame stood alone, the frame was then threaded to " +
+  "the stand below, and the rest of the paragraph came back on its own.";
 
 export async function build(ctx: PageContext): Promise<PageReport> {
   const { doc } = ctx;
@@ -65,11 +72,11 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     [
       {
         text:
-          "The tinted frame below holds more text than it can show. Overset " +
-          "text is editor state: retained by the model, saved by the " +
+          "The tinted frame below was poured more text than it can show. " +
+          "Overset text is editor state: retained by the model, saved by the " +
           "container, clipped by the render, and reported by the engine as a " +
-          "diagnostic — the assertion under this page reads that diagnostic, " +
-          "not the pixels.",
+          "diagnostic — the assertion under this page read that diagnostic, " +
+          "not the pixels, before the frame was threaded on.",
         style: STYLE.bodySmall,
       },
     ],
@@ -112,6 +119,22 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     summary?.overset,
     "a frame holding more text than fits must report overset",
   ).toBe(true);
+
+  // ── the second stand: thread it on, and the overset returns ───────
+  const stand = await doc.textFrame(pageIdOf(ctx, page), [64, 384, 492, 630]);
+  await assignLayer(ctx, "textFrame", stand, LAYER.content);
+  await doc.linkFrames(exhibit.frameId, stand);
+  elements.push(stand);
+  expect(await doc.storyChars(exhibit.storyId)).toBe(OVERSET_TEXT.length);
+  await doc.renderPage(page);
+  const [threadedStory] = await doc.storyIds(exhibit.storyId);
+  const after = (await storySummaries(ctx.page)).find(
+    (s) => s.selfId === threadedStory,
+  );
+  expect(
+    after?.overset,
+    "threaded onward, the story fits: the overset was editor state",
+  ).toBe(false);
 
   // ── the jump line: live page-number markers ───────────────────────
   // insertField puts a one-character marker (U+E018/E019) into the
@@ -156,7 +179,7 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   elements.push(
     await specLabel(ctx, page, [
       "Specimen No. 53",
-      "stories: overset flag",
+      "stories: overset flag, then linkFrames",
       "insertField: pageNumber",
       "insertField: nextPageNumber",
     ]),

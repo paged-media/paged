@@ -317,9 +317,9 @@ export async function build(ctx: PageContext): Promise<PageReport> {
       {
         text:
           committed !== null && changed
-            ? `AFTER · clone + heal transplant flowered turf into the upper ` +
-              `meadow; content-aware fill lifts a flower cluster from the ` +
-              `lower right · ${committed.toLocaleString("en-US")} B committed`
+            ? `AFTER · clone + heal move flowered turf into the upper ` +
+              `meadow; content-aware fill lifts a cluster · ` +
+              `${committed.toLocaleString("en-US")} B committed`
             : "AFTER · the retouch did not land on this lane — this frame " +
               "carries the photograph as shot",
         style: STYLE.specLabel,

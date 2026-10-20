@@ -243,13 +243,15 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     ...source.html
       .split("\n")
       .filter((l) => l.trim().length > 0)
-      .slice(0, 9)
+      // Excerpts sized to the frame: with nine + six lines (some of them
+      // wrapping at 212 pt) the closing "options" line was overset.
+      .slice(0, 7)
       .map((l) => codeLine(l)),
     `    "css": /* ${cssBytes} bytes, excerpt: */`,
     ...source.css
       .split("\n")
       .filter((l) => l.trim().length > 0)
-      .slice(4, 10)
+      .slice(4, 9)
       .map((l) => codeLine(l)),
     `    "options": { "media": "print", "overflow": "clip" } } }`,
   ];
@@ -293,9 +295,9 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   elements.push(
     await specLabel(ctx, p(104), [
       "Specimen No. 171",
-      "insertWebFrame (one undoable batch)",
-      "setPluginMetadata x-paged:media.paged.web {v:1, data}",
-      "renderWebFrame — Blitz → C-1 sceneLayer",
+      "insertWebFrame (one batch)",
+      "setPluginMetadata media.paged.web",
+      "renderWebFrame → C-1 sceneLayer",
       `${envelopeFor(source).length} envelope bytes`,
     ]),
   );

@@ -348,9 +348,8 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   }
   await rowCaption(
     342,
-    "simplifyPath tol 6 · outlineStroke w6 (the stroke becomes a " +
-      "region) · offsetPath +8. Edit positions were read back through " +
-      "requestPathAnchors, never guessed from page arithmetic.",
+    "simplifyPath tol 6 · outlineStroke w6 · offsetPath +8 - edit " +
+      "positions read back, never guessed.",
   );
 
   // ── band B: the planar ops ───────────────────────────────────────
@@ -399,8 +398,8 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   }
   await rowCaption(
     440,
-    "pathfinderBoolean on fresh overlapping pairs: union · intersect · " +
-      "subtract · exclude (the survivor keeps the bottom shape's paint)",
+    "pathfinderBoolean: union · intersect · subtract · exclude (the " +
+      "bottom shape's paint survives)",
   );
 
   const B2 = 458;
@@ -449,9 +448,8 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   });
   await rowCaption(
     598,
-    `outline (edges become open lines) · minus back · faces, keeping ` +
-      `only the engine-minted overlap face ${lens.id} - read through ` +
-      `requestPlanarRegions, never guessed.`,
+    `outline · minus back · faces, keeping only the overlap face ` +
+      `${lens.id} - read back, never guessed.`,
   );
 
   elements.push(

@@ -47,13 +47,11 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     [
       {
         text:
-          "A table is not a grid of rectangles that happen to align; it is a " +
-          "structure the text owns — rows and columns inside a story, with a " +
-          "header that knows to say itself again. This chapter builds one " +
-          "taller than its frame and lets it walk across the gutter, its " +
-          "header and footer repeating at the break; then it takes a cell " +
-          "apart property by property, rebuilds the grid live, and dresses " +
-          "the whole thing in styles.",
+          "A table is not a grid of rectangles that happen to align; it " +
+          "is a structure the text owns, with a header that knows to say " +
+          "itself again. This chapter builds one taller than its frame " +
+          "and walks it across the gutter, then takes a cell apart, " +
+          "rebuilds the grid live, and dresses it in styles.",
         style: STYLE.deck,
       },
     ],

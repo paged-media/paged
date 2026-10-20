@@ -451,13 +451,10 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     await marginNote(
       ctx,
       p(107),
-      "The registry records bake-to-native as PARTIAL (text at the " +
-        "default face, solid rects, single-subpath paths; the rest " +
-        "deferred and counted), so this ledger demonstrates the bake and " +
-        "claims no registry row for it. And the bake sits on a RECTO " +
-        "deliberately: on a facing verso the geometry door answers in " +
-        "spread space and the bake materializes onto the pasteboard — " +
-        "measured, twice. → Appendix A",
+      "Bake-to-native is partial (default-face text, solid rects, " +
+        "single-subpath paths), so this page demonstrates it and claims no " +
+        "row. It sits on a recto on purpose: on a verso the bake lands on " +
+        "the pasteboard. → Appendix A",
     ),
     await marginNote(
       ctx,

@@ -393,22 +393,19 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     await marginNote(
       ctx,
       pg,
-      "The grouped catalog this chapter wanted — a native table grouped by " +
-        "region with per-group SUM(qty) and AVG(unit_price) footers — lives " +
-        "in the engine (the §9.4 record-flow lane carries multi-level " +
-        "grouping and footer aggregates); this page authors a flat table " +
-        "binding only, so no grouping or footers reach the page. Shown " +
-        "instead: the native four-column table, and the refusals, " +
-        "verbatim. → Appendix A",
+      "The grouped catalog this chapter wanted (per-region SUM and AVG " +
+        "footers) lives in the engine's record-flow lane; this page authors " +
+        "a flat table binding only, so it shows the native table and the " +
+        "refusals, verbatim. → Appendix A",
     ),
   );
 
   elements.push(
     await specLabel(ctx, pg, [
       "Specimen No. 178",
-      "authored table binding → insertTextFrame + insertTable + cell pour",
-      "table translated by resizeFrame (stored coords, spread offset folded)",
-      "governed catalog · batch plans · provider publish · plan-batch refusal",
+      "table binding → insertTextFrame + insertTable + cell pour",
+      "moved by resizeFrame",
+      "governed catalog · batch plans · publish · refusal",
     ]),
   );
 

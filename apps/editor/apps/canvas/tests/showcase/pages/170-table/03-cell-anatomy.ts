@@ -217,7 +217,7 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   await marginNote(
     ctx,
     p(68),
-    "cellFillTint is stored per cell: a read answers 30, and the second cell paints the vermilion at that tint beside the full-strength first — edge-stroke tints paint the same way. Alternating row fills are a table-style region property — no per-table wire path; they arrive through an applied style (the ledger overleaf, dressed in Annual Table). → Appendix A",
+    "cellFillTint is stored per cell: a read answers 30, and the second cell paints the vermilion at that tint beside the full-strength first. Alternating row fills come from an applied table style (the ledger overleaf). → Appendix A",
   );
   elements.push(
     await specLabel(ctx, p(68), [

@@ -249,10 +249,8 @@ export async function build(ctx: PageContext): Promise<PageReport> {
               "between its own blocks, recursively — the pressmark image is " +
               "atomic and moves whole rather than tearing."
             : "Route cards, one source, two frames — threaded and persisted, " +
-              "but the engine REFUSED this chain's scene layers on this build " +
-              "(the image-bearing fragment's message carries a null where the " +
-              "wire wants a number). The frames above are the honest empties; " +
-              "the finding is recorded, not painted over.",
+              "but this build refused the chain's scene layers; the empty " +
+              "frames above are the honest record.",
         style: STYLE.caption,
       },
     ],

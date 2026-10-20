@@ -48,15 +48,13 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     [
       {
         text:
-          "HTML and CSS are a writing system for documents, and this chapter " +
-          "treats them as content: an article authored as markup, placed in a " +
-          "frame, laid out by a real browser engine, and printed here beside " +
-          "its own source. The pages that follow thread one source across " +
-          "many frames — including a named sidebar flow — break a forty-row " +
-          "table across three frames with its two-row header repeating, and " +
-          "close on the honest asymmetry of the whole affair: a live render " +
-          "is session state, and only what is baked to native content " +
-          "survives the file being closed.",
+          "HTML and CSS are a writing system for documents, and this " +
+          "chapter treats them as content: an article laid out by a real " +
+          "browser engine and printed beside its own source. The pages " +
+          "that follow thread one source across many frames, break a " +
+          "forty-row table across three, and close on the asymmetry: a " +
+          "live render is session state, and only what is baked to native " +
+          "content survives.",
         style: STYLE.deck,
       },
     ],

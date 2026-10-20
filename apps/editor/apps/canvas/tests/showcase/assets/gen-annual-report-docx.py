@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
-# annual-report.docx — the Paged Annual's Word chapter input: a three-to-four
-# page circulation report exercising EVERY tier paged.doc lowers.
+# annual-report.docx — the Paged Annual's Word chapter input: a short
+# circulation report exercising EVERY tier paged.doc lowers, sized to the
+# spread it is poured into (its two frames hold all of it: a longer report
+# left its tail overset in the finished book).
 #
 # stdlib only (zipfile + zlib + hand-authored WordprocessingML), fixed zip
 # member order + the fixed 1980 timestamp, so re-running is byte-stable:
@@ -103,9 +105,12 @@ DOC_RELS = XML_DECL + f"""<Relationships xmlns="http://schemas.openxmlformats.or
 </Relationships>"""
 
 # docDefaults + the four named styles the report applies. Sizes are half-points.
+# The default face is the annual's own body face, which the build ships
+# (core corpus/fonts, OFL): a report set in a face the build lacks (it was
+# Georgia) left a missing font in the finished book.
 STYLES = XML_DECL + f"""<w:styles xmlns:w="{NS_W}">
   <w:docDefaults>
-    <w:rPrDefault><w:rPr><w:rFonts w:ascii="Georgia"/><w:sz w:val="21"/></w:rPr></w:rPrDefault>
+    <w:rPrDefault><w:rPr><w:rFonts w:ascii="Source Serif 4"/><w:sz w:val="21"/></w:rPr></w:rPrDefault>
     <w:pPrDefault><w:pPr><w:spacing w:after="120"/></w:pPr></w:pPrDefault>
   </w:docDefaults>
   <w:style w:type="paragraph" w:styleId="Normal"><w:name w:val="Normal"/></w:style>
@@ -178,28 +183,23 @@ def document():
     b.append(p("Circulation Report", "Heading1"))
     b.append(
         '<w:p><w:r><w:t xml:space="preserve">This is the year as the press room '
-        "counted it: every copy that left the dock, every edition that opened on "
-        "a screen, and the honest arithmetic between the two. The figures below "
-        "are the same ones the ledgers carry — nothing is rounded upward, and "
-        "nothing that stayed in the building is counted."
+        "counted it: every copy that left the dock and every edition opened on "
+        "a screen. Nothing is rounded upward."
         "</w:t></w:r><w:r><w:footnoteReference w:id=\"2\"/></w:r></w:p>"
     )
 
     b.append(p("The year in print", "Heading2"))
     b.append(
         '<w:p><w:r><w:t xml:space="preserve">Print circulation rose in every '
-        "quarter but the third, when the coastal routes flooded and two "
-        "deliveries ran a week late. The full-year total came to "
+        "quarter but the flooded third. The full-year total came to "
         "</w:t></w:r>"
         '<w:r><w:rPr><w:b/></w:rPr><w:t xml:space="preserve">8,315 copies</w:t></w:r>'
         '<w:r><w:t xml:space="preserve">, up eleven percent on the year before. '
         "The digital editions grew faster still — "
         "</w:t></w:r>"
         '<w:r><w:rPr><w:i/></w:rPr><w:t xml:space="preserve">4,295 first opens</w:t></w:r>'
-        '<w:r><w:t xml:space="preserve"> against 2,700 — though the press '
-        "would like it noted that a screen has never once smelled of ink. The "
-        "one number the board watched all year is printed here in the house "
-        "colour: </w:t></w:r>"
+        '<w:r><w:t xml:space="preserve"> against 2,700. In the house colour: '
+        "</w:t></w:r>"
         '<w:r><w:rPr><w:b/><w:color w:val="1C3F94"/></w:rPr>'
         '<w:t xml:space="preserve">spoilage held under four percent</w:t></w:r>'
         '<w:r><w:t xml:space="preserve"> for the first time since the rebuild.'
@@ -207,18 +207,14 @@ def document():
     )
     b.append(
         p(
-            "The fourth quarter deserves its own sentence. A 2,390-copy run is "
-            "the largest this house has set since the two-press years, and it "
-            "went to bed on schedule, on the first attempt, with the plates "
-            "still warm from the proofing pass. The crew has asked that this be "
-            "recorded plainly and without adjectives; it is, except for that one."
+            "The fourth quarter's 2,390-copy run, the largest since the "
+            "two-press years, went to bed on schedule."
         )
     )
 
     b.append(p("How the counts are taken", "Heading2"))
     b.append(p(
-        "Three rules govern every number in this report. They are old rules, "
-        "and they have outlasted four presses and two buildings:"
+        "Three old rules govern every number in this report:"
     ))
     b.append(li("A copy is counted when it leaves the dock, not when it is printed.", 1, 0))
     b.append(li("Bundles broken for waste return to stock, uncounted.", 1, 1))
@@ -228,8 +224,7 @@ def document():
 
     b.append(p("Press operations", "Heading2"))
     b.append(p(
-        "The operations calendar ran in the same order it always has, and the "
-        "order is the point — each step gates the next:"
+        "Each step of the calendar gates the next:"
     ))
     b.append(li("Plates are proofed against the signed-off layout.", 2, 0))
     b.append(li("Registration is checked on the first fifty sheets.", 2, 1))
@@ -247,17 +242,11 @@ def document():
         "<w:tr>" + tc("Region") + tc("Channel") + tc("Copies") + "</w:tr>"
         "<w:tr>" + tc("Alpine", '<w:vMerge w:val="restart"/>') + tc("Print") + tc("3,410") + "</w:tr>"
         "<w:tr>" + tc("", "<w:vMerge/>") + tc("Digital") + tc("1,240") + "</w:tr>"
-        "<w:tr>" + tc("Harbour") + tc("Print") + tc("2,905") + "</w:tr>"
-        "<w:tr>" + tc("Harbour") + tc("Digital") + tc("1,470") + "</w:tr>"
         "<w:tr>" + tc("Plateau") + tc("Print") + tc("2,000") + "</w:tr>"
-        "<w:tr>" + tc("Plateau") + tc("Digital") + tc("1,585") + "</w:tr>"
         "</w:tbl>"
     )
     b.append(p(
-        "The Alpine routes remain the house's backbone, and the plateau's "
-        "digital growth is the story of the year: a region that took its first "
-        "print delivery only six years ago now opens more editions on screens "
-        "than it receives on paper."
+        "The Alpine routes remain the house's backbone."
     ))
 
     # The embedded image: the plate mark, 120 x 80 pt (EMU = pt * 12700).
@@ -283,21 +272,18 @@ def document():
 
     b.append(p("Digital editions", "Heading2"))
     b.append(
-        '<w:p><w:r><w:t xml:space="preserve">The full tables, the route maps, '
-        "and the month-by-month tallies live in the online annual at "
+        '<w:p><w:r><w:t xml:space="preserve">The full tables live at '
         "</w:t></w:r>"
         '<w:hyperlink r:id="rId50"><w:r><w:t>paged.media/annual</w:t></w:r></w:hyperlink>'
-        '<w:r><w:t xml:space="preserve">, and the counting rules themselves are '
-        "documented, in more words than they deserve, at "
+        '<w:r><w:t xml:space="preserve">, the counting rules at '
         "</w:t></w:r>"
         '<w:fldSimple w:instr="HYPERLINK &quot;https://docs.paged.media/&quot;">'
         "<w:r><w:t>docs.paged.media</w:t></w:r></w:fldSimple>"
         '<w:r><w:t xml:space="preserve">. Subscribers moved between the two '
-        "channels all year without ceremony"
+        "channels"
         "</w:t></w:r>"
         '<w:r><w:footnoteReference w:id="3"/></w:r>'
-        '<w:r><w:t xml:space="preserve"> and the report treats them as one '
-        "readership with two doors."
+        '<w:r><w:t xml:space="preserve">: one readership, two doors.'
         "</w:t></w:r></w:p>"
     )
 
@@ -317,9 +303,8 @@ def document():
         )
 
     b.append(p(
-        "Next year's targets are set the way this house has always set them: "
-        "one more route, one fewer excuse, and a spoilage figure that keeps its "
-        "head below four. The presses are ready. So is the dock."
+        "Next year: one more route, and spoilage below four. The presses are "
+        "ready."
     ))
 
     # Page geometry: the annual's 540 x 720 pt page (10800 x 14400 twips),

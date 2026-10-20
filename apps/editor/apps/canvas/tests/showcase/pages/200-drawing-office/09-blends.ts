@@ -422,7 +422,7 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     await marginNote(
       ctx,
       page,
-      "a blend refuses keys whose subpath/anchor structure differs rather than inventing a correspondence, and refuses text frames outright; the blend intermediates minted one page width off on this facing-spread verso and were re-homed by one transform batch (the measured read/insert seam) → Appendix A",
+      "A blend refuses keys whose subpath structure differs, and text frames outright; its intermediates minted one page width off on this verso and were re-homed by one transform batch → Appendix A",
     ),
   );
 

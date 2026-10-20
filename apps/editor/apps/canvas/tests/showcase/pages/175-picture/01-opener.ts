@@ -65,12 +65,9 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     [
       {
         text:
-          "A photograph enters a document twice: once as pixels the engine " +
-          "must decode, and once as a claim about where those pixels came " +
-          "from. This chapter places the same image through six codecs, " +
-          "keeps an EPS honestly undecoded, and works the fitting model — " +
-          "then shows the inline lane that carries every one of these " +
-          "pictures through the container round trip.",
+          "A photograph enters a document twice: as pixels to decode and " +
+          "as a claim about their source. Here one image runs six codecs, " +
+          "an EPS stays undecoded, and fitting is worked.",
         style: STYLE.deck,
       },
     ],
@@ -121,8 +118,7 @@ export async function build(ctx: PageContext): Promise<PageReport> {
         text:
           `Alpine sunburst at sunrise · Sagui Andrea, Pexels · ${HERO_W} × ` +
           `${HERO_H} px, ${statSync(HERO).size.toLocaleString("en-US")} bytes ` +
-          `of baseline JPEG, inline · frame cut to the image's own 3:2 · ` +
-          `keyline: Plate Frame (appliedObjectStyle)`,
+          `of JPEG, inline`,
         style: STYLE.specValue,
       },
     ],

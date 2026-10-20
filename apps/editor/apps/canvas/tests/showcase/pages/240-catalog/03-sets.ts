@@ -316,22 +316,20 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     await marginNote(
       ctx,
       pg,
-      "The price-band RULE this page planned (D-13: a data condition " +
-        "applying a named cell style through the engine's evaluate_rule and " +
-        "the minted rule cell style) is engine-shipped but has no editor " +
-        "surface — the bindings panel authors variable, image and barcode " +
-        "kinds only, so no rule binding can be defined here and none is " +
-        "faked. → Appendix A",
+      "The price-band rule this page planned (a data condition applying " +
+        "a cell style) is in the engine but has no editor surface: the " +
+        "bindings panel authors variable, image and barcode kinds only, so " +
+        "none is faked here. → Appendix A",
     ),
   );
 
   elements.push(
     await specLabel(ctx, pg, [
       "Specimen No. 180",
-      "preview stepper (resolve_at, of-N bound)",
-      "captureDataSet / applyDataSet — payload commands",
-      "refresh: resolveBindings + refreshFields, measured",
-      "change report baseline · locale probe",
+      "preview stepper (resolve_at)",
+      "captureDataSet / applyDataSet",
+      "resolveBindings + refreshFields, measured",
+      "change report · locale probe",
     ]),
   );
 

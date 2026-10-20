@@ -59,6 +59,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { openCanvas } from "../fidelity/canvas-driver";
 import type { CoverageClaim } from "./coverage";
 import { ShowcaseDoc } from "./driver";
+import { oversetStories } from "./health";
 import { Ledger, writeFragment, type ChapterFragment } from "./ledger";
 import { ANNUAL_PAGES } from "./names-annual";
 import type { SpreadSpec } from "./types";
@@ -359,6 +360,21 @@ export async function runChapter(
         `${cost.pageCalls} other calls ${(cost.pageMs / 1000).toFixed(1)}s)`,
     );
   }
+
+  // ── fit ──────────────────────────────────────────────────────────
+  // Every story fits its frames. The flag derives from build
+  // diagnostics, so compose the chapter's pages first; the chapters
+  // before this one passed the same check, so any overset story now is
+  // this chapter's copy (the apparatus helpers, a caption, a deck).
+  for (const i of new Set(spec.modules.flatMap((m) => m.pages))) {
+    await doc.renderPage(i, 256);
+  }
+  const overset = await oversetStories(page);
+  expect(
+    overset,
+    `chapter ${spec.id} left ${overset.length} overset stor${overset.length === 1 ? "y" : "ies"} ` +
+      `— fit the copy or the frame:\n${overset.map((s) => `  ${s.id}  ${s.text}`).join("\n")}`,
+  ).toEqual([]);
 
   // ── checkpoint ────────────────────────────────────────────────────
   const bytes = await doc.exportPaged();

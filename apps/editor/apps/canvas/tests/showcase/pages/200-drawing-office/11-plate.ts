@@ -265,7 +265,7 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     await marginNote(
       ctx,
       page,
-      "the trace is ONE-SHOT and fills-only (no live re-trace, no centreline strokes; registry row partial, demonstrated not claimed); its regions minted one page width off on this facing-spread verso and were re-homed by one transform batch; an opacity-mask release restacks the mask on TOP - only undo restores its exact z slot → Appendix A",
+      "The trace is one-shot and fills-only (demonstrated, not claimed); its regions minted one page width off on this verso and were re-homed in one batch. Releasing an opacity mask restacks it on top → Appendix A",
     ),
   );
   if (!maskWorked) {

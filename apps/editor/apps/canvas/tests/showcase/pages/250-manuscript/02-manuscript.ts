@@ -369,17 +369,14 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   const capLeft = await proseFrame(
     ctx,
     pg116,
-    [60, 568, 240, 656],
+    // Inside the content box: at 656 the caption ran into the folio.
+    [60, 568, 240, 636],
     [
       {
         text:
-          "Tiers on this page: the report's Heading 1 / Heading 2 / caption " +
-          "styles were synthesized into this document's catalog and applied " +
-          "over these paragraphs, and the counting rules and press calendar " +
-          "carry its two list families. Measured honestly: on this engine " +
-          "the applied styles and list glyphs do not change the paint — the " +
-          "story reads complete but renders in one face and size. Recorded, " +
-          "not retouched.",
+          "Tiers: the report's heading and caption styles were synthesized " +
+          "into this catalog and applied, its two list families carried " +
+          "over. Measured: they do not yet change the paint here.",
         style: STYLE.caption,
       },
     ],
@@ -400,17 +397,16 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   const capRecto = await proseFrame(
     ctx,
     pg117,
-    [48, 606, 480, 666],
+    // Inside the content box: at 666 it ran into the folio and the
+    // apparatus band.
+    [48, 588, 480, 638],
     [
       {
         text:
-          "Tiers continuing here: the circulation table keeps its gridSpan " +
-          "title row and vMerge'd Alpine cell; the plate mark arrives as an " +
-          "anchored image frame that paints the missing-image marker — the " +
-          "embedded PNG's bytes have no URI the anchored-frame door can " +
-          "fetch — and it overlaps the rows beneath it; “paged.media/annual” " +
-          "and “docs.paged.media” are the two Word hyperlink encodings — " +
-          "w:hyperlink and a HYPERLINK field — both lowered to native links. " +
+          "Tiers continuing: the table keeps its gridSpan title row and " +
+          "vMerge'd cell; the plate mark is an anchored picture whose link " +
+          "is a data URI carrying its own bytes; both Word hyperlink " +
+          "encodings lower to native links. " +
           (chapterDoc.partPath
             ? `Source part, from the container's own listing: ${chapterDoc.partPath}`
             : "The container listing carried no source part on this lane."),
@@ -447,10 +443,10 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     await specLabel(ctx, pg117, [
       "Specimen No. 184",
       threaded
-        ? "linkFrames → one story across the spread (asked, not assumed)"
+        ? "linkFrames → one story across the spread"
         : "linkFrames carry FAILED on this engine — recorded",
-      "gridSpan+vMerge table · embedded PNG · both hyperlink forms",
-      "listPagedParts → single-prefix source part",
+      "gridSpan+vMerge table · PNG · both hyperlink forms",
+      "listPagedParts → one source part",
     ]),
   );
 

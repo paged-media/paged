@@ -90,12 +90,10 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     [
       {
         text:
-          "A document's palette is a contract with a press. This chapter reads " +
-          "the annual's seven inks off the live collection, mints and edits new " +
-          "ones in front of you, walks the whole library out of the file as " +
-          "Adobe Swatch Exchange bytes and back in, and finishes at the " +
-          "prepress bench: profiles, proofs, ink aliases, and the defaults a " +
-          "fresh frame is born wearing.",
+          "A document's palette is a contract with a press. This chapter " +
+          "reads the annual's seven inks off the live collection, mints " +
+          "and edits new ones, walks the library out as Adobe Swatch " +
+          "Exchange bytes and back, and ends at the prepress bench.",
         style: STYLE.deck,
       },
     ],

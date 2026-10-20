@@ -64,14 +64,12 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     [
       {
         text:
-          "A catalog is not a page decorated with numbers; it is a database " +
-          "wearing typography. This chapter publishes FROM data rather than " +
-          "decorating WITH it: a forty-eight-row order book registers with a " +
-          "real query engine, its columns become bindings whose expressions " +
-          "the engine writes, and what lands on these pages — live fields, a " +
-          "native table, four barcode symbologies drawn as page geometry — is " +
-          "resolved content, not pasted text. Where the shipped surfaces stop " +
-          "short of the engine underneath, the margin says so.",
+          "A catalog is not a page decorated with numbers; it is a " +
+          "database wearing typography. Here a forty-eight-row order book " +
+          "registers with a query engine, its columns become bindings, " +
+          "and what lands on these pages — live fields, a native table, " +
+          "barcodes drawn as geometry — is resolved content, not pasted " +
+          "text.",
         style: STYLE.deck,
       },
     ],

@@ -203,10 +203,8 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     ctx,
     page,
     [156, 536, 410, 610],
-    "The inverse wrap turns the exclusion inside out: instead of keeping " +
-      "text away from the outline, it keeps text within it, so this " +
-      "paragraph paints only where it crosses the tinted plate it " +
-      "overlaps — everything outside the outline is given up.",
+    "The inverse wrap keeps this paragraph inside the tinted plate, " +
+      "not away from it.",
     STYLE.bodySmall,
   );
   const inverseTile = await mkTint([170, 540, 330, 606]);

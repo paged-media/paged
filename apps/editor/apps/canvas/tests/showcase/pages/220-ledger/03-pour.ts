@@ -220,22 +220,20 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     await marginNote(
       ctx,
       p(98),
-      "The page lowering runs over the engine's NoStyles contract " +
-        "(getRangeLowered): the workbook's cell fills and text colours do " +
-        "not reach this table today. The styled read exists as a separate " +
-        "door (getRangeStyled) feeding the Character panel provider; " +
-        "flipping it on under the page lane is a recorded, deliberate " +
-        "non-change. → Appendix A",
+      "The page lowering reads the workbook without its styles " +
+        "(getRangeLowered), so its cell fills and text colours do not " +
+        "reach this table. The styled read (getRangeStyled) is a separate " +
+        "door, deliberately not used here. → Appendix A",
     ),
   );
 
   elements.push(
     await specLabel(ctx, p(98), [
       "Specimen No. 153",
-      "lowerToFrame (command lane) — Data!A1:E5",
+      "lowerToFrame — Data!A1:E5",
       "insertTextFrame + insertTable + cell pour",
-      "columns via host.text.measureString (S-13)",
-      "showGridInFrame · hideGridInFrame (session, put away)",
+      "columns via host.text.measureString",
+      "show/hideGridInFrame",
     ]),
   );
 

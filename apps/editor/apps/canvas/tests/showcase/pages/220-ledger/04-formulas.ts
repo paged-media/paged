@@ -145,11 +145,13 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   // behind the workbook tab by the late reveal, and the formula bar
   // vanished mid-drive. So put the workbook panel away first (it shares
   // a dock group with the grid); its return is the completion signal.
+  // (The dock keeps a background tab mounted, so "put away" is hidden,
+  // not absent.)
   await openPanel(page, GRID_PANEL);
   await expect(
     page.locator('[data-sheet-panel="workbook"]'),
     "the workbook panel is put away before the import",
-  ).toHaveCount(0, { timeout: 30_000 });
+  ).toBeHidden({ timeout: 30_000 });
   const chooser = page
     .waitForEvent("filechooser", { timeout: 120_000 })
     .catch(() => null);
@@ -169,6 +171,10 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   await expect(
     page.locator('[data-sheet-panel="workbook"]'),
     "the formula workbook parsed, persisted, and the command revealed it",
+  ).toBeVisible({ timeout: 120_000 });
+  await expect(
+    page.locator('[data-sheet-panel="workbook"]'),
+    "the revealed workbook is the formula workbook",
   ).toContainText("sheet-02-formulas.xlsx", { timeout: 120_000 });
 
   // ── the calc engine, through the formula bar ─────────────────────
