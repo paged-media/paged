@@ -1145,9 +1145,20 @@ pub enum DisplayCommand {
     /// ([`crate::mask::feather_run_starts`]). Emitters bracket only
     /// objects that carry a feather; a list without markers keeps the
     /// contiguous-run reading.
+    ///
+    /// `path_id` is the outline the feathers are built on: the frame's
+    /// own path grown to its stroke's outer edge, from which InDesign
+    /// measures a feather (engine ADR 204).
     BeginFeatheredObject {
         path_id: PathId,
         transform: Transform,
+        /// The object paints nothing of its own outline — a text frame
+        /// with no fill and no stroke — so InDesign shapes its feather
+        /// by what its content paints: the text. The renderer rewrites
+        /// such a run's feathers onto the outlines of the fills inside
+        /// it once the text sits there; a lane reads the run as any
+        /// other.
+        content_shaped: bool,
     },
     /// Push a generic transparency / effect layer. Subsequent drawing
     /// commands emit into an offscreen buffer sized to `bounds` (page

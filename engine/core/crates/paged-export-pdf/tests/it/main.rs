@@ -7,6 +7,7 @@ mod bookmarks;
 mod effects_export;
 mod export_x4;
 mod feathered_picture;
+mod feathered_stroke_and_text;
 mod links;
 mod opacity_mask;
 mod pdf_fragments;

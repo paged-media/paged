@@ -97,9 +97,23 @@ pub(super) fn emit_oval_into(
     } else {
         (None, outer, None)
     };
-    if let (Some(pid), Some(effects)) = (effects_path, oval.effects.as_ref()) {
+    // The feathers' own outline: the ellipse grown to the stroke's outer
+    // edge, from which InDesign measures a feather (ADR 204).
+    let feather_path = match (effects_path, oval.effects.as_ref()) {
+        (Some(pid), Some(effects)) => Some(crate::module::feather_outline(
+            page,
+            effects,
+            pid,
+            effects_unit_normalize,
+            frame.stroke_outset_pt(),
+        )),
+        _ => None,
+    };
+    if let (Some(pid), Some(fpid), Some(effects)) =
+        (effects_path, feather_path, oval.effects.as_ref())
+    {
         crate::module::emit_effects_pre_fill(page, effects, pid, effects_xform, palette, color_ctx);
-        crate::module::begin_feathered_object(page, effects, pid, effects_xform);
+        crate::module::begin_feathered_object(page, effects, fpid, effects_xform, false);
     }
     let fill_group = push_target_group(page, frame.fill_target, oval_rect, outer);
     crate::module::fill_shadow_module(&frame, page, palette, color_ctx, outer);
@@ -134,20 +148,10 @@ pub(super) fn emit_oval_into(
     if content_group {
         pop_blend_group(page);
     }
-    // The interior effects and the feathers composite over the picture
-    // too: InDesign applies an object's effects to the object, content
-    // included.
+    // The interior effects composite over the picture too: InDesign
+    // applies an object's effects to the object, content included.
     if let (Some(pid), Some(effects)) = (effects_path, oval.effects.as_ref()) {
-        crate::module::emit_effects_post_fill(
-            page,
-            effects,
-            pid,
-            effects_xform,
-            palette,
-            color_ctx,
-            effects_unit_normalize,
-            frame.stroke_outset_pt(),
-        );
+        crate::module::emit_interior_effects(page, effects, pid, effects_xform, palette, color_ctx);
     }
     let stroke_group = push_target_group(page, frame.stroke_target, oval_rect, outer);
     crate::module::stroke_shadow_module(&frame, page, palette, color_ctx, outer);
@@ -170,6 +174,20 @@ pub(super) fn emit_oval_into(
     );
     if stroke_group {
         pop_blend_group(page);
+    }
+    // The feathers come last, over the stroke as well (ADR 204).
+    if let (Some(pid), Some(fpid), Some(effects)) =
+        (effects_path, feather_path, oval.effects.as_ref())
+    {
+        crate::module::emit_feathers(
+            page,
+            effects,
+            fpid,
+            pid,
+            effects_xform,
+            effects_unit_normalize,
+            frame.stroke_outset_pt(),
+        );
     }
     if needs_group {
         pop_blend_group(page);
@@ -1010,8 +1028,20 @@ pub(super) fn emit_rectangle_into(
             (id, Transform::for_rect_in(r, outer), Some(r))
         }
     });
-    if let (Some(effects), Some((effects_path, effects_xform, _))) =
-        (rect.effects.as_ref(), effects_target)
+    // The feathers' own outline: the frame grown to the stroke's outer
+    // edge, from which InDesign measures a feather (ADR 204).
+    let feather_path = match (rect.effects.as_ref(), effects_target) {
+        (Some(effects), Some((pid, _, unit))) => Some(crate::module::feather_outline(
+            page,
+            effects,
+            pid,
+            unit,
+            resolved.stroke_outset_pt(),
+        )),
+        _ => None,
+    };
+    if let (Some(effects), Some((effects_path, effects_xform, _)), Some(fpid)) =
+        (rect.effects.as_ref(), effects_target, feather_path)
     {
         crate::module::emit_effects_pre_fill(
             page,
@@ -1021,8 +1051,24 @@ pub(super) fn emit_rectangle_into(
             palette,
             color_ctx,
         );
-        crate::module::begin_feathered_object(page, effects, effects_path, effects_xform);
+        crate::module::begin_feathered_object(page, effects, fpid, effects_xform, false);
     }
+    // Last of everything the frame paints, over the stroke too.
+    let emit_feathers = |page: &mut BuiltPage| {
+        if let (Some(effects), Some((pid, xform, unit)), Some(fpid)) =
+            (rect.effects.as_ref(), effects_target, feather_path)
+        {
+            crate::module::emit_feathers(
+                page,
+                effects,
+                fpid,
+                pid,
+                xform,
+                unit,
+                resolved.stroke_outset_pt(),
+            );
+        }
+    };
 
     let fill_group = push_target_group(page, resolved.fill_target, r, outer);
     crate::module::fill_shadow_module(&resolved, page, palette, color_ctx, outer);
@@ -1046,21 +1092,19 @@ pub(super) fn emit_rectangle_into(
         pop_blend_group(page);
     }
 
-    // The interior effects and the feathers composite over the picture
-    // too: InDesign applies an object's effects to the object, content
-    // included, so a feathered picture frame fades its picture.
-    if let (Some(effects), Some((effects_path, effects_xform, effects_unit_normalize))) =
+    // The interior effects composite over the picture too: InDesign
+    // applies an object's effects to the object, content included. The
+    // feathers wait for the stroke (`emit_feathers`).
+    if let (Some(effects), Some((effects_path, effects_xform, _))) =
         (rect.effects.as_ref(), effects_target)
     {
-        crate::module::emit_effects_post_fill(
+        crate::module::emit_interior_effects(
             page,
             effects,
             effects_path,
             effects_xform,
             palette,
             color_ctx,
-            effects_unit_normalize,
-            resolved.stroke_outset_pt(),
         );
     }
     let stroke_group = push_target_group(page, resolved.stroke_target, r, outer);
@@ -1095,6 +1139,7 @@ pub(super) fn emit_rectangle_into(
         if stroke_group {
             pop_blend_group(page);
         }
+        emit_feathers(page);
         if needs_group {
             pop_blend_group(page);
         }
@@ -1175,6 +1220,7 @@ pub(super) fn emit_rectangle_into(
     if stroke_group {
         pop_blend_group(page);
     }
+    emit_feathers(page);
     if needs_group {
         pop_blend_group(page);
     }
