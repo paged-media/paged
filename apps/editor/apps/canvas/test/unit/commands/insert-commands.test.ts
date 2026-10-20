@@ -517,6 +517,41 @@ describe("Place image", () => {
     expect(fill?.op).toBe("replaceImageBytes");
   });
 
+  // UX audit F-03 (ADR 262): a picture opened with nothing open fills the
+  // page minted for it, edge to edge — whatever is selected, wherever the
+  // viewport is.
+  test("F-03: a picture opened as a document fills its page", async () => {
+    covers("command:paged.insert.placeImage");
+    stubGlobal("createImageBitmap", async () => ({
+      width: 800,
+      height: 600,
+      close() {},
+    }));
+    const h = inserts({
+      geometry: (e) => ({
+        id: e,
+        pageId: "p1",
+        bounds: [0, 0, 600, 800],
+        itemTransform: null,
+        hasImage: false,
+      }),
+    });
+    const outcome = (await h.invoke("paged.insert.placeImage", {
+      file: { name: "photo.png", bytes: PNG, mimeType: "image/png" },
+      fillPage: { pageId: "p1", widthPt: 800, heightPt: 600 },
+    })) as { applied: boolean };
+    expect(outcome.applied).toBe(true);
+    const [frame, fill] = h.fake.mutations() as Array<{
+      op: string;
+      args: Record<string, unknown>;
+    }>;
+    expect(frame).toEqual({
+      op: "insertFrame",
+      args: { pageId: "p1", bounds: [0, 0, 600, 800] },
+    });
+    expect(fill?.op).toBe("replaceImageBytes");
+  });
+
   test("a cancelled picker places nothing and says nothing", async () => {
     covers("command:paged.insert.placeImage");
     pick([]);
