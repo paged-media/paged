@@ -164,3 +164,41 @@ CLI, as the `paged` bin of `@paged-media/paged` (`packages/paged`), the engine p
 - `apply` and `merge` need paged.data, which is built into the editor and runs on DuckDB-WASM
   (34 MiB; its own engine wasm is 1.4 MiB), so the npm package does not carry it, and the verbs
   say so.
+
+## Amendment — 2026-10-20: a default face, a CMYK profile, and a merge that fails out loud
+
+Checking the CLI as a headless production surface (the role InDesign Server fills) found
+three silent failures and one missing flag. Each is now a decision:
+
+- **A default face.** Without a face the engine sets no text, so a PDF exported without
+  `--font` had blank text and said nothing. The CLI now does what core's Rust `paged` does:
+  a run that names no `--font` sets text in **Inter** (SIL Open Font License 1.1), the face
+  the Rust CLI bundles. `@paged-media/paged` ships it as `fonts/Inter.ttf` with its licence
+  in `fonts/OFL-inter.txt` (0.84 MiB, 0.44 MiB gzipped, about 2 % of the 45 MiB package). A
+  font is not wasm, so the app-wide wasm budget does not move. In a checkout the CLI reads
+  the engine's own copy (`engine/core/corpus/fonts/Inter.ttf`). `--no-default-font` goes
+  without a fallback, to see what a document is missing, and says on stderr that text may
+  not be set; a CLI whose face is missing says the same. The flags are the Rust CLI's.
+- **`--cmyk-profile <file.icc>`** (every verb, the Rust CLI's name): the ICC file every load
+  uses as its CMYK working space, and so the output intent of `export --pdf-standard pdfx4`.
+  A file that is not an ICC profile, or not a CMYK one, is a usage error. Unlike the Rust
+  flag it takes a file only: the Node CLI has no registry of installed profiles to resolve a
+  name against. It reaches the engine through `HarnessOptions.cmykProfile` (plugin-sdk),
+  the load's `cmykIccProfile`.
+- **The bin outlives its verb.** `merge` (with or without `--query`) exited 0 having written
+  nothing, about one run in two. The cause was not the query: `bin.ts` let the verb's promise
+  alone keep the process alive, and while paged.data booted DuckDB the verb awaited work no
+  event-loop handle stood for (a 35 MiB WebAssembly module compiling), so the runtime found
+  the loop empty and ended the process, exit code 0, before the merge had run. The bin now
+  holds the loop open with a timer until the verb settles, for every verb, and a process that
+  ends before then (something calling `process.exit`) says so and exits 70.
+  `test/fixtures/late-plugin.mjs` is the deterministic case: a bundle whose module finishes
+  loading on an unreferenced timer.
+- **`merge` never exits 0 with nothing written.** A query that selects no records, and a
+  merge that places none (a template page without `<<field>>` placeholders), are failures
+  (exit 1) that say which.
+- **Field text as written.** paged.data's merge reads a CSV's fields as the file has them
+  (`9.90`, `01/02/2026`), the way InDesign's Data Merge does, where the typed table the
+  sniffer makes holds `9.9` and a date (paged.data's oracle defect DM-8, closed for the
+  merge in `modules/data`). A value is typed only where the query asks for one: a `CAST`,
+  or a computation.

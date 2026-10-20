@@ -24,6 +24,7 @@ import {
   duckdbHandle,
   type DuckDBHandle,
 } from "../src/query/duckdb";
+import type { ColumnBatch } from "../src/query/recordset";
 import { nodeBootSql } from "./duckdb-node-ext";
 import {
   assertLowered,
@@ -179,6 +180,77 @@ describe.skipIf(!boot.handle || !engineBuilt)(
       const rs = await duck.query("SELECT name FROM reimported");
       expect(rs.row_count).toBe(1);
       expect(rs.columns[0][0]).toEqual({ t: "text", v: "Aardvark 14" });
+    });
+
+    it("reads a CSV as written for a merge: 9.90, 007 and 01/02/2026 stay text, typed reads are unchanged", async () => {
+      const duck = boot.handle!;
+      await duck.registerCsv(
+        "prices",
+        "sku,price,code,date\nA-1,9.90,007,01/02/2026\nB-2,10.00,012,03/04/2026\n",
+      );
+      const text = (batch: ColumnBatch, col: number): (string | null)[] => {
+        const c = batch.columns[col]!;
+        if (c.kind !== "utf8") throw new Error(`column ${col} is ${c.kind}`);
+        const out: (string | null)[] = [];
+        for (let r = 0; r < batch.row_count; r++)
+          out.push(
+            c.valid && !(c.valid[r >> 3]! & (1 << (r & 7)))
+              ? null
+              : new TextDecoder().decode(
+                  c.bytes.subarray(c.offsets[r], c.offsets[r + 1]),
+                ),
+          );
+        return out;
+      };
+      const written = await duck.queryColumnsAsWritten!(
+        'SELECT * FROM "prices"',
+        ["prices"],
+      );
+      expect(written).not.toBeNull();
+      expect(written!.schema.fields.map((f) => f.name)).toEqual([
+        "sku",
+        "price",
+        "code",
+        "date",
+      ]);
+      expect(text(written!, 1)).toEqual(["9.90", "10.00"]);
+      expect(text(written!, 2)).toEqual(["007", "012"]);
+      expect(text(written!, 3)).toEqual(["01/02/2026", "03/04/2026"]);
+
+      // A filter over the text still compares numbers; a CAST asks for a type.
+      const filtered = await duck.queryColumnsAsWritten!(
+        "SELECT sku, price, CAST(price AS DOUBLE) AS n FROM prices WHERE CAST(price AS DOUBLE) > 10",
+        ["prices"],
+      );
+      expect(filtered!.row_count).toBe(0);
+
+      // The typed table the bindings read is the sniffer's, as before, and
+      // it has its name back after the call.
+      const typed = await duck.query("SELECT price, date FROM prices");
+      expect(typed.schema.fields.map((f) => f.ty)).toEqual(["float", "date"]);
+      expect(typed.columns[0][0]).toEqual({ t: "number", v: 9.9 });
+
+      // A source without a twin (not a CSV) reads as usual: nothing to swap.
+      expect(
+        await duck.queryColumnsAsWritten!("SELECT 1 AS one", ["nothing"]),
+      ).toBeNull();
+    });
+
+    it("an as-written query that fails leaves every table where it was", async () => {
+      const duck = boot.handle!;
+      await duck.registerCsv("broken", "a,b\n1,2\n");
+      await expect(
+        duck.queryColumnsAsWritten!("SELECT no_such_column FROM broken", [
+          "broken",
+        ]),
+      ).rejects.toThrow();
+      const rs = await duck.query("SELECT a FROM broken");
+      expect(rs.schema.fields[0]!.ty).toBe("int");
+      // …and the twin is still there for the next merge.
+      const again = await duck.queryColumnsAsWritten!("SELECT a FROM broken", [
+        "broken",
+      ]);
+      expect(again!.columns[0]!.kind).toBe("utf8");
     });
 
     it("queries registered file bytes (the file-import path)", async () => {
