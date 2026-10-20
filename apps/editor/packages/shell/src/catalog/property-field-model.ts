@@ -42,6 +42,7 @@ import type {
   ShellValueEdit,
   ShellValueType,
 } from "./object-model-types";
+import { enumMemberLabel } from "@paged-media/panel-kit";
 
 // ------------------------------------------------------------ widgets
 
@@ -148,7 +149,12 @@ export function widgetFor(
       // A list of records (an appearance stack, gradient stops) — or any
       // list the panel gave an item presentation — is an item editor; a
       // list of scalars stays the typed text field ("0, 4, 2").
-      return type.of.kind === "struct" || presentation?.items
+      // A list of references the panel names a collection for (a colour
+      // group's swatches) is an item editor too: each item a picker over
+      // that collection, titled by its name (R13, ADR 254).
+      return type.of.kind === "struct" ||
+        presentation?.items ||
+        presentation?.collection
         ? "items"
         : "list";
     case "struct":
@@ -185,9 +191,11 @@ export function optionsFor(
       .filter((o) => type.members.includes(o.value))
       .map((o) => ({ value: o.value, label: o.label ?? o.value }));
   }
+  // A member the panel does not name reads in words (R13, ADR 254),
+  // never as the engine's identifier.
   const members = type.members.map((m) => ({
     value: m,
-    label: given.find((o) => o.value === m)?.label ?? m,
+    label: given.find((o) => o.value === m)?.label ?? enumMemberLabel(m),
   }));
   // A NULLABLE enum row can also be cleared (a paragraph back to its
   // style's value): the panel's empty-valued option names that, and the
@@ -1006,18 +1014,39 @@ export function subFieldsOf(
   return out;
 }
 
-/** The text that titles one list item: its `itemLabel` field, else "#n". */
+/** The text that titles one list item: its `itemLabel` field, else "#n".
+ *  A label that is a reference (a stop's `Color/u12`) reads as the name
+ *  `names` gives it (R13, ADR 254); a bare string item (a colour group's
+ *  member) is its own label. */
 export function itemTitle(
   item: unknown,
   index: number,
   items?: ListPresentation,
+  names?: ReadonlyMap<string, string>,
 ): string {
+  const named = (v: string) => names?.get(v) ?? v;
   const key = items?.itemLabel;
   if (key && item && typeof item === "object") {
     const v = (item as Record<string, unknown>)[key];
-    if (v !== undefined && v !== null && v !== "") return String(v);
+    if (v !== undefined && v !== null && v !== "") return named(String(v));
   }
+  if (typeof item === "string" && names?.has(item)) return named(item);
   return `#${index + 1}`;
+}
+
+/** The collection an item list's labels reference: the `collectionName`
+ *  of the sub-field its `itemLabel` names, else the list's own
+ *  `collectionName` (a list of bare references). */
+export function itemLabelCollection(items?: ListPresentation): string | null {
+  const key = items?.itemLabel;
+  for (const f of items?.fields ?? []) {
+    if (typeof f === "string" || f.field !== key) continue;
+    const c = f.props?.collectionName;
+    if (typeof c === "string") return c;
+  }
+  const own = (items as { collectionName?: unknown } | undefined)
+    ?.collectionName;
+  return typeof own === "string" ? own : null;
 }
 
 /** Which list edits a field offers: each defaults to on for a writable

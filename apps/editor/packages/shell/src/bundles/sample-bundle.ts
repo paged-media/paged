@@ -33,7 +33,7 @@ export function sampleBundleManifest(): BundleManifest {
     contributes: {
       commands: ["paged.sample.hello"],
       keybindings: ["cmd+shift+h"],
-      menus: ["Tools/Sample Bundle Hello"],
+      menus: ["Tools/Sample bundle hello"],
     },
   };
 }

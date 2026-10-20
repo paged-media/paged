@@ -465,7 +465,7 @@ export function createCoreObjectsV71(
       else if (row)
         wire = {
           type: keywordOf(row.schema.type, value) ? "enum" : row.wire,
-          value,
+          value: onTextWire(row.wire, value),
         };
       else if (CORE_OPERATION_PATHS.has(path))
         return no(
@@ -799,4 +799,15 @@ export function createCoreObjectsV71(
     dispose: () => v70.dispose(),
   };
   return self;
+}
+
+/** A list of ids written to a TEXT wire is IDML's space-separated list
+ *  (`ColorGroupSwatches="Color/u1 Color/u2"`): the engine reads it with
+ *  a whitespace split. Anything else is written as it is. */
+function onTextWire(wire: string, value: unknown): unknown {
+  return wire === "text" &&
+    Array.isArray(value) &&
+    value.every((v) => typeof v === "string")
+    ? value.join(" ")
+    : value;
 }

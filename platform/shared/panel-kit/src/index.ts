@@ -58,9 +58,13 @@ export {
   useActionFeedback,
 } from "./feedback";
 export {
+  ChoiceGroup,
+  ChoiceRow,
   IconButton,
   Segment,
   Tab,
+  type ChoiceGroupProps,
+  type ChoiceRowProps,
   type IconButtonProps,
   type SegmentProps,
   type TabProps,
@@ -76,3 +80,4 @@ export {
   type FieldName,
 } from "./labels";
 export { humanize, refusalText } from "./text";
+export { enumMemberLabel, humaniseIdentifier } from "./enum-labels";

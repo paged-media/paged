@@ -200,18 +200,15 @@ describe("Export Center: findings", () => {
   });
 
   // Each output row is a div with a click handler: no role, no tab stop.
-  test.failing(
-    "PN-306: an output can be chosen with the keyboard",
-    async () => {
-      covers("panel:paged.export-center");
-      const h = await mount();
-      const target = row(h, "image");
-      expect(
-        target.matches("button, [role=option], [role=row], [role=radio]"),
-      ).toBe(true);
-      expect(target.tabIndex).toBeGreaterThanOrEqual(0);
-    },
-  );
+  test("PN-306: an output can be chosen with the keyboard", async () => {
+    covers("panel:paged.export-center");
+    const h = await mount();
+    const target = row(h, "image");
+    expect(
+      target.matches("button, [role=option], [role=row], [role=radio]"),
+    ).toBe(true);
+    expect(target.tabIndex).toBeGreaterThanOrEqual(0);
+  });
 
   // "Publish every format from one place": the Outputs nav lists the
   // plugins' exporters (paged.publish's IDML among them), the Export

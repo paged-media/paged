@@ -190,9 +190,18 @@ describe("Publication health: states", () => {
       document: linksDocument(),
     });
     expect(h.mutations()).toEqual([]);
+    // Its only buttons are the section toggles and the risk rows that
+    // open where their findings are listed (PN-301); none writes.
     expect(
-      [...h.root.querySelectorAll("button")].map((b) => b.textContent),
+      [...h.root.querySelectorAll("button:not([data-risk-row])")].map(
+        (b) => b.textContent,
+      ),
     ).toEqual(["Document", "Risks"]);
+    for (const b of h.root.querySelectorAll<HTMLElement>(
+      "button[data-risk-row]",
+    ))
+      await h.click(b);
+    expect(h.mutations()).toEqual([]);
   });
 });
 
@@ -217,21 +226,18 @@ describe("Publication health: findings", () => {
   // A row with a count shows a chevron, the panel's "go there" sign (the
   // header says preflight "chevrons into the Preflight panel's
   // findings"), but the row is not a control: nothing opens.
-  test.failing(
-    "PN-301: a risk row with findings is a control that opens where they are listed",
-    async () => {
-      covers("panel:paged.publication-health");
-      const h = await mountPanel(PublicationHealthPanel, {
-        id: "paged.publication-health",
-        document: linksDocument(),
-      });
-      const row = h.root.querySelector<HTMLElement>(
-        '[data-risk-row="missing-links"]',
-      )!;
-      expect(row.getAttribute("data-risk-count")).toBe("2");
-      expect(row.matches("button, a[href], [role=button], [role=link]")).toBe(
-        true,
-      );
-    },
-  );
+  test("PN-301: a risk row with findings is a control that opens where they are listed", async () => {
+    covers("panel:paged.publication-health");
+    const h = await mountPanel(PublicationHealthPanel, {
+      id: "paged.publication-health",
+      document: linksDocument(),
+    });
+    const row = h.root.querySelector<HTMLElement>(
+      '[data-risk-row="missing-links"]',
+    )!;
+    expect(row.getAttribute("data-risk-count")).toBe("2");
+    expect(row.matches("button, a[href], [role=button], [role=link]")).toBe(
+      true,
+    );
+  });
 });
