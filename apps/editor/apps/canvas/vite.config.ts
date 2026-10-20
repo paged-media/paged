@@ -46,6 +46,22 @@ import { reactCompiler } from "../../../../tooling/js/react-compiler.mjs";
 // The monorepo root: apps/editor/apps/canvas → four levels up.
 const MONOREPO_ROOT = resolve(__dirname, "..", "..", "..", "..");
 
+// An installed InDesign's own fonts directory (macOS), for the fidelity
+// suite: a vendor pack whose reference PDF InDesign set in its substitute,
+// Myriad Pro, maps the missing families to the copy InDesign ships
+// (corpus config/overrides/<pack>/fonts.sh). The face is read in place and
+// never copied into a repository.
+const INDESIGN_FONT_DIRS = (() => {
+  try {
+    return readdirSync("/Applications")
+      .filter((n) => n.startsWith("Adobe InDesign"))
+      .map((n) => `/Applications/${n}/Resources/Required/fonts`)
+      .filter((d) => existsSync(d));
+  } catch {
+    return [];
+  }
+})();
+
 // Resolve a corpus subdir, preferring a copy colocated in the editor
 // (`apps/editor/corpus/<name>`, a local symlink) but falling back to the
 // repository-root corpus (`<repo root>/corpus/<name>`, gitignored; a local
@@ -776,6 +792,7 @@ export default defineConfig({
         // System CMYK ICC profile dir — the fidelity suite fetches
         // CoatedFOGRA39.icc via /@fs/ to match `pdftoppm`'s output.
         "/Library/Application Support/Adobe/Color/Profiles",
+        ...INDESIGN_FONT_DIRS,
       ],
     },
   },
