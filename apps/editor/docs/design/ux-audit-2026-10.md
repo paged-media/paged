@@ -172,6 +172,10 @@ File ▸ Open (and drop) accept .xlsx and .psd/.png, but they do not open as doc
 drop point through Place, with no picker (ADR 258). With no document open, a spreadsheet or a
 picture still fills its panel rather than opening a document.
 
+**Fixed (2026-10-20, `72e7bac5e`).** With no document open, a picture opens as a document of one
+page its own size with the picture placed on it, and a spreadsheet opens as a US Letter document
+with its used range placed (ADR 262). Opening into an open document is unchanged.
+
 <a id="f-04"></a>
 
 #### F-04 · "New document…" has no options: always one US Letter page in points
@@ -793,6 +797,10 @@ selection, presets and ruler thinning are not added.
 **Fixed (2026-10-20, `657163fe4`).** Fit page in window (⌘0), Fit spread in window (⌥⌘0), Fit
 selection in window (⌥⌘=) and Fit document (⌥⇧⌘0) are commands in View and the zoom drop-down,
 which also lists presets from 25 % to 800 % (ADR 257). Ruler thinning is not changed.
+
+**Fixed (2026-10-20, `72e7bac5e`).** Ruler labels thin as you zoom out: the labelled step grows
+along 1-2-5 until the widest number in view fits between two marks; negatives keep their minus
+sign, and a number the ruler's edge would cut is not shown (ADR 263).
 
 <a id="f-32"></a>
 
