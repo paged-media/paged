@@ -46,6 +46,7 @@ import { useSelection } from "./selection-context";
 import { pageToContentPoint } from "./content-point";
 import { useEditContextStack, type EnterPoint } from "./edit-context-stack";
 import { useRegistries } from "./registries-context";
+import { TEXT_TOOL_ID } from "./tool-context";
 import {
   resolveDoubleClick,
   type EditContextCandidate,
@@ -92,6 +93,14 @@ export function readEnvelope(
     }
   }
   return null;
+}
+
+/** A context that hands the canvas to the host's own Type tool: the
+ *  content it owns is native text (paged.doc's placed Word stories). */
+export function ownsNativeText(context: {
+  toolIds?: readonly string[] | null;
+}): boolean {
+  return context.toolIds?.includes(TEXT_TOOL_ID) ?? false;
 }
 
 function idKey(id: ElementId): string {
@@ -228,6 +237,12 @@ export function useEditContextEntry() {
       const real = editContexts.get(resolution.contextType);
       if (!real) return false;
       enter(real, element, at);
+      // Owned content the host's own Type tool edits (paged.doc lowers a
+      // Word document to native stories and names `paged.tool.type`) is
+      // entered AND keeps the click: the caller goes on to place the
+      // caret. Only content a plugin compiles (a sheet table, a web
+      // frame) swallows it.
+      if (objectTypesOnly && ownsNativeText(real)) return false;
       return true;
     },
     [
