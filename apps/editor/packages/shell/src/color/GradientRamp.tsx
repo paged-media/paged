@@ -51,6 +51,21 @@ export interface GradientRampProps {
   /** Click on empty track — add a stop at that location. */
   onAddStop?: (locationPct: number) => void;
   onCommit?: () => void;
+  /** The swatch's name for a stop's ref (R13, ADR 254): a stop handle is
+   *  titled "Brand red at 40%", never by the swatch's id. */
+  stopName?: (stopColorRef: string) => string | undefined;
+}
+
+/** A stop's swatch in words: the name the caller knows, else the ref's
+ *  last segment ("Color/Black" → "Black"), never the bare id path. */
+function stopLabel(
+  ref: string,
+  nameOf?: (ref: string) => string | undefined,
+): string {
+  const named = nameOf?.(ref);
+  if (named) return named;
+  const tail = ref.slice(ref.lastIndexOf("/") + 1);
+  return tail.startsWith("$ID/") ? tail.slice(4) : tail || ref;
 }
 
 /** CSS background for a stop list (shared with the chips). */
@@ -158,7 +173,7 @@ export function GradientRamp(props: GradientRampProps) {
             type="button"
             data-ramp-stop={i}
             data-selected={selectedIndex === i ? "true" : undefined}
-            title={`${s.stopColorRef} @ ${s.locationPct.toFixed(0)}%`}
+            title={`${stopLabel(s.stopColorRef, props.stopName)} at ${s.locationPct.toFixed(0)}%`}
             onPointerDown={beginDrag("stop", i)}
             style={{
               ...thumbStyle,

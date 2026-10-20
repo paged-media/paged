@@ -39,12 +39,17 @@ export interface SpreadEntry {
  *  spread with its selfId (`u196ae7`, or `u3` / `us` in a fresh document,
  *  hence any `u` + hex run and any repeat of the selfId); from 0.71.8 the
  *  label is its pages' folios (`3`, `2–3`), which only repeats the range
- *  shown beside it. A folio in another style (`i`, `A-1`) still shows. */
+ *  shown beside it, in any numbering style or with a section prefix
+ *  (`iv`, `B-1`, PN-107). */
+/** One folio as a page-number marker prints it: an optional section
+ *  prefix ending in a separator ("B-", "A.", "Ch:") and an arabic or a
+ *  roman number ("3", "iv", "B-1"). PN-107: "B-1" was taken for a name. */
+const FOLIO = String.raw`(?:[A-Za-z]{1,8}[-.:])?(?:\d+|[ivxlcdm]+|[IVXLCDM]+)`;
+const FOLIOS = new RegExp(String.raw`^${FOLIO}(?:\s*[–-]\s*${FOLIO})?$`);
+
 export function isIdLikeLabel(label: string, selfId: string): boolean {
   const l = label.trim();
-  return (
-    l === selfId || /^u[0-9a-f]+$/i.test(l) || /^\d+(?:\s*[–-]\s*\d+)?$/.test(l)
-  );
+  return l === selfId || /^u[0-9a-f]+$/i.test(l) || FOLIOS.test(l);
 }
 
 export function groupSpreads(

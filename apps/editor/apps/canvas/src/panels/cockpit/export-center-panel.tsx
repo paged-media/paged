@@ -33,6 +33,8 @@
 
 import { useState } from "react";
 
+import { ChoiceGroup, ChoiceRow } from "@paged-media/panel-kit";
+
 import {
   CockpitBtn,
   Icon,
@@ -178,70 +180,73 @@ export function ExportCenterPanel() {
             background: "var(--elevated)",
           }}
         >
-          {EXPORT_TARGETS.map((t, i) => {
-            const sel = selected === t.id;
-            const r = rowReadiness(t, loaded, profileReady);
-            const running = busy === t.id;
-            return (
-              <div
-                key={t.id}
-                data-export-target={t.id}
-                data-export-live={t.live ? "" : undefined}
-                data-selected={sel || undefined}
-                onClick={() => setSelectedExportTarget(t.id)}
-                style={{
-                  display: "flex",
-                  flexWrap: "wrap",
-                  alignItems: "center",
-                  gap: "8px 13px",
-                  padding: "13px 16px",
-                  borderTop: i ? "1px solid var(--pg-border)" : "none",
-                  cursor: "pointer",
-                  background: sel ? "var(--selected-bg)" : "transparent",
-                  opacity: t.live ? 1 : 0.6,
-                }}
-              >
-                <Icon
-                  name={t.icon}
-                  size={19}
-                  style={{ color: "var(--pg-muted-fg)", flexShrink: 0 }}
-                />
-                <div style={{ flex: "1 1 160px", minWidth: 0 }}>
-                  <div style={{ fontSize: 13.5, fontWeight: 500 }}>
-                    {t.title}
+          <ChoiceGroup label="Outputs">
+            {EXPORT_TARGETS.map((t, i) => {
+              const sel = selected === t.id;
+              const r = rowReadiness(t, loaded, profileReady);
+              const running = busy === t.id;
+              return (
+                <ChoiceRow
+                  key={t.id}
+                  data-export-target={t.id}
+                  data-export-live={t.live ? "" : undefined}
+                  data-selected={sel || undefined}
+                  checked={sel}
+                  onChoose={() => setSelectedExportTarget(t.id)}
+                  style={{
+                    display: "flex",
+                    flexWrap: "wrap",
+                    alignItems: "center",
+                    gap: "8px 13px",
+                    padding: "13px 16px",
+                    borderTop: i ? "1px solid var(--pg-border)" : "none",
+                    cursor: "pointer",
+                    background: sel ? "var(--selected-bg)" : "transparent",
+                    opacity: t.live ? 1 : 0.6,
+                  }}
+                >
+                  <Icon
+                    name={t.icon}
+                    size={19}
+                    style={{ color: "var(--pg-muted-fg)", flexShrink: 0 }}
+                  />
+                  <div style={{ flex: "1 1 160px", minWidth: 0 }}>
+                    <div style={{ fontSize: 13.5, fontWeight: 500 }}>
+                      {t.title}
+                    </div>
+                    <div className="pg-ui-xs" style={{ marginTop: 1 }}>
+                      {t.note}
+                    </div>
                   </div>
-                  <div className="pg-ui-xs" style={{ marginTop: 1 }}>
-                    {t.note}
-                  </div>
-                </div>
-                {t.live ? (
-                  <span
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 10,
-                      marginLeft: "auto",
-                    }}
-                  >
-                    <StatusPill tone={r.tone} testId={`readiness-${t.id}`}>
-                      {r.label}
-                    </StatusPill>
-                    <CockpitBtn
-                      sm
-                      primary
-                      disabled={!loaded || running}
-                      testId={`export-center-${t.id}`}
-                      onClick={() => void runTarget(t.id)}
+                  {t.live ? (
+                    <span
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 10,
+                        marginLeft: "auto",
+                      }}
                     >
-                      {running ? "Working…" : "Export…"}
-                    </CockpitBtn>
-                  </span>
-                ) : (
-                  <StatusPill tone="draft">soon</StatusPill>
-                )}
-              </div>
-            );
-          })}
+                      <StatusPill tone={r.tone} testId={`readiness-${t.id}`}>
+                        {r.label}
+                      </StatusPill>
+                      <CockpitBtn
+                        sm
+                        primary
+                        disabled={!loaded || running}
+                        testId={`export-center-${t.id}`}
+                        onClick={() => void runTarget(t.id)}
+                      >
+                        {running ? "Working…" : "Export…"}
+                      </CockpitBtn>
+                    </span>
+                  ) : (
+                    <StatusPill tone="draft">soon</StatusPill>
+                  )}
+                </ChoiceRow>
+              );
+            })}
+          </ChoiceGroup>
           {pluginExporters.map((e) => (
             <div
               key={e.id}

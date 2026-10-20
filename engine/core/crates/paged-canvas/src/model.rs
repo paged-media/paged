@@ -9671,6 +9671,17 @@ impl CanvasModel {
                 self_id: b.self_id.clone(),
                 name: b.name.clone().unwrap_or_else(|| b.self_id.clone()),
                 destination: b.destination.clone().unwrap_or_default(),
+                destination_page: b.destination.as_deref().and_then(|d| {
+                    self.scene
+                        .designmap
+                        .hyperlink_destinations
+                        .iter()
+                        .find(|x| x.self_id == d)
+                        .and_then(|x| match &x.kind {
+                            paged_model::HyperlinkDestinationKind::Page(p) => Some(p.clone()),
+                            _ => None,
+                        })
+                }),
                 parent: self
                     .scene
                     .designmap
@@ -9692,6 +9703,15 @@ impl CanvasModel {
                 self_id: x.self_id.clone(),
                 name: x.name.clone().unwrap_or_else(|| x.self_id.clone()),
                 format: x.format.clone().unwrap_or_default(),
+                format_name: x.format.as_deref().and_then(|f| {
+                    self.scene
+                        .designmap
+                        .cross_reference_formats
+                        .iter()
+                        .find(|c| c.self_id == f)
+                        .and_then(|c| c.name.clone())
+                        .filter(|n| !n.is_empty())
+                }),
                 destination: x.destination.clone().unwrap_or_default(),
             })
             .collect()
@@ -10551,39 +10571,49 @@ impl CanvasModel {
     /// pending."
     pub fn collection(&self, name: crate::channel::CollectionName) -> serde_json::Value {
         use crate::channel::CollectionName::*;
+        // Through the text form, not `to_value`: `to_value` widens an f32
+        // to the f64 nearest it (`0.1` → `0.10000000149011612`), while
+        // the text form writes the f32's shortest digits, as every typed
+        // read prints them (SCR-11).
+        fn json<T: serde::Serialize>(v: T) -> serde_json::Value {
+            serde_json::to_string(&v)
+                .ok()
+                .and_then(|s| serde_json::from_str(&s).ok())
+                .unwrap_or_default()
+        }
         match name {
-            Swatches => serde_json::to_value(self.swatches()).unwrap_or_default(),
-            Gradients => serde_json::to_value(self.gradients()).unwrap_or_default(),
-            ParagraphStyles => serde_json::to_value(self.paragraph_styles()).unwrap_or_default(),
-            CharacterStyles => serde_json::to_value(self.character_styles()).unwrap_or_default(),
-            Layers => serde_json::to_value(self.layers()).unwrap_or_default(),
-            ObjectStyles => serde_json::to_value(self.object_styles()).unwrap_or_default(),
-            Links => serde_json::to_value(self.links()).unwrap_or_default(),
-            Conditions => serde_json::to_value(self.conditions()).unwrap_or_default(),
-            Spreads => serde_json::to_value(self.spreads()).unwrap_or_default(),
-            Pages => serde_json::to_value(self.pages()).unwrap_or_default(),
-            MasterPages => serde_json::to_value(self.master_pages()).unwrap_or_default(),
-            CellStyles => serde_json::to_value(self.cell_styles()).unwrap_or_default(),
-            TableStyles => serde_json::to_value(self.table_styles()).unwrap_or_default(),
-            Fonts => serde_json::to_value(self.fonts()).unwrap_or_default(),
-            ConditionSets => serde_json::to_value(self.condition_sets()).unwrap_or_default(),
-            ColorGroups => serde_json::to_value(self.color_groups()).unwrap_or_default(),
-            Articles => serde_json::to_value(self.articles()).unwrap_or_default(),
-            Hyperlinks => serde_json::to_value(self.hyperlinks()).unwrap_or_default(),
-            Bookmarks => serde_json::to_value(self.bookmarks()).unwrap_or_default(),
-            CrossReferences => serde_json::to_value(self.cross_references()).unwrap_or_default(),
-            IndexTopics => serde_json::to_value(self.index_topics()).unwrap_or_default(),
-            Footnotes => serde_json::to_value(self.footnotes()).unwrap_or_default(),
-            Notes => serde_json::to_value(self.notes()).unwrap_or_default(),
-            XmlTags => serde_json::to_value(&self.scene.designmap.xml_tags).unwrap_or_default(),
-            XmlElements => serde_json::to_value(self.xml_elements()).unwrap_or_default(),
-            TrackedChanges => serde_json::to_value(self.tracked_changes()).unwrap_or_default(),
-            Endnotes => serde_json::to_value(self.endnotes()).unwrap_or_default(),
-            Inks => serde_json::to_value(self.inks()).unwrap_or_default(),
-            Sections => serde_json::to_value(self.sections()).unwrap_or_default(),
-            Stories => serde_json::to_value(self.stories()).unwrap_or_default(),
-            NumberingLists => serde_json::to_value(self.numbering_lists()).unwrap_or_default(),
-            InkCoverage => serde_json::to_value(self.ink_coverage()).unwrap_or_default(),
+            Swatches => json(self.swatches()),
+            Gradients => json(self.gradients()),
+            ParagraphStyles => json(self.paragraph_styles()),
+            CharacterStyles => json(self.character_styles()),
+            Layers => json(self.layers()),
+            ObjectStyles => json(self.object_styles()),
+            Links => json(self.links()),
+            Conditions => json(self.conditions()),
+            Spreads => json(self.spreads()),
+            Pages => json(self.pages()),
+            MasterPages => json(self.master_pages()),
+            CellStyles => json(self.cell_styles()),
+            TableStyles => json(self.table_styles()),
+            Fonts => json(self.fonts()),
+            ConditionSets => json(self.condition_sets()),
+            ColorGroups => json(self.color_groups()),
+            Articles => json(self.articles()),
+            Hyperlinks => json(self.hyperlinks()),
+            Bookmarks => json(self.bookmarks()),
+            CrossReferences => json(self.cross_references()),
+            IndexTopics => json(self.index_topics()),
+            Footnotes => json(self.footnotes()),
+            Notes => json(self.notes()),
+            XmlTags => json(&self.scene.designmap.xml_tags),
+            XmlElements => json(self.xml_elements()),
+            TrackedChanges => json(self.tracked_changes()),
+            Endnotes => json(self.endnotes()),
+            Inks => json(self.inks()),
+            Sections => json(self.sections()),
+            Stories => json(self.stories()),
+            NumberingLists => json(self.numbering_lists()),
+            InkCoverage => json(self.ink_coverage()),
         }
     }
 

@@ -28,6 +28,11 @@
 //     panels style and test by.
 //   · `Tab`: one tab of a `role="tablist"` row: `role="tab"` and
 //     `aria-selected`.
+//   · `ChoiceGroup` / `ChoiceRow`: a list of rows the user picks ONE of
+//     (an output, a target) where a row also holds its own controls (an
+//     Export… button), so the row cannot be a button: a `radiogroup` of
+//     `radio` rows with `aria-checked`, a tab stop each, Enter or Space
+//     to choose, the arrows to move (R22, editor ADR 255).
 
 import * as React from "react";
 
@@ -91,6 +96,62 @@ export function Tab(props: TabProps): React.ReactElement {
       role="tab"
       aria-selected={selected}
       data-active={selected ? "true" : "false"}
+    />
+  );
+}
+
+export type ChoiceGroupProps = {
+  /** The group's name, in words ("Outputs"). */
+  label: string;
+} & Omit<React.HTMLAttributes<HTMLDivElement>, "role" | "aria-label">;
+
+/** The `radiogroup` around a set of `ChoiceRow`s. */
+export function ChoiceGroup(props: ChoiceGroupProps): React.ReactElement {
+  const { label, ...rest } = props;
+  return <div {...rest} role="radiogroup" aria-label={label} />;
+}
+
+export type ChoiceRowProps = {
+  /** Whether this row is the chosen one. */
+  checked: boolean;
+  /** Choose this row (a click, Enter or Space). */
+  onChoose: () => void;
+} & Omit<
+  React.HTMLAttributes<HTMLDivElement>,
+  "role" | "aria-checked" | "onClick"
+>;
+
+/** One row of a `ChoiceGroup`: `role="radio"`, `aria-checked`, a tab
+ *  stop, Enter / Space to choose and ArrowUp / ArrowDown to the next row.
+ *  A key pressed on a control inside the row stays that control's. */
+export function ChoiceRow(props: ChoiceRowProps): React.ReactElement {
+  const { checked, onChoose, onKeyDown, tabIndex, ...rest } = props;
+  return (
+    <div
+      {...rest}
+      role="radio"
+      aria-checked={checked}
+      tabIndex={tabIndex ?? 0}
+      onClick={onChoose}
+      onKeyDown={(e) => {
+        onKeyDown?.(e);
+        if (e.defaultPrevented || e.target !== e.currentTarget) return;
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onChoose();
+          return;
+        }
+        if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+        const group = e.currentTarget.closest('[role="radiogroup"]');
+        if (!group) return;
+        const rows = [...group.querySelectorAll<HTMLElement>('[role="radio"]')];
+        const at = rows.indexOf(e.currentTarget);
+        const next = rows[at + (e.key === "ArrowDown" ? 1 : -1)];
+        if (next) {
+          e.preventDefault();
+          next.focus();
+        }
+      }}
     />
   );
 }

@@ -59,12 +59,9 @@ describe("Cross References panel", () => {
 
   // The format column prints the format's id
   // ("CrossReferenceFormat/u1") where the format has a name.
-  test.failing(
-    "PN-105: a cross-reference's format reads as the format's name",
-    async () => {
-      covers("panel:paged.cross-references");
-      const h = await mount();
-      expect(rows(h.root)[0].secondary).toBe("Page Number");
-    },
-  );
+  test("PN-105: a cross-reference's format reads as the format's name", async () => {
+    covers("panel:paged.cross-references");
+    const h = await mount();
+    expect(rows(h.root)[0].secondary).toBe("Page Number");
+  });
 });

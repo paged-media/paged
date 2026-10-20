@@ -43,7 +43,10 @@ import {
   type DocumentStats,
 } from "@paged-media/client";
 
-import { useCanvasClient } from "../state/canvas-client-context";
+import {
+  useCanvasClient,
+  useOptionalCanvasClient,
+} from "../state/canvas-client-context";
 import { useDocument } from "../state/document-context";
 
 /**
@@ -92,6 +95,51 @@ export function useCollection<T>(name: CollectionName): T[] | null {
   }, [client, name]);
 
   return items;
+}
+
+/**
+ * The names a collection gives its members, by `selfId` (R13, ADR 254):
+ * what a field shows for a reference (`Color/u12` → "Brand red") instead
+ * of the id. `null` asks for nothing (a field whose items reference no
+ * collection); an entry with no name is left out, so the caller decides
+ * the fallback.
+ */
+export function useCollectionNames(
+  name: CollectionName | null,
+): ReadonlyMap<string, string> {
+  // Optional: a field can mount without an engine (a standalone kit
+  // mount); it then names nothing and falls back to the ids.
+  const client = useOptionalCanvasClient();
+  const [names, setNames] = useState<ReadonlyMap<string, string>>(
+    () => new Map(),
+  );
+  useEffect(() => {
+    if (name === null || !client) return;
+    let cancelled = false;
+    const refetch = () => {
+      void client
+        .collection<{ selfId?: string; name?: string }>(name)
+        .then((items) => {
+          if (cancelled) return;
+          const m = new Map<string, string>();
+          for (const it of items as Array<{ selfId?: string; name?: string }>)
+            if (it?.selfId && it.name) m.set(it.selfId, it.name);
+          setNames(m);
+        })
+        .catch(() => {
+          if (!cancelled) setNames(new Map());
+        });
+    };
+    refetch();
+    const off = client.subscribe((msg) => {
+      if (changesTheDocument(msg)) refetch();
+    });
+    return () => {
+      cancelled = true;
+      off();
+    };
+  }, [client, name]);
+  return names;
 }
 
 /**
