@@ -1786,9 +1786,11 @@ pub(super) fn build_document_inner(
                             page_idx,
                             // R-10: inside the body's object group when it
                             // has one, so the frame composites as one.
-                            slot: slot_in_group.unwrap_or(pages[page_idx].list.commands.len()),
+                            slot: slot_in_group
+                                .map(|s| s.slot)
+                                .unwrap_or(pages[page_idx].list.commands.len()),
                             z_seq,
-                            in_object_group: slot_in_group.is_some(),
+                            in_object_group: slot_in_group.is_some_and(|s| s.in_object_group),
                         });
                     }
                 }
@@ -3879,6 +3881,13 @@ pub(super) fn build_document_inner(
                 continue;
             }
             text_slots::relocate_text_blocks(&mut pages[page_idx].list, blocks);
+        }
+        // With the text in its frame's run, an unfilled, unstroked text
+        // frame's feather can take the text's shape (ADR 204).
+        for (page, adopted) in pages.iter_mut().zip(&adopted) {
+            if !adopted {
+                crate::module::shape_feathers_by_content(&mut page.list);
+            }
         }
     }
 

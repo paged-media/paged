@@ -383,9 +383,10 @@ impl Walker<'_, '_> {
     /// carries a feather.
     ///
     /// A run may also open at a [`DisplayCommand::BeginFeatheredObject`]:
-    /// a picture frame paints its picture between its fill and its
-    /// effects, so the run reaches from the marker over the picture to
-    /// the feather that carries the marker's path.
+    /// a frame paints its picture, its interior effects, its stroke and
+    /// (a text frame) its text between its fill and its feathers, so the
+    /// run reaches from the marker over all of them to the feather that
+    /// carries the marker's path.
     fn feathered_run(&self, at: usize, range_end: usize) -> Option<(usize, usize)> {
         let commands = &self.list.commands;
         if self.feather_consumed.contains(&at) {
@@ -396,13 +397,13 @@ impl Walker<'_, '_> {
             | DisplayCommand::FillPathBlend { path_id, .. }
             | DisplayCommand::FillPathOverprint { path_id, .. } => (*path_id, at + 1),
             DisplayCommand::BeginFeatheredObject { path_id, .. } => {
-                // The object's first effect command after its picture.
+                // The object's first feather: after its fill, picture,
+                // interior effects, stroke and (on a text frame) text, all
+                // of which the run masks. The feathers carry the marker's
+                // path, the outline grown to the stroke's outer edge;
+                // the interior effects keep the frame's own.
                 let first = (at + 1..range_end).find(|&k| match &commands[k] {
-                    DisplayCommand::InnerShadow { path_id: p, .. }
-                    | DisplayCommand::InnerGlow { path_id: p, .. }
-                    | DisplayCommand::BevelEmboss { path_id: p, .. }
-                    | DisplayCommand::Satin { path_id: p, .. }
-                    | DisplayCommand::Feather { path_id: p, .. }
+                    DisplayCommand::Feather { path_id: p, .. }
                     | DisplayCommand::DirectionalFeather { path_id: p, .. }
                     | DisplayCommand::GradientFeather { path_id: p, .. } => p == path_id,
                     _ => false,

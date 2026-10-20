@@ -939,7 +939,7 @@ pub(super) fn emit_text_frame_into(
     color_ctx: ColorCtx<'_>,
     drop_shadow: Option<DropShadow>,
     auto_sized_bounds: Option<paged_model::Bounds>,
-) -> Option<usize> {
+) -> Option<BodyTextSlot> {
     let mut resolved = ResolvedFrame::from_text_frame(frame);
     // W1.7 Phase B: an AutoSizing frame paints its fill / stroke to the
     // GROWN extent, not the authored undersized box. Substitute the
@@ -1104,7 +1104,21 @@ pub(super) fn emit_text_frame_into(
     } else {
         (None, outer, None)
     };
-    if let (Some(path_id), Some(effects)) = (effects_path, frame.effects.as_ref()) {
+    // The feathers' own outline: the frame grown to the stroke's outer
+    // edge, from which InDesign measures a feather (ADR 204).
+    let feather_path = match (effects_path, frame.effects.as_ref()) {
+        (Some(pid), Some(effects)) => Some(crate::module::feather_outline(
+            page,
+            effects,
+            pid,
+            effects_unit_normalize,
+            resolved.stroke_outset_pt(),
+        )),
+        _ => None,
+    };
+    if let (Some(path_id), Some(fpid), Some(effects)) =
+        (effects_path, feather_path, frame.effects.as_ref())
+    {
         crate::module::emit_effects_pre_fill(
             page,
             effects,
@@ -1113,6 +1127,13 @@ pub(super) fn emit_text_frame_into(
             palette,
             color_ctx,
         );
+        // A feathered text frame opens its run here, before its fill, so
+        // the feather fades the fill, the stroke and the text together.
+        // With neither a fill nor a stroke it paints only its text, and
+        // the feather follows the glyphs (`shape_feathers_by_content`).
+        let content_shaped = crate::pipeline::frame_fill_is_transparent(resolved.fill_color)
+            && !crate::pipeline::frame_stroke_is_visible(resolved.stroke_color, stroke_weight);
+        crate::module::begin_feathered_object(page, effects, fpid, effects_xform, content_shaped);
     }
     let target_bounds = match &resolved.geometry {
         Geometry::TextFrameRect { rect } | Geometry::Rect { rect } | Geometry::Oval { rect } => {
@@ -1135,15 +1156,13 @@ pub(super) fn emit_text_frame_into(
         pop_blend_group(page);
     }
     if let (Some(path_id), Some(effects)) = (effects_path, frame.effects.as_ref()) {
-        crate::module::emit_effects_post_fill(
+        crate::module::emit_interior_effects(
             page,
             effects,
             path_id,
             effects_xform,
             palette,
             color_ctx,
-            effects_unit_normalize,
-            resolved.stroke_outset_pt(),
         );
     }
     let stroke_group = push_target_group(page, resolved.stroke_target, target_bounds, outer);
@@ -1173,13 +1192,44 @@ pub(super) fn emit_text_frame_into(
         pop_blend_group(page);
     }
     let _ = group_bounds;
-    // The text slot: just before the object group closes, so the story's
-    // glyphs, moved there, composite with the body as one group.
-    needs_group.then(|| {
-        let slot = page.list.commands.len();
+    // The text slot: after the stroke and before the feathers, so the
+    // story's glyphs, moved there, are faded by the frame's feather with
+    // the rest of the object, as InDesign fades them (ADR 204); and
+    // before the object group closes, so they composite with the body as
+    // one group.
+    let slot = page.list.commands.len();
+    let feathered = page.list.commands.len();
+    if let (Some(path_id), Some(fpid), Some(effects)) =
+        (effects_path, feather_path, frame.effects.as_ref())
+    {
+        crate::module::emit_feathers(
+            page,
+            effects,
+            fpid,
+            path_id,
+            effects_xform,
+            effects_unit_normalize,
+            resolved.stroke_outset_pt(),
+        );
+    }
+    let feathered = page.list.commands.len() > feathered;
+    if needs_group {
         pop_blend_group(page);
-        slot
+    }
+    (needs_group || feathered).then_some(BodyTextSlot {
+        slot,
+        in_object_group: needs_group,
     })
+}
+
+/// Where a text frame's story glyphs belong inside the commands its body
+/// emitted, when that is not simply after them: inside the body's object
+/// group (`in_object_group`), and before the frame's feathers, which fade
+/// the text with the box.
+#[derive(Debug, Clone, Copy)]
+pub(super) struct BodyTextSlot {
+    pub slot: usize,
+    pub in_object_group: bool,
 }
 
 /// First-baseline y (1/64 pt) for the head frame of a story,

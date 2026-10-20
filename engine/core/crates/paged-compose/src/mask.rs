@@ -592,7 +592,9 @@ pub fn cmd_path_and_transform(cmd: &crate::DisplayCommand) -> Option<(crate::Pat
         | C::GradientFeather {
             path_id, transform, ..
         }
-        | C::BeginFeatheredObject { path_id, transform } => Some((*path_id, transform)),
+        | C::BeginFeatheredObject {
+            path_id, transform, ..
+        } => Some((*path_id, transform)),
         _ => None,
     }
 }
@@ -1437,6 +1439,7 @@ mod tests {
             C::BeginFeatheredObject {
                 path_id: rect,
                 transform: xf,
+                content_shaped: false,
             },
             fill(rect),
             fill(other),
@@ -1450,6 +1453,7 @@ mod tests {
             C::BeginFeatheredObject {
                 path_id: other,
                 transform: xf,
+                content_shaped: false,
             },
             fill(other),
             fill(rect),
