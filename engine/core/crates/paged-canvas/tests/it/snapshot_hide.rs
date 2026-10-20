@@ -29,7 +29,7 @@ fn model() -> CanvasModel {
 }
 
 fn png(m: &CanvasModel, page: &PageId, hide: &[ElementId]) -> Vec<u8> {
-    render_snapshot_png_hiding(m, page, 200, None, hide)
+    render_snapshot_png_hiding(m, page, 200, None, hide, false)
         .expect("snapshot")
         .png_bytes
 }

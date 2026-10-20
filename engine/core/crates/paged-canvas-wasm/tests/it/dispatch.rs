@@ -2047,3 +2047,52 @@ fn script_result_without_a_document_has_no_stats() {
     assert_eq!(reply["kind"], "scriptResult", "{reply}");
     assert!(reply["payload"].get("stats").is_none(), "{reply}");
 }
+
+/// ADR 205 — `requestSnapshot` draws the page as the exports do unless it
+/// asks for the canvas's markers: a message without `markers` (every
+/// client before it existed) gets the clean page, `markers: true` the one
+/// the canvas shows, pink substituted-font highlight included.
+#[test]
+fn a_snapshot_request_draws_without_the_canvas_markers_by_default() {
+    let inter = std::fs::read(
+        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../corpus/fonts/Inter.ttf"),
+    )
+    .expect("Inter.ttf is committed at engine/core/corpus/fonts");
+    let mut core = WorkerCore::new();
+    let loaded = roundtrip(
+        &mut core,
+        &serde_json::json!({
+            "seq": 1,
+            "protocol": protocol(),
+            "kind": "loadDocument",
+            "payload": { "bytes": small_idml_in(Some("Ghost Family")), "font": inter }
+        }),
+    );
+    assert_eq!(loaded["kind"], "documentLoaded", "{loaded}");
+    assert!(core.model.as_ref().unwrap().live_build_has_markers());
+    let mut snap = |seq: u64, markers: Option<bool>| {
+        let mut payload = serde_json::json!({ "pageId": "p1", "targetWidthPx": 300 });
+        if let Some(m) = markers {
+            payload["markers"] = serde_json::json!(m);
+        }
+        let reply = roundtrip(
+            &mut core,
+            &serde_json::json!({
+                "seq": seq,
+                "protocol": protocol(),
+                "kind": "requestSnapshot",
+                "payload": payload
+            }),
+        );
+        assert_eq!(reply["kind"], "snapshotReady", "{reply}");
+        reply["payload"]["pngBytes"].clone()
+    };
+    let default = snap(2, None);
+    let clean = snap(3, Some(false));
+    let marked = snap(4, Some(true));
+    assert_eq!(default, clean, "no `markers` reads as false");
+    assert_ne!(
+        clean, marked,
+        "`markers: true` draws the canvas's highlight"
+    );
+}
