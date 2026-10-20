@@ -86,8 +86,12 @@ test.describe("Print-output facts (ADR 265)", () => {
     const chip = page.locator('[data-cockpit-action="output-profile"]:visible');
     const cmykRow = page.locator('[data-readiness-row="cmyk"]:visible');
     const health = page.locator('[data-status-pill="print-readiness"]:visible');
-    const map = page.locator('[data-status-pill="map-print-readiness"]:visible');
-    const exportPill = page.locator('[data-status-pill="readiness-pdf-x4"]:visible');
+    const map = page.locator(
+      '[data-status-pill="map-print-readiness"]:visible',
+    );
+    const exportPill = page.locator(
+      '[data-status-pill="readiness-pdf-x4"]:visible',
+    );
 
     // Before: no working space. Every surface says so in the same words.
     await setMode(page, "prepress");
