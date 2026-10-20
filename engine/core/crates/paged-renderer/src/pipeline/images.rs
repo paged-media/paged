@@ -894,12 +894,19 @@ fn resolve_image_id(
             let decoded = if let Some(d) = decoded_cache.get(uri) {
                 d.clone()
             } else {
-                let Some(resolver) = options.assets else {
-                    return ImageResolution::LinkMissing;
-                };
-                let Some(bytes) = resolver.resolve_image(uri) else {
-                    tracing::warn!(uri, "image resolver returned no bytes; skipping");
-                    return ImageResolution::LinkMissing;
+                // A `data:` URI is the bytes themselves (ADR 208): no
+                // resolver is asked, and none is needed.
+                let bytes: bytes::Bytes = if let Some(inline) = data_uri_bytes(uri) {
+                    inline.into()
+                } else {
+                    let Some(resolver) = options.assets else {
+                        return ImageResolution::LinkMissing;
+                    };
+                    let Some(bytes) = resolver.resolve_image(uri) else {
+                        tracing::warn!(uri, "image resolver returned no bytes; skipping");
+                        return ImageResolution::LinkMissing;
+                    };
+                    bytes
                 };
                 if let Some(pdf) = placed_pdf(bytes.as_ref()) {
                     return pdf;
@@ -927,6 +934,23 @@ fn resolve_image_id(
         return ImageResolution::DecodeFailed;
     }
     ImageResolution::Resolved(Placed::Raster(id), img_w, img_h)
+}
+
+/// The bytes a `data:<mime>;base64,<payload>` link carries, or `None` for
+/// any other link (and for a `data:` URI that is not base64 or does not
+/// decode). A Word document's embedded picture reaches the page this way
+/// (paged.doc lowers it to an anchored frame linked by a data URI), so it
+/// paints instead of the missing-image placeholder (ADR 208).
+pub(crate) fn data_uri_bytes(uri: &str) -> Option<Vec<u8>> {
+    use base64::Engine as _;
+    let (meta, payload) = uri.strip_prefix("data:")?.split_once(',')?;
+    if !meta.ends_with(";base64") {
+        return None;
+    }
+    base64::engine::general_purpose::STANDARD
+        .decode(payload.trim())
+        .ok()
+        .filter(|b| !b.is_empty())
 }
 
 /// Q-03: route inline base64 image bytes (the `<Contents>` payload

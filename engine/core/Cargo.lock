@@ -2602,6 +2602,7 @@ name = "paged-renderer"
 version = "0.0.0"
 dependencies = [
  "anyhow",
+ "base64",
  "bytes",
  "clap",
  "flate2",

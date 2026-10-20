@@ -10275,6 +10275,40 @@ impl CanvasModel {
                 }
             }
         }
+        // ADR 208 — a picture anchored in the text (an inline or anchored
+        // Rectangle, at any depth of an anchored Group, in a paragraph or a
+        // table cell) is a placed link like any other: the build reports
+        // it under the frame's own id, so it is listed with the same
+        // status. Left out, a placeholder painted in the text never
+        // reached the Links or Publication health panels.
+        fn anchored_links(
+            frames: &[paged_model::AnchoredFrame],
+            out: &mut Vec<(String, String, Option<[f32; 6]>)>,
+        ) {
+            for af in frames {
+                if let (Some(id), Some(uri)) = (af.self_id.clone(), af.image_link.clone()) {
+                    out.push((id, uri, af.image_item_transform));
+                }
+                anchored_links(&af.children, out);
+            }
+        }
+        fn walk(para: &paged_model::Paragraph, out: &mut Vec<(String, String, Option<[f32; 6]>)>) {
+            anchored_links(&para.anchored_frames, out);
+            for cell in para.table.iter().flat_map(|t| t.cells.iter()) {
+                for inner in &cell.paragraphs {
+                    walk(inner, out);
+                }
+            }
+        }
+        let mut anchored = Vec::new();
+        for story in &self.scene.stories {
+            for para in &story.story.paragraphs {
+                walk(para, &mut anchored);
+            }
+        }
+        for (id, uri, transform) in anchored {
+            out.push(summary(id, "Rectangle", uri, None, transform));
+        }
         out
     }
 
@@ -15175,6 +15209,72 @@ mod tests {
         // The link points at a non-existent asset and no resolver was
         // configured, so the build drew the placeholder → "missing".
         assert_eq!(l.status, "missing");
+    }
+
+    /// ADR 208 — pictures anchored in the text are listed among the links
+    /// with the status the build gave them; one linked by a `data:` URI
+    /// carries its own bytes and resolves, one linked to nothing is
+    /// missing.
+    #[test]
+    fn anchored_pictures_are_listed_and_a_data_uri_resolves() {
+        use std::io::Write;
+        let mut buf = Vec::new();
+        {
+            let mut zip = zip::ZipWriter::new(std::io::Cursor::new(&mut buf));
+            let opts: zip::write::SimpleFileOptions = zip::write::SimpleFileOptions::default()
+                .compression_method(zip::CompressionMethod::Stored);
+            zip.start_file("mimetype", opts).unwrap();
+            zip.write_all(b"application/vnd.adobe.indesign-idml-package")
+                .unwrap();
+            zip.start_file("designmap.xml", opts).unwrap();
+            zip.write_all(
+                br#"<?xml version="1.0" encoding="UTF-8"?>
+<Document DOMVersion="13.1" Self="d1">
+<idPkg:Spread src="Spreads/Spread_s1.xml" xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging"/>
+<idPkg:Story src="Stories/Story_st1.xml" xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging"/>
+</Document>"#,
+            )
+            .unwrap();
+            zip.start_file("Spreads/Spread_s1.xml", opts).unwrap();
+            zip.write_all(
+                br#"<?xml version="1.0" encoding="UTF-8"?>
+<idPkg:Spread xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging" DOMVersion="13.1">
+<Spread Self="s1" PageCount="1">
+<Page Self="p1" Name="1" GeometricBounds="0 0 792 612" ItemTransform="1 0 0 1 0 0"/>
+<TextFrame Self="tf1" ParentStory="st1" GeometricBounds="72 72 600 540" ItemTransform="1 0 0 1 0 0"/>
+</Spread></idPkg:Spread>"#,
+            )
+            .unwrap();
+            zip.start_file("Stories/Story_st1.xml", opts).unwrap();
+            zip.write_all(
+                br#"<?xml version="1.0" encoding="UTF-8"?>
+<idPkg:Story xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging" DOMVersion="13.1">
+<Story Self="st1"><ParagraphStyleRange><CharacterStyleRange>
+<Content>a</Content>
+<Rectangle Self="inlineData" GeometricBounds="0 0 20 20"><Image Self="i1"><Link Self="l1" LinkResourceURI="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="/></Image><AnchoredObjectSetting AnchoredPosition="InlinePosition"/></Rectangle>
+<Content>b</Content>
+<Rectangle Self="inlineLost" GeometricBounds="0 0 20 20"><Image Self="i2"><Link Self="l2" LinkResourceURI="file:///nowhere/plate.png"/></Image><AnchoredObjectSetting AnchoredPosition="InlinePosition"/></Rectangle>
+<Content>c</Content>
+</CharacterStyleRange></ParagraphStyleRange></Story></idPkg:Story>"#,
+            )
+            .unwrap();
+            zip.finish().unwrap();
+        }
+        // Text must shape for the anchors to place, so give the build a face.
+        let opts = CanvasOptions {
+            fonts: vec![include_bytes!("../../../corpus/fonts/Inter.ttf").to_vec()],
+            ..CanvasOptions::default()
+        };
+        let model = CanvasModel::load("doc-anchored", &buf, opts).unwrap();
+        let status = |id: &str| {
+            model
+                .links()
+                .into_iter()
+                .find(|l| l.host_self_id == id)
+                .map(|l| l.status)
+        };
+        assert_eq!(status("inlineData").as_deref(), Some("ok"));
+        assert_eq!(status("inlineLost").as_deref(), Some("missing"));
     }
 
     /// Engine ADR 207 — a placed image whose bytes are present but that no
