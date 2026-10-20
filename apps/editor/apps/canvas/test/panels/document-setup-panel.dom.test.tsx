@@ -406,22 +406,25 @@ describe("Margins and Columns", () => {
     });
   });
 
-  // An unset margin: the page address reads null and the panel shows its
+  // An unset margin: the page address read null and the panel showed its
   // schema default (36 pt), while the document's pages collection, which
-  // the page list and the document map read, says 0 pt for the same page.
-  test.failing(
-    "PN-203: the panel's margin and the pages collection agree for the same page",
-    async () => {
-      covers("panel:paged.margins-columns");
-      const h = await mount();
-      const pages = (await h.client.collection("pages")) as Array<{
-        selfId: string;
-        marginTopPt: number;
-      }>;
-      const first = pages.find((p) => p.selfId === h.scene.pageId)!;
-      expect(shown(h, "pageMarginTop")).toBe(`${first.marginTopPt} pt`);
-    },
-  );
+  // the page list and the document map read, said 0 pt for the same page.
+  // Fixed: the page reads the margins it is laid out with (0 pt, 1 column).
+  test("PN-203: the panel's margin and the pages collection agree for the same page", async () => {
+    covers("panel:paged.margins-columns");
+    const h = await mount();
+    const pages = (await h.client.collection("pages")) as Array<{
+      selfId: string;
+      marginTopPt: number;
+      columnCount: number;
+    }>;
+    const first = pages.find((p) => p.selfId === h.scene.pageId)!;
+    expect(shown(h, "pageMarginTop")).toBe(`${first.marginTopPt} pt`);
+    expect(await h.get(page(h.scene.pageId), "pageColumnCount")).toEqual({
+      type: "length",
+      value: first.columnCount,
+    });
+  });
 
   // UX audit F-39 (fixed, ADR 245): a typed unit was not converted, "10mm"
   // was written as 10 pt.

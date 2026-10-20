@@ -27,7 +27,29 @@ use anyhow::Result;
 use clap::Parser;
 use paged_cli::cli::{Cli, Command, GenCommand};
 
+/// CLI-3: a reader that stops reading (`paged describe | head`) ends the
+/// process quietly with the shell's broken-pipe status (128 + SIGPIPE),
+/// as a command-line tool does, instead of the panic `println!` raises on
+/// EPIPE. Every other panic reports as before. (Resetting SIGPIPE itself
+/// would also end `paged engine-serve` when one client hangs up.)
+fn quiet_broken_pipe() {
+    let report = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        let message = info
+            .payload()
+            .downcast_ref::<String>()
+            .map(String::as_str)
+            .or_else(|| info.payload().downcast_ref::<&str>().copied())
+            .unwrap_or("");
+        if message.starts_with("failed printing to stdout") && message.contains("Broken pipe") {
+            std::process::exit(141);
+        }
+        report(info);
+    }));
+}
+
 fn main() -> Result<()> {
+    quiet_broken_pipe();
     match Cli::parse().command {
         Command::Render {
             doc,

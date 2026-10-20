@@ -3262,31 +3262,69 @@ pub(super) fn apply_link_frames(
             .clone(),
         None,
     ));
+    let orphan = doc.spreads[to_si].spread.text_frames[to_fi]
+        .parent_story
+        .clone()
+        .filter(|own| Some(own) != story_id.as_ref());
     doc.spreads[to_si].spread.text_frames[to_fi].parent_story = story_id.clone();
-    let invalidation = match story_id {
+    // SCR-6: the target's own story is empty (checked above) and, once the
+    // target joins the chain, held by nothing: InDesign discards it, and so
+    // does the link, so no frameless story is left in the document. The
+    // inverse puts it back whole before the target returns to it.
+    let removed = match orphan {
+        Some(own) if !story_is_held(doc, &own) => {
+            Some(super::story::apply_remove_story(doc, &own)?.inverse)
+        }
+        _ => None,
+    };
+    let mut invalidation = match story_id {
         Some(sid) => reflow_hint_for_story(doc, &sid),
         None => InvalidationHint {
             structural: true,
             ..Default::default()
         },
     };
+    invalidation.structural |= removed.is_some();
 
+    // Undo restores `from`'s prior next-target (None clears it; a prior
+    // link re-points it) AND puts the target back on its own story — both
+    // halves, or the frame keeps rendering content it is no longer
+    // threaded to.
+    let unlink = Operation::UnlinkFrames {
+        frame: from.to_string(),
+        prev_next,
+        restore_target,
+    };
     Ok(AppliedOperation {
         op: Operation::LinkFrames {
             from: from.to_string(),
             to: to.to_string(),
         },
-        // Undo restores `from`'s prior next-target (None clears it; a
-        // prior link re-points it) AND puts the target back on its own
-        // story — both halves, or the frame keeps rendering content it
-        // is no longer threaded to.
-        inverse: Operation::UnlinkFrames {
-            frame: from.to_string(),
-            prev_next,
-            restore_target,
+        inverse: match removed {
+            Some(restore) => Operation::Batch {
+                ops: vec![restore, unlink],
+            },
+            None => unlink,
         },
         invalidation,
     })
+}
+
+/// Whether any frame or text path, on a spread or a master, names
+/// `story_id` as its story.
+fn story_is_held(doc: &Document, story_id: &str) -> bool {
+    let in_spread = |s: &paged_model::Spread| {
+        let on_path =
+            |paths: &[paged_model::TextPath]| paths.iter().any(|t| t.parent_story == story_id);
+        s.text_frames
+            .iter()
+            .any(|f| f.parent_story.as_deref() == Some(story_id))
+            || s.rectangles.iter().any(|r| on_path(&r.text_paths))
+            || s.polygons.iter().any(|p| on_path(&p.text_paths))
+            || s.graphic_lines.iter().any(|l| on_path(&l.text_paths))
+    };
+    doc.spreads.iter().any(|s| in_spread(&s.spread))
+        || doc.master_spreads.values().any(|m| in_spread(&m.spread))
 }
 
 pub(super) fn apply_unlink_frames(

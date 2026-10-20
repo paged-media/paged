@@ -256,6 +256,11 @@ fn apply_insert_text(
     offset: u32,
     text: &str,
 ) -> Result<AppliedText, TextOpError> {
+    // SCR-13: "\r" (InDesign scripting's paragraph return, and a CR LF
+    // pair) and U+2029 start a paragraph as "\n" does, as they already do
+    // on the footnote and tracked-change paths. Normalised before anything
+    // measures the text, so the inverse covers exactly what went in.
+    let text = &*normalize_paragraph_breaks(text);
     let paragraphs = find_paragraphs_mut(doc, story_id, cell)?;
     let len = paragraphs_byte_len(paragraphs);
     if offset > len {
@@ -320,6 +325,15 @@ fn apply_insert_text(
             keep_run,
         },
     })
+}
+
+/// `text` with every paragraph return spelled `\n`: `\r\n`, `\r` and
+/// U+2029 PARAGRAPH SEPARATOR each become one `\n`.
+fn normalize_paragraph_breaks(text: &str) -> std::borrow::Cow<'_, str> {
+    if !text.contains(['\r', '\u{2029}']) {
+        return std::borrow::Cow::Borrowed(text);
+    }
+    std::borrow::Cow::Owned(text.replace("\r\n", "\n").replace(['\r', '\u{2029}'], "\n"))
 }
 
 /// `text` inserted at story byte `offset`, each `\n` a paragraph break.
@@ -1609,6 +1623,34 @@ mod tests {
         let tail: String = ps[1].runs.iter().map(|r| r.text.clone()).collect();
         assert_eq!(head, "HelloX");
         assert_eq!(tail, "Y world");
+    }
+
+    #[test]
+    fn carriage_returns_start_paragraphs_and_undo_exactly() {
+        // SCR-13: "\r", "\r\n" and U+2029 are paragraph returns, as "\n".
+        let mut model = CanvasModel::load("d", &small_idml(), CanvasOptions::default()).unwrap();
+        let applied = apply(
+            model.scene_mut(),
+            &TextOp::InsertText {
+                story_id: "story1".into(),
+                offset: 5,
+                text: "A\rB\r\nC\u{2029}D".into(),
+                cell: None,
+                restore: None,
+            },
+        )
+        .unwrap();
+        let texts = |m: &CanvasModel| -> Vec<String> {
+            m.scene().stories[0]
+                .story
+                .paragraphs
+                .iter()
+                .map(|p| p.runs.iter().map(|r| r.text.clone()).collect())
+                .collect()
+        };
+        assert_eq!(texts(&model), ["HelloA", "B", "C", "D world"]);
+        apply(model.scene_mut(), &applied.inverse).unwrap();
+        assert_eq!(texts(&model), ["Hello world"]);
     }
 
     #[test]

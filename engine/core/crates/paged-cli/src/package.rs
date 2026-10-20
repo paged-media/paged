@@ -66,14 +66,48 @@ pub fn run(
             out.display()
         );
     }
-    std::fs::create_dir_all(out.join(LINKS_DIR))
-        .with_context(|| format!("create {}", out.display()))?;
-    let out = out
-        .canonicalize()
-        .with_context(|| format!("resolve {}", out.display()))?;
-
+    // CLI-8: the document opens before the folder is made, and a package
+    // that fails after that takes back what it made, so a retry may use
+    // the same folder.
     let mut session = Session::new();
     opts.open(&mut session, doc)?;
+    let existed = out.exists();
+    std::fs::create_dir_all(out.join(LINKS_DIR))
+        .with_context(|| format!("create {}", out.display()))?;
+    let made = out.to_path_buf();
+    let result = out
+        .canonicalize()
+        .with_context(|| format!("resolve {}", out.display()))
+        .and_then(|out| build(&mut session, doc, opts, &out, instructions, json_out));
+    if result.is_err() {
+        // The folder was new or empty, so all it holds is this run's.
+        if existed {
+            if let Ok(entries) = std::fs::read_dir(&made) {
+                for entry in entries.flatten() {
+                    let path = entry.path();
+                    let _ = if path.is_dir() {
+                        std::fs::remove_dir_all(&path)
+                    } else {
+                        std::fs::remove_file(&path)
+                    };
+                }
+            }
+        } else {
+            let _ = std::fs::remove_dir_all(&made);
+        }
+    }
+    result
+}
+
+/// The package itself, into the folder `out` (made, empty, resolved).
+fn build(
+    session: &mut Session,
+    doc: &Path,
+    opts: &DocumentOptions,
+    out: &Path,
+    instructions: Option<&str>,
+    json_out: bool,
+) -> Result<()> {
     let name = doc
         .file_stem()
         .and_then(|s| s.to_str())
@@ -126,7 +160,7 @@ pub fn run(
 
     // Fonts: every family the document sets in, matched against the
     // faces this run was handed.
-    let used = collection(&mut session, CollectionName::Fonts)?;
+    let used = collection(session, CollectionName::Fonts)?;
     let families: BTreeSet<String> = used
         .as_array()
         .into_iter()
@@ -177,7 +211,7 @@ pub fn run(
         let _ = std::fs::remove_dir(out.join(FONTS_DIR));
     }
 
-    let inks = collection(&mut session, CollectionName::Inks)?;
+    let inks = collection(session, CollectionName::Inks)?;
     let report = json!({
         "document": idml_path.display().to_string(),
         "links": link_rows,

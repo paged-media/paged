@@ -15,5 +15,7 @@ paged engine on 127.0.0.1:<PORT>
   "error": "`file` is required"
 }
 --- POST /run (not JSON)
-0
-""
+400
+{
+  "error": "the request body is not JSON: key must be a string at line 1 column 2"
+}

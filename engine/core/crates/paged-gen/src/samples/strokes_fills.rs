@@ -256,14 +256,16 @@ fn variants() -> Vec<Variant> {
             stroke_weight_pt: Some(8.0),
             fill_color: None,
         },
-        // Stroke overprint — the `StrokeOverprint` separation flag. A
-        // print-intent attribute (the inked stroke knocks nothing out
-        // beneath it); parsed + carried through, a no-op on the RGB
-        // compose path. Appended after the W1.2 style pages so it stays
-        // beyond the capped reference-PDF range.
+        // Stroke overprint — the `OverprintStroke` separation flag (the
+        // spelling InDesign, idml-import and idml-export use; GEN-1: it was
+        // written `StrokeOverprint`, which nothing reads). A print-intent
+        // attribute (the inked stroke knocks nothing out beneath it);
+        // parsed + carried through, a no-op on the RGB compose path, so the
+        // page's composite rendering (what the reference PDF is compared
+        // with) does not change with the rename.
         Variant {
             name: "strokes · overprint",
-            overrides: vec![("StrokeOverprint", "true")],
+            overrides: vec![("OverprintStroke", "true")],
             stroke_weight_pt: Some(8.0),
             fill_color: None,
         },
