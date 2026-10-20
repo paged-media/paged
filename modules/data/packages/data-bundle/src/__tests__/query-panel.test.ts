@@ -33,6 +33,10 @@ mock.module("react", () => ({
   },
   // No renderer here: effects (the session subscription) do not run.
   useEffect: () => {},
+  // Each call recomputes: a render reads the session as it is now.
+  useMemo: (make: () => unknown) => make(),
+  useSyncExternalStore: (_subscribe: unknown, getSnapshot: () => unknown) =>
+    getSnapshot(),
 }));
 
 type El = {
