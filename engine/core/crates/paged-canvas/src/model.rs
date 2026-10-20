@@ -6884,6 +6884,25 @@ impl CanvasModel {
         })
     }
 
+    /// [`Self::element_properties`] as a READ of one value answers it
+    /// (`RequestGet`, `paged.get`): a story range reports the EFFECTIVE
+    /// values its text is set with (ADR 206), where the snapshot reports
+    /// what the range itself sets. Every other element reads the same.
+    pub fn element_read_properties(
+        &self,
+        id: &crate::element_selection::ElementId,
+    ) -> Option<crate::channel::ElementProperties> {
+        if let crate::element_selection::ElementId::StoryRange {
+            story_id,
+            start,
+            end,
+        } = id
+        {
+            return self.story_range_properties(story_id, *start, *end, id, true);
+        }
+        self.element_properties(id)
+    }
+
     pub fn element_properties(
         &self,
         id: &crate::element_selection::ElementId,
@@ -6901,7 +6920,7 @@ impl CanvasModel {
             end,
         } = id
         {
-            return self.story_range_properties(story_id, *start, *end, id);
+            return self.story_range_properties(story_id, *start, *end, id, false);
         }
         // W3.A1 — tables / cells likewise live in stories, not spreads.
         if let ElementId::Table { story_id, table_id } = id {
@@ -8262,20 +8281,23 @@ impl CanvasModel {
     /// - Runs disagree → `PropertyEntry.value = None` (the catalog
     ///   renderer shows "—").
     ///
-    /// ADR 206: the value is the one the text is set with — the run's
-    /// own attribute over its character style, nested style and
-    /// paragraph style chain (`resolved_run_attrs`), the paragraph's own
-    /// over its style chain (`resolved_paragraph_attrs`) — not the local
-    /// override alone. Mixed therefore means "set two ways". A path the
-    /// cascade still leaves unset keeps its unset spelling (an Auto
-    /// leading is `Length(None)`, an unset string `""`); the type size
-    /// falls back to the renderer's default.
+    /// ADR 206: `effective` (a read: `RequestGet`, `paged.get`) collects
+    /// the value the text is set with — the run's own attribute over its
+    /// character style, nested style and paragraph style chain
+    /// (`resolved_run_attrs`), the paragraph's own over its style chain
+    /// (`resolved_paragraph_attrs`) — so mixed means "set two ways"; a
+    /// path the cascade still leaves unset keeps its unset spelling (an
+    /// Auto leading is `Length(None)`, an unset string `""`) and the type
+    /// size falls back to the renderer's default. Not `effective` (the
+    /// `RequestElementProperties` snapshot) collects what the range
+    /// itself sets: `None` / `""` where it inherits.
     fn story_range_properties(
         &self,
         story_id: &str,
         start: u32,
         end: u32,
         id: &crate::element_selection::ElementId,
+        effective: bool,
     ) -> Option<crate::channel::ElementProperties> {
         use crate::channel::{ElementProperties, PropertyEntry};
         use paged_mutate::{PropertyPath, Value};
@@ -8402,10 +8424,14 @@ impl CanvasModel {
                 None => para_end > start && para_start < end,
             };
             if in_range {
-                // The EFFECTIVE value (ADR 206): the paragraph's own
-                // attribute over its style's based-on chain, as the
-                // composer lays the paragraph out.
-                let rp = self.scene.resolved_paragraph_attrs(para);
+                // ADR 206 — a read takes the paragraph's own attribute
+                // over its style's based-on chain, as the composer lays
+                // the paragraph out; the snapshot its own attribute only.
+                let rp = if effective {
+                    self.scene.resolved_paragraph_attrs(para)
+                } else {
+                    paged_scene::ResolvedParagraphAttrs::from_paragraph(para)
+                };
                 space_before.push(rp.space_before);
                 space_after.push(rp.space_after);
                 first_line_indent.push(rp.first_line_indent);
@@ -8457,11 +8483,20 @@ impl CanvasModel {
                 if run_end <= char_start || run_start >= char_end {
                     continue;
                 }
-                // The EFFECTIVE value (ADR 206): the run's own attribute
-                // over its character style, nested style and paragraph
-                // style chain — the cascade the composer sets it with.
-                let rr = self.scene.resolved_run_attrs(para, run);
-                font_sizes.push(Some(rr.point_size.unwrap_or_else(default_point_size)));
+                // ADR 206 — a read takes the run's own attribute over its
+                // character style, nested style and paragraph style chain
+                // (the cascade the composer sets it with); the snapshot
+                // its own attribute only.
+                let rr = if effective {
+                    self.scene.resolved_run_attrs(para, run)
+                } else {
+                    paged_scene::ResolvedRunAttrs::from_run(run)
+                };
+                font_sizes.push(if effective {
+                    Some(rr.point_size.unwrap_or_else(default_point_size))
+                } else {
+                    rr.point_size
+                });
                 leadings.push(rr.leading);
                 trackings.push(rr.tracking);
                 fill_colors.push(rr.fill_color.clone());
@@ -10176,9 +10211,12 @@ impl CanvasModel {
     /// consumes this through `useCollection<LinkSummary>("links")`.
     pub fn links(&self) -> Vec<crate::channel::LinkSummary> {
         use crate::channel::LinkSummary;
-        // panels.md gap 2 — frames whose image the build couldn't
-        // resolve/decode (drew the placeholder) are "missing".
+        // panels.md gap 2 — frames whose link the build couldn't resolve
+        // (drew the placeholder) are "missing"; frames whose link resolved
+        // to bytes no decoder reads (an EPS) are "undecoded" — the file is
+        // there, the frame paints its own fill (engine ADR 207).
         let missing = self.built.diagnostics.missing_image_frame_ids();
+        let undecoded = self.built.diagnostics.undecoded_image_frame_ids();
         // panels.md gap 3 — placed-image colour space + ppi lives in
         // the per-spread side map keyed by host-frame self_id.
         let summary = |self_id: String,
@@ -10189,6 +10227,8 @@ impl CanvasModel {
             LinkSummary {
                 status: if missing.contains(&self_id) {
                     "missing"
+                } else if undecoded.contains(&self_id) {
+                    "undecoded"
                 } else {
                     "ok"
                 }
@@ -15135,6 +15175,58 @@ mod tests {
         // The link points at a non-existent asset and no resolver was
         // configured, so the build drew the placeholder → "missing".
         assert_eq!(l.status, "missing");
+    }
+
+    /// Engine ADR 207 — a placed image whose bytes are present but that no
+    /// decoder reads (an EPS: no PostScript interpreter, by declaration)
+    /// is `"undecoded"`, not `"missing"`; a link to nothing beside it is
+    /// still `"missing"`.
+    #[test]
+    fn undecodable_placed_bytes_are_undecoded_not_missing() {
+        use std::io::Write;
+        let mut buf = Vec::new();
+        {
+            let mut zip = zip::ZipWriter::new(std::io::Cursor::new(&mut buf));
+            let opts: zip::write::SimpleFileOptions = zip::write::SimpleFileOptions::default()
+                .compression_method(zip::CompressionMethod::Stored);
+            zip.start_file("mimetype", opts).unwrap();
+            zip.write_all(b"application/vnd.adobe.indesign-idml-package")
+                .unwrap();
+            zip.start_file("designmap.xml", opts).unwrap();
+            zip.write_all(
+                br#"<?xml version="1.0" encoding="UTF-8"?>
+<Document DOMVersion="13.1" Self="d1">
+<idPkg:Spread src="Spreads/Spread_s1.xml" xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging"/>
+</Document>"#,
+            )
+            .unwrap();
+            zip.start_file("Spreads/Spread_s1.xml", opts).unwrap();
+            zip.write_all(
+                br#"<?xml version="1.0" encoding="UTF-8"?>
+<idPkg:Spread xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging" DOMVersion="13.1">
+<Spread Self="s1" PageCount="1">
+<Page Self="p1" Name="1" GeometricBounds="0 0 792 612" ItemTransform="1 0 0 1 0 0"/>
+<Rectangle Self="eps" GeometricBounds="0 0 100 100" ItemTransform="1 0 0 1 50 50">
+<Image Self="img1" LinkResourceURI="file:///legacy.eps"><Properties><Contents><![CDATA[JSFQUy1BZG9iZS0zLjAgRVBTRi0zLjAKJSVCb3VuZGluZ0JveDogMCAwIDcyIDcyCm5ld3BhdGggMCAwIG1vdmV0byA3MiA3MiBsaW5ldG8gc3Ryb2tlCiUlRU9GCg==]]></Contents></Properties></Image>
+</Rectangle>
+<Rectangle Self="lost" GeometricBounds="0 0 100 100" ItemTransform="1 0 0 1 200 50">
+<Image Self="img2" LinkResourceURI="file:///lost-plate.tif"/>
+</Rectangle>
+</Spread></idPkg:Spread>"#,
+            )
+            .unwrap();
+            zip.finish().unwrap();
+        }
+        let model = CanvasModel::load("doc-eps", &buf, CanvasOptions::default()).unwrap();
+        let status = |id: &str| {
+            model
+                .links()
+                .into_iter()
+                .find(|l| l.host_self_id == id)
+                .map(|l| l.status)
+        };
+        assert_eq!(status("eps").as_deref(), Some("undecoded"));
+        assert_eq!(status("lost").as_deref(), Some("missing"));
     }
 
     #[test]

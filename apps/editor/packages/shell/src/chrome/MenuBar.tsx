@@ -155,7 +155,7 @@ export function MenuBar() {
   const navRef = useRef<MenuNavigation>({
     origin: "keyboard",
     returnTo: null,
-    switching: false,
+    open: null,
   });
   const roving = useRovingFocus({
     orientation: "horizontal",
@@ -229,6 +229,10 @@ export function MenuBar() {
   const labels = [...core, ...context].map(([label]) => label);
   const neighbour = (label: string, delta: number) =>
     labels[(labels.indexOf(label) + delta + labels.length) % labels.length];
+  const openAt = (label: string | null) => {
+    navRef.current.open = label;
+    setOpenMenu(label);
+  };
   const onContentKeyDown = (
     e: ReactKeyboardEvent<HTMLDivElement>,
     label: string,
@@ -237,8 +241,7 @@ export function MenuBar() {
     if (e.defaultPrevented) return;
     if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
     e.preventDefault();
-    navRef.current.switching = true;
-    setOpenMenu(neighbour(label, e.key === "ArrowRight" ? 1 : -1));
+    openAt(neighbour(label, e.key === "ArrowRight" ? 1 : -1));
   };
 
   const menu = (label: string, nodes: MenuNode[], contextual: boolean) => (
@@ -246,8 +249,8 @@ export function MenuBar() {
       key={label}
       open={openMenu === label}
       onOpenChange={(open) => {
-        if (open) setOpenMenu(label);
-        else if (openMenu === label) setOpenMenu(null);
+        if (open) openAt(label);
+        else if (navRef.current.open === label) openAt(null);
       }}
     >
       <DropdownMenuTrigger
@@ -274,11 +277,14 @@ export function MenuBar() {
         onKeyDown={(e) => onContentKeyDown(e, label)}
         onCloseAutoFocus={(e) => {
           const nav = navRef.current;
-          // The neighbour this menu switched to is opening and takes
-          // focus itself (Radix lands a keyboard-opened menu on its
-          // first item).
-          if (nav.switching) {
-            nav.switching = false;
+          // Another menu is open (Left/Right switched to it): it takes
+          // focus itself (Radix lands a keyboard-opened menu on its first
+          // item). Asked of the open menu, not of a flag the switch set:
+          // a menu closes when its exit ends, so on a slow machine a
+          // quick walk has two menus closing at once, and the second
+          // found the one flag spent by the first and pulled focus back
+          // to its own trigger, out of the menu that was open.
+          if (nav.open !== null && nav.open !== label) {
             e.preventDefault();
             return;
           }
@@ -319,7 +325,8 @@ export function MenuBar() {
 interface MenuNavigation {
   origin: "pointer" | "keyboard";
   returnTo: Element | null;
-  switching: boolean;
+  /** The open menu, as the event handlers last set it. */
+  open: string | null;
 }
 
 // ── model ──────────────────────────────────────────────────────────

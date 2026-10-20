@@ -78,6 +78,7 @@ and 024 predate that scheme and keep their numbers. Records 200–217 were writt
 | [266](266-one-source-for-the-print-output-facts.md) | One source for the print-output facts | Accepted 2026-10-20 |
 | [267](267-margins-and-columns-on-the-page.md) | Margins and columns are drawn on the page | Accepted 2026-10-20 |
 | [268](268-owned-native-text-keeps-the-click.md) | Owned native text keeps the Type-tool click | Accepted 2026-10-20 |
+| [269](269-the-demo-guide-floats-over-the-editor.md) | The demo guide floats over the editor, and the script waits behind a disclosure | Accepted 2026-10-20 |
 
 Decisions made in other repositories that this editor's code rests on are listed in
 [`../README.md`](../README.md). Comments in the source also cite ADR 025 (the journal) and

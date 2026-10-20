@@ -164,6 +164,18 @@ export interface DuckDBHandle {
   /** Run SQL and read the Arrow result as typed column buffers — the form
    *  `ingestColumnBatch` sends to the engine with one copy per column. */
   queryColumns(sql: string): Promise<ColumnBatch>;
+  /** Run SQL over the CSV `sources` AS WRITTEN — every column text, the
+   *  way InDesign's Data Merge reads a CSV — and read the result as
+   *  [`queryColumns`] does. The tables the SQL names are the CSV text twins
+   *  `registerCsv` keeps (see [`csvTextTwin`]) for the length of the one
+   *  call; everything else reads as usual. Null when no source has a twin.
+   *  Throws what DuckDB says when the SQL does not run over text (a
+   *  computation that needs numbers, without a CAST). Optional: a handle
+   *  without it serves typed values only. */
+  queryColumnsAsWritten?(
+    sql: string,
+    sources: readonly string[],
+  ): Promise<ColumnBatch | null>;
   /** Tear the session + worker down. */
   close(): Promise<void>;
 }
@@ -213,6 +225,27 @@ function ident(name: string): string {
   return `"${name.replace(/"/g, '""')}"`;
 }
 
+/** A single-quoted SQL string literal. */
+function literal(text: string): string {
+  return `'${text.replace(/'/g, "''")}'`;
+}
+
+/** The table holding CSV source `name` as written (every column VARCHAR),
+ *  beside the typed table the sniffer makes. A merge reads it: InDesign's
+ *  Data Merge inserts a field's text as the file has it (`9.90`, `007`),
+ *  where the typed table holds `9.9` and `7`. */
+export function csvTextTwin(name: string): string {
+  return `__paged_text_${name}`;
+}
+
+/** Where a source's typed table waits while a merge reads its twin. */
+function typedAside(name: string): string {
+  return `__paged_typed_${name}`;
+}
+
+/** The temporary table one as-written query lands in. */
+const AS_WRITTEN_ROWS = "__paged_as_written_rows";
+
 /** Run SQL; when the result has columns data-core has no kind for (TIME,
  *  INTERVAL, LIST, STRUCT, MAP, …), run it again with exactly those columns
  *  cast to VARCHAR, so they cross as DuckDB's own text rendering (oracle
@@ -255,6 +288,28 @@ export function duckdbHandle(
         schema: "main",
         detect: true,
       });
+      // The text twin: the same file, the same sniffing, every column text.
+      // Kept only when it has the typed table's columns and rows; a file the
+      // two readings disagree on merges typed, as before.
+      const twin = ident(csvTextTwin(name));
+      await conn.query(`DROP TABLE IF EXISTS ${twin}`);
+      try {
+        await conn.query(
+          `CREATE TABLE ${twin} AS SELECT * FROM read_csv(${literal(`${name}.csv`)}, all_varchar = true)`,
+        );
+        const shape = async (table: string) =>
+          JSON.stringify(
+            arrowToTextRows(
+              (await conn.query(
+                `SELECT (SELECT count(*) FROM ${ident(table)}) AS n, (SELECT string_agg(column_name, ',' ORDER BY column_index) FROM duckdb_columns() WHERE schema_name = 'main' AND table_name = ${literal(table)}) AS c`,
+              )) as ArrowLikeTable,
+            ).rows,
+          );
+        if ((await shape(name)) !== (await shape(csvTextTwin(name))))
+          await conn.query(`DROP TABLE IF EXISTS ${twin}`);
+      } catch {
+        await conn.query(`DROP TABLE IF EXISTS ${twin}`);
+      }
     },
     async registerFileBuffer(name: string, bytes: Uint8Array) {
       // A copy: the browser AsyncDuckDB transfers the buffer to its worker,
@@ -267,6 +322,49 @@ export function duckdbHandle(
     },
     async queryColumns(sql: string): Promise<ColumnBatch> {
       return arrowToColumns(await runQuery(conn, sql));
+    },
+    async queryColumnsAsWritten(sql: string, sources: readonly string[]) {
+      const twins = (await conn.query(
+        `SELECT table_name FROM duckdb_tables() WHERE schema_name = 'main'`,
+      )) as ArrowLikeTable;
+      const have = new Set(arrowToTextRows(twins).rows.map((r) => r[0] ?? ""));
+      const swap = sources.filter(
+        (s) => have.has(csvTextTwin(s)) && have.has(s),
+      );
+      if (swap.length === 0) return null;
+      // One transaction: the twins take the sources' names for the one
+      // statement and give them back, so nothing else ever reads a twin
+      // under a source's name, and a failure leaves both as they were.
+      const rename = (from: string, to: string) =>
+        `ALTER TABLE ${ident(from)} RENAME TO ${ident(to)};`;
+      const inner = sql.trim().replace(/;+\s*$/, "");
+      try {
+        await conn.query(
+          [
+            "BEGIN TRANSACTION;",
+            ...swap.map((s) => rename(s, typedAside(s))),
+            ...swap.map((s) => rename(csvTextTwin(s), s)),
+            `CREATE OR REPLACE TEMP TABLE ${AS_WRITTEN_ROWS} AS SELECT * FROM (${inner}) AS _paged_q;`,
+            ...swap.map((s) => rename(s, csvTextTwin(s))),
+            ...swap.map((s) => rename(typedAside(s), s)),
+            "COMMIT;",
+          ].join("\n"),
+        );
+      } catch (err) {
+        try {
+          await conn.query("ROLLBACK");
+        } catch {
+          // nothing was open
+        }
+        throw err;
+      }
+      try {
+        return arrowToColumns(
+          await runQuery(conn, `SELECT * FROM ${AS_WRITTEN_ROWS}`),
+        );
+      } finally {
+        await conn.query(`DROP TABLE IF EXISTS ${AS_WRITTEN_ROWS}`);
+      }
     },
     async rows(sql: string): Promise<TextRows> {
       return arrowToTextRows((await conn.query(sql)) as ArrowLikeTable);

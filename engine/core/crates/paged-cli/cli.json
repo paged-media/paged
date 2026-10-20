@@ -5797,6 +5797,36 @@
         },
         {
           "defaults": [],
+          "help": "Calls answered at once, each with its own engine session. Default: the machine's parallelism",
+          "long": "workers",
+          "name": "workers",
+          "positional": false,
+          "repeatable": false,
+          "required": false,
+          "short": null,
+          "takesValues": true,
+          "valueNames": [
+            "WORKERS"
+          ]
+        },
+        {
+          "defaults": [
+            "64"
+          ],
+          "help": "Calls that wait for a worker; one more is answered 503 at once",
+          "long": "queue",
+          "name": "queue",
+          "positional": false,
+          "repeatable": false,
+          "required": false,
+          "short": null,
+          "takesValues": true,
+          "valueNames": [
+            "QUEUE"
+          ]
+        },
+        {
+          "defaults": [],
           "help": "Font file or directory to make available, repeatable",
           "long": "fonts",
           "name": "fonts",
