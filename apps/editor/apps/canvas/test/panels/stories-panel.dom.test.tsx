@@ -223,14 +223,11 @@ describe("Stories panel: controls", () => {
 describe("Stories panel: findings", () => {
   // UX audit F-22: "Content mode's Stories list shows u240c3b". The row's
   // secondary line ends with the story's id.
-  test.failing(
-    "PN-110 (UX F-22): a story row shows no internal id",
-    async () => {
-      covers("panel:paged.stories");
-      const h = await mount();
-      expect(rows(h.root)[0].secondary).not.toContain(STRUCTURE.story);
-    },
-  );
+  test("PN-110 (UX F-22): a story row shows no internal id", async () => {
+    covers("panel:paged.stories");
+    const h = await mount();
+    expect(rows(h.root)[0].secondary).not.toContain(STRUCTURE.story);
+  });
 
   // The reflow controls say the rule cannot be read back and show
   // "unknown" (a mixed pill); the engine reports it as

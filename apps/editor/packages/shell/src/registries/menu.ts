@@ -81,6 +81,12 @@ export interface MenuItemContribution extends Omit<ContractMenuItem, "when"> {
    *  like `when`; a throw falls back to the static label. */
   labelFor?: (state: unknown) => string | null;
 
+  /** A toggle's state, computed at render (View ▸ Snap to points). When
+   *  set, the item renders as a menuitemcheckbox with a tick and
+   *  `aria-checked`; selecting it still just invokes the command, which
+   *  flips the state. A throw renders it unchecked. */
+  checked?: (state: unknown) => boolean;
+
   /** Icon name for the item's leading column (the shared icon
    *  registries). Optional: panel-show and tool-activate items take the
    *  panel's / tool's own icon without declaring one. */

@@ -212,4 +212,6 @@ needs a GPU. Don't run `cargo fmt --all` workspace-wide (it drifts unrelated fil
 `calibration`) is a **license-clear** golden set committed here so external
 contributors can run the fidelity gate. The full Envato-backed corpus and
 the InDesign export harness are internal (private) and not required to
-contribute.
+contribute. With the private corpus checked out, `scripts/pack-fidelity.py` runs the
+vendor-pack fidelity lane over its unpacked pack directories
+(`docs/development/testing.md` in the monorepo root).

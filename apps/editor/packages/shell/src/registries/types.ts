@@ -152,19 +152,20 @@ export function panelBelongsHere(state: unknown, panelId: string): boolean {
   const list = s?.registries?.editContexts?.list?.();
   if (!list) return true; // No registry to ask — offer it.
   const activeType = s?.editContext?.type ?? null;
+  let claimed = false;
   for (const raw of list) {
     const c = raw as { type?: string; panelIds?: readonly string[] };
     if (!c.panelIds?.includes(panelId)) continue;
-    // Claimed by the active context → offered.
+    // Claimed by the active context → offered, whichever claimant it is
+    // (a panel two contexts share is offered inside each of them).
     if (c.type === activeType) return true;
-    // Standing in no context → offered. A plugin's frame panel is where
-    // a user STARTS with that plugin (the sheet's Workbook opens or makes
-    // a workbook); greying it until the user is already inside the
-    // feature hid the feature behind itself.
-    if (activeType === null) return true;
-    // Inside ANOTHER content type → not offered (a control for content
-    // that is not on screen).
-    return false;
+    claimed = true;
   }
-  return true;
+  // Unclaimed → offered. Standing in no context → offered: a plugin's
+  // frame panel is where a user STARTS with that plugin (the sheet's
+  // Workbook opens or makes a workbook); greying it until the user is
+  // already inside the feature hid the feature behind itself. Claimed
+  // only by OTHER content types → not offered (a control for content
+  // that is not on screen).
+  return !claimed || activeType === null;
 }

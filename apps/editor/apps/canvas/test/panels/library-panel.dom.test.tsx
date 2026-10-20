@@ -161,11 +161,15 @@ describe("Library panel", () => {
   test("Release names a version, and the name shows on it", async () => {
     covers("panel:paged.library");
     const { h, lib, entry } = await withDocument(1);
-    globalThis.prompt = ((message?: string) => {
-      prompted.push(String(message));
-      return "v1";
-    }) as typeof prompt;
     await h.click(versions(h)[0].querySelector("[data-library-release]")!);
+    const name = versions(h)[0].querySelector<HTMLInputElement>(
+      "[data-library-release-name]",
+    )!;
+    name.focus();
+    await h.user.keyboard("v1");
+    await h.click(
+      versions(h)[0].querySelector("[data-library-release-confirm]")!,
+    );
     await h.settle();
     const refs = await lib.refs(entry.id);
     expect(refs["releases/v1"]).toBe(
@@ -174,29 +178,28 @@ describe("Library panel", () => {
     expect(versions(h)[0].textContent).toContain("released v1");
   });
 
-  // UX audit F-13: each version shows a content hash as its second line.
-  test.failing(
-    "PN-353 (UX F-13): versions are labelled for people, not by content hash",
-    async () => {
-      covers("panel:paged.library");
-      const { h } = await withDocument(1);
-      const hash = versions(h)[0].getAttribute("data-library-version")!;
-      expect(versions(h)[0].textContent).not.toContain(hash.slice(0, 10));
-    },
-  );
+  // UX audit F-13 (fixed): each version showed a content hash as its
+  // second line; it reads "Version n · author" now.
+  test("PN-353 (UX F-13): versions are labelled for people, not by content hash", async () => {
+    covers("panel:paged.library");
+    const { h } = await withDocument(1);
+    const hash = versions(h)[0].getAttribute("data-library-version")!;
+    expect(versions(h)[0].textContent).not.toContain(hash.slice(0, 10));
+  });
 
-  // UX audit F-13: "Release" asks through window.prompt.
-  test.failing(
-    "PN-354 (UX F-13): Release asks for the name in the panel, not through window.prompt",
-    async () => {
-      covers("panel:paged.library");
-      const { h } = await withDocument(1);
-      globalThis.prompt = ((message?: string) => {
-        prompted.push(String(message));
-        return null;
-      }) as typeof prompt;
-      await h.click(versions(h)[0].querySelector("[data-library-release]")!);
-      expect(prompted).toEqual([]);
-    },
-  );
+  // UX audit F-13 (fixed): "Release" asked through window.prompt; it
+  // asks in the panel now.
+  test("PN-354 (UX F-13): Release asks for the name in the panel, not through window.prompt", async () => {
+    covers("panel:paged.library");
+    const { h } = await withDocument(1);
+    globalThis.prompt = ((message?: string) => {
+      prompted.push(String(message));
+      return null;
+    }) as typeof prompt;
+    await h.click(versions(h)[0].querySelector("[data-library-release]")!);
+    expect(prompted).toEqual([]);
+    expect(
+      versions(h)[0].querySelector("[data-library-release-name]"),
+    ).not.toBeNull();
+  });
 });
