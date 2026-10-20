@@ -32,6 +32,7 @@ import {
   pluginOverlayLayersContribution,
   guideOverlayContribution,
   pageDecorationsContribution,
+  marginGuidesContribution,
   pathEditContribution,
   resizeHandlesContribution,
   rotateHandleContribution,
@@ -286,6 +287,7 @@ import { CorpusPicker } from "./ui/CorpusPicker";
 // contributions' `z` values inside OverlayHost.
 const BUILT_IN_OVERLAYS: OverlayContribution[] = [
   pageDecorationsContribution,
+  marginGuidesContribution,
   // W2.8 — the INTERACTIVE guide overlay supersedes the read-only
   // `rulerGuidesContribution` in the editor: it seeds its mirror from
   // the same `DocumentHandle.rulerGuides` AND drives create/move/

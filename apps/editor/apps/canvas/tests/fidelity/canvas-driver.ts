@@ -347,8 +347,13 @@ async function preloadPackFonts(page: Page, packName: string): Promise<void> {
   }));
   await page.evaluate(
     async ({ entries }) => {
-      const fetchBytes = async (url: string): Promise<Uint8Array> =>
-        new Uint8Array(await (await fetch(url)).arrayBuffer());
+      // A refused or missing file must fail the pack, not register the
+      // dev server's error page as a font.
+      const fetchBytes = async (url: string): Promise<Uint8Array> => {
+        const r = await fetch(url);
+        if (!r.ok) throw new Error(`font ${url}: HTTP ${r.status}`);
+        return new Uint8Array(await r.arrayBuffer());
+      };
       const c = (
         globalThis as unknown as {
           __canvas: {
