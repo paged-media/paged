@@ -567,7 +567,9 @@ function commands(
         expr: a.expr,
       }),
     ),
-    cmd<{ address: string; path: string }>(
+    // DAT-1: both filters are optional; `{ address }` lists every binding
+    // on the object, `{ path }` every binding of the path, `{}` them all.
+    cmd<{ address?: string; path?: string }>(
       "media.paged.data.propertyBindings",
       (a) =>
         session.propertyBindings({

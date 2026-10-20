@@ -85,5 +85,13 @@ export function makePatchGesture(
       const off = a && b ? patchOffset(a, b) : null;
       if (off) void session.patchSelection(off[0], off[1]);
     },
+    // IMG-2 / INV-2: Escape (and a lost pointer capture) mid-drag patches
+    // nothing; the release that follows finds no drag.
+    onKey(e: KeyboardEvent) {
+      if (e.key !== "Escape" || !from) return;
+      from = to = null;
+      host.overlay.setToolPreview(null);
+      e.preventDefault();
+    },
   };
 }

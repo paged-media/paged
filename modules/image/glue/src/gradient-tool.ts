@@ -82,5 +82,13 @@ export function makeGradientGesture(
       if (!a || !b || Math.hypot(b[0] - a[0], b[1] - a[1]) < 1) return;
       void session.fillGradientLine(a, b);
     },
+    // IMG-2 / INV-2: Escape (and a lost pointer capture) mid-drag fills
+    // nothing; the release that follows finds no drag.
+    onKey(e: KeyboardEvent) {
+      if (e.key !== "Escape" || !from) return;
+      from = to = null;
+      host.overlay.setToolPreview(null);
+      e.preventDefault();
+    },
   };
 }

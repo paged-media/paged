@@ -161,6 +161,14 @@ export function makeSelectionGesture(
     },
     onKey(e: KeyboardEvent) {
       const machine = session.selectionMachine();
+      // IMG-2 / INV-2: Escape (and a lost pointer capture) mid-drag
+      // selects nothing; the release that follows finds no drag.
+      if (e.key === "Escape" && machine?.dragging() && kind !== "polygon") {
+        machine.cancel();
+        e.preventDefault();
+        renderOverlay();
+        return;
+      }
       if (!machine || kind !== "polygon" || !machine.placingPolygon()) return;
       if (e.key === "Enter") {
         if (machine.polygonCommit()) session.refreshSelection();

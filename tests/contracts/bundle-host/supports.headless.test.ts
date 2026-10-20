@@ -88,10 +88,10 @@ const DYNAMIC = [
 ] as const;
 
 /** What the editor answers: every door its host options wire, and the
- *  members of the shell's PagedEditor. Not: `journal@1` (HOST-4, the
- *  editor passes no journal) and `gpu@1` (a bundle's own declaration,
- *  which the probe does not make). */
+ *  members of the shell's PagedEditor (`journal@1` since HOST-4). Not:
+ *  `gpu@1` (a bundle's own declaration, which the probe does not make). */
 const EDITOR = [
+  "journal@1",
   "text.measure@1",
   "text.measureStrings@1",
   "rendering.sceneLayer@1",
