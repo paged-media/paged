@@ -1,23 +1,24 @@
 # CLAUDE.md
 
-Orientation for Claude sessions in **paged-media/editor** — the closed
-commercial frontend for the `paged` IDML engine. Terse by design;
+Orientation for Claude sessions in the editor, `apps/editor` in the
+monorepo **paged-media/paged** — the frontend for the `paged` IDML engine,
+dual-licensed AGPL-3.0-only OR PMEL like the rest of the repository. Terse by design;
 read the root `README.md` for the longer picture and
 `apps/canvas/README.md` for canvas-app internals.
 
 ## What this is
 
-Public, **dual-licensed AGPL-3.0 OR PMEL** (And The Next GmbH). The editor
+Public, **dual-licensed AGPL-3.0-only OR PMEL** (And The Next GmbH). The editor
 is a networked app, so the open side is **AGPL** (§13 network copyleft).
 The engine is under the same terms since the monorepo relicense (ADR
-PM-0001; it was MPL-2.0 OR PMEL before). (This repo was proprietary / All-Rights-Reserved and private
-until 2026-06-22, when it was opened.)
+PM-0001; it was MPL-2.0 OR PMEL before). (The editor was proprietary and private
+until 2026-06-22, when it was opened; it joined the monorepo on 2026-10-18.)
 
 - **License headers apply to every source file** (AGPL Exhibit-style notice
   - PMEL, pointing at LICENSE.md). New source files carry it — copy it
     verbatim from the top of any existing source file, or see `CONTRIBUTING.md`.
-- This repo consumes the engine **across a package boundary** — the
-  published `@paged-media` wasm/SDK packages — **never** a Rust path
+- The editor consumes the engine **across a package boundary** — the
+  engine's wasm workspace packages (see below) — **never** a Rust path
   dependency, and never reaches into core's source tree.
 
 ## Workspace layout (Bun)
@@ -191,7 +192,7 @@ the clean-room icon system, and the cockpit UI kit
 ## Conventions
 
 - **Don't loosen fidelity thresholds to hide a regression.** Thresholds
-  (`corpus/envato/canvas-fidelity-thresholds.json`) are sized to
+  (`corpus/config/canvas-fidelity-thresholds.json`) are sized to
   measurements + headroom. Fix the regression; tighten after, never
   before.
 - **`bun fmt` formats everything; CI checks it.** Run

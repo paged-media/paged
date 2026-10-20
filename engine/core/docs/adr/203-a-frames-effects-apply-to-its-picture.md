@@ -1,6 +1,8 @@
 # ADR 203 — A frame's feathers and interior effects apply to its picture
 
-- **Status:** Accepted 2026-10-20.
+- **Status:** Accepted 2026-10-20. Amended by [ADR 204](204-a-feather-fades-the-stroke-and-the-text.md):
+  the feathers now follow the stroke and are built on its outer edge, and a text frame's text is
+  inside its run.
 - **Scope:** the frame emitters in `crates/paged-renderer/src/pipeline/{shapes,text_path}.rs`
   and `module/effects.rs`; `DisplayCommand::BeginFeatheredObject` and
   `paged_compose::mask::feather_run_starts`; the feather arms of both raster lanes

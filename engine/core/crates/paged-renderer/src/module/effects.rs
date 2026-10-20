@@ -27,18 +27,19 @@
 //!
 //! Rendering order matches Photoshop / InDesign's layer-effect stack:
 //! `OuterGlow` first (the halo lands behind the fill), then
-//! `InnerShadow` / `InnerGlow` / `BevelEmboss` / `Satin` / `Feather`
-//! after the fill and the frame's placed picture (they composite onto
-//! the object's interior, picture included). The fill and the picture
-//! are emitted between these two groups — the caller bookends the call
-//! accordingly, and opens the run with [`begin_feathered_object`] so
-//! a feather masks the picture with the fill.
+//! `InnerShadow` / `InnerGlow` / `BevelEmboss` / `Satin` after the fill
+//! and the frame's placed picture (they composite onto the object's
+//! interior, picture included), and the feathers last, after the stroke
+//! and — on a text frame — the text (ADR 204). The caller bookends the
+//! calls accordingly, and opens the run with [`begin_feathered_object`]
+//! so a feather masks everything the object paints.
 //!
 //! `directional_feather` / `gradient_feather` go through their own
 //! parser-to-compose converters (`directional_feather_from_parser` /
 //! `gradient_feather_from_parser`) and emit dedicated
 //! `DisplayCommand::DirectionalFeather` / `GradientFeather` variants
-//! after the fill, alongside the plain `Feather` arm.
+//! alongside the plain `Feather` arm, all on the outline
+//! [`feather_outline`] grows to the stroke's outer edge.
 //!
 //! All four shape kinds (Rectangle / Oval / Polygon / TextFrame)
 //! capture the effects bag (parser Q-04) and the pipeline wires this
@@ -99,41 +100,281 @@ pub(crate) fn emit_effects_pre_fill(
     }
 }
 
+/// True when `effects` carries any of the three feathers.
+fn has_feather(effects: &FrameEffects) -> bool {
+    effects.feather.is_some()
+        || effects.directional_feather.is_some()
+        || effects.gradient_feather.is_some()
+}
+
+/// The outline a frame's feathers are built on: the frame's own path
+/// grown by how far its stroke reaches outside it.
+///
+/// InDesign feathers an object from its visible edge, which on a stroked
+/// frame is the stroke's OUTER edge (InDesign 20.x, ADR 204): a basic
+/// feather on a frame with an 8 pt centred stroke fades the stroke as
+/// well, its band starting 4 pt outside the path. Building the mask on
+/// the grown outline is what every lane needs to agree on that, and a
+/// path is the one thing every lane already builds masks from — so the
+/// growth happens here, once, and no lane changes how it draws a mask.
+///
+/// The outline is offset in the frame's inner coordinates, where the
+/// stroke weight is measured: `unit_normalize` maps a unit-rect or
+/// unit-ellipse effects path there and back. Corners are mitred, as the
+/// default stroke join is. Returns `path_id` unchanged when nothing
+/// feathers or the stroke reaches nowhere outside the path.
+pub(crate) fn feather_outline(
+    page: &mut BuiltPage,
+    effects: &FrameEffects,
+    path_id: PathId,
+    unit_normalize: Option<Rect>,
+    stroke_outset_pt: f32,
+) -> PathId {
+    if !has_feather(effects) || stroke_outset_pt <= 0.0 {
+        return path_id;
+    }
+    let Some(base) = page.list.paths.get(path_id).cloned() else {
+        return path_id;
+    };
+    if unit_normalize.is_some_and(|r| r.w <= 0.0 || r.h <= 0.0) {
+        return path_id;
+    }
+    let to_inner = |x: f32, y: f32| match unit_normalize {
+        Some(r) => (r.x + x * r.w, r.y + y * r.h),
+        None => (x, y),
+    };
+    let from_inner = |x: f32, y: f32| match unit_normalize {
+        Some(r) => ((x - r.x) / r.w, (y - r.y) / r.h),
+        None => (x, y),
+    };
+    let inner = map_path(&base, to_inner);
+    // `aligned_outline_path` moves the outline by half the weight it is
+    // given; the outset is the whole distance.
+    let Some(grown) = crate::pipeline::aligned_outline_path(
+        &inner,
+        Some("OutsideAlignment"),
+        stroke_outset_pt * 2.0,
+    ) else {
+        return path_id;
+    };
+    let grown = map_path(&grown, from_inner);
+    let mut bytes = Vec::with_capacity(grown.segments.len() * 24 + 8);
+    bytes.extend_from_slice(b"feather-outline");
+    for seg in &grown.segments {
+        let (tag, pts): (u8, Vec<f32>) = match *seg {
+            paged_compose::PathSegment::MoveTo { x, y } => (0, vec![x, y]),
+            paged_compose::PathSegment::LineTo { x, y } => (1, vec![x, y]),
+            paged_compose::PathSegment::QuadTo { cx, cy, x, y } => (2, vec![cx, cy, x, y]),
+            paged_compose::PathSegment::CubicTo {
+                cx1,
+                cy1,
+                cx2,
+                cy2,
+                x,
+                y,
+            } => (3, vec![cx1, cy1, cx2, cy2, x, y]),
+            paged_compose::PathSegment::Close => (4, Vec::new()),
+        };
+        bytes.push(tag);
+        for v in pts {
+            bytes.extend_from_slice(&v.to_bits().to_le_bytes());
+        }
+    }
+    let key = crate::pipeline::fnv_1a_u64(&bytes);
+    page.list.paths.intern(key, grown).0
+}
+
+/// `path` with every point passed through `f`.
+fn map_path(
+    path: &paged_compose::PathData,
+    f: impl Fn(f32, f32) -> (f32, f32),
+) -> paged_compose::PathData {
+    use paged_compose::PathSegment as S;
+    let segments = path
+        .segments
+        .iter()
+        .map(|seg| match *seg {
+            S::MoveTo { x, y } => {
+                let (x, y) = f(x, y);
+                S::MoveTo { x, y }
+            }
+            S::LineTo { x, y } => {
+                let (x, y) = f(x, y);
+                S::LineTo { x, y }
+            }
+            S::QuadTo { cx, cy, x, y } => {
+                let (cx, cy) = f(cx, cy);
+                let (x, y) = f(x, y);
+                S::QuadTo { cx, cy, x, y }
+            }
+            S::CubicTo {
+                cx1,
+                cy1,
+                cx2,
+                cy2,
+                x,
+                y,
+            } => {
+                let (cx1, cy1) = f(cx1, cy1);
+                let (cx2, cy2) = f(cx2, cy2);
+                let (x, y) = f(x, y);
+                S::CubicTo {
+                    cx1,
+                    cy1,
+                    cx2,
+                    cy2,
+                    x,
+                    y,
+                }
+            }
+            S::Close => S::Close,
+        })
+        .collect();
+    paged_compose::PathData { segments }
+}
+
 /// Open a feathered object: when `effects` carries a feather, emit the
 /// marker that tells every lane where the object's paint begins
-/// ([`DisplayCommand::BeginFeatheredObject`]). Call it before the fill;
-/// the feather emitted by [`emit_effects_post_fill`] then masks the
-/// fill, the frame's picture and the interior effects together, as
-/// InDesign feathers a picture frame with its content.
+/// ([`DisplayCommand::BeginFeatheredObject`]). Call it before the fill,
+/// with the path the feathers are built on ([`feather_outline`]); the
+/// feathers emitted by [`emit_feathers`] then mask everything between —
+/// the fill, the frame's picture, the interior effects, the stroke and,
+/// on a text frame, the text — as InDesign feathers an object with its
+/// content.
+///
+/// `content_shaped` marks an object that paints nothing of its own
+/// outline — a text frame with no fill and no stroke — whose feather
+/// InDesign shapes by its text instead ([`shape_feathers_by_content`]).
 pub(crate) fn begin_feathered_object(
     page: &mut BuiltPage,
     effects: &FrameEffects,
-    fill_path_id: PathId,
+    feather_path_id: PathId,
     transform: Transform,
+    content_shaped: bool,
 ) {
-    if effects.feather.is_some()
-        || effects.directional_feather.is_some()
-        || effects.gradient_feather.is_some()
-    {
+    if has_feather(effects) {
         page.list
             .commands
             .push(DisplayCommand::BeginFeatheredObject {
-                path_id: fill_path_id,
+                path_id: feather_path_id,
                 transform,
+                content_shaped,
             });
     }
 }
 
-/// See [`emit_effects_pre_fill`]. Emits the effects that composite
-/// *after* the fill: InnerShadow, InnerGlow, BevelEmboss, Satin,
-/// Feather. Order mirrors Photoshop's layer-effect stack.
-/// `unit_normalize` carries the path-local rect for the frame when
-/// `transform` is the "unit-rect → page" composition
-/// (`Transform::for_rect_in`). The path under it is the unit rect at
-/// `[0,0,1,1]`, so IDML effect coordinates (which live in path-local
-/// coords) need to be normalised by this rect before being passed to
-/// the rasterizer. Pass `None` when the path is already in path-local
-/// coords (rounded-corner path) — coordinates flow through unmodified.
+/// Rebuild the feathers of every content-shaped run on `list` on the
+/// outlines its content fills.
+///
+/// InDesign feathers an object by its own coverage. For a frame with a
+/// fill or a stroke that is the grown outline [`feather_outline`] builds;
+/// a text frame with neither paints only its text, so the feather's
+/// band runs along the glyphs' edges (InDesign 20.x, ADR 204: a 10 pt
+/// feather on unfilled 30 pt text leaves the stems a light grey, not
+/// the frame's edge faded). The glyphs are known only once the story
+/// pass has moved them into the frame's run, so this runs after that
+/// relocation: for each [`DisplayCommand::BeginFeatheredObject`] with
+/// `content_shaped`, the outlines of the `FillPath`s between it and its
+/// feathers are carried into the feathers' own coordinates, joined into
+/// one path and put on the marker and the feathers in place of the
+/// frame's outline. A run that paints anything else (a stroke, an image)
+/// or nothing at all keeps the frame's outline.
+pub(crate) fn shape_feathers_by_content(list: &mut paged_compose::DisplayList) {
+    let mut i = 0;
+    while i < list.commands.len() {
+        let (pid, xf) = match &list.commands[i] {
+            DisplayCommand::BeginFeatheredObject {
+                path_id,
+                transform,
+                content_shaped: true,
+            } => (*path_id, *transform),
+            _ => {
+                i += 1;
+                continue;
+            }
+        };
+        let is_feather = |c: &DisplayCommand| {
+            matches!(
+                c,
+                DisplayCommand::Feather { path_id, transform, .. }
+                | DisplayCommand::DirectionalFeather { path_id, transform, .. }
+                | DisplayCommand::GradientFeather { path_id, transform, .. }
+                    if *path_id == pid && *transform == xf
+            )
+        };
+        let Some(first) = (i + 1..list.commands.len()).find(|&k| is_feather(&list.commands[k]))
+        else {
+            i += 1;
+            continue;
+        };
+        let last = (first..list.commands.len())
+            .take_while(|&k| is_feather(&list.commands[k]))
+            .last()
+            .unwrap_or(first);
+        if let Some(shape) = content_outline(list, i + 1..first, &xf) {
+            let mut bytes = b"feather-content".to_vec();
+            bytes.extend_from_slice(&(i as u64).to_le_bytes());
+            for v in xf.0 {
+                bytes.extend_from_slice(&v.to_bits().to_le_bytes());
+            }
+            bytes.extend_from_slice(&(shape.segments.len() as u64).to_le_bytes());
+            let key = crate::pipeline::fnv_1a_u64(&bytes);
+            let (shape_id, _) = list.paths.intern(key, shape);
+            for k in std::iter::once(i).chain(first..=last) {
+                match &mut list.commands[k] {
+                    DisplayCommand::BeginFeatheredObject { path_id, .. }
+                    | DisplayCommand::Feather { path_id, .. }
+                    | DisplayCommand::DirectionalFeather { path_id, .. }
+                    | DisplayCommand::GradientFeather { path_id, .. } => *path_id = shape_id,
+                    _ => {}
+                }
+            }
+        }
+        i = last + 1;
+    }
+}
+
+/// The outlines the fills in `range` paint, in the coordinates `xf`
+/// maps to the page; `None` when the range paints anything but fills,
+/// or nothing.
+fn content_outline(
+    list: &paged_compose::DisplayList,
+    range: std::ops::Range<usize>,
+    xf: &Transform,
+) -> Option<paged_compose::PathData> {
+    let to_local = xf.inverse()?;
+    let mut segments = Vec::new();
+    for cmd in &list.commands[range] {
+        match cmd {
+            DisplayCommand::FillPath {
+                path_id, transform, ..
+            }
+            | DisplayCommand::FillPathBlend {
+                path_id, transform, ..
+            } => {
+                let path = list.paths.get(*path_id)?;
+                let m = to_local.compose(transform);
+                segments.extend(map_path(path, |x, y| m.apply(x, y)).segments);
+            }
+            // Brackets and the interior effects add no coverage of
+            // their own.
+            DisplayCommand::BeginBlendGroup { .. }
+            | DisplayCommand::EndBlendGroup(..)
+            | DisplayCommand::PushClip { .. }
+            | DisplayCommand::PopClip(..)
+            | DisplayCommand::InnerShadow { .. }
+            | DisplayCommand::InnerGlow { .. }
+            | DisplayCommand::BevelEmboss { .. }
+            | DisplayCommand::Satin { .. } => {}
+            _ => return None,
+        }
+    }
+    (!segments.is_empty()).then_some(paged_compose::PathData { segments })
+}
+
+/// Every post-fill effect on one path, interior effects then feathers:
+/// for an emitter with no stroke between them (a line's effects ride
+/// its stroke's own outline).
 pub(crate) fn emit_effects_post_fill(
     page: &mut BuiltPage,
     effects: &FrameEffects,
@@ -143,6 +384,30 @@ pub(crate) fn emit_effects_post_fill(
     color_ctx: ColorCtx<'_>,
     unit_normalize: Option<Rect>,
     stroke_outset_pt: f32,
+) {
+    emit_interior_effects(page, effects, fill_path_id, transform, palette, color_ctx);
+    emit_feathers(
+        page,
+        effects,
+        fill_path_id,
+        fill_path_id,
+        transform,
+        unit_normalize,
+        stroke_outset_pt,
+    );
+}
+
+/// See [`emit_effects_pre_fill`]. Emits the effects that composite onto
+/// the object's interior after its fill and picture, before its stroke:
+/// InnerShadow, InnerGlow, BevelEmboss, Satin. Order mirrors
+/// Photoshop's layer-effect stack.
+pub(crate) fn emit_interior_effects(
+    page: &mut BuiltPage,
+    effects: &FrameEffects,
+    fill_path_id: PathId,
+    transform: Transform,
+    palette: &Graphic,
+    color_ctx: ColorCtx<'_>,
 ) {
     if let Some(p) = effects.inner_shadow.as_ref() {
         let params = inner_shadow_from_parser(p, palette, color_ctx, &mut page.list);
@@ -176,10 +441,35 @@ pub(crate) fn emit_effects_post_fill(
             params,
         });
     }
+}
+
+/// The three feathers, last of everything the object paints: after its
+/// stroke and (on a text frame) its text, so they fade all of it.
+/// `feather_path_id` is the outline they are built on
+/// ([`feather_outline`]) — the frame's path grown to the stroke's outer
+/// edge — and `fill_path_id` the frame's own path, whose box places a
+/// default radial gradient feather.
+///
+/// `unit_normalize` carries the path-local rect for the frame when
+/// `transform` is the "unit-rect → page" composition
+/// (`Transform::for_rect_in`). The path under it is the unit rect at
+/// `[0,0,1,1]`, so IDML effect coordinates (which live in path-local
+/// coords) need to be normalised by this rect before being passed to
+/// the rasterizer. Pass `None` when the path is already in path-local
+/// coords (rounded-corner path) — coordinates flow through unmodified.
+pub(crate) fn emit_feathers(
+    page: &mut BuiltPage,
+    effects: &FrameEffects,
+    feather_path_id: PathId,
+    fill_path_id: PathId,
+    transform: Transform,
+    unit_normalize: Option<Rect>,
+    stroke_outset_pt: f32,
+) {
     if let Some(p) = effects.feather.as_ref() {
         let params = feather_from_parser(p);
         page.list.commands.push(DisplayCommand::Feather {
-            path_id: fill_path_id,
+            path_id: feather_path_id,
             transform,
             params,
         });
@@ -187,7 +477,7 @@ pub(crate) fn emit_effects_post_fill(
     if let Some(p) = effects.directional_feather.as_ref() {
         let params = directional_feather_from_parser(p);
         page.list.commands.push(DisplayCommand::DirectionalFeather {
-            path_id: fill_path_id,
+            path_id: feather_path_id,
             transform,
             params,
         });
@@ -210,7 +500,7 @@ pub(crate) fn emit_effects_post_fill(
         });
         let params = gradient_feather_from_parser(p, unit_normalize, frame_box, stroke_outset_pt);
         page.list.commands.push(DisplayCommand::GradientFeather {
-            path_id: fill_path_id,
+            path_id: feather_path_id,
             transform,
             params,
         });

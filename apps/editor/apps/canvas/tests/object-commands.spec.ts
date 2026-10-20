@@ -1712,11 +1712,19 @@ test.describe("paged.object — clipping masks, against a recorded client", () =
     ]) {
       const command = commands.find((c) => c.id === id);
       expect(command?.category).toBe("Object");
-      // Greyed inside a plugin edit context, like Group.
+      // Greyed inside a plugin edit context, like Group, and with nothing
+      // selected (ADR 249: every Object verb acts on the selection).
       expect(typeof command?.when).toBe("function");
       const when = command!.when as (s: unknown) => boolean;
-      expect(when({ editContext: null })).toBe(true);
-      expect(when({ editContext: { type: "sheet" } })).toBe(false);
+      const selected = { elementSelection: [{ kind: "rectangle", id: "a" }] };
+      expect(when({ editContext: null, selection: selected })).toBe(true);
+      expect(when({ editContext: null })).toBe(false);
+      expect(
+        when({ editContext: null, selection: { elementSelection: [] } }),
+      ).toBe(false);
+      expect(
+        when({ editContext: { type: "sheet" }, selection: selected }),
+      ).toBe(false);
       expect(OBJECT_KEYBINDINGS.some((k) => k.command === id)).toBe(false);
     }
     expect(

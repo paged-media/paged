@@ -779,8 +779,19 @@ jobs:
       # because the ingest test-map unions them onto every journey spec).
       # Naming the real gating projects fixes all of it (`integration`,
       # the root tests/integration round trips, joined them in T1).
+      #
+      # A hang must not eat the runner. The first run with the corpus
+      # (2026-10-20) had shard 1 still in this step after 80 minutes: five
+      # tests waited out the 5-minute test timeout, twice each with the
+      # retry, so the shard never finished and never wrote its report. Three
+      # bounds now, innermost first: CI's per-test timeout (playwright.config,
+      # 3 minutes; the slowest passing test measured 72 s), Playwright's own
+      # --global-timeout (55 minutes: it stops, marks the rest "did not run"
+      # and still writes the blob, which the upload below keeps), and this
+      # step's timeout-minutes as the last resort if Playwright itself wedges.
       - name: playwright (lean surface, shard ${{ matrix.shard }})
         working-directory: apps/editor/apps/canvas
+        timeout-minutes: 65
         env:
           CI: "1"
           PAGED_CI_LEAN: "1"
@@ -791,6 +802,7 @@ jobs:
             --project=integration \
             --grep-invert @quarantine \
             --shard=${{ matrix.shard }}/${{ env.SHARDS }} \
+            --global-timeout=3300000 \
             --reporter=blob
 
       # The quarantined tests (apps/canvas/tests/quarantine.json, ADR 228)
@@ -801,6 +813,7 @@ jobs:
       - name: quarantined tests (advisory)
         if: ${{ !cancelled() && matrix.shard == 1 }}
         continue-on-error: true
+        timeout-minutes: 15
         working-directory: apps/editor/apps/canvas
         env:
           CI: "1"

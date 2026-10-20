@@ -135,6 +135,7 @@ fn a_feather_masks_the_picture_between_its_marker_and_itself() {
     list.commands.push(Cmd::BeginFeatheredObject {
         path_id: rect,
         transform: frame,
+        content_shaped: false,
     });
     // The picture: another path, so no contiguous run reaches it.
     list.commands.push(Cmd::FillPath {

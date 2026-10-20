@@ -69,8 +69,15 @@ import {
 const FIDELITY_MODE = (process.env.FIDELITY_MODE ?? "gate") as
   "gate" | "capture" | "advisory";
 
+// Read once, at collection: a corpus without its thresholds file fails here,
+// loudly, instead of gating every pack against nothing. Capture mode may
+// write the file for the first time.
+const THRESHOLDS = loadThresholds({
+  allowMissing: FIDELITY_MODE === "capture",
+});
+
 function thresholdFor(name: string): PackThreshold | null {
-  return loadThresholds().fixtures.find((f) => f.name === name) ?? null;
+  return THRESHOLDS.fixtures.find((f) => f.name === name) ?? null;
 }
 
 interface PageRecord {
@@ -118,6 +125,13 @@ function refreshDashboard(): void {
 // Seed an empty dashboard before any pack runs so the file exists
 // and is openable from the moment the suite starts.
 refreshDashboard();
+
+// No corpus: say so as a skipped test with its reason, never an empty pass.
+if (THRESHOLDS.unavailable) {
+  test("canvas fidelity thresholds", () => {
+    test.skip(true, `unavailable: ${THRESHOLDS.unavailable}`);
+  });
+}
 
 for (const pack of packs) {
   test.describe(pack.name, () => {
@@ -303,14 +317,12 @@ for (const pack of packs) {
       // Gate assertion: capture / advisory log only; gate mode fails
       // when a `stage: gated` pack carries violations (computed above).
       if (FIDELITY_MODE === "gate" && pack.stage === "gated") {
-        if (!thr) {
-          testInfo.annotations.push({
-            type: "missing-threshold",
-            description: `pack ${pack.name} stage=gated but no entry in ${THRESHOLDS_PATH}`,
-          });
-        } else {
-          expect(gateViolations, gateViolations.join("; ")).toEqual([]);
-        }
+        // A gated pack with no threshold is a gap in the gate, not a pass.
+        expect(
+          thr,
+          `pack ${pack.name} is stage=gated but has no entry in ${THRESHOLDS_PATH}`,
+        ).not.toBeNull();
+        expect(gateViolations, gateViolations.join("; ")).toEqual([]);
       }
     });
   });

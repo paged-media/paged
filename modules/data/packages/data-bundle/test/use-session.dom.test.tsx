@@ -16,10 +16,10 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// The session snapshot a panel renders (src/panels/use-session.ts) stays
-// current across a hidden dock tab: the editor keeps a hidden tab's panel in
-// a hidden <Activity> (editor ADR 240), whose effects are unmounted, so a
-// change made while it is hidden must show once the tab is shown again.
+// useSessionSnapshot under a hidden <Activity>, the way a dock tab the user
+// is not looking at is kept (editor ADR 240): the state stays, the effect
+// (the session subscription) is unmounted. Showing the tab again must show
+// the session as it is now, not as it was when the tab was hidden.
 
 import { afterEach, describe, expect, it } from "bun:test";
 import { act, cleanup, render } from "@testing-library/react";
@@ -30,66 +30,63 @@ import type { DataSourceSession, SessionState } from "../src/session";
 
 afterEach(() => cleanup());
 
-function fakeSession() {
+/** The two members the hook reads, over a mutable state. */
+function fakeSession(): {
+  session: DataSourceSession;
+  set(status: string): void;
+} {
+  let state = { persistence: { status: "pending", hash: null } };
   const listeners = new Set<() => void>();
-  let sources: string[] = [];
   const session = {
-    getState: () => ({ sources: [...sources] }) as unknown as SessionState,
+    getState: () => state as unknown as SessionState,
     onDidChange(l: () => void) {
       listeners.add(l);
-      return { dispose: () => listeners.delete(l) };
+      return { dispose: () => void listeners.delete(l) };
     },
   } as unknown as DataSourceSession;
   return {
     session,
-    addSilently(name: string) {
-      sources = [...sources, name];
-    },
-    addSource(name: string) {
-      sources = [...sources, name];
+    set(status) {
+      state = { persistence: { status, hash: null } };
       for (const l of [...listeners]) l();
     },
   };
 }
 
-function Sources({ session }: { session: DataSourceSession }) {
+function Status({ session }: { session: DataSourceSession }) {
   const [state] = useSessionSnapshot(session);
-  return createElement("p", null, `sources: ${state.sources.join(",")}`);
+  return createElement(
+    "p",
+    { "data-persistence": state.persistence.status },
+    state.persistence.status,
+  );
 }
 
+const shown = (root: HTMLElement) =>
+  root.querySelector("[data-persistence]")?.getAttribute("data-persistence");
+
 describe("useSessionSnapshot", () => {
-  it("shows a change made while the panel was hidden", () => {
-    const s = fakeSession();
+  it("follows the session while shown", async () => {
+    const f = fakeSession();
+    const { container } = render(createElement(Status, { session: f.session }));
+    expect(shown(container)).toBe("pending");
+    await act(async () => f.set("saved"));
+    expect(shown(container)).toBe("saved");
+  });
+
+  it("a tab shown again reads the session as it is now (a change while it was hidden is not lost)", async () => {
+    const f = fakeSession();
     const tree = (mode: "visible" | "hidden") =>
       createElement(Activity, {
         mode,
-        children: createElement(Sources, { session: s.session }),
+        children: createElement(Status, { session: f.session }),
       });
-    const view = render(tree("visible"));
-    expect(view.container.textContent).toBe("sources: ");
-    act(() => s.addSource("a"));
-    expect(view.container.textContent).toBe("sources: a");
-    act(() => view.rerender(tree("hidden")));
-    act(() => s.addSource("catalogue"));
-    act(() => view.rerender(tree("visible")));
-    expect(view.container.textContent).toBe("sources: a,catalogue");
-  });
-
-  it("refresh re-reads the session after an action the panel started", () => {
-    const s = fakeSession();
-    function Probe() {
-      const [state, refresh] = useSessionSnapshot(s.session);
-      return createElement(
-        "button",
-        { type: "button", onClick: refresh },
-        `sources: ${state.sources.join(",")}`,
-      );
-    }
-    const view = render(createElement(Probe));
-    // A change the session does not announce: only a refresh shows it.
-    s.addSilently("quiet");
-    expect(view.container.textContent).toBe("sources: ");
-    act(() => view.container.querySelector("button")!.click());
-    expect(view.container.textContent).toBe("sources: quiet");
+    const { container, rerender } = render(tree("visible"));
+    expect(shown(container)).toBe("pending");
+    await act(async () => rerender(tree("hidden")));
+    // Saved while the tab is hidden: no subscription hears it.
+    await act(async () => f.set("saved"));
+    await act(async () => rerender(tree("visible")));
+    expect(shown(container)).toBe("saved");
   });
 });

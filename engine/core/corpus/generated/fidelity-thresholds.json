@@ -762,6 +762,15 @@
       "rationale": "Gated 2026-10-13 from its first InDesign measurement (R-11: shadow blend, spread, noise, knockout, global light; glow technique; bevel blend modes; radial feather highlight; directional feather follow-shape). Worst page mean 0.884 / p99 20.96 / SSIM 0.9828. The residue is page 2: the bevels' Smooth shading (ours mitres the corners), the Precise glow edge, and cases 26-27, whose highlight moves the radial shading's focal point, which is not drawn yet. Sized at worst x 1.20 / worst - 0.005; tighten as those land. INK GATED 2026-10-13: worst page ink mean 2.529 (mean ΔE over the pixels either image inks, L* < 60); sized at worst + ~20%."
     },
     {
+      "name": "feather-strokes",
+      "max_pages_with_pdf": 1,
+      "max_mean_de": 0.623,
+      "max_p99_de": 20.34,
+      "min_ssim": 0.9833,
+      "max_ink_mean_de": 3.07,
+      "rationale": "Gated 2026-10-20 from its first InDesign measurement (engine ADR 204: an object feather fades the frame's stroke from its outer edge, and a text frame's text; an unfilled text frame's feather follows its glyphs). Worst page mean 0.519 / p99 16.95 / SSIM 0.9883 / ink mean 2.558; before ADR 204 the same page read 1.806 / 61.47 / 0.9552 / 10.77. The residue is case 6, whose linear gradient feather InDesign spreads over the stroke's box differently, and the stroke corners (ours are mitred on the grown outline). Sized at worst x 1.20 / worst - 0.005."
+    },
+    {
       "name": "justification",
       "max_pages_with_pdf": 3,
       "max_mean_de": 0.434,

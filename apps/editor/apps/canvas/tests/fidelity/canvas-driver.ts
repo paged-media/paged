@@ -103,6 +103,11 @@ export interface OpenCanvasOptions {
   answerReplacePrompts?: boolean;
 }
 
+/** Pages whose dialog listener `openCanvas` registered, and the options
+ *  it answers with (the latest call's). */
+const dialogAnswered = new WeakSet<Page>();
+const dialogOptions = new WeakMap<Page, OpenCanvasOptions>();
+
 export async function openCanvas(
   page: Page,
   options: OpenCanvasOptions = {},
@@ -122,17 +127,33 @@ export async function openCanvas(
   // `window.__answeredReplacePrompts`, so a spec can assert none was
   // asked. The guard's own behaviour is asserted with
   // `answerReplacePrompts: false` (shell-findings, documents-door).
-  page.on("dialog", (d) => {
-    if (
-      options.answerReplacePrompts !== false &&
-      d.type() === "confirm" &&
-      d.message().includes("unsaved edits")
-    ) {
-      void d.accept();
-    } else {
-      void d.dismiss();
-    }
-  });
+  //
+  // `beforeunload` is accepted: a spec that navigates again (a fresh load
+  // of the same page, as a replay does) means to leave, and an edited
+  // document now asks before the page goes (the shell's
+  // UnsavedChangesGuard), which a dismiss would answer by cancelling the
+  // navigation. The listener is registered ONCE per page, reading the
+  // latest call's options: a second `openCanvas` on the same page used to
+  // add a second listener, and the two then answered the same dialog
+  // ("Cannot dismiss dialog which is already handled").
+  dialogOptions.set(page, options);
+  if (!dialogAnswered.has(page)) {
+    dialogAnswered.add(page);
+    page.on("dialog", (d) => {
+      const current = dialogOptions.get(page) ?? {};
+      if (d.type() === "beforeunload") {
+        void d.accept();
+      } else if (
+        current.answerReplacePrompts !== false &&
+        d.type() === "confirm" &&
+        d.message().includes("unsaved edits")
+      ) {
+        void d.accept();
+      } else {
+        void d.dismiss();
+      }
+    });
+  }
   if (options.answerReplacePrompts !== false) {
     await page.addInitScript(() => {
       const w = globalThis as unknown as {

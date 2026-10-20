@@ -152,8 +152,28 @@ test.describe("ADR 323 §12.8 — list and struct values in PropertyField", () =
     expect(before).toHaveLength(2);
     const stops = list(panel, "stops");
     await expect(stops).toHaveAttribute("data-list-length", "2");
-    await expect(item(stops, 0).locator("[data-list-item-title]")).toHaveText(
+    // A stop is titled by its swatch's NAME, never the engine id (R13,
+    // editor ADR 254); the id only where the swatch has no name.
+    const stopName = await page.evaluate(async (ref) => {
+      const c = (
+        globalThis as unknown as {
+          __canvas: {
+            client: {
+              collection(
+                n: string,
+              ): Promise<Array<{ selfId?: string; name?: string }>>;
+            };
+          };
+        }
+      ).__canvas.client;
+      const sw = (await c.collection("swatches")).find((s) => s.selfId === ref);
+      return sw?.name || ref;
+    }, before[0]!.stopColor);
+    expect(stopName, "the first stop's swatch is named").not.toBe(
       before[0]!.stopColor,
+    );
+    await expect(item(stops, 0).locator("[data-list-item-title]")).toHaveText(
+      stopName,
     );
     await expect(
       item(stops, 0).locator('[data-struct-field="locationPct"]'),
