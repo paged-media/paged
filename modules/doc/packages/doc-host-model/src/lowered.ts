@@ -206,7 +206,15 @@ export interface LoweredSection {
   marginBottomPt: number;
   marginLeftPt: number;
   marginRightPt: number;
+  /** `w:cols/@w:num` — the section's own column count. */
   columns: number;
+  /** The columns of the frame this section's story pours into, as the
+   *  engine lays them out: equal columns `frameGutterPt` apart (Word's
+   *  `w:cols/@w:space`; unequal widths are laid out equal, with a
+   *  diagnostic). Embedded placement gives its frame these. Absent from
+   *  older lowerings: one column. */
+  frameColumns?: number;
+  frameGutterPt?: number;
   /** ADR 029 — index into `story.blocks` of this section's first block. */
   firstBlock?: number;
   /** ADR 029 — the native story (skeleton page) this section pours into.

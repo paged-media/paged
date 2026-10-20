@@ -357,7 +357,19 @@ pub struct LoweredSection {
     pub margin_bottom_pt: f32,
     pub margin_left_pt: f32,
     pub margin_right_pt: f32,
+    /// `w:cols/@w:num` — the section's own column count.
     pub columns: u32,
+    /// The columns of the frame this section's story pours into, as the
+    /// engine lays them out (`sections::StoryColumns`): equal columns
+    /// `frame_gutter_pt` apart (`w:cols/@w:space`; unequal `w:col` widths
+    /// are laid out equal at the first column's gap, with a diagnostic).
+    /// A section that changes the columns mid-story sits in them through
+    /// span/split columns instead (ADR 029). Embedded placement gives its
+    /// frame these columns; the standalone skeleton gives them its pages.
+    #[serde(default = "one_column")]
+    pub frame_columns: u32,
+    #[serde(default)]
+    pub frame_gutter_pt: f32,
     /// ADR 029 — index into `story.blocks` of this section's first block
     /// (blocks map 1:1 to Word body blocks); it runs to the next section's.
     #[serde(default)]
@@ -438,6 +450,10 @@ pub struct LoweredNoteNumbering {
     pub pos: Option<String>,
 }
 
+fn one_column() -> u32 {
+    1
+}
+
 impl Default for LoweredSection {
     fn default() -> Self {
         // US Letter, 1-inch margins, single column (Word default), in points.
@@ -449,6 +465,8 @@ impl Default for LoweredSection {
             margin_left_pt: 72.0,
             margin_right_pt: 72.0,
             columns: 1,
+            frame_columns: 1,
+            frame_gutter_pt: 0.0,
             first_block: 0,
             story: 0,
             header_footer: None,

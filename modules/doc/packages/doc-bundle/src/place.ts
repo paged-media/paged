@@ -115,6 +115,10 @@ export async function placeEmbedded(
     return null;
   }
   const frameId = frameOutcome.createdId;
+  for (const op of frameColumnOps(frameId, ir.section)) {
+    const set = await host.document.mutate(op);
+    if (!set.applied) host.log.warn(`paged.doc: ${op.op} was refused`);
+  }
 
   const centre: [number, number] = [
     (bounds[1] + bounds[3]) / 2,
@@ -158,6 +162,37 @@ export async function placeEmbedded(
 
   publishDiagnostics(host, ir);
   return { frameId, storyId };
+}
+
+/**
+ * The frame's columns, from the Word section (`w:cols`: count and
+ * `w:space`, as the lowering lays them out — `LoweredSection.frameColumns`).
+ * Empty for one column, the new frame's own.
+ */
+export function frameColumnOps(
+  elementId: ElementId,
+  section: LoweredDoc["section"],
+): Mutation[] {
+  const count = Math.max(1, Math.round(section.frameColumns ?? 1));
+  if (count <= 1) return [];
+  return [
+    {
+      op: "setElementProperty",
+      args: {
+        elementId,
+        path: "textFrameColumnCount",
+        value: { type: "length", value: count },
+      },
+    },
+    {
+      op: "setElementProperty",
+      args: {
+        elementId,
+        path: "textFrameColumnGutter",
+        value: { type: "length", value: section.frameGutterPt ?? 0 },
+      },
+    },
+  ] as Mutation[];
 }
 
 /** Surface honest diagnostics from the lowering (ADR-007). */
@@ -207,6 +242,7 @@ async function placeInOneBatch(
   const ops: Mutation[] = [
     { op: "insertTextFrame", args: { pageId, bounds } },
     { op: "bindCreated", args: { handle: "docFrame" } },
+    ...frameColumnOps(frameRef, ir.section),
     ...(await newStyleOps(host, buildStyleMutations(ir))),
     ...pourBatchOps(buildStory(ir, FRAME)),
     {
