@@ -155,6 +155,7 @@ export function StyleApplyPanel({
     <ObjectFieldFrame field={applied} data-style-apply={collection}>
       <ApplyList
         appliedId={appliedId}
+        mixed={!caret?.held && applied.bindingState === "mixed"}
         groups={[{ items }]}
         itemIcon={itemIcon}
         collection={collection}

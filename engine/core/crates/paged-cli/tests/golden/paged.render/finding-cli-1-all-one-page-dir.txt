@@ -1,9 +1,0 @@
-$ paged render doc.paged --all -o pages
---- exit: 1
---- stdout
-(empty)
---- stderr
-Error: write pages
-
-Caused by:
-    Is a directory (os error <N>)

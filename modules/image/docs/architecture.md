@@ -259,6 +259,7 @@ Rust.
 | panels (2)                  | `glue/test/panels.dom.test.tsx`                              | the Image panel mounted and clicked; the properties schema panel's list, gates and row addresses with a stand-in renderer                                                                           |
 | menu entries                | `apps/editor/apps/canvas/tests/plugin-surface/image.spec.ts` | the entries in the editor's menu bar (Playwright)                                                                                                                                                   |
 
-Findings are kept as expected failures (`it.failing`, named by id): IMG-1 (undoing a 90°
-canvas rotation keeps the rotated size, `commands.spec.ts`) and IMG-2 (the drag tools other
-than the polygonal lasso ignore Escape, INV-2, `tool-gestures.spec.ts`).
+Findings were kept as expected failures (`it.failing`, named by id): IMG-1 (undoing a 90°
+canvas rotation kept the rotated size, `commands.spec.ts`) and IMG-2 (the drag tools other
+than the polygonal lasso ignored Escape, INV-2, `tool-gestures.spec.ts`). Both are fixed; IMG-2
+in `95bbba254`: every drag tool abandons its gesture on Escape and the release commits nothing.

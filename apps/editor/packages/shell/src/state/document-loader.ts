@@ -199,6 +199,11 @@ export async function fetchDefaultFont(): Promise<Uint8Array | undefined> {
   return undefined;
 }
 
+/** The family the editor's bundled default face (`/fonts/Inter.ttf`)
+ *  belongs to: what text no style gives a font is set in, so what the
+ *  Character panel shows for it (PN-20). */
+export const DEFAULT_FONT_FAMILY = "Inter";
+
 /** The bundled default family's italic, beside its roman (`Inter.ttf`):
  *  the variable roman covers weights, not italic, so the client
  *  registers this as Inter's "Italic" after every load
@@ -221,7 +226,9 @@ export async function fetchDefaultFontFaces(): Promise<
   const italic = await defaultItalic;
   // A failed fetch is not cached: the next load tries again.
   if (!italic) defaultItalic = null;
-  return italic ? [{ family: "Inter", style: "Italic", bytes: italic }] : [];
+  return italic
+    ? [{ family: DEFAULT_FONT_FAMILY, style: "Italic", bytes: italic }]
+    : [];
 }
 
 /** TrueType / OpenType / collection magic: 0x00010000, "OTTO", "true", "ttcf". */

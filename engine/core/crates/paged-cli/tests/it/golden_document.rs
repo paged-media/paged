@@ -108,33 +108,23 @@ fn render() {
         .golden("paged render", "input-all-needs-a-directory");
 }
 
-/// finding CLI-1: `--all` promises "-o must then be a directory", and a
-/// one-page document breaks the promise both ways: an existing directory
-/// is refused ("Is a directory"), and a path that does not exist becomes
-/// a PNG FILE of that name. It should write `<dir>/page-001.png`, as it
-/// does for two pages.
+/// finding CLI-1 (fixed): `--all` promises "-o must then be a directory",
+/// and a one-page document broke the promise both ways (an existing
+/// directory refused, a new path written as a PNG file). It writes
+/// `<dir>/page-001.png`, as it does for two pages.
 #[test]
 fn render_all_on_a_one_page_document() {
     covers!("cli:paged render");
     let fx = Fx::new("render-all-one");
     fx.seeded("doc.paged");
     std::fs::create_dir_all(fx.path("pages")).unwrap();
-    // finding CLI-1: an existing directory is refused.
     fx.run(&["render", "doc.paged", "--all", "-o", "pages"])
-        .code(1)
-        .golden("paged render", "finding-cli-1-all-one-page-dir");
-    assert!(
-        !fx.exists("pages/page-001.png"),
-        "finding CLI-1: no page file is written"
-    );
-    // finding CLI-1: a new path becomes a file, not a directory.
-    fx.run(&["render", "doc.paged", "--all", "-o", "fresh"])
         .code(0);
-    assert!(
-        fx.path("fresh").is_file(),
-        "finding CLI-1: `fresh` is a PNG file"
-    );
-    assert_png(&fx.read("fresh"), 1224, 1584);
+    assert_png(&fx.read("pages/page-001.png"), 1224, 1584);
+    // A path that is not a directory is refused, as for two pages.
+    fx.run(&["render", "doc.paged", "--all", "-o", "fresh"])
+        .code(1);
+    assert!(!fx.exists("fresh"), "no file named after the directory");
 }
 
 #[test]
@@ -341,26 +331,21 @@ fn package() {
     assert!(instructions.contains("Print on matte."), "{instructions}");
 }
 
-/// finding CLI-8: a `paged package` that fails (here: the document is
-/// missing) leaves the folder it started behind (`failed/Links/`), so the
-/// retry with the right document is refused: "failed is not empty — a
-/// package goes into a new folder". A failed package should leave no
-/// folder, or one the retry may use.
+/// finding CLI-8 (fixed): a `paged package` that failed (here: the document
+/// is missing) left the folder it started behind (`failed/Links/`), so the
+/// retry with the right document was refused. A failed package leaves no
+/// folder, and the retry into the same folder succeeds.
 #[test]
-fn a_failed_package_leaves_its_folder_behind() {
+fn a_failed_package_leaves_no_folder_behind() {
     covers!("cli:paged package");
     let fx = Fx::new("package-failed");
     fx.placed("doc.paged");
     fx.run(&["package", "missing.paged", "-o", "failed"])
         .code(1);
-    // finding CLI-8: the half-made folder is still there.
-    assert!(
-        fx.path("failed/Links").is_dir(),
-        "finding CLI-8: failed/Links/ is left behind"
-    );
-    fx.run(&["package", "doc.paged", "-o", "failed"])
-        .code(1)
-        .golden("paged package", "finding-cli-8-retry-refused");
+    assert!(!fx.exists("failed"), "no half-made folder is left");
+    fx.run(&["package", "doc.paged", "-o", "failed"]).code(0);
+    assert!(fx.path("failed/Links").is_dir());
+    assert!(fx.exists("failed/doc.idml"));
 }
 
 #[test]
@@ -876,11 +861,11 @@ fn describe() {
         .golden("paged describe", "catalog-shape");
 }
 
-/// finding CLI-3: a command whose output a pipe stops reading (`paged
-/// describe | head`) panics — "failed printing to stdout: Broken pipe",
-/// exit 101 — where a command-line tool ends quietly.
+/// finding CLI-3 (fixed): a command whose output a pipe stops reading
+/// (`paged describe | head`) panicked, "failed printing to stdout: Broken
+/// pipe", exit 101. It ends quietly with the broken-pipe status.
 #[test]
-fn a_closed_pipe_panics() {
+fn a_closed_pipe_ends_quietly() {
     covers!("cli:paged describe");
     use std::io::Read as _;
     let fx = Fx::new("broken-pipe");
@@ -900,9 +885,9 @@ fn a_closed_pipe_panics() {
     // The read end is closed here, with ~200 KB still to write.
     let out = child.wait_with_output().expect("wait");
     let stderr = String::from_utf8_lossy(&out.stderr);
-    // finding CLI-3: a panic and exit 101, not a quiet end.
-    assert_eq!(out.status.code(), Some(101), "{stderr}");
-    assert!(stderr.contains("failed printing to stdout"), "{stderr}");
+    assert_eq!(out.status.code(), Some(141), "{stderr}");
+    assert!(!stderr.contains("panicked"), "{stderr}");
+    assert!(!stderr.contains("failed printing to stdout"), "{stderr}");
 }
 
 #[test]

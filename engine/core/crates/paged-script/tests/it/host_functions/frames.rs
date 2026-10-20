@@ -458,11 +458,17 @@ fn link_frames() {
         frames[1]["parent_story"], frames[0]["parent_story"],
         "the threaded frames share one story"
     );
-    // finding SCR-6: the second frame's own (empty) story stays in the document,
-    // held by no frame; linking should remove it.
+    // finding SCR-6 (fixed): the second frame's own (empty) story is
+    // removed by the link, as InDesign discards it; nothing is left held by
+    // no frame.
+    let stories = json_of(&ok(&mut m, "paged.stories()"));
+    assert_eq!(stories.as_array().map(Vec::len), Some(1), "{stories}");
+    // Undo puts the story back and the frame on it.
+    ok(&mut m, "paged.undo()");
     let stories = json_of(&ok(&mut m, "paged.stories()"));
     assert_eq!(stories.as_array().map(Vec::len), Some(2), "{stories}");
-    assert_eq!(stories[1]["characterCount"], 0);
+    let frames = snapshot(&m)["scene"]["spreads"][0]["spread"]["text_frames"].clone();
+    assert_ne!(frames[1]["parent_story"], frames[0]["parent_story"]);
 }
 
 #[test]

@@ -29,10 +29,7 @@ import {
   createCatalogRegistry,
   type CatalogRegistry,
 } from "@paged-media/catalog";
-import {
-  PAGED_INPUT_BOUNDS,
-  registerBuiltInCatalogEntries,
-} from "@paged-media/shell";
+import { registerBuiltInCatalogEntries } from "@paged-media/shell";
 
 import { pageBoundsEntry } from "./page-bounds-leaf";
 
@@ -42,11 +39,9 @@ export function appCatalogRegistry(): CatalogRegistry {
   if (!singleton) {
     singleton = createCatalogRegistry();
     registerBuiltInCatalogEntries(singleton);
-    // The app's own leaves. `paged.input.pageBounds` renders THROUGH the
-    // built-in Bounds leaf, which the shell does not export by name — it
-    // is reached here, through the registry that owns it.
-    const boundsLeaf = singleton.get(PAGED_INPUT_BOUNDS)?.leaf;
-    if (boundsLeaf) singleton.register(pageBoundsEntry(boundsLeaf));
+    // The app's own leaves: `paged.input.pageBounds`, the Object section's
+    // X / Y / W / H row (PN-252).
+    singleton.register(pageBoundsEntry());
   }
   return singleton;
 }

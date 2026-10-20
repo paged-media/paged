@@ -263,18 +263,19 @@ test.describe("E2E Transform X / Y and Bounds — where the object is", () => {
     // W / H are the frame's own size, unchanged by a move.
     expect(await shown(page, W)).toBe(200);
 
-    // Properties ▸ Bounds reads the same footprint.
+    // Properties ▸ Object reads the same footprint, as X / Y / W / H
+    // (PN-252).
     await openPanel(page, "paged.properties");
     const bounds = page.locator(BOUNDS);
     await expect(bounds).toHaveAttribute("data-page-bounds", "edges");
     await expect
       .poll(async () => [
-        await shown(page, `${BOUNDS} input[aria-label="top"]`),
-        await shown(page, `${BOUNDS} input[aria-label="left"]`),
-        await shown(page, `${BOUNDS} input[aria-label="bottom"]`),
-        await shown(page, `${BOUNDS} input[aria-label="right"]`),
+        await shown(page, `${BOUNDS} input[aria-label="x"]`),
+        await shown(page, `${BOUNDS} input[aria-label="y"]`),
+        await shown(page, `${BOUNDS} input[aria-label="width"]`),
+        await shown(page, `${BOUNDS} input[aria-label="height"]`),
       ])
-      .toEqual([110, 110, 210, 310]);
+      .toEqual([110, 110, 200, 100]);
   });
 
   test("AC-XY-2 — typing X moves the object there, rigidly, in ONE undo step; then Y @feat:editor-shell.panels.object-transform @feat:editor-tools.move.translate @feat:round-tripping.undo-redo @level:happy", async ({
@@ -358,18 +359,19 @@ test.describe("E2E Transform X / Y and Bounds — where the object is", () => {
     expect(after.transform!.slice(0, 4)).toEqual(before.transform!.slice(0, 4));
     expect(footprint(after).top).toBeCloseTo(box.top, 3);
 
-    // Bounds cannot write the edges of a rotated frame (a frameBounds
-    // write moves it along its own axes), so it is a read-only readout.
+    // The Object section cannot resize a rotated frame (a frameBounds
+    // write moves it along its own axes), so W / H are a read-only
+    // readout; X still reads the footprint.
     await openPanel(page, "paged.properties");
     await expect(page.locator(BOUNDS)).toHaveAttribute(
       "data-page-bounds",
       "readout",
     );
     await expect(
-      page.locator(`${BOUNDS} input[aria-label="left"]`),
+      page.locator(`${BOUNDS} input[aria-label="width"]`),
     ).toBeDisabled();
     await expect
-      .poll(() => shown(page, `${BOUNDS} input[aria-label="left"]`))
+      .poll(() => shown(page, `${BOUNDS} input[aria-label="x"]`))
       .toBeCloseTo(target, 1);
   });
 
@@ -448,7 +450,7 @@ test.describe("E2E Transform X / Y and Bounds — where the object is", () => {
     await expect.poll(() => shown(page, X)).toBe(130);
   });
 
-  test("AC-XY-5 — Bounds writes an EDGE of an un-rotated frame at the page position it shows @feat:editor-shell.panels.properties @feat:editor-shell.panels.object-transform @level:edge", async ({
+  test("AC-XY-5 — the Object section's W resizes an un-rotated frame from its reference point at the page position it shows @feat:editor-shell.panels.properties @feat:editor-shell.panels.object-transform @level:edge", async ({
     page,
   }) => {
     const rect = await made(page, {
@@ -458,16 +460,17 @@ test.describe("E2E Transform X / Y and Bounds — where the object is", () => {
     await select(page, [rect]);
     await invoke(page, NUDGE_RIGHT_LARGE); // translated by 10: page ≠ inner
     await openPanel(page, "paged.properties");
-    const right = `${BOUNDS} input[aria-label="right"]`;
-    await expect.poll(() => shown(page, right)).toBe(310);
+    const width = `${BOUNDS} input[aria-label="width"]`;
+    await expect.poll(() => shown(page, width)).toBe(200);
 
-    await type(page, right, 350);
-    // The RIGHT edge lands at 350 on the page; the left edge stays at 110.
+    await type(page, width, 240);
+    // The reference point is top-left: the RIGHT edge lands at 350 on the
+    // page; the left edge stays at 110.
     await expect
       .poll(async () => footprint(await geometry(page, rect)).right)
       .toBe(350);
     expect(footprint(await geometry(page, rect)).left).toBe(110);
-    await expect.poll(() => shown(page, right)).toBe(350);
+    await expect.poll(() => shown(page, width)).toBe(240);
   });
 });
 

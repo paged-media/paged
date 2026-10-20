@@ -33,7 +33,12 @@
 
 import { useSyncExternalStore } from "react";
 
-import { cockpitActions, useRegistries } from "@paged-media/shell";
+import {
+  cockpitActions,
+  useCollection,
+  useRegistries,
+} from "@paged-media/shell";
+import type { FontSummary, LinkSummary } from "@paged-media/client";
 
 import {
   getProblemsSnapshot,
@@ -56,12 +61,65 @@ const kicker: React.CSSProperties = {
   margin: `0 0 ${space[2]}`,
 };
 
+/** A problem the document itself has, with the panel that fixes it. */
+type ListedProblem = ProblemEntry & { panel?: string };
+
+/** The bundle id the document's own findings are listed under. */
+const DOCUMENT_SOURCE = "paged.document";
+
+function fileName(uri: string): string {
+  const path = uri.replace(/[?#].*$/, "");
+  const name = path.slice(path.lastIndexOf("/") + 1);
+  try {
+    return decodeURIComponent(name) || uri;
+  } catch {
+    return name || uri;
+  }
+}
+
+/**
+ * PN-350 (UX F-09): the document's own findings, as InDesign's preflight
+ * lists them: every missing link and every missing font, each opening
+ * the panel that fixes it (Links, Fonts). Read from the same collections
+ * Publication health and the Links and Fonts panels count.
+ */
+function useDocumentProblems(): ListedProblem[] {
+  const links = useCollection<LinkSummary>("links") ?? [];
+  const fonts = useCollection<FontSummary>("fonts") ?? [];
+  const out: ListedProblem[] = [];
+  for (const l of links) {
+    if (l.status !== "missing") continue;
+    out.push({
+      severity: "error",
+      message: `Missing link: ${fileName(l.uri)}`,
+      source: "links",
+      bundleId: DOCUMENT_SOURCE,
+      key: "links",
+      panel: "paged.links",
+    });
+  }
+  for (const f of fonts) {
+    if (!f.isMissing) continue;
+    out.push({
+      severity: "error",
+      message: `Missing font: ${f.family}`,
+      source: "fonts",
+      bundleId: DOCUMENT_SOURCE,
+      key: "fonts",
+      panel: "paged.fonts",
+    });
+  }
+  return out;
+}
+
 export function ProblemsPanel() {
-  const problems = useSyncExternalStore(
+  const reported = useSyncExternalStore(
     subscribeProblems,
     getProblemsSnapshot,
     getProblemsSnapshot,
   );
+  const documentProblems = useDocumentProblems();
+  const problems: ListedProblem[] = [...documentProblems, ...reported];
   const registries = useRegistries();
 
   // The bundle's primary panel: first registered panel whose id sits
@@ -69,8 +127,8 @@ export function ProblemsPanel() {
   const panelForBundle = (bundleId: string): string | undefined =>
     registries.panels.list().find((p) => p.id.startsWith(bundleId + "."))?.id;
 
-  const focus = (entry: ProblemEntry) => {
-    const panelId = panelForBundle(entry.bundleId);
+  const focus = (entry: ListedProblem) => {
+    const panelId = entry.panel ?? panelForBundle(entry.bundleId);
     if (panelId) cockpitActions.openPanel?.(panelId);
   };
 

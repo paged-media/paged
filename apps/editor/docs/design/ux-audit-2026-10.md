@@ -307,6 +307,9 @@ In a document with two missing links, Publication health and the Document Map sh
 
 **Screenshots:** `F-09-problems-vs-health.png`
 
+**Partly fixed (2026-10-20, `426912f45`).** Problems lists every missing link and missing font, and
+a click opens Links or Fonts (PN-350). The notice after opening is not built.
+
 <a id="f-10"></a>
 
 #### F-10 · The first-run screen and the Open picker only know IDML
@@ -938,6 +941,11 @@ With a caret in new text, the control bar's font-family select is empty and the 
 words (PN-1, editor ADR 254). The blank family at a caret (PN-20) and the section order in text
 context (PN-22) stay open.
 
+**Fixed (2026-10-20, `426912f45`).** The Character panel shows the family that applies at a caret
+(the styles' cascade, then the editor's default face; PN-20), and Properties leads with
+Character and Paragraph in text context (PN-22, editor ADR 256). The control bar's
+character-style truncation is not part of these rows.
+
 <a id="f-38"></a>
 
 #### F-38 · Geometry reads differently in the control bar and in Properties
@@ -957,6 +965,9 @@ The control bar shows X/Y/W/H to one decimal (242.3 pt). Properties shows the sa
 **Recommendation:** Use X/Y/W/H with a 9-point reference proxy in both places.
 
 **Screenshots:** `F-38-geometry-representation.png`
+
+**Fixed (2026-10-20, `426912f45`).** The Object section of Properties and the control strip reads
+X / Y / W / H with a reference point, as the Transform panel does (PN-252, editor ADR 256).
 
 <a id="f-40"></a>
 

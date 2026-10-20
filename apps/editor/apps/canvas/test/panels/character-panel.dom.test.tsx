@@ -310,22 +310,41 @@ describe("Character panel: every control writes the selected text", () => {
 });
 
 describe("Character panel: findings", () => {
-  // UX audit F-37: with a caret in new text, the family select is empty.
-  // The engine answers "" for the family, style and language of text that
-  // only the default style formats; the panel shows a blank or a dash.
-  test.failing(
-    "PN-20 (UX F-37): a caret in new text shows the family that applies, not a dash",
-    async () => {
-      covers("panel:paged.character");
-      const h = await mount();
-      await h.caret(h.scene.storyId, 2);
-      const family = h.root.querySelector<HTMLSelectElement>(
-        "[data-character-family] select",
-      )!;
-      expect(family.value).not.toBe("__mixed__");
-      expect(family.value).not.toBe("");
-    },
-  );
+  // UX audit F-37 (fixed): with a caret in new text, the family select was
+  // empty. The engine answers "" (no override) for the family of text that
+  // only the default style formats; the panel resolves the cascade (styles,
+  // then the editor's default face) and shows the family that applies.
+  test("PN-20 (UX F-37): a caret in new text shows the family that applies, not a dash", async () => {
+    covers("panel:paged.character");
+    const h = await mount();
+    await h.caret(h.scene.storyId, 2);
+    const family = h.root.querySelector<HTMLSelectElement>(
+      "[data-character-family] select",
+    )!;
+    expect(family.value).not.toBe("__mixed__");
+    expect(family.value).not.toBe("");
+    // No style in the fixture names a font: the default face applies.
+    expect(family.value).toBe("Inter");
+    // Showing the inherited family writes nothing.
+    expect(h.mutations()).toEqual([]);
+  });
+
+  test("PN-20: the inherited family follows the paragraph style's font", async () => {
+    covers("panel:paged.character");
+    const h = await mount();
+    await h.mutate(
+      set(
+        "style:paragraph/ParagraphStyle/$ID/[No paragraph style]",
+        "characterFontFamily",
+        { type: "text", value: "Georgia" },
+      ) as never,
+    );
+    await h.caret(h.scene.storyId, 8);
+    const family = h.root.querySelector<HTMLSelectElement>(
+      "[data-character-family] select",
+    )!;
+    expect(family.value).toBe("Georgia");
+  });
 
   // The engine reads auto leading as an unset length (null); the field
   // shows "0 pt", which is a leading that would set every line on top of

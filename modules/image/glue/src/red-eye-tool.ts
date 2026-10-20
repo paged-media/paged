@@ -88,5 +88,13 @@ export function makeRedEyeGesture(
       host.overlay.setToolPreview(null);
       if (a && b) void session.applyRedEye(redEyeBox(a, b));
     },
+    // IMG-2 / INV-2: Escape (and a lost pointer capture) mid-drag corrects
+    // nothing; the release that follows finds no drag.
+    onKey(e: KeyboardEvent) {
+      if (e.key !== "Escape" || !from) return;
+      from = to = null;
+      host.overlay.setToolPreview(null);
+      e.preventDefault();
+    },
   };
 }

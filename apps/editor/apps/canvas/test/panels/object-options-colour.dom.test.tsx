@@ -90,7 +90,7 @@ describe("Swatch Options panel", () => {
   test("the picker lists the document's swatches; a pick targets that swatch and seeds the colour", async () => {
     covers("panel:paged.swatch-options");
     const h = await mount();
-    expect(optionLabels(picker(h, "swatch"))).toEqual(["Black", "Red", "Spot"]);
+    expect(optionLabels(picker(h, "swatch"))).toEqual(["Red", "Spot"]);
     await pickRed(h);
     expect(optionsTarget(h)).toBe(`swatch:${h.scene.red}`);
     expect(
@@ -235,15 +235,12 @@ describe("Swatch Options panel", () => {
   });
 
   // The Swatches grid treats [Black] as reserved (no rename, no edit),
-  // as InDesign does; Swatch Options offers it first and edits it.
-  test.failing(
-    "PN-165: Black is reserved here as in the Swatches grid (not offered for editing)",
-    async () => {
-      covers("panel:paged.swatch-options");
-      const h = await mount();
-      expect(optionLabels(picker(h, "swatch"))).not.toContain("Black");
-    },
-  );
+  // as InDesign does; Swatch Options offered it first and edited it. Fixed.
+  test("PN-165: Black is reserved here as in the Swatches grid (not offered for editing)", async () => {
+    covers("panel:paged.swatch-options");
+    const h = await mount();
+    expect(optionLabels(picker(h, "swatch"))).not.toContain("Black");
+  });
 });
 
 // ---------------------------------------------------------- gradient options
@@ -447,6 +444,27 @@ describe("Color Group Options panel", () => {
       members: string[];
     }>;
     expect(groups[0].members.at(-1)).toBe("Color/Black");
+  });
+
+  // Removing the group's last swatch writes "" (the empty list), which the
+  // engine refused as a missing value, so the group kept the swatch. It
+  // ends up empty now.
+  test("removing the group's last swatch leaves the group empty", async () => {
+    covers("panel:paged.color-group-options");
+    const h = await mount();
+    const before = (await h.client.collection("colorGroups")) as Array<{
+      members: string[];
+    }>;
+    expect(before[0].members).toHaveLength(1);
+    const from = h.mark();
+    await h.click(h.field("members").querySelector("[data-list-remove]")!);
+    const sent = sentSets(h, from);
+    expect(sent).toHaveLength(1);
+    expect(sent[0].args.value).toEqual({ type: "text", value: "" });
+    const after = (await h.client.collection("colorGroups")) as Array<{
+      members: string[];
+    }>;
+    expect(after[0].members).toEqual([]);
   });
 
   // UX audit F-22 (fixed): the members field was the raw JSON of swatch ids.

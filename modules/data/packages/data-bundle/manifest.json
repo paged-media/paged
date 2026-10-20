@@ -402,10 +402,12 @@
             "kind": "struct",
             "fields": {
               "address": {
-                "kind": "text"
+                "kind": "text",
+                "optional": true
               },
               "path": {
-                "kind": "text"
+                "kind": "text",
+                "optional": true
               }
             }
           }

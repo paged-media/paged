@@ -387,22 +387,18 @@ describe("host.journal — the editor", () => {
 
   // The journal is "a local, in-memory flight recorder" a bundle records
   // into (ADR 025); the editor keeps one (the Journal panel, the bug-report
-  // export) and records the bundles' lifecycle there, but does not pass it
-  // to the bundle hosts (`journal` is not among the editor's host options),
-  // so `host.journal` is inert in the editor: paged.draw's panel-reload
-  // entries (use-panel-reload.ts) go nowhere.
-  test.failing(
-    "HOST-4 — a bundle's journal entry lands in the editor's journal",
-    () => {
-      const before = journal.entries().length;
-      t.host.journal.record({
-        code: `${PROBE_ID}.panel.reload`,
-        data: { panel: "probe" },
-      });
-      expect(t.host.supports("journal@1")).toBe(true);
-      expect(journal.entries().length).toBe(before + 1);
-    },
-  );
+  // export). It did not pass it to the bundle hosts, so `host.journal` was
+  // inert in the editor (HOST-4, fixed): the editor's host options carry it.
+  test("HOST-4 — a bundle's journal entry lands in the editor's journal", () => {
+    const before = journal.entries().length;
+    t.host.journal.record({
+      code: `${PROBE_ID}.panel.reload`,
+      data: { panel: "probe" },
+    });
+    expect(t.host.supports("journal@1")).toBe(true);
+    expect(journal.entries().length).toBe(before + 1);
+    expect(journal.entries().at(-1)?.code).toBe(`${PROBE_ID}.panel.reload`);
+  });
 });
 
 // ── host.tools ───────────────────────────────────────────────────────

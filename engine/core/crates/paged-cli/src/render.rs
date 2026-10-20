@@ -73,7 +73,9 @@ pub fn render_pages(
         let spec = page.unwrap_or_else(|| "1".to_string());
         vec![resolve_page(&handle.page_ids, &spec)?]
     };
-    if targets.len() > 1 && !out.is_dir() {
+    // CLI-1: `--all` always writes `<dir>/page-NNN.png`, however many
+    // pages the document has.
+    if all && !out.is_dir() {
         bail!(
             "--all writes one file per page, so -o must be a directory ({} is not)",
             out.display()
@@ -104,7 +106,7 @@ pub fn render_pages(
         let png = expect_reply!(reply, WorkerToMainKind::SnapshotReady(p) => p,
             format!("render page {}", index + 1))?;
 
-        let path: PathBuf = if targets.len() > 1 {
+        let path: PathBuf = if all {
             out.join(format!("page-{:03}.png", index + 1))
         } else {
             out.to_path_buf()

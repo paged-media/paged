@@ -42,6 +42,24 @@ const INTENTS = [
   "AbsoluteColorimetric",
 ] as const;
 
+/** An ICC profile's header: at least the 128-byte header, the `acsp`
+ *  signature at byte 36, and a declared size no larger than the file
+ *  (ICC.1 section 7.2). */
+export function isIccProfile(bytes: Uint8Array): boolean {
+  if (bytes.length < 128) return false;
+  const signature = String.fromCharCode(
+    bytes[36]!,
+    bytes[37]!,
+    bytes[38]!,
+    bytes[39]!,
+  );
+  if (signature !== "acsp") return false;
+  const size =
+    ((bytes[0]! << 24) | (bytes[1]! << 16) | (bytes[2]! << 8) | bytes[3]!) >>>
+    0;
+  return size >= 128 && size <= bytes.length;
+}
+
 export function ColorSettingsPanel() {
   const client = useCanvasClient();
   // Seeded from every profile registered so far, then followed.
@@ -55,6 +73,7 @@ export function ColorSettingsPanel() {
   const [proofOn, setProofOn] = useState(false);
   const [proofProfile, setProofProfile] = useState<string>("");
   const [paperWhite, setPaperWhite] = useState(false);
+  const [profileError, setProfileError] = useState<string | null>(null);
 
   // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
   const refresh = useCallback(() => {
@@ -65,7 +84,9 @@ export function ColorSettingsPanel() {
         setIntent(m.renderingIntent ?? "RelativeColorimetric");
         setBpc(m.blackPointCompensation ?? true);
         setProofOn(m.proofProfileName != null);
-        setProofProfile(m.proofProfileName ?? "");
+        // The device chosen here stays chosen while simulation is off (the
+        // engine stores no proof setup then).
+        if (m.proofProfileName != null) setProofProfile(m.proofProfileName);
         setPaperWhite(m.proofSimulatePaperWhite ?? false);
       })
       .catch(() => {});
@@ -131,6 +152,12 @@ export function ColorSettingsPanel() {
       if (!file) return;
       const name = file.name.replace(/\.(icc|icm)$/i, "");
       const bytes = new Uint8Array(await file.arrayBuffer());
+      // PN-159: only an ICC profile becomes a working space.
+      if (!isIccProfile(bytes)) {
+        setProfileError(`${file.name} is not an ICC colour profile.`);
+        return;
+      }
+      setProfileError(null);
       await client.registerColorProfile(name, bytes);
     };
     input.click();
@@ -206,6 +233,16 @@ export function ColorSettingsPanel() {
       >
         Add profile (.icc)…
       </button>
+      {profileError && (
+        <div
+          role="alert"
+          className="text-xs"
+          data-profile-error
+          style={{ color: "var(--status-error)" }}
+        >
+          {profileError}
+        </div>
+      )}
 
       <div className="text-[10px] uppercase tracking-wide text-muted-foreground border-t border-input pt-2">
         Proof colours
@@ -215,6 +252,8 @@ export function ColorSettingsPanel() {
           type="checkbox"
           data-setting="proof-on"
           checked={proofOn}
+          disabled={!proofProfile}
+          title={proofProfile ? undefined : "Choose a proof device first"}
           onChange={(e) => {
             setProofOn(e.target.checked);
             writeProof({ on: e.target.checked });
@@ -246,6 +285,14 @@ export function ColorSettingsPanel() {
           type="checkbox"
           data-setting="paper-white"
           checked={paperWhite}
+          disabled={!proofProfile || !proofOn}
+          title={
+            !proofProfile
+              ? "Choose a proof device first"
+              : !proofOn
+                ? "Simulate the output condition first"
+                : undefined
+          }
           onChange={(e) => {
             setPaperWhite(e.target.checked);
             writeProof({ paperWhite: e.target.checked });

@@ -307,12 +307,14 @@ describe.each(ADAPTERS)("host.parts — %s", (_name, make) => {
     ).rejects.toThrow(/\.\./);
   });
 
-  // PartsSurface: "`..`/absolute paths are rejected". The door strips a
-  // leading slash and writes the part under the plugin's namespace instead.
-  test.failing("HOST-6 — an absolute part path is rejected", async () => {
+  // PartsSurface: "`..`/absolute paths are rejected". The door stripped a
+  // leading slash and wrote the part under the plugin's namespace (HOST-6,
+  // fixed).
+  test("HOST-6 — an absolute part path is rejected", async () => {
     await expect(
       t.host.parts.write("/abs.bin", new Uint8Array([1])),
-    ).rejects.toThrow();
+    ).rejects.toThrow(/relative/);
+    expect(await t.host.parts.list()).not.toContain("abs.bin");
   });
 
   test("the parts travel with the file: exportPaged → open reads them back", async () => {

@@ -43,6 +43,15 @@ const mount = () =>
 const setting = <T extends HTMLElement>(h: H, name: string) =>
   h.root.querySelector<T>(`[data-setting="${name}"]`)!;
 
+/** The smallest bytes that read as an ICC profile: a 132-byte file whose
+ *  header declares its size and carries the `acsp` signature at byte 36. */
+function iccBytes(): Uint8Array<ArrayBuffer> {
+  const b = new Uint8Array(new ArrayBuffer(132));
+  b[3] = 132;
+  b.set([0x61, 0x63, 0x73, 0x70], 36);
+  return b;
+}
+
 /** Make the next file picker the panel opens "pick" `file`. */
 function pickOnClick(file: File): void {
   HTMLInputElement.prototype.click = function (this: HTMLInputElement) {
@@ -110,7 +119,7 @@ describe("Color settings panel: controls", () => {
   test("Simulate paper white, with a proof device, writes the proof setup", async () => {
     covers("panel:paged.color-settings");
     const h = await mount();
-    pickOnClick(new File([new Uint8Array(132)], "Proof.icc"));
+    pickOnClick(new File([iccBytes()], "Proof.icc"));
     await h.click(h.root.querySelector('[data-action="add-profile"]')!);
     await h.choose(setting(h, "proof-profile"), "Proof");
     const from = h.mark();
@@ -128,7 +137,7 @@ describe("Color settings panel: controls", () => {
   test("Add profile registers the picked file under its name; it becomes a working space and a proof device", async () => {
     covers("panel:paged.color-settings");
     const h = await mount();
-    pickOnClick(new File([new Uint8Array(132)], "Coated Test.icc"));
+    pickOnClick(new File([iccBytes()], "Coated Test.icc"));
     const from = h.mark();
     await h.click(h.root.querySelector('[data-action="add-profile"]')!);
     expect(
@@ -145,7 +154,7 @@ describe("Color settings panel: controls", () => {
   test("choosing the registered profile as the CMYK working space writes it", async () => {
     covers("panel:paged.color-settings");
     const h = await mount();
-    pickOnClick(new File([new Uint8Array(132)], "Coated Test.icc"));
+    pickOnClick(new File([iccBytes()], "Coated Test.icc"));
     await h.click(h.root.querySelector('[data-action="add-profile"]')!);
     const from = h.mark();
     await h.choose(setting(h, "cmyk-profile"), "Coated Test");
@@ -166,7 +175,7 @@ describe("Color settings panel: controls", () => {
   test("choosing a proof device turns proofing on with it", async () => {
     covers("panel:paged.color-settings");
     const h = await mount();
-    pickOnClick(new File([new Uint8Array(132)], "Proof.icc"));
+    pickOnClick(new File([iccBytes()], "Proof.icc"));
     await h.click(h.root.querySelector('[data-action="add-profile"]')!);
     const from = h.mark();
     await h.choose(setting(h, "proof-profile"), "Proof");
@@ -183,17 +192,26 @@ describe("Color settings panel: controls", () => {
 
 describe("Color settings panel: findings", () => {
   // With no proof device the engine stores no proof setup, so a click on
-  // "Simulate output condition" or "Simulate paper white" is undone by
-  // the next read: the box unticks itself and nothing says why.
-  test.failing(
-    "PN-163: the proof options are unavailable until a proof device is chosen",
-    async () => {
-      covers("panel:paged.color-settings");
-      const h = await mount();
-      expect(setting<HTMLInputElement>(h, "proof-on").disabled).toBe(true);
-      expect(setting<HTMLInputElement>(h, "paper-white").disabled).toBe(true);
-    },
-  );
+  // "Simulate output condition" or "Simulate paper white" was undone by
+  // the next read. Fixed: both are unavailable until a device is chosen.
+  test("PN-163: the proof options are unavailable until a proof device is chosen", async () => {
+    covers("panel:paged.color-settings");
+    const h = await mount();
+    expect(setting<HTMLInputElement>(h, "proof-on").disabled).toBe(true);
+    expect(setting<HTMLInputElement>(h, "paper-white").disabled).toBe(true);
+    pickOnClick(new File([iccBytes()], "Proof.icc"));
+    await h.click(h.root.querySelector('[data-action="add-profile"]')!);
+    await h.choose(setting(h, "proof-profile"), "Proof");
+    expect(setting<HTMLInputElement>(h, "proof-on").disabled).toBe(false);
+    expect(setting<HTMLInputElement>(h, "paper-white").disabled).toBe(false);
+    // Simulation off keeps the device chosen (and the options available).
+    await h.click(setting(h, "proof-on"));
+    expect(setting<HTMLInputElement>(h, "proof-on").checked).toBe(false);
+    expect(setting<HTMLSelectElement>(h, "proof-profile").value).toBe("Proof");
+    expect(setting<HTMLInputElement>(h, "proof-on").disabled).toBe(false);
+    // Paper white simulates on top of the output condition only.
+    expect(setting<HTMLInputElement>(h, "paper-white").disabled).toBe(true);
+  });
 
   // The list of profiles is built from the registration messages the
   // panel saw while mounted: a profile registered before it opened (or
@@ -213,20 +231,20 @@ describe("Color settings panel: findings", () => {
     ).toContain("Earlier");
   });
 
-  // Any bytes are accepted as an ICC profile and made the working space;
-  // a file that is not a profile should be refused with a message.
-  test.failing(
-    "PN-159: a picked file that is not an ICC profile is refused",
-    async () => {
-      covers("panel:paged.color-settings");
-      const h = await mount();
-      pickOnClick(new File([new Uint8Array([1, 2, 3, 4])], "notes.icc"));
-      await h.click(h.root.querySelector('[data-action="add-profile"]')!);
-      expect(
-        [...setting<HTMLSelectElement>(h, "cmyk-profile").options].map(
-          (o) => o.value,
-        ),
-      ).not.toContain("notes");
-    },
-  );
+  // Any bytes were accepted as an ICC profile and made the working space.
+  // Fixed: a file that is not a profile is refused with a message.
+  test("PN-159: a picked file that is not an ICC profile is refused", async () => {
+    covers("panel:paged.color-settings");
+    const h = await mount();
+    pickOnClick(new File([new Uint8Array([1, 2, 3, 4])], "notes.icc"));
+    await h.click(h.root.querySelector('[data-action="add-profile"]')!);
+    expect(
+      [...setting<HTMLSelectElement>(h, "cmyk-profile").options].map(
+        (o) => o.value,
+      ),
+    ).not.toContain("notes");
+    expect(h.root.querySelector("[data-profile-error]")?.textContent).toBe(
+      "notes.icc is not an ICC colour profile.",
+    );
+  });
 });

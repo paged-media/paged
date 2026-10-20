@@ -395,6 +395,7 @@ export {
   loadDocumentFile,
   fetchDefaultFont,
   fetchDefaultFontFaces,
+  DEFAULT_FONT_FAMILY,
   type DocumentLoaderCallbacks,
 } from "./state/document-loader";
 export {

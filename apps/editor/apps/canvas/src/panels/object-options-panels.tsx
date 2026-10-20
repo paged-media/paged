@@ -316,8 +316,10 @@ const swatchAddress = (selfId: string): string =>
 export function SwatchOptionsPanel() {
   const swatches = useCollection<SwatchSummary>("swatches");
   const [pick, setPick] = useState("");
+  // [None], [Registration] and [Black] are reserved, as in the Swatches
+  // grid and in InDesign, where Swatch Options cannot edit them (PN-165).
   const editable = (swatches ?? []).filter(
-    (s) => s.kind !== "none" && s.kind !== "registration",
+    (s) => s.kind !== "none" && s.kind !== "registration" && s.kind !== "black",
   );
   // A string, said so: the compiler cannot tell an element read off the
   // collection is not mutated later, and would not memoize on it (ADR 229).
