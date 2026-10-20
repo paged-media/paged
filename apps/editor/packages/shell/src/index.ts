@@ -490,6 +490,8 @@ export {
   pluginOverlayLayersContribution,
   renderPreviewShape,
   pageDecorationsContribution,
+  marginGuidesContribution,
+  marginGuides,
   pathEditContribution,
   resizeHandlesContribution,
   rotateHandleContribution,
