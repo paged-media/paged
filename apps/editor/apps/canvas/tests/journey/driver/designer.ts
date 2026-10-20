@@ -348,8 +348,6 @@ export class Designer {
     );
   }
 
-
-
   /** Apply a fill swatch to a frame. `colorRef` defaults to the blank
    *  document's built-in Black swatch so the shape becomes visible. */
   async applyFill(
