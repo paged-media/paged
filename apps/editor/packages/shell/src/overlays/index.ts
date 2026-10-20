@@ -24,6 +24,7 @@ export { marqueeContribution } from "./marquee";
 export { toolPreviewContribution, renderPreviewShape } from "./tool-preview";
 export { pluginOverlayLayersContribution } from "./plugin-layers";
 export { pageDecorationsContribution } from "./page-decorations";
+export { marginGuidesContribution, marginGuides } from "./margin-guides";
 export { pathEditContribution, elementSupportsPathEdit } from "./path-edit";
 export { resizeHandlesContribution } from "./resize-handles";
 export { rotateHandleContribution } from "./rotate-handle";

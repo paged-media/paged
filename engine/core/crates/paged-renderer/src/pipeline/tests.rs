@@ -2544,6 +2544,75 @@ fn placed_link_without_image_element_reports_missing() {
     );
 }
 
+#[test]
+fn undecodable_bytes_are_undecoded_not_missing() {
+    // Engine ADR 207: a link that resolved to bytes no decoder reads (an
+    // EPS — no PostScript interpreter, by declaration) is not a missing
+    // link. The frame paints its own fill (Q-14) and the file is there,
+    // so the Links panel must not count it among the missing; a link to
+    // nothing on the same page still is.
+    use std::io::Write;
+    use zip::{write::SimpleFileOptions, CompressionMethod, ZipWriter};
+
+    let buf = std::io::Cursor::new(Vec::new());
+    let mut zip = ZipWriter::new(buf);
+    let stored = SimpleFileOptions::default().compression_method(CompressionMethod::Stored);
+    let deflated = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
+    zip.start_file("mimetype", stored).unwrap();
+    zip.write_all(b"application/vnd.adobe.indesign-idml-package")
+        .unwrap();
+    zip.start_file("designmap.xml", deflated).unwrap();
+    zip.write_all(
+        br#"<?xml version="1.0" encoding="UTF-8"?>
+<Document xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging">
+  <idPkg:Spread src="Spreads/Spread_sp1.xml"/>
+</Document>"#,
+    )
+    .unwrap();
+    zip.start_file("Spreads/Spread_sp1.xml", deflated).unwrap();
+    zip.write_all(
+        br#"<?xml version="1.0" encoding="UTF-8"?>
+<idPkg:Spread xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging">
+  <Spread Self="sp1">
+    <Page Self="p1" GeometricBounds="0 0 200 200"/>
+    <Rectangle Self="eps" GeometricBounds="20 20 120 120"/>
+    <Rectangle Self="lost" GeometricBounds="20 140 60 180"/>
+  </Spread>
+</idPkg:Spread>"#,
+    )
+    .unwrap();
+    let bytes = zip.finish().unwrap().into_inner();
+    let mut doc = idml_import::import_idml_doc(&bytes).expect("open IDML");
+    let rects = &mut doc.spreads[0].spread.rectangles;
+    rects[0].has_image_element = true;
+    rects[0].image_link = Some("assets/legacy.eps".into());
+    rects[0].image_bytes = Some(
+        b"%!PS-Adobe-3.0 EPSF-3.0\n%%BoundingBox: 0 0 72 72\nnewpath 0 0 moveto 72 72 lineto stroke\n%%EOF\n"
+            .to_vec(),
+    );
+    rects[1].image_link = Some("file:///no/such/plate.tif".into());
+
+    let built = build_document(&doc, &PipelineOptions::default()).expect("build");
+    assert_eq!(
+        built
+            .diagnostics
+            .undecoded_image_frame_ids()
+            .into_iter()
+            .collect::<Vec<_>>(),
+        vec!["eps".to_string()],
+        "the EPS resolved and was not decoded"
+    );
+    assert_eq!(
+        built
+            .diagnostics
+            .missing_image_frame_ids()
+            .into_iter()
+            .collect::<Vec<_>>(),
+        vec!["lost".to_string()],
+        "only the link to nothing is missing"
+    );
+}
+
 fn test_section(
     self_id: &str,
     page_start: &str,
