@@ -71,6 +71,11 @@ const NUDGE_UP_LARGE = "paged.object.nudgeUpLarge";
 const NUDGE_DOWN_LARGE = "paged.object.nudgeDownLarge";
 const MAKE_CLIP = "paged.object.makeClippingMask";
 const RELEASE_CLIP = "paged.object.releaseClippingMask";
+// Lock and Hide (F-41), with their spread-wide inverses.
+const LOCK = "paged.object.lock";
+const UNLOCK_ALL_ON_SPREAD = "paged.object.unlockAllOnSpread";
+const HIDE = "paged.object.hide";
+const SHOW_ALL_ON_SPREAD = "paged.object.showAllOnSpread";
 
 interface ElementRef {
   kind: string;
@@ -584,6 +589,10 @@ test.describe("E2E paged.object — the structural command layer", () => {
         NUDGE_DOWN_LARGE,
         MAKE_CLIP,
         RELEASE_CLIP,
+        LOCK,
+        UNLOCK_ALL_ON_SPREAD,
+        HIDE,
+        SHOW_ALL_ON_SPREAD,
       ].sort(),
     );
     // ONE category, and it is the editor's — not a plugin namespace.
@@ -606,6 +615,10 @@ test.describe("E2E paged.object — the structural command layer", () => {
         "Object/Delete",
         "Object/Make clipping mask",
         "Object/Release clipping mask",
+        "Object/Lock",
+        "Object/Unlock all on spread",
+        "Object/Hide",
+        "Object/Show all on spread",
       ].sort(),
     );
     // Both platform variants, plus the shifted-glyph alternates the
@@ -619,6 +632,8 @@ test.describe("E2E paged.object — the structural command layer", () => {
     expect(registered.keys).toContain("cmd+shift+}");
     expect(registered.keys).toContain("cmd+shift+[");
     expect(registered.keys).toContain("cmd+shift+{");
+    expect(registered.keys).toContain("cmd+l");
+    expect(registered.keys).toContain("ctrl+l");
     // Delete on both of its keys, and the arrows with their ×10 twins.
     for (const k of [
       "backspace",

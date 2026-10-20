@@ -94,6 +94,16 @@ test.describe("E2E path + pathfinder ops", () => {
     page,
   }) => {
     const pageInfo = fx.pages[0];
+    // The union of two overlapping rectangles has the same silhouette as
+    // the pair, so with the fill and the stroke in one colour (the
+    // beforeEach's defaults) it renders pixel-identical and the sandwich
+    // cannot see it. A Paper stroke makes the merge visible: the front
+    // rectangle's outline across the back one is there before and gone
+    // after, and back again on undo.
+    await mutate(page, {
+      op: "setDocumentDefaults",
+      args: { strokeColor: "Color/Paper", strokeWeight: 2 },
+    });
     // Two overlapping scratch rectangles (setup; not undone by the
     // sandwich).
     const a = await insertRect(page, pageInfo.pageId, [40, 40, 120, 120]);

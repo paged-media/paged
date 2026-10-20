@@ -292,7 +292,12 @@ test.describe("E2E paged.draw — Image Trace off the UI thread", () => {
       traceWorkers,
       `the trace worker should have been spawned (saw: ${spawned.join(", ") || "none"})`,
     ).toHaveLength(1);
-    expect(traceWorkers[0]).toContain("@paged-media/draw");
+    // The bundle's own module: `@paged-media/draw` where it is installed
+    // as a package, its workspace source (modules/draw/packages/
+    // draw-bundle) where the dev server serves the monorepo.
+    expect(traceWorkers[0]).toMatch(
+      /@paged-media\/draw\/|\/modules\/draw\/packages\/draw-bundle\//,
+    );
 
     // 2. THE BUNDLE SAYS SO, and does not say the opposite. "no worker"
     //    is the fallback's line and carries the host's refusal verbatim.

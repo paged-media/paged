@@ -109,14 +109,20 @@ export default defineConfig({
     viewport: { width: 1600, height: 1000 },
   },
   webServer: {
-    // Vite under Bun (`--bun`), as `bun run dev` starts it.
-    command: `bunx --bun vite --port ${PORT} --strictPort`,
+    // Vite under Bun (`--bun`), as `bun run dev` starts it. Bound to the
+    // same IPv4 loopback the health check polls (BASE_URL): left to its
+    // default, Vite can listen on `localhost` resolved to ::1 only, and the
+    // 127.0.0.1 probe then never answers.
+    command: `bunx --bun vite --host 127.0.0.1 --port ${PORT} --strictPort`,
     cwd: __dirname,
     url: BASE_URL,
     reuseExistingServer: !process.env.CI,
     stdout: "pipe",
     stderr: "pipe",
-    timeout: 60_000,
+    // A cold start (config bundle, dependency scan, the module manifest's
+    // wasm hashes) measured 36 s on a warm disk and ran past 60 s on a
+    // first run after a fresh build.
+    timeout: 180_000,
   },
   projects: [
     {

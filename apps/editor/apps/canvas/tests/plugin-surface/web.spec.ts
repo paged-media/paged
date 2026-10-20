@@ -812,7 +812,7 @@ test.describe("plugin surface · paged.web", () => {
       await page.keyboard.press("Escape");
       await page
         .locator('nav[aria-label="Main menu"]')
-        .getByRole("button", { name: "Plugins" })
+        .getByRole("menuitem", { name: "Plugins", exact: true })
         .click();
       await page.locator('[data-menu-submenu="Web"]').hover();
       await expect(
