@@ -31,6 +31,9 @@ TGZ_DIR=$(cd "${1:?usage: consumer-test.sh <dir with the three .tgz> [<work dir>
 WORK=${2:-$(mktemp -d "${TMPDIR:-/tmp}/paged-consumer-XXXXXX")}
 mkdir -p "$WORK"
 WORK=$(cd "$WORK" && pwd)
+# The work dir is outside the repository, where proto's shims find no
+# .prototools: pin the repository's Bun for every `bun` run below.
+export PROTO_BUN_VERSION="${PROTO_BUN_VERSION:-$(bun --version)}"
 TS7=7.0.2
 TS5=5.9.3
 TYPES_NODE=24.19.2
