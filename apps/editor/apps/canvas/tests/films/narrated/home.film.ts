@@ -302,7 +302,7 @@ async function deselect(k: Kit, y = 400): Promise<void> {
 
 film("home", async (k) => {
   // A lot happens in this take: the hand moves a little briskly.
-  k.pointer.pace = 1.3;
+  k.pointer.pace = 1.5;
   const { page, designer, pointer } = k;
   let bodyStory = "";
   let bodyFrame = "";
@@ -419,7 +419,7 @@ film("home", async (k) => {
     bodyFrame = frame!.id.id;
     expect(body.overset, "the copy runs longer than its frame").toBe(true);
     k.focus(LOWER1);
-    await k.hold(1500);
+    await k.hold(1200);
   });
 
   // ── The headline takes the Title style the Word document brought. ──
@@ -443,7 +443,7 @@ film("home", async (k) => {
       .poll(() => controlBar(page))
       .toEqual(expect.arrayContaining(["Title", "Fraunces"]));
     k.focus(TOP1);
-    await k.hold(1800);
+    await k.hold(1200);
   });
 
   // ── Two columns for the copy's frame. ──
@@ -461,8 +461,7 @@ film("home", async (k) => {
     const gutter = page
       .locator('input[aria-label="Text frame column gutter"]:visible')
       .first();
-    await retype(k, count, "2");
-    await retype(k, gutter, "18");
+    await tabChain(k, count, ["2", "18"]);
     // The panel reads the frame back: two columns, an 18 pt gutter.
     await expect(count).toHaveValue("2");
     await expect(gutter).toHaveValue(/^18/);
@@ -493,15 +492,8 @@ film("home", async (k) => {
         .first(),
       "1",
     );
-    // The caret goes back to the text, and every paragraph is selected.
-    await pointer.click(await pt(k, 110, BODY_TOP + 24), { targetWidth: 40 });
-    await k.key("Meta+a", "Select all", "⌘A");
-    await press(
-      k,
-      page.locator('[data-option-value="LeftJustified"]:visible').first(),
-    );
     k.focus(LOWER1);
-    await k.hold(2200);
+    await k.hold(1200);
   });
 
   // ── The story threads onto page two. ──
@@ -574,7 +566,7 @@ film("home", async (k) => {
       )
       .toBe(false);
     await deselect(k, 700);
-    await k.hold(1600);
+    await k.hold(1200);
   });
 
   // ── A photograph in a frame, enhanced where it sits. ──
@@ -628,13 +620,8 @@ film("home", async (k) => {
       .toContain("Committed revision");
     await k.key("Escape");
     await expect.poll(() => editContext(page)).toBe(null);
-    // Done with the picture: its panel closes.
-    await press(
-      k,
-      page.getByRole("button", { name: "Close Image", exact: true }).first(),
-    );
     k.focus(TOP1);
-    await k.hold(1600);
+    await k.hold(1200);
   });
 
   // ── A mark beside the headline, drawn with the pen and filled. ──
@@ -786,7 +773,7 @@ film("home", async (k) => {
       .toBeLessThan(3);
     await deselect(k, P2 + 400);
     k.focus(PAGE2);
-    await k.hold(1600);
+    await k.hold(1200);
   });
 
   // ── Data: the product list, into DuckDB, in the Data layout. ──
@@ -874,7 +861,7 @@ film("home", async (k) => {
     );
     await deselect(k, P2 + 400);
     k.focus([CODE.x0 - 60, CODE.y0 - 60, CODE.x1 + 30, CODE.y1 + 40]);
-    await k.hold(1600);
+    await k.hold(1200);
   });
 
   // ── Prepress: preflight, the whole document. ──
