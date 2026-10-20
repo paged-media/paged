@@ -769,8 +769,10 @@ export {
   demoShowInfo,
   demoHighlight,
   demoResetOverlay,
+  demoSetGuideSide,
 } from "./demo";
 export type {
+  DemoGuideSide,
   Statement,
   SessionState,
   SessionStatus,

@@ -95,6 +95,30 @@ export function demoResetOverlay(): void {
   demoHighlight(null);
 }
 
+// ── The guide's corner ────────────────────────────────────────────────────────
+// The playground's demo guide floats in a bottom corner (editor ADR 267); the
+// narration box keeps to the other one so the two never stack. Null: no guide,
+// the box sits bottom-right.
+
+export type DemoGuideSide = "left" | "right";
+
+let guideSide: DemoGuideSide | null = null;
+const guideSideSubs = new Set<() => void>();
+
+/** Tell the narration box which bottom corner the demo guide holds. */
+export function demoSetGuideSide(side: DemoGuideSide | null): void {
+  if (guideSide === side) return;
+  guideSide = side;
+  for (const fn of guideSideSubs) fn();
+}
+const subscribeGuideSide = (onChange: () => void) => {
+  guideSideSubs.add(onChange);
+  return () => {
+    guideSideSubs.delete(onChange);
+  };
+};
+const getGuideSide = () => guideSide;
+
 // ── Spotlight (demo.highlight) ────────────────────────────────────────────────
 // Dims the editor and cuts out a target element so a demo can point at a panel /
 // control while it narrates. Module-singleton, same pattern as the box.
@@ -193,6 +217,11 @@ export function DemoSpotlight(): React.ReactElement | null {
  */
 export function DemoOverlay(): React.ReactElement | null {
   const req = useSyncExternalStore(subscribeBox, getBoxRequest, getBoxRequest);
+  const side = useSyncExternalStore(
+    subscribeGuideSide,
+    getGuideSide,
+    getGuideSide,
+  );
   useEffect(() => {
     if (!req || !req.autoMs) return;
     const t = setTimeout(advance, req.autoMs);
@@ -211,10 +240,10 @@ export function DemoOverlay(): React.ReactElement | null {
       data-demo-overlay
       style={{
         position: "fixed",
-        right: 24,
+        ...(side === "right" ? { left: 24 } : { right: 24 }),
         bottom: 24,
         zIndex: 9000,
-        maxWidth: 360,
+        maxWidth: "min(360px, calc(100vw - 48px))",
         background: chrome.panelBg,
         color: color.fg,
         border: `1px solid ${color.border}`,

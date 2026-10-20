@@ -36,7 +36,7 @@ demo scripts and the playground all act through it.
   limits that to first-party scripts.
 - The app mounts two front ends when the mode is `demo` or the build is not production.
   `PlaygroundController` loads `/scripts/<id>.js` for `?script=<id>` and steps through it
-  with `DemoSession`. `IframeScriptBridge` is active only under `?embed=script`: it accepts
+  with `DemoSession`, rendered as the demo guide ([ADR 267](267-the-demo-guide-floats-over-the-editor.md)). `IframeScriptBridge` is active only under `?embed=script`: it accepts
   `paged:run` messages from an allow-list of origins (`VITE_DOCS_ORIGIN`, default
   `https://docs.paged.media`, plus two localhost origins in development), passes the source
   to `client.executeScript`, and answers with `paged:result`.

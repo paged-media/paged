@@ -93,6 +93,20 @@
       ]
     },
     {
+      "id": "paged.demoGuide.v1",
+      "kind": "persisted-ui-state",
+      "storage": "localStorage",
+      "key": "paged.demoGuide.v1",
+      "default": { "collapsed": false, "side": "left", "script": false },
+      "effect": "the live-demo guide: collapsed to its pill or open, the bottom corner it docks to, and whether its script shows",
+      "source": "apps/editor/apps/canvas/src/playground/guide-prefs.ts",
+      "marker": "\"paged.demoGuide.v1\"",
+      "sites": [
+        ["getItem", "GUIDE_PREFS_KEY"],
+        ["setItem", "GUIDE_PREFS_KEY"]
+      ]
+    },
+    {
       "id": "paged.exportPdf.options.v1",
       "kind": "export-option",
       "storage": "localStorage",
@@ -270,7 +284,7 @@
       "storage": "url",
       "key": "?script=<id>[&embed][&autoplay]",
       "default": "absent: no live script",
-      "effect": "the live-script playground loads /scripts/<id>.js; `embed` hides its chrome, `autoplay` plays it",
+      "effect": "the live-script playground loads /scripts/<id>.js into the demo guide; `embed` starts the guide collapsed to its pill, `autoplay` plays it",
       "source": "apps/editor/apps/canvas/src/playground/PlaygroundController.tsx",
       "marker": "p.get(\"script\")",
       "sites": []
