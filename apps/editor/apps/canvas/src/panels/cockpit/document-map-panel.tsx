@@ -740,7 +740,7 @@ function HealthFooter() {
     ? links.filter((l) => l.status === "missing").length
     : null;
   const missingFonts = fonts ? fonts.filter((f) => f.isMissing).length : null;
-  // The Export Center's own Print PDF pill (ADR 265).
+  // The Export Center's own Print PDF pill (ADR 266).
   const print = exportReadiness(
     exportTargetById("pdf-x4"),
     loaded,

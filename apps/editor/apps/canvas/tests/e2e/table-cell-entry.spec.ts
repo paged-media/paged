@@ -149,7 +149,7 @@ test.describe("ED-8 — table cells from the Selection tool and from automation"
     await openPanel(page, "paged.table");
     await expect(page.locator('[data-table-panel="ready"]')).toBeVisible();
     await expect(page.locator("[data-table-cell-address]")).toHaveText(
-      `R${cell.row} · C${cell.col}`,
+      `Row ${cell.row + 1}, Column ${cell.col + 1}`,
     );
   });
 
@@ -177,7 +177,7 @@ test.describe("ED-8 — table cells from the Selection tool and from automation"
 
     await expect(page.locator('[data-table-panel="ready"]')).toBeVisible();
     await expect(page.locator("[data-table-cell-address]")).toHaveText(
-      `R${cell.row} · C${cell.col}`,
+      `Row ${cell.row + 1}, Column ${cell.col + 1}`,
     );
   });
 });

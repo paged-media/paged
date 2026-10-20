@@ -122,7 +122,7 @@ describe("Document Map: states", () => {
     ])
       expect(text).toContain(part);
     // No output intent: the print PDF is PDF 1.7 and exports, as the
-    // Export Center says (ADR 265), never a PDF/X-4 warning.
+    // Export Center says (ADR 266), never a PDF/X-4 warning.
     const print = h.root.querySelector(
       '[data-status-pill="map-print-readiness"]',
     );

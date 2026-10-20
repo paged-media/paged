@@ -101,7 +101,7 @@ export function OutputReadinessPanel(_props: PanelProps) {
   const fonts = useCollection<FontSummary>("fonts");
   const links = useCollection<LinkSummary>("links");
   const loaded = meta != null && meta.pageCount > 0;
-  // The print-output facts (ADR 265): the Prepress bar's chip reads the
+  // The print-output facts (ADR 266): the Prepress bar's chip reads the
   // same derivation, so the row and the chip cannot disagree.
   const print = printOutputFacts(meta);
 

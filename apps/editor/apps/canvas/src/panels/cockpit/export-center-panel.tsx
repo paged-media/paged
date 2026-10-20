@@ -75,7 +75,7 @@ export function ExportCenterPanel() {
   const meta = useDocumentMeta();
   const { handle } = useDocument();
   const loaded = meta != null && meta.pageCount > 0;
-  // The print-output facts (ADR 265): the same derivation Health, the
+  // The print-output facts (ADR 266): the same derivation Health, the
   // Document Map and the Prepress bar read.
   const facts = printOutputFacts(meta);
   const selected = useSelectedExportTarget();

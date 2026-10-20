@@ -330,7 +330,7 @@ export function PrepressToolbar(_props: ModeToolbarProps) {
   const { findings, runCount } = usePreflightFindings(client);
   const [running, setRunning] = useState(false);
 
-  // The print-output facts (ADR 265): the PDF/X-4 checklist's "CMYK
+  // The print-output facts (ADR 266): the PDF/X-4 checklist's "CMYK
   // working space active" row reads the same derivation. A profile the
   // document names but the editor has no bytes for reads "not loaded",
   // never as the bare name of a working space.
