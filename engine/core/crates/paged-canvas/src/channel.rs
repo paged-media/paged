@@ -701,6 +701,9 @@ export type WorkerToMain = WorkerToMainKind & {
 //   (`ElementsExported` reply) and the `pasteElements` mutation
 //   (`Operation::InsertSnippet` / `RemoveSnippet`). Alt+Translate commits
 //   as an `InsertSnippet` (GF-2, GF-3).
+// Additive on 74, no bump (governance rule 1) — ADR 205,
+//   `RequestSnapshot.markers`: a snapshot is drawn as the exports draw the
+//   page unless it asks for the canvas's markers. Optional, default false.
 pub const PROTOCOL_VERSION: ProtocolVersion = ProtocolVersion(74);
 
 /// A per-run script budget on the wire (v63). Every field is optional
@@ -1148,6 +1151,14 @@ pub enum MainToWorkerKind {
         /// document. Empty draws the page as it is.
         #[serde(default)]
         hide_items: Vec<crate::element_selection::ElementId>,
+        /// ADR 205 — draw the canvas's editor-only markers (the pink
+        /// highlight behind text in a substitute face, the ghost-cross over
+        /// EPS/PDF content that cannot be drawn) and its soft proof. Off by
+        /// default: a snapshot is drawn as the exports draw the page, so a
+        /// PNG export, a test or a script never carries them. The page
+        /// thumbnails, which show the canvas, ask for them.
+        #[serde(default)]
+        markers: bool,
     },
     /// Replace the worker's current selection. Phase 3 Item 1 — the
     /// worker mirrors the main thread's `ContentSelection` so the
@@ -4382,6 +4393,7 @@ mod tests {
                 target_width_px: 256,
                 dpi: None,
                 hide_items: Vec::new(),
+                markers: false,
             },
         };
         let json = serde_json::to_string(&msg).unwrap();

@@ -52,13 +52,20 @@ const handleOf = (docId: string, pageIds: string[]) =>
 function fakeClient() {
   const listeners = new Set<(m: WorkerToMain) => void>();
   const shots: string[] = [];
+  const options: unknown[] = [];
   const client = {
     subscribe(l: (m: WorkerToMain) => void) {
       listeners.add(l);
       return () => listeners.delete(l);
     },
-    async requestSnapshot(pageId: string) {
+    async requestSnapshot(
+      pageId: string,
+      _widthPx?: number,
+      _dpi?: number,
+      opts?: unknown,
+    ) {
       shots.push(pageId);
+      options.push(opts);
       return { pageId, pngBytes: [137, 80], widthPx: 256, heightPx: 1 };
     },
   } as unknown as CanvasClient;
@@ -66,7 +73,7 @@ function fakeClient() {
     for (const l of listeners)
       l({ kind, payload: { pageIds } } as unknown as WorkerToMain);
   };
-  return { client, shots, emit };
+  return { client, shots, options, emit };
 }
 
 function mount(client: CanvasClient) {
@@ -104,6 +111,16 @@ const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 afterEach(() => cleanup());
 
 describe("page thumbnails follow the edits", () => {
+  test("a thumbnail shows the canvas: it asks for the canvas's markers", async () => {
+    const c = fakeClient();
+    const { result } = mount(c.client);
+    loaded(result, handleOf("d1", ["p1"]));
+    act(() => c.emit("mutationApplied", ["p1"]));
+    await waitFor(() => expect(c.shots).toEqual(["p1"]));
+    // Engine ADR 205: every other snapshot is drawn as the exports draw it.
+    expect(c.options).toEqual([{ markers: true }]);
+  });
+
   test("a burst of edits re-snapshots each touched page once, in page order, after it settles", async () => {
     const c = fakeClient();
     const { result } = mount(c.client);

@@ -1840,6 +1840,11 @@ pub struct CanvasModel {
     /// counter means there is no invalidation site to remember: any
     /// path that reaches `rebuild_after_mutation` invalidates it.
     ink_coverage_cache: std::cell::RefCell<Option<(u64, Vec<crate::channel::InkCoverageSummary>)>>,
+    /// ADR 205 — the document as the exports draw it (no editor-only
+    /// markers, the working space, full-resolution resources), built on
+    /// the first snapshot that asks for it and kept for the build
+    /// generation it was made from. Dropped by every rebuild.
+    export_build_cache: std::cell::RefCell<Option<(u64, std::rc::Rc<BuiltDocument>)>>,
     /// Phase 3 Item 6 — content hash of the scene at load time.
     /// Drives determinism tests: replaying the recorded mutation log
     /// against the same `initial_state_hash` must produce a matching
@@ -2617,6 +2622,7 @@ impl CanvasModel {
             use_standard_lab_for_spots: false,
             cmm_cache: std::cell::RefCell::new(None),
             ink_coverage_cache: std::cell::RefCell::new(None),
+            export_build_cache: std::cell::RefCell::new(None),
             initial_state_hash,
             last_applied_seq: 0,
             current_selection: None,
@@ -11810,6 +11816,50 @@ impl CanvasModel {
             .map_err(|e| crate::channel::LoadError::Build(e.to_string()))
     }
 
+    /// ADR 205 — whether the live build painted an editor-only marker:
+    /// the pink highlight behind text set in a substitute face, or the
+    /// ghost-cross over inline EPS/PDF content that cannot be drawn. The
+    /// build reports both as diagnostics whether or not it paints them,
+    /// so this reads the report rather than the display lists. It answers
+    /// for the document, not the page: a page without substituted text in
+    /// a document with some counts as marked, which costs an export build
+    /// and never a wrong pixel.
+    pub fn live_build_has_markers(&self) -> bool {
+        self.built.diagnostics.items.iter().any(|d| {
+            matches!(
+                d.code,
+                paged_renderer::DiagnosticCode::FontSubstituted
+                    | paged_renderer::DiagnosticCode::ImageContentUnrenderable
+            )
+        })
+    }
+
+    /// ADR 205 — whether the live build draws every page as an export
+    /// would: no markers painted, no soft proof active, resources served
+    /// at full resolution. When it does, a snapshot reads the live pages
+    /// and no second build is made.
+    pub fn live_build_is_export_faithful(&self) -> bool {
+        self.proof_state.is_none()
+            && self.resource_render_scale == 1.0
+            && !self.live_build_has_markers()
+    }
+
+    /// ADR 205 — the document as the exports draw it, for a snapshot that
+    /// must not carry the canvas's markers. Built once per build
+    /// generation (the first such snapshot pays for the whole document,
+    /// every later page reads the same build) and dropped by the next
+    /// rebuild.
+    pub fn export_build(&self) -> Result<std::rc::Rc<BuiltDocument>, crate::channel::LoadError> {
+        if let Some((generation, doc)) = self.export_build_cache.borrow().as_ref() {
+            if *generation == self.build_generation {
+                return Ok(doc.clone());
+            }
+        }
+        let doc = std::rc::Rc::new(self.build_for_export()?);
+        *self.export_build_cache.borrow_mut() = Some((self.build_generation, doc.clone()));
+        Ok(doc)
+    }
+
     /// v70 — the page as it draws with some items hidden: a slideshow's
     /// build steps (each frame is the slide without the items later steps
     /// reveal). A copy of the scene with those items (a group: all its
@@ -12448,6 +12498,7 @@ impl CanvasModel {
                     .filter_map(|&i| built.pages.get(i).map(|p| p.id.clone())),
             );
         }
+        *self.export_build_cache.get_mut() = None;
         self.built = built;
         self.pending_keep_hints.clear();
         self.pending_edit_spans.clear();
