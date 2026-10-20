@@ -338,3 +338,73 @@ const PATH_EDIT_BODY =
 export function buildPathEditIdml(): Uint8Array {
   return packageWithBody(PATH_EDIT_BODY);
 }
+
+// ───────────────────────────────────────── styled-type fixture
+//
+// Type whose size comes from its STYLES only (engine ADR 206): the
+// heading's style is based on one that sets 30 pt, the body's style sets
+// 8.5 pt, and no run carries a size of its own. A caret there reads the
+// style's size, not the 12 pt default.
+
+/** The story and offsets the styled-type specs address. */
+export const STYLED_TYPE_FIXTURE = {
+  storyId: "ust",
+  /** "Heading" — style `Head`, based on `Base` (30 pt). */
+  heading: { start: 0, end: 7, size: 30 },
+  /** "Body text" — style `Body` (8.5 pt), after the heading's 7 chars. */
+  body: { start: 7, end: 16, size: 8.5 },
+} as const;
+
+const STYLED_TYPE_STYLES =
+  `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n` +
+  `<idPkg:Styles xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging" DOMVersion="20.0">` +
+  `<RootCharacterStyleGroup Self="rcs">` +
+  `<CharacterStyle Self="CharacterStyle/$ID/[No character style]" Name="$ID/[No character style]"/>` +
+  `</RootCharacterStyleGroup>` +
+  `<RootParagraphStyleGroup Self="rps">` +
+  `<ParagraphStyle Self="ParagraphStyle/$ID/[No paragraph style]" Name="$ID/[No paragraph style]"/>` +
+  `<ParagraphStyle Self="ParagraphStyle/Base" Name="Base" PointSize="30" Leading="36"/>` +
+  `<ParagraphStyle Self="ParagraphStyle/Head" Name="Head">` +
+  `<Properties><BasedOn type="object">ParagraphStyle/Base</BasedOn></Properties></ParagraphStyle>` +
+  `<ParagraphStyle Self="ParagraphStyle/Body" Name="Body" PointSize="8.5"/>` +
+  `</RootParagraphStyleGroup></idPkg:Styles>`;
+
+const STYLED_TYPE_STORY =
+  `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n` +
+  `<idPkg:Story xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging" DOMVersion="20.0">` +
+  `<Story Self="ust">` +
+  `<ParagraphStyleRange AppliedParagraphStyle="ParagraphStyle/Head">` +
+  `<CharacterStyleRange AppliedCharacterStyle="CharacterStyle/$ID/[No character style]">` +
+  `<Content>Heading</Content><Br/></CharacterStyleRange></ParagraphStyleRange>` +
+  `<ParagraphStyleRange AppliedParagraphStyle="ParagraphStyle/Body">` +
+  `<CharacterStyleRange AppliedCharacterStyle="CharacterStyle/$ID/[No character style]">` +
+  `<Content>Body text</Content></CharacterStyleRange></ParagraphStyleRange>` +
+  `</Story></idPkg:Story>`;
+
+/** The styled-type fixture — see {@link STYLED_TYPE_FIXTURE}. */
+export function buildStyledTypeIdml(): Uint8Array {
+  const designmap = DESIGNMAP.replace(
+    `<idPkg:BackingStory`,
+    `<idPkg:Story src="Stories/Story_ust.xml"/>\n<idPkg:BackingStory`,
+  ).replace("schema-panel-e2e.indd", "styled-type.indd");
+  const spread =
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n` +
+    `<idPkg:Spread xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging" DOMVersion="20.0">\n` +
+    `<Spread Self="us" PageCount="1" ItemTransform="1 0 0 1 0 0">\n` +
+    `<Page Self="usp" Name="1" GeometricBounds="0 0 792 612" ItemTransform="1 0 0 1 0 0" AppliedMaster="um"/>\n` +
+    `<TextFrame Self="utf" ParentStory="ust" GeometricBounds="72 72 400 540" ItemTransform="1 0 0 1 0 0"/>` +
+    `\n</Spread>\n</idPkg:Spread>`;
+  return buildZip([
+    { name: "mimetype", data: MIME, store: true },
+    { name: "designmap.xml", data: designmap },
+    { name: "META-INF/container.xml", data: CONTAINER },
+    { name: "Resources/Graphic.xml", data: GRAPHIC },
+    { name: "Resources/Fonts.xml", data: empty("Fonts") },
+    { name: "Resources/Styles.xml", data: STYLED_TYPE_STYLES },
+    { name: "Resources/Preferences.xml", data: empty("Preferences") },
+    { name: "MasterSpreads/MasterSpread_um.xml", data: MASTER },
+    { name: "Spreads/Spread_us.xml", data: spread },
+    { name: "Stories/Story_ust.xml", data: STYLED_TYPE_STORY },
+    { name: "XML/BackingStory.xml", data: BACKING },
+  ]);
+}
