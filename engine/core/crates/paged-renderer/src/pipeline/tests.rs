@@ -5716,3 +5716,17 @@ fn growth_by_estimate_takes_two_builds() {
     assert_eq!(exact.grow_passes, 1);
     assert_eq!(digests(&grown), digests(&exact));
 }
+
+#[test]
+fn a_data_uri_link_carries_its_bytes() {
+    // ADR 208: a `data:` URI is the picture itself; anything else (a file
+    // link, a data URI that is not base64) leaves resolution to the
+    // asset resolver.
+    let png = super::images::data_uri_bytes(
+        "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+    )
+    .expect("a base64 data URI decodes");
+    assert!(png.starts_with(b"\x89PNG"));
+    assert!(super::images::data_uri_bytes("file:///plate.png").is_none());
+    assert!(super::images::data_uri_bytes("data:text/plain,hello").is_none());
+}

@@ -136,6 +136,7 @@ is not written yet.
 | [205](205-a-snapshot-is-drawn-as-the-exports-draw-it.md) | A snapshot is drawn as the exports draw it; only the canvas shows its markers | Accepted 2026-10-20 |
 | [206](206-a-text-read-reports-the-effective-value.md) | A caret or text range reads the effective value, not the local override | Accepted 2026-10-20 |
 | [207](207-an-undecoded-link-is-not-a-missing-link.md) | An undecoded link is not a missing link | Accepted 2026-10-20 |
+| [208](208-a-data-uri-carries-its-picture.md) | A data URI carries its picture; a picture in the text is a listed link | Accepted 2026-10-20 |
 
 Decisions made in other repositories that this engine's code rests on are listed in
 [`../README.md`](../README.md).
