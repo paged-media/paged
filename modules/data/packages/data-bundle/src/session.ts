@@ -523,6 +523,10 @@ export interface DataMergeExport {
   fileName?: string;
 }
 
+/** The suffix of the id a query's as-written result (its CSV fields as the
+ *  file has them) is delivered under for a merge; see `asWritten`. */
+export const AS_WRITTEN = "::as-written";
+
 export const NO_NEW_DOCUMENT_DOOR =
   "this editor version cannot open a second document — merge into the current document instead";
 
@@ -1399,6 +1403,39 @@ export function createSession(
   /** Merge into a COPY of this document (D-26): export it, open the copy
    *  (the session follows the switch and restores the copy's session), then
    *  merge there, consuming the template page. */
+  /**
+   * The records a merge places, read the way InDesign's Data Merge reads a
+   * CSV: every field's text as the file has it (`9.90`, `007`, `01/02/2026`),
+   * not the typed value the sniffer made of it (`9.9`, `7`, a date). The
+   * query runs once more over the CSV sources' text twins and its result is
+   * delivered under an id of its own, which is what the merge plans from;
+   * the query's typed result, which bindings and previews read, is left as
+   * it is. A value is typed only where the query asks for one (a CAST, a
+   * computation). Answers `query` itself when there is nothing to read as
+   * written (no CSV source, a handle without twins) or the query does not
+   * run over text, and then says so.
+   */
+  async function asWritten(e: DataEngineLike, query: string): Promise<string> {
+    const q = queries.get(query);
+    const csv = [...importedCsv.keys()];
+    const d = duck as DuckDBHandle | null;
+    if (!q || csv.length === 0 || !d?.queryColumnsAsWritten) return query;
+    try {
+      const batch = await d.queryColumnsAsWritten(q.sql, csv);
+      if (!batch) return query;
+      const id = `${query}${AS_WRITTEN}`;
+      ingestColumnBatch(e, id, batch);
+      return id;
+    } catch (err) {
+      report({
+        level: "warn",
+        source: "flow",
+        message: `merge: query "${query}" does not run over its CSV as written (${errText(err)}), so its fields are typed values — CAST in the query to choose a type`,
+      });
+      return query;
+    }
+  }
+
   async function mergeToNewDocument(
     options: SessionMergeOptions,
     fail: (message: string) => MergeResult,
@@ -4415,7 +4452,7 @@ export function createSession(
         Pick<DataEngineLike, "plan_merge" | "merge_words" | "merge_overset">
       >;
       const result = await writeMerge(host, engineForMerge, template, {
-        query: options.query,
+        query: await asWritten(e, options.query),
         recordsPerPage: options.recordsPerPage ?? { mode: "single" },
         removeBlankLines: options.removeBlankLines ?? false,
         template: mode,
