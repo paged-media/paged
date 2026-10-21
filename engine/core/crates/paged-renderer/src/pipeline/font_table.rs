@@ -374,6 +374,20 @@ impl FontTable {
                 harvest_face_keys(paragraph, &mut face_keys, &mut id_to_bytes);
             }
         }
+        // The fallback face is in the table whether or not a run of the
+        // document asks for it yet. A run that names no family keys
+        // nothing (`story_font_keys` collects families), so text a later
+        // edit adds to a document that had none — a script filling a
+        // blank page — leaves the key set as it was and the model keeps
+        // this table. Without the fallback here, that text shaped (the
+        // face is at hand for shaping) but had no face bytes and no
+        // outline-to-bytes entry, so the PDF exporter drew it as
+        // outlines: no font, no text layer.
+        if let Some(b) = fallback.as_ref() {
+            let id = font_id(b);
+            face_keys.insert((id, wght_for_font_style(None).to_bits()));
+            id_to_bytes.entry(id).or_insert_with(|| b.clone());
+        }
         // Build `face_bytes` first (so the buffers are owned before
         // any Face borrows from them), then build `faces`. Per the
         // SAFETY contract on `faces`, the cached Face<'static>
