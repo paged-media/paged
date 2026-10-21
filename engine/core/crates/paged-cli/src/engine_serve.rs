@@ -35,7 +35,15 @@
 //! answers `file` + `format`; an array answers `files: [{format, file}]` in
 //! order. A PDF/X export needs a CMYK output profile: the server's
 //! `--cmyk-profile`, or the call's own `cmykProfile` (an ICC file as
-//! base64), which wins for that call.
+//! base64), which wins for that call. Either must be an ICC profile whose
+//! data colour space is CMYK: a call whose `cmykProfile` is not (empty,
+//! not base64, an RGB profile) is answered 400 with a JSON error, and a
+//! server whose `--cmyk-profile` is not refuses to start.
+//!
+//! Each call's engine is opened with the server's font flags, as every
+//! other command opens its documents: `--fonts` / `--font-family` register
+//! faces, and the bundled fallback face (or `--font`; none with
+//! `--no-default-font`) sets text no registered family answers for.
 //!
 //! Concurrency: `--workers` threads (default: the machine's parallelism)
 //! each answer one call at a time, and every call gets its own engine
@@ -72,6 +80,7 @@ fn respond(stream: &mut TcpStream, status: u16, body: &Value) -> Result<()> {
     let text = body.to_string();
     let reason = match status {
         200 => "OK",
+        400 => "Bad Request",
         503 => "Service Unavailable",
         _ => "Error",
     };
@@ -125,6 +134,28 @@ fn export_ask(v: &Value) -> Result<ExportAsk> {
     Ok(ask)
 }
 
+/// A call the caller got wrong in a way no engine run can fix: answered
+/// 400, where a call the engine could not carry out is 422.
+#[derive(Debug)]
+struct BadCall(String);
+
+impl std::fmt::Display for BadCall {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl std::error::Error for BadCall {}
+
+/// The call's own CMYK profile, held to the check the server's flag is.
+fn call_cmyk_profile(icc: &str) -> Result<Vec<u8>> {
+    let bytes = b64()
+        .decode(icc)
+        .map_err(|e| BadCall(format!("`cmykProfile` is not base64: {e}")))?;
+    crate::options::check_cmyk_icc(&bytes).map_err(|e| BadCall(format!("`cmykProfile` {e}")))?;
+    Ok(bytes)
+}
+
 /// One call: load, script, render, export, in a fresh session.
 pub fn run_call(assets: &DocumentOptions, call: &Value) -> Result<Value> {
     let scratch = std::env::temp_dir().join(format!(
@@ -158,12 +189,12 @@ pub fn run_call(assets: &DocumentOptions, call: &Value) -> Result<Value> {
         std::fs::write(&input, bytes)?;
         // The call's own CMYK profile wins over the server's for this call.
         let mut call_assets = assets.clone();
-        if let Some(icc) = call.get("cmykProfile").and_then(Value::as_str) {
+        if let Some(icc) = call.get("cmykProfile").filter(|v| !v.is_null()) {
+            let icc = icc
+                .as_str()
+                .ok_or_else(|| BadCall("`cmykProfile` is an ICC profile as base64".into()))?;
             let path = scratch.join("output.icc");
-            std::fs::write(
-                &path,
-                b64().decode(icc).context("`cmykProfile` is not base64")?,
-            )?;
+            std::fs::write(&path, call_cmyk_profile(icc)?)?;
             call_assets.cmyk_profile = Some(path.to_string_lossy().into_owned());
         }
         let mut engine = EngineSession::new(call_assets);
@@ -265,7 +296,10 @@ fn handle(mut stream: TcpStream, assets: &DocumentOptions) -> Result<()> {
             };
             match run_call(assets, &call) {
                 Ok(out) => respond(&mut stream, 200, &out),
-                Err(e) => respond(&mut stream, 422, &json!({ "error": e.to_string() })),
+                Err(e) => {
+                    let status = if e.is::<BadCall>() { 400 } else { 422 };
+                    respond(&mut stream, status, &json!({ "error": format!("{e:#}") }))
+                }
             }
         }
         _ => respond(
@@ -312,6 +346,11 @@ fn worker(rx: Arc<Mutex<Receiver<TcpStream>>>, assets: Arc<DocumentOptions>) {
 }
 
 pub fn run(port: u16, bind: &str, assets: DocumentOptions, conc: Concurrency) -> Result<()> {
+    // The flags every call's engine opens with are checked once, here:
+    // a bad profile or an unreadable fallback face is the operator's
+    // error, and a server that starts with one fails every call.
+    assets.check_cmyk_profile()?;
+    assets.fallback_font()?;
     let listener =
         TcpListener::bind((bind, port)).with_context(|| format!("binding {bind}:{port}"))?;
     eprintln!("paged engine on {bind}:{port}");

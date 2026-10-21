@@ -115,7 +115,63 @@ pub fn warn_if_nothing_shaped(stats: &paged_canvas::DocumentStats) {
     }
 }
 
+/// An ICC profile whose data colour space is CMYK, or what it is
+/// instead: the check the Node command line makes on `--cmyk-profile`.
+/// Without it a file that is not a profile at all (an empty one, a
+/// typo'd path to some other file) became a PDF/X-4 whose OutputIntent
+/// carries a broken ICC stream — a file that looks fine until a RIP
+/// reads it.
+pub fn check_cmyk_icc(bytes: &[u8]) -> std::result::Result<(), String> {
+    let tag = |at: usize| {
+        String::from_utf8_lossy(&bytes[at..at + 4])
+            .trim()
+            .to_string()
+    };
+    if bytes.len() < 128 || &bytes[36..40] != b"acsp" {
+        return Err(format!(
+            "is not an ICC profile ({} bytes without the `acsp` signature)",
+            bytes.len()
+        ));
+    }
+    if &bytes[16..20] != b"CMYK" {
+        return Err(format!("is a {} profile, not CMYK", tag(16)));
+    }
+    Ok(())
+}
+
+/// Read a profile file and hold it to [`check_cmyk_icc`].
+fn read_cmyk_icc(path: &std::path::Path, what: &str) -> Result<Vec<u8>> {
+    let bytes = std::fs::read(path).with_context(|| format!("read {}", path.display()))?;
+    check_cmyk_icc(&bytes).map_err(|e| anyhow::anyhow!("{what} {}: {e}", path.display()))?;
+    Ok(bytes)
+}
+
 impl DocumentOptions {
+    /// Check the CMYK profile these options name before any document is
+    /// opened with them, so a long-running host (`engine-serve`) refuses
+    /// to start with a bad one instead of failing, or worse writing a
+    /// broken output intent, on every call. A file is held to
+    /// [`check_cmyk_icc`]; a name must resolve to an installed CMYK
+    /// profile.
+    pub fn check_cmyk_profile(&self) -> Result<()> {
+        let Some(given) = &self.cmyk_profile else {
+            return Ok(());
+        };
+        let path = PathBuf::from(given);
+        if path.is_file() {
+            read_cmyk_icc(&path, "--cmyk-profile")?;
+            return Ok(());
+        }
+        match paged_color::profiles::resolve_by_name(given) {
+            Some(bytes) => {
+                check_cmyk_icc(&bytes).map_err(|e| anyhow::anyhow!("--cmyk-profile {given:?} {e}"))
+            }
+            None => {
+                anyhow::bail!("--cmyk-profile {given:?} is neither a file nor an installed profile")
+            }
+        }
+    }
+
     /// Register the assets, load `path`, and settle the working colour
     /// space — in that order, which is the whole point of this type.
     pub fn open(&self, session: &mut Session, path: &std::path::Path) -> Result<DocumentHandle> {
@@ -248,8 +304,7 @@ impl DocumentOptions {
         let env = std::env::var("PAGED_CMYK_PROFILE").ok();
         match paged_color::profiles::choose(cli_path.as_deref(), env.as_deref(), declared) {
             CmykProfileChoice::Explicit(path) => {
-                let bytes =
-                    std::fs::read(&path).with_context(|| format!("read {}", path.display()))?;
+                let bytes = read_cmyk_icc(&path, "--cmyk-profile")?;
                 Ok((Some(bytes), None))
             }
             CmykProfileChoice::Env { path, overrode } => {
@@ -258,8 +313,7 @@ impl DocumentOptions {
                         "colour: PAGED_CMYK_PROFILE overrides the document's declared {name:?}"
                     );
                 }
-                let bytes =
-                    std::fs::read(&path).with_context(|| format!("read {}", path.display()))?;
+                let bytes = read_cmyk_icc(&path, "PAGED_CMYK_PROFILE")?;
                 Ok((Some(bytes), None))
             }
             CmykProfileChoice::Declared(name) => {

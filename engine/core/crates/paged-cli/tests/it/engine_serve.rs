@@ -267,3 +267,166 @@ fn concurrent_calls_each_run_on_an_engine_of_their_own() {
             .starts_with(b"%PDF-"));
     }
 }
+
+/// A blank A4 IDML, the shape `paged new --format idml` makes: no story,
+/// so no run of the loaded document asks for any face.
+fn blank_a4_idml(dir: &std::path::Path) -> String {
+    let doc = dir.join("blank.idml");
+    assert!(Command::new(env!("CARGO_BIN_EXE_paged"))
+        .args(["new", "--size", "a4", "--format", "idml"])
+        .args(["--out", doc.to_str().unwrap()])
+        .status()
+        .unwrap()
+        .success());
+    base64::engine::general_purpose::STANDARD.encode(std::fs::read(&doc).unwrap())
+}
+
+const FILL_SCRIPT: &str = r#"
+    const page = JSON.parse(paged.pages())[0].selfId;
+    paged.insertTextFrame(page, [72, 72, 200, 400]);
+    const stories = JSON.parse(paged.stories());
+    paged.insertText(stories[stories.length - 1].selfId, 0, "Desk lamp DL-300 49.00 EUR");
+"#;
+
+/// Text a call's script sets on a page that had none is set with the
+/// fallback face: the PDF embeds it as a font (a text layer, not
+/// outlines) and the PNG has ink inside the frame. Before the fix the
+/// font table of a document loaded without text never held the fallback
+/// face's bytes, so the exporter drew the glyphs as paths and no font
+/// object was written.
+#[test]
+fn text_a_script_sets_on_a_blank_page_is_set_in_the_fallback_face() {
+    let s = serve("text", 23, &[]);
+    let b64 = base64::engine::general_purpose::STANDARD;
+    let file = blank_a4_idml(&s.dir);
+    let (status, out) = call(
+        s.port,
+        &json!({ "file": file, "script": FILL_SCRIPT, "render": { "page": 1, "dpi": 72 }, "export": "pdf" }),
+    );
+    assert_eq!(status, 200, "{out}");
+    assert!(out["error"].is_null(), "{out}");
+    let pdf = b64.decode(out["file"].as_str().unwrap()).unwrap();
+    let text = String::from_utf8_lossy(&pdf);
+    assert!(
+        text.contains("/FontFile2") && text.contains("/ToUnicode"),
+        "the text is set in an embedded font with a text layer, not drawn as outlines"
+    );
+
+    let png = image::load_from_memory(&b64.decode(out["png"].as_str().unwrap()).unwrap())
+        .unwrap()
+        .to_luma8();
+    // The frame is [top 72, left 72, bottom 200, right 400] pt; at 72 dpi
+    // a point is a pixel.
+    let inked = (72..200)
+        .flat_map(|y| (72..400).map(move |x| (x, y)))
+        .filter(|&(x, y)| png.get_pixel(x, y).0[0] < 128)
+        .count();
+    assert!(inked > 100, "the frame has ink: {inked} dark pixels");
+
+    // PDF/X-4 with the call's own profile sets the same text the same way.
+    if let Some(icc) = paged_color::test_profiles::read_cmyk_profile(env!("CARGO_MANIFEST_DIR")) {
+        let (status, out) = call(
+            s.port,
+            &json!({
+                "file": file,
+                "script": FILL_SCRIPT,
+                "cmykProfile": b64.encode(&icc),
+                "export": { "format": "pdf", "pdf": { "standard": "pdfx4" } },
+            }),
+        );
+        assert_eq!(status, 200, "{out}");
+        let pdf = b64.decode(out["file"].as_str().unwrap()).unwrap();
+        let text = String::from_utf8_lossy(&pdf);
+        assert!(text.contains("PDF/X-4") && text.contains("/FontFile2"));
+    }
+}
+
+/// A server-level `--fonts` directory reaches every call's engine: a run
+/// that names the family a registered face claims is set in that face.
+#[test]
+fn server_fonts_reach_every_call() {
+    let fonts = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../corpus/fonts");
+    let s = serve(
+        "fonts",
+        29,
+        &["--fonts", fonts.to_str().unwrap(), "--no-default-font"],
+    );
+    let b64 = base64::engine::general_purpose::STANDARD;
+    let file = blank_a4_idml(&s.dir);
+    let script = format!(
+        "{FILL_SCRIPT}
+        const style = paged.createCharacterStyle({{ name: 'Face' }});
+        paged.setStyleProperty('character', style, 'characterFontFamily', 'Inter');
+        const st = JSON.parse(paged.stories());
+        console.log('applied:' + paged.applyStyle(st[st.length - 1].selfId, 0, 26, style));"
+    );
+    let (status, out) = call(
+        s.port,
+        &json!({ "file": file, "script": script, "export": "pdf" }),
+    );
+    assert_eq!(status, 200, "{out}");
+    let pdf = b64.decode(out["file"].as_str().unwrap()).unwrap();
+    assert!(
+        String::from_utf8_lossy(&pdf).contains("/FontFile2"),
+        "the registered face sets the text without a fallback: {}",
+        out["output"]
+    );
+}
+
+/// A `cmykProfile` that is not an ICC CMYK profile is the caller's error,
+/// answered 400 with a JSON error, never a PDF/X-4 with a broken output
+/// intent.
+#[test]
+fn a_call_profile_that_is_not_icc_cmyk_is_refused() {
+    let s = serve("badicc", 31, &[]);
+    let b64 = base64::engine::general_purpose::STANDARD;
+    let pdfx4 = json!({ "format": "pdf", "pdf": { "standard": "pdfx4" } });
+    let mut rgb = vec![0u8; 128];
+    rgb[16..20].copy_from_slice(b"RGB ");
+    rgb[36..40].copy_from_slice(b"acsp");
+    for (profile, says) in [
+        (json!(""), "not an ICC profile"),
+        (json!("%%% not base64"), "not base64"),
+        (json!(b64.encode(b"hello")), "not an ICC profile"),
+        (json!(b64.encode(&rgb)), "not CMYK"),
+        (json!(42), "base64"),
+    ] {
+        let (status, out) = call(
+            s.port,
+            &json!({ "file": s.file, "cmykProfile": profile, "export": pdfx4 }),
+        );
+        assert_eq!(status, 400, "{profile}: {out}");
+        let error = out["error"].as_str().unwrap();
+        assert!(
+            error.contains("cmykProfile") && error.contains(says),
+            "{profile}: {error}"
+        );
+        assert!(out.get("file").is_none(), "no PDF comes back: {out}");
+    }
+}
+
+/// A server whose `--cmyk-profile` is not an ICC CMYK profile refuses to
+/// start, rather than failing (or writing a broken output intent) on
+/// every call.
+#[test]
+fn a_server_profile_that_is_not_icc_cmyk_refuses_to_start() {
+    let dir =
+        std::env::temp_dir().join(format!("paged-engine-serve-badflag-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let empty = dir.join("empty.icc");
+    std::fs::write(&empty, b"").unwrap();
+    let out = Command::new(env!("CARGO_BIN_EXE_paged"))
+        .args([
+            "engine-serve",
+            "--port",
+            "0",
+            "--cmyk-profile",
+            empty.to_str().unwrap(),
+        ])
+        .output()
+        .unwrap();
+    assert!(!out.status.success(), "the server does not start");
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(err.contains("not an ICC profile"), "{err}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
