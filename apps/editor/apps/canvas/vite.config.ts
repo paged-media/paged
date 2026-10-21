@@ -27,6 +27,7 @@ import {
   createReadStream,
   readFileSync,
   readdirSync,
+  realpathSync,
   statSync,
   writeFileSync,
   existsSync,
@@ -79,6 +80,15 @@ function resolveCorpusSubdir(name: string): string {
     }
   }
   return candidates[0]; // colocated path; the route 404s if it's absent
+}
+
+// The corpus root with symlinks resolved, when it exists.
+function realCorpusRoot(): string[] {
+  try {
+    return [realpathSync(resolve(CORPUS_ENVATO, ".."))];
+  } catch {
+    return [];
+  }
 }
 
 const CORPUS_FONTS = resolveCorpusSubdir("fonts");
@@ -795,6 +805,10 @@ export default defineConfig({
         // under corpus/idml/generated/* and corpus/idml/samples/*, not just the
         // envato packs the /corpus/idml/ route serves.
         resolve(CORPUS_ENVATO, ".."),
+        // ...and where that symlink points: Vite checks a /@fs/ request
+        // against the file's real path, so a corpus linked in from outside
+        // the repository 403s on every font and fixture without it.
+        ...realCorpusRoot(),
         // The workspace packages outside apps/editor (`<repo root>/modules`,
         // `platform/extensions`, `engine/core/packages`): their wasm
         // artifacts (canvas-wasm, sheet-js, image-js, DuckDB) are served via
