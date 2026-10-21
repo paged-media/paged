@@ -29,7 +29,7 @@ tool is absent.
 | `[profile.dev]` `debug = 1`                    | Line tables and function names, no variable info: smaller binaries, faster links. Backtraces keep file and line.                                                                          | `CARGO_PROFILE_DEV_DEBUG=2` |
 | `[profile.dev.package."*"]` `opt-level = 2`    | Dependencies are optimised once and then reused; tests that spend their time in dependencies (decoding, shaping, rasterising) run faster. The workspace's own crates stay at opt-level 0. | —                           |
 | `rustc-wrapper = "tooling/rust/rustc-wrapper"` | Compiles through sccache when it is installed, plain rustc otherwise.                                                                                                                     | `PAGED_SCCACHE=0`           |
-| macOS `linker = "tooling/rust/cc-lld"`         | Links with the active toolchain's own lld (`lib/rustlib/<host>/bin/gcc-ld/ld64.lld`, shipped with every rustup toolchain and matched to its LLVM); falls back to Apple's ld.              | `PAGED_LINKER=ld`           |
+| macOS `linker = "tooling/rust/cc-macos"`       | Links with Apple's ld, which links faster here than the toolchain's own lld (`lib/rustlib/<host>/bin/gcc-ld/ld64.lld`; numbers in `docs/migration/ci-speed.md`, lever 5).                 | `PAGED_LINKER=lld` (opt in) |
 
 Linkers and wrappers are set with `linker` and `rustc-wrapper`, never through
 `rustflags`: a `RUSTFLAGS` environment variable (CI sets `-Dwarnings`) replaces
