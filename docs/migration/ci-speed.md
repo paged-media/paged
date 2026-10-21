@@ -23,7 +23,7 @@ most 20 jobs run at once, 5 of them on macOS, shared by every repository.
 | 2. `concurrency` | 297 superseded runs, 111 of them ran to the end (1,543 job-minutes after a newer run existed); 114 duplicate runs; 143 runs on main cancelled | All 22 pull-request workflows cancel a superseded run; no push to main is cancelled or queued (a shared main group would have cancelled 99 of 199 main runs); deploys never cancel. This PR: one run per workflow, 0 superseded | Runs API over the window; the configuration; one demonstration push |
 | 3. Rust caching | rust-cache hit rate 20 % (old: 97 %); 0 core caches on main, 12.4 GB of caches against the 10 GB limit, the oldest 30 min old | Pull requests restore main's caches and write none: this PR hit on 6 of 8 core jobs (47 % overall while other PRs still evict); sccache measured on one job and not adopted (warm 4m14s vs rust-cache hit 2m09s) | rust-cache log lines of 251 + 34 + 32 jobs; the Actions cache list; a trial job |
 | 4. Job shape | Linux ran core's 3,797 tests twice (`cargo test`, then nextest), 39.8 job-minutes a run; every core job waited for a 10 s toolchain job, median 12m57s | Linux runs them once (nextest + doctests, same counts): 12m44s in this PR's run; no toolchain hop; core ci 103.9 → 45.5 job-minutes | Step times and `Finished` lines; the jobs API; this PR's run |
-| 5. mold | Links core's Linux builds since A8b | No isolated CI number (linking is inside cargo's compile time) | — |
+| 5. Linkers | Linux: mold since A8b; macOS: the toolchain's lld since A8c, neither with a link-only number | Linux keeps mold (0.55 s against rust-lld's 0.89 s for core's largest test binary); macOS goes back to Apple's ld (1.07 s against lld's 1.87 s on the hosted runner) | A timing link driver, five relinks per linker (lever 5 below) |
 | 6. Docker cache | No workflow builds an image | Not applicable | Workflow files |
 | 7. Runner disk | 104 GB free after the clean-up step (145 GB disk) | 93 GB free at the end of the largest job (target 9.0 GB), now recorded on every run | `df` in the job logs |
 
@@ -360,7 +360,7 @@ doctests' 1 + 1 equal `cargo test`'s 3,797 + 19).
 platform-conditional code path (`paged-color`'s installed-profile
 directories); and in 47 runs where both legs reached the test step (28 old,
 19 new) macOS never failed alone. What macOS checks is the platform itself:
-the native arm64 build with its own linker (`tooling/rust/cc-lld`, A8c) and
+the native arm64 build with its own linker (`tooling/rust/cc-macos`; A8c, lever 5) and
 the Apple-side paths. It stays, once; running it only on `main` would free a
 macOS slot (5 for the whole org) and is left as an option.
 
@@ -390,9 +390,42 @@ open pull requests edit.
 
 **5. mold.** Core's Linux builds link with mold since A8b (`tooling/rust/cc-mold`;
 the `mold linked the test binaries` step fails if they don't). Linking is not
-separable in cargo's output, so CI has no before/after number for it; the
-compile times in measurement 4 include it. The lld-vs-mold link-only
-microbenchmark stays open. What CI does show is A8b's other change: test
+separable in cargo's output, so CI had no before/after number for it; the
+compile times in measurement 4 include it.
+
+**Link-only microbenchmark (2026-10-21).** A timing link driver (set as
+`CARGO_TARGET_<triple>_LINKER`, calling the repository's driver and recording
+the wall time of that one process) measured the link alone. Each run touches
+one file of the target and rebuilds it, so the measured link is a relink of an
+unchanged dependency graph; five runs per linker after one warm-up. The
+targets: engine/core's largest test binary (`paged-canvas`'s `it`) and the
+`paged` CLI. Locally the load average was under 4 before every run (the
+driver waited otherwise), sccache off.
+
+| Where | Binary | Linker A | Linker B | Median A | Median B | Range A | Range B |
+|---|---|---|---|---|---|---|---|
+| Hosted Linux runner (4 CPUs) | paged-canvas `it` | mold | rust-lld (rustc's default) | 0.55 s | 0.89 s | 0.55–0.56 | 0.88–0.89 |
+| Hosted Linux runner | `paged` CLI | mold | rust-lld | 0.66 s | 1.06 s | 0.65–0.66 | 1.04–1.09 |
+| Hosted macOS runner (arm64) | paged-canvas `it` | Apple ld | toolchain lld | 1.07 s | 1.87 s | 1.05–1.60 | 1.56–2.02 |
+| Hosted macOS runner | `paged` CLI | Apple ld | toolchain lld | 0.80 s | 1.18 s | 0.74–1.16 | 1.03–1.63 |
+| M3 Max, USB SSD, linkers in turn | paged-canvas `it` | Apple ld | toolchain lld | 0.80 s | 2.05 s | 0.75–1.00 | 1.86–3.57 |
+| M3 Max, linkers in turn | `paged` CLI | Apple ld | toolchain lld | 0.69 s | 1.33 s | 0.49–0.94 | 1.19–1.70 |
+| M3 Max, linkers alternating | paged-canvas `it` | Apple ld | toolchain lld | 1.13 s | 1.77 s | 0.82–1.93 | 1.65–1.95 |
+| M3 Max, linkers alternating | `paged` CLI | Apple ld | toolchain lld | 0.70 s | 1.11 s | 0.56–1.01 | 1.06–4.16 |
+
+Apple's ld is Xcode's ld (`ld-1266`); the toolchain's lld is LLD 23 from Rust
+1.99.1. The hosted runs ran the linkers one after the other (A first), the
+alternating local run interleaves them so neither gets a warmer cache.
+
+- **Linux: mold stays.** It links in 62 % of rust-lld's time, with no
+  variance to speak of.
+- **macOS: Apple's ld is the default again.** In every measurement, on both
+  binaries, lld took 1.5 to 2.6 times as long. The A8c switch to lld had no
+  link-only number behind it. `tooling/rust/cc-macos` (formerly `cc-lld`)
+  now runs Apple's ld unless `PAGED_LINKER=lld`; Apple's ld is what rustc
+  uses without any configuration, so nothing else changes. A relink of the
+  largest test binary saves about 0.8 s on the runner and 0.6 to 1.2 s
+  locally. What CI does show is A8b's other change: test
 execution 20m06s → 8m56s (`cargo test`) and 14m24s → 4m17s (nextest), from
 dependencies at `opt-level = 2`.
 
