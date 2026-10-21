@@ -250,8 +250,14 @@ impl Binding {
 /// The barcode symbologies a [`Binding::Barcode`] can render (§9.7). The frozen
 /// wire shape; `data-barcode::Symbology` mirrors it 1:1 and the engine bridges
 /// the two. The registry rows are `data.barcode.<id>`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+///
+/// On the wire a symbology is its registry id — `"ean13"`, `"upca"`,
+/// `"code128"`, `"qr"` — which is what the panel and the session's
+/// `BarcodeSymbology` type write. Reading is lenient: case, `-`, `_` and
+/// spaces are ignored, so `"UPC-A"`, `"upcA"` (the camel-case spelling an
+/// earlier serialisation wrote) and `"EAN_13"` all name the same symbology.
+/// Writing always emits the registry id.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum BarcodeSymbology {
     /// EAN-13 — the 13-digit retail/catalog staple.
     Ean13,
@@ -261,6 +267,56 @@ pub enum BarcodeSymbology {
     Code128,
     /// QR — the 2D matrix symbology (byte mode).
     Qr,
+}
+
+impl BarcodeSymbology {
+    /// Every symbology, in registry order.
+    pub const ALL: [BarcodeSymbology; 4] = [
+        BarcodeSymbology::Ean13,
+        BarcodeSymbology::UpcA,
+        BarcodeSymbology::Code128,
+        BarcodeSymbology::Qr,
+    ];
+
+    /// The registry / wire id (`data.barcode.<id>`): `"ean13"`, `"upca"`,
+    /// `"code128"`, `"qr"`.
+    pub fn id(self) -> &'static str {
+        match self {
+            BarcodeSymbology::Ean13 => "ean13",
+            BarcodeSymbology::UpcA => "upca",
+            BarcodeSymbology::Code128 => "code128",
+            BarcodeSymbology::Qr => "qr",
+        }
+    }
+
+    /// Parse any spelling of a symbology: the registry id, the display name
+    /// (`"UPC-A"`, `"EAN-13"`, `"Code-128"`, `"QR"`), or a camel / snake case
+    /// variant. Case, `-`, `_` and spaces are ignored.
+    pub fn from_id(raw: &str) -> Option<BarcodeSymbology> {
+        let key: String = raw
+            .chars()
+            .filter(|c| !matches!(c, '-' | '_' | ' '))
+            .flat_map(char::to_lowercase)
+            .collect();
+        BarcodeSymbology::ALL.into_iter().find(|s| s.id() == key)
+    }
+}
+
+impl Serialize for BarcodeSymbology {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(self.id())
+    }
+}
+
+impl<'de> Deserialize<'de> for BarcodeSymbology {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let raw = String::deserialize(deserializer)?;
+        BarcodeSymbology::from_id(&raw).ok_or_else(|| {
+            serde::de::Error::custom(format!(
+                "unknown barcode symbology `{raw}`, expected one of `ean13`, `upca`, `code128`, `qr`"
+            ))
+        })
+    }
 }
 
 /// Per-barcode-binding options (§9.7). `quiet_zone` lets the author widen the
@@ -604,4 +660,47 @@ pub enum PlaceholderKind {
     TableRegion,
     /// A frame (chain) marked flow region (§9.4).
     FlowRegion,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The writer emits the registry id, and the id reads back as itself.
+    #[test]
+    fn data_barcode_symbology_round_trips_as_its_registry_id() {
+        for s in BarcodeSymbology::ALL {
+            let json = serde_json::to_string(&s).unwrap();
+            assert_eq!(json, format!("\"{}\"", s.id()));
+            assert_eq!(serde_json::from_str::<BarcodeSymbology>(&json).unwrap(), s);
+        }
+        assert_eq!(
+            serde_json::to_string(&BarcodeSymbology::UpcA).unwrap(),
+            "\"upca\""
+        );
+    }
+
+    /// The panel's `upca`, the display names and the camel-case spelling an
+    /// earlier serialisation wrote all name the same symbology.
+    #[test]
+    fn data_barcode_symbology_reads_every_spelling() {
+        let cases = [
+            ("upca", BarcodeSymbology::UpcA),
+            ("upcA", BarcodeSymbology::UpcA),
+            ("UPC-A", BarcodeSymbology::UpcA),
+            ("upc_a", BarcodeSymbology::UpcA),
+            ("ean13", BarcodeSymbology::Ean13),
+            ("EAN-13", BarcodeSymbology::Ean13),
+            ("ean-13", BarcodeSymbology::Ean13),
+            ("Code-128", BarcodeSymbology::Code128),
+            ("CODE128", BarcodeSymbology::Code128),
+            ("QR", BarcodeSymbology::Qr),
+        ];
+        for (raw, want) in cases {
+            let got: BarcodeSymbology = serde_json::from_str(&format!("\"{raw}\"")).unwrap();
+            assert_eq!(got, want, "{raw}");
+        }
+        let err = serde_json::from_str::<BarcodeSymbology>("\"code39\"").unwrap_err();
+        assert!(err.to_string().contains("code39"), "{err}");
+    }
 }

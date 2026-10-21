@@ -57,8 +57,10 @@ pub use qr::encode_qr;
 /// The barcode symbologies paged.data can encode (spec §9.7). The registry
 /// `data.barcode.<id>` rows mirror these; `data-core::Binding::Barcode` carries
 /// one as its `symbology` discriminant (the frozen contract).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+///
+/// Serialised as its registry id (`"upca"`, never the camel-case `"upcA"`);
+/// read leniently — case, `-`, `_` and spaces are ignored (see [`Symbology::from_id`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Symbology {
     /// EAN-13 — the 13-digit retail/catalog staple (12 data digits + 1 check).
     Ean13,
@@ -84,10 +86,46 @@ impl Symbology {
         }
     }
 
+    /// Every symbology, in registry order.
+    pub const ALL: [Symbology; 4] = [
+        Symbology::Ean13,
+        Symbology::UpcA,
+        Symbology::Code128,
+        Symbology::Qr,
+    ];
+
+    /// Parse any spelling: the registry id, the display name (`"UPC-A"`,
+    /// `"EAN-13"`, `"Code-128"`, `"QR"`) or a camel / snake case variant.
+    pub fn from_id(raw: &str) -> Option<Symbology> {
+        let key: String = raw
+            .chars()
+            .filter(|c| !matches!(c, '-' | '_' | ' '))
+            .flat_map(char::to_lowercase)
+            .collect();
+        Symbology::ALL.into_iter().find(|s| s.id() == key)
+    }
+
     /// Whether this symbology lays out modules in 2D (true for QR) or as a 1D
     /// row of full-height bars (the linear symbologies).
     pub fn is_matrix(self) -> bool {
         matches!(self, Symbology::Qr)
+    }
+}
+
+impl Serialize for Symbology {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(self.id())
+    }
+}
+
+impl<'de> Deserialize<'de> for Symbology {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let raw = String::deserialize(deserializer)?;
+        Symbology::from_id(&raw).ok_or_else(|| {
+            serde::de::Error::custom(format!(
+                "unknown barcode symbology `{raw}`, expected one of `ean13`, `upca`, `code128`, `qr`"
+            ))
+        })
     }
 }
 

@@ -272,3 +272,42 @@ fn data_barcode_quiet_zone_widens_the_margin__feat__data_barcode_symbology() {
     let last = wide.modules.last().unwrap();
     assert!(last.x_pt + last.w_pt <= 200.0 - 5.0 * unit_wide + 1e-9);
 }
+
+/// The panel and the session write a barcode binding's symbology as its
+/// registry id (`upca`); the engine used to read only the camel-case `upcA`
+/// and refused the UPC-A definition outright. Every symbology, in its id, its
+/// display name and the old camel-case spelling, now defines a binding, and
+/// the definition writes back the id.
+#[test]
+#[allow(non_snake_case)] // `__feat__<id>`: the cockpit test-to-feature join
+fn data_barcode_binding_accepts_every_symbology_spelling__feat__data_barcode_symbology() {
+    use data_core::BindingDef;
+    let spellings = [
+        ("ean13", "ean13"),
+        ("EAN-13", "ean13"),
+        ("upca", "upca"),
+        ("upcA", "upca"),
+        ("UPC-A", "upca"),
+        ("code128", "code128"),
+        ("Code-128", "code128"),
+        ("qr", "qr"),
+        ("QR", "qr"),
+    ];
+    for (raw, id) in spellings {
+        let def: BindingDef = serde_json::from_value(serde_json::json!({
+            "id": "bc", "kind": "barcode", "target": "u1c4", "query": "q",
+            "symbology": raw, "expr": "upc",
+        }))
+        .unwrap_or_else(|e| panic!("`{raw}` refused: {e}"));
+        let out = serde_json::to_value(&def).unwrap();
+        assert_eq!(out["symbology"], id, "`{raw}` writes back as `{id}`");
+        let Binding::Barcode { symbology, .. } = def.binding else {
+            panic!("`{raw}` did not define a barcode binding");
+        };
+        assert_eq!(symbology.id(), id);
+        // The encoder enum agrees with the frozen contract, spelling for spelling.
+        let enc: Symbology = serde_json::from_value(serde_json::json!(raw)).unwrap();
+        assert_eq!(enc.id(), id);
+        assert_eq!(serde_json::to_value(enc).unwrap(), id);
+    }
+}
