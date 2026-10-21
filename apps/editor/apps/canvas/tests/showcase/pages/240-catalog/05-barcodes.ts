@@ -276,13 +276,10 @@ export async function build(ctx: PageContext): Promise<PageReport> {
       const n = counts.get(s.kind) ?? 0;
       if (n === 0) {
         notes.push(
-          s.kind === "upca"
-            ? `${s.title}: no modules — the likely cause is the CSV type ` +
-                "sniffer reading the leading-zero UPC column numerically " +
-                "(072034010010 → 72034010010), an 11-digit value no UPC-A " +
-                "encoder accepts; the missing policy drew nothing rather " +
-                "than a fake symbol."
-            : `${s.title}: no modules reached its frame on this lane.`,
+          `${s.title}: no modules reached its frame on this lane — look ` +
+            "for a refused definition or an unencodable value in the " +
+            "browser log (UPC-A drew nothing for as long as the engine " +
+            "read only the spelling `upcA` and refused the panel's `upca`).",
         );
       }
     }
