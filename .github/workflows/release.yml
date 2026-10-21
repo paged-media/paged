@@ -157,19 +157,38 @@ jobs:
           fi
 
       # OIDC trusted publishing needs npm >= 11.5.1. The Node of /.prototools
-      # bundles an npm 11; a pinned upgrade only if it is older.
+      # bundles an older npm, and `npm install -g` lands beside proto's shim,
+      # which keeps answering with the bundled one (v0.74.2's first run printed
+      # 10.9.9 after the upgrade). So the pinned npm goes into a prefix of its
+      # own, put first on PATH for the later steps, and the step fails unless
+      # that is the npm they will run.
       - name: npm new enough for trusted publishing
         if: steps.have.outputs.missing != '0'
         run: |
           set -euo pipefail
+          new_enough() { node -e 'const [a,b,c]=process.argv[1].split(".").map(Number); process.exit(a>11||(a===11&&(b>5||(b===5&&c>=1)))?0:1)' "$1"; }
           NPM=$(npm --version)
-          if node -e 'const [a,b,c]=process.argv[1].split(".").map(Number); process.exit(a>11||(a===11&&(b>5||(b===5&&c>=1)))?0:1)' "$NPM"; then
+          if new_enough "$NPM"; then
             echo "npm $NPM"
-          else
-            echo "npm $NPM is older than 11.5.1; installing npm 11.6.2"
-            npm install -g npm@11.6.2
-            npm --version
+            exit 0
           fi
+          echo "npm $NPM is older than 11.5.1; installing npm 11.6.2 into its own prefix"
+          PREFIX="$RUNNER_TEMP/npm-11"
+          npm install --prefix "$PREFIX" --no-audit --no-fund npm@11.6.2
+          BIN="$PREFIX/node_modules/.bin"
+          GOT=$("$BIN/npm" --version)
+          new_enough "$GOT" || { echo "::error::the installed npm reports $GOT"; exit 1; }
+          echo "$BIN" >> "$GITHUB_PATH"
+          echo "npm $GOT at $BIN, first on PATH from the next step"
+
+      - name: npm on PATH is the one trusted publishing needs
+        if: steps.have.outputs.missing != '0'
+        run: |
+          set -euo pipefail
+          NPM=$(npm --version)
+          node -e 'const [a,b,c]=process.argv[1].split(".").map(Number); process.exit(a>11||(a===11&&(b>5||(b===5&&c>=1)))?0:1)' "$NPM" \
+            || { echo "::error::npm on PATH is $NPM ($(command -v npm)), older than 11.5.1"; exit 1; }
+          echo "npm $NPM ($(command -v npm))"
 
       # Is trusted publishing ready for each package? It asks npm's token
       # exchange directly, because npm's own OIDC helper is SILENT on every
@@ -200,7 +219,9 @@ jobs:
             CODE="$(curl -sS -o /tmp/exch.json -w '%{http_code}' -X POST \
               -H "Authorization: Bearer ${ID_TOKEN}" \
               "https://registry.npmjs.org/-/npm/v1/oidc/token/exchange/package/@paged-media%2f${PKG}")"
-            if [ "$CODE" = "200" ] && [ -n "$(jq -r '.token // empty' /tmp/exch.json)" ]; then
+            # The exchange answers 201 Created with the token (v0.74.2's first
+            # run read 201 as "not ready"); any 2xx with a token is ready.
+            if [ "${CODE:0:1}" = "2" ] && [ -n "$(jq -r '.token // empty' /tmp/exch.json)" ]; then
               echo "  OK         @paged-media/${PKG}"
             else
               MSG="$(jq -r '.message // .error // empty' /tmp/exch.json 2>/dev/null || true)"
