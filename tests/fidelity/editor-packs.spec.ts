@@ -20,6 +20,9 @@
 // Canvas fidelity suite.
 //
 // Per envato pack:
+//   0. A pack whose fonts.sh declares a LICENSED_FONTS face this machine
+//      lacks reports `unavailable: font: needs licensed font <Name>` and
+//      is skipped (PAGED_REQUIRE_FONTS=1 fails it instead).
 //   1. Open the canvas app, drop the pack's template.idml.
 //   2. Snapshot every page at PDF-matching width.
 //   3. pdftoppm-rasterise the pack's reference.pdf at the same DPI.
@@ -47,6 +50,7 @@ import {
   snapshotPagePng,
   snapshotWidthPx,
 } from "../../apps/editor/apps/canvas/tests/fidelity/canvas-driver";
+import { licensedFontsUnavailable } from "../../apps/editor/apps/canvas/tests/fidelity/fonts";
 import { rasterizeReferencePdf } from "../../apps/editor/apps/canvas/tests/fidelity/pdf-rasterize";
 import {
   diffPng,
@@ -137,6 +141,21 @@ for (const pack of packs) {
   test.describe(pack.name, () => {
     test(`render + diff ${pack.name}`, async ({ page }, testInfo) => {
       testInfo.setTimeout(5 * 60_000);
+      // A pack whose reference PDF was set in a licensed face this machine
+      // lacks is unavailable, not measured: the stand-in would gate the
+      // font swap. Throws under PAGED_REQUIRE_FONTS=1.
+      const unavailable = licensedFontsUnavailable(pack.name);
+      if (unavailable) {
+        testInfo.annotations.push({
+          type: "unavailable",
+          description: unavailable,
+        });
+        process.stdout.write(
+          `${unavailable} (${pack.name}; skipped, not passed)\n`,
+        );
+        test.skip(true, unavailable);
+        return;
+      }
       const outDir = packOutDir(pack.name);
       mkdirSync(outDir, { recursive: true });
 

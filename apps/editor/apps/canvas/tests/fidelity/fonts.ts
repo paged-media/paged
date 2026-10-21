@@ -33,7 +33,7 @@
 // dominate ΔE for every pack whose declared fonts differ from Inter.
 
 import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { appendFileSync, existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 import { OVERRIDES_DIR, corpusFontsDir } from "./fixtures";
@@ -47,11 +47,22 @@ export interface FontMapping {
   ttfPath: string;
 }
 
+/** A face the pack's reference PDF was set in that the corpus may not
+ *  ship (fonts.sh `LICENSED_FONTS=("Name=path")`). */
+export interface LicensedFont {
+  /** The face's name, as the unavailable line says it ("Myriad Pro"). */
+  name: string;
+  /** Where this machine has it; empty when it has none. */
+  path: string;
+}
+
 export interface PackFonts {
   /** Absolute path to the default-font TTF (used as the fallback). */
   defaultFontPath: string;
   /** Per-(family, style) substitutions, in fonts.sh declaration order. */
   mappings: FontMapping[];
+  /** Licensed faces the pack needs; a missing one makes it unavailable. */
+  licensedFonts: LicensedFont[];
 }
 
 /**
@@ -67,19 +78,24 @@ export function loadPackFonts(packName: string): PackFonts {
 
 /**
  * Source fonts.sh with bash, the way pack-fidelity.py does, and read
- * back `DEFAULT_FONT` and `FONT_FLAGS` (NUL-separated). `null` when bash
- * is not available, so the line parser below stands in.
+ * back `DEFAULT_FONT`, `LICENSED_FONTS` and `FONT_FLAGS` (NUL-separated:
+ * the default, the licensed count, the licensed entries, the flags — the
+ * layout of pack-fidelity.py's FONTS_SH_READER). `null` when bash is not
+ * available, so the line parser below stands in.
  */
-export function sourceFontsSh(path: string): PackFonts | null {
-  const fontsDir = corpusFontsDir();
+export function sourceFontsSh(
+  path: string,
+  fontsDir: string = corpusFontsDir(),
+): PackFonts | null {
   let out: string;
   try {
     out = execFileSync(
       "bash",
       [
         "-c",
-        'DEFAULT_FONT=""; FONT_FLAGS=(); . "$1"; ' +
-          'printf "%s\\0" "${DEFAULT_FONT:-$FONTS/Inter.ttf}" ${FONT_FLAGS[@]+"${FONT_FLAGS[@]}"}',
+        'DEFAULT_FONT=""; FONT_FLAGS=(); LICENSED_FONTS=(); . "$1"; ' +
+          'printf "%s\\0" "${DEFAULT_FONT:-$FONTS/Inter.ttf}" "${#LICENSED_FONTS[@]}" ' +
+          '${LICENSED_FONTS[@]+"${LICENSED_FONTS[@]}"} ${FONT_FLAGS[@]+"${FONT_FLAGS[@]}"}',
         "fonts",
         path,
       ],
@@ -88,7 +104,15 @@ export function sourceFontsSh(path: string): PackFonts | null {
   } catch {
     return null;
   }
-  const [defaultFontPath, ...flags] = out.split("\0").filter((x) => x !== "");
+  // Empty fields are meaningful here (a licensed entry's path may be
+  // empty), so split on NUL and drop only the trailing terminator.
+  const fields = out.split("\0").slice(0, -1);
+  const defaultFontPath = fields[0] ?? "";
+  const licensedCount = Number(fields[1] ?? 0);
+  const licensedFonts = fields
+    .slice(2, 2 + licensedCount)
+    .map(parseLicensedEntry);
+  const flags = fields.slice(2 + licensedCount).filter((x) => x !== "");
   const mappings: FontMapping[] = [];
   for (let i = 0; i < flags.length; i += 1) {
     if (flags[i] !== "--font-family" || i + 1 >= flags.length) continue;
@@ -106,7 +130,64 @@ export function sourceFontsSh(path: string): PackFonts | null {
   return {
     defaultFontPath: defaultFontPath || resolve(fontsDir, "Inter.ttf"),
     mappings,
+    licensedFonts,
   };
+}
+
+function parseLicensedEntry(entry: string): LicensedFont {
+  const eq = entry.indexOf("=");
+  return eq < 0
+    ? { name: entry.trim(), path: "" }
+    : { name: entry.slice(0, eq).trim(), path: entry.slice(eq + 1).trim() };
+}
+
+/**
+ * The licensed faces of `fonts` this machine lacks (every one of them
+ * under `PAGED_FORCE_NO_LICENSED_FONTS=1`).
+ */
+export function missingLicensedFonts(
+  fonts: PackFonts,
+  env: NodeJS.ProcessEnv = process.env,
+): string[] {
+  const forced = isOn(env["PAGED_FORCE_NO_LICENSED_FONTS"]);
+  return fonts.licensedFonts
+    .filter((f) => forced || f.path === "" || !existsSync(f.path))
+    .map((f) => f.name);
+}
+
+/**
+ * The platform/shared/test-resources convention for a pack that needs a
+ * licensed font this machine lacks: the `unavailable: font: …` line
+ * (appended to `PAGED_SKIP_LOG` when that names a file), or `null` when
+ * nothing is missing. Throws under `PAGED_REQUIRE_FONTS=1`, so a lane
+ * that claims the fonts cannot go green without them.
+ */
+export function licensedFontsUnavailable(
+  packName: string,
+  fonts: PackFonts = loadPackFonts(packName),
+  env: NodeJS.ProcessEnv = process.env,
+): string | null {
+  const missing = missingLicensedFonts(fonts, env);
+  if (missing.length === 0) return null;
+  const line = `unavailable: font: needs licensed font ${missing.join(", ")}`;
+  if (isOn(env["PAGED_REQUIRE_FONTS"])) {
+    throw new Error(
+      `${line} (${packName}) — PAGED_REQUIRE_FONTS=1 is set, so the pack fails`,
+    );
+  }
+  const log = env["PAGED_SKIP_LOG"];
+  if (log) {
+    try {
+      appendFileSync(log, `canvas-fidelity\t${packName}\tFONTS\t${line}\n`);
+    } catch {
+      // The line is still reported as the skip reason.
+    }
+  }
+  return line;
+}
+
+function isOn(value: string | undefined): boolean {
+  return ["1", "true", "yes"].includes((value ?? "").toLowerCase());
 }
 
 /**
@@ -132,10 +213,18 @@ export function parseFontsSh(src: string): PackFonts {
 
   let defaultFontPath = "";
   const mappings: FontMapping[] = [];
+  // Without a shell the path a fonts.sh finds for a licensed face cannot
+  // be known, so a declared one counts as missing (path "").
+  const licensedFonts: LicensedFont[] = [];
 
   for (const rawLine of src.split("\n")) {
     const line = rawLine.replace(/#.*$/, "").trim();
     if (!line) continue;
+    const lic = /^LICENSED_FONTS=\(\s*"([^"=]+)=/.exec(line);
+    if (lic) {
+      licensedFonts.push({ name: lic[1].trim(), path: "" });
+      continue;
+    }
     const def = /^DEFAULT_FONT=(?:"([^"]+)"|'([^']+)'|(\S+))$/.exec(line);
     if (def) {
       defaultFontPath = expandPath(def[1] ?? def[2] ?? def[3]);
@@ -160,5 +249,5 @@ export function parseFontsSh(src: string): PackFonts {
   if (!defaultFontPath) {
     defaultFontPath = resolve(fontsDir, "Inter.ttf");
   }
-  return { defaultFontPath, mappings };
+  return { defaultFontPath, mappings, licensedFonts };
 }
