@@ -42,7 +42,7 @@ members = [
 ]
 # W0 (paged.web) — standalone on purpose: the Blitz/Stylo tree is huge
 # and version-skewed from the workspace; keep it out of our Cargo.lock.
-exclude = ["spikes/blitz-wasm"]
+exclude = ["spikes/blitz-wasm", "vendor/vello_shaders"]
 
 [workspace.package]
 version = "0.0.0"
@@ -121,6 +121,14 @@ paged-scene = { path = "crates/paged-scene" }
 # build that does not carry this patch.
 [patch.crates-io]
 flo_curves = { git = "https://github.com/drietsch/flo_curves", rev = "6196f18" }
+# vello_shaders 0.11.0 with one change to `shader/fine.wgsl`: an image is
+# sampled in image space and its atlas offset is added to the integer texel
+# index, so where Vello's persistent image atlas happens to place a picture
+# cannot change its pixels (ADR 209). Upstream adds the offset to the f32
+# sample position before taking `fract`, which drops fraction bits as the
+# offset grows. REMOVE THIS BLOCK when a vello_shaders release samples in
+# image space: drop it and `vendor/vello_shaders`, then re-lock.
+vello_shaders = { path = "vendor/vello_shaders" }
 
 # Bench builds keep line tables, so `samply` / Instruments name the
 # engine's functions (crates/paged-perf/README.md). Optimisation is

@@ -4685,4 +4685,107 @@ mod tests {
             );
         }
     }
+
+    /// A deterministic "photograph": smooth gradients plus per-pixel
+    /// noise, so bilinear weights matter on every pixel.
+    fn photo(width: u32, height: u32, seed: u32) -> paged_compose::DecodedImage {
+        let mut rgba = Vec::with_capacity((width * height * 4) as usize);
+        let mut state = seed.wrapping_mul(2_654_435_761).wrapping_add(1);
+        for y in 0..height {
+            for x in 0..width {
+                state ^= state << 13;
+                state ^= state >> 17;
+                state ^= state << 5;
+                let n = state & 0x3f;
+                rgba.push((x * 255 / width * 3 / 4 + n) as u8);
+                rgba.push((y * 255 / height * 3 / 4 + (n >> 1)) as u8);
+                rgba.push(((x + y) * 97 % 256 * 3 / 4 + (n >> 2)) as u8);
+                rgba.push(255);
+            }
+        }
+        paged_compose::DecodedImage {
+            width,
+            height,
+            encoded: Vec::new().into(),
+            rgba: rgba.into(),
+            icc: None,
+        }
+    }
+
+    /// One placed photo on a page, scaled by a non-integer factor.
+    fn photo_page(image: paged_compose::DecodedImage, scale: f32) -> paged_compose::DisplayList {
+        use paged_compose::{DisplayCommand, Transform};
+        let mut list = paged_compose::DisplayList::new();
+        let (w, h) = (image.width as f32 * scale, image.height as f32 * scale);
+        let image_id = list.push_image(image);
+        list.commands.push(DisplayCommand::Image {
+            image_id,
+            transform: Transform([w, 0.0, 0.0, h, 3.25, 5.5]),
+        });
+        list
+    }
+
+    /// A placed photograph is sampled the same wherever Vello's image
+    /// atlas puts it (ADR 209). The atlas lives in the renderer and keeps
+    /// every picture resident across renders, so where a page's photo
+    /// lands depends on what that renderer drew before: on the editor's
+    /// worker, a GPU snapshot shares the renderer with the screen. Vello
+    /// 0.11 added the atlas offset to the f32 sample position before
+    /// taking the bilinear fraction, so a photo placed thousands of texels
+    /// from the origin was resampled with slightly different weights:
+    /// ±1 level on about 0.1 % of the bytes here (1,875 of 1.5 M with three
+    /// photos drawn first, 1 with only the atlas keep-alive). The vendored
+    /// `vello_shaders` samples in image space, so the pixels are a
+    /// function of the page alone.
+    #[test]
+    fn a_photo_samples_the_same_wherever_the_atlas_places_it() {
+        use paged_compose::{DisplayCommand, Transform};
+        let page = photo_page(photo(700, 500, 1), 0.37);
+        let mut opts = RasterOptions::new(300.0, 220.0);
+        opts.dpi = 173.0;
+        opts.background = ComposeColor::rgba(1.0, 1.0, 1.0, 1.0);
+
+        let fresh = VelloRasterizer::new();
+        let alone = fresh.rasterize(&page, &opts);
+        if !gpu_or_skip(&alone) {
+            return;
+        }
+
+        // The pages drawn before: none (only the keep-alive image is
+        // resident), then a spread of large photographs that grows the
+        // atlas and pushes the next picture far from its origin.
+        let mut spread = paged_compose::DisplayList::new();
+        for i in 0..3u32 {
+            let id = spread.push_image(photo(2000, 1900, 10 + i));
+            spread.commands.push(DisplayCommand::Image {
+                image_id: id,
+                transform: Transform([100.0, 0.0, 0.0, 95.0, i as f32 * 3.0, 0.0]),
+            });
+        }
+        let histories = [
+            ("an image-free page", paged_compose::DisplayList::new()),
+            ("three large photographs", spread),
+        ];
+        for (what, before) in histories {
+            let used = VelloRasterizer::new();
+            let _ = used.rasterize(&before, &opts);
+            let again = used.rasterize(&page, &opts);
+            let differing = alone.iter().zip(&again).filter(|(a, b)| a != b).count();
+            assert_eq!(
+                differing,
+                0,
+                "the photo page drawn after {what} differs from the page drawn alone on {differing} \
+                 of {} bytes: its sampling depends on where the atlas placed it",
+                alone.len()
+            );
+            // The same renderer, once more after the screen's history: the
+            // photo stays resident and must still match.
+            let _ = used.rasterize(&before, &opts);
+            assert_eq!(
+                used.rasterize(&page, &opts),
+                alone,
+                "a third render after {what}"
+            );
+        }
+    }
 }

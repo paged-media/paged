@@ -115,6 +115,12 @@ const NOISE = 0.0005;
  * twin bit-identical on every page but the named mask pages. The
  * comparison is about the IDML, not about the GPU's sampling history,
  * so it holds the rasterizer fixed instead of loosening the floor.
+ *
+ * The cause is fixed in the engine (engine ADR 209: Vello's fine shader
+ * took the bilinear weights after adding the picture's atlas offset, so
+ * where the shared atlas had placed a photo changed its pixels). The pin
+ * stays until a WebGPU run of this spec under `auto` shows both books
+ * bit-identical outside the named mask pages.
  */
 const SNAPSHOT_BACKEND = "cpu" as const;
 
