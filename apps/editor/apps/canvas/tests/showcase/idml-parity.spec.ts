@@ -75,8 +75,8 @@ const WIDTH = 816;
  * time that difference was invisible here — the mask did not paint on
  * the WebGPU path, both sides rendered the unmasked artwork and agreed —
  * so the allowance was zero, and the gate was meant to go red the day a
- * mask started painting. It did: the GPU lane composites soft masks now,
- * and those pages differ exactly where the ledger says they must.
+ * mask started painting. It did: both rasterizers composite soft masks
+ * now, and those pages differ exactly where the ledger says they must.
  *
  * So the allowance is not a count. It is derived per run from the
  * export's own ledger: each `opacity mask on <id>` entry resolves to the
@@ -85,14 +85,38 @@ const WIDTH = 816;
  * that differs still fails.
  *
  * The limit of this oracle, stated plainly: it proves that everything
- * the GPU renderer PAINTS survives the round trip. It cannot speak for
- * a construct the renderer never draws.
+ * the renderer PAINTS survives the round trip. It cannot speak for a
+ * construct the renderer never draws.
  */
 const NAMED_MASK = /opacity mask on `([^`]+)`/;
 
-/** Anti-aliasing floor: two renders of the same page are not always
- *  bit-identical, so a page counts as matching under this ratio. */
+/** Anti-aliasing floor: a page counts as matching under this ratio. On
+ *  the pinned CPU rasterizer (below) two renders of the same model are
+ *  bit-identical, so a matching page measures 0 and the floor is never
+ *  spent on noise. */
 const NOISE = 0.0005;
+
+/**
+ * Both books are drawn by ONE rasterizer, the CPU one, pinned for the
+ * whole comparison and checked after each half.
+ *
+ * Under the default `auto` policy a snapshot is drawn on the worker's
+ * WebGPU device whenever it has one — and a GPU snapshot is not a
+ * function of the page alone. It shares the presenter's Vello renderer
+ * with the on-screen frames, so what the screen drew before (the render
+ * loop's `presentFrame`, driven by the camera) changes how a placed
+ * photograph is resampled: the same page, the same model, rendered
+ * twice fifteen seconds apart, came back with 0.14 % of its pixels one
+ * colour level apart — photo pixels only. The two halves of this
+ * comparison run minutes apart with different screen histories, so the
+ * nightly reported pages 71, 88 and 89 (every one a photograph or an
+ * image-kernel tile) at 0.07–0.13 % and every other photo page just
+ * under the floor, while the CPU rasterizer draws the container and its
+ * twin bit-identical on every page but the named mask pages. The
+ * comparison is about the IDML, not about the GPU's sampling history,
+ * so it holds the rasterizer fixed instead of loosening the floor.
+ */
+const SNAPSHOT_BACKEND = "cpu" as const;
 
 interface PageDiff {
   page: number;
@@ -131,6 +155,7 @@ test.describe("idml parity", () => {
     mkdirSync(outDir, { recursive: true });
 
     await openCanvas(page);
+    await setSnapshotBackend(page, SNAPSHOT_BACKEND);
     const doc = new ShowcaseDoc(page);
     // Fonts BEFORE the load, both times: RegisterFont seeds shaping at
     // load, and a document shaped against substitutes would differ from
@@ -143,6 +168,7 @@ test.describe("idml parity", () => {
     for (let i = 0; i < ANNUAL_PAGES; i += 1) {
       fromPaged.push(await doc.renderPage(i, WIDTH));
     }
+    await expectDrawnBy(page, SNAPSHOT_BACKEND, "the container's pages");
 
     // The twin the engine loads must be the twin InDesign reads: the
     // IDML entries and nothing else. The exporter carries the container's
@@ -195,6 +221,7 @@ test.describe("idml parity", () => {
       if (ratio > NOISE) diffs.push({ page: i + 1, ratio });
       else worstUnder = Math.max(worstUnder, ratio);
     }
+    await expectDrawnBy(page, SNAPSHOT_BACKEND, "the twin's pages");
 
     // ── the oracle's own control ─────────────────────────────────────
     // "Nothing differs" is the same answer a BLIND comparison gives: a
@@ -251,6 +278,46 @@ test.describe("idml parity", () => {
     ).toEqual([]);
   });
 });
+
+type SnapshotBackend = "auto" | "gpu" | "cpu";
+
+interface SnapshotClient {
+  setSnapshotBackend(backend: SnapshotBackend): void;
+  snapshotBackendInfo(): Promise<{
+    requested: SnapshotBackend;
+    last: "gpu" | "cpu" | null;
+  } | null>;
+}
+
+async function setSnapshotBackend(
+  page: Page,
+  backend: SnapshotBackend,
+): Promise<void> {
+  await page.evaluate((b) => {
+    (
+      globalThis as unknown as { __canvas: { client: SnapshotClient } }
+    ).__canvas.client.setSnapshotBackend(b);
+  }, backend);
+}
+
+/** The policy still holds and the last snapshot was drawn by `want`: a
+ *  reload or a worker restart that reset the policy would otherwise put
+ *  the two halves back on different rasterizers without a word. */
+async function expectDrawnBy(
+  page: Page,
+  want: "gpu" | "cpu",
+  what: string,
+): Promise<void> {
+  const info = await page.evaluate(() =>
+    (
+      globalThis as unknown as { __canvas: { client: SnapshotClient } }
+    ).__canvas.client.snapshotBackendInfo(),
+  );
+  expect(
+    { requested: info?.requested, last: info?.last },
+    `${what} were drawn by the ${want.toUpperCase()} rasterizer`,
+  ).toEqual({ requested: want, last: want });
+}
 
 /**
  * The 1-based pages carrying an item the export names as an opacity-mask
