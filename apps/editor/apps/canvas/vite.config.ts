@@ -137,19 +137,32 @@ function isolate(
   res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
   next();
 }
-// ADR 240 — Trusted Types, report-only (src/boot/trusted-types.ts holds the
-// policy; public/_headers ships the same). The dev and preview servers answer
-// the report route themselves: a report is appended to the file
+// A response carries each CSP as a header line of its own (the browser
+// enforces every one): a policy is added to the ones already set, never
+// replaces them, so the middlewares' order does not matter.
+type PolicyResponse = {
+  getHeader(name: string): unknown;
+  setHeader(name: string, value: string | string[]): void;
+};
+function addPolicy(res: PolicyResponse, policy: string) {
+  const prev = res.getHeader("Content-Security-Policy");
+  const list = prev === undefined ? [] : [prev].flat().map(String);
+  if (!list.includes(policy)) list.push(policy);
+  res.setHeader("Content-Security-Policy", list.length === 1 ? list[0] : list);
+}
+
+// ADR 240, ADR 273 — Trusted Types, enforced (src/boot/trusted-types.ts holds
+// the policy; public/_headers ships the same). The dev and preview servers
+// answer the report route themselves: a report is appended to the file
 // PAGED_CSP_REPORT_LOG names (one JSON line each, so a test run's violations
 // can be counted afterwards), and dropped when it is unset.
-function trustedTypesReportOnly(
+function trustedTypesPolicy(
   req: {
     method?: string;
     url?: string;
     on(e: string, f: (c?: Buffer) => void): void;
   },
-  res: {
-    setHeader(name: string, value: string): void;
+  res: PolicyResponse & {
     statusCode: number;
     end(): void;
   },
@@ -171,7 +184,7 @@ function trustedTypesReportOnly(
     });
     return;
   }
-  res.setHeader("Content-Security-Policy-Report-Only", TRUSTED_TYPES_POLICY);
+  addPolicy(res, TRUSTED_TYPES_POLICY);
   next();
 }
 
@@ -179,14 +192,14 @@ const crossOriginIsolation = {
   name: "cross-origin-isolation-headers",
   configureServer(server: import("vite").ViteDevServer) {
     server.middlewares.use(isolate);
-    server.middlewares.use(trustedTypesReportOnly);
+    server.middlewares.use(trustedTypesPolicy);
   },
   // `vite preview` serves the production build with the same headers, so
   // a built app boots locally (the React Compiler's latency probe runs
   // against it, ADR 229).
   configurePreviewServer(server: import("vite").PreviewServer) {
     server.middlewares.use(isolate);
-    server.middlewares.use(trustedTypesReportOnly);
+    server.middlewares.use(trustedTypesPolicy);
   },
 };
 
@@ -225,7 +238,7 @@ const networkConnectSrcPolicy = {
   name: "network-connect-src-policy",
   configureServer(server: import("vite").ViteDevServer) {
     server.middlewares.use((_req, res, next) => {
-      res.setHeader("Content-Security-Policy", CONNECT_SRC_DEV);
+      addPolicy(res, CONNECT_SRC_DEV);
       next();
     });
   },

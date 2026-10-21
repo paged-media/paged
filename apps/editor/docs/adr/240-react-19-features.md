@@ -82,8 +82,8 @@ The editor is a client-only Vite SPA: the Server Components and SSR features do 
    preview, `paged-demo-script`: a playground script); React 19.3 hands the trusted objects to
    `innerHTML` and to attributes intact. A worker's script URL goes through the `default` policy,
    installed before anything starts a worker, which admits the editor's own origin, its blobs and
-   the module host only. Enforcement (the same value as `Content-Security-Policy`) follows once
-   the deployed site's reports are as clean as the test suites'.
+   the module host only. Enforcement (the same value as `Content-Security-Policy`) followed in
+   [ADR 273](273-trusted-types-are-enforced.md).
 
 ## Consequences
 
