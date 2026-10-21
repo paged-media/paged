@@ -29,6 +29,15 @@ another; the render takes it as `--cmyk-profile`, overriding the profile the
 document declares), `paged-diff` every page, and for a
 `gated` pack check `config/fidelity-thresholds.json`.
 
+Licensed fonts: a pack whose reference PDF was set in a face the corpus may
+not ship declares it in its fonts.sh as `LICENSED_FONTS=("Name=path")`, the
+path empty when this machine has none. A pack missing one is not rendered and
+reports `unavailable` (`unavailable: font: needs licensed font <Name>`):
+neither passed nor failed, because a stand-in measures the font swap, not the
+renderer. `PAGED_REQUIRE_FONTS=1` fails it instead (exit 1, also in advisory
+mode); `PAGED_FORCE_NO_LICENSED_FONTS=1` treats every licensed face as missing,
+which proves that path on a machine that has them.
+
 Environment:
 
     PAGED_CORPUS_DIR        corpus root (default: <repo root>/corpus)
@@ -39,11 +48,14 @@ Environment:
     PAGED_PACK_TIMEOUT      seconds per render (default 900)
     PAGED_CMYK_PROFILE      CMYK profile for the render and pdftoppm (default: Adobe FOGRA39)
     PAGED_PACK_GATE=advisory  report gated failures but exit 0
+    PAGED_REQUIRE_FONTS=1   a pack missing a licensed font fails instead of `unavailable`
+    PAGED_FORCE_NO_LICENSED_FONTS=1  behave as if no licensed font were installed
+    PAGED_SKIP_LOG          file every `unavailable` line is appended to
     CARGO_TARGET_DIR        where paged-inspect / paged-diff are built
 
 Writes `<out>/<slug>/{pack.json,report.json,test.log}` and `<out>/summary.json`.
-Exit 0 when every gated pack passes, 1 when one fails, 2 on bad input,
-3 when the corpus is unavailable.
+Exit 0 when every gated pack passes, 1 when one fails (or a required licensed
+font is missing), 2 on bad input, 3 when the corpus is unavailable.
 """
 
 from __future__ import annotations
@@ -100,22 +112,61 @@ def select_packs(manifest: dict, wanted: list[str]) -> list[dict]:
     return out
 
 
-def font_flags(corpus: Path, slug: str) -> tuple[str, list[str]]:
-    """Source the pack's bash fonts.sh and read back DEFAULT_FONT + FONT_FLAGS."""
+# Sources a fonts.sh and prints, NUL-separated: DEFAULT_FONT, the number of
+# LICENSED_FONTS entries, those entries, then FONT_FLAGS. The canvas lane
+# (apps/editor/apps/canvas/tests/fidelity/fonts.ts) reads the same layout.
+FONTS_SH_READER = (
+    'DEFAULT_FONT=""; FONT_FLAGS=(); LICENSED_FONTS=(); . "$1"; '
+    'printf "%s\\0" "${DEFAULT_FONT:-$FONTS/Inter.ttf}" "${#LICENSED_FONTS[@]}" '
+    '${LICENSED_FONTS[@]+"${LICENSED_FONTS[@]}"} ${FONT_FLAGS[@]+"${FONT_FLAGS[@]}"}'
+)
+
+
+def fonts_script(corpus: Path, slug: str) -> Path:
     overrides = corpus / "config" / "overrides"
     script = overrides / slug / "fonts.sh"
-    if not script.is_file():
-        script = overrides / "_default" / "fonts.sh"
-    shell = (
-        'DEFAULT_FONT=""; FONT_FLAGS=(); . "$1"; '
-        'printf "%s\\0" "${DEFAULT_FONT:-$FONTS/Inter.ttf}" ${FONT_FLAGS[@]+"${FONT_FLAGS[@]}"}'
-    )
-    env = dict(os.environ, FONTS=str(corpus / "fonts"))
+    return script if script.is_file() else overrides / "_default" / "fonts.sh"
+
+
+def read_fonts_sh(script: Path, fonts_dir: Path) -> tuple[str, list[str], list[tuple[str, str]]]:
+    """Source a bash fonts.sh: (DEFAULT_FONT, FONT_FLAGS, LICENSED_FONTS as (name, path))."""
+    env = dict(os.environ, FONTS=str(fonts_dir))
     res = subprocess.run(
-        ["bash", "-c", shell, "fonts", str(script)], env=env, capture_output=True, check=True
+        ["bash", "-c", FONTS_SH_READER, "fonts", str(script)],
+        env=env,
+        capture_output=True,
+        check=True,
     )
     parts = res.stdout.decode().split("\0")[:-1]
-    return parts[0], parts[1:]
+    count = int(parts[1])
+    licensed = [tuple(e.split("=", 1)) if "=" in e else (e, "") for e in parts[2 : 2 + count]]
+    return parts[0], parts[2 + count :], [(n.strip(), p.strip()) for n, p in licensed]
+
+
+def font_flags(corpus: Path, slug: str) -> tuple[str, list[str], list[tuple[str, str]]]:
+    """The pack's fonts.sh (else `_default`): default font, flags, licensed fonts."""
+    return read_fonts_sh(fonts_script(corpus, slug), corpus / "fonts")
+
+
+def missing_licensed(licensed: list[tuple[str, str]]) -> list[str]:
+    """The declared licensed faces this machine lacks (all of them under
+    PAGED_FORCE_NO_LICENSED_FONTS=1)."""
+    forced = env_flag("PAGED_FORCE_NO_LICENSED_FONTS")
+    return [name for name, path in licensed if forced or not path or not Path(path).is_file()]
+
+
+def report_unavailable(pack_id: str, reason: str) -> str:
+    """The test-resources line for a missing font, printed and appended to
+    PAGED_SKIP_LOG (`<lane>\\t<test>\\tFONTS\\t<line>`)."""
+    line = f"unavailable: font: {reason}"
+    log = os.environ.get("PAGED_SKIP_LOG")
+    if log:
+        try:
+            with open(log, "a") as f:
+                f.write(f"pack-fidelity\t{pack_id}\tFONTS\t{line}\n")
+        except OSError as e:
+            print(f"warning: could not append to PAGED_SKIP_LOG={log}: {e}", file=sys.stderr)
+    return line
 
 
 def cmyk_profile() -> Path | None:
@@ -186,7 +237,16 @@ def run_pack(pack: dict, ctx: dict) -> dict:
     pdf = src / "reference.pdf"
     have_pdf = magic(pdf, b"%PDF")
 
-    default_font, flags = font_flags(corpus, slug)
+    default_font, flags, licensed = font_flags(corpus, slug)
+    missing = missing_licensed(licensed)
+    if missing:
+        reason = f"needs licensed font {', '.join(missing)}"
+        line = report_unavailable(pack["id"], reason)
+        if env_flag("PAGED_REQUIRE_FONTS"):
+            log.write(f"{line} — PAGED_REQUIRE_FONTS=1 is set, so the pack fails\n")
+            return done("required-missing", f"PAGED_REQUIRE_FONTS=1: {reason}")
+        log.write(f"{line} (skipped, not passed; PAGED_REQUIRE_FONTS=1 fails it)\n")
+        return done("unavailable", reason)
     cmd = [str(ctx["inspect"]), str(idml), "--render", str(out / "cand.png")]
     cmd += ["--default-font", default_font, *flags, "--dpi", str(ctx["dpi"])]
     # The reference is rasterised through `icc` below, so the render goes
@@ -352,7 +412,10 @@ def main() -> int:
         "pages_passing_diff": sum(r["pages_passing"] for r in diffed),
         "gated": len(gated),
         "gated_passed": sum(1 for r in gated if r["result"] == "ok"),
-        "gated_failed": sum(1 for r in gated if r["result"] != "ok"),
+        "gated_failed": sum(1 for r in gated if r["result"] not in ("ok", "unavailable")),
+        # Neither passed nor failed: a licensed font the pack declares is missing.
+        "unavailable": by("unavailable"),
+        "required_missing": by("required-missing"),
         "median_pack_mean_de": (
             round(statistics.median(r["mean_mean_de"] for r in diffed), 4) if diffed else None
         ),
@@ -377,6 +440,12 @@ def main() -> int:
         )
     print()
     print("summary:", json.dumps(summary))
+    for r in results:
+        if r["result"] == "unavailable":
+            print(f"unavailable: font: {r['note']} ({r['id']}; skipped, not passed)")
+    if summary["required_missing"]:
+        # Advisory mode excuses budgets, not an input the run demanded.
+        return 1
     failed = summary["gated_failed"] > 0
     if failed and os.environ.get("PAGED_PACK_GATE") == "advisory":
         print("==> gated failures; advisory mode, exiting 0")
