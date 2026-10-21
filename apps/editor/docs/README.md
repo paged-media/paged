@@ -7,6 +7,13 @@ What this folder holds.
   the worker and canvas path, the shell and its registries, how plugins are hosted, how
   documents are opened and saved, and how it is built and tested.
 - [`status.md`](status.md): what ships today, the limits of what ships, and what is not built.
+- [`composable-editor.md`](composable-editor.md): the concept paper for an editor that an
+  embedding product composes: runtime profiles over the chrome's regions, feature gates,
+  templates with fields, roles and engine-enforced permissions, the embedding API, and a
+  phased roadmap.
+- [`composable-editor-plan.md`](composable-editor-plan.md): the implementation plan for the
+  composable editor: workstreams, tasks with files and tests, milestones, the ADR ledger and
+  the risks.
 - [`adr/`](adr/README.md): the decision records of this repository, 002, 023, 024 and 200–217.
 - [`design/client-sdk.md`](design/client-sdk.md): the concept paper for the editor's client
   layer (`packages/client`, `catalog`, `shell`): the split between a framework-agnostic
