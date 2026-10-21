@@ -207,11 +207,12 @@ approved sources; 0 after. React 19.3 hands a TrustedHTML to `innerHTML` (`dange
 and to `setAttribute` (`srcDoc`) as is (react-dom 19.3.1's `setInitialProperties` and
 `setValueForAttribute` do not coerce it), which is what lets the policies work through React.
 
-Not yet enforced. The deploy that would show the real site's reports is blocked (the `release`
-job's missing `CLOUDFLARE_API_TOKEN`), and the suites above are a part of the editor's surface,
-not all of it. Enforcing is the same value as `Content-Security-Policy` once the deployed site has
-reported for a while; a worker's own realm gets the policy from its response headers, so the
-header (not the build's `<meta>`) is the place.
+Enforced since editor ADR 273 (2026-10-21): the same value is now sent as
+`Content-Security-Policy`, on the deployed site, the dev server and `vite preview`. The deployed
+site's report route stores nothing (it logs each report to the Pages project's live log), so the
+evidence is the test suites run against the enforced dev server; the numbers are in the ADR. A
+worker's own realm gets the policy from its response headers, so the header (not the build's
+`<meta>`) is the place.
 
 ## The smaller 19.3 items
 

@@ -27,15 +27,21 @@ test("the policy requires Trusted Types for script and reports to the report rou
   assert.equal(REPORT_PATH, "/api/csp-report");
 });
 
-test("public/_headers ships the module's policy, report-only", () => {
+test("public/_headers ships the module's policy, enforced, as a policy of its own", () => {
   const headers = readFileSync(resolve(canvas, "public", "_headers"), "utf8");
-  const line = headers
+  const policies = headers
     .split("\n")
-    .find((l) => /^\s*Content-Security-Policy-Report-Only:/.test(l));
-  assert.ok(line, "_headers has no Content-Security-Policy-Report-Only line");
-  assert.equal(
-    line.replace(/^\s*Content-Security-Policy-Report-Only:\s*/, ""),
-    TRUSTED_TYPES_POLICY,
+    .filter((l) => /^\s*Content-Security-Policy:/.test(l))
+    .map((l) => l.replace(/^\s*Content-Security-Policy:\s*/, ""));
+  // The connect-src wall comes first (the build's rewrite replaces the
+  // first line only), the Trusted Types policy is a line of its own.
+  assert.equal(policies.length, 2, "_headers ships two CSP lines");
+  assert.match(policies[0], /^connect-src /);
+  assert.equal(policies[1], TRUSTED_TYPES_POLICY);
+  // Not report-only any more.
+  assert.ok(
+    !/Content-Security-Policy-Report-Only:.*trusted-types/.test(headers),
+    "_headers still sends Trusted Types report-only",
   );
   // The report route is served by a Pages Function.
   readFileSync(resolve(canvas, "functions", "api", "csp-report.ts"), "utf8");

@@ -17,8 +17,8 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// The Trusted Types report sink (ADR 240): the deployed editor sends its
-// policy report-only, and the browser posts each violation here
+// The Trusted Types report sink (ADR 240, ADR 273): the deployed editor
+// enforces its policy, and the browser posts each refused sink here
 // (`report-uri /api/csp-report`, src/boot/trusted-types.ts). A violation is
 // logged as one line to the Pages project's logs (`wrangler pages
 // deployment tail`) and answered 204; nothing is stored. The body is capped:

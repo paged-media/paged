@@ -17,8 +17,8 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// Trusted Types (ADR 240). The deployed site and the dev server send the
-// policy below; the app installs the default policy for script URLs before
+// Trusted Types (ADR 240, enforced since ADR 273). The deployed site and the
+// dev server send the policy below as an enforced Content-Security-Policy; the app installs the default policy for script URLs before
 // anything starts a worker. Pure and dependency-free like network-policy.ts:
 // vite.config.ts builds the dev header from it, the shipped `_headers`
 // carries the same value (scripts/trusted-types.test.mjs keeps them in
@@ -31,9 +31,9 @@
 //     policy. The HTML and script the editor makes on purpose go through
 //     named policies (@paged-media/helpers `trustedHtml` / `trustedScript`);
 //     a worker's script URL through the default policy below.
-//   - report-only first: a violation is reported to `REPORT_PATH` (the
-//     Pages Function functions/api/csp-report.ts; the dev server's own
-//     route) and nothing is refused, until the test suites report none.
+//   - enforced, and reported: a refused sink is reported to `REPORT_PATH`
+//     (the Pages Function functions/api/csp-report.ts; the dev server's own
+//     route). It was report-only until the test suites reported none.
 
 import { MODULE_HOST_ORIGIN } from "./network-policy";
 
@@ -73,8 +73,8 @@ interface DefaultPolicyFactory {
  *  is allowed when the URL is the editor's own; a `new Function` when its
  *  source was built from a body a named policy approved (the playground's,
  *  `isApprovedScript`: the browser hands the default policy the assembled
- *  source, not the trusted arguments). Anything else is refused (reported,
- *  while the policy is report-only). No HTML passes through it: markup
+ *  source, not the trusted arguments). Anything else is refused (and
+ *  reported). No HTML passes through it: markup
  *  has named policies. Idempotent. */
 export function installDefaultPolicy(
   isApprovedScript: (source: string) => boolean,

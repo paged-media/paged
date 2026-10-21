@@ -82,6 +82,7 @@ and 024 predate that scheme and keep their numbers. Records 200–217 were writt
 | [270](270-the-file-chooser-holds-its-input.md) | The file chooser holds its input until it answers | Accepted 2026-10-20 |
 | [271](271-a-rail-button-shows-its-panel.md) | A rail button shows its panel | Accepted 2026-10-20 |
 | [272](272-a-finished-export-closes-its-dialog.md) | A finished export closes its dialog | Accepted 2026-10-20 |
+| [273](273-trusted-types-are-enforced.md) | Trusted Types are enforced | Accepted 2026-10-21 |
 
 Decisions made in other repositories that this editor's code rests on are listed in
 [`../README.md`](../README.md). Comments in the source also cite ADR 025 (the journal) and
