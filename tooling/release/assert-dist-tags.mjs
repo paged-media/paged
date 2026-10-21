@@ -7,8 +7,9 @@
 //   node tooling/release/assert-dist-tags.mjs --audit
 //
 // - `<dist-tag>` (latest for a release, next for a prerelease) points at
-//   <version>. The registry can take a little while to show a fresh publish,
-//   so this asks again for up to two minutes before it fails.
+//   <version>. The registry can take minutes to show a fresh publish (v0.74.1
+//   and v0.74.2 both read the old `latest` for over two), so this asks again,
+//   past npm's local cache (--prefer-online), for up to six minutes.
 // - `latest` never points at a prerelease (a bare `npm install` would hand it
 //   out). A prerelease release publishes under `next` and leaves `latest` as
 //   it found it, so there this is a warning; a release to `latest` sets it,
@@ -44,10 +45,14 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 function distTags(name) {
   try {
-    const out = execFileSync("npm", ["view", name, "dist-tags", "--json"], {
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "pipe"],
-    }).trim();
+    const out = execFileSync(
+      "npm",
+      ["view", name, "dist-tags", "--json", "--prefer-online"],
+      {
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "pipe"],
+      },
+    ).trim();
     return out ? JSON.parse(out) : {};
   } catch {
     return null; // not on npm (yet), or the registry did not answer
@@ -58,7 +63,7 @@ const failures = [];
 for (const name of PACKAGES) {
   let tags = distTags(name);
   if (!audit) {
-    for (let i = 0; i < 12 && tags?.[tag] !== version; i++) {
+    for (let i = 0; i < 36 && tags?.[tag] !== version; i++) {
       await sleep(10_000);
       tags = distTags(name);
     }
