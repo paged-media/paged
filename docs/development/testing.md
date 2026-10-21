@@ -81,7 +81,7 @@ helper in `paged-gpu` (engine/core). Both honour `PAGED_FORCE_NO_GPU`.
 | `PAGED_REQUIRE_CORPUS`   | A corpus lane without its corpus directory fails.                                                                                                                                              | you, when running a corpus lane                                                       |
 | `PAGED_REQUIRE_ICC`      | A colour test without a CMYK profile fails.                                                                                                                                                    | core `check + test`, after `scripts/fetch-profiles.sh` succeeds                       |
 | `PAGED_REQUIRE_FIXTURES` | A test without its generated fixture or build output fails.                                                                                                                                    | core `check + test`, after `scripts/regen-fixtures.sh`                                |
-| `PAGED_REQUIRE_FONTS`    | A test without its (uncommitted) font fails.                                                                                                                                                   | you                                                                                   |
+| `PAGED_REQUIRE_FONTS`    | A test without its (uncommitted) font fails; so does a corpus pack whose declared licensed font is missing (below).                                                                            | you                                                                                   |
 | `PAGED_REQUIRE_TOOLS`    | A test without its external program fails.                                                                                                                                                     | you                                                                                   |
 | `PAGED_REQUIRE_SERVER`   | A server lane without `PAGED_SERVER_URL` fails.                                                                                                                                                | you, when running the server lane                                                     |
 | `PAGED_REQUIRE_FOGRA39`  | The core fidelity pixel gate (`engine/core/corpus/generated/diff.sh`) fails instead of exiting 3 (unavailable) when it has no Coated FOGRA39 profile.                                          | a runner that has the profile (none today)                                            |
@@ -166,6 +166,19 @@ Reports land in `engine/core/target/pack-fidelity/` (`PAGED_PACK_FIDELITY_OUT`):
 page's heatmap. The script's docstring lists the other variables (DPI, jobs,
 timeout, `PAGED_PACK_GATE=advisory`). Exit 3 without a corpus, 2 with
 `PAGED_REQUIRE_CORPUS=1`, 1 when a gated pack is over budget.
+
+**Licensed fonts.** A pack whose reference PDF was set in a face the corpus
+may not ship declares it in its `fonts.sh` as `LICENSED_FONTS=("Name=path")`,
+the path empty when the machine has none. Every lane that renders packs (this
+script, the editor's canvas fidelity gate `tests/fidelity/editor-packs.spec.ts`,
+the corpus's own `harness/test.sh`) reports such a pack
+`unavailable: font: needs licensed font <Name>` and does not render it: it is
+neither passed nor failed, because a stand-in face measures the font swap.
+`PAGED_REQUIRE_FONTS=1` fails it instead (exit 1, also with
+`PAGED_PACK_GATE=advisory`); `PAGED_FORCE_NO_LICENSED_FONTS=1` treats every
+licensed face as missing, which proves that path on a machine that has them.
+The contract's tests: `engine/core/scripts/test_pack_fidelity.py` (run in
+`core / fidelity`) and `apps/editor/apps/canvas/test/unit/fidelity-licensed-fonts.test.ts`.
 
 ## Proving the REQUIRE paths locally
 

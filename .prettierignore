@@ -91,6 +91,7 @@ modules/*/registry/
 # --- Third-party code and data, lockfiles ---------------------------------
 modules/data/vendor/
 modules/slide/vendor/
+engine/core/vendor/
 modules/publish/packages/pdf-bundle/bin/
 engine/core/crates/paged-text/patterns/
 bun.lock

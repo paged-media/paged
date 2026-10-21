@@ -26,6 +26,8 @@ on:
       # The shared formatting crate (platform/shared/fmt), compiled into the engine.
       - "platform/shared/fmt/**"
       - "engine/core/corpus/**"
+      - "engine/core/scripts/pack-fidelity.py"
+      - "engine/core/scripts/test_pack_fidelity.py"
       # A toolchain or dependency update can change rendered output without
       # touching a crate.
       - "engine/core/rust-toolchain.toml"
@@ -55,6 +57,12 @@ jobs:
         os: [ubuntu-latest, macos-latest]
     steps:
       - uses: actions/checkout@v4
+      # The vendor-pack lane (scripts/pack-fidelity.py) runs only where the
+      # private corpus is; its licensed-font contract (a pack missing a
+      # declared licensed face is `unavailable`, PAGED_REQUIRE_FONTS=1 fails
+      # it) is tested here on a throwaway corpus tree.
+      - name: pack-fidelity harness tests
+        run: python3 scripts/test_pack_fidelity.py -v
       # The pinned toolchain from rust-toolchain.toml (audit B21), read here
       # rather than in a job of its own that this one had to wait for.
       - id: pin

@@ -248,3 +248,16 @@ lavapipe against its 0.89 budget (96 % of it on CI). The cause is still that
 a Vello layer is always isolated and cannot read its backdrop (ADR 146).
 Closing it means drawing a knockout or non-isolated group some other way, for
 example rasterising that group on the CPU into an image layer.
+
+## Follow-up, 2026-10-21: GPU snapshots depended on the screen's history
+
+A GPU snapshot (ADR 188) shares the worker's Vello renderer with the screen,
+and the same page snapshotted twice came back with 0.14 % of its pixels one
+level apart, photographs only. The renderer's image atlas places each picture
+where its history left room, and Vello's fine shader took the bilinear weights
+from `fract(local + atlas_offset - 0.5)` in f32, so a picture far from the
+atlas origin was resampled with coarser weights. Fixed by sampling in image
+space in a vendored `vello_shaders` 0.11.0
+([ADR 209](../../engine/core/docs/adr/209-a-picture-is-sampled-in-image-space.md)),
+pinned by `a_photo_samples_the_same_wherever_the_atlas_places_it` on Metal and
+in `core / gpu` on lavapipe. No extra renderer, atlas or pass.

@@ -137,6 +137,7 @@ is not written yet.
 | [206](206-a-text-read-reports-the-effective-value.md) | A caret or text range reads the effective value, not the local override | Accepted 2026-10-20 |
 | [207](207-an-undecoded-link-is-not-a-missing-link.md) | An undecoded link is not a missing link | Accepted 2026-10-20 |
 | [208](208-a-data-uri-carries-its-picture.md) | A data URI carries its picture; a picture in the text is a listed link | Accepted 2026-10-20 |
+| [209](209-a-picture-is-sampled-in-image-space.md) | A picture is sampled in image space, not where the atlas put it | Accepted 2026-10-21 |
 
 Decisions made in other repositories that this engine's code rests on are listed in
 [`../README.md`](../README.md).
