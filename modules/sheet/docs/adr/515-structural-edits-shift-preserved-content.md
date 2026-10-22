@@ -40,7 +40,8 @@ evaluated.
   formats, validations and sparklines in `extLst`). On the edited sheet: its tables (extent,
   autoFilter, sortState, calculated and totals formulas; a column inserted inside a table becomes
   `ColumnN`, Excel's name, in the part and in the header cell; a table the edit deletes whole is
-  removed with its part, relationship, content type and `<tablePart>`), drawings (each anchor by
+  removed with its part, relationship, content type and `<tablePart>`, and formulas over it read
+  `#REF!`, as Excel rewrites them), drawings (each anchor by
   `editAs`: move and size, move only, absolute; shape text links), notes and their VML boxes,
   threaded comments. Across the package: every chart's series references (cached values kept),
   every defined name (print areas and titles included; a sheet-scoped name's unqualified
@@ -65,6 +66,10 @@ evaluated.
   that refuses, and a property test of random insert/delete sequences against a reference model.
 - The opt-in real-corpus lane `real_xlsx_corpus::excel_workbooks_take_structural_edits_and_one_cell_edits`:
   1778 inserts and deletes on the Excel-written workbooks of the private corpus, none refused.
+- The Excel open-check lane (`sheet-conformance/tests/it/excel_opencheck.rs`, recorded in
+  `oracle/excel/recorded/opencheck.tsv`): Excel 16 opens the Paged-saved results of these edits
+  without a repair, and its own re-save reads back with the same conditional formats,
+  validations, tables, notes and cell values.
 
 ## Consequences
 
