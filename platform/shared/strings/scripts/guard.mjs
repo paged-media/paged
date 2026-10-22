@@ -32,37 +32,119 @@ function walk(dir, out = []) {
   return out;
 }
 
-const files = walk(join(ROOT, "apps")).concat(
-  walk(join(ROOT, "modules")),
-  walk(join(ROOT, "platform")),
-);
+const files = walk(join(ROOT, "apps")).concat(walk(join(ROOT, "modules")), walk(join(ROOT, "platform")));
+
+/**
+ * The `defineMessages("ns", { key: "text", … })` calls of a source, read by
+ * a small scanner that knows comments and the three kinds of quotes, so a
+ * message may hold `})`, quotes of either kind, and `+`-joined pieces.
+ */
+function messagesOf(src) {
+  const out = [];
+  let i = 0;
+  const n = src.length;
+  const skipSpace = () => {
+    for (;;) {
+      while (i < n && /\s/.test(src[i])) i++;
+      if (src.startsWith("//", i)) i = src.indexOf("\n", i) < 0 ? n : src.indexOf("\n", i);
+      else if (src.startsWith("/*", i)) i = src.indexOf("*/", i + 2) < 0 ? n : src.indexOf("*/", i + 2) + 2;
+      else return;
+    }
+  };
+  /** A string literal at `i` (a template literal only without `${`), or null. */
+  const literal = () => {
+    const q = src[i];
+    if (q !== '"' && q !== "'" && q !== "`") return null;
+    let j = i + 1;
+    let text = "";
+    while (j < n && src[j] !== q) {
+      if (src[j] === "\\") {
+        const c = src[j + 1];
+        text += c === "n" ? "\n" : c === "t" ? "\t" : c === "u" ? String.fromCharCode(parseInt(src.slice(j + 2, j + 6), 16)) : c;
+        j += c === "u" ? 6 : 2;
+        continue;
+      }
+      if (q === "`" && src.startsWith("${", j)) return null;
+      text += src[j++];
+    }
+    i = j + 1;
+    return text;
+  };
+  /** Skips a string, comment or template at `i` as code would. */
+  const skipToken = () => {
+    const q = src[i];
+    if (q === '"' || q === "'" || q === "`") {
+      let j = i + 1;
+      while (j < n && src[j] !== q) j += src[j] === "\\" ? 2 : 1;
+      i = j + 1;
+      return true;
+    }
+    if (src.startsWith("//", i) || src.startsWith("/*", i)) {
+      skipSpace();
+      return true;
+    }
+    return false;
+  };
+  while (i < n) {
+    if (skipToken()) continue;
+    if (src.startsWith("defineMessages(", i) && !/[\w$.]/.test(src[i - 1] ?? "")) {
+      i += "defineMessages(".length;
+      skipSpace();
+      const ns = literal();
+      skipSpace();
+      if (ns === null || src[i] !== ",") continue;
+      i++;
+      skipSpace();
+      if (src[i] !== "{") continue;
+      i++;
+      for (;;) {
+        skipSpace();
+        if (src[i] === "}") break;
+        let key = literal();
+        if (key === null) {
+          const m = /^[A-Za-z_$][\w$]*/.exec(src.slice(i, i + 200));
+          if (!m) break;
+          key = m[0];
+          i += key.length;
+        }
+        skipSpace();
+        if (src[i] !== ":") break;
+        i++;
+        skipSpace();
+        let value = literal();
+        if (value === null) break;
+        for (;;) {
+          skipSpace();
+          if (src[i] !== "+") break;
+          i++;
+          skipSpace();
+          const more = literal();
+          if (more === null) break;
+          value += more;
+        }
+        out.push([`${ns}.${key}`, value]);
+        skipSpace();
+        if (src[i] === ",") i++;
+      }
+      continue;
+    }
+    i++;
+  }
+  return out;
+}
+
 const english = new Map();
-const call = /defineMessages\(\s*"([\w.-]+)"\s*,\s*\{([\s\S]*?)\n?\s*\}\s*\)/g;
-const entry =
-  /(?:^|[\s,{])(?:"([^"]+)"|([A-Za-z_$][\w$]*))\s*:\s*((?:"(?:[^"\\]|\\.)*"\s*\+?\s*)+|`[^`]*`)/g;
+const problems = [];
 for (const file of files) {
   if (!/\.(ts|tsx)$/.test(file) || /\.d\.ts$/.test(file)) continue;
   if (/\/test\/|\.test\.|\.spec\./.test(file)) continue;
   const source = readFileSync(file, "utf8");
   if (!source.includes("defineMessages(")) continue;
-  // Comments may show the call as an example.
-  const text = source
-    .replace(/\/\*[\s\S]*?\*\//g, "")
-    .replace(/^\s*\/\/.*$/gm, "");
-  for (const m of text.matchAll(call)) {
-    const ns = m[1];
-    for (const e of m[2].matchAll(entry)) {
-      const name = e[1] ?? e[2];
-      const raw = e[3].trim();
-      const value = raw.startsWith("`")
-        ? raw.slice(1, -1)
-        : raw
-            .split(/"\s*\+\s*"/)
-            .join("")
-            .replace(/^"|"$/g, "")
-            .replace(/\\"/g, '"');
-      english.set(`${ns}.${name}`, { value, file: relative(ROOT, file) });
-    }
+  for (const [key, value] of messagesOf(source)) {
+    const known = english.get(key);
+    if (known && known.value !== value)
+      problems.push(`${key} is defined twice with different English (${known.file}, ${relative(ROOT, file)}): it would throw when both load`);
+    english.set(key, { value, file: relative(ROOT, file) });
   }
 }
 
@@ -80,7 +162,6 @@ const params = (s) =>
     .map((m) => m[1])
     .sort()
     .join(",");
-const problems = [];
 for (const [key, { value, file }] of english) {
   const de = german.get(key);
   if (!de) problems.push(`${key} (${file}) has no German text`);
