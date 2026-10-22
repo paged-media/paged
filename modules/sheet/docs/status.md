@@ -31,7 +31,9 @@ each published canary added is under [Releases](#releases).
   the document name the host gives) and `ISOMITTED` for omitted LAMBDA arguments; `EXPAND`, `WRAPROWS`/`WRAPCOLS`, `TRIMRANGE`,
   `AREAS` and `GROUPBY`/`PIVOTBY` (headers, totals and subtotals, sort orders, filters, LAMBDA or
   eta-reduced aggregations such as `SUM`, stored `_xleta.SUM`; the trim-reference operators `.:`
-  `:.` are not parsed yet); dynamic arrays that spill and nest; Excel tables with structured references;
+  `:.` are not parsed yet); AGGREGATE's full set (functions 12–19, every option) and SUBTOTAL
+  101–111 over hidden rows, ROMAN's five forms, TREND over several regressors, TEXTBEFORE/TEXTAFTER
+  `match_end`, INDIRECT with R1C1 addresses, and TEXT in the workbook's locale; dynamic arrays that spill and nest; Excel tables with structured references;
   incremental recalculation with an interval index for range dependencies, and range
   accelerators within a recalc (column snapshots, anchored prefix aggregates for SUM/COUNT/
   COUNTA/AVERAGE/MIN/MAX, exact-match indexes for VLOOKUP/MATCH/XMATCH/XLOOKUP/COUNTIF/SUMIF,

@@ -55,7 +55,7 @@ use crate::special::{erf_series, erfc};
 
 // ---- PERCENTILE.EXC / QUARTILE.EXC -----------------------------------------
 
-fn percentile_exc_of(s: &[f64], k: f64) -> Result<f64, CellError> {
+pub(super) fn percentile_exc_of(s: &[f64], k: f64) -> Result<f64, CellError> {
     let n = s.len();
     if n == 0 || k <= 0.0 || k >= 1.0 {
         return Err(CellError::Num);
@@ -185,6 +185,90 @@ fn strict_numbers(g: &[Vec<CellValue>]) -> Result<Vec<f64>, CellError> {
     Ok(out)
 }
 
+/// TREND over several regressors (W3): ordinary least squares on the normal
+/// equations (as LINEST), then each row (column, for a row of `known_ys`)
+/// of `new_xs` — default `known_xs` — predicted. A `new_xs` with the wrong
+/// number of regressors is `#REF!`.
+fn trend_multi(args: &[Arg], yg: &[Vec<CellValue>], ys: &[f64], xg: &[Vec<CellValue>]) -> FnResult {
+    let fail = |e: CellError| FnResult::Scalar(CellValue::Error(e));
+    let n = ys.len();
+    let y_is_col = yg.first().map_or(0, Vec::len) == 1;
+    // Observations as rows of regressors.
+    let obs = |g: &[Vec<CellValue>]| -> Result<Vec<Vec<f64>>, CellError> {
+        let mut out = Vec::new();
+        if y_is_col {
+            for row in g {
+                out.push(strict_numbers(std::slice::from_ref(row))?);
+            }
+        } else {
+            for c in 0..g.first().map_or(0, Vec::len) {
+                let col: Vec<CellValue> = g.iter().map(|row| row[c].clone()).collect();
+                out.push(strict_numbers(&[col])?);
+            }
+        }
+        Ok(out)
+    };
+    let x = match obs(xg) {
+        Ok(x) => x,
+        Err(e) => return fail(e),
+    };
+    if x.len() != n {
+        return fail(CellError::Ref);
+    }
+    let k = x.first().map_or(0, Vec::len);
+    let with_const = match bool_arg(args.get(3), true) {
+        Ok(b) => b,
+        Err(e) => return fail(e),
+    };
+    let p = k + usize::from(with_const);
+    let row = |r: &[f64]| -> Vec<f64> {
+        let mut v = r.to_vec();
+        if with_const {
+            v.push(1.0);
+        }
+        v
+    };
+    let mut xtx = vec![vec![0.0; p]; p];
+    let mut xty = vec![0.0; p];
+    for (i, y) in ys.iter().enumerate() {
+        let r = row(&x[i]);
+        for a in 0..p {
+            xty[a] += r[a] * y;
+            for b in 0..p {
+                xtx[a][b] += r[a] * r[b];
+            }
+        }
+    }
+    let Some(inv) = invert(xtx) else {
+        return fail(CellError::Num);
+    };
+    let beta: Vec<f64> = (0..p)
+        .map(|a| (0..p).map(|b| inv[a][b] * xty[b]).sum())
+        .collect();
+    let target = match args.get(2) {
+        None | Some(Arg::Scalar(CellValue::Empty)) => x,
+        Some(a) => match obs(&grid(a)) {
+            Ok(t) => t,
+            Err(e) => return fail(e),
+        },
+    };
+    if target.iter().any(|t| t.len() != k) {
+        return fail(CellError::Ref);
+    }
+    let preds: Vec<CellValue> = target
+        .iter()
+        .map(|t| {
+            let r = row(t);
+            finite(r.iter().zip(&beta).map(|(a, b)| a * b).sum())
+        })
+        .collect();
+    FnResult::Array(if y_is_col {
+        preds.into_iter().map(|v| vec![v]).collect()
+    } else {
+        vec![preds]
+    })
+}
+
 /// `TREND(known_ys, [known_xs], [new_xs], [const])` (registry
 /// `sheet.fn.stat.trend`). Single-regressor least squares; the result has the
 /// shape of `new_xs` (default `known_xs`, default `{1..n}` shaped like
@@ -202,8 +286,7 @@ pub fn trend(args: &[Arg], _ctx: &EvalCtx) -> FnResult {
             let multi_col = g.first().map_or(0, |r| r.len()) > 1 && g.len() > 1;
             let multi_row = g.len() > 1 && g.first().map_or(0, |r| r.len()) > 1;
             if multi_col || multi_row {
-                // Multiple regression — recorded scope limit.
-                return fail(CellError::Value);
+                return trend_multi(args, &yg, &ys, &g);
             }
             match strict_numbers(&g) {
                 Ok(v) => (g, v),

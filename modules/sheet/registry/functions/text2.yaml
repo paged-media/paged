@@ -184,10 +184,10 @@
   range_aware: false
   rust: text2::textbefore
   status: implemented
-  provenance: ["Microsoft TEXTBEFORE (public docs) — text, delimiter, [instance], [match_mode], [match_end], [if_not_found]"]
+  provenance: ["Microsoft TEXTBEFORE (public docs) — text, delimiter, [instance], [match_mode], [match_end] (the text's end, or start counting back, is a delimiter), [if_not_found]"]
   tests:
     rust: ["sheet-conformance/tests/it/fn_text2.rs::sheet_fn_text2_textbefore"]
-    corpus: ["corpus/fn-corpus/text2/textbefore.golden.tsv"]
+    corpus: ["corpus/fn-corpus/text2/textbefore.golden.tsv", "corpus/fn-corpus/fix3/textbefore3.golden.tsv"]
 
 - id: sheet.fn.text.textafter
   name: TEXTAFTER
@@ -201,4 +201,4 @@
   provenance: ["Microsoft TEXTAFTER (public docs) — text, delimiter, [instance], [match_mode], [match_end], [if_not_found]"]
   tests:
     rust: ["sheet-conformance/tests/it/fn_text2.rs::sheet_fn_text2_textafter"]
-    corpus: ["corpus/fn-corpus/text2/textafter.golden.tsv"]
+    corpus: ["corpus/fn-corpus/text2/textafter.golden.tsv", "corpus/fn-corpus/fix3/textbefore3.golden.tsv"]
