@@ -321,3 +321,50 @@ export function cellIsBold(
     return /bold/i.test((tag && attr(tag, "FontStyle")) ?? "");
   });
 }
+
+/** The entered sheet frame's grid is DRAWN (sheet ADR 510, extensions ADR
+ *  334): the frame surface is on screen and what it shows differs from the
+ *  page under it by more than `minPixels`. The grid is DOM over the canvas,
+ *  not part of the engine's page render, so this compares two screenshots
+ *  of the surface's box: with the surface, and with it hidden for a moment.
+ *  `diff` is the journey driver's PNG diff (`designer.renderDiffPixels`).
+ *  Returns the changed pixel count. */
+export async function expectGridSurfaceDrawn(
+  page: Page,
+  diff: (before: Uint8Array, after: Uint8Array) => Promise<number>,
+  minPixels = 64,
+): Promise<number> {
+  const surface = page.locator('[data-testid="sheet-frame-surface"]');
+  await expect(surface, "the entered sheet frame shows its grid surface").toBeVisible({
+    timeout: 10_000,
+  });
+  const box = await surface.boundingBox();
+  expect(box, "the grid surface has a box").not.toBeNull();
+  const clip = {
+    x: Math.floor(box!.x),
+    y: Math.floor(box!.y),
+    width: Math.max(1, Math.floor(box!.width)),
+    height: Math.max(1, Math.floor(box!.height)),
+  };
+  let changed = 0;
+  await expect
+    .poll(
+      async () => {
+        const withGrid = await page.screenshot({ clip });
+        await page.evaluate(() => {
+          const el = document.querySelector<HTMLElement>("[data-paged-frame-surface]");
+          if (el) el.style.visibility = "hidden";
+        });
+        const without = await page.screenshot({ clip });
+        await page.evaluate(() => {
+          const el = document.querySelector<HTMLElement>("[data-paged-frame-surface]");
+          if (el) el.style.visibility = "";
+        });
+        changed = await diff(new Uint8Array(without), new Uint8Array(withGrid));
+        return changed;
+      },
+      { timeout: 15_000, message: `the grid surface should differ from the page by >${minPixels}px` },
+    )
+    .toBeGreaterThan(minPixels);
+  return changed;
+}

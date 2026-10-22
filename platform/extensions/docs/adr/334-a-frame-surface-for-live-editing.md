@@ -30,7 +30,8 @@ mounts as DOM exactly over the frame's content box while that context is active 
   them, and keys typed while focus is inside it are not handled by the canvas. The component
   uses native DOM input, including its own text field for a caret and input methods.
   `toContentPt(clientX, clientY)` maps a client position into content points (it honours
-  rotation, which a bounding rect does not). Cmd/Ctrl-wheel still zooms the canvas.
+  rotation, which a bounding rect does not). A wheel the component does not stop (it declined
+  it) goes on to the canvas, which pans or zooms.
 - **Lifetime.** The surface borrows its edit context: `contextType` must be declared in
   `contributes.editContexts[]` and registered by the same bundle. It mounts on enter and
   unmounts on exit; while mounted it paints over the frame's page content.

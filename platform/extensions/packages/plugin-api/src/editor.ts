@@ -314,7 +314,8 @@ export interface OverlayContribution {
  * there through pan, zoom and the frame's own transform; inside it, one
  * CSS pixel is one point of frame content. Because it is DOM on the main
  * thread, the bundle gets native input (pointer capture, hover, right
- * click, a real caret and IME through its own text field) with no round
+ * click, a real caret and IME through its own text field; a wheel it does
+ * not stop goes on to the canvas) with no round
  * trip to the render worker, and it paints opaque over the frame's page
  * content until the context ends.
  *

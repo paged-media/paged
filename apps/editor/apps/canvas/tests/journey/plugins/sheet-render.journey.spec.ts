@@ -45,6 +45,7 @@ import {
   exitSheet,
   importAndLower,
   placedValues,
+  expectGridSurfaceDrawn,
 } from "./sheet-kit";
 
 test.describe("journey · paged.sheet render output", () => {
@@ -72,11 +73,11 @@ test.describe("journey · paged.sheet render output", () => {
     await page.mouse.dblclick(at.x, at.y);
     await expect(breadcrumb).toBeVisible({ timeout: 10_000 });
     await page.waitForTimeout(800);
-    const gridPx = await designer.expectRenderChangesFrom(afterLower);
-    expect(
-      gridPx,
-      "the in-frame grid sceneLayer rendered onto the page",
-    ).toBeGreaterThan(64);
+    const gridPx = await expectGridSurfaceDrawn(page, (a, b) =>
+      designer.renderDiffPixels(a, b),
+    );
+    expect(gridPx, "the in-frame grid is drawn over the frame").toBeGreaterThan(64);
+    void afterLower;
     await exitSheet(page);
 
     // ── 3. EDIT — A1 → 4321; leaving refreshes the placed table. ──

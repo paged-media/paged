@@ -23,9 +23,10 @@
 // the frame's content box: a DOM element whose CSS transform is the camera,
 // the page's place on the spread, the frame's ItemTransform and the
 // content-box origin, so one CSS pixel inside it is one point of frame
-// content. Pointer, wheel and context-menu events stop here (they belong
-// to the surface, not the canvas's tools), except Cmd/Ctrl-wheel, which
-// still zooms the canvas. Keys typed while focus is inside are the
+// content. Pointer and context-menu events stop here (they belong to the
+// surface, not the canvas's tools). A wheel is the surface's to stop: one
+// it uses (the grid scrolled) stops there; one it declines (an edge, or
+// Cmd/Ctrl-wheel) bubbles on to the canvas, which pans or zooms. Keys typed while focus is inside are the
 // surface's (key-ownership: FRAME_SURFACE_ATTR).
 
 import type { CSSProperties, RefObject, SyntheticEvent } from "react";
@@ -105,9 +106,7 @@ export function FrameSurfaceHost(props: FrameSurfaceHostProps) {
       onPointerCancel={stop}
       onDoubleClick={stop}
       onContextMenu={stop}
-      onWheel={(e) => {
-        if (!e.ctrlKey && !e.metaKey) e.stopPropagation();
-      }}
+
     >
       <Render
         elementId={elementId}

@@ -720,3 +720,31 @@ describe("the window listener", () => {
     r.dispose();
   });
 });
+
+describe("targetOwnsKey: a frame surface (extensions ADR 334)", () => {
+  const inSurface = {
+    tagName: "DIV",
+    isContentEditable: false,
+    getAttribute: () => null,
+    hasAttribute: () => false,
+    closest: (selector: string) =>
+      selector.includes("data-paged-frame-surface") ? ({} as Element) : null,
+  } as unknown as HTMLElement;
+  const chord = (defaultPrevented: boolean) =>
+    targetOwnsKey({
+      key: "v",
+      metaKey: true,
+      ctrlKey: false,
+      altKey: false,
+      defaultPrevented,
+      target: inSurface,
+    });
+
+  test("a chord the surface handled (prevented) is the surface's, not a binding's", () => {
+    expect(chord(true)).toBe(true);
+  });
+
+  test("a chord the surface let through still reaches the bindings", () => {
+    expect(chord(false)).toBe(false);
+  });
+});
