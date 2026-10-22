@@ -433,8 +433,10 @@ describe.skipIf(!ENGINE_BUILT)("paged.sheet layout commands (plan G4)", () => {
     });
     let x = await savedWorkbook(env);
     expect(x.sheet).toContain('<mergeCell ref="A1:B1"/>');
-    expect(x.sheet).toMatch(/<col min="1" max="1" width="20"/);
-    expect(x.sheet).toMatch(/<col min="2" max="2" width="20"/);
+    // Columns 1 and 2 at width 20: one span, or one <col> each.
+    expect(x.sheet).toMatch(
+      /<col min="1" max="2" width="20"|<col min="1" max="1" width="20"[^>]*\/><col min="2" max="2" width="20"/,
+    );
     expect(x.sheet).toMatch(/<row r="3"[^>]*ht="30"/);
     expect(x.styles).toMatch(/<left style="medium"><color rgb="FFFF0000"\/>/);
     expect(
