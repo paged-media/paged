@@ -56,9 +56,11 @@ import type {
   TemplateFieldRef,
   TemplateFieldWrite,
 } from "@paged-media/plugin-api";
+import { t } from "@paged-media/strings";
 import { parseBinding } from "../../sheet-host-model/src";
 
 import type { ResolvedRange, SheetEngine } from "./engine";
+import { TEMPLATE } from "./messages";
 import { PLUGIN_ID, type SheetObjectModel } from "./object-model";
 import type { WorkbookSession } from "./session";
 
@@ -119,9 +121,7 @@ const valueOf = (v: ObjectValue): unknown => {
 function defOf<T>(field: TemplateFieldRef, needs: string): T {
   const d = field.def;
   if (!d || typeof d !== "object" || !(needs in (d as object)))
-    throw new Problem(
-      `The field "${field.name}" has no ${needs} in its definition.`,
-    );
+    throw new Problem(t(TEMPLATE.noDefinition, { name: field.name, needs }));
   return d as T;
 }
 
@@ -268,7 +268,7 @@ export function contributeSheetTemplateFields(
     // write's refresh re-pours them (and stamps them from their own count).
     await bridge.discoverHostFrames();
     const e = bridge.engine();
-    if (!e) throw new Problem("No workbook is open in this document.");
+    if (!e) throw new Problem(t(TEMPLATE.noWorkbook));
     return e;
   }
 
@@ -285,20 +285,20 @@ export function contributeSheetTemplateFields(
         "refersTo",
       );
       if (named.kind !== "value")
-        throw new Problem(`The workbook has no range named "${ref}".`);
+        throw new Problem(t(TEMPLATE.noNamedRange, { ref }));
       id = String(named.value).replace(/^=/, "").replace(/\$/g, "");
     }
     const parts = splitSheet(id);
-    if (!parts) throw new Problem(`"${ref}" does not name a sheet's cells.`);
+    if (!parts) throw new Problem(t(TEMPLATE.notCells, { ref }));
     const sheet = e
       .listSheets()
       .find((s) => s.name.toLowerCase() === parts.sheet.toLowerCase());
     if (!sheet || !e.resolveRange)
-      throw new Problem(`The workbook has no sheet named "${parts.sheet}".`);
+      throw new Problem(t(TEMPLATE.noSheet, { sheet: parts.sheet }));
     try {
       return { id, r: e.resolveRange(sheet.id, parts.rest) };
     } catch {
-      throw new Problem(`"${ref}" is not a range of the workbook.`);
+      throw new Problem(t(TEMPLATE.notARange, { ref }));
     }
   }
 
@@ -329,7 +329,7 @@ export function contributeSheetTemplateFields(
       const lacks = await fillerLacks(objects, p.address, TABLE_GRANTS);
       if (lacks)
         throw new Problem(
-          `${ref} is also shown in a table this template does not open (${p.address} needs ${lacks}); make that frame a sheet field too.`,
+          t(TEMPLATE.shownElsewhere, { ref, address: p.address, lacks }),
         );
     }
   }
@@ -340,15 +340,15 @@ export function contributeSheetTemplateFields(
     objects: ObjectsSurface,
     ops: Parameters<ObjectsSurface["batch"]>[0],
   ): Promise<TemplateFieldWrite> {
-    const out = await objects.batch(ops, { label: "Fill template field" });
+    const out = await objects.batch(ops, { label: t(TEMPLATE.undoLabel) });
     if (!out.applied) {
       await model.reconcile();
       const reason = out.reason ?? out.code ?? "refused";
       return {
         ok: false,
         problem: /document\.metadata/.test(reason)
-          ? "This template does not let a filler change the workbook: its document policy must grant document.metadata (the workbook's version is the document's label)."
-          : `The workbook could not be changed: ${reason}`,
+          ? t(TEMPLATE.noMetadata)
+          : t(TEMPLATE.notChanged, { reason }),
       };
     }
     await session.refreshPlacements();
@@ -381,7 +381,7 @@ export function contributeSheetTemplateFields(
 
   const cell: TemplateFieldKindContribution<string | number> = {
     kind: CELL_FIELD,
-    title: "Sheet cell",
+    title: t(TEMPLATE.cell),
     control: { kind: "text" },
     grants: TABLE_GRANTS,
     describe: (_ctx, field) => cellControl(defOf<CellDef>(field, "ref")),
@@ -389,7 +389,7 @@ export function contributeSheetTemplateFields(
       const d = defOf<CellDef>(field, "ref");
       const { id, r } = await resolve(objects, await engine(), d.ref);
       if (r.top !== r.bottom || r.left !== r.right)
-        throw new Problem(`"${d.ref}" is not one cell.`);
+        throw new Problem(t(TEMPLATE.notOneCell, { ref: d.ref }));
       const v = valueOf(
         await objects.get(`${P}/cell/${escapeId(id)}` as Address, "value"),
       );
@@ -405,19 +405,25 @@ export function contributeSheetTemplateFields(
           if (!d.allowed.includes(text))
             return {
               ok: false,
-              problem: `"${text}" is not one of the choices (${d.allowed.join(", ")}).`,
+              problem: `${t(TEMPLATE.notAChoice, { value: text })} (${d.allowed.join(", ")}).`,
             };
         } else if (d.type === "number") {
           const n = typeof value === "number" ? value : Number(value);
           if (typeof value === "boolean" || !Number.isFinite(n))
             return {
               ok: false,
-              problem: `"${String(value)}" is not a number.`,
+              problem: t(TEMPLATE.notANumber, { value: String(value) }),
             };
           if (d.min !== undefined && n < d.min)
-            return { ok: false, problem: `${n} is less than ${d.min}.` };
+            return {
+              ok: false,
+              problem: t(TEMPLATE.lessThan, { value: n, min: d.min }),
+            };
           if (d.max !== undefined && n > d.max)
-            return { ok: false, problem: `${n} is more than ${d.max}.` };
+            return {
+              ok: false,
+              problem: t(TEMPLATE.moreThan, { value: n, max: d.max }),
+            };
           text = String(n);
         } else {
           text = String(value ?? "");
@@ -425,17 +431,20 @@ export function contributeSheetTemplateFields(
         if (text.startsWith("="))
           return {
             ok: false,
-            problem: "A formula cannot be entered into a template field.",
+            problem: t(TEMPLATE.noFormula),
           };
         const e = await engine();
         const { id, r } = await resolve(objects, e, d.ref);
         if (r.top !== r.bottom || r.left !== r.right)
-          return { ok: false, problem: `"${d.ref}" is not one cell.` };
+          return {
+            ok: false,
+            problem: t(TEMPLATE.notOneCell, { ref: d.ref }),
+          };
         const address = `${P}/cell/${escapeId(id)}` as Address;
         if (valueOf(await objects.get(address, "formula")) !== null)
           return {
             ok: false,
-            problem: `${id} holds a formula; a template opens constant cells only.`,
+            problem: t(TEMPLATE.holdsFormula, { id }),
           };
         // The value it already holds: nothing to write, no undo step.
         if (String(valueOf(await objects.get(address, "value")) ?? "") === text)
@@ -470,7 +479,7 @@ export function contributeSheetTemplateFields(
 
   const range: TemplateFieldKindContribution<string[][]> = {
     kind: RANGE_FIELD,
-    title: "Sheet range",
+    title: t(TEMPLATE.range),
     control: { kind: "table", columns: [] },
     grants: TABLE_GRANTS,
     async describe({ objects }, field) {
@@ -499,7 +508,7 @@ export function contributeSheetTemplateFields(
         const height = r.bottom - r.top + 1;
         const width = r.right - r.left + 1;
         if (!Array.isArray(value) || value.some((row) => !Array.isArray(row)))
-          return { ok: false, problem: "The value is not a table of rows." };
+          return { ok: false, problem: t(TEMPLATE.notATable) };
         const rows = value.map((row) =>
           (row as unknown[]).map((c) =>
             c === null || c === undefined ? "" : String(c),
@@ -509,12 +518,16 @@ export function contributeSheetTemplateFields(
         if (bad >= 0)
           return {
             ok: false,
-            problem: `Row ${bad + 1} has ${rows[bad]!.length} values; the table has ${width} columns.`,
+            problem: t(TEMPLATE.rowWidth, {
+              row: bad + 1,
+              count: rows[bad]!.length,
+              width,
+            }),
           };
         if (rows.some((row) => row.some((c) => c.startsWith("="))))
           return {
             ok: false,
-            problem: "A formula cannot be entered into a template field.",
+            problem: t(TEMPLATE.noFormula),
           };
         if (growable(d)) {
           const lim = d.rows as { min?: number; max?: number };
@@ -522,18 +535,21 @@ export function contributeSheetTemplateFields(
           if (rows.length > max)
             return {
               ok: false,
-              problem: `The table takes at most ${max} rows; ${rows.length} were given.`,
+              problem: t(TEMPLATE.atMost, { max, count: rows.length }),
             };
           if (lim.min !== undefined && rows.length < lim.min)
             return {
               ok: false,
-              problem: `The table needs at least ${lim.min} rows; ${rows.length} were given.`,
+              problem: t(TEMPLATE.atLeast, {
+                min: lim.min,
+                count: rows.length,
+              }),
             };
           while (rows.length < height) rows.push(Array(width).fill(""));
         } else if (rows.length !== height) {
           return {
             ok: false,
-            problem: `The table has ${height} rows; ${rows.length} were given.`,
+            problem: t(TEMPLATE.exactRows, { height, count: rows.length }),
           };
         }
         const address = `${P}/range/${escapeId(id)}` as Address;
@@ -542,7 +558,7 @@ export function contributeSheetTemplateFields(
         if (inputs?.some((row) => row.some((c) => c.startsWith("="))))
           return {
             ok: false,
-            problem: `${id} holds formulas; a template opens constant cells only.`,
+            problem: t(TEMPLATE.holdsFormulas, { id }),
           };
         const now = valueOf(await objects.get(address, "values"));
         if (JSON.stringify(now) === JSON.stringify(rows)) return { ok: true };
@@ -565,7 +581,7 @@ export function contributeSheetTemplateFields(
 
   const chartSource: TemplateFieldKindContribution<string> = {
     kind: CHART_SOURCE_FIELD,
-    title: "Chart data",
+    title: t(TEMPLATE.chartData),
     control: { kind: "choice", options: [] },
     describe(_ctx, field) {
       const d = defOf<ChartSourceDef>(field, "allowed");
@@ -594,7 +610,7 @@ export function contributeSheetTemplateFields(
         if (!choice)
           return {
             ok: false,
-            problem: `"${String(value)}" is not one of the choices (${d.allowed.map((a) => a.name).join(", ")}).`,
+            problem: `${t(TEMPLATE.notAChoice, { value: String(value) })} (${d.allowed.map((a) => a.name).join(", ")}).`,
           };
         await engine();
         const address = `${P}/chart/${d.chart}` as Address;
@@ -608,7 +624,7 @@ export function contributeSheetTemplateFields(
           if (lacks)
             return {
               ok: false,
-              problem: `The chart is placed on the page and redrawing it replaces its artwork, which this template does not allow (${lacks}).`,
+              problem: `${t(TEMPLATE.chartRedraw)} (${lacks}).`,
             };
         }
         return commit(objects, [
