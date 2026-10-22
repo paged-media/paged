@@ -307,12 +307,15 @@ fn scan_refs(refs: &[Arg], skip_errors: bool) -> Scan {
     s
 }
 
-/// `AGGREGATE(function_num, options, ref1, …)` (registry
-/// `sheet.fn.math.aggregate`). T2 subset: `function_num` 1–11, `options`
-/// 0/4/6. See the module docs for the full ruling. The leading two args are
-/// the selector + option (read as numbers); the rest are the refs.
+/// `AGGREGATE(function_num, options, ref1, …)` and
+/// `AGGREGATE(function_num, options, array, k)` (Microsoft reference).
+/// `function_num` 1–11 are the SUBTOTAL aggregates, 12 MEDIAN, 13
+/// MODE.SNGL, 14 LARGE, 15 SMALL, 16 PERCENTILE.INC, 17 QUARTILE.INC, 18
+/// PERCENTILE.EXC, 19 QUARTILE.EXC (14–19 take `k`). `options` 0–7: 2, 3, 6
+/// and 7 skip error values; the hidden-row and nested-subtotal parts are
+/// applied by the evaluator before the kernel sees the references
+/// (`sheet-calc` `subtotal_mask`). Anything else is `#VALUE!`.
 pub fn aggregate(args: &[Arg], _ctx: &EvalCtx) -> CellValue {
-    // function_num (arg 0). An error here propagates.
     let fnum = match scalar_u32(args.first()) {
         Ok(n) => n,
         Err(e) => return CellValue::Error(e),
@@ -321,28 +324,115 @@ pub fn aggregate(args: &[Arg], _ctx: &EvalCtx) -> CellValue {
         Ok(n) => n,
         Err(e) => return CellValue::Error(e),
     };
-
-    let Some(inner) = InnerFn::from_num(fnum) else {
-        // function_num 12-19 are valid in Excel but deferred in T2; any other
-        // value is invalid. Both surface as #VALUE! (documented subset).
+    if options > 7 {
         return CellValue::Error(CellError::Value);
+    }
+    let skip_errors = matches!(options, 2 | 3 | 6 | 7);
+    // The reference form (1–13) takes references; a value is #VALUE!
+    // (Excel-recorded: AGGREGATE(9,5,5)). A single cell arrives as a 1×1
+    // reference (the evaluator materializes it for this function).
+    if fnum <= 13 && args[2..].iter().any(|a| matches!(a, Arg::Scalar(_))) {
+        return CellValue::Error(CellError::Value);
+    }
+    if let Some(inner) = InnerFn::from_num(fnum) {
+        let scan = scan_refs(&args[2..], skip_errors);
+        // COUNT and COUNTA never propagate an error cell.
+        if let Some(e) = scan
+            .first_error
+            .filter(|_| !matches!(inner, InnerFn::Count | InnerFn::CountA))
+        {
+            return CellValue::Error(e);
+        }
+        return apply_inner(inner, &scan.nums, scan.count_numbers, scan.count_nonblank);
+    }
+    if !(12..=19).contains(&fnum) {
+        return CellValue::Error(CellError::Value);
+    }
+    let (data, k) = if fnum >= 14 {
+        if args.len() < 4 {
+            return CellValue::Error(CellError::Value);
+        }
+        let k = match scalar_number(args.get(3)) {
+            Ok(k) => k,
+            Err(e) => return CellValue::Error(e),
+        };
+        (&args[2..3], k)
+    } else {
+        (&args[2..], 0.0)
     };
-
-    // T2 options: 0/4 = ignore nothing, 6 = ignore error values. The
-    // hidden-row options (1/2/3/5/7) need row-visibility metadata a pure
-    // kernel cannot see -> #VALUE!.
-    let skip_errors = match options {
-        0 | 4 => false,
-        6 => true,
-        _ => return CellValue::Error(CellError::Value),
-    };
-
-    let refs = &args[2..];
-    let scan = scan_refs(refs, skip_errors);
+    let scan = scan_refs(data, skip_errors);
     if let Some(e) = scan.first_error {
         return CellValue::Error(e);
     }
-    apply_inner(inner, &scan.nums, scan.count_numbers, scan.count_nonblank)
+    let mut v = scan.nums;
+    v.sort_by(f64::total_cmp);
+    let num = |x: f64| CellValue::Number(x);
+    let nume = CellValue::Error(CellError::Num);
+    if v.is_empty() {
+        return if fnum == 13 {
+            CellValue::Error(CellError::Na)
+        } else {
+            nume
+        };
+    }
+    match fnum {
+        12 => num(super::stat::percentile_of_sorted(&v, 0.5)),
+        13 => {
+            // The most frequent value, the first to occur in a tie; none
+            // repeated is #N/A.
+            let mut best: Option<(f64, usize)> = None;
+            for x in &scan_order(data, skip_errors) {
+                let count = v.iter().filter(|y| *y == x).count();
+                if count > 1 && best.is_none_or(|(_, c)| count > c) {
+                    best = Some((*x, count));
+                }
+            }
+            match best {
+                Some((x, _)) => num(x),
+                None => CellValue::Error(CellError::Na),
+            }
+        }
+        14 | 15 => {
+            let k = k.ceil();
+            if k < 1.0 || k > v.len() as f64 {
+                return nume;
+            }
+            let i = k as usize - 1;
+            num(if fnum == 14 { v[v.len() - 1 - i] } else { v[i] })
+        }
+        16 => {
+            if !(0.0..=1.0).contains(&k) {
+                return nume;
+            }
+            num(super::stat::percentile_of_sorted(&v, k))
+        }
+        17 => {
+            let q = k.trunc();
+            if !(0.0..=4.0).contains(&q) {
+                return nume;
+            }
+            num(super::stat::percentile_of_sorted(&v, q / 4.0))
+        }
+        18 => match super::stat2::percentile_exc_of(&v, k) {
+            Ok(x) => num(x),
+            Err(e) => CellValue::Error(e),
+        },
+        _ => {
+            let q = k.trunc();
+            if !(1.0..=3.0).contains(&q) {
+                return nume;
+            }
+            match super::stat2::percentile_exc_of(&v, q / 4.0) {
+                Ok(x) => num(x),
+                Err(e) => CellValue::Error(e),
+            }
+        }
+    }
+}
+
+/// The numbers of the references in their original order (MODE's tie rule).
+fn scan_order(refs: &[Arg], skip_errors: bool) -> Vec<f64> {
+    scan_refs(refs, skip_errors).nums
 }
 
 /// `SUBTOTAL(function_num, ref1, …)` (registry `sheet.fn.math.subtotal`).
@@ -399,50 +489,78 @@ fn scalar_u32(arg: Option<&Arg>) -> Result<u32, CellError> {
 // ============================================================================
 
 /// The classic additive/subtractive roman-numeral table, descending.
-const ROMAN_TABLE: &[(u32, &str)] = &[
-    (1000, "M"),
-    (900, "CM"),
-    (500, "D"),
-    (400, "CD"),
-    (100, "C"),
-    (90, "XC"),
-    (50, "L"),
-    (40, "XL"),
-    (10, "X"),
-    (9, "IX"),
-    (5, "V"),
-    (4, "IV"),
-    (1, "I"),
+/// Roman symbols with the form (0 classic … 4 simplified) from which each
+/// subtractive pair is allowed: form 1 adds the "5 before 10x/50x" pairs
+/// (VL, LD…), form 2 the "1 before 50x/100x" pairs (IL, XD…), forms 3 and 4
+/// the widest (VD, VM; ID, IM). Greedy over this table reproduces Excel's
+/// `ROMAN(499, 0..4)` = CDXCIX, LDVLIV, XDIX, VDIV, ID.
+const ROMAN_TABLE: &[(u32, &str, u8)] = &[
+    (1000, "M", 0),
+    (999, "IM", 4),
+    (995, "VM", 3),
+    (990, "XM", 2),
+    (950, "LM", 1),
+    (900, "CM", 0),
+    (500, "D", 0),
+    (499, "ID", 4),
+    (495, "VD", 3),
+    (490, "XD", 2),
+    (450, "LD", 1),
+    (400, "CD", 0),
+    (100, "C", 0),
+    (99, "IC", 2),
+    (95, "VC", 1),
+    (90, "XC", 0),
+    (50, "L", 0),
+    (49, "IL", 2),
+    (45, "VL", 1),
+    (40, "XL", 0),
+    (10, "X", 0),
+    (9, "IX", 0),
+    (5, "V", 0),
+    (4, "IV", 0),
+    (1, "I", 0),
 ];
 
-/// `ROMAN(number, [form])` (registry `sheet.fn.math.roman`). Classic
-/// roman-numeral **text** for an integer 1–3999 (T2 renders classic for any
-/// `form` 0–4, see module docs). `0` → `""`; negative or >3999 → `#VALUE!`.
+/// `ROMAN(number, [form])` (registry `sheet.fn.math.roman`) — roman-numeral
+/// text for an integer 0–3999 in one of Excel's five forms (0 classic … 4
+/// simplified; `TRUE` is 0, `FALSE` 4). `0` → `""`; negative or >3999 →
+/// `#VALUE!`; a form outside 0–4 is `#VALUE!`.
 pub fn roman(args: &[Arg], _ctx: &EvalCtx) -> CellValue {
     let number = match scalar_number(args.first()) {
         Ok(n) => n,
         Err(e) => return CellValue::Error(e),
     };
-    // [form] is accepted (0-4 classic..simplified); out-of-range -> #VALUE!.
-    if let Some(form_arg) = args.get(1) {
-        match scalar_number(Some(form_arg)) {
+    let form = match args.get(1) {
+        None | Some(Arg::Scalar(CellValue::Empty)) => 0,
+        Some(Arg::Scalar(CellValue::Bool(b))) => {
+            if *b {
+                0
+            } else {
+                4
+            }
+        }
+        Some(a) => match scalar_number(Some(a)) {
             Ok(f) => {
                 let f = f.trunc();
                 if !(0.0..=4.0).contains(&f) {
                     return CellValue::Error(CellError::Value);
                 }
+                f as u8
             }
             Err(e) => return CellValue::Error(e),
-        }
-    }
-
+        },
+    };
     let n = number.trunc();
     if !(0.0..=3999.0).contains(&n) {
         return CellValue::Error(CellError::Value);
     }
     let mut v = n as u32;
     let mut out = String::new();
-    for (val, sym) in ROMAN_TABLE {
+    for (val, sym, min_form) in ROMAN_TABLE {
+        if *min_form > form {
+            continue;
+        }
         while v >= *val {
             out.push_str(sym);
             v -= *val;

@@ -185,6 +185,14 @@ pub fn run_case(case: &CorpusCase) -> Result<CellValue, String> {
             (frow, fcol) = parse_addr(host);
             continue;
         }
+        // `hide=3` hides row 3 (SUBTOTAL 101–111, AGGREGATE options; W3).
+        if addr == "hide" {
+            let row: u32 = raw
+                .parse()
+                .unwrap_or_else(|_| panic!("[{}] bad hide={raw:?}", case.id));
+            e.set_rows_hidden(SHEET, [row - 1], true);
+            continue;
+        }
         apply_setup(&mut e, addr, raw, &case.id);
     }
     let formula = normalize_separators(&case.formula);
