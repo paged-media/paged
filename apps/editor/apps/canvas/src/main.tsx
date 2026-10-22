@@ -280,12 +280,16 @@ import {
   SELECT_ALL_MENU_ITEM,
 } from "./select-all";
 import { CorpusPicker } from "./ui/CorpusPicker";
+import { templateFieldsContribution } from "./overlays/template-fields";
 
 // Default overlay contributions for the canvas app. Order is
 // descriptive — actual paint order is determined by the
 // contributions' `z` values inside OverlayHost.
 const BUILT_IN_OVERLAYS: OverlayContribution[] = [
   pageDecorationsContribution,
+  // Template fields (docs/composable-editor.md §7.10): outlines, labels and a
+  // picture's Replace button, for an author and a filler only.
+  templateFieldsContribution,
   marginGuidesContribution,
   // W2.8 — the INTERACTIVE guide overlay supersedes the read-only
   // `rulerGuidesContribution` in the editor: it seeds its mirror from
