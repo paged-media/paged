@@ -56,7 +56,12 @@ function restylingEngine() {
       return { changed: [{ sheet, row, col, display: input }], restyled };
     },
     setCells: (
-      batch: readonly { sheet: number; row: number; col: number; input: string }[],
+      batch: readonly {
+        sheet: number;
+        row: number;
+        col: number;
+        input: string;
+      }[],
     ) => {
       const prevInputs: string[] = [];
       const restyled = [];
