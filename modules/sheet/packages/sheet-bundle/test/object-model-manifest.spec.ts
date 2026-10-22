@@ -21,6 +21,8 @@ import {
   SHEET_SCHEMAS,
 } from "../src/object-model";
 import type { WorkbookSession } from "../src/session";
+import { contributeLayoutCommands } from "../src/layout-commands";
+import { contributeSheetTemplateFields } from "../src/template-fields";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const PKG = join(HERE, "..");
@@ -28,11 +30,13 @@ const MANIFEST = join(PKG, "manifest.json");
 
 /** The model the bundle registers, captured without an engine. */
 function registeredModel(): ObjectModelContribution {
-  let model: ObjectModelContribution | null = null;
+  // Every `contribute.objectModel` call, merged: the kinds and commands of
+  // the object model, the layout commands and the template field kinds.
+  const models: ObjectModelContribution[] = [];
   const host = {
     contribute: {
       objectModel(m: ObjectModelContribution) {
-        model = m;
+        models.push(m);
         return { dispose() {}, changed() {} };
       },
     },
@@ -54,8 +58,15 @@ function registeredModel(): ObjectModelContribution {
     }),
     onDidChange: () => ({ dispose() {} }),
   } as unknown as WorkbookSession;
-  contributeObjectModel(host, session).dispose();
-  return model!;
+  const model = contributeObjectModel(host, session);
+  contributeLayoutCommands(host, session, model).dispose();
+  contributeSheetTemplateFields(host, session, model).dispose();
+  model.dispose();
+  return {
+    kinds: models.flatMap((m) => m.kinds),
+    commands: models.flatMap((m) => m.commands ?? []),
+    templateFields: models.flatMap((m) => m.templateFields ?? []),
+  };
 }
 
 function declaration() {
@@ -71,6 +82,10 @@ function declaration() {
       title: c.title,
       args: c.args,
       ...(c.result ? { result: c.result } : {}),
+    })),
+    templateFields: (m.templateFields ?? []).map((f) => ({
+      kind: f.kind,
+      title: f.title,
     })),
   };
 }
