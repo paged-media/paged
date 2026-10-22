@@ -1,0 +1,11 @@
+$ paged-node template make <TMP>/fixture.paged --no-plugins
+# exit 2
+# stdout
+{
+  "error": {
+    "message": "template: unknown subcommand \"make\" (fields, fill, check)",
+    "exit": 2
+  }
+}
+# stderr
+(empty)
