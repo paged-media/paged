@@ -26,7 +26,10 @@ import type {
   ElementId,
 } from "@paged-media/plugin-api";
 
+import { t } from "@paged-media/strings";
+
 import { DocEngine } from "./engine.js";
+import { DOC, OUTLINE } from "./messages.js";
 import { contributeMenu } from "./menu";
 import { createDocStore, paragraphRange } from "./panels/outline-model.js";
 import {
@@ -44,7 +47,7 @@ import {
 } from "./doc-state.js";
 import { contributeDocObjectModel } from "./object-model.js";
 import {
-  DOC_PROPERTIES_PANEL,
+  docPropertiesPanel,
   PROPERTIES_PANEL_ID,
   publishPropertyLists,
 } from "./panels/properties-panel.js";
@@ -312,7 +315,7 @@ export function activate(host: BundleHost): BundleHandle {
   async function pickAndIngest(): Promise<void> {
     if (!host.supports("shell.pickFile@1")) {
       host.log.warn("paged.doc: this host cannot pick files");
-      docStore.setNotice({ severity: "warning", message: NO_PICKER_REASON });
+      docStore.setNotice({ severity: "warning", message: t(NO_PICKER_REASON) });
       host.shell.openPanel(PANEL_ID);
       return;
     }
@@ -325,7 +328,7 @@ export function activate(host: BundleHost): BundleHandle {
       host.log.warn(`paged.doc: could not insert ${file.name}: ${String(err)}`);
       docStore.setNotice({
         severity: "error",
-        message: `${file.name} could not be read as a Word document.`,
+        message: t(OUTLINE.cannotRead, { name: file.name }),
       });
       host.shell.openPanel(PANEL_ID);
     }
@@ -373,7 +376,7 @@ export function activate(host: BundleHost): BundleHandle {
   disposers.push(
     host.contribute.command({
       id: "media.paged.doc.command.placeDoc",
-      title: INSERT_LABEL,
+      title: t(INSERT_LABEL),
       handler: () => void pickAndIngest(),
     }).dispose,
   );
@@ -383,7 +386,7 @@ export function activate(host: BundleHost): BundleHandle {
     disposers.push(
       host.contribute.importer({
         id: "media.paged.doc.importer.docx",
-        title: "Word document (.docx)",
+        title: t(DOC.importer),
         extensions: [".docx", ".dotx"],
         mimeTypes: [DOCX_MIME],
         import: async ({ name, bytes }) => {
@@ -398,7 +401,7 @@ export function activate(host: BundleHost): BundleHandle {
     disposers.push(
       host.contribute.exporter({
         id: "media.paged.doc.exporter.docx",
-        title: "Word document (.docx)",
+        title: t(DOC.importer),
         extension: ".docx",
         mimeType: DOCX_MIME,
         export: () => exportDocx(),
@@ -464,13 +467,14 @@ export function activate(host: BundleHost): BundleHandle {
   // ADR 323 — the object properties as host-rendered PropertyFields (a
   // schema panel of property rows; needs the object model + bindings).
   if (objectModel && host.supports("contribute.schemaPanel@1")) {
+    const schema = docPropertiesPanel();
     disposers.push(
       host.contribute.schemaPanel({
         id: PROPERTIES_PANEL_ID,
-        title: DOC_PROPERTIES_PANEL.title,
-        icon: DOC_PROPERTIES_PANEL.icon,
+        title: schema.title,
+        icon: schema.icon,
         defaultDock: "right",
-        schema: DOC_PROPERTIES_PANEL,
+        schema,
       }).dispose,
     );
     const lists = publishPropertyLists(host);

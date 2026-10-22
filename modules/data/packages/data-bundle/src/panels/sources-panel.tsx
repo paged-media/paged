@@ -44,6 +44,8 @@ import type { DataSourceSession, RemoteFormat, SessionState } from "../session";
 import { DiagnosticsList } from "./diagnostics";
 import { useSessionSnapshot } from "./use-session";
 import { color, font, space } from "@paged-media/panel-kit";
+import { useStrings } from "@paged-media/strings";
+import { SOURCES as M } from "../messages";
 
 const wrap: CSSProperties = {
   display: "flex",
@@ -65,15 +67,22 @@ const mono: CSSProperties = {
   fontFamily: font.mono,
 };
 
-/** What the panel says about saving, per persistence state. */
+/** What the panel says about saving, per persistence state (message
+ *  keys). */
 const PERSISTENCE_NOTE: Record<SessionState["persistence"]["status"], string> =
   {
-    empty: "Sources and bindings you define are saved with the document.",
-    pending: "Saving the data definitions with the document…",
-    saved: "Sources, bindings and imported data are saved with the document.",
-    unavailable:
-      "This editor cannot save data definitions with the document — reopening it needs a new import.",
+    empty: M.persistenceEmpty,
+    pending: M.persistencePending,
+    saved: M.persistenceSaved,
+    unavailable: M.persistenceUnavailable,
   };
+
+/** A remote source's status token in words (message keys). */
+const REMOTE_STATUS: Record<string, string> = {
+  inert: M.remoteInert,
+  loaded: M.remoteLoaded,
+  error: M.remoteError,
+};
 
 export function makeSourcesPanel(
   host: BundleHost,
@@ -83,6 +92,7 @@ export function makeSourcesPanel(
   // see `return function SourcesPanel()`, editor ADR 229).
   function SourcesPanel(): ReactElement {
     const [snapshot, refresh] = useSessionSnapshot(session);
+    const { t } = useStrings();
     const [remoteUrl, setRemoteUrl] = useState("");
     const [remoteFormat, setRemoteFormat] = useState<RemoteFormat>("csv");
     const [remoteError, setRemoteError] = useState<string | null>(null);
@@ -181,15 +191,17 @@ export function makeSourcesPanel(
       return (
         <span data-data-refresh-policy={name}>
           {" "}
-          · refresh{" "}
+          · {t(M.refresh)}{" "}
           <select
             value={p.policy}
             onChange={(e) => onPolicy(name, e.target.value, remote)}
           >
-            <option value="manual">manual</option>
-            <option value="onOpen">on open</option>
-            {remote ? <option value="interval">every …</option> : null}
-            <option value="never">never (snapshot)</option>
+            <option value="manual">{t(M.policyManual)}</option>
+            <option value="onOpen">{t(M.policyOnOpen)}</option>
+            {remote ? (
+              <option value="interval">{t(M.policyEvery)}</option>
+            ) : null}
+            <option value="never">{t(M.policyNever)}</option>
           </select>
           {p.policy === "interval" ? (
             <input
@@ -201,7 +213,10 @@ export function makeSourcesPanel(
             />
           ) : null}
           {snapshot.polling.includes(name) ? (
-            <span style={note}> polling ({policyLabel(p)})</span>
+            <span style={note}>
+              {" "}
+              {t(M.polling, { policy: policyLabel(p) })}
+            </span>
           ) : null}
         </span>
       );
@@ -217,11 +232,11 @@ export function makeSourcesPanel(
             onClick={() => void onPick()}
             style={{ alignSelf: "flex-start", padding: "4px 10px" }}
           >
-            Import file…
+            {t(M.importFile)}
           </button>
         ) : (
           <label>
-            Import file{" "}
+            {t(M.importFileLabel)}{" "}
             <input
               type="file"
               accept={IMPORT_ACCEPT.join(",")}
@@ -229,12 +244,10 @@ export function makeSourcesPanel(
             />
           </label>
         )}
-        <span style={note}>
-          CSV, TSV, JSON, Parquet or Excel (.xlsx) — one worksheet per source.
-        </span>
+        <span style={note}>{t(M.formats)}</span>
         <div>
           {snapshot.sources.length === 0 ? (
-            <span style={note}>No sources yet.</span>
+            <span style={note}>{t(M.noSources)}</span>
           ) : (
             <ul>
               {snapshot.sources.map((s) => {
@@ -261,7 +274,10 @@ export function makeSourcesPanel(
                         ))}
                       </select>
                     ) : f?.sheet ? (
-                      <span style={note}> · sheet {f.sheet}</span>
+                      <span style={note}>
+                        {" "}
+                        · {t(M.sheet, { sheet: f.sheet })}
+                      </span>
                     ) : null}
                     {remoteNames.has(s) ? null : <PolicyPicker name={s} />}
                   </li>
@@ -274,8 +290,8 @@ export function makeSourcesPanel(
           {/* Remote sources are consent-gated per the D-03 contract:
               per-origin consent state, request-consent + edit-time load —
               inert until granted, never fetched on document open. */}
-          <strong>Remote sources</strong>
-          <p style={note}>Remote data loads only after you allow it.</p>
+          <strong>{t(M.remoteSources)}</strong>
+          <p style={note}>{t(M.remoteNote)}</p>
           <div>
             <input
               type="url"
@@ -300,13 +316,11 @@ export function makeSourcesPanel(
               data-data-remote-add
               disabled={!remoteUrl.trim()}
               title={
-                remoteUrl.trim()
-                  ? "Add this remote source (it loads only after you allow its origin)"
-                  : "Enter the source's URL first"
+                remoteUrl.trim() ? t(M.addRemoteTitle) : t(M.addRemoteNeedsUrl)
               }
               onClick={onAddRemote}
             >
-              Add remote
+              {t(M.addRemote)}
             </button>
           </div>
           {remoteError && (
@@ -319,9 +333,7 @@ export function makeSourcesPanel(
             </p>
           )}
           {snapshot.remote.length === 0 ? (
-            <span style={note}>
-              No remote sources. A remote source never fetches on open.
-            </span>
+            <span style={note}>{t(M.noRemote)}</span>
           ) : (
             <ul>
               {snapshot.remote.map((r) => (
@@ -332,12 +344,17 @@ export function makeSourcesPanel(
                 >
                   <span style={mono}>{r.name}</span> ·{" "}
                   <span style={mono}>{r.origin}</span> · {r.format} ·{" "}
-                  {r.consent === "granted" ? "consented" : "consent required"} ·{" "}
-                  {r.status}
+                  {r.consent === "granted"
+                    ? t(M.consented)
+                    : t(M.consentRequired)}{" "}
+                  ·{" "}
+                  {REMOTE_STATUS[r.status]
+                    ? t(REMOTE_STATUS[r.status]!)
+                    : r.status}
                   {r.contentKey ? (
                     <>
                       {" "}
-                      · key <span style={mono}>{r.contentKey}</span>
+                      · {t(M.key)} <span style={mono}>{r.contentKey}</span>
                     </>
                   ) : null}
                   {r.consent === "required" ? (
@@ -345,14 +362,14 @@ export function makeSourcesPanel(
                       type="button"
                       onClick={() => void onRequestConsent(r.name)}
                     >
-                      Request consent
+                      {t(M.requestConsent)}
                     </button>
                   ) : (
                     <button
                       type="button"
                       onClick={() => void onLoadRemote(r.name)}
                     >
-                      Load
+                      {t(M.load)}
                     </button>
                   )}
                   <PolicyPicker name={r.name} />
@@ -362,8 +379,7 @@ export function makeSourcesPanel(
                       style={{ ...note, color: "var(--status-error)" }}
                       data-data-consent-refused
                     >
-                      Access to {r.origin} was not granted, so this source stays
-                      unloaded.
+                      {t(M.consentRefused, { origin: r.origin })}
                     </div>
                   )}
                 </li>
@@ -376,11 +392,7 @@ export function makeSourcesPanel(
             {policyNote}
           </p>
         ) : null}
-        <p style={note}>
-          A local file is read once at import; a browser page cannot watch it
-          for changes. Import it again, or let it refresh on open. Remote
-          sources can poll — only while their origin is allowed.
-        </p>
+        <p style={note}>{t(M.localFileNote)}</p>
         <div
           data-status={snapshot.status}
           // The message, not the engine's state name: "status: idle — …"
@@ -410,10 +422,10 @@ export function makeSourcesPanel(
             container part, persist.ts) on a host with container parts. */}
         {(snapshot.status === "duckdb-missing" ||
           snapshot.status === "engine-missing") && (
-          <p style={note}>The query engine isn&apos;t bundled in this build.</p>
+          <p style={note}>{t(M.engineMissing)}</p>
         )}
         <p style={note} data-data-persistence={snapshot.persistence.status}>
-          {PERSISTENCE_NOTE[snapshot.persistence.status]}
+          {t(PERSISTENCE_NOTE[snapshot.persistence.status])}
         </p>
       </div>
     );

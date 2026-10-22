@@ -55,4 +55,4 @@ export type {
   TransitionRecord,
 } from "./object-model.js";
 export { SLIDE_PANEL_FIELDS, type PanelFieldList } from "./panel-fields.js";
-export { SLIDE_PANELS, addressFor } from "./panels.js";
+export { slidePanels, addressFor } from "./panels.js";

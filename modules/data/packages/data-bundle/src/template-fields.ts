@@ -51,6 +51,9 @@ import type {
   ValueType,
 } from "@paged-media/plugin-api";
 
+import { t as tr } from "@paged-media/strings";
+
+import { TEMPLATE as M } from "./messages";
 import type { DataSourceSession } from "./session";
 
 export const RECORD_FIELD = "media.paged.data.record";
@@ -71,17 +74,13 @@ function why(reason: string): string {
       reason,
     ) ??
     /"permission":"([^"]+)","target":"([^"]+)"/.exec(reason.replace(/\\/g, ""));
-  return m
-    ? `this template does not let a filler change ${m[2]} (${m[1]})`
-    : reason;
+  return m ? tr(M.notPermitted, { target: m[2]!, permission: m[1]! }) : reason;
 }
 
 function defOf<T>(field: TemplateFieldRef, needs: string): T {
   const d = field.def;
   if (!d || typeof d !== "object" || !(needs in (d as object)))
-    throw new Problem(
-      `The field "${field.name}" has no ${needs} in its definition.`,
-    );
+    throw new Problem(tr(M.fieldNeeds, { field: field.name, needs }));
   return d as T;
 }
 
@@ -122,7 +121,7 @@ async function targetOf(
     string,
     unknown
   > | null;
-  if (!def) throw new Problem(`The data binding "${binding}" is not defined.`);
+  if (!def) throw new Problem(tr(M.bindingUndefined, { binding }));
   if (def.kind === "visibility") {
     const id = String(def.target ?? "");
     for (const kind of ITEM_KINDS) {
@@ -136,17 +135,14 @@ async function targetOf(
           control: { kind: "toggle" },
         };
     }
-    throw new Problem(`The item "${binding}" shows or hides is not here.`);
+    throw new Problem(tr(M.visibilityItemGone, { binding }));
   }
   if (def.kind !== "property")
-    throw new Problem(
-      `A ${String(def.kind)} binding is not a field: its value comes from its records.`,
-    );
+    throw new Problem(tr(M.notAField, { kind: String(def.kind) }));
   const selector = (def.target as { selector?: string } | null)?.selector;
   const addresses = selector ? await objects.query(selector) : [];
   const address = addresses[0];
-  if (!address)
-    throw new Problem(`The object "${binding}" writes is not in the document.`);
+  if (!address) throw new Problem(tr(M.objectGone, { binding }));
   const path = String(def.path ?? "");
   const row = (await objects.schema(address as Address)).find(
     (r) => r.path === path,
@@ -176,21 +172,24 @@ function checked(control: TemplateFieldControl, value: unknown): unknown {
     case "number": {
       const n = typeof value === "number" ? value : Number(value);
       if (typeof value === "boolean" || !Number.isFinite(n))
-        throw new Problem(`"${String(value)}" is not a number.`);
+        throw new Problem(tr(M.notANumber, { value: String(value) }));
       if (control.min !== undefined && n < control.min)
-        throw new Problem(`${n} is less than ${control.min}.`);
+        throw new Problem(tr(M.lessThan, { value: n, min: control.min }));
       if (control.max !== undefined && n > control.max)
-        throw new Problem(`${n} is more than ${control.max}.`);
+        throw new Problem(tr(M.moreThan, { value: n, max: control.max }));
       return n;
     }
     case "toggle":
       if (typeof value !== "boolean")
-        throw new Problem(`"${String(value)}" is not on or off.`);
+        throw new Problem(tr(M.notOnOff, { value: String(value) }));
       return value;
     case "choice":
       if (!control.options.some((o) => o.value === String(value)))
         throw new Problem(
-          `"${String(value)}" is not one of the choices (${control.options.map((o) => o.value).join(", ")}).`,
+          tr(M.notAChoice, {
+            value: String(value),
+            choices: control.options.map((o) => o.value).join(", "),
+          }),
         );
       return String(value);
     default:
@@ -210,13 +209,15 @@ async function writeBinding(
   const wasPinned = session.syncStatusOf(binding) === "pinned";
   if (!wasPinned) session.setPinned(binding, true);
   const out = await objects.set(t.address as Address, t.path, v, {
-    label: "Fill template field",
+    label: tr(M.fillUndo),
   });
   if (!out.applied) {
     if (!wasPinned) session.setPinned(binding, false);
     return {
       ok: false,
-      problem: `The value could not be written: ${why(out.reason ?? out.code ?? "refused")}.`,
+      problem: tr(M.notWritten, {
+        reason: why(out.reason ?? out.code ?? "refused"),
+      }),
     };
   }
   await session.flushPersist();
@@ -249,11 +250,11 @@ async function recordOptions(
 ): Promise<{ value: string; label?: string }[]> {
   await session.whenRestored();
   const q = session.listQueries().find((x) => x.id === d.query);
-  if (!q) throw new Problem(`The query "${d.query}" is not defined.`);
+  if (!q) throw new Problem(tr(M.queryUndefined, { query: d.query }));
   const p = await session.previewQuery(q.sql, MAX_RECORDS);
   if (p.diagnostic)
     throw new Problem(
-      `The query "${d.query}" could not run: ${p.diagnostic.message}`,
+      tr(M.queryFailed, { query: d.query, problem: p.diagnostic.message }),
     );
   const col = d.label ? p.columns.findIndex((c) => c.name === d.label) : -1;
   return p.rows.map((row, i) => ({
@@ -294,8 +295,12 @@ export function dataTemplateFields(
             ok: false,
             problem:
               options.length === 0
-                ? `The query "${d.query}" has no records.`
-                : `"${String(value)}" is not a record of "${d.query}" (1 to ${options.length}).`,
+                ? tr(M.noRecords, { query: d.query })
+                : tr(M.notARecord, {
+                    value: String(value),
+                    query: d.query,
+                    count: options.length,
+                  }),
           };
         const at = Number(value) - 1;
         // The lanes resolve against the ingested result.
@@ -324,7 +329,10 @@ export function dataTemplateFields(
           if (refused.length > 0)
             return {
               ok: false,
-              problem: `Record ${at + 1} could not be shown: ${why(refused[0]![1])}.`,
+              problem: tr(M.recordRefused, {
+                record: at + 1,
+                reason: why(refused[0]![1]),
+              }),
             };
         }
         for (const id of others) await session.previewRecord(id, at);
@@ -390,14 +398,17 @@ export function dataTemplateFields(
         if (!sets.includes(name))
           return {
             ok: false,
-            problem: `"${name}" is not one of the data sets (${sets.join(", ")}).`,
+            problem: tr(M.notADataSet, { name, sets: sets.join(", ") }),
           };
         const r = await session.applyDataSet(name);
         const skipped = Object.entries(r.skipped);
         if (r.applied === 0 && skipped.length > 0)
           return {
             ok: false,
-            problem: `The data set "${name}" could not be applied: ${why(skipped[0]![1])}.`,
+            problem: tr(M.dataSetRefused, {
+              name,
+              reason: why(skipped[0]![1]),
+            }),
           };
         await session.flushPersist();
         return { ok: true };
@@ -409,13 +420,10 @@ export function dataTemplateFields(
     const d = defOf<{ name: string }>(field, "name");
     await session.whenRestored();
     const v = (await session.variables()).find((x) => x.name === d.name);
-    if (!v) throw new Problem(`The variable "${d.name}" is not defined.`);
-    if (!v.bound)
-      throw new Problem(`The variable "${d.name}" is bound to nothing here.`);
+    if (!v) throw new Problem(tr(M.variableUndefined, { name: d.name }));
+    if (!v.bound) throw new Problem(tr(M.variableUnbound, { name: d.name }));
     if (v.trait === "textcontent" || v.trait === "filereference")
-      throw new Problem(
-        `The variable "${d.name}" fills a text or a picture: open that frame as a text or image field.`,
-      );
+      throw new Problem(tr(M.variableIsContent, { name: d.name }));
     return d.name;
   };
 

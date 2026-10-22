@@ -24,6 +24,7 @@
 
 import type { BundleHost, PanelProps } from "@paged-media/plugin-api";
 import { subscribeOf, useLive, useNearViewport } from "@paged-media/react-live";
+import { useStrings } from "@paged-media/strings";
 import * as React from "react";
 
 import {
@@ -38,6 +39,8 @@ import {
   type SlidesStore,
 } from "../slides-model.js";
 import { color } from "@paged-media/panel-kit";
+
+import { SLIDES } from "../messages.js";
 
 const list: React.CSSProperties = {
   display: "flex",
@@ -92,6 +95,7 @@ export function makeSlidesPanel(
 
   /** New slide: a layout picker and the button, above the list. */
   const NewSlide: React.FC<{ slides: readonly Slide[] }> = ({ slides }) => {
+    const { t } = useStrings();
     const [options, setOptions] = React.useState<Layout[]>([]);
     const [chosen, setChosen] = React.useState<string>("");
     const [busy, setBusy] = React.useState(false);
@@ -119,7 +123,7 @@ export function makeSlidesPanel(
         data-new-slide
       >
         <select
-          aria-label="Layout"
+          aria-label={t(SLIDES.layout)}
           value={layout.masterId}
           onChange={(e) => setChosen(e.target.value)}
           style={{ flex: 1, minWidth: 0 }}
@@ -141,7 +145,7 @@ export function makeSlidesPanel(
               .finally(() => setBusy(false));
           }}
         >
-          New slide
+          {t(SLIDES.newSlide)}
         </button>
       </div>
     );
@@ -150,6 +154,7 @@ export function makeSlidesPanel(
   const Component: React.FC<PanelProps> = () => {
     // The store as a render value (react-live, editor ADR 229): a new view
     // after every change, so the list and the active slide are read again.
+    const { t } = useStrings();
     const live = useLive(store, subscribeOf);
     const { observe: observeNear, has: isNear } = useNearViewport();
     const [dragging, setDragging] = React.useState<string | null>(null);
@@ -164,7 +169,7 @@ export function makeSlidesPanel(
           style={{ padding: 12, fontSize: 13, opacity: 0.7 }}
           data-slides-panel="empty"
         >
-          No slides. Open a PowerPoint deck with File ▸ Open.
+          {t(SLIDES.empty)}
         </div>
       );
     }
@@ -227,7 +232,7 @@ export function makeSlidesPanel(
               <div style={{ flex: 1, minWidth: 0 }}>
                 <button
                   type="button"
-                  title={`Go to slide ${slide.number}`}
+                  title={t(SLIDES.goTo, { number: slide.number })}
                   onClick={() => void host.viewport.goToPage(slide.pageId)}
                   style={{
                     display: "block",
@@ -247,29 +252,25 @@ export function makeSlidesPanel(
                   <button
                     type="button"
                     style={small}
-                    title="Duplicate slide"
+                    title={t(SLIDES.duplicateTitle)}
                     onClick={() => mutate(duplicateMutation(slide.pageId))}
                   >
-                    Duplicate
+                    {t(SLIDES.duplicate)}
                   </button>
                   <button
                     type="button"
                     style={small}
-                    title="Delete slide"
+                    title={t(SLIDES.deleteTitle)}
                     disabled={slides.length < 2}
                     onClick={() => mutate(deleteMutation(slide.pageId))}
                   >
-                    Delete
+                    {t(SLIDES.delete)}
                   </button>
                   <button
                     type="button"
                     style={small}
                     aria-pressed={!!slide.state.hidden}
-                    title={
-                      slide.state.hidden
-                        ? "Show in slideshow"
-                        : "Hide from slideshow"
-                    }
+                    title={t(slide.state.hidden ? SLIDES.show : SLIDES.hide)}
                     onClick={() =>
                       mutate(
                         setStateMutation(slide.pageId, {
@@ -279,7 +280,11 @@ export function makeSlidesPanel(
                       )
                     }
                   >
-                    {slide.state.hidden ? "Unhide" : "Hide"}
+                    {t(
+                      slide.state.hidden
+                        ? SLIDES.unhideButton
+                        : SLIDES.hideButton,
+                    )}
                   </button>
                 </div>
               </div>
