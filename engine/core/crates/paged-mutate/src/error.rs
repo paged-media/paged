@@ -91,6 +91,12 @@ pub enum OperationError {
     #[error("{node:?} is locked — unlock it (elementLocked = false) to {action}")]
     Locked { node: NodeId, action: String },
 
+    /// The session's role and the document's template policy do not permit
+    /// this (the editor's `docs/composable-editor.md` §7.7): `permission`
+    /// is the permission's name (`text.edit`), `target` what it was asked of.
+    #[error("not permitted: {permission} on {target}")]
+    NotPermitted { permission: String, target: String },
+
     #[error("batch failed at index {failed_at}: {source}")]
     BatchFailed {
         failed_at: usize,

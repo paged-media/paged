@@ -2573,6 +2573,7 @@ dependencies = [
  "paged-model",
  "paged-renderer",
  "paged-scene",
+ "paged-template",
  "schemars",
  "serde",
  "serde_json",
@@ -2743,6 +2744,19 @@ dependencies = [
  "serde",
  "serde_json",
  "zip",
+]
+
+[[package]]
+name = "paged-template"
+version = "0.0.0"
+dependencies = [
+ "paged-model",
+ "paged-scene",
+ "schemars",
+ "serde",
+ "serde_json",
+ "tsify-next",
+ "wasm-bindgen",
 ]
 
 [[package]]
