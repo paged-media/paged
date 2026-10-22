@@ -35,6 +35,61 @@
     "summary": "The stored revision the frame's marker points at; 0 = never committed."
   },
   {
+    "path": "canvasSize",
+    "type": {
+      "kind": "struct",
+      "fields": {
+        "width": {
+          "kind": "number",
+          "integer": true
+        },
+        "height": {
+          "kind": "number",
+          "integer": true
+        },
+        "anchor": {
+          "kind": "enum",
+          "members": [
+            "topLeft",
+            "top",
+            "topRight",
+            "left",
+            "center",
+            "right",
+            "bottomLeft",
+            "bottom",
+            "bottomRight"
+          ],
+          "default": "center"
+        }
+      }
+    },
+    "summary": "Canvas Size over every layer: the old canvas sits at `anchor`; added area is transparent. Reads the current size."
+  },
+  {
+    "path": "crop",
+    "type": {
+      "kind": "bounds"
+    },
+    "summary": "Crop every layer to [top, left, bottom, right] (image pixels). Reads the whole canvas."
+  },
+  {
+    "path": "transform",
+    "type": {
+      "kind": "enum",
+      "members": [
+        "none",
+        "rotateCw",
+        "rotateCcw",
+        "rotate180",
+        "flipHorizontal",
+        "flipVertical"
+      ]
+    },
+    "default": "none",
+    "summary": "An action: writing a quarter turn or a flip transforms every layer; reads none."
+  },
+  {
     "path": "nextLayerId",
     "type": {
       "kind": "number",

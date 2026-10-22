@@ -201,6 +201,9 @@ describe("drawBundle.activate", () => {
       // along an EXISTING path, and its exact inverse.
       "media.paged.draw.command.attachTextToPath",
       "media.paged.draw.command.detachTextFromPath",
+      "media.paged.draw.command.knife",
+      "media.paged.draw.command.scissorsAt",
+      "media.paged.draw.command.shapeBuild",
       "media.paged.draw.command.selectSameFill",
       "media.paged.draw.command.selectSameStroke",
       "media.paged.draw.command.selectSameStrokeWeight",

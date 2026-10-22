@@ -605,3 +605,68 @@ export function createShapeBuilderHandler(host: BundleHost): GestureHandler {
     },
   };
 }
+
+/** What a scripted Shape Builder gesture came to. */
+export type ShapeBuildOutcome =
+  { applied: true } | { applied: false; reason: string };
+
+/**
+ * The Shape Builder without a pointer (the typed `shapeBuild` command):
+ * `operands` ordered top to bottom, `path` the gesture in page space on
+ * `pageId`, `mode` keep (merge what it crosses) or remove (delete it).
+ * The same arrangement, the same face rule (the gesture replayed through
+ * the tool's machine) and the same ONE batch as a drag. Ovals are refused
+ * here: the tool reads them through temporary stand-ins, which a script
+ * does not need — convert them to paths first.
+ */
+export async function applyShapeBuild(
+  host: BundleHost,
+  operands: readonly ElementId[],
+  path: readonly (readonly [number, number])[],
+  mode: FaceMode,
+  pageId: string,
+): Promise<ShapeBuildOutcome> {
+  const no = (reason: string): ShapeBuildOutcome => ({
+    applied: false,
+    reason,
+  });
+  if (operands.length === 0) return no("select the shapes to build from");
+  const bad = operands.find((id) => !BOOLEAN_KINDS.has(id.kind));
+  if (bad) return no(`${bad.kind} ${String(bad.id)} is not a closed shape`);
+  if (hasOval(operands))
+    return no(
+      "an oval takes part through the tool; convert it to a path first",
+    );
+  if (path.length < 2) return no("a gesture is at least two points");
+  const read = await host.document.pathAnchors(operands[0]!).catch(() => null);
+  const matrix = (read?.itemTransform ?? null) as Affine | null;
+  const pageOrigin = pageOriginOf(read);
+  const regions = await readPlanarRegions(host, operands);
+  if (!regions || !regions.found)
+    return no(reportPlanarRefusal(host, "shapeBuild", regions));
+  const crossed = facesCrossedBy(
+    regions.faces.map((f) => faceToPageSpace(f, matrix)),
+    path,
+    mode === "remove",
+  );
+  const plan = planShapeBuild(operands.length, regions.faces, crossed, mode);
+  if (!plan) return no("the gesture crosses no region of the shapes");
+  const mutation = planIsEngineKeep(plan)
+    ? shapeBuilderFacesMutationFor([...operands], crossed, "keep")
+    : shapeBuildBatchFor(plan, {
+        inputs: [...operands],
+        faces: new Map(regions.faces.map((f) => [f.id, f])),
+        matrix,
+        pageOrigin,
+        pageId,
+        paints: await shapeBuildPaints(host, plan, [...operands]),
+      });
+  if (!mutation) return no("the arrangement no longer holds a crossed face");
+  const outcome = await host.document.mutate(mutation);
+  return outcome.applied
+    ? { applied: true }
+    : no(
+        regionRefusalReason(outcome.error) ??
+          "the engine refused the shape-builder commit",
+      );
+}

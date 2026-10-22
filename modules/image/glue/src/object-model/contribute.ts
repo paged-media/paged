@@ -13,6 +13,7 @@
 import type {
   BundleHost,
   ObjectModelHandle,
+  ObjectOp,
   ObjectsSurface,
   TypedCommandContribution,
   ValueType,
@@ -27,11 +28,19 @@ import {
   KIND_TITLES,
   parseImageAddress,
   imageAddress,
+  layerAddress,
   type ImageCodec,
   type ImageKind,
   type ImageObjects,
 } from "./image-objects";
+import { ANCHORS, QUARTER_OPS } from "./canvas-ops";
 import { IMAGE_TEMPLATE_FIELDS, imageTemplateFields } from "./template-fields";
+
+/** A native handler's answer "no target named: run the interactive twin". */
+const INTERACTIVE = Symbol("interactive");
+
+/** Interactive twins that work with no image open (they open one). */
+const STARTS_A_SESSION = new Set(["media.paged.image.command.openImage"]);
 
 /** One untyped command as `activate` registers it. */
 export interface UntypedCommand {
@@ -42,6 +51,7 @@ export interface UntypedCommand {
 
 const NO_ARGS: ValueType = { kind: "struct", fields: {} };
 const LAYER_REF: ValueType = { kind: "ref", to: `${KIND_PREFIX}layer` };
+const IMAGE_REF: ValueType = { kind: "ref", to: `${KIND_PREFIX}image` };
 const q = (kind: ImageKind) => `${KIND_PREFIX}${kind}`;
 
 /** The typed twins whose arguments differ from "none", and the new ones. */
@@ -63,6 +73,55 @@ export const TYPED_ARGS: Record<string, { args: ValueType; title?: string }> = {
   },
   "media.paged.image.command.convertLayerToSmart": {
     args: { kind: "struct", fields: { layer: LAYER_REF } },
+  },
+  ...Object.fromEntries(
+    (
+      [
+        "rotateCw",
+        "rotateCcw",
+        "rotate180",
+        "flipHorizontal",
+        "flipVertical",
+      ] as const
+    ).map((suffix) => [
+      `media.paged.image.command.${suffix}`,
+      {
+        args: {
+          kind: "struct",
+          fields: { image: { ...IMAGE_REF, optional: true } },
+        } as ValueType,
+      },
+    ]),
+  ),
+  "media.paged.image.command.cropImage": {
+    title: "Crop image",
+    args: {
+      kind: "struct",
+      fields: { image: IMAGE_REF, bounds: { kind: "bounds" } },
+    },
+  },
+  "media.paged.image.command.canvasSize": {
+    title: "Canvas size",
+    args: {
+      kind: "struct",
+      fields: {
+        image: IMAGE_REF,
+        width: { kind: "number", integer: true },
+        height: { kind: "number", integer: true },
+        anchor: { kind: "enum", members: ANCHORS, default: "center" },
+      },
+    },
+  },
+  "media.paged.image.command.applyAdjustment": {
+    title: "Apply adjustment",
+    args: {
+      kind: "struct",
+      fields: {
+        image: IMAGE_REF,
+        name: { kind: "text", optional: true },
+        params: { kind: "struct", fields: {}, open: true },
+      },
+    },
   },
   "media.paged.image.command.replaceLayerPixels": {
     title: "Replace layer pixels",
@@ -162,6 +221,56 @@ function nativeHandlers(
         ]),
       );
     },
+    ...Object.fromEntries(
+      QUARTER_OPS.map((op) => [
+        `media.paged.image.command.${op}`,
+        async (
+          { objects }: { objects: ObjectsSurface },
+          args: unknown,
+        ): Promise<unknown> => {
+          const { image } = args as { image?: string };
+          if (image === undefined) return INTERACTIVE;
+          return fail(await objects.set(image, "transform", op));
+        },
+      ]),
+    ),
+    "media.paged.image.command.cropImage": async ({ objects }, args) => {
+      const { image, bounds } = args as { image: string; bounds: number[] };
+      return fail(await objects.set(image, "crop", bounds));
+    },
+    "media.paged.image.command.canvasSize": async ({ objects }, args) => {
+      const { image, ...size } = args as {
+        image: string;
+        width: number;
+        height: number;
+        anchor: string;
+      };
+      return fail(await objects.set(image, "canvasSize", size));
+    },
+    "media.paged.image.command.applyAdjustment": async ({ objects }, args) => {
+      const { image, name, params } = args as {
+        image: string;
+        name?: string;
+        params: Record<string, unknown>;
+      };
+      const a = parseImageAddress(image);
+      if (!a || a.kind !== "image")
+        throw new Error(`invalidValue: ${image} is not a paged.image image`);
+      const ops: ObjectOp[] = [
+        { op: "create", kind: q("adjustment"), within: image, props: params },
+      ];
+      if (name !== undefined) {
+        const next = await objects.get(image, "nextLayerId");
+        if (next.kind !== "value") throw new Error(`unknownAddress: ${image}`);
+        ops.push({
+          op: "set",
+          address: layerAddress("layer", a.frameId, next.value as number),
+          path: "name",
+          value: name,
+        });
+      }
+      return fail(await objects.batch(ops));
+    },
     "media.paged.image.command.replaceLayerPixels": async (
       { objects },
       args,
@@ -176,21 +285,37 @@ function nativeHandlers(
 export function typedCommands(
   untyped: readonly UntypedCommand[],
   codec: () => Promise<ImageCodec>,
+  /** Whether an image is open in the editor's session (the interactive
+   *  twins act on it). Headless, nothing is: they refuse. */
+  live: () => boolean = () => true,
 ): TypedCommandContribution[] {
   const native = nativeHandlers(codec);
-  const out: TypedCommandContribution[] = untyped.map((c) => ({
-    id: c.id,
-    title: c.title,
-    args: TYPED_ARGS[c.id]?.args ?? NO_ARGS,
-    handler:
-      native[c.id] ??
-      (() => {
-        // The interactive twin: the same action on the image in the edit
-        // context. It returns nothing; its effect is the session's.
-        c.handler(null, undefined);
-        return null;
-      }),
-  }));
+  const out: TypedCommandContribution[] = untyped.map((c) => {
+    // The interactive twin: the same action on the image in the edit
+    // context. It returns nothing; its effect is the session's. With no
+    // image open it refuses rather than doing nothing.
+    const interactive = () => {
+      if (!STARTS_A_SESSION.has(c.id) && !live())
+        throw new Error(
+          `unmapped: ${c.id} acts on the image open in the editor, and none is open` +
+            (TARGETED.has(c.id) ? "; name the image to run it headless" : ""),
+        );
+      c.handler(null, undefined);
+      return null;
+    };
+    const own = native[c.id];
+    return {
+      id: c.id,
+      title: c.title,
+      args: TYPED_ARGS[c.id]?.args ?? NO_ARGS,
+      handler: own
+        ? async (ctx, args) => {
+            const r = await own(ctx, args);
+            return r === INTERACTIVE ? interactive() : r;
+          }
+        : interactive,
+    };
+  });
   for (const [id, spec] of Object.entries(TYPED_ARGS)) {
     if (out.some((c) => c.id === id)) continue;
     out.push({
@@ -202,6 +327,11 @@ export function typedCommands(
   }
   return out;
 }
+
+/** The interactive twins that also take a target and then run headless. */
+const TARGETED = new Set(
+  QUARTER_OPS.map((op) => `media.paged.image.command.${op}`),
+);
 
 /** `contributes.objectModel` as the manifest declares it (the kinds'
  *  rows live in `object-model/<kind>.json`, generated from KIND_ROWS). */
@@ -234,13 +364,14 @@ export function contributeImageObjectModel(
   host: BundleHost,
   untyped: readonly UntypedCommand[],
   codec: () => Promise<ImageCodec> = engineCodec(),
+  live?: () => boolean,
 ): { handle: ObjectModelHandle; objects: ImageObjects } | null {
   if (!host.supports("contribute.objectModel@1")) return null;
   const objects = createImageObjects(host, codec);
   const handle = host.contribute.objectModel({
     kinds: objects.kinds,
     batch: objects.batch,
-    commands: typedCommands(untyped, codec),
+    commands: typedCommands(untyped, codec, live),
     templateFields: imageTemplateFields(),
   });
   return {
