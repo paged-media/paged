@@ -28,6 +28,7 @@ it stood, for decisions made earlier; their status says so.
 | [512](512-range-accelerators.md) | Range accelerators: per-recalc column snapshots, anchored prefixes, exact-match indexes | Accepted 2026-10-22 |
 | [513](513-calc-model-amendment.md) | The calculation model: the W1.0 amendment of the frozen types, spill of any array, `@`, 3D references, named LAMBDA, short-circuit, 15 digits, manual calculation | Accepted 2026-10-22; amends 502, 509 |
 | [514](514-circular-references.md) | Circular references: a cycle member keeps its last value | Accepted 2026-10-22; supersedes 502's `#REF!` |
+| [516](516-function-library-w3.md) | The function library towards Excel's full set: recorded expected values, numeric agreement, the document-name amendment | Accepted 2026-10-23; extends 507 |
 
 The measured comparison behind ADR 501 is [`DECIMAL-SPIKE.md`](../../DECIMAL-SPIKE.md) at the
 repo root. Decisions made in other repositories that this plugin's code rests on are listed

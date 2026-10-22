@@ -372,6 +372,15 @@ impl SheetSession {
         self.structure_changed = true;
     }
 
+    /// Name the document for `CELL("filename")` (an empty name: unsaved).
+    /// Not written to the file; the volatile `CELL` cells see it on their
+    /// next recalculation, which this triggers.
+    pub fn set_document_name(&mut self, name: &str) -> SetCellResult {
+        let name = (!name.is_empty()).then_some(name);
+        self.engine_mut().set_document_name(name);
+        self.recalc_volatile()
+    }
+
     /// Toggle iterative calculation; written back to `<calcPr>` on save.
     pub fn set_iterative(&mut self, on: bool, max_iter: u32, max_change: f64) -> SetCellResult {
         let result = self.engine_mut().set_iterative(on, max_iter, max_change);

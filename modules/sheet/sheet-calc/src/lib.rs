@@ -491,6 +491,13 @@ impl Engine {
         self.model.calc.full_precision = full;
     }
 
+    /// Name the document (`CELL("filename")`, sheet ADR 516); `None` is an
+    /// unsaved workbook. `CELL` is volatile, so the next volatile recalc
+    /// picks the name up.
+    pub fn set_document_name(&mut self, name: Option<&str>) {
+        self.model.document_name = name.map(Into::into);
+    }
+
     /// Commit one input to the model, graph and dirty set — no recalc.
     fn stage_cell(&mut self, sheet: SheetId, row: u32, col: u32, input: SetInput) {
         let cref = CellRef {

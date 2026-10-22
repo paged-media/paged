@@ -19,7 +19,7 @@ each published canary added is under [Releases](#releases).
   (`document.onWillSave`), the workbook is written before the save takes the document's bytes.
   A reopened document restores its workbook when the host reports the open
   (`document.onDidOpen`).
-- **Calculation.** 360 registered functions, all implemented, among them `LET`, `LAMBDA` and its
+- **Calculation.** 364 registered functions, all implemented, among them `LET`, `LAMBDA` and its
   helpers, the engineering set (radix and bit functions, `CONVERT` with Excel's full unit table and
   prefixes, the complex-number `IM*` functions on Excel's text form, the error and Bessel
   functions with Excel's own approximations) and the modern math set (`CEILING.MATH`,
@@ -27,7 +27,8 @@ each published canary added is under [Releases](#releases).
   `fancy-regex`; Unicode property classes limited to `\p{L}`/`\p{N}`), `ARRAYTOTEXT`,
   `VALUETOTEXT`, `BAHTTEXT`, `ENCODEURL`, `FILTERXML` (an XPath location-path subset) and
   `EUROCONVERT`; numbers convert to text as Excel's `CONCAT` does (fixed notation up to 20
-  characters); dynamic arrays that spill and nest; Excel tables with structured references;
+  characters); `CELL`, `INFO`, `SHEET`/`SHEETS` over the whole workbook (sheet names, 3D spans,
+  the document name the host gives) and `ISOMITTED` for omitted LAMBDA arguments; dynamic arrays that spill and nest; Excel tables with structured references;
   incremental recalculation with an interval index for range dependencies, and range
   accelerators within a recalc (column snapshots, anchored prefix aggregates for SUM/COUNT/
   COUNTA/AVERAGE/MIN/MAX, exact-match indexes for VLOOKUP/MATCH/XMATCH/XLOOKUP/COUNTIF/SUMIF,
