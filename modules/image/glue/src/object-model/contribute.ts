@@ -31,6 +31,7 @@ import {
   type ImageKind,
   type ImageObjects,
 } from "./image-objects";
+import { IMAGE_TEMPLATE_FIELDS, imageTemplateFields } from "./template-fields";
 
 /** One untyped command as `activate` registers it. */
 export interface UntypedCommand {
@@ -214,6 +215,7 @@ export function manifestObjectModel(
       schema: `object-model/${kind}.json`,
     })),
     commands: commands.map((c) => ({ id: c.id, title: c.title, args: c.args })),
+    templateFields: IMAGE_TEMPLATE_FIELDS.map((f) => ({ ...f })),
   };
 }
 
@@ -239,6 +241,7 @@ export function contributeImageObjectModel(
     kinds: objects.kinds,
     batch: objects.batch,
     commands: typedCommands(untyped, codec),
+    templateFields: imageTemplateFields(),
   });
   return {
     handle,

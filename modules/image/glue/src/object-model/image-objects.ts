@@ -171,6 +171,13 @@ const IMAGE_ROWS: PropertySchema[] = [
       "The stored revision the frame's marker points at; 0 = never committed.",
   },
   {
+    path: "nextLayerId",
+    type: { kind: "number", integer: true },
+    access: "readOnly",
+    summary:
+      "The id the next new layer takes (a session handle), so a batch that creates a layer can address it.",
+  },
+  {
     path: "pending",
     type: { kind: "bool" },
     access: "readOnly",
@@ -635,6 +642,8 @@ export function createImageObjects(
           return value(s.marker?.rev ?? 0);
         case "pending":
           return value(s.marker?.pending === true);
+        case "nextLayerId":
+          return value(s.stack.nextId);
         default:
           return refusedValue("unknownPath", `image has no path "${path}"`);
       }
