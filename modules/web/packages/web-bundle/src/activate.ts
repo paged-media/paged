@@ -69,6 +69,10 @@ import {
 // The bundle's German, beside its English (`defineMessages` in each module).
 defineTranslations("de", de);
 
+/** The palette category of this bundle's commands, for the shell's
+ *  `categoryLabel`: the category is an identity and stays English. */
+defineMessages("commandCategory", { Web: "Web" });
+
 const PANEL_ID = SOURCE_PANEL_ID;
 
 /** The titles of the commands and the importer this entry registers. */
