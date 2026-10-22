@@ -79,6 +79,7 @@ import {
   zoomAt,
   type PageRect,
 } from "./layout";
+import { FrameSurfaceHost } from "./FrameSurfaceHost";
 import { TextInputSurface } from "./TextInputSurface";
 
 // Re-export the (now shell-owned) overlay state types so existing
@@ -1625,6 +1626,15 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
         pageRects={rects}
         width={hostSize.width}
         height={hostSize.height}
+      />
+      {/* Editor ADR 281 — a bundle's live editing surface over the
+          active frame (extensions ADR 334). */}
+      <FrameSurfaceHost
+        camera={props.camera}
+        pageIds={props.pageIds}
+        pageRects={rects}
+        elementGeometry={props.elementGeometry}
+        hostRef={wrapperRef}
       />
       {/* F-36 — where typed and composed text arrives while a caret is
           in a story (ADR 234). */}

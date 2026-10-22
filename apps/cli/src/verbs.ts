@@ -65,11 +65,15 @@ import { describeType, parseCliValue } from "./values";
 import { defaultLibrary } from "./mcp/library";
 import { LocalHost } from "./mcp/host";
 import { serveStdio } from "./mcp/protocol";
+import { template } from "./template";
 
 export interface VerbContext {
   args: ParsedArgs;
   cwd: string;
   session(doc: string | null): Promise<CliSession>;
+  /** A second, independent session (a verb that compares two documents);
+   *  disposed with the run. */
+  freshSession?(doc: string | null): Promise<CliSession>;
 }
 
 export interface VerbResult {
@@ -1419,6 +1423,7 @@ export const VERBS: readonly Verb[] = [
   merge,
   plugins,
   describe,
+  template,
   mcp,
 ];
 

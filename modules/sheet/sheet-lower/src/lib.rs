@@ -416,6 +416,11 @@ pub fn lower_range_styled(
     let mut x = 0.0_f64;
     for c in left..=right {
         col_x.push(x);
+        // A hidden column is not lowered (it keeps its boundary at zero
+        // width, so `col_x` stays indexed by range-relative column).
+        if ws.is_some_and(|w| w.col_hidden(c)) {
+            continue;
+        }
         let chars = ws
             .and_then(|w| w.col_widths.get(&c).copied())
             .unwrap_or(DEFAULT_COL_CHARS);
@@ -448,6 +453,9 @@ pub fn lower_range_styled(
         // Cells cover the FULL range width positionally (empty => "").
         let mut cells = Vec::with_capacity((right - left + 1) as usize);
         for c in left..=right {
+            if ws.is_some_and(|w| w.col_hidden(c)) {
+                continue;
+            }
             let (text, align, style_key) = match ws.and_then(|w| w.cell(r, c)) {
                 Some(cell) => {
                     let (text, align) = lower_cell(model, cell, &mut cache, &ctx);
@@ -485,7 +493,9 @@ pub fn lower_range_styled(
                 to: total_width,
             })
             .collect();
-        let v = col_x
+        let mut xs = col_x.clone();
+        xs.dedup();
+        let v = xs
             .iter()
             .map(|&at| Rule {
                 at,
@@ -565,6 +575,11 @@ pub fn lower_range_condfmt(
     let mut x = 0.0_f64;
     for c in left..=right {
         col_x.push(x);
+        // A hidden column is not lowered (it keeps its boundary at zero
+        // width, so `col_x` stays indexed by range-relative column).
+        if ws.is_some_and(|w| w.col_hidden(c)) {
+            continue;
+        }
         let chars = ws
             .and_then(|w| w.col_widths.get(&c).copied())
             .unwrap_or(DEFAULT_COL_CHARS);
@@ -600,6 +615,9 @@ pub fn lower_range_condfmt(
 
         let mut cells = Vec::with_capacity((right - left + 1) as usize);
         for c in left..=right {
+            if ws.is_some_and(|w| w.col_hidden(c)) {
+                continue;
+            }
             let (text, align, style_key) = match ws.and_then(|w| w.cell(r, c)) {
                 Some(cell) => {
                     let (text, align) = lower_cell(model, cell, &mut cache, &ctx);
@@ -666,7 +684,9 @@ pub fn lower_range_condfmt(
                 to: total_width,
             })
             .collect();
-        let v = col_x
+        let mut xs = col_x.clone();
+        xs.dedup();
+        let v = xs
             .iter()
             .map(|&at| Rule {
                 at,
@@ -887,7 +907,10 @@ fn lower_merges(
         while ir0 <= mr1.min(bottom) && ws.row_hidden(ir0) {
             ir0 += 1;
         }
-        let ic0 = mc0.max(left);
+        let mut ic0 = mc0.max(left);
+        while ic0 <= mc1.min(right) && ws.col_hidden(ic0) {
+            ic0 += 1;
+        }
         let ir1 = mr1.min(bottom);
         let ic1 = mc1.min(right);
         if ir0 > ir1 || ic0 > ic1 {
@@ -959,6 +982,42 @@ mod tests {
         assert_eq!(lc.rows[0].cells[0].col, 0);
         assert_eq!(lc.rows[0].cells[0].text, "");
         assert_eq!(lc.rows[0].cells[0].align, Align::General);
+    }
+
+    #[test]
+    #[allow(non_snake_case)]
+    fn hidden_columns_are_not_lowered__feat__sheet_lower_page() {
+        let (mut m, s) = model_with(&[(0, 0, text("a")), (0, 1, text("b")), (0, 2, text("c"))]);
+        let ws = m.sheet_mut(s).unwrap();
+        ws.col_meta.push(sheet_core::ColMeta {
+            min: 1,
+            max: 1,
+            hidden: true,
+            ..Default::default()
+        });
+        let lc = lower_range(
+            &m,
+            s,
+            CellRange {
+                r0: 0,
+                c0: 0,
+                r1: 0,
+                c1: 2,
+            },
+            &ViewOptions {
+                include_grid_rules: true,
+                ..ViewOptions::default()
+            },
+        );
+        let idx: Vec<u32> = lc.cols.iter().map(|c| c.index).collect();
+        assert_eq!(idx, vec![0, 2]);
+        let cells: Vec<(u32, &str)> = lc.rows[0]
+            .cells
+            .iter()
+            .map(|c| (c.col, c.text.as_str()))
+            .collect();
+        assert_eq!(cells, vec![(0, "a"), (2, "c")]);
+        assert_eq!(lc.rules.v.len(), 3, "one rule per visible boundary");
     }
 
     #[test]

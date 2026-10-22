@@ -1,0 +1,11 @@
+$ paged-node template
+# exit 2
+# stdout
+{
+  "error": {
+    "message": "usage: paged-node template fields <doc> | fill <template> | check <template> <filled>",
+    "exit": 2
+  }
+}
+# stderr
+(empty)
