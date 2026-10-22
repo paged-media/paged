@@ -69,6 +69,7 @@ import {
   makeSymbolInstanceKind,
   makeSymbolKind,
 } from "./symbol-kinds";
+import { DRAW_TEMPLATE_FIELDS, drawTemplateFields } from "./template-fields";
 import { TWINS, argsOf, typedCommands } from "./typed-commands";
 
 export {
@@ -78,6 +79,14 @@ export {
   type TwinSpec,
 } from "./typed-commands";
 export { validSubpathStarts } from "./path-kind";
+export {
+  DRAW_TEMPLATE_FIELDS,
+  GRAPHIC_STYLE_FIELD,
+  PAINT_FIELD,
+  SYMBOL_CHOICE_FIELD,
+  TEXT_ON_PATH_FIELD,
+  drawTemplateFields,
+} from "./template-fields";
 
 /** Every kind, as pure data (kind, title, schema) — the manifest view. */
 export const DRAW_OBJECT_KINDS: readonly {
@@ -110,6 +119,7 @@ export function drawObjectModelManifest(): {
     args: ValueType;
     result?: ValueType;
   }[];
+  templateFields: { kind: string; title: string }[];
 } {
   return {
     kinds: DRAW_OBJECT_KINDS.map((k) => ({
@@ -123,6 +133,7 @@ export function drawObjectModelManifest(): {
       args: argsOf(t),
       ...(t.result ? { result: t.result } : {}),
     })),
+    templateFields: DRAW_TEMPLATE_FIELDS.map((f) => ({ ...f })),
   };
 }
 
@@ -187,6 +198,7 @@ export function drawObjectModel(host: BundleHost): ObjectModelContribution {
   return {
     kinds,
     commands: typedCommands(host),
+    templateFields: drawTemplateFields(host),
     batch: (ops) => planDrawBatch(planners, host, ops),
   };
 }
