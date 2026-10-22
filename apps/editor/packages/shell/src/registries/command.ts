@@ -17,6 +17,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
+import type { FeatureStore } from "../state/features";
 import type * as Api from "@paged-media/plugin-api";
 
 import { isEnabled } from "./types";
@@ -107,6 +108,10 @@ export interface CommandRegistry extends Api.CommandRegistry {
    *  registries do: a component that lists commands during render reads
    *  them through `useRegistryView` (state/live.ts, ADR 229). */
   onChange(handler: () => void): Disposable;
+  /** Whether the editor offers this command at all: the feature gate
+   *  (docs/composable-editor.md §6). A command it does not offer is
+   *  refused by `invoke` like one whose `when` is false. */
+  offered?(id: string): boolean;
   /** The editor a command invoked NOW would run against: the live one,
    *  not a value captured at some earlier render. A flow that changes the
    *  document and then goes on (File ▸ Open of a picture with nothing
@@ -123,6 +128,7 @@ export interface CommandRegistry extends Api.CommandRegistry {
  */
 export function createCommandRegistry(
   getEditor: () => unknown,
+  features?: Pick<FeatureStore, "allows" | "onChange">,
 ): CommandRegistry {
   const byId = new Map<string, CommandContribution>();
   const observers = new Set<CommandObserver>();
@@ -130,6 +136,10 @@ export function createCommandRegistry(
   const changed = () => {
     for (const fn of [...changeListeners]) fn();
   };
+  // A feature change changes what is offered, so every view of the
+  // commands (menus, palette, toolbars) re-reads.
+  features?.onChange(() => changed());
+  const offered = (id: string) => features?.allows("command", id) ?? true;
   let nextSeq = 1;
 
   const emit = (event: CommandInvocationEvent) => {
@@ -162,6 +172,7 @@ export function createCommandRegistry(
     unregister(id) {
       if (byId.delete(id)) changed();
     },
+    offered,
     async invoke(id, payload) {
       const cmd = byId.get(id);
       if (!cmd) {
@@ -184,7 +195,7 @@ export function createCommandRegistry(
       // an ordinary answer to an ordinary question; throwing would turn
       // every stale menu click into an error dialog. Observers still see
       // nothing, because nothing ran.
-      if (!isEnabled(cmd.when, getEditor)) return undefined;
+      if (!isEnabled(cmd.when, getEditor) || !offered(id)) return undefined;
       // ADR 323 — a typed command refuses a payload that does not conform,
       // before anything runs (and before any observer records it).
       const args = cmd.args ?? DECLARED_ARGS.get(id);

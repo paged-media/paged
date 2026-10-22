@@ -17,6 +17,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
+import type { FeatureStore } from "../state/features";
 import type * as Api from "@paged-media/plugin-api";
 
 import {
@@ -325,11 +326,15 @@ function resolveParsed(
   bindings: readonly ParsedBinding[],
   event: KeyEventLike,
   getState?: () => unknown,
+  offered?: (binding: KeybindingContribution) => boolean,
 ): KeybindingContribution | null {
   let best: KeybindingContribution | null = null;
   let bestRank = -Infinity;
   for (const b of bindings) {
     if (!eventMatches(b.combo, event)) continue;
+    // A binding onto a command the editor does not offer is not a
+    // candidate, so the key stays the page's (docs/composable-editor.md §6).
+    if (offered && !offered(b.contribution)) continue;
     const { when, precedence } = b.contribution;
     if (!isEnabled(when, getState)) continue;
     let rank = when !== undefined ? 1 : 0;
@@ -380,7 +385,11 @@ export function resolveBinding(
 export function createKeybindingRegistry(
   commands: CommandRegistry,
   getState?: () => unknown,
+  features?: Pick<FeatureStore, "allows">,
 ): KeybindingRegistry & Disposable {
+  const offered = (b: KeybindingContribution) =>
+    commands.offered?.(b.command) !== false &&
+    (features?.allows("keybinding", `${b.key}→${b.command}`) ?? true);
   const bindings: ParsedBinding[] = [];
   const changeListeners = new Set<() => void>();
   const changed = () => {
@@ -393,7 +402,7 @@ export function createKeybindingRegistry(
     // canvas's content-selection model lives on its own layer and isn't
     // an editable element — bindings guard that through `when`.
     if (targetOwnsKey(event)) return;
-    const winner = resolveParsed(bindings, event, getState);
+    const winner = resolveParsed(bindings, event, getState, offered);
     if (!winner) return;
     event.preventDefault();
     void commands.invoke(winner.command);
@@ -438,6 +447,7 @@ export function createKeybindingRegistry(
         bindings,
         event,
         state === undefined ? getState : () => state,
+        offered,
       );
     },
     onChange(handler) {

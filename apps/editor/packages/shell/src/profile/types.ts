@@ -139,6 +139,9 @@ export interface EditorProfile {
   readonly documentSizePt?: readonly [number, number];
   /** Suffix that separates this profile's stored layout and mode. */
   readonly storageScope?: string;
+  /** Feature switches seeded at start, by feature id or glob
+   *  (`command:paged.object.*`, `chrome:rulers`); docs/composable-editor.md §6. */
+  readonly features?: Readonly<Record<string, boolean>>;
 }
 
 /**
@@ -167,6 +170,8 @@ export interface ResolvedProfile {
   readonly canvas: Required<CanvasFurniture>;
   readonly documentSizePt: readonly [number, number] | null;
   readonly storageScope: string;
+  /** Every layer's switches, base first; a later key overrides. */
+  readonly features: Readonly<Record<string, boolean>>;
 }
 
 /** Something about a profile that was ignored, with where it was. */

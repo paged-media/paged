@@ -913,3 +913,12 @@ export {
   useChromeRegions,
   type ChromeRegions,
 } from "./state/chrome-regions";
+export {
+  FEATURE_KINDS,
+  createFeatureStore,
+  type FeatureContext,
+  type FeatureId,
+  type FeatureKind,
+  type FeatureRule,
+  type FeatureStore,
+} from "./state/features";

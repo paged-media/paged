@@ -32,7 +32,12 @@ export function PanelHost({ id }: { id: string }) {
   const paged = usePaged();
   // A view (state/live.ts, ADR 229): the panel a mode slot names may
   // register after this host first rendered.
-  const panels = useRegistryView(useRegistries().panels);
+  const registries = useRegistries();
+  const panels = useRegistryView(registries.panels);
+  const features = useRegistryView(registries.features);
+  // A panel the editor does not offer (a feature) renders nothing where a
+  // slot or a tab names it.
+  if (!features.allows("panel", id)) return null;
   const contribution = panels.get(id);
   if (!contribution) {
     return (

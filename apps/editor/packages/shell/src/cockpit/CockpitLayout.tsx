@@ -73,6 +73,14 @@ export function CockpitLayout({
 }: CockpitLayoutProps) {
   const paged = usePaged();
   const chrome = useChromeRegions();
+  const features = useRegistryView(useRegistries().features);
+  // Canvas furniture: the profile's (absent, never rendered) and the
+  // features' (switched at runtime), both must allow it.
+  const titleBar =
+    chrome.canvas.titleBar && features.allows("chrome", "title-bar");
+  const rulers = chrome.canvas.rulers && features.allows("chrome", "rulers");
+  const thumbnails =
+    chrome.canvas.thumbnails && features.allows("chrome", "thumbnails");
   const modes = useRegistryView(useRegistries().modes);
   const { mode } = useWorkflowMode();
   const slots = modes.get(mode)?.slots;
@@ -151,8 +159,8 @@ export function CockpitLayout({
           background: "var(--pg-bg)",
         }}
       >
-        {chrome.canvas.titleBar && <DocTitleBar />}
-        {!isOverride && chrome.canvas.rulers && <HRuler />}
+        {titleBar && <DocTitleBar />}
+        {!isOverride && rulers && <HRuler />}
         <div
           data-cockpit-canvas
           onDragOver={(e) => {
@@ -173,7 +181,7 @@ export function CockpitLayout({
             overflow: "hidden",
           }}
         >
-          {!isOverride && chrome.canvas.rulers && <VRulerStrip />}
+          {!isOverride && rulers && <VRulerStrip />}
           {/* W2.8 — `data-paged-viewport` tags the viewport wrapper so
               the GuideDragController can invert client → document
               coordinates against the same rect the canvas uses. */}
@@ -197,7 +205,7 @@ export function CockpitLayout({
         {/* W2.9 — headless threading controller (out-port → loaded
             cursor → linkFrames / insertTextFrame; overset badge set). */}
         {!isOverride && <ThreadingController />}
-        {!isOverride && chrome.canvas.thumbnails && <ThumbnailRail />}
+        {!isOverride && thumbnails && <ThumbnailRail />}
       </main>
 
       {chrome.has("right") && (
