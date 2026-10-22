@@ -155,6 +155,20 @@ export interface SetCellsResult {
   changedCount: number;
   circular: { sheet: number; row: number; col: number }[];
   prevInputs?: string[];
+  /** The cells whose STYLE a typed entry changed (`45%` gives a General
+   *  cell `0%`, a leading `'` the quote prefix — Rust's typed-entry rule);
+   *  absent when none. The journal restores `before` on undo. */
+  restyled?: Restyle[];
+}
+
+/** One cell a typed entry restyled: its style id before and after
+ *  (restored with `setStyleIds`). */
+export interface Restyle {
+  sheet: number;
+  row: number;
+  col: number;
+  before: number;
+  after: number;
 }
 
 export interface CellEditRecord {
@@ -256,7 +270,7 @@ export interface SheetEngine {
     row: number,
     col: number,
     input: string,
-  ): { changed: CellChange[] };
+  ): { changed: CellChange[]; restyled?: Restyle[] };
   /** Commit MANY cell inputs with ONE recalc (Wave 2 batch door). Every
    *  input is validated first: a bad sheet id or a parse error throws and
    *  leaves the workbook untouched. Optional — an artifact that predates
@@ -661,6 +675,8 @@ export interface CellStylePatch {
   hAlign?: string;
   vAlign?: string;
   wrap?: boolean;
+  /** Excel's quote prefix (the text was typed after a leading `'`). */
+  quotePrefix?: boolean;
 }
 
 /** A sheet's layout: explicit column widths (characters) and row heights
@@ -718,7 +734,7 @@ export interface SheetWasmEngine {
     row: number,
     col: number,
     input: string,
-  ): { changed: CellChange[] };
+  ): { changed: CellChange[]; restyled?: Restyle[] };
   set_cells?(inputs: readonly CellInputArg[]): SetCellsResult;
   get_cell_display(sheet: number, row: number, col: number): string;
   get_cell_input(sheet: number, row: number, col: number): string;
