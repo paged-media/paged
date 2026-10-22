@@ -12,6 +12,7 @@
     "typecheck": "bun check -p tsconfig.json"
   },
   "dependencies": {
+    "@paged-media/strings": "workspace:*",
     "@paged-media/client": "workspace:*",
     "@paged-media/helpers": "workspace:*",
     "@paged-media/panel-kit": "workspace:*",
