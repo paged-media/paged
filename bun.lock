@@ -148,6 +148,36 @@
         "typescript": "catalog:",
       },
     },
+    "apps/editor/packages/editor": {
+      "name": "@paged-media/editor",
+      "version": "0.75.0-dev",
+      "dependencies": {
+        "@paged-media/paged": "workspace:*",
+      },
+      "devDependencies": {
+        "@babel/core": "catalog:",
+        "@paged-media/canvas-wasm": "workspace:*",
+        "@paged-media/shell": "workspace:*",
+        "@rolldown/plugin-babel": "catalog:",
+        "@types/node": "catalog:",
+        "@types/react": "catalog:",
+        "@types/react-dom": "catalog:",
+        "@vitejs/plugin-react": "^6.1.2",
+        "autoprefixer": "^10.6.1",
+        "babel-plugin-react-compiler": "catalog:",
+        "paged-canvas": "workspace:*",
+        "postcss": "^8.5.31",
+        "react": "catalog:",
+        "react-dom": "catalog:",
+        "tailwindcss": "^3.4.19",
+        "typescript": "catalog:",
+        "vite": "catalog:",
+      },
+      "peerDependencies": {
+        "react": ">=19.3",
+        "react-dom": ">=19.3",
+      },
+    },
     "apps/editor/packages/repository": {
       "name": "@paged-media/repository",
       "version": "0.0.0",
@@ -1042,6 +1072,8 @@
     "@paged-media/draw-geometry": ["@paged-media/draw-geometry@workspace:modules/draw/packages/draw-geometry"],
 
     "@paged-media/draw-tools": ["@paged-media/draw-tools@workspace:modules/draw/packages/draw-tools"],
+
+    "@paged-media/editor": ["@paged-media/editor@workspace:apps/editor/packages/editor"],
 
     "@paged-media/helpers": ["@paged-media/helpers@workspace:platform/shared/helpers"],
 
