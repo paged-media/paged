@@ -9,7 +9,7 @@
       "count": 1
     }
   },
-  "apps/editor/apps/canvas/src/main.tsx": {
+  "apps/editor/apps/canvas/src/app/mount.tsx": {
     "react-hooks/immutability": {
       "count": 1
     },
