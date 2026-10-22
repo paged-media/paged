@@ -81,18 +81,21 @@ export function PanelRail({
   // app's launchers it keeps, in its order; the bundles' rail panels stay
   // where the list says `@bundles`.
   const railRegion = useChromeRegions().region("panel-rail");
+  const features = useRegistryView(useRegistries().features);
+  const offeredPanel = (i: PanelRailItem) =>
+    features.allows("panel", i.panelId);
   const hostShown = filterByRegion(
     railRegion,
     items,
     (i) => i.panelId,
     () => false,
-  );
+  ).filter(offeredPanel);
   const pluginShown = filterByRegion(
     railRegion,
     pluginItems,
     (i) => i.panelId,
     () => true,
-  );
+  ).filter(offeredPanel);
   // One tab stop for the rail; Up/Down walk it (ADR 234).
   const roving = useRovingFocus({
     orientation: "vertical",

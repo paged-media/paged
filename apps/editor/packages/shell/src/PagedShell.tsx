@@ -165,6 +165,8 @@ import type {
   ResolvedRegion,
 } from "./profile/types";
 import { ActionsBar } from "./chrome/RegionItems";
+import { useRegistryView } from "./state/live";
+import type { FeatureId } from "./state/features";
 import {
   ChromeRegionsProvider,
   chromeRegionsOf,
@@ -242,6 +244,10 @@ export interface PagedShellProps {
   regions?: Readonly<Record<RegionId, ResolvedRegion | null>>;
   /** The profile's canvas furniture: title bar, rulers, thumbnails. */
   canvasFurniture?: Partial<CanvasFurniture>;
+  /** The profile's feature switches, set once when the shell mounts
+   *  (docs/composable-editor.md §6). Later changes go through
+   *  `useRegistries().features`. */
+  features?: Readonly<Record<string, boolean>>;
 }
 
 /**
@@ -265,6 +271,7 @@ export function PagedShell({
   initialDocumentSizePt,
   regions,
   canvasFurniture,
+  features,
   children,
 }: PropsWithChildren<PagedShellProps>) {
   const chromeRegions = chromeRegionsOf(regions, canvasFurniture);
@@ -328,6 +335,9 @@ export function PagedShell({
                                         the user switched tabs to do the
                                         thing they were recording. */}
                                                 <ActionsProvider>
+                                                  <SeedFeatures
+                                                    features={features}
+                                                  />
                                                   <ShellChrome
                                                     panels={panels}
                                                     overlays={overlays}
@@ -792,6 +802,17 @@ function ShellChrome({
       modesRegistered.current = false;
     };
   }, [registries, modes]);
+
+  // A stored mode this editor does not have (another preset's, or one the
+  // app no longer registers) falls back to the first registered mode, so
+  // the cockpit never reads the slots of a mode that is not there.
+  const modeView = useRegistryView(registries.modes);
+  useEffect(() => {
+    const registered = modeView.list();
+    if (registered.length > 0 && !modeView.get(workflowMode)) {
+      setWorkflowMode(registered[0]!.id);
+    }
+  }, [modeView, workflowMode, setWorkflowMode]);
 
   // Register the built-in file-open command. Programmatic file
   // dialog so the palette can invoke it without depending on the
@@ -1607,3 +1628,22 @@ const warningStyle: React.CSSProperties = {
   fontSize: 12,
   margin: 8,
 };
+
+/** Sets the profile's feature switches once, before the first paint, so a
+ *  feature the profile turns off is never drawn. */
+function SeedFeatures({
+  features,
+}: {
+  features?: Readonly<Record<string, boolean>>;
+}) {
+  const registries = useRegistries();
+  const seeded = useRef(false);
+  useLayoutEffect(() => {
+    if (seeded.current || !features) return;
+    seeded.current = true;
+    for (const [id, on] of Object.entries(features)) {
+      registries.features.set(id as FeatureId, on);
+    }
+  }, [registries, features]);
+  return null;
+}

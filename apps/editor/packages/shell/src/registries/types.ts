@@ -117,12 +117,19 @@ export function isEnabled(
 export function entryApplies(
   entryWhen: VisibilityPredicate | undefined,
   command: string,
-  commands: { get(id: string): { when?: VisibilityPredicate } | undefined },
+  commands: {
+    get(id: string): { when?: VisibilityPredicate } | undefined;
+    offered?(id: string): boolean;
+  },
   getState: (() => unknown) | undefined,
 ): boolean {
   if (!isEnabled(entryWhen, getState)) return false;
   const cmd = commands.get(command);
-  return cmd !== undefined && isEnabled(cmd.when, getState);
+  return (
+    cmd !== undefined &&
+    isEnabled(cmd.when, getState) &&
+    commands.offered?.(command) !== false
+  );
 }
 
 /**

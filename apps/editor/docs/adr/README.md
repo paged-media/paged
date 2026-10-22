@@ -28,7 +28,7 @@ and 024 predate that scheme and keep their numbers. Records 200–217 were writt
 | [210](210-design-token-bridge.md) | One token file bridges the brand system to the UI substrate | Accepted, recorded retroactively 2026-10-02 |
 | [211](211-no-backend.md) | The editor has no backend: documents are local files | Accepted, recorded retroactively 2026-10-02 |
 | [212](212-one-automation-surface.md) | One automation surface for tests, demos and the playground | Accepted, recorded retroactively 2026-10-02 |
-| [213](213-solo-mode.md) | Solo mode is a filter over the same app | Accepted, recorded retroactively 2026-10-02 |
+| [213](213-solo-mode.md) | Solo mode is a filter over the same app | Accepted, recorded retroactively 2026-10-02 (amended 2026-10-22) |
 | [214](214-operation-sandwich.md) | Every operation is proven by one invariant: model, pixels, byte-identical undo | Accepted, recorded retroactively 2026-10-02 |
 | [215](215-measured-capability-table.md) | The capability table is measured, not declared | Accepted, recorded retroactively 2026-10-02 |
 | [216](216-test-tiers.md) | Test tiers, and where each one gates | Accepted, recorded retroactively 2026-10-02 (amended 2026-10-19) |
@@ -83,6 +83,8 @@ and 024 predate that scheme and keep their numbers. Records 200–217 were writt
 | [271](271-a-rail-button-shows-its-panel.md) | A rail button shows its panel | Accepted 2026-10-20 |
 | [272](272-a-finished-export-closes-its-dialog.md) | A finished export closes its dialog | Accepted 2026-10-20 |
 | [273](273-trusted-types-are-enforced.md) | Trusted Types are enforced | Accepted 2026-10-21 |
+| [274](274-the-editor-profile-is-runtime-data.md) | The editor profile is runtime data | Accepted 2026-10-22 |
+| [275](275-features-gate-what-is-offered.md) | Features gate what is offered, over surface ids | Accepted 2026-10-22 |
 
 Decisions made in other repositories that this editor's code rests on are listed in
 [`../README.md`](../README.md). Comments in the source also cite ADR 025 (the journal) and

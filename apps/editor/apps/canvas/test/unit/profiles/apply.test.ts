@@ -171,7 +171,7 @@ describe("applyProfile", () => {
     );
   });
 
-  test("an unknown bundle and an unknown mode id are problems", () => {
+  test("an unknown bundle is a problem; a profile's own mode id is kept", () => {
     const { profile } = resolveProfile(
       {
         bundles: ["media.paged.nothing"],
@@ -181,10 +181,8 @@ describe("applyProfile", () => {
     );
     const s = applyProfile(profile, SOURCE);
     expect(s.bundles).toEqual([]);
-    expect(s.modes[0]!.id).toBe("design");
-    expect(s.problems.map((p) => p.path).sort()).toEqual([
-      "bundles",
-      "modes[0].id",
-    ]);
+    expect(s.modes[0]!.id).toBe("fill");
+    expect(s.initialMode).toBe("fill");
+    expect(s.problems.map((p) => p.path)).toEqual(["bundles"]);
   });
 });

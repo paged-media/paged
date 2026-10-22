@@ -200,10 +200,13 @@ application on the main thread; no bundle is discovered or loaded from a URL at 
   resolve sum to more than 100 MB
   ([plugin-sdk ADR 308](https://github.com/paged-media/paged/blob/main/platform/extensions/docs/adr/308-plugin-wasm.md)).
 
-`?solo=<profile>` boots the same application with one bundle activated and an allow-listed
-subset of host panels, tools and menus (six profiles, `apps/canvas/src/solo/profiles.ts`).
-The other bundles are still imported; only their `activate()` is skipped
-([ADR 213](adr/213-solo-mode.md)).
+An editor profile decides which bundles are activated, which host panels, tools, menus and
+modes are registered, and which regions of the chrome exist and what they hold
+(`packages/shell/src/profile/`, `apps/canvas/src/profiles/`,
+[ADR 274](adr/274-the-editor-profile-is-runtime-data.md)). `?profile=<preset>` names a preset;
+`?solo=<name>` boots the preset `solo:<name>`, one bundle with an allow-listed subset of host
+surfaces ([ADR 213](adr/213-solo-mode.md)). Bundles a profile leaves out are never fetched
+([ADR 222](adr/222-code-split-plugin-bundles.md)).
 
 ## Opening, saving and exporting
 
