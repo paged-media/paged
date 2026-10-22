@@ -1,10 +1,11 @@
 #!/usr/bin/env node
-// What npm would receive, checked before it does (PM-0008, amendment 3):
+// What npm would receive, checked before it does (PM-0008, amendment 3;
+// PM-0013):
 //
 //   node tooling/release/verify-tarballs.mjs <version> <tgz...>
 //
-// For each tarball of the three public packages:
-//   - the name is one of the three, the version is <version>, it is not
+// For each tarball of the four public packages:
+//   - the name is one of the four, the version is <version>, it is not
 //     private, and `publishConfig.access` is `public` (a scoped package is
 //     restricted unless it says so);
 //   - the licence is `AGPL-3.0-only OR LicenseRef-PMEL`, and LICENSE and
@@ -13,7 +14,7 @@
 //     directory (npm checks it against the provenance of a trusted publish);
 //   - no dependency of any kind is still `workspace:` or `catalog:`, there are
 //     no devDependencies, and no dependency names an @paged-media package
-//     that is not one of the three (a published package depends on nothing
+//     that is not one of the four (a published package depends on nothing
 //     private), at <version> if it does;
 //   - main, types, bin and every `exports` target are files in the tarball;
 //   - @paged-media/viewer: the viewer subset audit holds for the files
@@ -21,6 +22,12 @@
 //   - @paged-media/paged: the `paged` bin starts with a node shebang and
 //     imports nothing but node: builtins (React only dynamically), and the
 //     notices of the code bundled into it are there;
+//   - @paged-media/editor: React is a peer (>=19.3), not a dependency; it
+//     depends on @paged-media/paged at <version> and on nothing else; and
+//     its dist/ passes the package's own check
+//     (apps/editor/packages/editor/scripts/check-dist.mjs: no private
+//     package imported, every file it names present, no engine wasm, no
+//     source map, the size budget);
 //   - @paged-media/plugin-sdk: nothing in it imports the private
 //     @paged-media/plugin-api, and ./api is type-only (its index.js exports
 //     nothing).
@@ -51,6 +58,7 @@ const LICENSE = "AGPL-3.0-only OR LicenseRef-PMEL";
 const REPOSITORY = "git+https://github.com/paged-media/paged.git";
 const NAMES = new Set([
   "@paged-media/paged",
+  "@paged-media/editor",
   "@paged-media/viewer",
   "@paged-media/plugin-sdk",
 ]);
@@ -98,7 +106,7 @@ for (const tgz of tarballs) {
     const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
 
     if (!NAMES.has(pkg.name))
-      fail(`${pkg.name} is not one of the three public packages`);
+      fail(`${pkg.name} is not one of the four public packages`);
     if (seen.has(pkg.name)) fail(`${pkg.name} appears twice`);
     seen.add(pkg.name);
     if (pkg.version !== version)
@@ -124,7 +132,7 @@ for (const tgz of tarballs) {
           fail(`${field}.${dep}: not a public package`);
         if (NAMES.has(dep) && spec !== version) {
           fail(
-            `${field}.${dep} is ${spec}, expected ${version} (one version for the three)`,
+            `${field}.${dep} is ${spec}, expected ${version} (one version for the four)`,
           );
         }
       }
@@ -183,6 +191,28 @@ for (const tgz of tarballs) {
         fail(
           "fonts/Inter.ttf (and its licence) is missing: the bin has no default face",
         );
+    }
+    if (pkg.name === "@paged-media/editor") {
+      const deps = Object.keys(pkg.dependencies ?? {});
+      if (deps.join() !== "@paged-media/paged")
+        fail(
+          `dependencies are ${deps.join(", ") || "(none)"}; expected @paged-media/paged alone (everything else is bundled, React is a peer)`,
+        );
+      for (const peer of ["react", "react-dom"])
+        if (pkg.peerDependencies?.[peer] !== ">=19.3")
+          fail(`peerDependencies.${peer} is not >=19.3`);
+      try {
+        execFileSync(
+          "bun",
+          [
+            join(REPO, "apps/editor/packages/editor/scripts/check-dist.mjs"),
+            join(root, "dist"),
+          ],
+          { stdio: ["ignore", "inherit", "inherit"] },
+        );
+      } catch {
+        fail("the packed dist/ fails check-dist.mjs");
+      }
     }
     if (pkg.name === "@paged-media/plugin-sdk") {
       for (const f of files.filter((x) => /\.(js|mjs|d\.ts)$/.test(x))) {
