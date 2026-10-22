@@ -34,7 +34,7 @@ import type {
 
 import { defineTranslations } from "@paged-media/strings";
 
-import de from "../locales/de.json";
+import de from "../locales/de.json" with { type: "json" };
 import manifestJson from "../manifest.json";
 
 import { contributePdfIo } from "./io/pdf";

@@ -23,6 +23,6 @@
 
 import { defineTranslations } from "@paged-media/strings";
 
-import de from "./locales/de.json";
+import de from "./locales/de.json" with { type: "json" };
 
 defineTranslations("de", de);

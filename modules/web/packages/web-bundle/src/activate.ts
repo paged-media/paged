@@ -34,7 +34,7 @@ import {
 } from "@paged-media/plugin-sdk";
 
 import manifest from "../manifest.json";
-import de from "../locales/de.json";
+import de from "../locales/de.json" with { type: "json" };
 
 import { startAutoRender } from "./auto-render";
 import { startDocumentFaces } from "./document-faces";
