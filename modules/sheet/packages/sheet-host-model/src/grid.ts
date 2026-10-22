@@ -27,10 +27,13 @@
 // the SVG it paints over the active sheet).
 //
 // Coordinates: the scene's `xOffsets`/`yOffsets` are VIEWPORT-LOCAL
-// content-space points (the first visible track starts at 0), carrying
+// content-space points (the first displayed track starts at 0), carrying
 // `cols + 1` / `rows + 1` cumulative boundaries (leading edge of every
-// track plus a trailing edge). A cell at `(row, col)` draws its text at
-// `xOffsets[col - firstCol] + pad` / `yOffsets[row - firstRow] + baseline`.
+// track plus a trailing edge). The displayed tracks are listed in
+// `rowIndices`/`colIndices` (frozen tracks first, hidden rows skipped), so a
+// cell at `(row, col)` sits at display index `rowPos(vp, row)` /
+// `colPos(vp, col)` — never `row - firstRow` (that holds only without a
+// frozen band or hidden tracks, the fallback for hand-written scenes).
 // The translation is the same geometry the page lowering uses for its
 // rules — one geometry, two surfaces (spec §8.1).
 //
@@ -48,10 +51,14 @@ import type {
 
 import type { Align, LoweredStyle, Rule, Rules } from "./lowered";
 
-/** The viewport window: the first visible `(row, col)`, how many of each
- *  track fit, and the cumulative viewport-local pt boundaries along each
- *  axis. `xOffsets` carries `cols + 1` entries (incl. the trailing edge);
- *  `yOffsets` carries `rows + 1`. */
+/** The viewport window (mirror of Rust `sheet_grid::GridViewport`): the
+ *  displayed tracks and the cumulative viewport-local pt boundaries along
+ *  each axis. `xOffsets` carries `cols + 1` entries (incl. the trailing
+ *  edge); `yOffsets` carries `rows + 1`. `rowIndices`/`colIndices` are the
+ *  sheet indices shown, in display order (the `frozenRows`/`frozenCols`
+ *  frozen tracks first, then the scrolled body; hidden rows skipped);
+ *  `firstRow`/`firstCol` are the first BODY track. The engine always sends
+ *  the arrays; without them the tracks are `firstRow..firstRow + rows`. */
 export interface GridViewport {
   firstRow: number;
   firstCol: number;
@@ -61,6 +68,17 @@ export interface GridViewport {
   xOffsets: number[];
   /** Cumulative pt boundaries along y (len === `rows + 1`). */
   yOffsets: number[];
+  /** Sheet row of each displayed row (len === `rows`), increasing. */
+  rowIndices?: number[];
+  /** Sheet column of each displayed column (len === `cols`), increasing. */
+  colIndices?: number[];
+  /** Leading entries of `rowIndices` / `colIndices` that are frozen. */
+  frozenRows?: number;
+  frozenCols?: number;
+  /** The track past the print edge that is partly inside the box (not in
+   *  the index arrays; no cells are materialized for it). */
+  partialRow?: number | null;
+  partialCol?: number | null;
 }
 
 /** One materialized visible cell: its ABSOLUTE `(row, col)`, the FORMATTED
@@ -76,6 +94,36 @@ export interface GridCell {
   text: string;
   align: Align;
   styleKey?: number;
+  /** The text wraps inside the cell (from the style). */
+  wrap?: boolean;
+  /** `"top"` / `"center"` / `"bottom"`; absent = bottom. */
+  vAlign?: string;
+  /** For a left/right-aligned, non-wrapping text cell: the farthest sheet
+   *  column its text may spill into (empty neighbours, within the window
+   *  and the pane). The painter clips the text there. */
+  overflowTo?: number;
+}
+
+/** One merged area as shown in a viewport pane (mirror of Rust
+ *  `sheet_grid::GridMerge`): the whole area in sheet coordinates
+ *  (`row`/`col` = its anchor, `rowSpan`/`colSpan`), the visible part's
+ *  viewport-local rect, and the anchor cell's text and style. A merge that
+ *  crosses the frozen split arrives as one rect per pane. The cells it
+ *  covers are not in `GridScene.cells`. */
+export interface GridMerge {
+  row: number;
+  col: number;
+  rowSpan: number;
+  colSpan: number;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  text: string;
+  align: Align;
+  styleKey: number;
+  wrap?: boolean;
+  vAlign?: string;
 }
 
 /** A selection rectangle anchored at `(anchorRow, anchorCol)`, spanning
@@ -152,6 +200,8 @@ export interface GridScene {
    *  `dataBar` rule covers (spec §8.2/§10.4 — drawn geometry, not a fill).
    *  Absent/empty when none. */
   databars?: GridDataBar[];
+  /** Merged areas intersecting the window (one rect per pane). */
+  merges?: GridMerge[];
   /** Wave 5 — the target of a fill-handle drag in progress (drawn as an
    *  outline). Absent/null when no drag. Session-side, never from Rust. */
   fillPreview?: GridSelection | null;
@@ -258,6 +308,99 @@ export function viewportHeightPt(scene: GridScene): number {
   return ys.length > 0 ? ys[ys.length - 1] : 0;
 }
 
+/** Sheet row of display row `i` (the index array, else `firstRow + i`). */
+export function rowAt(vp: GridViewport, i: number): number {
+  return vp.rowIndices ? vp.rowIndices[i] : vp.firstRow + i;
+}
+
+/** Sheet column of display column `i`. */
+export function colAt(vp: GridViewport, i: number): number {
+  return vp.colIndices ? vp.colIndices[i] : vp.firstCol + i;
+}
+
+function posIn(
+  indices: number[] | undefined,
+  first: number,
+  count: number,
+  t: number,
+): number {
+  if (!indices) {
+    const i = t - first;
+    return i >= 0 && i < count ? i : -1;
+  }
+  let lo = 0;
+  let hi = indices.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (indices[mid] < t) lo = mid + 1;
+    else hi = mid;
+  }
+  return lo < indices.length && indices[lo] === t ? lo : -1;
+}
+
+/** Display index of sheet `row`, or -1 when it is not shown. */
+export function rowPos(vp: GridViewport, row: number): number {
+  return posIn(vp.rowIndices, vp.firstRow, vp.rows, row);
+}
+
+/** Display index of sheet `col`, or -1 when it is not shown. */
+export function colPos(vp: GridViewport, col: number): number {
+  return posIn(vp.colIndices, vp.firstCol, vp.cols, col);
+}
+
+/** The display band `[lo, hi)` of the shown tracks whose sheet index lies
+ *  in `[start, start + count)` (the arrays are increasing, so the band is
+ *  contiguous); `lo >= hi` when none is shown. */
+function bandOf(
+  indices: number[] | undefined,
+  first: number,
+  total: number,
+  start: number,
+  count: number,
+): [number, number] {
+  if (!indices) {
+    return [Math.max(0, start - first), Math.min(total, start + count - first)];
+  }
+  let lo = 0;
+  while (lo < indices.length && indices[lo] < start) lo += 1;
+  let hi = lo;
+  while (hi < indices.length && indices[hi] < start + count) hi += 1;
+  return [lo, hi];
+}
+
+/** Display row band `[lo, hi)` of the sheet rows `[start, start + count)`. */
+export function rowBand(
+  vp: GridViewport,
+  start: number,
+  count: number,
+): [number, number] {
+  return bandOf(vp.rowIndices, vp.firstRow, vp.rows, start, count);
+}
+
+/** Display column band `[lo, hi)` of the sheet columns `[start, start + count)`. */
+export function colBand(
+  vp: GridViewport,
+  start: number,
+  count: number,
+): [number, number] {
+  return bandOf(vp.colIndices, vp.firstCol, vp.cols, start, count);
+}
+
+/** The viewport-local rect `[x, y, w, h]` of the shown cell `(row, col)`,
+ *  or `null` when its row or column is not shown. */
+export function cellRect(
+  vp: GridViewport,
+  row: number,
+  col: number,
+): [number, number, number, number] | null {
+  const ci = colPos(vp, col);
+  const ri = rowPos(vp, row);
+  if (ci < 0 || ri < 0) return null;
+  const x = vp.xOffsets[ci];
+  const y = vp.yOffsets[ri];
+  return [x, y, vp.xOffsets[ci + 1] - x, vp.yOffsets[ri + 1] - y];
+}
+
 /** The text-anchor SVG attribute value for an alignment. `"general"` is
  *  resolved upstream in Rust (the engine emits a concrete left/right/
  *  center for general cells), so it is treated as left here — a defensive
@@ -316,18 +459,20 @@ function styleOf(
 function fillRects(scene: GridScene, vp: GridViewport): string {
   const parts: string[] = [];
   for (const cell of scene.cells) {
-    const ci = cell.col - vp.firstCol;
-    const ri = cell.row - vp.firstRow;
-    if (ci < 0 || ci >= vp.cols || ri < 0 || ri >= vp.rows) continue;
-    const style = styleOf(scene, cell.styleKey);
-    const fill = style?.fillRgb;
+    const r = cellRect(vp, cell.row, cell.col);
+    if (!r) continue;
+    const fill = styleOf(scene, cell.styleKey)?.fillRgb;
     if (!fill) continue;
-    const x0 = vp.xOffsets[ci];
-    const x1 = vp.xOffsets[ci + 1];
-    const y0 = vp.yOffsets[ri];
-    const y1 = vp.yOffsets[ri + 1];
     parts.push(
-      `<rect x="${x0}" y="${y0}" width="${x1 - x0}" height="${y1 - y0}" ` +
+      `<rect x="${r[0]}" y="${r[1]}" width="${r[2]}" height="${r[3]}" ` +
+        `fill="${xmlEscape(fill)}"/>`,
+    );
+  }
+  for (const m of scene.merges ?? []) {
+    const fill = styleOf(scene, m.styleKey)?.fillRgb;
+    if (!fill) continue;
+    parts.push(
+      `<rect x="${m.x}" y="${m.y}" width="${m.w}" height="${m.h}" ` +
         `fill="${xmlEscape(fill)}"/>`,
     );
   }
@@ -360,15 +505,14 @@ function cellBorders(
     `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" ` +
     `stroke="${o.textColor}" stroke-width="${o.gridWidth * 2}"/>`;
   for (const cell of scene.cells) {
-    const ci = cell.col - vp.firstCol;
-    const ri = cell.row - vp.firstRow;
-    if (ci < 0 || ci >= vp.cols || ri < 0 || ri >= vp.rows) continue;
+    const r = cellRect(vp, cell.row, cell.col);
+    if (!r) continue;
     const style = styleOf(scene, cell.styleKey);
     if (!style) continue;
-    const x0 = vp.xOffsets[ci];
-    const x1 = vp.xOffsets[ci + 1];
-    const y0 = vp.yOffsets[ri];
-    const y1 = vp.yOffsets[ri + 1];
+    const x0 = r[0];
+    const x1 = r[0] + r[2];
+    const y0 = r[1];
+    const y1 = r[1] + r[3];
     if (style.borderTop) parts.push(seg(x0, y0, x1, y0));
     if (style.borderBottom) parts.push(seg(x0, y1, x1, y1));
     if (style.borderLeft) parts.push(seg(x0, y0, x0, y1));
@@ -385,15 +529,24 @@ function cellTexts(
   o: GridSvgOptions,
 ): string {
   const parts: string[] = [];
+  const texts: {
+    text: string;
+    align: Align;
+    styleKey?: number;
+    r: number[];
+  }[] = [];
   for (const cell of scene.cells) {
-    const ci = cell.col - vp.firstCol;
-    const ri = cell.row - vp.firstRow;
-    if (ci < 0 || ci >= vp.cols || ri < 0 || ri >= vp.rows) continue;
-    if (cell.text.length === 0) continue;
+    const r = cellRect(vp, cell.row, cell.col);
+    if (r && cell.text.length > 0) texts.push({ ...cell, r });
+  }
+  for (const m of scene.merges ?? []) {
+    if (m.text.length > 0) texts.push({ ...m, r: [m.x, m.y, m.w, m.h] });
+  }
+  for (const cell of texts) {
     const style = styleOf(scene, cell.styleKey);
-    const x0 = vp.xOffsets[ci];
-    const x1 = vp.xOffsets[ci + 1];
-    const y0 = vp.yOffsets[ri];
+    const x0 = cell.r[0];
+    const x1 = cell.r[0] + cell.r[2];
+    const y0 = cell.r[1];
     const x = textX(cell.align, x0, x1, o.pad);
     const y = y0 + o.baseline;
     const size = style?.fontSizePt ?? o.fontSizePt;
@@ -420,15 +573,9 @@ export function selectionRect(
   const sel = scene.selection;
   if (!sel) return null;
   const vp = scene.viewport;
-  const c0 = sel.anchorCol - vp.firstCol;
-  const r0 = sel.anchorRow - vp.firstRow;
-  const c1 = c0 + sel.cols; // exclusive band index
-  const r1 = r0 + sel.rows;
-  // Clamp the band to the visible tracks; bail if it does not intersect.
-  const lo = Math.max(0, c0);
-  const hi = Math.min(vp.cols, c1);
-  const top = Math.max(0, r0);
-  const bot = Math.min(vp.rows, r1);
+  // The shown tracks inside the selection (a contiguous display band).
+  const [lo, hi] = colBand(vp, sel.anchorCol, sel.cols);
+  const [top, bot] = rowBand(vp, sel.anchorRow, sel.rows);
   if (lo >= hi || top >= bot) return null;
   const x = vp.xOffsets[lo];
   const y = vp.yOffsets[top];
@@ -450,9 +597,10 @@ export function fillHandleRect(
   const sel = scene.selection;
   if (!sel) return null;
   const vp = scene.viewport;
-  const ci = sel.anchorCol + sel.cols - vp.firstCol; // band index past the corner
-  const ri = sel.anchorRow + sel.rows - vp.firstRow;
-  if (ci < 1 || ci > vp.cols || ri < 1 || ri > vp.rows) return null;
+  // The corner is shown when the selection's last row and column are.
+  const ci = colPos(vp, sel.anchorCol + sel.cols - 1) + 1;
+  const ri = rowPos(vp, sel.anchorRow + sel.rows - 1) + 1;
+  if (ci < 1 || ri < 1) return null;
   const h = FILL_HANDLE_PT;
   return [vp.xOffsets[ci] - h / 2, vp.yOffsets[ri] - h / 2, h, h];
 }
@@ -481,10 +629,10 @@ function fillPreviewRect(
 
 /** Build the frozen-pane split `<line>`s (spec §8.1): a heavier rule at the
  *  bottom edge of the frozen row band and the right edge of the frozen column
- *  band. v1 draws the split only when the viewport shows the sheet origin
- *  (`firstRow`/`firstCol` 0) — i.e. the frozen band is on screen; a scrolled-
- *  past composite (the frozen band pinned over a scrolled body) is a panel
- *  follow-on. "" when no pane is frozen or the band is off-screen. */
+ *  band. The engine pins the frozen tracks at the top/left of every window,
+ *  so the split is always on screen while a pane is frozen; a hand-written
+ *  scene without `frozenRows`/`frozenCols` keeps the old rule (drawn only
+ *  when the window starts at the sheet origin). "" when nothing is frozen. */
 function freezeSplitSvg(scene: GridScene, o: GridSvgOptions): string {
   const fz = scene.freeze;
   if (!fz) return "";
@@ -497,11 +645,21 @@ function freezeSplitSvg(scene: GridScene, o: GridSvgOptions): string {
   const parts: string[] = [];
   // Horizontal split at the frozen row band's bottom edge (only when the
   // origin row is on screen and the band fits in the viewport).
-  if (fz.rows > 0 && vp.firstRow === 0 && fz.frozenHeightPt <= h) {
+  const pinnedRows = vp.frozenRows !== undefined;
+  const pinnedCols = vp.frozenCols !== undefined;
+  if (
+    fz.rows > 0 &&
+    (pinnedRows || vp.firstRow === 0) &&
+    fz.frozenHeightPt <= h
+  ) {
     parts.push(line(0, fz.frozenHeightPt, w, fz.frozenHeightPt));
   }
   // Vertical split at the frozen column band's right edge.
-  if (fz.cols > 0 && vp.firstCol === 0 && fz.frozenWidthPt <= w) {
+  if (
+    fz.cols > 0 &&
+    (pinnedCols || vp.firstCol === 0) &&
+    fz.frozenWidthPt <= w
+  ) {
     parts.push(line(fz.frozenWidthPt, 0, fz.frozenWidthPt, h));
   }
   return parts.join("");
@@ -540,9 +698,7 @@ function dataBarsSvg(scene: GridScene, o: GridSvgOptions): string {
   const vp = scene.viewport;
   const parts: string[] = [];
   for (const b of bars) {
-    const ci = b.col - vp.firstCol;
-    const ri = b.row - vp.firstRow;
-    if (ci < 0 || ci >= vp.cols || ri < 0 || ri >= vp.rows) continue;
+    if (!cellRect(vp, b.row, b.col)) continue;
     if (b.w <= 0 || b.h <= 0) continue; // a zero-fraction bar draws nothing
     parts.push(
       `<rect x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" ` +
@@ -694,28 +850,29 @@ export function gridSceneToSceneLayer(
 ): SceneLayer {
   const o: GridSvgOptions = { ...DEFAULT_GRID_SVG_OPTIONS, ...opts };
   const vp = scene.viewport;
-  const inView = (cell: GridCell): boolean => {
-    const ci = cell.col - vp.firstCol;
-    const ri = cell.row - vp.firstRow;
-    return ci >= 0 && ci < vp.cols && ri >= 0 && ri < vp.rows;
-  };
   const items: SceneItem[] = [];
+  // Cells and merged areas as `[rect, text, styleKey]` boxes.
+  const boxes: {
+    r: [number, number, number, number];
+    text: string;
+    styleKey?: number;
+  }[] = [];
+  for (const cell of scene.cells) {
+    const r = cellRect(vp, cell.row, cell.col);
+    if (r) boxes.push({ r, text: cell.text, styleKey: cell.styleKey });
+  }
+  for (const m of scene.merges ?? []) {
+    boxes.push({ r: [m.x, m.y, m.w, m.h], text: m.text, styleKey: m.styleKey });
+  }
 
   // 1 — cell background fills.
-  for (const cell of scene.cells) {
-    if (!inView(cell)) continue;
-    const fill = styleOf(scene, cell.styleKey)?.fillRgb;
+  for (const b of boxes) {
+    const fill = styleOf(scene, b.styleKey)?.fillRgb;
     if (!fill) continue;
-    const ci = cell.col - vp.firstCol;
-    const ri = cell.row - vp.firstRow;
+    const [x, y, w, h] = b.r;
     items.push({
       kind: "fillPath",
-      path: rectPath(
-        vp.xOffsets[ci],
-        vp.yOffsets[ri],
-        vp.xOffsets[ci + 1],
-        vp.yOffsets[ri + 1],
-      ),
+      path: rectPath(x, y, x + w, y + h),
       paint: cssColorToScenePaint(fill),
     });
   }
@@ -750,9 +907,7 @@ export function gridSceneToSceneLayer(
   //       (so the value reads over the bar). The geometry is engine-computed
   //       (inset + proportional); a light opacity keeps text legible.
   for (const b of scene.databars ?? []) {
-    const ci = b.col - vp.firstCol;
-    const ri = b.row - vp.firstRow;
-    if (ci < 0 || ci >= vp.cols || ri < 0 || ri >= vp.rows) continue;
+    if (!cellRect(vp, b.row, b.col)) continue;
     if (b.w <= 0 || b.h <= 0) continue;
     const paint = cssColorToScenePaint(b.fill);
     items.push({
@@ -763,16 +918,14 @@ export function gridSceneToSceneLayer(
   }
 
   // 3 — cell text (v1: leading-edge / left).
-  for (const cell of scene.cells) {
-    if (!inView(cell) || cell.text.length === 0) continue;
-    const style = styleOf(scene, cell.styleKey);
-    const ci = cell.col - vp.firstCol;
-    const ri = cell.row - vp.firstRow;
+  for (const b of boxes) {
+    if (b.text.length === 0) continue;
+    const style = styleOf(scene, b.styleKey);
     items.push({
       kind: "text",
-      x: vp.xOffsets[ci] + o.pad,
-      y: vp.yOffsets[ri] + o.baseline,
-      text: cell.text,
+      x: b.r[0] + o.pad,
+      y: b.r[1] + o.baseline,
+      text: b.text,
       size: style?.fontSizePt ?? o.fontSizePt,
       paint: cssColorToScenePaint(style?.textRgb ?? o.textColor),
     });
@@ -840,7 +993,13 @@ export function hitCell(
   const ci = trackIndex(vp.xOffsets, x);
   const ri = trackIndex(vp.yOffsets, y);
   if (ci === null || ri === null) return null;
-  return { row: vp.firstRow + ri, col: vp.firstCol + ci };
+  // A point inside a merged area selects its anchor, as in Excel.
+  for (const m of scene.merges ?? []) {
+    if (x >= m.x && x < m.x + m.w && y >= m.y && y < m.y + m.h) {
+      return { row: m.row, col: m.col };
+    }
+  }
+  return { row: rowAt(vp, ri), col: colAt(vp, ci) };
 }
 
 /** Which track band a coordinate falls in, given the cumulative
@@ -867,13 +1026,10 @@ export function cellEditorRect(
   row: number,
   col: number,
 ): [number, number, number, number] | null {
-  const vp = scene.viewport;
-  const ci = col - vp.firstCol;
-  const ri = row - vp.firstRow;
-  if (ci < 0 || ci >= vp.cols || ri < 0 || ri >= vp.rows) return null;
-  const x = vp.xOffsets[ci];
-  const y = vp.yOffsets[ri];
-  return [x, y, vp.xOffsets[ci + 1] - x, vp.yOffsets[ri + 1] - y];
+  // A merged anchor edits over the whole visible merged rect.
+  const m = (scene.merges ?? []).find((g) => g.row === row && g.col === col);
+  if (m) return [m.x, m.y, m.w, m.h];
+  return cellRect(scene.viewport, row, col);
 }
 
 export type { Align, LoweredStyle, Rule, Rules };

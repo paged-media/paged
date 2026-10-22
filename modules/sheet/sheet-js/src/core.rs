@@ -2018,10 +2018,13 @@ impl SheetSession {
     }
 
     /// Window a worksheet into a [`sheet_grid::GridScene`] for the sheets-mode
-    /// vector grid surface (spec §8.1, S-02). The engine windows from the
-    /// `(first_row, first_col)` scroll origin bounded by `(w_pt, h_pt)` and
-    /// materializes only the visible populated cells (`sheet_grid::grid_scene`
-    /// does the O(visible) windowing); the stored selection for THIS sheet
+    /// vector grid surface (spec §8.1, S-02). The window is
+    /// `sheet_grid::frame_window` for the `(first_row, first_col)` scroll
+    /// origin, the `(w_pt, h_pt)` box and the frozen split (the workbook's
+    /// stored one unless `opts` overrides it): frozen tracks pinned, hidden
+    /// rows skipped. Cells carry the workbook's styles through the page
+    /// lowering's own per-cell styler (`sheet_grid::grid_scene_styled`), and
+    /// only visible cells are materialized; the stored selection for THIS sheet
     /// (see [`set_grid_selection`](Self::set_grid_selection)) is folded into the
     /// returned scene. An OOB sheet id is a boundary error (finding-2 discipline,
     /// matching `set_cell`/`get_range_lowered`).
@@ -2048,8 +2051,11 @@ impl SheetSession {
         // we read the workbook's own stored split (parsed from the worksheet's
         // `<sheetViews><pane>` on load — read-only, round-trips byte-identical).
         let stored = self.doc.freeze_panes_of(sheet);
-        let grid_opts = sheet_grid::GridOptions {
-            include_gridlines: opts.include_gridlines.unwrap_or(true),
+        let spec = sheet_grid::FrameWindowSpec {
+            top_row: first_row,
+            left_col: first_col,
+            width_pt: w_pt,
+            height_pt: h_pt,
             freeze_rows: opts.freeze_rows.unwrap_or(stored.rows),
             freeze_cols: opts.freeze_cols.unwrap_or(stored.cols),
         };
@@ -2062,24 +2068,20 @@ impl SheetSession {
             .map(|cs| cs.comments.iter().map(|c| (c.row, c.col)).collect())
             .unwrap_or_default();
 
-        // Conditional-formatting DATA BARS (spec §8.2/§10.4): supply the sheet's
-        // cf model so the scene renders each `dataBar` rule as a proportional
-        // drawn rect — the SAME geometry lane the page lowering emits, so a bar
-        // reads identically on the grid and the page (cross-surface parity). The
-        // cf XML round-trips byte-identical; this read is additive + read-only.
+        // The workbook's visual styles and conditional formats go through the
+        // SAME per-cell styler the page lowering (`get_range_page`) uses, so a
+        // cell looks the same in the live grid and on the page (ADR 510).
         let cf = self.doc.lowered_conditional_formats(sheet);
 
         let model = self.engine().model();
-        let mut scene = sheet_grid::grid_scene_with_cf(
+        let mut scene = sheet_grid::grid_scene_styled(
             model,
             sheet,
-            first_row,
-            first_col,
-            w_pt,
-            h_pt,
-            &grid_opts,
+            &spec,
+            opts.include_gridlines.unwrap_or(true),
             &comment_cells,
             &cf,
+            &self.doc.visual_styles,
         );
 
         // Fold in the session's stored selection for THIS sheet (spec §8.1 —
