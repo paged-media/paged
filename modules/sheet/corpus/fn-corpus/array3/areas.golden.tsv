@@ -1,0 +1,10 @@
+# AREAS(reference).
+# id	formula	setup	expected
+ar-0	=AREAS(A1)	-	1
+ar-1	=AREAS(A1:B3)	-	1
+ar-2	=AREAS((A1:B2,C3,D4:E5))	-	3
+ar-3	=AREAS((A1,B1))	-	2
+ar-4	=AREAS(A1:B2 B1:C3)	-	1
+ar-5	=AREAS(1)	-	#VALUE!
+ar-6	=AREAS(INDIRECT("A1:B2"))	-	1
+ar-7	=AREAS(OFFSET(A1,1,1,2,2))	-	1
