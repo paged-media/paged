@@ -44,7 +44,7 @@ each published canary added is under [Releases](#releases).
   and 10,000 lookups into an edited 10,000-row table in about 9 ms natively; dependents of
   volatile cells recalculate with them; iterative calculation when the workbook's `calcPr`
   asks for it; `NOW` and `TODAY` follow the host clock. Number formats render in five display
-  locales. Expected values are recorded from Excel and replayed in CI: 3,089 of 3,108 function
+  locales. Expected values are recorded from Excel and replayed in CI: 5,156 of 5,222 function
   cases and 148 of 164 number-format cases agree, every disagreement a recorded ruling.
   Recalculating real workbooks reproduces Excel's saved value in 93.6% of comparable formula
   cells (56,533 of 60,419 over 201 workbooks): shared formulas, defined names of every kind,
