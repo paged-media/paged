@@ -3,7 +3,7 @@
   "version": 1,
   "counts": {
     "chrome": 4,
-    "command": 347,
+    "command": 349,
     "keybinding": 88,
     "menu": 257,
     "panel": 122,
@@ -1064,6 +1064,16 @@
       "id": "command:media.paged.sheet.command.unpublishDataset",
       "kind": "command",
       "owner": "media.paged.sheet"
+    },
+    {
+      "id": "command:media.paged.slide.duplicateSlide",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "command:media.paged.slide.exportPptx",
+      "kind": "command",
+      "owner": "media.paged.slide"
     },
     {
       "id": "command:media.paged.slide.importPptx",

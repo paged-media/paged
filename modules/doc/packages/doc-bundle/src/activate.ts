@@ -215,7 +215,10 @@ export function activate(host: BundleHost): BundleHandle {
     bytes: Uint8Array;
     fileName: string;
   } | null> {
-    if (!last) return null;
+    // A document opened from a saved file (or in another session) has no
+    // import record here: its persisted state is the label on its frame,
+    // as the typed exportDocx reads it.
+    if (!last) return exportPersisted();
     const verbatim = { bytes: last.source, fileName: last.fileName };
     // The persisted state wins: object-model writes advance the label's .docx.
     const frame = last.frameId ? (last.frameId as { id: string }).id : null;
@@ -278,6 +281,28 @@ export function activate(host: BundleHost): BundleHandle {
         `paged.doc: edited save-back failed, exporting the unedited source: ${String(err)}`,
       );
       return verbatim;
+    }
+  }
+
+  /** The export of the open document's Word document from its persisted
+   *  state alone: the first placed document (a standalone-opened one is
+   *  the only one). Null when the document holds none. */
+  async function exportPersisted(): Promise<{
+    bytes: Uint8Array;
+    fileName: string;
+  } | null> {
+    const [state] = await discoverDocs(host);
+    if (!state) return null;
+    const fileName = state.data.fileName ?? "document.docx";
+    try {
+      const bytes = await exportState(state);
+      return bytes ? { bytes, fileName } : null;
+    } catch (err) {
+      host.log.warn(
+        `paged.doc: edited save-back failed, exporting the stored document: ${String(err)}`,
+      );
+      const stored = await readDocBytes(host, state);
+      return stored ? { bytes: stored, fileName } : null;
     }
   }
 
