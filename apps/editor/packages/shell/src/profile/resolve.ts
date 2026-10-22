@@ -65,6 +65,7 @@ export function baseProfile(): ResolvedProfile {
     documentSizePt: null,
     storageScope: "",
     features: {},
+    role: "editor",
   };
 }
 
@@ -109,6 +110,7 @@ function applyLayer(
     documentSizePt: layer.documentSizePt ?? into.documentSizePt,
     storageScope: layer.storageScope ?? into.storageScope,
     features: { ...into.features, ...layer.features },
+    role: layer.role ?? into.role,
   };
 }
 
