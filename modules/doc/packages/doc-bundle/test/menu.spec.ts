@@ -15,6 +15,8 @@ import { dirname, join } from "node:path";
 
 import { describe, expect, it } from "bun:test";
 
+import { t } from "@paged-media/strings";
+
 import { MENU_COMMAND_PREFIX, MENU_ENTRIES } from "../src/menu";
 import { createDocStore } from "../src/panels/outline-model.js";
 import { INSERT_LABEL, makeOutlinePanel } from "../src/panels/outline-panel.js";
@@ -63,7 +65,7 @@ describe("doc menu entries", () => {
 describe("one verb for placing a Word document", () => {
   it("the panel button and the command use the menu's label", () => {
     const [path] = MENU_ENTRIES.find(([, s]) => s === "placeDoc")!;
-    expect(path.split("/").pop()).toBe(INSERT_LABEL);
+    expect(path.split("/").pop()).toBe(t(INSERT_LABEL));
     const panel = makeOutlinePanel(createDocStore(), {
       insert: () => {},
       canInsert: () => true,

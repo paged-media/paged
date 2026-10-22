@@ -30,10 +30,13 @@ import manifest from "../manifest.json";
 import { PANEL_FIELDS, schemaOf, type KindName } from "../src/object-model";
 import {
   BIND,
-  DATA_OBJECTS_PANEL,
+  dataObjectsPanel,
   OBJECTS_PANEL_ID,
   hasRowsBinding,
 } from "../src/panels/objects-panel";
+
+/** The panel as the bundle registers it (English: no locale is set). */
+const DATA_OBJECTS_PANEL = dataObjectsPanel();
 
 const kindOf = (q: string) => q.slice(q.lastIndexOf("/") + 1) as KindName;
 const declared = (

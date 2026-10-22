@@ -32,6 +32,7 @@ import type {
   SceneLayerSurface,
   TabularClipboard,
 } from "@paged-media/plugin-api";
+import { t } from "@paged-media/strings";
 import {
   gridSceneToSceneLayer,
   hitCell,
@@ -84,6 +85,7 @@ import {
   type ChainSubscription,
   type LoweredTableInfo,
 } from "./lower";
+import { NOTICES } from "./messages";
 import {
   chartPlacement,
   chartSizeOf,
@@ -4684,20 +4686,34 @@ export function createWorkbookSession(
     lastNotice = { text, tone, seq: (lastNotice?.seq ?? 0) + 1 };
     for (const l of [...noticeListeners]) l(lastNotice);
   };
-  const cellCount = (rows: number, cols: number) =>
-    `${rows} × ${cols} cell${rows * cols === 1 ? "" : "s"}`;
   const copyImpl = api.copySelection;
   const pasteImpl = api.pasteAtSelection;
   api.copySelection = async () => {
     const r = await copyImpl.call(api);
-    if (r.ok) postNotice(`Copied ${cellCount(r.rows, r.cols)}.`, "ok");
-    else postNotice(`Can't copy: ${r.message}.`, "error");
+    if (r.ok)
+      postNotice(
+        t(NOTICES.copied, {
+          rows: r.rows,
+          cols: r.cols,
+          cells: r.rows * r.cols,
+        }),
+        "ok",
+      );
+    else postNotice(t(NOTICES.cantCopy, { reason: r.message }), "error");
     return r;
   };
   api.pasteAtSelection = async () => {
     const r = await pasteImpl.call(api);
-    if (r.ok) postNotice(`Pasted ${cellCount(r.rows, r.cols)}.`, "ok");
-    else postNotice(`Can't paste: ${r.message}.`, "error");
+    if (r.ok)
+      postNotice(
+        t(NOTICES.pasted, {
+          rows: r.rows,
+          cols: r.cols,
+          cells: r.rows * r.cols,
+        }),
+        "ok",
+      );
+    else postNotice(t(NOTICES.cantPaste, { reason: r.message }), "error");
     return r;
   };
   return api;

@@ -42,6 +42,7 @@ import type {
   PanelSchemaRow,
 } from "@paged-media/plugin-api";
 import { propertyRows, publishObjectList } from "@paged-media/plugin-sdk";
+import { t } from "@paged-media/strings";
 
 import {
   PLUGIN_ID,
@@ -49,6 +50,7 @@ import {
   cellAddressOf,
   rangeAddressOf,
 } from "../object-model";
+import { PANELS, PROPERTIES } from "../messages";
 import type { WorkbookSession } from "../session";
 
 export const PROPERTIES_PANEL_ID = "media.paged.sheet.panel.properties";
@@ -157,6 +159,16 @@ const ROW_OPTIONS: Readonly<
   },
 };
 
+/** A group's section title, in the editor's locale. */
+const GROUP_TITLES: Readonly<Record<string, string>> = {
+  Cell: PROPERTIES.cell,
+  "Selected range": PROPERTIES.range,
+  Sheet: PROPERTIES.sheet,
+  Workbook: PROPERTIES.workbook,
+  "Named range": PROPERTIES.namedRange,
+  Chart: PROPERTIES.chart,
+};
+
 const section = (
   group: string,
   address: Parameters<typeof propertyRows>[2],
@@ -164,7 +176,7 @@ const section = (
 ) => {
   const kind = kindOf(group);
   return {
-    title: group,
+    title: GROUP_TITLES[group] ? t(GROUP_TITLES[group]) : group,
     rows: [
       ...lead,
       ...propertyRows(qualified(kind), pathsOf(group), address, {
@@ -174,10 +186,11 @@ const section = (
   };
 };
 
-/** The panel, from `SHEET_PANEL_FIELDS`. */
-export const SHEET_PROPERTIES_PANEL: PanelSchema = {
+/** The panel, from `SHEET_PANEL_FIELDS`, its titles in the editor's
+ *  locale (read when the panel is registered). */
+export const sheetPropertiesPanel = (): PanelSchema => ({
   id: PROPERTIES_PANEL_ID,
-  title: "Sheet properties",
+  title: t(PANELS.properties),
   icon: "panel-canvas",
   defaultDock: "right",
   sections: [
@@ -198,7 +211,10 @@ export const SHEET_PROPERTIES_PANEL: PanelSchema = {
       collapsible: true,
     },
   ],
-};
+});
+
+/** The panel in the active locale at load (the bundle's tests read it). */
+export const SHEET_PROPERTIES_PANEL: PanelSchema = sheetPropertiesPanel();
 
 /** The grid's active cell as an address, or null. */
 export function activeCellAddress(session: WorkbookSession): Address | null {

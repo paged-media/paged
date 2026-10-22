@@ -36,7 +36,10 @@ import type {
   DocumentFontOutcome,
 } from "@paged-media/plugin-api";
 
+import { t } from "@paged-media/strings";
+
 import type { EmbeddedFaceReport } from "./engine.js";
+import { DECK } from "./messages.js";
 
 export type { DocumentFontOutcome };
 
@@ -73,7 +76,7 @@ export async function giveDocumentEmbeddedFonts(
     return [
       {
         severity: "warning",
-        message: `This host cannot give the document the fonts the deck embeds (${families}); text set in them is drawn in a substitute.`,
+        message: t(DECK.noFontDoor, { families }),
         source: "pptx",
       },
     ];
@@ -96,7 +99,11 @@ export async function giveDocumentEmbeddedFonts(
     if (outcome.status === "refused") {
       out.push({
         severity: "warning",
-        message: `The embedded font “${f.family}” (${f.style}) was not loaded: ${outcome.reason}. Text set in it is drawn in a substitute.`,
+        message: t(DECK.fontRefused, {
+          family: f.family,
+          style: f.style,
+          reason: outcome.reason,
+        }),
         source: "pptx",
       });
     }

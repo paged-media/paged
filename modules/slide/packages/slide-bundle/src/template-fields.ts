@@ -47,6 +47,9 @@ import type {
   TemplateFieldRef,
   TemplateFieldWrite,
 } from "@paged-media/plugin-api";
+import { t } from "@paged-media/strings";
+
+import { TEMPLATE } from "./messages.js";
 
 export const PLACEHOLDER_TEXT_KIND = "media.paged.slide.placeholderText";
 export const VISIBILITY_KIND = "media.paged.slide.visibility";
@@ -79,7 +82,7 @@ async function slideOf(ctx: Ctx, field: TemplateFieldRef): Promise<string> {
   if (typeof named === "number") {
     const s = slides[named - 1];
     if (!Number.isInteger(named) || !s)
-      throw new Problem(`The deck has no slide ${String(named)}.`);
+      throw new Problem(t(TEMPLATE.noSlide, { slide: String(named) }));
     return s;
   }
   if (typeof named === "string" && named !== "") {
@@ -90,12 +93,12 @@ async function slideOf(ctx: Ctx, field: TemplateFieldRef): Promise<string> {
         : named;
     const s = `${P}/slide/${id}`;
     if (!slides.includes(s))
-      throw new Problem(`The deck has no slide ${named}.`);
+      throw new Problem(t(TEMPLATE.noSlide, { slide: named }));
     return s;
   }
   const [item] = await ctx.objects.query(`frame:${field.targetId}`);
   const [s] = item ? await ctx.objects.query(`${item} > ${P}/slide`) : [];
-  if (!s) throw new Problem("The field's item is on no slide of this deck.");
+  if (!s) throw new Problem(t(TEMPLATE.onNoSlide));
   return s;
 }
 
@@ -108,9 +111,7 @@ async function placeholderOf(
   if (typeof want["type"] !== "string") {
     const own = `${P}/placeholder/${field.targetId}`;
     if ((await valueOf(ctx, own, "type")) === null)
-      throw new Problem(
-        "The field's item is not a placeholder, and the field names none.",
-      );
+      throw new Problem(t(TEMPLATE.notPlaceholder));
     return own;
   }
   const type = want["type"];
@@ -121,8 +122,15 @@ async function placeholderOf(
     if (idx !== undefined && (await valueOf(ctx, a, "index")) !== idx) continue;
     return a;
   }
+  const number = String(await valueOf(ctx, slide, "index"));
   throw new Problem(
-    `Slide ${String(await valueOf(ctx, slide, "index"))} has no ${type} placeholder${idx === undefined ? "" : ` with index ${String(idx)}`}.`,
+    idx === undefined
+      ? t(TEMPLATE.noPlaceholder, { slide: number, type })
+      : t(TEMPLATE.noPlaceholderAt, {
+          slide: number,
+          type,
+          index: String(idx),
+        }),
   );
 }
 
@@ -159,13 +167,13 @@ function denial(reason: string): { permission: string; target: string } | null {
 /** A refusal the engine's policy made, as a sentence. */
 function deniedSentence(d: { permission: string; target: string }): string {
   return d.target === "the document"
-    ? `The template does not permit ${d.permission} on the document, which this field needs.`
-    : `The template does not permit ${d.permission} on ${d.target}, which is outside this field.`;
+    ? t(TEMPLATE.deniedDocument, { permission: d.permission })
+    : t(TEMPLATE.deniedTarget, { permission: d.permission, target: d.target });
 }
 
 /** A refused write's reason, as a sentence a form shows. */
 function refused(reason: string | undefined): TemplateFieldWrite {
-  const r = reason ?? "the deck refused the value";
+  const r = reason ?? t(TEMPLATE.refused);
   const denied = denial(r);
   if (denied) return { ok: false, problem: deniedSentence(denied) };
   const s = r.trim();
@@ -201,7 +209,7 @@ export function slideTemplateFields(
 ): TemplateFieldKindContribution[] {
   const placeholderText: TemplateFieldKindContribution<string> = {
     kind: PLACEHOLDER_TEXT_KIND,
-    title: "Slide placeholder text",
+    title: t(TEMPLATE.placeholderTextTitle),
     control: { kind: "text", multiline: true },
     grants: ["text.edit"],
     async describe(ctx, field): Promise<TemplateFieldControl> {
@@ -224,7 +232,7 @@ export function slideTemplateFields(
     write: (ctx, field, value) =>
       guarded(async () => {
         if (typeof value !== "string")
-          throw new Problem("A placeholder's text must be text.");
+          throw new Problem(t(TEMPLATE.mustBeText));
         const a = await placeholderOf(ctx, field);
         const type = await valueOf(ctx, a, "type");
         if (
@@ -232,13 +240,9 @@ export function slideTemplateFields(
           ONE_LINE.has(type) &&
           /[\r\n]/.test(value)
         )
-          throw new Problem(
-            "A title is one line and cannot hold a line break.",
-          );
+          throw new Problem(t(TEMPLATE.oneLine));
         if ((await ctx.objects.get(a, "content")).kind !== "value")
-          throw new Problem(
-            "The placeholder holds no text (a picture or a chart).",
-          );
+          throw new Problem(t(TEMPLATE.noText));
         const out = await ctx.objects.set(
           a,
           "content",
@@ -250,7 +254,7 @@ export function slideTemplateFields(
 
   const visibility: TemplateFieldKindContribution<boolean> = {
     kind: VISIBILITY_KIND,
-    title: "Slide shown",
+    title: t(TEMPLATE.shownTitle),
     control: { kind: "toggle" },
     grants: ["item.visibility"],
     read: (ctx, field) =>
@@ -260,8 +264,7 @@ export function slideTemplateFields(
       }),
     write: (ctx, field, value) =>
       guarded(async () => {
-        if (typeof value !== "boolean")
-          throw new Problem("Whether a slide is shown is yes or no.");
+        if (typeof value !== "boolean") throw new Problem(t(TEMPLATE.yesOrNo));
         const out = await ctx.objects.set(
           await slideOf(ctx, field),
           "hidden",
@@ -271,8 +274,7 @@ export function slideTemplateFields(
         if (denial(out.reason ?? "")?.permission === "document.metadata")
           return {
             ok: false,
-            problem:
-              "The template does not let a filler show or hide slides: it must grant document.metadata to the whole document.",
+            problem: t(TEMPLATE.cannotHide),
           };
         return refused(out.reason);
       }),

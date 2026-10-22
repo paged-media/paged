@@ -30,8 +30,10 @@
 
 import type { BundleHost, PanelProps } from "@paged-media/plugin-api";
 import { subscribeOf, useLive } from "@paged-media/react-live";
+import { useStrings } from "@paged-media/strings";
 import * as React from "react";
 
+import { NOTES } from "../messages.js";
 import { setStateMutation, type SlidesStore } from "../slides-model.js";
 
 /** The transition types of a move through the deck. */
@@ -69,6 +71,7 @@ export function makeNotesPanel(
   const Component: React.FC<PanelProps> = () => {
     // The store as a render value (react-live, editor ADR 229): a new view
     // after every change, so what is read from it is read again.
+    const { t } = useStrings();
     const slides = useLive(store, subscribeOf);
     const list = slides.list();
     // The slide shown follows the active one through a transition (a
@@ -111,7 +114,7 @@ export function makeNotesPanel(
           style={{ padding: 12, fontSize: 13, opacity: 0.7 }}
           data-notes-panel="empty"
         >
-          No slide selected.
+          {t(NOTES.empty)}
         </div>
       );
     }
@@ -146,15 +149,15 @@ export function makeNotesPanel(
           }}
         >
           <span style={{ flex: 1, opacity: 0.7 }}>
-            Slide {slide.number} · speaker notes
+            {t(NOTES.heading, { number: slide.number })}
           </span>
           <button
             type="button"
             data-notes-prev
             disabled={at <= 0}
             onClick={() => step(-1)}
-            title="Previous slide"
-            aria-label="Previous slide"
+            title={t(NOTES.previous)}
+            aria-label={t(NOTES.previous)}
           >
             ‹
           </button>
@@ -163,8 +166,8 @@ export function makeNotesPanel(
             data-notes-next
             disabled={at < 0 || at >= list.length - 1}
             onClick={() => step(1)}
-            title="Next slide"
-            aria-label="Next slide"
+            title={t(NOTES.next)}
+            aria-label={t(NOTES.next)}
           >
             ›
           </button>
@@ -178,7 +181,7 @@ export function makeNotesPanel(
           <textarea
             data-notes-text
             value={draft}
-            placeholder="Click to add notes"
+            placeholder={t(NOTES.placeholder)}
             onChange={(e) => setDraft(e.target.value)}
             onBlur={commit}
             style={{

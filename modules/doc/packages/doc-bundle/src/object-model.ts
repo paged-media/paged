@@ -76,8 +76,11 @@ import {
   parseAddress,
 } from "@paged-media/plugin-sdk";
 
+import { t } from "@paged-media/strings";
+
 import manifestJson from "../manifest.json" with { type: "json" };
 import { DocEngine } from "./engine.js";
+import { DOC } from "./messages.js";
 import { headingLevel, styleNameById } from "./panels/outline-model.js";
 import { docTemplateFields } from "./template-fields.js";
 import {
@@ -727,7 +730,7 @@ function scopeOf(
 function documentKind(host: BundleHost): ObjectKindContribution {
   return {
     kind: "docxDocument",
-    title: "Word document",
+    title: t(DOC.kindDocument),
     schema: schemaOf("docxDocument"),
     content: {
       kind: "blob",
@@ -806,7 +809,7 @@ function documentKind(host: BundleHost): ObjectKindContribution {
 function blockKind(host: BundleHost): ObjectKindContribution {
   return {
     kind: "block",
-    title: "Word block",
+    title: t(DOC.kindBlock),
     schema: schemaOf("block"),
     hostOf: (address) => {
       const d = parseId(address, "block");
@@ -899,7 +902,7 @@ function blockKind(host: BundleHost): ObjectKindContribution {
 function runKind(host: BundleHost): ObjectKindContribution {
   return {
     kind: "run",
-    title: "Word run",
+    title: t(DOC.kindRun),
     schema: schemaOf("run"),
     hostOf: (address) => {
       const d = parseId(address, "run");
@@ -949,7 +952,7 @@ function runKind(host: BundleHost): ObjectKindContribution {
 function mergeFieldKind(host: BundleHost): ObjectKindContribution {
   return {
     kind: "mergeField",
-    title: "Merge field",
+    title: t(DOC.kindMergeField),
     schema: schemaOf("mergeField"),
     hostOf: (address) => {
       const d = parseId(address, "mergeField");
@@ -1094,7 +1097,7 @@ function typedCommands(
         }
         if (ops.length > 0) {
           const out = await ctx.objects.batch(ops, {
-            label: "Fill merge fields",
+            label: t(DOC.fillMergeFields),
           });
           if (!out.applied)
             throw new Error(

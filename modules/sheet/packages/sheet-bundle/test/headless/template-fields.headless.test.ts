@@ -227,7 +227,7 @@ describe.skipIf(!ENGINE_BUILT)(
       });
       expect(await env.objects.writeTemplateField(f.qty, "many")).toEqual({
         ok: false,
-        problem: '"many" is not a number.',
+        problem: "“many” is not a number.",
       });
       expect(await cellValue(env, "B3")).toBe("5");
 
@@ -241,7 +241,7 @@ describe.skipIf(!ENGINE_BUILT)(
       });
       expect(await env.objects.writeTemplateField(f.fruit, "Kiwi")).toEqual({
         ok: false,
-        problem: '"Kiwi" is not one of the choices (Apples, Quince).',
+        problem: "“Kiwi” is not one of the choices (Apples, Quince).",
       });
       expect(await env.objects.writeTemplateField(f.fruit, "Quince")).toEqual({
         ok: true,
@@ -316,7 +316,7 @@ describe.skipIf(!ENGINE_BUILT)(
       expect((await env.objects.readTemplateField(f.source)).value).toBe("two");
       expect(await env.objects.writeTemplateField(f.source, "pie")).toEqual({
         ok: false,
-        problem: '"pie" is not one of the choices (all, two).',
+        problem: "“pie” is not one of the choices (all, two).",
       });
     });
 

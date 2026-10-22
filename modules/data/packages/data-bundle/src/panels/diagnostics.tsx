@@ -8,6 +8,8 @@ import type { CSSProperties, ReactElement } from "react";
 
 import type { SessionDiagnostic } from "../session";
 import { color, space, status } from "@paged-media/panel-kit";
+import { useStrings } from "@paged-media/strings";
+import { DIAGNOSTICS as M } from "../messages";
 
 const COLOR: Record<SessionDiagnostic["level"], string> = {
   error: status.error,
@@ -29,6 +31,7 @@ export function DiagnosticsList(props: {
   sources?: readonly SessionDiagnostic["source"][];
   onClear?: () => void;
 }): ReactElement | null {
+  const { t } = useStrings();
   const shown = props.diagnostics
     .filter((d) => !props.sources || props.sources.includes(d.source))
     .slice()
@@ -51,7 +54,7 @@ export function DiagnosticsList(props: {
       </ul>
       {props.onClear && (
         <button type="button" onClick={props.onClear}>
-          Clear messages
+          {t(M.clear)}
         </button>
       )}
     </div>

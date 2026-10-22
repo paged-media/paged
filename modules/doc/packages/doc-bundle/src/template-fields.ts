@@ -46,7 +46,10 @@ import type {
 } from "@paged-media/plugin-api";
 import type { LoweredDoc } from "@paged-media/doc-host-model";
 
+import { t } from "@paged-media/strings";
+
 import { discoverDocs, readLowered } from "./doc-state.js";
+import { TEMPLATE } from "./messages.js";
 
 // The object model's own address shape (object-model.ts, which registers
 // these kinds and so cannot be imported from here).
@@ -95,13 +98,9 @@ async function loweringOf(
   const state = (await discoverDocs(host)).find(
     (s) => (s.frame as { id: string }).id === frame,
   );
-  if (!state)
-    throw new Problem(
-      `There is no Word document on the field's frame ${frame}.`,
-    );
+  if (!state) throw new Problem(t(TEMPLATE.noDocument, { frame }));
   const ir = await readLowered(host, state);
-  if (!ir)
-    throw new Problem("The Word document's parts are missing from this file.");
+  if (!ir) throw new Problem(t(TEMPLATE.partsMissing));
   return ir;
 }
 
@@ -124,15 +123,14 @@ export function resolveAnchor(ir: LoweredDoc, def: unknown): number {
     const i = blocks.findIndex(
       (b) => b.kind === "paragraph" && (b.bookmarks ?? []).includes(name),
     );
-    if (i < 0)
-      throw new Problem(`The Word document has no bookmark named "${name}".`);
+    if (i < 0) throw new Problem(t(TEMPLATE.noBookmark, { name }));
     return i;
   }
   if (typeof anchor["style"] === "string") {
     const style = anchor["style"];
     const nth = anchor["occurrence"] ?? 0;
     if (typeof nth !== "number" || !Number.isInteger(nth) || nth < 0)
-      throw new Problem("The anchor's occurrence is a whole number from 0.");
+      throw new Problem(t(TEMPLATE.occurrence));
     let seen = 0;
     for (const [i, b] of blocks.entries()) {
       if (
@@ -144,19 +142,15 @@ export function resolveAnchor(ir: LoweredDoc, def: unknown): number {
         seen += 1;
       }
     }
-    throw new Problem(
-      `The Word document has no paragraph number ${nth + 1} in the style "${style}".`,
-    );
+    throw new Problem(t(TEMPLATE.noParagraph, { n: nth + 1, style }));
   }
   if (typeof anchor["block"] === "number") {
     const i = anchor["block"];
     if (!Number.isInteger(i) || i < 0 || i >= blocks.length)
-      throw new Problem(`The Word document has no block ${String(i)}.`);
+      throw new Problem(t(TEMPLATE.noBlock, { index: String(i) }));
     return i;
   }
-  throw new Problem(
-    "The field's anchor names no paragraph: give a bookmark, a style or a block.",
-  );
+  throw new Problem(t(TEMPLATE.noAnchor));
 }
 
 /** The block address a definition's anchor names. */
@@ -212,8 +206,8 @@ function denial(reason: string): { permission: string; target: string } | null {
 /** A refusal the engine's policy made, as a sentence. */
 function deniedSentence(d: { permission: string; target: string }): string {
   return d.target === "the document"
-    ? `The template does not permit ${d.permission} on the document, which this field needs.`
-    : `The template does not permit ${d.permission} on ${d.target}, which is outside this field.`;
+    ? t(TEMPLATE.deniedDocument, { permission: d.permission })
+    : t(TEMPLATE.deniedTarget, { permission: d.permission, target: d.target });
 }
 
 /** A write's outcome as the form's answer. */
@@ -222,7 +216,7 @@ function answer(out: {
   reason?: string;
 }): TemplateFieldWrite {
   if (out.applied) return ok;
-  const reason = out.reason ?? "the Word document refused the value";
+  const reason = out.reason ?? t(TEMPLATE.refused);
   const denied = denial(reason);
   return refuse(denied ? deniedSentence(denied) : sentence(reason));
 }
@@ -258,9 +252,10 @@ async function guarded(
 }
 
 function oneLine(value: unknown, what: string): string {
-  if (typeof value !== "string") throw new Problem(`${what} must be text.`);
+  if (typeof value !== "string")
+    throw new Problem(t(TEMPLATE.mustBeText, { what }));
   if (/[\r\n]/.test(value))
-    throw new Problem(`${what} is one paragraph and cannot hold a line break.`);
+    throw new Problem(t(TEMPLATE.oneParagraph, { what }));
   return value;
 }
 
@@ -269,7 +264,7 @@ export function docTemplateFields(
 ): TemplateFieldKindContribution[] {
   const blockText: TemplateFieldKindContribution<string> = {
     kind: BLOCK_TEXT_KIND,
-    title: "Word paragraph text",
+    title: t(TEMPLATE.blockTextTitle),
     control: { kind: "text" },
     grants: ["text.edit"],
     read: (ctx, field) =>
@@ -283,12 +278,10 @@ export function docTemplateFields(
       }),
     write: (ctx, field, value) =>
       guarded(async () => {
-        const text = oneLine(value, "A paragraph's text");
+        const text = oneLine(value, t(TEMPLATE.paragraphText));
         const block = await anchoredBlock(host, field);
         if ((await readValue(ctx, block, "kind")) !== "paragraph")
-          throw new Problem(
-            "The field's anchor names a table, not a paragraph.",
-          );
+          throw new Problem(t(TEMPLATE.anchorIsTable));
         return answer(await ctx.objects.set(block, "text", text));
       }),
   };
@@ -300,7 +293,7 @@ export function docTemplateFields(
   ): Promise<string[]> {
     const name = record(field.def)["name"];
     if (typeof name !== "string" || name === "")
-      throw new Problem("The field names no merge field.");
+      throw new Problem(t(TEMPLATE.noMergeFieldName));
     const frame = frameOf(field);
     await loweringOf(host, frame);
     const all = await ctx.objects.query(
@@ -310,15 +303,13 @@ export function docTemplateFields(
       a.startsWith(docAddress("mergeField", `${frame}/`)),
     );
     if (mine.length === 0)
-      throw new Problem(
-        `The Word document has no merge field named "${name}".`,
-      );
+      throw new Problem(t(TEMPLATE.noMergeField, { name }));
     return mine;
   }
 
   const mergeField: TemplateFieldKindContribution<string> = {
     kind: MERGE_FIELD_KIND,
-    title: "Word merge field",
+    title: t(TEMPLATE.mergeFieldTitle),
     control: { kind: "text" },
     grants: ["text.edit"],
     read: (ctx, field) =>
@@ -329,15 +320,13 @@ export function docTemplateFields(
       }),
     write: (ctx, field, value) =>
       guarded(async () => {
-        const text = oneLine(value, "A merge field's value");
+        const text = oneLine(value, t(TEMPLATE.mergeFieldValue));
         const all = await mergeFields(ctx, field);
         const writable: string[] = [];
         for (const a of all)
           if ((await readValue(ctx, a, "writable")) === true) writable.push(a);
         if (writable.length === 0)
-          throw new Problem(
-            "The merge field sits in a table cell, which cannot be written yet.",
-          );
+          throw new Problem(t(TEMPLATE.mergeFieldInCell));
         // Every use of the name takes the value, as a Word merge does: one
         // batch, one undo step.
         return answer(
@@ -348,7 +337,7 @@ export function docTemplateFields(
               path: "value",
               value: text,
             })),
-            { label: "Fill merge field" },
+            { label: t(TEMPLATE.fillMergeField) },
           ),
         );
       }),
@@ -356,8 +345,11 @@ export function docTemplateFields(
 
   const listItems: TemplateFieldKindContribution<string[][]> = {
     kind: LIST_ITEMS_KIND,
-    title: "Word list items",
-    control: { kind: "table", columns: [{ name: "text", title: "Item" }] },
+    title: t(TEMPLATE.listItemsTitle),
+    control: {
+      kind: "table",
+      columns: [{ name: "text", title: t(TEMPLATE.itemColumn) }],
+    },
     grants: ["text.edit"],
     read: (ctx, field) =>
       tolerant(async () => {
@@ -374,15 +366,14 @@ export function docTemplateFields(
           !Array.isArray(value) ||
           value.some((row) => !Array.isArray(row) || typeof row[0] !== "string")
         )
-          throw new Problem("A list's items are rows of text.");
-        const items = value.map((row, i) => oneLine(row[0], `Item ${i + 1}`));
-        if (items.length === 0)
-          throw new Problem("A list keeps at least one item.");
+          throw new Problem(t(TEMPLATE.rowsOfText));
+        const items = value.map((row, i) =>
+          oneLine(row[0], t(TEMPLATE.item, { n: i + 1 })),
+        );
+        if (items.length === 0) throw new Problem(t(TEMPLATE.keepOne));
         const block = await anchoredBlock(host, field);
         if ((await readValue(ctx, block, "listItems")) === null)
-          throw new Problem(
-            "The field's anchor names a paragraph that is not a list item.",
-          );
+          throw new Problem(t(TEMPLATE.notListItem));
         return answer(await ctx.objects.set(block, "listItems", items));
       }),
   };
