@@ -195,7 +195,7 @@ lane("the object model on the real plugin, headless", () => {
       (await h.objects.commands()).filter(
         (c) => c.owner === "media.paged.image",
       ),
-    ).toHaveLength(40);
+    ).toHaveLength(43); // 39 twins + replaceLayerPixels, cropImage, canvasSize, applyAdjustment
   });
 
   it("an unedited frame reads as its one Background layer", async () => {

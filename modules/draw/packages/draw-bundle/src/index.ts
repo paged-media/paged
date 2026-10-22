@@ -1379,3 +1379,17 @@ export {
 // the host's now (`paged.object.selectParentGroup`) — see
 // commands/parentage.ts.
 export { parentGroupOf } from "./commands/parentage";
+export {
+  CUT_COMMAND_IDS,
+  KNIFE_COMMAND_ID,
+  SCISSORS_AT_COMMAND_ID,
+  SHAPE_BUILD_COMMAND_ID,
+  contributeCutCommands,
+  runKnife,
+  runScissorsAt,
+  runShapeBuild,
+} from "./commands/cut-commands";
+export {
+  applyShapeBuild,
+  type ShapeBuildOutcome,
+} from "./handlers/shape-builder";

@@ -1099,7 +1099,12 @@ export function activate(host: BundleHost): BundleHandle {
 
   // ADR 323 — the layer stacks as addressable, typed objects (headless:
   // no edit context, no GPU), plus a typed twin of every command above.
-  const objectModel = contributeImageObjectModel(host, untyped);
+  const objectModel = contributeImageObjectModel(
+    host,
+    untyped,
+    undefined,
+    () => session.state().source !== null,
+  );
   // ADR 323 — the layer stack's properties as host-rendered PropertyFields
   // (a schema panel of property rows; needs the object model + bindings).
   const propertyLists =
