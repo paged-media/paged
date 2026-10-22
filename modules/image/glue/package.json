@@ -16,6 +16,7 @@
     "test:dom": "bun test --parallel --preload ../../../tooling/js/bun-test-setup.ts --preload ./test/happydom.ts --timeout 30000 .dom.test."
   },
   "dependencies": {
+    "@paged-media/strings": "workspace:*",
     "@paged-media/helpers": "workspace:*",
     "@paged-media/panel-kit": "workspace:*",
     "@paged-media/react-live": "workspace:*",
