@@ -808,6 +808,25 @@ const CASES: Record<string, Case[]> = {
       },
     },
   ],
+  template: [
+    { name: "help", argv: () => ["template", "--help"], exit: 0 },
+    { name: "usage", argv: () => ["template"], exit: 2 },
+    {
+      name: "usage-unknown-subcommand",
+      argv: () => ["template", "make", fx.paged, NP],
+      exit: 2,
+    },
+    {
+      name: "input-not-a-document",
+      argv: () => ["template", "fields", T("notes.txt"), NP],
+      exit: 2,
+    },
+    {
+      name: "ok-fields-none",
+      argv: () => ["template", "fields", fx.paged, NP],
+      exit: 0,
+    },
+  ],
   merge: [
     { name: "help", argv: () => ["merge", "--help"], exit: 0 },
     { name: "usage", argv: () => ["merge"], exit: 2 },
@@ -1153,6 +1172,11 @@ describe("paged-node golden transcripts", () => {
   it("describe", async () => {
     covers("cli:paged-node describe");
     await runVerb("describe");
+  });
+
+  it("template", async () => {
+    covers("cli:paged-node template");
+    await runVerb("template");
   });
 });
 
