@@ -20,7 +20,14 @@
 // First: the Trusted Types default policy, before anything starts a worker.
 import "./boot/install-trusted-types";
 
-import { StrictMode, useEffect, useEffectEvent, useRef, useState } from "react";
+import {
+  StrictMode,
+  useEffect,
+  useEffectEvent,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { createRoot } from "react-dom/client";
 import {
   PagedShell,
@@ -285,7 +292,9 @@ import { CorpusPicker } from "./ui/CorpusPicker";
 import { templateFieldsContribution } from "./overlays/template-fields";
 import {
   EditorInstanceProvider,
+  createRoleStore,
   hostCommands,
+  type ShellAccess,
   useEditorInstance,
   type EditorInstance,
   type HostActions,
@@ -1585,8 +1594,28 @@ class GatedCanvasClient extends CanvasClient {
 /**
  * Root: owns the CanvasClient lifecycle and hands it to PagedShell.
  */
+/** Hands the mounted shell to the embedding API (`onShell`), once. */
+function InstanceBridge() {
+  const instance = useEditorInstance();
+  const paged = usePaged();
+  const registries = useRegistries();
+  const client = useCanvasClient();
+  const handed = useRef(false);
+  useEffect(() => {
+    if (handed.current || !instance.onShell) return;
+    handed.current = true;
+    instance.onShell({ paged, registries, client });
+  }, [instance, paged, registries, client]);
+  return null;
+}
+
 function CanvasAppRoot() {
   const instance = useEditorInstance();
+  const role = useSyncExternalStore(
+    instance.role.subscribe,
+    instance.role.get,
+    instance.role.get,
+  );
   const [client, setClient] = useState<CanvasClient | null>(null);
 
   useEffect(() => {
@@ -1663,11 +1692,12 @@ function CanvasAppRoot() {
       regions={instance.profile.regions}
       canvasFurniture={instance.profile.canvas}
       features={instance.profile.features}
-      sessionPolicy={{ role: instance.profile.role, overrides: [] }}
+      sessionPolicy={{ role, overrides: [] }}
       bindingProviders={bindingProviders}
       objectModel={editorObjectModel}
     >
       <CanvasAppIntegration />
+      <InstanceBridge />
       <CanvasContextMenuHost />
       <PluginBundles />
       <ConsentDialog controller={editorConsent.controller} />
@@ -1728,6 +1758,8 @@ export interface MountOptions {
   library?: boolean;
   /** Called once the editor's client exists. */
   onClient?: (client: CanvasClient) => void;
+  /** Called once the shell is mounted (the embedding API's handle). */
+  onShell?: (shell: ShellAccess) => void;
 }
 
 export function createEditorInstance(
@@ -1768,6 +1800,8 @@ export function createEditorInstance(
     actions: options.actions ?? {},
     problems,
     onClient: options.onClient,
+    onShell: options.onShell,
+    role: createRoleStore(profile.role),
   };
 }
 
