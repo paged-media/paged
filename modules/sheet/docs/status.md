@@ -68,6 +68,20 @@ each published canary added is under [Releases](#releases).
   a grid drawn on the main thread over the frame, with row and column headings inside it,
   instead of the scene layer; pointer, wheel and keys go straight to it. The page table does not
   follow the scrolled window yet: it still shows the placed range.
+- **The live grid looks like the page (ADR 510).** `get_grid_scene` builds on `frame_window`:
+  the frozen rows and columns stay pinned while the body scrolls, hidden and filtered rows are
+  skipped, and the viewport lists the shown sheet rows and columns (`rowIndices`/`colIndices`,
+  `frozenRows`/`frozenCols`, `partialRow`/`partialCol`). Cells take the workbook's styles
+  through `CellStyler`, the per-cell path the page lowering (`get_range_page`) uses as well —
+  fills, fonts, text colour, per-edge borders, vertical alignment, wrap, the number-format text,
+  and conditional formatting (dxf rules, colour scales, data bars) — so a cell has the same style
+  key and style on both surfaces (pinned by a property test over random sheets). Merged areas
+  come as rects with the anchor's text and style, split at the frozen band, with the gridlines
+  inside them left out; text cells name the empty neighbours they may overflow into. The
+  painter (`paintGridScene`) and the SVG/scene-layer views draw all of it. Still open: hidden
+  columns (the model has no column metadata yet; `col_hidden` in sheet-grid is the hook);
+  number-format colours; a merged area clipped by the page window does not carry its anchor's
+  text onto the page.
 - **Grid panel and in-frame grid.** Range selection by click, drag and shift; arrows, Tab, F2,
   Delete and scrolling in the frame; a cell editor with function completion; copy and paste of
   ranges with relative references re-addressed; the fill handle with number, date, weekday and

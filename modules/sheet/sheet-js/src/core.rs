@@ -2015,10 +2015,13 @@ impl SheetSession {
     }
 
     /// Window a worksheet into a [`sheet_grid::GridScene`] for the sheets-mode
-    /// vector grid surface (spec §8.1, S-02). The engine windows from the
-    /// `(first_row, first_col)` scroll origin bounded by `(w_pt, h_pt)` and
-    /// materializes only the visible populated cells (`sheet_grid::grid_scene`
-    /// does the O(visible) windowing); the stored selection for THIS sheet
+    /// vector grid surface (spec §8.1, S-02). The window is
+    /// `sheet_grid::frame_window` for the `(first_row, first_col)` scroll
+    /// origin, the `(w_pt, h_pt)` box and the frozen split (the workbook's
+    /// stored one unless `opts` overrides it): frozen tracks pinned, hidden
+    /// rows skipped. Cells carry the workbook's styles through the page
+    /// lowering's own per-cell styler (`sheet_grid::grid_scene_styled`), and
+    /// only visible cells are materialized; the stored selection for THIS sheet
     /// (see [`set_grid_selection`](Self::set_grid_selection)) is folded into the
     /// returned scene. An OOB sheet id is a boundary error (finding-2 discipline,
     /// matching `set_cell`/`get_range_lowered`).
