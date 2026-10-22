@@ -50,6 +50,7 @@
     "directory": "modules/draw/packages/draw-bundle"
   },
   "dependencies": {
+    "@paged-media/strings": "workspace:*",
     "@paged-media/helpers": "workspace:*",
     "@paged-media/panel-kit": "workspace:*",
     "@paged-media/wasm-boot": "workspace:*"
