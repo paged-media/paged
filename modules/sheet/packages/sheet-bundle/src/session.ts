@@ -385,6 +385,16 @@ export interface WorkbookSession {
   /** Clear the in-frame grid layer (the frame returns to its native
    *  lowered content). */
   hideGridInFrame(): void;
+  /** Extensions ADR 334 — route the in-frame grid to a FRAME SURFACE
+   *  instead of the scene layer: every grid state (window, selection, the
+   *  open cell edit, the fill preview) goes to `sink`, windowed to
+   *  `cellArea` (the frame's content box minus the surface's heading
+   *  strips). Returns the detach. While attached no scene layer is
+   *  submitted, and any already shown is cleared. */
+  attachFrameSurface(
+    sink: (scene: GridScene) => void,
+    cellArea: { wPt: number; hPt: number },
+  ): () => void;
   /** Enumerate the workbook's parsed charts (M2 charts track, spec §8.4).
    *  Empty when there is no engine / no charts. */
   listCharts(): ChartInfo[];
@@ -943,6 +953,10 @@ export function createWorkbookSession(
   };
 
   let sceneSurface: SceneLayerSurface | null = null;
+  // Extensions ADR 334 — the mounted frame surface's sink and cell area;
+  // while set, the grid goes there instead of the scene layer.
+  let surfaceSink: ((scene: GridScene) => void) | null = null;
+  let surfaceArea: { wPt: number; hPt: number } | null = null;
   const sceneChannel = (): SceneLayerSurface | null => {
     if (!host.supports("rendering.sceneLayer@1")) return null;
     if (!sceneSurface) sceneSurface = host.contribute.sceneLayer();
@@ -1962,8 +1976,8 @@ export function createWorkbookSession(
    *  buffer is overlaid on a copy. */
   async function flushInFrameGrid(): Promise<boolean> {
     if (!lastFrameId || !lastGridWindow) return false;
-    const surface = sceneChannel();
-    if (!surface) return false;
+    const surface = surfaceSink ? null : sceneChannel();
+    if (!surface && !surfaceSink) return false;
     const base = computeGridScene(
       lastGridWindow.firstRow,
       lastGridWindow.firstCol,
@@ -1980,6 +1994,11 @@ export function createWorkbookSession(
     // window is memoised).
     const scene = fillPreview ? { ...edited, fillPreview } : edited;
     lastGridScene = scene;
+    if (surfaceSink) {
+      surfaceSink(scene);
+      return true;
+    }
+    if (!surface) return false;
     try {
       await surface.submit(lastFrameId, gridSceneToSceneLayer(scene));
     } catch (err) {
@@ -3045,7 +3064,11 @@ export function createWorkbookSession(
       const prevFrame = lastFrameId;
       lastFrameId = target; // the in-frame grid + hide now track this frame
       const surface = sceneChannel();
-      if (!surface) {
+      if (
+        !surface &&
+        !surfaceSink &&
+        !host.supports("editContext.frameSurface@1")
+      ) {
         host.log.warn(
           "showGridInFrame: no scene channel (supports('rendering.sceneLayer@1') is false)",
         );
@@ -3081,8 +3104,10 @@ export function createWorkbookSession(
       lastGridWindow = {
         firstRow: keep?.firstRow ?? start.row,
         firstCol: keep?.firstCol ?? start.col,
-        wPt,
-        hPt,
+        // A mounted frame surface windows to its cell area (its headings
+        // take part of the content box).
+        wPt: surfaceArea?.wPt ?? wPt,
+        hPt: surfaceArea?.hPt ?? hPt,
       };
       if (!inFrameActive) sessionFloor = journalCursor; // the modal boundary
       inFrameActive = true;
@@ -3125,6 +3150,26 @@ export function createWorkbookSession(
 
     cancelCellEdit() {
       cancelEdit();
+    },
+
+    attachFrameSurface(sink, cellArea) {
+      surfaceSink = sink;
+      surfaceArea = {
+        wPt: Math.max(cellArea.wPt, 0),
+        hPt: Math.max(cellArea.hPt, 0),
+      };
+      // A scene layer shown before the surface mounted would sit under it.
+      if (lastFrameId) void sceneSurface?.clear(lastFrameId);
+      if (lastGridWindow) {
+        lastGridWindow = { ...lastGridWindow, ...surfaceArea };
+        void submitInFrameGrid();
+      }
+      return () => {
+        if (surfaceSink === sink) {
+          surfaceSink = null;
+          surfaceArea = null;
+        }
+      };
     },
 
     hideGridInFrame() {

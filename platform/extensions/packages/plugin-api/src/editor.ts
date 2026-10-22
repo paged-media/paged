@@ -305,6 +305,55 @@ export interface OverlayContribution {
   when?: VisibilityPredicate;
 }
 
+// ------------------------------------------------------- frame surface
+
+/**
+ * A FRAME SURFACE (extensions ADR 334): a live editing surface a bundle
+ * renders over one of its frames while its edit context is active. The
+ * host positions it exactly over the frame's content box and keeps it
+ * there through pan, zoom and the frame's own transform; inside it, one
+ * CSS pixel is one point of frame content. Because it is DOM on the main
+ * thread, the bundle gets native input (pointer capture, hover, right
+ * click, a real caret and IME through its own text field; a wheel it does
+ * not stop goes on to the canvas) with no round
+ * trip to the render worker, and it paints opaque over the frame's page
+ * content until the context ends.
+ *
+ * `contextType` names an edit context this same bundle registered; the
+ * surface borrows that context's declaration and lifetime (it mounts when
+ * the context is entered on a frame and unmounts when the context exits).
+ */
+export interface FrameSurfaceContribution {
+  contextType: string;
+  render: ComponentType<FrameSurfaceProps>;
+}
+
+/** What the host hands a {@link FrameSurfaceContribution}'s component. */
+export interface FrameSurfaceProps {
+  /** The frame the context was entered on. */
+  elementId: string;
+  /** The content box, pt (the component's own CSS size). */
+  widthPt: number;
+  heightPt: number;
+  /** Screen pixels per point at the current zoom, before the device pixel
+   *  ratio. A canvas backing store sized `pt * pxPerPt * devicePixelRatio`
+   *  stays crisp at any zoom. */
+  pxPerPt: number;
+  /** `"frame"` over the frame on the page; `"fullscreen"` filling the
+   *  editor's work area (only when the host supports it). */
+  presentation: "frame" | "fullscreen";
+  /** A client (viewport) position mapped into content points, or null when
+   *  it falls outside the content box. Honours rotation and skew, which a
+   *  bounding rect does not. */
+  toContentPt(clientX: number, clientY: number): [number, number] | null;
+  /** Ask for a presentation; the host may refuse (it then keeps the
+   *  current one). Probe `supports("editContext.frameSurface.fullscreen@1")`. */
+  requestPresentation(presentation: "frame" | "fullscreen"): void;
+  /** Leave the edit context: `commit: true` runs its `onCommit` first (a
+   *  ✓ button, a click outside), `false` its `onCancel` (Esc). */
+  exit(opts: { commit: boolean }): void;
+}
+
 // --------------------------------------------- commands + keybindings
 
 export interface CommandContribution {
@@ -436,6 +485,10 @@ export interface MenuRegistry {
 export interface EditContextRegistry {
   register(contribution: EditContextContribution): Disposable;
 }
+/** Frame surfaces (extensions ADR 334), keyed by their edit-context type. */
+export interface FrameSurfaceRegistry {
+  register(contribution: FrameSurfaceContribution): Disposable;
+}
 /** W3.2 — the object-type registry (the shell owns hit-routing; a
  *  matching element's double-click enters its `editContextType`). */
 export interface ObjectTypeRegistry {
@@ -476,6 +529,9 @@ export interface ShellRegistries {
   importers?: ImporterRegistry;
   /** K-2 / S-06 — document exporters (plugin → file). Optional likewise. */
   exporters?: ExporterRegistry;
+  /** Frame surfaces (extensions ADR 334). Optional likewise: without it
+   *  the SDK warns and `supports("editContext.frameSurface@1")` is false. */
+  frameSurfaces?: FrameSurfaceRegistry;
 }
 
 // ---------------------------------------------------- overlay signals

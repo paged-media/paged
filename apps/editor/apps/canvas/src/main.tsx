@@ -491,6 +491,11 @@ function PluginBundles() {
   const { enterContextByType } = useEditContextEntry();
   const enterContextRef = useRef(enterContextByType);
   enterContextRef.current = enterContextByType;
+  // Extensions ADR 334 — `host.shell.exitEditContext`: leave the ACTIVE
+  // context when it is of `type` (commit or cancel first). The live stack
+  // through an effect event, as the undo routing reads it.
+  const exitStack = useEditContextStack();
+  const liveExitStack = useEffectEvent(() => exitStack);
   useEffect(() => {
     // Shell actions the host APP owns (the cockpit's panel
     // placement) — injected so the SDK's adapter stays a pure
@@ -612,6 +617,13 @@ function PluginBundles() {
       panels: cockpitActions,
       enterEditContext: (type, elementId) =>
         enterContextRef.current(type, elementId),
+      exitEditContext: async (type, opts) => {
+        const stack = liveExitStack();
+        if (stack.active?.type !== type) return false;
+        if (opts.commit) stack.commit();
+        else stack.cancel();
+        return true;
+      },
       widgets: {
         CodeEditor,
         ColorPicker: HostColorPicker,
