@@ -74,3 +74,9 @@ next step if that ever shows in a profile.
 
 - [ADR 005](005-wire-recipe.md) — every operation self-describing and invertible
 - [ADR 131](131-one-address-grammar-and-selectors.md) — item names, which address fields
+
+## Amendment — 2026-10-22
+
+The canvas model applies through `apply_checked`, with the session's role on the wire, the
+text and settings writes checked, gestures refused at their beginning and refusals typed:
+[ADR 1001](1001-the-session-has-a-role-and-refusals-are-typed.md).

@@ -108,6 +108,9 @@ pub struct WorkerCore {
     /// v67 — the session's snapping preferences. Kept here as well as on
     /// the model so they survive `LoadDocument` / `NewBlankDocument`.
     pub snap_settings: paged_canvas::snap_point::SnapSettings,
+    /// v75 — the session's role and overrides; like the snap settings it
+    /// survives document loads (engine ADR 1000).
+    pub session_policy: paged_template::SessionPolicy,
     /// v71 — scripts suspended on the host bridge (between their
     /// `RequestHostObjects` and the host's `HostObjectsResult`), by
     /// session id. Several may wait at once: the editor runs read-only
@@ -271,6 +274,7 @@ impl WorkerCore {
             export_sessions: std::collections::HashMap::new(),
             next_export_session: 1,
             snap_settings: Default::default(),
+            session_policy: Default::default(),
             script_sessions: std::collections::BTreeMap::new(),
             next_script_session: 1,
         }
@@ -359,6 +363,7 @@ impl WorkerCore {
                 match CanvasModel::load(doc_id, bytes.as_slice(), opts) {
                     Ok(mut model) => {
                         model.set_snap_settings(self.snap_settings);
+                        model.set_session_policy(self.session_policy.clone());
                         let handle = model.handle();
                         self.model = Some(model);
                         self.script_sessions.clear();
@@ -392,6 +397,7 @@ impl WorkerCore {
                 match CanvasModel::new_blank(doc_id, width_pt, height_pt, opts) {
                     Ok(mut model) => {
                         model.set_snap_settings(self.snap_settings);
+                        model.set_session_policy(self.session_policy.clone());
                         let handle = model.handle();
                         self.model = Some(model);
                         self.script_sessions.clear();
@@ -845,6 +851,13 @@ impl WorkerCore {
                     },
                 };
                 WorkerToMainKind::SnapPoint { result }
+            }
+            MainToWorkerKind::SetSessionPolicy { policy } => {
+                self.session_policy = policy.clone();
+                if let Some(m) = self.model.as_mut() {
+                    m.set_session_policy(policy.clone());
+                }
+                WorkerToMainKind::SessionPolicyApplied { policy }
             }
             MainToWorkerKind::SetSnapSettings { settings } => {
                 self.snap_settings = settings;

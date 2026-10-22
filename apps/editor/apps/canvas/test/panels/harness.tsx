@@ -100,6 +100,8 @@ import {
   type PanelContribution,
   type ShellRegistries,
   type TableCellSelection,
+  ChromeRegionsProvider,
+  chromeRegionsOf,
 } from "@paged-media/shell";
 import { createBindingProviderRegistry } from "@paged-media/plugin-sdk";
 
@@ -379,55 +381,57 @@ export function ShellProviders({
 }: PropsWithChildren<{ client: CanvasClient }>): ReactNode {
   return (
     <CanvasClientProvider client={client}>
-      <ThemeProvider>
-        <CameraProvider>
-          <DocumentProvider>
-            <ToolProvider>
-              <WorkflowModeProvider>
-                <ScreenModeProvider>
-                  <ToolSettingsProvider>
-                    <FormattingAffectsProvider>
-                      <SelectionProvider>
-                        <ContentSelectionProvider>
-                          <OverlaySignalsProvider>
-                            <GuideDragProvider>
-                              <ThreadingProvider>
-                                <TableSelectionProvider>
-                                  <InstrumentationProvider>
-                                    <EditContextStackProvider>
-                                      <BindingProviderProvider
-                                        host={
-                                          createBindingProviderRegistry() as never
-                                        }
-                                      >
-                                        <ObjectModelProvider
-                                          host={editorObjectModel}
+      <ChromeRegionsProvider value={chromeRegionsOf(undefined, undefined)}>
+        <ThemeProvider>
+          <CameraProvider>
+            <DocumentProvider>
+              <ToolProvider>
+                <WorkflowModeProvider>
+                  <ScreenModeProvider>
+                    <ToolSettingsProvider>
+                      <FormattingAffectsProvider>
+                        <SelectionProvider>
+                          <ContentSelectionProvider>
+                            <OverlaySignalsProvider>
+                              <GuideDragProvider>
+                                <ThreadingProvider>
+                                  <TableSelectionProvider>
+                                    <InstrumentationProvider>
+                                      <EditContextStackProvider>
+                                        <BindingProviderProvider
+                                          host={
+                                            createBindingProviderRegistry() as never
+                                          }
                                         >
-                                          <PagedEditorProvider>
-                                            <ActionsProvider>
-                                              <CockpitStateProvider>
-                                                {children}
-                                              </CockpitStateProvider>
-                                            </ActionsProvider>
-                                          </PagedEditorProvider>
-                                        </ObjectModelProvider>
-                                      </BindingProviderProvider>
-                                    </EditContextStackProvider>
-                                  </InstrumentationProvider>
-                                </TableSelectionProvider>
-                              </ThreadingProvider>
-                            </GuideDragProvider>
-                          </OverlaySignalsProvider>
-                        </ContentSelectionProvider>
-                      </SelectionProvider>
-                    </FormattingAffectsProvider>
-                  </ToolSettingsProvider>
-                </ScreenModeProvider>
-              </WorkflowModeProvider>
-            </ToolProvider>
-          </DocumentProvider>
-        </CameraProvider>
-      </ThemeProvider>
+                                          <ObjectModelProvider
+                                            host={editorObjectModel}
+                                          >
+                                            <PagedEditorProvider>
+                                              <ActionsProvider>
+                                                <CockpitStateProvider>
+                                                  {children}
+                                                </CockpitStateProvider>
+                                              </ActionsProvider>
+                                            </PagedEditorProvider>
+                                          </ObjectModelProvider>
+                                        </BindingProviderProvider>
+                                      </EditContextStackProvider>
+                                    </InstrumentationProvider>
+                                  </TableSelectionProvider>
+                                </ThreadingProvider>
+                              </GuideDragProvider>
+                            </OverlaySignalsProvider>
+                          </ContentSelectionProvider>
+                        </SelectionProvider>
+                      </FormattingAffectsProvider>
+                    </ToolSettingsProvider>
+                  </ScreenModeProvider>
+                </WorkflowModeProvider>
+              </ToolProvider>
+            </DocumentProvider>
+          </CameraProvider>
+        </ThemeProvider>
+      </ChromeRegionsProvider>
     </CanvasClientProvider>
   );
 }
