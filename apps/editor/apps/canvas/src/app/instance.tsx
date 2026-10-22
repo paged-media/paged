@@ -27,6 +27,7 @@ import { createContext, useContext, type ReactNode } from "react";
 
 import type { CanvasClient } from "@paged-media/client";
 import type {
+  CommandContribution,
   PanelContribution,
   PanelRailItem,
   ProfileProblem,
@@ -60,6 +61,32 @@ export interface HostActions {
   close?(): void;
   /** Go back in the host (`paged.host.back`). */
   back?(): void;
+}
+
+/**
+ * The host's actions as commands (concept §8.3): one per action the host
+ * supplied, so a profile can place it in a region (the actions bar, the
+ * header) and a feature can switch it off. `save` is not one: it replaces
+ * the editor's own save.
+ */
+export function hostCommands(actions: HostActions): CommandContribution[] {
+  const out: CommandContribution[] = [];
+  const { submit, close, back } = actions;
+  if (submit)
+    out.push({
+      id: "paged.host.submit",
+      title: "Submit",
+      handler: () => submit(),
+    });
+  if (close)
+    out.push({
+      id: "paged.host.close",
+      title: "Close",
+      handler: () => close(),
+    });
+  if (back)
+    out.push({ id: "paged.host.back", title: "Back", handler: () => back() });
+  return out;
 }
 
 export interface EditorInstance {
