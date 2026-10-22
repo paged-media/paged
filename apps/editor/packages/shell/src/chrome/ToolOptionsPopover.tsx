@@ -18,9 +18,11 @@
  */
 
 import { useSyncExternalStore, type CSSProperties } from "react";
+import { useStrings } from "@paged-media/strings";
 
 import { useToolSettings } from "../state/tool-settings-context";
 import type { ToolOptionField, ToolOptionsSpec } from "../tools/tool-options";
+import { TOOL_OPTIONS } from "./messages";
 
 // Concept 1 (T8) — the double-click tool-options popover. Renders a
 // spec's fields against the tool-settings store (app-state). Single-
@@ -33,11 +35,12 @@ export function ToolOptionsPopover({
   spec: ToolOptionsSpec;
   style?: CSSProperties;
 }) {
+  const strings = useStrings();
   return (
     <div
       style={{ ...popoverStyle, ...style }}
       role="dialog"
-      aria-label="Tool options"
+      aria-label={strings.t(TOOL_OPTIONS.label)}
       data-tool-options={spec.toolId}
     >
       {spec.fields.map((field) => (

@@ -17,6 +17,8 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
+import { useStrings } from "@paged-media/strings";
+import { INPUT } from "../messages";
 import { LengthInput } from "./LengthInput";
 import type { LengthUnit } from "./units";
 
@@ -47,15 +49,21 @@ export interface BoundsInputProps {
  * with the label under each cell (insets, offsets, crops).
  */
 export function BoundsInput(props: BoundsInputProps) {
+  const strings = useStrings();
   const {
     valuePt,
     defaultUnit,
-    labels = ["T", "L", "B", "R"],
     layout = "grid2",
     onChangePt,
     onCommitPt,
     disabled = false,
   } = props;
+  const labels = props.labels ?? [
+    strings.t(INPUT.topShort),
+    strings.t(INPUT.leftShort),
+    strings.t(INPUT.bottomShort),
+    strings.t(INPUT.rightShort),
+  ];
   const [top, left, bottom, right] = valuePt;
 
   const set = (idx: 0 | 1 | 2 | 3, next: number, commit: boolean) => {
@@ -98,7 +106,7 @@ export function BoundsInput(props: BoundsInputProps) {
         disabled={disabled}
         onChangePt={(v) => set(0, v, false)}
         onCommitPt={(v) => set(0, v, true)}
-        aria-label="top"
+        aria-label={strings.t(INPUT.top)}
       />
       <LengthInput
         valuePt={left}
@@ -107,7 +115,7 @@ export function BoundsInput(props: BoundsInputProps) {
         disabled={disabled}
         onChangePt={(v) => set(1, v, false)}
         onCommitPt={(v) => set(1, v, true)}
-        aria-label="left"
+        aria-label={strings.t(INPUT.left)}
       />
       <LengthInput
         valuePt={bottom}
@@ -116,7 +124,7 @@ export function BoundsInput(props: BoundsInputProps) {
         disabled={disabled}
         onChangePt={(v) => set(2, v, false)}
         onCommitPt={(v) => set(2, v, true)}
-        aria-label="bottom"
+        aria-label={strings.t(INPUT.bottom)}
       />
       <LengthInput
         valuePt={right}
@@ -125,7 +133,7 @@ export function BoundsInput(props: BoundsInputProps) {
         disabled={disabled}
         onChangePt={(v) => set(3, v, false)}
         onCommitPt={(v) => set(3, v, true)}
-        aria-label="right"
+        aria-label={strings.t(INPUT.right)}
       />
     </div>
   );

@@ -36,6 +36,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ExportPdfWireOptions } from "@paged-media/client";
+import { useStrings } from "@paged-media/strings";
 import {
   Dialog,
   DialogContent,
@@ -55,6 +56,8 @@ import {
   workingProfileLabel,
   type PrintOutputFacts,
 } from "../lib/print-output";
+import { EXPORT_PDF } from "./messages";
+import { richText } from "./rich";
 
 type DialogAction = "open" | "close";
 const listeners = new Set<(action: DialogAction) => void>();
@@ -144,6 +147,7 @@ const fieldRow: React.CSSProperties = {
 const labelStyle: React.CSSProperties = { width: 130, opacity: 0.8 };
 
 export function ExportPdfDialog() {
+  const strings = useStrings();
   const client = useCanvasClient();
   const { handle } = useDocument();
   const [open, setOpen] = useState(false);
@@ -365,16 +369,17 @@ export function ExportPdfDialog() {
       >
         <DialogContent data-export-dialog data-export-status={statusAttr}>
           <DialogHeader>
-            <DialogTitle>Export PDF</DialogTitle>
+            <DialogTitle>{strings.t(EXPORT_PDF.title)}</DialogTitle>
             <DialogDescription>
-              Print-grade PDF from the live document — text stays text, CMYK and
-              spot inks keep their numbers.
+              {strings.t(EXPORT_PDF.description)}
             </DialogDescription>
           </DialogHeader>
 
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             <div style={fieldRow}>
-              <span style={labelStyle}>Conformance</span>
+              <span style={labelStyle}>
+                {strings.t(EXPORT_PDF.conformance)}
+              </span>
               <select
                 data-export-standard
                 value={form.standard}
@@ -389,7 +394,9 @@ export function ExportPdfDialog() {
             </div>
 
             <div style={fieldRow}>
-              <span style={labelStyle}>Output intent</span>
+              <span style={labelStyle}>
+                {strings.t(EXPORT_PDF.outputIntent)}
+              </span>
               <select
                 data-export-profile
                 value={form.outputIntentProfile}
@@ -398,8 +405,10 @@ export function ExportPdfDialog() {
               >
                 <option value="">
                   {activeProfile
-                    ? `Document working space (${workingProfileLabel(print)})`
-                    : "Document working space"}
+                    ? strings.t(EXPORT_PDF.workingSpaceNamed, {
+                        profile: workingProfileLabel(print),
+                      })
+                    : strings.t(EXPORT_PDF.workingSpace)}
                 </option>
                 {profiles.map((p) => (
                   <option key={p} value={p}>
@@ -417,13 +426,12 @@ export function ExportPdfDialog() {
                   marginLeft: 138,
                 }}
               >
-                PDF/X-4 requires an output-intent profile — register one in the
-                Color settings panel or switch to PDF 1.7.
+                {strings.t(EXPORT_PDF.x4NeedsProfile)}
               </div>
             )}
 
             <div style={fieldRow}>
-              <span style={labelStyle}>Color</span>
+              <span style={labelStyle}>{strings.t(EXPORT_PDF.color)}</span>
               <select
                 data-export-policy
                 value={form.colorPolicy}
@@ -432,15 +440,17 @@ export function ExportPdfDialog() {
                   set("colorPolicy", e.target.value as FormState["colorPolicy"])
                 }
               >
-                <option value="preserveNumbers">Preserve numbers</option>
+                <option value="preserveNumbers">
+                  {strings.t(EXPORT_PDF.preserveNumbers)}
+                </option>
                 <option value="convertToDestination">
-                  Convert to destination
+                  {strings.t(EXPORT_PDF.convertToDestination)}
                 </option>
               </select>
             </div>
 
             <div style={fieldRow}>
-              <span style={labelStyle}>Pages</span>
+              <span style={labelStyle}>{strings.t(EXPORT_PDF.pages)}</span>
               <label style={{ display: "flex", alignItems: "center", gap: 4 }}>
                 <input
                   type="checkbox"
@@ -448,7 +458,7 @@ export function ExportPdfDialog() {
                   disabled={exporting}
                   onChange={(e) => set("allPages", e.target.checked)}
                 />
-                All ({pageCount})
+                {strings.t(EXPORT_PDF.allPages, { count: pageCount })}
               </label>
               {!form.allPages && (
                 <>
@@ -478,12 +488,12 @@ export function ExportPdfDialog() {
                   marginLeft: 138,
                 }}
               >
-                Range must be within 1–{pageCount}.
+                {strings.t(EXPORT_PDF.rangeInvalid, { count: pageCount })}
               </div>
             )}
 
             <div style={fieldRow}>
-              <span style={labelStyle}>Bleed</span>
+              <span style={labelStyle}>{strings.t(EXPORT_PDF.bleed)}</span>
               <label style={{ display: "flex", alignItems: "center", gap: 4 }}>
                 <input
                   type="checkbox"
@@ -491,7 +501,7 @@ export function ExportPdfDialog() {
                   disabled={exporting}
                   onChange={(e) => set("useDocumentBleed", e.target.checked)}
                 />
-                Use document bleed
+                {strings.t(EXPORT_PDF.documentBleed)}
               </label>
               {!form.useDocumentBleed && (
                 <>
@@ -501,13 +511,15 @@ export function ExportPdfDialog() {
                     disabled={exporting}
                     onChange={(e) => set("bleedPt", e.target.value)}
                   />
-                  <span style={{ opacity: 0.7 }}>pt (all sides)</span>
+                  <span style={{ opacity: 0.7 }}>
+                    {strings.t(EXPORT_PDF.ptAllSides)}
+                  </span>
                 </>
               )}
             </div>
 
             <div style={fieldRow}>
-              <span style={labelStyle}>Marks</span>
+              <span style={labelStyle}>{strings.t(EXPORT_PDF.marks)}</span>
               <label style={{ display: "flex", alignItems: "center", gap: 4 }}>
                 <input
                   type="checkbox"
@@ -515,7 +527,7 @@ export function ExportPdfDialog() {
                   disabled={exporting}
                   onChange={(e) => set("cropMarks", e.target.checked)}
                 />
-                Crop
+                {strings.t(EXPORT_PDF.cropMarks)}
               </label>
               <label style={{ display: "flex", alignItems: "center", gap: 4 }}>
                 <input
@@ -524,7 +536,7 @@ export function ExportPdfDialog() {
                   disabled={exporting}
                   onChange={(e) => set("registrationMarks", e.target.checked)}
                 />
-                Registration
+                {strings.t(EXPORT_PDF.registrationMarks)}
               </label>
               <label style={{ display: "flex", alignItems: "center", gap: 4 }}>
                 <input
@@ -533,12 +545,12 @@ export function ExportPdfDialog() {
                   disabled={exporting}
                   onChange={(e) => set("colorBars", e.target.checked)}
                 />
-                Color bars
+                {strings.t(EXPORT_PDF.colorBars)}
               </label>
             </div>
 
             <div style={fieldRow}>
-              <span style={labelStyle}>Include</span>
+              <span style={labelStyle}>{strings.t(EXPORT_PDF.include)}</span>
               <label style={{ display: "flex", alignItems: "center", gap: 4 }}>
                 <input
                   type="checkbox"
@@ -546,7 +558,7 @@ export function ExportPdfDialog() {
                   disabled={exporting}
                   onChange={(e) => set("bookmarks", e.target.checked)}
                 />
-                Bookmarks
+                {strings.t(EXPORT_PDF.bookmarks)}
               </label>
               <label style={{ display: "flex", alignItems: "center", gap: 4 }}>
                 <input
@@ -555,12 +567,12 @@ export function ExportPdfDialog() {
                   disabled={exporting}
                   onChange={(e) => set("tagged", e.target.checked)}
                 />
-                Create Tagged PDF
+                {strings.t(EXPORT_PDF.tagged)}
               </label>
             </div>
 
             <div style={fieldRow}>
-              <span style={labelStyle}>Downsample images</span>
+              <span style={labelStyle}>{strings.t(EXPORT_PDF.downsample)}</span>
               <select
                 value={form.downsample}
                 disabled={exporting}
@@ -568,16 +580,25 @@ export function ExportPdfDialog() {
                   set("downsample", e.target.value as FormState["downsample"])
                 }
               >
-                <option value="off">Off (preserve)</option>
-                <option value="300">to 300 ppi</option>
-                <option value="150">to 150 ppi</option>
+                <option value="off">
+                  {strings.t(EXPORT_PDF.downsampleOff)}
+                </option>
+                <option value="300">
+                  {strings.t(EXPORT_PDF.downsampleTo, { ppi: 300 })}
+                </option>
+                <option value="150">
+                  {strings.t(EXPORT_PDF.downsampleTo, { ppi: 150 })}
+                </option>
               </select>
             </div>
 
             {phase.kind === "exporting" && (
               <div data-export-progress style={{ marginTop: 4 }}>
                 <div style={{ fontSize: 12, marginBottom: 4 }}>
-                  Exporting page {phase.done} / {phase.total}…
+                  {strings.t(EXPORT_PDF.progress, {
+                    done: phase.done,
+                    total: phase.total,
+                  })}
                 </div>
                 <div
                   style={{
@@ -603,21 +624,21 @@ export function ExportPdfDialog() {
                 data-export-error
                 style={{ color: "var(--status-error)", fontSize: 12 }}
               >
-                Export failed: {phase.message}
+                {strings.t(EXPORT_PDF.failed, { message: phase.message })}
               </div>
             )}
           </div>
 
           <DialogFooter>
             <Button variant="outline" data-export-cancel onClick={onCancel}>
-              Cancel
+              {strings.t(EXPORT_PDF.cancel)}
             </Button>
             <Button
               data-export-confirm
               disabled={!canExport}
               onClick={() => void onExport()}
             >
-              Export
+              {strings.t(EXPORT_PDF.export)}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -626,12 +647,14 @@ export function ExportPdfDialog() {
         <div role="status" data-export-notice style={noticeStyle}>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <span style={{ flex: 1 }}>
-              Exported <strong>{notice.fileName}</strong> · {notice.pages}{" "}
-              {notice.pages === 1 ? "page" : "pages"}
+              {richText(
+                strings.t(EXPORT_PDF.exported, { count: notice.pages }),
+                { file: <strong>{notice.fileName}</strong> },
+              )}
             </span>
             <button
               type="button"
-              aria-label="Dismiss"
+              aria-label={strings.t(EXPORT_PDF.dismiss)}
               data-export-notice-close
               onClick={() => setNotice(null)}
               style={noticeCloseStyle}
@@ -641,10 +664,10 @@ export function ExportPdfDialog() {
           </div>
           {notice.diagnostics.length > 0 && (
             <div style={{ marginTop: 4, opacity: 0.8 }}>
-              {notice.diagnostics.length === 1
-                ? "1 finding"
-                : `${notice.diagnostics.length} findings`}
-              : {notice.diagnostics.join("; ")}
+              {strings.t(EXPORT_PDF.findings, {
+                count: notice.diagnostics.length,
+                list: notice.diagnostics.join("; "),
+              })}
             </div>
           )}
         </div>

@@ -25,7 +25,10 @@
 
 import { useState, type ReactNode } from "react";
 
+import { useStrings } from "@paged-media/strings";
+
 import { Icon } from "../../icons";
+import { LIST_ROWS as M } from "../messages";
 import { statusColor, type StatusTone } from "./kit";
 
 export interface ListRowBadge {
@@ -63,7 +66,7 @@ export interface ListRowSpec {
 export function ListRows({
   rows,
   search = false,
-  searchPlaceholder = "Filter",
+  searchPlaceholder,
   emptyText,
   testId,
 }: {
@@ -74,6 +77,7 @@ export function ListRows({
   emptyText?: string;
   testId?: string;
 }) {
+  const strings = useStrings();
   const [query, setQuery] = useState("");
   const q = query.trim().toLowerCase();
   const visible =
@@ -102,7 +106,7 @@ export function ListRows({
         >
           <Icon name="ui-search" size={14} />
           <input
-            placeholder={searchPlaceholder}
+            placeholder={searchPlaceholder ?? strings.t(M.filter)}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             data-list-search

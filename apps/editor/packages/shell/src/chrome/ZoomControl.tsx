@@ -23,6 +23,8 @@
 // invoke the registered zoom commands (zoom in / out / 100% / fit),
 // so behaviour matches the View menu and keyboard shortcuts.
 
+import { useStrings } from "@paged-media/strings";
+
 import { Icon } from "../icons";
 import { useCamera } from "../state/camera-context";
 import { ZOOM_PRESET_SCALES, zoomCameraTo } from "../state/zoom-range";
@@ -35,22 +37,25 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "../components/ui/dropdown-menu";
+import { ZOOM } from "./messages";
 
 // The fits first, as InDesign's zoom menu lists them, then the steps;
 // the presets follow (UX audit F-31, ADR 257).
+// The labels are message keys (./messages), read at render.
 const ZOOM_ITEMS: Array<[string, string]> = [
-  ["Fit page in window", "paged.view.fitPage"],
-  ["Fit spread in window", "paged.view.fitSpread"],
-  ["Fit selection in window", "paged.view.fitSelection"],
-  ["Fit document", "paged.view.zoomFit"],
-  ["Zoom in", "paged.view.zoomIn"],
-  ["Zoom out", "paged.view.zoomOut"],
-  ["Zoom to 100%", "paged.view.zoom100"],
+  [ZOOM.fitPage, "paged.view.fitPage"],
+  [ZOOM.fitSpread, "paged.view.fitSpread"],
+  [ZOOM.fitSelection, "paged.view.fitSelection"],
+  [ZOOM.fitDocument, "paged.view.zoomFit"],
+  [ZOOM.zoomIn, "paged.view.zoomIn"],
+  [ZOOM.zoomOut, "paged.view.zoomOut"],
+  [ZOOM.zoom100, "paged.view.zoom100"],
 ];
 
 export function ZoomControl({
   side = "bottom",
 }: { side?: "top" | "bottom" } = {}) {
+  const strings = useStrings();
   const { camera, setCamera, viewportSize } = useCamera();
   // Read through a view of the registry (state/live.ts, ADR 229). A
   // camera re-render alone would not do: compiled, `commands.get(id)` is
@@ -90,7 +95,7 @@ export function ZoomControl({
               data-zoom-item={id}
               onSelect={() => void commands.invoke(id)}
             >
-              {label}
+              {strings.t(label)}
             </DropdownMenuItem>
           ) : null,
         )}

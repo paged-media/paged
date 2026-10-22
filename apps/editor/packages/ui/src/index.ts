@@ -18,6 +18,8 @@
  */
 
 // @paged-media/ui — composite components and design-system primitives
+
+import "./translations";
 // shared across the canvas app and (eventually) third-party
 // bundles. Curated subset of shadcn primitives (re-exported from
 // @paged-media/shell) plus DTP composites built on top.

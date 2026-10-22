@@ -36,12 +36,16 @@ import {
   type WorkflowMode,
 } from "../state/workflow-mode-context";
 import { Segment } from "@paged-media/panel-kit";
+import { useStrings } from "@paged-media/strings";
+
+import { MODE_SWITCHER } from "./messages";
 
 export interface ModeSwitcherProps {
   right?: ReactNode;
 }
 
 export function ModeSwitcher({ right }: ModeSwitcherProps) {
+  const strings = useStrings();
   const { mode, setMode } = useWorkflowMode();
   // A view of the registry (state/live.ts, ADR 229): a bundle that
   // registers a mode after the first render shows up.
@@ -63,7 +67,7 @@ export function ModeSwitcher({ right }: ModeSwitcherProps) {
 
       <div
         role="toolbar"
-        aria-label="Workflow mode"
+        aria-label={strings.t(MODE_SWITCHER.label)}
         style={centerStyle}
         {...roving}
       >
@@ -90,6 +94,7 @@ export function ModeSwitcher({ right }: ModeSwitcherProps) {
 /** Kit chrome.jsx — the bottom-right zoom cluster: the zoom dropdown
  *  (live percent + presets) and a log-scale slider that zooms around the viewport centre. */
 function ZoomCluster() {
+  const strings = useStrings();
   const { camera, setCamera, viewportSize } = useCamera();
   // Log mapping 1%…800% so page-fit zooms (~5–60%) get usable travel.
   const MIN = Math.log(0.01);
@@ -118,7 +123,7 @@ function ZoomCluster() {
       <ZoomControl side="top" />
       <input
         type="range"
-        aria-label="Zoom"
+        aria-label={strings.t(MODE_SWITCHER.zoom)}
         min={0}
         max={1000}
         value={Math.round(pos * 1000)}

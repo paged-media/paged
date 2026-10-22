@@ -28,7 +28,10 @@
 // identity, kept minimal). Selection-magenta accent marks the active
 // (top) crumb — the DTP "you are editing inside this" cue.
 
+import { useStrings } from "@paged-media/strings";
+
 import { useEditContextStack } from "../state/edit-context-stack";
+import { EDIT_CONTEXT } from "./messages";
 import { chrome, font, radius, space } from "@paged-media/panel-kit";
 
 /** `vectorGraphic` → `Vector graphic`; `webFrame` → `Web frame`. */
@@ -38,6 +41,7 @@ function titleCase(type: string): string {
 }
 
 export function EditContextBreadcrumb() {
+  const strings = useStrings();
   const { breadcrumb, pop } = useEditContextStack();
   if (breadcrumb.length === 0) return null;
 
@@ -51,11 +55,11 @@ export function EditContextBreadcrumb() {
   return (
     <nav
       data-edit-context-breadcrumb
-      aria-label="Edit context"
+      aria-label={strings.t(EDIT_CONTEXT.label)}
       style={barStyle}
     >
       <span className="pg-ui-xs" style={kickerStyle}>
-        Editing
+        {strings.t(EDIT_CONTEXT.editing)}
       </span>
       {breadcrumb.map((frame, i) => {
         const isActive = i === breadcrumb.length - 1;
@@ -88,7 +92,7 @@ export function EditContextBreadcrumb() {
         type="button"
         data-edit-context-exit
         onClick={() => pop()}
-        title="Exit edit context (Esc)"
+        title={strings.t(EDIT_CONTEXT.exit)}
         style={exitStyle}
       >
         Esc
