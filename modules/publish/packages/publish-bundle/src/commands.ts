@@ -26,6 +26,7 @@
 //   media.paged.publish.exportIdml   { linkBase? }        → ExportResult
 //   media.paged.publish.exportPaged  {}                   → ExportResult
 //   media.paged.publish.importIdml   { bytes, name? }     → { pages }
+//   media.paged.publish.preflight    PDF options          → PreflightResult
 //
 // Every exporter answers ONE result shape (`schema/export-result.json`), so
 // a caller writes `bytes` to `fileName` and reports `diagnostics` without
@@ -37,6 +38,10 @@
 // handler runs, so a caller passes only what it means (`{}` exports every
 // page with the defaults); an absent optional field means "not set", never a
 // stand-in value. `PDF_EXPORT_DEFAULTS` is read from the schema file.
+//
+// `preflight` runs the PDF exporter with the same options and answers its
+// findings without the bytes: what the editor's Preflight panel shows, and
+// `ok` when none of them is an error.
 
 import type {
   BundleHost,
@@ -51,11 +56,13 @@ import exportIdmlArgs from "../schema/export-idml.args.json";
 import exportPagedArgs from "../schema/export-paged.args.json";
 import importIdmlArgs from "../schema/import-idml.args.json";
 import importResult from "../schema/import-result.json";
+import preflightResult from "../schema/preflight-result.json";
 
 export const EXPORT_PDF_COMMAND = "media.paged.publish.exportPdf";
 export const EXPORT_IDML_COMMAND = "media.paged.publish.exportIdml";
 export const EXPORT_PAGED_COMMAND = "media.paged.publish.exportPaged";
 export const IMPORT_IDML_COMMAND = "media.paged.publish.importIdml";
+export const PREFLIGHT_COMMAND = "media.paged.publish.preflight";
 
 export const EXPORT_RESULT_TYPE = exportResult as ValueType;
 export const EXPORT_PDF_ARGS_TYPE = exportPdfArgs as ValueType;
@@ -79,6 +86,8 @@ export interface PdfWireOptions {
   effectDpi: number | null;
   restrictedFontPolicy: string | null;
   title: string | null;
+  bookmarks: boolean;
+  tagged: boolean;
 }
 
 /** One exporter diagnostic; `page` is 1-based, 0 = the whole document. */
@@ -127,6 +136,11 @@ export interface PdfExportArgs {
   restrictedFontPolicy: "outline" | "fail";
   /** Document title (Info / XMP); absent = none. */
   title?: string;
+  /** Write the document's bookmarks as the PDF's outline (engine ADR 171). */
+  bookmarks: boolean;
+  /** Create a tagged PDF: stories and their paragraphs as the logical
+   *  structure, with `/MarkInfo` and `/Lang` (engine ADR 182). */
+  tagged: boolean;
 }
 
 /** The fields the schema DEFAULTS (every other field is optional). */
@@ -140,6 +154,8 @@ export type PdfExportDefaults = Pick<
   | "pageInfo"
   | "effectDpi"
   | "restrictedFontPolicy"
+  | "bookmarks"
+  | "tagged"
 >;
 
 /** The schema's struct-field defaults, read from `schema/export-pdf.args.json`
@@ -232,6 +248,8 @@ export function pdfWireOptions(args: PdfExportArgs): PdfWireOptions {
     effectDpi: args.effectDpi,
     restrictedFontPolicy: args.restrictedFontPolicy,
     title: text(args.title),
+    bookmarks: args.bookmarks,
+    tagged: args.tagged,
   };
 }
 
@@ -318,6 +336,35 @@ export async function exportPdf(
       .catch(() => undefined);
     throw err;
   }
+}
+
+/** What `preflight` answers (`schema/preflight-result.json`). */
+export interface PreflightResult {
+  /** No finding is an error. */
+  ok: boolean;
+  pageCount: number;
+  errors: number;
+  warnings: number;
+  findings: ExportDiagnostic[];
+}
+
+/** Preflight the active document: the PDF exporter's findings for `args`,
+ *  without the bytes. */
+export async function preflight(
+  host: BundleHost,
+  args: PdfExportArgs,
+): Promise<PreflightResult> {
+  const out = await exportPdf(host, args);
+  const count = (s: ExportDiagnostic["severity"]) =>
+    out.diagnostics.filter((d) => d.severity === s).length;
+  const errors = count("error");
+  return {
+    ok: errors === 0,
+    pageCount: out.pageCount,
+    errors,
+    warnings: count("warning"),
+    findings: out.diagnostics,
+  };
 }
 
 /** Export the active document to IDML through the engine's writer. Every
@@ -435,6 +482,13 @@ export function contributePublishCommands(
         const pages = await openIdml(host, bytes, name);
         return { pages: pages.map((id) => `page:${id}`) };
       },
+    },
+    {
+      id: PREFLIGHT_COMMAND,
+      title: "Preflight",
+      args: EXPORT_PDF_ARGS_TYPE,
+      result: preflightResult as ValueType,
+      handler: (_ctx, args) => preflight(host, args as PdfExportArgs),
     },
   ];
   return host.contribute.objectModel({ kinds: [], commands });

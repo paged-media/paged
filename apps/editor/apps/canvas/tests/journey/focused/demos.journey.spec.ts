@@ -32,7 +32,7 @@ test.describe("journey · embedding demos", () => {
     page,
   }) => {
     await page.goto("/demos/index.html");
-    await expect(page.locator("main.gallery a")).toHaveCount(8);
+    await expect(page.locator("main.gallery a")).toHaveCount(9);
   });
 
   test("business card: fill a field, Submit hands the values to the host @feat:editor-shell.solo-mode @level:happy", async ({
@@ -87,5 +87,26 @@ test.describe("journey · embedding demos", () => {
     await headline.fill("Greetings from the coast");
     await headline.dispatchEvent("change");
     await expect(page.locator("[data-demo-problems]")).toHaveText("");
+  });
+
+  test("theme and language: the form speaks German, the host's accent applies @feat:editor-shell.solo-mode @level:happy", async ({
+    page,
+  }) => {
+    await page.goto("/demos/theme-language.html");
+    await ready(page);
+    await page.locator("[data-demo-language]").selectOption("de");
+    await expect(page.getByRole("status")).toHaveText("ready (de)", {
+      timeout: 60_000,
+    });
+    await page.locator("[data-demo-accent]").selectOption("160 84% 30%");
+    expect(
+      await page.evaluate(() =>
+        document.documentElement.style.getPropertyValue("--paged-primary"),
+      ),
+    ).toBe("160 84% 30%");
+    // The form in German: the card's empty picture field.
+    await expect(page.locator('[data-field-picture="photo"]')).toHaveText(
+      "Kein Bild",
+    );
   });
 });
