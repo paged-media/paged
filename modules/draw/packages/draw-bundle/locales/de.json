@@ -495,6 +495,8 @@
   "draw.strokePanel.topRight": "Radius oben rechts",
   "draw.strokePanel.triangle": "Dreieck",
   "draw.strokePanel.weight": "Stärke",
+  "draw.svg.exporterTitle": "SVG (Auswahl)",
+  "draw.svg.importerTitle": "SVG (Scalable Vector Graphics)",
   "draw.symbols.breakLink": "Symbole: Verknüpfung aufheben (Bildmaterial bleibt erhalten)",
   "draw.symbols.define": "Symbole: Symbol aus Auswahl definieren",
   "draw.symbols.delete": "Symbole: Symbol löschen (platziertes Bildmaterial bleibt)",
