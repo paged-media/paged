@@ -1,0 +1,112 @@
+# sheet.fn.lookup.* / array (W3 additions) — EXPAND, WRAPROWS, WRAPCOLS,
+# TRIMRANGE (kernels in sheet-fn/src/families/array3.rs), AREAS, GROUPBY,
+# PIVOTBY (evaluator special forms: sheet-calc/src/eval/{info,groupby}.rs).
+# GROUPBY / PIVOTBY are approved as worksheet functions; the interactive
+# pivot table stays preserve-only (ADR 504). Expected values recorded from
+# Excel (oracle/excel/recorded/array3.tsv). The trim-reference operators
+# `.:` / `:.` need an AST amendment that has not landed (TRIMRANGE covers
+# their meaning).
+
+- id: sheet.fn.lookup.expand
+  name: EXPAND
+  xlfn_prefix: "_xlfn."
+  family: lookup
+  arity: { min: 2, max: 4 }
+  volatility: none
+  range_aware: true
+  returns_array: true
+  rust: array3::expand
+  status: implemented
+  provenance: ["Microsoft function reference (EXPAND) — pad to a size; smaller #VALUE!, past the grid #NUM!"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_array3.rs::sheet_fn_array3_expand"]
+    corpus: ["corpus/fn-corpus/array3/expand.golden.tsv"]
+
+- id: sheet.fn.lookup.wraprows
+  name: WRAPROWS
+  xlfn_prefix: "_xlfn."
+  family: lookup
+  arity: { min: 2, max: 3 }
+  volatility: none
+  range_aware: true
+  returns_array: true
+  rust: array3::wraprows
+  status: implemented
+  provenance: ["Microsoft function reference (WRAPROWS) — a vector wrapped into rows"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_array3.rs::sheet_fn_array3_wraprows"]
+    corpus: ["corpus/fn-corpus/array3/wraprows.golden.tsv"]
+
+- id: sheet.fn.lookup.wrapcols
+  name: WRAPCOLS
+  xlfn_prefix: "_xlfn."
+  family: lookup
+  arity: { min: 2, max: 3 }
+  volatility: none
+  range_aware: true
+  returns_array: true
+  rust: array3::wrapcols
+  status: implemented
+  provenance: ["Microsoft function reference (WRAPCOLS) — a vector wrapped into columns"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_array3.rs::sheet_fn_array3_wrapcols"]
+    corpus: ["corpus/fn-corpus/array3/wrapcols.golden.tsv"]
+
+- id: sheet.fn.lookup.trimrange
+  name: TRIMRANGE
+  xlfn_prefix: "_xlfn."
+  family: lookup
+  arity: { min: 1, max: 3 }
+  volatility: none
+  range_aware: true
+  returns_array: true
+  rust: array3::trimrange
+  status: implemented
+  provenance: ["Microsoft function reference (TRIMRANGE) — leading/trailing blank rows and columns dropped; all blank #REF!"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_array3.rs::sheet_fn_array3_trimrange"]
+    corpus: ["corpus/fn-corpus/array3/trimrange.golden.tsv"]
+
+- id: sheet.fn.lookup.areas
+  name: AREAS
+  family: lookup
+  arity: { min: 1, max: 1 }
+  volatility: none
+  range_aware: false
+  ref_args: true
+  special_form: true
+  status: implemented
+  provenance: ["Microsoft function reference (AREAS) — the areas of a union reference; evaluator special form"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_array3.rs::sheet_fn_array3_areas"]
+    corpus: ["corpus/fn-corpus/array3/areas.golden.tsv"]
+
+- id: sheet.fn.lookup.groupby
+  name: GROUPBY
+  xlfn_prefix: "_xlfn."
+  family: lookup
+  arity: { min: 3, max: 8 }
+  volatility: none
+  range_aware: true
+  returns_array: true
+  special_form: true
+  status: implemented
+  provenance: ["Microsoft function reference (GROUPBY) — headers, totals and subtotals, sort order, filter, LAMBDA or eta-reduced aggregation; evaluator special form"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_array3.rs::sheet_fn_array3_groupby"]
+    corpus: ["corpus/fn-corpus/array3/groupby.golden.tsv"]
+
+- id: sheet.fn.lookup.pivotby
+  name: PIVOTBY
+  xlfn_prefix: "_xlfn."
+  family: lookup
+  arity: { min: 4, max: 11 }
+  volatility: none
+  range_aware: true
+  returns_array: true
+  special_form: true
+  status: implemented
+  provenance: ["Microsoft function reference (PIVOTBY) — row and column groups, totals, sort orders, filter, relative_to for PERCENTOF; evaluator special form"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_array3.rs::sheet_fn_array3_pivotby"]
+    corpus: ["corpus/fn-corpus/array3/pivotby.golden.tsv"]

@@ -1450,3 +1450,25 @@ fn a_defined_name_called_is_a_lambda_call__feat__sheet_calc_model() {
     }
     assert_eq!(roundtrip("Tax(2,3)"), "_NAME0(2,3)");
 }
+
+#[allow(non_snake_case)]
+#[test]
+fn eta_reduced_function_names_round_trip__feat__sheet_fn_lookup_array() {
+    // A function's bare name as a value (GROUPBY's aggregation) prints
+    // `_xleta.SUM` in the file and reads back as the bare name (W3).
+    let f = p("GROUPBY(A2:A7,C2:C7,SUM)");
+    assert_eq!(
+        print_ooxml(&f, 0, &Ctx::new()),
+        "_xlfn.GROUPBY(A2:A7,C2:C7,_xleta.SUM)"
+    );
+    assert_eq!(
+        roundtrip("GROUPBY(A2:A7,C2:C7,SUM)"),
+        "GROUPBY(A2:A7,C2:C7,SUM)"
+    );
+    let back = p(&strip_storage_prefixes(
+        "_xlfn.GROUPBY(A2:A7,C2:C7,_xleta.SUM)",
+    ));
+    assert_eq!(back.root, f.root);
+    // An unknown name that is no function keeps its spelling.
+    assert_eq!(print_ooxml(&p("Bogus+1"), 0, &Ctx::new()), "Bogus+1");
+}

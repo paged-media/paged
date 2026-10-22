@@ -22,6 +22,7 @@ mod excel_oracle;
 mod extlink;
 mod fn_agg;
 mod fn_array;
+mod fn_array3;
 mod fn_database;
 mod fn_date;
 mod fn_date2;
