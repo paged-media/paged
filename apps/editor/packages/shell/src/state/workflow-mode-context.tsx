@@ -35,8 +35,15 @@ import { scopedChromeKey } from "./chrome-storage-scope";
 // only the active id — the screen-mode pattern). Pure VIEW state:
 // switching modes writes NOTHING to the document.
 
-export type WorkflowMode =
+/** The editor's own six modes. */
+export type BuiltInWorkflowMode =
   "design" | "content" | "prepress" | "data" | "review" | "export";
+
+/** A workflow mode id: one of the six, or one an editor profile declares
+ *  (docs/composable-editor.md §5.3). Open, so a preset can name its own
+ *  mode instead of borrowing `design`; the six stay as literals for
+ *  completion. */
+export type WorkflowMode = BuiltInWorkflowMode | (string & {});
 
 const STORAGE_KEY_BASE = "paged.workflowMode";
 /** Scoped per workspace — see `chrome-storage-scope.ts`. Solo must not
@@ -45,19 +52,12 @@ const STORAGE_KEY_BASE = "paged.workflowMode";
  *  no registered slots and therefore no left panel at all. */
 const storageKey = () => scopedChromeKey(STORAGE_KEY_BASE);
 
-const ALL_MODES: ReadonlySet<string> = new Set([
-  "design",
-  "content",
-  "prepress",
-  "data",
-  "review",
-  "export",
-]);
-
 function loadInitialMode(): WorkflowMode {
   try {
     const raw = localStorage.getItem(storageKey());
-    if (raw && ALL_MODES.has(raw)) return raw as WorkflowMode;
+    // Any stored id is taken here; the shell falls back to the first
+    // registered mode when it is not one of this editor's (PagedShell).
+    if (raw && raw.length <= 64) return raw;
   } catch {
     /* storage unavailable — fall through */
   }

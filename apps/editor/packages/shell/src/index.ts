@@ -387,6 +387,7 @@ export {
   useWorkflowMode,
   useOptionalWorkflowMode,
   type WorkflowMode,
+  type BuiltInWorkflowMode,
 } from "./state/workflow-mode-context";
 export { ContextToolbar } from "./chrome/ContextToolbar";
 export { ModeSwitcher } from "./chrome/ModeSwitcher";
