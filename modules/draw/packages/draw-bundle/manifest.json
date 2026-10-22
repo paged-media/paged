@@ -3202,6 +3202,24 @@
             }
           }
         }
+      ],
+      "templateFields": [
+        {
+          "kind": "media.paged.draw.paint",
+          "title": "Fill or stroke colour"
+        },
+        {
+          "kind": "media.paged.draw.graphicStyle",
+          "title": "Graphic style"
+        },
+        {
+          "kind": "media.paged.draw.textOnPath",
+          "title": "Text on a path"
+        },
+        {
+          "kind": "media.paged.draw.symbolChoice",
+          "title": "Symbol"
+        }
       ]
     }
   }

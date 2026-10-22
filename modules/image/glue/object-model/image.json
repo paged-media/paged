@@ -35,6 +35,15 @@
     "summary": "The stored revision the frame's marker points at; 0 = never committed."
   },
   {
+    "path": "nextLayerId",
+    "type": {
+      "kind": "number",
+      "integer": true
+    },
+    "access": "readOnly",
+    "summary": "The id the next new layer takes (a session handle), so a batch that creates a layer can address it."
+  },
+  {
     "path": "pending",
     "type": {
       "kind": "bool"

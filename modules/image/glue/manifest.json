@@ -506,6 +506,20 @@
             }
           }
         }
+      ],
+      "templateFields": [
+        {
+          "kind": "media.paged.image.picture",
+          "title": "Picture (keeps the adjustments)"
+        },
+        {
+          "kind": "media.paged.image.adjustmentPreset",
+          "title": "Adjustment preset"
+        },
+        {
+          "kind": "media.paged.image.layerVisibility",
+          "title": "Layer visibility"
+        }
       ]
     }
   }
