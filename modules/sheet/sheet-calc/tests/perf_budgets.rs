@@ -108,8 +108,10 @@ const N: u32 = 2000;
 // Editing A1 of a 2000-row running total: 2000 evaluations are inherent
 // (every total changes). The dirty walk is the interval index's: each
 // probe costs the tree levels plus its hits (before 2026-10 each probe
-// scanned every box: 4 000 000). The range views borrow the model (no
-// copies); the N²/2 cells READ are SUM's own scan.
+// scanned every box: 4 000 000). The first 32 totals (shorter than a
+// snapshot is worth) read the grid; from the 33rd, column A is snapshotted
+// once and every total is its anchored prefix (sheet ADR 512) — before
+// that, SUM's own scan read N²/2 = 2 001 000 cells.
 #[test]
 fn perf_running_total_edit_head__feat__sheet_calc_engine() {
     let mut e = running_total(N);
@@ -126,8 +128,10 @@ fn perf_running_total_edit_head__feat__sheet_calc_engine() {
             range_keys_scanned: 2_011, // 2000 hits + 11 tree levels (was 4 002 000: every probe scanned every box)
             precedent_candidates_scanned: 2_000, // one column seek per dirty total (was 4 000 000: boxes × dirty cut)
             ranges_materialized: 2_000,
-            cells_read: 2_001_000, // N²/2 — inherent for SUM-by-scan (was 2_001_000 cells COPIED; views copy 0)
-            cells_visited: 2_001_000,
+            cells_read: 2_528, // 528 grid reads by the 32 short totals + one 2 000-row snapshot (was 2_001_000: N²/2)
+            cells_visited: 528, // the prefix answers read no view cell (was 2_001_000)
+            snapshot_cells: 2_000,
+            accel_hits: 1_968,
             evaluations: 2_000,
             recalcs: 1,
             recalc_passes: 1,
@@ -155,6 +159,8 @@ fn perf_running_total_edit_tail__feat__sheet_calc_engine() {
             ranges_materialized: 1,
             cells_read: 2_000,
             cells_visited: 2_000,
+            snapshot_cells: 0,
+            accel_hits: 0,
             evaluations: 1,
             recalcs: 1,
             recalc_passes: 1,
@@ -189,6 +195,8 @@ fn perf_running_total_build__feat__sheet_calc_engine() {
             ranges_materialized: 2_000,
             cells_read: 2_001_000, // N²/2 — inherent for SUM-by-scan (copies: 2_001_000 → 0)
             cells_visited: 2_001_000,
+            snapshot_cells: 0,
+            accel_hits: 0,
             evaluations: 2_000,
             recalcs: 4_000, // one per entry — the batched scenario below: 1
             recalc_passes: 2_000,
@@ -224,8 +232,10 @@ fn perf_running_total_build_batched__feat__sheet_calc_engine() {
             range_keys_scanned: 0,
             precedent_candidates_scanned: 2_000,
             ranges_materialized: 2_000,
-            cells_read: 2_001_000, // SUM's own scan
-            cells_visited: 2_001_000,
+            cells_read: 2_528, // one recalc, so one column snapshot + prefixes (was 2_001_000: SUM's own scan)
+            cells_visited: 528,
+            snapshot_cells: 2_000,
+            accel_hits: 1_968,
             evaluations: 2_000,
             recalcs: 1, // per-entry lane: 4 000
             recalc_passes: 1,
@@ -258,9 +268,12 @@ fn vlookup_sheet() -> Engine {
 }
 
 // COVERS: one shared range box read by 1000 formulas. A write into the
-// table dirties all 1000 lookups (inherent under whole-range invalidation)
-// and each reads its key column until it matches (the views borrow the
-// table; before 2026-10 each evaluation copied all 2000 cells).
+// table dirties all 1000 lookups (inherent under whole-range invalidation).
+// The first lookup scans the grid; then both table columns are snapshotted
+// and every other lookup finds its row in the exact-match index and hands
+// the kernel the table cut to that row (sheet ADR 512). Before, each lookup
+// read its key column until it matched (501 500 cells; before 2026-10 each
+// evaluation copied all 2000 cells).
 #[test]
 fn perf_vlookup_edit_table__feat__sheet_calc_engine() {
     let mut e = vlookup_sheet();
@@ -276,8 +289,10 @@ fn perf_vlookup_edit_table__feat__sheet_calc_engine() {
             range_keys_scanned: 1, // the one shared table box (flat-scanned lane)
             precedent_candidates_scanned: 2_000, // 2 column seeks per lookup (was 1 000 000)
             ranges_materialized: 1_000,
-            cells_read: 501_500, // each lookup reads keys until it matches + 1 value (was 2_000_000 COPIED)
-            cells_visited: 501_500,
+            cells_read: 4_001, // 1 001 for the first lookup's scan + 2 snapshotted columns (was 501_500)
+            cells_visited: 3_997, // the cut kernels read 2 cells each (was 501_500)
+            snapshot_cells: 2_000,
+            accel_hits: 998,
             evaluations: 1_000,
             recalcs: 1,
             recalc_passes: 1,
@@ -303,6 +318,8 @@ fn perf_vlookup_edit_key__feat__sheet_calc_engine() {
             ranges_materialized: 1,
             cells_read: 8, // the lookup reads 7 keys + 1 value (was 2_000 COPIED)
             cells_visited: 8,
+            snapshot_cells: 0,
+            accel_hits: 0,
             evaluations: 1,
             recalcs: 1,
             recalc_passes: 1,
@@ -337,8 +354,10 @@ fn perf_insert_row__feat__sheet_calc_engine() {
             range_keys_scanned: 0,
             precedent_candidates_scanned: 1_000, // one seek per formula (was 1 000 000) — evaluations stay all-dirty
             ranges_materialized: 1_000,
-            cells_read: 501_000,
-            cells_visited: 501_000,
+            cells_read: 1_529, // 528 short totals + 1 001-row snapshot (was 501_000: SUM-by-scan)
+            cells_visited: 528,
+            snapshot_cells: 1_001,
+            accel_hits: 968,
             evaluations: 1_000, // every formula, whatever the edit touched — only the shifted ones need it
             recalcs: 1,
             recalc_passes: 1,
@@ -379,10 +398,66 @@ fn perf_whole_column_sum_edit__feat__sheet_calc_engine() {
             ranges_materialized: 1,
             cells_read: 10_000,
             cells_visited: 10_000, // the populated rows (was 1 048 576: the kernel scanned the whole column)
+            snapshot_cells: 0,
+            accel_hits: 0,
             evaluations: 1,
             recalcs: 1,
             recalc_passes: 1,
             cells_marked_dirty: 1,
+        },
+    );
+}
+
+/// A1:A1000 a category column (`c0`…`c9`), B1:B1000 amounts; D{k} =
+/// SUMIF over the category `c{k}` and E{k} = COUNTIF of it, k = 0..9.
+fn category_totals() -> Engine {
+    let mut e = engine();
+    let mut batch = Vec::new();
+    for i in 0..T {
+        batch.push((0, i, 0, e.parse_input(0, &format!("c{}", i % 10)).unwrap()));
+        batch.push((0, i, 1, e.parse_input(0, &(i + 1).to_string()).unwrap()));
+    }
+    for k in 0..10 {
+        let sumif = format!("=SUMIF($A$1:$A${T},\"c{k}\",$B$1:$B${T})");
+        let countif = format!("=COUNTIF($A$1:$A${T},\"C{k}\")");
+        batch.push((0, k, 3, e.parse_input(0, &sumif).unwrap()));
+        batch.push((0, k, 4, e.parse_input(0, &countif).unwrap()));
+    }
+    e.set_cells(batch);
+    e
+}
+
+// COVERS: the equality-criterion index (sheet ADR 512). Editing one amount
+// dirties every SUMIF (they share the amount box) and the COUNTIFs do not
+// move. The first SUMIF scans the grid; the other nine read their 100 rows
+// out of the category column's text index instead of testing all 1000.
+#[test]
+fn perf_sumif_categories_edit_amount__feat__sheet_calc_accel() {
+    let mut e = category_totals();
+    let work = measure(|| enter(&mut e, 499, 1, "0"));
+    // Row 500 is category c9 (499 % 10) and held 500.
+    let c9: f64 = (0..T)
+        .filter(|i| i % 10 == 9)
+        .map(|i| f64::from(i + 1))
+        .sum();
+    assert_eq!(num(&e, 9, 3), c9 - 500.0);
+    assert_eq!(num(&e, 9, 4), 100.0);
+    check(
+        "10 SUMIFs over a 1000-row category column, edit an amount",
+        work,
+        PerfCounters {
+            range_probes: 11,
+            range_keys_scanned: 1, // the one shared amount box
+            precedent_candidates_scanned: 20,
+            ranges_materialized: 20,
+            cells_read: 3_100, // the first SUMIF's 1 100-cell scan + 2 snapshotted columns (kernels alone: 11 000)
+            cells_visited: 2_000, // 1 100 + 9 × 100 matched amounts (kernels alone: 11 000)
+            snapshot_cells: 2_000,
+            accel_hits: 9,
+            evaluations: 10,
+            recalcs: 1,
+            recalc_passes: 1,
+            cells_marked_dirty: 10,
         },
     );
 }

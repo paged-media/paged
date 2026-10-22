@@ -55,8 +55,9 @@ pub struct PerfCounters {
     /// Range views built (`argview.rs` `materialize_range*`) — one per range
     /// argument per evaluation.
     pub ranges_materialized: u64,
-    /// Cells a kernel READ through those views inside the sheet's populated
-    /// rows (`argview.rs`). Views borrow the model, so this is the kernel's
+    /// Grid cells READ: by range views inside the sheet's populated rows
+    /// (`argview.rs`), and by the per-recalc column snapshots that views
+    /// read instead once a column is asked for twice (`accel.rs`). Views borrow the model, so this is the kernel's
     /// own work (a SUM reads its range, a VLOOKUP reads until it matches);
     /// nothing is copied up front. (The `cells_materialized` copy counter and
     /// the per-evaluation `ast_clones` counter were retired 2026-10 when the
@@ -68,6 +69,13 @@ pub struct PerfCounters {
     /// `SUM(A:A)` scanning all 1 048 576 rows of a 10 000-row sheet shows up
     /// here as 1 048 576, not 10 000.
     pub cells_visited: u64,
+    /// Cells copied out of the grid into per-recalc column snapshots
+    /// (`accel.rs`, sheet ADR 512) — also counted in `cells_read`, since
+    /// each is a grid read.
+    pub snapshot_cells: u64,
+    /// Calls answered (or narrowed) from a snapshot's prefix aggregate or
+    /// exact-match index instead of the kernel's scan (`accel.rs`).
+    pub accel_hits: u64,
     /// Formula evaluations, scalar and rich door (`lib.rs`).
     pub evaluations: u64,
     /// `Engine::recalc_dirty` invocations — one per committed edit today.
@@ -88,6 +96,8 @@ thread_local! {
             ranges_materialized: 0,
             cells_read: 0,
             cells_visited: 0,
+            snapshot_cells: 0,
+            accel_hits: 0,
             evaluations: 0,
             recalcs: 0,
             recalc_passes: 0,
