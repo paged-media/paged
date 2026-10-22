@@ -169,6 +169,10 @@ export function isActivatable(target: EventTarget | null | undefined): boolean {
   return role !== null && role !== undefined && ACTIVATABLE_ROLES.has(role);
 }
 
+/** The attribute the canvas puts on a mounted frame surface's root. */
+export const FRAME_SURFACE_ATTR = "data-paged-frame-surface";
+const FRAME_SURFACE_SELECTOR = `[${FRAME_SURFACE_ATTR}]`;
+
 function closest(el: Element, selector: string): boolean {
   return typeof el.closest === "function" && el.closest(selector) !== null;
 }
@@ -193,6 +197,8 @@ export function insideKeyOwningContainer(
  *    itself on Enter has said so by now;
  *  - focus is in a form field (not the canvas's own text input);
  *  - focus is inside a dialog or an open menu (every key);
+ *  - focus is inside a plugin's frame surface (extensions ADR 334): the
+ *    surface handles its own keys, as a dialog does;
  *  - focus is inside a composite widget (a menubar, toolbar, tablist,
  *    listbox, tree…) and the key is one it moves with or activates by;
  *  - Enter or Space on a focused button, link or checkbox (the control
@@ -210,6 +216,7 @@ export function canvasKeyYields(event: KeyOwnershipEvent): boolean {
   if (el.tagName === "BODY" || el.tagName === "HTML") return false;
   if (isFormField(el)) return true;
   if (closest(el, KEY_OWNING_CONTAINERS)) return true;
+  if (closest(el, FRAME_SURFACE_SELECTOR)) return true;
   const key = event.key.toLowerCase();
   const activates = key === "enter" || key === " ";
   if ((WIDGET_KEYS.has(key) || activates) && closest(el, WIDGET_KEY_OWNERS)) {

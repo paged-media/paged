@@ -2701,3 +2701,27 @@ null`; `url(name)`, `fetch(name)` (with `{ integrity }`). `null` is the
   host option (+ `ModulesBackend` / `ModuleLocation`), the `modules@1`
   flag, three helpers, two CLI commands. `loadBundle` ignores unknown
   options, so an editor can pass `modules` to an older SDK harmlessly.
+
+## 24. Frame surfaces (ADR 334 — `contribute.frameSurface`, `shell.exitEditContext`)
+
+A bundle's live DOM editing surface for one of its edit contexts, mounted by the host exactly
+over the frame's content box while the context is active on it (editor ADR 281).
+
+- **Shape.** `contribute.frameSurface({ contextType, render })`; the component gets
+  `FrameSurfaceProps`: `elementId`, `widthPt` / `heightPt` (its own CSS size), `pxPerPt`,
+  `presentation` (`"frame"` | `"fullscreen"`), `toContentPt(clientX, clientY)`,
+  `requestPresentation(p)` and `exit({ commit })`.
+- **Coordinates.** One CSS pixel inside the surface is one point of frame content; the host's
+  transform carries camera, page origin, ItemTransform and the content-box origin.
+- **Gate.** `contextType` must be declared in `contributes.editContexts[]` and registered by the
+  same bundle first (the surface borrows the context, like a binding provider, §18). No
+  separate capability.
+- **Input.** Events inside the surface are its own; the canvas does not run tools on them and
+  key ownership yields to it. Cmd/Ctrl-wheel still zooms the canvas.
+- **Leaving.** `exit` and `host.shell.exitEditContext({ commit })` end the bundle's own active
+  context (`onCommit` or `onCancel`, then `onExit`); never another bundle's.
+- **Probes.** `contribute.frameSurface@1` (door, static), `editContext.frameSurface@1` (the host
+  mounts surfaces), `editContext.frameSurface.fullscreen@1` (full-screen presentation),
+  `shell.exitEditContext@1`.
+- **Isolate.** React in the host realm, like panels (§6). The isolate form is a transferred
+  `OffscreenCanvas`, a plain-data input stream and the host's input-method proxy.

@@ -59,6 +59,7 @@ import { createWorkbookSession } from "./session";
 import { contributeObjectModel } from "./object-model";
 import { makeWorkbookPanel } from "./panels/workbook-panel";
 import { makeGridPanel } from "./panels/grid-panel";
+import { makeSheetFrameSurface } from "./surface/sheet-frame-surface";
 import { makeDatasetsPanel } from "./panels/datasets-panel";
 import {
   PROPERTIES_PANEL_ID,
@@ -568,6 +569,17 @@ export function activate(host: BundleHost): BundleHandle {
         session.hideGridInFrame();
       },
     });
+
+    // Sheet ADR 510 / extensions ADR 334 — while the frame is entered the
+    // grid is a FRAME SURFACE: a main-thread surface over the frame with
+    // headings, native pointer and key input, no render-worker round trip
+    // per keystroke. A host without frame surfaces keeps the scene layer.
+    if (host.supports("contribute.frameSurface@1")) {
+      host.contribute.frameSurface({
+        contextType: "sheet",
+        render: makeSheetFrameSurface(session),
+      });
+    }
 
     // ADR 023 phase D — paged.sheet answers the HOST's Swatches panel
     // while the `sheet` context is active: the WORKBOOK PALETTE (the

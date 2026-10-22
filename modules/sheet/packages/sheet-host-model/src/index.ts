@@ -133,6 +133,16 @@ export {
 } from "./grid";
 
 export {
+  columnLetters,
+  DEFAULT_HEADING_STYLE,
+  paintGridScene,
+  rowHeadingWidthPt,
+  type HeadingStyle,
+  type PaintContext,
+  type PaintOptions,
+} from "./grid-paint";
+
+export {
   applyCompletion,
   arityHint,
   completionTokenAt,

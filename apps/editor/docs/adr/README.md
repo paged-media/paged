@@ -85,6 +85,7 @@ and 024 predate that scheme and keep their numbers. Records 200–217 were writt
 | [273](273-trusted-types-are-enforced.md) | Trusted Types are enforced | Accepted 2026-10-21 |
 | [274](274-the-editor-profile-is-runtime-data.md) | The editor profile is runtime data | Accepted 2026-10-22 |
 | [275](275-features-gate-what-is-offered.md) | Features gate what is offered, over surface ids | Accepted 2026-10-22 |
+| [281](281-the-canvas-mounts-frame-surfaces.md) | The canvas mounts a bundle's frame surface over the active frame | Accepted 2026-10-22 |
 
 Decisions made in other repositories that this editor's code rests on are listed in
 [`../README.md`](../README.md). Comments in the source also cite ADR 025 (the journal) and
