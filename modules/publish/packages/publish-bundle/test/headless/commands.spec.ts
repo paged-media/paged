@@ -49,7 +49,10 @@ import {
   pdfExportArgs,
   pdfWireOptions,
   type PdfExportArgs,
+  PREFLIGHT_COMMAND,
+  type PreflightResult,
 } from "../../src/commands";
+import preflightResultType from "../../schema/preflight-result.json";
 import importResult from "../../schema/import-result.json";
 import exportPdfArgsFile from "../../schema/export-pdf.args.json";
 import exportIdmlArgsFile from "../../schema/export-idml.args.json";
@@ -87,7 +90,7 @@ const head = (b: Uint8Array, n: number) =>
   new TextDecoder().decode(b.subarray(0, n));
 
 describe("[plugin-publish.typed-commands] import and export as typed commands", () => {
-  it("lists four typed commands carrying the schema files' types", async () => {
+  it("lists five typed commands carrying the schema files' types", async () => {
     const mine = (await h.objects.commands()).filter(
       (c) => c.owner === "media.paged.publish",
     );
@@ -97,6 +100,7 @@ describe("[plugin-publish.typed-commands] import and export as typed commands", 
         EXPORT_PAGED_COMMAND,
         EXPORT_PDF_COMMAND,
         IMPORT_IDML_COMMAND,
+        PREFLIGHT_COMMAND,
       ].sort(),
     );
     const pdf = mine.find((c) => c.id === EXPORT_PDF_COMMAND)!;
@@ -264,6 +268,8 @@ describe("[plugin-publish.typed-commands] partial args: struct defaults and opti
       downsamplePpi: null,
       effectDpi: 150,
       title: null,
+      bookmarks: false,
+      tagged: false,
     });
     // A present marksOffset of 0 is a real offset, not "the engine's default".
     expect(
@@ -279,6 +285,49 @@ describe("[plugin-publish.typed-commands] partial args: struct defaults and opti
     )) as ExportResult;
     expect(head(out.bytes, 5)).toBe("%PDF-");
     expect(out.pageCount).toBe(pageCount);
+  }, 60_000);
+
+  it("exportPdf carries bookmarks (the outline) and tagged PDF, both off by default", async () => {
+    covers("command:media.paged.publish.exportPdf");
+    const text = (b: Uint8Array) => new TextDecoder("latin1").decode(b);
+    const plain = text(
+      ((await h.objects.invoke(EXPORT_PDF_COMMAND, {})) as ExportResult).bytes,
+    );
+    expect(plain).not.toContain("/StructTreeRoot");
+    expect(plain).not.toContain("/Outlines");
+    const both = text(
+      (
+        (await h.objects.invoke(EXPORT_PDF_COMMAND, {
+          bookmarks: true,
+          tagged: true,
+        })) as ExportResult
+      ).bytes,
+    );
+    expect(both).toContain("/StructTreeRoot");
+    expect(both).toContain("/MarkInfo");
+    expect(both).toContain("/Outlines");
+    expect(pdfWireOptions(pdfExportArgs({ tagged: true }))).toMatchObject({
+      bookmarks: false,
+      tagged: true,
+    });
+  }, 60_000);
+
+  it("preflight answers the exporter's findings without the bytes", async () => {
+    covers("command:media.paged.publish.preflight");
+    const out = (await h.objects.invoke(PREFLIGHT_COMMAND, {
+      pages: "1",
+    })) as PreflightResult;
+    expect(validateValue(preflightResultType as ValueType, out)).toBeNull();
+    expect(out.pageCount).toBe(1);
+    expect(out.errors).toBe(
+      out.findings.filter((f) => f.severity === "error").length,
+    );
+    expect(out.ok).toBe(out.errors === 0);
+    expect("bytes" in out).toBe(false);
+    // The exporter's option checks hold for preflight too.
+    await expect(
+      h.objects.invoke(PREFLIGHT_COMMAND, { standard: "pdfx4" }),
+    ).rejects.toThrow(/outputIntentProfile/);
   }, 60_000);
 
   it("exportPdf with only { pages, title }", async () => {

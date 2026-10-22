@@ -32,6 +32,8 @@
       "members": ["outline", "fail"],
       "default": "outline"
     },
-    "title": { "kind": "text", "optional": true }
+    "title": { "kind": "text", "optional": true },
+    "bookmarks": { "kind": "bool", "default": false },
+    "tagged": { "kind": "bool", "default": false }
   }
 }
