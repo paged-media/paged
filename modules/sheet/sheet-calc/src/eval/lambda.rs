@@ -537,7 +537,34 @@ fn lambda_arg(
 }
 
 /// `MAP(array1, [array2, …], lambda)`.
+/// Element results of MAP / SCAN / BYROW / BYCOL / MAKEARRAY: a lambda that
+/// returns more than one value for an element makes the whole call `#CALC!`
+/// — Excel does not nest arrays (recorded: `MAP(A1:A2,LAMBDA(x,SEQUENCE(2)))`).
+#[derive(Default)]
+struct Nested(std::cell::Cell<bool>);
+
+impl Nested {
+    fn take(&self, r: FnResult) -> CellValue {
+        match r {
+            FnResult::Array(g) if g.len() > 1 || g.first().is_some_and(|row| row.len() > 1) => {
+                self.0.set(true);
+                CellValue::Error(CellError::Calc)
+            }
+            r => collapse(r),
+        }
+    }
+
+    fn result(&self, r: FnResult) -> FnResult {
+        if self.0.get() {
+            err(CellError::Calc)
+        } else {
+            r
+        }
+    }
+}
+
 fn map(model: &SheetModel, args: &[Expr], ctx: &EvalCtx, spills: &SpillState) -> FnResult {
+    let nest = Nested::default();
     let (arrays, lam) = args.split_at(args.len() - 1);
     let (params, body) = match lambda_arg(model, &lam[0], ctx, spills) {
         Ok(l) => l,
@@ -560,12 +587,12 @@ fn map(model: &SheetModel, args: &[Expr], ctx: &EvalCtx, spills: &SpillState) ->
             (0..cols)
                 .map(|c| {
                     let bound: Vec<Expr> = els.iter().map(|x| x.at(r, c)).collect();
-                    collapse(apply_value(model, &params, &body, &bound, ctx, spills))
+                    nest.take(apply_value(model, &params, &body, &bound, ctx, spills))
                 })
                 .collect()
         })
         .collect();
-    FnResult::Array(grid)
+    nest.result(FnResult::Array(grid))
 }
 
 /// `REDUCE(initial, array, lambda(acc, value))` / `SCAN(...)`.
@@ -576,6 +603,7 @@ fn reduce_scan(
     spills: &SpillState,
     scan: bool,
 ) -> FnResult {
+    let nest = Nested::default();
     let (params, body) = match lambda_arg(model, &args[2], ctx, spills) {
         Ok(l) => l,
         Err(e) => return err(e),
@@ -599,7 +627,7 @@ fn reduce_scan(
                 spills,
             );
             if scan {
-                orow.push(collapse(res.clone()));
+                orow.push(nest.take(res.clone()));
             }
             acc = value_expr(res.clone());
             last = Some(res);
@@ -609,7 +637,7 @@ fn reduce_scan(
         }
     }
     if scan {
-        return FnResult::Array(out);
+        return nest.result(FnResult::Array(out));
     }
     match last {
         Some(v) => v,
@@ -625,6 +653,7 @@ fn by_line(
     spills: &SpillState,
     rows: bool,
 ) -> FnResult {
+    let nest = Nested::default();
     let (params, body) = match lambda_arg(model, &args[1], ctx, spills) {
         Ok(l) => l,
         Err(e) => return err(e),
@@ -639,7 +668,7 @@ fn by_line(
     if rows {
         let grid = (0..els.rows)
             .map(|r| {
-                vec![collapse(apply_value(
+                vec![nest.take(apply_value(
                     model,
                     &params,
                     &body,
@@ -649,11 +678,11 @@ fn by_line(
                 ))]
             })
             .collect();
-        FnResult::Array(grid)
+        nest.result(FnResult::Array(grid))
     } else {
         let row = (0..els.cols)
             .map(|c| {
-                collapse(apply_value(
+                nest.take(apply_value(
                     model,
                     &params,
                     &body,
@@ -663,12 +692,13 @@ fn by_line(
                 ))
             })
             .collect();
-        FnResult::Array(vec![row])
+        nest.result(FnResult::Array(vec![row]))
     }
 }
 
 /// `MAKEARRAY(rows, cols, lambda(r, c))`.
 fn makearray(model: &SheetModel, args: &[Expr], ctx: &EvalCtx, spills: &SpillState) -> FnResult {
+    let nest = Nested::default();
     let dim = |e: &Expr| -> Result<i64, CellError> {
         let v = eval(model, e, ctx, spills);
         if let CellValue::Error(e) = v {
@@ -695,7 +725,7 @@ fn makearray(model: &SheetModel, args: &[Expr], ctx: &EvalCtx, spills: &SpillSta
         .map(|r| {
             (1..=cols)
                 .map(|c| {
-                    collapse(apply_value(
+                    nest.take(apply_value(
                         model,
                         &params,
                         &body,
@@ -707,5 +737,5 @@ fn makearray(model: &SheetModel, args: &[Expr], ctx: &EvalCtx, spills: &SpillSta
                 .collect()
         })
         .collect();
-    FnResult::Array(grid)
+    nest.result(FnResult::Array(grid))
 }

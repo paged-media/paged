@@ -60,10 +60,13 @@ versioned amendment. This record is that amendment (W1.0) and the calculation mo
   with a 0 selector, INDIRECT, `a:b`) marks it `Worksheet::dynamic_arrays`, and the result's
   shape decides what spills. The array path (`eval/lift.rs`) also evaluates lambda calls and the
   reference-returning forms as blocks. A formula loaded WITHOUT the dynamic-array mark is
-  legacy and never starts spilling: a range where one value is expected (the root, a range
-  name, a structured reference, the argument of a scalar-parameter function) reads the cell in
-  the formula's row or column — Excel's implicit intersection — or `#VALUE!` (recorded:
-  `legacy-*`). An empty array is `#CALC!` (SEQUENCE(0), an empty FILTER, TAKE(x,0), DROP of
+  legacy and never starts spilling: the loader inserts the `@` Excel 365 shows for it
+  (`sheet_calc::legacy`) — before a range in a value position (the root, an operand, an
+  argument of a scalar-parameter function, a lookup key) and inside an array expression handed
+  to a function without an array-class parameter (`SUM(@A1:A3*2)`; `SUMPRODUCT`, `INDEX`,
+  `LARGE`, … keep their arrays). It then evaluates like any formula, reads as Excel shows it,
+  and a range where one value is expected reduces to the cell in the formula's row or column, or
+  `#VALUE!` (recorded: `legacy-*`, `legacy2-*`). An empty array is `#CALC!` (SEQUENCE(0), an empty FILTER, TAKE(x,0), DROP of
   everything, a lambda as a value); SEQUENCE(-2) stays `#VALUE!` (recorded).
 - **`@`.** A reference reduces by implicit intersection, an array to its first element, a value
   to itself (`@SEQUENCE(3)` is 1, `@{7,8,9}` is 7).
@@ -87,7 +90,8 @@ versioned amendment. This record is that amendment (W1.0) and the calculation mo
   XMATCH compare exactly (recorded: `#N/A` for 0.1+0.2 against 0.3). The LAST operation of a
   formula, when it is `+` or `-`, snaps a result within 2^-48 of the larger operand to 0
   (`eval::eval_root`: `=0.1+0.2-0.3` is 0, `=1*(0.1+0.2-0.3)` 5.55E-17,
-  `=2.675-2.67-0.005` −1.07E-16). Entry truncation to 15 digits is typed entry's (ADR 511).
+  `=2.675-2.67-0.005` −1.07E-16): "within" is fewer than 8 units in the last place of the larger
+  operand (recorded: `=1+1E-15-1`, 5 units, is 0; `=1E+15+1-1E+15`, 8 units, is 1). Entry truncation to 15 digits is typed entry's (ADR 511).
 - **Manual calculation.** With `calcMode="manual"` an edit marks its dependents dirty and
   calculates only the formula just entered; `Engine::calculate_now` (F9),
   `Engine::calculate_sheet` (Shift+F9) and `Engine::is_calc_pending` are the doors, exported
@@ -98,15 +102,16 @@ versioned amendment. This record is that amendment (W1.0) and the calculation mo
 
 ## Evidence
 
-- Excel-recorded lane `calcmodel`: `corpus/calc-model/cases.tsv` (79 cases, 220 probed cells),
+- Excel-recorded lane `calcmodel`: `corpus/calc-model/cases.tsv` (135 cases, 415 probed cells),
   `sheet-conformance/oracle/excel/{calcmodel.py,recorded/calcmodel.tsv,calcmodel-divergences.tsv}`,
-  replayed by `sheet-conformance/tests/it/calc_model.rs`: 207 of 220 cells agree; the 13 listed
-  are ADR 514's cycle ruling (11), the parenthesised root (below), AVERAGEA (not registered yet)
-  and SUM's own cancellation (one recorded case, not modelled).
+  replayed by `sheet-conformance/tests/it/calc_model.rs`: 400 of 415 cells agree; the 15 listed
+  are ADR 514's cycle ruling (11), the parenthesised root (below), AVERAGEA and VARA (not
+  registered yet) and SUM's own cancellation (one recorded case, not modelled).
 - The five `#CALC!` rows left `oracle/excel/divergences.tsv`.
 - `sheet-calc/tests/it/short_circuit.rs` — the work counters.
 - `corpus/xlsx-recalc/expected.tsv` moved for improvements only: FormulaEvalTestData 1100 →
-  1224 agreeing cells (legacy implicit intersection, unknown names as `#NAME?`), DGet 142 → 145
+  1224 agreeing cells against the tree before the W3 functions, 1258 with them (legacy implicit
+  intersection, unknown names as `#NAME?`), DGet 142 → 145
   and BooleanFunctionsTestCaseData 22 → 23 (`=a`, `=glasses=TRUE`: unknown names as `#NAME?`,
   matching Excel's cached `#NAME?`).
 
@@ -124,9 +129,9 @@ versioned amendment. This record is that amendment (W1.0) and the calculation mo
 
 - A formula typed with a typo is accepted and shows `#NAME?` (Excel's behaviour) instead of
   being refused; the bundle's error path for "unknown function" no longer fires.
-- Legacy workbooks keep their values (no new spills); a legacy formula feeding an array to a
-  range-aware function (`=SUM(A1:A3*2)`) is still lifted element-wise, as a dynamic one would
-  be — Excel 2016 intersects there (not built).
+- Legacy workbooks keep their values (no new spills); their formulas read with `@` where Excel
+  365 shows one. The array-class list is the engine's (`eval::array_class`), checked against
+  the recorded cases, not every function Excel classifies.
 - A new function row that Excel stores with a prefix must say `xlfn_prefix`.
 - Loaded rich-value errors (`t="e"` + `vm`) still read as `#VALUE!` until recalculated.
 

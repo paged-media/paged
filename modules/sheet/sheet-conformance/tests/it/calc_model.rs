@@ -366,10 +366,14 @@ fn run_case(n: usize, case: &Case) -> Engine {
                 let ctx = Ctx { model: &m, sheet };
                 sheet_parser::parse(body, &ctx).unwrap_or_else(|e| panic!("{body}: {e}"))
             };
-            let fid = m.intern_formula(f);
+            let mut f = f;
             if kind == "cell" {
                 m.sheet_mut(sheet).unwrap().dynamic_arrays.insert((r, c));
+            } else {
+                // What the loader does with a legacy formula.
+                sheet_calc::legacy::mark_implicit_intersections(&m, &mut f.root);
             }
+            let fid = m.intern_formula(f);
             sheet_core::Cell {
                 value: CellValue::Empty,
                 formula: Some(fid),
@@ -589,4 +593,35 @@ fn precision_as_displayed_rounds_entered_numbers__feat__sheet_calc_model() {
     // General keeps the whole number.
     s.set_cell(0, 1, 0, "1.2345").unwrap();
     assert_eq!(s.get_cell_input(0, 1, 0), "1.2345");
+}
+
+#[test]
+fn a_legacy_formula_reads_with_explicit_at__feat__sheet_calc_model() {
+    // What Excel 365 shows when it opens a formula stored without the
+    // dynamic-array mark: `@` wherever the old evaluation intersected.
+    let mut m = SheetModel::new();
+    m.add_sheet("S");
+    for (text, shown) in [
+        ("A1:A3", "@A1:A3"),
+        ("A1:A3*2", "@A1:A3*2"),
+        ("ABS(A1:A3)", "ABS(@A1:A3)"),
+        ("SUM(A1:A3)", "SUM(A1:A3)"),
+        ("SUM(A1:A3*2)", "SUM(@A1:A3*2)"),
+        ("SUMPRODUCT(A1:A3*2)", "SUMPRODUCT(A1:A3*2)"),
+        ("SUMPRODUCT(ABS(A1:A3))", "SUMPRODUCT(ABS(A1:A3))"),
+        (
+            "VLOOKUP(A1:A3,B1:C3,2,FALSE)",
+            "VLOOKUP(@A1:A3,B1:C3,2,FALSE)",
+        ),
+        ("IF(A1:A3>1,\"y\",\"n\")", "IF(@A1:A3>1,\"y\",\"n\")"),
+        ("SEQUENCE(3)", "SEQUENCE(3)"),
+    ] {
+        let ctx = Ctx {
+            model: &m,
+            sheet: 0,
+        };
+        let mut f = sheet_parser::parse(text, &ctx).unwrap();
+        sheet_calc::legacy::mark_implicit_intersections(&m, &mut f.root);
+        assert_eq!(sheet_parser::print(&f, 0, &ctx), shown, "{text}");
+    }
 }
