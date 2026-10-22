@@ -205,8 +205,15 @@ impl Printer<'_> {
                 self.span_prefix(r.sheets, out);
                 self.range_body(&r.range, out);
             }
-            // Spelled as written: Excel keeps an unknown name's text.
-            Expr::UnknownName(name) => out.push_str(name),
+            // Spelled as written: Excel keeps an unknown name's text. A
+            // function's bare name (an eta-reduced LAMBDA, W3) is stored
+            // `_xleta.NAME`.
+            Expr::UnknownName(name) => {
+                if self.ooxml && sheet_core::funcs::lookup_func(name).is_some() {
+                    out.push_str("_xleta.");
+                }
+                out.push_str(name);
+            }
             Expr::UnknownFunc(name, args) => {
                 out.push_str(name);
                 self.call_args(args, out);

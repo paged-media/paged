@@ -117,6 +117,44 @@ pub(super) fn sheets(
     }
 }
 
+/// `AREAS(reference)` — the areas of a (union) reference: `(A1:B2,C3)` is 2.
+/// A non-reference is `#VALUE!`.
+pub(super) fn areas(
+    model: &SheetModel,
+    args: &[Expr],
+    ctx: &EvalCtx,
+    spills: &SpillState,
+) -> CellValue {
+    fn count(model: &SheetModel, e: &Expr, ctx: &EvalCtx, spills: &SpillState) -> Option<u32> {
+        match e {
+            Expr::Binary(sheet_core::ast::BinOp::Union, a, b) => {
+                Some(count(model, a, ctx, spills)? + count(model, b, ctx, spills)?)
+            }
+            Expr::Ref3D(_) | Expr::Range3D(_) => Some(1),
+            // An intersection of two references is one area when they
+            // overlap.
+            Expr::Binary(sheet_core::ast::BinOp::Isect, a, b) => {
+                let (x, y) = (
+                    eval_as_ref(model, a, ctx, spills)?.normalized(),
+                    eval_as_ref(model, b, ctx, spills)?.normalized(),
+                );
+                let overlap = x.start.sheet == y.start.sheet
+                    && x.start.row.max(y.start.row) <= x.end.row.min(y.end.row)
+                    && x.start.col.max(y.start.col) <= x.end.col.min(y.end.col);
+                overlap.then_some(1)
+            }
+            other => eval_as_ref(model, other, ctx, spills).map(|_| 1),
+        }
+    }
+    match count(model, &args[0], ctx, spills) {
+        Some(n) => CellValue::Number(f64::from(n)),
+        None => match eval(model, &args[0], ctx, spills) {
+            CellValue::Error(e) => err(e),
+            _ => err(CellError::Value),
+        },
+    }
+}
+
 /// `ISOMITTED(argument)`.
 pub(super) fn isomitted(args: &[Expr]) -> CellValue {
     CellValue::Bool(matches!(args.first(), Some(Expr::Missing)))
