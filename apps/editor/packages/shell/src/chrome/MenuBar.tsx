@@ -46,6 +46,8 @@ import { useWorkflowMode } from "../state/workflow-mode-context";
 import { entryApplies, type VisibilityPredicate } from "../registries/types";
 import { Icon, hasIcon } from "../icons";
 import { useRovingFocus } from "../focus/roving-focus";
+import { filterByRegion } from "../profile/region-filter";
+import { useChromeRegions } from "../state/chrome-regions";
 
 /**
  * Top-level menu bar. Reads from `MenuRegistry` and renders each
@@ -91,6 +93,7 @@ const INSERT_VERB = /^Insert (.+)$/;
 
 export function MenuBar() {
   const registries = useRegistries();
+  const chrome = useChromeRegions();
   // Every registry this bar reads during render, as a view that changes
   // with its contents (state/live.ts, ADR 229): bundles register menus,
   // panels, tools and bindings after the bar first renders.
@@ -203,11 +206,21 @@ export function MenuBar() {
     );
     return own.length === 0 || own.some((ns) => here.has(ns));
   };
-  const core = tree.filter(([label]) => CORE_MENUS.includes(label));
-  const context = tree.filter(
+  const offered = tree.filter(
     ([label, nodes]) =>
-      !CORE_MENUS.includes(label) && showContextMenu(label, nodes),
+      CORE_MENUS.includes(label) || showContextMenu(label, nodes),
   );
+  // The editor profile's menu bar (docs/composable-editor.md §5.2): which
+  // top-level menus it keeps and in which order. The bundles' own menus
+  // are the contextual ones.
+  const kept = filterByRegion(
+    chrome.region("menubar"),
+    offered,
+    ([label]) => label,
+    ([label]) => !CORE_MENUS.includes(label),
+  );
+  const core = kept.filter(([label]) => CORE_MENUS.includes(label));
+  const context = kept.filter(([label]) => !CORE_MENUS.includes(label));
 
   const ctx: RenderCtx = {
     invoke: (id) => void commands.invoke(id),

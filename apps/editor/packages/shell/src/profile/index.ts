@@ -30,3 +30,4 @@ export {
   matchIndices,
 } from "./adjust";
 export { validateProfile } from "./validate";
+export { BUNDLES_ENTRY, filterByRegion } from "./region-filter";

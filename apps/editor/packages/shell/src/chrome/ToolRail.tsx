@@ -49,6 +49,8 @@ import {
 } from "../registries/tool";
 import type { EditContextContribution } from "../registries/edit-context";
 import { font, IconButton } from "@paged-media/panel-kit";
+import { filterByRegion } from "../profile/region-filter";
+import { useChromeRegions } from "../state/chrome-regions";
 
 // Concept 1 (T4) — the left tool rail. Shell CHROME, rendered as a
 // sibling of the dockview container, NOT a dock panel: fixed, not
@@ -276,6 +278,7 @@ export function ToolRail({
   hostToolIds?: ReadonlySet<string>;
 }) {
   const registries = useRegistries();
+  const chrome = useChromeRegions();
   const { effectiveTool, setBaseTool } = useTool();
 
   // Re-derive when the tool or edit-context registry changes (bundles
@@ -420,8 +423,20 @@ export function ToolRail({
     return ids;
   }, [hostToolIds, contextRegistry]);
 
+  // The editor profile's tool rail (docs/composable-editor.md §5.2): the
+  // tools it keeps. A slot stays while one of its members is kept.
+  const railRegion = chrome.region("tool-rail");
+  const keptTools = new Set(
+    filterByRegion(
+      railRegion,
+      tools.list().map((t) => t.id as string),
+      (id) => id,
+      (id) => hostToolIds !== undefined && !hostToolIds.has(id),
+    ),
+  );
   const slotVisible = (slot: SlotModel): boolean => {
     if (slot.members.some((m) => m.id === effectiveTool)) return true;
+    if (!slot.members.some((m) => keptTools.has(m.id))) return false;
     const face = faceToolOf(slot);
     if (restrictedTools)
       return applicabilityStyle(

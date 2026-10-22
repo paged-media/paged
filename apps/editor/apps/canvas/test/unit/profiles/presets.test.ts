@@ -25,7 +25,11 @@
 
 import { describe, expect, test } from "bun:test";
 
-import { resolveProfile } from "@paged-media/shell";
+import {
+  ALWAYS_IN_PALETTE,
+  BUNDLES_ENTRY,
+  resolveProfile,
+} from "@paged-media/shell";
 
 import { profileFromSearch } from "../../../src/profiles/from-url";
 import { PRESETS, soloPresetId } from "../../../src/profiles/presets";
@@ -44,15 +48,15 @@ describe("solo presets", () => {
       expect(profile.panels).toEqual([...solo.panelIds]);
       expect(profile.regions["tool-rail"]).toEqual({
         kind: "list",
-        items: [...solo.toolIds],
+        items: [...ALWAYS_IN_PALETTE, ...solo.toolIds, BUNDLES_ENTRY],
       });
       expect(profile.regions.menubar).toEqual({
         kind: "list",
-        items: [...solo.menuTopLevels],
+        items: [...solo.menuTopLevels, BUNDLES_ENTRY],
       });
       expect(profile.regions["panel-rail"]).toEqual({
         kind: "list",
-        items: [...solo.panelRailIds],
+        items: [...solo.panelRailIds, BUNDLES_ENTRY],
       });
       expect(profile.regions["mode-bar"]).toBeNull();
       expect(profile.modes).toEqual([

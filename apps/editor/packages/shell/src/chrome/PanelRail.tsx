@@ -41,6 +41,8 @@ import { useRegistries } from "../state/registries-context";
 import { useRegistryView } from "../state/live";
 import { useOptionalCockpitState } from "../cockpit/cockpit-state-context";
 import { Segment } from "@paged-media/panel-kit";
+import { filterByRegion } from "../profile/region-filter";
+import { useChromeRegions } from "../state/chrome-regions";
 
 export interface PanelRailItem {
   /** A registered panel id (`paged.swatches`, …). */
@@ -75,13 +77,30 @@ export function PanelRail({
     .list()
     .filter((p) => p.rail)
     .map((p) => ({ panelId: p.id, title: p.title, icon: p.icon ?? "" }));
+  // The editor profile's panel rail (docs/composable-editor.md §5.2): the
+  // app's launchers it keeps, in its order; the bundles' rail panels stay
+  // where the list says `@bundles`.
+  const railRegion = useChromeRegions().region("panel-rail");
+  const hostShown = filterByRegion(
+    railRegion,
+    items,
+    (i) => i.panelId,
+    () => false,
+  );
+  const pluginShown = filterByRegion(
+    railRegion,
+    pluginItems,
+    (i) => i.panelId,
+    () => true,
+  );
   // One tab stop for the rail; Up/Down walk it (ADR 234).
   const roving = useRovingFocus({
     orientation: "vertical",
     items: "[data-panel-rail-item]",
   });
 
-  if (!cockpit || (items.length === 0 && pluginItems.length === 0)) return null;
+  if (!cockpit || (hostShown.length === 0 && pluginShown.length === 0))
+    return null;
 
   const isActive = (item: PanelRailItem) =>
     cockpit.activeTab === item.panelId &&
@@ -155,8 +174,8 @@ export function PanelRail({
       style={railStyle}
       {...roving}
     >
-      {items.map((item) => renderItem(item, false))}
-      {pluginItems.length > 0 && items.length > 0 && (
+      {hostShown.map((item) => renderItem(item, false))}
+      {pluginShown.length > 0 && hostShown.length > 0 && (
         <div
           aria-hidden
           style={{
@@ -166,7 +185,7 @@ export function PanelRail({
           }}
         />
       )}
-      {pluginItems.map((item) => renderItem(item, true))}
+      {pluginShown.map((item) => renderItem(item, true))}
     </div>
   );
 }

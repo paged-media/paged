@@ -164,6 +164,7 @@ import type {
   RegionId,
   ResolvedRegion,
 } from "./profile/types";
+import { ActionsBar } from "./chrome/RegionItems";
 import {
   ChromeRegionsProvider,
   chromeRegionsOf,
@@ -451,6 +452,13 @@ function ShellChrome({
 }>) {
   const client = useCanvasClient();
   const chrome = useChromeRegions();
+  const actionsRegion = chrome.region("actions-bar");
+  const actionsItems =
+    actionsRegion === null
+      ? []
+      : actionsRegion.kind === "list"
+        ? actionsRegion.items
+        : actionsRegion.append;
   const objectModel = useObjectModel();
   const { handle, snapshotsReady, setHandle, setResolution } = useDocument();
   const {
@@ -1291,6 +1299,10 @@ function ShellChrome({
       {chrome.has("header") && (
         <Header onFile={onFile} headerExtras={headerExtras} status={status} />
       )}
+
+      {/* The actions bar: host actions and commands a template shape
+       *  shows under the header (docs/composable-editor.md §5.2). */}
+      {actionsItems.length > 0 && <ActionsBar items={actionsItems} />}
 
       {/* Cockpit — the mode-aware context toolbar (only when the
        *  app contributed modes; chrome stays lean otherwise). */}

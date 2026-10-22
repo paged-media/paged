@@ -23,7 +23,11 @@
 // applies profiles (plan task A4) the solo presets are derived from
 // `SOLO_PROFILES`, so the two cannot drift; A4 moves the data here.
 
-import type { EditorProfile } from "@paged-media/shell";
+import {
+  ALWAYS_IN_PALETTE,
+  BUNDLES_ENTRY,
+  type EditorProfile,
+} from "@paged-media/shell";
 
 import { SOLO_PROFILES, type SoloProfile } from "../solo/profiles";
 
@@ -46,10 +50,13 @@ export function soloPreset(profile: SoloProfile): EditorProfile {
       },
     ],
     regions: {
-      // The tools beyond the navigation set the shell always keeps.
-      "tool-rail": { items: [...profile.toolIds] },
-      menubar: { items: [...profile.menuTopLevels] },
-      "panel-rail": { items: [...profile.panelRailIds] },
+      // The navigation tools, the profile's host tools, then whatever the
+      // one bundle contributes: its own tools, its menu, its rail panels.
+      "tool-rail": {
+        items: [...ALWAYS_IN_PALETTE, ...profile.toolIds, BUNDLES_ENTRY],
+      },
+      menubar: { items: [...profile.menuTopLevels, BUNDLES_ENTRY] },
+      "panel-rail": { items: [...profile.panelRailIds, BUNDLES_ENTRY] },
       // One mode: the switcher, and the zoom control it holds, are not rendered.
       "mode-bar": null,
     },

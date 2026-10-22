@@ -43,6 +43,7 @@ import { FileDrop } from "./FileDrop";
 import { MenuBar, prettyKey } from "./MenuBar";
 import { notifyPalette } from "./CommandPalette";
 import { useChromeRegions } from "../state/chrome-regions";
+import { RegionItems } from "./RegionItems";
 
 export interface HeaderProps {
   onFile: (file: File) => void;
@@ -52,6 +53,7 @@ export interface HeaderProps {
 
 export function Header({ onFile, headerExtras, status }: HeaderProps) {
   const chrome = useChromeRegions();
+  const headerRegion = chrome.region("header");
   return (
     <header style={headerStyle}>
       <div
@@ -87,21 +89,32 @@ export function Header({ onFile, headerExtras, status }: HeaderProps) {
         style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}
       >
         <FileDrop onFile={onFile} hidden />
-        {headerExtras != null && (
-          <div
-            style={{
-              display: "flex",
-              maxWidth: 200,
-              minWidth: 0,
-              overflow: "hidden",
-            }}
-          >
-            {headerExtras}
-          </div>
+        {/* A profile that lists the header's items replaces this cluster
+         *  with them; one that keeps it whole may append to it. */}
+        {headerRegion?.kind === "list" ? (
+          <RegionItems items={headerRegion.items} />
+        ) : (
+          <>
+            {headerExtras != null && (
+              <div
+                style={{
+                  display: "flex",
+                  maxWidth: 200,
+                  minWidth: 0,
+                  overflow: "hidden",
+                }}
+              >
+                {headerExtras}
+              </div>
+            )}
+            <ThemeToggle />
+            <span style={zoneDividerStyle} aria-hidden />
+            <ShareButton />
+            {headerRegion && headerRegion.append.length > 0 && (
+              <RegionItems items={headerRegion.append} />
+            )}
+          </>
         )}
-        <ThemeToggle />
-        <span style={zoneDividerStyle} aria-hidden />
-        <ShareButton />
       </div>
     </header>
   );
