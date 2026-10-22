@@ -63,7 +63,8 @@ describe.skipIf(!docxPresent)(
     let dispose: () => void;
     const errors: string[] = [];
 
-    beforeEach(async () => {
+    /** A fresh session: a headless host with the bundle activated. */
+    async function start(): Promise<void> {
       errors.length = 0;
       h = await createHeadlessHost({
         resolveFrom: ENGINE_ANCHOR,
@@ -99,6 +100,10 @@ describe.skipIf(!docxPresent)(
       exporter = h
         .exportersContributed()
         .find((c) => c.id === "media.paged.doc.exporter.docx")!;
+    }
+
+    beforeEach(async () => {
+      await start();
       await h.newBlank(300, 300);
     }, 60_000);
 
@@ -181,6 +186,42 @@ describe.skipIf(!docxPresent)(
           )
           .join("");
         expect(text).toContain("A-17");
+      } finally {
+        engine.dispose();
+      }
+    });
+
+    it("File ▸ Export of a saved Word document reopened in a new session writes it with its edits", async () => {
+      covers("exporter:media.paged.doc.exporter.docx");
+      await importer.import({
+        name: "merge-letter.docx",
+        bytes: fixture("merge-letter.docx"),
+        mimeType: DOCX_MIME,
+      });
+      const field = "plugin:media.paged.doc/mergeField/docx_f0/b1/f0";
+      expect(await host.objects.set(field, "value", "B-9")).toMatchObject({
+        applied: true,
+      });
+      const { bytes: saved } = await h.exportDocument("paged");
+      dispose();
+      h.dispose();
+      // Another session opens the saved document: the importing session's
+      // record is gone, the label and the parts are not.
+      await start();
+      await h.load(saved);
+      const out = await exporter.export();
+      expect(out).not.toBeNull();
+      expect(out!.fileName).toBe("merge-letter.docx");
+      const engine = await DocEngine.boot();
+      try {
+        engine.loadDocx(out!.bytes);
+        const text = engine
+          .lowered()
+          .story.blocks.flatMap((b) =>
+            b.kind === "paragraph" ? b.runs.map((r) => r.text) : [],
+          )
+          .join("");
+        expect(text).toContain("B-9");
       } finally {
         engine.dispose();
       }

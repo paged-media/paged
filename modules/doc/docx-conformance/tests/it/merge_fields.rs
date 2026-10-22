@@ -203,6 +203,7 @@ fn object_edits_address_a_merge_field_by_occurrence__feat__plugin_doc_object_mod
                 value: "Arlington".into(),
             },
         ],
+        ..Default::default()
     };
     // The set the session derives: the field's first result run takes the
     // value, the second is emptied.

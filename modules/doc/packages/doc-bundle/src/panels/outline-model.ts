@@ -42,7 +42,7 @@ export const OUTLINE_CAP = 300;
 const PREVIEW_CHARS = 80;
 
 /** `ParagraphStyle/docx-Heading1` / a style NAMED "heading 2" → level. */
-function headingLevel(
+export function headingLevel(
   styleId: string | null | undefined,
   styleNameById: Map<string, string>,
 ): number | null {
