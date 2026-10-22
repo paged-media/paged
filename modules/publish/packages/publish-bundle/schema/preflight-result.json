@@ -1,0 +1,24 @@
+{
+  "kind": "struct",
+  "fields": {
+    "ok": { "kind": "bool" },
+    "pageCount": { "kind": "number", "integer": true },
+    "errors": { "kind": "number", "integer": true },
+    "warnings": { "kind": "number", "integer": true },
+    "findings": {
+      "kind": "list",
+      "of": {
+        "kind": "struct",
+        "fields": {
+          "severity": {
+            "kind": "enum",
+            "members": ["error", "warning", "info"]
+          },
+          "code": { "kind": "text" },
+          "message": { "kind": "text", "multiline": true },
+          "page": { "kind": "number", "integer": true }
+        }
+      }
+    }
+  }
+}
