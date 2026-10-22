@@ -23,6 +23,7 @@
 // app; the surface gates read the literal here.
 
 import { TemplateFormPanel } from "./template/form-panel";
+import { TemplatePanel } from "./template/template-panel";
 import { AIAssistant, type PanelContribution } from "@paged-media/shell";
 
 import { CharacterPanel } from "./character-panel";
@@ -129,6 +130,16 @@ export const BUILT_IN_PANELS: PanelContribution[] = [
     id: "paged.template.form",
     title: "Template form",
     component: TemplateFormPanel,
+    defaultDock: "right",
+    defaultGroup: "cockpit",
+    icon: "panel-properties",
+  },
+  // The Template panel (plan F1, F2): an author makes fields, sets what a
+  // filler may do, and previews the template as a filler.
+  {
+    id: "paged.template",
+    title: "Template",
+    component: TemplatePanel,
     defaultDock: "right",
     defaultGroup: "cockpit",
     icon: "panel-properties",

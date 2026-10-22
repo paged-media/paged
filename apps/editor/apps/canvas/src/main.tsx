@@ -1705,6 +1705,7 @@ function CanvasAppRoot() {
       canvasFurniture={instance.profile.canvas}
       features={instance.profile.features}
       sessionPolicy={{ role, overrides: [] }}
+      onSessionRoleChange={instance.role.set}
       bindingProviders={bindingProviders}
       objectModel={editorObjectModel}
     >
