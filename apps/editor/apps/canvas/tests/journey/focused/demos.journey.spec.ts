@@ -32,7 +32,7 @@ test.describe("journey · embedding demos", () => {
     page,
   }) => {
     await page.goto("/demos/index.html");
-    await expect(page.locator("main.gallery a")).toHaveCount(9);
+    await expect(page.locator("main.gallery a")).toHaveCount(10);
   });
 
   test("business card: fill a field, Submit hands the values to the host @feat:editor-shell.solo-mode @level:happy", async ({
@@ -108,5 +108,23 @@ test.describe("journey · embedding demos", () => {
     await expect(page.locator('[data-field-picture="photo"]')).toHaveText(
       "Kein Bild",
     );
+  });
+
+  test("iframe: the host drives a framed editor through messages @feat:editor-shell.solo-mode @level:happy", async ({
+    page,
+  }) => {
+    await page.goto("/demos/iframe.html");
+    await ready(page);
+    const messages = page.locator("[data-demo-messages]");
+    await page.locator("[data-demo-set-name]").click();
+    await expect(messages).toContainText("name set", { timeout: 15_000 });
+    const frame = page.frameLocator("iframe");
+    await expect(frame.locator('[data-field-input="name"]')).toHaveValue(
+      "Mary Example",
+      { timeout: 15_000 },
+    );
+    await frame.locator('[data-region-command="paged.host.submit"]').click();
+    await expect(page.getByRole("status")).toHaveText("submitted");
+    await expect(messages).toContainText('"Mary Example"');
   });
 });

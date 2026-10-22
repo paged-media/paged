@@ -129,6 +129,16 @@ export class DocEngine {
       occurrence: number;
       value: string;
     }>;
+    /** Body paragraph blocks removed whole (a list's items taken away). */
+    deleteParagraphs?: ReadonlyArray<number>;
+    /** Paragraphs added after block `after`, each a copy of block
+     *  `source`'s paragraph and first-run properties carrying `text` (a
+     *  list's items added; a section-ending source is refused). */
+    cloneParagraphs?: ReadonlyArray<{
+      source: number;
+      after: number;
+      text: string;
+    }>;
   }): { bytes: Uint8Array; skips: string[] } {
     const bytes = this.inner.save_object_edits(JSON.stringify(edits));
     return { bytes, skips: this.lastSaveSkips() };

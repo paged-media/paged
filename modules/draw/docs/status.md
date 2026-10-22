@@ -123,12 +123,43 @@ first consumers' fix-ups, §12.7 the panel property row). It is on `main` and pu
   or next to a library write, are full-envelope `setPluginMetadata` mutations the registry
   checks. Every draw object answers `hostOf`, so `page:#1 > plugin:media.paged.draw/path` and
   `doc > plugin:media.paged.draw/repeat` select.
-- **Typed commands.** 97 of the 107 commands have a typed twin with the same id; the ten
-  Path Options "…" commands, which only raise a panel, are the untyped remainder.
+- **Typed commands.** 100 of the 110 commands have a typed twin with the same id; the ten
+  Path Options "…" commands, which only raise a panel, are the untyped remainder. The
+  Knife, Scissors and Shape Builder, tools before, are commands too, their gesture given as
+  data: `knife { page, cut }`, `scissorsAt { point, tolerance }` and
+  `shapeBuild { path, mode }` act on their `targets` as the tool would, in one undo step,
+  and a cut that does nothing fails with its reason (`commands/cut-commands.ts`). A
+  scripted Shape Builder refuses ovals (the tool reads them through stand-ins).
 - **A recipe write changes the recipe, not the artwork.** The artwork follows on the typed
   update command (`updateRepeat`, `updateBlend`, `editPatternField`, `regenerateLivePaint`,
   `updateObjectsOnPath`): two undo steps, because an update mints new ids.
 - **Two libraries in one batch are refused**: they share the one document label.
+
+### Template fields
+
+A template can open four parts of a drawing to a filler (extensions ADR 335; code:
+`packages/draw-bundle/src/object-model/template-fields.ts`). A field is the
+`x-paged:template` label of one page item; the engine grants the filler that item's
+`select`, `document.metadata` and the kind's grants, and checks every write.
+
+| Kind                            | Definition                       | Value     | Grants                                                       |
+| ------------------------------- | -------------------------------- | --------- | ------------------------------------------------------------ |
+| `media.paged.draw.paint`        | `{ channel, allowed?, target? }` | swatch id | `appearance.fill`, `appearance.stroke`                       |
+| `media.paged.draw.graphicStyle` | `{ allowed?, targets? }`         | style id  | `appearance.fill`, `appearance.stroke`, `appearance.opacity` |
+| `media.paged.draw.textOnPath`   | `{ path? }`                      | text      | `text.edit`                                                  |
+| `media.paged.draw.symbolChoice` | `{ allowed? }`                   | symbol id | `item.resize`, `appearance.fill`, `appearance.stroke`        |
+
+- `allowed` lists ids or names; without it every swatch, style or symbol is a choice. A
+  value outside the list is refused with one sentence.
+- **paint** writes the frame's fill or stroke, or, when the item has an appearance stack,
+  its top layer (the layer that bakes to the frame).
+- **symbolChoice** re-shapes the instance leaf in place (path, paint and link, one batch),
+  so the element and its field label survive. Only one-piece symbols can be chosen: a
+  rebuild would mint new elements, which a filler may not, and drop the field's label.
+- **textOnPath** reads and writes the story on the path. The engine decides a story's
+  permissions by the text frame that hosts it, and a story on a path has none: a filler's
+  write is refused unless the template grants `text.edit` document-wide (a core change
+  would let the path's own grant reach its story).
 
 ### Illustrator variables
 

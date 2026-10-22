@@ -225,4 +225,6 @@ cargo test -p sheet-conformance --test it excel_oracle::
 #   python3 generate.py && ./drive.sh && python3 read.py
 # the calculation-model lane (spill shapes, @, 3D, LAMBDA, cycles, 15 digits):
 #   python3 calcmodel.py generate && ./drive.sh calcmodel && python3 calcmodel.py read
+# the open-check lane (Excel opens what Paged saves after edits, no repair):
+#   see the header of sheet-conformance/tests/it/excel_opencheck.rs
 ```

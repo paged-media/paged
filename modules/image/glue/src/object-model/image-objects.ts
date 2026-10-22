@@ -76,6 +76,15 @@ import {
   defaultAdjust,
 } from "./adjust";
 import {
+  ANCHORS,
+  applyCanvasOp,
+  canvasOpProblem,
+  QUARTER_OPS,
+  type Anchor,
+  type CanvasOp,
+  type QuarterOp,
+} from "./canvas-ops";
+import {
   clonePgil,
   readPgil,
   stackFromImage,
@@ -169,6 +178,39 @@ const IMAGE_ROWS: PropertySchema[] = [
     access: "readOnly",
     summary:
       "The stored revision the frame's marker points at; 0 = never committed.",
+  },
+  {
+    path: "canvasSize",
+    type: {
+      kind: "struct",
+      fields: {
+        width: { kind: "number", integer: true },
+        height: { kind: "number", integer: true },
+        anchor: { kind: "enum", members: ANCHORS, default: "center" },
+      },
+    },
+    summary:
+      "Canvas Size over every layer: the old canvas sits at `anchor`; added area is transparent. Reads the current size.",
+  },
+  {
+    path: "crop",
+    type: { kind: "bounds" },
+    summary:
+      "Crop every layer to [top, left, bottom, right] (image pixels). Reads the whole canvas.",
+  },
+  {
+    path: "transform",
+    type: { kind: "enum", members: ["none", ...QUARTER_OPS] },
+    default: "none",
+    summary:
+      "An action: writing a quarter turn or a flip transforms every layer; reads none.",
+  },
+  {
+    path: "nextLayerId",
+    type: { kind: "number", integer: true },
+    access: "readOnly",
+    summary:
+      "The id the next new layer takes (a session handle), so a batch that creates a layer can address it.",
   },
   {
     path: "pending",
@@ -635,6 +677,18 @@ export function createImageObjects(
           return value(s.marker?.rev ?? 0);
         case "pending":
           return value(s.marker?.pending === true);
+        case "nextLayerId":
+          return value(s.stack.nextId);
+        case "canvasSize":
+          return value({
+            width: s.stack.width,
+            height: s.stack.height,
+            anchor: "center",
+          });
+        case "crop":
+          return value([0, 0, s.stack.height, s.stack.width]);
+        case "transform":
+          return value("none");
         default:
           return refusedValue("unknownPath", `image has no path "${path}"`);
       }
@@ -987,8 +1041,11 @@ export function createImageObjects(
     }
     if (op.op === "invoke") throw new Refused("invoke is not a write");
     const a = parseImageAddress(op.address)!;
-    if (a.kind === "image")
-      throw new Refused("the image object has no writable paths");
+    if (a.kind === "image") {
+      if (op.op !== "set")
+        throw new Refused("an image is deleted with its frame");
+      return applyCanvas(s, op.path, op.value);
+    }
     const l = layerOf(s, a.layerId!);
     if (op.op === "delete") {
       if (kind === "mask") {
@@ -1057,6 +1114,35 @@ export function createImageObjects(
         return;
       }
     }
+  }
+
+  /** A canvas operation on the whole stack (canvas-ops.ts). */
+  function applyCanvas(s: FrameState, path: string, v: unknown) {
+    let op: CanvasOp;
+    if (path === "transform") {
+      if (v === "none") return;
+      op = { kind: v as QuarterOp };
+    } else if (path === "crop") {
+      const [top, left, bottom, right] = v as number[];
+      op = {
+        kind: "crop",
+        x: left!,
+        y: top!,
+        width: right! - left!,
+        height: bottom! - top!,
+      };
+    } else if (path === "canvasSize") {
+      const c = v as { width: number; height: number; anchor?: Anchor };
+      op = {
+        kind: "canvas",
+        width: c.width,
+        height: c.height,
+        anchor: c.anchor ?? "center",
+      };
+    } else throw new Refused(`image path "${path}" is not writable`);
+    const why = canvasOpProblem(s.stack, op);
+    if (why) throw new Refused(why);
+    applyCanvasOp(s.stack, op);
   }
 
   function newLayer(s: FrameState, kind: "pixels" | "adjustment"): PgilLayer {

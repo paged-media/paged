@@ -779,8 +779,13 @@ impl Engine {
         }
         self.spills.clear();
 
+        let before = self.table_names();
         self.apply_edit_structural(edit);
-        self.rewrite_all_formulas(edit);
+        // A table the edit deleted whole: references to it read #REF!, as
+        // Excel rewrites them.
+        let after = self.table_names();
+        let gone: Vec<String> = before.into_iter().filter(|t| !after.contains(t)).collect();
+        self.rewrite_all_formulas(edit, &gone);
         // Rebuild the graph + dirty set from the mutated model.
         self.graph.rebuild(&self.model);
         self.dirty = Dirty::new();
@@ -1401,7 +1406,20 @@ impl Engine {
 
     /// Rewrite every formula in the model for the structural edit. Re-interns
     /// the rewritten formula and repoints the cell's `FormulaId`.
-    fn rewrite_all_formulas(&mut self, edit: &Edit) {
+    /// Every table's name, lower-cased.
+    fn table_names(&self) -> Vec<String> {
+        self.model
+            .sheets
+            .iter()
+            .flat_map(|ws| {
+                ws.tables
+                    .iter()
+                    .map(|t| t.name.as_str().to_ascii_lowercase())
+            })
+            .collect()
+    }
+
+    fn rewrite_all_formulas(&mut self, edit: &Edit, gone_tables: &[String]) {
         // Collect (cref, old_fid) for every formula cell.
         let mut targets: Vec<(CellRef, sheet_core::FormulaId)> = Vec::new();
         for (sheet_idx, ws) in self.model.sheets.iter().enumerate() {
@@ -1424,7 +1442,10 @@ impl Engine {
             let Some(old) = self.model.formula(fid).cloned() else {
                 continue;
             };
-            let rewritten = sheet_parser::rewrite(&old, edit);
+            let mut rewritten = sheet_parser::rewrite(&old, edit);
+            if !gone_tables.is_empty() {
+                rewritten.root = drop_tables(&rewritten.root, gone_tables);
+            }
             let new_fid = self.model.intern_formula(rewritten);
             if let Some(ws) = self.model.sheet_mut(cref.sheet) {
                 if let Some(existing) = ws.cell(cref.row, cref.col) {
@@ -1434,6 +1455,26 @@ impl Engine {
                 }
             }
         }
+    }
+}
+
+/// `e` with every structured reference to a table in `gone` (lower-cased
+/// names) replaced by `#REF!`.
+fn drop_tables(e: &sheet_core::ast::Expr, gone: &[String]) -> sheet_core::ast::Expr {
+    use sheet_core::ast::{Expr, LitValue};
+    let f = |x: &Expr| drop_tables(x, gone);
+    match e {
+        Expr::StructuredRef(r) if gone.contains(&r.table.as_str().to_ascii_lowercase()) => {
+            Expr::Lit(LitValue::Error(CellError::Ref))
+        }
+        Expr::Unary(op, a) => Expr::Unary(*op, Box::new(f(a))),
+        Expr::Binary(op, a, b) => Expr::Binary(*op, Box::new(f(a)), Box::new(f(b))),
+        Expr::Func(id, args) => Expr::Func(*id, args.iter().map(f).collect()),
+        Expr::Array(rows) => Expr::Array(rows.iter().map(|r| r.iter().map(f).collect()).collect()),
+        Expr::SpillRef(a) => Expr::SpillRef(Box::new(f(a))),
+        Expr::Call(c, args) => Expr::Call(Box::new(f(c)), args.iter().map(f).collect()),
+        Expr::UnknownFunc(n, args) => Expr::UnknownFunc(n.clone(), args.iter().map(f).collect()),
+        other => other.clone(),
     }
 }
 
