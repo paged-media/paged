@@ -314,7 +314,13 @@
           "title": "Rotate canvas 90° clockwise",
           "args": {
             "kind": "struct",
-            "fields": {}
+            "fields": {
+              "image": {
+                "kind": "ref",
+                "to": "plugin:media.paged.image/image",
+                "optional": true
+              }
+            }
           }
         },
         {
@@ -322,7 +328,13 @@
           "title": "Rotate canvas 90° counter-clockwise",
           "args": {
             "kind": "struct",
-            "fields": {}
+            "fields": {
+              "image": {
+                "kind": "ref",
+                "to": "plugin:media.paged.image/image",
+                "optional": true
+              }
+            }
           }
         },
         {
@@ -330,7 +342,13 @@
           "title": "Rotate canvas 180°",
           "args": {
             "kind": "struct",
-            "fields": {}
+            "fields": {
+              "image": {
+                "kind": "ref",
+                "to": "plugin:media.paged.image/image",
+                "optional": true
+              }
+            }
           }
         },
         {
@@ -338,7 +356,13 @@
           "title": "Flip canvas horizontal",
           "args": {
             "kind": "struct",
-            "fields": {}
+            "fields": {
+              "image": {
+                "kind": "ref",
+                "to": "plugin:media.paged.image/image",
+                "optional": true
+              }
+            }
           }
         },
         {
@@ -346,7 +370,13 @@
           "title": "Flip canvas vertical",
           "args": {
             "kind": "struct",
-            "fields": {}
+            "fields": {
+              "image": {
+                "kind": "ref",
+                "to": "plugin:media.paged.image/image",
+                "optional": true
+              }
+            }
           }
         },
         {
@@ -488,6 +518,80 @@
           "args": {
             "kind": "struct",
             "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.cropImage",
+          "title": "Crop image",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "image": {
+                "kind": "ref",
+                "to": "plugin:media.paged.image/image"
+              },
+              "bounds": {
+                "kind": "bounds"
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.image.command.canvasSize",
+          "title": "Canvas size",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "image": {
+                "kind": "ref",
+                "to": "plugin:media.paged.image/image"
+              },
+              "width": {
+                "kind": "number",
+                "integer": true
+              },
+              "height": {
+                "kind": "number",
+                "integer": true
+              },
+              "anchor": {
+                "kind": "enum",
+                "members": [
+                  "topLeft",
+                  "top",
+                  "topRight",
+                  "left",
+                  "center",
+                  "right",
+                  "bottomLeft",
+                  "bottom",
+                  "bottomRight"
+                ],
+                "default": "center"
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.image.command.applyAdjustment",
+          "title": "Apply adjustment",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "image": {
+                "kind": "ref",
+                "to": "plugin:media.paged.image/image"
+              },
+              "name": {
+                "kind": "text",
+                "optional": true
+              },
+              "params": {
+                "kind": "struct",
+                "fields": {},
+                "open": true
+              }
+            }
           }
         },
         {
