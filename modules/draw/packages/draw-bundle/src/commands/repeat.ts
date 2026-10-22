@@ -221,6 +221,21 @@ import {
   writeRecipeBytes,
   type RecipeHost,
 } from "../recipe-store";
+import { defineMessages } from "@paged-media/strings";
+
+/** Command titles, message keys `registerCommand` reads in the editor's locale. */
+const M = defineMessages("draw.repeat", {
+  radial:
+    "Repeat: Radial from selection (instances around a ring — artwork rebuilt by Update, not a live link)",
+  grid: "Repeat: Grid from selection (rows × columns, spacing, flip — artwork rebuilt by Update, not a live link)",
+  mirror:
+    "Repeat: Mirror from selection (one reflection across an axis — artwork rebuilt by Update, not a live link)",
+  update:
+    "Repeat: Update (new parameters + the sources' CURRENT geometry; the instances get new ids)",
+  select: "Repeat: Select the instances",
+  expand: "Repeat: Expand (keep every instance as ordinary artwork)",
+  release: "Repeat: Release (remove the instances, keep the source)",
+});
 export const REPEAT_COMMAND_CATEGORY = "Repeat";
 
 export const MAKE_RADIAL_REPEAT_COMMAND_ID =
@@ -1979,53 +1994,49 @@ export function contributeRepeatCommands(host: BundleHost): Disposable {
   const disposers = [
     registerCommand(host, {
       id: MAKE_RADIAL_REPEAT_COMMAND_ID,
-      title:
-        "Repeat: Radial from selection (instances around a ring — artwork rebuilt by Update, not a live link)",
+      title: M.radial,
       category: REPEAT_COMMAND_CATEGORY,
       handler: (_paged, payload) =>
         applyMakeRepeat(host, "radial", payload).then(() => undefined),
     }),
     registerCommand(host, {
       id: MAKE_GRID_REPEAT_COMMAND_ID,
-      title:
-        "Repeat: Grid from selection (rows × columns, spacing, flip — artwork rebuilt by Update, not a live link)",
+      title: M.grid,
       category: REPEAT_COMMAND_CATEGORY,
       handler: (_paged, payload) =>
         applyMakeRepeat(host, "grid", payload).then(() => undefined),
     }),
     registerCommand(host, {
       id: MAKE_MIRROR_REPEAT_COMMAND_ID,
-      title:
-        "Repeat: Mirror from selection (one reflection across an axis — artwork rebuilt by Update, not a live link)",
+      title: M.mirror,
       category: REPEAT_COMMAND_CATEGORY,
       handler: (_paged, payload) =>
         applyMakeRepeat(host, "mirror", payload).then(() => undefined),
     }),
     registerCommand(host, {
       id: UPDATE_REPEAT_COMMAND_ID,
-      title:
-        "Repeat: Update (new parameters + the sources' CURRENT geometry; the instances get new ids)",
+      title: M.update,
       category: REPEAT_COMMAND_CATEGORY,
       handler: (_paged, payload) =>
         applyUpdateRepeat(host, payload).then(() => undefined),
     }),
     registerCommand(host, {
       id: SELECT_REPEAT_INSTANCES_COMMAND_ID,
-      title: "Repeat: Select the instances",
+      title: M.select,
       category: REPEAT_COMMAND_CATEGORY,
       handler: (_paged, payload) =>
         applySelectRepeatInstances(host, payload).then(() => undefined),
     }),
     registerCommand(host, {
       id: EXPAND_REPEAT_COMMAND_ID,
-      title: "Repeat: Expand (keep every instance as ordinary artwork)",
+      title: M.expand,
       category: REPEAT_COMMAND_CATEGORY,
       handler: (_paged, payload) =>
         applyExpandRepeat(host, payload).then(() => undefined),
     }),
     registerCommand(host, {
       id: RELEASE_REPEAT_COMMAND_ID,
-      title: "Repeat: Release (remove the instances, keep the source)",
+      title: M.release,
       category: REPEAT_COMMAND_CATEGORY,
       handler: (_paged, payload) =>
         applyReleaseRepeat(host, payload).then(() => undefined),

@@ -37,6 +37,7 @@
 // burst, one walk per document REVISION out of the shared link index
 // (`src/link-index.ts`), and the newest reload wins.
 
+import { t } from "@paged-media/strings";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "bun:test";
 
 import { metadataReadsPerLeaf } from "../engine-reads";
@@ -120,7 +121,7 @@ describe("Blend options panel — rendered against the engine", () => {
       );
       // The honesty note is on screen, verbatim.
       expect(panel.get("[data-draw-blend-note]").textContent).toBe(
-        BLEND_PANEL_NOTE,
+        t(BLEND_PANEL_NOTE),
       );
     });
 

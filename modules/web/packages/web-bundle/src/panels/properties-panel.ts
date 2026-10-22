@@ -33,6 +33,7 @@ import type {
   PanelSchema,
 } from "@paged-media/plugin-api";
 import { propertyRows, publishObjectList } from "@paged-media/plugin-sdk";
+import { defineMessages, t } from "@paged-media/strings";
 
 import { PANEL_FIELDS, PLUGIN_ID } from "../object-model";
 
@@ -65,15 +66,25 @@ const list = (rows: string, select: string) => ({
   },
 });
 
-/** The panel, from `PANEL_FIELDS` (every entry is a row of its kind). */
-export const WEB_PROPERTIES_PANEL: PanelSchema = {
-  id: PROPERTIES_PANEL_ID,
+const M = defineMessages("web.properties", {
   title: "Web frame properties",
+  render: "Render",
+  documentValues: "Document values",
+  documentValuesNote:
+    "The values behind {{doc.…}} and {{data.…}}; edit a frame's variables in Web source.",
+  cssVariables: "CSS variables",
+});
+
+/** The panel, from `PANEL_FIELDS` (every entry is a row of its kind), in
+ *  the editor's language when it is asked for. */
+export const webPropertiesPanel = (): PanelSchema => ({
+  id: PROPERTIES_PANEL_ID,
+  title: t(M.title),
   icon: "panel-properties",
   defaultDock: "right",
   sections: [
     {
-      title: "Render",
+      title: t(M.render),
       // The selected frame's web frame (`<selected> > webFrame`).
       rows: propertyRows(WEB_FRAME, paths(WEB_FRAME, "Render"), "selection"),
     },
@@ -81,12 +92,12 @@ export const WEB_PROPERTIES_PANEL: PanelSchema = {
       // The values behind {{doc.…}} / {{data.…}}. The Web source panel's
       // Variables section is where a frame's variables are edited; this list
       // points there rather than being a third editor of its own.
-      title: "Document values",
+      title: t(M.documentValues),
       rows: [
         {
           widget: "paged.label",
           props: {
-            text: "The values behind {{doc.…}} and {{data.…}}; edit a frame's variables in Web source.",
+            text: t(M.documentValuesNote),
           },
         },
         list(BIND.templateVars, BIND.templateVar),
@@ -96,7 +107,7 @@ export const WEB_PROPERTIES_PANEL: PanelSchema = {
       ],
     },
     {
-      title: "CSS variables",
+      title: t(M.cssVariables),
       rows: [
         list(BIND.cssVars, BIND.cssVar),
         ...propertyRows(CSS_VAR, paths(CSS_VAR, "CSS variables"), {
@@ -105,7 +116,7 @@ export const WEB_PROPERTIES_PANEL: PanelSchema = {
       ],
     },
   ],
-};
+});
 
 /** Keep the two lists live: the document's template values, and the CSS
  *  variables of the selected web frame. */

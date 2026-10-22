@@ -3,7 +3,23 @@
 // three (`fillPattern`, `applyShapeBlur`) with no way in.
 
 import type { ImageSession } from "../../session";
+import { defineMessages, t } from "@paged-media/strings";
+
 import { mono, note, row, sectionTitle } from "./styles";
+
+const M = defineMessages("image.pattern", {
+  title: "Pattern",
+  define: "Define pattern",
+  none: "none",
+  scale: "Scale",
+  fill: "Fill",
+  shapeBlur: "Shape blur",
+  blur: "Blur",
+  note:
+    "Define pattern copies the selection's bounding box (the whole image " +
+    "when nothing is selected). The fill tiles it into the selection; Shape " +
+    "blur uses its alpha as the blur's shape.",
+});
 
 export function PatternSection({
   session,
@@ -26,7 +42,7 @@ export function PatternSection({
 }) {
   return (
     <>
-      <div style={sectionTitle}>Pattern</div>
+      <div style={sectionTitle}>{t(M.title)}</div>
       <div style={row}>
         <button
           type="button"
@@ -34,14 +50,14 @@ export function PatternSection({
           disabled={disabled}
           onClick={() => session.definePattern()}
         >
-          Define pattern
+          {t(M.define)}
         </button>
         <span style={mono} data-image-pattern-size>
-          {pattern ? `${pattern.width}×${pattern.height}` : "none"}
+          {pattern ? `${pattern.width}×${pattern.height}` : t(M.none)}
         </span>
       </div>
       <div style={row}>
-        <label htmlFor="pg-image-pattern-scale">Scale</label>
+        <label htmlFor="pg-image-pattern-scale">{t(M.scale)}</label>
         <input
           id="pg-image-pattern-scale"
           type="range"
@@ -58,11 +74,11 @@ export function PatternSection({
           disabled={disabled || !gpu || !pattern}
           onClick={() => void session.fillWithPattern(scale)}
         >
-          Fill
+          {t(M.fill)}
         </button>
       </div>
       <div style={row}>
-        <label htmlFor="pg-image-shape-blur">Shape blur</label>
+        <label htmlFor="pg-image-shape-blur">{t(M.shapeBlur)}</label>
         <input
           id="pg-image-shape-blur"
           type="range"
@@ -79,14 +95,10 @@ export function PatternSection({
           disabled={disabled || !gpu || !pattern}
           onClick={() => void session.shapeBlurWithPattern(radius)}
         >
-          Blur
+          {t(M.blur)}
         </button>
       </div>
-      <div style={note}>
-        Define pattern copies the selection&apos;s bounding box (the whole image
-        when nothing is selected). The fill tiles it into the selection; Shape
-        blur uses its alpha as the blur&apos;s shape.
-      </div>
+      <div style={note}>{t(M.note)}</div>
     </>
   );
 }

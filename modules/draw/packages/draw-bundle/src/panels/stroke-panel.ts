@@ -47,6 +47,40 @@ import type {
 
 import { supportsLiveCorners } from "../commands/live-corners";
 import { createReloader, publishChanges } from "./reload";
+import { defineMessages, t } from "@paged-media/strings";
+
+const M = defineMessages("draw.strokePanel", {
+  title: "Vector stroke",
+  intro:
+    "Arrowheads, corner radii and dashes for vector shapes. Weight, color and cap are repeated here; join, miter, alignment and stroke type are in the Stroke panel.",
+  weight: "Weight",
+  color: "Color",
+  cap: "Cap",
+  butt: "Butt",
+  round: "Round",
+  project: "Project",
+  dashes: "Dashes",
+  dashesText:
+    "Set the dash pattern in Draw ▸ Stroke ▸ Dashes… (up to three dash and gap pairs).",
+  lineEnds: "Line ends",
+  start: "Start",
+  end: "End",
+  corners: "Corners",
+  cornersText:
+    "Pick the corner style in Draw ▸ Corners (rounded, inverse rounded, bevel, fancy or none).",
+  topLeft: "Top left radius",
+  topRight: "Top right radius",
+  bottomRight: "Bottom right radius",
+  bottomLeft: "Bottom left radius",
+  appearance: "Appearance",
+  appearanceText:
+    "To stack several fills and strokes on one object, use the Appearance panel.",
+  none: "None",
+  simple: "Simple",
+  triangle: "Triangle",
+  circle: "Circle",
+  bar: "Bar",
+});
 
 export const STROKE_PANEL_ID = "media.paged.draw.panel.stroke";
 
@@ -82,11 +116,11 @@ export const BIND_APPEARANCE_CONTROLS_VISIBLE =
  *  vocabulary stays scriptable through the same property — the picker
  *  carries the five workhorse ends. */
 export const ARROWHEAD_OPTIONS = [
-  { value: "", label: "None" },
-  { value: "SimpleArrowHead", label: "Simple" },
-  { value: "TriangleArrowHead", label: "Triangle" },
-  { value: "CircleSolidArrowHead", label: "Circle" },
-  { value: "BarArrowHead", label: "Bar" },
+  { value: "", label: M.none },
+  { value: "SimpleArrowHead", label: M.simple },
+  { value: "TriangleArrowHead", label: M.triangle },
+  { value: "CircleSolidArrowHead", label: M.circle },
+  { value: "BarArrowHead", label: M.bar },
 ] as const;
 
 /** The same picker for the object-model property row: core's
@@ -100,17 +134,15 @@ export const ARROWHEAD_PROPERTY_OPTIONS = ARROWHEAD_OPTIONS.map((o) =>
 
 /** The panel's title: the host has its own "Stroke" panel, and this one
  *  is the vector half of stroking. */
-export const STROKE_PANEL_TITLE = "Vector stroke";
+export const STROKE_PANEL_TITLE = M.title;
 
 /** The intro line: what this panel adds to the host's Stroke panel. */
-export const STROKE_PANEL_INTRO =
-  "Arrowheads, corner radii and dashes for vector shapes. Weight, color " +
-  "and cap are repeated here; join, miter, alignment and stroke type are " +
-  "in the Stroke panel.";
+export const STROKE_PANEL_INTRO = M.intro;
 
-export const strokePanel: SchemaPanelContribution = {
+/** The panel, in the editor's locale (built when it is contributed). */
+export const strokePanel = (): SchemaPanelContribution => ({
   id: STROKE_PANEL_ID,
-  title: STROKE_PANEL_TITLE,
+  title: t(STROKE_PANEL_TITLE),
   // Its own glyph (the Width tool's stroke silhouette): `panel-stroke` is
   // the host Stroke panel's, and two tabs with one icon read as one panel.
   // Every name must exist in the host's glyph map, or the tab is iconless.
@@ -119,11 +151,11 @@ export const strokePanel: SchemaPanelContribution = {
   defaultGroup: "draw",
   schema: {
     id: STROKE_PANEL_ID,
-    title: STROKE_PANEL_TITLE,
+    title: t(STROKE_PANEL_TITLE),
     sections: [
       {
         rows: [
-          { widget: "paged.label", props: { text: STROKE_PANEL_INTRO } },
+          { widget: "paged.label", props: { text: t(STROKE_PANEL_INTRO) } },
           {
             // ADR 323 — an object-model property row: the host renders
             // the core row with its schema-driven PropertyField over
@@ -131,7 +163,7 @@ export const strokePanel: SchemaPanelContribution = {
             field: "property",
             address: "selection",
             path: "frameStrokeWeight",
-            label: "Weight",
+            label: t(M.weight),
             props: { suffix: "pt" },
             // Enabled only when something is selected — the leaf's own
             // no-write-path disable agrees, but the gate makes the
@@ -145,7 +177,7 @@ export const strokePanel: SchemaPanelContribution = {
             field: "property",
             address: "selection",
             path: "frameStrokeColor",
-            label: "Color",
+            label: t(M.color),
             enabled: { bind: BIND_HAS_SELECTION },
           },
           {
@@ -155,12 +187,12 @@ export const strokePanel: SchemaPanelContribution = {
             field: "property",
             address: "selection",
             path: "frameStrokeEndCap",
-            label: "Cap",
+            label: t(M.cap),
             style: "segments",
             options: [
-              { value: "ButtEndCap", label: "Butt" },
-              { value: "RoundEndCap", label: "Round" },
-              { value: "ProjectingEndCap", label: "Project" },
+              { value: "ButtEndCap", label: t(M.butt) },
+              { value: "RoundEndCap", label: t(M.round) },
+              { value: "ProjectingEndCap", label: t(M.project) },
             ],
             enabled: { bind: BIND_HAS_SELECTION },
           },
@@ -178,13 +210,13 @@ export const strokePanel: SchemaPanelContribution = {
         // dashes section (typed pairs, read back for the selection —
         // `commands/path-options.ts` says why it lives there rather than
         // here) and the four preset commands. No fake inline array scrubs.
-        title: "Dashes",
+        title: t(M.dashes),
         visible: { bind: BIND_DASH_CONTROLS_VISIBLE },
         rows: [
           {
             widget: "paged.label",
             props: {
-              text: "Set the dash pattern in Draw ▸ Stroke ▸ Dashes… (up to three dash and gap pairs).",
+              text: t(M.dashesText),
             },
           },
         ],
@@ -196,7 +228,7 @@ export const strokePanel: SchemaPanelContribution = {
         // the start/end pickers ride the §11.5 ceiling unchanged —
         // scalar `selectionProperty` text values from the curated
         // ArrowHead vocabulary, "" clears.
-        title: "Line ends",
+        title: t(M.lineEnds),
         visible: { bind: BIND_ARROWHEAD_CONTROLS_VISIBLE },
         rows: [
           {
@@ -206,9 +238,12 @@ export const strokePanel: SchemaPanelContribution = {
             field: "property",
             address: "selection",
             path: "frameStrokeStartArrowhead",
-            label: "Start",
+            label: t(M.start),
             style: "segments",
-            options: [...ARROWHEAD_PROPERTY_OPTIONS],
+            options: ARROWHEAD_PROPERTY_OPTIONS.map((o) => ({
+              ...o,
+              label: t(o.label),
+            })),
             enabled: { bind: BIND_HAS_SELECTION },
           },
           {
@@ -218,9 +253,12 @@ export const strokePanel: SchemaPanelContribution = {
             field: "property",
             address: "selection",
             path: "frameStrokeEndArrowhead",
-            label: "End",
+            label: t(M.end),
             style: "segments",
-            options: [...ARROWHEAD_PROPERTY_OPTIONS],
+            options: ARROWHEAD_PROPERTY_OPTIONS.map((o) => ({
+              ...o,
+              label: t(o.label),
+            })),
             enabled: { bind: BIND_HAS_SELECTION },
           },
         ],
@@ -238,13 +276,13 @@ export const strokePanel: SchemaPanelContribution = {
         // scrub changes the shape — the renderer's `uniform_corner`
         // reads `corners[0]` because an N-gon has no "top right" — while
         // all four round-trip.
-        title: "Corners",
+        title: t(M.corners),
         visible: { bind: BIND_CORNER_CONTROLS_VISIBLE },
         rows: [
           {
             widget: "paged.label",
             props: {
-              text: "Pick the corner style in Draw ▸ Corners (rounded, inverse rounded, bevel, fancy or none).",
+              text: t(M.cornersText),
             },
           },
           {
@@ -254,7 +292,7 @@ export const strokePanel: SchemaPanelContribution = {
             field: "property",
             address: "selection",
             path: "frameCornerRadiusTopLeft",
-            label: "Top left radius",
+            label: t(M.topLeft),
             props: { suffix: "pt", min: 0 },
             enabled: { bind: BIND_HAS_SELECTION },
           },
@@ -265,7 +303,7 @@ export const strokePanel: SchemaPanelContribution = {
             field: "property",
             address: "selection",
             path: "frameCornerRadiusTopRight",
-            label: "Top right radius",
+            label: t(M.topRight),
             props: { suffix: "pt", min: 0 },
             enabled: { bind: BIND_HAS_SELECTION },
           },
@@ -276,7 +314,7 @@ export const strokePanel: SchemaPanelContribution = {
             field: "property",
             address: "selection",
             path: "frameCornerRadiusBottomRight",
-            label: "Bottom right radius",
+            label: t(M.bottomRight),
             props: { suffix: "pt", min: 0 },
             enabled: { bind: BIND_HAS_SELECTION },
           },
@@ -287,7 +325,7 @@ export const strokePanel: SchemaPanelContribution = {
             field: "property",
             address: "selection",
             path: "frameCornerRadiusBottomLeft",
-            label: "Bottom left radius",
+            label: t(M.bottomLeft),
             props: { suffix: "pt", min: 0 },
             enabled: { bind: BIND_HAS_SELECTION },
           },
@@ -300,20 +338,20 @@ export const strokePanel: SchemaPanelContribution = {
         // scalar binding ceiling, so layer management is COMMAND-driven.
         // The readout points the author at the Appearance commands; the
         // section's VISIBILITY gates on a non-empty selection.
-        title: "Appearance",
+        title: t(M.appearance),
         visible: { bind: BIND_APPEARANCE_CONTROLS_VISIBLE },
         rows: [
           {
             widget: "paged.label",
             props: {
-              text: "To stack several fills and strokes on one object, use the Appearance panel.",
+              text: t(M.appearanceText),
             },
           },
         ],
       },
     ],
   },
-};
+});
 
 /**
  * Wire the panel's published bindings to REAL state. Subscribes to the

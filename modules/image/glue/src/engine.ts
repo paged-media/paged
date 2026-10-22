@@ -36,6 +36,7 @@
 // say "engine wasm not built".
 
 import { isNodeRealm, wasmBindgenModule } from "@paged-media/wasm-boot";
+import { defineMessages, t } from "@paged-media/strings";
 
 /** Levels (the panel's black/white/gamma + output range), composite over
  *  all channels. Identity: in 0/1, gamma 1, out 0/1. */
@@ -551,18 +552,26 @@ export function displayTreatmentOf(code: number | undefined): DisplayTreatment {
 }
 
 /** A short phrase for the panel's colour row. */
-export function displayTreatmentLabel(t: DisplayTreatment): string {
-  switch (t) {
+const TREATMENT = defineMessages("image.colourTreatment", {
+  managed: "ICC managed",
+  profileRejected: "sRGB assumed (profile rejected)",
+  cmykConverted: "CMYK, converted to sRGB",
+  cmykUncalibrated: "CMYK, converted to sRGB without a profile",
+  assumed: "sRGB assumed",
+});
+
+export function displayTreatmentLabel(treatment: DisplayTreatment): string {
+  switch (treatment) {
     case "managed":
-      return "ICC managed";
+      return t(TREATMENT.managed);
     case "profile-rejected":
-      return "sRGB assumed (profile rejected)";
+      return t(TREATMENT.profileRejected);
     case "cmyk-converted":
-      return "CMYK, converted to sRGB";
+      return t(TREATMENT.cmykConverted);
     case "cmyk-uncalibrated":
-      return "CMYK, converted to sRGB without a profile";
+      return t(TREATMENT.cmykUncalibrated);
     default:
-      return "sRGB assumed";
+      return t(TREATMENT.assumed);
   }
 }
 

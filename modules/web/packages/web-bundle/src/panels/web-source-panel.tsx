@@ -143,12 +143,108 @@ import {
 } from "./ingest";
 import { selectRange } from "./find-in-source";
 import { insertWebFrame } from "../insert";
+import { defineMessages, useStrings } from "@paged-media/strings";
 
-/** The source panel's id and title. "Web source" (HTML, CSS, preview) sits
- *  beside "Web frame properties" (the schema panel), so each title says
- *  which one it is. */
+/** The source panel's id. Its title, "Web source" (HTML, CSS, preview),
+ *  sits beside "Web frame properties" (the schema panel), so each title
+ *  says which one it is. */
 export const SOURCE_PANEL_ID = "media.paged.web.panel.source";
-export const SOURCE_PANEL_TITLE = "Web source";
+
+/** The words of the source panel (`@paged-media/strings`). */
+export const SOURCE_TEXT = defineMessages("web.source", {
+  title: "Web source",
+  startFromTemplate: "Start from a template",
+  threadInto:
+    "{count, plural, one {Thread # selected frame into a flow:} other {Thread # selected frames into a flow:}}",
+  primaryFlow: "{name} (primary)",
+  unthreadSelected: "Unthread selected",
+  overflowClip: "Clip",
+  overflowShrink: "Shrink to fit",
+  overflowGrow: "Grow frame",
+  overflowThread: "Continue into thread",
+  overflowClipNote: "Content past the frame is cut off.",
+  overflowShrinkNote: "The content is scaled down until it fits the frame.",
+  overflowGrowNote: "The frame's height follows the content.",
+  overflowThreadNote:
+    "Content continues into the frames threaded after this one.",
+  emptyNote:
+    "Insert a web frame, or select one frame to edit its HTML and CSS.",
+  insertWebFrame: "Insert web frame",
+  notMade: "Not made a web frame: {reason}",
+  documentRefused: "the document refused the change",
+  notWebFrameYet: "The selected {kind} is not a web frame yet.",
+  makeWebFrame: "Make web frame",
+  boundNotSaved: "not saved: {reason}",
+  refused: "refused",
+  fromDocumentAndData: "From the document and data",
+  documentValue: "Document value {key}",
+  set: "Set",
+  noValue: "No value",
+  boundAbout:
+    "Names you can use: doc.title, doc.pages, doc.<key> (a document value you set here), frame.page, and data.<field> (the first record of a data source). The same document values are listed under Document values in Web frame properties.",
+  notSaved: "Not saved: {reason}",
+  pastedClean: "Pasted HTML — nothing to clean (no scripts or handlers).",
+  clipboardClean: "Pasted from clipboard — nothing to clean.",
+  paintsNoBox: "<{tag}> paints no box on the canvas",
+  readClipboard: "Read HTML from the clipboard and sanitize it",
+  pasteAndSanitize: "Paste HTML and sanitize it",
+  pasteHtml: "Paste HTML",
+  pastePlaceholder: "Paste HTML here — it is sanitized on insert",
+  pasteAria: "Paste HTML to ingest",
+  htmlAria: "Web frame HTML",
+  cssAria: "Web frame CSS",
+  // `{count}` comes in its parentheses: the strings guard reads a message
+  // that ends a parameter with ")" as the end of the call.
+  tags: "Tags {count}",
+  findInSource: "Find in source {count}",
+  outlineOnCanvas: "Outline <{tag}> on the canvas (line {line} in the editor)",
+  selectAtLine: "Select <{tag}> at line {line}",
+  lineSuffix: " line {line}",
+  outlineHint:
+    "Each tag shows its line in the editor; click one to outline it on the canvas.",
+  replaceWithTemplate: "Replace with template",
+  options: "Options",
+  media: "Media",
+  print: "Print",
+  screen: "Screen",
+  mediaNote:
+    "Adds the class media-{media} to the body; @media queries still match screen.",
+  overflow: "Overflow",
+  variables: "Variables",
+  variableName: "Variable {n} name",
+  variableValue: "Variable {n} value",
+  removeVariable: "Remove variable {name}",
+  addVariable: "Add variable",
+  variableHint: "Write {example} in the HTML or CSS to insert a variable.",
+  filterAbout:
+    "A variable can pass through a filter, as in {example}. Filters: {filters}. Variables are plain text substitution; they run no scripts.",
+  preview: "Preview",
+  fontsShown: "The preview uses the document’s fonts.",
+  fontsShownList: "The preview uses the document’s fonts: {families}.",
+  fromDocument: "From the document: {families}",
+  fontsSubstituted: "Some fonts are browser substitutes in the preview.",
+  notInDocument: " Not in the document: {families}.",
+  previewTitle: "Web frame preview",
+  previewNote: "The canvas shows this preview once you save.",
+  previewAbout:
+    "The preview is the browser’s rendering at the frame’s size. The canvas lays text out in its bundled typeface, and “Shrink to fit” scales only on the canvas.",
+  nothingToSave: "Nothing to save: the document has these edits",
+  saveToDocument: "Save to document",
+  unsavedEdits: "Unsaved edits show only in the preview",
+  savedToDocument: "Saved to the document",
+  diagnostics: "Diagnostics",
+  opRenderFrame: "Render frame",
+  opRenderFlow: "Render flow",
+  opBake: "Bake to document",
+  flowAndRender: "Flow & render",
+  nativeItems: "{count, plural, one {# native item} other {# native items}}",
+  frames: "{count, plural, one {# frame} other {# frames}}",
+  engineNotLoaded: "engine not loaded",
+  overset: "overset",
+  fits: "fits",
+  deferred: "deferred: {list}",
+});
+const S = SOURCE_TEXT;
 
 /** Trailing-edge debounce between a keystroke and the preview/lint
  *  refresh. Document writes do NOT ride this timer — see `persistDraft`. */
@@ -309,9 +405,10 @@ function TemplatePicker({
 }: {
   onSeed(templateId: string): void;
 }): ReactElement {
+  const { t } = useStrings();
   return (
     <div data-web-templates style={{ margin: `${space[1]} 0` }}>
-      <div style={{ ...kicker, marginTop: 0 }}>Start from a template</div>
+      <div style={{ ...kicker, marginTop: 0 }}>{t(S.startFromTemplate)}</div>
       <div
         style={{
           display: "flex",
@@ -319,13 +416,13 @@ function TemplatePicker({
           gap: space[1],
         }}
       >
-        {WEB_TEMPLATES.map((t) => (
+        {WEB_TEMPLATES.map((tpl) => (
           <button
-            key={t.id}
+            key={tpl.id}
             type="button"
-            data-web-template={t.id}
-            title={t.description}
-            onClick={() => onSeed(t.id)}
+            data-web-template={tpl.id}
+            title={tpl.description}
+            onClick={() => onSeed(tpl.id)}
             style={{
               font: `500 11px ${font.sans}`,
               color: "var(--pg-fg)",
@@ -336,7 +433,7 @@ function TemplatePicker({
               cursor: "pointer",
             }}
           >
-            {t.label}
+            {tpl.label}
           </button>
         ))}
       </div>
@@ -385,6 +482,7 @@ function FlowPicker({
   onThread: (flowName: string | undefined) => void;
   onUnthread: () => void;
 }): ReactElement {
+  const { t } = useStrings();
   const chip = primaryButton;
   return (
     <div
@@ -400,8 +498,7 @@ function FlowPicker({
           color: "var(--pg-muted-fg)",
         }}
       >
-        Thread {targetCount} selected frame{targetCount === 1 ? "" : "s"} into a
-        flow:
+        {t(S.threadInto, { count: targetCount })}
       </p>
       <div
         style={{
@@ -418,8 +515,7 @@ function FlowPicker({
             onClick={() => onThread(o.flowName)}
             style={chip}
           >
-            {o.name}
-            {o.primary ? " (primary)" : ""}
+            {o.primary ? t(S.primaryFlow, { name: o.name }) : o.name}
           </button>
         ))}
       </div>
@@ -435,7 +531,7 @@ function FlowPicker({
           border: "1px solid var(--pg-border)",
         }}
       >
-        Unthread selected
+        {t(S.unthreadSelected)}
       </button>
     </div>
   );
@@ -443,16 +539,16 @@ function FlowPicker({
 
 /** Overflow policy labels and what each one does, in the panel's words. */
 const OVERFLOW_LABEL: Record<OverflowPolicy, string> = {
-  clip: "Clip",
-  shrink: "Shrink to fit",
-  grow: "Grow frame",
-  thread: "Continue into thread",
+  clip: S.overflowClip,
+  shrink: S.overflowShrink,
+  grow: S.overflowGrow,
+  thread: S.overflowThread,
 };
 const OVERFLOW_NOTE: Record<OverflowPolicy, string> = {
-  clip: "Content past the frame is cut off.",
-  shrink: "The content is scaled down until it fits the frame.",
-  grow: "The frame's height follows the content.",
-  thread: "Content continues into the frames threaded after this one.",
+  clip: S.overflowClipNote,
+  shrink: S.overflowShrinkNote,
+  grow: S.overflowGrowNote,
+  thread: S.overflowThreadNote,
 };
 
 // ----------------------------------------------------------------- panel
@@ -467,6 +563,7 @@ export function makeWebSourcePanel(
   // The lane is stable for the host's lifetime — probe once.
   const lane = resolveEditorLane(host);
   return function WebSourcePanel(): ReactElement {
+    const { t } = useStrings();
     const [selection, setSelection] = useState<ElementId[]>(() =>
       host.selection.get(),
     );
@@ -619,7 +716,7 @@ export function makeWebSourcePanel(
               color: "var(--pg-muted-fg)",
             }}
           >
-            Insert a web frame, or select one frame to edit its HTML and CSS.
+            {t(S.emptyNote)}
           </p>
           <button
             type="button"
@@ -631,7 +728,7 @@ export function makeWebSourcePanel(
             }
             style={primaryButton}
           >
-            Insert web frame
+            {t(S.insertWebFrame)}
           </button>
           {panelError && (
             <p
@@ -656,7 +753,9 @@ export function makeWebSourcePanel(
             setPanelError(null);
             setSource(src);
           } else {
-            const message = `Not made a web frame: ${out.reason ?? "the document refused the change"}`;
+            const message = t(S.notMade, {
+              reason: out.reason ?? t(S.documentRefused),
+            });
             host.log.warn(message);
             setPanelError(message);
           }
@@ -676,7 +775,7 @@ export function makeWebSourcePanel(
               color: "var(--pg-muted-fg)",
             }}
           >
-            The selected {target.kind} is not a web frame yet.
+            {t(S.notWebFrameYet, { kind: target.kind })}
           </p>
           <button
             type="button"
@@ -684,7 +783,7 @@ export function makeWebSourcePanel(
             onClick={() => makeFrom(DEFAULT_SOURCE)}
             style={primaryButton}
           >
-            Make web frame
+            {t(S.makeWebFrame)}
           </button>
           {panelError && (
             <p
@@ -703,8 +802,9 @@ export function makeWebSourcePanel(
               default — an empty frame is a poor first run. */}
           <TemplatePicker
             onSeed={(id) => {
-              const t = templateById(id);
-              if (t) makeFrom(sourceFromTemplate(t, DEFAULT_SOURCE.options));
+              const tpl = templateById(id);
+              if (tpl)
+                makeFrom(sourceFromTemplate(tpl, DEFAULT_SOURCE.options));
             }}
           />
         </div>
@@ -821,6 +921,7 @@ function BoundData({
    *  and that change refreshes the bindings and the canvas by itself). */
   onChanged(): void;
 }): ReactElement | null {
+  const { t } = useStrings();
   const [values, setValues] = useState<Record<string, string>>({});
   const [note, setNote] = useState<string | null>(null);
   if (names.length === 0) return null;
@@ -831,7 +932,11 @@ function BoundData({
   const save = async (key: string, value: string) => {
     const current = await readDocumentValues(host);
     const out = await writeDocumentValues(host, { ...current, [key]: value });
-    setNote(out.applied ? null : `not saved: ${out.reason ?? "refused"}`);
+    setNote(
+      out.applied
+        ? null
+        : t(S.boundNotSaved, { reason: out.reason ?? t(S.refused) }),
+    );
     if (!out.applied || documentValuesNotify(host)) return;
     onChanged();
     // The canvas re-renders the frames that name the value.
@@ -847,7 +952,7 @@ function BoundData({
           margin: `${space[2]} 0 ${space[1]}`,
         }}
       >
-        From the document and data
+        {t(S.fromDocumentAndData)}
       </div>
       {names.map((name) => {
         const value = bindings.vars[name];
@@ -867,7 +972,7 @@ function BoundData({
               <>
                 <input
                   data-web-bound-input={name}
-                  aria-label={`Document value ${key}`}
+                  aria-label={t(S.documentValue, { key })}
                   value={values[name] ?? value ?? ""}
                   onChange={(e) =>
                     setValues({ ...values, [name]: e.target.value })
@@ -888,7 +993,7 @@ function BoundData({
                     cursor: "pointer",
                   }}
                 >
-                  Set
+                  {t(S.set)}
                 </button>
               </>
             ) : (
@@ -900,18 +1005,13 @@ function BoundData({
                     : { font: `12px ${font.sans}` }
                 }
               >
-                {value === undefined ? "No value" : value}
+                {value === undefined ? t(S.noValue) : value}
               </span>
             )}
           </div>
         );
       })}
-      <About>
-        Names you can use: doc.title, doc.pages, doc.&lt;key&gt; (a document
-        value you set here), frame.page, and data.&lt;field&gt; (the first
-        record of a data source). The same document values are listed under
-        Document values in Web frame properties.
-      </About>
+      <About>{t(S.boundAbout)}</About>
       {note && (
         <span
           data-web-bound-note
@@ -955,6 +1055,7 @@ function SourceEditor({
   fontFamilies,
   onPersisted,
 }: SourceEditorProps): ReactElement {
+  const { t } = useStrings();
   // The DRAFT is what the editors bind — it never touches the document
   // by itself. `persisted` mirrors the last successful save for the
   // dirty flag; `preview` is the draft's debounced shadow and drives
@@ -1118,7 +1219,9 @@ function SourceEditor({
     const next = draft;
     void persistDraft(host, id, next).then(({ applied, reason }) => {
       if (!applied) {
-        const message = `Not saved: ${reason ?? "the document refused the change"}`;
+        const message = t(S.notSaved, {
+          reason: reason ?? t(S.documentRefused),
+        });
         setSaveError(message);
         host.diagnostics.set(`${sourceKey}#save`, [
           { severity: "error", message, source: "save" },
@@ -1136,9 +1239,9 @@ function SourceEditor({
   // the author's current frame OPTIONS (media/viewport). A draft edit
   // (not a document write): the explicit save still commits it.
   const seedTemplate = (templateId: string) => {
-    const t = templateById(templateId);
-    if (!t) return;
-    setDraft((d) => sourceFromTemplate(t, d.options));
+    const tpl = templateById(templateId);
+    if (!tpl) return;
+    setDraft((d) => sourceFromTemplate(tpl, d.options));
     setIngestNote(null);
   };
 
@@ -1149,10 +1252,7 @@ function SourceEditor({
   const ingestInto = (raw: string) => {
     const { html, removed } = ingestHtml(raw);
     setDraft((d) => ({ ...d, html }));
-    setIngestNote(
-      describeRemoval(removed) ??
-        "Pasted HTML — nothing to clean (no scripts or handlers).",
-    );
+    setIngestNote(describeRemoval(removed) ?? t(S.pastedClean));
     setPasteOpen(false);
   };
 
@@ -1167,10 +1267,7 @@ function SourceEditor({
         return;
       }
       setDraft((d) => ({ ...d, html: result.html }));
-      setIngestNote(
-        describeRemoval(result.removed) ??
-          "Pasted from clipboard — nothing to clean.",
-      );
+      setIngestNote(describeRemoval(result.removed) ?? t(S.clipboardClean));
     });
   };
 
@@ -1197,9 +1294,7 @@ function SourceEditor({
   const findInSource = (entry: TagOutlineEntry, index: number) => {
     setActiveTag(index);
     void highlightOutlineEntry(host, id, { ...draft }, index).then((n) =>
-      setHighlightNote(
-        n > 0 ? null : `<${entry.tag}> paints no box on the canvas`,
-      ),
+      setHighlightNote(n > 0 ? null : t(S.paintsNoBox, { tag: entry.tag })),
     );
     const el = htmlTextareaRef.current;
     if (!el) return; // host-widget lane: no caret to drive
@@ -1256,8 +1351,8 @@ function SourceEditor({
           onClick={pasteFromClipboard}
           title={
             clipboardAvailable(host)
-              ? "Read HTML from the clipboard and sanitize it"
-              : "Paste HTML and sanitize it"
+              ? t(S.readClipboard)
+              : t(S.pasteAndSanitize)
           }
           style={{
             font: `500 10px ${font.sans}`,
@@ -1269,7 +1364,7 @@ function SourceEditor({
             cursor: "pointer",
           }}
         >
-          Paste HTML
+          {t(S.pasteHtml)}
         </button>
       </div>
       {pasteOpen && (
@@ -1278,8 +1373,8 @@ function SourceEditor({
             data-web-paste-input
             autoFocus
             spellCheck={false}
-            placeholder="Paste HTML here — it is sanitized on insert"
-            aria-label="Paste HTML to ingest"
+            placeholder={t(S.pastePlaceholder)}
+            aria-label={t(S.pasteAria)}
             onPaste={(e) => {
               const text =
                 e.clipboardData.getData("text/html") ||
@@ -1320,7 +1415,7 @@ function SourceEditor({
             onChange={(html) => setDraft({ ...draft, html })}
             diagnostics={htmlGutter}
             minHeight={96}
-            ariaLabel="Web frame HTML"
+            ariaLabel={t(S.htmlAria)}
           />
         ) : (
           // Fallback lane — render the bundle's own textarea with a ref
@@ -1332,7 +1427,7 @@ function SourceEditor({
             onChange={(html) => setDraft({ ...draft, html })}
             diagnostics={htmlGutter}
             minHeight={96}
-            ariaLabel="Web frame HTML"
+            ariaLabel={t(S.htmlAria)}
           />
         )}
       </div>
@@ -1342,7 +1437,9 @@ function SourceEditor({
           canvas inside the frame marks its tag here. */}
       {outline.length > 0 && (
         <Disclosure
-          summary={`${lane.native ? "Tags" : "Find in source"} (${outline.length})`}
+          summary={t(lane.native ? S.tags : S.findInSource, {
+            count: `(${outline.length})`,
+          })}
           data-web-outline
           style={{ margin: `${space[1]} 0 0` }}
           summaryStyle={disclosureKicker}
@@ -1367,8 +1464,11 @@ function SourceEditor({
                   onClick={() => findInSource(entry, i)}
                   title={
                     lane.native
-                      ? `Outline <${entry.tag}> on the canvas (line ${entry.line} in the editor)`
-                      : `Select <${entry.tag}> at line ${entry.line}`
+                      ? t(S.outlineOnCanvas, {
+                          tag: entry.tag,
+                          line: entry.line,
+                        })
+                      : t(S.selectAtLine, { tag: entry.tag, line: entry.line })
                   }
                   style={{
                     font: `11px ${font.mono}`,
@@ -1384,7 +1484,9 @@ function SourceEditor({
                       chip reads as a line label: the tag and its line. */}
                   {entry.tag}
                   <span style={{ color: "var(--pg-muted-fg)" }}>
-                    {lane.native ? ` line ${entry.line}` : `:${entry.line}`}
+                    {lane.native
+                      ? t(S.lineSuffix, { line: entry.line })
+                      : `:${entry.line}`}
                   </span>
                 </button>
               </li>
@@ -1395,8 +1497,7 @@ function SourceEditor({
               data-web-outline-hint
               style={{ margin: `${space[1]} 0 0`, ...mutedNote }}
             >
-              Each tag shows its line in the editor; click one to outline it on
-              the canvas.
+              {t(S.outlineHint)}
             </p>
           )}
           {highlightNote && (
@@ -1416,23 +1517,23 @@ function SourceEditor({
           value={draft.css}
           onChange={(css) => setDraft({ ...draft, css })}
           minHeight={72}
-          ariaLabel="Web frame CSS"
+          ariaLabel={t(S.cssAria)}
         />
       </div>
       {/* Replace the draft's HTML/CSS with a vetted starter (keeps the
           current frame options). A draft edit — the explicit save still
           commits it. */}
       <Disclosure
-        summary="Replace with template"
+        summary={t(S.replaceWithTemplate)}
         data-web-template-replace
         style={{ margin: `${space[1]} 0 0` }}
         summaryStyle={disclosureKicker}
       >
         <TemplatePicker onSeed={seedTemplate} />
       </Disclosure>
-      <div style={kicker}>Options</div>
+      <div style={kicker}>{t(S.options)}</div>
       <label style={optionRow}>
-        Media
+        {t(S.media)}
         <select
           data-web-media
           value={draft.options.media}
@@ -1447,16 +1548,15 @@ function SourceEditor({
           }
           style={field}
         >
-          <option value="print">Print</option>
-          <option value="screen">Screen</option>
+          <option value="print">{t(S.print)}</option>
+          <option value="screen">{t(S.screen)}</option>
         </select>
         <span data-web-media-note style={rowNote}>
-          Adds the class media-{draft.options.media} to the body; @media queries
-          still match screen.
+          {t(S.mediaNote, { media: draft.options.media })}
         </span>
       </label>
       <label style={optionRow}>
-        Overflow
+        {t(S.overflow)}
         {/* What the canvas does with content taller than the frame —
             overflow.ts; the canvas re-renders on save. */}
         <select
@@ -1475,15 +1575,15 @@ function SourceEditor({
         >
           {OVERFLOW_POLICIES.map((p) => (
             <option key={p} value={p}>
-              {OVERFLOW_LABEL[p]}
+              {t(OVERFLOW_LABEL[p])}
             </option>
           ))}
         </select>
         <span data-web-overflow-note style={rowNote}>
-          {OVERFLOW_NOTE[draft.options.overflow]}
+          {t(OVERFLOW_NOTE[draft.options.overflow])}
         </span>
       </label>
-      <div style={kicker}>Variables</div>
+      <div style={kicker}>{t(S.variables)}</div>
       {/* §6.2 — the DETERMINISTIC template slice: {{name}} substitution
           plus a closed whitelist of pure filters, applied between the
           source and the preview, and before every canvas render (the
@@ -1495,7 +1595,7 @@ function SourceEditor({
           <input
             data-web-var-name
             value={name}
-            aria-label={`Variable ${i + 1} name`}
+            aria-label={t(S.variableName, { n: i + 1 })}
             onChange={(e) => {
               const entries = varEntries.slice() as Array<[string, string]>;
               entries[i] = [e.target.value, value];
@@ -1510,7 +1610,7 @@ function SourceEditor({
           <input
             data-web-var-value
             value={value}
-            aria-label={`Variable ${i + 1} value`}
+            aria-label={t(S.variableValue, { n: i + 1 })}
             onChange={(e) => {
               const entries = varEntries.slice() as Array<[string, string]>;
               entries[i] = [name, e.target.value];
@@ -1521,7 +1621,7 @@ function SourceEditor({
           <button
             type="button"
             data-web-var-remove
-            aria-label={`Remove variable ${name}`}
+            aria-label={t(S.removeVariable, { name })}
             onClick={() =>
               setVarEntries(
                 varEntries.filter((_, j) => j !== i) as Array<[string, string]>,
@@ -1563,15 +1663,16 @@ function SourceEditor({
             cursor: "pointer",
           }}
         >
-          Add variable
+          {t(S.addVariable)}
         </button>
         <span style={rowNote}>
-          Write {"{{name}}"} in the HTML or CSS to insert a variable.
+          {t(S.variableHint, { example: "{{name}}" })}
         </span>
         <About>
-          A variable can pass through a filter, as in {"{{name | upper}}"}.
-          Filters: {TEMPLATE_FILTERS.join(", ")}. Variables are plain text
-          substitution; they run no scripts.
+          {t(S.filterAbout, {
+            example: "{{name | upper}}",
+            filters: TEMPLATE_FILTERS.join(", "),
+          })}
         </About>
       </div>
       <BoundData
@@ -1580,7 +1681,7 @@ function SourceEditor({
         bindings={bindings}
         onChanged={refreshBindings}
       />
-      <div style={kicker}>Preview</div>
+      <div style={kicker}>{t(S.preview)}</div>
       {/* Font badge: W1 honesty + the W-06 flip. When the asset store
           serves a used family's BYTES, the panel composes a real
           `@font-face` (object URL) into the srcdoc and the badge flips
@@ -1625,20 +1726,23 @@ function SourceEditor({
           />
           {badge.state === "shown" ? (
             <span>
-              The preview uses the document’s fonts
-              {badge.shown.length > 0 ? `: ${badge.shown.join(", ")}.` : "."}
+              {badge.shown.length > 0
+                ? t(S.fontsShownList, { families: badge.shown.join(", ") })
+                : t(S.fontsShown)}
             </span>
           ) : (
             <span
               title={
                 badge.shown.length > 0
-                  ? `From the document: ${badge.shown.join(", ")}`
+                  ? t(S.fromDocument, { families: badge.shown.join(", ") })
                   : undefined
               }
             >
-              Some fonts are browser substitutes in the preview.
+              {t(S.fontsSubstituted)}
               {badge.unregistered.length > 0
-                ? ` Not in the document: ${badge.unregistered.join(", ")}.`
+                ? t(S.notInDocument, {
+                    families: badge.unregistered.join(", "),
+                  })
                 : ""}
             </span>
           )}
@@ -1655,7 +1759,7 @@ function SourceEditor({
       >
         <iframe
           data-web-preview
-          title="Web frame preview"
+          title={t(S.previewTitle)}
           sandbox=""
           // Trusted Types (editor ADR 240): the composed preview — the
           // source pasted HTML is sanitized on the way in, and the frame
@@ -1677,13 +1781,9 @@ function SourceEditor({
         data-web-preview-note
         style={{ margin: `${space[1]} 0 0`, ...mutedNote }}
       >
-        The canvas shows this preview once you save.
+        {t(S.previewNote)}
       </p>
-      <About>
-        The preview is the browser’s rendering at the frame’s size. The canvas
-        lays text out in its bundled typeface, and “Shrink to fit” scales only
-        on the canvas.
-      </About>
+      <About>{t(S.previewAbout)}</About>
       {/* Persistence is EXPLICIT: one undoable metadata mutation per
           save, never a side effect of typing (the preview above
           refreshes live; the document does not). */}
@@ -1702,9 +1802,7 @@ function SourceEditor({
           data-web-commit
           disabled={!dirty}
           onClick={commit}
-          title={
-            dirty ? undefined : "Nothing to save: the document has these edits"
-          }
+          title={dirty ? undefined : t(S.nothingToSave)}
           style={{
             ...primaryButton,
             padding: "4px 12px",
@@ -1712,12 +1810,10 @@ function SourceEditor({
             opacity: dirty ? 1 : 0.5,
           }}
         >
-          Save to document
+          {t(S.saveToDocument)}
         </button>
         <span data-web-dirty={dirty ? "true" : "false"} style={mutedNote}>
-          {dirty
-            ? "Unsaved edits show only in the preview"
-            : "Saved to the document"}
+          {dirty ? t(S.unsavedEdits) : t(S.savedToDocument)}
         </span>
         {saveError && (
           <span
@@ -1731,7 +1827,7 @@ function SourceEditor({
       </div>
       {diagnostics.length > 0 && (
         <>
-          <div style={kicker}>Diagnostics</div>
+          <div style={kicker}>{t(S.diagnostics)}</div>
           <ul
             data-web-diagnostics
             style={{ listStyle: "none", margin: 0, padding: 0 }}
@@ -1774,14 +1870,14 @@ function SourceEditor({
         // flag, the bake's deferred-kind counts.
         if (!report) return null;
         const OP_LABEL: Record<string, string> = {
-          renderFrame: "Render frame",
-          renderFlow: "Render flow",
-          bake: "Bake to document",
+          renderFrame: t(S.opRenderFrame),
+          renderFlow: t(S.opRenderFlow),
+          bake: t(S.opBake),
         };
         const deferredLine = formatDeferred(report.deferred);
         return (
           <>
-            <div style={kicker}>Flow &amp; render</div>
+            <div style={kicker}>{t(S.flowAndRender)}</div>
             <div
               data-web-render-report={report.op}
               style={{
@@ -1792,24 +1888,24 @@ function SourceEditor({
               <div>
                 {OP_LABEL[report.op] ?? report.op} #{report.seq} —{" "}
                 {report.rendered
-                  ? `${report.submitted} ${
-                      report.op === "bake" ? "native item(s)" : "frame(s)"
-                    }`
-                  : "engine not loaded"}
+                  ? t(report.op === "bake" ? S.nativeItems : S.frames, {
+                      count: report.submitted,
+                    })
+                  : t(S.engineNotLoaded)}
                 {report.overset === true && (
                   <span
                     data-web-overset
                     style={{ color: "var(--status-review)" }}
                   >
                     {" "}
-                    · overset
+                    · {t(S.overset)}
                   </span>
                 )}
-                {report.overset === false && " · fits"}
+                {report.overset === false && ` · ${t(S.fits)}`}
               </div>
               {deferredLine && (
                 <div data-web-deferred style={{ color: "var(--pg-muted-fg)" }}>
-                  deferred: {deferredLine}
+                  {t(S.deferred, { list: deferredLine })}
                 </div>
               )}
               {report.messages.map((m, i) => (

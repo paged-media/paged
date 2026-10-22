@@ -9,7 +9,10 @@
  * a change made in the panel is not reflected in the bar).
  */
 import type { BundleHost, Disposable } from "@paged-media/plugin-api";
+import { defineMessages, t } from "@paged-media/strings";
+
 import { GRADIENT_KINDS, type GradientKind } from "./engine";
+import { gradientKindLabel } from "./words";
 import type { ToolSettingValue } from "@paged-media/plugin-api";
 import type { ImageSession } from "./session";
 
@@ -41,28 +44,39 @@ const pct = (key: string, label: string): ToolOptionField => ({
   unit: "%",
 });
 
-const SIZE: ToolOptionField = {
+const M = defineMessages("image.toolOptions", {
+  size: "Size",
+  tolerance: "Tolerance",
+  contiguous: "Contiguous",
+  hardness: "Hardness",
+  opacity: "Opacity",
+  flow: "Flow",
+  gradient: "Gradient",
+});
+
+const size = (): ToolOptionField => ({
   kind: "number",
   key: "size",
-  label: "Size",
+  label: t(M.size),
   min: 1,
   max: 2000,
   step: 1,
   unit: "px",
-};
-const WAND: ToolOptionField[] = [
+});
+const wand = (): ToolOptionField[] => [
   {
     kind: "number",
     key: "tolerance",
-    label: "Tolerance",
+    label: t(M.tolerance),
     min: 0,
     max: 255,
     step: 1,
   },
-  { kind: "toggle", key: "contiguous", label: "Contiguous" },
+  { kind: "toggle", key: "contiguous", label: t(M.contiguous) },
 ];
 
-/** The fields each tool declares, by tool id. */
+/** The fields each tool declares, by tool id, labelled in the editor's
+ *  language at the time (the bundle declares them on activation). */
 export function toolOptionFields(ids: {
   brush: string;
   pencil: string;
@@ -73,25 +87,28 @@ export function toolOptionFields(ids: {
 }): Record<string, ToolOptionField[]> {
   return {
     [ids.brush]: [
-      SIZE,
-      pct("hardness", "Hardness"),
-      pct("opacity", "Opacity"),
-      pct("flow", "Flow"),
+      size(),
+      pct("hardness", t(M.hardness)),
+      pct("opacity", t(M.opacity)),
+      pct("flow", t(M.flow)),
     ],
-    [ids.pencil]: [SIZE, pct("opacity", "Opacity")],
+    [ids.pencil]: [size(), pct("opacity", t(M.opacity))],
     [ids.eraser]: [
-      SIZE,
-      pct("hardness", "Hardness"),
-      pct("opacity", "Opacity"),
+      size(),
+      pct("hardness", t(M.hardness)),
+      pct("opacity", t(M.opacity)),
     ],
-    [ids.wand]: WAND,
-    [ids.bucket]: WAND,
+    [ids.wand]: wand(),
+    [ids.bucket]: wand(),
     [ids.gradient]: [
       {
         kind: "select",
         key: "kind",
-        label: "Gradient",
-        options: GRADIENT_KINDS.map((k) => ({ value: k, label: k })),
+        label: t(M.gradient),
+        options: GRADIENT_KINDS.map((k) => ({
+          value: k,
+          label: gradientKindLabel(k),
+        })),
       },
     ],
   };

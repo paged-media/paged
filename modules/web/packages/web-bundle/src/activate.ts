@@ -24,6 +24,7 @@
 // persistence is the document label + container parts (source-part.ts).
 
 import type { BundleHandle, BundleHost } from "@paged-media/plugin-api";
+import { defineMessages, defineTranslations, t } from "@paged-media/strings";
 import { contributeMenu } from "./menu";
 import {
   contributeEditContext,
@@ -33,6 +34,7 @@ import {
 } from "@paged-media/plugin-sdk";
 
 import manifest from "../manifest.json";
+import de from "../locales/de.json";
 
 import { startAutoRender } from "./auto-render";
 import { startDocumentFaces } from "./document-faces";
@@ -55,16 +57,35 @@ import { createDraftSession } from "./panels/draft-store";
 import {
   makeWebSourcePanel,
   SOURCE_PANEL_ID,
-  SOURCE_PANEL_TITLE,
+  SOURCE_TEXT,
 } from "./panels/web-source-panel";
 import { contributeObjectModel } from "./object-model";
 import {
   PROPERTIES_PANEL_ID,
-  WEB_PROPERTIES_PANEL,
+  webPropertiesPanel,
   publishPropertyLists,
 } from "./panels/properties-panel";
 
+// The bundle's German, beside its English (`defineMessages` in each module).
+defineTranslations("de", de);
+
+/** The palette category of this bundle's commands, for the shell's
+ *  `categoryLabel`: the category is an identity and stays English. */
+defineMessages("commandCategory", { Web: "Web" });
+
 const PANEL_ID = SOURCE_PANEL_ID;
+
+/** The titles of the commands and the importer this entry registers. */
+const M = defineMessages("web.commands", {
+  insertWebFrame: "Insert web frame",
+  renderWebFrame: "Render web frame to canvas",
+  renderWebFlow: "Render web flow across frames",
+  threadWebFlow: "Thread web flow into frames",
+  unthreadWebFlow: "Unthread web flow from frames",
+  threadWebFlowNamed: "Thread web flow into the named flow",
+  bakeWebFrame: "Bake web frame to document",
+  htmlFile: "HTML file",
+});
 
 export function activate(host: BundleHost): BundleHandle {
   // The panel's drafts and their undo history, shared with the edit context
@@ -72,14 +93,14 @@ export function activate(host: BundleHost): BundleHandle {
   const drafts = createDraftSession();
   contributePanel(host, {
     id: PANEL_ID,
-    title: SOURCE_PANEL_TITLE,
+    title: t(SOURCE_TEXT.title),
     icon: "panel-script-editor",
     component: makeWebSourcePanel(host, drafts),
     defaultDock: "right",
   });
   host.contribute.command({
     id: "media.paged.web.command.insertWebFrame",
-    title: "Insert web frame",
+    title: t(M.insertWebFrame),
     category: "Web",
     handler: async () => {
       await insertWebFrame(host, PANEL_ID);
@@ -95,7 +116,7 @@ export function activate(host: BundleHost): BundleHandle {
   // render.
   host.contribute.command({
     id: "media.paged.web.command.renderWebFrame",
-    title: "Render web frame to canvas",
+    title: t(M.renderWebFrame),
     category: "Web",
     handler: () => renderSelectedWebFrame(host),
   });
@@ -105,7 +126,7 @@ export function activate(host: BundleHost): BundleHandle {
   // same honest not-loaded fallback as "Render to frame".
   host.contribute.command({
     id: "media.paged.web.command.renderWebFlow",
-    title: "Render web flow across frames",
+    title: t(M.renderWebFlow),
     category: "Web",
     handler: () => renderSelectedWebFlow(host),
   });
@@ -114,13 +135,13 @@ export function activate(host: BundleHost): BundleHandle {
   // the source envelope, so the flow survives reopen).
   host.contribute.command({
     id: "media.paged.web.command.threadWebFlow",
-    title: "Thread web flow into frames",
+    title: t(M.threadWebFlow),
     category: "Web",
     handler: () => threadSelectedIntoFlow(host),
   });
   host.contribute.command({
     id: "media.paged.web.command.unthreadWebFlow",
-    title: "Unthread web flow from frames",
+    title: t(M.unthreadWebFlow),
     category: "Web",
     handler: () => unthreadSelectedFromFlow(host),
   });
@@ -129,7 +150,7 @@ export function activate(host: BundleHost): BundleHandle {
   // picker-free (the host exposes no quick-pick).
   host.contribute.command({
     id: "media.paged.web.command.threadWebFlowNamed",
-    title: "Thread web flow into the named flow",
+    title: t(M.threadWebFlowNamed),
     category: "Web",
     handler: () => threadSelectedIntoNamedFlow(host),
   });
@@ -140,7 +161,7 @@ export function activate(host: BundleHost): BundleHandle {
   // faked; the not-loaded path bakes nothing and says so.
   host.contribute.command({
     id: "media.paged.web.command.bakeWebFrame",
-    title: "Bake web frame to document",
+    title: t(M.bakeWebFrame),
     category: "Web",
     handler: () => bakeSelectedWebFrame(host),
   });
@@ -163,7 +184,7 @@ export function activate(host: BundleHost): BundleHandle {
   if (host.supports("contribute.importer@1")) {
     host.contribute.importer({
       id: "media.paged.web.importer.html",
-      title: "HTML file",
+      title: t(M.htmlFile),
       extensions: [".html", ".htm"],
       mimeTypes: ["text/html"],
       import: async ({ name, bytes }) => {
@@ -184,14 +205,15 @@ export function activate(host: BundleHost): BundleHandle {
   const objectModel = contributeObjectModel(host);
   // ADR 323 — the object properties as host-rendered PropertyFields (a
   // schema panel of property rows; needs the object model + bindings).
+  const propertiesPanel = webPropertiesPanel();
   const propertyLists =
     objectModel && host.supports("contribute.schemaPanel@1")
       ? (contributeSchemaPanel(host, {
           id: PROPERTIES_PANEL_ID,
-          title: WEB_PROPERTIES_PANEL.title,
-          icon: WEB_PROPERTIES_PANEL.icon,
+          title: propertiesPanel.title,
+          icon: propertiesPanel.icon,
           defaultDock: "right",
-          schema: WEB_PROPERTIES_PANEL,
+          schema: propertiesPanel,
         }),
         publishPropertyLists(host))
       : null;

@@ -31,10 +31,16 @@ import type {
   PluginManifest,
 } from "@paged-media/plugin-api";
 
+import { defineTranslations } from "@paged-media/strings";
+
+import de from "../locales/de.json";
 import manifestJson from "../manifest.json";
 
 import { contributeIdmlIo } from "./io/idml";
 import { contributePublishCommands } from "./commands";
+
+// The bundle's German, beside its English (`defineMessages` in each file).
+defineTranslations("de", de);
 
 export function activate(host: BundleHost): BundleHandle {
   // ADR-022 Phase 4 — the IDML importer + exporter, capability-gated. Both

@@ -53,6 +53,7 @@
 import { inflateSync } from "node:zlib";
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
+import { t } from "@paged-media/strings";
 import { fileURLToPath } from "node:url";
 import {
   describe,
@@ -943,7 +944,7 @@ describe("draw conformance — IMAGE TRACE v0", () => {
 
     it("the RECORDED command handler is registered with the honest title", async () => {
       const cmd = commandFor(h, IMAGE_TRACE_COMMAND_ID);
-      expect(cmd.title).toBe(IMAGE_TRACE_COMMAND_TITLE);
+      expect(cmd.title).toBe(t(IMAGE_TRACE_COMMAND_TITLE));
       // The title itself has to carry the scope — CommandContribution has
       // no description field.
       expect(cmd.title).toContain("one-shot");

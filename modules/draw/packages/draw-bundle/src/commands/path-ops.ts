@@ -54,6 +54,14 @@ import type {
 
 import { registerCommand } from "../command-registry";
 import { oneBatchFor } from "./batch-handles";
+import { defineMessages } from "@paged-media/strings";
+
+/** Command titles, message keys `registerCommand` reads in the editor's locale. */
+const M = defineMessages("draw.pathOps", {
+  outlineStroke: "Path: Outline stroke",
+  offset: "Path: Offset path (last used values)",
+  simplify: "Path: Simplify (last used values)",
+});
 export const PATH_OPS_COMMAND_CATEGORY = "Path";
 
 export const OUTLINE_STROKE_COMMAND_ID =
@@ -339,14 +347,14 @@ export function contributePathOpsCommands(
   const disposers = [
     registerCommand(host, {
       id: OUTLINE_STROKE_COMMAND_ID,
-      title: "Path: Outline stroke",
+      title: M.outlineStroke,
       category: PATH_OPS_COMMAND_CATEGORY,
       handler: (_paged, payload) =>
         applyOutlineStroke(host, payload as PathOpPayload),
     }),
     registerCommand(host, {
       id: OFFSET_PATH_COMMAND_ID,
-      title: "Path: Offset path (last used values)",
+      title: M.offset,
       category: PATH_OPS_COMMAND_CATEGORY,
       handler: (_paged, payload) =>
         applyOffsetPath(
@@ -356,7 +364,7 @@ export function contributePathOpsCommands(
     }),
     registerCommand(host, {
       id: SIMPLIFY_PATH_COMMAND_ID,
-      title: "Path: Simplify (last used values)",
+      title: M.simplify,
       category: PATH_OPS_COMMAND_CATEGORY,
       handler: (_paged, payload) =>
         applySimplifyPath(

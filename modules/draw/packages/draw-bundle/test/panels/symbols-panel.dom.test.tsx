@@ -29,6 +29,7 @@
 // burst, one walk per document REVISION out of the shared link index
 // (`src/link-index.ts`) — and a selection is a lookup in that walk.
 
+import { t } from "@paged-media/strings";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "bun:test";
 
 import { metadataReadsPerLeaf } from "../engine-reads";
@@ -105,7 +106,7 @@ describe("Symbols panel — rendered against the engine", () => {
       expect(panel.disabled("[data-draw-symbol-reset]")).toBe(true);
       expect(panel.disabled("[data-draw-symbol-break]")).toBe(true);
       expect(panel.get("[data-draw-symbols-note]").textContent).toBe(
-        SYMBOLS_NOTE,
+        t(SYMBOLS_NOTE),
       );
     });
 

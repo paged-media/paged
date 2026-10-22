@@ -69,6 +69,16 @@ import {
 
 import { registerCommand } from "../command-registry";
 import { oneBatchFor } from "./batch-handles";
+import { defineMessages } from "@paged-media/strings";
+
+/** Command titles, message keys `registerCommand` reads in the editor's locale. */
+const M = defineMessages("draw.appearance", {
+  addFill: "Appearance: Add fill",
+  addStroke: "Appearance: Add stroke",
+  clear: "Appearance: Clear extra layers",
+  removeLayer: "Appearance: Remove layer",
+  reorderLayer: "Appearance: Reorder layer",
+});
 export const APPEARANCE_COMMAND_CATEGORY = "Appearance";
 
 export const APPEARANCE_ADD_FILL_COMMAND_ID =
@@ -473,14 +483,14 @@ export function contributeAppearanceCommands(host: BundleHost): Disposable {
   const disposers = [
     registerCommand(host, {
       id: APPEARANCE_ADD_FILL_COMMAND_ID,
-      title: "Appearance: Add fill",
+      title: M.addFill,
       category: APPEARANCE_COMMAND_CATEGORY,
       handler: () =>
         applyAppearanceCommand(host, APPEARANCE_ADD_FILL_COMMAND_ID, "fill"),
     }),
     registerCommand(host, {
       id: APPEARANCE_ADD_STROKE_COMMAND_ID,
-      title: "Appearance: Add stroke",
+      title: M.addStroke,
       category: APPEARANCE_COMMAND_CATEGORY,
       handler: () =>
         applyAppearanceCommand(
@@ -491,14 +501,14 @@ export function contributeAppearanceCommands(host: BundleHost): Disposable {
     }),
     registerCommand(host, {
       id: APPEARANCE_CLEAR_COMMAND_ID,
-      title: "Appearance: Clear extra layers",
+      title: M.clear,
       category: APPEARANCE_COMMAND_CATEGORY,
       handler: () =>
         applyAppearanceCommand(host, APPEARANCE_CLEAR_COMMAND_ID, "clear"),
     }),
     registerCommand(host, {
       id: APPEARANCE_REMOVE_LAYER_COMMAND_ID,
-      title: "Appearance: Remove layer",
+      title: M.removeLayer,
       category: APPEARANCE_COMMAND_CATEGORY,
       handler: (_paged, payload) => {
         const p = payload as Record<string, unknown> | undefined;
@@ -512,7 +522,7 @@ export function contributeAppearanceCommands(host: BundleHost): Disposable {
     }),
     registerCommand(host, {
       id: APPEARANCE_MOVE_LAYER_COMMAND_ID,
-      title: "Appearance: Reorder layer",
+      title: M.reorderLayer,
       category: APPEARANCE_COMMAND_CATEGORY,
       handler: (_paged, payload) => {
         const p = payload as Record<string, unknown> | undefined;

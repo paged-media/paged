@@ -58,6 +58,7 @@
 // document default face, which is that same face in a new document) and is
 // not reported.
 
+import { defineMessages, t } from "@paged-media/strings";
 import type {
   BundleHost,
   Disposable,
@@ -76,6 +77,18 @@ import {
 } from "./css-faces";
 import type { WebEngine } from "./engine-loader";
 import { readResourcePart } from "./source-part";
+
+const M = defineMessages("web.resources", {
+  faceTooLarge:
+    "font face “{family}” ({size} MB) is over the canvas's {limit} MB limit for one face — the canvas draws its text in the default font",
+  faceFormat:
+    "font face “{family}” is a {format} file — the canvas takes TrueType or OpenType faces only; store a .ttf or .otf source beside it",
+  networkResource:
+    "“{url}” is not loaded: a web frame loads nothing from the network — store it with the document",
+  missingResource: "resource “{url}” is not in the document — it is not shown",
+  missingFont:
+    "font “{face}” is not in the document — the canvas draws it in the default font",
+});
 
 type InputsHost = Pick<BundleHost, "supports" | "assets" | "parts" | "log">;
 
@@ -260,9 +273,11 @@ async function resolveFace(
         return {
           bytes: null,
           diagnostic: faceProblem(
-            `font face “${rule.family}” (${(bytes.byteLength / MB).toFixed(1)} MB) is over the canvas's ` +
-              `${(ASSET_BUDGETS.maxFontFaceBytes / MB).toFixed(0)} MB limit for one face — ` +
-              "the canvas draws its text in the default font",
+            t(M.faceTooLarge, {
+              family: rule.family,
+              size: (bytes.byteLength / MB).toFixed(1),
+              limit: (ASSET_BUDGETS.maxFontFaceBytes / MB).toFixed(0),
+            }),
           ),
         };
       }
@@ -274,8 +289,7 @@ async function resolveFace(
     return {
       bytes: null,
       diagnostic: faceProblem(
-        `font face “${rule.family}” is a ${other.toUpperCase()} file — the canvas takes TrueType or ` +
-          "OpenType faces only; store a .ttf or .otf source beside it",
+        t(M.faceFormat, { family: rule.family, format: other.toUpperCase() }),
       ),
     };
   }
@@ -619,8 +633,8 @@ export function resourceDiagnostics(engine: WebEngine): WebDiagnostic[] {
   return misses.map((url) => ({
     severity: "warning" as const,
     message: /^[a-z][a-z0-9+.-]*:\/\//i.test(url)
-      ? `“${url}” is not loaded: a web frame loads nothing from the network — store it with the document`
-      : `resource “${url}” is not in the document — it is not shown`,
+      ? t(M.networkResource, { url })
+      : t(M.missingResource, { url }),
     source: "render" as const,
   }));
 }
@@ -648,7 +662,7 @@ export function faceDiagnostics(
     .filter((f) => !(bundledExpected && isBundledFace(f)))
     .map((face) => ({
       severity: "warning" as const,
-      message: `font “${face}” is not in the document — the canvas draws it in the default font`,
+      message: t(M.missingFont, { face }),
       source: "render" as const,
     }));
 }

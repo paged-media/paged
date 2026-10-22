@@ -76,6 +76,45 @@ import {
 } from "../commands/symbols";
 import { textOnPathOf } from "../commands/text-on-path";
 import { addressOf, coreAddressOf, DRAW_ID, treeItems } from "./shared";
+import { defineMessages, t } from "@paged-media/strings";
+
+/** The field kinds' titles and their refusals, in the editor's locale. */
+const P = defineMessages("draw.templateField", {
+  writeRefused: "the write was refused",
+  notPermitted: "not permitted: {permission} on {target}",
+  locked: "{node} is locked",
+  engineRefused: "the engine refused the write",
+  chooseColour: "choose a colour",
+  notOneColour: `"{value}" is not one of this field's colours`,
+  chooseStyle: "choose a style",
+  notOneStyle: `"{value}" is not one of this field's styles`,
+  chooseSymbol: "choose a symbol",
+  notOneSymbol: `"{value}" is not one of this field's symbols`,
+  fillLayersUnread: "the fill layers of {target} cannot be read",
+  strokeLayersUnread: "the stroke layers of {target} cannot be read",
+  textString: "the text must be a string",
+  oneLine: "text on a path is one line: remove the line breaks",
+  noText: "{target} carries no text on its path",
+  multiPiece: `"{name}" has {count} pieces; a symbol field swaps one-piece symbols`,
+  notInstance: "{id} is not a symbol instance",
+  noPath: "{id} has no path to re-shape",
+  noMeasurablePath: "{id} has no measurable path",
+  paintTitle: "Fill or stroke colour",
+  graphicStyleTitle: "Graphic style",
+  textOnPathTitle: "Text on a path",
+  symbolTitle: "Symbol",
+});
+
+const CHOOSE = {
+  colour: P.chooseColour,
+  style: P.chooseStyle,
+  symbol: P.chooseSymbol,
+} as const;
+const NOT_ONE = {
+  colour: P.notOneColour,
+  style: P.notOneStyle,
+  symbol: P.notOneSymbol,
+} as const;
 
 type Ctx = { objects: ObjectsSurface };
 type Option = { value: string; label?: string };
@@ -99,7 +138,7 @@ export const DRAW_TEMPLATE_FIELDS: readonly { kind: string; title: string }[] =
 /** A refused write's reason as a sentence: the engine's typed refusal
  *  (`notPermitted`, `locked`) named, any other reason as it came. */
 export function refusalSentence(reason: string | undefined, code?: string) {
-  if (!reason) return `the write was refused (${code ?? "failed"})`;
+  if (!reason) return `${t(P.writeRefused)} (${code ?? "failed"})`;
   try {
     const e = (
       JSON.parse(reason) as {
@@ -108,10 +147,13 @@ export function refusalSentence(reason: string | undefined, code?: string) {
     ).error;
     const d = e?.details ?? {};
     if (e?.kind === "notPermitted")
-      return `not permitted: ${String(d["permission"])} on ${String(d["target"])}`;
-    if (e?.kind === "locked") return `${String(d["node"])} is locked`;
+      return t(P.notPermitted, {
+        permission: String(d["permission"]),
+        target: String(d["target"]),
+      });
+    if (e?.kind === "locked") return t(P.locked, { node: String(d["node"]) });
     if (typeof d["what"] === "string") return d["what"];
-    if (e?.kind) return `the engine refused the write (${e.kind})`;
+    if (e?.kind) return `${t(P.engineRefused)} (${e.kind})`;
   } catch {
     /* a plain sentence */
   }
@@ -172,12 +214,11 @@ function choicesOf<T extends { id: string; name: string }>(
 function chosen<T extends { id: string; name: string }>(
   choices: readonly T[],
   value: unknown,
-  what: string,
+  what: "colour" | "style" | "symbol",
 ): T | string {
-  if (typeof value !== "string" || value.length === 0)
-    return `choose a ${what}`;
+  if (typeof value !== "string" || value.length === 0) return t(CHOOSE[what]);
   const hit = choices.find((c) => c.id === value || c.name === value);
-  return hit ?? `"${value}" is not one of this field's ${what}s`;
+  return hit ?? t(NOT_ONE[what], { value });
 }
 
 const choiceControl = (
@@ -217,7 +258,7 @@ const paintTarget = (field: TemplateFieldRef): string => {
 
 const paintKind = (host: BundleHost): TemplateFieldKindContribution => ({
   kind: PAINT_FIELD,
-  title: "Fill or stroke colour",
+  title: t(P.paintTitle),
   control: { kind: "choice", options: [] },
   grants: ["appearance.fill", "appearance.stroke"],
   async describe(_ctx, field) {
@@ -250,7 +291,9 @@ const paintKind = (host: BundleHost): TemplateFieldKindContribution => ({
       const current = await ctx.objects.get(appearance, path);
       if (current.kind !== "value" || !Array.isArray(current.value))
         return refused(
-          `the ${channel} layers of ${field.targetId} cannot be read`,
+          t(channel === "fill" ? P.fillLayersUnread : P.strokeLayersUnread, {
+            target: field.targetId,
+          }),
         );
       const next = (current.value as { color: string }[]).map((l, i, all) =>
         i === all.length - 1 ? { ...l, color: pick.id } : l,
@@ -283,7 +326,7 @@ const styleTargets = (field: TemplateFieldRef): string[] => {
 
 const graphicStyleKind = (host: BundleHost): TemplateFieldKindContribution => ({
   kind: GRAPHIC_STYLE_FIELD,
-  title: "Graphic style",
+  title: t(P.graphicStyleTitle),
   control: { kind: "choice", options: [] },
   grants: ["appearance.fill", "appearance.stroke", "appearance.opacity"],
   async describe(_ctx, field) {
@@ -326,7 +369,7 @@ async function storyOnPath(
 
 const textOnPathKind = (host: BundleHost): TemplateFieldKindContribution => ({
   kind: TEXT_ON_PATH_FIELD,
-  title: "Text on a path",
+  title: t(P.textOnPathTitle),
   control: { kind: "text" },
   grants: ["text.edit"],
   async read(ctx: Ctx, field) {
@@ -339,11 +382,10 @@ const textOnPathKind = (host: BundleHost): TemplateFieldKindContribution => ({
     return v.kind === "value" && typeof v.value === "string" ? v.value : null;
   },
   async write(ctx: Ctx, field, value) {
-    if (typeof value !== "string") return refused("the text must be a string");
-    if (/[\r\n]/.test(value))
-      return refused("text on a path is one line: remove the line breaks");
+    if (typeof value !== "string") return refused(t(P.textString));
+    if (/[\r\n]/.test(value)) return refused(t(P.oneLine));
     const story = await storyOnPath(host, field);
-    if (!story) return refused(`${field.targetId} carries no text on its path`);
+    if (!story) return refused(t(P.noText, { target: field.targetId }));
     return writeProblem(
       await ctx.objects.set(
         formatAddress({ kind: "story", id: story }),
@@ -373,12 +415,12 @@ async function rePlaceBatch(
   to: SymbolDefinition,
 ): Promise<string | object> {
   if (to.pieces.length !== 1)
-    return `"${to.name}" has ${to.pieces.length} pieces; a symbol field swaps one-piece symbols`;
+    return t(P.multiPiece, { name: to.name, count: to.pieces.length });
   const link = symbolInstanceOf(env);
-  if (!link) return `${String(el.id)} is not a symbol instance`;
+  if (!link) return t(P.notInstance, { id: String(el.id) });
   const read = await host.document.pathAnchors(el).catch(() => null);
   if (!read || read.anchors.length < 2)
-    return `${String(el.id)} has no path to re-shape`;
+    return t(P.noPath, { id: String(el.id) });
   const bounds = symbolBoundsOf([
     {
       anchors: read.anchors.map((a) => ({
@@ -389,7 +431,7 @@ async function rePlaceBatch(
       subpathStarts: [...read.subpathStarts],
     },
   ]);
-  if (!bounds) return `${String(el.id)} has no measurable path`;
+  if (!bounds) return t(P.noMeasurablePath, { id: String(el.id) });
   const [ox, oy] = registrationPointOf(
     bounds,
     from?.registration ?? DEFAULT_SYMBOL_REGISTRATION,
@@ -424,7 +466,7 @@ async function rePlaceBatch(
 
 const symbolChoiceKind = (host: BundleHost): TemplateFieldKindContribution => ({
   kind: SYMBOL_CHOICE_FIELD,
-  title: "Symbol",
+  title: t(P.symbolTitle),
   control: { kind: "choice", options: [] },
   grants: ["item.resize", "appearance.fill", "appearance.stroke"],
   async describe(_ctx, field) {

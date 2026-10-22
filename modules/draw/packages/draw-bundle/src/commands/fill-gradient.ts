@@ -46,6 +46,13 @@ import type {
 
 import { registerCommand } from "../command-registry";
 import { batchMutationFor } from "./batch-handles";
+import { defineMessages } from "@paged-media/strings";
+
+/** Command titles, message keys `registerCommand` reads in the editor's locale. */
+const M = defineMessages("draw.fillGradient", {
+  linear: "Fill: Linear gradient",
+  radial: "Fill: Radial gradient",
+});
 /** The command category the gradient-fill presets group under. */
 export const FILL_COMMAND_CATEGORY = "Fill";
 
@@ -64,12 +71,12 @@ export interface FillGradientPreset {
 export const FILL_GRADIENT_PRESETS: readonly FillGradientPreset[] = [
   {
     id: "media.paged.draw.command.fillGradientLinear",
-    title: "Fill: Linear gradient",
+    title: M.linear,
     kind: "Linear",
   },
   {
     id: "media.paged.draw.command.fillGradientRadial",
-    title: "Fill: Radial gradient",
+    title: M.radial,
     kind: "Radial",
   },
 ] as const;

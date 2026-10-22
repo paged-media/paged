@@ -40,6 +40,14 @@ import { selectionTopToBottom } from "./pathfinder-region";
 import { applyScissorsAt } from "../handlers/scissors";
 import { applyShapeBuild } from "../handlers/shape-builder";
 import { registerCommand } from "../command-registry";
+import { defineMessages } from "@paged-media/strings";
+
+/** Command titles, message keys `registerCommand` reads in the editor's locale. */
+const M = defineMessages("draw.cut", {
+  knife: "Knife along a polyline",
+  scissors: "Cut the selected path at a point",
+  shapeBuilder: "Shape Builder along a path",
+});
 
 export const KNIFE_COMMAND_ID = "media.paged.draw.command.knife";
 export const SCISSORS_AT_COMMAND_ID = "media.paged.draw.command.scissorsAt";
@@ -140,19 +148,19 @@ export function contributeCutCommands(host: BundleHost): Disposable {
   const disposers = [
     registerCommand(host, {
       id: KNIFE_COMMAND_ID,
-      title: "Knife along a polyline",
+      title: M.knife,
       category: CUT_COMMAND_CATEGORY,
       handler: (_paged, payload) => runKnife(host, payload),
     }),
     registerCommand(host, {
       id: SCISSORS_AT_COMMAND_ID,
-      title: "Cut the selected path at a point",
+      title: M.scissors,
       category: CUT_COMMAND_CATEGORY,
       handler: (_paged, payload) => runScissorsAt(host, payload),
     }),
     registerCommand(host, {
       id: SHAPE_BUILD_COMMAND_ID,
-      title: "Shape Builder along a path",
+      title: M.shapeBuilder,
       category: CUT_COMMAND_CATEGORY,
       handler: (_paged, payload) => runShapeBuild(host, payload),
     }),
