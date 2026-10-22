@@ -3,7 +3,7 @@
   "version": 1,
   "counts": {
     "chrome": 4,
-    "command": 335,
+    "command": 341,
     "keybinding": 88,
     "menu": 257,
     "panel": 121,
@@ -901,6 +901,11 @@
       "owner": "media.paged.publish"
     },
     {
+      "id": "command:media.paged.publish.preflight",
+      "kind": "command",
+      "owner": "media.paged.publish"
+    },
+    {
       "id": "command:media.paged.sheet.command.addSheet",
       "kind": "command",
       "owner": "media.paged.sheet"
@@ -1046,7 +1051,17 @@
       "owner": "media.paged.web"
     },
     {
+      "id": "command:media.paged.web.command.importHtml",
+      "kind": "command",
+      "owner": "media.paged.web"
+    },
+    {
       "id": "command:media.paged.web.command.insertWebFrame",
+      "kind": "command",
+      "owner": "media.paged.web"
+    },
+    {
+      "id": "command:media.paged.web.command.makeWebFrame",
       "kind": "command",
       "owner": "media.paged.web"
     },
@@ -1402,6 +1417,21 @@
     },
     {
       "id": "command:paged.help.reportIssue",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.host.back",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.host.close",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.host.submit",
       "kind": "command",
       "owner": "editor"
     },
