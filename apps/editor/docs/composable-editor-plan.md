@@ -1089,24 +1089,22 @@ the canvas, a script (`paged.*`) and a plugin, because "every caller" is the cla
 
 ## 12. ADR ledger and numbering
 
-| Record                                                 | Range        | Number  | Lands with |
-| ------------------------------------------------------ | ------------ | ------- | ---------- |
-| The editor profile is runtime data (amends 213)        | editor       | 274     | A4         |
-| Features gate what is offered                          | editor       | 275     | B2         |
-| Filling a template                                     | editor       | 276     | D5         |
-| The editor mounts as an instance                       | editor       | 277     | E1         |
-| Host actions are commands                              | editor       | 278     | E2         |
-| The embedding API and the iframe bridge                | editor       | 279     | E6         |
-| The editor speaks through a string catalogue           | editor       | 280     | E10        |
-| Contribution titles may be message keys                | extensions   | 333     | E10        |
-| The engine's ADR range                                 | repository   | PM-0012 | before C1  |
-| A template policy lives in labels                      | engine       | 1000    | C1         |
-| The session has a role                                 | engine       | 1001    | C2         |
-| Permissions are checked at three doors; undo is exempt | engine       | 1002    | C5         |
-| Refusals are typed on the wire                         | engine       | 1003    | C6         |
-| The XML structure is model data and is written         | engine       | 1004    | C10        |
-| Template fields are binding targets                    | modules/data | 560     | F8         |
-| A fourth public package                                | repository   | PM-0013 | E8         |
+| Record                                                                   | Range        | Number  | Lands with |
+| ------------------------------------------------------------------------ | ------------ | ------- | ---------- |
+| The editor profile is runtime data (amends 213)                          | editor       | 274     | A4         |
+| Features gate what is offered                                            | editor       | 275     | B2         |
+| Filling a template                                                       | editor       | 276     | D5         |
+| The editor mounts as an instance                                         | editor       | 277     | E1         |
+| Host actions are commands                                                | editor       | 278     | E2         |
+| The embedding API and the iframe bridge                                  | editor       | 279     | E6         |
+| The editor speaks through a string catalogue                             | editor       | 280     | E10        |
+| Contribution titles may be message keys                                  | extensions   | 333     | E10        |
+| The engine's ADR range                                                   | repository   | PM-0012 | before C1  |
+| A template policy lives in labels, and operations are checked against it | engine       | 1000    | C1, C3, C4 |
+| The session has a role; three doors; typed refusals                      | engine       | 1001    | C2, C5, C6 |
+| The XML structure is model data and is written                           | engine       | 1002    | C10        |
+| Template fields are binding targets                                      | modules/data | 560     | F8         |
+| A fourth public package                                                  | repository   | PM-0013 | E8         |
 
 **Decided:** the engine gets a new, non-overlapping range, set by **PM-0012** before C1 lands.
 The proposed range is 1000–1099; no record in the repository uses a four-digit number today.

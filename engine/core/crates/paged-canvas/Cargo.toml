@@ -25,6 +25,7 @@ paged-scene = { path = "../paged-scene" }
 paged-compose = { path = "../paged-compose" }
 paged-text = { path = "../paged-text" }
 paged-mutate = { path = "../paged-mutate" }
+paged-template = { path = "../paged-template" }
 paged-wire = { path = "../paged-wire" }
 # ADR 132 — the property schemas and the virtual path table `Mutation::Set`
 # resolves against (and the v65 style-properties coverage gate).

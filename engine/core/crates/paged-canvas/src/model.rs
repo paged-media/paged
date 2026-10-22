@@ -771,20 +771,48 @@ fn missing_frame_target(mutation: &Mutation) -> Option<&str> {
 /// that is not in the document is `NotFound` (finding CLI-5), anything
 /// else keeps the apply layer's words.
 fn frame_mutation_error(e: paged_mutate::OperationError) -> crate::channel::WorkerError {
-    fn missing(e: &paged_mutate::OperationError) -> Option<&paged_mutate::NodeId> {
+    use paged_mutate::OperationError as E;
+    // A batch's refusal is its child's: unwrap to the cause.
+    fn cause(e: &E) -> &E {
         match e {
-            paged_mutate::OperationError::NodeNotFound(node) => Some(node),
-            paged_mutate::OperationError::BatchFailed { source, .. } => missing(source),
-            _ => None,
+            E::BatchFailed { source, .. } => cause(source),
+            other => other,
         }
     }
-    match missing(&e) {
-        Some(node) => crate::channel::WorkerError::NotFound {
+    match cause(&e) {
+        E::NodeNotFound(node) => crate::channel::WorkerError::NotFound {
             what: node_address(node),
         },
-        None => crate::channel::WorkerError::NotImplemented {
+        E::NotPermitted { permission, target } => crate::channel::WorkerError::NotPermitted {
+            permission: permission.clone(),
+            target: target.clone(),
+        },
+        E::Locked { node, action } => crate::channel::WorkerError::Locked {
+            node: node_address(node),
+            action: action.clone(),
+        },
+        _ => crate::channel::WorkerError::NotImplemented {
             what: format!("frame mutation failed: {e}"),
         },
+    }
+}
+
+/// Which page items a session may select (see `CanvasModel::selectability`).
+pub(crate) enum Selectability {
+    All,
+    None,
+    ByItem(paged_template::PolicyIndex, paged_template::SessionPolicy),
+}
+
+impl Selectability {
+    pub(crate) fn allows(&self, self_id: &str) -> bool {
+        match self {
+            Selectability::All => true,
+            Selectability::None => false,
+            Selectability::ByItem(index, session) => index
+                .effective(session, Some(self_id))
+                .has(paged_template::Permission::Select),
+        }
     }
 }
 
@@ -2016,6 +2044,9 @@ pub struct CanvasModel {
     /// v67 (RFI C-68) — the session's snapping preferences, shared by
     /// every gesture and by `RequestSnapPoint`.
     pub(crate) snap_settings: crate::snap_point::SnapSettings,
+    /// v75 — the session's role and overrides; the document's template
+    /// policy applies through them (engine ADR 1000). Session state.
+    pub(crate) session_policy: paged_template::SessionPolicy,
     /// v67 — every page's snap targets for one build, rebuilt lazily when
     /// `build_generation` moves on (and held still for a whole gesture,
     /// whose preview rebuilds on every tick).
@@ -2680,6 +2711,7 @@ impl CanvasModel {
             pending_edit_spans: HashMap::new(),
             build_generation: 0,
             snap_settings: Default::default(),
+            session_policy: Default::default(),
             snap_index: None,
             emission_prints: Default::default(),
             pending_dirty_scope: DirtyScope::Unset,
@@ -2839,6 +2871,7 @@ impl CanvasModel {
         // A value the operation layer would store but no caller may
         // author (an unknown composer) is refused before anything runs.
         refuse_unauthorable(mutation)?;
+        self.refuse_unpermitted(mutation)?;
         // A colour written as a swatch ADDRESS is stored as the swatch's
         // `Self` id — the only form the renderer resolves.
         if let Some(normalized) = self.normalize_color_refs(mutation) {
@@ -5781,7 +5814,11 @@ impl CanvasModel {
         } else {
             Invalidation::Everything
         };
-        let applied = paged_mutate::apply(&mut self.scene, &op).map_err(frame_mutation_error)?;
+        // Engine ADR 1000 — every user edit that becomes an `Operation`
+        // reaches here and is checked against the session's policy; undo and
+        // redo apply their inverses elsewhere, unchecked.
+        let applied = paged_mutate::apply_checked(&mut self.scene, &op, &self.session_policy)
+            .map_err(frame_mutation_error)?;
         self.stage_op_apply_ms(phase_elapsed_ms(t_op));
         // Perf-MasterText + Perf-BodyStory — committed mutations
         // can shift the per-page pool state (Alt-duplicate inserts
@@ -10704,6 +10741,7 @@ impl CanvasModel {
             Footnotes => json(self.footnotes()),
             Notes => json(self.notes()),
             XmlTags => json(&self.scene.designmap.xml_tags),
+            TemplateFields => json(self.template_fields()),
             XmlElements => json(self.xml_elements()),
             TrackedChanges => json(self.tracked_changes()),
             Endnotes => json(self.endnotes()),
@@ -13169,6 +13207,55 @@ impl CanvasModel {
     /// not undoable.
     pub fn set_snap_settings(&mut self, settings: crate::snap_point::SnapSettings) {
         self.snap_settings = settings;
+    }
+
+    /// v75 — the session's role and overrides (engine ADR 1000).
+    pub fn session_policy(&self) -> &paged_template::SessionPolicy {
+        &self.session_policy
+    }
+
+    /// v75 — replace the session's role and overrides. Session state: not
+    /// saved, not undoable.
+    pub fn set_session_policy(&mut self, policy: paged_template::SessionPolicy) {
+        self.session_policy = policy;
+    }
+
+    /// Which page items this session may select: the hit test skips the
+    /// rest, so a filler's click passes through scenery to the field
+    /// beneath.
+    pub(crate) fn selectability(&self) -> Selectability {
+        use paged_template::Permission;
+        match self.session_policy.unbound() {
+            Some(set) if set.has(Permission::Select) => Selectability::All,
+            Some(_) => Selectability::None,
+            None => Selectability::ByItem(
+                paged_template::PolicyIndex::build(&self.scene).0,
+                self.session_policy.clone(),
+            ),
+        }
+    }
+
+    /// Refuses the writes that never become an `Operation` when the
+    /// session may not make them: text insertion and deletion, and the
+    /// document settings (engine ADR 1000). Everything else is checked
+    /// where it applies (`apply_operation`).
+    fn refuse_unpermitted(&self, mutation: &Mutation) -> Result<(), crate::channel::WorkerError> {
+        use paged_mutate::apply::permit::{check_requirements, Requirement};
+        use paged_template::Permission as P;
+        let requirements = match mutation {
+            Mutation::InsertText { story_id, .. } | Mutation::DeleteRange { story_id, .. } => {
+                vec![Requirement::on_story(P::TextEdit, story_id)]
+            }
+            Mutation::SetDocumentDefaults { .. }
+            | Mutation::SetColorSettings { .. }
+            | Mutation::SetInkSetting { .. }
+            | Mutation::SetUseStandardLabForSpots { .. } => {
+                vec![Requirement::on_document(P::DocumentStyles)]
+            }
+            _ => return Ok(()),
+        };
+        check_requirements(&self.scene, &requirements, &self.session_policy)
+            .map_err(frame_mutation_error)
     }
 
     /// v67 — (re)build the snap index when the document has been rebuilt

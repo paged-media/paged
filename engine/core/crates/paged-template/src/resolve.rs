@@ -155,9 +155,9 @@ impl PolicyIndex {
 mod tests {
     use super::*;
     use crate::permission::{Override, Permission as P, Role};
-    use crate::policy::{FieldKind, ItemPolicy};
+    use crate::policy::{ItemPolicy, TemplateFieldKind};
 
-    fn field(name: &str, kind: FieldKind) -> FieldDef {
+    fn field(name: &str, kind: TemplateFieldKind) -> FieldDef {
         FieldDef {
             name: name.into(),
             kind,
@@ -174,14 +174,14 @@ mod tests {
         items.insert(
             "headline".to_string(),
             ItemPolicy {
-                field: Some(field("headline", FieldKind::Text)),
+                field: Some(field("headline", TemplateFieldKind::Text)),
                 ..Default::default()
             },
         );
         items.insert(
             "photo".to_string(),
             ItemPolicy {
-                field: Some(field("photo", FieldKind::Image)),
+                field: Some(field("photo", TemplateFieldKind::Image)),
                 allow: vec![P::ImageCrop],
                 deny: vec![P::Select],
             },
@@ -260,7 +260,7 @@ mod tests {
     #[test]
     fn envelopes_round_trip_and_bad_ones_are_problems() {
         let p = ItemPolicy {
-            field: Some(field("x", FieldKind::Visibility)),
+            field: Some(field("x", TemplateFieldKind::Visibility)),
             ..Default::default()
         };
         let back: ItemPolicy = read_envelope(&p.to_label()).unwrap();

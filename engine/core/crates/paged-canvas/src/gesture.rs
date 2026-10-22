@@ -515,6 +515,10 @@ pub enum GestureError {
     /// by the engine anyway, after the preview had moved it.
     #[error("element is locked — unlock it (elementLocked = false) to transform it: {0:?}")]
     Locked(ElementId),
+    /// v75 — the session's template policy does not permit this transform
+    /// of the element; refused at the start, as a lock is.
+    #[error("not permitted: {1} on {0:?}")]
+    NotPermitted(ElementId, String),
 }
 
 impl CanvasModel {
@@ -594,6 +598,35 @@ impl CanvasModel {
                 .is_some_and(|node| paged_mutate::is_locked(&self.scene, &node))
         }) {
             return Err(GestureError::Locked(locked.clone()));
+        }
+        // Template permissions (engine ADR 1000): a drag the session may
+        // not commit is refused before its preview moves anything.
+        {
+            use paged_template::Permission as P;
+            let permission = match gesture {
+                GestureType::Translate => P::ItemMove,
+                GestureType::Rotate => P::ItemRotate,
+                GestureType::TranslateContent
+                | GestureType::RotateContent
+                | GestureType::ScaleContent => P::ImageCrop,
+                _ => P::ItemResize,
+            };
+            for id in &nodes {
+                let requirement =
+                    paged_mutate::apply::permit::Requirement::on_item(permission, id.raw_id());
+                if paged_mutate::apply::permit::check_requirements(
+                    &self.scene,
+                    &[requirement],
+                    &self.session_policy,
+                )
+                .is_err()
+                {
+                    return Err(GestureError::NotPermitted(
+                        id.clone(),
+                        permission.name().to_string(),
+                    ));
+                }
+            }
         }
         let snapshots = nodes
             .iter()

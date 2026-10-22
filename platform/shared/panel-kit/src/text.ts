@@ -56,6 +56,9 @@ const NODE_NAMES: Readonly<Record<string, string>> = {
 const ENGINE_KINDS: Readonly<Record<string, string>> = {
   noDocument: "No document is open.",
   unknownPage: "That page is no longer in the document.",
+  // v75 (engine ADR 1000): the typed refusals.
+  locked: "The object is locked. Unlock it to change it.",
+  notPermitted: "This part of the template cannot be changed.",
 };
 
 /** What a write result's code means when it comes with no reason. */
