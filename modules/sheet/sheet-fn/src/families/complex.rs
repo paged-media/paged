@@ -48,7 +48,7 @@ use crate::ctx::EvalCtx;
 /// A complex value and the suffix it was written with (`None` = not stated,
 /// as for a real number).
 #[derive(Copy, Clone, Debug, PartialEq)]
-pub(crate) struct Complex {
+pub struct Complex {
     pub re: f64,
     pub im: f64,
     pub suffix: Option<char>,
@@ -148,8 +148,9 @@ fn sign(s: &str) -> (f64, &str, bool) {
     }
 }
 
-/// Parse Excel's complex text form.
-pub(crate) fn parse_complex(text: &str) -> Option<Complex> {
+/// Parse Excel's complex text form (public for the conformance harness,
+/// which compares complex results part by part).
+pub fn parse_complex(text: &str) -> Option<Complex> {
     let compact: String = text.chars().filter(|c| *c != ' ').collect();
     let s = compact.as_str();
     if s.is_empty() {
@@ -185,35 +186,7 @@ pub(crate) fn parse_complex(text: &str) -> Option<Complex> {
 /// One part of the written form: 15 significant digits, fixed notation while
 /// it fits 21 characters, scientific beyond.
 fn part_text(x: f64) -> String {
-    let x = if x == 0.0 { 0.0 } else { x };
-    let sci = format!("{:.14e}", x.abs());
-    let (mant, exp) = sci.split_once('e').unwrap_or((sci.as_str(), "0"));
-    let exp: i32 = exp.parse().unwrap_or(0);
-    let digits: String = mant.chars().filter(|c| c.is_ascii_digit()).collect();
-    let digits = digits.trim_end_matches('0');
-    let digits = if digits.is_empty() { "0" } else { digits };
-    let neg = if x < 0.0 { "-" } else { "" };
-    // Fixed form of d.ddd × 10^exp.
-    let fixed = if exp >= 0 {
-        let e = exp as usize;
-        if digits.len() <= e + 1 {
-            format!("{digits}{}", "0".repeat(e + 1 - digits.len()))
-        } else {
-            format!("{}.{}", &digits[..=e], &digits[e + 1..])
-        }
-    } else {
-        format!("0.{}{digits}", "0".repeat((-exp - 1) as usize))
-    };
-    if fixed.len() <= 21 {
-        return format!("{neg}{fixed}");
-    }
-    let m = if digits.len() > 1 {
-        format!("{}.{}", &digits[..1], &digits[1..])
-    } else {
-        digits.to_string()
-    };
-    let es = if exp < 0 { '-' } else { '+' };
-    format!("{neg}{m}E{es}{:02}", exp.abs())
+    coerce::number_text(x, 21)
 }
 
 /// Write `z` in Excel's text form.

@@ -26,6 +26,17 @@ sheet-core = { path = "../sheet-core" }
 paged-fmt = { path = "../../../platform/shared/fmt" }
 sheet-format = { path = "../sheet-format" }
 compact_str.workspace = true
+# REGEXTEST / REGEXEXTRACT / REGEXREPLACE (W3): a backtracking engine over
+# regex-automata, so look-around, back-references and atomic groups — the
+# PCRE constructs Excel's regex functions accept — compile. MIT. `perf` and
+# `variable-lookbehinds` stay off (wasm size).
+fancy-regex = { version = "0.17", default-features = false, features = ["std"] }
+# Only the Unicode tables the patterns need: \w \d \s and \b (perl
+# classes), case folding, and \p{..} general categories. The full `unicode`
+# set (scripts, ages, segmentation) costs ~300 KB of wasm for nothing Excel
+# users write.
+regex-syntax = { version = "0.8", default-features = false, features = ["std", "unicode-perl", "unicode-case"] }
+regex-automata = { version = "0.4", default-features = false, features = ["std", "unicode-perl", "unicode-case", "unicode-word-boundary"] }
 # exact-decimal SPIKE carrier (D-6, M3) — OPTIONAL, keyed on `exact-decimal`.
 # rust_decimal 1.x: MIT, pure-Rust, 28-29 significant digits, wasm-compatible
 # (it ships a wasm32 cfg target shim and no native/C deps — its only required

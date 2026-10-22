@@ -1,0 +1,22 @@
+# The byte-count variants (FINDB, LEFTB, LENB, MIDB, REPLACEB, RIGHTB, SEARCHB).
+# id	formula	setup	expected
+b-0	=FINDB("c","abcabc")	-	3
+b-1	=FINDB("c","abcabc",4)	-	6
+b-2	=FINDB("x","abc")	-	#VALUE!
+b-3	=LEFTB("abcdef",2)	-	ab
+b-4	=LEFTB("abc")	-	a
+b-5	=LENB("abc")	-	3
+b-6	=LENB("")	-	0
+b-7	=LENB("日本")	-	2
+b-8	=LEFTB("日本語",2)	-	日本
+b-9	=MIDB("abcdef",2,3)	-	bcd
+b-10	=MIDB("日本語",2,2)	-	本語
+b-11	=REPLACEB("abcdef",2,3,"X")	-	aXef
+b-12	=RIGHTB("abcdef",2)	-	ef
+b-13	=RIGHTB("abc")	-	c
+b-14	=SEARCHB("C","abcabc")	-	3
+b-15	=SEARCHB("?c","abcabc")	-	2
+b-16	=FINDB("本","日本語")	-	2
+b-17	=LEFTB("abc",-1)	-	#VALUE!
+b-18	=MIDB("abc",0,1)	-	#VALUE!
+b-19	=LENB(123)	-	3

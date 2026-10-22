@@ -22,7 +22,7 @@
 //! same door `corpus_runner.rs` drives for whole families.
 
 use sheet_conformance::load_corpus;
-use sheet_conformance::runner::{project, run_case};
+use sheet_conformance::runner::{project, projection_matches, run_case};
 
 /// Replay `corpus/fn-corpus/<family>/<file>.golden.tsv`, reporting every
 /// mismatch at once.
@@ -35,7 +35,7 @@ pub fn replay(family: &str, file: &str) {
         match run_case(case) {
             Ok(v) => {
                 let got = project(&v);
-                if got != case.expected {
+                if !projection_matches(&got, &case.expected) {
                     failures.push(format!(
                         "[{}] {} (setup {:?}) -> got {got:?}, want {:?}",
                         case.id, case.formula, case.setup, case.expected

@@ -1,0 +1,5 @@
+# JIS(text) - the Japanese-locale name of DBCS.
+# id	formula	setup	expected
+jis-0	=JIS("ABC")	-	ABC
+jis-1	=JIS("ｶﾞ")	-	ｶﾞ
+jis-2	=JIS(1)	-	1
