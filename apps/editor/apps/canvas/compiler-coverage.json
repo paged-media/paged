@@ -4,7 +4,7 @@
   "skipped": 2,
   "bailouts": [
     {
-      "file": "src/main.tsx",
+      "file": "src/app/mount.tsx",
       "function": "PluginBundles",
       "reason": "Immutability",
       "detail": "This value cannot be modified"

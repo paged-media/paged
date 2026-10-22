@@ -181,7 +181,7 @@
       "default": "on (absent)",
       "values": ["off"],
       "effect": "\"off\" keeps the local document library (origin-private file system) from starting",
-      "source": "apps/editor/apps/canvas/src/main.tsx",
+      "source": "apps/editor/apps/canvas/src/app/mount.tsx",
       "marker": "\"paged.library\"",
       "sites": [["getItem", "\"paged.library\""]]
     },

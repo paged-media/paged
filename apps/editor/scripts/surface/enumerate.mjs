@@ -724,7 +724,7 @@ export function enumerateSurface(root) {
   const patterns = [];
 
   // Host panels and tools.
-  const panelsFile = "apps/editor/apps/canvas/src/main.tsx";
+  const panelsFile = "apps/editor/apps/canvas/src/app/mount.tsx";
   const hostPanels = constValue(ev, root, panelsFile, "BUILT_IN_PANELS");
   const hostPanelIds = Array.isArray(hostPanels)
     ? hostPanels.map((p) => p?.id).filter((x) => typeof x === "string")
