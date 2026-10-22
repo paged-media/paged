@@ -1,0 +1,13 @@
+# IMPRODUCT.
+# id	formula	setup	expected
+improduct-0	=IMPRODUCT("3+4i","5-3i")	-	27+11i
+improduct-1	=IMPRODUCT("1+2i",30)	-	30+60i
+improduct-2	=IMPRODUCT("i","i")	-	-1
+improduct-3	=IMPRODUCT("abc","1")	-	#NUM!
+improduct-4	=IMPRODUCT("1+i","1+j")	-	#VALUE!
+improduct-5	=IMPRODUCT("1+2j","3+4j")	-	-5+10j
+improduct-6	=IMPRODUCT(5,2)	-	10
+improduct-7	=IMPRODUCT("2i")	-	2i
+improduct-x0	=IMPRODUCT(A1:A2)	A1=1+i;A2=1-i	2
+improduct-x1	=IMPRODUCT(A1,1)	A1=#N/A	#N/A
+improduct-x2	=IMPRODUCT({"1+i","1-i","2"})	-	4

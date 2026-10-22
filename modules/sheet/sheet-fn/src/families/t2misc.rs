@@ -18,7 +18,7 @@
 
 //! Misc T2 functions (spec §7/§11 T2 "remaining publishing-relevant
 //! functions"): [`aggregate`], [`subtotal`], [`roman`], [`arabic`],
-//! [`convert`], [`hyperlink`]. Pure kernels of the frozen signature
+//! [`hyperlink`]. Pure kernels of the frozen signature
 //! `fn(&[Arg], &EvalCtx) -> CellValue`; the arity guard runs in the generated
 //! [`crate::dispatch`] before these are called. All coercion routes through
 //! [`crate::coerce`]; arithmetic accumulation routes through the
@@ -84,14 +84,7 @@
 //! use is the classic numeral). `ARABIC` is the inverse: roman text → number,
 //! a leading `-` negates, `""` → 0, non-roman text → `#VALUE!`.
 //!
-//! ## `CONVERT(number, from_unit, to_unit)`
-//!
-//! A documented **basic** unit set (the publishing-relevant subset of
-//! ECMA-376 §18.17.7): length `m`/`ft`/`in`/`mi`/`km`, mass `g`/`kg`/`lbm`,
-//! time `s`/`min`/`hr`/`day`, temperature `C`/`F`/`K`. Units are
-//! case-sensitive (Excel: `"m"` ≠ `"M"`). An unknown unit or a cross-dimension
-//! conversion (`"m"` → `"kg"`) → `#N/A` (Excel). Temperature converts through
-//! the affine Celsius pivot; the others through a multiplicative SI base.
+//! `CONVERT` moved to [`super::units`] (the full unit table, W3).
 //!
 //! ## `HYPERLINK(link_location, [friendly_name])`
 //!
@@ -523,118 +516,6 @@ fn parse_roman(s: &str) -> Option<u32> {
 }
 
 // ============================================================================
-// CONVERT — basic unit conversion
-// ============================================================================
-
-/// The dimension a unit belongs to. Conversions across dimensions are `#N/A`.
-#[derive(Copy, Clone, PartialEq, Eq, Debug)]
-enum Dimension {
-    Length,
-    Mass,
-    Time,
-    Temperature,
-}
-
-/// `CONVERT(number, from_unit, to_unit)` (registry
-/// `sheet.fn.engineering.convert`). The documented T2 basic unit set (module
-/// docs). Unknown unit or cross-dimension conversion → `#N/A`. Units are
-/// case-sensitive. An error in any arg propagates.
-pub fn convert(args: &[Arg], _ctx: &EvalCtx) -> CellValue {
-    if let Some(e) = coerce::first_error(args) {
-        return CellValue::Error(e);
-    }
-    let number = match scalar_number(args.first()) {
-        Ok(n) => n,
-        Err(e) => return CellValue::Error(e),
-    };
-    let from = scalar_text(args.get(1));
-    let to = scalar_text(args.get(2));
-
-    let (Some((from_dim, _)), Some((to_dim, _))) = (unit_info(&from), unit_info(&to)) else {
-        // Unknown unit string -> #N/A (Excel).
-        return CellValue::Error(CellError::Na);
-    };
-    if from_dim != to_dim {
-        // Cross-dimension conversion -> #N/A (Excel).
-        return CellValue::Error(CellError::Na);
-    }
-
-    let out = if from_dim == Dimension::Temperature {
-        // Temperature is affine: pivot through Celsius.
-        let celsius = match to_celsius(&from, number) {
-            Some(c) => c,
-            None => return CellValue::Error(CellError::Na),
-        };
-        match from_celsius(&to, celsius) {
-            Some(v) => v,
-            None => return CellValue::Error(CellError::Na),
-        }
-    } else {
-        // Multiplicative: value -> SI base -> target.
-        let (_, from_factor) = unit_info(&from).unwrap();
-        let (_, to_factor) = unit_info(&to).unwrap();
-        // base = number * from_factor; result = base / to_factor.
-        F64::from_f64(number)
-            .mul(F64::from_f64(from_factor))
-            .div(F64::from_f64(to_factor))
-            .to_f64()
-    };
-    CellValue::Number(out)
-}
-
-/// Look up a unit string: its [`Dimension`] and the factor to the SI base of
-/// that dimension (metre / gram / second). Temperature carries a `1.0`
-/// placeholder factor — it converts through the affine helpers, not the
-/// multiplicative path. `None` for an unknown unit.
-fn unit_info(u: &str) -> Option<(Dimension, f64)> {
-    Some(match u {
-        // Length -> base metre.
-        "m" => (Dimension::Length, 1.0),
-        "km" => (Dimension::Length, 1000.0),
-        "in" => (Dimension::Length, 0.0254),
-        "ft" => (Dimension::Length, 0.3048),
-        "mi" => (Dimension::Length, 1609.344),
-        // Mass -> base gram.
-        "g" => (Dimension::Mass, 1.0),
-        "kg" => (Dimension::Mass, 1000.0),
-        "lbm" => (Dimension::Mass, 453.59237),
-        // Time -> base second.
-        "s" => (Dimension::Time, 1.0),
-        "min" => (Dimension::Time, 60.0),
-        "hr" => (Dimension::Time, 3600.0),
-        "day" => (Dimension::Time, 86400.0),
-        // Temperature (affine; factor is a placeholder).
-        "C" => (Dimension::Temperature, 1.0),
-        "F" => (Dimension::Temperature, 1.0),
-        "K" => (Dimension::Temperature, 1.0),
-        _ => return None,
-    })
-}
-
-/// Convert a temperature `value` in unit `u` to Celsius. `None` for a
-/// non-temperature unit (caller has already dimension-checked, so this is
-/// defensive).
-fn to_celsius(u: &str, value: f64) -> Option<f64> {
-    Some(match u {
-        "C" => value,
-        "F" => (value - 32.0) * 5.0 / 9.0,
-        "K" => value - 273.15,
-        _ => return None,
-    })
-}
-
-/// Convert a Celsius `value` to the temperature unit `u`. `None` for a
-/// non-temperature unit (defensive — caller dimension-checks first).
-fn from_celsius(u: &str, value: f64) -> Option<f64> {
-    Some(match u {
-        "C" => value,
-        "F" => value * 9.0 / 5.0 + 32.0,
-        "K" => value + 273.15,
-        _ => return None,
-    })
-}
-
-// ============================================================================
 // HYPERLINK — display-only (T2 ruling)
 // ============================================================================
 
@@ -679,14 +560,4 @@ fn scalar_number(arg: Option<&Arg>) -> Result<f64, CellError> {
         None => return Err(CellError::Value),
     };
     coerce::to_number(&v)
-}
-
-/// Read an argument as its General text through [`coerce::to_text`] (a range
-/// uses its top-left cell). A missing arg yields `""`.
-fn scalar_text(arg: Option<&Arg>) -> compact_str::CompactString {
-    match arg {
-        Some(Arg::Scalar(v)) => coerce::to_text(v),
-        Some(Arg::Range(view)) => coerce::to_text(&view.get(0, 0)),
-        None => compact_str::CompactString::default(),
-    }
 }

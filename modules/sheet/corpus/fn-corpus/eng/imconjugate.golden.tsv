@@ -1,0 +1,16 @@
+# IMCONJUGATE.
+# id	formula	setup	expected
+imconjugate-0	=IMCONJUGATE("3+4i")	-	3-4i
+imconjugate-1	=IMCONJUGATE("3-4i")	-	3+4i
+imconjugate-2	=IMCONJUGATE("-2.5+0.5j")	-	-2.5-0.5j
+imconjugate-3	=IMCONJUGATE("i")	-	-i
+imconjugate-4	=IMCONJUGATE("-i")	-	i
+imconjugate-5	=IMCONJUGATE("5")	-	5
+imconjugate-6	=IMCONJUGATE("0")	-	0
+imconjugate-7	=IMCONJUGATE("4j")	-	-4j
+imconjugate-8	=IMCONJUGATE("1E2+1E-3i")	-	100-0.001i
+imconjugate-9	=IMCONJUGATE("0.5-i")	-	0.5+i
+imconjugate-10	=IMCONJUGATE("abc")	-	#NUM!
+imconjugate-11	=IMCONJUGATE("1+2j")	-	1-2j
+imconjugate-x0	=IMCONJUGATE(A1)	A1=#N/A	#N/A
+imconjugate-x1	=CONCAT(IMCONJUGATE({"1+i","i"}))	-	1-i-i

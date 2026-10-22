@@ -1,0 +1,17 @@
+# IMPOWER.
+# id	formula	setup	expected
+impower-0	=IMPOWER("2+3i",3)	-	-46+9.00000000000001i
+impower-1	=IMPOWER("i",2)	-	-1+1.22464679914735E-16i
+impower-2	=IMPOWER("2+3i",0.5)	-	1.67414922803554+0.895977476129838i
+impower-3	=IMPOWER("2+3i",-1)	-	0.153846153846154-0.230769230769231i
+impower-4	=IMPOWER("0",2)	-	0
+impower-5	=IMPOWER("0",0)	-	#NUM!
+impower-6	=IMPOWER("0",-1)	-	#NUM!
+impower-7	=IMPOWER("4",0.5)	-	2
+impower-8	=IMPOWER("-8",1/3)	-	1+1.73205080756888i
+impower-9	=IMPOWER("abc",2)	-	#NUM!
+impower-10	=IMPOWER("1+i","a")	-	#VALUE!
+impower-11	=IMPOWER("1+i",1E10)	-	#NUM!
+impower-12	=IMPOWER("1+2j",2)	-	-3+4j
+impower-13	=IMPOWER("2",10)	-	1024
+impower-x0	=IMPOWER(A1,2)	A1=#N/A	#N/A

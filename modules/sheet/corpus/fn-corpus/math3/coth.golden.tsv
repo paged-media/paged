@@ -1,0 +1,10 @@
+# COTH(number).
+# id	formula	setup	expected
+coth-0	=COTH(2)	-	1.03731472072755
+coth-1	=COTH(-0.5)	-	-2.16395341373865
+coth-2	=COTH(1E-5)	-	100000.000003333
+coth-3	=COTH(50)	-	1
+coth-err0	=COTH(0)	-	#DIV/0!
+coth-err1	=COTH(A1)	A1=#N/A	#N/A
+coth-array	=SUM(COTH({0.5,1.5,-2}))	-	2.23143008599362
+coth-text	=COTH("abc")	-	#VALUE!

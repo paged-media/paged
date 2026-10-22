@@ -1,0 +1,16 @@
+# BIN2DEC(number).
+# id	formula	setup	expected
+bin2dec-0	=BIN2DEC(1100100)	-	100
+bin2dec-1	=BIN2DEC(1111111111)	-	-1
+bin2dec-2	=BIN2DEC(1000000000)	-	-512
+bin2dec-3	=BIN2DEC(0)	-	0
+bin2dec-4	=BIN2DEC("101")	-	5
+bin2dec-5	=BIN2DEC(10000000000)	-	#NUM!
+bin2dec-6	=BIN2DEC(2)	-	#NUM!
+bin2dec-7	=BIN2DEC(-1)	-	#NUM!
+bin2dec-8	=BIN2DEC(1.5)	-	#NUM!
+bin2dec-9	=BIN2DEC("")	-	0
+bin2dec-10	=BIN2DEC(TRUE)	-	#VALUE!
+bin2dec-x0	=BIN2DEC(A1)	A1=#N/A	#N/A
+bin2dec-x1	=SUM(BIN2DEC({1,10,11}))	-	6
+bin2dec-x2	=BIN2DEC(A1)	-	0
