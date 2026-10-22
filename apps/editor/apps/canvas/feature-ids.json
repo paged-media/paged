@@ -3,10 +3,10 @@
   "version": 1,
   "counts": {
     "chrome": 4,
-    "command": 335,
+    "command": 338,
     "keybinding": 88,
     "menu": 257,
-    "panel": 121,
+    "panel": 122,
     "tool": 72
   },
   "features": [
@@ -1402,6 +1402,21 @@
     },
     {
       "id": "command:paged.help.reportIssue",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.host.back",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.host.close",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.host.submit",
       "kind": "command",
       "owner": "editor"
     },
@@ -4002,6 +4017,11 @@
     },
     {
       "id": "panel:paged.tabs",
+      "kind": "panel",
+      "owner": "editor"
+    },
+    {
+      "id": "panel:paged.template",
       "kind": "panel",
       "owner": "editor"
     },
