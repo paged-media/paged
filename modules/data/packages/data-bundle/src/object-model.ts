@@ -42,6 +42,7 @@ import {
 import { objectsOf } from "./property-lane";
 import type { PropertyBindingSpec } from "./property-session";
 import type { DataSourceSession } from "./session";
+import { dataTemplateFields, inspectionCommands } from "./template-fields";
 
 export const PLUGIN_ID = "media.paged.data";
 
@@ -632,6 +633,11 @@ export function contributeObjectModel(
   if (!host.supports("contribute.objectModel@1")) return null;
   return host.contribute.objectModel({
     kinds: kinds(host, session),
-    commands: commands(host, session, panels),
+    commands: [
+      ...commands(host, session, panels),
+      ...inspectionCommands(session),
+    ],
+    // Plan G3: the parts of the data a template opens to a filler.
+    templateFields: dataTemplateFields(session),
   });
 }
