@@ -57,3 +57,17 @@ registry has a row for template fill.
 
 - [ADR 274](274-the-editor-profile-is-runtime-data.md) — the profile and its presets
 - [ADR 275](275-features-gate-what-is-offered.md) — the features the fill preset switches off
+
+## Amendment — 2026-10-22: outlines and the Replace button (D3); no separate fill context (D4)
+
+The overlay `paged.template-fields` (`apps/canvas/src/overlays/template-fields.tsx`) outlines
+every field of the template, dashed, with its label, for an author and a filler; a picture
+field carries a Replace button, the overlay's one interactive part (the bytes go through
+`replaceImageBytes`, checked by the engine). An editor and a viewer see the document as it
+prints. The label and button keep their size on screen at any zoom. Evidence:
+`apps/canvas/test/panels/template-field-outlines.dom.test.tsx`.
+
+The plan's fill edit context (D4) is not built as an edit context: the `template-fill` preset
+registers only the select, type, hand and zoom tools and removes the context toolbar, and the
+engine refuses what the template does not permit (engine ADR 1001), so an edit context would
+restate both. The Consequences above are updated accordingly.
