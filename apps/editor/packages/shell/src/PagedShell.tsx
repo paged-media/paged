@@ -255,6 +255,9 @@ export interface PagedShellProps {
   /** The session's role and overrides, handed to the engine (engine ADR
    *  1001). Omitted = an editor, the engine's default. */
   sessionPolicy?: SessionPolicy;
+  /** The host keeps the role: a role change (Preview as filler, Author
+   *  template) goes here and comes back as `sessionPolicy`. */
+  onSessionRoleChange?: (role: SessionPolicy["role"]) => void;
 }
 
 /**
@@ -280,6 +283,7 @@ export function PagedShell({
   canvasFurniture,
   features,
   sessionPolicy,
+  onSessionRoleChange,
   children,
 }: PropsWithChildren<PagedShellProps>) {
   const chromeRegions = chromeRegionsOf(regions, canvasFurniture);
@@ -287,7 +291,12 @@ export function PagedShell({
     <DebugErrorBoundary label="paged-shell">
       <CanvasClientProvider client={client}>
         <ChromeRegionsProvider value={chromeRegions}>
-          <SessionPolicyProvider policy={sessionPolicy ?? DEFAULT_SESSION}>
+          <SessionPolicyProvider
+            policy={sessionPolicy ?? DEFAULT_SESSION}
+            {...(onSessionRoleChange
+              ? { onRoleChange: onSessionRoleChange }
+              : {})}
+          >
             <ThemeProvider>
               <CameraProvider>
                 <DocumentProvider>
