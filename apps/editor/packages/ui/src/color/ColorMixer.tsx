@@ -32,6 +32,8 @@
 // split chip; the first edit seeds a neutral default and the commit
 // write-replaces across the selection (the binding fan-out).
 
+import { useStrings, type Strings } from "@paged-media/strings";
+import { COLOR } from "../messages";
 import { useMemo, useState, type CSSProperties } from "react";
 
 import { Segment } from "@paged-media/panel-kit";
@@ -74,17 +76,24 @@ export interface ColorMixerProps {
 const CHANNEL_NAMES: Readonly<
   Record<string, Readonly<Record<string, string>>>
 > = {
-  CMYK: { c: "Cyan", m: "Magenta", y: "Yellow", k: "Black" },
-  RGB: { r: "Red", g: "Green", b: "Blue" },
-  LAB: { l: "Lightness", a: "a (green to red)", b: "b (blue to yellow)" },
-  HSB: { h: "Hue", s: "Saturation", b: "Brightness" },
-  Gray: { k: "Gray" },
+  CMYK: { c: COLOR.cyan, m: COLOR.magenta, y: COLOR.yellow, k: COLOR.black },
+  RGB: { r: COLOR.red, g: COLOR.green, b: COLOR.blue },
+  LAB: { l: COLOR.lightness, a: COLOR.greenToRed, b: COLOR.blueToYellow },
+  HSB: { h: COLOR.hue, s: COLOR.saturation, b: COLOR.brightness },
+  Gray: { k: COLOR.gray },
 };
-function channelName(tab: MixerTab, key: string, label: string): string {
-  return CHANNEL_NAMES[tab]?.[key] ?? label;
+function channelName(
+  strings: Strings,
+  tab: MixerTab,
+  key: string,
+  label: string,
+): string {
+  const name = CHANNEL_NAMES[tab]?.[key];
+  return name ? strings.t(name) : label;
 }
 
 export function ColorMixer(props: ColorMixerProps) {
+  const strings = useStrings();
   const { value, onChange, onCommit, onAddSwatch, onApply } = props;
   const showTint = props.showTint ?? true;
   const [tab, setTab] = useState<MixerTab>(value?.space ?? "CMYK");
@@ -216,7 +225,7 @@ export function ColorMixer(props: ColorMixerProps) {
           {compute.outOfGamut && !mixed && (
             <span
               data-gamut="out"
-              title="Out of gamut for the document's CMYK working space"
+              title={strings.t(COLOR.outOfGamut)}
               style={{
                 color: "var(--status-review)",
                 fontSize: 12,
@@ -228,7 +237,7 @@ export function ColorMixer(props: ColorMixerProps) {
           )}
           <div
             data-mixer-preview
-            title={mixed ? "Mixed selection" : compute.rgbHex}
+            title={mixed ? strings.t(COLOR.mixedSelection) : compute.rgbHex}
             style={{
               width: 26,
               height: 18,
@@ -261,7 +270,7 @@ export function ColorMixer(props: ColorMixerProps) {
             </span>
           ) : (
             <NumberInput
-              aria-label={channelName(tab, ch.key, ch.label)}
+              aria-label={channelName(strings, tab, ch.key, ch.label)}
               value={displayed[i] ?? 0}
               min={ch.min}
               max={ch.max}
@@ -300,7 +309,7 @@ export function ColorMixer(props: ColorMixerProps) {
             <span style={{ fontSize: 11, opacity: 0.6 }}>—</span>
           ) : (
             <NumberInput
-              aria-label="Tint (%)"
+              aria-label={strings.t(COLOR.tint)}
               value={value?.tint ?? 100}
               min={0}
               max={100}
@@ -323,7 +332,7 @@ export function ColorMixer(props: ColorMixerProps) {
               onClick={() => value && onApply(value)}
               style={footBtn}
             >
-              Apply
+              {strings.t(COLOR.apply)}
             </button>
           )}
           {onAddSwatch && (
@@ -334,7 +343,7 @@ export function ColorMixer(props: ColorMixerProps) {
               onClick={() => value && onAddSwatch(valueToSwatchSpec(value))}
               style={footBtn}
             >
-              + Add to Swatches
+              {strings.t(COLOR.addToSwatches)}
             </button>
           )}
         </div>

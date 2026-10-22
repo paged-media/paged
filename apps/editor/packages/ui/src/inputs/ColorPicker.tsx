@@ -24,6 +24,8 @@
 // the text-driven commit path is unchanged; the popover-with-
 // swatch-grid stays the v2 seam.
 
+import { useStrings } from "@paged-media/strings";
+import { COLOR } from "../messages";
 import { useState } from "react";
 import { Icon } from "@paged-media/shell";
 
@@ -39,6 +41,7 @@ export interface ColorPickerProps {
 }
 
 export function ColorPicker(props: ColorPickerProps) {
+  const strings = useStrings();
   const { value, onCommit, palette, disabled = false } = props;
   const [open, setOpen] = useState(false);
   const [text, setText] = useState<string>(value ?? "");
@@ -66,7 +69,7 @@ export function ColorPicker(props: ColorPickerProps) {
           className="h-4 w-4 shrink-0 rounded border border-input"
           style={{ background: preview ?? "transparent" }}
           aria-hidden="true"
-          title={value ?? "no fill"}
+          title={value ?? strings.t(COLOR.noFill)}
         />
         <span
           className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-left text-xs"
@@ -122,7 +125,7 @@ export function ColorPicker(props: ColorPickerProps) {
                 (e.target as HTMLInputElement).blur();
               }
             }}
-            aria-label="swatch reference"
+            aria-label={strings.t(COLOR.swatchReference)}
           />
         </div>
       )}

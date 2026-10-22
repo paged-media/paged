@@ -26,6 +26,8 @@
 // refusing a bare GET as not same-origin, or not a route — means a proxy
 // that serves the editor's POSTs.
 
+import { t } from "@paged-media/strings";
+import { AI } from "./messages";
 import { useEffect, useSyncExternalStore } from "react";
 
 import { AI_PROXY_PATH } from "./editor-ai";
@@ -104,3 +106,8 @@ export function useAiAvailability(): AiAvailability {
 /** The words an ask affordance shows when the service is unavailable. */
 export const AI_UNAVAILABLE_TEXT =
   "Claude is not available here: this deployment has no AI service.";
+
+/** {@link AI_UNAVAILABLE_TEXT} in the editor's locale. */
+export function aiUnavailableText(): string {
+  return t(AI.unavailable);
+}

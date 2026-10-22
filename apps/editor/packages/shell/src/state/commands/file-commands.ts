@@ -21,6 +21,8 @@
 // picker and (3h+) the Cmd+K palette both resolve through this
 // contribution so there's a single load path.
 
+import { t } from "@paged-media/strings";
+import { COMMANDS, LOAD, REPLACE } from "../messages";
 import { getAiAvailability } from "../../ai/availability";
 import { createBlankDocument, loadDocumentFile } from "../document-loader";
 import { importReplaceAllowed, setPendingImportSource } from "../import-source";
@@ -54,11 +56,11 @@ export function buildNewDocumentCommand(options: {
 }): CommandContribution {
   return {
     id: PAGED_FILE_NEW,
-    title: "New document",
+    title: t(COMMANDS.newDocument),
     category: "File",
     handler: async (paged) => {
       const editor = paged as PagedEditor;
-      if (!(await confirmDiscard(editor, "Creating a new document"))) return;
+      if (!(await confirmDiscard(editor, t(REPLACE.creatingNew)))) return;
       await mintBlankDocument(
         editor,
         options.defaultSizePt ?? LETTER_PT,
@@ -133,7 +135,7 @@ export function buildOpenIdmlCommand(options: {
     // the importer registry, so this door opens every registered format
     // (.idml, .svg, .xlsx, images, .docx, …). Command id keeps the historic
     // name for test/config stability.
-    title: "Open…",
+    title: t(COMMANDS.open),
     category: "File",
     handler: async (paged) => {
       const file = await options.pickFile();
@@ -193,7 +195,8 @@ export async function openFile(
   // gesture the user may abandon anyway, and a plugin importer does
   // not necessarily replace the document — paged.sheet's .xlsx adds
   // a frame. This branch is the one that always replaces.
-  if (!(await confirmDiscard(editor, `Opening ${file.name}`))) return;
+  if (!(await confirmDiscard(editor, t(REPLACE.opening, { name: file.name }))))
+    return;
   await openDocumentFile(editor, file, sinks);
 }
 
@@ -331,8 +334,11 @@ async function runImporter(
       return "declined";
     }
     sinks.pushWarning(
-      `import of ${file.name} via ${importer.title} failed: ` +
-        (err instanceof Error ? err.message : String(err)),
+      t(LOAD.importFailed, {
+        name: file.name,
+        importer: importer.title,
+        error: err instanceof Error ? err.message : String(err),
+      }),
     );
     return "failed";
   } finally {
@@ -408,7 +414,7 @@ export function buildNewFromBriefCommand(
 ): CommandContribution {
   return {
     id: PAGED_FILE_NEW_FROM_BRIEF,
-    title: "New document from a brief…",
+    title: t(COMMANDS.newFromBrief),
     category: "File",
     when: () => getAiAvailability() !== "unavailable",
     handler: () => {

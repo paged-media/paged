@@ -24,6 +24,7 @@
 // it invokes the Tab chrome-hide command).
 
 import type { ReactNode } from "react";
+import { useStrings } from "@paged-media/strings";
 
 import { Icon, hasIcon } from "../icons";
 import { useRegistries } from "../state/registries-context";
@@ -34,6 +35,7 @@ import {
   useOptionalEditContextStack,
   type EditContextFrame,
 } from "../state/edit-context-stack";
+import { CONTEXT_TOOLBAR } from "./messages";
 
 export interface ContextToolbarProps {
   /** Editor handle threaded into the mode's toolbar segment. */
@@ -43,6 +45,7 @@ export interface ContextToolbarProps {
 }
 
 export function ContextToolbar({ paged, right }: ContextToolbarProps) {
+  const strings = useStrings();
   const { mode } = useWorkflowMode();
   const registries = useRegistries();
   const { commands } = registries;
@@ -93,7 +96,7 @@ export function ContextToolbar({ paged, right }: ContextToolbarProps) {
         {right != null && <span style={sepStyle} />}
         <ViewPill
           name="ui-expand"
-          title="Focus mode (⌘\, or Tab on the canvas)"
+          title={strings.t(CONTEXT_TOOLBAR.focusMode)}
           onClick={() => void commands.invoke("paged.chrome.toggleAll")}
         />
       </div>
@@ -148,6 +151,7 @@ export function contextSegmentModel(
  * is broken.
  */
 function ContextSegment({ frame }: { frame: EditContextFrame }) {
+  const strings = useStrings();
   const tools = useRegistryView(useRegistries().tools);
   const tool = useOptionalTool();
   const model = contextSegmentModel(frame, (id) => {
@@ -187,10 +191,12 @@ function ContextSegment({ frame }: { frame: EditContextFrame }) {
       ))}
       {model.noTools && (
         <span style={{ opacity: 0.7, whiteSpace: "nowrap" }}>
-          no canvas tools apply here
+          {strings.t(CONTEXT_TOOLBAR.noTools)}
         </span>
       )}
-      <span style={{ opacity: 0.6, whiteSpace: "nowrap" }}>Esc to leave</span>
+      <span style={{ opacity: 0.6, whiteSpace: "nowrap" }}>
+        {strings.t(CONTEXT_TOOLBAR.escToLeave)}
+      </span>
     </span>
   );
 }

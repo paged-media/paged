@@ -30,6 +30,8 @@
 // import from `apps/canvas/src/ui/` without dragging shell into
 // canvas internals.
 
+import { t, useStrings } from "@paged-media/strings";
+import { COMMANDS, LOAD } from "./state/messages";
 import React, {
   useEffect,
   useEffectEvent,
@@ -558,11 +560,12 @@ function ShellChrome({
       bootDocRef.current = false;
       setWarnings((prev) => [
         ...prev,
-        `Could not create the initial document: ${String(err)}`,
+        t(LOAD.initialFailed, { error: String(err) }),
       ]);
     });
   }, [initialDocumentSizePt, paged, handle, setStatus]);
   const sabSupported = supportsSharedArrayBuffer();
+  const strings = useStrings();
 
   // Editor-ops — the worker-message subscriber below needs the live
   // document handle (to refresh the page grid on page-structure
@@ -753,13 +756,13 @@ function ShellChrome({
     const disposables = [
       registries.commands.register({
         id: "paged.chrome.toggleAll",
-        title: "Toggle panels and tool rail",
+        title: t(COMMANDS.toggleAll),
         category: "View",
         handler: (paged) => onToggleAll(paged as PagedEditor),
       }),
       registries.commands.register({
         id: "paged.chrome.togglePanels",
-        title: "Toggle panels (keep tool rail)",
+        title: t(COMMANDS.togglePanels),
         category: "View",
         handler: (paged) => onTogglePanels(paged as PagedEditor),
       }),
@@ -890,7 +893,7 @@ function ShellChrome({
                     multiple: false,
                     types: [
                       {
-                        description: "Paged and IDML documents",
+                        description: t(COMMANDS.pickerDocuments),
                         accept: {
                           "application/x-paged+zip": [".paged"],
                           "application/vnd.adobe.indesign-idml-package": [
@@ -1354,11 +1357,7 @@ function ShellChrome({
         !railHidden && <ContextToolbar paged={paged} />}
 
       {!sabSupported && (
-        <div style={warningStyle}>
-          Some features are running in a reduced mode. Reload the page; if it
-          persists, the page is not being served with the headers the editor
-          needs (cross-origin isolation).
-        </div>
+        <div style={warningStyle}>{strings.t(LOAD.reducedMode)}</div>
       )}
 
       {warnings.length > 0 && (

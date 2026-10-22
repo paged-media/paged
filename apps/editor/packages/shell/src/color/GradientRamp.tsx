@@ -28,6 +28,8 @@
 // diamonds sit between adjacent stops. All positions are 0..=100
 // (the wire's locationPct/midpointPct units).
 
+import { useStrings } from "@paged-media/strings";
+import { SURFACE } from "../messages";
 import { useRef, type CSSProperties, type PointerEvent } from "react";
 
 export interface RampStop {
@@ -81,6 +83,7 @@ export function rampCss(stops: RampStop[], kind?: string): string {
 }
 
 export function GradientRamp(props: GradientRampProps) {
+  const strings = useStrings();
   const {
     stops,
     kind,
@@ -173,7 +176,10 @@ export function GradientRamp(props: GradientRampProps) {
             type="button"
             data-ramp-stop={i}
             data-selected={selectedIndex === i ? "true" : undefined}
-            title={`${stopLabel(s.stopColorRef, props.stopName)} at ${s.locationPct.toFixed(0)}%`}
+            title={strings.t(SURFACE.stopAt, {
+              stop: stopLabel(s.stopColorRef, props.stopName),
+              location: s.locationPct.toFixed(0),
+            })}
             onPointerDown={beginDrag("stop", i)}
             style={{
               ...thumbStyle,
@@ -198,7 +204,7 @@ export function GradientRamp(props: GradientRampProps) {
               key={`mid-${i}`}
               type="button"
               data-ramp-midpoint={i}
-              title={`midpoint ${mid.toFixed(0)}%`}
+              title={strings.t(SURFACE.midpoint, { location: mid.toFixed(0) })}
               onPointerDown={beginDrag("mid", i)}
               style={{
                 ...midStyle,

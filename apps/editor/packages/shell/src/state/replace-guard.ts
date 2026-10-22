@@ -43,6 +43,8 @@
 // no React tree: OK discards, Cancel keeps. Asking nothing is never an
 // option.
 
+import { t } from "@paged-media/strings";
+import { REPLACE } from "./messages";
 import { cancelPendingPlacement } from "./pending-placement";
 
 /** The user's answer to the replace question. */
@@ -157,11 +159,15 @@ const IS_MAC =
  *  save chord of THIS platform (F-05: it said Cmd+S everywhere). */
 export function replaceConfirmText(request: ReplaceRequest): string {
   const who = request.requester
-    ? `${request.requester} wants to open ${request.documentName ?? "a document"} in place of this document. `
+    ? t(REPLACE.requester, {
+        requester: request.requester,
+        document: request.documentName ?? t(REPLACE.aDocument),
+      })
     : "";
   return (
-    `This document has unsaved edits. ${who}${request.action} will discard them.\n\n` +
-    `Save with ${IS_MAC ? "⌘S" : "Ctrl+S"} first, or continue to discard.`
+    t(REPLACE.unsaved, { who, action: request.action }) +
+    "\n\n" +
+    t(REPLACE.saveFirst, { chord: IS_MAC ? "⌘S" : "Ctrl+S" })
   );
 }
 

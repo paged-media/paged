@@ -27,6 +27,8 @@
 // it is never a keyboard trap (WCAG 2.1.2); Cmd/Ctrl+\ hides the chrome
 // from anywhere.
 
+import { t } from "@paged-media/strings";
+import { SURFACE } from "../messages";
 import type { FocusEvent, PointerEvent } from "react";
 
 import { CANVAS_SURFACE_ATTR } from "./key-ownership";
@@ -72,7 +74,10 @@ export function canvasHasPointerFocus(): boolean {
 export const canvasViewportSurfaceProps = {
   tabIndex: 0,
   role: "application",
-  "aria-label": "Document canvas",
+  // Read when the props are spread, so it follows the editor's locale.
+  get "aria-label"() {
+    return t(SURFACE.documentCanvas);
+  },
   [CANVAS_SURFACE_ATTR]: "viewport",
   onPointerDownCapture(e: PointerEvent<HTMLElement>) {
     const viewport = e.currentTarget;

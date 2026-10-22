@@ -33,6 +33,7 @@
 // and a hidden `<input type="file">` for the Playwright suite cover it.
 
 import { type ReactNode, useEffect, useRef, useState } from "react";
+import { useStrings } from "@paged-media/strings";
 
 import { Icon } from "../icons";
 import { useDocumentMeta } from "../catalog/use-collection";
@@ -44,6 +45,7 @@ import { MenuBar, prettyKey } from "./MenuBar";
 import { notifyPalette } from "./CommandPalette";
 import { useChromeRegions } from "../state/chrome-regions";
 import { RegionItems } from "./RegionItems";
+import { HEADER } from "./messages";
 
 export interface HeaderProps {
   onFile: (file: File) => void;
@@ -122,12 +124,13 @@ export function Header({ onFile, headerExtras, status }: HeaderProps) {
 
 /** What is open, and its state in one dot. */
 function DocumentChip({ status }: { status?: string }) {
+  const strings = useStrings();
   const { handle, sourceName } = useDocument();
   const meta = useDocumentMeta();
   const ready = !status || /ready/i.test(status);
   const name = handle
-    ? meta?.documentName || sourceName || "Untitled document"
-    : "No document";
+    ? meta?.documentName || sourceName || strings.t(HEADER.untitled)
+    : strings.t(HEADER.noDocument);
   // U14 — honest wording: dirty means edits since load; nothing writes
   // to disk on its own, so neither state may claim a save happened.
   const state = !ready
@@ -135,8 +138,8 @@ function DocumentChip({ status }: { status?: string }) {
     : !handle
       ? null
       : meta?.dirty
-        ? "Edited — not saved"
-        : "No unsaved edits";
+        ? strings.t(HEADER.edited)
+        : strings.t(HEADER.noUnsavedEdits);
   const dot = !ready
     ? "var(--status-review)"
     : meta?.dirty
@@ -206,6 +209,7 @@ function Brand() {
  *  It fills the space between the menus and the right cluster up to
  *  460 px and, given less than 220 px, collapses to a search icon. */
 function CommandTrigger() {
+  const strings = useStrings();
   const ref = useRef<HTMLDivElement | null>(null);
   const [compact, setCompact] = useState(false);
   useEffect(() => {
@@ -226,8 +230,14 @@ function CommandTrigger() {
         type="button"
         data-command-trigger
         data-compact={compact ? "true" : undefined}
-        aria-label={`Search or ask (${prettyKey("cmd+k")})`}
-        title={compact ? `Search or ask (${prettyKey("cmd+k")})` : undefined}
+        aria-label={strings.t(HEADER.searchOrAskKey, {
+          key: prettyKey("cmd+k"),
+        })}
+        title={
+          compact
+            ? strings.t(HEADER.searchOrAskKey, { key: prettyKey("cmd+k") })
+            : undefined
+        }
         onClick={() => notifyPalette("open")}
         style={{
           display: "flex",
@@ -258,7 +268,7 @@ function CommandTrigger() {
                 textOverflow: "ellipsis",
               }}
             >
-              Search or ask…
+              {strings.t(HEADER.searchOrAsk)}
             </span>
             <kbd
               style={{
@@ -282,13 +292,18 @@ function CommandTrigger() {
 
 /** Sun/moon — dark is the primary surface, light one click away. */
 export function ThemeToggle() {
+  const strings = useStrings();
   const { theme, toggleTheme } = useTheme();
   const [hover, setHover] = useState(false);
   return (
     <button
       type="button"
       data-theme-toggle
-      title={theme === "dark" ? "Light mode" : "Dark mode"}
+      title={
+        theme === "dark"
+          ? strings.t(HEADER.lightMode)
+          : strings.t(HEADER.darkMode)
+      }
       onClick={toggleTheme}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
