@@ -27,7 +27,7 @@
 
 import { defineMessages, defineTranslations } from "@paged-media/strings";
 
-import de from "../locales/de.json";
+import de from "../locales/de.json" with { type: "json" };
 
 /** Panel titles, runtime command titles, the importer. */
 export const COMMANDS = defineMessages("data.commands", {

@@ -21,7 +21,7 @@
 
 import { defineTranslations } from "@paged-media/strings";
 
-import de from "../locales/de.json";
+import de from "../locales/de.json" with { type: "json" };
 // Every message the German covers, so a catalogue never names a key
 // that is not defined.
 import "./messages";

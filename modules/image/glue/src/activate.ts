@@ -46,7 +46,7 @@ import {
 import { contributeMenu } from "./menu";
 import { defineMessages, defineTranslations, t } from "@paged-media/strings";
 
-import de from "../locales/de.json";
+import de from "../locales/de.json" with { type: "json" };
 
 import manifest from "../manifest.json";
 
