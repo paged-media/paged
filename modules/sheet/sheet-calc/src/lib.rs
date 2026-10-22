@@ -75,6 +75,7 @@ macro_rules! perf_count {
     }};
 }
 
+mod accel;
 pub mod argview;
 pub mod dirty;
 pub mod eval;
@@ -171,6 +172,9 @@ pub struct Engine {
     /// owned region + every owned cell → its anchor. Off-model bookkeeping; the
     /// spilled cells themselves are plain value cells in [`Engine::model`].
     spills: SpillState,
+    /// Whether recalcs use the range accelerators (`accel`, sheet ADR 512).
+    /// On by default; off only to prove the fast paths equal the kernels.
+    accelerate: bool,
 }
 
 impl Engine {
@@ -192,7 +196,17 @@ impl Engine {
             config,
             pass: 0,
             spills: SpillState::new(),
+            accelerate: true,
         }
+    }
+
+    /// Turn the range accelerators (column snapshots, anchored prefix
+    /// aggregates, exact-match indexes — sheet ADR 512) on or off for later
+    /// recalcs. They are on by default and never change a result; the switch
+    /// exists so tests can compare the accelerated and the plain kernel
+    /// paths bit for bit.
+    pub fn set_accelerators(&mut self, on: bool) {
+        self.accelerate = on;
     }
 
     /// Read-only access to the spill ledger (test/introspection seam — the
@@ -517,6 +531,9 @@ impl Engine {
         // would keep the fixpoint alive forever whenever any volatile exists).
         self.dirty.reseed_volatile(&self.graph);
         perf_count!(recalcs, 1);
+        // Column snapshots and their indexes live for this recalc only; every
+        // write below keeps them exact (`accel::note_write`).
+        let _accel = accel::Scope::enter(&self.model, self.accelerate);
 
         // Bounded fixpoint: each iteration drains the current dirty cut; spill
         // materialization writes engine-owned cells and dirties their
@@ -615,18 +632,31 @@ impl Engine {
     /// Evaluate one ordered cell: the spill path for a spilling root, the
     /// scalar path otherwise (a former anchor releases its old region).
     fn evaluate_in_order(&mut self, cref: CellRef, changed: &mut Vec<CellRef>) {
-        if self.cell_spills(cref) {
+        // One cell lookup decides the path and feeds the evaluation.
+        let fid = self.formula_id(cref);
+        if fid.is_some_and(|f| self.formula_spills(cref, f)) {
             self.recompute_spill_anchor(cref, changed);
         } else {
             // A non-spilling formula that USED to be a spill anchor must
             // release its old region (e.g. edited from SEQUENCE to a scalar
             // formula).
             self.clear_spill_region(cref, changed);
-            let new_value = self.evaluate_cell(cref);
+            let new_value = match fid {
+                Some(f) => self.evaluate_formula(cref, f),
+                None => self.evaluate_cell(cref),
+            };
             if self.commit_value(cref, new_value) {
                 changed.push(cref);
             }
         }
+    }
+
+    /// The formula id stored at `cref`, if it holds a formula.
+    fn formula_id(&self, cref: CellRef) -> Option<sheet_core::FormulaId> {
+        self.model
+            .sheet(cref.sheet)?
+            .cell(cref.row, cref.col)?
+            .formula
     }
 
     /// Evaluate a single formula cell's expression (a literal cell evaluates
@@ -642,6 +672,11 @@ impl Engine {
         let Some(fid) = cell.formula else {
             return cell.value.clone();
         };
+        self.evaluate_formula(cref, fid)
+    }
+
+    /// Evaluate the formula `fid` stored at `cref`.
+    fn evaluate_formula(&self, cref: CellRef, fid: sheet_core::FormulaId) -> CellValue {
         let Some(f) = self.model.formula(fid) else {
             return CellValue::Error(CellError::Ref);
         };
@@ -752,14 +787,9 @@ impl Engine {
     /// Whether the formula at `cref` has a *spilling* root (a `returns_array`
     /// function call or an array literal — the T1 ruling
     /// `sheet.calc.spill.materialize`). A literal/non-formula cell never spills.
-    fn cell_spills(&self, cref: CellRef) -> bool {
+    /// `cref` is known to hold the formula `fid`.
+    fn formula_spills(&self, cref: CellRef, fid: sheet_core::FormulaId) -> bool {
         let Some(ws) = self.model.sheet(cref.sheet) else {
-            return false;
-        };
-        let Some(cell) = ws.cell(cref.row, cref.col) else {
-            return false;
-        };
-        let Some(fid) = cell.formula else {
             return false;
         };
         // A legacy array formula over more than one cell fills its area
@@ -938,6 +968,7 @@ impl Engine {
         if prior.as_ref() == Some(&value) {
             return;
         }
+        accel::note_write(cell, &value);
         ws.set_cell(
             cell.row,
             cell.col,
@@ -964,6 +995,7 @@ impl Engine {
             }
             if let Some(ws) = self.model.sheet_mut(c.sheet) {
                 if ws.cell(c.row, c.col).is_some() {
+                    accel::note_write(c, &CellValue::Empty);
                     ws.remove_cell(c.row, c.col);
                     changed.push(c);
                 }
@@ -978,17 +1010,18 @@ impl Engine {
         let Some(ws) = self.model.sheet_mut(cref.sheet) else {
             return false;
         };
-        match ws.cell(cref.row, cref.col) {
+        // One tree descent: compare and overwrite the value in place.
+        match ws.cells.get_mut(&(cref.row, cref.col)) {
             Some(existing) => {
                 if existing.value == value {
                     return false;
                 }
-                let mut updated = existing.clone();
-                updated.value = value;
-                ws.set_cell(cref.row, cref.col, updated);
+                accel::note_write(cref, &value);
+                existing.value = value;
                 true
             }
             None => {
+                accel::note_write(cref, &value);
                 // A cycle/eval result for a cell that lost its record — store a
                 // bare value cell (rare; keeps the engine total).
                 ws.set_cell(

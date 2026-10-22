@@ -21,7 +21,11 @@ each published canary added is under [Releases](#releases).
   (`document.onDidOpen`).
 - **Calculation.** 263 registered functions, all implemented, among them `LET`, `LAMBDA` and its
   helpers; dynamic arrays that spill and nest; Excel tables with structured references;
-  incremental recalculation with an interval index for range dependencies; dependents of
+  incremental recalculation with an interval index for range dependencies, and range
+  accelerators within a recalc (column snapshots, anchored prefix aggregates for SUM/COUNT/
+  COUNTA/AVERAGE/MIN/MAX, exact-match indexes for VLOOKUP/MATCH/XMATCH/XLOOKUP/COUNTIF/SUMIF,
+  ADR 512) that never change a value — a 10,000-row running total recalculates in about 4 ms
+  and 10,000 lookups into an edited 10,000-row table in about 9 ms natively; dependents of
   volatile cells recalculate with them; iterative calculation when the workbook's `calcPr`
   asks for it; `NOW` and `TODAY` follow the host clock. Number formats render in five display
   locales. Expected values are recorded from Excel and replayed in CI: 1,470 of 1,485 function
