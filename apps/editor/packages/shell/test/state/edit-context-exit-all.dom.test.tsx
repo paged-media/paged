@@ -63,7 +63,10 @@ describe("edit-context exitAll", () => {
     const { stack } = mount();
     const calls: string[] = [];
     act(() => {
-      stack().enter(contribution(calls) as never, { kind: "textFrame", id: "f1" } as never);
+      stack().enter(
+        contribution(calls) as never,
+        { kind: "textFrame", id: "f1" } as never,
+      );
     });
     act(() => stack().exitAll({ commit: true }));
     expect(calls).toEqual(["commit", "exit"]);
@@ -74,7 +77,10 @@ describe("edit-context exitAll", () => {
     const { stack } = mount();
     const calls: string[] = [];
     act(() => {
-      stack().enter(contribution(calls) as never, { kind: "textFrame", id: "f1" } as never);
+      stack().enter(
+        contribution(calls) as never,
+        { kind: "textFrame", id: "f1" } as never,
+      );
     });
     act(() => stack().exitAll());
     expect(calls).toEqual(["exit"]);

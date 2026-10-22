@@ -1214,7 +1214,15 @@ mod tests {
         assert_eq!(w.cols, vec![0, 7, 8, 9]);
         assert_eq!(w.frozen_cols, 1);
         // A top-left inside the frozen band starts the body right after it.
-        let w = frame_window(&m, s, &FrameWindowSpec { top_row: 0, left_col: 0, ..sp });
+        let w = frame_window(
+            &m,
+            s,
+            &FrameWindowSpec {
+                top_row: 0,
+                left_col: 0,
+                ..sp
+            },
+        );
         assert_eq!(w.rows, vec![0, 1, 2, 3, 4]);
         assert_eq!(w.cols, vec![0, 1, 2, 3]);
     }
@@ -1238,12 +1246,22 @@ mod tests {
             ws.col_widths.insert(5, 4.0);
             ws.row_heights.insert(2, 40.0);
         }
-        for (r0, c0, w, h) in [(0, 0, 300.0, 200.0), (1, 2, 123.4, 99.9), (5, 4, 1000.0, 20.0)] {
+        for (r0, c0, w, h) in [
+            (0, 0, 300.0, 200.0),
+            (1, 2, 123.4, 99.9),
+            (5, 4, 1000.0, 20.0),
+        ] {
             let fw = frame_window(&m, s, &spec(r0, c0, w, h));
             let scene = grid_scene(&m, s, r0, c0, w, h, &GridOptions::default());
             let vp = &scene.viewport;
-            assert_eq!(fw.rows, (vp.first_row..vp.first_row + vp.rows).collect::<Vec<_>>());
-            assert_eq!(fw.cols, (vp.first_col..vp.first_col + vp.cols).collect::<Vec<_>>());
+            assert_eq!(
+                fw.rows,
+                (vp.first_row..vp.first_row + vp.rows).collect::<Vec<_>>()
+            );
+            assert_eq!(
+                fw.cols,
+                (vp.first_col..vp.first_col + vp.cols).collect::<Vec<_>>()
+            );
             assert!((fw.width_pt - vp.x_offsets[vp.cols as usize]).abs() < 1e-9);
             assert!((fw.height_pt - vp.y_offsets[vp.rows as usize]).abs() < 1e-9);
         }
@@ -1256,6 +1274,16 @@ mod tests {
         assert!(json.contains("\"colWidthsPt\"") && json.contains("\"partialRow\""));
         let back: FrameWindowSpec =
             serde_json::from_str(r#"{"topRow":3,"leftCol":1,"widthPt":10,"heightPt":20}"#).unwrap();
-        assert_eq!(back, FrameWindowSpec { top_row: 3, left_col: 1, width_pt: 10.0, height_pt: 20.0, freeze_rows: 0, freeze_cols: 0 });
+        assert_eq!(
+            back,
+            FrameWindowSpec {
+                top_row: 3,
+                left_col: 1,
+                width_pt: 10.0,
+                height_pt: 20.0,
+                freeze_rows: 0,
+                freeze_cols: 0
+            }
+        );
     }
 }

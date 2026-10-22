@@ -146,7 +146,8 @@ export function cellOfA1(a1: string): { row: number; col: number } | null {
   const m = /^\$?([A-Za-z]{1,3})\$?([1-9][0-9]{0,6})$/.exec(a1.trim());
   if (!m) return null;
   let col = 0;
-  for (const ch of m[1]!.toUpperCase()) col = col * 26 + (ch.charCodeAt(0) - 64);
+  for (const ch of m[1]!.toUpperCase())
+    col = col * 26 + (ch.charCodeAt(0) - 64);
   const row = Number(m[2]) - 1;
   if (col - 1 > 16383 || row > 1048575) return null;
   return { row, col: col - 1 };
@@ -182,7 +183,10 @@ export function makeBinding(
 }
 
 /** The same binding with some v2 fields changed (pure). */
-export function withView(binding: Binding, options: BindingViewOptions): Binding {
+export function withView(
+  binding: Binding,
+  options: BindingViewOptions,
+): Binding {
   const d = binding.data;
   return makeBinding(d.sheet, d.range, d.contentVersion, d.table, {
     view: { ...d.view, ...options.view },
@@ -278,7 +282,8 @@ function parseView(input: unknown): Partial<FrameView> {
   if (typeof input !== "object" || input === null) return {};
   const v = input as Record<string, unknown>;
   const out: Partial<FrameView> = {};
-  if (typeof v.topLeft === "string" && A1_CELL.test(v.topLeft)) out.topLeft = v.topLeft;
+  if (typeof v.topLeft === "string" && A1_CELL.test(v.topLeft))
+    out.topLeft = v.topLeft;
   if (typeof v.lock === "boolean") out.lock = v.lock;
   return out;
 }
@@ -292,9 +297,14 @@ function parsePrint(input: unknown): Partial<FramePrint> {
   return out;
 }
 
-function parseFreeze(input: unknown): { rows: number; cols: number } | undefined {
+function parseFreeze(
+  input: unknown,
+): { rows: number; cols: number } | undefined {
   if (typeof input !== "object" || input === null) return undefined;
   const f = input as Record<string, unknown>;
-  const ok = (n: unknown) => typeof n === "number" && Number.isInteger(n) && n >= 0;
-  return ok(f.rows) && ok(f.cols) ? { rows: f.rows as number, cols: f.cols as number } : undefined;
+  const ok = (n: unknown) =>
+    typeof n === "number" && Number.isInteger(n) && n >= 0;
+  return ok(f.rows) && ok(f.cols)
+    ? { rows: f.rows as number, cols: f.cols as number }
+    : undefined;
 }
