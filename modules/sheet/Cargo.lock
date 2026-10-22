@@ -922,6 +922,7 @@ dependencies = [
  "sheet-calc",
  "sheet-core",
  "sheet-fn",
+ "sheet-format",
  "sheet-parser",
  "smallvec",
 ]

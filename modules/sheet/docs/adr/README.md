@@ -24,6 +24,7 @@ it stood, for decisions made earlier; their status says so.
 | [508](508-content-addressed-swatches.md) | Workbook colours become swatches at content-addressed ids | Accepted, recorded retroactively 2026-10-02 |
 | [509](509-excel-first-dialect.md) | Excel-first formula dialect; locales are data | Accepted, recorded retroactively 2026-10-02 |
 | [510](510-excel-inside-the-frame.md) | Excel inside the frame: a sheet frame is a window onto the sheet | Accepted 2026-10-22; amends 505 |
+| [511](511-typed-entry-is-excels.md) | A typed cell entry is stored the way Excel stores it | Accepted 2026-10-22 |
 
 The measured comparison behind ADR 501 is [`DECIMAL-SPIKE.md`](../../DECIMAL-SPIKE.md) at the
 repo root. Decisions made in other repositories that this plugin's code rests on are listed
