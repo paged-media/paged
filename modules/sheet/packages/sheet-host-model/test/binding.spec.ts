@@ -26,17 +26,30 @@ import { describe, expect, it } from "bun:test";
 import {
   BINDING_KEY,
   BINDING_VERSION,
+  cellOfA1,
   contentHash,
   makeBinding,
   parseBinding,
+  rangeTopLeft,
+  withView,
 } from "../src";
+
+/** The v2 fields a binding made without options carries. */
+const V2_DEFAULTS = {
+  print: { headings: false, gridlines: false },
+  sizing: "fit" as const,
+};
+/** What a v1 envelope reads as: its range's top-left, locked. */
+function migrated(range: string) {
+  return { ...V2_DEFAULTS, view: { topLeft: rangeTopLeft(range), lock: true } };
+}
 
 describe("sheet_plugin_binding_metadata: key + version", () => {
   it("the binding key is this plugin's own derived namespace", () => {
     expect(BINDING_KEY).toBe("x-paged:media.paged.sheet");
   });
-  it("the envelope version is 1", () => {
-    expect(BINDING_VERSION).toBe(1);
+  it("the envelope version is 2", () => {
+    expect(BINDING_VERSION).toBe(2);
   });
 });
 
@@ -44,8 +57,14 @@ describe("sheet_plugin_binding_metadata: round-trip", () => {
   it("make → parse is the identity for a valid binding", () => {
     const b = makeBinding("Budget 2026", "A1:F40", 12);
     expect(b).toEqual({
-      v: 1,
-      data: { sheet: "Budget 2026", range: "A1:F40", contentVersion: 12 },
+      v: 2,
+      data: {
+        sheet: "Budget 2026",
+        range: "A1:F40",
+        contentVersion: 12,
+        ...V2_DEFAULTS,
+        view: { topLeft: "A1", lock: false },
+      },
     });
     expect(parseBinding(b)).toEqual(b);
   });
@@ -64,8 +83,8 @@ describe("sheet_plugin_binding_metadata: rejects garbage", () => {
     ["a string", "A1:B2"],
     ["an array", [1, 2, 3]],
     [
-      "wrong version",
-      { v: 2, data: { sheet: "S", range: "A1", contentVersion: 1 } },
+      "unknown version",
+      { v: 3, data: { sheet: "S", range: "A1", contentVersion: 1 } },
     ],
     ["missing data", { v: 1 }],
     ["data not an object", { v: 1, data: "A1" }],
@@ -102,8 +121,13 @@ describe("sheet_plugin_binding_metadata: rejects garbage", () => {
       stray: true,
     };
     expect(parseBinding(dirty)).toEqual({
-      v: 1,
-      data: { sheet: "S", range: "A1:B2", contentVersion: 3 },
+      v: 2,
+      data: {
+        sheet: "S",
+        range: "A1:B2",
+        contentVersion: 3,
+        ...migrated("A1:B2"),
+      },
     });
   });
 
@@ -126,8 +150,13 @@ describe("sheet_plugin_binding_metadata: rejects garbage", () => {
       },
     };
     expect(parseBinding(bad)).toEqual({
-      v: 1,
-      data: { sheet: "S", range: "A1:B2", contentVersion: 4 },
+      v: 2,
+      data: {
+        sheet: "S",
+        range: "A1:B2",
+        contentVersion: 4,
+        ...migrated("A1:B2"),
+      },
     });
   });
 
@@ -154,5 +183,78 @@ describe("sheet_plugin_binding_metadata: rejects garbage", () => {
     expect(contentHash({ rows: [{ cells: [{ text: "2" }] }] })).not.toBe(
       contentHash(a),
     );
+  });
+});
+
+describe("sheet_frame_view_binding: v2 view, print, freeze, sizing (ADR 510)", () => {
+  it("a v1 envelope reads as v2 with its range's top-left, locked, measured widths", () => {
+    const v1 = {
+      v: 1,
+      data: { sheet: "S", range: "$c$3:F9", contentVersion: 2 },
+    };
+    expect(parseBinding(v1)?.data).toEqual({
+      sheet: "S",
+      range: "$c$3:F9",
+      contentVersion: 2,
+      view: { topLeft: "C3", lock: true },
+      print: { headings: false, gridlines: false },
+      sizing: "fit",
+    });
+  });
+
+  it("v2 fields round-trip through JSON", () => {
+    const b = makeBinding("Q3", "C14:H30", 5, undefined, {
+      view: { topLeft: "C14", lock: true },
+      print: { headings: true, gridlines: false },
+      freeze: { rows: 1, cols: 2 },
+      sizing: "window",
+    });
+    expect(parseBinding(JSON.parse(JSON.stringify(b)))).toEqual(b);
+  });
+
+  it("malformed v2 fields fall back to their defaults, never the binding", () => {
+    const b = parseBinding({
+      v: 2,
+      data: {
+        sheet: "S",
+        range: "B2:C3",
+        contentVersion: 1,
+        view: { topLeft: "not a cell", lock: "yes" },
+        print: { headings: 1 },
+        freeze: { rows: -1, cols: 0 },
+        sizing: "stretch",
+      },
+    });
+    expect(b?.data.view).toEqual({ topLeft: "B2", lock: false });
+    expect(b?.data.print).toEqual({ headings: false, gridlines: false });
+    expect(b?.data.freeze).toBeUndefined();
+    expect(b?.data.sizing).toBe("fit");
+  });
+
+  it("withView changes only what it is given", () => {
+    const b = makeBinding("S", "A1:B2", 3, { hash: "h", widths: [10] });
+    const moved = withView(b, { view: { topLeft: "D40" } });
+    expect(moved.data.view).toEqual({ topLeft: "D40", lock: false });
+    expect(moved.data.table).toEqual(b.data.table);
+    expect(moved.data.range).toBe("A1:B2");
+    expect(withView(moved, { view: { lock: true } }).data.view).toEqual({
+      topLeft: "D40",
+      lock: true,
+    });
+  });
+
+  it("rangeTopLeft strips sheet prefixes and dollar signs", () => {
+    expect(rangeTopLeft("A1")).toBe("A1");
+    expect(rangeTopLeft("'Q 3'!$b$2:$d$9")).toBe("B2");
+    expect(rangeTopLeft("XFD1048576")).toBe("XFD1048576");
+  });
+
+  it("cellOfA1 reads zero-based row and column, and rejects cells outside the grid", () => {
+    expect(cellOfA1("A1")).toEqual({ row: 0, col: 0 });
+    expect(cellOfA1("$c$14")).toEqual({ row: 13, col: 2 });
+    expect(cellOfA1("XFD1048576")).toEqual({ row: 1048575, col: 16383 });
+    expect(cellOfA1("XFE1")).toBeNull();
+    expect(cellOfA1("A0")).toBeNull();
+    expect(cellOfA1("A1:B2")).toBeNull();
   });
 });

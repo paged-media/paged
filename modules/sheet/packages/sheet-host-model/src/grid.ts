@@ -157,6 +157,36 @@ export interface GridScene {
   fillPreview?: GridSelection | null;
 }
 
+/** What a sheet frame asks the engine for (ADR 510; mirrors Rust
+ *  `sheet_grid::FrameWindowSpec`): the top-left cell it was left at, the
+ *  box the cells must fit, and the frozen split. */
+export interface FrameWindowSpec {
+  topRow: number;
+  leftCol: number;
+  widthPt: number;
+  heightPt: number;
+  freezeRows?: number;
+  freezeCols?: number;
+}
+
+/** The tracks a sheet frame shows (ADR 510; mirrors Rust
+ *  `sheet_grid::FrameWindow`): sheet row and column indices in display
+ *  order (frozen tracks first, hidden rows skipped), their pt sizes, and
+ *  the first track past the print edge that is partly visible. The live
+ *  grid and the page lowering both use this one answer. */
+export interface FrameWindow {
+  rows: number[];
+  cols: number[];
+  rowHeightsPt: number[];
+  colWidthsPt: number[];
+  frozenRows: number;
+  frozenCols: number;
+  widthPt: number;
+  heightPt: number;
+  partialRow: number | null;
+  partialCol: number | null;
+}
+
 /** Tunable geometry for `gridSceneToSvg` — paint-time constants the panel
  *  picks (token-resolved colours, text padding/baseline). All defaults
  *  are sober publishing values; the panel overrides colours from the

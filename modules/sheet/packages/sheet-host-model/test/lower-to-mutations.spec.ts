@@ -143,8 +143,15 @@ describe("sheet_plugin_lower_mutations: phase-1 batch", () => {
     expect(meta.args.key).toBe("x-paged:media.paged.sheet");
     // The value is the JSON-stringified binding envelope, round-trippable.
     expect(JSON.parse(meta.args.value)).toEqual({
-      v: 1,
-      data: { sheet: "Sheet1", range: "A1:B2", contentVersion: 7 },
+      v: 2,
+      data: {
+        sheet: "Sheet1",
+        range: "A1:B2",
+        contentVersion: 7,
+        view: { topLeft: "A1", lock: false },
+        print: { headings: false, gridlines: false },
+        sizing: "fit",
+      },
     });
   });
 

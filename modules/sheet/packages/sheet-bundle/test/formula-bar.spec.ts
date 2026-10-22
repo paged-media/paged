@@ -23,6 +23,7 @@
 // GLUE (§3): no completion/matching logic here — that is pinned pure in
 // sheet-host-model/test/completions.spec.ts. No DOM, no wasm.
 
+import { stubFrameWindow } from "./frame-window-stub";
 import { describe, expect, it } from "bun:test";
 
 import type { BundleHost } from "@paged-media/plugin-api";
@@ -59,6 +60,7 @@ function fakeEngine() {
     }),
     getRangeValues: () => [],
     paginate: () => [],
+    getFrameWindow: stubFrameWindow,
     getGridScene: () => ({
       viewport: {
         firstRow: 0,

@@ -1,6 +1,7 @@
 # ADR 505 — A sheet on the page is a native table; editing happens in a scene-layer grid
 
 - **Status:** Accepted. Recorded retroactively on 2026-10-02 from the code at `71f37d7`.
+  Amended by [ADR 510](510-excel-inside-the-frame.md): the frame is a window onto the sheet.
 - **Scope:** `sheet-lower`, `sheet-grid`, `packages/sheet-host-model` (`lower-to-table.ts`, `lower-to-mutations.ts`, `binding.ts`, `grid.ts`), `packages/sheet-bundle` (`lower.ts`, `activate.ts`, `session.ts`)
 
 ## Context

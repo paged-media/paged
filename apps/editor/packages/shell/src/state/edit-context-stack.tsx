@@ -135,8 +135,11 @@ export interface EditContextStackValue {
    *  contribution's `isDirty` (false when none / no context). Gates the
    *  discard prompt + the §8.0 seamless-undo boundary. */
   isActiveDirty(): boolean;
-  /** Clear the entire stack (selection-clear / document-close). */
-  exitAll(): void;
+  /** Clear the entire stack (selection-clear / document-close). With
+   *  `{ commit: true }` each frame's `onCommit` runs before its `onExit`,
+   *  top to root: leaving by selecting something else keeps the work, as a
+   *  click outside does. Without it only `onExit` runs (document close). */
+  exitAll(opts?: { commit?: boolean }): void;
   /** Is `id` inside the ACTIVE context's write-scope? True when no
    *  context is active (no restriction). The honest selection-space
    *  line — see the module header. */
@@ -256,12 +259,19 @@ export function EditContextStackProvider({ children }: PropsWithChildren) {
   const cancel = useCallback(() => popWith("cancel"), [popWith]);
 
   // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
-  const exitAll = useCallback(() => {
+  const exitAll = useCallback((opts?: { commit?: boolean }) => {
     setStack((prev) => {
       // Run onExit for every frame, top→root, on the way out.
       for (let i = prev.length - 1; i >= 0; i--) {
         const frame = prev[i];
         const contribution = hooksRef.current.get(frame.type);
+        if (opts?.commit) {
+          try {
+            contribution?.onCommit?.();
+          } catch {
+            /* a modal hook must not wedge the unwind */
+          }
+        }
         try {
           contribution?.onExit?.({ type: frame.type, id: frame.scopeRoot });
         } catch {

@@ -23,6 +23,7 @@
 // journal dies at the session boundary (clear + workbook load). No DOM,
 // no wasm: a stateful fake engine stores inputs so the inverses are real.
 
+import { stubFrameWindow } from "./frame-window-stub";
 import { describe, expect, it } from "bun:test";
 
 import type { BundleHost } from "@paged-media/plugin-api";
@@ -62,6 +63,7 @@ function statefulEngine() {
     }),
     getRangeValues: () => [],
     paginate: () => [],
+    getFrameWindow: stubFrameWindow,
     getGridScene: () => ({
       viewport: {
         firstRow: 0,

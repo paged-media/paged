@@ -30,6 +30,7 @@
 // forms (the contract permits either — the defensive cellToString handles
 // both; a follow-up should standardize one).
 
+import { stubFrameWindow } from "./frame-window-stub";
 import { createElement } from "react";
 import {
   act,
@@ -87,6 +88,7 @@ function makeFakeEngine(): SheetEngine {
     }),
     getRangeValues: () => [],
     paginate: () => [],
+    getFrameWindow: stubFrameWindow,
     getGridScene: () => ({
       viewport: {
         firstRow: 0,
