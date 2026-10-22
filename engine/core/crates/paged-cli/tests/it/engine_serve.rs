@@ -430,3 +430,62 @@ fn a_server_profile_that_is_not_icc_cmyk_refuses_to_start() {
     assert!(err.contains("not an ICC profile"), "{err}");
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// Editor plan F7: a call fills a template's fields before its script and
+/// export, as a filler the template's policy binds, and a value that does
+/// not fit is answered 422 with the problem.
+#[test]
+fn a_call_fills_template_fields_as_a_filler() {
+    let s = serve("template", 37, &[]);
+    let port = s.port;
+    // The author makes a text frame a field.
+    let author = r#"
+        const parse = (v) => (typeof v === "string" ? JSON.parse(v) : v);
+        const pages = parse(paged.pages());
+        const before = new Set(parse(paged.stories()).map((s) => s.selfId));
+        const frame = paged.insertTextFrame(pages[0].selfId, [72, 72, 200, 300]);
+        const story = parse(paged.stories()).map((s) => s.selfId).find((s) => !before.has(s));
+        paged.insertText(story, 0, "Old title");
+        const ok = paged.setPluginMetadata(String(frame), "x-paged:template",
+          JSON.stringify({ v: 1, data: { field: { name: "headline", kind: "text", constraints: { maxLength: 20 } } } }));
+        console.log("field:" + ok);
+    "#;
+    let (status, made) = call(
+        port,
+        &json!({
+            "file": s.file,
+            "template": { "values": [], "role": "author" },
+            "script": author,
+            "export": true,
+        }),
+    );
+    assert_eq!(status, 200, "{made}");
+    assert!(made["output"].to_string().contains("field:true"), "{made}");
+    let template = made["file"].as_str().unwrap().to_string();
+
+    // A filler fills it; the script sees the value.
+    let (status, filled) = call(
+        port,
+        &json!({
+            "file": template,
+            "template": { "values": [{ "name": "headline", "value": { "kind": "text", "text": "Ada Example" } }] },
+            "script": "console.log(JSON.stringify(paged.stories()))",
+            "export": "paged",
+        }),
+    );
+    assert_eq!(status, 200, "{filled}");
+    assert!(filled["file"].is_string());
+
+    // A value longer than the field allows is refused, with the problem.
+    let (status, refused) = call(
+        port,
+        &json!({
+            "file": template,
+            "template": { "values": [{ "name": "headline", "value": { "kind": "text", "text": "A title much longer than twenty" } }] },
+            "export": "pdf",
+        }),
+    );
+    assert_eq!(status, 422, "{refused}");
+    assert_eq!(refused["problems"][0]["name"], "headline", "{refused}");
+    assert!(refused.get("file").is_none());
+}
