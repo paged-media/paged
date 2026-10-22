@@ -66,6 +66,7 @@
         "@paged-media/sheet": "workspace:*",
         "@paged-media/shell": "workspace:*",
         "@paged-media/slide": "workspace:*",
+        "@paged-media/strings": "workspace:*",
         "@paged-media/tools": "workspace:*",
         "@paged-media/ui": "workspace:*",
         "@paged-media/web": "workspace:*",
@@ -760,6 +761,9 @@
     "platform/shared/panel-kit": {
       "name": "@paged-media/panel-kit",
       "version": "0.0.0",
+      "dependencies": {
+        "@paged-media/strings": "workspace:*",
+      },
       "devDependencies": {
         "@happy-dom/global-registrator": "catalog:",
         "@paged-media/plugin-api": "workspace:*",
@@ -777,6 +781,22 @@
     },
     "platform/shared/react-live": {
       "name": "@paged-media/react-live",
+      "version": "0.0.0",
+      "devDependencies": {
+        "@happy-dom/global-registrator": "catalog:",
+        "@testing-library/react": "catalog:",
+        "@types/bun": "catalog:",
+        "@types/react": "catalog:",
+        "react": "catalog:",
+        "react-dom": "catalog:",
+        "typescript": "catalog:",
+      },
+      "peerDependencies": {
+        "react": ">=19.3",
+      },
+    },
+    "platform/shared/strings": {
+      "name": "@paged-media/strings",
       "version": "0.0.0",
       "devDependencies": {
         "@happy-dom/global-registrator": "catalog:",
@@ -1038,6 +1058,8 @@
     "@paged-media/shell": ["@paged-media/shell@workspace:apps/editor/packages/shell"],
 
     "@paged-media/slide": ["@paged-media/slide@workspace:modules/slide/packages/slide-bundle"],
+
+    "@paged-media/strings": ["@paged-media/strings@workspace:platform/shared/strings"],
 
     "@paged-media/test-kit": ["@paged-media/test-kit@workspace:platform/shared/test-kit"],
 

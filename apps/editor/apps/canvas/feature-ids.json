@@ -3,7 +3,7 @@
   "version": 1,
   "counts": {
     "chrome": 4,
-    "command": 338,
+    "command": 341,
     "keybinding": 88,
     "menu": 257,
     "panel": 122,
@@ -901,6 +901,11 @@
       "owner": "media.paged.publish"
     },
     {
+      "id": "command:media.paged.publish.preflight",
+      "kind": "command",
+      "owner": "media.paged.publish"
+    },
+    {
       "id": "command:media.paged.sheet.command.addSheet",
       "kind": "command",
       "owner": "media.paged.sheet"
@@ -1046,7 +1051,17 @@
       "owner": "media.paged.web"
     },
     {
+      "id": "command:media.paged.web.command.importHtml",
+      "kind": "command",
+      "owner": "media.paged.web"
+    },
+    {
       "id": "command:media.paged.web.command.insertWebFrame",
+      "kind": "command",
+      "owner": "media.paged.web"
+    },
+    {
+      "id": "command:media.paged.web.command.makeWebFrame",
       "kind": "command",
       "owner": "media.paged.web"
     },
