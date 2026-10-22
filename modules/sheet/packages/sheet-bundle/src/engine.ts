@@ -472,6 +472,18 @@ export interface SheetEngine {
     maxIter: number,
     maxChange: number,
   ): { changed: CellChange[] };
+  /** Set the calculation mode (written back to `<calcPr calcMode>`).
+   *  Leaving `manual` calculates what is pending. */
+  setCalcMode?(mode: CalcMode): { changed: CellChange[] };
+  /** Calculate Now (F9): every pending cell and the volatile ones. */
+  calculateNow?(): { changed: CellChange[] };
+  /** Calculate Sheet (Shift+F9): the pending cells of one sheet. */
+  calculateSheet?(sheet: number): { changed: CellChange[] };
+  /** Whether edits wait for a calculation (manual mode). */
+  isCalcPending?(): boolean;
+  /** Precision as displayed (`<calcPr fullPrecision>`): `false` stores an
+   *  entered number as its format shows it. */
+  setFullPrecision?(full: boolean): void;
   /** Add a worksheet at the end (empty name = next free `SheetN`); its id. */
   addSheet?(name: string): number;
   /** Rename a worksheet (Excel's name rules; throws the reason). */
@@ -707,7 +719,18 @@ export interface CalcSettingsInfo {
   iterative: boolean;
   maxIter: number;
   maxChange: number;
+  /** `<calcPr calcMode>`. */
+  calcMode: CalcMode;
+  /** `<calcPr fullPrecision>` (`false` = precision as displayed). */
+  fullPrecision: boolean;
+  /** `<calcPr fullCalcOnLoad>`. */
+  fullCalcOnLoad: boolean;
+  /** Edits waiting for a calculation (manual mode). */
+  calcPending: boolean;
 }
+
+/** When formulas recalculate (`<calcPr calcMode>`). */
+export type CalcMode = "auto" | "autoNoTable" | "manual";
 
 /** The host clock the facade feeds `NOW`/`TODAY` from. Injected so tests
  *  can pin it; the default reads `Date`. */
@@ -822,6 +845,11 @@ export interface SheetWasmEngine {
     max_iter: number,
     max_change: number,
   ): { changed: CellChange[] };
+  set_calc_mode?(mode: string): { changed: CellChange[] };
+  calculate_now?(): { changed: CellChange[] };
+  calculate_sheet?(sheet: number): { changed: CellChange[] };
+  is_calc_pending?(): boolean;
+  set_full_precision?(full: boolean): void;
   add_sheet?(name: string): number;
   rename_sheet?(sheet: number, name: string): void;
   delete_sheet?(sheet: number): { changed: CellChange[] };
@@ -992,6 +1020,20 @@ export function wrapEngine(
       need("set_iterative")(on, maxIter, maxChange) as {
         changed: CellChange[];
       },
+    setCalcMode: (mode) =>
+      need("set_calc_mode")(mode) as { changed: CellChange[] },
+    calculateNow: () => {
+      tick();
+      return need("calculate_now")() as { changed: CellChange[] };
+    },
+    calculateSheet: (sheet) => {
+      tick();
+      return need("calculate_sheet")(sheet) as { changed: CellChange[] };
+    },
+    isCalcPending: () => need("is_calc_pending")() as boolean,
+    setFullPrecision: (full) => {
+      need("set_full_precision")(full);
+    },
     addSheet: (name) => need("add_sheet")(name) as number,
     renameSheet: (sheet, name) => {
       need("rename_sheet")(sheet, name);

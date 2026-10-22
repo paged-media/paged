@@ -110,10 +110,10 @@ pub(super) fn special_rich(
     Some(match name {
         "LET" => match reduce_let(model, args, ctx, spills) {
             Reduced::Value(v) => v,
-            // A lambda as a cell value: #CALC! grounded to #VALUE!.
-            Reduced::Lambda(..) => err(CellError::Value),
+            // A lambda as a cell value is #CALC! (Excel-recorded).
+            Reduced::Lambda(..) => err(CellError::Calc),
         },
-        "LAMBDA" => err(CellError::Value),
+        "LAMBDA" => err(CellError::Calc),
         "MAP" => map(model, args, ctx, spills),
         "REDUCE" => reduce_scan(model, args, ctx, spills, false),
         "SCAN" => reduce_scan(model, args, ctx, spills, true),
@@ -134,7 +134,7 @@ pub(super) fn eval_call(
 ) -> FnResult {
     match reduce_call(model, callee, args, ctx, spills) {
         Reduced::Value(v) => v,
-        Reduced::Lambda(..) => err(CellError::Value),
+        Reduced::Lambda(..) => err(CellError::Calc),
     }
 }
 
@@ -161,6 +161,17 @@ fn reduce(model: &SheetModel, e: &Expr, ctx: &EvalCtx, spills: &SpillState) -> R
         }
         Expr::Func(_, args) if is_func(e, "LET") => reduce_let(model, args, ctx, spills),
         Expr::Call(callee, args) => reduce_call(model, callee, args, ctx, spills),
+        // A defined name whose formula is a LAMBDA (a named LAMBDA, sheet
+        // ADR 513) reduces to that lambda; any other name to its value.
+        Expr::Name(nid) => match crate::names::name_expr_at(model, *nid, ctx.current) {
+            Some(inner) if matches!(&*inner, Expr::Func(..) | Expr::Call(..)) => {
+                let inner = inner.into_owned();
+                super::with_name_depth(Reduced::Value(err(CellError::Name)), || {
+                    reduce(model, &inner, ctx, spills)
+                })
+            }
+            _ => Reduced::Value(eval_value(model, e, ctx, spills)),
+        },
         _ => Reduced::Value(eval_value(model, e, ctx, spills)),
     }
 }
@@ -214,7 +225,24 @@ fn reduce_call(
         Reduced::Value(_) => return Reduced::Value(err(CellError::Value)),
     };
     let bound: Vec<Expr> = args.iter().map(|a| bind(model, a, ctx, spills)).collect();
-    apply(model, &params, &body, &bound, ctx, spills)
+    // A recursive named LAMBDA calls itself through this function: past
+    // MAX_CALL_DEPTH nested calls the call is #NUM! instead of a stack
+    // overflow (a recursion without a reachable base case).
+    let depth = CALL_DEPTH.with(|d| d.get());
+    if depth >= MAX_CALL_DEPTH {
+        return Reduced::Value(err(CellError::Num));
+    }
+    CALL_DEPTH.with(|d| d.set(depth + 1));
+    let out = apply(model, &params, &body, &bound, ctx, spills);
+    CALL_DEPTH.with(|d| d.set(depth));
+    out
+}
+
+/// How deep lambda calls may nest (recursion through a named LAMBDA).
+const MAX_CALL_DEPTH: u32 = 128;
+
+thread_local! {
+    static CALL_DEPTH: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
 }
 
 /// Apply a lambda to already-bound argument expressions.
@@ -349,7 +377,11 @@ fn subst(e: &Expr, name: &str, repl: &Expr) -> Expr {
         | Expr::Name(_)
         | Expr::StructuredRef(_)
         | Expr::Local(_)
-        | Expr::Missing => e.clone(),
+        | Expr::Missing
+        | Expr::Ref3D(_)
+        | Expr::Range3D(_)
+        | Expr::UnknownName(_) => e.clone(),
+        Expr::UnknownFunc(n, args) => Expr::UnknownFunc(n.clone(), args.iter().map(s).collect()),
         Expr::Unary(op, a) => Expr::Unary(*op, Box::new(s(a))),
         Expr::Binary(op, a, b) => Expr::Binary(*op, Box::new(s(a)), Box::new(s(b))),
         Expr::SpillRef(a) => Expr::SpillRef(Box::new(s(a))),
@@ -505,7 +537,34 @@ fn lambda_arg(
 }
 
 /// `MAP(array1, [array2, …], lambda)`.
+/// Element results of MAP / SCAN / BYROW / BYCOL / MAKEARRAY: a lambda that
+/// returns more than one value for an element makes the whole call `#CALC!`
+/// — Excel does not nest arrays (recorded: `MAP(A1:A2,LAMBDA(x,SEQUENCE(2)))`).
+#[derive(Default)]
+struct Nested(std::cell::Cell<bool>);
+
+impl Nested {
+    fn take(&self, r: FnResult) -> CellValue {
+        match r {
+            FnResult::Array(g) if g.len() > 1 || g.first().is_some_and(|row| row.len() > 1) => {
+                self.0.set(true);
+                CellValue::Error(CellError::Calc)
+            }
+            r => collapse(r),
+        }
+    }
+
+    fn result(&self, r: FnResult) -> FnResult {
+        if self.0.get() {
+            err(CellError::Calc)
+        } else {
+            r
+        }
+    }
+}
+
 fn map(model: &SheetModel, args: &[Expr], ctx: &EvalCtx, spills: &SpillState) -> FnResult {
+    let nest = Nested::default();
     let (arrays, lam) = args.split_at(args.len() - 1);
     let (params, body) = match lambda_arg(model, &lam[0], ctx, spills) {
         Ok(l) => l,
@@ -528,12 +587,12 @@ fn map(model: &SheetModel, args: &[Expr], ctx: &EvalCtx, spills: &SpillState) ->
             (0..cols)
                 .map(|c| {
                     let bound: Vec<Expr> = els.iter().map(|x| x.at(r, c)).collect();
-                    collapse(apply_value(model, &params, &body, &bound, ctx, spills))
+                    nest.take(apply_value(model, &params, &body, &bound, ctx, spills))
                 })
                 .collect()
         })
         .collect();
-    FnResult::Array(grid)
+    nest.result(FnResult::Array(grid))
 }
 
 /// `REDUCE(initial, array, lambda(acc, value))` / `SCAN(...)`.
@@ -544,6 +603,7 @@ fn reduce_scan(
     spills: &SpillState,
     scan: bool,
 ) -> FnResult {
+    let nest = Nested::default();
     let (params, body) = match lambda_arg(model, &args[2], ctx, spills) {
         Ok(l) => l,
         Err(e) => return err(e),
@@ -567,7 +627,7 @@ fn reduce_scan(
                 spills,
             );
             if scan {
-                orow.push(collapse(res.clone()));
+                orow.push(nest.take(res.clone()));
             }
             acc = value_expr(res.clone());
             last = Some(res);
@@ -577,7 +637,7 @@ fn reduce_scan(
         }
     }
     if scan {
-        return FnResult::Array(out);
+        return nest.result(FnResult::Array(out));
     }
     match last {
         Some(v) => v,
@@ -593,6 +653,7 @@ fn by_line(
     spills: &SpillState,
     rows: bool,
 ) -> FnResult {
+    let nest = Nested::default();
     let (params, body) = match lambda_arg(model, &args[1], ctx, spills) {
         Ok(l) => l,
         Err(e) => return err(e),
@@ -607,7 +668,7 @@ fn by_line(
     if rows {
         let grid = (0..els.rows)
             .map(|r| {
-                vec![collapse(apply_value(
+                vec![nest.take(apply_value(
                     model,
                     &params,
                     &body,
@@ -617,11 +678,11 @@ fn by_line(
                 ))]
             })
             .collect();
-        FnResult::Array(grid)
+        nest.result(FnResult::Array(grid))
     } else {
         let row = (0..els.cols)
             .map(|c| {
-                collapse(apply_value(
+                nest.take(apply_value(
                     model,
                     &params,
                     &body,
@@ -631,12 +692,13 @@ fn by_line(
                 ))
             })
             .collect();
-        FnResult::Array(vec![row])
+        nest.result(FnResult::Array(vec![row]))
     }
 }
 
 /// `MAKEARRAY(rows, cols, lambda(r, c))`.
 fn makearray(model: &SheetModel, args: &[Expr], ctx: &EvalCtx, spills: &SpillState) -> FnResult {
+    let nest = Nested::default();
     let dim = |e: &Expr| -> Result<i64, CellError> {
         let v = eval(model, e, ctx, spills);
         if let CellValue::Error(e) = v {
@@ -663,7 +725,7 @@ fn makearray(model: &SheetModel, args: &[Expr], ctx: &EvalCtx, spills: &SpillSta
         .map(|r| {
             (1..=cols)
                 .map(|c| {
-                    collapse(apply_value(
+                    nest.take(apply_value(
                         model,
                         &params,
                         &body,
@@ -675,5 +737,5 @@ fn makearray(model: &SheetModel, args: &[Expr], ctx: &EvalCtx, spills: &SpillSta
                 .collect()
         })
         .collect();
-    FnResult::Array(grid)
+    nest.result(FnResult::Array(grid))
 }

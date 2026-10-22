@@ -1,0 +1,14 @@
+# OCT2BIN(number,[places]).
+# id	formula	setup	expected
+oct2bin-0	=OCT2BIN(3,3)	-	011
+oct2bin-1	=OCT2BIN(7777777000)	-	1000000000
+oct2bin-2	=OCT2BIN(7777777777)	-	1111111111
+oct2bin-3	=OCT2BIN(777)	-	111111111
+oct2bin-4	=OCT2BIN(1000)	-	#NUM!
+oct2bin-5	=OCT2BIN(7777776777)	-	#NUM!
+oct2bin-6	=OCT2BIN(8)	-	#NUM!
+oct2bin-7	=OCT2BIN(3,1)	-	#NUM!
+oct2bin-8	=OCT2BIN(3,11)	-	#NUM!
+oct2bin-9	=OCT2BIN(-1)	-	#NUM!
+oct2bin-x0	=OCT2BIN(A1)	A1=#N/A	#N/A
+oct2bin-x1	=CONCAT(OCT2BIN({1,2}))	-	110

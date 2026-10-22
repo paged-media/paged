@@ -432,4 +432,9 @@ export interface ObjectModelDeclaration {
     args: string | ValueType;
     result?: string | ValueType;
   }>;
+  /** Template field kinds (G1), `<manifest.id>.<name>`. */
+  templateFields?: Array<{
+    kind: string;
+    title: string;
+  }>;
 }

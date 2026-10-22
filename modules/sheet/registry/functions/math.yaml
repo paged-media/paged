@@ -15,6 +15,14 @@
 #   provenance  sources (ECMA-376 / OpenFormula / public docs / oracle)
 #   tests       rust test pointers + golden corpus paths (the coverage
 #               gate verifies both for every implemented row)
+#   returns_array / special_form  (M1 / M2 amendments; see sheet-core/build.rs)
+# W1.0 versioned amendment (2026-10-22, docs/adr/513-calc-model-amendment.md):
+#   lazy_args   true when the evaluator evaluates only the arguments the
+#               call needs (IF, IFS, IFERROR, IFNA, CHOOSE, SWITCH)
+#   cached_only connect | blocked — never run; a formula using it keeps its
+#               cached value, else #CONNECT! / #BLOCKED!
+#   xlfn_prefix "_xlfn." | "_xlfn._xlws." — the OOXML storage prefix of a
+#               function newer than ECMA-376 (absent for the base set)
 
 - id: sheet.fn.math.sum
   name: SUM

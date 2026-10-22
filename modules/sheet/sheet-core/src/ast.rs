@@ -19,9 +19,11 @@
 //! The canonical, dialect-neutral formula AST (spec §5.1/§6). This is pure
 //! data: parser logic lives in `sheet-parser`, evaluation in `sheet-calc`.
 //! Functions are referenced by [`FuncId`] (the registry-generated index),
-//! so an unregistered function is unrepresentable here by construction.
+//! so an unregistered function can never be dispatched: since the W1.0
+//! amendment it parses to [`Expr::UnknownFunc`], which evaluates to `#NAME?`
+//! and keeps its spelling (Excel's behaviour, sheet ADR 513).
 
-use crate::refs::{CellRef, RangeRef};
+use crate::refs::{CellRef, RangeRef, SheetId};
 use compact_str::CompactString;
 
 use crate::value::CellError;
@@ -91,6 +93,54 @@ pub enum Expr {
     /// blank one say so in their kernels. Only ever appears as a direct
     /// argument of `Func`/`Call`; prints as nothing.
     Missing,
+    /// A 3D cell reference `Sheet1:Sheet3!A1` (W1.0 versioned amendment,
+    /// 2026-10-22, sheet ADR 513): the same cell on every sheet of the span,
+    /// by workbook ORDER (a [`SheetId`] is the sheet's position).
+    Ref3D(Ref3D),
+    /// A 3D range `Sheet1:Sheet3!A1:B2` (W1.0 amendment): one box per sheet of
+    /// the span. Range-aware functions read it as a stack of views; anywhere
+    /// else it is an error (Excel: `#REF!` as a value, `#VALUE!` as the
+    /// argument of a function that takes no 3D reference).
+    Range3D(Range3D),
+    /// An identifier that names nothing — no defined name, no LET/LAMBDA local
+    /// (W1.0 amendment; amends ADR 509). Evaluates to `#NAME?` and prints
+    /// verbatim, so `=Foo+1` round-trips as Excel keeps it. Defining the name
+    /// later re-resolves it (`sheet-calc` `Engine::new`).
+    UnknownName(CompactString),
+    /// A call of a function the registry does not know and no defined name
+    /// spells (W1.0 amendment; amends ADR 509): `#NAME?`, printed verbatim with
+    /// its arguments. A defined name of that spelling (a named LAMBDA) turns
+    /// it into `Call(Name(id), args)`.
+    UnknownFunc(CompactString, Vec<Expr>),
+}
+
+/// The sheet span of a 3D reference: `first` and `last` in workbook order,
+/// `first <= last` (the parser orders a span written backwards, as Excel does).
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+pub struct SheetSpan {
+    pub first: SheetId,
+    pub last: SheetId,
+}
+
+impl SheetSpan {
+    /// Every sheet of the span, in order.
+    pub fn sheets(self) -> impl Iterator<Item = SheetId> {
+        self.first..=self.last
+    }
+}
+
+/// A 3D cell reference: `cell.sheet` is `sheets.first`.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+pub struct Ref3D {
+    pub sheets: SheetSpan,
+    pub cell: CellRef,
+}
+
+/// A 3D range: `range` is the box (its sheet is `sheets.first`).
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+pub struct Range3D {
+    pub sheets: SheetSpan,
+    pub range: RangeRef,
 }
 
 /// An Excel structured (table) reference (spec §6.4 / ECMA-376 §18.17.2.4).
@@ -157,12 +207,16 @@ pub enum BinOp {
 }
 
 /// Unary operators. `Plus` is the (semantically inert) unary `+`;
-/// `Percent` is the postfix `%`.
+/// `Percent` is the postfix `%`; `ImplicitIntersect` is the prefix `@`
+/// (W1.0 amendment): a reference reduces to the one cell in the formula's row
+/// or column, an array to its first element. Stored in OOXML as
+/// `_xlfn.SINGLE(…)`.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub enum UnOp {
     Neg,
     Plus,
     Percent,
+    ImplicitIntersect,
 }
 
 /// A total-ordering / hashable wrapper over `f64`, comparing by raw bits

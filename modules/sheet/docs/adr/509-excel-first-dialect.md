@@ -86,3 +86,14 @@ Limits of what is built:
 - [ADR 500](500-own-calculation-engine.md), [ADR 502](502-recalculation-and-spill.md) — the engine that evaluates the AST; the graph that uses the extracted references
 - [ADR 317](https://github.com/paged-media/plugin-sdk/blob/main/docs/adr/317-registry-driven-dispatch.md) — the generated function table the parser resolves names against
 - [ADR 503](503-xlsx-patched-not-regenerated.md), [ADR 507](507-golden-corpora-coverage-gate.md) — formula text on save; the locale goldens
+
+## Amendment — 2026-10-22
+
+The unknown-function ruling is replaced ([ADR 513](513-calc-model-amendment.md), the W1.0
+amendment of the frozen AST). An unknown function is `Expr::UnknownFunc(name, args)` and an
+unknown name `Expr::UnknownName(name)`: the formula is accepted, evaluates to `#NAME?` and prints
+as written, as Excel keeps it. A defined name called as a function is a named LAMBDA. On load, a
+formula that calls an unknown function keeps its cached value (it may be a function the saving
+Excel knew), and an unknown `_xlfn.` function keeps its prefix. The dialect also gains `@`
+(stored `_xlfn.SINGLE(…)`) and 3D references `First:Last!A1`. An unknown sheet is still a
+`ParseError`.

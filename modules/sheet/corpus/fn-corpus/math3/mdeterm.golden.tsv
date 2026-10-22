@@ -1,0 +1,12 @@
+# MDETERM(array) - determinant.
+# id	formula	setup	expected
+md-2x2	=MDETERM({1,2;3,4})	-	-2
+md-3x3	=MDETERM({1,3,8;4,6,2;7,9,5})	-	-54
+md-4x4	=MDETERM(A1:D4)	A1=1;B1=3;C1=8;D1=5;A2=1;B2=3;C2=6;D2=1;A3=1;B3=1;C3=1;D3=0;A4=7;B4=3;C4=10;D4=2	88
+md-singular	=MDETERM({1,2;2,4})	-	0
+md-nonsquare	=MDETERM({1,2,3;4,5,6})	-	#VALUE!
+md-blank	=MDETERM(A1:B2)	A1=1;B1=2;A2=3	#VALUE!
+md-text	=MDETERM(A1:B2)	A1=1;B1=2;A2=3;B2=text:x	#VALUE!
+md-1x1	=MDETERM(5)	-	5
+md-err	=MDETERM(A1:B2)	A1=1;B1=#N/A;A2=3;B2=4	#N/A
+md-hilbert	=MDETERM({1,0.5,0.333333333333333;0.5,0.333333333333333,0.25;0.333333333333333,0.25,0.2})	-	0.000462962962962922

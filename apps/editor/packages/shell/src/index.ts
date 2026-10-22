@@ -345,6 +345,8 @@ export {
   buildNewDocumentCommand,
   buildNewFromBriefCommand,
   openFile,
+  openDocumentFile,
+  mintBlankDocument,
   dropFile,
   dropPlaces,
   PLACE_DROPPED_COMMAND,

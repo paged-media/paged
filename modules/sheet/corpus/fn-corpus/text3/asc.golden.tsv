@@ -1,0 +1,19 @@
+# ASC(text) - full-width to half-width.
+# id	formula	setup	expected
+asc-0	=ASC("ＡＢＣ１２３")	-	ＡＢＣ１２３
+asc-1	=ASC("abc")	-	abc
+asc-2	=ASC("　")	-	　
+asc-3	=ASC("カタカナ")	-	カタカナ
+asc-4	=ASC("ガ")	-	ガ
+asc-5	=ASC("パ")	-	パ
+asc-6	=ASC("ー")	-	ー
+asc-7	=ASC("。「」、")	-	。「」、
+asc-8	=ASC("ｱｲｳ")	-	ｱｲｳ
+asc-9	=ASC("ひらがな")	-	ひらがな
+asc-10	=ASC("＄％＆")	-	＄％＆
+asc-11	=ASC(123)	-	123
+asc-12	=ASC(TRUE)	-	TRUE
+asc-13	=UNICODE(ASC("Ａ"))	-	65313
+asc-14	=ASC("ヴ")	-	ヴ
+asc-15	=ASC("ヰ")	-	ヰ
+asc-16	=ASC(A1)	A1=#N/A	#N/A

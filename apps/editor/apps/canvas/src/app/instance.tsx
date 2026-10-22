@@ -25,10 +25,12 @@
 
 import { createContext, useContext, type ReactNode } from "react";
 
-import type { CanvasClient } from "@paged-media/client";
+import type { CanvasClient, Role } from "@paged-media/client";
 import type {
   CommandContribution,
+  PagedEditor,
   PanelContribution,
+  ShellRegistries,
   PanelRailItem,
   ProfileProblem,
   ResolvedProfile,
@@ -89,6 +91,37 @@ export function hostCommands(actions: HostActions): CommandContribution[] {
   return out;
 }
 
+/** What a host reaches once the shell is up: its editor and registries. */
+export interface ShellAccess {
+  readonly paged: PagedEditor;
+  readonly registries: ShellRegistries;
+  readonly client: CanvasClient;
+}
+
+/** The session's role, changeable while the editor runs (`setRole`). */
+export interface RoleStore {
+  get(): Role;
+  set(role: Role): void;
+  subscribe(listener: () => void): () => void;
+}
+
+export function createRoleStore(initial: Role): RoleStore {
+  let role = initial;
+  const listeners = new Set<() => void>();
+  return {
+    get: () => role,
+    set(next) {
+      if (next === role) return;
+      role = next;
+      for (const l of [...listeners]) l();
+    },
+    subscribe(listener) {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+  };
+}
+
 export interface EditorInstance {
   readonly profile: ResolvedProfile;
   readonly surfaces: EditorSurfaces;
@@ -96,6 +129,10 @@ export interface EditorInstance {
   readonly problems: readonly ProfileProblem[];
   /** Called once the editor's client exists. */
   readonly onClient?: (client: CanvasClient) => void;
+  /** Called once the shell is mounted, with what a host drives it by. */
+  readonly onShell?: (shell: ShellAccess) => void;
+  /** The session's role; the profile's at mount. */
+  readonly role: RoleStore;
 }
 
 const InstanceContext = createContext<EditorInstance | null>(null);

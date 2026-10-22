@@ -1,0 +1,12 @@
+# CEILING.PRECISE(number,[significance]).
+# id	formula	setup	expected
+cp-pos	=CEILING.PRECISE(4.3)	-	5
+cp-neg	=CEILING.PRECISE(-4.3)	-	-4
+cp-sig	=CEILING.PRECISE(4.3,2)	-	6
+cp-negsig	=CEILING.PRECISE(4.3,-2)	-	6
+cp-neg-negsig	=CEILING.PRECISE(-4.3,-2)	-	-4
+cp-zero	=CEILING.PRECISE(4.3,0)	-	0
+cp-cent	=CEILING.PRECISE(4.42,0.01)	-	4.42
+cp-text	=CEILING.PRECISE("a")	-	#VALUE!
+cp-err	=CEILING.PRECISE(1,A1)	A1=#N/A	#N/A
+cp-array	=SUM(CEILING.PRECISE({1.5,-1.5},{1,0.5}))	-	0.5

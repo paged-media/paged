@@ -58,6 +58,7 @@ fn field(name: &str, kind: TemplateFieldKind, constraints: Constraints) -> Field
         group: None,
         required: false,
         constraints,
+        module: None,
     }
 }
 

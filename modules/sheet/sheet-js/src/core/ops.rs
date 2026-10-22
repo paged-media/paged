@@ -57,13 +57,20 @@ pub enum StructuralEdit {
     DeleteCols,
 }
 
-/// The calc settings the panel shows (`<calcPr>` iteration knobs).
+/// The calc settings the panel shows (`<calcPr>`): the iteration knobs and
+/// (sheet ADR 513) the calculation mode, precision as displayed, full calc on
+/// load, and whether edits wait for a calculation.
 #[derive(serde::Serialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct CalcSettingsInfo {
     pub iterative: bool,
     pub max_iter: u32,
     pub max_change: f64,
+    /// `auto` | `autoNoTable` | `manual`.
+    pub calc_mode: String,
+    pub full_precision: bool,
+    pub full_calc_on_load: bool,
+    pub calc_pending: bool,
 }
 
 /// Excel's sheet-name rules: 1–31 chars, none of `: \ / ? * [ ]`, not
@@ -141,10 +148,61 @@ fn drop_sheet_refs(e: &mut Expr, gone: SheetId) -> bool {
             let x = drop_sheet_refs(callee, gone);
             drop_sheet_refs_all(args.iter_mut(), gone) || x
         }
-        Expr::Lit(_) | Expr::Name(_) | Expr::StructuredRef(_) | Expr::Local(_) | Expr::Missing => {
-            false
-        }
+        // A 3D span loses the deleted sheet: an end moves inward, an empty
+        // span is `#REF!` (Excel's rule for deleting a sheet of a 3D reference).
+        Expr::Ref3D(r) => match shrink_span(r.sheets, gone) {
+            Some(sheets) => {
+                r.sheets = sheets;
+                r.cell.sheet = sheets.first;
+                false
+            }
+            None => {
+                *e = Expr::Lit(LitValue::Error(CellError::Ref));
+                true
+            }
+        },
+        Expr::Range3D(r) => match shrink_span(r.sheets, gone) {
+            Some(sheets) => {
+                r.sheets = sheets;
+                r.range.start.sheet = sheets.first;
+                r.range.end.sheet = sheets.first;
+                false
+            }
+            None => {
+                *e = Expr::Lit(LitValue::Error(CellError::Ref));
+                true
+            }
+        },
+        Expr::UnknownFunc(_, args) => drop_sheet_refs_all(args.iter_mut(), gone),
+        Expr::Lit(_)
+        | Expr::Name(_)
+        | Expr::StructuredRef(_)
+        | Expr::Local(_)
+        | Expr::Missing
+        | Expr::UnknownName(_) => false,
     }
+}
+
+/// A 3D sheet span after sheet `gone` is deleted (later ids shift down one),
+/// or `None` when it held only that sheet.
+fn shrink_span(
+    span: sheet_core::ast::SheetSpan,
+    gone: SheetId,
+) -> Option<sheet_core::ast::SheetSpan> {
+    if span.first == gone && span.last == gone {
+        return None;
+    }
+    let first = if span.first > gone {
+        span.first - 1
+    } else {
+        span.first
+    };
+    let last = if span.last >= gone {
+        span.last - 1
+    } else {
+        span.last
+    };
+    Some(sheet_core::ast::SheetSpan { first, last })
 }
 
 impl SheetSession {
@@ -270,7 +328,48 @@ impl SheetSession {
             iterative: c.iterative,
             max_iter: c.max_iter,
             max_change: c.max_change,
+            calc_mode: c.calc_mode.as_str().to_string(),
+            full_precision: c.full_precision,
+            full_calc_on_load: c.full_calc_on_load,
+            calc_pending: self.engine().is_calc_pending(),
         }
+    }
+
+    /// Set the calculation mode (`auto` | `autoNoTable` | `manual`), written
+    /// back to `<calcPr calcMode>` on save. Leaving manual calculates what is
+    /// pending.
+    pub fn set_calc_mode(&mut self, mode: &str) -> Result<SetCellResult, SessionError> {
+        let m = sheet_core::CalcMode::parse(mode)
+            .ok_or_else(|| SessionError(format!("unknown calculation mode {mode:?}")))?;
+        let result = self.engine_mut().set_calc_mode(m);
+        self.structure_changed = true;
+        Ok(self.changes_of(&result))
+    }
+
+    /// Calculate Now (F9): every pending cell, and the volatile ones.
+    pub fn calculate_now(&mut self) -> SetCellResult {
+        let result = self.engine_mut().calculate_now();
+        self.changes_of(&result)
+    }
+
+    /// Calculate Sheet (Shift+F9): the pending cells of one sheet.
+    pub fn calculate_sheet(&mut self, sheet: u16) -> Result<SetCellResult, SessionError> {
+        self.validate_sheet(sheet)?;
+        let result = self.engine_mut().calculate_sheet(sheet);
+        Ok(self.changes_of(&result))
+    }
+
+    /// Whether edits are waiting for a calculation (manual mode).
+    pub fn is_calc_pending(&self) -> bool {
+        self.engine().is_calc_pending()
+    }
+
+    /// Precision as displayed (`<calcPr fullPrecision>`): with `false`, a
+    /// number entered from now on is stored rounded to its cell's format.
+    /// Written back on save.
+    pub fn set_full_precision(&mut self, full: bool) {
+        self.engine_mut().set_full_precision(full);
+        self.structure_changed = true;
     }
 
     /// Toggle iterative calculation; written back to `<calcPr>` on save.

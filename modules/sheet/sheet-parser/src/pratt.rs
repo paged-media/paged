@@ -213,6 +213,14 @@ impl Parser<'_> {
                 let rhs = self.parse_bp(BP_UNARY)?;
                 Ok(Expr::Unary(UnOp::Plus, Box::new(rhs)))
             }
+            // `@` — implicit intersection (W1.0 amendment). Binds like the
+            // other prefix operators, so the reference operators inside its
+            // operand bind first: `@A1:A3*2` is `(@(A1:A3))*2`.
+            TokKind::At => {
+                self.bump();
+                let rhs = self.parse_bp(BP_UNARY)?;
+                Ok(Expr::Unary(UnOp::ImplicitIntersect, Box::new(rhs)))
+            }
             _ => self.parse_primary(),
         }
     }
@@ -266,9 +274,16 @@ impl Parser<'_> {
         sheet_name: &str,
         qual_span: std::ops::Range<usize>,
     ) -> Result<Expr, ParseError> {
-        let sheet = self.ctx.sheet_id(sheet_name).ok_or_else(|| {
-            ParseError::new(format!("unknown sheet {sheet_name:?}"), qual_span.clone())
-        })?;
+        let Some(sheet) = self.ctx.sheet_id(sheet_name) else {
+            // `First:Last!` — a 3D span (W1.0 amendment).
+            if let Some(span) = self.sheet_span(sheet_name) {
+                return self.parse_3d(span);
+            }
+            return Err(ParseError::new(
+                format!("unknown sheet {sheet_name:?}"),
+                qual_span,
+            ));
+        };
         let Some(tok) = self.peek() else {
             return Err(ParseError::new(
                 "expected a cell reference after sheet qualifier",
@@ -317,12 +332,76 @@ impl Parser<'_> {
         Ok(Expr::Ref(start))
     }
 
+    /// `First:Last` as a sheet span, both ends resolved and put in workbook
+    /// order (Excel accepts a span written backwards and shows it ordered).
+    fn sheet_span(&self, name: &str) -> Option<sheet_core::ast::SheetSpan> {
+        let (a, b) = name.split_once(':')?;
+        let (a, b) = (self.ctx.sheet_id(a)?, self.ctx.sheet_id(b)?);
+        Some(sheet_core::ast::SheetSpan {
+            first: a.min(b),
+            last: a.max(b),
+        })
+    }
+
+    /// After `First:Last!`: a cell, a range or a band on every sheet of the
+    /// span.
+    fn parse_3d(&mut self, sheets: sheet_core::ast::SheetSpan) -> Result<Expr, ParseError> {
+        use sheet_core::ast::{Range3D, Ref3D};
+        let Some(tok) = self.peek() else {
+            return Err(ParseError::new(
+                "expected a cell reference after a 3D sheet span",
+                self.eof_span(),
+            ));
+        };
+        if let Some(range) = refs::band(sheets.first, &tok.kind) {
+            self.bump();
+            return Ok(Expr::Range3D(Range3D { sheets, range }));
+        }
+        let TokKind::Cell {
+            row,
+            col,
+            row_abs,
+            col_abs,
+        } = tok.kind
+        else {
+            return Err(ParseError::new(
+                "expected a cell reference after a 3D sheet span",
+                tok.span.clone(),
+            ));
+        };
+        self.bump();
+        let start = refs::cell(sheets.first, row, col, row_abs, col_abs);
+        if matches!(self.peek().map(|t| &t.kind), Some(TokKind::Colon)) {
+            if let Some(next) = self.tokens.get(self.pos + 1) {
+                if let TokKind::Cell {
+                    row: r2,
+                    col: c2,
+                    row_abs: ra2,
+                    col_abs: ca2,
+                } = next.kind
+                {
+                    self.bump(); // ':'
+                    self.bump(); // cell
+                    let end = refs::cell(sheets.first, r2, c2, ra2, ca2);
+                    return Ok(Expr::Range3D(Range3D {
+                        sheets,
+                        range: refs::range(start, end),
+                    }));
+                }
+            }
+        }
+        Ok(Expr::Ref3D(Ref3D {
+            sheets,
+            cell: start,
+        }))
+    }
+
     /// A bare identifier: a function call iff immediately followed by `(`,
     /// else a defined name. Unknown function name → `ParseError` (ruling).
     fn parse_ident(
         &mut self,
         name: &str,
-        ident_span: std::ops::Range<usize>,
+        _ident_span: std::ops::Range<usize>,
     ) -> Result<Expr, ParseError> {
         let is_call = matches!(self.peek().map(|t| &t.kind), Some(TokKind::LParen))
             && self.peek().is_some_and(|t| !t.ws_before);
@@ -335,9 +414,20 @@ impl Parser<'_> {
                 let call = Expr::Call(Box::new(Expr::Local(name.into())), args);
                 return self.parse_postfix_calls(call);
             }
-            let fid = sheet_core::funcs::lookup_func(name).ok_or_else(|| {
-                ParseError::new(format!("unknown function {name:?}"), ident_span.clone())
-            })?;
+            let Some(fid) = sheet_core::funcs::lookup_func(name) else {
+                // Not a registered function: a defined name called as a
+                // function (a named LAMBDA), else an unknown function that
+                // evaluates to #NAME? and keeps its spelling (W1.0 amendment;
+                // amends ADR 509 — this used to be a ParseError).
+                self.bump(); // '('
+                let args = self.parse_args()?;
+                self.expect(TokKind::RParen, "expected ')' after arguments")?;
+                let call = match self.ctx.name_id(name) {
+                    Some(nid) => Expr::Call(Box::new(Expr::Name(nid)), args),
+                    None => Expr::UnknownFunc(name.into(), args),
+                };
+                return self.parse_postfix_calls(call);
+            };
             self.bump(); // '('
             let fname = sheet_core::funcs::meta(fid).name;
             let args = match fname {
@@ -355,10 +445,11 @@ impl Parser<'_> {
         } else if self.is_local(name) {
             Ok(Expr::Local(name.into()))
         } else {
-            let nid = self.ctx.name_id(name).ok_or_else(|| {
-                ParseError::new(format!("unknown name {name:?}"), ident_span.clone())
-            })?;
-            Ok(Expr::Name(nid))
+            // An unknown name is `#NAME?`, spelled as written (W1.0).
+            Ok(match self.ctx.name_id(name) {
+                Some(nid) => Expr::Name(nid),
+                None => Expr::UnknownName(name.into()),
+            })
         }
     }
 
@@ -633,6 +724,7 @@ fn is_operand_start(kind: &TokKind) -> bool {
             | TokKind::Structured(_)
             | TokKind::LParen
             | TokKind::LBrace
+            | TokKind::At
     )
 }
 

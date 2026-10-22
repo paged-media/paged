@@ -1,0 +1,9 @@
+# SUMXMY2(array_x,array_y).
+# id	formula	setup	expected
+a-doc	=SUMXMY2({2,3,9,1,8,7,5},{6,5,11,7,5,4,4})	-	79
+a-range	=SUMXMY2(A1:A3,B1:B3)	A1=1;A2=2;A3=3;B1=4;B2=5;B3=6	27
+a-skip	=SUMXMY2(A1:A3,B1:B3)	A1=1;A3=3;B1=4;B2=5;B3=6	18
+a-mismatch	=SUMXMY2({1,2,3},{1,2})	-	#N/A
+a-scalar	=SUMXMY2("3",2)	-	#DIV/0!
+a-err	=SUMXMY2(A1:A2,B1:B2)	A1=#NUM!;A2=2;B1=4;B2=5	#NUM!
+a-text	=SUMXMY2("x",2)	-	#DIV/0!

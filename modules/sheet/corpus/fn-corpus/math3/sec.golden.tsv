@@ -1,0 +1,10 @@
+# SEC(number).
+# id	formula	setup	expected
+sec-0	=SEC(45)	-	1.90359440740442
+sec-1	=SEC(0)	-	1
+sec-2	=SEC(-1)	-	1.85081571768093
+sec-3	=SEC(1.5707963267949)	-	-286411383293069
+sec-err0	=SEC(2^27)	-	#NUM!
+sec-err1	=SEC(A1)	A1=#N/A	#N/A
+sec-array	=SUM(SEC({0.5,1.5,-2}))	-	12.8733288685721
+sec-text	=SEC("abc")	-	#VALUE!
