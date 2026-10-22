@@ -201,7 +201,7 @@ export async function createBlankDocument(
  */
 export async function fetchDefaultFont(): Promise<Uint8Array | undefined> {
   try {
-    const fontResp = await fetch("/fonts/Inter.ttf");
+    const fontResp = await fetch(defaultFontUrls.roman);
     if (fontResp.ok) {
       const bytes = new Uint8Array(await fontResp.arrayBuffer());
       // A static host answers a missing file with its SPA index.html and a
@@ -213,6 +213,24 @@ export async function fetchDefaultFont(): Promise<Uint8Array | undefined> {
     // fall through to undefined — the caller warns.
   }
   return undefined;
+}
+
+/**
+ * Where the default faces are served: the editor app's own `/fonts/`. An
+ * embedding build that ships them elsewhere (the `@paged-media/editor`
+ * package, beside its modules) says so once, before the first load.
+ */
+let defaultFontUrls = {
+  roman: "/fonts/Inter.ttf",
+  italic: "/fonts/Inter-Italic.ttf",
+};
+
+export function setDefaultFontUrls(urls: {
+  roman: string;
+  italic: string;
+}): void {
+  defaultFontUrls = { ...urls };
+  defaultItalic = null;
 }
 
 /** The family the editor's bundled default face (`/fonts/Inter.ttf`)
@@ -231,7 +249,7 @@ export async function fetchDefaultFontFaces(): Promise<
 > {
   defaultItalic ??= (async () => {
     try {
-      const resp = await fetch("/fonts/Inter-Italic.ttf");
+      const resp = await fetch(defaultFontUrls.italic);
       if (!resp.ok) return undefined;
       const bytes = new Uint8Array(await resp.arrayBuffer());
       return isFontFile(bytes) ? bytes : undefined;

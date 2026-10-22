@@ -1,0 +1,81 @@
+{
+  "name": "@paged-media/editor",
+  "version": "0.75.0-dev",
+  "description": "The paged editor, embeddable: createEditor(element, config) mounts the full editor or one of its presets (template filling, a viewer, a solo tool) into a host page and returns a handle to drive it; ./iframe drives an editor in a frame. The engine comes from @paged-media/paged.",
+  "license": "AGPL-3.0-only OR LicenseRef-PMEL",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/paged-media/paged.git",
+    "directory": "apps/editor/packages/editor"
+  },
+  "type": "module",
+  "sideEffects": [
+    "*.css"
+  ],
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./iframe": "./src/iframe.ts",
+    "./presets": "./src/presets.ts"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "typecheck": "bun check -p tsconfig.json && bun check -p test/tsconfig.json",
+    "build": "bun scripts/build.mjs",
+    "check-dist": "bun scripts/check-dist.mjs",
+    "prepublishOnly": "bun run build"
+  },
+  "dependencies": {
+    "@paged-media/paged": "workspace:*"
+  },
+  "peerDependencies": {
+    "react": ">=19.3",
+    "react-dom": ">=19.3"
+  },
+  "devDependencies": {
+    "@babel/core": "catalog:",
+    "@paged-media/canvas-wasm": "workspace:*",
+    "@paged-media/shell": "workspace:*",
+    "@rolldown/plugin-babel": "catalog:",
+    "@types/node": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "@vitejs/plugin-react": "^6.1.2",
+    "autoprefixer": "^10.6.1",
+    "babel-plugin-react-compiler": "catalog:",
+    "paged-canvas": "workspace:*",
+    "postcss": "^8.5.31",
+    "react": "catalog:",
+    "react-dom": "catalog:",
+    "tailwindcss": "^3.4.19",
+    "typescript": "catalog:",
+    "vite": "catalog:"
+  },
+  "publishConfig": {
+    "access": "public",
+    "main": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "./iframe": {
+        "types": "./dist/iframe.d.ts",
+        "default": "./dist/iframe.js"
+      },
+      "./presets": {
+        "types": "./dist/presets.d.ts",
+        "default": "./dist/presets.js"
+      },
+      "./style.css": "./dist/style.css",
+      "./feature-ids.json": "./dist/feature-ids.json",
+      "./theme-tokens.json": "./dist/theme-tokens.json",
+      "./package.json": "./package.json"
+    }
+  }
+}
