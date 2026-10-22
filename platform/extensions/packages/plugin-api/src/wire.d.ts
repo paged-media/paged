@@ -76,6 +76,10 @@ export interface FieldDef {
     group?: string;
     required?: boolean;
     constraints?: Constraints;
+    /**
+     * A module field\'s kind and definition (`kind` is `module`).
+     */
+    module?: ModuleField;
 }
 
 /**
@@ -93,6 +97,29 @@ export interface GrammarError {
      */
     position: number;
     message: string;
+}
+
+/**
+ * A module field\'s own part of its definition. The engine lists the field
+ * and grants its permissions; the module reads and writes its value.
+ */
+export interface ModuleField {
+    /**
+     * The module\'s field kind, `<module id>.<name>`
+     * (`media.paged.sheet.cell`).
+     */
+    kind: string;
+    /**
+     * What filling the field takes beyond selecting the item and writing
+     * the module\'s label on it (`text.edit` for a cell\'s text). The
+     * template\'s own permission is never granted this way.
+     */
+    grants?: Permission[];
+    /**
+     * The module\'s definition: which part of its content is open (a cell
+     * reference, a block anchor, a layer name).
+     */
+    def?: unknown;
 }
 
 /**
@@ -2811,7 +2838,7 @@ export type OverflowRule = "refuse" | "shrink" | "allow-and-flag";
 /**
  * What kind of value a field takes.
  */
-export type TemplateFieldKind = "text" | "textRun" | "variable" | "image" | "choice" | "visibility" | "data";
+export type TemplateFieldKind = "text" | "textRun" | "variable" | "image" | "choice" | "visibility" | "data" | "module";
 
 /**
  * What may be done to an item, the document, or the template itself. Each

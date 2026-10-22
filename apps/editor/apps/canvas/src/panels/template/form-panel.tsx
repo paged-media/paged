@@ -22,8 +22,9 @@
 // It reads the engine's `templateFields` collection and writes through
 // `setTemplateFields` (one undo step, checked against the session's role) or,
 // for a picture, through `replaceImageBytes`, which the engine checks as
-// `image.replace` on the item. The canvas shows the same values, because
-// both read the document.
+// `image.replace` on the item. A module field (a sheet's cell, a doc's
+// block) reads and writes through its module (module-field.tsx). The canvas
+// shows the same values, because both read the document.
 
 import { useState, type ReactElement } from "react";
 
@@ -44,6 +45,8 @@ import {
   useCanvasClient,
   useCollection,
 } from "@paged-media/shell";
+
+import { ModuleFieldControl } from "./module-field";
 
 const IMAGE_TYPES = [
   ".jpg",
@@ -187,6 +190,9 @@ function FieldRow({ row }: { row: TemplateFieldSummary }): ReactElement {
       );
       break;
     }
+    case "module":
+      control = <ModuleFieldControl row={row} onProblem={setMessage} />;
+      break;
     default:
       control = (
         <span style={{ color: "var(--pg-muted-fg)" }}>
