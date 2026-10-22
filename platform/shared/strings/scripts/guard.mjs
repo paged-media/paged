@@ -32,7 +32,10 @@ function walk(dir, out = []) {
   return out;
 }
 
-const files = walk(join(ROOT, "apps")).concat(walk(join(ROOT, "modules")), walk(join(ROOT, "platform")));
+const files = walk(join(ROOT, "apps")).concat(
+  walk(join(ROOT, "modules")),
+  walk(join(ROOT, "platform")),
+);
 
 /**
  * The `defineMessages("ns", { key: "text", … })` calls of a source, read by
@@ -46,8 +49,10 @@ function messagesOf(src) {
   const skipSpace = () => {
     for (;;) {
       while (i < n && /\s/.test(src[i])) i++;
-      if (src.startsWith("//", i)) i = src.indexOf("\n", i) < 0 ? n : src.indexOf("\n", i);
-      else if (src.startsWith("/*", i)) i = src.indexOf("*/", i + 2) < 0 ? n : src.indexOf("*/", i + 2) + 2;
+      if (src.startsWith("//", i))
+        i = src.indexOf("\n", i) < 0 ? n : src.indexOf("\n", i);
+      else if (src.startsWith("/*", i))
+        i = src.indexOf("*/", i + 2) < 0 ? n : src.indexOf("*/", i + 2) + 2;
       else return;
     }
   };
@@ -60,7 +65,14 @@ function messagesOf(src) {
     while (j < n && src[j] !== q) {
       if (src[j] === "\\") {
         const c = src[j + 1];
-        text += c === "n" ? "\n" : c === "t" ? "\t" : c === "u" ? String.fromCharCode(parseInt(src.slice(j + 2, j + 6), 16)) : c;
+        text +=
+          c === "n"
+            ? "\n"
+            : c === "t"
+              ? "\t"
+              : c === "u"
+                ? String.fromCharCode(parseInt(src.slice(j + 2, j + 6), 16))
+                : c;
         j += c === "u" ? 6 : 2;
         continue;
       }
@@ -87,7 +99,10 @@ function messagesOf(src) {
   };
   while (i < n) {
     if (skipToken()) continue;
-    if (src.startsWith("defineMessages(", i) && !/[\w$.]/.test(src[i - 1] ?? "")) {
+    if (
+      src.startsWith("defineMessages(", i) &&
+      !/[\w$.]/.test(src[i - 1] ?? "")
+    ) {
       i += "defineMessages(".length;
       skipSpace();
       const ns = literal();
@@ -143,7 +158,9 @@ for (const file of files) {
   for (const [key, value] of messagesOf(source)) {
     const known = english.get(key);
     if (known && known.value !== value)
-      problems.push(`${key} is defined twice with different English (${known.file}, ${relative(ROOT, file)}): it would throw when both load`);
+      problems.push(
+        `${key} is defined twice with different English (${known.file}, ${relative(ROOT, file)}): it would throw when both load`,
+      );
     english.set(key, { value, file: relative(ROOT, file) });
   }
 }
