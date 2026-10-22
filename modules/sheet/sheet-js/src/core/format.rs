@@ -28,9 +28,10 @@
 
 use std::collections::BTreeSet;
 
+use sheet_format::entry::{resolve_format, FormatHint};
 use sheet_xlsx::{EdgePatch, StylePatch};
 
-use super::{SessionError, SheetSession, T0_LOWER_CELL_CAP};
+use super::{Restyle, SessionError, SheetSession, T0_LOWER_CELL_CAP};
 use sheet_lower::CellRange;
 
 /// One border edge across the wasm door: `{ style, color? }` (`style`
@@ -63,6 +64,9 @@ pub struct StylePatchArg {
     pub h_align: Option<String>,
     pub v_align: Option<String>,
     pub wrap: Option<bool>,
+    /// Excel's quote prefix (a leading `'` was typed; ruling
+    /// `sheet.edit.typed-entry`).
+    pub quote_prefix: Option<bool>,
 }
 
 impl From<StylePatchArg> for StylePatch {
@@ -89,6 +93,7 @@ impl From<StylePatchArg> for StylePatch {
             h_align: a.h_align,
             v_align: a.v_align,
             wrap: a.wrap,
+            quote_prefix: a.quote_prefix,
         }
     }
 }
@@ -117,9 +122,18 @@ impl From<StylePatch> for StylePatchArg {
             h_align: p.h_align,
             v_align: p.v_align,
             wrap: p.wrap,
+            quote_prefix: p.quote_prefix,
         }
     }
 }
+
+/// One typed entry awaiting its style decision: the cell, the format its
+/// text implies, whether a leading `'` forced text, whether it cleared the
+/// cell.
+pub(crate) type PendingTyped = ((u16, u32, u32), Option<FormatHint>, bool, bool);
+
+/// A cell and the style patch a typed entry gives it.
+pub(crate) type CellPatch = ((u16, u32, u32), StylePatch);
 
 /// What `set_style` did: how many cells it restyled and how many distinct
 /// styles they now use.
@@ -141,6 +155,116 @@ pub(crate) fn bounds(r: &CellRange) -> (u32, u32, u32, u32) {
 }
 
 impl SheetSession {
+    // ── typed entry's formats ────────────────────────────────────────────
+
+    /// Decide, BEFORE the values are written, which cells a typed entry
+    /// restyles (ruling `sheet.edit.typed-entry`): the implied format when
+    /// Excel's rule takes it ([`resolve_format`] against the cell's current
+    /// format), and the quote prefix set by a leading `'` or cleared by an
+    /// entry without one.
+    pub(crate) fn typed_patches(
+        &self,
+        pending: &[PendingTyped],
+    ) -> Result<Vec<CellPatch>, SessionError> {
+        let model = self.engine().model();
+        let style_of = |&(sheet, row, col): &(u16, u32, u32)| {
+            model
+                .sheet(sheet)
+                .and_then(|ws| ws.cell(row, col))
+                .map(|c| c.style.0)
+                .unwrap_or(0)
+        };
+        // The quote-prefixed styles: read only when a styled cell is touched.
+        let quoted = if pending.iter().any(|p| style_of(&p.0) != 0) {
+            self.doc
+                .quote_prefixed_styles()
+                .map_err(|e| SessionError(e.to_string()))?
+        } else {
+            BTreeSet::new()
+        };
+        let locale = model.calc.locale;
+        let mut out = Vec::new();
+        for (at, hint, quote, empty) in pending {
+            let style = style_of(at);
+            let current = model.styles.num_fmt_of(sheet_core::StyleId(style));
+            let num_fmt = hint
+                .and_then(|h| resolve_format(current, h, locale))
+                .map(str::to_owned);
+            let has_quote = quoted.contains(&style);
+            let quote_prefix = match (*quote, has_quote) {
+                (true, false) => Some(true),
+                (false, true) if !empty => Some(false),
+                _ => None,
+            };
+            let patch = StylePatch {
+                num_fmt,
+                quote_prefix,
+                ..StylePatch::default()
+            };
+            if !patch.is_empty() {
+                out.push((*at, patch));
+            }
+        }
+        Ok(out)
+    }
+
+    /// Apply typed-entry patches (each distinct patch once, over the
+    /// distinct styles of its cells) and report every cell whose style id
+    /// moved.
+    pub(crate) fn apply_cell_patches(
+        &mut self,
+        patches: Vec<CellPatch>,
+    ) -> Result<Vec<Restyle>, SessionError> {
+        type Cell = (u16, u32, u32);
+        let mut groups: Vec<(StylePatch, Vec<Cell>)> = Vec::new();
+        for (at, patch) in patches {
+            match groups.iter_mut().find(|(p, _)| *p == patch) {
+                Some((_, cells)) => cells.push(at),
+                None => groups.push((patch, vec![at])),
+            }
+        }
+        let mut out = Vec::new();
+        for (patch, cells) in groups {
+            let olds: Vec<u32> = {
+                let model = self.engine().model();
+                cells
+                    .iter()
+                    .map(|&(s, r, c)| {
+                        model
+                            .sheet(s)
+                            .and_then(|ws| ws.cell(r, c))
+                            .map(|x| x.style.0)
+                            .unwrap_or(0)
+                    })
+                    .collect()
+            };
+            let bases: BTreeSet<u32> = olds.iter().copied().collect();
+            let (map, table) = self
+                .doc
+                .apply_style_patch(&bases, &patch)
+                .map_err(|e| SessionError(e.to_string()))?;
+            let engine = self.engine_mut();
+            engine.replace_styles(table);
+            for (&(sheet, row, col), &old) in cells.iter().zip(&olds) {
+                let new = map[&old];
+                engine.set_cell_style(sheet, row, col, new);
+                if new.0 != old {
+                    out.push(Restyle {
+                        sheet,
+                        row,
+                        col,
+                        before: old,
+                        after: new.0,
+                    });
+                }
+            }
+            for &(sheet, _, _) in &cells {
+                self.extra_dirty.insert(sheet);
+            }
+        }
+        Ok(out)
+    }
+
     // ── cell styles ──────────────────────────────────────────────────────
 
     /// Apply a partial style to every cell of `range` on `sheet` (blank

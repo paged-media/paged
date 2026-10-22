@@ -1,0 +1,20 @@
+$ paged-node template --help
+# exit 0
+# stdout
+paged-node template fields <doc> | fill <template> | check <template> <filled>
+
+template fields: list them, fill them as a filler (writes .paged, .idml or .pdf), check that a filled document changed only its fields
+
+options:
+  --values <json|file>               the field values: a JSON list of {name, value}, an object of name → text, or a file holding either
+  -o, --out <file>                   fill: write the result here
+  --plugins <a,b>                    load exactly these bundles (package names or paths) instead of discovering them
+  --no-plugins                       load no plugin bundles (core objects only)
+  --font <file.ttf>                  fallback face for text no registered font answers for (default: the bundled Inter)
+  --no-default-font                  no fallback face: text no font answers for is not set (to see what a document is missing)
+  --cmyk-profile <file.icc>          CMYK working space and PDF/X output intent (an ICC file)
+  --engine-from <dir>                resolve the engine (@paged-media/paged) from this directory
+  --text                             human-readable output instead of JSON
+  -h, --help                         show help
+# stderr
+(empty)

@@ -77,6 +77,7 @@ import type {
   StoryContent,
   DocumentSurface,
   EditContextContribution,
+  FrameSurfaceContribution,
   ElementId,
   FontFaceAsset,
   HitFilter,
@@ -205,6 +206,9 @@ export const HOST_FEATURES: readonly string[] = [
   // shared registry. Same static-door / dynamic-backing split as
   // `contribute.schemaPanel@1` + `schemaPanel.renderer@1`.
   "contribute.bindingProvider@1",
+  // Extensions ADR 334 — the frame-surface DOOR (static); whether a host
+  // will mount it is the dynamic `editContext.frameSurface@1`.
+  "contribute.frameSurface@1",
   // ADR 323 — the object model: the contribution door and `host.objects`
   // (core addresses always route; a private registry serves core + this
   // bundle's own kinds when the host injects no shared one).
@@ -1137,8 +1141,15 @@ export type BundleTrust = "first-party";
  * omits `saveFile` still injects a valid backend and
  * `supports("shell.saveFile@1")` reports the truth.
  */
-export type ShellBackend = Omit<ShellSurface, "saveFile" | "enterEditContext"> &
-  Partial<Pick<ShellSurface, "saveFile" | "enterEditContext">>;
+export type ShellBackend = Omit<
+  ShellSurface,
+  "saveFile" | "enterEditContext" | "exitEditContext"
+> &
+  Partial<Pick<ShellSurface, "saveFile" | "enterEditContext">> & {
+    /** Leave the active edit context of `type` (extensions ADR 334); the
+     *  host answers false when that type is not the active one. */
+    exitEditContext?(type: string, opts: { commit: boolean }): Promise<boolean>;
+  };
 
 /** The host's will-save registry (protocol 66 batch): the editor awaits
  *  every registered listener before it serialises the document. The SDK
@@ -1949,6 +1960,34 @@ export function createBundleHost(
       // present) captures it; otherwise it is a tracked no-op.
       if (recorded) return store.add(recorded);
       return store.add(toDisposable(() => {}));
+    },
+    // Extensions ADR 334 — a frame surface BORROWS its edit context: the
+    // context type must be one this bundle registered (a surface for a
+    // context that can never be entered is a silently dead surface).
+    frameSurface(c: FrameSurfaceContribution) {
+      requireDeclared(
+        declaresType(declared?.editContexts, c.contextType),
+        "contribute.frameSurface",
+        `contributes.editContexts[] must declare { type: "${c.contextType}" } ` +
+          `(a frame surface borrows its edit context's declaration)`,
+      );
+      if (!registeredContexts.has(c.contextType)) {
+        throw new Error(
+          `plugin-api: contribute.frameSurface("${c.contextType}") — no such ` +
+            `edit context is registered by ${manifest.id}. Call ` +
+            `contribute.editContext({ type: "${c.contextType}", … }) first.`,
+        );
+      }
+      const reg = getEditor()?.registries?.frameSurfaces;
+      if (!reg) {
+        log.warn(
+          `contribute.frameSurface("${c.contextType}") registered nothing — the ` +
+            `host wired no frame-surface registry (probe ` +
+            `supports("editContext.frameSurface@1"))`,
+        );
+        return store.add(toDisposable(() => {}));
+      }
+      return store.add(reg.register(c));
     },
     objectType(c) {
       requireDeclared(
@@ -3396,6 +3435,21 @@ export function createBundleHost(
       }
       return shellBackend.enterEditContext(type, elementId);
     },
+    // Extensions ADR 334 — leave THIS bundle's active context. The host
+    // checks the active type, so a bundle can never close another's.
+    async exitEditContext(opts) {
+      if (!shellBackend?.exitEditContext) {
+        log.warn(
+          `shell.exitEditContext ignored — the host app wired no context exit ` +
+            `(probe with supports("shell.exitEditContext@1"))`,
+        );
+        return false;
+      }
+      for (const type of registeredContexts) {
+        if (await shellBackend.exitEditContext(type, opts)) return true;
+      }
+      return false;
+    },
   };
 
   // --------------------------------------------------------- tools
@@ -4482,6 +4536,12 @@ export function createBundleHost(
   }
   if (typeof options?.shell?.enterEditContext === "function") {
     featureSet.add("shell.enterEditContext@1");
+  }
+  if (typeof options?.shell?.exitEditContext === "function") {
+    featureSet.add("shell.exitEditContext@1");
+  }
+  if (getEditor()?.registries?.frameSurfaces) {
+    featureSet.add("editContext.frameSurface@1");
   }
   if (options?.toolSettings) {
     featureSet.add("tools.settings@1");

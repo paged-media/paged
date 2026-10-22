@@ -66,6 +66,13 @@ export {
 } from "./overlay";
 
 export {
+  createFrameSurfaceRegistry,
+  type FrameSurfaceContribution,
+  type FrameSurfaceProps,
+  type FrameSurfaceRegistry,
+} from "./frame-surface";
+
+export {
   createToolRegistry,
   DEFAULT_TOOLS,
   type Tool,

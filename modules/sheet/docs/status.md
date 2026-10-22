@@ -36,6 +36,13 @@ each published canary added is under [Releases](#releases).
   and whole-row references, omitted arguments, legacy array formulas and element-wise array
   arguments evaluate as Excel does. A number literal beyond the double-precision range is a
   formula error, as in Excel.
+- **Typed entry.** What a person types into a cell is stored as Excel stores it (ADR 511):
+  percentages, currency, group separators, fractions, scientific notation, dates, times and
+  date-times become numbers with the number format Excel gives them, a leading `'` forces text
+  with Excel's quote prefix, and value and format undo as one step. The CSV import types fields
+  through the same parser. Recorded from Excel and replayed in CI: 741 of 742 en-US entries
+  through the session agree (215 of 216 through the parser), de-DE, es-ES and it-IT 71 of 71,
+  fr-FR 63 of 71, every disagreement a recorded ruling.
 - **Workbook panel.** File and sheet controls on top (open, new, and sheets: add, rename,
   delete), then collapsible sections: Place on page (open by default), Rows and columns, Format
   and layout (borders, merge, column width, row height, freeze), Names, Sort range (formula cells
@@ -53,6 +60,14 @@ each published canary added is under [Releases](#releases).
   of items (name, values, categories, colour) that can be added, removed and reordered. Every
   writable row of every kind is a field (a spec holds the panel to the schemas); each commit is
   one undo step, and each field offers the host's "Bind to data…".
+- **The frame is a window onto its sheet (ADR 510).** A sheet frame's binding (v2) carries its
+  view (the top-left cell and a lock), print headings and gridlines and its column sizing; a
+  binding written before reads as locked at its range. Entering a frame opens its bound sheet at
+  that cell. `get_frame_window` decides which rows and columns a frame shows, for the live grid
+  and the page alike. On a host with frame surfaces (extensions ADR 334) the entered frame shows
+  a grid drawn on the main thread over the frame, with row and column headings inside it,
+  instead of the scene layer; pointer, wheel and keys go straight to it. The page table does not
+  follow the scrolled window yet: it still shows the placed range.
 - **Grid panel and in-frame grid.** Range selection by click, drag and shift; arrows, Tab, F2,
   Delete and scrolling in the frame; a cell editor with function completion; copy and paste of
   ranges with relative references re-addressed; the fill handle with number, date, weekday and
@@ -177,7 +192,10 @@ each published canary added is under [Releases](#releases).
 - **Formulas** are the Excel en-US dialect only. On load, a formula the parser does not read
   keeps its cached value: an unregistered function, an external defined name or DDE item
   (`[1]!Name`).
-  `TREND` fits one regressor only. A typed date is stored as text.
+  `TREND` fits one regressor only.
+- **Typed entry** follows Excel (ADR 511): month names and `TRUE`/`FALSE` are English in every
+  locale; `#GETTING_DATA` typed stays text; a number re-entered by undo keeps 15 significant
+  digits.
 - **Locale.** The display locale is taken from the workbook's number formats on load.
 - **Saving an edited sheet** writes a new or changed literal text cell as an inline string
   (`t="inlineStr"`), not into the shared-string table. A sheet's tab state cannot be changed.

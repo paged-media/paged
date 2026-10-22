@@ -187,6 +187,7 @@ impl SheetSession {
                     col: c.col,
                 })
                 .collect(),
+            restyled: Vec::new(),
         }
     }
 
