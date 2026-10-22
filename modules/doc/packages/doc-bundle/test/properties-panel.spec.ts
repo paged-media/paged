@@ -27,7 +27,7 @@ import { propertyRowsOf, validatePanelSchema } from "@paged-media/plugin-sdk";
 import manifest from "../manifest.json" with { type: "json" };
 import { PANEL_FIELDS, schemaOf } from "../src/object-model";
 import {
-  DOC_PROPERTIES_PANEL,
+  docPropertiesPanel,
   PROPERTIES_PANEL_ID,
 } from "../src/panels/properties-panel";
 
@@ -37,7 +37,7 @@ const kindOf = (q: string) =>
 describe("Word properties panel (property rows)", () => {
   it("validates against the manifest schemas", () => {
     expect(
-      validatePanelSchema(DOC_PROPERTIES_PANEL, {
+      validatePanelSchema(docPropertiesPanel(), {
         pluginId: manifest.id,
         schemaOf: (k) =>
           k.startsWith(`plugin:${manifest.id}/`)
@@ -47,7 +47,7 @@ describe("Word properties panel (property rows)", () => {
     ).toEqual([]);
   });
   it("covers every declared PANEL_FIELDS entry, each through a property row", () => {
-    const rows = propertyRowsOf(DOC_PROPERTIES_PANEL).map(
+    const rows = propertyRowsOf(docPropertiesPanel()).map(
       (r) => `${kindOf(r.field.kind!)}.${r.field.path}`,
     );
     expect(rows.sort()).toEqual(
