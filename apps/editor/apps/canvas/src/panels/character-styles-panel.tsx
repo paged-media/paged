@@ -27,9 +27,16 @@
 
 import { useContentSelection, useObjectField } from "@paged-media/shell";
 
+import { defineMessages, useStrings } from "@paged-media/strings";
+
 import { StyleApplyPanel } from "./style-apply";
 
+const M = defineMessages("app.characterStylesPanel", {
+  newStyle: "New character style",
+});
+
 export function CharacterStylesPanel() {
+  const strings = useStrings();
   // ADR 323 — the applied style is an object-model field on the selection.
   const applied = useObjectField({
     path: "appliedCharacterStyle",
@@ -70,7 +77,7 @@ export function CharacterStylesPanel() {
         testId="character-styles"
         createOp="createCharacterStyle"
         deleteOp="deleteCharacterStyle"
-        newName="New character style"
+        newName={strings.t(M.newStyle)}
         caret={caret}
       />
     </div>

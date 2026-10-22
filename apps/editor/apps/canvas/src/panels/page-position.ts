@@ -69,6 +69,12 @@ import {
   type PlacedLeaf,
 } from "./page-box";
 import { problemsSink } from "./problems-store";
+import { defineMessages, t } from "@paged-media/strings";
+
+const M = defineMessages("app.pagePosition", {
+  moveRefused: "Move refused: {reason}",
+  resizeRefused: "Resize refused: {reason}",
+});
 
 export type { PageBox, PlacedLeaf } from "./page-box";
 
@@ -183,11 +189,11 @@ export function usePagePosition(): PagePosition {
    *  (it caches geometry and refreshes only on clicks and gestures). */
   // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
   const send = useCallback(
-    async (verb: string, ops: Mutation[]) => {
+    async (refused: string, ops: Mutation[]) => {
       if (ops.length === 0) return;
       const refusal = refusalOf(await client.mutate(asOneMutation(ops)));
       if (refusal) {
-        report(`${verb} refused: ${refusal}`);
+        report(t(refused, { reason: refusal }));
         return;
       }
       const shown = elementGeometry.map((g) => g.id);
@@ -209,10 +215,10 @@ export function usePagePosition(): PagePosition {
       if (dx === 0 && dy === 0) return;
       const plan = await translationPlan(client, elementSelection, dx, dy);
       if (!plan.ok) {
-        report(`Move refused: ${plan.reason}`);
+        report(t(M.moveRefused, { reason: plan.reason }));
         return;
       }
-      await send("Move", plan.ops);
+      await send(M.moveRefused, plan.ops);
     },
     [client, elementSelection, send],
   );
@@ -223,7 +229,7 @@ export function usePagePosition(): PagePosition {
     async (box: PageBox) => {
       problemsSink.clear(OBJECT_DIAGNOSTIC_SOURCE);
       if (!edgeLeaf) return;
-      await send("Resize", [
+      await send(M.resizeRefused, [
         {
           op: "setElementProperty",
           args: {

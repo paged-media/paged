@@ -69,10 +69,43 @@ import { frameFittingComposition } from "./frame-fitting.composition";
 import { objectTransformComposition } from "./object-transform.composition";
 import { paragraphComposition } from "./paragraph.composition";
 import { strokeComposition } from "./stroke.composition";
+import { defineMessages, useStrings } from "@paged-media/strings";
+
+const M = defineMessages("app.propertiesPanel", {
+  frame: "Frame",
+  group: "Group",
+  objects: "Objects",
+  text: "Text",
+  image: "Image",
+  page: "Page",
+  properties: "Properties",
+  objectCount: "{count, plural, one {# object} other {# objects}}",
+  groupCount: "{count, plural, one {# group} other {# groups}}",
+  frameCount: "{count, plural, one {# frame} other {# frames}}",
+  textSelection: "Text selection",
+  oversetTitle:
+    "This frame's story does not fit — text continues past the last frame in its chain",
+  fitsTitle: "This frame's story fits",
+  overset: "overset",
+  oversetNo: "overset · no",
+  empty: "Select a frame or place a text caret to see its properties.",
+  editInPlace: "{type} — double-click to edit in place.",
+  noImage:
+    "The selection holds no placed image. File ▸ Place… puts one in the selected frame.",
+  askAssistant: "Ask the AI Assistant…",
+  geometry: "Geometry",
+  pages: "Pages",
+  size: "Size",
+  margins: "Margins",
+  columns: "Columns",
+  bleed: "Bleed",
+  columnsValue: "{count} · gutter {gutter}",
+});
 
 type InspectorKind = "text" | "image" | "frame" | "page" | "none";
 
 export function PropertiesPanel() {
+  const strings = useStrings();
   const { elementSelection, elementGeometry } = useSelection();
   const { contentSelection } = useContentSelection();
   const cockpit = useOptionalCockpitState();
@@ -137,7 +170,12 @@ export function PropertiesPanel() {
   // groups and frames together is named for both.
   const groups = elementSelection.filter((id) => id.kind === "group").length;
   const frames = elementSelection.length - groups;
-  const noun = groups === 0 ? "Frame" : frames === 0 ? "Group" : "Objects";
+  const noun =
+    groups === 0
+      ? strings.t(M.frame)
+      : frames === 0
+        ? strings.t(M.group)
+        : strings.t(M.objects);
   const loneGroup =
     groups === 1 && frames === 0 ? groupIdOf(elementSelection[0]) : null;
   const members = useGroupMemberCount(loneGroup, elementGeometry);
@@ -147,32 +185,32 @@ export function PropertiesPanel() {
   const title =
     ownedTitle ??
     (kind === "text"
-      ? "Text"
+      ? strings.t(M.text)
       : kind === "image"
-        ? "Image"
+        ? strings.t(M.image)
         : kind === "frame"
           ? noun
           : kind === "page"
-            ? "Page"
-            : "Properties");
+            ? strings.t(M.page)
+            : strings.t(M.properties));
 
   // The gallery's selection sub-header — "Text · 1 frame", "Group · 2
   // objects" (a lone group counts what is in it).
   const counted = loneGroup
     ? members === null
       ? null
-      : plural(members, "object")
+      : strings.t(M.objectCount, { count: members })
     : [
-        groups > 0 ? plural(groups, "group") : null,
-        frames > 0 ? plural(frames, "frame") : null,
+        groups > 0 ? strings.t(M.groupCount, { count: groups }) : null,
+        frames > 0 ? strings.t(M.frameCount, { count: frames }) : null,
       ]
         .filter(Boolean)
         .join(", ");
   const selectionLabel =
     kind === "text"
-      ? "Text selection"
+      ? strings.t(M.textSelection)
       : hasElement
-        ? [kind === "image" ? "Image" : noun, counted]
+        ? [kind === "image" ? strings.t(M.image) : noun, counted]
             .filter(Boolean)
             .join(" · ")
         : null;
@@ -180,10 +218,10 @@ export function PropertiesPanel() {
   const typeSections = hasContent ? (
     <>
       <div data-properties-section="character">
-        <CompositionRenderer composition={characterComposition} />
+        <CompositionRenderer composition={characterComposition(strings)} />
       </div>
       <div data-properties-section="paragraph">
-        <CompositionRenderer composition={paragraphComposition} />
+        <CompositionRenderer composition={paragraphComposition(strings)} />
       </div>
     </>
   ) : null;
@@ -230,8 +268,8 @@ export function PropertiesPanel() {
                 }
                 title={
                   threading?.isOverset(oversetFrameId)
-                    ? "This frame's story does not fit — text continues past the last frame in its chain"
-                    : "This frame's story fits"
+                    ? strings.t(M.oversetTitle)
+                    : strings.t(M.fitsTitle)
                 }
                 className="pg-ui-xs"
                 style={{
@@ -243,8 +281,8 @@ export function PropertiesPanel() {
                 }}
               >
                 {threading?.isOverset(oversetFrameId)
-                  ? "overset"
-                  : "overset · no"}
+                  ? strings.t(M.overset)
+                  : strings.t(M.oversetNo)}
               </span>
             )}
           </div>
@@ -256,7 +294,7 @@ export function PropertiesPanel() {
             data-properties-empty
             style={{ padding: "0 14px 12px", lineHeight: 1.5 }}
           >
-            Select a frame or place a text caret to see its properties.
+            {strings.t(M.empty)}
           </div>
         )}
 
@@ -282,8 +320,9 @@ export function PropertiesPanel() {
                   className="pg-ui-xs"
                   style={{ padding: "4px 2px", opacity: 0.7, lineHeight: 1.5 }}
                 >
-                  {humanizeType(owned.objectType.type)} — double-click to edit
-                  in place.
+                  {strings.t(M.editInPlace, {
+                    type: humanizeType(owned.objectType.type),
+                  })}
                 </div>
               )}
             </div>
@@ -298,12 +337,16 @@ export function PropertiesPanel() {
           ) : null}
           {hasElement ? (
             <div data-properties-section="object">
-              <CompositionRenderer composition={objectTransformComposition} />
+              <CompositionRenderer
+                composition={objectTransformComposition(strings)}
+              />
             </div>
           ) : null}
           {kind === "image" && hasImage ? (
             <div data-properties-section="fitting">
-              <CompositionRenderer composition={frameFittingComposition} />
+              <CompositionRenderer
+                composition={frameFittingComposition(strings)}
+              />
             </div>
           ) : null}
           {kind === "image" && hasElement && !hasImage ? (
@@ -312,13 +355,12 @@ export function PropertiesPanel() {
               data-properties-no-image
               style={{ padding: "4px 2px", lineHeight: 1.5 }}
             >
-              The selection holds no placed image. File ▸ Place… puts one in the
-              selected frame.
+              {strings.t(M.noImage)}
             </div>
           ) : null}
           {hasElement ? (
             <div data-properties-section="stroke">
-              <CompositionRenderer composition={strokeComposition} />
+              <CompositionRenderer composition={strokeComposition(strings)} />
             </div>
           ) : null}
           {hasContent && kind !== "text" ? typeSections : null}
@@ -340,17 +382,13 @@ export function PropertiesPanel() {
               onClick={() => openAssistant({ view: "ask" })}
               testId="open-ai-assistant"
             >
-              Ask the AI Assistant…
+              {strings.t(M.askAssistant)}
             </CockpitBtn>
           </div>
         )}
       </div>
     </CatalogRegistryProvider>
   );
-}
-
-function plural(n: number, word: string): string {
-  return `${n} ${word}${n === 1 ? "" : "s"}`;
 }
 
 function groupIdOf(id: ElementId | undefined): string | null {
@@ -425,21 +463,22 @@ function formatSides(
  *  for engine accessors outlived its gap). Section/status await
  *  collaboration. */
 function PageSummary() {
+  const strings = useStrings();
   const { handle } = useDocument();
   const first = handle?.pageSizesPt[0];
   const unit = useDocumentUnit();
   const page = useCollection<PageGeometry>("pages")?.[0] ?? null;
   return (
-    <CockpitSection title="Geometry">
-      <CockpitRow label="Pages">
+    <CockpitSection title={strings.t(M.geometry)}>
+      <CockpitRow label={strings.t(M.pages)}>
         <CockpitValue>{handle ? handle.pageCount : "—"}</CockpitValue>
       </CockpitRow>
-      <CockpitRow label="Size">
+      <CockpitRow label={strings.t(M.size)}>
         <CockpitValue>
           {first ? formatLengthPair(first[0], first[1], unit) : "—"}
         </CockpitValue>
       </CockpitRow>
-      <CockpitRow label="Margins">
+      <CockpitRow label={strings.t(M.margins)}>
         <CockpitValue>
           {page
             ? formatSides(
@@ -454,14 +493,17 @@ function PageSummary() {
             : "—"}
         </CockpitValue>
       </CockpitRow>
-      <CockpitRow label="Columns">
+      <CockpitRow label={strings.t(M.columns)}>
         <CockpitValue>
           {page
-            ? `${page.columnCount ?? 1} · gutter ${formatLength(page.columnGutterPt ?? 0, unit)}`
+            ? strings.t(M.columnsValue, {
+                count: page.columnCount ?? 1,
+                gutter: formatLength(page.columnGutterPt ?? 0, unit),
+              })
             : "—"}
         </CockpitValue>
       </CockpitRow>
-      <CockpitRow label="Bleed">
+      <CockpitRow label={strings.t(M.bleed)}>
         <CockpitValue>
           {page
             ? formatSides(

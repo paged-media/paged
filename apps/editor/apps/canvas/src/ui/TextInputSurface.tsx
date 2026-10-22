@@ -37,7 +37,13 @@ import { useState, type CSSProperties } from "react";
 import type { Camera, CaretGeometry, PageId } from "@paged-media/client";
 import { CANVAS_SURFACE_ATTR, useContentSelection } from "@paged-media/shell";
 
+import { defineMessages, useStrings } from "@paged-media/strings";
+
 import type { PageRect } from "./layout";
+
+const M = defineMessages("app.uiTextInputSurface", {
+  storyText: "Story text",
+});
 
 export interface TextInputSurfaceProps {
   camera: Camera;
@@ -74,6 +80,7 @@ export function caretScreenBox(
 export function TextInputSurface(props: TextInputSurfaceProps) {
   const { caret, contentSelection } = useContentSelection();
   const [composing, setComposing] = useState(false);
+  const strings = useStrings();
   const box = caretScreenBox(
     caret,
     props.camera,
@@ -86,7 +93,7 @@ export function TextInputSurface(props: TextInputSurfaceProps) {
   return (
     <textarea
       {...{ [CANVAS_SURFACE_ATTR]: "text" }}
-      aria-label="Story text"
+      aria-label={strings.t(M.storyText)}
       // Reached by focus from the canvas, never by Tab: the caret IS the
       // place the user is, and Tab there types a tab.
       tabIndex={-1}

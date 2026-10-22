@@ -54,6 +54,36 @@ import { viewportToDoc } from "@paged-media/client";
 
 import { objectVerbApplies, refusalOf } from "./object-commands";
 import { currentPageTarget, TEXT_FRAME_SIZE_PT } from "./insert-commands";
+import { defineMessages, t } from "@paged-media/strings";
+
+const M = defineMessages("app.clipboardCommands", {
+  cut: "Cut",
+  copy: "Copy",
+  paste: "Paste",
+  pasteInPlace: "Paste in place",
+  duplicate: "Duplicate",
+  refused: "{verb} refused: {reason}",
+  needsItem: "{verb} needs a selected page item.",
+  noAnswer: "the engine did not answer",
+  nothingToCopy: "nothing to copy",
+  needsDocument: "{verb} needs an open document.",
+  clipboardEmpty: "{verb}: the clipboard holds nothing to paste.",
+});
+
+// The words of this file's menu rows; the shell's menu bar shows each
+// path segment through them (`menu.<segment>`).
+defineMessages("menu", {
+  Cut: "Cut",
+  Copy: "Copy",
+  Paste: "Paste",
+  "Paste in place": "Paste in place",
+  Duplicate: "Duplicate",
+});
+
+// The palette categories of this file's commands (`commandCategory.<name>`).
+defineMessages("commandCategory", {
+  Edit: "Edit",
+});
 
 export const PAGED_EDIT_CUT = "paged.edit.cut";
 export const PAGED_EDIT_COPY = "paged.edit.copy";
@@ -258,6 +288,25 @@ const isPageItem = (id: ElementId): boolean =>
   id.kind === "polygon" ||
   id.kind === "group";
 
+const VERB_KEYS: Readonly<Record<string, string>> = {
+  Cut: M.cut,
+  Copy: M.copy,
+  Paste: M.paste,
+  "Paste in place": M.pasteInPlace,
+  Duplicate: M.duplicate,
+};
+
+/** A verb's words for a report. */
+function verbText(verb: string): string {
+  const key = VERB_KEYS[verb];
+  return key ? t(key) : verb;
+}
+
+/** "<verb> refused: <reason>", in the editor's words. */
+function refusedText(verb: string, reason: string): string {
+  return t(M.refused, { verb: verbText(verb), reason });
+}
+
 function selectedItems(paged: PagedEditor): ElementId[] {
   return paged.selection.elementSelection.filter(isPageItem);
 }
@@ -271,7 +320,7 @@ export async function copySelection(
 ): Promise<PageItemClip | null> {
   const ids = selectedItems(paged);
   if (ids.length === 0) {
-    deps.report("info", `${verb} needs a selected page item.`);
+    deps.report("info", t(M.needsItem, { verb: verbText(verb) }));
     return null;
   }
   const reply = await paged.client.send({
@@ -279,17 +328,14 @@ export async function copySelection(
     payload: { elementIds: ids },
   });
   if (reply.kind !== "elementsExported") {
-    deps.report(
-      "error",
-      `${verb} refused: ${refusalOf(reply) ?? "the engine did not answer"}`,
-    );
+    deps.report("error", refusedText(verb, refusalOf(reply) ?? t(M.noAnswer)));
     return null;
   }
   const { snippet, refused } = reply.payload;
   const text = reply.payload.text ?? "";
   const count = reply.payload.count ?? 0;
   if (!snippet) {
-    deps.report("error", `${verb} refused: ${refused ?? "nothing to copy"}`);
+    deps.report("error", refusedText(verb, refused ?? t(M.nothingToCopy)));
     return null;
   }
   const next: PageItemClip = {
@@ -370,7 +416,7 @@ export async function pasteClipboard(
   const verb = inPlace ? "Paste in place" : "Paste";
   const handle = paged.document.handle;
   if (!handle || handle.pageCount === 0) {
-    deps.report("info", `${verb} needs an open document.`);
+    deps.report("info", t(M.needsDocument, { verb: verbText(verb) }));
     return;
   }
   const at = viewCentre(paged);
@@ -380,7 +426,7 @@ export async function pasteClipboard(
     pageItemClipboard.current(),
   );
   if (content.kind === "empty") {
-    deps.report("info", `${verb}: the clipboard holds nothing to paste.`);
+    deps.report("info", t(M.clipboardEmpty, { verb: verbText(verb) }));
     return;
   }
   let mutation: Mutation;
@@ -424,7 +470,7 @@ export async function pasteClipboard(
   const reply = await paged.client.mutate(mutation);
   const refusal = refusalOf(reply);
   if (refusal) {
-    deps.report("error", `${verb} refused: ${refusal}`);
+    deps.report("error", refusedText(verb, refusal));
     return;
   }
   await selectMinted(paged, reply);
@@ -438,7 +484,7 @@ export async function duplicateSelection(
 ): Promise<void> {
   const ids = selectedItems(paged);
   if (ids.length === 0) {
-    deps.report("info", "Duplicate needs a selected page item.");
+    deps.report("info", t(M.needsItem, { verb: verbText("Duplicate") }));
     return;
   }
   const reply = await paged.client.mutate({
@@ -447,7 +493,7 @@ export async function duplicateSelection(
   });
   const refusal = refusalOf(reply);
   if (refusal) {
-    deps.report("error", `Duplicate refused: ${refusal}`);
+    deps.report("error", refusedText("Duplicate", refusal));
     return;
   }
   await selectMinted(paged, reply);
@@ -483,14 +529,14 @@ export function buildClipboardCommands(
   return [
     {
       id: PAGED_EDIT_CUT,
-      title: "Cut",
+      title: t(M.cut),
       category: "Edit",
       when: clipboardSelectionApplies,
       handler: (paged) => cutSelection(paged as PagedEditor, deps),
     },
     {
       id: PAGED_EDIT_COPY,
-      title: "Copy",
+      title: t(M.copy),
       category: "Edit",
       when: clipboardSelectionApplies,
       handler: async (paged) => {
@@ -499,21 +545,21 @@ export function buildClipboardCommands(
     },
     {
       id: PAGED_EDIT_PASTE,
-      title: "Paste",
+      title: t(M.paste),
       category: "Edit",
       when: pasteApplies,
       handler: (paged) => pasteClipboard(paged as PagedEditor, deps, false),
     },
     {
       id: PAGED_EDIT_PASTE_IN_PLACE,
-      title: "Paste in place",
+      title: t(M.pasteInPlace),
       category: "Edit",
       when: pasteApplies,
       handler: (paged) => pasteClipboard(paged as PagedEditor, deps, true),
     },
     {
       id: PAGED_EDIT_DUPLICATE,
-      title: "Duplicate",
+      title: t(M.duplicate),
       category: "Edit",
       when: clipboardSelectionApplies,
       handler: (paged) => duplicateSelection(paged as PagedEditor, deps),

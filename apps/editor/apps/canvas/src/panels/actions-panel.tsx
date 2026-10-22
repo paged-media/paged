@@ -47,21 +47,93 @@ import {
   verdictTitle,
   type PagedAction,
 } from "@paged-media/shell";
+import { defineMessages, useStrings } from "@paged-media/strings";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type PanelProps = any;
 
 const MUTED = { color: "var(--pg-muted-fg)", fontFamily: "var(--font-sans)" };
 
+const M = defineMessages("app.actionsPanel", {
+  notGestures: "canvas gestures — move, resize, rotate, pen and shape drawing",
+  notTyping: "typing in a text frame",
+  notFields: "panel field edits (font size, stroke weight, swatch values…)",
+  notSelection: "selection clicks, marquee and camera moves",
+  notUndoKeys:
+    "the Cmd-Z / Cmd-Shift-Z keystrokes (Edit ▸ Undo from the menu IS recorded)",
+  nothingRecorded:
+    "Nothing recorded — no command ran. Direct manipulation (drag, typing, " +
+    "panel fields) is not recordable; see the scope note below.",
+  nothingImported:
+    "Nothing imported — the file held no actions this build understands.",
+  imported: "Imported {count, plural, one {# action} other {# actions}}.",
+  title: "Actions",
+  recording: "Recording",
+  saved: "{count} saved",
+  // Beside the count, which the panel shows in its own element.
+  capturedOne: "command captured",
+  capturedOther: "commands captured",
+  namePlaceholder: "Name this action",
+  stop: "Stop",
+  discard: "Discard",
+  record: "Record",
+  import: "Import…",
+  exportAll: "Export all",
+  storageRefused:
+    "Browser storage refused the last write — actions exist for this " +
+    "session only. Export to keep them.",
+  empty:
+    "No actions yet. Press Record, run some commands from the menu, " +
+    "palette or a panel, then press Stop.",
+  replayed: "Replayed “{name}”",
+  failed: " — failed: {error}",
+  skipped: "skipped",
+  noMutations:
+    "No document mutations — this replay changed only the view or the UI.",
+  mutations:
+    "{count, plural, one {# document mutation} other {# document mutations}} " +
+    "applied. A replay is not one undoable unit — undo that many times to " +
+    "reverse it.",
+  dismiss: "Dismiss",
+  contains: "What a recording contains",
+  recordsBefore: "Actions record",
+  commands: "commands",
+  recordsAfter:
+    " — anything reachable from a menu, a keybinding, the command palette, " +
+    "the tool rail, a panel button or a plugin. Steps with no payload " +
+    "replay against whatever is selected at replay time.",
+  notRecorded: "Not recorded:",
+  notCaptured:
+    "Not captured: {gestures, plural, one {# canvas gesture} other {# canvas gestures}} " +
+    "and {edits, plural, one {# direct edit} other {# direct edits}} " +
+    "(typing / panel fields) changed the document while recording. They " +
+    "cannot be replayed.",
+  playing: "Playing…",
+  play: "Play",
+  willSkip: "{count, plural, one {# step} other {# steps}} will be skipped",
+  stepEnabled: "Step {n} enabled",
+  failedWhileRecording: " — failed while recording",
+  deleteStep: "Delete step {n}",
+  includeDocBound:
+    "Replay steps that carry ids from the recorded document. Off by " +
+    "default — those ids do not exist in another document.",
+  copied: "Copied",
+  copyAsScript: "Copy as script",
+  export: "Export…",
+  delete: "Delete",
+  copyNoteBefore: "“Copy as script” emits the same steps as",
+  copyNoteAfter: "calls for the demo/automation runner.",
+});
+
 /** The permanent scope statement. Worded as facts about the tap, not
  *  as an apology — the user needs to be able to predict what an
  *  action will contain before they record it. */
 const NOT_RECORDED = [
-  "canvas gestures — move, resize, rotate, pen and shape drawing",
-  "typing in a text frame",
-  "panel field edits (font size, stroke weight, swatch values…)",
-  "selection clicks, marquee and camera moves",
-  "the Cmd-Z / Cmd-Shift-Z keystrokes (Edit ▸ Undo from the menu IS recorded)",
+  M.notGestures,
+  M.notTyping,
+  M.notFields,
+  M.notSelection,
+  M.notUndoKeys,
 ];
 
 function download(name: string, body: string) {
@@ -76,6 +148,7 @@ function download(name: string, body: string) {
 }
 
 export function ActionsPanel(_: PanelProps) {
+  const strings = useStrings();
   const actions = useActions();
   const [name, setName] = useState("");
   const [openId, setOpenId] = useState<string | null>(null);
@@ -89,9 +162,7 @@ export function ActionsPanel(_: PanelProps) {
     const created = actions.stopRecording(name);
     setName("");
     if (!created) {
-      setNotice(
-        "Nothing recorded — no command ran. Direct manipulation (drag, typing, panel fields) is not recordable; see the scope note below.",
-      );
+      setNotice(strings.t(M.nothingRecorded));
       return;
     }
     setNotice(null);
@@ -103,8 +174,8 @@ export function ActionsPanel(_: PanelProps) {
     const accepted = actions.importActions(await file.text());
     setNotice(
       accepted === 0
-        ? "Nothing imported — the file held no actions this build understands."
-        : `Imported ${accepted} action${accepted === 1 ? "" : "s"}.`,
+        ? strings.t(M.nothingImported)
+        : strings.t(M.imported, { count: accepted }),
     );
   };
 
@@ -118,14 +189,16 @@ export function ActionsPanel(_: PanelProps) {
       }}
     >
       <CockpitPanelHeader
-        title="Actions"
+        title={strings.t(M.title)}
         action={
           recording ? (
             <StatusPill tone="error" testId="actions-recording">
-              Recording
+              {strings.t(M.recording)}
             </StatusPill>
           ) : (
-            <StatusPill tone="draft">{actions.actions.length} saved</StatusPill>
+            <StatusPill tone="draft">
+              {strings.t(M.saved, { count: actions.actions.length })}
+            </StatusPill>
           )
         }
       />
@@ -143,7 +216,9 @@ export function ActionsPanel(_: PanelProps) {
           >
             <div style={{ fontSize: 12, marginBottom: 8 }}>
               <span data-actions-step-count>{recording.steps.length}</span>{" "}
-              command{recording.steps.length === 1 ? "" : "s"} captured
+              {strings.t(
+                recording.steps.length === 1 ? M.capturedOne : M.capturedOther,
+              )}
             </div>
             <UncapturedLine
               gestures={recording.uncaptured.gestures}
@@ -152,16 +227,16 @@ export function ActionsPanel(_: PanelProps) {
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="Name this action"
+              placeholder={strings.t(M.namePlaceholder)}
               data-actions-name
               style={inputStyle}
             />
             <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
               <CockpitBtn primary sm onClick={stop} testId="actions-stop">
-                Stop
+                {strings.t(M.stop)}
               </CockpitBtn>
               <CockpitBtn sm onClick={actions.cancelRecording}>
-                Discard
+                {strings.t(M.discard)}
               </CockpitBtn>
             </div>
           </div>
@@ -173,10 +248,10 @@ export function ActionsPanel(_: PanelProps) {
               onClick={actions.startRecording}
               testId="actions-record"
             >
-              Record
+              {strings.t(M.record)}
             </CockpitBtn>
             <CockpitBtn sm onClick={() => fileRef.current?.click()}>
-              Import…
+              {strings.t(M.import)}
             </CockpitBtn>
             <CockpitBtn
               sm
@@ -188,7 +263,7 @@ export function ActionsPanel(_: PanelProps) {
                 )
               }
             >
-              Export all
+              {strings.t(M.exportAll)}
             </CockpitBtn>
             <input
               ref={fileRef}
@@ -212,8 +287,7 @@ export function ActionsPanel(_: PanelProps) {
               color: "var(--status-error)",
             }}
           >
-            Browser storage refused the last write — actions exist for this
-            session only. Export to keep them.
+            {strings.t(M.storageRefused)}
           </div>
         )}
         {notice && (
@@ -229,10 +303,7 @@ export function ActionsPanel(_: PanelProps) {
       {/* ── the list ──────────────────────────────────────────── */}
       <div style={{ padding: "0 14px 12px" }}>
         {actions.actions.length === 0 && !recording && (
-          <div style={{ ...MUTED, fontSize: 12 }}>
-            No actions yet. Press Record, run some commands from the menu,
-            palette or a panel, then press Stop.
-          </div>
+          <div style={{ ...MUTED, fontSize: 12 }}>{strings.t(M.empty)}</div>
         )}
         {actions.actions.map((action) => (
           <ActionRow
@@ -277,7 +348,7 @@ export function ActionsPanel(_: PanelProps) {
         <div data-actions-report style={{ padding: "0 14px 12px" }}>
           <Divider />
           <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 6 }}>
-            Replayed “{actions.lastReport.actionName}”
+            {strings.t(M.replayed, { name: actions.lastReport.actionName })}
           </div>
           {actions.lastReport.ran.map((r) => (
             <div
@@ -290,7 +361,7 @@ export function ActionsPanel(_: PanelProps) {
               }}
             >
               {r.index + 1}. {r.title}
-              {r.error ? ` — failed: ${r.error}` : ""}
+              {r.error ? strings.t(M.failed, { error: r.error }) : ""}
             </div>
           ))}
           {actions.lastReport.skipped.map((s) => (
@@ -298,7 +369,8 @@ export function ActionsPanel(_: PanelProps) {
               key={s.index}
               style={{ ...MUTED, fontSize: 11, marginBottom: 3 }}
             >
-              {s.index + 1}. {s.title} — skipped ({skipReasonLabel(s.reason)})
+              {s.index + 1}. {s.title} — {strings.t(M.skipped)} (
+              {skipReasonLabel(s.reason)})
             </div>
           ))}
           {/* Honest undo statement. A replay is NOT one undoable unit:
@@ -311,14 +383,14 @@ export function ActionsPanel(_: PanelProps) {
               panel. So we report the count instead of pretending. */}
           <div style={{ ...MUTED, fontSize: 11, marginTop: 6 }}>
             {actions.lastReport.mutations === 0
-              ? "No document mutations — this replay changed only the view or the UI."
-              : `${actions.lastReport.mutations} document mutation${
-                  actions.lastReport.mutations === 1 ? "" : "s"
-                } applied. A replay is not one undoable unit — undo that many times to reverse it.`}
+              ? strings.t(M.noMutations)
+              : strings.t(M.mutations, {
+                  count: actions.lastReport.mutations,
+                })}
           </div>
           <div style={{ marginTop: 8 }}>
             <CockpitBtn sm onClick={actions.dismissReport}>
-              Dismiss
+              {strings.t(M.dismiss)}
             </CockpitBtn>
           </div>
         </div>
@@ -328,18 +400,16 @@ export function ActionsPanel(_: PanelProps) {
       <div style={{ padding: "0 14px 16px" }}>
         <Divider />
         <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 6 }}>
-          What a recording contains
+          {strings.t(M.contains)}
         </div>
         <div style={{ ...MUTED, fontSize: 11, lineHeight: 1.55 }}>
-          Actions record <strong>commands</strong> — anything reachable from a
-          menu, a keybinding, the command palette, the tool rail, a panel button
-          or a plugin. Steps with no payload replay against whatever is selected
-          at replay time.
-          <div style={{ marginTop: 6 }}>Not recorded:</div>
+          {strings.t(M.recordsBefore)} <strong>{strings.t(M.commands)}</strong>
+          {strings.t(M.recordsAfter)}
+          <div style={{ marginTop: 6 }}>{strings.t(M.notRecorded)}</div>
           <ul style={{ margin: "3px 0 0", paddingLeft: 16, listStyle: "disc" }}>
             {NOT_RECORDED.map((line) => (
               <li key={line} style={{ marginBottom: 2 }}>
-                {line}
+                {strings.t(line)}
               </li>
             ))}
           </ul>
@@ -383,6 +453,7 @@ function UncapturedLine({
   gestures: number;
   directEdits: number;
 }) {
+  const strings = useStrings();
   if (gestures === 0 && directEdits === 0) return null;
   return (
     <div
@@ -394,9 +465,7 @@ function UncapturedLine({
         lineHeight: 1.5,
       }}
     >
-      Not captured: {gestures} canvas gesture{gestures === 1 ? "" : "s"} and{" "}
-      {directEdits} direct edit{directEdits === 1 ? "" : "s"} (typing / panel
-      fields) changed the document while recording. They cannot be replayed.
+      {strings.t(M.notCaptured, { gestures, edits: directEdits })}
     </div>
   );
 }
@@ -416,6 +485,7 @@ function ActionRow({
   onToggle: () => void;
   onPlay: () => void;
 }) {
+  const strings = useStrings();
   const plan = planReplay(action);
   return (
     <div
@@ -457,13 +527,12 @@ function ActionRow({
           onClick={onPlay}
           testId={`actions-play-${action.id}`}
         >
-          {playing ? "Playing…" : "Play"}
+          {playing ? strings.t(M.playing) : strings.t(M.play)}
         </CockpitBtn>
       </div>
       {plan.skip.length > 0 && (
         <div style={{ ...MUTED, fontSize: 11, marginTop: 4 }}>
-          {plan.skip.length} step{plan.skip.length === 1 ? "" : "s"} will be
-          skipped
+          {strings.t(M.willSkip, { count: plan.skip.length })}
         </div>
       )}
     </div>
@@ -487,6 +556,7 @@ function ActionDetail({
   onIncludeDocumentBound: (value: boolean) => void;
   onExport: () => void;
 }) {
+  const strings = useStrings();
   const [copied, setCopied] = useState(false);
   const hasDocBound = action.steps.some((s) => s.verdict === "documentBound");
   return (
@@ -521,14 +591,13 @@ function ActionDetail({
               type="checkbox"
               checked={!step.disabled}
               onChange={() => onToggleStep(i)}
-              aria-label={`Step ${i + 1} enabled`}
+              aria-label={strings.t(M.stepEnabled, { n: i + 1 })}
             />
             <span style={{ fontSize: 11, flex: 1 }} title={step.command}>
               {i + 1}. {step.title}
               {step.failed && (
                 <span style={{ color: "var(--status-error)" }}>
-                  {" "}
-                  — failed while recording
+                  {strings.t(M.failedWhileRecording)}
                 </span>
               )}
             </span>
@@ -553,7 +622,7 @@ function ActionDetail({
             <button
               type="button"
               onClick={() => onDeleteStep(i)}
-              aria-label={`Delete step ${i + 1}`}
+              aria-label={strings.t(M.deleteStep, { n: i + 1 })}
               style={{
                 background: "none",
                 border: "none",
@@ -587,10 +656,7 @@ function ActionDetail({
             onChange={(e) => onIncludeDocumentBound(e.target.checked)}
             data-actions-include-docbound
           />
-          <span>
-            Replay steps that carry ids from the recorded document. Off by
-            default — those ids do not exist in another document.
-          </span>
+          <span>{strings.t(M.includeDocBound)}</span>
         </label>
       )}
 
@@ -604,13 +670,13 @@ function ActionDetail({
               .catch(() => setCopied(false));
           }}
         >
-          {copied ? "Copied" : "Copy as script"}
+          {copied ? strings.t(M.copied) : strings.t(M.copyAsScript)}
         </CockpitBtn>
         <CockpitBtn sm onClick={onExport}>
-          Export…
+          {strings.t(M.export)}
         </CockpitBtn>
         <CockpitBtn sm onClick={onRemove} testId="actions-delete">
-          Delete
+          {strings.t(M.delete)}
         </CockpitBtn>
       </div>
       {/* Why "Copy as script" exists at all — see `toDemoScript`. The
@@ -619,8 +685,8 @@ function ActionDetail({
           step list stays the primitive only because a script cannot
           carry the per-step verdicts. */}
       <div style={{ ...MUTED, fontSize: 11, marginTop: 6, lineHeight: 1.5 }}>
-        “Copy as script” emits the same steps as{" "}
-        <code>editor.runCommand(…)</code> calls for the demo/automation runner.
+        {strings.t(M.copyNoteBefore)} <code>editor.runCommand(…)</code>{" "}
+        {strings.t(M.copyNoteAfter)}
       </div>
     </div>
   );

@@ -47,6 +47,7 @@ import { createPortal } from "react-dom";
 import { IconButton } from "@paged-media/panel-kit";
 
 import { useCanvasClient } from "@paged-media/shell";
+import { defineMessages, useStrings } from "@paged-media/strings";
 import { ColorMixer, type MixerValue } from "@paged-media/ui";
 import type {
   ColorGroupSummary,
@@ -54,6 +55,32 @@ import type {
   Mutation,
   SwatchSummary,
 } from "@paged-media/client";
+
+const M = defineMessages("app.swatchRow", {
+  unresolved: "No document swatch carries this id — colour unresolved",
+  reserved: "Reserved swatch",
+  editColour: "Edit colour",
+  noEdits: "The active content type does not serve swatch edits",
+  doubleClickRename: "Double-click to rename",
+  noRenames: "The active content type does not serve swatch renames",
+  outOfGamut: "Out of gamut",
+  colorGroup: "Color group",
+  noGroups: "The active content type does not serve color groups",
+  deleteSwatch: "Delete swatch",
+  noDeletion: "The active content type does not serve swatch deletion",
+  process: "process",
+  spot: "spot",
+  tint: "tint",
+  gradient: "gradient",
+});
+
+/** The swatch kinds the row names in words; another kind shows as is. */
+const KINDS: Readonly<Record<string, string>> = {
+  process: M.process,
+  spot: M.spot,
+  tint: M.tint,
+  gradient: M.gradient,
+};
 
 const RESERVED = new Set(["none", "paper", "black", "registration"]);
 
@@ -88,6 +115,7 @@ export function SwatchRow({
    *  a provider may own the swatch list without owning the groups.) */
   canAssignGroup?: boolean;
 }) {
+  const strings = useStrings();
   const client = useCanvasClient();
   const [preview, setPreview] = useState<ColorPreview | null>(null);
   const [previewResolved, setPreviewResolved] = useState<boolean | null>(null);
@@ -215,12 +243,12 @@ export function SwatchRow({
         }
         title={
           previewResolved === false
-            ? "No document swatch carries this id — colour unresolved"
+            ? strings.t(M.unresolved)
             : reserved
-              ? "Reserved swatch"
+              ? strings.t(M.reserved)
               : canEdit
-                ? "Edit colour"
-                : "The active content type does not serve swatch edits"
+                ? strings.t(M.editColour)
+                : strings.t(M.noEdits)
         }
         disabled={reserved || !canEdit}
         onClick={openEditor}
@@ -252,8 +280,8 @@ export function SwatchRow({
             reserved
               ? undefined
               : canEdit
-                ? "Double-click to rename"
-                : "The active content type does not serve swatch renames"
+                ? strings.t(M.doubleClickRename)
+                : strings.t(M.noRenames)
           }
         >
           {swatch.name}
@@ -263,7 +291,7 @@ export function SwatchRow({
       {preview?.outOfGamut && (
         <span
           data-swatch-gamut="out"
-          title="Out of gamut"
+          title={strings.t(M.outOfGamut)}
           className="text-status-review text-[10px]"
         >
           ▲!
@@ -279,7 +307,9 @@ export function SwatchRow({
         className="text-[10px] uppercase text-muted-foreground"
         data-swatch-kind={swatch.kind}
       >
-        {swatch.kind}
+        {Object.hasOwn(KINDS, swatch.kind)
+          ? strings.t(KINDS[swatch.kind]!)
+          : swatch.kind}
       </span>
       {/* Group assign. */}
       {!reserved && (
@@ -290,9 +320,7 @@ export function SwatchRow({
           disabled={!canAssignGroup}
           onChange={(e) => onAssignGroup(swatch.selfId, e.target.value || null)}
           title={
-            canAssignGroup
-              ? "Color group"
-              : "The active content type does not serve color groups"
+            canAssignGroup ? strings.t(M.colorGroup) : strings.t(M.noGroups)
           }
         >
           <option value="">—</option>
@@ -305,11 +333,9 @@ export function SwatchRow({
       )}
       {!reserved && (
         <IconButton
-          label="Delete swatch"
+          label={strings.t(M.deleteSwatch)}
           title={
-            canDelete
-              ? "Delete swatch"
-              : "The active content type does not serve swatch deletion"
+            canDelete ? strings.t(M.deleteSwatch) : strings.t(M.noDeletion)
           }
           data-action="remove-swatch"
           disabled={!canDelete}

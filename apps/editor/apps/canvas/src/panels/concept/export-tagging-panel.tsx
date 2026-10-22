@@ -26,6 +26,7 @@
 import { useState } from "react";
 
 import { Segment } from "@paged-media/panel-kit";
+import { defineMessages, useStrings } from "@paged-media/strings";
 
 import {
   ConceptShell,
@@ -37,14 +38,30 @@ import {
 
 type Scope = "Paragraph" | "Character";
 
+const M = defineMessages("app.conceptExportTaggingPanel", {
+  target:
+    "Map each paragraph/character style to an HTML tag + CSS class (and PDF tag) for clean EPUB/HTML and tagged PDF.",
+  paragraph: "Paragraph",
+  character: "Character",
+  style: "Style",
+  tag: "Tag",
+  class: "Class",
+  emitCss: "Emit CSS",
+  taggedPdf: "Tagged PDF",
+  pdfTag: "PDF tag",
+});
+
+const SCOPE_LABEL: Record<Scope, string> = {
+  Paragraph: M.paragraph,
+  Character: M.character,
+};
+
 export function ExportTaggingPanel() {
+  const strings = useStrings();
   const [scope, setScope] = useState<Scope>("Paragraph");
   const para = scope === "Paragraph";
   return (
-    <ConceptShell
-      testId="export-tagging-panel"
-      target="Map each paragraph/character style to an HTML tag + CSS class (and PDF tag) for clean EPUB/HTML and tagged PDF."
-    >
+    <ConceptShell testId="export-tagging-panel" target={strings.t(M.target)}>
       <div
         className="inline-flex w-full overflow-hidden rounded-[6px] border border-input"
         role="group"
@@ -67,28 +84,28 @@ export function ExportTaggingPanel() {
                   : "var(--pg-muted-fg)",
             }}
           >
-            {s}
+            {strings.t(SCOPE_LABEL[s])}
           </Segment>
         ))}
       </div>
-      <Row label="Style">
+      <Row label={strings.t(M.style)}>
         <SeamSelect value="—" />
       </Row>
       <Kicker>EPUB &amp; HTML</Kicker>
-      <Row label="Tag">
+      <Row label={strings.t(M.tag)}>
         <SeamSelect value={para ? "p" : "span"} />
       </Row>
-      <Row label="Class">
+      <Row label={strings.t(M.class)}>
         <SeamSelect value="—" />
       </Row>
       <Row label="EPUB:type">
         <SeamSelect value={para ? "bodymatter" : "—"} />
       </Row>
-      <Row label="Emit CSS">
+      <Row label={strings.t(M.emitCss)}>
         <SeamSwitch on />
       </Row>
-      <Kicker>Tagged PDF</Kicker>
-      <Row label="PDF tag">
+      <Kicker>{strings.t(M.taggedPdf)}</Kicker>
+      <Row label={strings.t(M.pdfTag)}>
         <SeamSelect value={para ? "P" : "Span"} />
       </Row>
       {/* The gallery code preview — static illustration. */}

@@ -34,7 +34,15 @@ import { Fragment, ViewTransition } from "react";
 import { useNearViewport } from "@paged-media/shell";
 import type { Camera } from "@paged-media/client";
 import type { PageId } from "@paged-media/client";
+import { defineMessages, useStrings } from "@paged-media/strings";
+
 import { fitCamera, layoutPages, type PageRect } from "./layout";
+
+const M = defineMessages("app.uiNavigator", {
+  pages: "Pages",
+  jumpTo: "Jump to page {page}",
+  page: "Page {page}",
+});
 
 export interface NavigatorProps {
   pageIds: ReadonlyArray<PageId>;
@@ -48,6 +56,7 @@ const THUMB_WIDTH_PX = 120;
 
 export function Navigator(props: NavigatorProps) {
   const rects = layoutPages(props.pageSizesPt);
+  const strings = useStrings();
   const { observe: observeNear, has: isNear } = useNearViewport();
 
   const onJumpTo = (rect: PageRect) => {
@@ -59,7 +68,7 @@ export function Navigator(props: NavigatorProps) {
   return (
     <aside style={panelStyle}>
       <header style={headerStyle}>
-        <strong>Pages</strong>
+        <strong>{strings.t(M.pages)}</strong>
         <span style={{ opacity: 0.6 }}>
           {props.snapshots.size}/{props.pageIds.length}
         </span>
@@ -76,7 +85,7 @@ export function Navigator(props: NavigatorProps) {
                 type="button"
                 onClick={() => onJumpTo(rect)}
                 style={tileStyle}
-                title={`Jump to page ${i + 1} (${id})`}
+                title={`${strings.t(M.jumpTo, { page: i + 1 })} (${id})`}
               >
                 <div
                   style={{
@@ -98,7 +107,7 @@ export function Navigator(props: NavigatorProps) {
                     <ViewTransition default="none">
                       <img
                         src={url}
-                        alt={`Page ${i + 1}`}
+                        alt={strings.t(M.page, { page: i + 1 })}
                         style={{
                           width: "100%",
                           height: "100%",

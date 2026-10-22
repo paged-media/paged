@@ -47,7 +47,27 @@ import {
   type PrintOutputFacts,
 } from "@paged-media/shell";
 
+import { defineMessages, t } from "@paged-media/strings";
+
 import { downloadBytes } from "../../shell-file-saver";
+
+const M = defineMessages("app.cockpitExportTargets", {
+  comingSoon: "Coming soon",
+  noDocument: "No document",
+  ready: "Ready",
+  printPdf: "Print PDF",
+  printPdfNote:
+    "PDF/X-4 with an output intent, else PDF 1.7 · text as text · " +
+    "native CMYK + spot plates",
+  pageImages: "Page images (PNG)",
+  pageImagesNote: "Rasterised pages · pick resolution",
+  web: "Web bundle",
+  webNote: "Responsive HTML",
+  social: "Social crops",
+  socialNote: "Per-network image crops",
+  package: "Print package",
+  packageNote: "Document + links + fonts, zipped",
+});
 
 export type ExportTargetId = "pdf-x4" | "image" | "web" | "social" | "package";
 
@@ -77,10 +97,10 @@ export function exportReadiness(
   target: Pick<ExportTarget, "id" | "live">,
   loaded: boolean,
   facts: PrintOutputFacts,
-  soon = "Coming soon",
+  soon = t(M.comingSoon),
 ): { tone: "ready" | "warn" | "draft"; label: string; reason?: string } {
   if (!target.live) return { tone: "draft", label: soon };
-  if (!loaded) return { tone: "draft", label: "No document" };
+  if (!loaded) return { tone: "draft", label: t(M.noDocument) };
   if (target.id === "pdf-x4") {
     return {
       tone: "ready",
@@ -88,23 +108,32 @@ export function exportReadiness(
       reason: printStandardReason(facts) ?? undefined,
     };
   }
-  return { tone: "ready", label: "Ready" };
+  return { tone: "ready", label: t(M.ready) };
 }
 
 export const EXPORT_TARGETS: ExportTarget[] = [
   {
     id: "pdf-x4",
     icon: "ui-doc",
-    title: "Print PDF",
-    note: "PDF/X-4 with an output intent, else PDF 1.7 · text as text · native CMYK + spot plates",
+    // The words follow the editor's locale when read.
+    get title() {
+      return t(M.printPdf);
+    },
+    get note() {
+      return t(M.printPdfNote);
+    },
     live: true,
     action: "dialog",
   },
   {
     id: "image",
     icon: "ui-page",
-    title: "Page images (PNG)",
-    note: "Rasterised pages · pick resolution",
+    get title() {
+      return t(M.pageImages);
+    },
+    get note() {
+      return t(M.pageImagesNote);
+    },
     live: true,
     action: "image",
   },
@@ -114,22 +143,34 @@ export const EXPORT_TARGETS: ExportTarget[] = [
   {
     id: "web",
     icon: "ui-web",
-    title: "Web bundle",
-    note: "Responsive HTML",
+    get title() {
+      return t(M.web);
+    },
+    get note() {
+      return t(M.webNote);
+    },
     live: false,
   },
   {
     id: "social",
     icon: "ui-social",
-    title: "Social crops",
-    note: "Per-network image crops",
+    get title() {
+      return t(M.social);
+    },
+    get note() {
+      return t(M.socialNote);
+    },
     live: false,
   },
   {
     id: "package",
     icon: "ui-export",
-    title: "Print package",
-    note: "Document + links + fonts, zipped",
+    get title() {
+      return t(M.package);
+    },
+    get note() {
+      return t(M.packageNote);
+    },
     live: false,
   },
 ];

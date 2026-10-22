@@ -78,7 +78,7 @@ import type { PropertyPath, Value } from "@paged-media/client";
 
 import { appCatalogRegistry } from "./catalog-registry";
 import {
-  BLEND_MODES,
+  blendModes,
   bevelComposition,
   directionalFeatherComposition,
   dropShadowComposition,
@@ -88,6 +88,31 @@ import {
   outerGlowComposition,
   satinComposition,
 } from "./effects.composition";
+import { defineMessages, useStrings, type Strings } from "@paged-media/strings";
+
+const M = defineMessages("app.effectsPanel", {
+  dropShadow: "Drop shadow",
+  innerShadow: "Inner shadow",
+  outerGlow: "Outer glow",
+  innerGlow: "Inner glow",
+  bevelAndEmboss: "Bevel and emboss",
+  satin: "Satin",
+  feather: "Feather",
+  directionalFeather: "Directional feather",
+  object: "Object",
+  stroke: "Stroke",
+  fill: "Fill",
+  text: "Text",
+  graphic: "Graphic",
+  isolateBlending: "Isolate blending",
+  knockoutGroup: "Knockout group",
+  opacity: "Opacity",
+  opacityLabel: "opacity",
+  blend: "Blend",
+  transparencyTarget: "Transparency target",
+  effects: "Effects",
+  onTheObject: "· on the object",
+});
 
 // Typed against `PropertyPath` so a mistyped path is a tsc error.
 function elementProp(path: PropertyPath): { path: string; scope: "element" } {
@@ -100,47 +125,57 @@ function elementProp(path: PropertyPath): { path: string; scope: "element" } {
 // rendered inside the violet rail when the effect is on. Drop shadow's
 // enable rides the legacy `frameDropShadow` bool (not `*Enabled`).
 const EFFECT_FAMILIES: {
+  /** The family's stable id (test hooks); `title` is what it shows. */
   name: string;
+  title: string;
   enable: { enabled: { path: string; scope: "element" } };
-  fields: CompositionNode;
+  fields: (strings: Strings) => CompositionNode;
 }[] = [
   {
     name: "Drop shadow",
+    title: M.dropShadow,
     enable: { enabled: elementProp("frameDropShadow") },
     fields: dropShadowComposition,
   },
   {
     name: "Inner shadow",
+    title: M.innerShadow,
     enable: { enabled: elementProp("frameInnerShadowEnabled") },
     fields: innerShadowComposition,
   },
   {
     name: "Outer glow",
+    title: M.outerGlow,
     enable: { enabled: elementProp("frameOuterGlowEnabled") },
     fields: outerGlowComposition,
   },
   {
     name: "Inner glow",
+    title: M.innerGlow,
     enable: { enabled: elementProp("frameInnerGlowEnabled") },
     fields: innerGlowComposition,
   },
   {
     name: "Bevel and emboss",
+    title: M.bevelAndEmboss,
     enable: { enabled: elementProp("frameBevelEnabled") },
     fields: bevelComposition,
   },
   {
     name: "Satin",
+    title: M.satin,
     enable: { enabled: elementProp("frameSatinEnabled") },
     fields: satinComposition,
   },
   {
     name: "Feather",
+    title: M.feather,
     enable: { enabled: elementProp("frameFeatherEnabled") },
     fields: featherComposition,
   },
   {
     name: "Directional feather",
+    title: M.directionalFeather,
     enable: { enabled: elementProp("frameDirectionalFeatherEnabled") },
     fields: directionalFeatherComposition,
   },
@@ -150,10 +185,10 @@ type TargetId = "object" | "stroke" | "fill" | "content";
 
 /** InDesign's transparency targets, in its panel order. */
 const TARGETS: readonly { id: TargetId; label: string }[] = [
-  { id: "object", label: "Object" },
-  { id: "stroke", label: "Stroke" },
-  { id: "fill", label: "Fill" },
-  { id: "content", label: "Text" },
+  { id: "object", label: M.object },
+  { id: "stroke", label: M.stroke },
+  { id: "fill", label: M.fill },
+  { id: "content", label: M.text },
 ];
 
 // One opacity + blend pair per target (a module-level map: one hook per
@@ -175,12 +210,17 @@ const GROUP_BINDINGS = {
   isolate: elementProp("groupIsolateBlending"),
   knockout: elementProp("groupKnockout"),
 };
+/** The group options' stable test hooks (their English names). */
+const GROUP_TEST_IDS = {
+  isolate: "Isolate blending",
+  knockout: "Knockout group",
+} as const;
 const GROUP_OPTIONS: readonly {
   key: keyof typeof GROUP_BINDINGS;
   label: string;
 }[] = [
-  { key: "isolate", label: "Isolate blending" },
-  { key: "knockout", label: "Knockout group" },
+  { key: "isolate", label: M.isolateBlending },
+  { key: "knockout", label: M.knockoutGroup },
 ];
 
 function unwrapBool(v: Value | null): boolean | null {
@@ -204,10 +244,12 @@ function unwrapText(v: Value | null): string {
  *  when on. Mirrors the original drop-shadow template, generalised. */
 function EffectDisclosure({
   name,
+  title,
   enable,
   fields,
 }: {
   name: string;
+  title: string;
   enable: { enabled: { path: string; scope: "element" } };
   fields: CompositionNode;
 }) {
@@ -228,13 +270,13 @@ function EffectDisclosure({
             resolved.enabled.onCommit?.({ type: "bool", value: next } as Value);
           }}
           testId={name}
-          label={name}
+          label={title}
         />
         <span
           className="flex-1 text-xs"
           style={{ color: on ? "var(--pg-fg)" : "var(--pg-muted-fg)" }}
         >
-          {name}
+          {title}
         </span>
         {on && (
           <Icon
@@ -259,18 +301,31 @@ function EffectDisclosure({
 
 /** A target's current setting as InDesign lists it ("Multiply 60%"):
  *  an unset blend reads Normal, an unset opacity 100 %; mixed reads —. */
-function targetSummary(blend: ObjectField, opacity: ObjectField): string {
+function targetSummary(
+  strings: Strings,
+  blend: ObjectField,
+  opacity: ObjectField,
+): string {
   if (blend.state.state !== "value" || opacity.state.state !== "value")
     return "—";
+  const modes = blendModes(strings);
   const mode =
-    BLEND_MODES.find((m) => m.value === unwrapText(blend.value))?.label ??
-    "Normal";
+    modes.find((m) => m.value === unwrapText(blend.value))?.label ??
+    modes[0]!.label;
   const pct = unwrapLength(opacity.value);
   return `${mode} ${Math.round(pct ?? 100)}%`;
 }
 
 /** Isolate blending / Knockout group: a check row, live on a group. */
-function GroupOption({ field, label }: { field: ObjectField; label: string }) {
+function GroupOption({
+  field,
+  label,
+  testId,
+}: {
+  field: ObjectField;
+  label: string;
+  testId: string;
+}) {
   const on = unwrapBool(field.value);
   const live = field.state.state === "value" && field.onCommit != null;
   return (
@@ -285,7 +340,7 @@ function GroupOption({ field, label }: { field: ObjectField; label: string }) {
         onToggle={(next) =>
           field.onCommit?.({ type: "bool", value: next } as Value)
         }
-        testId={label}
+        testId={testId}
         label={label}
       />
       <span
@@ -299,6 +354,7 @@ function GroupOption({ field, label }: { field: ObjectField; label: string }) {
 }
 
 export function EffectsPanel() {
+  const strings = useStrings();
   const fields = useObjectBindings(TARGET_BINDINGS);
   const group = useObjectBindings(GROUP_BINDINGS);
   const { elementSelection } = useSelection();
@@ -317,8 +373,8 @@ export function EffectsPanel() {
   const contentLabel =
     elementSelection.length > 0 &&
     elementSelection.every((id) => id.kind !== "textFrame")
-      ? "Graphic"
-      : "Text";
+      ? strings.t(M.graphic)
+      : strings.t(M.text);
 
   const opacity = unwrapLength(opacityField.value);
   const blendId = unwrapText(blendField.value) || "Normal";
@@ -337,7 +393,7 @@ export function EffectsPanel() {
           className="relative grid grid-cols-[84px_1fr] items-center gap-2"
         >
           <span className="text-xs" style={{ color: "var(--pg-muted-fg)" }}>
-            Opacity
+            {strings.t(M.opacity)}
           </span>
           <NumberInput
             icon="ui-size"
@@ -357,7 +413,7 @@ export function EffectsPanel() {
                 value: next,
               } as Value);
             }}
-            aria-label="opacity"
+            aria-label={strings.t(M.opacityLabel)}
           />
         </ObjectFieldFrame>
         <ObjectFieldFrame
@@ -365,10 +421,10 @@ export function EffectsPanel() {
           className="relative grid grid-cols-[84px_1fr] items-center gap-2"
         >
           <span className="text-xs" style={{ color: "var(--pg-muted-fg)" }}>
-            Blend
+            {strings.t(M.blend)}
           </span>
           <KitSelect
-            aria-label="Blend"
+            aria-label={strings.t(M.blend)}
             value={blendMixed ? "__mixed__" : blendId}
             soft={blendMixed}
             disabled={blendDisabled}
@@ -387,7 +443,7 @@ export function EffectsPanel() {
                 —
               </option>
             )}
-            {BLEND_MODES.map((opt) => (
+            {blendModes(strings).map((opt) => (
               <option key={opt.value} value={opt.value}>
                 {opt.label}
               </option>
@@ -397,7 +453,7 @@ export function EffectsPanel() {
         <div
           className="flex flex-col"
           role="radiogroup"
-          aria-label="Transparency target"
+          aria-label={strings.t(M.transparencyTarget)}
           data-effects-targets=""
         >
           {TARGETS.filter((t) => carried(t.id)).map((t) => {
@@ -416,12 +472,14 @@ export function EffectsPanel() {
                   color: active ? "var(--pg-fg)" : "var(--pg-muted-fg)",
                 }}
               >
-                <span>{t.id === "content" ? contentLabel : t.label}</span>
+                <span>
+                  {t.id === "content" ? contentLabel : strings.t(t.label)}
+                </span>
                 <span
                   className="pg-mono-meta"
                   data-effects-target-summary={t.id}
                 >
-                  {targetSummary(blendOf(t.id), opacityOf(t.id))}
+                  {targetSummary(strings, blendOf(t.id), opacityOf(t.id))}
                 </span>
               </button>
             );
@@ -429,13 +487,13 @@ export function EffectsPanel() {
         </div>
         <div className="-mx-3 border-t border-input px-3 pt-2">
           <div className="pg-label mb-1">
-            Effects
+            {strings.t(M.effects)}
             {target !== "object" && (
               <span
                 className="ml-1 normal-case"
                 style={{ color: "var(--pg-muted-fg)" }}
               >
-                · on the object
+                {strings.t(M.onTheObject)}
               </span>
             )}
           </div>
@@ -444,8 +502,9 @@ export function EffectsPanel() {
               <EffectDisclosure
                 key={fam.name}
                 name={fam.name}
+                title={strings.t(fam.title)}
                 enable={fam.enable}
-                fields={fam.fields}
+                fields={fam.fields(strings)}
               />
             ))}
           </div>
@@ -455,7 +514,12 @@ export function EffectsPanel() {
           data-effects-group-options=""
         >
           {GROUP_OPTIONS.map((o) => (
-            <GroupOption key={o.key} field={group[o.key]} label={o.label} />
+            <GroupOption
+              key={o.key}
+              field={group[o.key]}
+              label={strings.t(o.label)}
+              testId={GROUP_TEST_IDS[o.key]}
+            />
           ))}
         </div>
       </div>

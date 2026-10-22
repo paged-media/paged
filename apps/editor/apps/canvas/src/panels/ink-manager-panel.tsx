@@ -29,8 +29,34 @@ import { useCallback, useEffect, useState } from "react";
 
 import { useCanvasClient } from "@paged-media/shell";
 import type { InkSummary } from "@paged-media/client";
+import { defineMessages, useStrings } from "@paged-media/strings";
+
+const M = defineMessages("app.inkManagerPanel", {
+  standardLab: "Use Standard Lab Values for Spots",
+  inks: "Inks",
+  processCyan: "Process Cyan",
+  processMagenta: "Process Magenta",
+  processYellow: "Process Yellow",
+  processBlack: "Process Black",
+  spotInk: "Spot ink",
+  convertToProcess: "Convert to process at output",
+  aliasHint: "Output as another ink's plate",
+  ownPlate: "own plate",
+  empty: "No spot inks in this document.",
+  footnote:
+    "Output-time settings — the swatches themselves are never modified. Consumed by PDF separations at export.",
+});
+
+/** The process plates, with their words. */
+const PROCESS = [
+  ["Cyan", M.processCyan],
+  ["Magenta", M.processMagenta],
+  ["Yellow", M.processYellow],
+  ["Black", M.processBlack],
+] as const;
 
 export function InkManagerPanel() {
+  const strings = useStrings();
   const client = useCanvasClient();
   const [inks, setInks] = useState<InkSummary[]>([]);
   const [standardLab, setStandardLab] = useState(false);
@@ -92,15 +118,15 @@ export function InkManagerPanel() {
           checked={standardLab}
           onChange={(e) => toggleStandardLab(e.target.checked)}
         />
-        Use Standard Lab Values for Spots
+        {strings.t(M.standardLab)}
       </label>
 
       {/* Process plates — informational rows. */}
       <div className="text-[10px] uppercase tracking-wide text-muted-foreground pt-1">
-        Inks
+        {strings.t(M.inks)}
       </div>
       <ul className="text-xs">
-        {["Cyan", "Magenta", "Yellow", "Black"].map((p) => (
+        {PROCESS.map(([p, label]) => (
           <li
             key={p}
             className="flex items-center gap-2 px-1 py-0.5 border-b border-input/30 text-muted-foreground"
@@ -117,7 +143,7 @@ export function InkManagerPanel() {
                 }[p],
               }}
             />
-            <span className="flex-1">Process {p}</span>
+            <span className="flex-1">{strings.t(label)}</span>
           </li>
         ))}
         {inks.map((ink) => (
@@ -128,7 +154,7 @@ export function InkManagerPanel() {
           >
             <span
               className="w-3 h-3 rounded-full border border-input"
-              title="Spot ink"
+              title={strings.t(M.spotInk)}
               style={{ background: "var(--status-draft)" }}
             />
             <span className="flex-1 truncate" title={ink.name}>
@@ -136,7 +162,7 @@ export function InkManagerPanel() {
             </span>
             <label
               className="flex items-center gap-1 text-[10px]"
-              title="Convert to process at output"
+              title={strings.t(M.convertToProcess)}
             >
               <input
                 type="checkbox"
@@ -151,11 +177,11 @@ export function InkManagerPanel() {
             <select
               className="text-[10px] border border-input rounded max-w-[80px]"
               data-action="alias-ink"
-              title="Output as another ink's plate"
+              title={strings.t(M.aliasHint)}
               value={ink.aliasTo ?? ""}
               onChange={(e) => setInk(ink, { aliasTo: e.target.value || null })}
             >
-              <option value="">own plate</option>
+              <option value="">{strings.t(M.ownPlate)}</option>
               {inks
                 .filter((other) => other.spotId !== ink.spotId)
                 .map((other) => (
@@ -168,13 +194,12 @@ export function InkManagerPanel() {
         ))}
         {inks.length === 0 && (
           <li className="px-1 py-1 text-muted-foreground" data-inks="empty">
-            No spot inks in this document.
+            {strings.t(M.empty)}
           </li>
         )}
       </ul>
       <div className="text-[10px] text-muted-foreground">
-        Output-time settings — the swatches themselves are never modified.
-        Consumed by PDF separations at export.
+        {strings.t(M.footnote)}
       </div>
     </div>
   );

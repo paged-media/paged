@@ -34,8 +34,20 @@ import {
   useContentSelection,
 } from "@paged-media/shell";
 import type { IndexTopicSummary } from "@paged-media/client";
+import { defineMessages, useStrings } from "@paged-media/strings";
+
+const M = defineMessages("app.indexPanel", {
+  loading: "Loading index…",
+  empty: "No index topics in this document.",
+  filter: "Filter topics",
+  generateHint:
+    "Generate the index into the story with the text cursor (its text is replaced)",
+  placeCursor: "Place the text cursor in the story that will hold the index",
+  generate: "+ Generate index",
+});
 
 export function IndexPanel() {
+  const strings = useStrings();
   const items = useCollection<IndexTopicSummary>("indexTopics");
   const client = useCanvasClient();
   const { contentSelection } = useContentSelection();
@@ -60,7 +72,7 @@ export function IndexPanel() {
         className="p-3 text-xs text-muted-foreground"
         data-index-panel="loading"
       >
-        Loading index…
+        {strings.t(M.loading)}
       </div>
     );
   }
@@ -68,13 +80,13 @@ export function IndexPanel() {
     <div data-index-panel="ready">
       {items.length === 0 ? (
         <div className="p-3 text-xs text-muted-foreground" data-empty-index>
-          No index topics in this document.
+          {strings.t(M.empty)}
         </div>
       ) : (
         <div data-index-topic-list>
           <ListRows
             search={items.length > 8}
-            searchPlaceholder="Filter topics"
+            searchPlaceholder={strings.t(M.filter)}
             rows={items.map((t) => ({
               key: t.selfId,
               icon: "panel-index",
@@ -90,15 +102,11 @@ export function IndexPanel() {
           disabled={!target}
           onClick={generate}
           data-generate-index
-          title={
-            target
-              ? "Generate the index into the story with the text cursor (its text is replaced)"
-              : "Place the text cursor in the story that will hold the index"
-          }
+          title={target ? strings.t(M.generateHint) : strings.t(M.placeCursor)}
           className="w-full text-xs h-[30px] rounded-[7px] border text-muted-foreground disabled:opacity-55"
           style={{ borderColor: "var(--chrome-divider)" }}
         >
-          + Generate index
+          {strings.t(M.generate)}
         </button>
         {failed ? (
           <div

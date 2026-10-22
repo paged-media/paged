@@ -64,7 +64,64 @@ import type {
   Value,
 } from "@paged-media/client";
 
+import { defineMessages, useStrings } from "@paged-media/strings";
+
 import { ConceptShell, Kicker, Row } from "./concept-kit";
+
+const M = defineMessages("app.conceptAnchoredPanel", {
+  optInline: "Inline",
+  optAboveLine: "Above line",
+  optCustomAnchored: "Custom (anchored)",
+  optTopLeft: "Top left",
+  optTopCenter: "Top center",
+  optTopRight: "Top right",
+  optLeftCenter: "Left center",
+  optCenter: "Center",
+  optRightCenter: "Right center",
+  optBottomLeft: "Bottom left",
+  optBottomCenter: "Bottom center",
+  optBottomRight: "Bottom right",
+  optAnchorLocation: "Anchor location",
+  optColumnEdge: "Column edge",
+  optTextFrame: "Text frame",
+  optPageMargin: "Page margin",
+  optPageEdge: "Page edge",
+  optLineBaseline: "Line baseline",
+  optLineAscent: "Line ascent",
+  optLineXHeight: "Line x-height",
+  optTopOfLeading: "Top of leading",
+  optEmBoxBottom: "Em-box bottom",
+  optLeft: "Left",
+  optRight: "Right",
+  optTop: "Top",
+  optBottom: "Bottom",
+  target:
+    "Position mode, X/Y offsets, anchor + reference points (incl. the W1.16 line-ref metrics), alignment, spine-relative and lock are live for an anchored object; a non-anchored selection states it honestly.",
+  reading: "Reading selection…",
+  selectOne: "Select a single object.",
+  anchoredKind: "Anchored {kind}",
+  anchoredObject: "Anchored object",
+  kindNotAnchored: "{kind} is not anchored",
+  objectNotAnchored: "Object is not anchored",
+  onThePage:
+    "This object lives on the page, not anchored into text. Anchor it by cutting and pasting it into a text story (the InDesign inline / anchored flow).",
+  selectAnchored:
+    "Select an object anchored into a text story to edit its anchored position.",
+  position: "Position",
+  mode: "Mode",
+  spineRelative: "Spine relative",
+  lockPosition: "Lock position",
+  customPosition: "Custom position",
+  customHint:
+    "Switch the mode to Custom (anchored) to edit the offset and reference points.",
+  xOffset: "X offset",
+  yOffset: "Y offset",
+  anchorPoint: "Anchor point",
+  hReference: "H reference",
+  vReference: "V reference",
+  hAlign: "H align",
+  vAlign: "V align",
+});
 
 // ── IDML enum option tables ──────────────────────────────────────
 // The selects carry the RAW IDML strings the read-side returns, so
@@ -73,56 +130,56 @@ import { ConceptShell, Kicker, Row } from "./concept-kit";
 // always has a matching option.
 
 const POSITION_OPTIONS: Array<[string, string]> = [
-  ["InlinePosition", "Inline"],
-  ["AboveLine", "Above line"],
-  ["Anchored", "Custom (anchored)"],
+  ["InlinePosition", M.optInline],
+  ["AboveLine", M.optAboveLine],
+  ["Anchored", M.optCustomAnchored],
 ];
 
 const ANCHOR_POINT_OPTIONS: Array<[string, string]> = [
-  ["TopLeftAnchor", "Top left"],
-  ["TopCenterAnchor", "Top center"],
-  ["TopRightAnchor", "Top right"],
-  ["LeftCenterAnchor", "Left center"],
-  ["CenterAnchor", "Center"],
-  ["RightCenterAnchor", "Right center"],
-  ["BottomLeftAnchor", "Bottom left"],
-  ["BottomCenterAnchor", "Bottom center"],
-  ["BottomRightAnchor", "Bottom right"],
+  ["TopLeftAnchor", M.optTopLeft],
+  ["TopCenterAnchor", M.optTopCenter],
+  ["TopRightAnchor", M.optTopRight],
+  ["LeftCenterAnchor", M.optLeftCenter],
+  ["CenterAnchor", M.optCenter],
+  ["RightCenterAnchor", M.optRightCenter],
+  ["BottomLeftAnchor", M.optBottomLeft],
+  ["BottomCenterAnchor", M.optBottomCenter],
+  ["BottomRightAnchor", M.optBottomRight],
 ];
 
 const H_REFERENCE_OPTIONS: Array<[string, string]> = [
-  ["AnchorLocation", "Anchor location"],
-  ["ColumnEdge", "Column edge"],
-  ["TextFrame", "Text frame"],
-  ["PageMargin", "Page margin"],
-  ["PageEdge", "Page edge"],
+  ["AnchorLocation", M.optAnchorLocation],
+  ["ColumnEdge", M.optColumnEdge],
+  ["TextFrame", M.optTextFrame],
+  ["PageMargin", M.optPageMargin],
+  ["PageEdge", M.optPageEdge],
 ];
 
 // VerticalReferencePoint — the W1.16 line-ref metric options. The
 // renderer resolves these against real line-ref metrics.
 const V_REFERENCE_OPTIONS: Array<[string, string]> = [
-  ["LineBaseline", "Line baseline"],
-  ["LineAscent", "Line ascent"],
-  ["LineXheight", "Line x-height"],
-  ["TopOfLeading", "Top of leading"],
-  ["EmBoxBottom", "Em-box bottom"],
-  ["ColumnEdge", "Column edge"],
-  ["TextFrame", "Text frame"],
-  ["PageMargin", "Page margin"],
-  ["PageEdge", "Page edge"],
-  ["AnchorLocation", "Anchor location"],
+  ["LineBaseline", M.optLineBaseline],
+  ["LineAscent", M.optLineAscent],
+  ["LineXheight", M.optLineXHeight],
+  ["TopOfLeading", M.optTopOfLeading],
+  ["EmBoxBottom", M.optEmBoxBottom],
+  ["ColumnEdge", M.optColumnEdge],
+  ["TextFrame", M.optTextFrame],
+  ["PageMargin", M.optPageMargin],
+  ["PageEdge", M.optPageEdge],
+  ["AnchorLocation", M.optAnchorLocation],
 ];
 
 const H_ALIGN_OPTIONS: Array<[string, string]> = [
-  ["LeftAlign", "Left"],
-  ["CenterAlign", "Center"],
-  ["RightAlign", "Right"],
+  ["LeftAlign", M.optLeft],
+  ["CenterAlign", M.optCenter],
+  ["RightAlign", M.optRight],
 ];
 
 const V_ALIGN_OPTIONS: Array<[string, string]> = [
-  ["TopAlign", "Top"],
-  ["CenterAlign", "Center"],
-  ["BottomAlign", "Bottom"],
+  ["TopAlign", M.optTop],
+  ["CenterAlign", M.optCenter],
+  ["BottomAlign", M.optBottom],
 ];
 
 const ANCHORED_PATHS: PropertyPath[] = [
@@ -257,6 +314,7 @@ function EnumRow({
   disabled?: boolean;
   onCommit: (next: string) => void;
 }) {
+  const strings = useStrings();
   return (
     <Row label={label}>
       <ObjectFieldFrame field={field} className="relative w-full">
@@ -271,7 +329,7 @@ function EnumRow({
           {value === "" && <option value="">—</option>}
           {options.map(([v, l]) => (
             <option key={v} value={v}>
-              {l}
+              {strings.t(l)}
             </option>
           ))}
         </KitSelect>
@@ -332,6 +390,7 @@ function BoolRow({
 }
 
 export function AnchoredPanel() {
+  const strings = useStrings();
   const { anchored, values, id, kind, loading } = useAnchored();
   const fields = useObjectBindings(FIELDS);
   const write = (key: AnchoredKey, value: unknown) => {
@@ -348,11 +407,7 @@ export function AnchoredPanel() {
   const custom = position === "Anchored";
 
   return (
-    <ConceptShell
-      testId="anchored-panel"
-      live
-      target="Position mode, X/Y offsets, anchor + reference points (incl. the W1.16 line-ref metrics), alignment, spine-relative and lock are live for an anchored object; a non-anchored selection states it honestly."
-    >
+    <ConceptShell testId="anchored-panel" live target={strings.t(M.target)}>
       {/* Honest status header — anchored vs not. */}
       <div
         data-anchored-status={
@@ -376,27 +431,29 @@ export function AnchoredPanel() {
         />
         <span className="text-[12px]" style={{ color: "var(--pg-fg)" }}>
           {loading
-            ? "Reading selection…"
+            ? strings.t(M.reading)
             : !id
-              ? "Select a single object."
+              ? strings.t(M.selectOne)
               : anchored
-                ? `Anchored ${kind ?? "object"}`
-                : `${kind ?? "Object"} is not anchored`}
+                ? kind
+                  ? strings.t(M.anchoredKind, { kind })
+                  : strings.t(M.anchoredObject)
+                : kind
+                  ? strings.t(M.kindNotAnchored, { kind })
+                  : strings.t(M.objectNotAnchored)}
         </span>
       </div>
 
       {!anchored ? (
         <div className="text-xs text-muted-foreground" data-anchored-empty>
-          {id
-            ? "This object lives on the page, not anchored into text. Anchor it by cutting and pasting it into a text story (the InDesign inline / anchored flow)."
-            : "Select an object anchored into a text story to edit its anchored position."}
+          {id ? strings.t(M.onThePage) : strings.t(M.selectAnchored)}
         </div>
       ) : (
         <>
-          <Kicker>Position</Kicker>
+          <Kicker>{strings.t(M.position)}</Kicker>
           <EnumRow
             field={fields.anchoredPosition}
-            label="Mode"
+            label={strings.t(M.mode)}
             testId="position"
             options={POSITION_OPTIONS}
             value={position}
@@ -404,32 +461,31 @@ export function AnchoredPanel() {
           />
           <BoolRow
             field={fields.anchoredSpineRelative}
-            label="Spine relative"
+            label={strings.t(M.spineRelative)}
             testId="spine-relative"
             on={unwrapBool(values.anchoredSpineRelative)}
             onCommit={(v) => setBool("anchoredSpineRelative", v)}
           />
           <BoolRow
             field={fields.anchoredLockPosition}
-            label="Lock position"
+            label={strings.t(M.lockPosition)}
             testId="lock-position"
             icon="ui-lock"
             on={unwrapBool(values.anchoredLockPosition)}
             onCommit={(v) => setBool("anchoredLockPosition", v)}
           />
 
-          <Kicker>Custom position</Kicker>
+          <Kicker>{strings.t(M.customPosition)}</Kicker>
           {!custom && (
             <div
               className="text-[10.5px] italic opacity-70"
               style={{ color: "var(--pg-muted-fg)" }}
               data-anchored-custom-hint
             >
-              Switch the mode to Custom (anchored) to edit the offset and
-              reference points.
+              {strings.t(M.customHint)}
             </div>
           )}
-          <Row label="X offset">
+          <Row label={strings.t(M.xOffset)}>
             <ObjectFieldFrame
               field={fields.anchoredXOffset}
               className="relative w-full"
@@ -445,7 +501,7 @@ export function AnchoredPanel() {
               </span>
             </ObjectFieldFrame>
           </Row>
-          <Row label="Y offset">
+          <Row label={strings.t(M.yOffset)}>
             <ObjectFieldFrame
               field={fields.anchoredYOffset}
               className="relative w-full"
@@ -463,7 +519,7 @@ export function AnchoredPanel() {
           </Row>
           <EnumRow
             field={fields.anchorPoint}
-            label="Anchor point"
+            label={strings.t(M.anchorPoint)}
             testId="anchor-point"
             options={ANCHOR_POINT_OPTIONS}
             value={unwrapText(values.anchorPoint)}
@@ -472,7 +528,7 @@ export function AnchoredPanel() {
           />
           <EnumRow
             field={fields.anchoredHorizontalReference}
-            label="H reference"
+            label={strings.t(M.hReference)}
             testId="h-reference"
             options={H_REFERENCE_OPTIONS}
             value={unwrapText(values.anchoredHorizontalReference)}
@@ -481,7 +537,7 @@ export function AnchoredPanel() {
           />
           <EnumRow
             field={fields.anchoredVerticalReference}
-            label="V reference"
+            label={strings.t(M.vReference)}
             testId="v-reference"
             options={V_REFERENCE_OPTIONS}
             value={unwrapText(values.anchoredVerticalReference)}
@@ -490,7 +546,7 @@ export function AnchoredPanel() {
           />
           <EnumRow
             field={fields.anchoredHorizontalAlignment}
-            label="H align"
+            label={strings.t(M.hAlign)}
             testId="h-align"
             options={H_ALIGN_OPTIONS}
             value={unwrapText(values.anchoredHorizontalAlignment)}
@@ -499,7 +555,7 @@ export function AnchoredPanel() {
           />
           <EnumRow
             field={fields.anchoredVerticalAlignment}
-            label="V align"
+            label={strings.t(M.vAlign)}
             testId="v-align"
             options={V_ALIGN_OPTIONS}
             value={unwrapText(values.anchoredVerticalAlignment)}

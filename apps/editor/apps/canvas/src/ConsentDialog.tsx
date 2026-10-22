@@ -40,6 +40,23 @@ import {
 } from "./plugin-consent";
 import { color, font, radius } from "@paged-media/panel-kit";
 import { FocusScope } from "@paged-media/shell";
+import { defineMessages, useStrings } from "@paged-media/strings";
+
+const M = defineMessages("app.consentDialog", {
+  title: "Allow network access?",
+  intro: "A plugin wants to reach the origins below.",
+  blocked:
+    "This editor's network policy does not admit this origin. Allowing it " +
+    "records your consent, but requests to it stay blocked until the " +
+    "deployment lists it.",
+  remember: "Remember for this document",
+  rememberWhy:
+    "This document was not opened from a file or the library, so the " +
+    "permission lasts until it is closed.",
+  deny: "Deny",
+  allow: "Allow",
+  allowCount: "Allow {count}",
+});
 
 export function ConsentDialog({
   controller,
@@ -58,6 +75,7 @@ function ConsentPrompt({ pending }: { pending: PendingConsent }) {
   // Default-deny posture: nothing is pre-checked. The user opts each origin in.
   const [checked, setChecked] = useState<ReadonlySet<string>>(new Set());
   const [remember, setRemember] = useState(false);
+  const strings = useStrings();
 
   const deny = (): void => pending.decide({ granted: [], remember: false });
   const allow = (): void => pending.decide({ granted: [...checked], remember });
@@ -117,10 +135,10 @@ function ConsentPrompt({ pending }: { pending: PendingConsent }) {
             focus returns to the opener on close. */}
         <FocusScope trap autoFocus restoreFocus>
           <h2 id="consent-title" style={{ margin: "0 0 4px", fontSize: 15 }}>
-            Allow network access?
+            {strings.t(M.title)}
           </h2>
           <p style={{ margin: "0 0 14px", color: color.mutedFg }}>
-            A plugin wants to reach the origins below.{" "}
+            {strings.t(M.intro)}{" "}
             <strong style={{ color: color.fg }}>{pending.purpose}</strong>
           </p>
 
@@ -167,9 +185,7 @@ function ConsentPrompt({ pending }: { pending: PendingConsent }) {
                       color: color.mutedFg,
                     }}
                   >
-                    This editor&apos;s network policy does not admit this
-                    origin. Allowing it records your consent, but requests to it
-                    stay blocked until the deployment lists it.
+                    {strings.t(M.blocked)}
                   </p>
                 )}
               </li>
@@ -195,7 +211,7 @@ function ConsentPrompt({ pending }: { pending: PendingConsent }) {
               }
               onChange={(e) => setRemember(e.target.checked)}
             />
-            Remember for this document
+            {strings.t(M.remember)}
           </label>
           {pending.rememberable ? null : (
             // Editor ADR 264: a grant is remembered under the identity the
@@ -205,8 +221,7 @@ function ConsentPrompt({ pending }: { pending: PendingConsent }) {
               data-testid="consent-remember-why"
               style={{ margin: "-8px 0 16px", color: color.mutedFg }}
             >
-              This document was not opened from a file or the library, so the
-              permission lasts until it is closed.
+              {strings.t(M.rememberWhy)}
             </p>
           )}
 
@@ -217,7 +232,7 @@ function ConsentPrompt({ pending }: { pending: PendingConsent }) {
               onClick={deny}
               style={btnStyle(false)}
             >
-              Deny
+              {strings.t(M.deny)}
             </button>
             <button
               type="button"
@@ -226,7 +241,9 @@ function ConsentPrompt({ pending }: { pending: PendingConsent }) {
               disabled={checked.size === 0}
               style={btnStyle(true, checked.size === 0)}
             >
-              Allow{checked.size > 0 ? ` ${checked.size}` : ""}
+              {checked.size > 0
+                ? strings.t(M.allowCount, { count: checked.size })
+                : strings.t(M.allow)}
             </button>
           </div>
         </FocusScope>

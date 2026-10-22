@@ -27,15 +27,21 @@
 import { useCanvasClient } from "@paged-media/shell";
 import { ColorWheel } from "@paged-media/ui";
 import type { Mutation, SwatchSpec } from "@paged-media/client";
+import { defineMessages, useStrings } from "@paged-media/strings";
+
+const M = defineMessages("app.colorWheelPanel", {
+  newSwatch: "New swatch",
+});
 
 export function ColorWheelPanel() {
+  const strings = useStrings();
   const client = useCanvasClient();
 
   const addSwatch = (spec: SwatchSpec) => {
     void client
       .mutate({
         op: "createSwatch",
-        args: { spec: { ...spec, name: spec.name ?? "New swatch" } },
+        args: { spec: { ...spec, name: spec.name ?? strings.t(M.newSwatch) } },
       })
       .catch(() => {});
   };
