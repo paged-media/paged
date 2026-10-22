@@ -49,6 +49,14 @@ each published canary added is under [Releases](#releases).
   of items (name, values, categories, colour) that can be added, removed and reordered. Every
   writable row of every kind is a field (a spec holds the panel to the schemas); each commit is
   one undo step, and each field offers the host's "Bind to data…".
+- **The frame is a window onto its sheet (ADR 510).** A sheet frame's binding (v2) carries its
+  view (the top-left cell and a lock), print headings and gridlines and its column sizing; a
+  binding written before reads as locked at its range. Entering a frame opens its bound sheet at
+  that cell. `get_frame_window` decides which rows and columns a frame shows, for the live grid
+  and the page alike. On a host with frame surfaces (extensions ADR 334) the entered frame shows
+  a grid drawn on the main thread over the frame, with row and column headings inside it,
+  instead of the scene layer; pointer, wheel and keys go straight to it. The page table does not
+  follow the scrolled window yet: it still shows the placed range.
 - **Grid panel and in-frame grid.** Range selection by click, drag and shift; arrows, Tab, F2,
   Delete and scrolling in the frame; a cell editor with function completion; copy and paste of
   ranges with relative references re-addressed; the fill handle with number, date, weekday and

@@ -31,6 +31,7 @@ import {
   createCommandRegistry,
   createEditContextRegistry,
   createExporterRegistry,
+  createFrameSurfaceRegistry,
   createImporterRegistry,
   createKeybindingRegistry,
   createMenuRegistry,
@@ -43,6 +44,7 @@ import {
   type CommandRegistry,
   type EditContextRegistry,
   type ExporterRegistry,
+  type FrameSurfaceRegistry,
   type ImporterRegistry,
   type KeybindingRegistry,
   type MenuRegistry,
@@ -84,6 +86,9 @@ export interface ShellRegistries {
   /** K-2 / S-06 — document exporters (plugin → file). The export panel
    *  lists these and pulls bytes on save. */
   exporters: ExporterRegistry;
+  /** Frame surfaces (extensions ADR 334): a bundle's live editing surface
+   *  for one of its edit contexts, mounted over the active frame. */
+  frameSurfaces: FrameSurfaceRegistry;
 }
 
 const Context = createContext<ShellRegistries | null>(null);
@@ -122,6 +127,7 @@ export function createShellRegistries(
     objectTypes: createObjectTypeRegistry(),
     importers: createImporterRegistry(),
     exporters: createExporterRegistry(),
+    frameSurfaces: createFrameSurfaceRegistry(),
   };
 }
 
