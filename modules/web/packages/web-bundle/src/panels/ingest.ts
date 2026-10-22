@@ -31,7 +31,15 @@
 // affordance the panel always offers).
 
 import type { BundleHost } from "@paged-media/plugin-api";
+import { defineMessages, t } from "@paged-media/strings";
 import { sanitizeHtml, type SanitizeRemoval } from "../../../web-model/src";
+
+const M = defineMessages("web.ingest", {
+  scripts: "script blocks",
+  handlers: "inline event handlers",
+  javascriptUrls: "javascript: URLs",
+  removed: "Removed {parts} on ingest (page JavaScript never runs).",
+});
 
 export interface IngestResult {
   /** The sanitized HTML to seed into the source. */
@@ -63,14 +71,14 @@ export function describeRemoval(
   const parts = removed.map((r) => {
     switch (r) {
       case "<script> element":
-        return "script blocks";
+        return t(M.scripts);
       case "event-handler attribute":
-        return "inline event handlers";
+        return t(M.handlers);
       case "javascript: URL":
-        return "javascript: URLs";
+        return t(M.javascriptUrls);
     }
   });
-  return `Removed ${parts.join(", ")} on ingest (page JavaScript never runs).`;
+  return t(M.removed, { parts: parts.join(", ") });
 }
 
 /** Whether the K-6 system-clipboard door is actually wired. */
