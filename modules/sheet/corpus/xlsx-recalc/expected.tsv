@@ -5,12 +5,12 @@
 54686_fraction_formats.xls.xlsx	4245	4245	0	0	0	0
 57003-FixedFunctionTestCaseData.xls.xlsx	20	12	8	0	0	0
 62815.xlsb.xlsx	270	270	0	0	0	0
-BooleanFunctionsTestCaseData.xls.xlsx	26	22	3	1	0	0
-DGet.xls.xlsx	163	142	18	3	0	0
+BooleanFunctionsTestCaseData.xls.xlsx	26	23	3	0	0	0
+DGet.xls.xlsx	163	145	18	0	0	0
 DStar.xls.xlsx	16	16	0	0	0	0
 DateTimeToNumberTestCases.xls.xlsx	30	12	18	0	0	0
 FormatChoiceTests.xls.xlsx	51	41	10	0	0	0
-FormulaEvalTestData.xls.xlsx	1416	1133	174	95	14	0
+FormulaEvalTestData.xls.xlsx	1416	1259	50	93	14	0
 IfFunctionTestCaseData.xls.xlsx	32	32	0	0	0	0
 IndexFunctionTestCaseData.xls.xlsx	98	61	37	0	0	0
 IrrNpvTestCaseData.xls.xlsx	29	16	10	0	3	0

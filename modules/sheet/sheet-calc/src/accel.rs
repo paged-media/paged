@@ -560,6 +560,14 @@ fn num_key(n: f64) -> u64 {
     }
 }
 
+/// The key of a number in a CRITERIA index: criteria compare numbers at 15
+/// significant digits (`sheet_fn::coerce::eq15`), so equal-at-15-digits
+/// values share a key. (The lookup index keeps [`num_key`]: MATCH and
+/// VLOOKUP compare exactly.)
+fn crit_key(n: f64) -> u64 {
+    num_key(coerce::round15(n))
+}
+
 struct ExactIndex {
     map: FxHashMap<Key, Vec<u32>>,
     empties: Vec<u32>,
@@ -613,7 +621,7 @@ fn num_index(
     for (i, v) in values.iter().enumerate() {
         if let Some(n) = f(v) {
             if !n.is_nan() {
-                m.entry(num_key(n)).or_default().push(lo + i as u32);
+                m.entry(crit_key(n)).or_default().push(lo + i as u32);
             }
         }
     }
@@ -1174,7 +1182,7 @@ fn criterion_rows(snap: &ColSnap, crit: &CellValue) -> Option<Matches> {
                 return None;
             }
             let m = snap.num_any();
-            lists.push(Rc::from(m.get(&num_key(*n)).map_or(&[][..], |v| v)));
+            lists.push(Rc::from(m.get(&crit_key(*n)).map_or(&[][..], |v| v)));
         }
         // `criteria::Kind::BareEq`: a number spelling meets numbers, logicals
         // and blanks by value; the text spelling meets every cell's text.
@@ -1187,7 +1195,7 @@ fn criterion_rows(snap: &ColSnap, crit: &CellValue) -> Option<Matches> {
                     return None;
                 }
                 let m = snap.num_nontext();
-                lists.push(Rc::from(m.get(&num_key(n)).map_or(&[][..], |v| v)));
+                lists.push(Rc::from(m.get(&crit_key(n)).map_or(&[][..], |v| v)));
             }
             let m = snap.text_any();
             lists.push(Rc::from(

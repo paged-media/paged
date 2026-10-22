@@ -47,6 +47,7 @@
 
 - id: sheet.fn.date.days
   name: DAYS
+  xlfn_prefix: "_xlfn."
   family: date
   arity: { min: 2, max: 2 }
   volatility: none
@@ -151,6 +152,7 @@
 
 - id: sheet.fn.date.isoweeknum
   name: ISOWEEKNUM
+  xlfn_prefix: "_xlfn."
   family: date
   arity: { min: 1, max: 1 }
   volatility: none
@@ -166,6 +168,7 @@
 
 - id: sheet.fn.date.networkdays-intl
   name: NETWORKDAYS.INTL
+  xlfn_prefix: "_xlfn."
   family: date
   arity: { min: 2, max: 4 }
   volatility: none
@@ -179,6 +182,7 @@
 
 - id: sheet.fn.date.workday-intl
   name: WORKDAY.INTL
+  xlfn_prefix: "_xlfn."
   family: date
   arity: { min: 2, max: 4 }
   volatility: none

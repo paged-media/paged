@@ -1,0 +1,276 @@
+# sheet.fn.text.* (W3 additions) — regular expressions, ARRAYTOTEXT /
+# VALUETOTEXT, BAHTTEXT, the width and byte variants, PHONETIC, ENCODEURL,
+# FILTERXML, EUROCONVERT. Kernels in sheet-fn/src/families/text3.rs (the
+# byte variants reuse the text/text2 kernels). Expected values recorded from
+# Excel (oracle/excel/recorded/text3.tsv); provenance: Microsoft's public
+# function reference, PCRE2 pattern and substitution syntax.
+
+- id: sheet.fn.text.regextest
+  name: REGEXTEST
+  xlfn_prefix: "_xlfn."
+  family: text
+  arity: { min: 2, max: 3 }
+  volatility: none
+  range_aware: false
+  rust: text3::regextest
+  status: implemented
+  provenance: ["Microsoft function reference (REGEXTEST) — PCRE2 via fancy-regex; bad pattern or flag #VALUE!"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_text3.rs::sheet_fn_text3_regextest"]
+    corpus: ["corpus/fn-corpus/text3/regextest.golden.tsv"]
+
+- id: sheet.fn.text.regexextract
+  name: REGEXEXTRACT
+  xlfn_prefix: "_xlfn."
+  family: text
+  arity: { min: 2, max: 4 }
+  volatility: none
+  range_aware: false
+  returns_array: true
+  rust: text3::regexextract
+  status: implemented
+  provenance: ["Microsoft function reference (REGEXEXTRACT) — modes 0/1/2, all matches and groups as a row; no match #N/A"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_text3.rs::sheet_fn_text3_regexextract"]
+    corpus: ["corpus/fn-corpus/text3/regexextract.golden.tsv"]
+
+- id: sheet.fn.text.regexreplace
+  name: REGEXREPLACE
+  xlfn_prefix: "_xlfn."
+  family: text
+  arity: { min: 3, max: 5 }
+  volatility: none
+  range_aware: false
+  rust: text3::regexreplace
+  status: implemented
+  provenance: ["Microsoft function reference (REGEXREPLACE) — PCRE2 extended replacement ($n, ${name}, \\u...); occurrence 0/n/-n"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_text3.rs::sheet_fn_text3_regexreplace"]
+    corpus: ["corpus/fn-corpus/text3/regexreplace.golden.tsv"]
+
+- id: sheet.fn.text.arraytotext
+  name: ARRAYTOTEXT
+  xlfn_prefix: "_xlfn."
+  family: text
+  arity: { min: 1, max: 2 }
+  volatility: none
+  range_aware: true
+  rust: text3::arraytotext
+  status: implemented
+  provenance: ["Microsoft function reference (ARRAYTOTEXT) — concise ', ' join or strict array literal"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_text3.rs::sheet_fn_text3_arraytotext"]
+    corpus: ["corpus/fn-corpus/text3/arraytotext.golden.tsv"]
+
+- id: sheet.fn.text.valuetotext
+  name: VALUETOTEXT
+  xlfn_prefix: "_xlfn."
+  family: text
+  arity: { min: 1, max: 2 }
+  volatility: none
+  range_aware: false
+  rust: text3::valuetotext
+  status: implemented
+  provenance: ["Microsoft function reference (VALUETOTEXT) — strict form quotes text"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_text3.rs::sheet_fn_text3_valuetotext"]
+    corpus: ["corpus/fn-corpus/text3/valuetotext.golden.tsv"]
+
+- id: sheet.fn.text.bahttext
+  name: BAHTTEXT
+  family: text
+  arity: { min: 1, max: 1 }
+  volatility: none
+  range_aware: false
+  rust: text3::bahttext
+  status: implemented
+  provenance: ["Microsoft function reference (BAHTTEXT) — Thai baht words, satang rounded"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_text3.rs::sheet_fn_text3_bahttext"]
+    corpus: ["corpus/fn-corpus/text3/bahttext.golden.tsv"]
+
+- id: sheet.fn.text.asc
+  name: ASC
+  family: text
+  arity: { min: 1, max: 1 }
+  volatility: none
+  range_aware: false
+  rust: text3::width_identity
+  status: implemented
+  provenance: ["Microsoft function reference (ASC) — unchanged outside a DBCS locale (Excel-recorded in en-US)"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_text3.rs::sheet_fn_text3_asc"]
+    corpus: ["corpus/fn-corpus/text3/asc.golden.tsv"]
+
+- id: sheet.fn.text.dbcs
+  name: DBCS
+  family: text
+  arity: { min: 1, max: 1 }
+  volatility: none
+  range_aware: false
+  rust: text3::width_identity
+  status: implemented
+  provenance: ["Microsoft function reference (DBCS) — unchanged outside a DBCS locale (Excel-recorded in en-US)"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_text3.rs::sheet_fn_text3_dbcs"]
+    corpus: ["corpus/fn-corpus/text3/dbcs.golden.tsv"]
+
+- id: sheet.fn.text.jis
+  name: JIS
+  family: text
+  arity: { min: 1, max: 1 }
+  volatility: none
+  range_aware: false
+  rust: text3::width_identity
+  status: implemented
+  provenance: ["Microsoft function reference (JIS) — the Japanese-UI name of DBCS"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_text3.rs::sheet_fn_text3_jis"]
+    corpus: ["corpus/fn-corpus/text3/jis.golden.tsv"]
+
+- id: sheet.fn.text.findb
+  name: FINDB
+  family: text
+  arity: { min: 2, max: 3 }
+  volatility: none
+  range_aware: false
+  rust: text::find
+  status: implemented
+  provenance: ["Microsoft function reference (FINDB) — single-byte (en-US) locale: a byte is a character (Excel-recorded)"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_text3.rs::sheet_fn_text3_findb"]
+    corpus: ["corpus/fn-corpus/text3/bytes.golden.tsv"]
+
+- id: sheet.fn.text.leftb
+  name: LEFTB
+  family: text
+  arity: { min: 1, max: 2 }
+  volatility: none
+  range_aware: false
+  rust: text::left
+  status: implemented
+  provenance: ["Microsoft function reference (LEFTB) — single-byte (en-US) locale: a byte is a character (Excel-recorded)"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_text3.rs::sheet_fn_text3_leftb"]
+    corpus: ["corpus/fn-corpus/text3/bytes.golden.tsv"]
+
+- id: sheet.fn.text.lenb
+  name: LENB
+  family: text
+  arity: { min: 1, max: 1 }
+  volatility: none
+  range_aware: false
+  rust: text::len
+  status: implemented
+  provenance: ["Microsoft function reference (LENB) — single-byte (en-US) locale: a byte is a character (Excel-recorded)"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_text3.rs::sheet_fn_text3_lenb"]
+    corpus: ["corpus/fn-corpus/text3/bytes.golden.tsv"]
+
+- id: sheet.fn.text.midb
+  name: MIDB
+  family: text
+  arity: { min: 3, max: 3 }
+  volatility: none
+  range_aware: false
+  rust: text::mid
+  status: implemented
+  provenance: ["Microsoft function reference (MIDB) — single-byte (en-US) locale: a byte is a character (Excel-recorded)"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_text3.rs::sheet_fn_text3_midb"]
+    corpus: ["corpus/fn-corpus/text3/bytes.golden.tsv"]
+
+- id: sheet.fn.text.replaceb
+  name: REPLACEB
+  family: text
+  arity: { min: 4, max: 4 }
+  volatility: none
+  range_aware: false
+  rust: text2::replace
+  status: implemented
+  provenance: ["Microsoft function reference (REPLACEB) — single-byte (en-US) locale: a byte is a character (Excel-recorded)"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_text3.rs::sheet_fn_text3_replaceb"]
+    corpus: ["corpus/fn-corpus/text3/bytes.golden.tsv"]
+
+- id: sheet.fn.text.rightb
+  name: RIGHTB
+  family: text
+  arity: { min: 1, max: 2 }
+  volatility: none
+  range_aware: false
+  rust: text::right
+  status: implemented
+  provenance: ["Microsoft function reference (RIGHTB) — single-byte (en-US) locale: a byte is a character (Excel-recorded)"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_text3.rs::sheet_fn_text3_rightb"]
+    corpus: ["corpus/fn-corpus/text3/bytes.golden.tsv"]
+
+- id: sheet.fn.text.searchb
+  name: SEARCHB
+  family: text
+  arity: { min: 2, max: 3 }
+  volatility: none
+  range_aware: false
+  rust: text::search
+  status: implemented
+  provenance: ["Microsoft function reference (SEARCHB) — single-byte (en-US) locale: a byte is a character (Excel-recorded)"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_text3.rs::sheet_fn_text3_searchb"]
+    corpus: ["corpus/fn-corpus/text3/bytes.golden.tsv"]
+
+- id: sheet.fn.text.phonetic
+  name: PHONETIC
+  family: text
+  arity: { min: 1, max: 1 }
+  volatility: none
+  range_aware: true
+  ref_args: true
+  rust: text3::phonetic
+  status: implemented
+  provenance: ["Microsoft function reference (PHONETIC) — the reference's text (no furigana runs read)"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_text3.rs::sheet_fn_text3_phonetic"]
+    corpus: ["corpus/fn-corpus/text3/phonetic.golden.tsv"]
+
+- id: sheet.fn.text.encodeurl
+  name: ENCODEURL
+  xlfn_prefix: "_xlfn."
+  family: text
+  arity: { min: 1, max: 1 }
+  volatility: none
+  range_aware: false
+  rust: text3::encodeurl
+  status: implemented
+  provenance: ["Microsoft function reference (ENCODEURL) — percent-encoding of all but RFC 3986 unreserved characters"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_text3.rs::sheet_fn_text3_encodeurl"]
+    corpus: ["corpus/fn-corpus/text3/encodeurl.golden.tsv"]
+
+- id: sheet.fn.text.filterxml
+  name: FILTERXML
+  xlfn_prefix: "_xlfn."
+  family: text
+  arity: { min: 2, max: 2 }
+  volatility: none
+  range_aware: false
+  returns_array: true
+  rust: text3::filterxml
+  status: implemented
+  provenance: ["Microsoft function reference (FILTERXML) — own XML parser, XPath location-path subset"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_text3.rs::sheet_fn_text3_filterxml"]
+    corpus: ["corpus/fn-corpus/text3/filterxml.golden.tsv"]
+
+- id: sheet.fn.text.euroconvert
+  name: EUROCONVERT
+  family: text
+  arity: { min: 3, max: 5 }
+  volatility: none
+  range_aware: false
+  rust: text3::euroconvert
+  status: implemented
+  provenance: ["Microsoft function reference (EUROCONVERT) — fixed euro legacy rates, per-currency calculation precision"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_text3.rs::sheet_fn_text3_euroconvert"]
+    corpus: ["corpus/fn-corpus/text3/euroconvert.golden.tsv"]

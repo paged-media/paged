@@ -4,6 +4,7 @@
 //! its own process. A new test file goes here and gets a `mod` line below.
 
 mod calc_graph;
+mod calc_model;
 mod calc_order;
 mod calc_rewrite;
 mod chart;
@@ -41,6 +42,7 @@ mod fn_stat;
 mod fn_t2misc;
 mod fn_text;
 mod fn_text2;
+mod fn_text3;
 mod fn_wave7;
 mod format;
 mod format2;

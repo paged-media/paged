@@ -6,6 +6,8 @@
 
 - id: sheet.fn.logical.ifs
   name: IFS
+  xlfn_prefix: "_xlfn."
+  lazy_args: true
   family: logical
   arity: { min: 2, max: null }
   volatility: none
@@ -19,6 +21,8 @@
 
 - id: sheet.fn.logical.switch
   name: SWITCH
+  xlfn_prefix: "_xlfn."
+  lazy_args: true
   family: logical
   arity: { min: 3, max: null }
   volatility: none
@@ -32,6 +36,7 @@
 
 - id: sheet.fn.logical.xor
   name: XOR
+  xlfn_prefix: "_xlfn."
   family: logical
   arity: { min: 1, max: null }
   volatility: none
@@ -45,6 +50,8 @@
 
 - id: sheet.fn.logical.ifna
   name: IFNA
+  xlfn_prefix: "_xlfn."
+  lazy_args: true
   family: logical
   arity: { min: 2, max: 2 }
   volatility: none

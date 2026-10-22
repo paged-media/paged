@@ -122,6 +122,48 @@ pub fn normalize_separators(formula: &str) -> String {
 
 /// The General projection the goldens assert: the error token for an error,
 /// `coerce::to_text` for everything else.
+/// Whether two numbers agree within the corpus tolerance: a relative
+/// `1e-12`, the acceptance bound of the function library (a 15-digit
+/// projection can differ in its last digit between platform math libraries).
+pub fn numbers_agree(a: f64, b: f64) -> bool {
+    a == b || (a - b).abs() <= 1e-12 * a.abs().max(b.abs())
+}
+
+/// Whether two texts are the same complex number in Excel's text form (same
+/// suffix, both parts within [`numbers_agree`]) — the platform-independent
+/// comparison for the `IM*` results.
+///
+/// A pair without an imaginary part must also have the same length, so a
+/// real number printed differently (`100` vs `1E2`) is not masked — only
+/// last-digit rounding is.
+pub fn complex_texts_agree(a: &str, b: &str) -> bool {
+    use sheet_fn::families::complex::parse_complex;
+    let imaginary = |s: &str| s.ends_with('i') || s.ends_with('j');
+    if !imaginary(a) && !imaginary(b) && a.len() != b.len() {
+        return false;
+    }
+    match (parse_complex(a), parse_complex(b)) {
+        (Some(x), Some(y)) => {
+            (x.suffix == y.suffix || x.suffix.is_none() || y.suffix.is_none())
+                && numbers_agree(x.re, y.re)
+                && numbers_agree(x.im, y.im)
+        }
+        _ => false,
+    }
+}
+
+/// Whether a replayed projection matches a golden `expected`: equal text,
+/// or both numbers / both complex numbers within the tolerance.
+pub fn projection_matches(got: &str, want: &str) -> bool {
+    if got == want {
+        return true;
+    }
+    if let (Ok(a), Ok(b)) = (got.parse::<f64>(), want.parse::<f64>()) {
+        return numbers_agree(a, b);
+    }
+    complex_texts_agree(got, want)
+}
+
 pub fn project(value: &CellValue) -> String {
     match value {
         CellValue::Error(e) => e.as_str().to_string(),

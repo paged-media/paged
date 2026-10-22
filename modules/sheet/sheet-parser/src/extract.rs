@@ -123,5 +123,30 @@ fn walk(e: &Expr, set: &mut RefSet) {
                 walk(a, set);
             }
         }
+        // A 3D reference reads the same cell / box on every sheet of its
+        // span: one dependency per sheet.
+        Expr::Ref3D(r) => {
+            for sheet in r.sheets.sheets() {
+                set.cells.push(CellRef { sheet, ..r.cell });
+            }
+        }
+        Expr::Range3D(r) => {
+            let n = r.range.normalized();
+            for sheet in r.sheets.sheets() {
+                set.ranges.push(RangeRef {
+                    start: CellRef { sheet, ..n.start },
+                    end: CellRef { sheet, ..n.end },
+                });
+            }
+        }
+        // An unknown name has no references; an unknown function's
+        // arguments still do (Excel tracks them, and defining the name later
+        // must find them already registered).
+        Expr::UnknownName(_) => {}
+        Expr::UnknownFunc(_, args) => {
+            for a in args {
+                walk(a, set);
+            }
+        }
     }
 }

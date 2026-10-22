@@ -163,6 +163,7 @@
 
 - id: sheet.fn.engineering.bitand
   name: BITAND
+  xlfn_prefix: "_xlfn."
   family: engineering
   arity: { min: 2, max: 2 }
   volatility: none
@@ -176,6 +177,7 @@
 
 - id: sheet.fn.engineering.bitor
   name: BITOR
+  xlfn_prefix: "_xlfn."
   family: engineering
   arity: { min: 2, max: 2 }
   volatility: none
@@ -189,6 +191,7 @@
 
 - id: sheet.fn.engineering.bitxor
   name: BITXOR
+  xlfn_prefix: "_xlfn."
   family: engineering
   arity: { min: 2, max: 2 }
   volatility: none
@@ -202,6 +205,7 @@
 
 - id: sheet.fn.engineering.bitlshift
   name: BITLSHIFT
+  xlfn_prefix: "_xlfn."
   family: engineering
   arity: { min: 2, max: 2 }
   volatility: none
@@ -215,6 +219,7 @@
 
 - id: sheet.fn.engineering.bitrshift
   name: BITRSHIFT
+  xlfn_prefix: "_xlfn."
   family: engineering
   arity: { min: 2, max: 2 }
   volatility: none
@@ -267,6 +272,7 @@
 
 - id: sheet.fn.engineering.erf-precise
   name: ERF.PRECISE
+  xlfn_prefix: "_xlfn."
   family: engineering
   arity: { min: 1, max: 1 }
   volatility: none
@@ -293,6 +299,7 @@
 
 - id: sheet.fn.engineering.erfc-precise
   name: ERFC.PRECISE
+  xlfn_prefix: "_xlfn."
   family: engineering
   arity: { min: 1, max: 1 }
   volatility: none
@@ -397,6 +404,7 @@
 
 - id: sheet.fn.engineering.imcosh
   name: IMCOSH
+  xlfn_prefix: "_xlfn."
   family: engineering
   arity: { min: 1, max: 1 }
   volatility: none
@@ -410,6 +418,7 @@
 
 - id: sheet.fn.engineering.imcot
   name: IMCOT
+  xlfn_prefix: "_xlfn."
   family: engineering
   arity: { min: 1, max: 1 }
   volatility: none
@@ -423,6 +432,7 @@
 
 - id: sheet.fn.engineering.imcsc
   name: IMCSC
+  xlfn_prefix: "_xlfn."
   family: engineering
   arity: { min: 1, max: 1 }
   volatility: none
@@ -436,6 +446,7 @@
 
 - id: sheet.fn.engineering.imcsch
   name: IMCSCH
+  xlfn_prefix: "_xlfn."
   family: engineering
   arity: { min: 1, max: 1 }
   volatility: none
@@ -449,6 +460,7 @@
 
 - id: sheet.fn.engineering.imsec
   name: IMSEC
+  xlfn_prefix: "_xlfn."
   family: engineering
   arity: { min: 1, max: 1 }
   volatility: none
@@ -462,6 +474,7 @@
 
 - id: sheet.fn.engineering.imsech
   name: IMSECH
+  xlfn_prefix: "_xlfn."
   family: engineering
   arity: { min: 1, max: 1 }
   volatility: none
@@ -488,6 +501,7 @@
 
 - id: sheet.fn.engineering.imsinh
   name: IMSINH
+  xlfn_prefix: "_xlfn."
   family: engineering
   arity: { min: 1, max: 1 }
   volatility: none
@@ -501,6 +515,7 @@
 
 - id: sheet.fn.engineering.imtan
   name: IMTAN
+  xlfn_prefix: "_xlfn."
   family: engineering
   arity: { min: 1, max: 1 }
   volatility: none

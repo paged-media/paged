@@ -1,0 +1,27 @@
+# REGEXREPLACE(text, pattern, replacement, [occurrence], [case_sensitivity]).
+# id	formula	setup	expected
+rr-0	=REGEXREPLACE("a1b2c3","[0-9]","#")	-	a#b#c#
+rr-1	=REGEXREPLACE("a1b2c3","[0-9]","#",2)	-	a1b#c3
+rr-2	=REGEXREPLACE("a1b2c3","[0-9]","#",-1)	-	a1b2c#
+rr-3	=REGEXREPLACE("a1b2c3","[0-9]","#",4)	-	a1b2c3
+rr-4	=REGEXREPLACE("a1b2c3","[0-9]","#",-4)	-	a1b2c3
+rr-5	=REGEXREPLACE("John Smith","(\w+) (\w+)","$2, $1")	-	Smith, John
+rr-6	=REGEXREPLACE("ABC","b","x",0,1)	-	AxC
+rr-7	=REGEXREPLACE("ABC","b","x",0,0)	-	ABC
+rr-8	=REGEXREPLACE("abc","(","x")	-	#VALUE!
+rr-9	=REGEXREPLACE("abc","b","$0$0")	-	abbc
+rr-10	=REGEXREPLACE("abc","(?<m>b)","[${m}]")	-	a[b]c
+rr-11	=REGEXREPLACE("abc","b","$$")	-	a$c
+rr-12	=REGEXREPLACE("abc","b","\1")	-	#VALUE!
+rr-13	=REGEXREPLACE("abc","(b)","${1}x")	-	abxc
+rr-14	=REGEXREPLACE("abc","","-")	-	-a-b-c-
+rr-15	=REGEXREPLACE("aaa","a*","x")	-	xx
+rr-16	=REGEXREPLACE("abc","b","$5")	-	#VALUE!
+rr-17	=REGEXREPLACE(123,"2","x")	-	1x3
+rr-18	=ARRAYTOTEXT(REGEXREPLACE({"a1","b2"},"\d",""))	-	a, b
+rr-19	=REGEXREPLACE("abc","b","x",1.9)	-	axc
+rr-20	=REGEXREPLACE("abc","B","x",0,"a")	-	#VALUE!
+rr-21	=REGEXREPLACE("a.b.c","\.","")	-	abc
+rr-22	=REGEXREPLACE("hello world","(\w)(\w*)","\u$1$2")	-	Hello World
+rr-23	=REGEXREPLACE("abc","b","$")	-	#VALUE!
+rr-24	=REGEXREPLACE(A1,"x","y")	A1=#N/A	#N/A

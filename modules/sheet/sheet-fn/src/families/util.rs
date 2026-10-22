@@ -88,6 +88,18 @@ pub(crate) fn atp_num_or(arg: Option<&Arg>, default: f64) -> Result<f64, CellErr
     }
 }
 
+/// A logical argument with a default for an absent or blank argument.
+#[inline]
+pub(crate) fn bool_arg_or(arg: Option<&Arg>, default: bool) -> Result<bool, CellError> {
+    match arg {
+        None | Some(Arg::Scalar(CellValue::Empty)) => Ok(default),
+        Some(a) => match scalar(Some(a)) {
+            Some(v) => coerce::to_bool(&v),
+            None => Ok(default),
+        },
+    }
+}
+
 /// An argument as a row-major grid (a scalar is 1×1).
 pub(crate) fn grid(arg: &Arg) -> Vec<Vec<CellValue>> {
     match arg {
