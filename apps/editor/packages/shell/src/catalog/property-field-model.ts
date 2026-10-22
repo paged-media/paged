@@ -43,6 +43,9 @@ import type {
   ShellValueType,
 } from "./object-model-types";
 import { enumMemberLabel } from "@paged-media/panel-kit";
+import { t as tr } from "@paged-media/strings";
+
+import { LIST, PARSE } from "./messages";
 
 // ------------------------------------------------------------ widgets
 
@@ -204,7 +207,10 @@ export function optionsFor(
     ? given.find((o) => o.value === CLEAR_OPTION)
     : undefined;
   return clear
-    ? [{ value: CLEAR_OPTION, label: clear.label ?? "[Default]" }, ...members]
+    ? [
+        { value: CLEAR_OPTION, label: clear.label ?? tr(LIST.default) },
+        ...members,
+      ]
     : members;
 }
 
@@ -272,8 +278,10 @@ function inRange(
   row: Pick<ShellPropertySchema, "range"> | undefined,
 ): string | null {
   const r = row?.range;
-  if (r?.min !== undefined && n < r.min) return `${n} is below ${r.min}`;
-  if (r?.max !== undefined && n > r.max) return `${n} is above ${r.max}`;
+  if (r?.min !== undefined && n < r.min)
+    return tr(PARSE.below, { value: n, min: r.min });
+  if (r?.max !== undefined && n > r.max)
+    return tr(PARSE.above, { value: n, max: r.max });
   return null;
 }
 
@@ -289,41 +297,37 @@ export function parseInput(
     case "bool":
       if (/^(true|yes|1|on)$/i.test(t)) return { ok: true, value: true };
       if (/^(false|no|0|off)$/i.test(t)) return { ok: true, value: false };
-      return no(`"${text}" is not true or false`);
+      return no(tr(PARSE.notBool, { text }));
     case "number": {
       if (type.keywords?.includes(t)) return { ok: true, value: t };
       const n = plainNumber(t.replace(/\s*%$/, "").replace(/\s*°$/, ""));
-      if (n === null) return no(`"${text}" is not a number`);
+      if (n === null) return no(tr(PARSE.notNumber, { text }));
       if (type.integer && !Number.isInteger(n))
-        return no(`"${text}" is not a whole number`);
+        return no(tr(PARSE.notWholeNumber, { text }));
       const e = inRange(n, row);
       return e ? no(e) : { ok: true, value: n };
     }
     case "length": {
       const n = parseLength(t);
-      if (n === null) return no(`"${text}" is not a length`);
+      if (n === null) return no(tr(PARSE.notLength, { text }));
       const e = inRange(n, row);
       return e ? no(e) : { ok: true, value: n };
     }
     case "enum":
       return type.members.includes(t)
         ? { ok: true, value: t }
-        : no(`"${text}" is not one of ${type.members.join(", ")}`);
+        : no(tr(PARSE.notOneOf, { text, members: type.members.join(", ") }));
     case "bounds": {
       const v = numbers(t, 4, parseLength);
-      return v
-        ? { ok: true, value: v }
-        : no("bounds are four lengths: top, left, bottom, right");
+      return v ? { ok: true, value: v } : no(tr(PARSE.bounds));
     }
     case "transform": {
       const v = numbers(t, 6, plainNumber);
-      return v
-        ? { ok: true, value: v }
-        : no("a transform is six numbers: a b c d tx ty");
+      return v ? { ok: true, value: v } : no(tr(PARSE.transform));
     }
     case "point": {
       const v = numbers(t, 2, parseLength);
-      return v ? { ok: true, value: v } : no("a point is two lengths: x, y");
+      return v ? { ok: true, value: v } : no(tr(PARSE.point));
     }
     case "list": {
       const of = type.of;
@@ -335,10 +339,12 @@ export function parseInput(
         );
         if (!v)
           return no(
-            `"${text}" is not a list of ${of.kind === "length" ? "lengths" : "numbers"}`,
+            tr(of.kind === "length" ? PARSE.notLengths : PARSE.notNumbers, {
+              text,
+            }),
           );
         if (type.maxItems !== undefined && v.length > type.maxItems) {
-          return no(`at most ${type.maxItems} items`);
+          return no(tr(PARSE.atMost, { max: type.maxItems }));
         }
         return { ok: true, value: v };
       }
@@ -349,12 +355,12 @@ export function parseInput(
       return parseJson(text);
     case "text":
       if (type.maxLength !== undefined && text.length > type.maxLength) {
-        return no(`longer than ${type.maxLength} characters`);
+        return no(tr(PARSE.longerThan, { max: type.maxLength }));
       }
       return { ok: true, value: text };
     default:
       // color / ref / asset: a reference string, written as typed.
-      return t === "" ? no("empty reference") : { ok: true, value: t };
+      return t === "" ? no(tr(PARSE.emptyReference)) : { ok: true, value: t };
   }
 }
 
@@ -362,7 +368,7 @@ function parseJson(text: string): ParseResult {
   try {
     return { ok: true, value: JSON.parse(text) };
   } catch {
-    return { ok: false, reason: `"${text}" is not JSON` };
+    return { ok: false, reason: tr(PARSE.notJson, { text }) };
   }
 }
 

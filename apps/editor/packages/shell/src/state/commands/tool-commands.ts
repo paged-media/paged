@@ -26,6 +26,8 @@
 // X/D fill-stroke keys land with the gesture spine (Phase 2) and the
 // fill/stroke cluster (Phase 4) respectively.
 
+import { t } from "@paged-media/strings";
+import { COMMANDS } from "../messages";
 import type { CommandContribution } from "../../registries/command";
 import type { KeybindingContribution } from "../../registries/keybinding";
 import type { ToolContribution } from "../../registries/tool";
@@ -71,7 +73,7 @@ export function buildToolbarContributions(
     const command = TOOL_ACTIVATE_COMMAND_PREFIX + tool.id;
     commands.push({
       id: command,
-      title: `Tool: ${tool.title}`,
+      title: t(COMMANDS.activateTool, { tool: tool.title }),
       category: "Tools",
       icon: tool.icon,
       handler: (paged) => {
@@ -90,7 +92,7 @@ export function buildToolbarContributions(
   // `W` — toggle Normal ⇄ Preview, text-suppressed like tool shortcuts.
   commands.push({
     id: SCREEN_PREVIEW_TOGGLE_COMMAND,
-    title: "Toggle preview screen mode",
+    title: t(COMMANDS.togglePreview),
     category: "View",
     handler: (paged) => {
       (paged as PagedEditor).screenMode.togglePreview();

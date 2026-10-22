@@ -21,6 +21,10 @@
 // Playwright suite drives via `page.setInputFiles`. Extracted from
 // PagedShell so the Header can mount the compact variant.
 
+import { useStrings } from "@paged-media/strings";
+
+import { FILE_DROP } from "./messages";
+
 export interface FileDropProps {
   onFile: (file: File) => void;
   compact?: boolean;
@@ -32,6 +36,7 @@ export interface FileDropProps {
 }
 
 export function FileDrop(props: FileDropProps) {
+  const strings = useStrings();
   const onDrop = (e: React.DragEvent) => {
     e.preventDefault();
     const file = e.dataTransfer.files[0];
@@ -61,7 +66,7 @@ export function FileDrop(props: FileDropProps) {
       onDrop={onDrop}
       style={props.compact ? compactDropStyle : dropStyle}
     >
-      {props.compact ? "" : "Drop an IDML file here, or "}
+      {props.compact ? "" : strings.t(FILE_DROP.prompt)}
       {input}
     </div>
   );

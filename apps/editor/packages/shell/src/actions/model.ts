@@ -80,6 +80,8 @@
 // is the explicit opt-in for replaying an action in the document it
 // was recorded in.
 
+import { t } from "@paged-media/strings";
+import { ACTIONS } from "./messages";
 import type { CommandInvocation } from "../registries/command";
 
 /** Bump when the persisted shape changes incompatibly. */
@@ -320,39 +322,39 @@ function skipReasonFor(
 export function skipReasonLabel(reason: SkipReason): string {
   switch (reason) {
     case "disabled":
-      return "turned off";
+      return t(ACTIONS.skipDisabled);
     case "failedWhileRecording":
-      return "failed while recording";
+      return t(ACTIONS.skipFailed);
     case "documentBound":
-      return "carries ids from the recorded document";
+      return t(ACTIONS.skipDocumentBound);
     case "unserializable":
-      return "payload could not be saved";
+      return t(ACTIONS.skipUnserializable);
   }
 }
 
 export function verdictLabel(verdict: StepVerdict): string {
   switch (verdict) {
     case "contextual":
-      return "selection";
+      return t(ACTIONS.verdictContextual);
     case "portable":
-      return "portable";
+      return t(ACTIONS.verdictPortable);
     case "documentBound":
-      return "doc ids";
+      return t(ACTIONS.verdictDocumentBound);
     case "unserializable":
-      return "not saved";
+      return t(ACTIONS.verdictUnserializable);
   }
 }
 
 export function verdictTitle(verdict: StepVerdict): string {
   switch (verdict) {
     case "contextual":
-      return "No payload — replays against whatever is selected at replay time.";
+      return t(ACTIONS.verdictContextualTitle);
     case "portable":
-      return "Payload carries no document ids — replays anywhere.";
+      return t(ACTIONS.verdictPortableTitle);
     case "documentBound":
-      return "Payload embeds ids minted by the recorded document. Skipped unless you allow document-bound steps.";
+      return t(ACTIONS.verdictDocumentBoundTitle);
     case "unserializable":
-      return "The payload could not be saved (a function, blob or cycle). This step can never replay.";
+      return t(ACTIONS.verdictUnserializableTitle);
   }
 }
 
