@@ -103,6 +103,7 @@ tasks:
       && bun run test:profile-presets
       && bun run test:feat-vocabulary
       && bun run test:client-catalog
+      && bun run test:feature-ids
     # The wasm budget and the module door measure the wasm the app ships.
     deps:
       [

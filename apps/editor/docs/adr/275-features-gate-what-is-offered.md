@@ -7,8 +7,9 @@
   consult it: `chrome/MenuBar.tsx`, `chrome/CommandPalette.tsx`, `chrome/CanvasContextMenu.tsx`,
   `chrome/ToolRail.tsx`, `chrome/PanelRail.tsx`, `chrome/RegionItems.tsx`,
   `cockpit/PanelHost.tsx`, `cockpit/CockpitLayout.tsx`, `overlays/overlay-host.tsx`; the
-  profile's `features` and `PagedShell`'s `features` prop. Follows
-  [ADR 274](274-the-editor-profile-is-runtime-data.md). Tasks B1–B2 of
+  profile's `features` and `PagedShell`'s `features` prop; `scripts/feature-ids.mjs` and
+  `apps/canvas/feature-ids.json`. Follows
+  [ADR 274](274-the-editor-profile-is-runtime-data.md). Tasks B1–B3 of
   [the composable editor's plan](../composable-editor-plan.md).
 
 ## Context
@@ -61,9 +62,12 @@ engine ([the concept](../composable-editor.md) §7).
 ## Consequences
 
 A host can narrow a preset without rewriting it. The feature ids become a contract once hosts
-use them; publishing them as a checked inventory is task B3 of the plan. The `chrome` and
-`overlay` kinds are not yet surface kinds of ADR 227, so the conformance gate does not see
-them.
+use them, so they are published as a generated inventory, `apps/canvas/feature-ids.json`
+(`scripts/feature-ids.mjs`, checked in the `checks` job): commands, panels, tools, menu paths
+and keybindings from the surface inventory of ADR 227, planned host tools, and the shell's
+`CHROME_FEATURES`, which the generator holds the code's `chrome:` gates to. Overlay ids are not
+in it yet, and the `chrome` and `overlay` kinds are not surface kinds of ADR 227, so the
+conformance gate does not see them.
 
 ## Related
 

@@ -44,6 +44,15 @@ export const FEATURE_KINDS = [
 
 export type FeatureKind = (typeof FEATURE_KINDS)[number];
 
+/** The `chrome:` features: parts of the chrome that are not registry
+ *  entries. Anything gated by `allows("chrome", …)` is listed here. */
+export const CHROME_FEATURES = [
+  "rulers",
+  "title-bar",
+  "thumbnails",
+  "context-menu",
+] as const;
+
 /** `command:paged.object.lock`, `menu:Window/*`, `chrome:rulers`, … */
 export type FeatureId = `${FeatureKind}:${string}`;
 
