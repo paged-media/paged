@@ -914,6 +914,7 @@ export {
   type ChromeRegions,
 } from "./state/chrome-regions";
 export {
+  CHROME_FEATURES,
   FEATURE_KINDS,
   createFeatureStore,
   type FeatureContext,

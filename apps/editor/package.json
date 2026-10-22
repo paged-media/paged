@@ -29,7 +29,8 @@
     "test:feat-vocabulary": "bun scripts/feat-vocabulary-guard.mjs",
     "test:quarantine": "bun test --timeout 30000 ./scripts/quarantine-guard.test.mjs && bun scripts/quarantine-guard.mjs --list",
     "test:profile-presets": "bun scripts/profile-presets-guard.mjs",
-    "test:client-catalog": "bun scripts/client-api-catalog.mjs --check"
+    "test:client-catalog": "bun scripts/client-api-catalog.mjs --check",
+    "test:feature-ids": "bun scripts/feature-ids.mjs --check"
   },
   "devDependencies": {
     "@babel/parser": "7.29.8"
