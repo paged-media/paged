@@ -3,7 +3,7 @@
   "version": 1,
   "counts": {
     "chrome": 4,
-    "command": 335,
+    "command": 351,
     "keybinding": 88,
     "menu": 257,
     "panel": 121,
@@ -47,6 +47,16 @@
     },
     {
       "id": "command:media.paged.data.captureDataSet",
+      "kind": "command",
+      "owner": "media.paged.data"
+    },
+    {
+      "id": "command:media.paged.data.captureEveryRecord",
+      "kind": "command",
+      "owner": "media.paged.data"
+    },
+    {
+      "id": "command:media.paged.data.checkExpression",
       "kind": "command",
       "owner": "media.paged.data"
     },
@@ -111,7 +121,27 @@
       "owner": "media.paged.data"
     },
     {
+      "id": "command:media.paged.data.exportVariableLibrary",
+      "kind": "command",
+      "owner": "media.paged.data"
+    },
+    {
+      "id": "command:media.paged.data.importVariableLibrary",
+      "kind": "command",
+      "owner": "media.paged.data"
+    },
+    {
       "id": "command:media.paged.data.merge",
+      "kind": "command",
+      "owner": "media.paged.data"
+    },
+    {
+      "id": "command:media.paged.data.previewQuery",
+      "kind": "command",
+      "owner": "media.paged.data"
+    },
+    {
+      "id": "command:media.paged.data.previewRecordFlow",
       "kind": "command",
       "owner": "media.paged.data"
     },
@@ -122,6 +152,11 @@
     },
     {
       "id": "command:media.paged.data.refresh",
+      "kind": "command",
+      "owner": "media.paged.data"
+    },
+    {
+      "id": "command:media.paged.data.refreshDiff",
       "kind": "command",
       "owner": "media.paged.data"
     },
@@ -956,6 +991,11 @@
       "owner": "media.paged.sheet"
     },
     {
+      "id": "command:media.paged.sheet.command.importCsv",
+      "kind": "command",
+      "owner": "media.paged.sheet"
+    },
+    {
       "id": "command:media.paged.sheet.command.importXlsx",
       "kind": "command",
       "owner": "media.paged.sheet"
@@ -977,6 +1017,11 @@
     },
     {
       "id": "command:media.paged.sheet.command.lowerToFrame",
+      "kind": "command",
+      "owner": "media.paged.sheet"
+    },
+    {
+      "id": "command:media.paged.sheet.command.mergeCells",
       "kind": "command",
       "owner": "media.paged.sheet"
     },
@@ -1006,6 +1051,21 @@
       "owner": "media.paged.sheet"
     },
     {
+      "id": "command:media.paged.sheet.command.setBorders",
+      "kind": "command",
+      "owner": "media.paged.sheet"
+    },
+    {
+      "id": "command:media.paged.sheet.command.setColumnWidth",
+      "kind": "command",
+      "owner": "media.paged.sheet"
+    },
+    {
+      "id": "command:media.paged.sheet.command.setRowHeight",
+      "kind": "command",
+      "owner": "media.paged.sheet"
+    },
+    {
       "id": "command:media.paged.sheet.command.sheetFromDataset",
       "kind": "command",
       "owner": "media.paged.sheet"
@@ -1022,6 +1082,11 @@
     },
     {
       "id": "command:media.paged.sheet.command.styleFromCell",
+      "kind": "command",
+      "owner": "media.paged.sheet"
+    },
+    {
+      "id": "command:media.paged.sheet.command.unmergeCells",
       "kind": "command",
       "owner": "media.paged.sheet"
     },
@@ -1402,6 +1467,21 @@
     },
     {
       "id": "command:paged.help.reportIssue",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.host.back",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.host.close",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.host.submit",
       "kind": "command",
       "owner": "editor"
     },
