@@ -23,6 +23,7 @@
 // fixed GridScene and a fake host captures every scene-layer submit so we
 // can assert what core would compose.
 
+import { stubFrameWindow } from "./frame-window-stub";
 import { describe, expect, it } from "bun:test";
 
 import type { BundleHost, SceneLayer } from "@paged-media/plugin-api";
@@ -97,6 +98,7 @@ function fakeEngine() {
     paginate: () => [],
     // The fake ignores the window args and always returns the 2×2 scene; the
     // session overlays its own selection onto it via computeGridScene.
+    getFrameWindow: stubFrameWindow,
     getGridScene: () => scene2x2(),
     setGridSelection(sheet, anchorRow, anchorCol, rows, cols) {
       setSelCalls.push([sheet, anchorRow, anchorCol, rows, cols]);
