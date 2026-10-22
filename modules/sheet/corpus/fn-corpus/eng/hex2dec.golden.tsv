@@ -1,0 +1,15 @@
+# HEX2DEC(number).
+# id	formula	setup	expected
+hex2dec-0	=HEX2DEC("A5")	-	165
+hex2dec-1	=HEX2DEC("FFFFFFFF5B")	-	-165
+hex2dec-2	=HEX2DEC("3DA408B9")	-	1034160313
+hex2dec-3	=HEX2DEC("7FFFFFFFFF")	-	549755813887
+hex2dec-4	=HEX2DEC("8000000000")	-	-549755813888
+hex2dec-5	=HEX2DEC("FFFFFFFFFF")	-	-1
+hex2dec-6	=HEX2DEC("10000000000")	-	#NUM!
+hex2dec-7	=HEX2DEC("xyz")	-	#NUM!
+hex2dec-8	=HEX2DEC("ff")	-	255
+hex2dec-9	=HEX2DEC(100)	-	256
+hex2dec-10	=HEX2DEC("")	-	0
+hex2dec-x0	=HEX2DEC(A1)	A1=#N/A	#N/A
+hex2dec-x1	=SUM(HEX2DEC({"A","B"}))	-	21

@@ -68,6 +68,10 @@ pub struct ParsedWorksheet {
     pub row_heights: BTreeMap<u32, f64>,
     /// Rows saved hidden (`<row hidden="1">`), 0-based (Wave 7).
     pub hidden_rows: std::collections::BTreeSet<u32>,
+    /// Row attributes beyond height/hidden (W1.4), 0-based.
+    pub row_meta: BTreeMap<u32, sheet_core::RowMeta>,
+    /// `<col>` attributes beyond width (W1.4), 0-based ranges.
+    pub col_meta: Vec<sheet_core::ColMeta>,
     /// Unknown `<worksheet>` children, re-emitted on dirty re-encode.
     pub captured: CapturedSubtrees,
 }
@@ -143,6 +147,10 @@ pub fn parse(xml: &[u8], shared: &[CompactString]) -> Result<ParsedWorksheet, Xl
                             if attr(&e, b"hidden")?.is_some_and(|v| v == "1" || v == "true") {
                                 out.hidden_rows.insert(cur_row_idx);
                             }
+                            let meta = row_meta_of(&e)?;
+                            if meta != sheet_core::RowMeta::default() {
+                                out.row_meta.insert(cur_row_idx, meta);
+                            }
                         }
                         b"c" => {
                             cur_cell = Some(CellAccum::start(&e)?);
@@ -187,7 +195,8 @@ pub fn parse(xml: &[u8], shared: &[CompactString]) -> Result<ParsedWorksheet, Xl
                         Anchor::BeforeSheetData
                     };
                     let end = reader.buffer_position() as usize;
-                    out.captured.push(anchor, xml[pos_before..end].to_vec());
+                    out.captured
+                        .push_at(anchor, xml[pos_before..end].to_vec(), pos_before, end);
                 } else if capturing.is_none() {
                     match local.as_slice() {
                         b"dimension" => { /* recomputed on write */ }
@@ -215,6 +224,10 @@ pub fn parse(xml: &[u8], shared: &[CompactString]) -> Result<ParsedWorksheet, Xl
                             if let Some(idx) = idx {
                                 if attr(&e, b"hidden")?.is_some_and(|v| v == "1" || v == "true") {
                                     out.hidden_rows.insert(idx);
+                                }
+                                let meta = row_meta_of(&e)?;
+                                if meta != sheet_core::RowMeta::default() {
+                                    out.row_meta.insert(idx, meta);
                                 }
                             }
                             if custom {
@@ -274,7 +287,8 @@ pub fn parse(xml: &[u8], shared: &[CompactString]) -> Result<ParsedWorksheet, Xl
                 if let Some((anchor, start, ref name)) = capturing {
                     if depth == 2 && &local == name {
                         let end = reader.buffer_position() as usize;
-                        out.captured.push(anchor, xml[start..end].to_vec());
+                        out.captured
+                            .push_at(anchor, xml[start..end].to_vec(), start, end);
                         capturing = None;
                     }
                     depth -= 1;
@@ -409,7 +423,7 @@ fn push_cell(
 }
 
 /// Map (t=, <v>, inline text) to a [`CellValue`] (ECMA-376 §18.18.11 ST_CellType).
-fn resolve_value(
+pub(crate) fn resolve_value(
     ty: &str,
     v: &str,
     inline_t: &str,
@@ -466,16 +480,78 @@ fn parse_col(
         // <col> uses 1-based inclusive column ranges; store only when an
         // explicit/custom width is present.
         if custom || attr(e, b"width")?.is_some() {
-            for c in min..=max {
+            for c in min..=max.min(sheet_core::MAX_COL + 1) {
                 out.col_widths.insert(c.saturating_sub(1), width);
             }
+        }
+    }
+    if let (Some(min), Some(max)) = (min, max) {
+        let flag = |name: &[u8]| -> Result<bool, XlsxError> {
+            Ok(attr(e, name)?.is_some_and(|v| v == "1" || v == "true"))
+        };
+        let meta = sheet_core::ColMeta {
+            min: min.saturating_sub(1),
+            max: max.saturating_sub(1).min(sheet_core::MAX_COL),
+            style: attr(e, b"style")?.and_then(|s| s.parse().ok()).unwrap_or(0),
+            hidden: flag(b"hidden")?,
+            outline_level: attr(e, b"outlineLevel")?
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(0),
+            collapsed: flag(b"collapsed")?,
+            best_fit: flag(b"bestFit")?,
+            custom_width: custom,
+            phonetic: flag(b"phonetic")?,
+        };
+        if !meta.is_plain() {
+            out.col_meta.push(meta);
         }
     }
     Ok(())
 }
 
+/// The widths and `<col>` records of a `<cols>` element's bytes, read as the
+/// worksheet reader reads them (the save compares the model against them).
+pub(crate) fn parse_cols(
+    xml: &[u8],
+) -> Result<(BTreeMap<u32, f64>, Vec<sheet_core::ColMeta>), XlsxError> {
+    use quick_xml::events::Event;
+    let mut reader = quick_xml::Reader::from_reader(xml);
+    let mut buf = Vec::new();
+    let mut out = ParsedWorksheet::default();
+    loop {
+        match reader.read_event_into(&mut buf)? {
+            Event::Start(e) | Event::Empty(e) if e.local_name().as_ref() == b"col" => {
+                parse_col(&e, &mut out)?;
+            }
+            Event::Eof => break,
+            _ => {}
+        }
+        buf.clear();
+    }
+    Ok((out.col_widths, out.col_meta))
+}
+
+/// The attributes of a `<row>` start tag beyond `r`/`ht`/`hidden`.
+pub(crate) fn row_meta_of(
+    e: &quick_xml::events::BytesStart<'_>,
+) -> Result<sheet_core::RowMeta, XlsxError> {
+    let flag = |name: &[u8]| -> Result<bool, XlsxError> {
+        Ok(attr(e, name)?.is_some_and(|v| v == "1" || v == "true"))
+    };
+    Ok(sheet_core::RowMeta {
+        style: attr(e, b"s")?.and_then(|s| s.parse().ok()).unwrap_or(0),
+        custom_format: flag(b"customFormat")?,
+        outline_level: attr(e, b"outlineLevel")?
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(0),
+        collapsed: flag(b"collapsed")?,
+        thick_top: flag(b"thickTop")?,
+        thick_bot: flag(b"thickBot")?,
+    })
+}
+
 /// Parse an `A1:B2` range token into a relative [`RangeRef`] on sheet 0.
-fn parse_range(s: &str) -> Option<RangeRef> {
+pub(crate) fn parse_range(s: &str) -> Option<RangeRef> {
     let (a, b) = s.split_once(':')?;
     let (r0, c0, _, _) = parse_a1(a)?;
     let (r1, c1, _, _) = parse_a1(b)?;

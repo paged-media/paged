@@ -1,0 +1,12 @@
+# COT(number).
+# id	formula	setup	expected
+cot-0	=COT(30)	-	-0.156119952161659
+cot-1	=COT(1)	-	0.642092615934331
+cot-2	=COT(-0.5)	-	-1.83048772171245
+cot-3	=COT(1E-10)	-	10000000000
+cot-4	=COT(100)	-	-1.70295691942647
+cot-err0	=COT(0)	-	#DIV/0!
+cot-err1	=COT(2^27)	-	#NUM!
+cot-err2	=COT(A1)	A1=#N/A	#N/A
+cot-array	=SUM(COT({0.5,1.5,-2}))	-	2.35906012037539
+cot-text	=COT("abc")	-	#VALUE!

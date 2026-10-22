@@ -37,6 +37,7 @@ import { expect, test, type Page } from "@playwright/test";
 
 import { openPanel } from "../../fidelity/canvas-driver";
 import { Designer } from "../driver/designer";
+import { expectGridSurfaceDrawn } from "./sheet-kit";
 
 import { dirname, resolve as pathResolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -214,7 +215,10 @@ test.describe("journey · paged.sheet xlsx round-trip", () => {
     await page.mouse.dblclick(at!.x, at!.y);
     await expect(breadcrumb).toBeVisible({ timeout: 10_000 });
     await page.waitForTimeout(800);
-    await designer.expectRenderChangesFrom(before);
+    await expectGridSurfaceDrawn(page, (a, b) =>
+      designer.renderDiffPixels(a, b),
+    );
+    void before;
     await page.keyboard.press("Escape");
     await expect(breadcrumb).toHaveCount(0);
 

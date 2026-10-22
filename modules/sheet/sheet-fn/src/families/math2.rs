@@ -253,7 +253,7 @@ pub fn permut(args: &[Arg], _ctx: &EvalCtx) -> CellValue {
 /// `C(n, k)` multiplicatively, using the smaller of `k`/`n-k` so the product
 /// stays small. Returns an `f64` (Excel's domain); the caller has already
 /// validated `0 <= k <= n`.
-fn n_choose_k(n: f64, k: f64) -> f64 {
+pub(crate) fn n_choose_k(n: f64, k: f64) -> f64 {
     let k = k.min(n - k);
     let mut acc = F64(1.0);
     let mut i = 1.0;

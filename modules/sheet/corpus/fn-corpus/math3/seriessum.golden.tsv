@@ -1,0 +1,13 @@
+# SERIESSUM(x,n,m,coefficients).
+# id	formula	setup	expected
+ss-doc	=SERIESSUM(PI()/4,0,2,{1,-0.5,0.0416666666666667,-0.00138888888888889})	-	0.707103214822846
+ss-range	=SERIESSUM(2,1,1,A1:A3)	A1=1;A2=2;A3=3	34
+ss-scalar	=SERIESSUM(3,2,1,4)	-	36
+ss-x0	=SERIESSUM(0,1,1,{1,2})	-	0
+ss-x0n0	=SERIESSUM(0,0,1,{1,2})	-	#NUM!
+ss-neg-n	=SERIESSUM(2,-1,1,{1,2})	-	2.5
+ss-text-coef	=SERIESSUM(2,1,1,A1:A2)	A1=1;A2=text:x	#VALUE!
+ss-blank-coef	=SERIESSUM(2,1,1,A1:A3)	A1=1;A3=3	14
+ss-text-x	=SERIESSUM("a",1,1,{1})	-	#VALUE!
+ss-err	=SERIESSUM(2,1,1,A1:A2)	A1=1;A2=#DIV/0!	#DIV/0!
+ss-frac	=SERIESSUM(1.5,0.5,0.5,{1,1,1})	-	4.56186217847897

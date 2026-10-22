@@ -458,7 +458,7 @@ fn column_width_and_row_height_round_trip__feat__sheet_layout_sizes() {
     let out = s.save_xlsx().unwrap();
     let xml = part_text(&out, SHEET1);
     assert!(
-        xml.contains(r#"<col min="2" max="2" width="20" customWidth="1"/>"#),
+        xml.contains(r#"<col min="2" max="3" width="20" customWidth="1"/>"#),
         "{xml}"
     );
     assert!(
