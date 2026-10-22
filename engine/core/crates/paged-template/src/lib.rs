@@ -36,7 +36,7 @@ mod resolve;
 
 pub use permission::{Override, PermSet, Permission, Role, SessionPolicy};
 pub use policy::{
-    Constraints, DocumentPolicy, FieldDef, ItemPolicy, OverflowRule, PolicyProblem,
+    Constraints, DocumentPolicy, FieldDef, ItemPolicy, ModuleField, OverflowRule, PolicyProblem,
     TemplateFieldKind, TEMPLATE_KEY,
 };
 pub use resolve::PolicyIndex;
