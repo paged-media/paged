@@ -24,8 +24,15 @@
 
 import { ListRows, useCollection } from "@paged-media/shell";
 import type { CrossReferenceSummary } from "@paged-media/client";
+import { defineMessages, useStrings } from "@paged-media/strings";
+
+const M = defineMessages("app.crossReferencesPanel", {
+  loading: "Loading cross-references…",
+  empty: "No cross-references in this document.",
+});
 
 export function CrossReferencesPanel() {
+  const strings = useStrings();
   const items = useCollection<CrossReferenceSummary>("crossReferences");
   if (items === null) {
     return (
@@ -33,7 +40,7 @@ export function CrossReferencesPanel() {
         className="p-3 text-xs text-muted-foreground"
         data-cross-references-panel="loading"
       >
-        Loading cross-references…
+        {strings.t(M.loading)}
       </div>
     );
   }
@@ -44,7 +51,7 @@ export function CrossReferencesPanel() {
           className="p-3 text-xs text-muted-foreground"
           data-empty-cross-references
         >
-          No cross-references in this document.
+          {strings.t(M.empty)}
         </div>
       ) : (
         <div data-cross-reference-list>

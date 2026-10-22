@@ -68,6 +68,51 @@ import {
   usePreflightFindings,
 } from "../panels/cockpit/preflight-findings";
 import { setSelectedExportTarget } from "../panels/cockpit/export-targets";
+import { defineMessages, useStrings } from "@paged-media/strings";
+
+const M = defineMessages("app.cockpitToolbars", {
+  soon: "soon",
+  noTextSelection: "No text selection",
+  textSelected: "Text selected",
+  caretPlaced: "Caret placed",
+  character: "Character",
+  characterDisabled: "Place the caret in text to format characters",
+  paragraph: "Paragraph",
+  paragraphDisabled: "Place the caret in text to format paragraphs",
+  styles: "Styles",
+  stylesDisabled: "Place the caret in text to apply a paragraph style",
+  document: "document",
+  documentPages: "{name} · {count, plural, one {# page} other {# pages}}",
+  preflight: "Preflight",
+  errors: "{count, plural, one {# error} other {# errors}}",
+  warnings: "{count, plural, one {# warning} other {# warnings}}",
+  noIssues: "No issues",
+  workingProfile: "Working CMYK profile",
+  noWorkingProfile: "No working CMYK profile",
+  validateTitle: "Run preflight — the real PDF/X validation pipeline",
+  validating: "Validating…",
+  validate: "Validate",
+  lastResult: "Last preflight result",
+  runValidate: "Run Validate to see findings",
+  normalView: "Back to normal view",
+  showBleed: "Show the bleed area",
+  bleed: "Bleed",
+  dataSourcesTitle: "Data sources — import a file or connect a remote source",
+  dataSources: "Data sources",
+  bindingsTitle: "Bindings — map fields to frames",
+  bindings: "Bindings",
+  datasetTitle: "Dataset preview — data sets and the batch plan",
+  dataset: "Dataset preview",
+  comments: "Comments",
+  approve: "Approve",
+  requestChanges: "Request changes",
+  compareVersions: "Compare versions",
+  exportPdfTitle: "Export a print PDF (PDF/X-4)",
+  exportPdf: "Export PDF…",
+  pageImagesTitle: "Set up page-image (PNG) export in the Export Center",
+  pageImages: "Page images",
+  web: "Web",
+});
 
 // ── tiny shared primitives (kit Pill/Chip styling) ─────────────
 
@@ -192,11 +237,12 @@ export function Sep() {
 
 /** "Coming soon" affordance — a stub is visibly a stub. */
 function Soon({ children, icon }: { children: ReactNode; icon?: string }) {
+  const strings = useStrings();
   return (
     <Chip icon={icon} disabled>
       {children}
       <span className="pg-mono-meta" style={{ fontSize: 9.5 }}>
-        soon
+        {strings.t(M.soon)}
       </span>
     </Chip>
   );
@@ -262,6 +308,7 @@ export { DesignControlBar as DesignToolbar } from "./control-bar";
 // ── Content — selection-aware formatting raises + live readout ──
 
 export function ContentToolbar(_props: ModeToolbarProps) {
+  const strings = useStrings();
   const meta = useDocumentMeta();
   const { contentSelection } = useContentSelection();
   // The Type tool sets a caret/range; with neither, the formatting
@@ -270,36 +317,36 @@ export function ContentToolbar(_props: ModeToolbarProps) {
   const hasRange =
     contentSelection != null && contentSelection.start !== contentSelection.end;
   const selLabel = !hasCaret
-    ? "No text selection"
+    ? strings.t(M.noTextSelection)
     : hasRange
-      ? "Text selected"
-      : "Caret placed";
+      ? strings.t(M.textSelected)
+      : strings.t(M.caretPlaced);
 
   return (
     <>
       <RaisePill
         panelId="paged.character"
         icon="panel-character"
-        label="Character"
+        label={strings.t(M.character)}
         enabled={hasCaret}
-        disabledTitle="Place the caret in text to format characters"
+        disabledTitle={strings.t(M.characterDisabled)}
         testId="content-character"
       />
       <RaisePill
         panelId="paged.paragraph"
         icon="panel-paragraph"
-        label="Paragraph"
+        label={strings.t(M.paragraph)}
         enabled={hasCaret}
-        disabledTitle="Place the caret in text to format paragraphs"
+        disabledTitle={strings.t(M.paragraphDisabled)}
         testId="content-paragraph"
       />
       <Sep />
       <RaisePill
         panelId="paged.paragraph-styles"
         icon="panel-paragraph-styles"
-        label="Styles"
+        label={strings.t(M.styles)}
         enabled={hasCaret}
-        disabledTitle="Place the caret in text to apply a paragraph style"
+        disabledTitle={strings.t(M.stylesDisabled)}
         testId="content-styles"
       />
       <Sep />
@@ -314,7 +361,10 @@ export function ContentToolbar(_props: ModeToolbarProps) {
       </span>
       {meta ? (
         <span className="pg-mono-meta" style={{ marginLeft: 8 }}>
-          {meta.documentName || "document"} · {meta.pageCount} pages
+          {strings.t(M.documentPages, {
+            name: meta.documentName || strings.t(M.document),
+            count: meta.pageCount,
+          })}
         </span>
       ) : null}
     </>
@@ -324,6 +374,7 @@ export function ContentToolbar(_props: ModeToolbarProps) {
 // ── Prepress — REAL working-space chip + live preflight + bleed ─
 
 export function PrepressToolbar(_props: ModeToolbarProps) {
+  const strings = useStrings();
   const meta = useDocumentMeta();
   const client = useCanvasClient();
   const screenMode = useScreenMode();
@@ -343,12 +394,12 @@ export function PrepressToolbar(_props: ModeToolbarProps) {
   const { errors, warnings } = severityCounts(findings ?? null);
   const hasRun = runCount > 0;
   const issueLabel = !hasRun
-    ? "Preflight"
+    ? strings.t(M.preflight)
     : errors > 0
-      ? `${errors} error${errors === 1 ? "" : "s"}`
+      ? strings.t(M.errors, { count: errors })
       : warnings > 0
-        ? `${warnings} warning${warnings === 1 ? "" : "s"}`
-        : "No issues";
+        ? strings.t(M.warnings, { count: warnings })
+        : strings.t(M.noIssues);
   const issueDot = !hasRun
     ? "var(--status-draft)"
     : errors > 0
@@ -380,8 +431,8 @@ export function PrepressToolbar(_props: ModeToolbarProps) {
         testId="output-profile"
         title={
           profileActive
-            ? "Working CMYK profile"
-            : (printStandardReason(print) ?? "No working CMYK profile")
+            ? strings.t(M.workingProfile)
+            : (printStandardReason(print) ?? strings.t(M.noWorkingProfile))
         }
         disabled
       >
@@ -403,17 +454,15 @@ export function PrepressToolbar(_props: ModeToolbarProps) {
         testId="prepress-validate"
         primary
         disabled={!loaded || running}
-        title="Run preflight — the real PDF/X validation pipeline"
+        title={strings.t(M.validateTitle)}
         onClick={() => void validate()}
       >
-        {running ? "Validating…" : "Validate"}
+        {running ? strings.t(M.validating) : strings.t(M.validate)}
       </Chip>
       <Chip
         icon="ui-displays"
         testId="prepress-issues"
-        title={
-          hasRun ? "Last preflight result" : "Run Validate to see findings"
-        }
+        title={hasRun ? strings.t(M.lastResult) : strings.t(M.runValidate)}
         disabled
       >
         {issueLabel}
@@ -432,10 +481,10 @@ export function PrepressToolbar(_props: ModeToolbarProps) {
         icon="ui-eye"
         testId="prepress-bleed"
         on={bleedOn}
-        title={bleedOn ? "Back to normal view" : "Show the bleed area"}
+        title={bleedOn ? strings.t(M.normalView) : strings.t(M.showBleed)}
         onClick={() => screenMode.setScreenMode(bleedOn ? "normal" : "bleed")}
       >
-        Bleed
+        {strings.t(M.bleed)}
       </Chip>
     </>
   );
@@ -444,6 +493,7 @@ export function PrepressToolbar(_props: ModeToolbarProps) {
 // ── Data layout — REAL mapping raise + honest source/generate ──
 
 export function DataToolbar(_props: ModeToolbarProps) {
+  const strings = useStrings();
   // The three pills raise the LIVE paged.data panels, in the order the
   // work goes (sources → bindings → data sets), named as the panels are
   // named. They were "Field mapping", "Connect source" and "Generate" —
@@ -458,30 +508,30 @@ export function DataToolbar(_props: ModeToolbarProps) {
         testId="data-sources"
         on={sources.active}
         disabled={!sources.raise}
-        title="Data sources — import a file or connect a remote source"
+        title={strings.t(M.dataSourcesTitle)}
         onClick={sources.raise}
       >
-        Data sources
+        {strings.t(M.dataSources)}
       </Chip>
       <Chip
         icon="ui-database"
         testId="data-mapping"
         on={mapping.active}
         disabled={!mapping.raise}
-        title="Bindings — map fields to frames"
+        title={strings.t(M.bindingsTitle)}
         onClick={mapping.raise}
       >
-        Bindings
+        {strings.t(M.bindings)}
       </Chip>
       <Chip
         icon="ui-bolt"
         testId="data-generate"
         on={dataset.active}
         disabled={!dataset.raise}
-        title="Dataset preview — data sets and the batch plan"
+        title={strings.t(M.datasetTitle)}
         onClick={dataset.raise}
       >
-        Dataset preview
+        {strings.t(M.dataset)}
       </Chip>
     </>
   );
@@ -490,6 +540,7 @@ export function DataToolbar(_props: ModeToolbarProps) {
 // ── Review — REAL comments raise + honest approvals ────────────
 
 export function ReviewToolbar(_props: ModeToolbarProps) {
+  const strings = useStrings();
   const { raise, active } = usePanelRaise("paged.comments");
   return (
     <>
@@ -498,15 +549,15 @@ export function ReviewToolbar(_props: ModeToolbarProps) {
         testId="review-comments"
         on={active}
         disabled={!raise}
-        title="Comments"
+        title={strings.t(M.comments)}
         onClick={raise}
       >
-        Comments
+        {strings.t(M.comments)}
       </Chip>
       <Sep />
-      <Soon icon="ui-check">Approve</Soon>
-      <Soon icon="ui-return">Request changes</Soon>
-      <Soon icon="ui-history">Compare versions</Soon>
+      <Soon icon="ui-check">{strings.t(M.approve)}</Soon>
+      <Soon icon="ui-return">{strings.t(M.requestChanges)}</Soon>
+      <Soon icon="ui-history">{strings.t(M.compareVersions)}</Soon>
     </>
   );
 }
@@ -514,6 +565,7 @@ export function ReviewToolbar(_props: ModeToolbarProps) {
 // ── Export — drives the REAL PDF / image / IDML outputs ────────
 
 export function ExportToolbar(_props: ModeToolbarProps) {
+  const strings = useStrings();
   const meta = useDocumentMeta();
   const { handle } = useDocument();
   // The image/IDML run actions live in the Export Center; the pills
@@ -527,26 +579,26 @@ export function ExportToolbar(_props: ModeToolbarProps) {
         primary
         testId="export-pdf"
         disabled={!meta}
-        title="Export a print PDF (PDF/X-4)"
+        title={strings.t(M.exportPdfTitle)}
         onClick={() => notifyExportPdfDialog("open")}
       >
-        Export PDF…
+        {strings.t(M.exportPdf)}
       </Chip>
       <Sep />
       <Chip
         icon="ui-page"
         testId="export-image"
         disabled={!handle}
-        title="Set up page-image (PNG) export in the Export Center"
+        title={strings.t(M.pageImagesTitle)}
         onClick={() => setSelectedExportTarget("image")}
       >
-        Page images
+        {strings.t(M.pageImages)}
       </Chip>
       {/* IDML export moved to the paged.publish plugin exporter (ADR-022
           Phase 5) — it lives in the Export Center's plugin-exporters section,
           so there's no built-in IDML target chip here anymore. */}
       <Sep />
-      <Soon icon="ui-web">Web</Soon>
+      <Soon icon="ui-web">{strings.t(M.web)}</Soon>
     </>
   );
 }

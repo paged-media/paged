@@ -44,118 +44,142 @@ import {
   PAGED_LAYOUT_SECTION,
   asPropertyFields,
 } from "@paged-media/shell";
+import { defineMessages, type Strings } from "@paged-media/strings";
+
+const M = defineMessages("app.textWrapComposition", {
+  textWrap: "Text Wrap",
+  wrap: "Wrap",
+  offset: "Offset",
+  wrapTo: "Wrap to",
+  bothEdges: "Both edges",
+  contour: "Contour",
+  sameAsClip: "Same as clip",
+  default: "Default",
+  graphicFrame: "Graphic frame",
+  detectEdges: "Detect edges",
+  alphaChannel: "Alpha channel",
+  photoshopPath: "Photoshop path",
+  includeInsideEdges: "Include inside edges",
+  invert: "Invert",
+});
 
 // ADR 323 — every live field is a schema-driven `PropertyField`: the
 // type comes from the target's schema row, reads/writes go through
 // `host.objects` (one batch = one undo step over a multi-selection), and
 // each field offers "Bind to data…" with a binding badge. Seams stay seams.
-export const textWrapComposition: CompositionNode = asPropertyFields({
-  catalogId: PAGED_LAYOUT_SECTION,
-  props: { title: "Text Wrap", heading: false },
-  bindings: {},
-  children: [
-    {
-      catalogId: PAGED_INPUT_TOGGLE_GROUP,
-      props: {
-        label: "Wrap",
-        labelPosition: "stack",
-        options: [
-          { value: "None", label: "ui-x" },
-          { value: "BoundingBoxTextWrap", label: "panel-text-wrap" },
-          { value: "Contour", label: "panel-conditions" },
-          { value: "JumpObjectTextWrap", label: "ui-rows" },
-        ],
-      },
-      bindings: {
-        value: {
-          kind: "selectionProperty",
-          scope: "element",
-          path: "frameTextWrapMode",
+export function textWrapComposition(strings: Strings): CompositionNode {
+  return asPropertyFields({
+    catalogId: PAGED_LAYOUT_SECTION,
+    props: { title: strings.t(M.textWrap), heading: false },
+    bindings: {},
+    children: [
+      {
+        catalogId: PAGED_INPUT_TOGGLE_GROUP,
+        props: {
+          label: strings.t(M.wrap),
+          labelPosition: "stack",
+          options: [
+            { value: "None", label: "ui-x" },
+            { value: "BoundingBoxTextWrap", label: "panel-text-wrap" },
+            { value: "Contour", label: "panel-conditions" },
+            { value: "JumpObjectTextWrap", label: "ui-rows" },
+          ],
         },
-      },
-    },
-    {
-      catalogId: PAGED_LAYOUT_SECTION,
-      props: { title: "Offset" },
-      bindings: {},
-      children: [
-        {
-          catalogId: PAGED_INPUT_BOUNDS,
-          props: { layout: "row4" },
-          bindings: {
-            value: {
-              kind: "selectionProperty",
-              scope: "element",
-              path: "frameTextWrapOffsets",
-            },
+        bindings: {
+          value: {
+            kind: "selectionProperty",
+            scope: "element",
+            path: "frameTextWrapMode",
           },
         },
-      ],
-    },
-    {
-      // DEFER (2026-06-07) — InDesign's "Wrap to" SIDE knob
-      // (left / right / both / largest-area / toward-or-away-spine) is a
-      // distinct `TextWrapSide`-style property that core does NOT model
-      // (the wrap MODE above — bounding-box / contour / jump — is the
-      // "wrap-to" the W2.4 seam list conflated). Routing it needs a NEW
-      // PropertyPath (not a path over an existing field), which would be
-      // additive but the parse/render side carries no side field yet.
-      // Kept as a visible seam, not a new op, per protocol governance.
-      catalogId: PAGED_INPUT_SELECT,
-      props: { label: "Wrap to", seam: true, placeholder: "Both edges" },
-      bindings: {},
-    },
-    {
-      // LIVE (W2.4) — contour source for Contour wrap. Bound to the
-      // new `frameTextWrapContourType` path (Value::Text enum string).
-      // Empty value clears the override. Meaningful only when Wrap =
-      // Contour; the apply arm preserves mode/offsets/invert.
-      catalogId: PAGED_INPUT_SELECT,
-      props: {
-        label: "Contour",
-        placeholder: "Same as clip",
-        options: [
-          { value: "", label: "Default" },
-          { value: "SameAsClipping", label: "Same as clip" },
-          { value: "GraphicFrame", label: "Graphic frame" },
-          { value: "DetectEdges", label: "Detect edges" },
-          { value: "AlphaChannel", label: "Alpha channel" },
-          { value: "PhotoshopPath", label: "Photoshop path" },
+      },
+      {
+        catalogId: PAGED_LAYOUT_SECTION,
+        props: { title: strings.t(M.offset) },
+        bindings: {},
+        children: [
+          {
+            catalogId: PAGED_INPUT_BOUNDS,
+            props: { layout: "row4" },
+            bindings: {
+              value: {
+                kind: "selectionProperty",
+                scope: "element",
+                path: "frameTextWrapOffsets",
+              },
+            },
+          },
         ],
       },
-      bindings: {
-        value: {
-          kind: "selectionProperty",
-          scope: "element",
-          path: "frameTextWrapContourType",
+      {
+        // DEFER (2026-06-07) — InDesign's "Wrap to" SIDE knob
+        // (left / right / both / largest-area / toward-or-away-spine) is a
+        // distinct `TextWrapSide`-style property that core does NOT model
+        // (the wrap MODE above — bounding-box / contour / jump — is the
+        // "wrap-to" the W2.4 seam list conflated). Routing it needs a NEW
+        // PropertyPath (not a path over an existing field), which would be
+        // additive but the parse/render side carries no side field yet.
+        // Kept as a visible seam, not a new op, per protocol governance.
+        catalogId: PAGED_INPUT_SELECT,
+        props: {
+          label: strings.t(M.wrapTo),
+          seam: true,
+          placeholder: strings.t(M.bothEdges),
+        },
+        bindings: {},
+      },
+      {
+        // LIVE (W2.4) — contour source for Contour wrap. Bound to the
+        // new `frameTextWrapContourType` path (Value::Text enum string).
+        // Empty value clears the override. Meaningful only when Wrap =
+        // Contour; the apply arm preserves mode/offsets/invert.
+        catalogId: PAGED_INPUT_SELECT,
+        props: {
+          label: strings.t(M.contour),
+          placeholder: strings.t(M.sameAsClip),
+          options: [
+            { value: "", label: strings.t(M.default) },
+            { value: "SameAsClipping", label: strings.t(M.sameAsClip) },
+            { value: "GraphicFrame", label: strings.t(M.graphicFrame) },
+            { value: "DetectEdges", label: strings.t(M.detectEdges) },
+            { value: "AlphaChannel", label: strings.t(M.alphaChannel) },
+            { value: "PhotoshopPath", label: strings.t(M.photoshopPath) },
+          ],
+        },
+        bindings: {
+          value: {
+            kind: "selectionProperty",
+            scope: "element",
+            path: "frameTextWrapContourType",
+          },
         },
       },
-    },
-    {
-      // LIVE (W2.4) — `IncludeInsideEdges` lets text flow into a
-      // contour's interior holes. Bool path sharing the TextWrap field.
-      catalogId: PAGED_INPUT_TOGGLE_SWITCH,
-      props: { label: "Include inside edges" },
-      bindings: {
-        value: {
-          kind: "selectionProperty",
-          scope: "element",
-          path: "frameTextWrapContourIncludeInside",
+      {
+        // LIVE (W2.4) — `IncludeInsideEdges` lets text flow into a
+        // contour's interior holes. Bool path sharing the TextWrap field.
+        catalogId: PAGED_INPUT_TOGGLE_SWITCH,
+        props: { label: strings.t(M.includeInsideEdges) },
+        bindings: {
+          value: {
+            kind: "selectionProperty",
+            scope: "element",
+            path: "frameTextWrapContourIncludeInside",
+          },
         },
       },
-    },
-    {
-      // LIVE invert flag (W2.3). Shares the `Option<TextWrap>` field
-      // with mode/offsets; the apply arm preserves the other members.
-      catalogId: PAGED_INPUT_TOGGLE_SWITCH,
-      props: { label: "Invert" },
-      bindings: {
-        value: {
-          kind: "selectionProperty",
-          scope: "element",
-          path: "textWrapInvert",
+      {
+        // LIVE invert flag (W2.3). Shares the `Option<TextWrap>` field
+        // with mode/offsets; the apply arm preserves the other members.
+        catalogId: PAGED_INPUT_TOGGLE_SWITCH,
+        props: { label: strings.t(M.invert) },
+        bindings: {
+          value: {
+            kind: "selectionProperty",
+            scope: "element",
+            path: "textWrapInvert",
+          },
         },
       },
-    },
-  ],
-});
+    ],
+  });
+}

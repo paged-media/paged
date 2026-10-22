@@ -25,6 +25,11 @@
 
 import { useCamera, ZOOM_MAX_SCALE, ZOOM_MIN_SCALE } from "@paged-media/shell";
 import { NumberInput } from "@paged-media/ui";
+import { defineMessages, useStrings } from "@paged-media/strings";
+
+const M = defineMessages("app.uiZoomField", {
+  zoomPercent: "zoom percent",
+});
 
 // The one zoom range (ADR 246), in percent.
 const MIN_ZOOM_PERCENT = ZOOM_MIN_SCALE * 100;
@@ -34,6 +39,7 @@ const ZOOM_STEP = 0.5;
 
 export function ZoomField() {
   const { camera, setCamera } = useCamera();
+  const strings = useStrings();
   const percent = Math.round(camera.scale * 100);
 
   const apply = (nextPercent: number) => {
@@ -52,7 +58,7 @@ export function ZoomField() {
       min={MIN_ZOOM_PERCENT}
       max={MAX_ZOOM_PERCENT}
       precision={0}
-      aria-label="zoom percent"
+      aria-label={strings.t(M.zoomPercent)}
       onChange={apply}
       className="w-20"
     />

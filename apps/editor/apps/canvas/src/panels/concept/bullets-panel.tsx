@@ -96,6 +96,48 @@ import { KitSelect, NumberInput } from "@paged-media/ui";
 import { appCatalogRegistry } from "../catalog-registry";
 import { bulletsNumberingComposition } from "../bullets-numbering.composition";
 import { ConceptShell, Kicker, Row, SeamNum, SeamSelect } from "./concept-kit";
+import { defineMessages, useStrings } from "@paged-media/strings";
+
+const M = defineMessages("app.conceptBulletsPanel", {
+  listName: "list name",
+  rename: "Double-click to rename",
+  continueOn: "Continue numbers across stories (on)",
+  restartOff: "Restart numbers per story (off)",
+  assignTitle: "Assign to selected paragraphs",
+  assignNeedsCaret: "Place a text caret to assign",
+  assign: "Assign",
+  deleteList: "Delete list definition",
+  newListName: "New list",
+  listDefinitions: "List definitions",
+  loadingLists: "Loading lists…",
+  noLists: "No named lists in this document.",
+  newList: "New list",
+  appliedSeam:
+    "The list applied to each paragraph is not shown yet: the editor can set it but cannot read it back.",
+  target:
+    "List type, bullet glyph and text after, numbering style, number expression, start at / continue, marker character styles and named list definitions (create / rename / continuity / assign) are live; level / restart scope / position land with a per-paragraph list-level model.",
+  level: "Level",
+  numberingStyle: "Numbering style",
+  style: "Style",
+  styleDefault: "[Style default]",
+  number: "Number",
+  charStyle: "Char style",
+  mode: "Mode",
+  continueFromPrevious: "Continue from previous number",
+  startAt: "Start at",
+  restart: "Restart",
+  atThisLevel: "At this level",
+  bullet: "Bullet",
+  glyph: "Glyph",
+  textAfter: "Text after",
+  position: "Position",
+  alignment: "Alignment",
+  left: "Left",
+  indent: "Indent",
+  tab: "Tab",
+  sample1: "Solid oak frame",
+  sample2: "Natural oil finish",
+});
 
 const TEXT_BINDINGS = {
   bullet: { scope: "content" as const, path: "paragraphBulletCharacter" },
@@ -246,6 +288,7 @@ function ListDefRow({
   onToggleContinuity: (next: boolean) => void;
   onDelete: () => void;
 }) {
+  const strings = useStrings();
   const [editing, setEditing] = useState(false);
   return (
     <div
@@ -262,7 +305,7 @@ function ListDefRow({
           data-list-def-name-input
           autoFocus
           defaultValue={list.name}
-          aria-label="list name"
+          aria-label={strings.t(M.listName)}
           onKeyDown={(e) => {
             if (e.key === "Enter") (e.target as HTMLInputElement).blur();
             if (e.key === "Escape") setEditing(false);
@@ -278,7 +321,7 @@ function ListDefRow({
         <button
           type="button"
           data-list-def-name
-          title="Double-click to rename"
+          title={strings.t(M.rename)}
           onDoubleClick={() => setEditing(true)}
           className="min-w-0 flex-1 cursor-text truncate border-0 bg-transparent text-left text-[12.5px] font-semibold"
           style={{ color: "var(--pg-fg)" }}
@@ -293,8 +336,8 @@ function ListDefRow({
         data-list-def-continuity
         title={
           list.continueAcrossStories
-            ? "Continue numbers across stories (on)"
-            : "Restart numbers per story (off)"
+            ? strings.t(M.continueOn)
+            : strings.t(M.restartOff)
         }
         onClick={() => onToggleContinuity(!list.continueAcrossStories)}
         className="relative h-[16px] w-[28px] shrink-0 rounded-full border-0"
@@ -314,19 +357,17 @@ function ListDefRow({
         data-list-def-assign
         disabled={!canAssign}
         title={
-          canAssign
-            ? "Assign to selected paragraphs"
-            : "Place a text caret to assign"
+          canAssign ? strings.t(M.assignTitle) : strings.t(M.assignNeedsCaret)
         }
         onClick={onAssign}
         className="shrink-0 cursor-pointer rounded-[5px] border border-input bg-background px-[7px] py-[3px] text-[10.5px] text-foreground disabled:cursor-default disabled:opacity-45"
       >
-        Assign
+        {strings.t(M.assign)}
       </button>
       <button
         type="button"
         data-list-def-delete
-        title="Delete list definition"
+        title={strings.t(M.deleteList)}
         onClick={onDelete}
         className="flex h-[20px] w-[20px] shrink-0 cursor-pointer items-center justify-center rounded border-0 bg-transparent"
         style={{ color: "var(--pg-muted-fg)" }}
@@ -340,6 +381,7 @@ function ListDefRow({
 /** W2.10 — the named list-definitions manager (the W1.22
  *  `NumberingList` surface). */
 function ListDefinitions() {
+  const strings = useStrings();
   const client = useCanvasClient();
   const lists = useCollection<NumberingListSummary>("numberingLists");
   const { contentSelection } = useContentSelection();
@@ -353,7 +395,7 @@ function ListDefinitions() {
         args: {
           spec: {
             selfId: null,
-            name: "New list",
+            name: strings.t(M.newListName),
             continueAcrossStories: false,
             continueAcrossDocuments: false,
           },
@@ -400,15 +442,17 @@ function ListDefinitions() {
 
   return (
     <div data-list-definitions={lists === null ? "loading" : "ready"}>
-      <Kicker>List definitions</Kicker>
+      <Kicker>{strings.t(M.listDefinitions)}</Kicker>
       {lists === null ? (
-        <div className="py-2 text-xs text-muted-foreground">Loading lists…</div>
+        <div className="py-2 text-xs text-muted-foreground">
+          {strings.t(M.loadingLists)}
+        </div>
       ) : lists.length === 0 ? (
         <div
           className="py-1 text-xs text-muted-foreground"
           data-empty-list-definitions
         >
-          No named lists in this document.
+          {strings.t(M.noLists)}
         </div>
       ) : (
         <div data-list-def-list>
@@ -437,7 +481,7 @@ function ListDefinitions() {
           color: "var(--pg-muted-fg)",
         }}
       >
-        <Icon name="ui-plus" size={13} /> New list
+        <Icon name="ui-plus" size={13} /> {strings.t(M.newList)}
       </button>
       {/* Honest seam: the applied list cannot be reflected per
           paragraph — `paragraphAppliedNumberingList` is write-only on
@@ -448,14 +492,14 @@ function ListDefinitions() {
         className="mt-[6px] text-[10.5px] italic opacity-70"
         style={{ color: "var(--pg-muted-fg)" }}
       >
-        The list applied to each paragraph is not shown yet: the editor can set
-        it but cannot read it back.
+        {strings.t(M.appliedSeam)}
       </div>
     </div>
   );
 }
 
 export function BulletsPanel() {
+  const strings = useStrings();
   const text = useObjectBindings(TEXT_BINDINGS);
   const cont = useBindings(CONTINUE_BINDING).continue;
   const bullet = unwrapText(text.bullet.value);
@@ -467,24 +511,22 @@ export function BulletsPanel() {
 
   return (
     <CatalogRegistryProvider registry={appCatalogRegistry()}>
-      <ConceptShell
-        testId="bullets-panel"
-        live
-        target="List type, bullet glyph and text after, numbering style, number expression, start at / continue, marker character styles and named list definitions (create / rename / continuity / assign) are live; level / restart scope / position land with a per-paragraph list-level model."
-      >
+      <ConceptShell testId="bullets-panel" live target={strings.t(M.target)}>
         {/* W2.10 — named list-definition management. */}
         <ListDefinitions />
 
         {/* LIVE — list type segment (paragraphListType). */}
-        <CompositionRenderer composition={bulletsNumberingComposition} />
+        <CompositionRenderer
+          composition={bulletsNumberingComposition(strings)}
+        />
 
         {/* Level awaits a per-paragraph list-level model. */}
-        <Row label="Level">
+        <Row label={strings.t(M.level)}>
           <SeamNum value="1" />
         </Row>
 
-        <Kicker>Numbering style</Kicker>
-        <Row label="Style">
+        <Kicker>{strings.t(M.numberingStyle)}</Kicker>
+        <Row label={strings.t(M.style)}>
           {/* LIVE — paragraphNumberingFormat, the counter style
               ("1, 2, 3, 4…" / "i, ii, iii, iv…"). */}
           <ObjectFieldFrame field={text.format}>
@@ -500,7 +542,7 @@ export function BulletsPanel() {
                 } as Value)
               }
             >
-              <option value="">[Style default]</option>
+              <option value="">{strings.t(M.styleDefault)}</option>
               {NUMBERING_FORMATS.map((f) => (
                 <option key={f} value={f}>
                   {f}
@@ -512,7 +554,7 @@ export function BulletsPanel() {
             </KitSelect>
           </ObjectFieldFrame>
         </Row>
-        <Row label="Number">
+        <Row label={strings.t(M.number)}>
           {/* LIVE (v64) — paragraphNumberingExpression, the marker
               template ("^#.^t", "(^#)"). */}
           <ObjectFieldFrame field={text.expression}>
@@ -526,13 +568,13 @@ export function BulletsPanel() {
             />
           </ObjectFieldFrame>
         </Row>
-        <Row label="Char style">
+        <Row label={strings.t(M.charStyle)}>
           {/* LIVE (v64) — paragraphNumberingCharacterStyle. */}
           <div data-bullets-field="numbering-char-style" className="min-w-0">
             <CompositionRenderer composition={NUMBER_CHAR_STYLE} />
           </div>
         </Row>
-        <Row label="Mode">
+        <Row label={strings.t(M.mode)}>
           {/* LIVE (v64) — paragraphNumberingContinue (three-state). */}
           <KitSelect
             data-bullets-field="numbering-mode"
@@ -551,12 +593,14 @@ export function BulletsPanel() {
                 —
               </option>
             )}
-            <option value="">[Style default]</option>
-            <option value="continue">Continue from previous number</option>
-            <option value="restart">Start at</option>
+            <option value="">{strings.t(M.styleDefault)}</option>
+            <option value="continue">
+              {strings.t(M.continueFromPrevious)}
+            </option>
+            <option value="restart">{strings.t(M.startAt)}</option>
           </KitSelect>
         </Row>
-        <Row label="Start at">
+        <Row label={strings.t(M.startAt)}>
           {/* LIVE (v64) — paragraphNumberingStartAt, a whole number
               >= 1. Read when the count restarts (Mode = Start at). */}
           <ObjectFieldFrame field={text.startAt}>
@@ -576,12 +620,12 @@ export function BulletsPanel() {
             />
           </ObjectFieldFrame>
         </Row>
-        <Row label="Restart">
-          <SeamSelect value="At this level" />
+        <Row label={strings.t(M.restart)}>
+          <SeamSelect value={strings.t(M.atThisLevel)} />
         </Row>
 
-        <Kicker>Bullet</Kicker>
-        <Row label="Glyph">
+        <Kicker>{strings.t(M.bullet)}</Kicker>
+        <Row label={strings.t(M.glyph)}>
           {/* LIVE — paragraphBulletCharacter (the glyph itself). */}
           <ObjectFieldFrame field={text.bullet}>
             <TextField
@@ -593,7 +637,7 @@ export function BulletsPanel() {
             />
           </ObjectFieldFrame>
         </Row>
-        <Row label="Text after">
+        <Row label={strings.t(M.textAfter)}>
           {/* LIVE (v64) — paragraphBulletsTextAfter, IDML spelling
               ("^t" is a tab). */}
           <ObjectFieldFrame field={text.textAfter}>
@@ -607,21 +651,21 @@ export function BulletsPanel() {
             />
           </ObjectFieldFrame>
         </Row>
-        <Row label="Char style">
+        <Row label={strings.t(M.charStyle)}>
           {/* LIVE (v64) — paragraphBulletsCharacterStyle. */}
           <div data-bullets-field="bullets-char-style" className="min-w-0">
             <CompositionRenderer composition={BULLET_CHAR_STYLE} />
           </div>
         </Row>
 
-        <Kicker>Position</Kicker>
-        <Row label="Alignment">
-          <SeamSelect value="Left" />
+        <Kicker>{strings.t(M.position)}</Kicker>
+        <Row label={strings.t(M.alignment)}>
+          <SeamSelect value={strings.t(M.left)} />
         </Row>
-        <Row label="Indent">
+        <Row label={strings.t(M.indent)}>
           <SeamNum value="—" icon="ui-size" />
         </Row>
-        <Row label="Tab">
+        <Row label={strings.t(M.tab)}>
           <SeamNum value="—" icon="ui-size" />
         </Row>
 
@@ -636,8 +680,8 @@ export function BulletsPanel() {
             lineHeight: 1.7,
           }}
         >
-          <div>1.&emsp;Solid oak frame</div>
-          <div>2.&emsp;Natural oil finish</div>
+          <div>1.&emsp;{strings.t(M.sample1)}</div>
+          <div>2.&emsp;{strings.t(M.sample2)}</div>
         </div>
       </ConceptShell>
     </CatalogRegistryProvider>

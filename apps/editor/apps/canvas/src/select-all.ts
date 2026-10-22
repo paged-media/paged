@@ -38,6 +38,22 @@ import type { ElementId, SceneTreeNode } from "@paged-media/client";
 
 import { currentPageTarget } from "./insert-commands";
 import { wholeStorySelection } from "./ui/useTextEditing";
+import { defineMessages, t } from "@paged-media/strings";
+
+const M = defineMessages("app.selectAll", {
+  selectAll: "Select all",
+});
+
+// The words of this file's menu rows; the shell's menu bar shows each
+// path segment through them (`menu.<segment>`).
+defineMessages("menu", {
+  "Select all": "Select all",
+});
+
+// The palette categories of this file's commands (`commandCategory.<name>`).
+defineMessages("commandCategory", {
+  Edit: "Edit",
+});
 
 export const PAGED_EDIT_SELECT_ALL = "paged.edit.selectAll";
 
@@ -135,7 +151,9 @@ const selectAllKeyApplies = (state: unknown): boolean =>
 
 export const SELECT_ALL_COMMAND: CommandContribution = {
   id: PAGED_EDIT_SELECT_ALL,
-  title: "Select all",
+  get title() {
+    return t(M.selectAll);
+  },
   category: "Edit",
   when: selectAllApplies,
   handler: (paged) => selectAll(paged as PagedEditor),

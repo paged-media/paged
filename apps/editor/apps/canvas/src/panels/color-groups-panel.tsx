@@ -35,6 +35,16 @@ import {
   useDocument,
 } from "@paged-media/shell";
 import type { ColorGroupSummary, ColorPreview } from "@paged-media/client";
+import { defineMessages, useStrings } from "@paged-media/strings";
+
+const M = defineMessages("app.colorGroupsPanel", {
+  deleteGroup: "Delete group",
+  deleteGroupHint: "Delete group (swatches stay)",
+  emptyGroup: "Empty group — assign swatches from the Swatches panel.",
+  loading: "Loading color groups…",
+  newGroup: "New group",
+  empty: "No color groups in this document.",
+});
 
 function MemberChip({ swatchId }: { swatchId: string }) {
   const client = useCanvasClient();
@@ -68,6 +78,7 @@ function GroupRow({
   group: ColorGroupSummary;
   onDelete: () => void;
 }) {
+  const strings = useStrings();
   const { open, toggle, region } = useDisclosure(true);
   return (
     <div data-group-id={group.selfId} className="mb-[10px]">
@@ -99,8 +110,8 @@ function GroupRow({
           </span>
         </button>
         <IconButton
-          label="Delete group"
-          title="Delete group (swatches stay)"
+          label={strings.t(M.deleteGroup)}
+          title={strings.t(M.deleteGroupHint)}
           data-group-delete
           onClick={onDelete}
           className="flex h-[20px] w-[20px] cursor-pointer items-center justify-center rounded border-0 bg-transparent"
@@ -120,7 +131,7 @@ function GroupRow({
               className="text-xs italic"
               style={{ color: "var(--pg-muted-fg)" }}
             >
-              Empty group — assign swatches from the Swatches panel.
+              {strings.t(M.emptyGroup)}
             </span>
           ) : (
             group.members.map((m) => <MemberChip key={m} swatchId={m} />)
@@ -132,6 +143,7 @@ function GroupRow({
 }
 
 export function ColorGroupsPanel() {
+  const strings = useStrings();
   const client = useCanvasClient();
   const items = useCollection<ColorGroupSummary>("colorGroups");
   // With no document there is nothing to add a group to: the button
@@ -145,7 +157,7 @@ export function ColorGroupsPanel() {
         className="p-3 text-xs text-muted-foreground"
         data-color-groups-panel="loading"
       >
-        Loading color groups…
+        {strings.t(M.loading)}
       </div>
     );
   }
@@ -154,7 +166,9 @@ export function ColorGroupsPanel() {
     void client
       .mutate({
         op: "createColorGroup",
-        args: { spec: { selfId: null, name: "New group", members: [] } },
+        args: {
+          spec: { selfId: null, name: strings.t(M.newGroup), members: [] },
+        },
       })
       .catch(() => {});
   };
@@ -172,7 +186,7 @@ export function ColorGroupsPanel() {
           className="pb-2 text-xs text-muted-foreground"
           data-empty-color-groups
         >
-          No color groups in this document.
+          {strings.t(M.empty)}
         </div>
       ) : (
         <div data-color-group-list>
@@ -196,7 +210,7 @@ export function ColorGroupsPanel() {
           color: "var(--pg-muted-fg)",
         }}
       >
-        <Icon name="ui-plus" size={13} /> New group
+        <Icon name="ui-plus" size={13} /> {strings.t(M.newGroup)}
       </button>
     </div>
   );

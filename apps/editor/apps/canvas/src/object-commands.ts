@@ -188,6 +188,109 @@ import type {
   SceneTreeNode,
   WorkerToMain,
 } from "@paged-media/client";
+import { defineMessages, t } from "@paged-media/strings";
+
+const M = defineMessages("app.objectCommands", {
+  bringToFront: "Bring to front",
+  bringForward: "Bring forward",
+  sendBackward: "Send backward",
+  sendToBack: "Send to back",
+  group: "Group",
+  ungroup: "Ungroup",
+  selectParentGroup: "Select parent group",
+  delete: "Delete",
+  makeClippingMask: "Make clipping mask",
+  releaseClippingMask: "Release clipping mask",
+  lock: "Lock",
+  unlockAllOnSpread: "Unlock all on spread",
+  hide: "Hide",
+  showAllOnSpread: "Show all on spread",
+  nudgeLeft: "Nudge left",
+  nudgeLeft10: "Nudge left ×10",
+  nudgeRight: "Nudge right",
+  nudgeRight10: "Nudge right ×10",
+  nudgeUp: "Nudge up",
+  nudgeUp10: "Nudge up ×10",
+  nudgeDown: "Nudge down",
+  nudgeDown10: "Nudge down ×10",
+  arrange: "Arrange",
+  nudge: "Nudge",
+  editContextBlocked:
+    "{verb} arranges page items, and you are editing inside a {type}. Leave the frame (Esc) to arrange it in the document.",
+  refused: "{verb} refused: {reason}",
+  kindTextFrame: "text frame",
+  kindRectangle: "rectangle",
+  kindOval: "ellipse",
+  kindPolygon: "path",
+  kindGraphicLine: "line",
+  kindGroup: "group",
+  clipNeedsTwo:
+    "a clipping mask needs two or more objects — the topmost becomes the clipping path and the rest are clipped by it.",
+  clipNotFree:
+    "{item} is not a free object on the page (it may already be inside a clipping path).",
+  clipTopmost:
+    "the topmost object, {item}, cannot be a clipping path — the engine clips only by a rectangle, an ellipse or a path. Bring one of those to the front of the selection.",
+  clipGroup:
+    "{item} cannot be clipped: the engine pastes single objects into a frame, never a group. Ungroup it first.",
+  clipGrouped:
+    "{item} is inside {group}, and the engine cannot paste a grouped object into a frame. Ungroup first.",
+  noDocument: "no document loaded",
+  lockedNode: "{node} is locked — unlock it to {action}",
+  notPermitted: "the template does not permit {permission} on {target}",
+  engineRefused: "the engine refused the operation",
+  layerLimit:
+    "Arrange is within a layer. This document has {count} layers, and the renderer sorts by layer before stacking order — an item on a higher layer still paints above the one you moved. Move it between layers to change that (InDesign's model).",
+  treeUnreadableNothingRemoved:
+    "the document structure could not be read, so nothing was removed.",
+  treeUnreadable: "the document structure could not be read.",
+  treeUnreadableGroups:
+    "the document structure could not be read, so a group and its own members could not be told apart.",
+  noGeometry:
+    "the engine reports no geometry for {item}, so there is no position to move.",
+  notInDocument: "{item} is not in the document.",
+  positionUnreadable: "the selection's position could not be read",
+  treeUnreadableTopmost:
+    "the document structure could not be read, so the topmost object could not be found.",
+  clipIndexUnreadable:
+    "what {item} already clips could not be read, so its index would have been lost.",
+  selectClipPath:
+    "select a clipping path — a rectangle, an ellipse or a path that holds clipped content.",
+  clipsUnreadable:
+    "what the selection clips could not be read, so nothing was released.",
+  noIndexOne:
+    "{items} holds no content this editor clipped. Content pasted in elsewhere — by InDesign, a script or a plugin — cannot be found: the engine has no read that lists what is inside a frame.",
+  noIndexOther:
+    "{items} hold no content this editor clipped. Content pasted in elsewhere — by InDesign, a script or a plugin — cannot be found: the engine has no read that lists what is inside a frame.",
+  releasedPartly: "Released what could be found; {rest}",
+});
+
+// The words of this file's menu rows; the shell's menu bar shows each
+// path segment through them (`menu.<segment>`).
+defineMessages("menu", {
+  "Bring to front": "Bring to front",
+  "Bring forward": "Bring forward",
+  "Send backward": "Send backward",
+  "Send to back": "Send to back",
+  Group: "Group",
+  Ungroup: "Ungroup",
+  "Select parent group": "Select parent group",
+  "Nudge left": "Nudge left",
+  "Nudge right": "Nudge right",
+  "Nudge up": "Nudge up",
+  "Nudge down": "Nudge down",
+  Delete: "Delete",
+  "Make clipping mask": "Make clipping mask",
+  "Release clipping mask": "Release clipping mask",
+  Lock: "Lock",
+  "Unlock all on spread": "Unlock all on spread",
+  Hide: "Hide",
+  "Show all on spread": "Show all on spread",
+});
+
+// The palette categories of this file's commands (`commandCategory.<name>`).
+defineMessages("commandCategory", {
+  Object: "Object",
+});
 
 export const PAGED_OBJECT_BRING_TO_FRONT = "paged.object.bringToFront";
 export const PAGED_OBJECT_BRING_FORWARD = "paged.object.bringForward";
@@ -303,13 +406,38 @@ export interface ObjectCommandDeps {
  * what made the original defect invisible — the mutation landed on the
  * wrong target and nothing said anything either way.
  */
+/** A verb's words for a report: the commands' own titles. */
+function verbText(verb: string): string {
+  const key = VERB_KEYS[verb];
+  return key ? t(key) : verb;
+}
+
+const VERB_KEYS: Readonly<Record<string, string>> = {
+  Arrange: M.arrange,
+  Nudge: M.nudge,
+  Group: M.group,
+  Ungroup: M.ungroup,
+  "Select parent group": M.selectParentGroup,
+  Delete: M.delete,
+  "Make clipping mask": M.makeClippingMask,
+  "Release clipping mask": M.releaseClippingMask,
+  Lock: M.lock,
+  Hide: M.hide,
+  "Unlock all on spread": M.unlockAllOnSpread,
+  "Show all on spread": M.showAllOnSpread,
+};
+
+/** "<verb> refused: <reason>", in the editor's words. */
+function refused(verb: string, reason: string): string {
+  return t(M.refused, { verb: verbText(verb), reason });
+}
+
 function blockedByEditContext(deps: ObjectCommandDeps, verb: string): boolean {
   const ctx = deps.activeEditContext();
   if (!ctx) return false;
   deps.report(
     "info",
-    `${verb} arranges page items, and you are editing inside a ${ctx.type}. ` +
-      "Leave the frame (Esc) to arrange it in the document.",
+    t(M.editContextBlocked, { verb: verbText(verb), type: ctx.type }),
   );
   return true;
 }
@@ -545,18 +673,19 @@ export function isPageItem(id: ElementId): id is PageItemId {
 }
 
 const KIND_WORDS: Record<string, string> = {
-  textFrame: "text frame",
-  rectangle: "rectangle",
-  oval: "ellipse",
-  polygon: "path",
-  graphicLine: "line",
-  group: "group",
+  textFrame: M.kindTextFrame,
+  rectangle: M.kindRectangle,
+  oval: M.kindOval,
+  polygon: M.kindPolygon,
+  graphicLine: M.kindGraphicLine,
+  group: M.kindGroup,
 };
 
 /** How a diagnostic names an element: the word a user would use, and
  *  the id the Layers panel shows. */
 export function describeElement(id: ElementId): string {
-  return `${KIND_WORDS[id.kind] ?? id.kind} ${String((id as { id: unknown }).id)}`;
+  const word = KIND_WORDS[id.kind];
+  return `${word ? t(word) : id.kind} ${String((id as { id: unknown }).id)}`;
 }
 
 /** One id-bearing node's place in the group structure. */
@@ -960,9 +1089,7 @@ export function clipPlan(
   if (targets.length < 2) {
     return {
       ok: false,
-      reason:
-        "a clipping mask needs two or more objects — the topmost becomes " +
-        "the clipping path and the rest are clipped by it.",
+      reason: t(M.clipNeedsTwo),
     };
   }
 
@@ -972,9 +1099,7 @@ export function clipPlan(
     if (!places.has(elementKey(id))) {
       return {
         ok: false,
-        reason:
-          `${describeElement(id)} is not a free object on the page (it may ` +
-          "already be inside a clipping path).",
+        reason: t(M.clipNotFree, { item: describeElement(id) }),
       };
     }
   }
@@ -990,29 +1115,24 @@ export function clipPlan(
   if (!canClipBy(clip)) {
     return {
       ok: false,
-      reason:
-        `the topmost object, ${describeElement(clip)}, cannot be a clipping ` +
-        "path — the engine clips only by a rectangle, an ellipse or a path. " +
-        "Bring one of those to the front of the selection.",
+      reason: t(M.clipTopmost, { item: describeElement(clip) }),
     };
   }
   for (const item of content) {
     if (item.kind === "group") {
       return {
         ok: false,
-        reason:
-          `${describeElement(item)} cannot be clipped: the engine pastes ` +
-          "single objects into a frame, never a group. Ungroup it first.",
+        reason: t(M.clipGroup, { item: describeElement(item) }),
       };
     }
     const parent = places.get(elementKey(item))!.groups.at(-1);
     if (parent) {
       return {
         ok: false,
-        reason:
-          `${describeElement(item)} is inside ${describeElement(parent)}, and ` +
-          "the engine cannot paste a grouped object into a frame. Ungroup " +
-          "first.",
+        reason: t(M.clipGrouped, {
+          item: describeElement(item),
+          group: describeElement(parent),
+        }),
       };
     }
   }
@@ -1101,13 +1221,19 @@ export function refusalOf(reply: WorkerToMain): string | null {
   if (reply.kind !== "mutationFailed") return null;
   const error = reply.payload.error;
   if (error.kind === "notImplemented") return error.details.what;
-  if (error.kind === "noDocument") return "no document loaded";
+  if (error.kind === "noDocument") return t(M.noDocument);
   // v75 — the typed refusals (engine ADR 1001), in the engine's words.
   if (error.kind === "locked")
-    return `${error.details.node} is locked — unlock it to ${error.details.action}`;
+    return t(M.lockedNode, {
+      node: error.details.node,
+      action: error.details.action,
+    });
   if (error.kind === "notPermitted")
-    return `the template does not permit ${error.details.permission} on ${error.details.target}`;
-  return `the engine refused the operation (${error.kind})`;
+    return t(M.notPermitted, {
+      permission: error.details.permission,
+      target: error.details.target,
+    });
+  return `${t(M.engineRefused)} (${error.kind})`;
 }
 
 /** One mutation, or a BATCH when there are several. A batch is atomic
@@ -1154,7 +1280,7 @@ export async function arrangeSelection(
   );
   const refusal = refusalOf(reply);
   if (refusal) {
-    deps.report("error", `Arrange refused: ${refusal}`);
+    deps.report("error", refused("Arrange", refusal));
     return;
   }
   await reportLayerLimit(deps);
@@ -1168,13 +1294,7 @@ async function reportLayerLimit(deps: ObjectCommandDeps): Promise<void> {
   try {
     const layers = await deps.client.layers();
     if (layers.length > 1) {
-      deps.report(
-        "info",
-        `Arrange is within a layer. This document has ${layers.length} layers, ` +
-          `and the renderer sorts by layer before stacking order — an item on a ` +
-          `higher layer still paints above the one you moved. Move it between ` +
-          `layers to change that (InDesign's model).`,
-      );
+      deps.report("info", t(M.layerLimit, { count: layers.length }));
     }
   } catch {
     /* no layers read — the arrange still applied. */
@@ -1194,7 +1314,7 @@ export async function groupSelection(deps: ObjectCommandDeps): Promise<void> {
   });
   const refusal = refusalOf(reply);
   if (refusal) {
-    deps.report("error", `Group refused: ${refusal}`);
+    deps.report("error", refused("Group", refusal));
     return;
   }
   // The engine echoes the minted group id, so follow-up verbs (move,
@@ -1235,7 +1355,7 @@ export async function ungroupSelection(deps: ObjectCommandDeps): Promise<void> {
   );
   const refusal = refusalOf(reply);
   if (refusal) {
-    deps.report("error", `Ungroup refused: ${refusal}`);
+    deps.report("error", refused("Ungroup", refusal));
     return;
   }
   await deps.setSelection([
@@ -1292,17 +1412,13 @@ export async function deleteSelection(deps: ObjectCommandDeps): Promise<void> {
   try {
     roots = await deps.client.sceneTree();
   } catch {
-    deps.report(
-      "error",
-      "Delete refused: the document structure could not be read, so " +
-        "nothing was removed.",
-    );
+    deps.report("error", refused("Delete", t(M.treeUnreadableNothingRemoved)));
     return;
   }
 
   let plan = deletePlan(selection, roots);
   if (!plan.ok) {
-    deps.report("error", `Delete refused: ${plan.reason}`);
+    deps.report("error", refused("Delete", plan.reason));
     return;
   }
   // Fact 13 — a clipping path goes with what it clips. The first plan
@@ -1322,7 +1438,7 @@ export async function deleteSelection(deps: ObjectCommandDeps): Promise<void> {
     if (index.size > 0) {
       plan = deletePlan(selection, roots, index);
       if (!plan.ok) {
-        deps.report("error", `Delete refused: ${plan.reason}`);
+        deps.report("error", refused("Delete", plan.reason));
         return;
       }
     }
@@ -1332,7 +1448,7 @@ export async function deleteSelection(deps: ObjectCommandDeps): Promise<void> {
   const reply = await deps.client.mutate(asOneMutation(plan.ops));
   const refusal = refusalOf(reply);
   if (refusal) {
-    deps.report("error", `Delete refused: ${refusal}`);
+    deps.report("error", refused("Delete", refusal));
     return;
   }
 
@@ -1412,10 +1528,7 @@ async function readTree(
   try {
     return await deps.client.sceneTree();
   } catch {
-    deps.report(
-      "error",
-      `${verb} refused: the document structure could not be read.`,
-    );
+    deps.report("error", refused(verb, t(M.treeUnreadable)));
     return null;
   }
 }
@@ -1438,7 +1551,7 @@ async function flagSelection(
       : setFlag(leaves, "elementVisible", false);
   const refusal = refusalOf(await deps.client.mutate(asOneMutation(ops)));
   if (refusal) {
-    deps.report("error", `${verb} refused: ${refusal}`);
+    deps.report("error", refused(verb, refusal));
     return;
   }
   // A hidden item is gone from the page: nothing of it stays selected.
@@ -1509,7 +1622,7 @@ async function clearFlagOnSpread(
       ? setFlag(flagged, "elementLocked", false)
       : setFlag(flagged, "elementVisible", true);
   const refusal = refusalOf(await deps.client.mutate(asOneMutation(ops)));
-  if (refusal) deps.report("error", `${verb} refused: ${refusal}`);
+  if (refusal) deps.report("error", refused(verb, refusal));
 }
 
 export const unlockAllOnSpread = (deps: ObjectCommandDeps) =>
@@ -1647,9 +1760,7 @@ export async function translationPlan(
     } catch {
       return {
         ok: false,
-        reason:
-          "the document structure could not be read, so a group and its " +
-          "own members could not be told apart.",
+        reason: t(M.treeUnreadableGroups),
       };
     }
   }
@@ -1670,9 +1781,7 @@ export async function translationPlan(
           // gone. There is no transform to write back.
           return {
             ok: false,
-            reason:
-              `the engine reports no geometry for ${describeElement(leaf)}, ` +
-              "so there is no position to move.",
+            reason: t(M.noGeometry, { item: describeElement(leaf) }),
           };
         }
         ops.push({
@@ -1689,7 +1798,7 @@ export async function translationPlan(
       if (own === undefined) {
         return {
           ok: false,
-          reason: `${describeElement(group)} is not in the document.`,
+          reason: t(M.notInDocument, { item: describeElement(group) }),
         };
       }
       // A nested group steps in its parent's frame. Engines that answer
@@ -1739,7 +1848,7 @@ export async function translationPlan(
     return {
       ok: false,
       reason:
-        "the selection's position could not be read " +
+        `${t(M.positionUnreadable)} ` +
         `(${err instanceof Error ? err.message : String(err)}).`,
     };
   }
@@ -1751,14 +1860,14 @@ async function applyNudge(nudge: PendingNudge): Promise<void> {
   const { deps, selection, dx, dy } = nudge;
   const plan = await translationPlan(deps.client, selection, dx, dy);
   if (!plan.ok) {
-    deps.report("error", `Nudge refused: ${plan.reason}`);
+    deps.report("error", refused("Nudge", plan.reason));
     return;
   }
   if (plan.ops.length === 0) return;
 
   const refusal = refusalOf(await deps.client.mutate(asOneMutation(plan.ops)));
   if (refusal) {
-    deps.report("error", `Nudge refused: ${refusal}`);
+    deps.report("error", refused("Nudge", refusal));
     return;
   }
   try {
@@ -1911,15 +2020,14 @@ export async function makeClippingMask(deps: ObjectCommandDeps): Promise<void> {
   } catch {
     deps.report(
       "error",
-      "Make clipping mask refused: the document structure could not be " +
-        "read, so the topmost object could not be found.",
+      refused("Make clipping mask", t(M.treeUnreadableTopmost)),
     );
     return;
   }
   const layerZ = await layerPositions(deps, selection);
   let plan = clipPlan(selection, roots, { layerZ });
   if (!plan.ok) {
-    deps.report("error", `Make clipping mask refused: ${plan.reason}`);
+    deps.report("error", refused("Make clipping mask", plan.reason));
     return;
   }
   // A clipping path that already holds content keeps it listed.
@@ -1933,15 +2041,17 @@ export async function makeClippingMask(deps: ObjectCommandDeps): Promise<void> {
   } catch {
     deps.report(
       "error",
-      `Make clipping mask refused: what ${describeElement(clip)} already ` +
-        "clips could not be read, so its index would have been lost.",
+      refused(
+        "Make clipping mask",
+        t(M.clipIndexUnreadable, { item: describeElement(clip) }),
+      ),
     );
     return;
   }
   if (existing.length > 0) {
     plan = clipPlan(selection, roots, { layerZ, existing });
     if (!plan.ok) {
-      deps.report("error", `Make clipping mask refused: ${plan.reason}`);
+      deps.report("error", refused("Make clipping mask", plan.reason));
       return;
     }
   }
@@ -1949,7 +2059,7 @@ export async function makeClippingMask(deps: ObjectCommandDeps): Promise<void> {
   const reply = await deps.client.mutate(asOneMutation(plan.ops));
   const refusal = refusalOf(reply);
   if (refusal) {
-    deps.report("error", `Make clipping mask refused: ${refusal}`);
+    deps.report("error", refused("Make clipping mask", refusal));
     return;
   }
   await deps.setSelection([plan.clip]);
@@ -1981,11 +2091,7 @@ export async function releaseClippingMask(
     containers.push(id);
   }
   if (containers.length === 0) {
-    deps.report(
-      "error",
-      "Release clipping mask refused: select a clipping path — a " +
-        "rectangle, an ellipse or a path that holds clipped content.",
-    );
+    deps.report("error", refused("Release clipping mask", t(M.selectClipPath)));
     return;
   }
 
@@ -1997,8 +2103,7 @@ export async function releaseClippingMask(
   } catch {
     deps.report(
       "error",
-      "Release clipping mask refused: what the selection clips could not " +
-        "be read, so nothing was released.",
+      refused("Release clipping mask", t(M.clipsUnreadable)),
     );
     return;
   }
@@ -2010,12 +2115,11 @@ export async function releaseClippingMask(
     else empty.push(container);
   }
   const noIndex = (ids: PageItemId[]) =>
-    `${ids.map(describeElement).join(", ")} ${ids.length === 1 ? "holds" : "hold"} ` +
-    "no content this editor clipped. Content pasted in elsewhere — by " +
-    "InDesign, a script or a plugin — cannot be found: the engine has no " +
-    "read that lists what is inside a frame.";
+    t(ids.length === 1 ? M.noIndexOne : M.noIndexOther, {
+      items: ids.map(describeElement).join(", "),
+    });
   if (releases.length === 0) {
-    deps.report("error", `Release clipping mask refused: ${noIndex(empty)}`);
+    deps.report("error", refused("Release clipping mask", noIndex(empty)));
     return;
   }
 
@@ -2024,7 +2128,7 @@ export async function releaseClippingMask(
   );
   const refusal = refusalOf(reply);
   if (refusal) {
-    deps.report("error", `Release clipping mask refused: ${refusal}`);
+    deps.report("error", refused("Release clipping mask", refusal));
     return;
   }
   await deps.setSelection([
@@ -2032,7 +2136,7 @@ export async function releaseClippingMask(
     ...releases.map((r) => r.container),
   ]);
   if (empty.length > 0) {
-    deps.report("info", `Released what could be found; ${noIndex(empty)}`);
+    deps.report("info", t(M.releasedPartly, { rest: noIndex(empty) }));
   }
 }
 
@@ -2155,49 +2259,49 @@ const NUDGE_COMMANDS: ReadonlyArray<{
 }> = [
   {
     id: PAGED_OBJECT_NUDGE_LEFT,
-    title: "Nudge left",
+    title: M.nudgeLeft,
     direction: "left",
     large: false,
   },
   {
     id: PAGED_OBJECT_NUDGE_RIGHT,
-    title: "Nudge right",
+    title: M.nudgeRight,
     direction: "right",
     large: false,
   },
   {
     id: PAGED_OBJECT_NUDGE_UP,
-    title: "Nudge up",
+    title: M.nudgeUp,
     direction: "up",
     large: false,
   },
   {
     id: PAGED_OBJECT_NUDGE_DOWN,
-    title: "Nudge down",
+    title: M.nudgeDown,
     direction: "down",
     large: false,
   },
   {
     id: PAGED_OBJECT_NUDGE_LEFT_LARGE,
-    title: "Nudge left ×10",
+    title: M.nudgeLeft10,
     direction: "left",
     large: true,
   },
   {
     id: PAGED_OBJECT_NUDGE_RIGHT_LARGE,
-    title: "Nudge right ×10",
+    title: M.nudgeRight10,
     direction: "right",
     large: true,
   },
   {
     id: PAGED_OBJECT_NUDGE_UP_LARGE,
-    title: "Nudge up ×10",
+    title: M.nudgeUp10,
     direction: "up",
     large: true,
   },
   {
     id: PAGED_OBJECT_NUDGE_DOWN_LARGE,
-    title: "Nudge down ×10",
+    title: M.nudgeDown10,
     direction: "down",
     large: true,
   },
@@ -2209,56 +2313,56 @@ export function buildObjectCommands(
   return [
     {
       id: PAGED_OBJECT_BRING_TO_FRONT,
-      title: "Bring to front",
+      title: t(M.bringToFront),
       category: "Object",
       when: onSelectedObjects,
       handler: () => handlers.bringToFront(),
     },
     {
       id: PAGED_OBJECT_BRING_FORWARD,
-      title: "Bring forward",
+      title: t(M.bringForward),
       category: "Object",
       when: onSelectedObjects,
       handler: () => handlers.bringForward(),
     },
     {
       id: PAGED_OBJECT_SEND_BACKWARD,
-      title: "Send backward",
+      title: t(M.sendBackward),
       category: "Object",
       when: onSelectedObjects,
       handler: () => handlers.sendBackward(),
     },
     {
       id: PAGED_OBJECT_SEND_TO_BACK,
-      title: "Send to back",
+      title: t(M.sendToBack),
       category: "Object",
       when: onSelectedObjects,
       handler: () => handlers.sendToBack(),
     },
     {
       id: PAGED_OBJECT_GROUP,
-      title: "Group",
+      title: t(M.group),
       category: "Object",
       when: onSelectedObjects,
       handler: () => handlers.group(),
     },
     {
       id: PAGED_OBJECT_UNGROUP,
-      title: "Ungroup",
+      title: t(M.ungroup),
       category: "Object",
       when: onSelectedObjects,
       handler: () => handlers.ungroup(),
     },
     {
       id: PAGED_OBJECT_SELECT_PARENT_GROUP,
-      title: "Select parent group",
+      title: t(M.selectParentGroup),
       category: "Object",
       when: onSelectedObjects,
       handler: () => handlers.selectParentGroup(),
     },
     {
       id: PAGED_OBJECT_DELETE,
-      title: "Delete",
+      title: t(M.delete),
       category: "Object",
       when: onSelectionWhereKeysApply,
       handler: () => handlers.delete(),
@@ -2266,7 +2370,7 @@ export function buildObjectCommands(
     ...NUDGE_COMMANDS.map(
       ({ id, title, direction, large }): CommandContribution => ({
         id,
-        title,
+        title: t(title),
         category: "Object",
         when: onSelectionWhereKeysApply,
         handler: () => handlers.nudge(direction, large),
@@ -2274,42 +2378,42 @@ export function buildObjectCommands(
     ),
     {
       id: PAGED_OBJECT_MAKE_CLIPPING_MASK,
-      title: "Make clipping mask",
+      title: t(M.makeClippingMask),
       category: "Object",
       when: onSelectedObjects,
       handler: () => handlers.makeClippingMask(),
     },
     {
       id: PAGED_OBJECT_RELEASE_CLIPPING_MASK,
-      title: "Release clipping mask",
+      title: t(M.releaseClippingMask),
       category: "Object",
       when: onSelectedObjects,
       handler: () => handlers.releaseClippingMask(),
     },
     {
       id: PAGED_OBJECT_LOCK,
-      title: "Lock",
+      title: t(M.lock),
       category: "Object",
       when: onSelectionWhereKeysApply,
       handler: () => handlers.lock(),
     },
     {
       id: PAGED_OBJECT_UNLOCK_ALL_ON_SPREAD,
-      title: "Unlock all on spread",
+      title: t(M.unlockAllOnSpread),
       category: "Object",
       when: notInsideAnEditContext,
       handler: () => handlers.unlockAllOnSpread(),
     },
     {
       id: PAGED_OBJECT_HIDE,
-      title: "Hide",
+      title: t(M.hide),
       category: "Object",
       when: onSelectionWhereKeysApply,
       handler: () => handlers.hide(),
     },
     {
       id: PAGED_OBJECT_SHOW_ALL_ON_SPREAD,
-      title: "Show all on spread",
+      title: t(M.showAllOnSpread),
       category: "Object",
       when: notInsideAnEditContext,
       handler: () => handlers.showAllOnSpread(),

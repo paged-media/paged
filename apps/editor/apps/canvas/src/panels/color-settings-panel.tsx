@@ -34,13 +34,28 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { chooseFiles, useCanvasClient } from "@paged-media/shell";
+import { defineMessages, useStrings } from "@paged-media/strings";
 
-const INTENTS = [
-  "Perceptual",
-  "RelativeColorimetric",
-  "Saturation",
-  "AbsoluteColorimetric",
-] as const;
+const M = defineMessages("app.colorSettingsPanel", {
+  intentPerceptual: "Perceptual",
+  intentRelativeColorimetric: "Relative Colorimetric",
+  intentSaturation: "Saturation",
+  intentAbsoluteColorimetric: "Absolute Colorimetric",
+  notIcc: "{file} is not an ICC colour profile.",
+  workingSpaces: "Working spaces",
+  cmyk: "CMYK",
+  documentDefault: "(document default / naive)",
+  intent: "Intent",
+  bpc: "Black-point compensation",
+  addProfile: "Add profile (.icc)…",
+  proofColours: "Proof colours",
+  chooseDeviceFirst: "Choose a proof device first",
+  simulateOutput: "Simulate output condition",
+  device: "Device",
+  chooseProfile: "(choose a registered profile)",
+  simulateOutputFirst: "Simulate the output condition first",
+  simulatePaperWhite: "Simulate paper white",
+});
 
 /** An ICC profile's header: at least the 128-byte header, the `acsp`
  *  signature at byte 36, and a declared size no larger than the file
@@ -60,7 +75,16 @@ export function isIccProfile(bytes: Uint8Array): boolean {
   return size >= 128 && size <= bytes.length;
 }
 
+/** The rendering intents (their wire values), with their words. */
+const INTENTS = [
+  ["Perceptual", M.intentPerceptual],
+  ["RelativeColorimetric", M.intentRelativeColorimetric],
+  ["Saturation", M.intentSaturation],
+  ["AbsoluteColorimetric", M.intentAbsoluteColorimetric],
+] as const;
+
 export function ColorSettingsPanel() {
+  const strings = useStrings();
   const client = useCanvasClient();
   // Seeded from every profile registered so far, then followed.
   // (A test double of the client may not keep the list.)
@@ -150,7 +174,7 @@ export function ColorSettingsPanel() {
       const bytes = new Uint8Array(await file.arrayBuffer());
       // PN-159: only an ICC profile becomes a working space.
       if (!isIccProfile(bytes)) {
-        setProfileError(`${file.name} is not an ICC colour profile.`);
+        setProfileError(strings.t(M.notIcc, { file: file.name }));
         return;
       }
       setProfileError(null);
@@ -164,10 +188,10 @@ export function ColorSettingsPanel() {
       data-color-settings="ready"
     >
       <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
-        Working spaces
+        {strings.t(M.workingSpaces)}
       </div>
       <label className="flex items-center gap-2 text-xs">
-        <span className="w-12 text-muted-foreground">CMYK</span>
+        <span className="w-12 text-muted-foreground">{strings.t(M.cmyk)}</span>
         <select
           className="flex-1 border border-input rounded"
           data-setting="cmyk-profile"
@@ -177,7 +201,7 @@ export function ColorSettingsPanel() {
             writeSettings({ cmykProfile: e.target.value });
           }}
         >
-          <option value="">(document default / naive)</option>
+          <option value="">{strings.t(M.documentDefault)}</option>
           {/* The designmap-declared name surfaces even when its
               bytes aren't registered yet. */}
           {cmykProfile && !profiles.includes(cmykProfile) && (
@@ -191,7 +215,9 @@ export function ColorSettingsPanel() {
         </select>
       </label>
       <label className="flex items-center gap-2 text-xs">
-        <span className="w-12 text-muted-foreground">Intent</span>
+        <span className="w-12 text-muted-foreground">
+          {strings.t(M.intent)}
+        </span>
         <select
           className="flex-1 border border-input rounded"
           data-setting="intent"
@@ -201,9 +227,9 @@ export function ColorSettingsPanel() {
             writeSettings({ intent: e.target.value });
           }}
         >
-          {INTENTS.map((i) => (
-            <option key={i} value={i}>
-              {i}
+          {INTENTS.map(([value, label]) => (
+            <option key={value} value={value}>
+              {strings.t(label)}
             </option>
           ))}
         </select>
@@ -218,7 +244,7 @@ export function ColorSettingsPanel() {
             writeSettings({ bpc: e.target.checked });
           }}
         />
-        Black-point compensation
+        {strings.t(M.bpc)}
       </label>
       <button
         type="button"
@@ -226,7 +252,7 @@ export function ColorSettingsPanel() {
         data-action="add-profile"
         onClick={addProfile}
       >
-        Add profile (.icc)…
+        {strings.t(M.addProfile)}
       </button>
       {profileError && (
         <div
@@ -240,7 +266,7 @@ export function ColorSettingsPanel() {
       )}
 
       <div className="text-[10px] uppercase tracking-wide text-muted-foreground border-t border-input pt-2">
-        Proof colours
+        {strings.t(M.proofColours)}
       </div>
       <label className="flex items-center gap-2 text-xs">
         <input
@@ -248,16 +274,18 @@ export function ColorSettingsPanel() {
           data-setting="proof-on"
           checked={proofOn}
           disabled={!proofProfile}
-          title={proofProfile ? undefined : "Choose a proof device first"}
+          title={proofProfile ? undefined : strings.t(M.chooseDeviceFirst)}
           onChange={(e) => {
             setProofOn(e.target.checked);
             writeProof({ on: e.target.checked });
           }}
         />
-        Simulate output condition
+        {strings.t(M.simulateOutput)}
       </label>
       <label className="flex items-center gap-2 text-xs">
-        <span className="w-12 text-muted-foreground">Device</span>
+        <span className="w-12 text-muted-foreground">
+          {strings.t(M.device)}
+        </span>
         <select
           className="flex-1 border border-input rounded"
           data-setting="proof-profile"
@@ -267,7 +295,7 @@ export function ColorSettingsPanel() {
             writeProof({ profile: e.target.value, on: true });
           }}
         >
-          <option value="">(choose a registered profile)</option>
+          <option value="">{strings.t(M.chooseProfile)}</option>
           {profiles.map((p) => (
             <option key={p} value={p}>
               {p}
@@ -283,9 +311,9 @@ export function ColorSettingsPanel() {
           disabled={!proofProfile || !proofOn}
           title={
             !proofProfile
-              ? "Choose a proof device first"
+              ? strings.t(M.chooseDeviceFirst)
               : !proofOn
-                ? "Simulate the output condition first"
+                ? strings.t(M.simulateOutputFirst)
                 : undefined
           }
           onChange={(e) => {
@@ -293,7 +321,7 @@ export function ColorSettingsPanel() {
             writeProof({ paperWhite: e.target.checked });
           }}
         />
-        Simulate paper white
+        {strings.t(M.simulatePaperWhite)}
       </label>
     </div>
   );

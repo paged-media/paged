@@ -73,6 +73,66 @@ import { ALIGN_COMMAND, type AlignKind } from "../align-plan";
 import { usePagePosition } from "../panels/page-position";
 import { layoutPages } from "../ui/layout";
 import { Chip, Sep, ToolPill } from "./toolbars";
+import { defineMessages, useStrings, type Strings } from "@paged-media/strings";
+
+const M = defineMessages("app.cockpitControlBar", {
+  noDocument: "No document — File ▸ New document… or drop an IDML file here",
+  page: "Page",
+  previousPage: "Previous page",
+  nextPage: "Next page",
+  pageSize: "Page size",
+  normalView: "Back to normal view",
+  showBleed: "Show the bleed area",
+  bleed: "Bleed",
+  normalViewW: "Back to normal view (W)",
+  previewW: "Preview (W)",
+  preview: "Preview",
+  rectangle: "Rectangle",
+  oval: "Ellipse",
+  polygon: "Polygon",
+  graphicLine: "Line",
+  textFrame: "Text frame",
+  group: "Group",
+  image: "Image",
+  object: "Object",
+  objects: "{count, plural, one {# object} other {# objects}}",
+  resizeHint:
+    "Rotated, sheared, grouped or multiple objects resize through Transform",
+  leftEdge: "Left edge (pt)",
+  topEdge: "Top edge (pt)",
+  widthLabel: "W",
+  width: "Width (pt)",
+  heightLabel: "H",
+  height: "Height (pt)",
+  rotation: "Rotation (degrees)",
+  strokeLabel: "Stroke",
+  strokeWeight: "Stroke weight (pt)",
+  opacityLabel: "Opacity",
+  opacity: "Opacity (%)",
+  alignLeft: "Align left",
+  centerHorizontally: "Center horizontally",
+  alignRight: "Align right",
+  alignTop: "Align top",
+  centerVertically: "Center vertically",
+  alignBottom: "Align bottom",
+  bringToFront: "Bring to front",
+  sendToBack: "Send to back",
+  groupAction: "Group",
+  groupTitle: "Group (⌘G)",
+  ungroupTitle: "Ungroup (⇧⌘G)",
+  ungroup: "Ungroup",
+  alignCenter: "Align center",
+  justify: "Justify",
+  paragraphStyle: "Paragraph style",
+  characterStyle: "Character style",
+  fontFamily: "Font family",
+  sizeLabel: "Size",
+  fontSize: "Font size (pt)",
+  leadLabel: "Lead",
+  leading: "Leading (pt)",
+  auto: "Auto",
+  mixed: "— mixed —",
+});
 
 export function DesignControlBar() {
   const { elementSelection } = useSelection();
@@ -112,6 +172,7 @@ export function DesignControlBar() {
 // ── nothing selected ───────────────────────────────────────────────
 
 function DocumentControls() {
+  const strings = useStrings();
   const { handle } = useDocument();
   const { camera, viewportSize } = useCamera();
   const screenMode = useScreenMode();
@@ -123,7 +184,7 @@ function DocumentControls() {
         className="pg-ui-xs"
         style={{ paddingLeft: 4, color: "var(--pg-muted-fg)" }}
       >
-        No document — File ▸ New document… or drop an IDML file here
+        {strings.t(M.noDocument)}
       </span>
     );
   }
@@ -143,10 +204,10 @@ function DocumentControls() {
   const bleedOn = screenMode.screenMode === "bleed";
   return (
     <>
-      <Label>Page</Label>
+      <Label>{strings.t(M.page)}</Label>
       <ToolPill
         icon="ui-chevron-left"
-        title="Previous page"
+        title={strings.t(M.previousPage)}
         disabled={current === 0}
         onClick={() => go(current - 1)}
         testId="page-prev"
@@ -160,7 +221,7 @@ function DocumentControls() {
       </span>
       <ToolPill
         icon="ui-chevron-right"
-        title="Next page"
+        title={strings.t(M.nextPage)}
         disabled={current >= sizes.length - 1}
         onClick={() => go(current + 1)}
         testId="page-next"
@@ -168,7 +229,7 @@ function DocumentControls() {
       <Sep />
       <span
         className="pg-value"
-        title="Page size"
+        title={strings.t(M.pageSize)}
         style={{ ...valueText, color: "var(--pg-muted-fg)" }}
       >
         {formatLengthPair(w, h, unit)}
@@ -178,16 +239,17 @@ function DocumentControls() {
         icon="ui-page"
         on={bleedOn}
         testId="design-bleed"
-        title={bleedOn ? "Back to normal view" : "Show the bleed area"}
+        title={bleedOn ? strings.t(M.normalView) : strings.t(M.showBleed)}
         onClick={() => screenMode.setScreenMode(bleedOn ? "normal" : "bleed")}
       >
-        Bleed
+        {strings.t(M.bleed)}
       </Chip>
     </>
   );
 }
 
 function PreviewChip() {
+  const strings = useStrings();
   const screenMode = useScreenMode();
   const previewOn = screenMode.screenMode === "preview";
   return (
@@ -195,10 +257,10 @@ function PreviewChip() {
       icon={previewOn ? "ui-eye-off" : "ui-eye"}
       on={previewOn}
       testId="preview-toggle"
-      title={previewOn ? "Back to normal view (W)" : "Preview (W)"}
+      title={previewOn ? strings.t(M.normalViewW) : strings.t(M.previewW)}
       onClick={() => screenMode.togglePreview()}
     >
-      Preview
+      {strings.t(M.preview)}
     </Chip>
   );
 }
@@ -206,25 +268,27 @@ function PreviewChip() {
 // ── page items ─────────────────────────────────────────────────────
 
 const KIND_LABEL: Record<string, string> = {
-  rectangle: "Rectangle",
-  oval: "Ellipse",
-  polygon: "Polygon",
-  graphicLine: "Line",
-  textFrame: "Text frame",
-  group: "Group",
-  image: "Image",
+  rectangle: M.rectangle,
+  oval: M.oval,
+  polygon: M.polygon,
+  graphicLine: M.graphicLine,
+  textFrame: M.textFrame,
+  group: M.group,
+  image: M.image,
 };
 
-function kindLabel(ids: readonly ElementId[]): string {
-  if (ids.length > 1) return `${ids.length} objects`;
+function kindLabel(strings: Strings, ids: readonly ElementId[]): string {
+  if (ids.length > 1) return strings.t(M.objects, { count: ids.length });
   const kind = (ids[0] as unknown as { kind?: string }).kind ?? "";
-  return (
-    KIND_LABEL[kind] ??
-    (kind ? kind.charAt(0).toUpperCase() + kind.slice(1) : "Object")
-  );
+  const key = Object.hasOwn(KIND_LABEL, kind) ? KIND_LABEL[kind] : undefined;
+  if (key) return strings.t(key);
+  return kind
+    ? kind.charAt(0).toUpperCase() + kind.slice(1)
+    : strings.t(M.object);
 }
 
 function ObjectControls({ ids }: { ids: readonly ElementId[] }) {
+  const strings = useStrings();
   const { box, edgeLeaf, moveBy, setEdges } = usePagePosition();
   const rotation = useObjectProperty({ path: "frameRotationAngle" });
   const stroke = useObjectProperty({ path: "frameStrokeWeight" });
@@ -241,8 +305,7 @@ function ObjectControls({ ids }: { ids: readonly ElementId[] }) {
     if (!model) return;
     run(ALIGN_COMMAND, { kind, targets: ids.map((id) => model.addressOf(id)) });
   };
-  const resizeHint =
-    "Rotated, sheared, grouped or multiple objects resize through Transform";
+  const resizeHint = strings.t(M.resizeHint);
   return (
     <>
       <span
@@ -255,12 +318,12 @@ function ObjectControls({ ids }: { ids: readonly ElementId[] }) {
           whiteSpace: "nowrap",
         }}
       >
-        {kindLabel(ids)}
+        {kindLabel(strings, ids)}
       </span>
       <Sep />
       <NumField
         label="X"
-        title="Left edge (pt)"
+        title={strings.t(M.leftEdge)}
         value={box?.left ?? null}
         unit="pt"
         onCommit={box ? (x) => moveBy(x - box.left, 0) : null}
@@ -270,7 +333,7 @@ function ObjectControls({ ids }: { ids: readonly ElementId[] }) {
       />
       <NumField
         label="Y"
-        title="Top edge (pt)"
+        title={strings.t(M.topEdge)}
         value={box?.top ?? null}
         unit="pt"
         onCommit={box ? (y) => moveBy(0, y - box.top) : null}
@@ -279,8 +342,8 @@ function ObjectControls({ ids }: { ids: readonly ElementId[] }) {
         length
       />
       <NumField
-        label="W"
-        title={edgeLeaf ? "Width (pt)" : resizeHint}
+        label={strings.t(M.widthLabel)}
+        title={edgeLeaf ? strings.t(M.width) : resizeHint}
         value={box ? box.right - box.left : null}
         unit="pt"
         min={0.1}
@@ -293,8 +356,8 @@ function ObjectControls({ ids }: { ids: readonly ElementId[] }) {
         length
       />
       <NumField
-        label="H"
-        title={edgeLeaf ? "Height (pt)" : resizeHint}
+        label={strings.t(M.heightLabel)}
+        title={edgeLeaf ? strings.t(M.height) : resizeHint}
         value={box ? box.bottom - box.top : null}
         unit="pt"
         min={0.1}
@@ -309,14 +372,14 @@ function ObjectControls({ ids }: { ids: readonly ElementId[] }) {
       <Sep />
       <PropertyNum
         label="∠"
-        title="Rotation (degrees)"
+        title={strings.t(M.rotation)}
         field={rotation}
         unit="°"
         testId="rotation"
       />
       <PropertyNum
-        label="Stroke"
-        title="Stroke weight (pt)"
+        label={strings.t(M.strokeLabel)}
+        title={strings.t(M.strokeWeight)}
         field={stroke}
         unit="pt"
         min={0}
@@ -325,8 +388,8 @@ function ObjectControls({ ids }: { ids: readonly ElementId[] }) {
         testId="stroke"
       />
       <PropertyNum
-        label="Opacity"
-        title="Opacity (%)"
+        label={strings.t(M.opacityLabel)}
+        title={strings.t(M.opacity)}
         field={opacity}
         unit="%"
         min={0}
@@ -339,18 +402,18 @@ function ObjectControls({ ids }: { ids: readonly ElementId[] }) {
         <>
           {(
             [
-              ["left", "ui-obj-align-left", "Align left"],
-              ["centerH", "ui-obj-align-center-h", "Center horizontally"],
-              ["right", "ui-obj-align-right", "Align right"],
-              ["top", "ui-obj-align-top", "Align top"],
-              ["centerV", "ui-obj-align-center-v", "Center vertically"],
-              ["bottom", "ui-obj-align-bottom", "Align bottom"],
+              ["left", "ui-obj-align-left", M.alignLeft],
+              ["centerH", "ui-obj-align-center-h", M.centerHorizontally],
+              ["right", "ui-obj-align-right", M.alignRight],
+              ["top", "ui-obj-align-top", M.alignTop],
+              ["centerV", "ui-obj-align-center-v", M.centerVertically],
+              ["bottom", "ui-obj-align-bottom", M.alignBottom],
             ] as const
           ).map(([kind, icon, title]) => (
             <ToolPill
               key={kind}
               icon={icon}
-              title={title}
+              title={strings.t(title)}
               onClick={() => align(kind)}
               testId={`align-${kind}`}
             />
@@ -360,32 +423,32 @@ function ObjectControls({ ids }: { ids: readonly ElementId[] }) {
       )}
       <ToolPill
         icon="ui-arrange-front"
-        title="Bring to front"
+        title={strings.t(M.bringToFront)}
         onClick={() => run("paged.object.bringToFront")}
         testId="bring-front"
       />
       <ToolPill
         icon="ui-arrange-back"
-        title="Send to back"
+        title={strings.t(M.sendToBack)}
         onClick={() => run("paged.object.sendToBack")}
         testId="send-back"
       />
       {multi && (
         <Chip
           testId="group"
-          title="Group (⌘G)"
+          title={strings.t(M.groupTitle)}
           onClick={() => run("paged.object.group")}
         >
-          Group
+          {strings.t(M.groupAction)}
         </Chip>
       )}
       {isGroup && (
         <Chip
           testId="ungroup"
-          title="Ungroup (⇧⌘G)"
+          title={strings.t(M.ungroupTitle)}
           onClick={() => run("paged.object.ungroup")}
         >
-          Ungroup
+          {strings.t(M.ungroup)}
         </Chip>
       )}
     </>
@@ -395,13 +458,14 @@ function ObjectControls({ ids }: { ids: readonly ElementId[] }) {
 // ── text ───────────────────────────────────────────────────────────
 
 const JUSTIFY: ReadonlyArray<readonly [string, string, string]> = [
-  ["LeftAlign", "ui-align-left", "Align left"],
-  ["CenterAlign", "ui-align-center", "Align center"],
-  ["RightAlign", "ui-align-right", "Align right"],
-  ["LeftJustified", "ui-align-justify", "Justify"],
+  ["LeftAlign", "ui-align-left", M.alignLeft],
+  ["CenterAlign", "ui-align-center", M.alignCenter],
+  ["RightAlign", "ui-align-right", M.alignRight],
+  ["LeftJustified", "ui-align-justify", M.justify],
 ];
 
 function TextControls() {
+  const strings = useStrings();
   const paraStyle = useObjectProperty({
     path: "appliedParagraphStyle",
     scope: "content",
@@ -436,14 +500,14 @@ function TextControls() {
   return (
     <>
       <PropertySelect
-        title="Paragraph style"
+        title={strings.t(M.paragraphStyle)}
         field={paraStyle}
         width={150}
         testId="paragraph-style"
         options={paraStyles.map((r) => [r.selfId, cleanStyleName(r.name)])}
       />
       <PropertySelect
-        title="Character style"
+        title={strings.t(M.characterStyle)}
         field={charStyle}
         width={130}
         testId="character-style"
@@ -451,15 +515,15 @@ function TextControls() {
       />
       <Sep />
       <PropertySelect
-        title="Font family"
+        title={strings.t(M.fontFamily)}
         field={family}
         width={150}
         testId="font-family"
         options={fonts.map((f) => [f.family, f.family])}
       />
       <PropertyNum
-        label="Size"
-        title="Font size (pt)"
+        label={strings.t(M.sizeLabel)}
+        title={strings.t(M.fontSize)}
         field={size}
         unit="pt"
         min={0.1}
@@ -467,21 +531,21 @@ function TextControls() {
         testId="font-size"
       />
       <PropertyNum
-        label="Lead"
-        title="Leading (pt)"
+        label={strings.t(M.leadLabel)}
+        title={strings.t(M.leading)}
         field={leading}
         unit="pt"
         min={0}
         step={0.5}
         testId="leading"
-        placeholder="Auto"
+        placeholder={strings.t(M.auto)}
       />
       <Sep />
       {JUSTIFY.map(([value, icon, title]) => (
         <ToolPill
           key={value}
           icon={icon}
-          title={title}
+          title={strings.t(title)}
           on={current === value}
           disabled={!justify.commit}
           onClick={() => void justify.commit?.(value)}
@@ -747,6 +811,7 @@ function PropertySelect(p: {
   width: number;
   testId: string;
 }) {
+  const strings = useStrings();
   const s = p.field.state;
   const value = s.state === "value" ? String(s.value ?? "") : "";
   const known = p.options.some(([v]) => v === value);
@@ -766,7 +831,7 @@ function PropertySelect(p: {
     >
       {s.state !== "value" && (
         <option value="__none__" disabled>
-          {s.state === "mixed" ? "— mixed —" : p.title}
+          {s.state === "mixed" ? strings.t(M.mixed) : p.title}
         </option>
       )}
       {p.options.map(([v, label]) => (

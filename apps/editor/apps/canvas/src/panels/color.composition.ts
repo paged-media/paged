@@ -37,41 +37,50 @@ import {
   PAGED_LAYOUT_SECTION,
   asPropertyFields,
 } from "@paged-media/shell";
+import { defineMessages, type Strings } from "@paged-media/strings";
+
+const M = defineMessages("app.colorComposition", {
+  color: "Color",
+  fill: "Fill",
+  tint: "Tint",
+});
 
 // ADR 323 — every live field is a schema-driven `PropertyField`: the
 // type comes from the target's schema row, reads/writes go through
 // `host.objects` (one batch = one undo step over a multi-selection), and
 // each field offers "Bind to data…" with a binding badge. Seams stay seams.
-export const colorComposition: CompositionNode = asPropertyFields({
-  catalogId: PAGED_LAYOUT_SECTION,
-  props: { title: "Color" },
-  bindings: {},
-  children: [
-    {
-      catalogId: PAGED_INPUT_COLLECTION_SELECT,
-      props: {
-        label: "Fill",
-        collectionName: "swatches",
-        valueType: "colorRef",
-      },
-      bindings: {
-        value: {
-          kind: "selectionProperty",
-          scope: "element",
-          path: "frameFillColor",
+export function colorComposition(strings: Strings): CompositionNode {
+  return asPropertyFields({
+    catalogId: PAGED_LAYOUT_SECTION,
+    props: { title: strings.t(M.color) },
+    bindings: {},
+    children: [
+      {
+        catalogId: PAGED_INPUT_COLLECTION_SELECT,
+        props: {
+          label: strings.t(M.fill),
+          collectionName: "swatches",
+          valueType: "colorRef",
+        },
+        bindings: {
+          value: {
+            kind: "selectionProperty",
+            scope: "element",
+            path: "frameFillColor",
+          },
         },
       },
-    },
-    {
-      catalogId: PAGED_INPUT_NUMERIC_SCRUB,
-      props: { label: "Tint" },
-      bindings: {
-        value: {
-          kind: "selectionProperty",
-          scope: "element",
-          path: "frameFillTint",
+      {
+        catalogId: PAGED_INPUT_NUMERIC_SCRUB,
+        props: { label: strings.t(M.tint) },
+        bindings: {
+          value: {
+            kind: "selectionProperty",
+            scope: "element",
+            path: "frameFillTint",
+          },
         },
       },
-    },
-  ],
-});
+    ],
+  });
+}
