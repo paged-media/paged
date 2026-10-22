@@ -348,5 +348,7 @@ fn a_table_deleted_whole_goes_with_its_part__feat__sheet_calc_rewrite_structural
     assert!(!data.contains("tableParts"), "{data}");
     assert!(!part(&out, "xl/worksheets/_rels/sheet1.xml.rels").contains("table1.xml"));
     assert!(!part(&out, "[Content_Types].xml").contains("table1.xml"));
+    // A reference to the deleted table reads #REF!, as Excel rewrites it.
+    has(&data, "<f>SUM(#REF!)</f>");
     assert!(SheetSession::load_xlsx(&out).is_ok());
 }

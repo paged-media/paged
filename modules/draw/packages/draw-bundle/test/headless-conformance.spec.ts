@@ -322,6 +322,10 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
         // C-29 (engine v58) — Type on a path (Attach / Detach).
         "command",
         "command",
+        // G4 — the Knife, Scissors and Shape Builder as commands.
+        "command",
+        "command",
+        "command",
         // Phase 9 (Tier B) — Select-same (Fill / Stroke / Stroke weight).
         "command",
         "command",

@@ -103,6 +103,10 @@ import {
 } from "./commands/compound-path";
 import { contributeDashCommands, DASH_COMMAND_IDS } from "./commands/dash";
 import {
+  contributeCutCommands,
+  CUT_COMMAND_IDS,
+} from "./commands/cut-commands";
+import {
   contributePatternCommands,
   PATTERN_COMMAND_IDS,
 } from "./commands/pattern";
@@ -491,6 +495,8 @@ export function activate(host: BundleHost): BundleHandle {
   // deliberately absent (only Rainbow renders). It FLOWS AN EXISTING
   // story — the wire has no create-story op — and says so.
   const textOnPathCommandsSub = contributeTextOnPathCommands(host);
+  // The Knife, Scissors and Shape Builder as commands (their gesture as data).
+  const cutCommandsSub = contributeCutCommands(host);
   // Phase 9 (Tier B) — Select-same (pure selection over fill / stroke /
   // stroke-weight; no mutation).
   const selectSameCommandsSub = contributeSelectSameCommands(host);
@@ -622,7 +628,8 @@ export function activate(host: BundleHost): BundleHandle {
         INSERT_SHAPE_COMMAND_IDS.length +
         IMAGE_TRACE_COMMAND_IDS.length +
         BLEND_COMMAND_IDS.length +
-        OBJECTS_ON_PATH_COMMAND_IDS.length
+        OBJECTS_ON_PATH_COMMAND_IDS.length +
+        CUT_COMMAND_IDS.length
       } commands + 1 edit context + ` +
       `${layersProviderHandle ? 1 : 0} binding providers ` +
       `(apiVersion ${manifest.apiVersion})`,
@@ -647,6 +654,7 @@ export function activate(host: BundleHost): BundleHandle {
       insertShapeCommandsSub.dispose();
       selectSameCommandsSub.dispose();
       textOnPathCommandsSub.dispose();
+      cutCommandsSub.dispose();
       opacityMaskCommandsSub.dispose();
       livePaintCommandsSub.dispose();
       symbolCommandsSub.dispose();

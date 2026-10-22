@@ -230,6 +230,27 @@ pub fn apply_edits(
                 };
                 paras.entry(p).or_default().delete = true;
             }
+            StructuralEdit::CloneParagraph {
+                source,
+                after,
+                text,
+            } => {
+                let (Some(from), Some(at)) =
+                    (bindings.para_ord(*source), bindings.para_ord(*after))
+                else {
+                    skips.push(format!(
+                        "clone-paragraph skipped: block {source} or {after} is not a body paragraph"
+                    ));
+                    continue;
+                };
+                let src = pkg.require(main_part)?;
+                match splice::clone_paragraph(src, from, text) {
+                    Some(frag) => paras.entry(at).or_default().insert_after.push(frag),
+                    None => skips.push(format!(
+                        "clone-paragraph skipped: block {source} cannot be copied (it ends a section)"
+                    )),
+                }
+            }
             StructuralEdit::InsertParagraph {
                 block,
                 text,

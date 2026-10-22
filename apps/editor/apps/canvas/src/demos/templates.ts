@@ -28,6 +28,12 @@ import type { ElementId, TemplateFieldSummary } from "@paged-media/client";
 
 import type { EditorHandle } from "../embed";
 
+/** What a builder needs of an editor: a role, a blank document and the
+ *  client's writes and reads (a handle, or a headless session). */
+export type TemplateHost = Pick<EditorHandle, "setRole" | "newDocument"> & {
+  client: Pick<EditorHandle["client"], "mutate" | "collection">;
+};
+
 type Bounds = [number, number, number, number];
 
 interface FieldSpec {
@@ -50,7 +56,7 @@ interface Reply {
   };
 }
 
-async function mutate(h: EditorHandle, m: unknown): Promise<Reply> {
+async function mutate(h: TemplateHost, m: unknown): Promise<Reply> {
   const reply = (await h.client.mutate(m as never)) as unknown as Reply;
   if (reply.kind !== "mutationApplied") {
     throw new Error(
@@ -60,21 +66,21 @@ async function mutate(h: EditorHandle, m: unknown): Promise<Reply> {
   return reply;
 }
 
-async function storyIds(h: EditorHandle): Promise<string[]> {
+async function storyIds(h: TemplateHost): Promise<string[]> {
   const stories = await h.client.collection<{ selfId: string }>(
     "stories" as never,
   );
   return stories.map((s) => s.selfId);
 }
 
-async function pageIds(h: EditorHandle): Promise<string[]> {
+async function pageIds(h: TemplateHost): Promise<string[]> {
   const pages = await h.client.collection<{ selfId: string }>("pages" as never);
   return pages.map((p) => p.selfId);
 }
 
 /** A text frame with `text`; returns the frame and its story. */
 async function textFrame(
-  h: EditorHandle,
+  h: TemplateHost,
   pageId: string,
   bounds: Bounds,
   text: string,
@@ -98,7 +104,7 @@ async function textFrame(
 }
 
 async function rect(
-  h: EditorHandle,
+  h: TemplateHost,
   pageId: string,
   bounds: Bounds,
   fill?: string,
@@ -119,7 +125,7 @@ async function rect(
 }
 
 async function makeField(
-  h: EditorHandle,
+  h: TemplateHost,
   id: ElementId,
   spec: FieldSpec,
 ): Promise<void> {
@@ -136,7 +142,7 @@ async function makeField(
   });
 }
 
-async function documentPolicy(h: EditorHandle, order: string[]): Promise<void> {
+async function documentPolicy(h: TemplateHost, order: string[]): Promise<void> {
   await mutate(h, {
     op: "setDocumentMetadata",
     args: {
@@ -148,7 +154,7 @@ async function documentPolicy(h: EditorHandle, order: string[]): Promise<void> {
 
 /** A business card (3.5 × 2 in): a fixed band and company line, the
  *  person's name, title and e-mail, and a portrait. */
-export async function businessCard(h: EditorHandle): Promise<void> {
+export async function businessCard(h: TemplateHost): Promise<void> {
   await h.setRole("author");
   await h.newDocument(252, 144);
   const [page] = await pageIds(h);
@@ -194,7 +200,7 @@ export async function businessCard(h: EditorHandle): Promise<void> {
 
 /** A postcard (6 × 4 in): a headline, a message, a picture and an
  *  optional stamp. */
-export async function postcard(h: EditorHandle): Promise<void> {
+export async function postcard(h: TemplateHost): Promise<void> {
   await h.setRole("author");
   await h.newDocument(432, 288);
   const [page] = await pageIds(h);
@@ -244,7 +250,7 @@ export async function postcard(h: EditorHandle): Promise<void> {
 
 /** A photobook spread set (3 square pages), each with a picture and a
  *  caption: page-by-page fields in one template. */
-export async function photobook(h: EditorHandle): Promise<void> {
+export async function photobook(h: TemplateHost): Promise<void> {
   await h.setRole("author");
   await h.newDocument(432, 432);
   for (let i = 0; i < 2; i++) {
