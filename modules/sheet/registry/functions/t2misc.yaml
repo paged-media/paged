@@ -45,10 +45,10 @@
   range_aware: true
   rust: t2misc::aggregate
   status: implemented
-  provenance: ["Microsoft AGGREGATE (public docs) — function_num, options (error/hidden-row handling), then ref(s). T2 SUBSET: function_num 1-11; options 0/4 (ignore nothing) + 6 (ignore errors). 12-19 and hidden-row/nested options out of T2 scope (ruling in families/t2misc.rs)."]
+  provenance: ["Microsoft AGGREGATE (public docs) — function_num 1-19 (12 MEDIAN, 13 MODE.SNGL, 14 LARGE, 15 SMALL, 16/17 PERCENTILE/QUARTILE.INC, 18/19 .EXC take k), options 0-7: 2/3/6/7 skip errors, 1/3/5/7 skip hidden rows (evaluator mask), nested SUBTOTAL/AGGREGATE always skipped (Excel-recorded, fix3/aggregate3)"]
   tests:
     rust: ["sheet-conformance/tests/it/fn_t2misc.rs::sheet_fn_t2misc_aggregate"]
-    corpus: ["corpus/fn-corpus/t2misc/aggregate.golden.tsv"]
+    corpus: ["corpus/fn-corpus/t2misc/aggregate.golden.tsv", "corpus/fn-corpus/fix3/aggregate3.golden.tsv"]
 
 - id: sheet.fn.math.subtotal
   name: SUBTOTAL
@@ -58,12 +58,12 @@
   range_aware: true
   rust: t2misc::subtotal
   status: implemented
-  provenance: ["ECMA-376 §18.17.7 (SUBTOTAL) — function_num (1-11 incl-manual, 101-111 ignore-hidden) then ref(s); nested SUBTOTAL/AGGREGATE results are excluded from the aggregate (implemented eval-side, FINDING 3 — sheet-calc/eval.rs masks them at materialization). T2: no row-visibility metadata in the pure kernel, so 1-11 == 101-111 (ruling in families/t2misc.rs)."]
+  provenance: ["ECMA-376 §18.17.7 (SUBTOTAL) — function_num 1-11 skip filter-hidden rows, 101-111 every hidden row (sheet-calc subtotal_mask, W3); nested SUBTOTAL/AGGREGATE results excluded (FINDING 3). Excel-recorded (fix3/subtotal3)"]
   tests:
     rust:
       - "sheet-conformance/tests/it/fn_t2misc.rs::sheet_fn_t2misc_subtotal"
       - "sheet-conformance/tests/it/special_forms.rs::sheet_fn_math_subtotal_excludes_nested"
-    corpus: ["corpus/fn-corpus/t2misc/subtotal.golden.tsv"]
+    corpus: ["corpus/fn-corpus/t2misc/subtotal.golden.tsv", "corpus/fn-corpus/fix3/subtotal3.golden.tsv"]
 
 - id: sheet.fn.math.roman
   name: ROMAN
@@ -73,10 +73,10 @@
   range_aware: false
   rust: t2misc::roman
   status: implemented
-  provenance: ["ECMA-376 §18.17.7 (ROMAN) — arabic -> roman-numeral text; optional [form] (form 0 = classic). 1-3999 domain; 0 -> empty text; negative/>3999 -> #VALUE! (ruling in families/t2misc.rs)."]
+  provenance: ["ECMA-376 §18.17.7 (ROMAN) — arabic -> roman-numeral text in forms 0 (classic) to 4 (simplified), TRUE = 0, FALSE = 4; 0-3999; 0 -> empty text; other -> #VALUE! (Excel-recorded, fix3/roman3)"]
   tests:
     rust: ["sheet-conformance/tests/it/fn_t2misc.rs::sheet_fn_t2misc_roman"]
-    corpus: ["corpus/fn-corpus/t2misc/roman.golden.tsv"]
+    corpus: ["corpus/fn-corpus/t2misc/roman.golden.tsv", "corpus/fn-corpus/fix3/roman3.golden.tsv"]
 
 - id: sheet.fn.math.arabic
   name: ARABIC

@@ -184,8 +184,8 @@ Rules for every code change in this repo:
 - **Interface freeze.** `sheet-core` types, the AST, the `sheet-fn`
   calling convention (`Arg`/`EvalCtx`), and the registry YAML schema are
   FROZEN (M0 phase 0). Changes go through the orchestrator as versioned
-  amendments, never drive-by edits. (So far: W1.0, ADR 513; `SheetModel::document_name`,
-  ADR 516.)
+  amendments, never drive-by edits. (So far: W1.0, ADR 513; `SheetModel::document_name`
+  and `EvalCtx::locale`, ADR 516.)
 
 ## Two-registry split
 

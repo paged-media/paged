@@ -1,9 +1,9 @@
 # ADR 516 — The function library towards Excel's full set (W3): rulings, the oracle as the source of expected values, and the document-name amendment
 
 - **Status:** Accepted, 2026-10-23. Extends [ADR 507](507-golden-corpora-coverage-gate.md)
-  (goldens) with recorded expected values; amends the frozen `SheetModel` (one field).
-- **Scope:** `registry/functions/{eng,math3,text3,info3,…}.yaml`, `sheet-fn` (the new families,
-  `special.rs`, `coerce.rs`), `sheet-calc/src/eval/info.rs`, `sheet-core/src/model.rs`,
+  (goldens) with recorded expected values; amends the frozen `SheetModel` and `EvalCtx` (one field each).
+- **Scope:** `registry/functions/{eng,math3,text3,info3,array3,…}.yaml`, `sheet-fn` (the new
+  families, `special.rs`, `coerce.rs`, `ctx.rs`), `sheet-calc/src/eval/info.rs`, `sheet-core/src/model.rs`,
   `sheet-js`, the bundle facade, `sheet-conformance` (golden replay, oracle lane).
 
 ## Context
@@ -36,10 +36,19 @@ reading documentation alone would encode guesses: the documentation does not say
    document (a file name), read by `CELL("filename")` (`[name]sheet`) and by `CELL("address")`
    on another sheet; `None` is an unsaved workbook (`""`, as in Excel). Not written to the
    file. Set through `Engine::set_document_name` / `setDocumentName` after a load.
-7. **Information functions are special forms.** `SHEET`, `SHEETS`, `CELL`, `INFO`,
+7. **Amendment: `EvalCtx::locale`** (additive; `EvalCtx::new` keeps en-US, the evaluator sets
+   the workbook's through `with_locale`). `TEXT` reads its code in the en dialect and renders it
+   in that locale (`1.234,50` in a German workbook), as Excel renders a format code in the
+   user's locale.
+8. **Row visibility.** SUBTOTAL 1–11 skip filter-hidden rows, 101–111 and AGGREGATE's options
+   1/3/5/7 every hidden row; nested SUBTOTAL/AGGREGATE results are skipped under every
+   AGGREGATE option (Excel-recorded, 4–7 included). The evaluator masks the cells before the
+   kernel; hiding rows (`Engine::set_rows_hidden`) or filtering recalculates the formulas that
+   call them.
+9. **Information functions are special forms.** `SHEET`, `SHEETS`, `CELL`, `INFO`,
    `ISOMITTED` read the model or the unevaluated argument (`sheet-calc/src/eval/info.rs`);
    `INFO` answers for the engine (`system` is `pcdos`, `release` `16.0`).
-8. **Regular expressions** use `fancy-regex` (MIT) with trimmed Unicode tables (+650 KB wasm);
+10. **Regular expressions** use `fancy-regex` (MIT) with trimmed Unicode tables (+650 KB wasm);
    `\p{L}` and `\p{N}` map onto the Perl classes, other property classes are `#VALUE!`.
 
 ## Consequences

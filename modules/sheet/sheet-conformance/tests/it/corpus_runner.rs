@@ -269,3 +269,8 @@ fn sheet_calc_corpus_info3() {
 fn sheet_calc_corpus_array3() {
     run_family("array3");
 }
+
+#[test]
+fn sheet_calc_corpus_fix3() {
+    run_family("fix3");
+}

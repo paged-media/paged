@@ -31,7 +31,7 @@
 
 use std::cell::Cell;
 
-use sheet_core::{CellRef, DateSystem};
+use sheet_core::{CellRef, DateSystem, Locale};
 
 /// The non-argument inputs to a function kernel (spec §7). Construct with
 /// [`EvalCtx::new`]; the RNG is seeded so volatile functions are
@@ -48,6 +48,12 @@ pub struct EvalCtx {
     /// splitmix64 state, advanced by [`EvalCtx::next_f64`]. `Cell` so a
     /// kernel taking `&EvalCtx` can still draw numbers without `&mut`.
     rng_state: Cell<u64>,
+    /// The workbook's display locale (W3 additive amendment, sheet ADR 516):
+    /// `TEXT` renders its result with the locale's separators and names, as
+    /// Excel renders a format code in the user's locale. The formula dialect
+    /// stays en-US. [`EvalCtx::new`] gives en-US; the evaluator sets the
+    /// workbook's through [`EvalCtx::with_locale`].
+    pub locale: Locale,
 }
 
 impl EvalCtx {
@@ -60,7 +66,14 @@ impl EvalCtx {
             current,
             now_serial,
             rng_state: Cell::new(rng_seed),
+            locale: Locale::EnUs,
         }
+    }
+
+    /// The same context rendering in `locale`.
+    pub fn with_locale(mut self, locale: Locale) -> Self {
+        self.locale = locale;
+        self
     }
 
     /// Draw the next pseudo-random `f64` in `[0, 1)` (one splitmix64 step).

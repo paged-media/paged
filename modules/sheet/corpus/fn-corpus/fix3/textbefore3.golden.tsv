@@ -1,0 +1,18 @@
+# TEXTBEFORE / TEXTAFTER match_end.
+# id	formula	setup	expected
+tb-0	=TEXTBEFORE("a-b-c","-",1,0,1)	-	a
+tb-1	=TEXTBEFORE("abc","-",1,0,1)	-	abc
+tb-2	=TEXTAFTER("abc","-",1,0,1)	-	
+tb-3	=TEXTBEFORE("a-b","-",3,0,1)	-	#N/A
+tb-4	=TEXTBEFORE("a-b","-",2,0,1)	-	a-b
+tb-5	=TEXTAFTER("a-b","-",2,0,1)	-	
+tb-6	=TEXTBEFORE("a-b","-",-2,0,1)	-	
+tb-7	=TEXTAFTER("a-b","-",-2,0,1)	-	a-b
+tb-8	=TEXTAFTER("a-b","-",-3,0,1)	-	#N/A
+tb-9	=TEXTBEFORE("abc","-",-1,0,1)	-	
+tb-10	=TEXTAFTER("abc","-",-1,0,1)	-	abc
+tb-11	=TEXTBEFORE("a-b","-",1,0,0)	-	a
+tb-12	=TEXTBEFORE("aXb","x",1,1,1)	-	a
+tb-13	=TEXTBEFORE("a-b","-",2,0,1,"none")	-	a-b
+tb-14	=TEXTAFTER("","-",1,0,1)	-	#VALUE!
+tb-15	=TEXTBEFORE("","-",1,0,1)	-	#VALUE!
