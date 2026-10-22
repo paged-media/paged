@@ -1,0 +1,18 @@
+{
+  "publish.commands.bleedFour": "Der Anschnitt hat vier Werte: [oben, innen, unten, außen]",
+  "publish.commands.bleedRange": "Anschnittwerte liegen zwischen 0 und 432 pt",
+  "publish.commands.downsampleRange": "Die Neuberechnung liegt zwischen 1 und 2400 ppi (ohne Angabe: nie neu berechnen)",
+  "publish.commands.effectDpiRange": "Die Effektauflösung liegt zwischen 36 und 1200 dpi",
+  "publish.commands.exportIdml": "IDML exportieren",
+  "publish.commands.exportPdf": "PDF exportieren",
+  "publish.commands.hostCannotOpen": "diese Umgebung kann kein Dokument öffnen",
+  "publish.commands.hostDeclined": "die Umgebung hat das Öffnen von {name} abgelehnt",
+  "publish.commands.marksOffsetRange": "Der Versatz der Druckmarken liegt zwischen 0 und 72 pt",
+  "publish.commands.openIdml": "IDML öffnen",
+  "publish.commands.pagesNotAscending": "Seiten „{pages}“ ist kein aufsteigender Bereich ab Seite 1",
+  "publish.commands.pagesNotRange": "Seiten „{pages}“ ist weder „Alle“, eine Seitenzahl noch ein Bereich „a-b“",
+  "publish.commands.pdfx4Profile": "PDF/X-4 braucht ein Ausgabe-Intent-Profil (den Namen eines registrierten Profils)",
+  "publish.commands.preflight": "Preflight",
+  "publish.commands.savePaged": "Als .paged speichern",
+  "publish.io.idmlPackage": "IDML-Paket"
+}
