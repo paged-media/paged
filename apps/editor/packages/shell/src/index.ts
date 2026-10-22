@@ -907,6 +907,7 @@ export {
   type ResolvedProfile,
   type ResolvedRegion,
 } from "./profile";
+export { SessionPolicyProvider, useSessionRole } from "./state/session-role";
 export {
   ChromeRegionsProvider,
   chromeRegionsOf,
