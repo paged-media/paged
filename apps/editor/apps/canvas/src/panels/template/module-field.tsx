@@ -30,7 +30,11 @@ import type {
 } from "@paged-media/plugin-api";
 import type { TemplateFieldSummary } from "@paged-media/client";
 import { FieldInput, FieldTextarea, space } from "@paged-media/panel-kit";
-import { chooseFiles, useObjectModel } from "@paged-media/shell";
+import {
+  chooseFiles,
+  useObjectModel,
+  type ShellObjectsSurface,
+} from "@paged-media/shell";
 
 export function moduleFieldRef(
   row: TemplateFieldSummary,
@@ -86,18 +90,23 @@ function useModuleField(
       live = false;
     };
   }, [objects, row]);
-  const write = async (value: unknown): Promise<string | null> => {
-    const ref = moduleFieldRef(row);
-    if (!ref || !objects?.writeTemplateField)
-      return "No module writes this field.";
-    try {
-      const r = await objects.writeTemplateField(ref, value);
-      return r.ok ? null : r.problem;
-    } catch (err) {
-      return String(err);
-    }
-  };
+  const write = (value: unknown) => writeField(objects, row, value);
   return [loaded, write];
+}
+
+/** Writes a module field; answers the problem, or null when it took. */
+function writeField(
+  objects: ShellObjectsSurface | undefined,
+  row: TemplateFieldSummary,
+  value: unknown,
+): Promise<string | null> {
+  const ref = moduleFieldRef(row);
+  const write = objects?.writeTemplateField;
+  if (!ref || !write) return Promise.resolve("No module writes this field.");
+  return write(ref, value).then(
+    (r) => (r.ok ? null : r.problem),
+    (err: unknown) => String(err),
+  );
 }
 
 function TextControl(props: {
