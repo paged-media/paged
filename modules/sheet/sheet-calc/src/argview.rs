@@ -48,7 +48,11 @@
 //! stays at zero; the cells a kernel actually reads are counted as
 //! `cells_read`.
 
+use std::rc::Rc;
+
 use sheet_core::{CellRef, CellValue, RangeRef, SheetModel, Worksheet};
+
+use crate::accel::{self, ColSnap};
 
 /// A lazy getter over relative `(row, col)` coordinates.
 type Getter<'m> = Box<dyn Fn(u32, u32) -> CellValue + 'm>;
@@ -65,6 +69,23 @@ pub struct RangeBuf<'m> {
     /// Relative rows `[lo, hi)` that may hold a value (the populated rows
     /// clipped to the window); `None` for an owned block.
     live: Option<(u32, u32)>,
+    /// When the view reads per-recalc column snapshots ([`crate::accel`])
+    /// instead of the sparse grid: the sheet range it covers and one snapshot
+    /// per column. The accelerated function paths read it; kernels never do.
+    src: Option<Src>,
+}
+
+/// The sheet area behind a snapshot-backed [`RangeBuf`] (see
+/// [`crate::accel`]): normalized top-left, geometry, live rows and the
+/// column snapshots covering `live` (one per column, left to right).
+pub(crate) struct Src {
+    pub(crate) sheet: sheet_core::SheetId,
+    pub(crate) row0: u32,
+    pub(crate) col0: u32,
+    pub(crate) rows: u32,
+    pub(crate) cols: u32,
+    pub(crate) live: (u32, u32),
+    pub(crate) snaps: smallvec::SmallVec<[Rc<ColSnap>; 2]>,
 }
 
 impl<'m> RangeBuf<'m> {
@@ -115,6 +136,26 @@ impl<'m> RangeBuf<'m> {
             cols,
             get,
             live: None,
+            src: None,
+        }
+    }
+
+    /// The snapshot area behind this view, when it has one.
+    pub(crate) fn src(&self) -> Option<&Src> {
+        self.src.as_ref()
+    }
+
+    /// A zero-row view with this view's origin and width — what an
+    /// accelerated lookup hands its kernel when the index proves there is no
+    /// match (the kernel then answers its own not-found).
+    pub(crate) fn no_rows(&self) -> RangeBuf<'m> {
+        RangeBuf {
+            origin: self.origin,
+            rows: 0,
+            cols: self.cols,
+            get: Box::new(|_, _| CellValue::Empty),
+            live: Some((0, 0)),
+            src: None,
         }
     }
 }
@@ -150,6 +191,11 @@ fn window<'m>(
     let ws = model.sheet(sheet);
     // Reads outside the populated rows answer Empty without a lookup.
     let bounds = ws.and_then(populated_rows);
+    if mask.is_none() {
+        if let Some(buf) = snapshot_window(model, n, bounds) {
+            return buf;
+        }
+    }
     let get: Getter<'m> = Box::new(move |r: u32, c: u32| -> CellValue {
         let (Some(ws), Some((lo, hi))) = (ws, bounds) else {
             perf_count!(cells_visited, 1);
@@ -192,7 +238,123 @@ fn window<'m>(
         cols: n.cols(),
         get,
         live,
+        src: None,
     }
+}
+
+/// The live rows of a window starting at `row0` with `rows` rows, given the
+/// sheet's populated row span (relative `[lo, hi)`; empty when disjoint).
+fn live_of(bounds: Option<(u32, u32)>, row0: u32, rows: u32) -> (u32, u32) {
+    match bounds {
+        Some((lo, hi)) if rows > 0 && hi >= row0 && lo <= row0.saturating_add(rows - 1) => {
+            (lo.saturating_sub(row0), (hi - row0 + 1).min(rows))
+        }
+        _ => (0, 0),
+    }
+}
+
+/// Build the view over per-recalc column snapshots ([`crate::accel`]) when
+/// the accelerators are on, the range is narrow enough and its live rows are
+/// many enough; `None` falls back to reading the sparse grid.
+fn snapshot_window<'m>(
+    model: &'m SheetModel,
+    n: RangeRef,
+    bounds: Option<(u32, u32)>,
+) -> Option<RangeBuf<'m>> {
+    let (sheet, row0, col0) = (n.start.sheet, n.start.row, n.start.col);
+    let (rows, cols) = (n.rows(), n.cols());
+    if cols > accel::MAX_COLS {
+        return None;
+    }
+    let live = live_of(bounds, row0, rows);
+    if live.1 - live.0 < accel::MIN_ROWS {
+        return None;
+    }
+    let (a, b) = (row0 + live.0, row0 + live.1 - 1);
+    let mut snaps: smallvec::SmallVec<[Rc<ColSnap>; 2]> = smallvec::SmallVec::new();
+    for c in col0..col0 + cols {
+        snaps.push(accel::column(model, sheet, c, a, b)?);
+    }
+    Some(snap_buf(
+        model,
+        Src {
+            sheet,
+            row0,
+            col0,
+            rows,
+            cols,
+            live,
+            snaps,
+        },
+        n.start,
+    ))
+}
+
+/// Wrap a snapshot area as a [`RangeBuf`]: the getter reads the snapshots
+/// (rows outside `live` are blank by construction).
+fn snap_buf<'m>(model: &'m SheetModel, src: Src, origin: CellRef) -> RangeBuf<'m> {
+    let (row0, col0, live) = (src.row0, src.col0, src.live);
+    let snaps = src.snaps.clone();
+    let ws = model.sheet(src.sheet);
+    let get: Getter<'m> = Box::new(move |r: u32, c: u32| -> CellValue {
+        perf_count!(cells_visited, 1);
+        if r < live.0 || r >= live.1 {
+            return CellValue::Empty;
+        }
+        let row = row0 + r;
+        match snaps.get(c as usize).and_then(|s| s.get(row)) {
+            Some(v) => v.clone(),
+            // Never reached (the snapshots cover the live rows); stay total.
+            None => {
+                perf_count!(cells_read, 1);
+                ws.and_then(|ws| ws.cell(row, col0 + c))
+                    .map(|cell| cell.value.clone())
+                    .unwrap_or(CellValue::Empty)
+            }
+        }
+    });
+    RangeBuf {
+        origin,
+        rows: src.rows,
+        cols: src.cols,
+        get,
+        live: Some(live),
+        src: Some(src),
+    }
+}
+
+/// The same snapshot area cut to `n_rows` rows starting `rel` rows below its
+/// top (an accelerated lookup's one-row window onto the row it found). The
+/// cut keeps the column snapshots, so it reads no grid cell.
+pub(crate) fn narrow<'m>(
+    model: &'m SheetModel,
+    buf: &RangeBuf<'m>,
+    rel: u32,
+    n_rows: u32,
+) -> Option<RangeBuf<'m>> {
+    let src = buf.src.as_ref()?;
+    let row0 = src.row0 + rel;
+    let live = (
+        src.live.0.saturating_sub(rel).min(n_rows),
+        src.live.1.saturating_sub(rel).min(n_rows),
+    );
+    let origin = CellRef {
+        row: row0,
+        ..buf.origin
+    };
+    Some(snap_buf(
+        model,
+        Src {
+            sheet: src.sheet,
+            row0,
+            col0: src.col0,
+            rows: n_rows,
+            cols: src.cols,
+            live,
+            snaps: src.snaps.clone(),
+        },
+        origin,
+    ))
 }
 
 /// View a (possibly un-normalized) range as a [`RangeBuf`]. The geometry is
