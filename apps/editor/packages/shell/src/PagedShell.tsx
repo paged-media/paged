@@ -165,6 +165,7 @@ import type {
   ResolvedRegion,
 } from "./profile/types";
 import { ActionsBar } from "./chrome/RegionItems";
+import { useRegistryView } from "./state/live";
 import {
   ChromeRegionsProvider,
   chromeRegionsOf,
@@ -792,6 +793,17 @@ function ShellChrome({
       modesRegistered.current = false;
     };
   }, [registries, modes]);
+
+  // A stored mode this editor does not have (another preset's, or one the
+  // app no longer registers) falls back to the first registered mode, so
+  // the cockpit never reads the slots of a mode that is not there.
+  const modeView = useRegistryView(registries.modes);
+  useEffect(() => {
+    const registered = modeView.list();
+    if (registered.length > 0 && !modeView.get(workflowMode)) {
+      setWorkflowMode(registered[0]!.id);
+    }
+  }, [modeView, workflowMode, setWorkflowMode]);
 
   // Register the built-in file-open command. Programmatic file
   // dialog so the palette can invoke it without depending on the
