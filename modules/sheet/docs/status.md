@@ -71,7 +71,11 @@ each published canary added is under [Releases](#releases).
   series, row and column attributes. What the delete removes entirely goes with its cells, as
   in Excel. Still refused, with the reason: a pivot table on the sheet or a pivot cache over it,
   and an extension Paged does not know that holds cell references. Over the Excel-written
-  workbooks of the private corpus, 1778 inserts and deletes: none refused.
+  workbooks of the private corpus, 1778 inserts and deletes: none refused. Excel 16 opens what
+  Paged saves after these edits without a repair and keeps what it holds (the open-check lane,
+  `recorded/opencheck.tsv`: 16 cases; a broken control file is caught; the generated fixtures 05,
+  11 and 13 are refused by Excel as generated, so the cases made from them are not gated). A reference to a table
+  the edit deletes reads `#REF!`, as Excel rewrites it.
 - **Workbook panel.** File and sheet controls on top (open, new, and sheets: add, rename,
   delete), then collapsible sections: Place on page (open by default), Rows and columns, Format
   and layout (borders, merge, column width, row height, freeze), Names, Sort range (formula cells
