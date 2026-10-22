@@ -172,11 +172,9 @@ fn sheet_fn_info_error_type_non_error_is_na() {
     // A non-error subject has no error code → #N/A.
     assert_eq!(call("ERROR.TYPE", &[s(num(5.0))]), err(CellError::Na));
     assert_eq!(call("ERROR.TYPE", &[s(txt("x"))]), err(CellError::Na));
-    // The ruled #SPILL! → #N/A (no classic 1..7 index).
-    assert_eq!(
-        call("ERROR.TYPE", &[s(err(CellError::Spill))]),
-        err(CellError::Na)
-    );
+    // Excel 365's newer codes have their own numbers: #SPILL! 9, #CALC! 14.
+    assert_eq!(call("ERROR.TYPE", &[s(err(CellError::Spill))]), num(9.0));
+    assert_eq!(call("ERROR.TYPE", &[s(err(CellError::Calc))]), num(14.0));
 }
 
 #[test]

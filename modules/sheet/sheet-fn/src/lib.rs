@@ -63,6 +63,7 @@ pub mod num;
 #[cfg(feature = "exact-decimal")]
 pub mod num_decimal;
 pub mod result;
+pub mod special;
 
 // ---- Crate-root re-exports of the frozen calling convention (spec §7). ----
 

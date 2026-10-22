@@ -32,6 +32,11 @@
 // Types only — this file is imported by the node unit test as well.
 
 import type { ElementId } from "@paged-media/client";
+import type {
+  TemplateFieldControl,
+  TemplateFieldRef,
+  TemplateFieldWrite,
+} from "@paged-media/plugin-api";
 
 /** ADR 132's value types (plugin-api `ValueType`, mirrored). */
 export type ShellValueType =
@@ -157,6 +162,16 @@ export interface ShellObjectsSurface {
   schema(addressOrKind: string): Promise<readonly ShellPropertySchema[]>;
   commands(): Promise<readonly ShellObjectCommandInfo[]>;
   invoke(command: string, args: unknown): Promise<unknown>;
+  /** A module field's control and value (plan G1); absent where no module
+   *  registry is wired. */
+  readTemplateField?(
+    field: TemplateFieldRef,
+  ): Promise<{ control: TemplateFieldControl; value: unknown }>;
+  /** Writes a module field's value through its module. */
+  writeTemplateField?(
+    field: TemplateFieldRef,
+    value: unknown,
+  ): Promise<TemplateFieldWrite>;
   onDidChange(
     listener: (e: { addresses: readonly string[]; origin: string }) => void,
   ): { dispose(): void };

@@ -1,0 +1,12 @@
+# BIN2OCT(number,[places]).
+# id	formula	setup	expected
+bin2oct-0	=BIN2OCT(1001,3)	-	011
+bin2oct-1	=BIN2OCT(1100100)	-	144
+bin2oct-2	=BIN2OCT(1111111111)	-	7777777777
+bin2oct-3	=BIN2OCT(1001,1)	-	#NUM!
+bin2oct-4	=BIN2OCT(1001,11)	-	#NUM!
+bin2oct-5	=BIN2OCT(3)	-	#NUM!
+bin2oct-6	=BIN2OCT(1111111111,1)	-	7777777777
+bin2oct-7	=BIN2OCT(1,0)	-	#NUM!
+bin2oct-x0	=BIN2OCT(A1)	A1=#VALUE!	#VALUE!
+bin2oct-x1	=CONCAT(BIN2OCT({1,111}))	-	17

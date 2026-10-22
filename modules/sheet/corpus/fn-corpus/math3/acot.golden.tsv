@@ -1,0 +1,10 @@
+# ACOT(number).
+# id	formula	setup	expected
+acot-0	=ACOT(2)	-	0.463647609000806
+acot-1	=ACOT(-1)	-	2.35619449019234
+acot-2	=ACOT(0)	-	1.5707963267949
+acot-3	=ACOT(1E-300)	-	1.5707963267949
+acot-4	=ACOT(1E+300)	-	1E-300
+acot-err0	=ACOT(A1)	A1=#N/A	#N/A
+acot-array	=SUM(ACOT({0.5,1.5,-2}))	-	4.37309636593065
+acot-text	=ACOT("abc")	-	#VALUE!

@@ -88,6 +88,7 @@ fn field(name: &str, kind: TemplateFieldKind) -> FieldDef {
         group: None,
         required: false,
         constraints: Default::default(),
+        module: None,
     }
 }
 

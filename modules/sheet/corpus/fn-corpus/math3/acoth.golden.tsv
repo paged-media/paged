@@ -1,0 +1,12 @@
+# ACOTH(number), |x|>1.
+# id	formula	setup	expected
+acoth-0	=ACOTH(6)	-	0.168236118310606
+acoth-1	=ACOTH(-2)	-	-0.549306144334055
+acoth-2	=ACOTH(1.0000001)	-	8.4056214404672
+acoth-3	=ACOTH(1E+10)	-	0.0000000001
+acoth-err0	=ACOTH(1)	-	#NUM!
+acoth-err1	=ACOTH(0.5)	-	#NUM!
+acoth-err2	=ACOTH(-1)	-	#NUM!
+acoth-err3	=ACOTH(A1)	A1=#N/A	#N/A
+acoth-array	=SUM(ACOTH({0.5,1.5,-2}))	-	#NUM!
+acoth-text	=ACOTH("abc")	-	#VALUE!

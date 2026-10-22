@@ -4,6 +4,7 @@
 //! its own process. A new test file goes here and gets a `mod` line below.
 
 mod calc_graph;
+mod calc_model;
 mod calc_order;
 mod calc_rewrite;
 mod chart;
@@ -24,6 +25,7 @@ mod fn_array;
 mod fn_database;
 mod fn_date;
 mod fn_date2;
+mod fn_eng;
 mod fn_fin;
 mod fn_info;
 mod fn_info2;
@@ -34,11 +36,13 @@ mod fn_lookup;
 mod fn_lookup2;
 mod fn_math;
 mod fn_math2;
+mod fn_math3;
 mod fn_oracle_added;
 mod fn_stat;
 mod fn_t2misc;
 mod fn_text;
 mod fn_text2;
+mod fn_text3;
 mod fn_wave7;
 mod format;
 mod format2;
@@ -59,6 +63,7 @@ mod spill_ref;
 mod spill_roundtrip;
 mod stylemap;
 mod tables;
+mod w3_golden;
 mod whole_refs;
 mod xlsx_recalc_corpus;
 mod xlsx_roundtrip;

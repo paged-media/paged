@@ -220,7 +220,7 @@ function validateObjectModel(manifest, manifestDir, err) {
     return;
   }
   for (const key of Object.keys(om)) {
-    if (!["kinds", "commands"].includes(key))
+    if (!["kinds", "commands", "templateFields"].includes(key))
       err(`unknown objectModel key "${key}"`);
   }
   if (!Array.isArray(om.kinds)) {
@@ -313,6 +313,26 @@ function validateObjectModel(manifest, manifestDir, err) {
           if (e) err(e);
         }
       }
+    }
+  }
+  if (om.templateFields !== undefined) {
+    if (!Array.isArray(om.templateFields)) {
+      err(`"contributes.objectModel.templateFields" must be an array`);
+      return;
+    }
+    const ns = typeof manifest.id === "string" ? `${manifest.id}.` : null;
+    const seen = new Set();
+    for (const f of om.templateFields) {
+      if (typeof f !== "object" || f === null || typeof f.kind !== "string") {
+        err(`each template field kind needs { kind, title }`);
+        continue;
+      }
+      const at = `template field kind "${f.kind}"`;
+      if (ns && !f.kind.startsWith(ns))
+        err(`${at} must be namespaced under "${ns}"`);
+      if (seen.has(f.kind)) err(`${at} is declared twice`);
+      seen.add(f.kind);
+      if (typeof f.title !== "string") err(`${at} needs a title`);
     }
   }
 }

@@ -213,6 +213,7 @@ export const HOST_FEATURES: readonly string[] = [
   // (core addresses always route; a private registry serves core + this
   // bundle's own kinds when the host injects no shared one).
   "contribute.objectModel@1",
+  "contribute.objectModel.templateFields@1",
   "objects@1",
   "contribute.importer@1",
   "contribute.exporter@1",
@@ -2155,6 +2156,13 @@ export function createBundleHost(
           decl?.commands?.some((x) => x.id === c.id) ?? false,
           "contribute.objectModel",
           `contributes.objectModel.commands[] must include "${c.id}"`,
+        );
+      }
+      for (const f of model.templateFields ?? []) {
+        requireDeclared(
+          decl?.templateFields?.some((x) => x.kind === f.kind) ?? false,
+          "contribute.objectModel",
+          `contributes.objectModel.templateFields[] must include "${f.kind}"`,
         );
       }
       const handle = objectRegistry.register({
@@ -4724,6 +4732,16 @@ export function createBundleHost(
         if (denied) throw new Error(`denied: ${denied.reason}`);
       }
       return objectRegistry.invoke(command, args);
+    },
+    templateFieldKinds: () => objectRegistry.templateFieldKinds(),
+    readTemplateField(field) {
+      requireDocRead("objects.readTemplateField");
+      return objectRegistry.readTemplateField(field);
+    },
+    async writeTemplateField(field, value) {
+      const denied = deniedWrite("objects.writeTemplateField");
+      if (denied) return { ok: false, problem: denied.reason ?? "denied" };
+      return objectRegistry.writeTemplateField(field, value);
     },
     onDidChange(listener, filter) {
       return store.add(objectRegistry.onDidChange(listener, filter));

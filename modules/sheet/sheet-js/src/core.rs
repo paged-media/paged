@@ -742,7 +742,16 @@ impl SheetSession {
                 parse(&strip_storage_prefixes(&text), &ctx)
             };
             match parsed {
-                Ok(formula) => {
+                Ok(mut formula) => {
+                    // A plain `<f>` (no array area, no dynamic-array mark) is
+                    // a legacy formula: Excel 365 reads it with `@` wherever
+                    // it intersected (sheet ADR 513).
+                    let legacy = model
+                        .sheet(sheet)
+                        .is_some_and(|ws| !ws.array_formulas.contains_key(&(row, col)));
+                    if legacy {
+                        sheet_calc::legacy::mark_implicit_intersections(&model, &mut formula.root);
+                    }
                     let fid = model.intern_formula(formula);
                     if let Some(ws) = model.sheet_mut(sheet) {
                         if let Some(cell) = ws.cells.get_mut(&(row, col)) {
@@ -794,9 +803,14 @@ impl SheetSession {
         // one read `#NAME?`.
         format::resolve_name_targets(&mut model);
 
+        // A load always calculates, whatever the calculation mode: the
+        // cached values of a manual workbook are not trusted (sheet ADR 513).
+        // The mode applies to the edits that follow.
+        let mode = std::mem::take(&mut model.calc.calc_mode);
         let mut engine = Engine::new(model, config);
         engine.recalc_all();
         read_unmarked_spill_caches(&mut engine, &file_spills, config.now_serial);
+        engine.set_calc_mode(mode);
 
         Ok(SheetSession {
             engine: Some(engine),
@@ -908,8 +922,13 @@ impl SheetSession {
         let empty = matches!(typed.input, sheet_calc::SetInput::Value(CellValue::Empty));
         let pending = vec![((sheet, row, col), typed.hint, typed.quote_prefix, empty)];
         let patches = self.typed_patches(&pending)?;
-        let result = self.engine_mut().set_cell(sheet, row, col, typed.input);
+        let mut result = self.engine_mut().set_cell(sheet, row, col, typed.input);
         let restyled = self.apply_cell_patches(patches)?;
+        if let Some(more) = self.round_as_displayed(&[(sheet, row, col)]) {
+            result.changed.extend(more.changed);
+            result.changed.sort();
+            result.changed.dedup();
+        }
 
         // Record the entered cell as edited (for save re-printing).
         self.edited.insert((sheet, row, col));
@@ -1024,8 +1043,12 @@ impl SheetSession {
             .map(|(_, p)| p)
             .collect();
         let patches = self.typed_patches(&typed_pending)?;
-        let res = self.engine_mut().set_cells(parsed);
+        let mut res = self.engine_mut().set_cells(parsed);
         let restyled = self.apply_cell_patches(patches)?;
+        let keys: Vec<(u16, u32, u32)> = written.iter().copied().collect();
+        if let Some(more) = self.round_as_displayed(&keys) {
+            res.changed.extend(more.changed);
+        }
         self.edited.extend(written.iter().copied());
         let mut changed = written;
         changed.extend(res.changed.iter().map(|c| (c.sheet, c.row, c.col)));
@@ -1043,6 +1066,44 @@ impl SheetSession {
             prev_inputs,
             restyled,
         })
+    }
+
+    /// Precision as displayed (`<calcPr fullPrecision="0">`, sheet ADR 513):
+    /// the numbers just entered at `keys` are stored as their cell's format
+    /// shows them (`1.2345` under `0.00` is stored `1.23`). `None` when the
+    /// workbook keeps full precision or nothing needed rounding; else the
+    /// recalc of the rewritten cells.
+    fn round_as_displayed(&mut self, keys: &[(u16, u32, u32)]) -> Option<sheet_calc::RecalcResult> {
+        let model = self.engine().model();
+        if model.calc.full_precision {
+            return None;
+        }
+        let mut cache = FormatCache::default();
+        let mut rewrites = Vec::new();
+        for &(s, r, c) in keys {
+            let Some(cell) = model.sheet(s).and_then(|ws| ws.cell(r, c)) else {
+                continue;
+            };
+            let (None, CellValue::Number(x)) = (cell.formula, &cell.value) else {
+                continue;
+            };
+            let Ok(fmt) = cache.get(model.styles.num_fmt_of(cell.style)) else {
+                continue;
+            };
+            let shown = sheet_format::as_displayed(*x, fmt);
+            if shown != *x {
+                rewrites.push((
+                    s,
+                    r,
+                    c,
+                    sheet_calc::SetInput::Value(CellValue::Number(shown)),
+                ));
+            }
+        }
+        if rewrites.is_empty() {
+            return None;
+        }
+        Some(self.engine_mut().set_cells(rewrites))
     }
 
     /// The current formatted display of one cell (spec §9). `""` for an empty
@@ -2018,10 +2079,13 @@ impl SheetSession {
     }
 
     /// Window a worksheet into a [`sheet_grid::GridScene`] for the sheets-mode
-    /// vector grid surface (spec §8.1, S-02). The engine windows from the
-    /// `(first_row, first_col)` scroll origin bounded by `(w_pt, h_pt)` and
-    /// materializes only the visible populated cells (`sheet_grid::grid_scene`
-    /// does the O(visible) windowing); the stored selection for THIS sheet
+    /// vector grid surface (spec §8.1, S-02). The window is
+    /// `sheet_grid::frame_window` for the `(first_row, first_col)` scroll
+    /// origin, the `(w_pt, h_pt)` box and the frozen split (the workbook's
+    /// stored one unless `opts` overrides it): frozen tracks pinned, hidden
+    /// rows skipped. Cells carry the workbook's styles through the page
+    /// lowering's own per-cell styler (`sheet_grid::grid_scene_styled`), and
+    /// only visible cells are materialized; the stored selection for THIS sheet
     /// (see [`set_grid_selection`](Self::set_grid_selection)) is folded into the
     /// returned scene. An OOB sheet id is a boundary error (finding-2 discipline,
     /// matching `set_cell`/`get_range_lowered`).
@@ -2048,8 +2112,11 @@ impl SheetSession {
         // we read the workbook's own stored split (parsed from the worksheet's
         // `<sheetViews><pane>` on load — read-only, round-trips byte-identical).
         let stored = self.doc.freeze_panes_of(sheet);
-        let grid_opts = sheet_grid::GridOptions {
-            include_gridlines: opts.include_gridlines.unwrap_or(true),
+        let spec = sheet_grid::FrameWindowSpec {
+            top_row: first_row,
+            left_col: first_col,
+            width_pt: w_pt,
+            height_pt: h_pt,
             freeze_rows: opts.freeze_rows.unwrap_or(stored.rows),
             freeze_cols: opts.freeze_cols.unwrap_or(stored.cols),
         };
@@ -2062,24 +2129,20 @@ impl SheetSession {
             .map(|cs| cs.comments.iter().map(|c| (c.row, c.col)).collect())
             .unwrap_or_default();
 
-        // Conditional-formatting DATA BARS (spec §8.2/§10.4): supply the sheet's
-        // cf model so the scene renders each `dataBar` rule as a proportional
-        // drawn rect — the SAME geometry lane the page lowering emits, so a bar
-        // reads identically on the grid and the page (cross-surface parity). The
-        // cf XML round-trips byte-identical; this read is additive + read-only.
+        // The workbook's visual styles and conditional formats go through the
+        // SAME per-cell styler the page lowering (`get_range_page`) uses, so a
+        // cell looks the same in the live grid and on the page (ADR 510).
         let cf = self.doc.lowered_conditional_formats(sheet);
 
         let model = self.engine().model();
-        let mut scene = sheet_grid::grid_scene_with_cf(
+        let mut scene = sheet_grid::grid_scene_styled(
             model,
             sheet,
-            first_row,
-            first_col,
-            w_pt,
-            h_pt,
-            &grid_opts,
+            &spec,
+            opts.include_gridlines.unwrap_or(true),
             &comment_cells,
             &cf,
+            &self.doc.visual_styles,
         );
 
         // Fold in the session's stored selection for THIS sheet (spec §8.1 —

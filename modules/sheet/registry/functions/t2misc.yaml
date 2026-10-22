@@ -38,6 +38,7 @@
 
 - id: sheet.fn.math.aggregate
   name: AGGREGATE
+  xlfn_prefix: "_xlfn."
   family: t2misc
   arity: { min: 3, max: null }
   volatility: none
@@ -79,6 +80,7 @@
 
 - id: sheet.fn.math.arabic
   name: ARABIC
+  xlfn_prefix: "_xlfn."
   family: t2misc
   arity: { min: 1, max: 1 }
   volatility: none
@@ -92,16 +94,16 @@
 
 - id: sheet.fn.engineering.convert
   name: CONVERT
-  family: t2misc
+  family: engineering
   arity: { min: 3, max: 3 }
   volatility: none
   range_aware: false
-  rust: t2misc::convert
+  rust: units::convert
   status: implemented
-  provenance: ["ECMA-376 §18.17.7 (CONVERT) — number, from_unit, to_unit; T2 BASIC unit set: length (m/ft/in/mi/km), mass (g/kg/lbm), time (s/min/hr/day), temperature (C/F/K). Unknown unit or mismatched dimension -> #N/A (ruling in families/t2misc.rs)."]
+  provenance: ["ECMA-376 §18.17.7 + Microsoft function reference (CONVERT) — the full unit table with decimal and binary prefixes; unknown unit, prefix on a unit that takes none, or mismatched dimension -> #N/A (rulings in families/units.rs, Excel-recorded)"]
   tests:
     rust: ["sheet-conformance/tests/it/fn_t2misc.rs::sheet_fn_t2misc_convert"]
-    corpus: ["corpus/fn-corpus/t2misc/convert.golden.tsv"]
+    corpus: ["corpus/fn-corpus/t2misc/convert.golden.tsv", "corpus/fn-corpus/eng/convert_units.golden.tsv"]
 
 - id: sheet.fn.lookup.hyperlink
   name: HYPERLINK

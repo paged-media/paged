@@ -861,4 +861,19 @@ export default defineConfig({
   worker: {
     format: "es",
   },
+  // The editor page plus the embedding demos (`demos/*.html`), each a host
+  // page that mounts the editor through `createEditor`.
+  build: {
+    rolldownOptions: {
+      input: Object.fromEntries([
+        ["main", resolve(__dirname, "index.html")],
+        ...readdirSync(resolve(__dirname, "demos"))
+          .filter((n) => n.endsWith(".html"))
+          .map((n) => [
+            `demos/${n.slice(0, -5)}`,
+            resolve(__dirname, "demos", n),
+          ]),
+      ]),
+    },
+  },
 });

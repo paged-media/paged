@@ -32,7 +32,7 @@
 //! A formula's root outside a CSE anchor keeps the scalar ruling (a range in a
 //! value position is `#VALUE!`).
 
-use sheet_core::ast::{BinOp, Expr};
+use sheet_core::ast::{BinOp, Expr, UnOp};
 use sheet_core::{CellError, CellValue, RangeRef, SheetModel};
 use sheet_fn::{Arg, EvalCtx, FnResult};
 
@@ -49,7 +49,7 @@ const MAX_CELLS: u64 = 1 << 22;
 
 /// Whether `fid` takes scalars only, so an array argument lifts it element
 /// by element (a range-aware function consumes ranges itself).
-fn liftable(fid: sheet_core::ast::FuncId) -> bool {
+pub(crate) fn liftable(fid: sheet_core::ast::FuncId) -> bool {
     let m = sheet_core::funcs::meta(fid);
     !m.range_aware && !m.ref_args && !m.special_form && !m.returns_array
 }
@@ -57,7 +57,7 @@ fn liftable(fid: sheet_core::ast::FuncId) -> bool {
 /// The SCALAR parameters (0-based) of range-aware functions whose other
 /// parameters take ranges: an array there lifts the call over that
 /// parameter only (`MATCH($M20:$M119, K20:K119, 0)` is a block of positions).
-fn scalar_params(fid: sheet_core::ast::FuncId) -> &'static [usize] {
+pub(crate) fn scalar_params(fid: sheet_core::ast::FuncId) -> &'static [usize] {
     match sheet_core::funcs::meta(fid).name {
         "MATCH" | "XMATCH" => &[0, 2],
         "INDEX" => &[1, 2, 3],
@@ -103,6 +103,8 @@ fn array_operand(model: &SheetModel, e: &Expr, depth: u32) -> bool {
 /// is not consumed by a range-aware call inside it.
 fn contains_array(model: &SheetModel, e: &Expr, depth: u32) -> bool {
     match e {
+        // `@` reduces whatever it is given to one value.
+        Expr::Unary(UnOp::ImplicitIntersect, _) => false,
         Expr::Unary(_, a) => array_operand(model, a, depth) || contains_array(model, a, depth),
         Expr::Binary(op, a, b) if value_op(*op) => [a, b]
             .iter()
@@ -118,9 +120,14 @@ fn contains_array(model: &SheetModel, e: &Expr, depth: u32) -> bool {
     }
 }
 
+/// Whether `e` itself is array-shaped (a multi-cell reference or an array).
+pub(super) fn is_array_operand(model: &SheetModel, e: &Expr) -> bool {
+    array_operand(model, e, 0)
+}
+
 /// Whether evaluating `e` as an argument should go through [`eval_array`]: an
 /// operator or scalar-function tree over an array operand.
-pub(super) fn needs_lift(model: &SheetModel, e: &Expr) -> bool {
+pub(crate) fn needs_lift(model: &SheetModel, e: &Expr) -> bool {
     contains_array(model, e, 0)
 }
 
@@ -174,6 +181,7 @@ pub fn eval_array(model: &SheetModel, e: &Expr, ctx: &EvalCtx, spills: &SpillSta
             }
         },
         Expr::Array(rows) => eval_array_literal(model, rows, ctx, spills),
+        Expr::Unary(UnOp::ImplicitIntersect, _) => FnResult::Scalar(eval(model, e, ctx, spills)),
         Expr::Unary(op, a) => map1(eval_array(model, a, ctx, spills), |v| unary_value(*op, v)),
         Expr::Binary(op, a, b) if value_op(*op) => {
             let l = eval_array(model, a, ctx, spills);
@@ -232,6 +240,30 @@ pub fn eval_array(model: &SheetModel, e: &Expr, ctx: &EvalCtx, spills: &SpillSta
                 sheet_fn::dispatch(*fid, &built, ctx)
             })
         }
+        // A lambda call yields whatever its body yields (`Fn(A1:A3)` spills).
+        Expr::Call(callee, args) => super::lambda::eval_call(model, callee, args, ctx, spills),
+        // Reference-returning forms — OFFSET/INDIRECT, INDEX selecting a whole
+        // row or column, `a:b` between references — are the area's values
+        // (Excel: `=OFFSET(A1,0,0,3)` spills three cells).
+        Expr::Func(fid, args) if sheet_core::funcs::meta(*fid).special_form => {
+            match super::eval_as_ref(model, e, ctx, spills) {
+                Some(r) => range_block(model, r),
+                None => eval_func_rich(model, *fid, args, ctx, spills),
+            }
+        }
+        Expr::Func(fid, args)
+            if sheet_core::funcs::meta(*fid).name == "INDEX"
+                && super::index_selects_vector(model, args, ctx, spills) =>
+        {
+            match super::eval_as_ref(model, e, ctx, spills) {
+                Some(r) => range_block(model, r),
+                None => FnResult::Scalar(eval(model, e, ctx, spills)),
+            }
+        }
+        Expr::Binary(BinOp::Range, _, _) => match super::eval_as_ref(model, e, ctx, spills) {
+            Some(r) => range_block(model, r),
+            None => FnResult::Scalar(eval(model, e, ctx, spills)),
+        },
         _ => FnResult::Scalar(eval(model, e, ctx, spills)),
     }
 }
@@ -248,7 +280,7 @@ fn map1(v: FnResult, f: impl Fn(CellValue) -> CellValue) -> FnResult {
 }
 
 /// Apply `f` element-wise over operands with Excel's broadcasting.
-fn map_n(vals: &[FnResult], mut f: impl FnMut(&[CellValue]) -> CellValue) -> FnResult {
+pub(super) fn map_n(vals: &[FnResult], mut f: impl FnMut(&[CellValue]) -> CellValue) -> FnResult {
     let dims = |v: &FnResult| match v {
         FnResult::Scalar(_) => (1usize, 1usize),
         FnResult::Array(g) => (g.len(), g.first().map_or(0, Vec::len)),

@@ -1,0 +1,11 @@
+# FLOOR.PRECISE(number,[significance]).
+# id	formula	setup	expected
+fp-neg	=FLOOR.PRECISE(-3.2,-1)	-	-4
+fp-pos	=FLOOR.PRECISE(3.2,1)	-	3
+fp-neg1	=FLOOR.PRECISE(-3.2,1)	-	-4
+fp-negsig	=FLOOR.PRECISE(3.2,-1)	-	3
+fp-def	=FLOOR.PRECISE(3.2)	-	3
+fp-zero	=FLOOR.PRECISE(3.2,0)	-	0
+fp-text	=FLOOR.PRECISE("x")	-	#VALUE!
+fp-err	=FLOOR.PRECISE(A1)	A1=#NAME?	#NAME?
+fp-array	=SUM(FLOOR.PRECISE({1.5,-1.5}))	-	-1

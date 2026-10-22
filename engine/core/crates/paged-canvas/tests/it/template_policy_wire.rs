@@ -86,6 +86,7 @@ fn make_field(m: &mut CanvasModel, id: &ElementId, name: &str, kind: TemplateFie
             group: None,
             required: false,
             constraints: Default::default(),
+            module: None,
         }),
         ..Default::default()
     };

@@ -1,0 +1,12 @@
+# EUROCONVERT(number, source, target, [full_precision], [triangulation_precision]).
+# id	formula	setup	expected
+ec-0	=EUROCONVERT(1,"FRF","DEM")	-	0.3
+ec-1	=EUROCONVERT(1,"FRF","DEM",TRUE)	-	0.298164361383444
+ec-2	=EUROCONVERT(1,"FRF","DEM",TRUE,3)	-	0.29728616
+ec-3	=EUROCONVERT(100,"DEM","EUR")	-	51.13
+ec-4	=EUROCONVERT(100,"EUR","ITL")	-	193627
+ec-5	=EUROCONVERT(1,"XXX","EUR")	-	#VALUE!
+ec-6	=EUROCONVERT(1,"EUR","EUR")	-	1
+ec-7	=EUROCONVERT(1,"FRF","DEM",FALSE,2)	-	#VALUE!
+ec-8	=EUROCONVERT(1,"FRF","DEM",TRUE,2)	-	#VALUE!
+ec-9	=EUROCONVERT("a","FRF","DEM")	-	#VALUE!
