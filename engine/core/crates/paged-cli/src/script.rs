@@ -81,6 +81,10 @@ pub struct ScriptOptions {
     /// Render resolution.
     #[arg(long, default_value_t = 144.0)]
     pub dpi: f32,
+    /// The session's role (engine ADR 1001): `author` may write a
+    /// template's policy, `filler` is bound by it. Default: `editor`.
+    #[arg(long, value_parser = ["author", "editor", "filler", "viewer"])]
+    pub role: Option<String>,
 }
 
 /// The CLI's flags as the wire's optional budget. `--timeout none`
@@ -115,6 +119,17 @@ pub fn run(
     let mut session = Session::new();
     let handle = assets.open(&mut session, doc)?;
 
+    if let Some(role) = &opts.role {
+        let role: paged_template::Role = serde_json::from_value(serde_json::json!(role))?;
+        let policy = paged_template::SessionPolicy {
+            role,
+            overrides: vec![],
+        };
+        match session.send(paged_canvas::channel::MainToWorkerKind::SetSessionPolicy { policy })? {
+            paged_canvas::channel::WorkerToMainKind::SessionPolicyApplied { .. } => {}
+            other => bail!("the engine did not take the role: {other:?}"),
+        }
+    }
     let before = session.model()?.current_state_hash();
     let result = session.run_script(&source, Some(budget(opts)?))?;
 

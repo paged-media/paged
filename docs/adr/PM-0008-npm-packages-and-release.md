@@ -2,7 +2,8 @@
 
 - **Status:** Accepted 2026-10-18. Amended 2026-10-18 (amendment 1: one version for the four
   packages, and how a release is cut), 2026-10-19 (amendment 2: the contract moves to
-  React 19) and 2026-10-19 (amendment 3: three public packages, before the first release).
+  React 19), 2026-10-19 (amendment 3: three public packages, before the first release) and
+  2026-10-23 (amendment 4: a fourth, `@paged-media/editor`, by PM-0013).
 - **Supersedes:** apps/editor ADR 201 (first-party plugins compiled in as pinned published
   packages).
 - **Amends:** apps/editor ADR 205 (the client packaged as the write SDK): the client is a
@@ -172,3 +173,12 @@ At a test version on 2026-10-19 the tarballs were 15.8 MB (`paged`, 45.6 MB unpa
 wasm 28.8 MB, the introspection 13.8 MB, the bundled CLI 1.5 MB), 4.6 MB (`viewer`, 11.7 MB) and
 0.3 MB (`plugin-sdk`, 1.3 MB). paged.data is not in `paged`: its own wasm is 1.4 MiB, but it runs
 on DuckDB-WASM (34 MiB), and it is built into the editor; `paged apply` and `merge` say so.
+
+## Amendment 4 (2026-10-23): a fourth public package
+
+[PM-0013](PM-0013-editor-package.md) adds `@paged-media/editor` (`apps/editor/packages/editor`):
+the embeddable editor, with every private package it uses bundled, the engine taken from
+`@paged-media/paged` as a dependency at the same version, and React as a peer. The rule above holds
+unchanged: a public package depends on no private one. The release workflow, `stage.mjs`,
+`verify-tarballs.mjs`, `assert-dist-tags.mjs` and `consumer-test.sh` handle four packages, one
+version; the editor's first publish goes through the token path, as `paged` and `viewer` did.

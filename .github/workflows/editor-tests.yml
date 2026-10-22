@@ -247,6 +247,16 @@ jobs:
       - name: typecheck canvas tests
         run: bun run --filter ./apps/canvas typecheck:tests
 
+      # @paged-media/editor (docs/adr/PM-0013): its public types against the
+      # embedding API's sources, the package build, and check-dist (no
+      # private package left, no engine copy, every named file present, the
+      # size budget). What the release publishes, checked on every change.
+      - name: "@paged-media/editor — typecheck, build, check-dist"
+        run: |
+          set -euo pipefail
+          bun run --filter ./packages/editor typecheck
+          bun run --filter ./packages/editor build
+
       # The COOP/COEP boot contract SharedArrayBuffer needs (pairs with
       # apps/canvas/public/_headers).
       - name: boot cross-origin-isolation check

@@ -1,0 +1,6 @@
+$ paged template fill t.paged --values '{"headline":"A title much longer than twenty"}' -o refused.paged
+--- exit: 1
+--- stdout
+(empty)
+--- stderr
+Error: values do not fit their fields: [{"name":"headline","problem":"longer than the field allows"}]

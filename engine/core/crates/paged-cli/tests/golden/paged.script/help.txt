@@ -41,6 +41,11 @@ Options:
           
           [default: 144]
 
+      --role <ROLE>
+          The session's role (engine ADR 1001): `author` may write a template's policy, `filler` is bound by it. Default: `editor`
+          
+          [possible values: author, editor, filler, viewer]
+
       --standard <STANDARD>
           "pdf17" (default) or "pdfx4". X-4 needs a resolvable output intent — give one here or let the document's profile serve
           

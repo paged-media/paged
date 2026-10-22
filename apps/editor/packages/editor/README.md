@@ -1,0 +1,74 @@
+# @paged-media/editor
+
+The paged editor, embeddable. `createEditor(element, config)` mounts the full editor, or one of
+its presets (template filling, a viewer, a solo tool), into an element of your page and resolves
+to a handle you drive it by: load and save documents, fill a template's fields, export a PDF,
+switch features, theme it, listen to its events. `@paged-media/editor/iframe` drives an editor
+running in a frame instead.
+
+```sh
+npm i @paged-media/editor react react-dom
+```
+
+```ts
+import { createEditor } from "@paged-media/editor";
+import "@paged-media/editor/style.css";
+
+const editor = await createEditor(document.getElementById("editor")!, {
+  profile: "template-fill",
+  document: { bytes: templateBytes, name: "card.paged" },
+  actions: { submit: async () => send(await editor.save()) },
+});
+await editor.setFieldValues({ name: "Ada Lovelace" });
+editor.on((event) => {
+  if (event.type === "fieldChange") console.log(event.fields);
+});
+```
+
+| Import                                  | What it is                                                                       |
+| --------------------------------------- | -------------------------------------------------------------------------------- |
+| `@paged-media/editor`                   | `createEditor`, `mountEditor` and the types. The editor loads on the first call. |
+| `@paged-media/editor/iframe`            | `connectEditor(iframe, config)`: the same handle, every method async. No React.  |
+| `@paged-media/editor/presets`           | `PRESETS`, the preset profiles as data.                                          |
+| `@paged-media/editor/style.css`         | The editor's stylesheet.                                                         |
+| `@paged-media/editor/feature-ids.json`  | The ids a profile's `features` and `handle.features` take.                       |
+| `@paged-media/editor/theme-tokens.json` | The design tokens `handle.setTheme({ tokens })` takes.                           |
+
+## What the page needs
+
+- **Cross-origin isolation.** The engine shares memory with its worker, so the page is served with
+  `Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embedder-Policy: credentialless`
+  (or `require-corp`). A page that cannot be isolated embeds the editor through
+  `@paged-media/editor/iframe`.
+- **React 19.3 or later** (a peer dependency): the editor renders with yours.
+- **The engine**, `@paged-media/paged`, is a dependency at the same version; npm installs it.
+
+## Assets
+
+The package's modules name their files (chunks, workers, wasm, fonts) relative to themselves, in
+the form bundlers read (`new URL("./file", import.meta.url)`). A host that bundles it with Vite,
+webpack 5 or Rollup with an `import.meta.url` asset plugin gets every file copied into its own
+output, the engine's wasm from `@paged-media/paged` included. With Vite, keep the package out of
+the dev-server's dependency pre-bundling, which does not follow those references:
+
+```ts
+// vite.config.ts
+export default {
+  optimizeDeps: { exclude: ["@paged-media/editor", "@paged-media/paged"] },
+};
+```
+
+A host that serves files itself copies `node_modules/@paged-media/editor/dist/` and
+`node_modules/@paged-media/paged/paged_canvas_wasm_bg.wasm` into one directory and passes its URL:
+`createEditor(element, { assetBase: "/paged-editor/" })`. `engineWasm` names the engine's wasm
+alone. Workers must be same-origin with the page.
+
+The paged.data bundle's engines (its query engine and DuckDB) are not in the package: the editor
+loads them from `https://modules.paged.media` when a profile activates paged.data, and DuckDB's
+worker from the package's `dist/bin/` (beside its chunk, or under `assetBase`).
+
+## Licence
+
+`AGPL-3.0-only OR LicenseRef-PMEL`: see [LICENSE.md](./LICENSE.md). The default face, Inter, is
+under the SIL Open Font License 1.1 (`dist/fonts/OFL-inter.txt`). Decision record:
+[PM-0013](https://github.com/paged-media/paged/blob/main/docs/adr/PM-0013-editor-package.md).

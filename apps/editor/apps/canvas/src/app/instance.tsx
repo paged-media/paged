@@ -146,6 +146,9 @@ export interface EditorInstance {
   readonly onShell?: (shell: ShellAccess) => void;
   /** The session's role; the profile's at mount. */
   readonly role: RoleStore;
+  /** Where the engine's wasm is served, when the host names it; else the
+   *  build's own asset. */
+  readonly engineWasm?: string;
 }
 
 const InstanceContext = createContext<EditorInstance | null>(null);

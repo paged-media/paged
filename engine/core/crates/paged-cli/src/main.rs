@@ -181,6 +181,29 @@ fn main() -> Result<()> {
             assets,
             paged_cli::engine_serve::Concurrency::new(workers, queue),
         ),
+        Command::Template { what } => match what {
+            paged_cli::cli::TemplateCommand::Fields { doc, json, assets } => {
+                paged_cli::template::fields(&doc, &assets, json)
+            }
+            paged_cli::cli::TemplateCommand::Fill {
+                template,
+                values,
+                out,
+                pdf,
+                assets,
+            } => paged_cli::template::fill(&template, &assets, &values, &out, &pdf),
+            paged_cli::cli::TemplateCommand::Check {
+                template,
+                filled,
+                json,
+                assets,
+            } => {
+                if !paged_cli::template::check(&template, &filled, &assets, json)? {
+                    std::process::exit(1);
+                }
+                Ok(())
+            }
+        },
         Command::Library { what, library } => {
             let root = library.unwrap_or_else(paged_cli::library::DiskLibrary::default_root);
             match what {
