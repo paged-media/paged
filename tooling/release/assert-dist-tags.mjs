@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // The dist-tag assertion of a release (PM-0008, amendment 3): after
 // release.yml publishes, npm must serve the release from the dist-tag it was
-// published under, for each of the three public packages.
+// published under, for each of the four public packages (PM-0013).
 //
 //   node tooling/release/assert-dist-tags.mjs <version> <dist-tag>
 //   node tooling/release/assert-dist-tags.mjs --audit
@@ -18,15 +18,16 @@
 //   replaced; the owner removes it (docs/migration/npm-release-runbook.md). It
 //   is reported, not failed, so the first release does not depend on that.
 //
-// --audit prints the three packages' dist-tags and checks only the `latest`
+// --audit prints the four packages' dist-tags and checks only the `latest`
 // rule (a package not on npm yet, as the two new names are before the first
-// release, is reported, not failed). Read-only: it runs `npm view`, never
+// release, and the editor before its first, is reported, not failed). Read-only: it runs `npm view`, never
 // anything that writes.
 
 import { execFileSync } from "node:child_process";
 
 const PACKAGES = [
   "@paged-media/paged",
+  "@paged-media/editor",
   "@paged-media/viewer",
   "@paged-media/plugin-sdk",
 ];
@@ -99,5 +100,5 @@ if (failures.length) {
 console.log(
   audit
     ? "dist-tags audit OK"
-    : `dist-tags OK — ${tag} is ${version} for all three`,
+    : `dist-tags OK — ${tag} is ${version} for all four`,
 );

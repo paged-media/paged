@@ -1671,7 +1671,14 @@ function CanvasAppRoot() {
     // `?url` wasm asset, instead of opaquely copying a raw `.ts` URL across
     // the package boundary (the D6/E8 prod-dist bug).
     const c = new GatedCanvasClient({
-      workerFactory: () => new CanvasRenderWorker(),
+      workerFactory: () => {
+        const w = new CanvasRenderWorker();
+        // The first message, before the client's own: the worker boots
+        // the engine from it (worker.ts `startInit`).
+        if (instance.engineWasm)
+          w.postMessage({ kind: "engineWasm", url: instance.engineWasm });
+        return w;
+      },
       // U5/A7 — the default-font invariant. Any document load that
       // reaches the client WITHOUT explicit font bytes (the plugin
       // native-document fallback, a direct `client.loadDocument` from
@@ -1807,6 +1814,8 @@ export interface MountOptions {
   onShell?: (shell: ShellAccess) => void;
   /** The words the editor shows (a locale's catalogue); else English. */
   strings?: Strings;
+  /** Where the engine's wasm is served; else this build's own asset. */
+  engineWasm?: string;
 }
 
 export function createEditorInstance(
@@ -1849,6 +1858,7 @@ export function createEditorInstance(
     onClient: options.onClient,
     onShell: options.onShell,
     role: createRoleStore(profile.role),
+    ...(options.engineWasm ? { engineWasm: options.engineWasm } : {}),
   };
 }
 

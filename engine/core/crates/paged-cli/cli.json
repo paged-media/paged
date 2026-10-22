@@ -604,6 +604,26 @@
           ]
         },
         {
+          "defaults": [],
+          "help": "The session's role (engine ADR 1001): `author` may write a template's policy, `filler` is bound by it. Default: `editor`",
+          "long": "role",
+          "name": "role",
+          "positional": false,
+          "possibleValues": [
+            "author",
+            "editor",
+            "filler",
+            "viewer"
+          ],
+          "repeatable": false,
+          "required": false,
+          "short": null,
+          "takesValues": true,
+          "valueNames": [
+            "ROLE"
+          ]
+        },
+        {
           "defaults": [
             "pdf17"
           ],
@@ -5899,6 +5919,460 @@
       "longAbout": null,
       "name": "engine-serve",
       "subcommands": []
+    },
+    {
+      "about": "A template's fields: list them, fill them as a filler, check a submission changed only its fields",
+      "args": [],
+      "longAbout": null,
+      "name": "template",
+      "subcommands": [
+        {
+          "about": "The template's fields, their kinds and values",
+          "args": [
+            {
+              "defaults": [],
+              "help": "The `.paged` or `.idml` template",
+              "long": null,
+              "name": "doc",
+              "positional": true,
+              "repeatable": false,
+              "required": true,
+              "short": null,
+              "takesValues": true,
+              "valueNames": [
+                "DOC"
+              ]
+            },
+            {
+              "defaults": [],
+              "help": "Answer JSON",
+              "long": "json",
+              "name": "json",
+              "positional": false,
+              "repeatable": false,
+              "required": false,
+              "short": null,
+              "takesValues": false,
+              "valueNames": [
+                "JSON"
+              ]
+            },
+            {
+              "defaults": [],
+              "help": "Font file or directory to make available, repeatable",
+              "long": "fonts",
+              "name": "fonts",
+              "positional": false,
+              "repeatable": true,
+              "required": false,
+              "short": null,
+              "takesValues": true,
+              "valueNames": [
+                "DIR|FILE"
+              ]
+            },
+            {
+              "defaults": [],
+              "help": "Bind one family (and optionally a style) to a file, repeatable: `--font-family \"Fraunces/Italic=/path/Fraunces-Italic.ttf\"`",
+              "long": "font-family",
+              "name": "font_family",
+              "positional": false,
+              "repeatable": true,
+              "required": false,
+              "short": null,
+              "takesValues": true,
+              "valueNames": [
+                "NAME[/STYLE]=PATH"
+              ]
+            },
+            {
+              "defaults": [],
+              "help": "Fallback face for text no registered family answers for. Absent, the face the CLI bundles (Inter) stands in",
+              "long": "font",
+              "name": "font",
+              "positional": false,
+              "repeatable": false,
+              "required": false,
+              "short": null,
+              "takesValues": true,
+              "valueNames": [
+                "FILE"
+              ]
+            },
+            {
+              "defaults": [],
+              "help": "No fallback face: text no registered family answers for is not set, and the run says so (to see what a document is missing)",
+              "long": "no-default-font",
+              "name": "no_default_font",
+              "positional": false,
+              "repeatable": false,
+              "required": false,
+              "short": null,
+              "takesValues": false,
+              "valueNames": [
+                "NO_DEFAULT_FONT"
+              ]
+            },
+            {
+              "defaults": [],
+              "help": "CMYK profile: a file path, or a name to resolve against the host's installed profiles (e.g. \"Coated FOGRA39\")",
+              "long": "cmyk-profile",
+              "name": "cmyk_profile",
+              "positional": false,
+              "repeatable": false,
+              "required": false,
+              "short": null,
+              "takesValues": true,
+              "valueNames": [
+                "NAME|FILE"
+              ]
+            }
+          ],
+          "longAbout": null,
+          "name": "fields",
+          "subcommands": []
+        },
+        {
+          "about": "Fill the fields as a filler and write the result (.paged, .idml, .pdf)",
+          "args": [
+            {
+              "defaults": [],
+              "help": "The template",
+              "long": null,
+              "name": "template",
+              "positional": true,
+              "repeatable": false,
+              "required": true,
+              "short": null,
+              "takesValues": true,
+              "valueNames": [
+                "TEMPLATE"
+              ]
+            },
+            {
+              "defaults": [],
+              "help": "A JSON list of {name, value}, an object of name → text, or a file holding either",
+              "long": "values",
+              "name": "values",
+              "positional": false,
+              "repeatable": false,
+              "required": true,
+              "short": null,
+              "takesValues": true,
+              "valueNames": [
+                "VALUES"
+              ]
+            },
+            {
+              "defaults": [],
+              "help": "Where to write; the extension names the format",
+              "long": "out",
+              "name": "out",
+              "positional": false,
+              "repeatable": false,
+              "required": true,
+              "short": "o",
+              "takesValues": true,
+              "valueNames": [
+                "OUT"
+              ]
+            },
+            {
+              "defaults": [
+                "pdf17"
+              ],
+              "help": "\"pdf17\" (default) or \"pdfx4\". X-4 needs a resolvable output intent — give one here or let the document's profile serve",
+              "long": "standard",
+              "name": "standard",
+              "positional": false,
+              "repeatable": false,
+              "required": false,
+              "short": null,
+              "takesValues": true,
+              "valueNames": [
+                "STANDARD"
+              ]
+            },
+            {
+              "defaults": [],
+              "help": "Output-intent profile NAME, resolved against what this run registered. Defaults to the working space",
+              "long": "output-intent",
+              "name": "output_intent",
+              "positional": false,
+              "repeatable": false,
+              "required": false,
+              "short": null,
+              "takesValues": true,
+              "valueNames": [
+                "OUTPUT_INTENT"
+              ]
+            },
+            {
+              "defaults": [],
+              "help": "Human-readable output condition for the OutputIntent dict",
+              "long": "output-condition",
+              "name": "output_condition",
+              "positional": false,
+              "repeatable": false,
+              "required": false,
+              "short": null,
+              "takesValues": true,
+              "valueNames": [
+                "OUTPUT_CONDITION"
+              ]
+            },
+            {
+              "defaults": [],
+              "help": "Crop marks, registration marks, colour bars, page info",
+              "long": "marks",
+              "name": "marks",
+              "positional": false,
+              "repeatable": false,
+              "required": false,
+              "short": null,
+              "takesValues": false,
+              "valueNames": [
+                "MARKS"
+              ]
+            },
+            {
+              "defaults": [],
+              "help": "0-based inclusive page range, e.g. `0-9`",
+              "long": "pages",
+              "name": "pages",
+              "positional": false,
+              "repeatable": false,
+              "required": false,
+              "short": null,
+              "takesValues": true,
+              "valueNames": [
+                "FROM-TO"
+              ]
+            },
+            {
+              "defaults": [],
+              "help": "Write the document's bookmarks as the PDF outline",
+              "long": "bookmarks",
+              "name": "bookmarks",
+              "positional": false,
+              "repeatable": false,
+              "required": false,
+              "short": null,
+              "takesValues": false,
+              "valueNames": [
+                "BOOKMARKS"
+              ]
+            },
+            {
+              "defaults": [],
+              "help": "Create Tagged PDF: a structure tree of stories and paragraphs, as InDesign's \"Create Tagged PDF\" writes it",
+              "long": "tagged",
+              "name": "tagged",
+              "positional": false,
+              "repeatable": false,
+              "required": false,
+              "short": null,
+              "takesValues": false,
+              "valueNames": [
+                "TAGGED"
+              ]
+            },
+            {
+              "defaults": [],
+              "help": "Font file or directory to make available, repeatable",
+              "long": "fonts",
+              "name": "fonts",
+              "positional": false,
+              "repeatable": true,
+              "required": false,
+              "short": null,
+              "takesValues": true,
+              "valueNames": [
+                "DIR|FILE"
+              ]
+            },
+            {
+              "defaults": [],
+              "help": "Bind one family (and optionally a style) to a file, repeatable: `--font-family \"Fraunces/Italic=/path/Fraunces-Italic.ttf\"`",
+              "long": "font-family",
+              "name": "font_family",
+              "positional": false,
+              "repeatable": true,
+              "required": false,
+              "short": null,
+              "takesValues": true,
+              "valueNames": [
+                "NAME[/STYLE]=PATH"
+              ]
+            },
+            {
+              "defaults": [],
+              "help": "Fallback face for text no registered family answers for. Absent, the face the CLI bundles (Inter) stands in",
+              "long": "font",
+              "name": "font",
+              "positional": false,
+              "repeatable": false,
+              "required": false,
+              "short": null,
+              "takesValues": true,
+              "valueNames": [
+                "FILE"
+              ]
+            },
+            {
+              "defaults": [],
+              "help": "No fallback face: text no registered family answers for is not set, and the run says so (to see what a document is missing)",
+              "long": "no-default-font",
+              "name": "no_default_font",
+              "positional": false,
+              "repeatable": false,
+              "required": false,
+              "short": null,
+              "takesValues": false,
+              "valueNames": [
+                "NO_DEFAULT_FONT"
+              ]
+            },
+            {
+              "defaults": [],
+              "help": "CMYK profile: a file path, or a name to resolve against the host's installed profiles (e.g. \"Coated FOGRA39\")",
+              "long": "cmyk-profile",
+              "name": "cmyk_profile",
+              "positional": false,
+              "repeatable": false,
+              "required": false,
+              "short": null,
+              "takesValues": true,
+              "valueNames": [
+                "NAME|FILE"
+              ]
+            }
+          ],
+          "longAbout": null,
+          "name": "fill",
+          "subcommands": []
+        },
+        {
+          "about": "Is <filled> the template with only its fields changed? Exits 1 when not",
+          "args": [
+            {
+              "defaults": [],
+              "help": "The template",
+              "long": null,
+              "name": "template",
+              "positional": true,
+              "repeatable": false,
+              "required": true,
+              "short": null,
+              "takesValues": true,
+              "valueNames": [
+                "TEMPLATE"
+              ]
+            },
+            {
+              "defaults": [],
+              "help": "The filled document to check",
+              "long": null,
+              "name": "filled",
+              "positional": true,
+              "repeatable": false,
+              "required": true,
+              "short": null,
+              "takesValues": true,
+              "valueNames": [
+                "FILLED"
+              ]
+            },
+            {
+              "defaults": [],
+              "help": "Answer JSON",
+              "long": "json",
+              "name": "json",
+              "positional": false,
+              "repeatable": false,
+              "required": false,
+              "short": null,
+              "takesValues": false,
+              "valueNames": [
+                "JSON"
+              ]
+            },
+            {
+              "defaults": [],
+              "help": "Font file or directory to make available, repeatable",
+              "long": "fonts",
+              "name": "fonts",
+              "positional": false,
+              "repeatable": true,
+              "required": false,
+              "short": null,
+              "takesValues": true,
+              "valueNames": [
+                "DIR|FILE"
+              ]
+            },
+            {
+              "defaults": [],
+              "help": "Bind one family (and optionally a style) to a file, repeatable: `--font-family \"Fraunces/Italic=/path/Fraunces-Italic.ttf\"`",
+              "long": "font-family",
+              "name": "font_family",
+              "positional": false,
+              "repeatable": true,
+              "required": false,
+              "short": null,
+              "takesValues": true,
+              "valueNames": [
+                "NAME[/STYLE]=PATH"
+              ]
+            },
+            {
+              "defaults": [],
+              "help": "Fallback face for text no registered family answers for. Absent, the face the CLI bundles (Inter) stands in",
+              "long": "font",
+              "name": "font",
+              "positional": false,
+              "repeatable": false,
+              "required": false,
+              "short": null,
+              "takesValues": true,
+              "valueNames": [
+                "FILE"
+              ]
+            },
+            {
+              "defaults": [],
+              "help": "No fallback face: text no registered family answers for is not set, and the run says so (to see what a document is missing)",
+              "long": "no-default-font",
+              "name": "no_default_font",
+              "positional": false,
+              "repeatable": false,
+              "required": false,
+              "short": null,
+              "takesValues": false,
+              "valueNames": [
+                "NO_DEFAULT_FONT"
+              ]
+            },
+            {
+              "defaults": [],
+              "help": "CMYK profile: a file path, or a name to resolve against the host's installed profiles (e.g. \"Coated FOGRA39\")",
+              "long": "cmyk-profile",
+              "name": "cmyk_profile",
+              "positional": false,
+              "repeatable": false,
+              "required": false,
+              "short": null,
+              "takesValues": true,
+              "valueNames": [
+                "NAME|FILE"
+              ]
+            }
+          ],
+          "longAbout": null,
+          "name": "check",
+          "subcommands": []
+        }
+      ]
     },
     {
       "about": "The local library of documents `paged mcp` serves",

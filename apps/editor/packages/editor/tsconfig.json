@@ -1,0 +1,12 @@
+{
+  "extends": "../../../../tsconfig.base.json",
+  "compilerOptions": {
+    "types": [],
+    "paths": {
+      "@paged-media/paged": [
+        "../../../../engine/core/packages/canvas-wasm/paged_canvas_wasm.d.ts"
+      ]
+    }
+  },
+  "include": ["src"]
+}

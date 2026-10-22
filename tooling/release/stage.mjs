@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// The publish tarballs of the three public npm packages at one release version
-// (PM-0008, amendment 3):
+// The publish tarballs of the four public npm packages at one release version
+// (PM-0008, amendment 3; PM-0013):
 //
 //   bun tooling/release/stage.mjs <version> <destination dir> [--keep]
 //
@@ -12,8 +12,8 @@
 //    the protocol from that minor.
 // 2. Each package.json gets the release version, and `bun install` records it
 //    in bun.lock (`bun pm pack` takes a `workspace:` specifier's version from
-//    the lockfile; none of the three depends on another today, but the
-//    lockfile and the manifests stay one story).
+//    the lockfile: @paged-media/editor's dependency on @paged-media/paged
+//    is packed as exactly this version).
 // 3. tooling/js/pack.mjs packs each package (workspace: and catalog: resolved,
 //    publishConfig applied) into the destination.
 // 4. tooling/release/verify-tarballs.mjs checks the tarballs.
@@ -21,7 +21,8 @@
 // The package.json files and bun.lock are restored afterwards (unless --keep),
 // so a local dry run leaves the tree as it was. Release versions are never
 // committed. The built files the packages ship (the engine wasm, plugin-api's
-// and plugin-sdk's dist/, the viewer's dist/) must exist before this runs.
+// and plugin-sdk's dist/, the viewer's dist/, the editor's dist/) must exist
+// before this runs.
 //
 // Prints one line per tarball: `<name>\t<path>`.
 
@@ -32,9 +33,11 @@ import { fileURLToPath } from "node:url";
 
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
-/** The public packages, in publish order (none depends on another). */
+/** The public packages, in publish order: a package after the ones it
+ *  depends on (the editor depends on paged). */
 export const PUBLIC_PACKAGES = [
   { name: "@paged-media/paged", dir: "packages/paged" },
+  { name: "@paged-media/editor", dir: "apps/editor/packages/editor" },
   { name: "@paged-media/viewer", dir: "engine/core/web/idml-viewer" },
   {
     name: "@paged-media/plugin-sdk",

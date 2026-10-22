@@ -21,6 +21,47 @@ orientation only.
 - **§2 lists facts in the code that the concept did not account for.** The tasks are built
   around them. Read §2 before any task.
 
+## 0a. Progress (2026-10-23)
+
+| Task                                             | State                                                                                   | Where                                                               |
+| ------------------------------------------------ | --------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| A1–A6 profiles, regions, presets                 | Done                                                                                    | ADR 274, `packages/shell/src/profile/`, `apps/canvas/src/profiles/` |
+| B1–B3 features                                   | Done                                                                                    | ADR 275, `apps/canvas/feature-ids.json`                             |
+| C1–C8, C11 engine policy                         | Done                                                                                    | engine ADRs 1000, 1001 (protocol 75)                                |
+| C9, C10 XML tags ↔ fields, F5 open as template   | In progress                                                                             | branch `templates/xml-tags`                                         |
+| D1–D5 filling in the editor                      | Done                                                                                    | ADR 276, `panels/template/`                                         |
+| E2, E3, E5 host actions, handle, host components | Done                                                                                    | `apps/canvas/src/embed/create-editor.ts`                            |
+| E4 theme and strings                             | Done                                                                                    | `setTheme`, `docs/theme-tokens.json`, `platform/shared/strings`     |
+| E6 iframe bridge                                 | Done; the old script bridge is not folded in yet                                        | `embed.html`, `src/embed/{bridge,connect}.ts`                       |
+| E7 example host                                  | Done as the demo pages                                                                  | `apps/canvas/demos/`                                                |
+| E10 the whole editor in strings                  | Done: 5,036 messages, German shipped; extensions through `host.strings`                 | extensions ADR 333, strings guard in CI                             |
+| E1 instance safety                               | In progress                                                                             | branch `editor/instance-safety`                                     |
+| E8 the npm package                               | In progress                                                                             | branch `editor/package`                                             |
+| E9 embedding docs                                | Updating                                                                                | docs site PR                                                        |
+| F1, F2 Template panel, preview as filler         | Done                                                                                    | `panels/template/template-panel.tsx`                                |
+| F6 the CLI                                       | Done (Node CLI): `paged-node template fields, kinds, fill, check`                       | `apps/cli/src/template.ts`                                          |
+| F7 server rendering                              | Done                                                                                    | `engine-serve` `POST /run` `template`                               |
+| F8 catalogues                                    | In progress                                                                             | branch `data/template-catalogues`                                   |
+| F3 preflight, F4 author overlay                  | Open                                                                                    |                                                                     |
+| G1, G2 module field kinds, routing               | Done                                                                                    | extensions ADR 335, engine ADR 1000 amendment                       |
+| G3 field kinds of every module                   | Done; `pdf.page` needs engine work first                                                | each module's `template-fields.ts`                                  |
+| G4 coverage gaps                                 | Largely done: CLI imports and bytes, typed commands per module; open items listed in G4 |                                                                     |
+| H demos                                          | Done: gallery of ten pages, journeys                                                    | `apps/canvas/demos/`                                                |
+| I docs and website                               | PRs open                                                                                | docs site, website                                                  |
+
+Corrections to the plan found while building:
+
+- An iframe does not free the host page from cross-origin isolation: a frame is isolated only
+  when its top page is. The host page sends COOP `same-origin` and COEP `credentialless`, and the
+  frame is allowed `cross-origin-isolated` (E6).
+- The strings package lives in `platform/shared/strings`, not under `apps/editor/packages`, so
+  the built-in modules can use it (PM-0002); third-party extensions reach it through
+  `host.strings`.
+- Engine follow-ups found by the module work: a module field cannot grant a document-level
+  label write scoped to its own module (sheet, web document values and slide visibility need
+  `document.metadata` from the document's defaults today); a story on a path has no frame, so
+  its text-edit grant does not reach it; a placed PDF always draws its first page.
+
 ## 1. Summary
 
 | Workstream             | Concept  | Where                                                                                   | Depends on       |
