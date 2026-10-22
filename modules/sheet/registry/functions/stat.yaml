@@ -524,10 +524,10 @@
   returns_array: true
   rust: stat2::trend
   status: implemented
-  provenance: ["Microsoft TREND (public docs) — known_ys, [known_xs], [new_xs], [const]; single-regressor fit (multiple regression is a recorded #VALUE! scope limit)"]
+  provenance: ["Microsoft TREND (public docs) — known_ys, [known_xs], [new_xs], [const]; one or several regressors (least squares on the normal equations, as LINEST); collinear regressors #NUM! (Excel drops them; listed divergence)"]
   tests:
     rust: ["sheet-conformance/tests/it/fn_wave7.rs::sheet_fn_stat_trend"]
-    corpus: ["corpus/fn-corpus/stat/trend.golden.tsv"]
+    corpus: ["corpus/fn-corpus/stat/trend.golden.tsv", "corpus/fn-corpus/fix3/trend3.golden.tsv"]
 
 - id: sheet.fn.stat.norm-dist
   name: NORM.DIST

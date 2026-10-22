@@ -20,6 +20,7 @@ mod edit_ops;
 mod entry_oracle;
 mod excel_oracle;
 mod extlink;
+mod fix_model;
 mod fn_agg;
 mod fn_array;
 mod fn_array3;

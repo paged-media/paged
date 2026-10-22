@@ -221,7 +221,7 @@ impl SheetSession {
     }
 
     /// Map an engine recalc result to the wire shape (formatted displays).
-    fn changes_of(&self, result: &sheet_calc::RecalcResult) -> SetCellResult {
+    pub(crate) fn changes_of(&self, result: &sheet_calc::RecalcResult) -> SetCellResult {
         let model = self.engine().model();
         let mut cache = FormatCache::default();
         let ctx = FormatCtx::new(model.calc.date_system, model.calc.locale);

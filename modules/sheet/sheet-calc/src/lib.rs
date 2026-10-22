@@ -245,6 +245,67 @@ impl Engine {
         }
     }
 
+    /// Hide or show rows by hand (`<row hidden="1">`). View state, but
+    /// SUBTOTAL 101–111 and AGGREGATE's hidden-row options read it, so the
+    /// formulas that call them recalculate.
+    pub fn set_rows_hidden(
+        &mut self,
+        sheet: sheet_core::SheetId,
+        rows: impl IntoIterator<Item = u32>,
+        hidden: bool,
+    ) -> RecalcResult {
+        if let Some(ws) = self.model.sheet_mut(sheet) {
+            for r in rows {
+                if hidden {
+                    ws.hidden_rows.insert(r);
+                } else {
+                    ws.hidden_rows.remove(&r);
+                }
+            }
+        }
+        self.recalc_visibility()
+    }
+
+    /// Recalculate the formulas that read row visibility (SUBTOTAL,
+    /// AGGREGATE) after hidden or filtered rows changed.
+    pub fn recalc_visibility(&mut self) -> RecalcResult {
+        let ids: Vec<sheet_core::FuncId> = ["SUBTOTAL", "AGGREGATE"]
+            .iter()
+            .filter_map(|n| sheet_core::funcs::lookup_func(n))
+            .collect();
+        let cells: Vec<CellRef> = self
+            .model
+            .sheets
+            .iter()
+            .enumerate()
+            .flat_map(|(si, ws)| {
+                ws.cells.iter().filter_map(move |(&(row, col), c)| {
+                    c.formula
+                        .map(|fid| (si as sheet_core::SheetId, row, col, fid))
+                })
+            })
+            .filter(|&(_, _, _, fid)| {
+                self.model
+                    .formula(fid)
+                    .is_some_and(|f| expr_calls(&f.root, &ids))
+            })
+            .map(|(sheet, row, col, _)| CellRef {
+                sheet,
+                row,
+                col,
+                row_abs: false,
+                col_abs: false,
+            })
+            .collect();
+        if cells.is_empty() {
+            return RecalcResult::default();
+        }
+        for c in cells {
+            self.dirty.mark(c);
+        }
+        self.recalc_dirty()
+    }
+
     /// Escape hatch for structural consumers (the `sheet-js` save path).
     ///
     /// MUTATING cells through the returned model WITHOUT going back through
@@ -1635,6 +1696,20 @@ fn shown_result(r: FnResult) -> FnResult {
                 .map(|row| row.into_iter().map(IntoShown::into_shown).collect())
                 .collect(),
         ),
+    }
+}
+
+/// Whether an expression calls any of `ids`.
+fn expr_calls(e: &sheet_core::ast::Expr, ids: &[sheet_core::FuncId]) -> bool {
+    use sheet_core::ast::Expr;
+    match e {
+        Expr::Func(fid, args) => ids.contains(fid) || args.iter().any(|a| expr_calls(a, ids)),
+        Expr::Unary(_, a) | Expr::SpillRef(a) => expr_calls(a, ids),
+        Expr::Binary(_, a, b) => expr_calls(a, ids) || expr_calls(b, ids),
+        Expr::Array(rows) => rows.iter().flatten().any(|a| expr_calls(a, ids)),
+        Expr::Call(c, args) => expr_calls(c, ids) || args.iter().any(|a| expr_calls(a, ids)),
+        Expr::UnknownFunc(_, args) => args.iter().any(|a| expr_calls(a, ids)),
+        _ => false,
     }
 }
 
