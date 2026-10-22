@@ -45,6 +45,7 @@ import { usePaged } from "../state/paged-editor";
 import { useRegistries } from "../state/registries-context";
 import { useRegistryView } from "../state/live";
 import { useWorkflowMode } from "../state/workflow-mode-context";
+import { useChromeRegions } from "../state/chrome-regions";
 import { PanelHost } from "./PanelHost";
 import { RightDock } from "./RightDock";
 import { DocTitleBar } from "./canvas-frame/DocTitleBar";
@@ -71,6 +72,7 @@ export function CockpitLayout({
   onFile,
 }: CockpitLayoutProps) {
   const paged = usePaged();
+  const chrome = useChromeRegions();
   const modes = useRegistryView(useRegistries().modes);
   const { mode } = useWorkflowMode();
   const slots = modes.get(mode)?.slots;
@@ -102,37 +104,39 @@ export function CockpitLayout({
         display: "flex",
       }}
     >
-      <Activity
-        mode={!panelsHidden && leftId ? "visible" : "hidden"}
-        name="left column"
-      >
-        <div
-          data-left-panel={leftId}
-          // F-50 (ADR 259): the docks are complementary landmarks.
-          role="complementary"
-          aria-label="Left panels"
-          style={{
-            width: 262,
-            flexShrink: 0,
-            display: "flex",
-            flexDirection: "column",
-            minHeight: 0,
-            borderRight: "1px solid var(--chrome-border)",
-            background: "var(--pg-bg)",
-            overflow: "hidden",
-          }}
+      {chrome.has("left") && (
+        <Activity
+          mode={!panelsHidden && leftId ? "visible" : "hidden"}
+          name="left column"
         >
-          {visitedLeft.map((id) => (
-            <Activity
-              key={id}
-              mode={id === leftId ? "visible" : "hidden"}
-              name={id}
-            >
-              <PanelHost id={id} />
-            </Activity>
-          ))}
-        </div>
-      </Activity>
+          <div
+            data-left-panel={leftId}
+            // F-50 (ADR 259): the docks are complementary landmarks.
+            role="complementary"
+            aria-label="Left panels"
+            style={{
+              width: 262,
+              flexShrink: 0,
+              display: "flex",
+              flexDirection: "column",
+              minHeight: 0,
+              borderRight: "1px solid var(--chrome-border)",
+              background: "var(--pg-bg)",
+              overflow: "hidden",
+            }}
+          >
+            {visitedLeft.map((id) => (
+              <Activity
+                key={id}
+                mode={id === leftId ? "visible" : "hidden"}
+                name={id}
+              >
+                <PanelHost id={id} />
+              </Activity>
+            ))}
+          </div>
+        </Activity>
+      )}
 
       {/* Canvas column — the main landmark (F-50, ADR 259). */}
       <main
@@ -147,8 +151,8 @@ export function CockpitLayout({
           background: "var(--pg-bg)",
         }}
       >
-        <DocTitleBar />
-        {!isOverride && <HRuler />}
+        {chrome.canvas.titleBar && <DocTitleBar />}
+        {!isOverride && chrome.canvas.rulers && <HRuler />}
         <div
           data-cockpit-canvas
           onDragOver={(e) => {
@@ -169,7 +173,7 @@ export function CockpitLayout({
             overflow: "hidden",
           }}
         >
-          {!isOverride && <VRulerStrip />}
+          {!isOverride && chrome.canvas.rulers && <VRulerStrip />}
           {/* W2.8 — `data-paged-viewport` tags the viewport wrapper so
               the GuideDragController can invert client → document
               coordinates against the same rect the canvas uses. */}
@@ -193,27 +197,32 @@ export function CockpitLayout({
         {/* W2.9 — headless threading controller (out-port → loaded
             cursor → linkFrames / insertTextFrame; overset badge set). */}
         {!isOverride && <ThreadingController />}
-        {!isOverride && <ThumbnailRail />}
+        {!isOverride && chrome.canvas.thumbnails && <ThumbnailRail />}
       </main>
 
-      <Activity mode={panelsHidden ? "hidden" : "visible"} name="right column">
-        <div
-          role="complementary"
-          aria-label="Panels"
-          style={{
-            width: 320,
-            flexShrink: 0,
-            display: "flex",
-            flexDirection: "column",
-            minHeight: 0,
-            borderLeft: "1px solid var(--chrome-border)",
-            background: "var(--pg-bg)",
-            overflow: "hidden",
-          }}
+      {chrome.has("right") && (
+        <Activity
+          mode={panelsHidden ? "hidden" : "visible"}
+          name="right column"
         >
-          <RightDock />
-        </div>
-      </Activity>
+          <div
+            role="complementary"
+            aria-label="Panels"
+            style={{
+              width: 320,
+              flexShrink: 0,
+              display: "flex",
+              flexDirection: "column",
+              minHeight: 0,
+              borderLeft: "1px solid var(--chrome-border)",
+              background: "var(--pg-bg)",
+              overflow: "hidden",
+            }}
+          >
+            <RightDock />
+          </div>
+        </Activity>
+      )}
     </div>
   );
 }
