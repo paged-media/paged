@@ -47,6 +47,7 @@
     "@paged-media/repository": "workspace:*",
     "@paged-media/sheet": "workspace:*",
     "@paged-media/shell": "workspace:*",
+    "@paged-media/strings": "workspace:*",
     "@paged-media/slide": "workspace:*",
     "@paged-media/tools": "workspace:*",
     "@paged-media/ui": "workspace:*",

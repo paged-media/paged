@@ -430,6 +430,10 @@ jobs:
       # be current.
       - name: feature-id inventory is current
         run: bun run test:feature-ids
+      # The theme tokens a host may set (handle.setTheme) are a contract
+      # too; the table is generated from theme.css and must be current.
+      - name: theme-token contract is current
+        run: bun run test:theme-tokens
 
       # The bun test lanes above as evidence: bun's reports, rewritten into
       # the vitest shape (tooling/js/bun-junit.mjs) with each spec path made

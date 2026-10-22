@@ -264,7 +264,8 @@ files = ["apps/editor/apps/canvas/src/worker/**/*.{ts,tsx}"]
 # NOT on it. Relative imports are always allowed.
 #
 # The internal shared packages: @paged-media/ai, @paged-media/helpers,
-# @paged-media/panel-kit, @paged-media/react-live, @paged-media/test-kit and
+# @paged-media/panel-kit, @paged-media/react-live, @paged-media/strings,
+# @paged-media/test-kit and
 # @paged-media/wasm-boot.
 # The self-test reads platform/shared/*/package.json and fails when a shared
 # package is missing from these lists, or when an extension may import it.
@@ -276,7 +277,7 @@ excludeFiles = ["**/*.spec.*", "**/*.test.*"]
 "no-restricted-imports" = [
   "error",
   { patterns = [
-    { regex = '^(?!\.|(@paged-media/(plugin-api|plugin-sdk|ai|helpers|panel-kit|react-live|test-kit|wasm-boot)|react|react-dom|@duckdb/duckdb-wasm|apache-arrow)(/|$)|@paged-media/data-)', message = "A built-in module imports only the extension contract, platform/shared/*, its own packages, react, and its listed third-party packages (paged.data: @duckdb/duckdb-wasm, apache-arrow). Promote what you need to plugin-api, use an existing capability, or record it (docs/adr/PM-0002)." },
+    { regex = '^(?!\.|(@paged-media/(plugin-api|plugin-sdk|ai|helpers|panel-kit|react-live|strings|test-kit|wasm-boot)|react|react-dom|@duckdb/duckdb-wasm|apache-arrow)(/|$)|@paged-media/data-)', message = "A built-in module imports only the extension contract, platform/shared/*, its own packages, react, and its listed third-party packages (paged.data: @duckdb/duckdb-wasm, apache-arrow). Promote what you need to plugin-api, use an existing capability, or record it (docs/adr/PM-0002)." },
   ] },
 ]
 
@@ -287,7 +288,7 @@ excludeFiles = ["**/*.spec.*", "**/*.test.*"]
 "no-restricted-imports" = [
   "error",
   { patterns = [
-    { regex = '^(?!\.|(@paged-media/(plugin-api|plugin-sdk|ai|helpers|panel-kit|react-live|test-kit|wasm-boot|doc)|react|react-dom)(/|$)|@paged-media/doc-)', message = "A built-in module imports only the extension contract, platform/shared/*, its own packages and react. Promote what you need to plugin-api, use an existing capability, or record it (docs/adr/PM-0002)." },
+    { regex = '^(?!\.|(@paged-media/(plugin-api|plugin-sdk|ai|helpers|panel-kit|react-live|strings|test-kit|wasm-boot|doc)|react|react-dom)(/|$)|@paged-media/doc-)', message = "A built-in module imports only the extension contract, platform/shared/*, its own packages and react. Promote what you need to plugin-api, use an existing capability, or record it (docs/adr/PM-0002)." },
   ] },
 ]
 
@@ -298,7 +299,7 @@ excludeFiles = ["**/*.spec.*", "**/*.test.*"]
 "no-restricted-imports" = [
   "error",
   { patterns = [
-    { regex = '^(?!\.|(@paged-media/(plugin-api|plugin-sdk|ai|helpers|panel-kit|react-live|test-kit|wasm-boot)|react|react-dom)(/|$)|@paged-media/draw-)', message = "A built-in module imports only the extension contract, platform/shared/*, its own packages and react. Promote what you need to plugin-api, use an existing capability, or record it (docs/adr/PM-0002)." },
+    { regex = '^(?!\.|(@paged-media/(plugin-api|plugin-sdk|ai|helpers|panel-kit|react-live|strings|test-kit|wasm-boot)|react|react-dom)(/|$)|@paged-media/draw-)', message = "A built-in module imports only the extension contract, platform/shared/*, its own packages and react. Promote what you need to plugin-api, use an existing capability, or record it (docs/adr/PM-0002)." },
   ] },
 ]
 
@@ -309,7 +310,7 @@ excludeFiles = ["**/*.spec.*", "**/*.test.*"]
 "no-restricted-imports" = [
   "error",
   { patterns = [
-    { regex = '^(?!\.|(@paged-media/(plugin-api|plugin-sdk|ai|helpers|panel-kit|react-live|test-kit|wasm-boot)|react|react-dom)(/|$)|@paged-media/image-)', message = "A built-in module imports only the extension contract, platform/shared/*, its own packages and react. Promote what you need to plugin-api, use an existing capability, or record it (docs/adr/PM-0002)." },
+    { regex = '^(?!\.|(@paged-media/(plugin-api|plugin-sdk|ai|helpers|panel-kit|react-live|strings|test-kit|wasm-boot)|react|react-dom)(/|$)|@paged-media/image-)', message = "A built-in module imports only the extension contract, platform/shared/*, its own packages and react. Promote what you need to plugin-api, use an existing capability, or record it (docs/adr/PM-0002)." },
   ] },
 ]
 
@@ -320,7 +321,7 @@ excludeFiles = ["**/*.spec.*", "**/*.test.*"]
 "no-restricted-imports" = [
   "error",
   { patterns = [
-    { regex = '^(?!\.|(@paged-media/(plugin-api|plugin-sdk|ai|helpers|panel-kit|react-live|test-kit|wasm-boot|publish|pdf)|react|react-dom|jszip)(/|$)|@paged-media/(publish|pdf)-)', message = "A built-in module imports only the extension contract, platform/shared/*, its own packages, react, and its listed third-party packages (publish: jszip). Promote what you need to plugin-api, use an existing capability, or record it (docs/adr/PM-0002)." },
+    { regex = '^(?!\.|(@paged-media/(plugin-api|plugin-sdk|ai|helpers|panel-kit|react-live|strings|test-kit|wasm-boot|publish|pdf)|react|react-dom|jszip)(/|$)|@paged-media/(publish|pdf)-)', message = "A built-in module imports only the extension contract, platform/shared/*, its own packages, react, and its listed third-party packages (publish: jszip). Promote what you need to plugin-api, use an existing capability, or record it (docs/adr/PM-0002)." },
   ] },
 ]
 
@@ -331,7 +332,7 @@ excludeFiles = ["**/*.spec.*", "**/*.test.*"]
 "no-restricted-imports" = [
   "error",
   { patterns = [
-    { regex = '^(?!\.|(@paged-media/(plugin-api|plugin-sdk|ai|helpers|panel-kit|react-live|test-kit|wasm-boot)|react|react-dom)(/|$)|@paged-media/sheet-)', message = "A built-in module imports only the extension contract, platform/shared/*, its own packages and react. Promote what you need to plugin-api, use an existing capability, or record it (docs/adr/PM-0002)." },
+    { regex = '^(?!\.|(@paged-media/(plugin-api|plugin-sdk|ai|helpers|panel-kit|react-live|strings|test-kit|wasm-boot)|react|react-dom)(/|$)|@paged-media/sheet-)', message = "A built-in module imports only the extension contract, platform/shared/*, its own packages and react. Promote what you need to plugin-api, use an existing capability, or record it (docs/adr/PM-0002)." },
   ] },
 ]
 
@@ -342,7 +343,7 @@ excludeFiles = ["**/*.spec.*", "**/*.test.*"]
 "no-restricted-imports" = [
   "error",
   { patterns = [
-    { regex = '^(?!\.|(@paged-media/(plugin-api|plugin-sdk|ai|helpers|panel-kit|react-live|test-kit|wasm-boot|slide)|react|react-dom)(/|$)|@paged-media/slide-)', message = "A built-in module imports only the extension contract, platform/shared/*, its own packages and react. Promote what you need to plugin-api, use an existing capability, or record it (docs/adr/PM-0002)." },
+    { regex = '^(?!\.|(@paged-media/(plugin-api|plugin-sdk|ai|helpers|panel-kit|react-live|strings|test-kit|wasm-boot|slide)|react|react-dom)(/|$)|@paged-media/slide-)', message = "A built-in module imports only the extension contract, platform/shared/*, its own packages and react. Promote what you need to plugin-api, use an existing capability, or record it (docs/adr/PM-0002)." },
   ] },
 ]
 
@@ -353,7 +354,7 @@ excludeFiles = ["**/*.spec.*", "**/*.test.*"]
 "no-restricted-imports" = [
   "error",
   { patterns = [
-    { regex = '^(?!\.|(@paged-media/(plugin-api|plugin-sdk|ai|helpers|panel-kit|react-live|test-kit|wasm-boot)|react|react-dom)(/|$)|@paged-media/web-)', message = "A built-in module imports only the extension contract, platform/shared/*, its own packages and react. Promote what you need to plugin-api, use an existing capability, or record it (docs/adr/PM-0002)." },
+    { regex = '^(?!\.|(@paged-media/(plugin-api|plugin-sdk|ai|helpers|panel-kit|react-live|strings|test-kit|wasm-boot)|react|react-dom)(/|$)|@paged-media/web-)', message = "A built-in module imports only the extension contract, platform/shared/*, its own packages and react. Promote what you need to plugin-api, use an existing capability, or record it (docs/adr/PM-0002)." },
   ] },
 ]
 

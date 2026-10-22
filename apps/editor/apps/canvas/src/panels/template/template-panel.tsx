@@ -100,6 +100,15 @@ function parse<T>(raw: unknown): T | null {
   }
 }
 
+/** `text` as JSON, or undefined when it is not JSON. */
+function parseJson(text: string): unknown {
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    return undefined;
+  }
+}
+
 /** The kind an item suggests: a text frame holds text, a frame a picture. */
 function kindFor(id: ElementId): Kind {
   if (id.kind === "textFrame") return "text";
@@ -219,14 +228,9 @@ function FieldEditor({
   const save = async () => {
     const trimmed = name.trim();
     if (!trimmed) return onDone("A field needs a name.");
-    let parsedDef: unknown = null;
-    if (kind === "module") {
-      try {
-        parsedDef = JSON.parse(def || "{}");
-      } catch {
-        return onDone("The module definition is not JSON.");
-      }
-    }
+    const parsedDef = kind === "module" ? parseJson(def || "{}") : null;
+    if (parsedDef === undefined)
+      return onDone("The module definition is not JSON.");
     const info = kinds.find((k) => k.kind === moduleKind);
     const next: ItemPolicy = {
       field: {
