@@ -374,24 +374,10 @@ pub struct TextShift<'a> {
     pub sheet_name: &'a str,
     /// True when unqualified references in the text are on the edited sheet.
     pub host_is_target: bool,
-    /// Every sheet's name in tab order, so a reference over a span of sheets
-    /// (`Jan:Mar!A1`) that leaves the edited sheet out is known to stay as
-    /// it is. Empty when unknown: such a reference then cannot be shifted.
+    /// Every sheet's name in tab order (empty when unknown). Context only: a
+    /// reference over a span of sheets (`Jan:Mar!A1`) keeps its address
+    /// whatever the span holds (sheet ADR 513).
     pub sheets: &'a [String],
-}
-
-impl TextShift<'_> {
-    /// Whether the sheet span `a:b` (names) can be left as it is: both ends
-    /// are known and the edited sheet lies outside it. (A span that holds the
-    /// edited sheet is refused: its references are shared by every sheet in
-    /// it.)
-    fn span_excludes_target(&self, a: &str, b: &str) -> bool {
-        let pos = |n: &str| self.sheets.iter().position(|x| x.eq_ignore_ascii_case(n));
-        match (pos(a), pos(b), pos(self.sheet_name)) {
-            (Some(i), Some(j), Some(t)) => t < i.min(j) || t > i.max(j),
-            _ => false,
-        }
-    }
 }
 
 /// Why a reference text cannot be shifted. The caller keeps the text and
@@ -431,8 +417,9 @@ enum RefShape {
 /// references matter. Strings, bracketed parts and error literals are
 /// skipped; a word followed by `!` qualifies the next reference; an A1 cell,
 /// `A:C` or `1:3` is a reference unless a `(` follows it (a function).
-/// `Err` only for an unterminated string or quoted name, or a reference over
-/// a span of sheets (`Jan:Mar!A1`), which the text alone cannot place.
+/// A reference over a span of sheets (`Jan:Mar!A1`) keeps its address, as
+/// the AST rewrite keeps it (sheet ADR 513). `Err` only for an unterminated
+/// string or quoted name.
 fn text_refs(text: &str, s: &TextShift<'_>) -> Result<Vec<TextRef>, Unshiftable> {
     let b = text.as_bytes();
     let mut out = Vec::new();
@@ -483,15 +470,11 @@ fn text_refs(text: &str, s: &TextShift<'_>) -> Result<Vec<TextRef>, Unshiftable>
                 j += 1;
                 if b.get(j) == Some(&b'!') {
                     let bare = name.rsplit(']').next().unwrap_or(&name);
-                    if let Some((x, y)) = bare.split_once(':') {
-                        if name.starts_with('[') || s.span_excludes_target(x, y) {
-                            qual = Some((i..j + 1, false));
-                            i = j + 1;
-                            continue;
-                        }
-                        return Err(Unshiftable(format!(
-                            "a reference over a span of sheets that holds this one ('{name}'!)"
-                        )));
+                    if bare.contains(':') {
+                        // A 3D reference keeps its address (sheet ADR 513).
+                        qual = Some((i..j + 1, false));
+                        i = j + 1;
+                        continue;
                     }
                     let on = !name.starts_with('[') && bare.eq_ignore_ascii_case(s.sheet_name);
                     qual = Some((i..j + 1, on));
@@ -576,14 +559,15 @@ fn text_refs(text: &str, s: &TextShift<'_>) -> Result<Vec<TextRef>, Unshiftable>
                 }
                 let word = &text[start..j];
                 if b.get(j) == Some(&b'!') {
-                    // `Jan:Mar!A1`: the word before the colon was a sheet.
-                    if start >= 1 && b[start - 1] == b':' && out_last_is_sheetish(text, start - 1) {
-                        return Err(Unshiftable(format!(
-                            "a reference over a span of sheets that holds this one (…:{word}!)"
-                        )));
-                    }
+                    // `…:Mar!` closes a 3D span (`Jan:Mar!A1`): it keeps its
+                    // address (sheet ADR 513).
+                    let span_end =
+                        start >= 1 && b[start - 1] == b':' && out_last_is_sheetish(text, start - 1);
                     let name = word.trim_start_matches('$');
-                    qual = Some((start..j + 1, name.eq_ignore_ascii_case(s.sheet_name)));
+                    qual = Some((
+                        start..j + 1,
+                        !span_end && name.eq_ignore_ascii_case(s.sheet_name),
+                    ));
                     i = j + 1;
                     continue;
                 }
@@ -641,14 +625,11 @@ fn text_refs(text: &str, s: &TextShift<'_>) -> Result<Vec<TextRef>, Unshiftable>
                     if let Some(w2) = word_at(text, j + 1) {
                         let end = j + 1 + w2.len();
                         if b.get(end) == Some(&b'!') {
-                            if s.span_excludes_target(word, w2) {
-                                qual = Some((ref_start..end + 1, false));
-                                i = end + 1;
-                                continue;
-                            }
-                            return Err(Unshiftable(format!(
-                                "a reference over a span of sheets that holds this one ({word}:{w2}!)"
-                            )));
+                            // `Jan:Mar!A1`: a 3D reference keeps its address
+                            // (sheet ADR 513).
+                            qual = Some((ref_start..end + 1, false));
+                            i = end + 1;
+                            continue;
                         }
                         if let (Some((c0, a0)), Some((c1, a1))) = (col_word(word), col_word(w2)) {
                             out.push(TextRef {
@@ -1030,27 +1011,19 @@ mod text_shift_tests {
         let t = "IF( A1 > 0 , \"x\" ,  Name1 )";
         assert_eq!(shift_ref_text(t, &s).unwrap(), t);
         assert!(shift_ref_text("\"open", &s).is_err());
-        assert!(shift_ref_text("SUM(Jan:Mar!A1)", &s).is_err());
-        assert!(shift_ref_text("SUM('Jan:Mar'!A1)", &s).is_err());
-        // With the tab order known, a span that leaves the sheet out stays.
-        let order = ["Jan".to_string(), "Mar".to_string(), "Data".to_string()];
-        let known = TextShift {
-            sheets: &order,
-            ..ts(INS_ROW_2, false)
-        };
+        // A 3D reference keeps its address (sheet ADR 513), quoted or not.
         assert_eq!(
-            shift_ref_text("SUM(Jan:Mar!A1)+Data!A2", &known).unwrap(),
-            "SUM(Jan:Mar!A1)+Data!A4"
+            shift_ref_text("SUM(Jan:Mar!A5)", &s).unwrap(),
+            "SUM(Jan:Mar!A5)"
         );
-        let inside = ["Jan".to_string(), "Data".to_string(), "Mar".to_string()];
-        assert!(shift_ref_text(
-            "SUM(Jan:Mar!A1)",
-            &TextShift {
-                sheets: &inside,
-                ..known
-            }
-        )
-        .is_err());
+        assert_eq!(
+            shift_ref_text("SUM('Jan:Data'!A5)+Data!A5", &ts(INS_ROW_2, false)).unwrap(),
+            "SUM('Jan:Data'!A5)+Data!A7"
+        );
+        assert_eq!(
+            shift_ref_text("SUM(Jan:Data!A5)", &ts(INS_ROW_2, false)).unwrap(),
+            "SUM(Jan:Data!A5)"
+        );
         // What the formula lexer refuses still shifts: non-ASCII names,
         // external books, structured references, error literals.
         assert_eq!(
