@@ -28,7 +28,7 @@
     "test:applicability": "bun scripts/applicability-guard.mjs",
     "test:feat-vocabulary": "bun scripts/feat-vocabulary-guard.mjs",
     "test:quarantine": "bun test --timeout 30000 ./scripts/quarantine-guard.test.mjs && bun scripts/quarantine-guard.mjs --list",
-    "test:solo-profiles": "bun scripts/solo-profiles-guard.mjs",
+    "test:profile-presets": "bun scripts/profile-presets-guard.mjs",
     "test:client-catalog": "bun scripts/client-api-catalog.mjs --check"
   },
   "devDependencies": {
