@@ -13,7 +13,8 @@
   },
   "scripts": {
     "typecheck": "bun check -p tsconfig.json",
-    "test": "bun test --parallel --preload ../../../tooling/js/bun-test-setup.ts --preload ./test/happydom.ts"
+    "test": "bun test --parallel --preload ../../../tooling/js/bun-test-setup.ts --preload ./test/happydom.ts",
+    "test:guard": "bun scripts/guard.mjs"
   },
   "peerDependencies": {
     "react": ">=19.3"
