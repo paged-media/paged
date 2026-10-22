@@ -175,7 +175,14 @@ async function fill(
       throw new CliError(EXIT.failed, `fill refused: ${refusal(reply)}`);
   }
   const problems: { name: string; problem: string }[] = [];
-  for (const v of values) {
+  // In the template's field order, whatever order the values came in: a
+  // module's writes may depend on the order (a sheet counts its writes), and
+  // `check` refills in this order too.
+  const rank = new Map(rows.map((r, i) => [r.field.name, i]));
+  const ordered = [...values].sort(
+    (a, b) => (rank.get(a.name) ?? 0) - (rank.get(b.name) ?? 0),
+  );
+  for (const v of ordered) {
     const ref = modules.get(v.name);
     if (!ref) continue;
     try {
@@ -270,9 +277,17 @@ async function snapshot(s: CliSession): Promise<Map<string, string>> {
     }
     for (const address of addresses) {
       const all = await s.h.objects.getAll(address, { content: true });
+      // A derived row is computed from the session (a query's record count
+      // once its source loaded), not stored in the document: two documents
+      // are compared by what they hold.
+      const derived = new Set(
+        (await s.h.objects.schema(address))
+          .filter((r) => r.access === "derived")
+          .map((r) => r.path),
+      );
       const values: Record<string, unknown> = {};
       for (const [path, v] of Object.entries(all)) {
-        if (v.kind === "value") values[path] = v.value;
+        if (v.kind === "value" && !derived.has(path)) values[path] = v.value;
       }
       out.set(address, JSON.stringify(values));
     }

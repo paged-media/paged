@@ -156,11 +156,10 @@ describe("paged template — data fields", () => {
     });
   });
 
-  // `template check` compares every readable row, derived ones included:
-  // the query's `recordCount` (what this session ingested) is 3 after the
-  // refill and 0 in the reopened submission, though the documents agree.
-  // Passes (as failing) until check skips `access: "derived"` rows.
-  it.failing("checks a filled record field clean", async () => {
+  // `template check` leaves derived rows out: the query's `recordCount`
+  // (what this session ingested) is 3 after the refill and 0 in the
+  // reopened submission, though the documents agree.
+  it("checks a filled record field clean", async () => {
     const out = join(tmp.dir, "checked.paged");
     await cli([
       "template",
