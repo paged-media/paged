@@ -24,36 +24,57 @@
 // outlines, the template panel). Without a provider the role is `editor`,
 // the engine's default.
 
-import { createContext, useContext, useEffect, type ReactNode } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  type ReactNode,
+} from "react";
 
 import type { Role, SessionPolicy } from "@paged-media/client";
 
 import { useCanvasClient } from "./canvas-client-context";
 
 const SessionRoleContext = createContext<Role>("editor");
+const SetRoleContext = createContext<((role: Role) => void) | null>(null);
 
 /** The role this editor runs in. */
 export function useSessionRole(): Role {
   return useContext(SessionRoleContext);
 }
 
+/** Changes the session's role (an author previewing as a filler, an editor
+ *  taking up authoring); null where nothing may change it. */
+export function useSetSessionRole(): ((role: Role) => void) | null {
+  return useContext(SetRoleContext);
+}
+
 /** Publishes the role and hands the policy to the engine whenever it
- *  changes (the worker keeps it across document loads). */
+ *  changes (the worker keeps it across document loads). A role change goes
+ *  to the host's `onRoleChange` when it keeps the role (the embedding
+ *  instance does), else the provider keeps it. */
 export function SessionPolicyProvider({
   policy,
+  onRoleChange,
   children,
 }: {
   policy: SessionPolicy;
+  onRoleChange?: (role: Role) => void;
   children: ReactNode;
 }) {
   const client = useCanvasClient();
-  const key = JSON.stringify(policy);
+  const [local, setLocal] = useState<Role | null>(null);
+  const role = onRoleChange ? policy.role : (local ?? policy.role);
+  const key = JSON.stringify({ ...policy, role });
   useEffect(() => {
     void client.setSessionPolicy(JSON.parse(key) as SessionPolicy);
   }, [client, key]);
   return (
-    <SessionRoleContext.Provider value={policy.role}>
-      {children}
+    <SessionRoleContext.Provider value={role}>
+      <SetRoleContext.Provider value={onRoleChange ?? setLocal}>
+        {children}
+      </SetRoleContext.Provider>
     </SessionRoleContext.Provider>
   );
 }
