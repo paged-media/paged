@@ -2741,6 +2741,8 @@ export function createWorkbookSession(
     };
     try {
       state.engine.loadXlsx(bytes);
+      // CELL("filename") reads the workbook's name (sheet ADR 516).
+      state.engine.setDocumentName?.(name);
       loadEpoch += 1;
       state.fileName = name;
       state.gridSelection = null;

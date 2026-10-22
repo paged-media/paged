@@ -1,0 +1,10 @@
+# ISNONTEXT(value).
+# id	formula	setup	expected
+int-0	=ISNONTEXT(1)	-	TRUE
+int-1	=ISNONTEXT("a")	-	FALSE
+int-2	=ISNONTEXT(A1)	-	TRUE
+int-3	=ISNONTEXT(A1)	A1=text:	FALSE
+int-4	=ISNONTEXT(A1)	A1=#N/A	TRUE
+int-5	=ISNONTEXT(TRUE)	-	TRUE
+int-6	=SUM(--ISNONTEXT({1,"a",TRUE}))	-	2
+int-7	=ISNONTEXT(A1:A2)	A1=text:x;A2=1	FALSE
