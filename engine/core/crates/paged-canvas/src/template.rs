@@ -195,9 +195,11 @@ impl CanvasModel {
                         .as_ref()
                         .and_then(|e| self.visible_of(e))
                         .map(|visible| FieldValue::Visible { visible }),
+                    // A module field's value is its module's to read.
                     TemplateFieldKind::TextRun
                     | TemplateFieldKind::Choice
-                    | TemplateFieldKind::Data => None,
+                    | TemplateFieldKind::Data
+                    | TemplateFieldKind::Module => None,
                 };
                 TemplateFieldSummary {
                     overset: story_id.as_ref().is_some_and(|s| overset.contains(s)),
@@ -327,6 +329,9 @@ impl CanvasModel {
                     _,
                 ) => {
                     problem("this kind of field cannot be set yet");
+                }
+                (TemplateFieldKind::Module, _) => {
+                    problem("a module field is set through its module");
                 }
                 _ => problem("the value does not fit the field's kind"),
             }

@@ -21,6 +21,7 @@
 // browser's template form sends (engine ADR 1001):
 //
 //   paged template fields <doc>                      the fields, their kinds, constraints and values
+//   paged template kinds                             the module field kinds the loaded modules offer
 //   paged template fill <template> --values <json> -o <out>
 //                                                    fill as a filler; write .paged, .idml or .pdf
 //   paged template check <template> <filled>         is <filled> the template with only its fields changed?
@@ -30,9 +31,15 @@
 // the submission's own field values and compares the two documents element
 // by element and story by story: any other difference is a change the
 // template did not allow. The template, not the submission, is the authority.
+//
+// A module field (a sheet's cell, a doc's block; plan G2) is read and written
+// by the module that owns its kind, through `host.objects`, after the session
+// takes the filler role, so the engine checks the module's writes as it
+// checks its own. A module value is plain JSON; a picture is
+// `{ "$file": "<path>" }`.
 
 import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { basename, resolve } from "node:path";
 
 import { flagStr, type OptionSpec } from "./args";
 import { CliError, EXIT } from "./errors";
@@ -48,25 +55,80 @@ interface Reply {
 }
 
 interface FieldRow {
-  field: { name: string; kind: string };
+  field: {
+    name: string;
+    kind: string;
+    module?: { kind: string; def?: unknown } | null;
+  };
+  targetId: string;
   storyId?: string | null;
   value?: {
     kind: string;
     text?: string;
     uri?: string;
     visible?: boolean;
+    value?: unknown;
   } | null;
 }
+
+interface FieldValue {
+  name: string;
+  value: unknown;
+}
+
+const moduleRef = (r: FieldRow) =>
+  r.field.module
+    ? {
+        name: r.field.name,
+        targetId: r.targetId,
+        kind: r.field.module.kind,
+        def: r.field.module.def ?? null,
+      }
+    : null;
 
 const send = (s: CliSession, kind: string, payload?: unknown): Promise<Reply> =>
   s.driver.editor.client.send(
     (payload === undefined ? { kind } : { kind, payload }) as never,
   ) as unknown as Promise<Reply>;
 
+/** The template's fields; a module field's value comes from its module
+ *  (`{ kind: "module", value }`), or is null when the module is not
+ *  loaded. */
 async function fields(s: CliSession): Promise<FieldRow[]> {
-  return (await s.driver.editor.client.collection(
+  const rows = (await s.driver.editor.client.collection(
     "templateFields" as never,
   )) as FieldRow[];
+  for (const row of rows) {
+    const ref = moduleRef(row);
+    if (!ref) continue;
+    try {
+      const { value } = await s.h.objects.readTemplateField(ref);
+      row.value = value === null ? null : { kind: "module", value };
+    } catch {
+      row.value = null;
+    }
+  }
+  return rows;
+}
+
+/** A module value as its module takes it: the wire's wrapped text or
+ *  visibility unwrapped, a `{ "$file" }` picture read from disk. */
+function moduleValue(cwd: string, v: unknown): unknown {
+  if (v && typeof v === "object" && !Array.isArray(v)) {
+    const o = v as Record<string, unknown>;
+    if (o["kind"] === "module") return o["value"];
+    if (o["kind"] === "text" && typeof o["text"] === "string") return o["text"];
+    if (o["kind"] === "visible" && typeof o["visible"] === "boolean")
+      return o["visible"];
+    if (typeof o["$file"] === "string") {
+      const path = resolve(cwd, o["$file"]);
+      return {
+        name: basename(path),
+        bytes: new Uint8Array(readFileSync(path)),
+      };
+    }
+  }
+  return v;
 }
 
 function refusal(reply: Reply): string {
@@ -80,8 +142,13 @@ function refusal(reply: Reply): string {
   return e.kind;
 }
 
-/** Fill `values` in a filler session; throws what the engine refused. */
-async function fill(s: CliSession, values: unknown[]): Promise<void> {
+/** Fill `values` in a filler session; throws what the engine or a module
+ *  refused. */
+async function fill(
+  s: CliSession,
+  values: readonly FieldValue[],
+  cwd: string,
+): Promise<void> {
   const role = await send(s, "setSessionPolicy", {
     policy: { role: "filler" },
   });
@@ -90,23 +157,56 @@ async function fill(s: CliSession, values: unknown[]): Promise<void> {
       EXIT.failed,
       `the engine did not take the session role (${role.kind})`,
     );
-  const reply = await send(s, "setTemplateFields", { values });
-  if (reply.kind === "templateFieldsRefused")
+  const rows = await fields(s);
+  const modules = new Map(
+    rows.flatMap((r) => {
+      const ref = moduleRef(r);
+      return ref ? [[r.field.name, ref] as const] : [];
+    }),
+  );
+  const engine = values.filter((v) => !modules.has(v.name));
+  if (engine.length > 0) {
+    const reply = await send(s, "setTemplateFields", { values: engine });
+    if (reply.kind === "templateFieldsRefused")
+      throw new CliError(EXIT.failed, "values do not fit their fields", {
+        problems: reply.payload.problems ?? [],
+      });
+    if (reply.kind !== "mutationApplied")
+      throw new CliError(EXIT.failed, `fill refused: ${refusal(reply)}`);
+  }
+  const problems: { name: string; problem: string }[] = [];
+  for (const v of values) {
+    const ref = modules.get(v.name);
+    if (!ref) continue;
+    try {
+      const r = await s.h.objects.writeTemplateField(
+        ref,
+        moduleValue(cwd, v.value),
+      );
+      if (!r.ok) problems.push({ name: v.name, problem: r.problem });
+    } catch (err) {
+      problems.push({
+        name: v.name,
+        problem: /unknownFieldKind/.test(String(err))
+          ? `the module of ${ref.kind} is not loaded`
+          : (err as Error).message,
+      });
+    }
+  }
+  if (problems.length > 0)
     throw new CliError(EXIT.failed, "values do not fit their fields", {
-      problems: reply.payload.problems ?? [],
+      problems,
     });
-  if (reply.kind !== "mutationApplied")
-    throw new CliError(EXIT.failed, `fill refused: ${refusal(reply)}`);
 }
 
 /** The values a filled document holds, as `fill` takes them. */
-function valuesOf(rows: readonly FieldRow[]): unknown[] {
+function valuesOf(rows: readonly FieldRow[]): FieldValue[] {
   return rows.flatMap((r) =>
     r.value ? [{ name: r.field.name, value: r.value }] : [],
   );
 }
 
-function readValues(cwd: string, arg: string): unknown[] {
+function readValues(cwd: string, arg: string): FieldValue[] {
   const text =
     arg.trim().startsWith("[") || arg.trim().startsWith("{")
       ? arg
@@ -121,7 +221,7 @@ function readValues(cwd: string, arg: string): unknown[] {
     );
   }
   // `{ "name": "text" | value }` is accepted beside the wire's list.
-  if (Array.isArray(parsed)) return parsed;
+  if (Array.isArray(parsed)) return parsed as FieldValue[];
   if (parsed && typeof parsed === "object") {
     return Object.entries(parsed as Record<string, unknown>).map(
       ([name, v]) => ({
@@ -154,10 +254,14 @@ const KINDS = [
 ];
 
 /** Every object's readable properties (a story's content included), keyed
- *  by address: what two documents are compared by. */
+ *  by address: what two documents are compared by. The loaded modules'
+ *  objects count too, so a change to a sheet outside its fields shows. */
 async function snapshot(s: CliSession): Promise<Map<string, string>> {
   const out = new Map<string, string>();
-  for (const kind of KINDS) {
+  const modules = (await s.h.objects.kinds())
+    .filter((k) => k.owner !== "core")
+    .map((k) => k.kind);
+  for (const kind of [...KINDS, ...modules]) {
     let addresses: readonly string[] = [];
     try {
       addresses = await s.h.objects.query(kind);
@@ -184,10 +288,10 @@ const VALUES: OptionSpec = {
 
 export const template: Verb = {
   name: "template",
-  usage: "fields <doc> | fill <template> | check <template> <filled>",
+  usage: "fields <doc> | kinds | fill <template> | check <template> <filled>",
   summary:
     "template fields: list them, fill them as a filler (writes .paged, .idml or .pdf), check that a filled document changed only its fields",
-  min: 2,
+  min: 1,
   max: 3,
   options: [
     VALUES,
@@ -198,13 +302,27 @@ export const template: Verb = {
       help: "fill: write the result here",
     },
   ],
-  reaches: [],
+  reaches: ["templateFieldKinds", "readTemplateField", "writeTemplateField"],
   async run({ args, session, freshSession, cwd }) {
     const [sub, doc, other] = args.positionals as [
       string,
-      string,
+      string | undefined,
       string | undefined,
     ];
+    if (sub === "kinds") {
+      const s = await session(null);
+      const kinds = await s.h.objects.templateFieldKinds();
+      return {
+        json: { kinds },
+        text: kinds.length
+          ? kinds
+              .map((k) => `${k.kind}\t${k.control.kind}\t${k.title}`)
+              .join("\n")
+          : "no module field kinds",
+      };
+    }
+    if (!doc)
+      throw new CliError(EXIT.usage, `template ${sub} needs a document`);
     if (sub === "fields") {
       const s = await session(doc);
       const rows = await fields(s);
@@ -227,7 +345,7 @@ export const template: Verb = {
       const out = flagStr(args, "out");
       if (!out) throw new CliError(EXIT.usage, "template fill needs -o <file>");
       const s = await session(doc);
-      await fill(s, readValues(cwd, valuesArg));
+      await fill(s, readValues(cwd, valuesArg), cwd);
       const saved = await s.save(out);
       return {
         json: { ...saved, fields: await fields(s) },
@@ -246,7 +364,7 @@ export const template: Verb = {
       if (!freshSession)
         throw new CliError(EXIT.usage, "template check needs a second session");
       const expected = await freshSession(doc);
-      await fill(expected, values);
+      await fill(expected, values, cwd);
       const wanted = await snapshot(expected);
       const differences: string[] = [];
       for (const key of new Set([...wanted.keys(), ...actual.keys()])) {
@@ -263,7 +381,7 @@ export const template: Verb = {
     }
     throw new CliError(
       EXIT.usage,
-      `template: unknown subcommand "${sub}" (fields, fill, check)`,
+      `template: unknown subcommand "${sub}" (fields, kinds, fill, check)`,
     );
   },
 };

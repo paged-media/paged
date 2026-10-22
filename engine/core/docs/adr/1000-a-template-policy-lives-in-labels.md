@@ -80,3 +80,15 @@ next step if that ever shows in a profile.
 The canvas model applies through `apply_checked`, with the session's role on the wire, the
 text and settings writes checked, gestures refused at their beginning and refusals typed:
 [ADR 1001](1001-the-session-has-a-role-and-refusals-are-typed.md).
+
+## Amendment — 2026-10-23: module fields
+
+A template may open a part of a module's content (a sheet's cell, a doc's block, an edited
+image's picture). Such a field has the kind `module`, and its `module` names the module's field
+kind (`media.paged.sheet.cell`), the module's definition (a cell reference, an anchor) and the
+permissions filling it takes beyond selecting the item and writing the module's label on it
+(`select` and `document.metadata`, which the kind grants). `template.author` is never granted
+this way. The engine lists a module field in `templateFields` without a value and refuses one in
+`setTemplateFields` ("a module field is set through its module"): the module reads and writes
+it through `host.objects` (extensions [ADR 335](../../../../platform/extensions/docs/adr/335-modules-contribute-template-field-kinds.md)),
+and the engine checks the module's writes against the session's role like any other.
