@@ -37,6 +37,7 @@ import type {
   PropertyFieldAddress,
 } from "@paged-media/plugin-api";
 import { propertyRows, publishObjectList } from "@paged-media/plugin-sdk";
+import { defineMessages, t } from "@paged-media/strings";
 
 import {
   KIND_PREFIX,
@@ -44,6 +45,7 @@ import {
   parseImageAddress,
   layerAddress,
 } from "../object-model/image-objects";
+import { hueSatRangeLabel } from "../words";
 
 export const PROPERTIES_PANEL_ID = `${PLUGIN_ID}.panel.properties`;
 
@@ -236,77 +238,161 @@ export const IMAGE_PANEL_FIELDS: ReadonlyArray<ImagePanelField> = [
 const pathsOf = (group: string) =>
   IMAGE_PANEL_FIELDS.filter((f) => f.group === group).map((f) => f.path);
 
-const HSL = ["Hue", "Saturation", "Lightness"];
-const RANGES = ["Reds", "Yellows", "Greens", "Cyans", "Blues", "Magentas"];
-const RGB = ["Red", "Green", "Blue"];
-const MIX_SOURCE: Record<string, string> = {
-  r: "red",
-  g: "green",
-  b: "blue",
-  c: "constant",
-};
-const TONES: Record<string, string> = {
-  sh: "Shadows",
-  mid: "Midtones",
-  hi: "Highlights",
-};
-const BALANCE: Record<string, string> = {
-  Cr: "cyan–red",
-  Mg: "magenta–green",
-  Yb: "yellow–blue",
-};
-
-const LABELS: Readonly<Record<string, string>> = {
-  ...Object.fromEntries(HSL.map((l, i) => [`hueSaturation.master[${i}]`, l])),
-  "hueSaturation.colorize[0]": "Colorize",
-  ...Object.fromEntries(
-    HSL.map((l, i) => [
-      `hueSaturation.colorize[${i + 1}]`,
-      `Colorize ${l.toLowerCase()}`,
-    ]),
-  ),
-  ...Object.fromEntries(
-    RANGES.flatMap((r, i) =>
-      HSL.map((l, j) => [
-        `hueSaturation.ranges[${i}][${j}]`,
-        `${r} ${l.toLowerCase()}`,
-      ]),
-    ),
-  ),
-  ...Object.fromEntries(
-    Object.entries(TONES).flatMap(([k, t]) =>
-      Object.entries(BALANCE).map(([b, l]) => [
-        `colorBalance.${k}${b}`,
-        `${t} ${l}`,
-      ]),
-    ),
-  ),
-  ...Object.fromEntries(
-    RGB.flatMap((out) =>
-      Object.entries(MIX_SOURCE).map(([s, l]) => [
-        `channelMixer.${out[0]!.toLowerCase()}${s}`,
-        `${out} from ${l}`,
-      ]),
-    ),
-  ),
-  ...Object.fromEntries(
-    RGB.flatMap((c) =>
-      [
-        ["InBlack", "input black"],
-        ["InWhite", "input white"],
-        ["Gamma", "gamma"],
-      ].map(([k, l]) => [`levelsRgb.${c[0]!.toLowerCase()}${k}`, `${c} ${l}`]),
-    ),
-  ),
-  "photoFilter.fr": "Filter red",
-  "photoFilter.fg": "Filter green",
-  "photoFilter.fb": "Filter blue",
-  "photoFilter.preserve": "Preserve luminosity",
-  "curves.composite": "Composite curve (256 levels)",
-  "curves.channels": "Channel curves (red, green, blue)",
+const L = defineMessages("image.properties", {
+  title: "Image properties",
+  layers: "Layers",
+  mask: "Mask",
+  smartObject: "Smart object",
+  adjustment: "Adjustment",
+  hueSaturation: "Hue/saturation",
+  hueSaturationRanges: "Hue/saturation ranges",
+  colourBalance: "Colour balance",
+  blackWhite: "Black & white",
+  channelMixer: "Channel mixer",
+  levelsPerChannel: "Levels per channel",
+  photoFilter: "Photo filter",
+  curves: "Curves",
+  filters: "Filters",
+  hue: "Hue",
+  saturation: "Saturation",
+  lightness: "Lightness",
+  hueLower: "hue",
+  saturationLower: "saturation",
+  lightnessLower: "lightness",
+  colorize: "Colorize",
+  colorizeOf: "Colorize {component}",
+  rangeOf: "{range} {component}",
+  shadows: "Shadows",
+  midtones: "Midtones",
+  highlights: "Highlights",
+  cyanRed: "cyan–red",
+  magentaGreen: "magenta–green",
+  yellowBlue: "yellow–blue",
+  toneAxis: "{tone} {axis}",
+  red: "Red",
+  green: "Green",
+  blue: "Blue",
+  fromRed: "red",
+  fromGreen: "green",
+  fromBlue: "blue",
+  fromConstant: "constant",
+  mixFrom: "{out} from {source}",
+  inputBlack: "input black",
+  inputWhite: "input white",
+  gamma: "gamma",
+  channelLevel: "{channel} {level}",
+  filterRed: "Filter red",
+  filterGreen: "Filter green",
+  filterBlue: "Filter blue",
+  preserveLuminosity: "Preserve luminosity",
+  compositeCurve: "Composite curve (256 levels)",
+  channelCurves: "Channel curves (red, green, blue)",
   order: "Stack position",
   pixelSource: "Replace pixels",
+});
+
+/** The section titles of the field groups (the group names stay the ids). */
+const GROUP_TITLES: Readonly<Record<string, string>> = {
+  Layers: L.layers,
+  Mask: L.mask,
+  "Smart object": L.smartObject,
+  Tone: L.adjustment,
+  "Hue/saturation": L.hueSaturation,
+  "Hue/saturation ranges": L.hueSaturationRanges,
+  "Colour balance": L.colourBalance,
+  "Black & white": L.blackWhite,
+  "Channel mixer": L.channelMixer,
+  "Levels per channel": L.levelsPerChannel,
+  "Photo filter": L.photoFilter,
+  Curves: L.curves,
+  Filters: L.filters,
 };
+
+/** The row labels in the editor's language, read when the panel is
+ *  contributed (rows the map leaves out take the schema's own label). */
+function labels(): Readonly<Record<string, string>> {
+  const hsl = [L.hue, L.saturation, L.lightness];
+  const hslLower = [L.hueLower, L.saturationLower, L.lightnessLower];
+  const ranges = ["Reds", "Yellows", "Greens", "Cyans", "Blues", "Magentas"];
+  const rgb: Array<[string, string]> = [
+    ["r", L.red],
+    ["g", L.green],
+    ["b", L.blue],
+  ];
+  const mixSource: Array<[string, string]> = [
+    ["r", L.fromRed],
+    ["g", L.fromGreen],
+    ["b", L.fromBlue],
+    ["c", L.fromConstant],
+  ];
+  const tones: Array<[string, string]> = [
+    ["sh", L.shadows],
+    ["mid", L.midtones],
+    ["hi", L.highlights],
+  ];
+  const balance: Array<[string, string]> = [
+    ["Cr", L.cyanRed],
+    ["Mg", L.magentaGreen],
+    ["Yb", L.yellowBlue],
+  ];
+  const levels: Array<[string, string]> = [
+    ["InBlack", L.inputBlack],
+    ["InWhite", L.inputWhite],
+    ["Gamma", L.gamma],
+  ];
+  return {
+    ...Object.fromEntries(
+      hsl.map((l, i) => [`hueSaturation.master[${i}]`, t(l)]),
+    ),
+    "hueSaturation.colorize[0]": t(L.colorize),
+    ...Object.fromEntries(
+      hslLower.map((l, i) => [
+        `hueSaturation.colorize[${i + 1}]`,
+        t(L.colorizeOf, { component: t(l) }),
+      ]),
+    ),
+    ...Object.fromEntries(
+      ranges.flatMap((r, i) =>
+        hslLower.map((l, j) => [
+          `hueSaturation.ranges[${i}][${j}]`,
+          t(L.rangeOf, { range: hueSatRangeLabel(r), component: t(l) }),
+        ]),
+      ),
+    ),
+    ...Object.fromEntries(
+      tones.flatMap(([k, tone]) =>
+        balance.map(([b, axis]) => [
+          `colorBalance.${k}${b}`,
+          t(L.toneAxis, { tone: t(tone), axis: t(axis) }),
+        ]),
+      ),
+    ),
+    ...Object.fromEntries(
+      rgb.flatMap(([o, out]) =>
+        mixSource.map(([s, source]) => [
+          `channelMixer.${o}${s}`,
+          t(L.mixFrom, { out: t(out), source: t(source) }),
+        ]),
+      ),
+    ),
+    ...Object.fromEntries(
+      rgb.flatMap(([c, channel]) =>
+        levels.map(([k, level]) => [
+          `levelsRgb.${c}${k}`,
+          t(L.channelLevel, { channel: t(channel), level: t(level) }),
+        ]),
+      ),
+    ),
+    "photoFilter.fr": t(L.filterRed),
+    "photoFilter.fg": t(L.filterGreen),
+    "photoFilter.fb": t(L.filterBlue),
+    "photoFilter.preserve": t(L.preserveLuminosity),
+    "curves.composite": t(L.compositeCurve),
+    "curves.channels": t(L.channelCurves),
+    order: t(L.order),
+    pixelSource: t(L.pixelSource),
+  };
+}
 
 /** Per-row presentation. The curves rows keep the typed list field (a
  *  number list; the channel tables as their JSON) rather than an items
@@ -342,40 +428,47 @@ const ADJUSTMENT_GROUPS = [
   "Filters",
 ] as const;
 
-const rowsOf = (kind: string, group: string, address: PropertyFieldAddress) =>
-  propertyRows(kind, pathsOf(group), address, {
-    labels: LABELS,
-    row: (p) => ROW_OPTIONS[p] ?? {},
-  });
-
-export const IMAGE_PROPERTIES_PANEL: PanelSchema = {
-  id: PROPERTIES_PANEL_ID,
-  title: "Image properties",
-  icon: "panel-properties",
-  defaultDock: "right",
-  sections: [
-    {
-      title: "Layers",
-      rows: [layerList, ...rowsOf(LAYER, "Layers", { bind: BIND.layer })],
-    },
-    {
-      title: "Mask",
-      visible: { bind: BIND.hasMask },
-      rows: rowsOf(MASK, "Mask", { bind: BIND.mask }),
-    },
-    {
-      title: "Smart object",
-      visible: { bind: BIND.isSmart },
-      rows: rowsOf(SMART, "Smart object", { bind: BIND.smartObject }),
-    },
-    ...ADJUSTMENT_GROUPS.map((group) => ({
-      title: group === "Tone" ? "Adjustment" : group,
-      collapsible: true,
-      visible: { bind: BIND.isAdjustment },
-      rows: rowsOf(ADJUSTMENT, group, { bind: BIND.adjustment }),
-    })),
-  ],
-};
+/**
+ * The panel's schema, in the editor's language at the time it is called
+ * (the bundle contributes it on activation).
+ */
+export function imagePropertiesPanel(): PanelSchema {
+  const rowLabels = labels();
+  const rowsOf = (kind: string, group: string, address: PropertyFieldAddress) =>
+    propertyRows(kind, pathsOf(group), address, {
+      labels: rowLabels,
+      row: (p) => ROW_OPTIONS[p] ?? {},
+    });
+  const title = (group: string) => t(GROUP_TITLES[group] ?? group);
+  return {
+    id: PROPERTIES_PANEL_ID,
+    title: t(L.title),
+    icon: "panel-properties",
+    defaultDock: "right",
+    sections: [
+      {
+        title: title("Layers"),
+        rows: [layerList, ...rowsOf(LAYER, "Layers", { bind: BIND.layer })],
+      },
+      {
+        title: title("Mask"),
+        visible: { bind: BIND.hasMask },
+        rows: rowsOf(MASK, "Mask", { bind: BIND.mask }),
+      },
+      {
+        title: title("Smart object"),
+        visible: { bind: BIND.isSmart },
+        rows: rowsOf(SMART, "Smart object", { bind: BIND.smartObject }),
+      },
+      ...ADJUSTMENT_GROUPS.map((group) => ({
+        title: title(group),
+        collapsible: true,
+        visible: { bind: BIND.isAdjustment },
+        rows: rowsOf(ADJUSTMENT, group, { bind: BIND.adjustment }),
+      })),
+    ],
+  };
+}
 
 /** Keep the layer list and the picked layer's derived addresses live. */
 export function publishPropertyLists(host: BundleHost): Disposable {

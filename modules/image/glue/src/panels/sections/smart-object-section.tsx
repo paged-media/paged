@@ -2,7 +2,21 @@
 // scale FROM ITS PRESERVED SOURCE (never from the already-scaled pixels).
 
 import type { ImageSession } from "../../session";
+import { defineMessages, t } from "@paged-media/strings";
+
 import { mono, note, row, sectionTitle } from "./styles";
+
+const M = defineMessages("image.smartObject", {
+  title: "Smart object",
+  convert: "Convert active layer",
+  smart: "smart",
+  pixels: "pixels",
+  scale: "Scale",
+  render: "Render",
+  note:
+    "A smart object keeps its original pixels. Scaling re-renders from them, " +
+    "so shrinking and then enlarging again loses nothing.",
+});
 
 export function SmartObjectSection({
   session,
@@ -23,7 +37,7 @@ export function SmartObjectSection({
 }) {
   return (
     <>
-      <div style={sectionTitle}>Smart object</div>
+      <div style={sectionTitle}>{t(M.title)}</div>
       <div style={row}>
         <button
           type="button"
@@ -31,12 +45,12 @@ export function SmartObjectSection({
           disabled={disabled || active < 0 || isSmart}
           onClick={() => void session.makeLayerSmart(active)}
         >
-          Convert active layer
+          {t(M.convert)}
         </button>
-        <span style={mono}>{isSmart ? "smart" : "pixels"}</span>
+        <span style={mono}>{t(isSmart ? M.smart : M.pixels)}</span>
       </div>
       <div style={row}>
-        <label htmlFor="pg-image-smart-scale">Scale</label>
+        <label htmlFor="pg-image-smart-scale">{t(M.scale)}</label>
         <input
           id="pg-image-smart-scale"
           type="range"
@@ -54,13 +68,10 @@ export function SmartObjectSection({
           disabled={disabled || !isSmart || !gpu}
           onClick={() => void session.renderLayerSmart(active, scale)}
         >
-          Render
+          {t(M.render)}
         </button>
       </div>
-      <div style={note}>
-        A smart object keeps its original pixels. Scaling re-renders from them,
-        so shrinking and then enlarging again loses nothing.
-      </div>
+      <div style={note}>{t(M.note)}</div>
     </>
   );
 }

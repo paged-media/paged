@@ -4,14 +4,32 @@
 
 import type { CanvasOpKind } from "../../engine";
 import type { ImageSession } from "../../session";
+import { defineMessages, t } from "@paged-media/strings";
+
 import { mono, note, row, sectionTitle } from "./styles";
 
+const M = defineMessages("image.canvas", {
+  title: "Canvas",
+  rotateCcw: "⟲ 90°",
+  rotateCw: "⟳ 90°",
+  rotate180: "180°",
+  flipH: "Flip ↔",
+  flipV: "Flip ↕",
+  size: "Size",
+  anchor: "Anchor",
+  applySize: "Apply size",
+  note:
+    "Rotate, flip and Canvas Size move every layer and mask exactly. Added " +
+    "canvas is transparent; cut-off canvas is gone. Each is one undo step.",
+});
+
+/** The operations and their message keys (read through `t` at render). */
 const OPS: Array<[CanvasOpKind, string]> = [
-  ["rotate-ccw", "⟲ 90°"],
-  ["rotate-cw", "⟳ 90°"],
-  ["rotate-180", "180°"],
-  ["flip-h", "Flip ↔"],
-  ["flip-v", "Flip ↕"],
+  ["rotate-ccw", M.rotateCcw],
+  ["rotate-cw", M.rotateCw],
+  ["rotate-180", M.rotate180],
+  ["flip-h", M.flipH],
+  ["flip-v", M.flipV],
 ];
 
 export interface CanvasSize {
@@ -35,7 +53,7 @@ export function CanvasSection({
 }) {
   return (
     <>
-      <div style={sectionTitle}>Canvas</div>
+      <div style={sectionTitle}>{t(M.title)}</div>
       <div style={row}>
         {OPS.map(([op, label]) => (
           <button
@@ -45,12 +63,12 @@ export function CanvasSection({
             disabled={disabled}
             onClick={() => void session.canvasOp(op)}
           >
-            {label}
+            {t(label)}
           </button>
         ))}
       </div>
       <div style={row}>
-        <label htmlFor="pg-image-canvas-w">Size</label>
+        <label htmlFor="pg-image-canvas-w">{t(M.size)}</label>
         <input
           id="pg-image-canvas-w"
           type="number"
@@ -69,7 +87,7 @@ export function CanvasSection({
         />
       </div>
       <div style={row}>
-        <span>Anchor</span>
+        <span>{t(M.anchor)}</span>
         <span
           style={{
             display: "grid",
@@ -98,13 +116,10 @@ export function CanvasSection({
           disabled={disabled || size.width < 1 || size.height < 1}
           onClick={() => void session.canvasOp("canvas", size)}
         >
-          Apply size
+          {t(M.applySize)}
         </button>
       </div>
-      <div style={note}>
-        Rotate, flip and Canvas Size move every layer and mask exactly. Added
-        canvas is transparent; cut-off canvas is gone. Each is one undo step.
-      </div>
+      <div style={note}>{t(M.note)}</div>
     </>
   );
 }
