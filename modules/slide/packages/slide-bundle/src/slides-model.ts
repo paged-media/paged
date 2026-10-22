@@ -370,6 +370,13 @@ type TreeNode = {
  * copy brings the layout's master and its placeholders with PowerPoint's
  * own formatting, which the engine keeps on an emptied paragraph. Answers
  * the new page's id, or null when the host refused a step.
+ *
+ * ONE undo step. Which items to drop and which stories to empty is only
+ * known once the copy exists, and a batch cannot name the ids a copy mints
+ * inside it; so the copy is made once to read them, undone, and made again
+ * with the rest in one batch. The engine mints the same ids for the same
+ * copy of the same document (the batch's page is checked against the
+ * probe's, and a mismatch is undone and answered null).
  */
 export async function newSlide(
   host: BundleHost,
@@ -380,11 +387,42 @@ export async function newSlide(
   const storiesBefore = new Set(
     (await doc.collection<{ selfId: string }>("stories")).map((s) => s.selfId),
   );
-  const dup = await doc.mutate(duplicateMutation(layout.templatePageId));
-  if (!dup.applied) return null;
+  const probe = await doc.mutate(duplicateMutation(layout.templatePageId));
+  if (!probe.applied) return null;
+  let ops: MutationInput[] | null = null;
   // The engine names the copy; the page list says where it landed.
-  const pageId = dup.createdPages?.[0];
-  if (!pageId) return null;
+  const pageId = probe.createdPages?.[0] ?? null;
+  try {
+    if (pageId)
+      ops = await emptyCopy(host, layout, pageId, afterPageId, storiesBefore);
+  } finally {
+    await doc.undo();
+  }
+  if (!pageId || !ops) return null;
+  const out = await doc.mutate({
+    op: "batch",
+    args: { ops: [duplicateMutation(layout.templatePageId), ...ops] },
+  } as MutationInput);
+  if (!out.applied) return null;
+  if (out.createdPages?.[0] !== pageId) {
+    await doc.undo();
+    return null;
+  }
+  return pageId;
+}
+
+/** What makes the copy `pageId` of `layout`'s slide a new slide: its items
+ *  that are not placeholders deleted, its placeholders emptied, its label
+ *  the layout's alone, and the page moved after `afterPageId` (or last).
+ *  Null when the copy is not in the page list. */
+async function emptyCopy(
+  host: BundleHost,
+  layout: Layout,
+  pageId: string,
+  afterPageId: string | null,
+  storiesBefore: ReadonlySet<string>,
+): Promise<MutationInput[] | null> {
+  const doc = host.document;
   const pages = await doc.collection<{ selfId: string }>("pages");
   const index = pages.findIndex((p) => p.selfId === pageId);
   if (index < 0) return null;
@@ -428,7 +466,5 @@ export async function newSlide(
     : order.length - 1;
   const move = moveMutation(order, pageId, target);
   if (move) ops.push(move);
-
-  const out = await doc.mutate({ op: "batch", args: { ops } } as MutationInput);
-  return out.applied ? pageId : null;
+  return ops;
 }
