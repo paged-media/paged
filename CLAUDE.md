@@ -91,18 +91,25 @@ tools and asks before anything that writes.
 
 ## npm packages
 
-Three public packages (docs/adr/PM-0008, amendment 3): `@paged-media/viewer`
+Four public packages (docs/adr/PM-0008, amendment 3; PM-0013): `@paged-media/viewer`
 (`engine/core/web/idml-viewer`), `@paged-media/paged` (`packages/paged`: the
 engine of the private `@paged-media/canvas-wasm` plus the `paged` bin, the CLI of
-`apps/cli`) and `@paged-media/plugin-sdk` (with the private `plugin-api` inlined as
-`./api`). Every other workspace package is private, and a public one depends on
-no private one. `.github/workflows/release.yml` publishes the three from a tag.
+`apps/cli`), `@paged-media/editor` (`apps/editor/packages/editor`: the embedding
+API of `apps/canvas/src/embed`, built with every private package bundled, the
+engine from `@paged-media/paged`, React a peer) and `@paged-media/plugin-sdk`
+(with the private `plugin-api` inlined as `./api`). Every other workspace package
+is private, and a public one depends on no private one.
+`.github/workflows/release.yml` publishes the four from a tag.
+
+- `@paged-media/editor`'s public types are `src/types.ts`, written out;
+  `test/conformance.ts` holds them to the embedding API's sources (`bun run
+typecheck` there). A change to `createEditor`'s config or handle updates both.
 
 - Any edit under `platform/extensions/packages/{plugin-api,plugin-sdk}/src`,
   comments included, bumps plugin-sdk's version (the contract's one public
   number), and plugin-api's private version moves with it to the same value
   (`extensions / contract-guard`). Between releases the in-tree number is the next
-  release's canary (`0.74.3-canary.N` after `v0.74.2`); a release stamps all three
+  release's canary (`0.74.3-canary.N` after `v0.74.2`); a release stamps all four
   packages with the tag's version (`tooling/release/stage.mjs`).
 
 ## Invariants

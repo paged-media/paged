@@ -28,6 +28,8 @@ const PACKAGES = {
   "web/idml-viewer": "@paged-media/viewer",
   // The engine on npm, assembled from canvas-wasm (PM-0008, amendment 3).
   "../../packages/paged": "@paged-media/paged",
+  // The embeddable editor, held to the same number (PM-0013).
+  "../../apps/editor/packages/editor": "@paged-media/editor",
 };
 const write = process.argv.includes("--write");
 

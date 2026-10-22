@@ -39,18 +39,14 @@
 // (not for --dry-run). A wasm that matches no package is an error: a module
 // without a version has no immutable home.
 
-import { execFileSync } from "node:child_process";
 import {
   appendFileSync,
   existsSync,
-  mkdtempSync,
   readFileSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
-import { brotliCompressSync, constants } from "node:zlib";
 
 import {
   APP,
@@ -62,57 +58,9 @@ import {
   walkWasm as walk,
 } from "./module-index.mjs";
 
+import { present, upload } from "./module-host.mjs";
+
 export { MODULE_HOST };
-const BUCKET = process.env.PAGED_MODULE_BUCKET ?? "paged-modules";
-
-async function present(url) {
-  try {
-    const res = await fetch(url, { method: "HEAD" });
-    return res.ok;
-  } catch {
-    return false;
-  }
-}
-
-function upload(key, file) {
-  const raw = readFileSync(file);
-  const br = brotliCompressSync(raw, {
-    params: {
-      [constants.BROTLI_PARAM_QUALITY]: 10,
-      [constants.BROTLI_PARAM_SIZE_HINT]: raw.length,
-    },
-  });
-  // In a temp dir: the file may be inside the package store (a declared
-  // module this build did not emit).
-  const dir = mkdtempSync(join(tmpdir(), "paged-modules-"));
-  const tmp = join(dir, "module.wasm.br");
-  writeFileSync(tmp, br);
-  execFileSync(
-    "npx",
-    [
-      "-y",
-      "wrangler@4",
-      "r2",
-      "object",
-      "put",
-      `${BUCKET}/${key}`,
-      // Wrangler 4 runs `r2 object` commands against the local simulator
-      // unless told otherwise.
-      "--remote",
-      "--file",
-      tmp,
-      "--content-type",
-      "application/wasm",
-      "--content-encoding",
-      "br",
-      "--cache-control",
-      "public, max-age=31536000, immutable",
-    ],
-    { stdio: ["ignore", "inherit", "inherit"] },
-  );
-  rmSync(dir, { recursive: true, force: true });
-  return br.length;
-}
 
 /** The installed root of package `name` (realpath), or null. */
 function rootOf(name) {
