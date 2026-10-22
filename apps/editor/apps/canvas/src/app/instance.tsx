@@ -36,6 +36,7 @@ import type {
   ResolvedProfile,
   ToolContribution,
 } from "@paged-media/shell";
+import { defineMessages, t } from "@paged-media/strings";
 
 import type { BundleEntry } from "../plugin-bundle-loader";
 import type { PluginBundle } from "../plugin-bundle-table";
@@ -71,23 +72,33 @@ export interface HostActions {
  * header) and a feature can switch it off. `save` is not one: it replaces
  * the editor's own save.
  */
+const HOST = defineMessages("hostAction", {
+  submit: "Submit",
+  close: "Close",
+  back: "Back",
+});
+
 export function hostCommands(actions: HostActions): CommandContribution[] {
   const out: CommandContribution[] = [];
   const { submit, close, back } = actions;
   if (submit)
     out.push({
       id: "paged.host.submit",
-      title: "Submit",
+      title: t(HOST.submit),
       handler: () => submit(),
     });
   if (close)
     out.push({
       id: "paged.host.close",
-      title: "Close",
+      title: t(HOST.close),
       handler: () => close(),
     });
   if (back)
-    out.push({ id: "paged.host.back", title: "Back", handler: () => back() });
+    out.push({
+      id: "paged.host.back",
+      title: t(HOST.back),
+      handler: () => back(),
+    });
   return out;
 }
 
@@ -96,6 +107,8 @@ export interface ShellAccess {
   readonly paged: PagedEditor;
   readonly registries: ShellRegistries;
   readonly client: CanvasClient;
+  /** Switches the editor between its dark and light theme. */
+  readonly setThemeMode: (mode: "dark" | "light") => void;
 }
 
 /** The session's role, changeable while the editor runs (`setRole`). */

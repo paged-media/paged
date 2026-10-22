@@ -165,6 +165,18 @@ Decisions: the split between TypeScript and Rust, [ADR 654](adr/654-pdf-ir-and-m
 the reader, [ADR 655](adr/655-pdfium-reader.md); the two paths,
 [ADR 656](adr/656-pdf-opens-as-native-document.md).
 
+## Typed commands and template fields
+
+The publish bundle contributes typed commands through `host.contribute.objectModel`
+(`packages/publish-bundle/src/commands.ts`): `exportPdf` (the options of
+`schema/export-pdf.args.json`, bookmarks and tagged PDF included), `exportIdml`,
+`exportPaged`, `importIdml`, and `preflight`, which runs the PDF exporter with the same options
+and answers its findings without the bytes (`ok` when none is an error).
+
+Neither bundle has a template field kind yet. The one planned, `media.paged.pdf.page` (which
+page of a placed PDF a frame shows), needs the engine first: it draws page 1 of a placed PDF
+whatever the IDML says (`<PDFAttribute PageNumber>` is not read).
+
 ## Where data is stored
 
 Neither bundle stores anything: no plugin metadata, no container parts, no host storage.
