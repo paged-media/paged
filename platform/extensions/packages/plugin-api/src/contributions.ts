@@ -60,6 +60,10 @@ export type {
   OverlayContribution,
   OverlayProps,
   OverlayPageRect,
+  // Frame surfaces (extensions ADR 334).
+  FrameSurfaceContribution,
+  FrameSurfaceProps,
+  FrameSurfaceRegistry,
   // Commands + keybindings.
   CommandContribution,
   KeybindingContribution,
