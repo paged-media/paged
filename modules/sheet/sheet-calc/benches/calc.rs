@@ -24,10 +24,11 @@
 //! `perf-counters` feature is on in bench builds (the crate's own
 //! dev-dependency), which costs a thread-local add per counted event.
 //!
-//! The SUM-form running total runs at n = 10 000, not 100 000: editing its
-//! head is ~n² today (4 × 10⁸ box scans and precedent tests at 10k), so
-//! 100k would take minutes per sample. The cell-chain form
-//! (`B{i} = B{i-1} + A{i}`) has no range edges and runs at 100k.
+//! The SUM-form running total runs at n = 10 000: its head edit was ~n²
+//! (1.3 s at 10k) until the anchored prefix aggregates (sheet ADR 512) made
+//! it linear (~4 ms). The cell-chain form (`B{i} = B{i-1} + A{i}`) has no
+//! range edges and runs at 100k. The `quadratic` group keeps its name for
+//! trend continuity.
 
 use criterion::{criterion_group, criterion_main, Criterion};
 use sheet_calc::{Engine, EngineConfig};
@@ -165,5 +166,63 @@ fn vlookup_table(c: &mut Criterion) {
     assert!(matches!(num(&e, 0, 3), 70.0 | 80.0));
 }
 
-criterion_group!(benches, running_total, vlookup_table);
+/// A1:B{n} a key/value table, D{i} = XLOOKUP(C{i}, $A$1:$A${n}, $B$1:$B${n}).
+fn xlookup(n: u32) -> Engine {
+    let mut e = engine();
+    let mut batch = Vec::new();
+    for i in 0..n {
+        batch.push((0, i, 0, e.parse_input(0, &(i + 1).to_string()).unwrap()));
+        batch.push((
+            0,
+            i,
+            1,
+            e.parse_input(0, &((i + 1) * 10).to_string()).unwrap(),
+        ));
+        batch.push((0, i, 2, e.parse_input(0, &(n - i).to_string()).unwrap()));
+        let f = format!("=XLOOKUP(C{},$A$1:$A${n},$B$1:$B${n})", i + 1);
+        batch.push((0, i, 3, e.parse_input(0, &f).unwrap()));
+    }
+    e.set_cells(batch);
+    e
+}
+
+/// A1:A{n} categories c0..c99, B1:B{n} amounts; D{k} = SUMIF over c{k}.
+fn sumif_categories(n: u32) -> Engine {
+    let mut e = engine();
+    let mut batch = Vec::new();
+    for i in 0..n {
+        batch.push((0, i, 0, e.parse_input(0, &format!("c{}", i % 100)).unwrap()));
+        batch.push((0, i, 1, e.parse_input(0, &(i + 1).to_string()).unwrap()));
+    }
+    for k in 0..100 {
+        let f = format!("=SUMIF($A$1:$A${n},\"c{k}\",$B$1:$B${n})");
+        batch.push((0, k, 3, e.parse_input(0, &f).unwrap()));
+    }
+    e.set_cells(batch);
+    e
+}
+
+fn index_lookups(c: &mut Criterion) {
+    const N: u32 = 10_000;
+    let mut g = c.benchmark_group("quadratic");
+    g.sample_size(10);
+    let mut e = xlookup(N);
+    let mut flip = false;
+    g.bench_function("xlookup_10k_over_10k_edit_table", |b| {
+        b.iter(|| {
+            flip = !flip;
+            enter(&mut e, N / 2, 1, if flip { "-1" } else { "0" });
+        })
+    });
+    let mut e = sumif_categories(N);
+    g.bench_function("sumif_100_over_10k_edit_amount", |b| {
+        b.iter(|| {
+            flip = !flip;
+            enter(&mut e, N / 2, 1, if flip { "-1" } else { "0" });
+        })
+    });
+    g.finish();
+}
+
+criterion_group!(benches, running_total, vlookup_table, index_lookups);
 criterion_main!(benches);

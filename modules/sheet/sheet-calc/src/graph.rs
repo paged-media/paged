@@ -271,32 +271,68 @@ impl DepGraph {
     /// reads `cell` directly, PLUS every formula that reads a range whose box
     /// contains `cell` (answered by the [`RangeIndex`] stab).
     pub fn dependents_of(&self, cell: CellRef) -> Vec<CellRef> {
+        let mut v: Vec<CellRef> = Vec::new();
+        self.for_each_dependent(cell, |d| v.push(d));
+        v.sort_unstable();
+        v.dedup();
+        v
+    }
+
+    /// [`DepGraph::dependents_of`] without the collected, sorted, de-duplicated
+    /// `Vec`: `f` sees every direct dependent, a formula that reaches `cell`
+    /// both directly and through a range more than once. For walks that
+    /// de-duplicate themselves (dirty propagation inserts into a set), so the
+    /// per-cell allocation is gone (2026-10: a 100 000-cell chain head edit
+    /// spent a fifth of its time allocating these sets).
+    pub fn for_each_dependent(&self, cell: CellRef, mut f: impl FnMut(CellRef)) {
         let key = strip(cell);
-        let mut out: FxHashSet<CellRef> = FxHashSet::default();
         if let Some(set) = self.cell_dependents.get(&key) {
-            out.extend(set.iter().copied());
+            set.iter().copied().for_each(&mut f);
         }
         perf_count!(range_probes, 1);
         self.index.stab(key.sheet, key.row, key.col, |rk| {
             if let Some(deps) = self.range_dependents.get(rk) {
-                out.extend(deps.iter().copied());
+                deps.iter().copied().for_each(&mut f);
             }
         });
-        let mut v: Vec<CellRef> = out.into_iter().collect();
-        v.sort();
-        v
     }
 
     /// The direct cell + range dependencies a formula cell reads, as
     /// single-cell `CellRef`s already registered as formula nodes (used by the
     /// topo sort to compute in-degree over the dirty subgraph). Range deps
     /// expand to the candidate cells INSIDE the box (a [`Candidates`] seek).
+    /// De-duplicated, in no particular order.
     pub fn precedents_in(&self, cell: CellRef, candidate: &Candidates<'_>) -> Vec<CellRef> {
-        let mut out: FxHashSet<CellRef> = FxHashSet::default();
+        let mut out: Vec<CellRef> = Vec::new();
+        self.for_each_precedent_in(cell, candidate, |c| out.push(c));
+        out.sort_unstable();
+        out.dedup();
+        out
+    }
+
+    /// The single cells `cell` reads directly (its forward cell edges).
+    pub fn cell_deps(&self, cell: CellRef) -> &[CellRef] {
+        self.cell_deps_of.get(&cell).map_or(&[], |v| v.as_slice())
+    }
+
+    /// The range boxes `cell` reads (its forward range edges).
+    pub fn range_deps(&self, cell: CellRef) -> &[RangeKey] {
+        self.range_deps_of.get(&cell).map_or(&[], |v| v.as_slice())
+    }
+
+    /// [`DepGraph::precedents_in`] as a callback, duplicates included (a cell
+    /// read directly and through a range is reported twice). The topo sort
+    /// de-duplicates its edge list once instead of allocating a set per cell.
+    pub fn for_each_precedent_in(
+        &self,
+        cell: CellRef,
+        candidate: &Candidates<'_>,
+        mut f: impl FnMut(CellRef),
+    ) {
         if let Some(deps) = self.cell_deps_of.get(&cell) {
             for d in deps {
                 if candidate.contains(d) {
-                    out.insert(*d);
+                    f(*d);
                 }
             }
         }
@@ -304,12 +340,9 @@ impl DepGraph {
             for k in keys {
                 // Any candidate formula cell inside this range box is a
                 // precedent (intra-dirty-cut edge).
-                candidate.inside(k, |c| {
-                    out.insert(c);
-                });
+                candidate.inside(k, &mut f);
             }
         }
-        out.into_iter().collect()
     }
 
     /// Rebuild the whole graph from scratch: register every cell in `model`
@@ -523,14 +556,23 @@ impl RangeIndex {
 pub struct Candidates<'a> {
     set: &'a FxHashSet<CellRef>,
     /// `(sheet, col, row)` — column-major, so a box column is one range.
-    by_col: BTreeSet<(SheetId, u32, u32)>,
+    /// Built on the first box query: a dirty cut with no range edges (a
+    /// cell chain) never pays for it.
+    by_col: std::cell::OnceCell<BTreeSet<(SheetId, u32, u32)>>,
 }
 
 impl<'a> Candidates<'a> {
-    /// Index a dirty cut (`O(d log d)`).
+    /// Index a dirty cut (`O(d log d)`, deferred to the first box query).
     pub fn new(set: &'a FxHashSet<CellRef>) -> Self {
-        let by_col = set.iter().map(|c| (c.sheet, c.col, c.row)).collect();
-        Candidates { set, by_col }
+        Candidates {
+            set,
+            by_col: std::cell::OnceCell::new(),
+        }
+    }
+
+    fn by_col(&self) -> &BTreeSet<(SheetId, u32, u32)> {
+        self.by_col
+            .get_or_init(|| self.set.iter().map(|c| (c.sheet, c.col, c.row)).collect())
     }
 
     /// Whether `cell` is a candidate.
@@ -543,7 +585,7 @@ impl<'a> Candidates<'a> {
     /// candidates instead (the cheaper of the two).
     pub fn inside(&self, k: &RangeKey, mut f: impl FnMut(CellRef)) {
         let cols = u64::from(k.col1 - k.col0) + 1;
-        if cols > self.by_col.len() as u64 {
+        if cols > self.set.len() as u64 {
             perf_count!(precedent_candidates_scanned, self.set.len());
             for c in self.set {
                 if k.contains(c.sheet, c.row, c.col) {
@@ -555,7 +597,7 @@ impl<'a> Candidates<'a> {
         for col in k.col0..=k.col1 {
             perf_count!(precedent_candidates_scanned, 1);
             for &(sheet, col, row) in self
-                .by_col
+                .by_col()
                 .range((k.sheet, col, k.row0)..=(k.sheet, col, k.row1))
             {
                 perf_count!(precedent_candidates_scanned, 1);

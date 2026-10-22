@@ -6,7 +6,7 @@
     "command": 335,
     "keybinding": 88,
     "menu": 257,
-    "panel": 120,
+    "panel": 121,
     "tool": 72
   },
   "features": [
@@ -4002,6 +4002,11 @@
     },
     {
       "id": "panel:paged.tabs",
+      "kind": "panel",
+      "owner": "editor"
+    },
+    {
+      "id": "panel:paged.template.form",
       "kind": "panel",
       "owner": "editor"
     },

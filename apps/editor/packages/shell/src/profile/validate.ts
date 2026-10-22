@@ -50,6 +50,14 @@ const PROFILE_KEYS = new Set([
   "documentSizePt",
   "storageScope",
   "features",
+  "role",
+]);
+
+const ROLES: ReadonlySet<string> = new Set([
+  "author",
+  "editor",
+  "filler",
+  "viewer",
 ]);
 
 const REGION_SET: ReadonlySet<string> = new Set(REGION_IDS);
@@ -312,6 +320,17 @@ export function validateProfile(input: unknown): {
         }
       }
       out.canvas = canvas;
+    }
+  }
+
+  if (input.role !== undefined) {
+    if (typeof input.role === "string" && ROLES.has(input.role)) {
+      out.role = input.role as EditorProfile["role"];
+    } else {
+      problems.push({
+        path: "role",
+        message: "expected author, editor, filler or viewer; ignored",
+      });
     }
   }
 

@@ -55,6 +55,7 @@ use sheet_core::{CellError, CellRef, CellValue, RangeRef, SheetId, SheetModel, T
 use sheet_fn::{coerce, Arg, EvalCtx, FnResult};
 use std::borrow::Cow;
 
+use crate::accel::{self, Fast};
 use crate::argview::{self, RangeBuf};
 use crate::spill::SpillState;
 
@@ -587,7 +588,7 @@ fn excel_ordering(lhs: &CellValue, rhs: &CellValue) -> std::cmp::Ordering {
 /// How one function argument materializes: a ready scalar value, or an index
 /// into the owned [`RangeBuf`] backing list (a range view is lent from it only
 /// once the buffers are allocated, so borrows do not overlap allocation).
-enum ArgPlan {
+pub(crate) enum ArgPlan {
     Scalar(CellValue),
     BufAt(usize),
 }
@@ -835,7 +836,10 @@ fn eval_func(
         return eval_special_form(model, fid, args, ctx, spills);
     }
     let args = with_missing_defaults(fid, args);
-    let (bufs, plans) = plan_args(model, fid, &args, ctx, spills);
+    let (mut bufs, plans) = plan_args(model, fid, &args, ctx, spills);
+    if let Fast::Value(v) = accel::try_eval(model, fid, &mut bufs, &plans) {
+        return v;
+    }
     let built = build_args(&bufs, &plans);
     sheet_fn::dispatch(fid, &built, ctx)
 }
@@ -910,7 +914,10 @@ fn eval_func_rich(
         return FnResult::Scalar(eval_special_form(model, fid, args, ctx, spills));
     }
     let args = with_missing_defaults(fid, args);
-    let (bufs, plans) = plan_args(model, fid, &args, ctx, spills);
+    let (mut bufs, plans) = plan_args(model, fid, &args, ctx, spills);
+    if let Fast::Value(v) = accel::try_eval(model, fid, &mut bufs, &plans) {
+        return FnResult::Scalar(v);
+    }
     let built = build_args(&bufs, &plans);
     sheet_fn::dispatch_rich(fid, &built, ctx)
 }

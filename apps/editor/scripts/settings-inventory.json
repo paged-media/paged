@@ -280,7 +280,9 @@
         "solo:sheet",
         "solo:doc",
         "solo:web",
-        "solo:data"
+        "solo:data",
+        "template-fill",
+        "viewer"
       ],
       "effect": "boots the editor as a named preset of the editor profile; it wins over ?solo=",
       "source": "apps/editor/apps/canvas/src/profiles/from-url.ts",
