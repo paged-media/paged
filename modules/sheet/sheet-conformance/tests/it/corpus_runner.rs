@@ -54,7 +54,7 @@
 //!   it so a no-arg reference function has a known anchor. The runner places
 //!   the formula at that cell instead of the default Z99.
 
-use sheet_conformance::runner::{project, run_case as replay};
+use sheet_conformance::runner::{project, projection_matches, run_case as replay};
 use sheet_conformance::{load_corpus, CorpusCase};
 
 /// The outcome of running one corpus case.
@@ -76,7 +76,7 @@ fn run_case(case: &CorpusCase) -> Outcome {
         }
     };
     let got = project(&value);
-    if got == case.expected {
+    if projection_matches(&got, &case.expected) {
         Outcome::Pass
     } else {
         Outcome::Fail(format!(
@@ -253,4 +253,9 @@ fn sheet_calc_corpus_math3() {
 #[test]
 fn sheet_calc_corpus_eng() {
     run_family("eng");
+}
+
+#[test]
+fn sheet_calc_corpus_text3() {
+    run_family("text3");
 }

@@ -93,3 +93,4 @@ paged-test-resources = { path = "../../platform/shared/test-resources" }
 opt-level = "s"
 lto = true
 codegen-units = 1
+

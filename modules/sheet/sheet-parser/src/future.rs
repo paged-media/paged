@@ -223,8 +223,8 @@ mod tests {
     #[test]
     fn unknown_future_functions_keep_their_prefix() {
         assert_eq!(
-            strip_storage_prefixes("_xlfn.REGEXTEST(A1,\"x\")+_xlfn.XLOOKUP(1,B1:B2,C1:C2)"),
-            "_xlfn.REGEXTEST(A1,\"x\")+XLOOKUP(1,B1:B2,C1:C2)"
+            strip_storage_prefixes("_xlfn.FUTUREFN(A1,\"x\")+_xlfn.XLOOKUP(1,B1:B2,C1:C2)"),
+            "_xlfn.FUTUREFN(A1,\"x\")+XLOOKUP(1,B1:B2,C1:C2)"
         );
     }
 

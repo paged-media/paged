@@ -198,7 +198,10 @@ fn agrees(engine: &Result<CellValue, String>, excel: &Recorded) -> bool {
             .value
             .parse::<f64>()
             .is_ok_and(|x| numbers_agree(*n, x)),
-        (CellValue::Text(t), "s") => t.as_ref() as &str == excel.value,
+        (CellValue::Text(t), "s") => {
+            t.as_ref() as &str == excel.value
+                || sheet_conformance::runner::complex_texts_agree(t, &excel.value)
+        }
         (CellValue::Bool(b), "b") => (excel.value == "1") == *b,
         (CellValue::Error(e), "e") => e.as_str() == excel.value,
         (CellValue::Empty, "blank") => true,

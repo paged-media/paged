@@ -1,0 +1,17 @@
+# VALUETOTEXT(value, [format]).
+# id	formula	setup	expected
+vt-0	=VALUETOTEXT("abc")	-	abc
+vt-1	=VALUETOTEXT("abc",1)	-	"abc"
+vt-2	=VALUETOTEXT(1.5)	-	1.5
+vt-3	=VALUETOTEXT(1.5,1)	-	1.5
+vt-4	=VALUETOTEXT(TRUE)	-	TRUE
+vt-5	=VALUETOTEXT(TRUE,1)	-	TRUE
+vt-6	=VALUETOTEXT(#N/A)	-	#N/A
+vt-7	=VALUETOTEXT(#N/A,1)	-	#N/A
+vt-8	=VALUETOTEXT("a""b",1)	-	"a""b"
+vt-9	=VALUETOTEXT(1,2)	-	#VALUE!
+vt-10	=VALUETOTEXT(1/3)	-	0.333333333333333
+vt-11	=ARRAYTOTEXT(VALUETOTEXT({1,"a"},1))	-	1, "a"
+vt-12	=VALUETOTEXT(A1)	-	
+vt-13	=VALUETOTEXT(A1,1)	-	
+vt-14	=VALUETOTEXT(A1,1)	A1=text:	""
