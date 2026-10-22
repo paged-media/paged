@@ -65,6 +65,7 @@ import {
   parseAddress,
 } from "@paged-media/plugin-sdk";
 import { labelKey } from "@paged-media/helpers";
+import { defineMessages, t } from "@paged-media/strings";
 
 import manifest from "../manifest.json";
 import {
@@ -108,6 +109,13 @@ import {
   writeWebSource,
 } from "./source-part";
 import { webTemplateFields } from "./template-fields";
+
+/** The object kinds as a user names them. */
+const KIND_TITLE = defineMessages("web.objects", {
+  webFrame: "Web frame",
+  templateVar: "Template value",
+  cssVar: "CSS variable",
+});
 
 export const PLUGIN_ID = manifest.id;
 const LABEL_KEY = labelKey(PLUGIN_ID);
@@ -375,7 +383,7 @@ function writeOf(
 function webFrameKind(host: BundleHost): ObjectKindContribution {
   return {
     kind: "webFrame",
-    title: "Web frame",
+    title: t(KIND_TITLE.webFrame),
     schema: schemaOf("webFrame"),
     content: { kind: "html", mime: ["text/html"] },
     hostOf: (address) => {
@@ -526,7 +534,7 @@ function templateVarKind(host: BundleHost): ObjectKindContribution {
   };
   return {
     kind: "templateVar",
-    title: "Template value",
+    title: t(KIND_TITLE.templateVar),
     schema: schemaOf("templateVar"),
     hostOf: () => "doc",
     async list() {
@@ -584,7 +592,7 @@ function split(address: Address): { frame: string; name: string } | null {
 function cssVarKind(host: BundleHost): ObjectKindContribution {
   return {
     kind: "cssVar",
-    title: "CSS variable",
+    title: t(KIND_TITLE.cssVar),
     schema: schemaOf("cssVar"),
     hostOf: (address) => {
       const s = split(address);

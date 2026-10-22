@@ -31,6 +31,7 @@
 //    C-1 SceneLayer per frame via `bakeWebFlow`. Honest: an engine that can't
 //    load falls back to the not-loaded note; never a fake render.
 
+import { defineMessages, t } from "@paged-media/strings";
 import type { BundleHost, ElementId } from "@paged-media/plugin-api";
 import {
   asFrameTarget,
@@ -48,6 +49,11 @@ import { loadWebEngine } from "./engine-loader";
 import { publishRenderReport } from "./render-report";
 import { loadWebSource, writeWebSource } from "./source-part";
 
+const M = defineMessages("web.flow", {
+  chainNotSaved: "{op}: the flow chain was not saved — {reason}",
+  refused: "refused",
+});
+
 /** Diagnostics key suffix for the flow render lane — distinct from the
  *  single-frame render key + the panel lint key so notes don't clobber. */
 const FLOW_DIAG_SUFFIX = "#renderFlow";
@@ -59,7 +65,7 @@ function reportRefusal(
   op: string,
   reason: string | undefined,
 ): void {
-  const message = `${op}: the flow chain was not saved — ${reason ?? "refused"}`;
+  const message = t(M.chainNotSaved, { op, reason: reason ?? t(M.refused) });
   host.log.warn(message);
   if (target) {
     host.diagnostics.set(sourceKeyFor(target) + FLOW_DIAG_SUFFIX, [

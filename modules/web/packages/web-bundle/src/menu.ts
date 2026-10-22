@@ -9,6 +9,7 @@
  * */
 
 import type { BundleHost, Disposable } from "@paged-media/plugin-api";
+import { defineMessages, t } from "@paged-media/strings";
 
 const C = "media.paged.web.command";
 
@@ -23,6 +24,27 @@ const ENTRIES: [path: string, suffix: string, group: string][] = [
   ["Web/Bake to document", "bakeWebFrame", "bake"],
 ];
 
+/** The entries' last segment in the editor's language, by command suffix.
+ *  The first segment names the menu (this plugin's own, or a host menu)
+ *  and stays as it is. */
+const LEAF = defineMessages("web.menu", {
+  insertWebFrame: "Insert web frame…",
+  renderWebFrame: "Render frame",
+  renderWebFlow: "Render flow across frames",
+  threadWebFlow: "Thread flow into frames",
+  threadWebFlowNamed: "Thread into named flow…",
+  unthreadWebFlow: "Unthread flow",
+  bakeWebFrame: "Bake to document",
+});
+
+/** `path` with its last segment in the editor's language. */
+function localPath(path: string, suffix: string): string {
+  const key = (LEAF as Record<string, string>)[suffix];
+  if (!key) return path;
+  const slash = path.lastIndexOf("/");
+  return `${path.slice(0, slash + 1)}${t(key)}`;
+}
+
 /** Register every entry; one Disposable drops them all. */
 export function contributeMenu(host: BundleHost): Disposable {
   const handles: Disposable[] = [];
@@ -32,7 +54,7 @@ export function contributeMenu(host: BundleHost): Disposable {
     perGroup.set(group, n);
     handles.push(
       host.contribute.menu({
-        path,
+        path: localPath(path, suffix),
         command: `${C}.${suffix}`,
         group,
         order: n * 10,
