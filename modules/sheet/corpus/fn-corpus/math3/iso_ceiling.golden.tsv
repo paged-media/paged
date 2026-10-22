@@ -1,0 +1,10 @@
+# ISO.CEILING(number,[significance]).
+# id	formula	setup	expected
+ic-pos	=ISO.CEILING(4.3)	-	5
+ic-neg	=ISO.CEILING(-4.3)	-	-4
+ic-sig	=ISO.CEILING(4.3,2)	-	6
+ic-negsig	=ISO.CEILING(-4.3,-2)	-	-4
+ic-zero	=ISO.CEILING(4.3,0)	-	0
+ic-text	=ISO.CEILING("a")	-	#VALUE!
+ic-err	=ISO.CEILING(A1)	A1=#REF!	#REF!
+ic-array	=SUM(ISO.CEILING({2.1,-2.1}))	-	1

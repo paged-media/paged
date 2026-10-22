@@ -1,0 +1,11 @@
+# MUNIT(dimension) - identity matrix.
+# id	formula	setup	expected
+mu-sum	=SUM(MUNIT(3))	-	3
+mu-rows	=ROWS(MUNIT(4))	-	4
+mu-off	=INDEX(MUNIT(3),1,2)	-	0
+mu-diag	=INDEX(MUNIT(3),2,2)	-	1
+mu-zero	=MUNIT(0)	-	#VALUE!
+mu-neg	=MUNIT(-1)	-	#VALUE!
+mu-frac	=SUM(MUNIT(2.7))	-	2
+mu-text	=MUNIT("a")	-	#VALUE!
+mu-one	=MUNIT(1)	-	1

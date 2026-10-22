@@ -19,8 +19,11 @@ each published canary added is under [Releases](#releases).
   (`document.onWillSave`), the workbook is written before the save takes the document's bytes.
   A reopened document restores its workbook when the host reports the open
   (`document.onDidOpen`).
-- **Calculation.** 263 registered functions, all implemented, among them `LET`, `LAMBDA` and its
-  helpers; dynamic arrays that spill and nest; Excel tables with structured references;
+- **Calculation.** 340 registered functions, all implemented, among them `LET`, `LAMBDA` and its
+  helpers, the engineering set (radix and bit functions, `CONVERT` with Excel's full unit table and
+  prefixes, the complex-number `IM*` functions on Excel's text form, the error and Bessel
+  functions with Excel's own approximations) and the modern math set (`CEILING.MATH`,
+  `FLOOR.MATH`, `MDETERM`/`MINVERSE`/`MUNIT`, the reciprocal trigonometric functions); dynamic arrays that spill and nest; Excel tables with structured references;
   incremental recalculation with an interval index for range dependencies, and range
   accelerators within a recalc (column snapshots, anchored prefix aggregates for SUM/COUNT/
   COUNTA/AVERAGE/MIN/MAX, exact-match indexes for VLOOKUP/MATCH/XMATCH/XLOOKUP/COUNTIF/SUMIF,
@@ -28,7 +31,7 @@ each published canary added is under [Releases](#releases).
   and 10,000 lookups into an edited 10,000-row table in about 9 ms natively; dependents of
   volatile cells recalculate with them; iterative calculation when the workbook's `calcPr`
   asks for it; `NOW` and `TODAY` follow the host clock. Number formats render in five display
-  locales. Expected values are recorded from Excel and replayed in CI: 1,470 of 1,485 function
+  locales. Expected values are recorded from Excel and replayed in CI: 3,089 of 3,108 function
   cases and 148 of 164 number-format cases agree, every disagreement a recorded ruling.
   Recalculating real workbooks reproduces Excel's saved value in 93.6% of comparable formula
   cells (56,533 of 60,419 over 201 workbooks): shared formulas, defined names of every kind,
@@ -78,9 +81,8 @@ each published canary added is under [Releases](#releases).
   key and style on both surfaces (pinned by a property test over random sheets). Merged areas
   come as rects with the anchor's text and style, split at the frozen band, with the gridlines
   inside them left out; text cells name the empty neighbours they may overflow into. The
-  painter (`paintGridScene`) and the SVG/scene-layer views draw all of it. Still open: hidden
-  columns (the model has no column metadata yet; `col_hidden` in sheet-grid is the hook);
-  number-format colours; a merged area clipped by the page window does not carry its anchor's
+  painter (`paintGridScene`) and the SVG/scene-layer views draw all of it. Hidden columns are skipped
+  like hidden rows. Still open: number-format colours; a merged area clipped by the page window does not carry its anchor's
   text onto the page.
 - **Grid panel and in-frame grid.** Range selection by click, drag and shift; arrows, Tab, F2,
   Delete and scrolling in the frame; a cell editor with function completion; copy and paste of
@@ -135,7 +137,16 @@ each published canary added is under [Releases](#releases).
   formula is stored the way Excel stores a dynamic array (an array formula over its spill range,
   flagged by the `XLDAPR` cell metadata) and reloads as a live spill; Excel's own dynamic arrays
   load the same way. A workbook saved before that (each anchor a plain formula next to its
-  spilled values) reads those values back as the spill when they match.
+  spilled values) reads those values back as the spill when they match. An edited worksheet is
+  patched, not regenerated: rows and cells whose content did not change keep their bytes, a
+  changed cell keeps its start tag (`ph`, `vm`, unknown attributes) and a text cell that still
+  holds its shared string keeps the index, so rich-text runs survive. Hidden, styled and
+  outlined columns, row styles, outline levels and the `collapsed`/`thickTop`/`thickBot` flags
+  are read into the model (`RowMeta`, `ColMeta`) and written back; hidden columns are skipped
+  by the page lowering and the frame window like hidden rows. `listSheets` reports each tab's
+  `state` (`visible`, `hidden`, `veryHidden`), read-only. A rich-text string can be appended to
+  the shared-string table without renumbering it (`XlsxDocument::append_shared_string`); no
+  editing surface writes one yet.
 
 - **Object model.** On `main` and published since 0.1.0-canary.15. The contract is plugin-sdk's
   [`DESIGN.md`](https://github.com/paged-media/paged/blob/main/platform/extensions/DESIGN.md) §21, with the
@@ -202,8 +213,8 @@ each published canary added is under [Releases](#releases).
   locale; `#GETTING_DATA` typed stays text; a number re-entered by undo keeps 15 significant
   digits.
 - **Locale.** The display locale is taken from the workbook's number formats on load.
-- **Saving an edited sheet** drops unknown attributes on its rows and cells and unknown elements
-  inside `<sheetData>`; unknown children of `<worksheet>` are kept.
+- **Saving an edited sheet** writes a new or changed literal text cell as an inline string
+  (`t="inlineStr"`), not into the shared-string table. A sheet's tab state cannot be changed.
 
 ## Not built
 

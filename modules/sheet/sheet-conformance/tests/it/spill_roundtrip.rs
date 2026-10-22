@@ -352,7 +352,11 @@ fn excels_own_dynamic_arrays_load_and_round_trip__feat__sheet_xlsx_roundtrip() {
     ] {
         let c = cell_xml(&xml, anchor);
         assert!(
-            c.contains(r#" cm="1""#) && c.contains(&format!(r#"<f t="array" ref="{area}">"#)),
+            // The patched save keeps Excel's own `<f>` (with `aca`/`ca`) where
+            // it still says the same.
+            c.contains(r#" cm="1""#)
+                && c.contains(r#"<f t="array""#)
+                && c.contains(&format!(r#"ref="{area}""#)),
             "{anchor} is written back as a dynamic array over {area}: {c}"
         );
     }

@@ -371,7 +371,7 @@ describe.skipIf(!artifactBuilt)(
     it("resolves the facade over the real wasm", async () => {
       const engine = await bootEngine();
       expect(engine.listSheets()).toEqual([
-        { id: 0, name: "Sheet1", rows: 0, cols: 0 },
+        { id: 0, name: "Sheet1", rows: 0, cols: 0, state: "visible" },
       ]);
       engine.dispose();
     });

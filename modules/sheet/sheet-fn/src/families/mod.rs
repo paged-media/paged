@@ -52,3 +52,11 @@ pub mod t2misc;
 // Wave-7 additions (data & functions).
 pub mod array2;
 pub mod stat2;
+
+// W3 (function library to ~96%).
+pub mod complex;
+pub mod eng;
+pub mod linalg;
+pub mod math3;
+pub mod units;
+pub(crate) mod util;

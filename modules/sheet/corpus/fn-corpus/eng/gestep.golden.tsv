@@ -1,0 +1,12 @@
+# GESTEP(number,[step]).
+# id	formula	setup	expected
+gestep-0	=GESTEP(5,4)	-	1
+gestep-1	=GESTEP(5,5)	-	1
+gestep-2	=GESTEP(-4,-5)	-	1
+gestep-3	=GESTEP(-1)	-	0
+gestep-4	=GESTEP(0)	-	1
+gestep-5	=GESTEP("5",5)	-	1
+gestep-6	=GESTEP("a")	-	#VALUE!
+gestep-7	=GESTEP(TRUE,1)	-	#VALUE!
+gestep-x0	=GESTEP(A1)	A1=#N/A	#N/A
+gestep-x1	=SUM(GESTEP({1,2,3},2))	-	2

@@ -17,7 +17,7 @@
  */
 
 //! Cross-surface parity (ADR 510): for random sheets — values, styles,
-//! hidden and filtered rows, conditional formats — the live grid scene of a
+//! hidden rows and columns, conditional formats — the live grid scene of a
 //! window and the page lowering of the range that window covers agree cell
 //! by cell on text, alignment, style key and style.
 
@@ -62,6 +62,7 @@ fn visual(id: StyleId) -> Option<VisualAttrs> {
 struct Seed {
     cells: Vec<(u32, u32, u8, u32)>,
     hidden: Vec<u32>,
+    hidden_cols: Vec<u32>,
     cf: bool,
     top: u32,
     left: u32,
@@ -73,15 +74,17 @@ fn seed() -> impl Strategy<Value = Seed> {
     (
         prop::collection::vec((0u32..40, 0u32..12, 0u8..4, 0u32..7), 0..160),
         prop::collection::vec(0u32..40, 0..6),
+        prop::collection::vec(1u32..12, 0..3),
         any::<bool>(),
         0u32..20,
         0u32..6,
         60.0f64..400.0,
         20.0f64..300.0,
     )
-        .prop_map(|(cells, hidden, cf, top, left, w, h)| Seed {
+        .prop_map(|(cells, hidden, hidden_cols, cf, top, left, w, h)| Seed {
             cells,
             hidden,
+            hidden_cols,
             cf,
             top,
             left,
@@ -113,6 +116,14 @@ fn build(seed: &Seed) -> (SheetModel, SheetCondFmt) {
     }
     for &r in &seed.hidden {
         ws.hidden_rows.insert(r);
+    }
+    for &c in &seed.hidden_cols {
+        ws.col_meta.push(sheet_core::ColMeta {
+            min: c,
+            max: c,
+            hidden: true,
+            ..Default::default()
+        });
     }
     let cf = if seed.cf {
         SheetCondFmt {
@@ -182,14 +193,16 @@ proptest! {
             c1: *vp.col_indices.last().unwrap(),
         };
         let page = lower_range_condfmt(&m, 0, range, &ViewOptions::default(), &visual, &cf);
-        // Same tracks: the page skips the same hidden rows.
+        // Same tracks: the page skips the same hidden rows and columns.
         let page_rows: Vec<u32> = page.rows.iter().map(|r| r.index + r0).collect();
         prop_assert_eq!(&page_rows, &vp.row_indices);
+        let page_cols: Vec<u32> = page.cols.iter().map(|c| c.index + c0).collect();
+        prop_assert_eq!(&page_cols, &vp.col_indices);
         // Same styles table, same per-cell text / align / key.
         prop_assert_eq!(&scene.styles, &page.styles);
         for cell in &scene.cells {
             let row = page.rows.iter().find(|r| r.index + r0 == cell.row).unwrap();
-            let pc = &row.cells[(cell.col - c0) as usize];
+            let pc = row.cells.iter().find(|pc| pc.col == cell.col - c0).unwrap();
             prop_assert_eq!(&cell.text, &pc.text);
             prop_assert_eq!(cell.align, pc.align);
             prop_assert_eq!(cell.style_key, pc.style_key);

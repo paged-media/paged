@@ -28,23 +28,49 @@
 
 /// Registered functions Excel stores with `_xlfn.` (Excel 2010 and later).
 const XLFN: &[&str] = &[
+    "ACOT",
+    "ACOTH",
     "AGGREGATE",
     "ANCHORARRAY",
     "ARABIC",
     "BASE",
+    "BITAND",
+    "BITLSHIFT",
+    "BITOR",
+    "BITRSHIFT",
+    "BITXOR",
     "BYCOL",
     "BYROW",
+    "CEILING.MATH",
+    "CEILING.PRECISE",
     "CHOOSECOLS",
     "CHOOSEROWS",
+    "COMBINA",
     "CONCAT",
+    "COT",
+    "COTH",
+    "CSC",
+    "CSCH",
     "DAYS",
     "DECIMAL",
     "DROP",
+    "ERF.PRECISE",
+    "ERFC.PRECISE",
+    "FLOOR.MATH",
+    "FLOOR.PRECISE",
     "FORECAST.LINEAR",
     "FORMULATEXT",
     "HSTACK",
     "IFNA",
     "IFS",
+    "IMCOSH",
+    "IMCOT",
+    "IMCSC",
+    "IMCSCH",
+    "IMSEC",
+    "IMSECH",
+    "IMSINH",
+    "IMTAN",
     "ISFORMULA",
     "ISOWEEKNUM",
     "LAMBDA",
@@ -54,6 +80,7 @@ const XLFN: &[&str] = &[
     "MAXIFS",
     "MINIFS",
     "MODE.SNGL",
+    "MUNIT",
     "NETWORKDAYS.INTL",
     "NORM.DIST",
     "NORM.INV",
@@ -62,6 +89,7 @@ const XLFN: &[&str] = &[
     "NUMBERVALUE",
     "PERCENTILE.EXC",
     "PERCENTILE.INC",
+    "PERCENTOF",
     "PERCENTRANK.EXC",
     "PERCENTRANK.INC",
     "QUARTILE.EXC",
@@ -70,6 +98,8 @@ const XLFN: &[&str] = &[
     "RANK.EQ",
     "REDUCE",
     "SCAN",
+    "SEC",
+    "SECH",
     "SEQUENCE",
     "SHEET",
     "SHEETS",
@@ -272,5 +302,11 @@ mod tests {
         assert_eq!(storage_prefix("FILTER"), "_xlfn._xlws.");
         assert_eq!(storage_prefix("SUM"), "");
         assert_eq!(storage_prefix("SUMIFS"), "");
+        // Excel's own save (oracle/excel): the 2013 functions carry the
+        // prefix, ISO.CEILING and the Analysis ToolPak set do not.
+        assert_eq!(storage_prefix("BITAND"), "_xlfn.");
+        assert_eq!(storage_prefix("IMCOSH"), "_xlfn.");
+        assert_eq!(storage_prefix("ISO.CEILING"), "");
+        assert_eq!(storage_prefix("BESSELJ"), "");
     }
 }

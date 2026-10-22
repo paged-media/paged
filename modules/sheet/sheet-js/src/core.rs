@@ -254,6 +254,9 @@ pub struct SheetInfo {
     pub name: String,
     pub rows: u32,
     pub cols: u32,
+    /// The tab's visibility as the workbook saved it: `"visible"`,
+    /// `"hidden"` or `"veryHidden"` (read-only).
+    pub state: &'static str,
 }
 
 /// A worksheet's frozen-pane split for the panel/grid (spec §8.1). Read-only
@@ -2156,6 +2159,11 @@ impl SheetSession {
     /// Enumerate the workbook's sheets (id, name, used extent). `rows`/`cols`
     /// are the 1-based extent of the populated range (0 when the sheet is
     /// empty).
+    /// The worksheet part a sheet is saved to (`xl/worksheets/sheet1.xml`).
+    pub fn doc_part_name(&self, sheet: u16) -> Option<String> {
+        self.doc.part_name_of(sheet).map(str::to_string)
+    }
+
     pub fn list_sheets(&self) -> Vec<SheetInfo> {
         let model = self.engine().model();
         model
@@ -2172,6 +2180,7 @@ impl SheetSession {
                     name: ws.name.to_string(),
                     rows,
                     cols,
+                    state: ws.state.as_str(),
                 }
             })
             .collect()
