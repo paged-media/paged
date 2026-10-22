@@ -82,6 +82,7 @@ pub mod external;
 pub mod graph;
 pub mod iterate;
 pub mod layout;
+pub mod legacy;
 pub mod names;
 #[cfg(feature = "perf-counters")]
 pub mod perf;
@@ -792,12 +793,7 @@ impl Engine {
             }
             .into_shown();
         }
-        // Not marked dynamic: a legacy formula (or one whose root cannot
-        // produce an array, where the two read the same).
-        eval::with_legacy(true, || {
-            eval::eval_root(&self.model, &f.root, &ctx, &self.spills)
-        })
-        .into_shown()
+        eval::eval_root(&self.model, &f.root, &ctx, &self.spills).into_shown()
     }
 
     /// The value a formula this engine cannot compute keeps
