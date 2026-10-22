@@ -387,6 +387,7 @@ export {
   useWorkflowMode,
   useOptionalWorkflowMode,
   type WorkflowMode,
+  type BuiltInWorkflowMode,
 } from "./state/workflow-mode-context";
 export { ContextToolbar } from "./chrome/ContextToolbar";
 export { ModeSwitcher } from "./chrome/ModeSwitcher";
@@ -912,3 +913,13 @@ export {
   useChromeRegions,
   type ChromeRegions,
 } from "./state/chrome-regions";
+export {
+  CHROME_FEATURES,
+  FEATURE_KINDS,
+  createFeatureStore,
+  type FeatureContext,
+  type FeatureId,
+  type FeatureKind,
+  type FeatureRule,
+  type FeatureStore,
+} from "./state/features";

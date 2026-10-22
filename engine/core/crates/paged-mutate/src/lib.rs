@@ -66,6 +66,7 @@ pub mod planar;
 pub mod schema;
 
 pub use apply::apply;
+pub use apply::apply_checked;
 pub use apply::is_locked;
 pub use apply::{duplicate_demand, duplicate_roots, DuplicateDemand};
 pub use apply::{

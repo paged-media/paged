@@ -129,7 +129,14 @@ function applicableCommands(
   open: boolean,
 ): CommandContribution[] {
   if (!open) return [];
-  return commands.list().filter((c) => isEnabled(c.when, () => paged));
+  // A command the editor does not offer (a feature, docs/composable-editor.md
+  // §6) is not in the palette at all.
+  return commands
+    .list()
+    .filter(
+      (c) =>
+        commands.offered?.(c.id) !== false && isEnabled(c.when, () => paged),
+    );
 }
 
 export function CommandPalette() {

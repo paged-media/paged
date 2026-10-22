@@ -90,3 +90,15 @@ default size (`packages/shell/src/PagedShell.tsx:857-862`) and falls back to Let
 - [ADR 203](203-shell-is-a-registry-host.md) — the registries the filtered lists are handed to
 - [ADR 002](002-cockpit-over-dockview.md) — the fixed workflow modes whose id solo reuses
 - [ADR 216](216-test-tiers.md) — the `checks` job and the journey tier
+
+## Amendment — 2026-10-22
+
+Solo mode is now the presets `solo:<name>` of the editor profile
+([ADR 274](274-the-editor-profile-is-runtime-data.md)). `?solo=<name>` still accepts exactly
+the six names and boots the same surfaces, which a unit test holds every preset to.
+`resolveSoloProfile`, `solo/mode.ts` and the `SOLO_SURFACES` block of `main.tsx` are gone;
+`solo/profiles.ts` keeps the profile data, from which the presets are built. Mode ids are open,
+so the reason given above for reusing `design` no longer binds; the presets keep it so stored
+layouts are unchanged. `scripts/solo-profiles-guard.mjs` is replaced by
+`scripts/profile-presets-guard.mjs`, which reads the presets as data and checks them against
+the surface inventory, including the bundle whose manifest the old guard could not read.

@@ -17,6 +17,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
+import { createFeatureStore, type FeatureStore } from "./features";
 import {
   createContext,
   useContext,
@@ -59,6 +60,9 @@ import {
  * overlays stay valid as React re-renders.
  */
 export interface ShellRegistries {
+  /** What the editor offers (docs/composable-editor.md §6): the feature
+   *  gate every surface consults. Not security; see state/features.ts. */
+  features: FeatureStore;
   panels: PanelRegistry;
   modes: ModeRegistry;
   commands: CommandRegistry;
@@ -93,17 +97,19 @@ const Context = createContext<ShellRegistries | null>(null);
 export function createShellRegistries(
   getEditor: () => unknown,
 ): ShellRegistries {
-  const commands = createCommandRegistry(getEditor);
+  const features = createFeatureStore(getEditor);
+  const commands = createCommandRegistry(getEditor, features);
   // Pass `getEditor` as the keybinding state thunk too, so `when`
   // predicates (e.g. the tool-shortcut text-suppression guard) read
   // the live editor handle.
-  const keybindings = createKeybindingRegistry(commands, getEditor);
+  const keybindings = createKeybindingRegistry(commands, getEditor, features);
   // Tools are supplied by the app via `<PagedShell tools={...}>` and
   // registered in ShellChrome (mirrors panels/overlays), so the rail
   // contains zero hardcoded entries. Bundles add more via
   // `useRegistries().tools.register(...)`.
   const tools = createToolRegistry();
   return {
+    features,
     panels: createPanelRegistry(),
     modes: createModeRegistry(),
     commands,

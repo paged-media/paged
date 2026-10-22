@@ -72,7 +72,9 @@ export function DocTitleBar() {
           Edited
         </span>
       )}
-      {mode !== "design" && modeTitle && (
+      {/* No badge in Design, and none where there is only one mode: an
+          editor with one mode is that mode (a solo or template preset). */}
+      {mode !== "design" && modes.list().length > 1 && modeTitle && (
         <span
           data-doc-title-mode-badge
           style={{

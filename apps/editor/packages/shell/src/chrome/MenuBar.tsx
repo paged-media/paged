@@ -165,7 +165,18 @@ export function MenuBar() {
     items: "[data-menu-trigger]",
   });
 
-  const tree = buildMenuTree(menus.list());
+  // An entry the editor does not offer (a feature on the menu path or on
+  // its command, docs/composable-editor.md §6) is not on the bar at all.
+  const features = useRegistryView(registries.features);
+  const tree = buildMenuTree(
+    menus
+      .list()
+      .filter(
+        (m) =>
+          features.allows("menu", m.path) &&
+          commands.offered?.(m.command) !== false,
+      ),
+  );
   if (tree.length === 0) return null;
 
   const applies = (leaf: MenuLeaf) =>

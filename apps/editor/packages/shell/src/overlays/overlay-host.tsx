@@ -17,6 +17,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
+import { isEnabled } from "../registries/types";
 import { useMemo, type CSSProperties } from "react";
 
 import type { Camera } from "@paged-media/client";
@@ -53,11 +54,17 @@ export interface OverlayHostProps {
 export function OverlayHost(props: OverlayHostProps) {
   // A view of the overlay registry (state/live.ts): the sort follows a
   // contribution coming or going.
-  const overlays = useRegistryView(useRegistries().overlays);
+  const registries = useRegistries();
+  const overlays = useRegistryView(registries.overlays);
+  const features = useRegistryView(registries.features);
   const paged = useOptionalPaged();
+  // An overlay draws while its `when` holds and the editor offers it (a
+  // feature, `overlay:<id>`); `when` was declared and never read before.
   const sorted = overlays
     .list()
-    .slice()
+    .filter(
+      (c) => features.allows("overlay", c.id) && isEnabled(c.when, () => paged),
+    )
     .sort((a, b) => (a.z ?? 100) - (b.z ?? 100));
 
   // eslint-disable-next-line no-restricted-syntax -- handed to components that compare it (ADR 229)

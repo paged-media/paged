@@ -370,3 +370,43 @@ describe("validateProfile", () => {
     });
   });
 });
+
+describe("feature switches in a profile", () => {
+  test("merge layer by layer; a later key overrides", () => {
+    const { profile } = resolveProfile(
+      {
+        extends: "a",
+        features: { "chrome:rulers": true, "panel:paged.layers": false },
+      },
+      {
+        a: {
+          features: { "chrome:rulers": false, "command:paged.object.*": false },
+        },
+      },
+    );
+    expect(profile.features).toEqual({
+      "chrome:rulers": true,
+      "command:paged.object.*": false,
+      "panel:paged.layers": false,
+    });
+  });
+
+  test("the shape check keeps feature ids with a known kind and a boolean", () => {
+    const { profile, problems } = validateProfile({
+      features: {
+        "chrome:rulers": false,
+        "nope:x": true,
+        "panel:": false,
+        "tool:paged.tool.pen": "no",
+      },
+    });
+    expect(profile.features).toEqual({ "chrome:rulers": false });
+    expect(problems.map((p) => p.path).sort()).toEqual(
+      [
+        "features.nope:x",
+        "features.panel:",
+        "features.tool:paged.tool.pen",
+      ].sort(),
+    );
+  });
+});

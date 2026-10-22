@@ -64,6 +64,7 @@ export function baseProfile(): ResolvedProfile {
     canvas: { titleBar: true, rulers: true, thumbnails: true },
     documentSizePt: null,
     storageScope: "",
+    features: {},
   };
 }
 
@@ -107,6 +108,7 @@ function applyLayer(
     canvas: { ...into.canvas, ...layer.canvas },
     documentSizePt: layer.documentSizePt ?? into.documentSizePt,
     storageScope: layer.storageScope ?? into.storageScope,
+    features: { ...into.features, ...layer.features },
   };
 }
 

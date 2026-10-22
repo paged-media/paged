@@ -39,7 +39,7 @@
       "scoped": true,
       "default": "design",
       "values": ["design", "content", "prepress", "data", "review", "export"],
-      "effect": "the active workflow mode (cockpit slots, context toolbar, panel sets)",
+      "effect": "the active workflow mode (cockpit slots, context toolbar, panel sets); any id an editor profile registers, else the first registered mode",
       "source": "apps/editor/packages/shell/src/state/workflow-mode-context.tsx",
       "marker": "\"paged.workflowMode\"",
       "sites": [

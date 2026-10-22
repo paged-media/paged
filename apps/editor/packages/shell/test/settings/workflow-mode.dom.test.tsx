@@ -91,15 +91,20 @@ describe("setting paged.workflowMode", () => {
     }
   });
 
-  test("an unknown stored mode falls back to design", () => {
+  test("a stored id is read as is; an empty or oversized one is design", () => {
     covers("setting:paged.workflowMode");
-    for (const stored of ["editing", "", "Design", '"data"']) {
+    // Mode ids are open (an editor profile may declare its own), so the
+    // provider takes any stored id; whether this editor HAS that mode is
+    // the shell's question, answered against the mode registry
+    // (apps/canvas/test/shell/modes.dom.test.tsx).
+    for (const [stored, mode] of [
+      ["fill", "fill"],
+      ["", "design"],
+      ["x".repeat(65), "design"],
+    ] as const) {
       localStorage.setItem(KEY, stored);
       const { result, unmount } = mount();
-      expect({ stored, mode: result.current.mode }).toEqual({
-        stored,
-        mode: "design",
-      });
+      expect({ stored, mode: result.current.mode }).toEqual({ stored, mode });
       unmount();
     }
   });

@@ -426,13 +426,14 @@ export function ToolRail({
   // The editor profile's tool rail (docs/composable-editor.md §5.2): the
   // tools it keeps. A slot stays while one of its members is kept.
   const railRegion = chrome.region("tool-rail");
+  const features = useRegistryView(registries.features);
   const keptTools = new Set(
     filterByRegion(
       railRegion,
       tools.list().map((t) => t.id as string),
       (id) => id,
       (id) => hostToolIds !== undefined && !hostToolIds.has(id),
-    ),
+    ).filter((id) => features.allows("tool", id)),
   );
   const slotVisible = (slot: SlotModel): boolean => {
     if (slot.members.some((m) => m.id === effectiveTool)) return true;

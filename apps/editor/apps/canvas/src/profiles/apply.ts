@@ -65,18 +65,6 @@ export interface AppSurfaces<P, T, R, B> {
   problems: ProfileProblem[];
 }
 
-// Until mode ids are open (plan task A5) a profile mode must use one of the
-// six ids the shell knows; another id is registered as `design`, which is
-// what solo mode has always done.
-const KNOWN_MODES: ReadonlySet<string> = new Set([
-  "design",
-  "content",
-  "prepress",
-  "data",
-  "review",
-  "export",
-]);
-
 function namedIn(region: ResolvedRegion | null): string[] {
   if (region === null || region.kind === "all") return [];
   return region.items.filter(
@@ -116,16 +104,8 @@ export function applyProfile<
     modes = [...source.modes];
   } else {
     modes = profile.modes.map((m, index) => {
-      let id = m.id;
-      if (!KNOWN_MODES.has(id)) {
-        problems.push({
-          path: `modes[${index}].id`,
-          message: `mode id "${id}" is not one of the shell's; registered as "design"`,
-        });
-        id = "design";
-      }
       return {
-        id: id as WorkflowMode,
+        id: m.id,
         title: m.title,
         icon: "panel-canvas",
         order: (index + 1) * 10,
