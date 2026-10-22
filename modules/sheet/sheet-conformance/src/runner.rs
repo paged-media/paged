@@ -56,7 +56,8 @@ pub fn parse_addr(addr: &str) -> (u32, u32) {
 }
 
 /// Apply one setup `(addr, raw)` seed: `empty` = blank, `text:`/`bool:` force
-/// the type, anything else goes through `enter`'s literal detection.
+/// the type, an error literal is that error, anything else goes through
+/// `enter`'s typed-entry detection.
 pub fn apply_setup(e: &mut Engine, addr: &str, raw: &str, case_id: &str) {
     let (row, col) = parse_addr(addr);
     if raw == "empty" {
@@ -75,6 +76,10 @@ pub fn apply_setup(e: &mut Engine, addr: &str, raw: &str, case_id: &str) {
             other => panic!("[{case_id}] bad bool: setup value {other:?}"),
         };
         e.set_cell(SHEET, row, col, SetInput::Value(CellValue::Bool(b)));
+    } else if let Some(err) = sheet_core::CellError::parse(raw) {
+        // An error seed is the error value itself — including `#SPILL!`,
+        // which typed entry keeps as text (Excel never accepts it typed).
+        e.set_cell(SHEET, row, col, SetInput::Value(CellValue::Error(err)));
     } else {
         e.enter(SHEET, row, col, raw)
             .unwrap_or_else(|err| panic!("[{case_id}] setup {addr}={raw:?} parse error: {err:?}"));

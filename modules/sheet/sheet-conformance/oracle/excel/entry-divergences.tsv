@@ -1,0 +1,22 @@
+# Engine-vs-Excel disagreements of the ENTRY lane (tests/it/entry_oracle.rs).
+# Every row is a recorded ruling; the lane fails on an unlisted disagreement
+# and on a listed row that now agrees. Tokens: <type>:<value>|<format>|q<quote>.
+# file	id	lane (parse|session)	engine	excel	reason
+entry.tsv	err-10	parse	s:#GETTING_DATA|General|q0	e:#N/A|General|q0	the model has no #GETTING_DATA error (sheet-core's CellError is frozen) and Excel saves it as #N/A anyway: a typed #GETTING_DATA stays text rather than becoming a #N/A the person did not type
+entry.tsv	err-10	session	s:#GETTING_DATA|General|q0	e:#N/A|General|q0	the model has no #GETTING_DATA error (sheet-core's CellError is frozen) and Excel saves it as #N/A anyway: a typed #GETTING_DATA stays text rather than becoming a #N/A the person did not type
+entry-fr.tsv	fr-FR-23	parse	n:1234.5|#,##0.00 "€";[Red]-#,##0.00 "€"|q0	n:1234.5|General|q0	host artifact: the recording Mac's system region is a prefixed-euro region and Excel took the currency POSITION from it under the per-app fr_FR pin; fr-FR writes the euro after the number (ms-docs, the French regional currency format "1 234,56 €"), so a trailing € is currency
+entry-fr.tsv	fr-FR-24	parse	n:1234|#,##0 "€";[Red]-#,##0 "€"|q0	n:1234|General|q0	host artifact (see fr-FR-23): fr-FR currency is a trailing € (ms-docs)
+entry-fr.tsv	fr-FR-25	parse	n:5|#,##0 "€";[Red]-#,##0 "€"|q0	n:5|General|q0	host artifact (see fr-FR-23): fr-FR currency is a trailing € (ms-docs)
+entry-fr.tsv	fr-FR-26	parse	n:-5|#,##0 "€";[Red]-#,##0 "€"|q0	n:-5|General|q0	host artifact (see fr-FR-23): fr-FR currency is a trailing € (ms-docs)
+entry-fr.tsv	fr-FR-27	parse	n:5|#,##0 "€";[Red]-#,##0 "€"|q0	n:5|General|q0	host artifact (see fr-FR-23): fr-FR currency is a trailing € (ms-docs)
+entry-fr.tsv	fr-FR-28	parse	n:1234.5|General|q0	n:1234.5|#,##0.00 "€";[Red]-#,##0.00 "€"|q0	host artifact (see fr-FR-23): a leading € is the non-native position in fr-FR, a plain number as in de/es/it (recorded there)
+entry-fr.tsv	fr-FR-29	parse	n:5|General|q0	n:5|#,##0 "€";[Red]-#,##0 "€"|q0	host artifact (see fr-FR-23): a leading € is the non-native position in fr-FR, a plain number as in de/es/it (recorded there)
+entry-fr.tsv	fr-FR-31	parse	n:-5|#,##0 "€";[Red]-#,##0 "€"|q0	n:-5|General|q0	host artifact (see fr-FR-23): fr-FR currency is a trailing € (ms-docs)
+entry-fr.tsv	fr-FR-23	session	n:1234.5|#,##0.00 "€";[Red]-#,##0.00 "€"|q0	n:1234.5|General|q0	host artifact: the recording Mac's system region is a prefixed-euro region and Excel took the currency POSITION from it under the per-app fr_FR pin; fr-FR writes the euro after the number (ms-docs, the French regional currency format "1 234,56 €"), so a trailing € is currency
+entry-fr.tsv	fr-FR-24	session	n:1234|#,##0 "€";[Red]-#,##0 "€"|q0	n:1234|General|q0	host artifact (see fr-FR-23): fr-FR currency is a trailing € (ms-docs)
+entry-fr.tsv	fr-FR-25	session	n:5|#,##0 "€";[Red]-#,##0 "€"|q0	n:5|General|q0	host artifact (see fr-FR-23): fr-FR currency is a trailing € (ms-docs)
+entry-fr.tsv	fr-FR-26	session	n:-5|#,##0 "€";[Red]-#,##0 "€"|q0	n:-5|General|q0	host artifact (see fr-FR-23): fr-FR currency is a trailing € (ms-docs)
+entry-fr.tsv	fr-FR-27	session	n:5|#,##0 "€";[Red]-#,##0 "€"|q0	n:5|General|q0	host artifact (see fr-FR-23): fr-FR currency is a trailing € (ms-docs)
+entry-fr.tsv	fr-FR-28	session	n:1234.5|General|q0	n:1234.5|#,##0.00 "€";[Red]-#,##0.00 "€"|q0	host artifact (see fr-FR-23): a leading € is the non-native position in fr-FR, a plain number as in de/es/it (recorded there)
+entry-fr.tsv	fr-FR-29	session	n:5|General|q0	n:5|#,##0 "€";[Red]-#,##0 "€"|q0	host artifact (see fr-FR-23): a leading € is the non-native position in fr-FR, a plain number as in de/es/it (recorded there)
+entry-fr.tsv	fr-FR-31	session	n:-5|#,##0 "€";[Red]-#,##0 "€"|q0	n:-5|General|q0	host artifact (see fr-FR-23): fr-FR currency is a trailing € (ms-docs)

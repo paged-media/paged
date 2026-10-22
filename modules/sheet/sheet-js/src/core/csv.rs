@@ -23,17 +23,19 @@
 //! and round-trips exactly like a workbook, and nothing downstream needs a
 //! CSV special case.
 //!
-//! Typing is locale-aware (`sheet-format`): numbers parse with the locale's
-//! decimal/group separators, dates in ISO `yyyy-mm-dd` or the locale's short
-//! date order (en `m/d/yyyy`, de `dd.mm.yyyy`, fr/es/it `dd/mm/yyyy`) and
-//! render in that pattern; `12%` is a percent; `TRUE`/`FALSE` booleans;
+//! Typing is the typed-entry parser every cell entry uses
+//! (`sheet_format::entry`, ruling `sheet.edit.typed-entry`), in the import
+//! locale: numbers with the locale's decimal/group separators, percent,
+//! currency, fractions, times, dates in ISO `yyyy-mm-dd` or the locale's
+//! short date order (en `m/d/yyyy`, de `dd.mm.yyyy`, fr/es/it `dd/mm/yyyy`)
+//! — a full numeric date renders in that pattern, every other implied format
+//! is the one typing gives; `TRUE`/`FALSE` booleans; error literals;
 //! everything else text. A leading `=` stays TEXT (a CSV is data, not
 //! formulas — no formula injection through an import).
 
-use sheet_core::{DateSystem, Locale};
+use sheet_core::{CellError, CellValue, DateSystem, Locale};
+use sheet_format::entry::{parse_entry, EntryCtx, FormatHint};
 use sheet_format::locale::locale_data;
-use sheet_format::number::parse_number_locale;
-use sheet_format::serial::ymd_to_serial;
 
 use super::{SessionError, SheetSession};
 
@@ -41,6 +43,17 @@ use super::{SessionError, SheetSession};
 const XF_DATE: u32 = 1;
 const XF_PERCENT: u32 = 2;
 const XF_PERCENT_2: u32 = 3;
+/// The first xf of what a CSV needs beyond the fixed ones (implied formats,
+/// the quote prefix) — appended only when used, so a CSV without them keeps
+/// its exact styles part.
+const XF_FIRST_EXTRA: u32 = 4;
+
+/// One appended xf: an implied number format, or Excel's quote prefix.
+#[derive(Clone, Copy, PartialEq)]
+enum ExtraXf {
+    Format(&'static str),
+    Quote,
+}
 
 /// Map a BCP-47-ish host language tag to the display locale (`de-AT` → de).
 pub fn locale_from_tag(tag: &str) -> Locale {
@@ -138,51 +151,30 @@ pub fn sniff_delimiter(text: &str) -> char {
 pub enum Typed {
     Empty,
     Number(f64),
+    /// A full numeric date: rendered in the import locale's short date.
     Date(f64),
     Percent(f64, bool),
+    /// Any other number the text implies a format for (`$5`, `9:30`,
+    /// `15-Jan`, `1 1/4`, `1e3`).
+    Formatted(f64, &'static str),
     Bool(bool),
+    Error(CellError),
     Text(String),
+    /// Text a leading `'` forced (the cell carries the quote prefix).
+    Quoted(String),
 }
 
-/// A date in ISO order or the locale's short-date order → serial.
-fn parse_date(s: &str, locale: Locale, sys: DateSystem) -> Option<f64> {
-    let s = s.trim();
-    let nums = |sep: char| -> Option<Vec<u32>> {
-        let parts: Vec<&str> = s.split(sep).collect();
-        if parts.len() != 3 || parts.iter().any(|p| p.is_empty() || p.len() > 4) {
-            return None;
-        }
-        parts.iter().map(|p| p.parse::<u32>().ok()).collect()
-    };
-    if let Some(p) = nums('-') {
-        if s.split('-').next()?.len() == 4 {
-            return ymd_to_serial(p[0] as i32, p[1], p[2], sys);
-        }
-    }
-    let pattern = locale_data(locale).short_date;
-    let sep = if pattern.contains('.') { '.' } else { '/' };
-    let p = nums(sep)?;
-    let year = |y: u32| -> i32 {
-        if y < 100 {
-            // Excel's two-digit-year window: 00–29 → 20xx, 30–99 → 19xx.
-            if y < 30 {
-                2000 + y as i32
-            } else {
-                1900 + y as i32
-            }
-        } else {
-            y as i32
-        }
-    };
-    if pattern.starts_with('m') {
-        ymd_to_serial(year(p[2]), p[0], p[1], sys)
-    } else {
-        ymd_to_serial(year(p[2]), p[1], p[0], sys)
-    }
-}
-
-/// Type one field for `locale`.
+/// Type one field for `locale`: the typed-entry parser every cell entry
+/// uses (`sheet_format::entry`, ruling `sheet.edit.typed-entry` — Excel types
+/// an opened CSV the way it types a cell), over the field trimmed of
+/// surrounding whitespace. A leading `=` stays TEXT (a CSV is data, not
+/// formulas). A date typed without a year lands in the year of `now_serial`.
 pub fn type_field(s: &str, locale: Locale, sys: DateSystem) -> Typed {
+    type_field_at(s, locale, sys, 0.0)
+}
+
+/// [`type_field`] with the session clock.
+pub fn type_field_at(s: &str, locale: Locale, sys: DateSystem, now_serial: f64) -> Typed {
     let t = s.trim();
     if t.is_empty() {
         return Typed::Empty;
@@ -190,31 +182,23 @@ pub fn type_field(s: &str, locale: Locale, sys: DateSystem) -> Typed {
     if t.starts_with('=') {
         return Typed::Text(s.to_string());
     }
-    if t.eq_ignore_ascii_case("TRUE") {
-        return Typed::Bool(true);
-    }
-    if t.eq_ignore_ascii_case("FALSE") {
-        return Typed::Bool(false);
-    }
-    if let Some(body) = t.strip_suffix('%') {
-        if let Some(n) = parse_number_locale(body, locale) {
-            return Typed::Percent(n / 100.0, n.fract() != 0.0);
+    let e = parse_entry(t, &EntryCtx::new(locale, sys, now_serial));
+    match (e.value, e.hint) {
+        (CellValue::Empty, _) => Typed::Empty,
+        (CellValue::Bool(b), _) => Typed::Bool(b),
+        (CellValue::Error(err), _) => Typed::Error(err),
+        (CellValue::Text(t), _) if e.quote_prefix => Typed::Quoted(t.to_string()),
+        (CellValue::Text(_), _) => Typed::Text(s.to_string()),
+        // A group-separated number imports in General, as the CSV import
+        // always has (a data column keeps its plain numbers); typing it into
+        // a cell gives `#,##0`.
+        (CellValue::Number(n), None | Some(FormatHint::Thousands { .. })) => Typed::Number(n),
+        (CellValue::Number(n), Some(FormatHint::Date)) => Typed::Date(n),
+        (CellValue::Number(n), Some(FormatHint::Percent { decimals })) => {
+            Typed::Percent(n, decimals)
         }
+        (CellValue::Number(n), Some(h)) => Typed::Formatted(n, h.code(locale)),
     }
-    // Dates before numbers: `04.10.2026` is a valid de group-separated
-    // number shape too, and the date reading is the one a person meant.
-    if let Some(serial) = parse_date(t, locale, sys) {
-        return Typed::Date(serial);
-    }
-    let numeric_shape = t.chars().all(|c| {
-        c.is_ascii_digit() || matches!(c, '.' | ',' | '-' | '+' | 'e' | 'E' | ' ' | '\u{a0}')
-    });
-    if numeric_shape && t.chars().any(|c| c.is_ascii_digit()) {
-        if let Some(n) = parse_number_locale(t, locale) {
-            return Typed::Number(n);
-        }
-    }
-    Typed::Text(s.to_string())
 }
 
 fn esc(s: &str) -> String {
@@ -240,16 +224,41 @@ fn col_name(mut c: usize) -> String {
 
 /// Build the XLSX package for delimited `text`.
 pub fn csv_to_xlsx(text: &str, delim: Option<char>, locale: Locale, sheet_name: &str) -> Vec<u8> {
+    csv_to_xlsx_at(text, delim, locale, sheet_name, 0.0)
+}
+
+/// [`csv_to_xlsx`] with the session clock (a date without a year).
+pub fn csv_to_xlsx_at(
+    text: &str,
+    delim: Option<char>,
+    locale: Locale,
+    sheet_name: &str,
+    now_serial: f64,
+) -> Vec<u8> {
     let delim = delim.unwrap_or_else(|| sniff_delimiter(text));
     let sys = DateSystem::Date1900;
     let records = parse_records(text, delim);
 
+    // Implied formats beyond the fixed date/percent ones: each distinct code
+    // gets a custom numFmt and an xf, appended after the fixed four (and the
+    // quote-prefix xf).
+    let mut extra: Vec<ExtraXf> = Vec::new();
+    let mut xf_of = |x: ExtraXf| -> u32 {
+        let i = match extra.iter().position(|e| *e == x) {
+            Some(i) => i,
+            None => {
+                extra.push(x);
+                extra.len() - 1
+            }
+        };
+        XF_FIRST_EXTRA + i as u32
+    };
     let mut sheet = String::new();
     for (r, rec) in records.iter().enumerate() {
         let mut cells = String::new();
         for (c, field) in rec.iter().enumerate() {
             let a1 = format!("{}{}", col_name(c), r + 1);
-            match type_field(field, locale, sys) {
+            match type_field_at(field, locale, sys, now_serial) {
                 Typed::Empty => {}
                 Typed::Number(n) => cells.push_str(&format!(r#"<c r="{a1}"><v>{n}</v></c>"#)),
                 Typed::Date(n) => {
@@ -259,13 +268,28 @@ pub fn csv_to_xlsx(text: &str, delim: Option<char>, locale: Locale, sheet_name: 
                     let xf = if decimals { XF_PERCENT_2 } else { XF_PERCENT };
                     cells.push_str(&format!(r#"<c r="{a1}" s="{xf}"><v>{n}</v></c>"#));
                 }
+                Typed::Formatted(n, code) => {
+                    let xf = xf_of(ExtraXf::Format(code));
+                    cells.push_str(&format!(r#"<c r="{a1}" s="{xf}"><v>{n}</v></c>"#));
+                }
                 Typed::Bool(b) => {
                     cells.push_str(&format!(r#"<c r="{a1}" t="b"><v>{}</v></c>"#, u8::from(b)))
                 }
+                Typed::Error(e) => cells.push_str(&format!(
+                    r#"<c r="{a1}" t="e"><v>{}</v></c>"#,
+                    esc(e.as_str())
+                )),
                 Typed::Text(t) => cells.push_str(&format!(
                     r#"<c r="{a1}" t="inlineStr"><is><t xml:space="preserve">{}</t></is></c>"#,
                     esc(&t)
                 )),
+                Typed::Quoted(t) => {
+                    let xf = xf_of(ExtraXf::Quote);
+                    cells.push_str(&format!(
+                        r#"<c r="{a1}" s="{xf}" t="inlineStr"><is><t xml:space="preserve">{}</t></is></c>"#,
+                        esc(&t)
+                    ));
+                }
             }
         }
         if !cells.is_empty() {
@@ -288,6 +312,28 @@ pub fn csv_to_xlsx(text: &str, delim: Option<char>, locale: Locale, sheet_name: 
         "{lcid}{}",
         locale_data(locale).short_date.replace('.', "\\.")
     ));
+    let mut num_fmts = format!(r#"<numFmt numFmtId="164" formatCode="{date_code}"/>"#);
+    let mut extra_xfs = String::new();
+    let mut num_fmt_count = 1;
+    for x in &extra {
+        match x {
+            ExtraXf::Format(code) => {
+                let id = 164 + num_fmt_count;
+                num_fmt_count += 1;
+                num_fmts.push_str(&format!(
+                    r#"<numFmt numFmtId="{id}" formatCode="{}"/>"#,
+                    esc(code)
+                ));
+                extra_xfs.push_str(&format!(
+                    r#"<xf numFmtId="{id}" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>"#
+                ));
+            }
+            ExtraXf::Quote => extra_xfs.push_str(
+                r#"<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" quotePrefix="1"/>"#,
+            ),
+        }
+    }
+    let xf_count = XF_FIRST_EXTRA as usize + extra.len();
     let files: [(&str, String); 7] = [
         ("[Content_Types].xml", r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>"#.to_string()),
@@ -298,7 +344,7 @@ pub fn csv_to_xlsx(text: &str, delim: Option<char>, locale: Locale, sheet_name: 
         ("xl/_rels/workbook.xml.rels", r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>"#.to_string()),
         ("xl/styles.xml", format!(r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><numFmts count="1"><numFmt numFmtId="164" formatCode="{date_code}"/></numFmts><fonts count="1"><font><sz val="11"/><name val="Calibri"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="4"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/><xf numFmtId="9" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/><xf numFmtId="10" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>"#)),
+<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><numFmts count="{num_fmt_count}">{num_fmts}</numFmts><fonts count="1"><font><sz val="11"/><name val="Calibri"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="{xf_count}"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/><xf numFmtId="9" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/><xf numFmtId="10" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>{extra_xfs}</cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>"#)),
         ("xl/worksheets/sheet1.xml", format!(r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>{sheet}</sheetData></worksheet>"#)),
         ("docProps/app.xml", r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -327,7 +373,7 @@ impl SheetSession {
             .collect();
         let name = name.trim_matches('\'');
         let name = if name.is_empty() { "Sheet1" } else { name };
-        let bytes = csv_to_xlsx(text, delimiter, locale, name);
+        let bytes = csv_to_xlsx_at(text, delimiter, locale, name, now_serial);
         let mut s = SheetSession::load_xlsx_at(&bytes, now_serial)?;
         // The typed values are the user's import: the workbook is unsaved.
         s.structure_changed = true;

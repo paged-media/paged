@@ -126,6 +126,7 @@ export async function main(
   const verb = VERBS.find((v) => v.name === first);
   let text = false;
   let session: CliSession | null = null;
+  const extra: CliSession[] = [];
   try {
     if (!verb)
       throw new CliError(
@@ -159,6 +160,11 @@ export async function main(
         session = await openSession(doc, options);
         return session;
       },
+      async freshSession(doc) {
+        const s = await openSession(doc, options);
+        extra.push(s);
+        return s;
+      },
     });
     if (result.silent) return result.exit ?? EXIT.ok;
     io.stdout(
@@ -187,5 +193,6 @@ export async function main(
     return e.exit;
   } finally {
     (session as CliSession | null)?.dispose();
+    for (const s of extra) s.dispose();
   }
 }

@@ -1,0 +1,8 @@
+$ paged-node template fields <TMP>/fixture.paged --no-plugins
+# exit 0
+# stdout
+{
+  "fields": []
+}
+# stderr
+(empty)
