@@ -3,7 +3,7 @@
   "version": 1,
   "counts": {
     "chrome": 4,
-    "command": 341,
+    "command": 347,
     "keybinding": 88,
     "menu": 257,
     "panel": 122,
@@ -351,6 +351,11 @@
       "owner": "media.paged.draw"
     },
     {
+      "id": "command:media.paged.draw.command.knife",
+      "kind": "command",
+      "owner": "media.paged.draw"
+    },
+    {
       "id": "command:media.paged.draw.command.makeCompoundPath",
       "kind": "command",
       "owner": "media.paged.draw"
@@ -576,6 +581,11 @@
       "owner": "media.paged.draw"
     },
     {
+      "id": "command:media.paged.draw.command.scissorsAt",
+      "kind": "command",
+      "owner": "media.paged.draw"
+    },
+    {
       "id": "command:media.paged.draw.command.selectBlendObjects",
       "kind": "command",
       "owner": "media.paged.draw"
@@ -617,6 +627,11 @@
     },
     {
       "id": "command:media.paged.draw.command.selectSameStrokeWeightOptions",
+      "kind": "command",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "command:media.paged.draw.command.shapeBuild",
       "kind": "command",
       "owner": "media.paged.draw"
     },
@@ -696,6 +711,11 @@
       "owner": "media.paged.image"
     },
     {
+      "id": "command:media.paged.image.command.applyAdjustment",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
       "id": "command:media.paged.image.command.applyToFile",
       "kind": "command",
       "owner": "media.paged.image"
@@ -707,6 +727,11 @@
     },
     {
       "id": "command:media.paged.image.command.bakeAdjustToLayer",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.canvasSize",
       "kind": "command",
       "owner": "media.paged.image"
     },
@@ -737,6 +762,11 @@
     },
     {
       "id": "command:media.paged.image.command.convertLayerToSmart",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.cropImage",
       "kind": "command",
       "owner": "media.paged.image"
     },
