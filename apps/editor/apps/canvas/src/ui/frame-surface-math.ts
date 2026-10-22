@@ -67,4 +67,3 @@ export function contentToHostMatrix(
   const inset: Mat = [1, 0, 0, 1, left, top];
   return compose(compose(compose(cam, onPage), item), inset);
 }
-
