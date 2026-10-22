@@ -44,8 +44,43 @@ export type Params = Readonly<Record<string, string | number>>;
 /** A locale's messages, by key. */
 export type Catalogue = Readonly<Record<string, string>>;
 
-/** The locales the editor ships, by language. */
-export const BUILT_IN_LOCALES: Readonly<Record<string, Catalogue>> = { de };
+/** Translations packages register beside their English (`defineTranslations`),
+ *  by language. */
+const shipped = new Map<string, Record<string, string>>([["de", { ...de }]]);
+
+/**
+ * A package's translation of its messages into `locale`, registered when the
+ * package loads, as its English is (`defineMessages`): each package keeps its
+ * own locale files beside its code, and the editor's catalogue for a
+ * language is all of them together.
+ */
+export function defineTranslations(locale: string, catalogue: Catalogue): void {
+  const into = shipped.get(locale) ?? {};
+  for (const [key, text] of Object.entries(catalogue)) {
+    const known = into[key];
+    if (known !== undefined && known !== text)
+      throw new Error(
+        `strings: ${locale} ${key} is translated twice differently`,
+      );
+    into[key] = text;
+  }
+  shipped.set(locale, into);
+}
+
+/** The locales the editor ships, by language: every package's translations
+ *  registered so far. */
+export const BUILT_IN_LOCALES: Readonly<Record<string, Catalogue>> = new Proxy(
+  {},
+  {
+    get: (_t, locale: string) => shipped.get(locale),
+    has: (_t, locale: string) => shipped.has(locale),
+    ownKeys: () => [...shipped.keys()],
+    getOwnPropertyDescriptor: (_t, locale: string) =>
+      shipped.has(locale)
+        ? { enumerable: true, configurable: true, value: shipped.get(locale) }
+        : undefined,
+  },
+);
 
 /** The English source of every defined message, by key. */
 const english = new Map<string, string>();
