@@ -16,6 +16,7 @@ mod decimal_spike;
 mod defects;
 mod edit_fill;
 mod edit_ops;
+mod entry_oracle;
 mod excel_oracle;
 mod extlink;
 mod fn_agg;

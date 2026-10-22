@@ -100,6 +100,8 @@ export interface EditorHostOptionDeps {
   };
   /** The shell's edit-context entry by type, the one a double-click takes. */
   enterEditContext: NonNullable<ShellBackend["enterEditContext"]>;
+  /** Leave the active edit context of a type (extensions ADR 334). */
+  exitEditContext?: ShellBackend["exitEditContext"];
   /** The file picker and saver; default the editor's own (a transient
    *  `<input type=file>`, an anchor download). */
   pickFile?: ShellBackend["pickFile"];
@@ -164,6 +166,9 @@ export function createEditorHostOptions(
     // "Adjust image" command, an importer that just placed one). The SDK
     // refuses a type the calling bundle did not register.
     enterEditContext: deps.enterEditContext,
+    // Extensions ADR 334 — leave a bundle's own active context (a frame
+    // surface's ✓ / Back button). Flips supports("shell.exitEditContext@1").
+    ...(deps.exitEditContext ? { exitEditContext: deps.exitEditContext } : {}),
   };
   // v66 — tool options a bundle declared are written by the host's
   // tool-options popover; `host.tools.settings` reads them back.

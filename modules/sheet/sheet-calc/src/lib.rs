@@ -93,6 +93,7 @@ pub mod volatile;
 use sheet_core::ast::Formula;
 use sheet_core::{Cell, CellError, CellRef, CellValue, NameId, SheetId, SheetModel};
 use sheet_fn::FnResult;
+use sheet_format::entry::{is_text_format, parse_entry_for_format, Entry, EntryCtx, FormatHint};
 use sheet_parser::{Edit, ParseCtx};
 
 use crate::dirty::Dirty;
@@ -145,6 +146,15 @@ pub enum SetInput {
     Value(CellValue),
     /// A parsed formula.
     Formula(Formula),
+}
+
+/// A typed cell entry, parsed but not committed ([`Engine::parse_entry_at`]):
+/// the input plus the number format the text implies and whether a leading
+/// `'` forced text (the cell then carries the quote-prefix attribute).
+pub struct TypedInput {
+    pub input: SetInput,
+    pub hint: Option<FormatHint>,
+    pub quote_prefix: bool,
 }
 
 /// The calculation engine. Owns the [`SheetModel`], the dependency
@@ -276,13 +286,16 @@ impl Engine {
     ///
     /// - `raw` starting with `'='` parses as a formula (a [`ParseError`]
     ///   surfaces as `Err`).
-    /// - Otherwise literal detection runs: a number (incl. a leading `+`/`-`
-    ///   and scientific notation), `TRUE`/`FALSE` (case-insensitive), an error
-    ///   literal (`#REF!` etc. via [`CellError::parse`]), the empty string →
-    ///   [`CellValue::Empty`], anything else → [`CellValue::Text`].
+    /// - Otherwise the typed-entry parser runs ([`sheet_format::entry`],
+    ///   ruling `sheet.edit.typed-entry`): numbers (groups, `%`, currency,
+    ///   fractions, scientific; 15 significant digits), dates and times as
+    ///   serials, `TRUE`/`FALSE`, error literals, a leading `'` for text,
+    ///   the empty string → [`CellValue::Empty`], anything else →
+    ///   [`CellValue::Text`]. The workbook locale reads separators and date
+    ///   order; the session clock completes a date typed without a year.
     ///
-    /// **NO date-literal parsing in T0** (`"2024-01-01"` is stored as Text,
-    /// not a serial — dates are a number-format concern, deferred).
+    /// The number format the text implies is NOT applied here (styles are
+    /// the session's): callers that want it use [`Engine::parse_entry_at`].
     ///
     /// Commits the cell and recalcs the resulting dirty cut.
     ///
@@ -315,7 +328,55 @@ impl Engine {
             };
             SetInput::Formula(sheet_parser::parse(body, &ctx)?)
         } else {
-            SetInput::Value(literal_of(raw))
+            SetInput::Value(self.typed(raw, "General").value)
+        })
+    }
+
+    /// The typed-entry context of this engine: the workbook locale and date
+    /// system, the session clock.
+    pub fn entry_ctx(&self) -> EntryCtx {
+        EntryCtx::new(
+            self.model.calc.locale,
+            self.model.calc.date_system,
+            self.config.now_serial,
+        )
+    }
+
+    fn typed(&self, raw: &str, current_fmt: &str) -> Entry {
+        parse_entry_for_format(raw, current_fmt, &self.entry_ctx())
+    }
+
+    /// Parse raw cell text for the cell at `(sheet, row, col)` exactly as a
+    /// person typing it there: a formula as [`Engine::parse_input`] does
+    /// (unless the cell is Text-formatted, `@` — then everything, `=…`
+    /// included, is stored verbatim, as Excel does), else the typed-entry
+    /// value plus the number format it implies and the quote-prefix flag
+    /// (ruling `sheet.edit.typed-entry`). Nothing is committed.
+    pub fn parse_entry_at(
+        &self,
+        sheet: SheetId,
+        row: u32,
+        col: u32,
+        raw: &str,
+    ) -> Result<TypedInput, sheet_parser::ParseError> {
+        let fmt = self
+            .model
+            .sheet(sheet)
+            .and_then(|ws| ws.cell(row, col))
+            .map(|c| self.model.styles.num_fmt_of(c.style))
+            .unwrap_or("General");
+        if raw.starts_with('=') && !is_text_format(fmt) {
+            return Ok(TypedInput {
+                input: self.parse_input(sheet, raw)?,
+                hint: None,
+                quote_prefix: false,
+            });
+        }
+        let e = self.typed(raw, fmt);
+        Ok(TypedInput {
+            input: SetInput::Value(e.value),
+            hint: e.hint,
+            quote_prefix: e.quote_prefix,
         })
     }
 
@@ -1234,53 +1295,6 @@ fn seed_volatility(model: &SheetModel, graph: &DepGraph, dirty: &mut Dirty) {
     }
 }
 
-/// Excel-like literal detection for a non-formula raw cell entry (the `enter`
-/// ruling). Order: empty → blank; number (incl. leading `+`/`-`, scientific) →
-/// Number; `TRUE`/`FALSE` (case-insensitive) → Bool; error literal → Error;
-/// otherwise → Text. NO date-literal parsing in T0.
-fn literal_of(raw: &str) -> CellValue {
-    if raw.is_empty() {
-        return CellValue::Empty;
-    }
-    // TRUE / FALSE (case-insensitive).
-    if raw.eq_ignore_ascii_case("TRUE") {
-        return CellValue::Bool(true);
-    }
-    if raw.eq_ignore_ascii_case("FALSE") {
-        return CellValue::Bool(false);
-    }
-    // Error literal (#REF! etc).
-    if let Some(e) = CellError::parse(raw) {
-        return CellValue::Error(e);
-    }
-    // Number (mirrors the coerce::to_number text ruling: leading +/-, sci, no
-    // thousands separators / inf / nan / underscores).
-    if let Some(n) = parse_number_literal(raw) {
-        return CellValue::Number(n);
-    }
-    CellValue::Text(raw.into())
-}
-
-/// Parse a numeric literal exactly like `sheet_fn::coerce::to_number`'s text
-/// branch (kept in sync, but `sheet-calc` cannot reach that private fn). A
-/// number literal does NOT trim surrounding whitespace here (cell entry of
-/// `" 1"` is text in Excel) — only an exact numeric spelling parses.
-fn parse_number_literal(s: &str) -> Option<f64> {
-    if s != s.trim() {
-        return None;
-    }
-    let probe = s.strip_prefix(['+', '-']).unwrap_or(s);
-    let head = probe.as_bytes().first().copied();
-    let numeric_head = matches!(head, Some(b'0'..=b'9') | Some(b'.'));
-    if !numeric_head {
-        return None;
-    }
-    if s.bytes().any(|b| b == b'_') {
-        return None;
-    }
-    s.parse::<f64>().ok().filter(|n| n.is_finite())
-}
-
 // ---- structural-edit geometry helpers ----
 
 #[derive(Copy, Clone, PartialEq, Eq)]
@@ -1547,9 +1561,12 @@ mod tests {
         assert_eq!(value_at(&e, 5, 0), CellValue::from("hello"));
         e.enter(0, 6, 0, "").unwrap();
         assert_eq!(value_at(&e, 6, 0), CellValue::Empty);
-        // " 1" (leading space) is text, not a number.
+        // " 1": Excel ignores the spaces around a number (recorded, the
+        // oracle entry lane `num-10`); around TRUE they make it text.
         e.enter(0, 7, 0, " 1").unwrap();
-        assert_eq!(value_at(&e, 7, 0), CellValue::from(" 1"));
+        assert_eq!(value_at(&e, 7, 0), CellValue::Number(1.0));
+        e.enter(0, 8, 0, " TRUE").unwrap();
+        assert_eq!(value_at(&e, 8, 0), CellValue::from(" TRUE"));
     }
 
     #[test]

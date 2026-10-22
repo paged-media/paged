@@ -92,6 +92,23 @@ pub struct CircularRef {
 pub struct SetCellResult {
     pub changed: Vec<CellChange>,
     pub circular: Vec<CircularRef>,
+    /// The cells whose STYLE the entry changed (typed entry: `45%` gives a
+    /// General cell the `0%` format, a leading `'` the quote prefix; ruling
+    /// `sheet.edit.typed-entry`). Absent when none — the caller journals
+    /// these with the value as ONE undo step.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub restyled: Vec<Restyle>,
+}
+
+/// One cell a typed entry restyled: its style id before and after (restore
+/// with `set_style_ids`).
+#[derive(serde::Serialize, Debug, Clone, PartialEq)]
+pub struct Restyle {
+    pub sheet: u16,
+    pub row: u32,
+    pub col: u32,
+    pub before: u32,
+    pub after: u32,
 }
 
 /// One input of a [`SheetSession::set_cells`] batch (`{sheet,row,col,input}`
@@ -119,6 +136,10 @@ pub struct SetCellsResult {
     pub changed_count: u32,
     pub circular: Vec<CircularRef>,
     pub prev_inputs: Vec<String>,
+    /// The cells whose style the typed entries changed (see
+    /// [`SetCellResult::restyled`]); absent when none.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub restyled: Vec<Restyle>,
 }
 
 /// One cell rewritten by a bulk edit op (sort / replace), carrying BOTH
@@ -878,22 +899,27 @@ impl SheetSession {
             )));
         }
 
-        let engine = self
-            .engine
-            .as_mut()
-            .expect("engine present outside save_xlsx");
-        let result = engine
-            .enter(sheet, row, col, input)
+        // Typed entry (ruling `sheet.edit.typed-entry`): the value Excel
+        // would store plus the format the text implies, applied as ONE edit.
+        let typed = self
+            .engine()
+            .parse_entry_at(sheet, row, col, input)
             .map_err(|e| SessionError(e.to_string()))?;
+        let empty = matches!(typed.input, sheet_calc::SetInput::Value(CellValue::Empty));
+        let pending = vec![((sheet, row, col), typed.hint, typed.quote_prefix, empty)];
+        let patches = self.typed_patches(&pending)?;
+        let result = self.engine_mut().set_cell(sheet, row, col, typed.input);
+        let restyled = self.apply_cell_patches(patches)?;
 
         // Record the entered cell as edited (for save re-printing).
         self.edited.insert((sheet, row, col));
 
         // Build the changed list with each cell's formatted display.
+        let engine = self.engine();
         let model = engine.model();
         let mut cache = FormatCache::default();
         let ctx = FormatCtx::new(model.calc.date_system, model.calc.locale);
-        let changed = result
+        let mut changed: Vec<CellChange> = result
             .changed
             .iter()
             .map(|cref| CellChange {
@@ -903,6 +929,20 @@ impl SheetSession {
                 display: cell_display(model, cref.sheet, cref.row, cref.col, &mut cache, &ctx),
             })
             .collect();
+        // A restyle alone (same value, new format) still changes the display.
+        for r in &restyled {
+            if !changed
+                .iter()
+                .any(|c| (c.sheet, c.row, c.col) == (r.sheet, r.row, r.col))
+            {
+                changed.push(CellChange {
+                    sheet: r.sheet,
+                    row: r.row,
+                    col: r.col,
+                    display: cell_display(model, r.sheet, r.row, r.col, &mut cache, &ctx),
+                });
+            }
+        }
         let circular = result
             .circular
             .iter()
@@ -913,7 +953,11 @@ impl SheetSession {
             })
             .collect();
 
-        Ok(SetCellResult { changed, circular })
+        Ok(SetCellResult {
+            changed,
+            circular,
+            restyled,
+        })
     }
 
     /// Commit a batch of cell inputs with ONE recalc (spec §6.2 batch door,
@@ -927,6 +971,7 @@ impl SheetSession {
         let engine = self.engine();
         let sheet_count = engine.model().sheets.len();
         let mut parsed = Vec::with_capacity(inputs.len());
+        let mut typed_pending = Vec::new();
         for c in inputs {
             if (c.sheet as usize) >= sheet_count {
                 return Err(SessionError(format!(
@@ -934,10 +979,19 @@ impl SheetSession {
                     c.sheet
                 )));
             }
-            let input = engine.parse_input(c.sheet, &c.input).map_err(|e| {
-                SessionError(format!("{} does not parse: {e}", a1_of(c.row, c.col)))
-            })?;
-            parsed.push((c.sheet, c.row, c.col, input));
+            let typed = engine
+                .parse_entry_at(c.sheet, c.row, c.col, &c.input)
+                .map_err(|e| {
+                    SessionError(format!("{} does not parse: {e}", a1_of(c.row, c.col)))
+                })?;
+            let empty = matches!(typed.input, sheet_calc::SetInput::Value(CellValue::Empty));
+            typed_pending.push((
+                (c.sheet, c.row, c.col),
+                typed.hint,
+                typed.quote_prefix,
+                empty,
+            ));
+            parsed.push((c.sheet, c.row, c.col, typed.input));
         }
         // Prior inputs, in batch order: a cell written earlier in the batch
         // reports that earlier input (the sequential inverse).
@@ -957,7 +1011,21 @@ impl SheetSession {
             .collect();
         let written: BTreeSet<(u16, u32, u32)> =
             inputs.iter().map(|c| (c.sheet, c.row, c.col)).collect();
+        // A cell written twice keeps only its LAST entry's format.
+        let mut last: std::collections::HashMap<(u16, u32, u32), usize> =
+            std::collections::HashMap::new();
+        for (i, p) in typed_pending.iter().enumerate() {
+            last.insert(p.0, i);
+        }
+        let typed_pending: Vec<_> = typed_pending
+            .into_iter()
+            .enumerate()
+            .filter(|(i, p)| last.get(&p.0) == Some(i))
+            .map(|(_, p)| p)
+            .collect();
+        let patches = self.typed_patches(&typed_pending)?;
         let res = self.engine_mut().set_cells(parsed);
+        let restyled = self.apply_cell_patches(patches)?;
         self.edited.extend(written.iter().copied());
         let mut changed = written;
         changed.extend(res.changed.iter().map(|c| (c.sheet, c.row, c.col)));
@@ -973,6 +1041,7 @@ impl SheetSession {
                 })
                 .collect(),
             prev_inputs,
+            restyled,
         })
     }
 
@@ -2481,7 +2550,17 @@ fn cell_input_text(model: &SheetModel, sheet: SheetId, row: u32, col: u32) -> St
         // Shortest round-trip float text — `Engine::enter` parses it
         // back to the same f64.
         CellValue::Number(n) => n.to_string(),
-        CellValue::Text(t) => t.to_string(),
+        // A text that would re-type as something else (`45%`, `1/2`, `TRUE`,
+        // `=x`) carries Excel's leading `'` (ruling sheet.edit.typed-entry).
+        CellValue::Text(t) => {
+            let ctx =
+                sheet_format::entry::EntryCtx::new(model.calc.locale, model.calc.date_system, 0.0);
+            if sheet_format::entry::needs_quote(t, &ctx) {
+                format!("'{t}")
+            } else {
+                t.to_string()
+            }
+        }
         CellValue::Bool(b) => (if *b { "TRUE" } else { "FALSE" }).to_string(),
         CellValue::Error(e) => e.as_str().to_string(),
     }

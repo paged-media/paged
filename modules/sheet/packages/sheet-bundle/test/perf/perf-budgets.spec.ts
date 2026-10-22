@@ -583,7 +583,9 @@ describe.skipIf(!ENGINE_BUILT)(
     // the previous tables never removed (1291 mutations for 10 reflows).
     it("reflow a two-frame chain 10 times [sheet.lower.paginate]", async () => {
       const s = await open(
-        await authorWorkbook(120, 3, (r, c) => `${r}:${c}`),
+        // Text cells: `1:0` would type as a time (typed entry, sheet ADR
+        // 511) and right-align, which reads the paragraph styles.
+        await authorWorkbook(120, 3, (r, c) => `r${r}c${c}`),
         "A1:C120",
       );
       // Two threaded frames on the page (raw host — setup, not counted).

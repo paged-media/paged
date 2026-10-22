@@ -23,6 +23,7 @@ import type * as Api from "@paged-media/plugin-api";
 import {
   MENU_KEYS,
   WIDGET_KEYS,
+  insideFrameSurface,
   insideKeyOwningContainer,
   isActivatable,
   isCanvasSurface,
@@ -263,6 +264,11 @@ export function targetOwnsKey(
   if (MENU_KEYS.has(key) && event.defaultPrevented) return true;
   const target = event.target as HTMLElement | null;
   if (!target || !target.tagName) return false;
+  // A plugin's frame surface (extensions ADR 334) says "mine" by preventing
+  // the default of the keys it handles — Cmd+C/V included, which would
+  // otherwise run the plugin's own keybinding a second time. A key it lets
+  // through (Cmd+S, Cmd+K) still reaches the bindings.
+  if (event.defaultPrevented && insideFrameSurface(target)) return true;
   // Tab moves focus (F-49): from a field, a button, a dialog, the page.
   // Only the canvas's own surfaces hand it to a binding.
   if (key === "tab") return !isCanvasSurface(target);
