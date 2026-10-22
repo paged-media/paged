@@ -131,6 +131,11 @@ export interface PersistedSession {
   /** Refresh policy per source; a source not named here is manual. Absent
    *  in a part written before wave 6 (decodeSession fills it). */
   refresh?: Record<string, RefreshPolicy>;
+  /** The record the document shows, per query (0-based; the preview
+   *  stepper and a template's record field). Absent = the first. */
+  preview?: Record<string, number>;
+  /** The data set last applied to the document, if any. */
+  dataSet?: string;
 }
 
 export function emptyTargets(): PersistedTargets {
@@ -267,5 +272,15 @@ export function decodeSession(
     data: Array.isArray(p.data) ? p.data : [],
     remote: Array.isArray(p.remote) ? p.remote : [],
     refresh: p.refresh && typeof p.refresh === "object" ? p.refresh : {},
+    ...(p.preview && typeof p.preview === "object"
+      ? {
+          preview: Object.fromEntries(
+            Object.entries(p.preview).filter(
+              ([, n]) => Number.isInteger(n) && (n as number) >= 0,
+            ),
+          ),
+        }
+      : {}),
+    ...(typeof p.dataSet === "string" ? { dataSet: p.dataSet } : {}),
   };
 }
