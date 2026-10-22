@@ -304,6 +304,11 @@ fn ref_expr(r: RangeRef) -> Expr {
 
 /// The expression substituted for a bound name (see the module docs).
 fn bind(model: &SheetModel, e: &Expr, ctx: &EvalCtx, spills: &SpillState) -> Expr {
+    // An empty argument stays empty, so ISOMITTED can see it (W3); used as a
+    // value it still reads as a blank.
+    if matches!(e, Expr::Missing) {
+        return Expr::Missing;
+    }
     if is_ref_shaped(e) {
         if let Some(r) = eval_as_ref(model, e, ctx, spills) {
             return ref_expr(r);

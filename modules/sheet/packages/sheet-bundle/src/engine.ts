@@ -484,6 +484,8 @@ export interface SheetEngine {
   /** Precision as displayed (`<calcPr fullPrecision>`): `false` stores an
    *  entered number as its format shows it. */
   setFullPrecision?(full: boolean): void;
+  /** Name the document for `CELL("filename")` (empty: an unsaved workbook). */
+  setDocumentName?(name: string): { changed: CellChange[] };
   /** Add a worksheet at the end (empty name = next free `SheetN`); its id. */
   addSheet?(name: string): number;
   /** Rename a worksheet (Excel's name rules; throws the reason). */
@@ -850,6 +852,7 @@ export interface SheetWasmEngine {
   calculate_sheet?(sheet: number): { changed: CellChange[] };
   is_calc_pending?(): boolean;
   set_full_precision?(full: boolean): void;
+  set_document_name?(name: string): { changed: CellChange[] };
   add_sheet?(name: string): number;
   rename_sheet?(sheet: number, name: string): void;
   delete_sheet?(sheet: number): { changed: CellChange[] };
@@ -1034,6 +1037,8 @@ export function wrapEngine(
     setFullPrecision: (full) => {
       need("set_full_precision")(full);
     },
+    setDocumentName: (name) =>
+      need("set_document_name")(name) as { changed: CellChange[] },
     addSheet: (name) => need("add_sheet")(name) as number,
     renameSheet: (sheet, name) => {
       need("rename_sheet")(sheet, name);

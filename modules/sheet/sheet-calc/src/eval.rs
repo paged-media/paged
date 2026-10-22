@@ -59,6 +59,7 @@ use crate::accel::{self, Fast};
 use crate::argview::{self, RangeBuf};
 use crate::spill::SpillState;
 
+mod info;
 mod lambda;
 pub(crate) mod lift;
 pub use lift::eval_array;
@@ -1411,6 +1412,11 @@ fn eval_func_rich(
         if let Some(r) = lambda::special_rich(model, fid, args, ctx, spills) {
             return r;
         }
+        // CELL("width") spills its {width, is_default} pair.
+        let meta = sheet_core::funcs::meta(fid);
+        if meta.name == "CELL" && args.len() >= meta.min_args as usize && args.len() <= 2 {
+            return info::cell_rich(model, args, ctx, spills);
+        }
         return FnResult::Scalar(eval_special_form(model, fid, args, ctx, spills));
     }
     if refuses_3d(fid, args) {
@@ -1565,6 +1571,12 @@ fn eval_special_form(
         // resolvable OFFSET/INDIRECT) — the same resolution special forms
         // use. A value, an array or an unresolvable INDIRECT is FALSE.
         "ISREF" => CellValue::Bool(eval_as_ref(model, &args[0], ctx, spills).is_some()),
+        // The information forms that read the workbook (W3, eval/info.rs).
+        "SHEET" => info::sheet(model, args, ctx, spills),
+        "SHEETS" => info::sheets(model, args, ctx, spills),
+        "INFO" => info::info(model, args, ctx, spills),
+        "ISOMITTED" => info::isomitted(args),
+        "CELL" => lambda::collapse(info::cell_rich(model, args, ctx, spills)),
         // A registered special form with no handler is an internal invariant
         // break (a new `special_form: true` row landed without wiring eval).
         _ => CellValue::Error(CellError::Name),

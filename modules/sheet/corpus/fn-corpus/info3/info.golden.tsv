@@ -1,0 +1,12 @@
+# INFO(type_text).
+# id	formula	setup	expected
+info-0	=INFO("numfile")	-	1
+info-1	=INFO("recalc")	-	Automatic
+info-2	=INFO("release")	-	16.0
+info-3	=INFO("system")	-	pcdos
+info-4	=INFO("origin")	-	$A:$A$1
+info-5	=INFO("bogus")	-	#VALUE!
+info-6	=INFO("RECALC")	-	Automatic
+info-7	=ISTEXT(INFO("osversion"))	-	TRUE
+info-8	=ISTEXT(INFO("directory"))	-	TRUE
+info-9	=INFO(1)	-	#VALUE!
