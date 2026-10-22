@@ -78,7 +78,7 @@ async function mount(profile?: EditorProfile) {
         tools={BUILT_IN_TOOLS}
         modes={MODES}
         initialMode="design"
-        panelRail={[{ id: RIGHT, icon: "panel-layers", label: "Right" }]}
+        panelRail={[{ panelId: RIGHT, icon: "panel-layers", title: "Right" }]}
         canvasComponent={() => <div data-test-canvas />}
         regions={resolved?.regions}
         canvasFurniture={resolved?.canvas}

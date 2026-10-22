@@ -68,7 +68,6 @@ import {
   commitSave,
   setLibrary,
   setChromeStorageScope,
-  ALWAYS_IN_PALETTE,
   AI_ASK_COMMAND,
   openAssistant,
   setAssistantOpener,
@@ -124,8 +123,8 @@ import {
   setPageGoTo,
   setTextReveal,
 } from "./plugin-pages";
-import { resolveSoloProfile } from "./solo/profiles";
-import { soloMode } from "./solo/mode";
+import { applyProfile } from "./profiles/apply";
+import { profileFromSearch } from "./profiles/from-url";
 // ADR 222 — the bundles are NOT imported here: each is a dynamic import()
 // in the table, so each is its own chunk and none sits in the entry.
 import { PLUGIN_BUNDLES } from "./plugin-bundle-table";
@@ -675,19 +674,14 @@ function PluginBundles() {
           hostOptionsFor(bundle.manifest.id),
         );
     }
-    // Solo loads ONE bundle. Filtering here (rather than after
-    // registration) means the other seven never activate at all, so
-    // their panels, tools, menus, importers and edit contexts are never
-    // registered and nothing has to un-register them — and, since the
-    // bundles are dynamic imports (ADR 222), their chunks are never
-    // fetched either.
+    // The profile's bundles only (a solo preset names ONE). Filtering
+    // here (rather than after registration) means the others never
+    // activate at all, so their panels, tools, menus, importers and edit
+    // contexts are never registered and nothing has to un-register them —
+    // and, since the bundles are dynamic imports (ADR 222), their chunks
+    // are never fetched either.
     const activator = createBundleActivator({
-      entries: SOLO
-        ? PLUGIN_BUNDLES.filter((e) => e.id === SOLO.bundleId).map((e) => ({
-            ...e,
-            lane: "boot" as const,
-          }))
-        : PLUGIN_BUNDLES,
+      entries: SURFACES.bundles,
       activate: loadGuarded,
       record: (entry) => journal.record(entry),
       publishProblem: (bundleId, key, diagnostics) =>
@@ -1485,12 +1479,12 @@ function CanvasAppIntegration() {
       ...GLOBAL_LIGHT_MENU_ITEMS,
       ...COCKPIT_MENU_SEAMS,
     ]
-      // Solo keeps only the host menus its profile names. Whole-menu
-      // removal falls out of this for free: MenuBar builds a top-level
+      // The profile keeps only the host menus its menu bar names. Whole-
+      // menu removal falls out of this for free: MenuBar builds a top-level
       // menu only if at least one item carries that first path segment,
       // so dropping every `Layout/…` item removes the Layout menu — no
       // per-menu predicate needed, and none exists.
-      .filter((m) => SOLO_SURFACES?.keepMenu(m) ?? true)
+      .filter((m) => SURFACES.keepMenu(m))
       .map((m) => registries.menus.register(m));
     const keyDisposables = [
       ...APP_KEYBINDINGS,
@@ -1613,17 +1607,19 @@ function CanvasAppRoot() {
   return (
     <PagedShell
       client={client}
-      panels={SOLO_SURFACES?.panels ?? BUILT_IN_PANELS}
+      panels={SURFACES.panels}
       overlays={BUILT_IN_OVERLAYS}
-      tools={SOLO_SURFACES?.tools ?? BUILT_IN_TOOLS}
-      modes={SOLO_SURFACES?.modes ?? COCKPIT_MODES}
-      panelRail={SOLO_SURFACES?.panelRail ?? PANEL_RAIL}
+      tools={SURFACES.tools}
+      modes={SURFACES.modes}
+      panelRail={SURFACES.panelRail}
       canvasComponent={CanvasPanel}
       // The corpus picker is an Envato IDML-pack browser — DTP
       // furniture with no meaning in a drawing app.
-      headerExtras={SOLO ? null : <CorpusPicker />}
-      initialMode={SOLO ? "design" : undefined}
-      initialDocumentSizePt={SOLO?.documentSizePt}
+      headerExtras={SURFACES.plain ? <CorpusPicker /> : null}
+      initialMode={SURFACES.initialMode}
+      initialDocumentSizePt={SURFACES.initialDocumentSizePt}
+      regions={PROFILE.regions}
+      canvasFurniture={PROFILE.canvas}
       bindingProviders={bindingProviders}
       objectModel={editorObjectModel}
     >
@@ -1662,72 +1658,52 @@ if (!import.meta.env.PROD) {
   exposeJournalForTests();
 }
 
-// ── SOLO MODE ────────────────────────────────────────────────────────
+// ── THE EDITOR PROFILE ───────────────────────────────────────────────
 //
-// Resolved ONCE, at module scope, before anything renders.
+// Resolved ONCE, at module scope, before anything renders
+// (docs/composable-editor.md §5; solo mode is the preset `solo:<name>`,
+// ADR 213).
 //
 // NOT in JSX, and not memoized: `PagedShell` registers panels in an
 // effect whose deps include the `panels` array and whose ref guard
 // resets on cleanup, so a NEW ARRAY IDENTITY disposes ~55 panels and
 // re-registers them — cascading through the Window menu and every
-// derived show/hide command. `?solo` cannot change without a reload, so
+// derived show/hide command. The URL cannot change without a reload, so
 // there is nothing to memoize and no reason to involve React at all.
 //
-// Resolution is TOTAL: an unknown profile returns null and the ordinary
-// editor boots. This runs before `installGlobalErrorCapture()` at the
-// bottom of this file, so a throw here would white-screen with nothing
+// Resolution is TOTAL: an unknown preset resolves to the ordinary editor
+// and reports a problem. This runs before `installGlobalErrorCapture()` at
+// the bottom of this file, so a throw here would white-screen with nothing
 // in the journal.
-const SOLO = resolveSoloProfile(
+const RESOLVED = profileFromSearch(
   typeof location === "undefined" ? "" : location.search,
 );
-// Namespace the chrome's localStorage before the first read. Solo runs
-// the cockpit under the mode id "design" (the union is closed), and
-// `paged.cockpit.v1` is keyed BY MODE ID — unscoped, solo and the
-// ordinary editor would overwrite each other's right-dock tabs, and the
-// unresolvable ids would then be dropped in silence.
-setChromeStorageScope(SOLO ? `.solo.${SOLO.bundleId}` : "");
+const PROFILE = RESOLVED.profile;
+// Namespace the chrome's localStorage before the first read. A solo
+// preset runs the cockpit under the mode id "design" (the union is
+// closed), and `paged.cockpit.v1` is keyed BY MODE ID — unscoped, solo and
+// the ordinary editor would overwrite each other's right-dock tabs, and
+// the unresolvable ids would then be dropped in silence.
+setChromeStorageScope(PROFILE.storageScope);
 
 /** Surfaces the app hands the shell, filtered to the profile.
  *
- *  ALLOW-LIST: the profile names what it SHOWS, so a host panel added
- *  later is absent from solo until someone puts it there deliberately.
- *  A deny-list would leak every new DTP panel into every profile — the
- *  fail-open shape this codebase keeps finding. The cost is the
- *  opposite failure (a renamed panel silently drops out), which is what
+ *  ALLOW-LIST: a profile names what it SHOWS, so a host panel added later
+ *  is absent from a preset until someone puts it there deliberately. A
+ *  deny-list would leak every new DTP panel into every preset — the
+ *  fail-open shape this codebase keeps finding. The cost is the opposite
+ *  failure (a renamed panel silently drops out), which is what
  *  `scripts/solo-profiles-guard.mjs` exists to catch. */
-const SOLO_SURFACES = SOLO
-  ? (() => {
-      const panelAllow = new Set([
-        ...SOLO.panelIds,
-        // Whatever the layout itself names must survive the filter, or
-        // the cockpit renders "This panel is unavailable" in its own
-        // left column.
-        ...(SOLO.slots.left ? [SOLO.slots.left] : []),
-        ...(SOLO.slots.tabs ?? []),
-        ...(SOLO.slots.inspector ? [SOLO.slots.inspector] : []),
-        ...SOLO.panelRailIds,
-      ]);
-      const toolAllow = new Set([
-        ...SOLO.toolIds,
-        // Navigation and inspection are never taken away — the same set
-        // the tool rail exempts from context narrowing, for the same
-        // reason: selection is how you get out of anything.
-        ...ALWAYS_IN_PALETTE,
-      ]);
-      const menuAllow = new Set(SOLO.menuTopLevels);
-      const keepMenu = (m: { path: string }) =>
-        menuAllow.has(m.path.split("/")[0]);
-      return {
-        panels: BUILT_IN_PANELS.filter((p) => panelAllow.has(p.id)),
-        tools: BUILT_IN_TOOLS.filter((t) => toolAllow.has(t.id)),
-        panelRail: PANEL_RAIL.filter((r) =>
-          SOLO.panelRailIds.includes(r.panelId),
-        ),
-        modes: [soloMode(SOLO)],
-        keepMenu,
-      };
-    })()
-  : null;
+const SURFACES = applyProfile(PROFILE, {
+  panels: BUILT_IN_PANELS,
+  tools: BUILT_IN_TOOLS,
+  panelRail: PANEL_RAIL,
+  modes: COCKPIT_MODES,
+  bundles: PLUGIN_BUNDLES,
+});
+for (const problem of [...RESOLVED.problems, ...SURFACES.problems]) {
+  console.warn(`[editor profile] ${problem.path}: ${problem.message}`);
+}
 
 // ADR 180 — the local library (every document a repository in the
 // origin-private file system). Optional: without OPFS, or with
