@@ -83,16 +83,15 @@ impl Dirty {
     /// formula recompute); only its dependents are. If `origin` is itself a
     /// formula whose input changed, the caller marks it explicitly.
     pub fn propagate_from(&mut self, origin: CellRef, graph: &DepGraph) {
-        let mut stack: Vec<CellRef> = graph.dependents_of(origin);
+        let mut stack: Vec<CellRef> = Vec::new();
+        graph.for_each_dependent(origin, |d| stack.push(d));
         while let Some(c) = stack.pop() {
             if self.set.insert(c) {
                 perf_count!(cells_marked_dirty, 1);
                 // Newly dirtied — its own dependents may now be dirty too.
-                for d in graph.dependents_of(c) {
-                    if !self.set.contains(&d) {
-                        stack.push(d);
-                    }
-                }
+                // Pushed unchecked: the insert above de-duplicates, so a
+                // membership probe here would only double the hash work.
+                graph.for_each_dependent(c, |d| stack.push(d));
             }
         }
     }
