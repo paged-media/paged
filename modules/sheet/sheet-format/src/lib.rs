@@ -45,6 +45,7 @@
 
 pub mod cache;
 pub mod datetime;
+pub mod entry;
 pub mod general;
 pub mod locale;
 pub mod number;

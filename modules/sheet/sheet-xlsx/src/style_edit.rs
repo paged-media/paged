@@ -151,6 +151,9 @@ pub struct StylePatch {
     /// `top` / `center` / `bottom` / `justify` / `distributed`.
     pub v_align: Option<String>,
     pub wrap: Option<bool>,
+    /// Excel's quote prefix (`<xf quotePrefix="1">`): the cell's text was
+    /// entered after a leading `'` (ruling `sheet.edit.typed-entry`).
+    pub quote_prefix: Option<bool>,
 }
 
 impl StylePatch {
@@ -683,6 +686,10 @@ fn apply_to_xf(xml: Vec<u8>, base: usize, p: &StylePatch) -> Result<(Vec<u8>, us
         xf.set("applyAlignment", Some("1".into()));
     }
 
+    if let Some(q) = p.quote_prefix {
+        xf.set("quotePrefix", q.then(|| "1".to_string()));
+    }
+
     find_or_append(xml, "cellXfs", "xf", &xf, &prefix)
 }
 
@@ -866,7 +873,29 @@ impl XlsxDocument {
                 al.and_then(|a| a.attr("wrapText"))
                     .is_some_and(|w| w == "1" || w == "true"),
             ),
+            quote_prefix: Some(
+                xf.attr("quotePrefix")
+                    .is_some_and(|q| q == "1" || q == "true"),
+            ),
         })
+    }
+
+    /// The style ids (`cellXfs` indices) carrying Excel's quote prefix
+    /// (`quotePrefix="1"`) — what typed entry reads to clear the attribute
+    /// when a cell is re-typed without a leading `'`.
+    pub fn quote_prefixed_styles(&self) -> Result<BTreeSet<u32>, XlsxError> {
+        let xml = self.styles_bytes();
+        let mut out = BTreeSet::new();
+        let Some(sec) = section(&xml, "cellXfs")? else {
+            return Ok(out);
+        };
+        for (i, sp) in records(&xml, &sec, "xf")?.iter().enumerate() {
+            let a = attrs_of(&xml, sp)?;
+            if matches!(attr_local(&a, "quotePrefix").as_deref(), Some("1" | "true")) {
+                out.insert(i as u32);
+            }
+        }
+        Ok(out)
     }
 }
 
