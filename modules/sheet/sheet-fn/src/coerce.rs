@@ -32,6 +32,32 @@ use sheet_core::{CellError, CellValue};
 
 use crate::arg::Arg;
 
+/// `x` rounded to Excel's 15 significant decimal digits — the precision at
+/// which Excel's `=`/`<>`/`<`/`>` operators and the criteria of COUNTIF /
+/// SUMIF compare numbers (sheet ADR 513; Excel-recorded:
+/// `=0.1+0.2=0.3` is TRUE, `=1+1E-15=1` TRUE, `=1+1E-14=1` FALSE). MATCH,
+/// VLOOKUP and XMATCH do NOT use it (recorded: an exact match of
+/// `0.1+0.2` against `0.3` is `#N/A`). Non-finite values are returned as is.
+pub fn round15(x: f64) -> f64 {
+    if x == 0.0 || !x.is_finite() {
+        return x;
+    }
+    format!("{x:.14e}").parse().unwrap_or(x)
+}
+
+/// Whether two numbers are equal at 15 significant digits ([`round15`]).
+pub fn eq15(a: f64, b: f64) -> bool {
+    if a == b {
+        return true;
+    }
+    // Quick reject: farther apart than any 15-digit rounding can bridge.
+    let scale = a.abs().max(b.abs());
+    if (a - b).abs() > scale * 1e-14 {
+        return false;
+    }
+    round15(a) == round15(b)
+}
+
 /// Coerce a value to a number (registry `sheet.fn.coerce.to-number`).
 ///
 /// Rulings (ECMA-376 implicit conversion; OpenFormula §6.3):

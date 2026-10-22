@@ -1,0 +1,30 @@
+# sheet.fn.external.* — functions this engine never runs (W1.0 amendment,
+# docs/adr/513-calc-model-amendment.md). Schema: see math.yaml. A
+# `cached_only` row has no kernel: a formula calling it keeps the value its
+# workbook cached; with none it shows the row's error (#BLOCKED! for a
+# network call, #CONNECT! for a cube function without its connection).
+
+- id: sheet.fn.external.webservice
+  name: WEBSERVICE
+  xlfn_prefix: "_xlfn."
+  family: external
+  arity: { min: 1, max: 1 }
+  volatility: none
+  range_aware: false
+  cached_only: blocked
+  status: implemented
+  provenance: ["Microsoft WEBSERVICE function (public docs)", "spec §1.1 no-network ruling"]
+  tests:
+    rust: ["sheet-conformance/tests/it/calc_model.rs::cached_only_functions_keep_the_cached_value__feat__sheet_calc_model"]
+
+- id: sheet.fn.external.cubevalue
+  name: CUBEVALUE
+  family: external
+  arity: { min: 1, max: null }
+  volatility: none
+  range_aware: false
+  cached_only: connect
+  status: implemented
+  provenance: ["ECMA-376 §18.17.7 (CUBEVALUE)", "spec §1.1 no-network ruling"]
+  tests:
+    rust: ["sheet-conformance/tests/it/calc_model.rs::cached_only_functions_keep_the_cached_value__feat__sheet_calc_model"]

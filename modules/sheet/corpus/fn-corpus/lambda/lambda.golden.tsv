@@ -7,5 +7,5 @@
 inline	=LAMBDA(x,x+1)(2)	-	3
 via-let	=LET(f,LAMBDA(x,y,x*y),f(3,4))	-	12
 closure	=LET(a,10,f,LAMBDA(x,x+a),f(1))	-	11
-as-value-calc	=LAMBDA(x,x)	-	#VALUE!
+as-value-calc	=LAMBDA(x,x)	-	#CALC!
 arg-count	=LAMBDA(x,x)(1,2)	-	#VALUE!

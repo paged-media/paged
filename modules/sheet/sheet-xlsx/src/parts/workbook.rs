@@ -72,6 +72,10 @@ fn parse_calc_pr(
         iterate: attr(e, b"iterate")?.map(|v| is_xml_true(&v)),
         iterate_count: attr(e, b"iterateCount")?.and_then(|v| v.trim().parse().ok()),
         iterate_delta: attr(e, b"iterateDelta")?.and_then(|v| v.trim().parse().ok()),
+        calc_mode: attr(e, b"calcMode")?
+            .and_then(|v| sheet_core::calc_settings::CalcMode::parse(v.trim())),
+        full_precision: attr(e, b"fullPrecision")?.map(|v| is_xml_true(&v)),
+        full_calc_on_load: attr(e, b"fullCalcOnLoad")?.map(|v| is_xml_true(&v)),
     })
 }
 

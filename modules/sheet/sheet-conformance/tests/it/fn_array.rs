@@ -141,8 +141,8 @@ fn sheet_fn_array_sequence() {
         &call("SEQUENCE", &[num(2.0), num(2.0), num(10.0), num(5.0)]),
         &[&[n(10.0), n(15.0)], &[n(20.0), n(25.0)]],
     );
-    // A non-positive shape grounds #CALC! to #VALUE!.
-    assert_err(&call("SEQUENCE", &[num(0.0)]), CellError::Value);
+    // A zero shape is an empty array (#CALC!), a negative one #VALUE!.
+    assert_err(&call("SEQUENCE", &[num(0.0)]), CellError::Calc);
     assert_err(&call("SEQUENCE", &[num(-2.0)]), CellError::Value);
     // The scalar door returns #VALUE! for this returns_array row by construction.
     assert_eq!(
@@ -246,7 +246,10 @@ fn sheet_fn_array_filter() {
     // An empty result with no if_empty grounds #CALC! to #N/A.
     let data2 = Grid::new(2, 1, vec![n(1.0), n(2.0)]);
     let mask2 = Grid::new(2, 1, vec![boolean_v(false), boolean_v(false)]);
-    assert_err(&call("FILTER", &[data2.arg(), mask2.arg()]), CellError::Na);
+    assert_err(
+        &call("FILTER", &[data2.arg(), mask2.arg()]),
+        CellError::Calc,
+    );
     // An empty result WITH if_empty returns the fallback as a 1x1 block.
     let data3 = Grid::new(2, 1, vec![n(1.0), n(2.0)]);
     let mask3 = Grid::new(2, 1, vec![boolean_v(false), boolean_v(false)]);

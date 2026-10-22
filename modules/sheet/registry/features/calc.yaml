@@ -49,20 +49,15 @@
     rust: ["sheet-conformance/tests/it/calc_order.rs::sheet_calc_recalc_order_independence"]
 
 - id: sheet.calc.circular
-  title: Circular references with iteration off — cycle members get the internal Circular diagnostic (displays #REF!-class, reported on RecalcResult.circular); iterative calc is D-7/T2
-  ruling: "Excel raises a circular warning; we surface the cycle set to glue. Not one of the 8 wire error codes."
+  title: Circular references with iteration off — cycle members are not calculated and keep their last value (0 when never calculated); the cycle set is reported on RecalcResult.circular
+  ruling: "Excel's behaviour (sheet ADR 514, superseding the 2026 #REF! encoding). Excel's full calculation also leaves the cycle's dependents uncalculated; the engine calculates them from the members' values (recorded divergence)."
   note: >
-    CIRCULAR ENCODING (the exact T0 contract): CellError has no Circular variant
-    (the wire enum is frozen at 8 codes). When the scheduler (sheet-calc/src/topo.rs)
-    finds a cycle, each cycle member's STORED value becomes
-    CellValue::Error(CellError::Ref) — the #REF!-class display this row's title
-    calls for — AND the full cycle set is reported on RecalcResult.circular
-    (sheet-calc/src/lib.rs::Engine::recalc_dirty). The glue surfaces the circular
-    WARNING from `circular`; the cell displays the #REF!-class error. Breaking the
-    cycle (re-entering a member as a non-cyclic formula or a literal) clears both
-    on the next recalc.
+    sheet-calc/src/lib.rs::Engine::recalc_dirty — a cycle member whose stored
+    value is blank gets 0, any other keeps its value; TopoOrder::after cells
+    evaluate from them. The glue surfaces the circular WARNING from `circular`.
+    Breaking the cycle recalculates normally.
   status: implemented
-  provenance: ["spec §6.2, D-7"]
+  provenance: ["spec §6.2, D-7", "Excel-recorded corpus/calc-model circ-*"]
   tests:
     rust: ["sheet-conformance/tests/it/calc_graph.rs::sheet_calc_circular"]
 

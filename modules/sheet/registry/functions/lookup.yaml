@@ -54,6 +54,7 @@
 
 - id: sheet.fn.lookup.choose
   name: CHOOSE
+  lazy_args: true
   family: lookup
   arity: { min: 2, max: null }
   volatility: none

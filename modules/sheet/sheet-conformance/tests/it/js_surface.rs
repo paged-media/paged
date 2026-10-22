@@ -179,10 +179,10 @@ fn sheet_grid_cell_input_reprint_round_trips() {
 fn sheet_js_set_cell_parse_error_is_boundary() {
     let mut s = SheetSession::new();
     assert!(s.set_cell(0, 0, 0, "=1+").is_err(), "syntax error -> Err");
-    assert!(
-        s.set_cell(0, 0, 0, "=NOTAFUNC(1)").is_err(),
-        "unknown function -> Err"
-    );
+    // An unknown function is a value (#NAME?), not a boundary error (W1.0).
+    s.set_cell(0, 0, 0, "=NOTAFUNC(1)")
+        .expect("unknown function commits");
+    assert_eq!(s.get_cell_display(0, 0, 0), "#NAME?");
 
     // #DIV/0! is a DISPLAY string, never a boundary error.
     let r = s
