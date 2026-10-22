@@ -74,7 +74,6 @@ import {
   setDocumentSourceSink,
   resolveProfile,
   type EditorProfile,
-  type CommandContribution,
 } from "@paged-media/shell";
 import "@paged-media/shell/styles/globals.css";
 
@@ -286,6 +285,7 @@ import { CorpusPicker } from "./ui/CorpusPicker";
 import { templateFieldsContribution } from "./overlays/template-fields";
 import {
   EditorInstanceProvider,
+  hostCommands,
   useEditorInstance,
   type EditorInstance,
   type HostActions,
@@ -841,32 +841,7 @@ function CanvasAppIntegration() {
   // only when the host supplies them, so a profile can place them in a
   // region (the actions bar, the header) and a feature can switch them off.
   useEffect(() => {
-    const { actions } = instance;
-    const host: CommandContribution[] = [];
-    if (actions.submit) {
-      const submit = actions.submit;
-      host.push({
-        id: "paged.host.submit",
-        title: "Submit",
-        handler: () => submit(),
-      });
-    }
-    if (actions.close) {
-      const close = actions.close;
-      host.push({
-        id: "paged.host.close",
-        title: "Close",
-        handler: () => close(),
-      });
-    }
-    if (actions.back) {
-      const back = actions.back;
-      host.push({
-        id: "paged.host.back",
-        title: "Back",
-        handler: () => back(),
-      });
-    }
+    const host = hostCommands(instance.actions);
     const disposables = host.map((c) => registries.commands.register(c));
     return () => {
       for (const d of disposables) d.dispose();
