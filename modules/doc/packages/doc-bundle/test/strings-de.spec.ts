@@ -26,6 +26,7 @@ import {
   BUILT_IN_LOCALES,
   createStrings,
   setActiveStrings,
+  t,
 } from "@paged-media/strings";
 
 import { contributeMenu } from "../src/menu";
@@ -59,7 +60,7 @@ describe("paged.doc in German", () => {
     ]);
   });
 
-  it("translates a menu item but keeps the menu it merges into", () => {
+  it("keeps its menu path English, and names the item in German", () => {
     german();
     const paths: string[] = [];
     const host = {
@@ -72,7 +73,10 @@ describe("paged.doc in German", () => {
       log: { info() {} },
     } as unknown as BundleHost;
     contributeMenu(host).dispose();
-    expect(paths).toEqual(["Object/Word-Dokument einfügen…"]);
+    expect(paths).toEqual(["Object/Insert Word document…"]);
+    expect(t(`menu.${paths[0]!.split("/")[1]}`)).toBe(
+      "Word-Dokument einfügen…",
+    );
   });
 
   it("writes the page line with German plurals, and English by default", () => {

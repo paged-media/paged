@@ -76,5 +76,6 @@
   "doc.template.paragraphText": "Der Text eines Absatzes",
   "doc.template.partsMissing": "Die Teile des Word-Dokuments fehlen in dieser Datei.",
   "doc.template.refused": "das Word-Dokument hat den Wert abgelehnt",
-  "doc.template.rowsOfText": "Die Einträge einer Liste sind Textzeilen."
+  "doc.template.rowsOfText": "Die Einträge einer Liste sind Textzeilen.",
+  "menu.Insert Word document…": "Word-Dokument einfügen…"
 }
