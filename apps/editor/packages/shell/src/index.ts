@@ -904,3 +904,9 @@ export {
   type ResolvedProfile,
   type ResolvedRegion,
 } from "./profile";
+export {
+  ChromeRegionsProvider,
+  chromeRegionsOf,
+  useChromeRegions,
+  type ChromeRegions,
+} from "./state/chrome-regions";

@@ -42,6 +42,7 @@ import { ShareButton } from "./CollabCluster";
 import { FileDrop } from "./FileDrop";
 import { MenuBar, prettyKey } from "./MenuBar";
 import { notifyPalette } from "./CommandPalette";
+import { useChromeRegions } from "../state/chrome-regions";
 
 export interface HeaderProps {
   onFile: (file: File) => void;
@@ -50,6 +51,7 @@ export interface HeaderProps {
 }
 
 export function Header({ onFile, headerExtras, status }: HeaderProps) {
+  const chrome = useChromeRegions();
   return (
     <header style={headerStyle}>
       <div
@@ -62,8 +64,12 @@ export function Header({ onFile, headerExtras, status }: HeaderProps) {
       >
         <Brand />
         <DocumentChip status={status} />
-        <span style={zoneDividerStyle} aria-hidden />
-        <MenuBar />
+        {chrome.has("menubar") && (
+          <>
+            <span style={zoneDividerStyle} aria-hidden />
+            <MenuBar />
+          </>
+        )}
       </div>
 
       <div
@@ -74,7 +80,7 @@ export function Header({ onFile, headerExtras, status }: HeaderProps) {
           justifyContent: "center",
         }}
       >
-        <CommandTrigger />
+        {chrome.has("palette") && <CommandTrigger />}
       </div>
 
       <div
