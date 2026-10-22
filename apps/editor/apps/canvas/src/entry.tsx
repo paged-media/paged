@@ -18,8 +18,10 @@
  */
 
 // The editor's page entry: one editor in `#root`, configured by the URL
-// (`?profile=`, `?solo=`). An embedding host calls `mountEditor` itself
-// (docs/composable-editor.md §8; plan task E1).
+// (`?profile=`, `?solo=`, `?locale=`). An embedding host calls `mountEditor`
+// itself (docs/composable-editor.md §8; plan task E1).
+
+import { loadLocale } from "@paged-media/strings";
 
 import { mountEditor } from "./main";
 
@@ -27,4 +29,12 @@ const root = document.getElementById("root");
 if (!root) {
   throw new Error("missing #root");
 }
-mountEditor(root, { search: location.search });
+const locale = new URLSearchParams(location.search).get("locale");
+if (locale) {
+  void loadLocale(locale).then(({ strings, problem }) => {
+    if (problem) console.warn(`[editor locale] ${problem}`);
+    mountEditor(root, { search: location.search, strings });
+  });
+} else {
+  mountEditor(root, { search: location.search });
+}

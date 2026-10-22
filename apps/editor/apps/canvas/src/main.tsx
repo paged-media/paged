@@ -19,6 +19,8 @@
 
 // First: the Trusted Types default policy, before anything starts a worker.
 import "./boot/install-trusted-types";
+// The app's translations, registered before anything shows a word.
+import "./strings";
 
 import {
   StrictMode,
@@ -86,6 +88,7 @@ import {
 import {
   StringsProvider,
   createStrings,
+  setActiveStrings,
   type Strings,
 } from "@paged-media/strings";
 import "@paged-media/shell/styles/globals.css";
@@ -1866,12 +1869,16 @@ export function mountEditor(
   element: HTMLElement,
   options: MountOptions = {},
 ): MountedEditor {
+  const strings = options.strings ?? createStrings();
+  // The words of what is built before the first render (the profile's
+  // panels and modes) follow the editor's locale too.
+  setActiveStrings(strings);
   const instance = createEditorInstance(options);
   if (options.library ?? instance.surfaces.plain) startLibrary();
   const root = createRoot(element);
   root.render(
     <StrictMode>
-      <StringsProvider strings={options.strings ?? createStrings()}>
+      <StringsProvider strings={strings}>
         <EditorInstanceProvider instance={instance}>
           <CanvasAppRoot />
         </EditorInstanceProvider>
