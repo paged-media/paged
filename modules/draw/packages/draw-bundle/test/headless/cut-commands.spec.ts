@@ -25,6 +25,7 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
 import type { ElementId } from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
+import { covers } from "@paged-media/test-kit";
 
 import { drawBundle } from "../../src";
 import { F1_MULTI_SHAPE } from "../fixtures/corpus";
@@ -55,6 +56,7 @@ describe("paged.draw — the cuts as typed commands", () => {
   afterEach(() => h?.dispose());
 
   it("knife: cuts the named square in two along the line — one undo step", async () => {
+    covers("command:media.paged.draw.command.knife");
     const before = await leaves(h);
     const r = await h.objects.invoke(`${C}.knife`, {
       targets: ["rectangle:urect"],
@@ -86,6 +88,7 @@ describe("paged.draw — the cuts as typed commands", () => {
   });
 
   it("scissorsAt: cuts the open path at a point on a segment — one undo step", async () => {
+    covers("command:media.paged.draw.command.scissorsAt");
     const id = { kind: "polygon", id: "upoly" } as ElementId;
     const before = await h.host.document.pathAnchors(id);
     const r = await h.objects.invoke(`${C}.scissorsAt`, {
@@ -111,6 +114,7 @@ describe("paged.draw — the cuts as typed commands", () => {
   });
 
   it("shapeBuild: a drag across two overlapping squares merges them", async () => {
+    covers("command:media.paged.draw.command.shapeBuild");
     const made = await h.host.document.mutate({
       op: "insertFrame",
       args: { pageId: F1_MULTI_SHAPE.pageId, bounds: [200, 200, 400, 400] },
