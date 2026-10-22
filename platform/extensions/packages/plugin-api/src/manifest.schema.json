@@ -430,6 +430,18 @@
                   }
                 }
               }
+            },
+            "templateFields": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["kind", "title"],
+                "additionalProperties": false,
+                "properties": {
+                  "kind": { "type": "string" },
+                  "title": { "type": "string" }
+                }
+              }
             }
           }
         },

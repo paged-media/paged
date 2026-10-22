@@ -1,7 +1,7 @@
 $ paged-node template --help
 # exit 0
 # stdout
-paged-node template fields <doc> | fill <template> | check <template> <filled>
+paged-node template fields <doc> | kinds | fill <template> | check <template> <filled>
 
 template fields: list them, fill them as a filler (writes .paged, .idml or .pdf), check that a filled document changed only its fields
 

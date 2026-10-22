@@ -448,9 +448,94 @@ export interface TypedCommandContribution<A = unknown, R = unknown> {
   handler(ctx: { objects: ObjectsSurface }, args: A): R | Promise<R>;
 }
 
+/**
+ * The control a template form shows for a module field (G1, engine ADR
+ * 1000), and so the value it reads and writes: `text` and `choice` a
+ * string, `number` a number, `toggle` a boolean, `picture`
+ * `{ name, bytes: Uint8Array }` (read: `{ name }` or null), `table` rows of
+ * strings in `columns` order.
+ */
+export type TemplateFieldControl =
+  | { kind: "text"; multiline?: boolean }
+  | { kind: "number"; min?: number; max?: number; step?: number }
+  | {
+      kind: "choice";
+      options: readonly { value: string; label?: string }[];
+    }
+  | { kind: "toggle" }
+  | { kind: "picture" }
+  | {
+      kind: "table";
+      columns: readonly { name: string; title?: string }[];
+    };
+
+/** A module field as the template names it: the item it is on, the
+ *  module's field kind, and the module's own definition (a cell
+ *  reference, a block anchor, a layer name). */
+export interface TemplateFieldRef {
+  /** The field's name in the template. */
+  name: string;
+  /** The `Self` id of the item the field is on. */
+  targetId: string;
+  /** The module's field kind, `<manifest.id>.<name>`. */
+  kind: string;
+  /** The module's definition, as the author wrote it. */
+  def: unknown;
+}
+
+/** What writing a field's value came to. A refused value names why, in a
+ *  sentence a form can show next to the field. */
+export type TemplateFieldWrite = { ok: true } | { ok: false; problem: string };
+
+/**
+ * A module's TEMPLATE FIELD KIND (G1): a part of its content a template
+ * can open to a filler. The engine lists the field and grants its
+ * permissions; the module reads and writes the value through its usual
+ * door, so the engine's policy still checks every write.
+ */
+export interface TemplateFieldKindContribution<V = unknown> {
+  /** `<manifest.id>.<name>` (`media.paged.sheet.cell`). */
+  kind: string;
+  title: string;
+  /** The control a form shows when `describe` is absent. */
+  control: TemplateFieldControl;
+  /** The permissions filling a field of this kind takes beyond selecting
+   *  the item and writing the module's label on it (`text.edit`): what an
+   *  author's tool writes into the field's `grants`. */
+  grants?: readonly string[];
+  /** The control for one field, when it depends on the definition (a
+   *  choice whose options the content lists). */
+  describe?(
+    ctx: { objects: ObjectsSurface },
+    field: TemplateFieldRef,
+  ): TemplateFieldControl | Promise<TemplateFieldControl>;
+  read(
+    ctx: { objects: ObjectsSurface },
+    field: TemplateFieldRef,
+  ): V | null | Promise<V | null>;
+  write(
+    ctx: { objects: ObjectsSurface },
+    field: TemplateFieldRef,
+    value: V,
+  ): TemplateFieldWrite | Promise<TemplateFieldWrite>;
+}
+
+/** A registered template field kind, as `host.objects` lists it. */
+export interface TemplateFieldKindInfo {
+  kind: string;
+  title: string;
+  owner: string;
+  control: TemplateFieldControl;
+  grants: readonly string[];
+}
+
 export interface ObjectModelContribution {
   kinds: readonly ObjectKindContribution[];
   commands?: readonly TypedCommandContribution[];
+  /** Template field kinds (G1): the parts of this module's content a
+   *  template can open to a filler. Each must be declared in
+   *  `contributes.objectModel.templateFields[]`. */
+  templateFields?: readonly TemplateFieldKindContribution[];
   /**
    * PLUGIN-level planner: receives every `set` / `create` / `delete` op of
    * a batch that targets ANY of this plugin's kinds, in batch order, and
@@ -563,6 +648,20 @@ export interface ObjectsSurface {
    *  it also joins `batch` as an `invoke` op (one undo step with the
    *  batch's sets / creates / deletes). */
   invoke(command: string, args: unknown): Promise<unknown>;
+  /** The template field kinds the loaded modules contribute (G1). */
+  templateFieldKinds(): Promise<readonly TemplateFieldKindInfo[]>;
+  /** A module field's control and value; rejects (`unknownFieldKind`)
+   *  when no loaded module has the field's kind. */
+  readTemplateField(
+    field: TemplateFieldRef,
+  ): Promise<{ control: TemplateFieldControl; value: unknown }>;
+  /** Writes a module field's value through its module; a refused value
+   *  answers `{ ok: false, problem }`, an unknown kind rejects
+   *  (`unknownFieldKind`). */
+  writeTemplateField(
+    field: TemplateFieldRef,
+    value: unknown,
+  ): Promise<TemplateFieldWrite>;
   onDidChange(
     listener: (e: ObjectChange) => void,
     filter?: { selector?: Selector },

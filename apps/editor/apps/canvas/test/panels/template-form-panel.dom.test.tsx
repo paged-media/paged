@@ -26,6 +26,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { covers } from "@paged-media/test-kit";
 
+import { objectRegistry } from "../../src/object-model";
 import { TemplateFormPanel } from "../../src/panels/template/form-panel";
 import { mountPanel, unmountAll, type PanelHarness } from "./harness";
 
@@ -119,5 +120,91 @@ describe("Template form", () => {
     await h.click(box);
     const [row] = await h.client.templateFields();
     expect(row!.value).toEqual({ kind: "visible", visible: false });
+  });
+
+  test("a module field reads and writes through its module", async () => {
+    covers("panel:paged.template.form");
+    const h = await mount();
+    const values = new Map<string, number>([["B4", 12.5]]);
+    const registered = objectRegistry.register({
+      plugin: "acme.sheet",
+      model: {
+        kinds: [],
+        templateFields: [
+          {
+            kind: "acme.sheet.price",
+            title: "Price",
+            control: { kind: "number", min: 0 },
+            read: (_ctx, f) =>
+              values.get((f.def as { cell: string }).cell) ?? null,
+            write(_ctx, f, value) {
+              if (typeof value !== "number" || value < 0)
+                return { ok: false, problem: "Not a price." };
+              values.set((f.def as { cell: string }).cell, value);
+              return { ok: true };
+            },
+          },
+        ],
+      },
+    });
+    await h.client.setSessionPolicy({ role: "author", overrides: [] });
+    const made = await h.mutate({
+      op: "insertFrame",
+      args: { pageId: h.handle!.pageIds[0], bounds: [100, 40, 160, 300] },
+    } as never);
+    const id = (made as { payload: { createdId: unknown } }).payload.createdId;
+    const policy = (kind: string) =>
+      JSON.stringify({
+        v: 1,
+        data: {
+          field: {
+            name: kind.endsWith("price") ? "price" : "other",
+            kind: "module",
+            module: { kind, def: { cell: "B4" } },
+          },
+        },
+      });
+    await h.mutate({
+      op: "setPluginMetadata",
+      args: {
+        elementId: id,
+        key: "x-paged:template",
+        value: policy("acme.sheet.price"),
+      },
+    } as never);
+    try {
+      await h.client.setSessionPolicy({ role: "filler", overrides: [] });
+      await h.settle();
+      // The module reads its value asynchronously after the row renders.
+      let input: HTMLInputElement | null = null;
+      for (let i = 0; i < 50 && !input; i++) {
+        await h.settle();
+        input = h.root.querySelector<HTMLInputElement>(
+          '[data-field-input="price"]',
+        );
+      }
+      if (!input) throw new Error("the module field has no input");
+      expect(input.value).toBe("12.5");
+      await h.act(async () => {
+        input.focus();
+        await h.user.clear(input);
+        await h.user.type(input, "-3");
+        input.blur();
+      });
+      await h.settle();
+      expect(h.root.querySelector("[data-field-problem]")?.textContent).toBe(
+        "Not a price.",
+      );
+      await h.act(async () => {
+        input.focus();
+        await h.user.clear(input);
+        await h.user.type(input, "9");
+        input.blur();
+      });
+      await h.settle();
+      expect(values.get("B4")).toBe(9);
+    } finally {
+      registered.dispose();
+    }
   });
 });

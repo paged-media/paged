@@ -58,6 +58,9 @@ import type {
   ObjectWrite,
   ObjectWriteResult,
   ObjectsSurface,
+  TemplateFieldKindContribution,
+  TemplateFieldKindInfo,
+  TemplateFieldRef,
   ParsedAddress,
   PartsSurface,
   PluginLogger,
@@ -255,6 +258,19 @@ export function createObjectRegistry(
   const coreCommands = core ? createCoreCommands(core) : null;
   const log = options.log ?? console;
   const kinds = new Map<string, KindEntry>();
+  // Template field kinds (G1), by `<manifest.id>.<name>`.
+  const fieldKinds = new Map<
+    string,
+    { plugin: string; f: TemplateFieldKindContribution }
+  >();
+  const fieldKindOf = (field: TemplateFieldRef) => {
+    const found = fieldKinds.get(field.kind);
+    if (!found)
+      throw new Error(
+        `unknownFieldKind: no loaded module has the field kind "${field.kind}"`,
+      );
+    return found.f;
+  };
   const commands = new Map<
     string,
     { plugin: string; c: TypedCommandContribution }
@@ -1224,6 +1240,26 @@ export function createObjectRegistry(
       ];
     },
     invoke: (command, args) => invoke(command, args),
+    async templateFieldKinds() {
+      return [...fieldKinds.values()].map(
+        ({ plugin, f }): TemplateFieldKindInfo => ({
+          kind: f.kind,
+          title: f.title,
+          owner: plugin,
+          control: f.control,
+          grants: f.grants ?? [],
+        }),
+      );
+    },
+    async readTemplateField(field) {
+      const f = fieldKindOf(field);
+      const ctx = { objects: surface };
+      const control = f.describe ? await f.describe(ctx, field) : f.control;
+      return { control, value: (await f.read(ctx, field)) ?? null };
+    },
+    async writeTemplateField(field, value) {
+      return fieldKindOf(field).write({ objects: surface }, field, value);
+    },
     onDidChange(listener, filter) {
       const match = matcher(filter?.selector);
       const entry = { fn: listener, match };
@@ -1238,6 +1274,7 @@ export function createObjectRegistry(
     register({ plugin, model, parts, log: plog }) {
       const added: string[] = [];
       const addedCommands: string[] = [];
+      const addedFields: string[] = [];
       try {
         for (const kind of model.kinds) {
           const qualified = `plugin:${plugin}/${kind.kind}`;
@@ -1277,9 +1314,22 @@ export function createObjectRegistry(
           commands.set(c.id, { plugin, c });
           addedCommands.push(c.id);
         }
+        for (const f of model.templateFields ?? []) {
+          if (!f.kind.startsWith(`${plugin}.`))
+            throw new Error(
+              `template field kind ${f.kind} must be namespaced under "${plugin}."`,
+            );
+          if (fieldKinds.has(f.kind))
+            throw new Error(
+              `template field kind ${f.kind} is already registered`,
+            );
+          fieldKinds.set(f.kind, { plugin, f });
+          addedFields.push(f.kind);
+        }
       } catch (err) {
         for (const k of added) kinds.delete(k);
         for (const c of addedCommands) commands.delete(c);
+        for (const f of addedFields) fieldKinds.delete(f);
         throw err;
       }
       let disposed = false;
@@ -1297,6 +1347,7 @@ export function createObjectRegistry(
           disposed = true;
           for (const k of added) kinds.delete(k);
           for (const c of addedCommands) commands.delete(c);
+          for (const f of addedFields) fieldKinds.delete(f);
         },
       };
     },
