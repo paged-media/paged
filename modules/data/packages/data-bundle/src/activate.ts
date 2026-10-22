@@ -29,7 +29,9 @@
 // allocated OUTSIDE a facade-tracked registration, so dispose tears it down.
 
 import type { BundleHandle, BundleHost } from "@paged-media/plugin-api";
+import { t } from "@paged-media/strings";
 import { contributeMenu } from "./menu";
+import { COMMANDS as M } from "./messages";
 import {
   contributePanel,
   contributeSchemaPanel,
@@ -44,7 +46,7 @@ import { makeDatasetPanel } from "./panels/dataset-panel";
 import { makeQueryPanel } from "./panels/query-panel";
 import { contributeObjectModel } from "./object-model";
 import {
-  DATA_OBJECTS_PANEL,
+  dataObjectsPanel,
   OBJECTS_PANEL_ID,
   publishObjectLists,
 } from "./panels/objects-panel";
@@ -103,7 +105,7 @@ export function activate(host: BundleHost): BundleHandle {
 
   contributePanel(host, {
     id: SOURCES_PANEL_ID,
-    title: "Data sources",
+    title: t(M.sourcesPanel),
     icon: "ui-database",
     component: makeSourcesPanel(host, session),
     defaultDock: "right",
@@ -111,7 +113,7 @@ export function activate(host: BundleHost): BundleHandle {
 
   contributePanel(host, {
     id: BINDINGS_PANEL_ID,
-    title: "Bindings",
+    title: t(M.bindingsPanel),
     icon: "panel-links",
     component: makeBindingsPanel(host, session),
     defaultDock: "right",
@@ -122,7 +124,7 @@ export function activate(host: BundleHost): BundleHandle {
     // "Dataset preview", not "Dataset": the editor's Window menu already
     // carries Data / Data Source / Data sources / Datasets — this title
     // stays distinct from all of them.
-    title: "Dataset preview",
+    title: t(M.datasetPanel),
     icon: "ui-rows",
     component: makeDatasetPanel(host, session),
     defaultDock: "right",
@@ -130,7 +132,7 @@ export function activate(host: BundleHost): BundleHandle {
 
   contributePanel(host, {
     id: QUERY_PANEL_ID,
-    title: "Data query",
+    title: t(M.queryPanel),
     icon: "ui-filter",
     component: makeQueryPanel(host, session),
     defaultDock: "right",
@@ -141,7 +143,7 @@ export function activate(host: BundleHost): BundleHandle {
   if (host.supports("contribute.importer@1")) {
     host.contribute.importer({
       id: IMPORTER_ID,
-      title: "Data source (JSON, Parquet)",
+      title: t(M.importerTitle),
       extensions: IMPORTER_EXTENSIONS,
       mimeTypes: [
         "application/json",
@@ -162,31 +164,31 @@ export function activate(host: BundleHost): BundleHandle {
 
   host.contribute.command({
     id: "media.paged.data.command.importData",
-    title: "Data sources…",
+    title: t(M.importData),
     category: "Data",
     handler: () => host.shell.openPanel(SOURCES_PANEL_ID),
   });
   host.contribute.command({
     id: "media.paged.data.command.defineBinding",
-    title: "Bindings…",
+    title: t(M.defineBinding),
     category: "Data",
     handler: () => host.shell.openPanel(BINDINGS_PANEL_ID),
   });
   host.contribute.command({
     id: "media.paged.data.command.resolveBindings",
-    title: "Refresh data from sources",
+    title: t(M.resolveBindings),
     category: "Data",
     handler: () => session.refreshData(),
   });
   host.contribute.command({
     id: "media.paged.data.command.lowerBinding",
-    title: "Place bindings on the page",
+    title: t(M.lowerBinding),
     category: "Data",
     handler: () => session.lowerAll(),
   });
   host.contribute.command({
     id: "media.paged.data.command.mergeRecords",
-    title: "Merge records into the document",
+    title: t(M.mergeRecords),
     category: "Data",
     // Payload: SessionMergeOptions; without one, the first query merges
     // Single Record through the <<field>> frames on the active page. With no
@@ -203,7 +205,7 @@ export function activate(host: BundleHost): BundleHandle {
   });
   host.contribute.command({
     id: "media.paged.data.command.openDataset",
-    title: "Dataset preview…",
+    title: t(M.openDataset),
     category: "Data",
     handler: () => host.shell.openPanel(DATASET_PANEL_ID),
   });
@@ -228,7 +230,7 @@ export function activate(host: BundleHost): BundleHandle {
   // recorder, and nothing here assumes it exists.
   host.contribute.command({
     id: "media.paged.data.command.captureDataSet",
-    title: "Capture the current values as a data set",
+    title: t(M.captureDataSet),
     category: "Data",
     handler: (_paged, payload) => {
       const p = (payload ?? {}) as { name?: string; record?: number };
@@ -237,7 +239,7 @@ export function activate(host: BundleHost): BundleHandle {
   });
   host.contribute.command({
     id: "media.paged.data.command.applyDataSet",
-    title: "Apply a data set…",
+    title: t(M.applyDataSet),
     category: "Data",
     handler: (_paged, payload) => {
       const p = (payload ?? {}) as { name?: string };
@@ -254,7 +256,7 @@ export function activate(host: BundleHost): BundleHandle {
   // Wave 6: the Data query panel (SQL, builders, preview grid).
   host.contribute.command({
     id: "media.paged.data.command.editQuery",
-    title: "Data query…",
+    title: t(M.editQuery),
     category: "Data",
     handler: () => host.shell.openPanel(QUERY_PANEL_ID),
   });
@@ -303,14 +305,15 @@ export function activate(host: BundleHost): BundleHandle {
   // ADR 323 §4 — the same objects as host-rendered PropertyFields: a schema
   // panel of property rows ("Data objects"; needs the object model and the
   // schema-panel door). The React panels above keep their features.
+  const objectsPanel = dataObjectsPanel();
   const objectLists =
     objectModel && host.supports("contribute.schemaPanel@1")
       ? (contributeSchemaPanel(host, {
           id: OBJECTS_PANEL_ID,
-          title: DATA_OBJECTS_PANEL.title,
-          icon: DATA_OBJECTS_PANEL.icon,
+          title: objectsPanel.title,
+          icon: objectsPanel.icon,
           defaultDock: "right",
-          schema: DATA_OBJECTS_PANEL,
+          schema: objectsPanel,
         }),
         publishObjectLists(host, session))
       : null;
@@ -319,7 +322,7 @@ export function activate(host: BundleHost): BundleHandle {
   // object model's).
   host.contribute.command({
     id: "media.paged.data.bindProperty",
-    title: "Bind to data…",
+    title: t(M.bindProperty),
     category: "Data",
     handler: (_paged, payload) => {
       const p = (payload ?? {}) as {
