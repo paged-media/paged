@@ -1,0 +1,9 @@
+{
+  "publish.pdfCommands.hostCannotOpen": "diese Umgebung kann kein Dokument öffnen",
+  "publish.pdfCommands.hostDeclined": "die Umgebung hat das Öffnen von {name} abgelehnt",
+  "publish.pdfCommands.openPdf": "PDF öffnen",
+  "publish.pdfImport.dpiRange": "Die Auflösung liegt zwischen 36 und 600 dpi",
+  "publish.pdfImport.editableFailed": "die bearbeitbare Rekonstruktion konnte nicht ausgeführt werden",
+  "publish.pdfImport.maxPagesRange": "Die Höchstzahl der Seiten liegt zwischen 1 und 2000 (ohne Angabe: die Vorgabe des gewählten Wegs)",
+  "publish.pdfImport.pdf": "PDF"
+}

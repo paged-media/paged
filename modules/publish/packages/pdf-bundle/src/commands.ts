@@ -32,10 +32,18 @@ import type {
   ValueType,
 } from "@paged-media/plugin-api";
 
+import { defineMessages, t } from "@paged-media/strings";
+
 import importPdfArgs from "../schema/import-pdf.args.json";
 import importPdfResult from "../schema/import-pdf.result.json";
 
 import { openPdf, type PdfImportOptions } from "./io/pdf";
+
+const M = defineMessages("publish.pdfCommands", {
+  openPdf: "Open PDF",
+  hostDeclined: "the host declined to open {name}",
+  hostCannotOpen: "this host cannot open a document",
+});
 
 export const IMPORT_PDF_COMMAND = "media.paged.pdf.importPdf";
 export const IMPORT_PDF_ARGS_TYPE = importPdfArgs as ValueType;
@@ -59,8 +67,7 @@ function openDoor(
   if (host.supports("documents.open@1")) {
     return async (bytes) => {
       const r = await host.documents.open(bytes, { name });
-      if (!r.opened)
-        throw new Error(`failed: the host declined to open ${name}`);
+      if (!r.opened) throw new Error(`failed: ${t(M.hostDeclined, { name })}`);
     };
   }
   return null;
@@ -75,12 +82,12 @@ export function contributePdfCommands(
     { mode: "editable" | "image"; pageCount: number }
   > = {
     id: IMPORT_PDF_COMMAND,
-    title: "Open PDF",
+    title: t(M.openPdf),
     args: IMPORT_PDF_ARGS_TYPE,
     result: IMPORT_PDF_RESULT_TYPE,
     async handler(_ctx, args) {
       const open = openDoor(host, args.name);
-      if (!open) throw new Error("failed: this host cannot open a document");
+      if (!open) throw new Error(`failed: ${t(M.hostCannotOpen)}`);
       const options: PdfImportOptions = { mode: args.mode, dpi: args.dpi };
       if (args.maxPages !== undefined) options.maxPages = args.maxPages;
       return openPdf(host, args.bytes, options, open);

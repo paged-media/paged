@@ -50,6 +50,8 @@ import type {
   ValueType,
 } from "@paged-media/plugin-api";
 
+import { defineMessages, t } from "@paged-media/strings";
+
 import exportResult from "../schema/export-result.json";
 import exportPdfArgs from "../schema/export-pdf.args.json";
 import exportIdmlArgs from "../schema/export-idml.args.json";
@@ -57,6 +59,26 @@ import exportPagedArgs from "../schema/export-paged.args.json";
 import importIdmlArgs from "../schema/import-idml.args.json";
 import importResult from "../schema/import-result.json";
 import preflightResult from "../schema/preflight-result.json";
+
+/** The commands' titles and refusals, in the editor's locale. */
+const M = defineMessages("publish.commands", {
+  exportPdf: "Export PDF",
+  exportIdml: "Export IDML",
+  savePaged: "Save as .paged",
+  openIdml: "Open IDML",
+  preflight: "Preflight",
+  pagesNotRange: `pages "{pages}" is not "all", "n" or "a-b"`,
+  pagesNotAscending: `pages "{pages}" is not an ascending 1-based range`,
+  bleedFour: "bleed is [top, inside, bottom, outside]",
+  bleedRange: "bleed values are 0–432 pt",
+  marksOffsetRange: "marksOffset is 0–72 pt",
+  downsampleRange: "downsamplePpi is 1–2400 (absent = never resample)",
+  effectDpiRange: "effectDpi is 36–1200",
+  pdfx4Profile:
+    "pdfx4 needs an outputIntentProfile (a registered profile name)",
+  hostDeclined: "the host declined to open {name}",
+  hostCannotOpen: "this host cannot open a document",
+});
 
 export const EXPORT_PDF_COMMAND = "media.paged.publish.exportPdf";
 export const EXPORT_IDML_COMMAND = "media.paged.publish.exportIdml";
@@ -195,14 +217,13 @@ export function parsePageRange(pages: string): {
   pageFrom: number | null;
   pageTo: number | null;
 } {
-  const t = pages.trim().toLowerCase();
-  if (t === "" || t === "all") return { pageFrom: null, pageTo: null };
-  const m = /^(\d+)(?:\s*-\s*(\d+))?$/.exec(t);
-  if (!m) throw invalid(`pages "${pages}" is not "all", "n" or "a-b"`);
+  const range = pages.trim().toLowerCase();
+  if (range === "" || range === "all") return { pageFrom: null, pageTo: null };
+  const m = /^(\d+)(?:\s*-\s*(\d+))?$/.exec(range);
+  if (!m) throw invalid(t(M.pagesNotRange, { pages }));
   const from = Number(m[1]);
   const to = m[2] === undefined ? from : Number(m[2]);
-  if (from < 1 || to < from)
-    throw invalid(`pages "${pages}" is not an ascending 1-based range`);
+  if (from < 1 || to < from) throw invalid(t(M.pagesNotAscending, { pages }));
   return { pageFrom: from - 1, pageTo: to - 1 };
 }
 
@@ -210,27 +231,23 @@ export function parsePageRange(pages: string): {
  *  cannot carry (ADR 132 puts `range` on rows) are checked here. */
 export function pdfWireOptions(args: PdfExportArgs): PdfWireOptions {
   const { bleed, marksOffset, downsamplePpi } = args;
-  if (bleed !== undefined && bleed.length !== 4)
-    throw invalid("bleed is [top, inside, bottom, outside]");
-  if (bleed?.some((b) => b < 0 || b > 432))
-    throw invalid("bleed values are 0–432 pt");
+  if (bleed !== undefined && bleed.length !== 4) throw invalid(t(M.bleedFour));
+  if (bleed?.some((b) => b < 0 || b > 432)) throw invalid(t(M.bleedRange));
   if (marksOffset !== undefined && (marksOffset < 0 || marksOffset > 72))
-    throw invalid("marksOffset is 0–72 pt");
+    throw invalid(t(M.marksOffsetRange));
   if (
     downsamplePpi !== undefined &&
     (downsamplePpi < 1 || downsamplePpi > 2400)
   ) {
-    throw invalid("downsamplePpi is 1–2400 (absent = never resample)");
+    throw invalid(t(M.downsampleRange));
   }
   if (args.effectDpi < 36 || args.effectDpi > 1200)
-    throw invalid("effectDpi is 36–1200");
+    throw invalid(t(M.effectDpiRange));
   const text = (s: string | undefined): string | null =>
     s === undefined || s === "" ? null : s;
   const outputIntentProfile = text(args.outputIntentProfile);
   if (args.standard === "pdfx4" && outputIntentProfile === null) {
-    throw invalid(
-      "pdfx4 needs an outputIntentProfile (a registered profile name)",
-    );
+    throw invalid(t(M.pdfx4Profile));
   }
   return {
     standard: args.standard,
@@ -435,9 +452,9 @@ export async function openIdml(
     await host.nativeDocument.open(bytes);
   } else if (host.supports("documents.open@1")) {
     const r = await host.documents.open(bytes, { name });
-    if (!r.opened) throw new Error(`failed: the host declined to open ${name}`);
+    if (!r.opened) throw new Error(`failed: ${t(M.hostDeclined, { name })}`);
   } else {
-    throw new Error("failed: this host cannot open a document");
+    throw new Error(`failed: ${t(M.hostCannotOpen)}`);
   }
   return (await host.document.collection<{ selfId: string }>("pages")).map(
     (p) => p.selfId,
@@ -452,14 +469,14 @@ export function contributePublishCommands(
   const commands: TypedCommandContribution[] = [
     {
       id: EXPORT_PDF_COMMAND,
-      title: "Export PDF",
+      title: t(M.exportPdf),
       args: EXPORT_PDF_ARGS_TYPE,
       result: EXPORT_RESULT_TYPE,
       handler: (_ctx, args) => exportPdf(host, args as PdfExportArgs),
     },
     {
       id: EXPORT_IDML_COMMAND,
-      title: "Export IDML",
+      title: t(M.exportIdml),
       args: exportIdmlArgs as ValueType,
       result: EXPORT_RESULT_TYPE,
       handler: (_ctx, args) =>
@@ -467,14 +484,14 @@ export function contributePublishCommands(
     },
     {
       id: EXPORT_PAGED_COMMAND,
-      title: "Save as .paged",
+      title: t(M.savePaged),
       args: exportPagedArgs as ValueType,
       result: EXPORT_RESULT_TYPE,
       handler: () => exportPagedResult(host),
     },
     {
       id: IMPORT_IDML_COMMAND,
-      title: "Open IDML",
+      title: t(M.openIdml),
       args: importIdmlArgs as ValueType,
       result: importResult as ValueType,
       async handler(_ctx, args) {
@@ -485,7 +502,7 @@ export function contributePublishCommands(
     },
     {
       id: PREFLIGHT_COMMAND,
-      title: "Preflight",
+      title: t(M.preflight),
       args: EXPORT_PDF_ARGS_TYPE,
       result: preflightResult as ValueType,
       handler: (_ctx, args) => preflight(host, args as PdfExportArgs),

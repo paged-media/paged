@@ -32,10 +32,16 @@ import type {
   PluginManifest,
 } from "@paged-media/plugin-api";
 
+import { defineTranslations } from "@paged-media/strings";
+
+import de from "../locales/de.json";
 import manifestJson from "../manifest.json";
 
 import { contributePdfIo } from "./io/pdf";
 import { contributePdfCommands } from "./commands";
+
+// The bundle's German, beside its English (`defineMessages` in each file).
+defineTranslations("de", de);
 
 export function activate(host: BundleHost): BundleHandle {
   // Phase 0 — the PDF importer, capability-gated. Surfaces the engine's
