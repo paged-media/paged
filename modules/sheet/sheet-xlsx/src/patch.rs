@@ -117,10 +117,14 @@ fn leaf_text(xml: &[u8], span: &Span) -> String {
     }
     let close = format!("</{}>", span.qname);
     let end = span.end.saturating_sub(close.len()).max(span.tag_end);
-    let raw = String::from_utf8_lossy(&xml[span.tag_end..end]);
+    // XML end-of-line handling: a literal CR LF (or lone CR) reads as LF,
+    // as the reader that produced the model's text reads it.
+    let raw = String::from_utf8_lossy(&xml[span.tag_end..end])
+        .replace("\r\n", "\n")
+        .replace('\r', "\n");
     quick_xml::escape::unescape(&raw)
         .map(|c| c.into_owned())
-        .unwrap_or_else(|_| raw.into_owned())
+        .unwrap_or_else(|_| raw.clone())
 }
 
 /// The displayed text of an `<is>` (every `<t>` outside `<rPh>`).

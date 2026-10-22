@@ -14,3 +14,4 @@ false.golden.tsv	arity-violation-one-arg
 true.golden.tsv	arity-violation-one-arg
 ifs.golden.tsv	odd-arity-is-na
 phonetic.golden.tsv	ph-4
+cell.golden.tsv	cell-26

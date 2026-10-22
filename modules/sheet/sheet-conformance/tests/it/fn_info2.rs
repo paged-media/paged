@@ -182,65 +182,6 @@ fn sheet_fn_info_error_type_arity_violation() {
     assert_eq!(call("ERROR.TYPE", &[]), err(CellError::Value));
 }
 
-// ================= SHEET =================
-
-#[test]
-fn sheet_fn_info_sheet_no_arg_is_current_plus_one() {
-    // current.sheet == 2 → SHEET() == 3 (1-based).
-    let c = EvalCtx::new(DateSystem::Date1900, cr_at(2, 0, 0), 0.0, 1);
-    assert_eq!(call_in("SHEET", &[], &c), num(3.0));
-}
-
-#[test]
-fn sheet_fn_info_sheet_range_arg_uses_origin_sheet() {
-    // Origin on sheet id 4 → SHEET(ref) == 5.
-    let cells = [num(1.0)];
-    let rv = RangeView::from_slice(cr_at(4, 0, 0), 1, 1, &cells);
-    assert_eq!(call("SHEET", &[Arg::Range(rv)]), num(5.0));
-}
-
-#[test]
-fn sheet_fn_info_sheet_scalar_arg_falls_back_to_current() {
-    // A non-reference, non-name value is #N/A (Excel 16, recorded).
-    let c = EvalCtx::new(DateSystem::Date1900, cr_at(1, 0, 0), 0.0, 1);
-    assert_eq!(call_in("SHEET", &[s(num(99.0))], &c), err(CellError::Na));
-    // A sheet-NAME text arg likewise falls back at T1.
-    assert_eq!(call_in("SHEET", &[s(txt("Sheet1"))], &c), num(2.0));
-}
-
-#[test]
-fn sheet_fn_info_sheet_arity_violation() {
-    // Two args (> max 1) → #VALUE!.
-    assert_eq!(
-        call("SHEET", &[s(num(1.0)), s(num(2.0))]),
-        err(CellError::Value)
-    );
-}
-
-// ================= SHEETS =================
-
-#[test]
-fn sheet_fn_info_sheets_is_one_t1() {
-    // T1 limitation: always 1 (no 3-D range Arg shape, no workbook sheet count).
-    assert_eq!(call("SHEETS", &[]), num(1.0));
-    let cells = [num(1.0), num(2.0)];
-    let rv = RangeView::from_slice(cr_at(0, 0, 0), 1, 2, &cells);
-    assert_eq!(call("SHEETS", &[Arg::Range(rv)]), num(1.0));
-    // Even a range whose origin is on a non-zero sheet spans one sheet at T1.
-    let cells2 = [num(1.0)];
-    let rv2 = RangeView::from_slice(cr_at(3, 0, 0), 1, 1, &cells2);
-    assert_eq!(call("SHEETS", &[Arg::Range(rv2)]), num(1.0));
-}
-
-#[test]
-fn sheet_fn_info_sheets_arity_violation() {
-    // Two args (> max 1) → #VALUE!.
-    assert_eq!(
-        call("SHEETS", &[s(num(1.0)), s(num(2.0))]),
-        err(CellError::Value)
-    );
-}
-
 // ================= ISEVEN / ISODD =================
 
 #[test]
@@ -560,14 +501,9 @@ mod corpus {
     fn sheet_fn_info_error_type_corpus() {
         run("error_type.golden.tsv");
     }
-    #[test]
-    fn sheet_fn_info_sheet_corpus() {
-        run("sheet.golden.tsv");
-    }
-    #[test]
-    fn sheet_fn_info_sheets_corpus() {
-        run("sheets.golden.tsv");
-    }
+    // sheet.golden.tsv / sheets.golden.tsv: SHEET and SHEETS are evaluator
+    // special forms since W3 — replayed through the engine by
+    // corpus_runner.rs (and info_model.rs over a multi-sheet workbook).
     #[test]
     fn sheet_fn_info_iseven_corpus() {
         run("iseven.golden.tsv");

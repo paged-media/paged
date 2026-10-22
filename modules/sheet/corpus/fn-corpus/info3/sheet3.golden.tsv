@@ -1,0 +1,9 @@
+# SHEET / SHEETS over the workbook (the oracle workbook holds one sheet per case: c1..cN and locale_probe).
+# id	formula	setup	expected
+sh-0	=SHEETS()	-	1
+sh-1	=SHEET("c3")	-	#N/A
+sh-2	=SHEET("C3")	-	#N/A
+sh-3	=SHEET("nosuch")	-	#N/A
+sh-4	=SHEETS(A1)	-	1
+sh-5	=SHEET()	-	1
+sh-6	=SHEET("locale_probe")	-	#N/A
