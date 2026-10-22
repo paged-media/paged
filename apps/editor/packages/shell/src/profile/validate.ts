@@ -24,6 +24,7 @@
 // profile does not pass silently.
 
 import { isRecord, isStringArray } from "../lib/stored-settings";
+import { FEATURE_KINDS } from "../state/features";
 import {
   REGION_IDS,
   type EditorProfile,
@@ -48,9 +49,11 @@ const PROFILE_KEYS = new Set([
   "canvas",
   "documentSizePt",
   "storageScope",
+  "features",
 ]);
 
 const REGION_SET: ReadonlySet<string> = new Set(REGION_IDS);
+const FEATURE_KIND_SET: ReadonlySet<string> = new Set(FEATURE_KINDS);
 
 function isRegionId(value: unknown): value is RegionId {
   return typeof value === "string" && REGION_SET.has(value);
@@ -309,6 +312,34 @@ export function validateProfile(input: unknown): {
         }
       }
       out.canvas = canvas;
+    }
+  }
+
+  if (input.features !== undefined) {
+    if (!isRecord(input.features)) {
+      problems.push({
+        path: "features",
+        message: "expected an object; ignored",
+      });
+    } else {
+      const features: Record<string, boolean> = {};
+      for (const [id, on] of Object.entries(input.features)) {
+        const kind = id.split(":")[0] ?? "";
+        if (!FEATURE_KIND_SET.has(kind) || id.length <= kind.length + 1) {
+          problems.push({
+            path: `features.${id}`,
+            message: "not a feature id (<kind>:<id>); ignored",
+          });
+        } else if (typeof on !== "boolean") {
+          problems.push({
+            path: `features.${id}`,
+            message: "expected a boolean; ignored",
+          });
+        } else {
+          features[id] = on;
+        }
+      }
+      out.features = features;
     }
   }
 

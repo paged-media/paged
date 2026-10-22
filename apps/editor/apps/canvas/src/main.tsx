@@ -1620,6 +1620,7 @@ function CanvasAppRoot() {
       initialDocumentSizePt={SURFACES.initialDocumentSizePt}
       regions={PROFILE.regions}
       canvasFurniture={PROFILE.canvas}
+      features={PROFILE.features}
       bindingProviders={bindingProviders}
       objectModel={editorObjectModel}
     >

@@ -103,7 +103,8 @@ export function CanvasContextMenu({
   const commands = useRegistryView(registries.commands);
   const keybindings = useRegistryView(registries.keybindings);
   const paged = useOptionalPaged();
-  if (!point) return null;
+  const features = useRegistryView(registries.features);
+  if (!point || !features.allows("chrome", "context-menu")) return null;
   const keys = new Map<string, string[]>();
   for (const b of keybindings.list()) {
     const list = keys.get(b.command);
@@ -112,7 +113,8 @@ export function CanvasContextMenu({
   }
   const rows = entries.flatMap((e) => {
     const cmd = commands.get(e.command);
-    if (!cmd) return [];
+    // Not offered (a feature): not in the menu at all.
+    if (!cmd || commands.offered?.(e.command) === false) return [];
     const chord = keys.get(e.command);
     return [
       {

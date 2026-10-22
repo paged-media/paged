@@ -47,7 +47,7 @@ export function RegionItems({
   const render = (item: RegionItem, key: string) => {
     if (typeof item === "string") {
       const command = commands.get(item);
-      if (!command) return null;
+      if (!command || commands.offered?.(item) === false) return null;
       return (
         <Button
           key={key}
