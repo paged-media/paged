@@ -20,7 +20,14 @@
 // First: the Trusted Types default policy, before anything starts a worker.
 import "./boot/install-trusted-types";
 
-import { StrictMode, useEffect, useEffectEvent, useRef, useState } from "react";
+import {
+  StrictMode,
+  useEffect,
+  useEffectEvent,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { createRoot } from "react-dom/client";
 import {
   PagedShell,
@@ -74,7 +81,6 @@ import {
   setDocumentSourceSink,
   resolveProfile,
   type EditorProfile,
-  type CommandContribution,
 } from "@paged-media/shell";
 import "@paged-media/shell/styles/globals.css";
 
@@ -286,6 +292,9 @@ import { CorpusPicker } from "./ui/CorpusPicker";
 import { templateFieldsContribution } from "./overlays/template-fields";
 import {
   EditorInstanceProvider,
+  createRoleStore,
+  hostCommands,
+  type ShellAccess,
   useEditorInstance,
   type EditorInstance,
   type HostActions,
@@ -491,6 +500,11 @@ function PluginBundles() {
   const { enterContextByType } = useEditContextEntry();
   const enterContextRef = useRef(enterContextByType);
   enterContextRef.current = enterContextByType;
+  // Extensions ADR 334 — `host.shell.exitEditContext`: leave the ACTIVE
+  // context when it is of `type` (commit or cancel first). The live stack
+  // through an effect event, as the undo routing reads it.
+  const exitStack = useEditContextStack();
+  const liveExitStack = useEffectEvent(() => exitStack);
   useEffect(() => {
     // Shell actions the host APP owns (the cockpit's panel
     // placement) — injected so the SDK's adapter stays a pure
@@ -612,6 +626,13 @@ function PluginBundles() {
       panels: cockpitActions,
       enterEditContext: (type, elementId) =>
         enterContextRef.current(type, elementId),
+      exitEditContext: async (type, opts) => {
+        const stack = liveExitStack();
+        if (stack.active?.type !== type) return false;
+        if (opts.commit) stack.commit();
+        else stack.cancel();
+        return true;
+      },
       widgets: {
         CodeEditor,
         ColorPicker: HostColorPicker,
@@ -841,32 +862,7 @@ function CanvasAppIntegration() {
   // only when the host supplies them, so a profile can place them in a
   // region (the actions bar, the header) and a feature can switch them off.
   useEffect(() => {
-    const { actions } = instance;
-    const host: CommandContribution[] = [];
-    if (actions.submit) {
-      const submit = actions.submit;
-      host.push({
-        id: "paged.host.submit",
-        title: "Submit",
-        handler: () => submit(),
-      });
-    }
-    if (actions.close) {
-      const close = actions.close;
-      host.push({
-        id: "paged.host.close",
-        title: "Close",
-        handler: () => close(),
-      });
-    }
-    if (actions.back) {
-      const back = actions.back;
-      host.push({
-        id: "paged.host.back",
-        title: "Back",
-        handler: () => back(),
-      });
-    }
+    const host = hostCommands(instance.actions);
     const disposables = host.map((c) => registries.commands.register(c));
     return () => {
       for (const d of disposables) d.dispose();
@@ -1610,8 +1606,28 @@ class GatedCanvasClient extends CanvasClient {
 /**
  * Root: owns the CanvasClient lifecycle and hands it to PagedShell.
  */
+/** Hands the mounted shell to the embedding API (`onShell`), once. */
+function InstanceBridge() {
+  const instance = useEditorInstance();
+  const paged = usePaged();
+  const registries = useRegistries();
+  const client = useCanvasClient();
+  const handed = useRef(false);
+  useEffect(() => {
+    if (handed.current || !instance.onShell) return;
+    handed.current = true;
+    instance.onShell({ paged, registries, client });
+  }, [instance, paged, registries, client]);
+  return null;
+}
+
 function CanvasAppRoot() {
   const instance = useEditorInstance();
+  const role = useSyncExternalStore(
+    instance.role.subscribe,
+    instance.role.get,
+    instance.role.get,
+  );
   const [client, setClient] = useState<CanvasClient | null>(null);
 
   useEffect(() => {
@@ -1688,11 +1704,12 @@ function CanvasAppRoot() {
       regions={instance.profile.regions}
       canvasFurniture={instance.profile.canvas}
       features={instance.profile.features}
-      sessionPolicy={{ role: instance.profile.role, overrides: [] }}
+      sessionPolicy={{ role, overrides: [] }}
       bindingProviders={bindingProviders}
       objectModel={editorObjectModel}
     >
       <CanvasAppIntegration />
+      <InstanceBridge />
       <CanvasContextMenuHost />
       <PluginBundles />
       <ConsentDialog controller={editorConsent.controller} />
@@ -1753,6 +1770,8 @@ export interface MountOptions {
   library?: boolean;
   /** Called once the editor's client exists. */
   onClient?: (client: CanvasClient) => void;
+  /** Called once the shell is mounted (the embedding API's handle). */
+  onShell?: (shell: ShellAccess) => void;
 }
 
 export function createEditorInstance(
@@ -1793,6 +1812,8 @@ export function createEditorInstance(
     actions: options.actions ?? {},
     problems,
     onClient: options.onClient,
+    onShell: options.onShell,
+    role: createRoleStore(profile.role),
   };
 }
 

@@ -43,6 +43,8 @@ use sheet_core::NameTable;
 pub struct SheetRef {
     pub name: String,
     pub rid: String,
+    /// The tab's visibility (`state=`; W1.4).
+    pub state: sheet_core::SheetState,
 }
 
 /// What `workbook.xml` yields.
@@ -198,7 +200,10 @@ fn parse_sheet(e: &quick_xml::events::BytesStart<'_>) -> Result<SheetRef, XlsxEr
         attr(e, b"name")?.ok_or_else(|| XlsxError::Structure("<sheet> missing name".into()))?;
     // r:id — match by local name "id" (the r: prefix is dropped by local_name).
     let rid = attr(e, b"id")?.ok_or_else(|| XlsxError::Structure("<sheet> missing r:id".into()))?;
-    Ok(SheetRef { name, rid })
+    let state = attr(e, b"state")?
+        .map(|v| sheet_core::SheetState::from_xml(&v))
+        .unwrap_or_default();
+    Ok(SheetRef { name, rid, state })
 }
 
 /// XML boolean (ECMA-376 §22.9.2.7): `1`/`true` are true, `0`/`false`/absent

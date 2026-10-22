@@ -55,6 +55,8 @@ export interface SheetInfo {
   name: string;
   rows: number;
   cols: number;
+  /** The tab's visibility as the workbook saved it (read-only). */
+  state?: "visible" | "hidden" | "veryHidden";
 }
 
 /** One changed cell after an edit — the engine returns the recomputed

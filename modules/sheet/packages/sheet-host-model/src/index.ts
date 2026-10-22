@@ -110,6 +110,13 @@ export {
 export {
   DEFAULT_GRID_SVG_OPTIONS,
   cellEditorRect,
+  cellRect,
+  colAt,
+  colBand,
+  colPos,
+  rowAt,
+  rowBand,
+  rowPos,
   cssColorToScenePaint,
   FILL_HANDLE_PT,
   fillHandleRect,
@@ -126,11 +133,22 @@ export {
   type FrameWindowSpec,
   type GridDataBar,
   type GridFreeze,
+  type GridMerge,
   type GridScene,
   type GridSelection,
   type GridSvgOptions,
   type GridViewport,
 } from "./grid";
+
+export {
+  columnLetters,
+  DEFAULT_HEADING_STYLE,
+  paintGridScene,
+  rowHeadingWidthPt,
+  type HeadingStyle,
+  type PaintContext,
+  type PaintOptions,
+} from "./grid-paint";
 
 export {
   applyCompletion,

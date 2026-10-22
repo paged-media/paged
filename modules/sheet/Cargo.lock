@@ -1004,6 +1004,8 @@ dependencies = [
 name = "sheet-grid"
 version = "0.0.0"
 dependencies = [
+ "criterion",
+ "proptest",
  "serde",
  "serde_json",
  "sheet-core",

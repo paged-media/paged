@@ -55,7 +55,10 @@ pub use error::ParseError;
 pub use extract::{extract_refs, RefSet};
 pub use future::{storage_prefix, strip_storage_prefixes};
 pub use print::{print, print_ooxml};
-pub use rewrite::{rewrite, rewrite_fill, Edit};
+pub use rewrite::{
+    edit_is_rows, rewrite, rewrite_fill, shift_index, shift_range_ref, shift_ref_text, shift_sqref,
+    shift_table, Edit, TableShift, TextShift, Unshiftable,
+};
 pub use shift::shift_formula_text;
 
 use sheet_core::ast::{Formula, NameId};

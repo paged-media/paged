@@ -1,0 +1,15 @@
+# IMSUM.
+# id	formula	setup	expected
+imsum-0	=IMSUM("3+4i","5-3i")	-	8+i
+imsum-1	=IMSUM("1","i","-1")	-	i
+imsum-2	=IMSUM("i","-i")	-	0
+imsum-3	=IMSUM("abc","1")	-	#NUM!
+imsum-4	=IMSUM("1+i","1+j")	-	#VALUE!
+imsum-5	=IMSUM("1+2j","3+4j")	-	4+6j
+imsum-6	=IMSUM(5,2)	-	7
+imsum-7	=IMSUM("1")	-	1
+imsum-x0	=IMSUM(A1:A3)	A1=1+i;A2=2;A3=text:3i	3+4i
+imsum-x1	=IMSUM(A1:A3)	A1=1+i;A3=3i	1+4i
+imsum-x2	=IMSUM(A1,1)	A1=#N/A	#N/A
+imsum-x3	=IMSUM({"1+i","2-i"})	-	3
+imsum-x4	=IMSUM(A1:A2)	A1=TRUE;A2=1	#VALUE!

@@ -1,0 +1,23 @@
+# IMABS.
+# id	formula	setup	expected
+imabs-0	=IMABS("3+4i")	-	5
+imabs-1	=IMABS("3-4i")	-	5
+imabs-2	=IMABS("-2.5+0.5j")	-	2.54950975679639
+imabs-3	=IMABS("i")	-	1
+imabs-4	=IMABS("-i")	-	1
+imabs-5	=IMABS("5")	-	5
+imabs-6	=IMABS("0")	-	0
+imabs-7	=IMABS("4j")	-	4
+imabs-8	=IMABS("1E2+1E-3i")	-	100.000000005
+imabs-9	=IMABS("0.5-i")	-	1.11803398874989
+imabs-10	=IMABS("abc")	-	#NUM!
+imabs-11	=IMABS("3+4k")	-	#NUM!
+imabs-12	=IMABS("1+2i+3")	-	#NUM!
+imabs-13	=IMABS("+3i")	-	3
+imabs-14	=IMABS("3i4")	-	#NUM!
+imabs-15	=IMABS("-0+0i")	-	0
+imabs-16	=IMABS(5)	-	5
+imabs-17	=IMABS("")	-	#NUM!
+imabs-18	=IMABS("1e10+1e10i")	-	14142135623.731
+imabs-x0	=IMABS(A1)	A1=#N/A	#N/A
+imabs-x1	=SUM(IMABS({"3+4i","5"}))	-	10

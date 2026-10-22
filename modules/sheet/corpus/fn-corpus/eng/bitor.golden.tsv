@@ -1,0 +1,13 @@
+# BITOR(number1,number2).
+# id	formula	setup	expected
+bitor-0	=BITOR(23,10)	-	31
+bitor-1	=BITOR(0,0)	-	0
+bitor-2	=BITOR(281474976710655,1)	-	281474976710655
+bitor-3	=BITOR(281474976710656,1)	-	#NUM!
+bitor-4	=BITOR(-1,1)	-	#NUM!
+bitor-5	=BITOR(1.5,1)	-	#NUM!
+bitor-6	=BITOR("a",1)	-	#VALUE!
+bitor-7	=BITOR(2^47,1)	-	140737488355329
+bitor-x0	=BITOR(A1,1)	A1=#N/A	#N/A
+bitor-x1	=SUM(BITOR({1,2},4))	-	11
+bitor-x2	=BITOR(TRUE,2)	-	3

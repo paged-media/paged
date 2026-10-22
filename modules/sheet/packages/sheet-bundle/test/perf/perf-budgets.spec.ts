@@ -357,7 +357,7 @@ describe.skipIf(!ENGINE_BUILT)(
         "=mutations": 0,
         "=engineCalls": 3,
         "=reads": 0,
-        "=bytesWritten": 5293,
+        "=bytesWritten": 5223,
         // was 5922 (21 × the full grid). 282 → 283 in Wave 5: the selection
         // now carries its fill-handle knob — one item per submit, new chrome
         // the fill gesture needs, not new work per keystroke.
@@ -409,7 +409,7 @@ describe.skipIf(!ENGINE_BUILT)(
         "=mutations": 0,
         "=engineCalls": 3,
         "=reads": 0,
-        "=bytesWritten": 5293,
+        "=bytesWritten": 5223,
         "=sceneItems": 5943, // 5922 + the fill-handle knob × 21 submits (Wave 5)
         "=rejected": 0,
       });
@@ -444,7 +444,7 @@ describe.skipIf(!ENGINE_BUILT)(
         "=mutations": 0,
         "=engineCalls": 2,
         "=reads": 0,
-        "=bytesWritten": 18759,
+        "=bytesWritten": 18661,
         "=sceneItems": 0,
         "=rejected": 0,
       });
@@ -489,7 +489,7 @@ describe.skipIf(!ENGINE_BUILT)(
         "=mutations": 0,
         "=engineCalls": 3, // was 2001; 2 + the selection (Wave 5)
         "=reads": 0,
-        "=bytesWritten": 9817,
+        "=bytesWritten": 9735,
         "=sceneItems": 0,
         "=rejected": 0,
       });
@@ -532,7 +532,7 @@ describe.skipIf(!ENGINE_BUILT)(
         "=mutations": 0,
         "=engineCalls": 3, // fillRange + the selection + the persist save
         "=reads": 0,
-        "=bytesWritten": 18749,
+        "=bytesWritten": 18653,
         "=sceneItems": 0,
         "=rejected": 0,
       });
@@ -569,7 +569,7 @@ describe.skipIf(!ENGINE_BUILT)(
         "=mutations": 0,
         "=engineCalls": 2, // one setCells + the persist save
         "=reads": 0,
-        "=bytesWritten": 7355,
+        "=bytesWritten": 7265,
         "=sceneItems": 0,
         "=rejected": 0,
       });

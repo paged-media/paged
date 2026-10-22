@@ -34,4 +34,8 @@ pub struct SheetBinding {
     pub part_name: String,
     /// Unknown `<worksheet>` children captured at parse time.
     pub captured: CapturedSubtrees,
+    /// The row/column inserts and deletes applied to this sheet since the
+    /// part was read, in order: the save finds each original row and cell
+    /// at its new address through them (patch.rs).
+    pub edits: Vec<sheet_parser::Edit>,
 }
