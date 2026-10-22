@@ -54,6 +54,7 @@ pub mod array2;
 pub mod stat2;
 
 // W3 (function library to ~96%).
+pub mod array3;
 pub mod complex;
 pub mod eng;
 pub mod linalg;

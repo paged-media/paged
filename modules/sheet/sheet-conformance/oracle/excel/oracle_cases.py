@@ -60,6 +60,12 @@ XLFN = {
     "CONFIDENCE.T", "STDEVA", "ENCODEURL", "FILTERXML", "WEBSERVICE",
     "MUNIT", "IMCOSH", "IMCOT", "IMCSC", "IMCSCH", "IMSEC", "IMSECH", "IMSINH", "IMTAN", "PERCENTOF", "REGEXTEST", "REGEXEXTRACT", "REGEXREPLACE", "TRIMRANGE", "GROUPBY", "PIVOTBY", "ECMA.CEILING",
 }
+# A function name passed as a value (GROUPBY(r, v, SUM)) is an eta-reduced
+# LAMBDA, stored `_xleta.SUM`.
+ETA = {"SUM", "AVERAGE", "COUNT", "COUNTA", "MAX", "MIN", "PERCENTOF", "MEDIAN",
+       "STDEV.S", "STDEV.P", "VAR.S", "VAR.P", "PRODUCT", "ARRAYTOTEXT", "MODE.SNGL",
+       "CONCAT", "TEXTJOIN", "UNIQUE", "SORT", "ABS"}
+_ETA = re.compile(r'(?<![A-Za-z0-9_.])(' + "|".join(re.escape(n) for n in sorted(ETA, key=len, reverse=True)) + r')(?![A-Za-z0-9_.(])')
 # Worksheet-only dynamic-array functions carry a second namespace.
 XLWS = {"FILTER", "SORT"}
 
@@ -174,6 +180,7 @@ def to_file_formula(formula: str) -> str:
                 return f"_xlfn.{name}("
             return m.group(0)
         parts[i] = _FN.sub(sub, parts[i])
+        parts[i] = _ETA.sub(lambda m: f"_xleta.{m.group(1)}", parts[i])
     params = lambda_params(body)
     if params:
         for i in range(0, len(parts), 2):

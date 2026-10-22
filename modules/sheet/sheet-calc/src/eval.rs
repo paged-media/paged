@@ -59,6 +59,7 @@ use crate::accel::{self, Fast};
 use crate::argview::{self, RangeBuf};
 use crate::spill::SpillState;
 
+mod groupby;
 mod info;
 mod lambda;
 pub(crate) mod lift;
@@ -1412,8 +1413,16 @@ fn eval_func_rich(
         if let Some(r) = lambda::special_rich(model, fid, args, ctx, spills) {
             return r;
         }
-        // CELL("width") spills its {width, is_default} pair.
+        // CELL("width") spills its {width, is_default} pair; GROUPBY and
+        // PIVOTBY build their blocks (eval/groupby.rs).
         let meta = sheet_core::funcs::meta(fid);
+        let arity_ok = args.len() >= meta.min_args as usize
+            && meta.max_args.is_none_or(|m| args.len() <= m as usize);
+        match meta.name {
+            "GROUPBY" if arity_ok => return groupby::groupby(model, args, ctx, spills),
+            "PIVOTBY" if arity_ok => return groupby::pivotby(model, args, ctx, spills),
+            _ => {}
+        }
         if meta.name == "CELL" && args.len() >= meta.min_args as usize && args.len() <= 2 {
             return info::cell_rich(model, args, ctx, spills);
         }
@@ -1576,7 +1585,10 @@ fn eval_special_form(
         "SHEETS" => info::sheets(model, args, ctx, spills),
         "INFO" => info::info(model, args, ctx, spills),
         "ISOMITTED" => info::isomitted(args),
+        "AREAS" => info::areas(model, args, ctx, spills),
         "CELL" => lambda::collapse(info::cell_rich(model, args, ctx, spills)),
+        "GROUPBY" => lambda::collapse(groupby::groupby(model, args, ctx, spills)),
+        "PIVOTBY" => lambda::collapse(groupby::pivotby(model, args, ctx, spills)),
         // A registered special form with no handler is an internal invariant
         // break (a new `special_form: true` row landed without wiring eval).
         _ => CellValue::Error(CellError::Name),

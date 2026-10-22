@@ -466,6 +466,10 @@ fn strict_value(v: &CellValue) -> String {
 
 /// `ARRAYTOTEXT(array, [format])`.
 pub fn arraytotext(args: &[Arg], _ctx: &EvalCtx) -> CellValue {
+    // A scalar error (not an error inside an array) propagates.
+    if let Arg::Scalar(CellValue::Error(e)) = &args[0] {
+        return err(*e);
+    }
     let strict = tri!(flag(args.get(1), &[0, 1])) == 1;
     let g = grid(&args[0]);
     if strict {
