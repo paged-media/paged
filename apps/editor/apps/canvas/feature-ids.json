@@ -3,7 +3,7 @@
   "version": 1,
   "counts": {
     "chrome": 4,
-    "command": 335,
+    "command": 340,
     "keybinding": 88,
     "menu": 257,
     "panel": 121,
@@ -1031,6 +1031,16 @@
       "owner": "media.paged.sheet"
     },
     {
+      "id": "command:media.paged.slide.duplicateSlide",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "command:media.paged.slide.exportPptx",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
       "id": "command:media.paged.slide.importPptx",
       "kind": "command",
       "owner": "media.paged.slide"
@@ -1402,6 +1412,21 @@
     },
     {
       "id": "command:paged.help.reportIssue",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.host.back",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.host.close",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.host.submit",
       "kind": "command",
       "owner": "editor"
     },
