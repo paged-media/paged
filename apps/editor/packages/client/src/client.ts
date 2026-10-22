@@ -53,6 +53,9 @@ import {
   type FrameChainLink,
   type GestureType,
   type SessionPolicy,
+  type TemplateFieldProblem,
+  type TemplateFieldSummary,
+  type TemplateFieldValue,
   type GradientDetail,
   type LayerSummary,
   type LineBounds,
@@ -635,6 +638,39 @@ export class CanvasClient {
     });
     if (reply.kind === "sessionPolicyApplied") return reply.payload.policy;
     throw new Error(`unexpected reply: ${reply.kind}`);
+  }
+
+  /**
+   * v75 (engine ADR 1001) — the template's fields, in form order, with their
+   * definitions and current values: the `templateFields` collection.
+   */
+  async templateFields(): Promise<readonly TemplateFieldSummary[]> {
+    return this.collection<TemplateFieldSummary>("templateFields");
+  }
+
+  /**
+   * v75 (engine ADR 1001) — fill template fields. The values are checked
+   * against the fields' constraints and applied as one batch: one undo
+   * step, checked against the session's policy. Resolves to the reply: a
+   * mutation's (`mutationApplied` / `mutationFailed`), or
+   * `{ kind: "templateFieldsRefused", payload: { problems } }` when a value
+   * does not fit its field, in which case nothing applied.
+   */
+  async setTemplateFields(
+    values: readonly TemplateFieldValue[],
+  ): Promise<
+    | { ok: true; reply: WorkerToMain }
+    | { ok: false; problems: readonly TemplateFieldProblem[] }
+    | { ok: false; reply: WorkerToMain }
+  > {
+    const reply = await this.send({
+      kind: "setTemplateFields",
+      payload: { values: [...values] },
+    });
+    if (reply.kind === "templateFieldsRefused")
+      return { ok: false, problems: reply.payload.problems };
+    if (reply.kind === "mutationApplied") return { ok: true, reply };
+    return { ok: false, reply };
   }
 
   /** Phase 3 — replace the worker's selection state. */
