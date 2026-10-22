@@ -45,6 +45,7 @@
 
 - id: sheet.fn.info.sheet
   name: SHEET
+  xlfn_prefix: "_xlfn."
   family: info
   arity: { min: 0, max: 1 }
   volatility: none
@@ -59,6 +60,7 @@
 
 - id: sheet.fn.info.sheets
   name: SHEETS
+  xlfn_prefix: "_xlfn."
   family: info
   arity: { min: 0, max: 1 }
   volatility: none
@@ -106,6 +108,7 @@
 # pure dispatch door returns #NAME? for this row (eval intercepts first).
 - id: sheet.fn.info.isformula
   name: ISFORMULA
+  xlfn_prefix: "_xlfn."
   family: info
   arity: { min: 1, max: 1 }
   volatility: none

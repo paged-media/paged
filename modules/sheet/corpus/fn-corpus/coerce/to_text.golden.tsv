@@ -4,8 +4,9 @@
 #               empty | n:<f64> | t:<text> | b:TRUE|b:FALSE | e:<#TOKEN!>
 #   expected  the to_text(input) string, ALWAYS encoded as t:<text>
 #             (to_text is total — it never errors). The number cases pin the
-#             Excel General representation (D-6: 15 significant digits,
-#             shortest round-trip, scientific outside [1e-4, 1e15)).
+#             Excel number-to-text conversion (D-6: 15 significant digits;
+#             fixed notation while it takes at most 20 characters,
+#             scientific beyond — Excel-recorded through CONCAT, text3/arraytotext).
 empty-is-blank	empty	t:
 bool-true	b:TRUE	t:TRUE
 bool-false	b:FALSE	t:FALSE
@@ -21,5 +22,7 @@ hundred-thousand	n:100000	t:100000
 one-third-15sig	n:0.3333333333333333	t:0.333333333333333
 big-scientific	n:1e20	t:1E+20
 big-scientific-mantissa	n:1.5e20	t:1.5E+20
-small-scientific	n:1e-5	t:1E-05
-small-scientific-mantissa	n:1.25e-7	t:1.25E-07
+small-fixed	n:1e-5	t:0.00001
+small-fixed-mantissa	n:1.25e-7	t:0.000000125
+small-scientific	n:1e-19	t:1E-19
+small-scientific-mantissa	n:1.23456789012345e-7	t:1.23456789012345E-07

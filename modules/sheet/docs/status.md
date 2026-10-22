@@ -19,11 +19,15 @@ each published canary added is under [Releases](#releases).
   (`document.onWillSave`), the workbook is written before the save takes the document's bytes.
   A reopened document restores its workbook when the host reports the open
   (`document.onDidOpen`).
-- **Calculation.** 340 registered functions, all implemented, among them `LET`, `LAMBDA` and its
+- **Calculation.** 360 registered functions, all implemented, among them `LET`, `LAMBDA` and its
   helpers, the engineering set (radix and bit functions, `CONVERT` with Excel's full unit table and
   prefixes, the complex-number `IM*` functions on Excel's text form, the error and Bessel
   functions with Excel's own approximations) and the modern math set (`CEILING.MATH`,
-  `FLOOR.MATH`, `MDETERM`/`MINVERSE`/`MUNIT`, the reciprocal trigonometric functions); dynamic arrays that spill and nest; Excel tables with structured references;
+  `FLOOR.MATH`, `MDETERM`/`MINVERSE`/`MUNIT`, the reciprocal trigonometric functions), the regular-expression functions (PCRE syntax through
+  `fancy-regex`; Unicode property classes limited to `\p{L}`/`\p{N}`), `ARRAYTOTEXT`,
+  `VALUETOTEXT`, `BAHTTEXT`, `ENCODEURL`, `FILTERXML` (an XPath location-path subset) and
+  `EUROCONVERT`; numbers convert to text as Excel's `CONCAT` does (fixed notation up to 20
+  characters); dynamic arrays that spill and nest; Excel tables with structured references;
   incremental recalculation with an interval index for range dependencies, and range
   accelerators within a recalc (column snapshots, anchored prefix aggregates for SUM/COUNT/
   COUNTA/AVERAGE/MIN/MAX, exact-match indexes for VLOOKUP/MATCH/XMATCH/XLOOKUP/COUNTIF/SUMIF,
@@ -39,6 +43,18 @@ each published canary added is under [Releases](#releases).
   and whole-row references, omitted arguments, legacy array formulas and element-wise array
   arguments evaluate as Excel does. A number literal beyond the double-precision range is a
   formula error, as in Excel.
+- **Calculation model** (ADRs 513, 514). A typed formula that can produce an array spills by its
+  result (`=A1:A3`, `=A1:A3*2`, `=IF(A1:A3>1,A1:A3,0)`, `=OFFSET(A1,0,0,3)`, a LAMBDA over a
+  range); a formula loaded without Excel's dynamic-array mark keeps implicit intersection; `@`;
+  3D references (`Jan:Mar!A1`) for the aggregates; a defined name called as a function is a
+  named LAMBDA; an unknown name or function is `#NAME?` and keeps its spelling; IF, IFS,
+  IFERROR, IFNA, CHOOSE and SWITCH evaluate only the branch they return; `#CALC!` and Excel 365's
+  other errors; comparisons and COUNTIF/SUMIF criteria at 15 significant digits and the
+  final-operation cancellation snap (`=0.1+0.2=0.3` is TRUE, `=0.1+0.2-0.3` is 0); a cycle keeps
+  its last values (0 when never calculated) with the circular warning; manual calculation
+  (`calcMode`, Calculate Now / Calculate Sheet) and precision as displayed, read from and written
+  to `<calcPr>`. Recorded from Excel and replayed in CI: 400 of 415 probed cells (135 cases)
+  agree, every disagreement a recorded ruling or a listed defect.
 - **Typed entry.** What a person types into a cell is stored as Excel stores it (ADR 511):
   percentages, currency, group separators, fractions, scientific notation, dates, times and
   date-times become numbers with the number format Excel gives them, a leading `'` forces text
@@ -206,8 +222,12 @@ each published canary added is under [Releases](#releases).
 - **Filter views** hide rows from the page lowering; they are not written into the xlsx and no
   panel calls them yet.
 - **Formulas** are the Excel en-US dialect only. On load, a formula the parser does not read
-  keeps its cached value: an unregistered function, an external defined name or DDE item
-  (`[1]!Name`).
+  keeps its cached value (an external defined name or DDE item, `[1]!Name`), and so does one
+  calling a function the engine does not know or never runs (WEBSERVICE, CUBEVALUE).
+- **Calculation model limits** (ADR 513): a root in parentheses is snapped where Excel does not; SUM's own cancellation is not snapped; a row
+  insert does not move a 3D reference; a recursive LAMBDA stops at 128 nested calls (`#NUM!`);
+  a load always calculates, also in manual mode; loaded rich-value errors read as `#VALUE!` until
+  recalculated.
   `TREND` fits one regressor only.
 - **Typed entry** follows Excel (ADR 511): month names and `TRUE`/`FALSE` are English in every
   locale; `#GETTING_DATA` typed stays text; a number re-entered by undo keeps 15 significant

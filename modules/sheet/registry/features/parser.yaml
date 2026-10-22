@@ -24,7 +24,7 @@
 
 - id: sheet.parser.functions
   title: Function calls resolved via the generated registry name table
-  ruling: "Unknown function name -> ParseError (T0). An unregistered name has no FuncId, so it is unrepresentable in the AST and a #NAME? literal would lose round-trip; the xlsx layer keeps raw text + cached value on a parse failure (constitution §10.2)."
+  ruling: "An unknown function is Expr::UnknownFunc and an unknown name Expr::UnknownName (W1.0 amendment, sheet ADR 513, superseding the T0 ParseError ruling): #NAME?, printed as written; a loaded formula calling an unknown function keeps its cached value."
   status: implemented
   provenance: ["spec §7 registry-driven dispatch"]
   tests:

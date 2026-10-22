@@ -62,6 +62,21 @@ struct FnRow {
     /// row returns `#NAME?` (it must never be reached — eval intercepts first).
     #[serde(default)]
     special_form: bool,
+    /// W1.0 amendment (sheet ADR 513): the evaluator evaluates ONLY the
+    /// arguments the call needs (IF/IFS/IFERROR/IFNA/CHOOSE/SWITCH — Excel
+    /// short-circuits them). The dependency graph still sees every argument.
+    #[serde(default)]
+    lazy_args: bool,
+    /// W1.0 amendment: a function this engine never runs (network, cube,
+    /// external code). A formula using it keeps its cached value; with none,
+    /// it is the named error: `connect` → `#CONNECT!`, `blocked` → `#BLOCKED!`.
+    #[serde(default)]
+    cached_only: Option<String>,
+    /// W1.0 amendment: the OOXML storage prefix Excel writes before the name
+    /// (`_xlfn.` for a function newer than ECMA-376, `_xlfn._xlws.` for the
+    /// worksheet-only FILTER/SORT); absent for the base set.
+    #[serde(default)]
+    xlfn_prefix: Option<String>,
     #[serde(default)]
     status: String,
     // Other fields (rust, provenance, tests) are intentionally ignored
@@ -127,6 +142,22 @@ fn main() {
                 );
             }
         }
+        if let Some(c) = &r.cached_only {
+            if c != "connect" && c != "blocked" {
+                panic!(
+                    "sheet-core build.rs: function {} has cached_only {c:?} (want connect|blocked)",
+                    r.id
+                );
+            }
+        }
+        if let Some(p) = &r.xlfn_prefix {
+            if p != "_xlfn." && p != "_xlfn._xlws." {
+                panic!(
+                    "sheet-core build.rs: function {} has xlfn_prefix {p:?} (want _xlfn. or _xlfn._xlws.)",
+                    r.id
+                );
+            }
+        }
         if seen_id.insert(r.id.as_str(), ()).is_some() {
             panic!("sheet-core build.rs: duplicate function id {:?}", r.id);
         }
@@ -158,6 +189,9 @@ fn main() {
          \x20   pub ref_args: bool,\n\
          \x20   pub returns_array: bool,\n\
          \x20   pub special_form: bool,\n\
+         \x20   pub lazy_args: bool,\n\
+         \x20   pub cached_only: Option<crate::value::CellError>,\n\
+         \x20   pub xlfn_prefix: &'static str,\n\
          \x20   pub implemented: bool,\n\
          }\n\n",
     );
@@ -171,10 +205,16 @@ fn main() {
             Some(m) => format!("Some({m})"),
             None => "None".to_string(),
         };
+        let cached_only = match r.cached_only.as_deref() {
+            Some("connect") => "Some(crate::value::CellError::Connect)",
+            Some(_) => "Some(crate::value::CellError::Blocked)",
+            None => "None",
+        };
+        let prefix = r.xlfn_prefix.as_deref().unwrap_or("");
         writeln!(
             out,
-            "    FuncMeta {{ id: {:?}, name: {:?}, family: {:?}, min_args: {}, max_args: {}, volatile: {}, range_aware: {}, ref_args: {}, returns_array: {}, special_form: {}, implemented: {} }},",
-            r.id, r.name, r.family, r.arity.min, max, volatile, r.range_aware, r.ref_args, r.returns_array, r.special_form, implemented
+            "    FuncMeta {{ id: {:?}, name: {:?}, family: {:?}, min_args: {}, max_args: {}, volatile: {}, range_aware: {}, ref_args: {}, returns_array: {}, special_form: {}, lazy_args: {}, cached_only: {}, xlfn_prefix: {:?}, implemented: {} }},",
+            r.id, r.name, r.family, r.arity.min, max, volatile, r.range_aware, r.ref_args, r.returns_array, r.special_form, r.lazy_args, cached_only, prefix, implemented
         )
         .unwrap();
     }

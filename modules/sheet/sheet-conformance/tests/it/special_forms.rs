@@ -104,9 +104,13 @@ fn sheet_fn_lookup_offset_multicell_in_scalar_and_as_range_arg() {
     e.enter(0, 0, 0, "1").unwrap();
     e.enter(0, 1, 0, "2").unwrap();
     e.enter(0, 2, 0, "3").unwrap();
-    // A multi-cell OFFSET in a SCALAR slot is #VALUE! (range-in-scalar ruling).
+    // A typed multi-cell OFFSET spills its area (Excel 365; sheet ADR 513).
     e.enter(0, 5, 0, "=OFFSET(A1,0,0,3,1)").unwrap();
-    assert_eq!(val(&e, 0, 5, 0), err(CellError::Value));
+    assert_eq!(val(&e, 0, 5, 0), num(1.0));
+    assert_eq!(val(&e, 0, 7, 0), num(3.0));
+    // Kept as a legacy formula would be (`@`), it is the intersection: none.
+    e.enter(0, 5, 3, "=@OFFSET(A1,0,0,3,1)").unwrap();
+    assert_eq!(val(&e, 0, 5, 3), err(CellError::Value));
     // The SAME OFFSET feeding a range-aware outer fn sees the whole 3x1 area.
     e.enter(0, 5, 1, "=SUM(OFFSET(A1,0,0,3,1))").unwrap();
     assert_eq!(val(&e, 0, 5, 1), num(6.0));

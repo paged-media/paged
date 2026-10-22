@@ -1,0 +1,15 @@
+# ENCODEURL(text).
+# id	formula	setup	expected
+eu-0	=ENCODEURL("a b")	-	a%20b
+eu-1	=ENCODEURL("https://x.org/?q=1&r=ä")	-	https%3A%2F%2Fx.org%2F%3Fq%3D1%26r%3D%C3%A4
+eu-2	=ENCODEURL("-_.~")	-	-_.~
+eu-3	=ENCODEURL("!*'();:@&=+$,/?#[]")	-	%21%2A%27%28%29%3B%3A%40%26%3D%2B%24%2C%2F%3F%23%5B%5D
+eu-4	=ENCODEURL("")	-	
+eu-5	=ENCODEURL(12.5)	-	12.5
+eu-6	=ENCODEURL("日本")	-	%E6%97%A5%E6%9C%AC
+eu-7	=ENCODEURL("%")	-	%25
+eu-8	=ENCODEURL(TRUE)	-	TRUE
+eu-9	=ENCODEURL("a"&CHAR(10)&"b")	-	a%0Ab
+eu-10	=ENCODEURL("€")	-	%E2%82%AC
+eu-11	=ENCODEURL("😀")	-	%F0%9F%98%80
+eu-12	=ENCODEURL(A1)	A1=#N/A	#N/A

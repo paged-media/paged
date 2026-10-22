@@ -28,8 +28,8 @@
 //!   error cell in a source lands in the output at its new position (Excel),
 //!   it does not collapse the whole result.
 //! - **Padding.** `VSTACK`/`HSTACK` pad a short source with `#N/A` (Excel).
-//! - **The `#CALC!` grounding** (see `array`): an empty result (`TAKE(x,0)`,
-//!   dropping everything, `TOCOL` ignoring every cell) is `#VALUE!`.
+//! - **Empty results** (see `array`): an empty result (`TAKE(x,0)`,
+//!   dropping everything, `TOCOL` ignoring every cell) is `#CALC!`.
 //! - **Out-of-range indices.** `CHOOSECOLS`/`CHOOSEROWS` with `0` or `|n|`
 //!   beyond the extent are `#VALUE!`; a negative index counts from the end.
 //! - **MMULT** needs `cols(a) == rows(b)` and every cell numeric (an empty or
@@ -82,7 +82,7 @@ fn transpose(g: &Grid) -> Grid {
 
 fn non_empty(g: Grid) -> FnResult {
     if g.is_empty() || g.iter().all(|r| r.is_empty()) {
-        err(CellError::Value)
+        err(CellError::Calc)
     } else {
         FnResult::Array(g)
     }
@@ -161,7 +161,7 @@ fn take_drop(args: &[Arg], take: bool) -> FnResult {
         None => None,
     };
     if take && (rows == 0 || cols == Some(0)) {
-        return err(CellError::Value);
+        return err(CellError::Calc);
     }
     let op = |v: &[CellValue], n: i64| if take { take_n(v, n) } else { drop_n(v, n) };
     let picked: Grid = if take {

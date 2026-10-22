@@ -32,6 +32,32 @@ use sheet_core::{CellError, CellValue};
 
 use crate::arg::Arg;
 
+/// `x` rounded to Excel's 15 significant decimal digits — the precision at
+/// which Excel's `=`/`<>`/`<`/`>` operators and the criteria of COUNTIF /
+/// SUMIF compare numbers (sheet ADR 513; Excel-recorded:
+/// `=0.1+0.2=0.3` is TRUE, `=1+1E-15=1` TRUE, `=1+1E-14=1` FALSE). MATCH,
+/// VLOOKUP and XMATCH do NOT use it (recorded: an exact match of
+/// `0.1+0.2` against `0.3` is `#N/A`). Non-finite values are returned as is.
+pub fn round15(x: f64) -> f64 {
+    if x == 0.0 || !x.is_finite() {
+        return x;
+    }
+    format!("{x:.14e}").parse().unwrap_or(x)
+}
+
+/// Whether two numbers are equal at 15 significant digits ([`round15`]).
+pub fn eq15(a: f64, b: f64) -> bool {
+    if a == b {
+        return true;
+    }
+    // Quick reject: farther apart than any 15-digit rounding can bridge.
+    let scale = a.abs().max(b.abs());
+    if (a - b).abs() > scale * 1e-14 {
+        return false;
+    }
+    round15(a) == round15(b)
+}
+
 /// Coerce a value to a number (registry `sheet.fn.coerce.to-number`).
 ///
 /// Rulings (ECMA-376 implicit conversion; OpenFormula §6.3):
@@ -254,77 +280,62 @@ impl CompareExt for CellValue {
     }
 }
 
-/// Render an `f64` in Excel's **General** number format (D-6: 15 significant
-/// digits, shortest round-trippable). This is `sheet-fn`'s self-contained
-/// copy of the `sheet_format::format_general` contract so coercion is
-/// testable without a `sheet-format` dependency cycle on its codegen; the
-/// two MUST agree, and the `coerce/to_text.golden.tsv` corpus pins the
-/// behavior cross-engine.
+/// Render an `f64` as Excel converts a number to text — `CONCAT(x)`, `x&""`,
+/// `LEN(x)` (D-6: 15 significant digits). Excel-recorded
+/// (`corpus/fn-corpus/text3/arraytotext.golden.tsv`, the `cc-`/`cd-` cases):
 ///
-/// Rules:
-/// - Non-finite (should not reach storage) maps to Excel's `#NUM!` token so
-///   the conversion is total; real values never hit this.
-/// - Integers within the safe-integer range print with no decimal point.
-/// - Magnitudes in `[1e-4, 1e15)` print in fixed notation, trimmed of
-///   trailing zeros, at most 15 significant digits.
-/// - Anything else prints in scientific notation `dE±dd` (Excel's General
-///   exponent form), again ≤15 significant digits.
+/// - the value is rounded to 15 significant digits;
+/// - it is written in fixed notation, trailing zeros trimmed, while that
+///   takes at most 20 characters (sign not counted): `0.0000000001`,
+///   `10000000000000000000`, `123456789012345000`;
+/// - beyond that in `d.dddE±XX` form: `1E+20`, `1E-19`,
+///   `1.23456789012345E-07`.
+///
+/// This is not the cell display's General format (that one fits a column
+/// width: `TEXT(1E-10,"General")` is `1E-10`), which lives in `sheet-format`.
+/// Non-finite values (never stored) map to `#NUM!` so the conversion is total.
 fn general_number_text(n: f64) -> CompactString {
     if !n.is_finite() {
         return CompactString::new(CellError::Num.as_str());
     }
-    if n == 0.0 {
-        // Collapses -0.0 to "0" as Excel General does.
-        return CompactString::new("0");
-    }
-
-    let abs = n.abs();
-    // Excel General switches to scientific outside roughly [1e-4, 1e15).
-    if !(1e-4..1e15).contains(&abs) {
-        return scientific_15(n);
-    }
-
-    // Fixed notation: 15 significant digits, then trim trailing zeros.
-    // Significant digits left of the point:
-    let int_digits = if abs >= 1.0 {
-        abs.log10().floor() as i32 + 1
-    } else {
-        0
-    };
-    let decimals = (15 - int_digits).clamp(0, 15) as usize;
-    let mut s = format!("{n:.decimals$}");
-    if s.contains('.') {
-        while s.ends_with('0') {
-            s.pop();
-        }
-        if s.ends_with('.') {
-            s.pop();
-        }
-    }
-    CompactString::new(s)
+    CompactString::new(number_text(n, 20))
 }
 
-/// Scientific-notation branch of [`general_number_text`]: a normalized
-/// mantissa (≤15 significant digits, trailing zeros trimmed) and a signed,
-/// at-least-two-digit exponent — Excel's General scientific form (`1.5E+20`,
-/// `1E-05`).
-fn scientific_15(n: f64) -> CompactString {
-    // {:e} gives "d.ddddde±d"; render with 14 fractional mantissa digits
-    // (15 significant), then trim.
-    let raw = format!("{n:.14e}");
-    let (mantissa, exp) = raw.split_once('e').unwrap_or((raw.as_str(), "0"));
-    let mut m = mantissa.to_string();
-    if m.contains('.') {
-        while m.ends_with('0') {
-            m.pop();
-        }
-        if m.ends_with('.') {
-            m.pop();
-        }
+/// `n` with 15 significant digits: fixed notation while it fits
+/// `max_fixed` characters (sign excluded), scientific beyond. Shared with
+/// the complex-number text form (which allows 21).
+pub(crate) fn number_text(n: f64, max_fixed: usize) -> String {
+    if n == 0.0 {
+        // Collapses -0.0 to "0".
+        return "0".to_string();
     }
-    let exp_i: i32 = exp.parse().unwrap_or(0);
-    let sign = if exp_i < 0 { '-' } else { '+' };
-    CompactString::new(format!("{m}E{sign}{:02}", exp_i.abs()))
+    let sci = format!("{:.14e}", n.abs());
+    let (mant, exp) = sci.split_once('e').unwrap_or((sci.as_str(), "0"));
+    let exp: i32 = exp.parse().unwrap_or(0);
+    let digits: String = mant.chars().filter(|c| c.is_ascii_digit()).collect();
+    let digits = digits.trim_end_matches('0');
+    let digits = if digits.is_empty() { "0" } else { digits };
+    let neg = if n < 0.0 { "-" } else { "" };
+    let fixed = if exp >= 0 {
+        let e = exp as usize;
+        if digits.len() <= e + 1 {
+            format!("{digits}{}", "0".repeat(e + 1 - digits.len()))
+        } else {
+            format!("{}.{}", &digits[..=e], &digits[e + 1..])
+        }
+    } else {
+        format!("0.{}{digits}", "0".repeat((-exp - 1) as usize))
+    };
+    if fixed.len() <= max_fixed {
+        return format!("{neg}{fixed}");
+    }
+    let m = if digits.len() > 1 {
+        format!("{}.{}", &digits[..1], &digits[1..])
+    } else {
+        digits.to_string()
+    };
+    let es = if exp < 0 { '-' } else { '+' };
+    format!("{neg}{m}E{es}{:02}", exp.abs())
 }
 
 #[cfg(test)]
@@ -394,8 +405,15 @@ mod tests {
     fn to_text_scientific() {
         assert_eq!(to_text(&num(1e20)).as_str(), "1E+20");
         assert_eq!(to_text(&num(1.5e20)).as_str(), "1.5E+20");
-        assert_eq!(to_text(&num(1e-5)).as_str(), "1E-05");
-        assert_eq!(to_text(&num(1.25e-7)).as_str(), "1.25E-07");
+        // Fixed while it fits 20 characters (Excel-recorded CONCAT).
+        assert_eq!(to_text(&num(1e-5)).as_str(), "0.00001");
+        assert_eq!(to_text(&num(1.25e-7)).as_str(), "0.000000125");
+        assert_eq!(to_text(&num(1e19)).as_str(), "10000000000000000000");
+        assert_eq!(to_text(&num(1e-19)).as_str(), "1E-19");
+        assert_eq!(
+            to_text(&num(1.23456789012345e-7)).as_str(),
+            "1.23456789012345E-07"
+        );
     }
 
     #[test]

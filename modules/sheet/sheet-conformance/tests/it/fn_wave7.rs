@@ -379,7 +379,7 @@ fn sheet_fn_array_take() {
         spill(&[], &format!("=TAKE({NINE},2,-1)"), 2, 1),
         rows(&[&[3.0], &[6.0]])
     );
-    assert_eq!(calc(&[], &format!("=TAKE({NINE},0)")), er(CellError::Value));
+    assert_eq!(calc(&[], &format!("=TAKE({NINE},0)")), er(CellError::Calc));
 }
 
 #[test]
@@ -392,7 +392,7 @@ fn sheet_fn_array_drop() {
         spill(&[], &format!("=DROP({NINE},1,1)"), 2, 2),
         rows(&[&[5.0, 6.0], &[8.0, 9.0]])
     );
-    assert_eq!(calc(&[], &format!("=DROP({NINE},3)")), er(CellError::Value));
+    assert_eq!(calc(&[], &format!("=DROP({NINE},3)")), er(CellError::Calc));
 }
 
 #[test]

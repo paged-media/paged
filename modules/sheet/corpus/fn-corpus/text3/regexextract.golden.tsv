@@ -1,0 +1,27 @@
+# REGEXEXTRACT(text, pattern, [return_mode], [case_sensitivity]).
+# id	formula	setup	expected
+re-0	=REGEXEXTRACT("abc123def456","[0-9]+")	-	123
+re-1	=REGEXEXTRACT("abc","[0-9]+")	-	#N/A
+re-2	=ROWS(REGEXEXTRACT("a1b22c333","[0-9]+",1))	-	1
+re-3	=COLUMNS(REGEXEXTRACT("a1b22c333","[0-9]+",1))	-	3
+re-4	=INDEX(REGEXEXTRACT("a1b22c333","[0-9]+",1),3)	-	333
+re-5	=ARRAYTOTEXT(REGEXEXTRACT("a1b22c333","[0-9]+",1))	-	1, 22, 333
+re-6	=ARRAYTOTEXT(REGEXEXTRACT("John Smith","(\w+) (\w+)",2))	-	John, Smith
+re-7	=COLUMNS(REGEXEXTRACT("John Smith","(\w+) (\w+)",2))	-	2
+re-8	=REGEXEXTRACT("John Smith","(\w+) (\w+)",2)	-	John
+re-9	=REGEXEXTRACT("ABC","b",0,1)	-	B
+re-10	=REGEXEXTRACT("ABC","b",0,0)	-	#N/A
+re-11	=REGEXEXTRACT("abc","b",3)	-	#VALUE!
+re-12	=REGEXEXTRACT("abc","(")	-	#VALUE!
+re-13	=REGEXEXTRACT("abc","(x)?b",2)	-	#N/A
+re-14	=ARRAYTOTEXT(REGEXEXTRACT("abc","(x)?(b)",2))	-	#N/A, b
+re-15	=REGEXEXTRACT("abc","")	-	
+re-16	=REGEXEXTRACT("abc","",1)	-	
+re-17	=ARRAYTOTEXT(REGEXEXTRACT("a,b,,c","[^,]*",1))	-	a, , b, , , c, 
+re-18	=REGEXEXTRACT("abc","b",2)	-	#VALUE!
+re-19	=ARRAYTOTEXT(REGEXEXTRACT({"a1","b22"},"\d+"))	-	1, 22
+re-20	=REGEXEXTRACT(12345,"3.")	-	34
+re-21	=REGEXEXTRACT("x@y.com","(?<user>[^@]+)@")	-	x@
+re-22	=REGEXEXTRACT("aaa","a*?")	-	
+re-23	=REGEXEXTRACT("abc","b",-1)	-	#VALUE!
+re-24	=REGEXEXTRACT(A1,"x")	A1=#DIV/0!	#DIV/0!

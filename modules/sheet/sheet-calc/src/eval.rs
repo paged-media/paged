@@ -60,7 +60,7 @@ use crate::argview::{self, RangeBuf};
 use crate::spill::SpillState;
 
 mod lambda;
-mod lift;
+pub(crate) mod lift;
 pub use lift::eval_array;
 
 /// Evaluate a formula root `expr` for the cell at `current`, with the given
@@ -90,8 +90,10 @@ pub fn eval_expr_rich(
         Expr::Call(callee, args) => lambda::eval_call(model, callee, args, ctx, spills),
         // A bare `=A1#` is the area itself, which spills.
         Expr::SpillRef(_) => lift::eval_array(model, expr, ctx, spills),
-        // Not a spilling root — fall back to the scalar evaluation.
-        other => FnResult::Scalar(eval(model, other, ctx, spills)),
+        // Anything else through the element-wise array path, so an operator
+        // or a scalar function over an array is a block (a lambda body
+        // `x+1` bound to a range — sheet ADR 513).
+        other => lift::eval_array(model, other, ctx, spills),
     }
 }
 
@@ -111,6 +113,108 @@ pub fn expr_spills(expr: &Expr) -> bool {
     }
 }
 
+/// Evaluate a formula ROOT in scalar position: [`eval_expr`] plus Excel's
+/// final-operation cancellation snap (sheet ADR 513): when the LAST operation
+/// of the formula is `+` or `-` and its result is smaller than 8 units in the
+/// last place of the larger operand — what is left of a cancellation is only
+/// the operands' binary representation error — the result is 0 (recorded:
+/// `=1+1E-15-1`, 5 units, is 0; `=1E+15+1-1E+15`, 8 units, is 1). Excel-recorded:
+/// `=0.1+0.2-0.3` is 0, `=1*(0.1+0.2-0.3)` 5.55E-17 (the last operation is
+/// `*`), `=2.675-2.67-0.005` -1.07E-16 (a real difference). A root written in
+/// parentheses defeats the snap in Excel; the AST keeps no parentheses, so
+/// here it does not (a recorded divergence).
+pub fn eval_root(model: &SheetModel, e: &Expr, ctx: &EvalCtx, spills: &SpillState) -> CellValue {
+    match e {
+        Expr::Binary(op @ (BinOp::Add | BinOp::Sub), a, b) => {
+            let l = eval(model, a, ctx, spills);
+            let r = eval(model, b, ctx, spills);
+            snapped(*op, l, r)
+        }
+        _ => eval(model, e, ctx, spills),
+    }
+}
+
+/// [`eval_root`] for a dynamic-array root: element-wise, each element
+/// snapped as a scalar root would be.
+pub fn eval_root_array(
+    model: &SheetModel,
+    e: &Expr,
+    ctx: &EvalCtx,
+    spills: &SpillState,
+) -> FnResult {
+    match e {
+        Expr::Binary(op @ (BinOp::Add | BinOp::Sub), a, b) => {
+            let l = lift::eval_array(model, a, ctx, spills);
+            let r = lift::eval_array(model, b, ctx, spills);
+            lift::map_n(&[l, r], |v| snapped(*op, v[0].clone(), v[1].clone()))
+        }
+        _ => lift::eval_array(model, e, ctx, spills),
+    }
+}
+
+/// `l op r` for `+`/`-` with the cancellation snap of [`eval_root`].
+fn snapped(op: BinOp, l: CellValue, r: CellValue) -> CellValue {
+    let (x, y) = (coerce::to_number(&l), coerce::to_number(&r));
+    let v = binary_values(op, l, r);
+    match (v, x, y) {
+        (CellValue::Number(z), Ok(x), Ok(y)) if z != 0.0 && z.is_finite() => {
+            // Fewer than 8 units in the last place of the larger operand:
+            // what is left is the operands' representation error.
+            let m = x.abs().max(y.abs());
+            let exp = ((m.to_bits() >> 52) & 0x7ff) as i32 - 1023;
+            if z.abs() < 2f64.powi(exp - 49) {
+                CellValue::Number(0.0)
+            } else {
+                CellValue::Number(z)
+            }
+        }
+        (v, _, _) => v,
+    }
+}
+
+/// Whether a formula TYPED in this engine may produce an array, so it is
+/// entered as a dynamic-array formula and spills by its result's shape
+/// (sheet ADR 513, amending ADR 502): a range or array, an operator or a
+/// scalar function over one (`A1:A3*2`, `IF(A1:A3>1,…)`), a `returns_array`
+/// call, a lambda call, or a reference-returning form that can name more than
+/// one cell (OFFSET with a size, INDEX with a 0 selector, INDIRECT, `a:b`).
+/// Deliberately generous: a dynamic formula whose result is one value is one
+/// cell, exactly as before; only the save marks it (`cm`) as Excel would.
+pub fn root_may_spill(model: &SheetModel, e: &Expr) -> bool {
+    if expr_spills(e) || lift::is_array_operand(model, e) || lift::needs_lift(model, e) {
+        return true;
+    }
+    let lit_zero = |a: Option<&Expr>| match a {
+        Some(Expr::Lit(sheet_core::ast::LitValue::Number(n))) => n.get() == 0.0,
+        Some(Expr::Missing) => true,
+        _ => false,
+    };
+    let sized = |a: Option<&Expr>| match a {
+        None | Some(Expr::Missing) => false,
+        Some(Expr::Lit(sheet_core::ast::LitValue::Number(n))) => n.get() != 1.0,
+        Some(_) => true,
+    };
+    match e {
+        Expr::Unary(UnOp::ImplicitIntersect, _) => false,
+        Expr::Unary(_, a) => root_may_spill(model, a),
+        Expr::Binary(BinOp::Range, _, _) => true,
+        Expr::Binary(BinOp::Union | BinOp::Isect, _, _) => false,
+        Expr::Binary(_, a, b) => root_may_spill(model, a) || root_may_spill(model, b),
+        Expr::Func(fid, args) => {
+            let meta = sheet_core::funcs::meta(*fid);
+            match meta.name {
+                "OFFSET" => sized(args.get(3)) || sized(args.get(4)),
+                "INDIRECT" => true,
+                "INDEX" => lit_zero(args.get(1)) || lit_zero(args.get(2)),
+                _ if meta.special_form => false,
+                _ if lift::liftable(*fid) => args.iter().any(|a| root_may_spill(model, a)),
+                _ => false,
+            }
+        }
+        _ => false,
+    }
+}
+
 fn eval(model: &SheetModel, e: &Expr, ctx: &EvalCtx, spills: &SpillState) -> CellValue {
     match e {
         Expr::Lit(lit) => lit_to_value(lit),
@@ -118,9 +222,16 @@ fn eval(model: &SheetModel, e: &Expr, ctx: &EvalCtx, spills: &SpillState) -> Cel
         // meaning, where Excel's differs from a blank, is the kernel's).
         Expr::Missing => CellValue::Empty,
         Expr::Ref(r) => argview::cell_value(model, *r),
-        // A range (or array/union/intersection) in scalar position is #VALUE!
-        // (T0 ruling: ranges are only meaningful as function arguments).
-        Expr::Range(_) | Expr::Array(_) => CellValue::Error(CellError::Value),
+        // A range where one value is expected reduces to the cell in the
+        // formula's row or column — Excel's implicit intersection (`#VALUE!`
+        // when there is none). Only a legacy formula (or a scalar slot the
+        // array path does not lift) gets here: a dynamic formula's root
+        // spills the range instead (sheet ADR 513).
+        Expr::Range(r) => match implicit_intersection(r.normalized(), ctx.current) {
+            Ok(c) => argview::cell_value(model, c),
+            Err(e) => CellValue::Error(e),
+        },
+        Expr::Array(_) => CellValue::Error(CellError::Value),
         Expr::Name(nid) => eval_name(model, *nid, ctx, spills),
         Expr::Unary(op, inner) => eval_unary(model, *op, inner, ctx, spills),
         Expr::Binary(op, a, b) => eval_binary(model, *op, a, b, ctx, spills),
@@ -141,6 +252,79 @@ fn eval(model: &SheetModel, e: &Expr, ctx: &EvalCtx, spills: &SpillState) -> Cel
         Expr::Call(callee, args) => {
             lambda::collapse(lambda::eval_call(model, callee, args, ctx, spills))
         }
+        // A 3D reference is only meaningful as the argument of a function
+        // that takes one (SUM, COUNT, …); as a value it is `#REF!`
+        // (Excel-recorded, corpus/calc-model `3d-other-uses`).
+        Expr::Ref3D(_) | Expr::Range3D(_) => CellValue::Error(CellError::Ref),
+        // A name or function nothing defines (W1.0): `#NAME?`; the arguments
+        // of an unknown function are never evaluated.
+        Expr::UnknownName(_) | Expr::UnknownFunc(_, _) => CellValue::Error(CellError::Name),
+    }
+}
+
+/// Whether a formula cannot be computed by this engine and so keeps the value
+/// its file cached (sheet ADR 513): it calls a function the registry does not
+/// know ([`Expr::UnknownFunc`] — unknown to this engine, perhaps not to the
+/// Excel that saved it) or a `cached_only` one (network, cube). With no cached
+/// value the call evaluates to its error (`#NAME?`, `#CONNECT!`, `#BLOCKED!`).
+pub fn keeps_cached_value(e: &Expr) -> bool {
+    let any = |xs: &[Expr]| xs.iter().any(keeps_cached_value);
+    match e {
+        Expr::UnknownFunc(_, _) => true,
+        Expr::Func(fid, args) => sheet_core::funcs::meta(*fid).cached_only.is_some() || any(args),
+        Expr::Unary(_, a) | Expr::SpillRef(a) => keeps_cached_value(a),
+        Expr::Binary(_, a, b) => keeps_cached_value(a) || keeps_cached_value(b),
+        Expr::Call(c, args) => keeps_cached_value(c) || any(args),
+        Expr::Array(rows) => rows.iter().any(|r| any(r)),
+        _ => false,
+    }
+}
+
+/// Excel's implicit intersection of the area `r` with the formula cell `at`:
+/// a one-row area keeps its row, else the formula's row must lie inside it;
+/// the same for columns. No such cell is `#VALUE!` (Excel-recorded,
+/// corpus/calc-model `legacy-*` and `at-*`). The sheet does not matter.
+pub(crate) fn implicit_intersection(r: RangeRef, at: CellRef) -> Result<CellRef, CellError> {
+    let pick = |lo: u32, hi: u32, here: u32| -> Result<u32, CellError> {
+        if lo == hi {
+            Ok(lo)
+        } else if (lo..=hi).contains(&here) {
+            Ok(here)
+        } else {
+            Err(CellError::Value)
+        }
+    };
+    Ok(CellRef {
+        sheet: r.start.sheet,
+        row: pick(r.start.row, r.end.row, at.row)?,
+        col: pick(r.start.col, r.end.col, at.col)?,
+        row_abs: false,
+        col_abs: false,
+    })
+}
+
+/// The `@` operator: a reference reduces by implicit intersection, an array
+/// (a dynamic-array result, an array literal) to its first element, a value
+/// stays itself (Excel-recorded: `@SEQUENCE(3)` is 1, `@{7,8,9}` is 7).
+fn eval_implicit_intersect(
+    model: &SheetModel,
+    inner: &Expr,
+    ctx: &EvalCtx,
+    spills: &SpillState,
+) -> CellValue {
+    if let Some(r) = eval_as_ref(model, inner, ctx, spills) {
+        return match implicit_intersection(r.normalized(), ctx.current) {
+            Ok(c) => argview::cell_value(model, c),
+            Err(e) => CellValue::Error(e),
+        };
+    }
+    match lift::eval_array(model, inner, ctx, spills) {
+        FnResult::Scalar(v) => v,
+        FnResult::Array(g) => g
+            .into_iter()
+            .next()
+            .and_then(|row| row.into_iter().next())
+            .unwrap_or(CellValue::Error(CellError::Calc)),
     }
 }
 
@@ -178,13 +362,11 @@ fn spill_anchor_of(inner: &Expr) -> Option<CellRef> {
 fn eval_structured_ref_scalar(model: &SheetModel, s: &StructuredRef, ctx: &EvalCtx) -> CellValue {
     match resolve_structured_ref(model, s, ctx) {
         Ok(r) => {
-            let n = r.normalized();
-            if n.rows() == 1 && n.cols() == 1 {
-                argview::cell_value(model, n.start)
-            } else {
-                // A multi-cell area in a scalar slot — only meaningful as a
-                // function argument (no implicit intersection in T0).
-                CellValue::Error(CellError::Value)
+            // A multi-cell area where one value is expected: implicit
+            // intersection, as for a plain range.
+            match implicit_intersection(r.normalized(), ctx.current) {
+                Ok(c) => argview::cell_value(model, c),
+                Err(e) => CellValue::Error(e),
             }
         }
         Err(e) => CellValue::Error(e),
@@ -374,8 +556,8 @@ fn lit_to_value(lit: &sheet_core::ast::LitValue) -> CellValue {
     }
 }
 
-/// Resolve a defined name in scalar position. `Range` names collapse to their
-/// top-left cell (a value context); `Formula` names evaluate their compiled
+/// Resolve a defined name in scalar position. `Range` names reduce by
+/// implicit intersection (a value context); `Formula` names evaluate their compiled
 /// expression in the referring cell's context ([`crate::names`]).
 fn eval_name(
     model: &SheetModel,
@@ -385,7 +567,12 @@ fn eval_name(
 ) -> CellValue {
     match model.names.get(nid) {
         Some(def) => match &def.target {
-            NameTarget::Range(r) => argview::cell_value(model, r.normalized().start),
+            // A range name where one value is expected: implicit
+            // intersection (Excel; it used to read the top-left cell).
+            NameTarget::Range(r) => match implicit_intersection(r.normalized(), ctx.current) {
+                Ok(c) => argview::cell_value(model, c),
+                Err(e) => CellValue::Error(e),
+            },
             NameTarget::Formula(_) => match crate::names::name_expr_at(model, nid, ctx.current) {
                 Some(e) => with_name_depth(CellValue::Error(CellError::Name), || {
                     eval(model, &e, ctx, spills)
@@ -438,6 +625,9 @@ fn eval_unary(
     ctx: &EvalCtx,
     spills: &SpillState,
 ) -> CellValue {
+    if op == UnOp::ImplicitIntersect {
+        return eval_implicit_intersect(model, inner, ctx, spills);
+    }
     let v = eval(model, inner, ctx, spills);
     unary_value(op, v)
 }
@@ -461,6 +651,9 @@ fn unary_value(op: UnOp, v: CellValue) -> CellValue {
             Ok(n) => CellValue::Number(n / 100.0),
             Err(e) => CellValue::Error(e),
         },
+        // Over one value `@` is that value (the reference / array cases are
+        // decided before a value exists, in `eval_implicit_intersect`).
+        UnOp::ImplicitIntersect => v,
     }
 }
 
@@ -576,6 +769,14 @@ fn compare(op: BinOp, lhs: &CellValue, rhs: &CellValue) -> CellValue {
 /// byte tie-break between two equal-under-fold texts collapsed to `Equal`.
 fn excel_ordering(lhs: &CellValue, rhs: &CellValue) -> std::cmp::Ordering {
     use std::cmp::Ordering;
+    // Numbers equal at 15 significant digits are equal for every comparison
+    // operator (sheet ADR 513; Excel-recorded `=0.1+0.2=0.3` TRUE,
+    // `=0.1+0.2>=0.3` TRUE, `=0.1+0.2>0.3` FALSE).
+    if let (CellValue::Number(a), CellValue::Number(b)) = (lhs, rhs) {
+        if coerce::eq15(*a, *b) {
+            return Ordering::Equal;
+        }
+    }
     let ord = coerce::compare(lhs, rhs);
     if let (CellValue::Text(a), CellValue::Text(b)) = (lhs, rhs) {
         if a.eq_ignore_ascii_case(b) {
@@ -797,10 +998,304 @@ fn plan_args<'m>(
                     None => plans.push(ArgPlan::Scalar(eval(model, arg, ctx, spills))),
                 }
             }
+            // A 3D reference reaches a function that takes one as a stack of
+            // views, one per sheet of the span, in sheet order — the kernels
+            // of these aggregates are variadic over ranges, so the stack is
+            // simply consecutive range arguments. Any other function: `#VALUE!`
+            // (Excel-recorded: COUNTIF / ROWS over a 3D reference).
+            Expr::Ref3D(r) if takes_3d(fid) => {
+                for sheet in r.sheets.sheets() {
+                    let c = CellRef { sheet, ..r.cell };
+                    bufs.push(materialize(model, RangeRef { start: c, end: c }));
+                    plans.push(ArgPlan::BufAt(bufs.len() - 1));
+                }
+            }
+            Expr::Range3D(r) if takes_3d(fid) => {
+                let n = r.range.normalized();
+                for sheet in r.sheets.sheets() {
+                    let one = RangeRef {
+                        start: CellRef { sheet, ..n.start },
+                        end: CellRef { sheet, ..n.end },
+                    };
+                    bufs.push(materialize(model, one));
+                    plans.push(ArgPlan::BufAt(bufs.len() - 1));
+                }
+            }
+            Expr::Ref3D(_) | Expr::Range3D(_) => {
+                plans.push(ArgPlan::Scalar(CellValue::Error(CellError::Value)))
+            }
             _ => plans.push(ArgPlan::Scalar(eval(model, arg, ctx, spills))),
         }
     }
     (bufs, plans)
+}
+
+/// Short-circuit evaluation for a `lazy_args` registry row (IF, IFS, IFERROR,
+/// IFNA, CHOOSE, SWITCH — sheet ADR 513): evaluate the arguments that decide
+/// which branch the call returns, in order, then hand the kernel the call
+/// with every deciding argument replaced by its value and every branch it
+/// will NOT return replaced by an omitted argument — so an untaken branch is
+/// never evaluated (no cell read, no error, no volatile draw) while the
+/// kernel's own semantics stay exactly as before. The dependency graph still
+/// registers every branch (`extract_refs` walks the whole call), as Excel
+/// does. `None` (evaluate eagerly) when a deciding argument is array-shaped:
+/// the element-wise path decides per element.
+fn lazy_args(
+    model: &SheetModel,
+    fid: FuncId,
+    args: &[Expr],
+    ctx: &EvalCtx,
+    spills: &SpillState,
+) -> Option<Vec<Expr>> {
+    let meta = sheet_core::funcs::meta(fid);
+    if !meta.lazy_args {
+        return None;
+    }
+    if args.len() < meta.min_args as usize || meta.max_args.is_some_and(|m| args.len() > m as usize)
+    {
+        return None;
+    }
+    let decide = |e: &Expr| -> Option<CellValue> {
+        if lift::needs_lift(model, e) || lift::is_array_operand(model, e) {
+            return None;
+        }
+        Some(eval(model, e, ctx, spills))
+    };
+    let lit = |v: CellValue| -> Expr {
+        use sheet_core::ast::{LitValue, OrderedF64};
+        match v {
+            CellValue::Empty => Expr::Missing,
+            CellValue::Number(n) => Expr::Lit(LitValue::Number(OrderedF64::new(n))),
+            CellValue::Text(t) => Expr::Lit(LitValue::Text(t)),
+            CellValue::Bool(b) => Expr::Lit(LitValue::Bool(b)),
+            CellValue::Error(e) => Expr::Lit(LitValue::Error(e)),
+        }
+    };
+    // The kernels' own condition rule (`coerce::to_bool`); `None` = the
+    // condition is an error the kernel returns.
+    let truthy = |v: &CellValue| -> Option<bool> { coerce::to_bool(v).ok() };
+    let mut out: Vec<Expr> = args.to_vec();
+    match meta.name {
+        "IF" => {
+            let c = decide(&args[0])?;
+            let take = truthy(&c);
+            out[0] = lit(c);
+            match take {
+                // The other branch is never returned.
+                Some(true) if out.len() > 2 => out[2] = Expr::Missing,
+                Some(false) => out[1] = Expr::Missing,
+                // An error (or text) condition returns its error: no branch.
+                None => {
+                    for a in out.iter_mut().skip(1) {
+                        *a = Expr::Missing;
+                    }
+                }
+                _ => {}
+            }
+        }
+        "IFERROR" | "IFNA" => {
+            let v = decide(&args[0])?;
+            let caught = match &v {
+                CellValue::Error(e) => meta.name == "IFERROR" || *e == CellError::Na,
+                _ => false,
+            };
+            out[0] = lit(v);
+            if !caught {
+                out[1] = Expr::Missing;
+            }
+        }
+        "CHOOSE" => {
+            let i = decide(&args[0])?;
+            let pick = coerce::to_number(&i).ok().map(|n| n.trunc());
+            out[0] = lit(i);
+            for (k, a) in out.iter_mut().enumerate().skip(1) {
+                if pick != Some(k as f64) {
+                    *a = Expr::Missing;
+                }
+            }
+        }
+        // A dangling condition is the kernel's #N/A whatever it holds.
+        "IFS" if !args.len().is_multiple_of(2) => return None,
+        "IFS" => {
+            // (cond, value) pairs: stop at the first TRUE condition.
+            let mut k = 0;
+            let mut done = false;
+            while k + 1 < out.len() {
+                if done {
+                    out[k] = Expr::Missing;
+                    out[k + 1] = Expr::Missing;
+                } else {
+                    let c = decide(&args[k])?;
+                    match truthy(&c) {
+                        Some(true) => done = true,
+                        Some(false) => out[k + 1] = Expr::Missing,
+                        None => {
+                            // The kernel returns this error; nothing after it.
+                            out[k + 1] = Expr::Missing;
+                            done = true;
+                        }
+                    }
+                    out[k] = lit(c);
+                }
+                k += 2;
+            }
+        }
+        "SWITCH" => {
+            // expr, (value, result) pairs, [default].
+            let x = decide(&args[0])?;
+            if matches!(x, CellValue::Error(_)) {
+                for a in out.iter_mut().skip(1) {
+                    *a = Expr::Missing;
+                }
+                out[0] = lit(x);
+                return Some(out);
+            }
+            let pairs_end = 1 + (out.len() - 1) / 2 * 2;
+            let mut matched = false;
+            let mut k = 1;
+            while k + 2 <= pairs_end {
+                if matched {
+                    out[k] = Expr::Missing;
+                    out[k + 1] = Expr::Missing;
+                } else {
+                    let v = decide(&args[k])?;
+                    let hit = !matches!(v, CellValue::Error(_))
+                        && excel_ordering(&x, &v) == std::cmp::Ordering::Equal;
+                    if !hit {
+                        out[k + 1] = Expr::Missing;
+                    } else {
+                        matched = true;
+                    }
+                    out[k] = lit(v);
+                }
+                k += 2;
+            }
+            if matched && pairs_end < out.len() {
+                out[pairs_end] = Expr::Missing;
+            }
+            out[0] = lit(x);
+        }
+        _ => return None,
+    }
+    Some(out)
+}
+
+/// Functions with an ARRAY-class parameter in Excel's legacy (pre-dynamic)
+/// evaluation: an array expression passed to them is evaluated as an array
+/// even in a formula entered without Ctrl+Shift+Enter (`SUMPRODUCT(A1:A3*2)`
+/// is 12, recorded). Every other function reads such an argument by implicit
+/// intersection in a legacy formula.
+pub(crate) fn array_class(fid: FuncId) -> bool {
+    let m = sheet_core::funcs::meta(fid);
+    m.returns_array
+        || m.special_form
+        || matches!(
+            m.name,
+            "SUMPRODUCT"
+                | "MMULT"
+                | "MDETERM"
+                | "MINVERSE"
+                | "TRANSPOSE"
+                | "FREQUENCY"
+                | "LINEST"
+                | "LOGEST"
+                | "TREND"
+                | "GROWTH"
+                | "SUMX2MY2"
+                | "SUMX2PY2"
+                | "SUMXMY2"
+                | "CORREL"
+                | "COVAR"
+                | "COVARIANCE.P"
+                | "COVARIANCE.S"
+                | "PEARSON"
+                | "RSQ"
+                | "SLOPE"
+                | "INTERCEPT"
+                | "STEYX"
+                | "FORECAST"
+                | "FORECAST.LINEAR"
+                | "TTEST"
+                | "T.TEST"
+                | "CHITEST"
+                | "CHISQ.TEST"
+                | "FTEST"
+                | "F.TEST"
+                | "PROB"
+                | "LOOKUP"
+                | "INDEX"
+                | "MATCH"
+                | "XMATCH"
+                | "XLOOKUP"
+                | "VLOOKUP"
+                | "HLOOKUP"
+                | "LARGE"
+                | "SMALL"
+                | "PERCENTILE"
+                | "PERCENTILE.INC"
+                | "PERCENTILE.EXC"
+                | "QUARTILE"
+                | "QUARTILE.INC"
+                | "QUARTILE.EXC"
+                | "PERCENTRANK"
+                | "PERCENTRANK.INC"
+                | "PERCENTRANK.EXC"
+                | "RANK"
+                | "RANK.EQ"
+                | "RANK.AVG"
+                | "MODE"
+                | "MODE.SNGL"
+                | "MODE.MULT"
+                | "IRR"
+                | "MIRR"
+                | "NPV"
+                | "ROWS"
+                | "COLUMNS"
+                | "AREAS"
+                | "AGGREGATE"
+                | "TEXTJOIN"
+                | "CONCAT"
+        )
+}
+
+/// A 3D reference handed to a function that takes none: the call is
+/// `#VALUE!` (Excel-recorded: `COUNTIF(Jan:Mar!A1,">0")`, `ROWS(Jan:Mar!A1:A3)`).
+fn refuses_3d(fid: FuncId, args: &[Expr]) -> bool {
+    !takes_3d(fid)
+        && args
+            .iter()
+            .any(|a| matches!(a, Expr::Ref3D(_) | Expr::Range3D(_)))
+}
+
+/// The functions that accept a 3D reference (Microsoft's list for 3-D
+/// references: the aggregates over values; the `.S`/`.P` names with their
+/// older spellings). Excel-recorded in corpus/calc-model `3d-sum`.
+fn takes_3d(fid: FuncId) -> bool {
+    matches!(
+        sheet_core::funcs::meta(fid).name,
+        "SUM"
+            | "AVERAGE"
+            | "AVERAGEA"
+            | "COUNT"
+            | "COUNTA"
+            | "MAX"
+            | "MAXA"
+            | "MIN"
+            | "MINA"
+            | "PRODUCT"
+            | "STDEV"
+            | "STDEVA"
+            | "STDEVP"
+            | "STDEVPA"
+            | "STDEV.S"
+            | "STDEV.P"
+            | "VAR"
+            | "VARA"
+            | "VARP"
+            | "VARPA"
+            | "VAR.S"
+            | "VAR.P"
+    )
 }
 
 /// Lend the borrowing `&[Arg]` slice from `bufs`/`plans` (the second pass — see
@@ -835,6 +1330,11 @@ fn eval_func(
     if sheet_core::funcs::meta(fid).special_form {
         return eval_special_form(model, fid, args, ctx, spills);
     }
+    if refuses_3d(fid, args) {
+        return CellValue::Error(CellError::Value);
+    }
+    let lazy = lazy_args(model, fid, args, ctx, spills);
+    let args = lazy.as_deref().unwrap_or(args);
     let args = with_missing_defaults(fid, args);
     let (mut bufs, plans) = plan_args(model, fid, &args, ctx, spills);
     if let Fast::Value(v) = accel::try_eval(model, fid, &mut bufs, &plans) {
@@ -913,6 +1413,11 @@ fn eval_func_rich(
         }
         return FnResult::Scalar(eval_special_form(model, fid, args, ctx, spills));
     }
+    if refuses_3d(fid, args) {
+        return FnResult::Scalar(CellValue::Error(CellError::Value));
+    }
+    let lazy = lazy_args(model, fid, args, ctx, spills);
+    let args = lazy.as_deref().unwrap_or(args);
     let args = with_missing_defaults(fid, args);
     let (mut bufs, plans) = plan_args(model, fid, &args, ctx, spills);
     if let Fast::Value(v) = accel::try_eval(model, fid, &mut bufs, &plans) {
@@ -977,7 +1482,7 @@ fn spill_rect_to_range(rect: crate::spill::SpillRect) -> RangeRef {
 /// parsed to one) into a [`FnResult::Array`] (spec §6.4,
 /// `sheet.calc.spill.cse-parse`). Each element is evaluated in scalar position;
 /// ragged rows are NOT padded (the parser produces rectangular literals). An
-/// empty literal degrades to `#VALUE!`.
+/// empty literal is `#CALC!`.
 fn eval_array_literal(
     model: &SheetModel,
     rows: &[Vec<Expr>],
@@ -985,7 +1490,7 @@ fn eval_array_literal(
     spills: &SpillState,
 ) -> FnResult {
     if rows.is_empty() || rows.iter().all(|r| r.is_empty()) {
-        return FnResult::Scalar(CellValue::Error(CellError::Value));
+        return FnResult::Scalar(CellValue::Error(CellError::Calc));
     }
     let grid: Vec<Vec<CellValue>> = rows
         .iter()
@@ -1581,15 +2086,23 @@ mod tests {
     }
 
     #[test]
-    fn range_in_scalar_position_is_value_error() {
-        let m = model();
+    fn range_in_scalar_position_intersects() {
+        // A range where one value is expected: implicit intersection with the
+        // formula's row (the ctx cell is A1, inside A1:A3), else #VALUE!.
+        let mut m = model();
         let s = spills();
+        set(&mut m, 0, 0, CellValue::Number(7.0));
         let rng = Expr::Range(RangeRef {
             start: cr(0, 0),
             end: cr(2, 0),
         });
+        assert_eq!(eval_expr(&m, &rng, &ctx(), &s), CellValue::Number(7.0));
+        let off = Expr::Range(RangeRef {
+            start: cr(3, 0),
+            end: cr(5, 0),
+        });
         assert_eq!(
-            eval_expr(&m, &rng, &ctx(), &s),
+            eval_expr(&m, &off, &ctx(), &s),
             CellValue::Error(CellError::Value)
         );
     }

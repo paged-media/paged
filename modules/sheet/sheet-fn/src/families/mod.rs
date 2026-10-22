@@ -58,5 +58,6 @@ pub mod complex;
 pub mod eng;
 pub mod linalg;
 pub mod math3;
+pub mod text3;
 pub mod units;
 pub(crate) mod util;
