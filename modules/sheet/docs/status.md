@@ -53,8 +53,8 @@ each published canary added is under [Releases](#releases).
   final-operation cancellation snap (`=0.1+0.2=0.3` is TRUE, `=0.1+0.2-0.3` is 0); a cycle keeps
   its last values (0 when never calculated) with the circular warning; manual calculation
   (`calcMode`, Calculate Now / Calculate Sheet) and precision as displayed, read from and written
-  to `<calcPr>`. Recorded from Excel and replayed in CI: 207 of 220 probed cells agree, every
-  disagreement a recorded ruling or a listed defect.
+  to `<calcPr>`. Recorded from Excel and replayed in CI: 400 of 415 probed cells (135 cases)
+  agree, every disagreement a recorded ruling or a listed defect.
 - **Typed entry.** What a person types into a cell is stored as Excel stores it (ADR 511):
   percentages, currency, group separators, fractions, scientific notation, dates, times and
   date-times become numbers with the number format Excel gives them, a leading `'` forces text
@@ -224,9 +224,7 @@ each published canary added is under [Releases](#releases).
 - **Formulas** are the Excel en-US dialect only. On load, a formula the parser does not read
   keeps its cached value (an external defined name or DDE item, `[1]!Name`), and so does one
   calling a function the engine does not know or never runs (WEBSERVICE, CUBEVALUE).
-- **Calculation model limits** (ADR 513): a legacy formula feeding an array to a range-aware
-  function (`=SUM(A1:A3*2)`) is lifted element-wise where Excel 2016 intersects; a root in
-  parentheses is snapped where Excel does not; SUM's own cancellation is not snapped; a row
+- **Calculation model limits** (ADR 513): a root in parentheses is snapped where Excel does not; SUM's own cancellation is not snapped; a row
   insert does not move a 3D reference; a recursive LAMBDA stops at 128 nested calls (`#NUM!`);
   a load always calculates, also in manual mode; loaded rich-value errors read as `#VALUE!` until
   recalculated.

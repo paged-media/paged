@@ -60,7 +60,7 @@ use crate::argview::{self, RangeBuf};
 use crate::spill::SpillState;
 
 mod lambda;
-mod lift;
+pub(crate) mod lift;
 pub use lift::eval_array;
 
 /// Evaluate a formula root `expr` for the cell at `current`, with the given
@@ -115,9 +115,10 @@ pub fn expr_spills(expr: &Expr) -> bool {
 
 /// Evaluate a formula ROOT in scalar position: [`eval_expr`] plus Excel's
 /// final-operation cancellation snap (sheet ADR 513): when the LAST operation
-/// of the formula is `+` or `-` and its result is within 2^-48 of the larger
-/// operand's magnitude — what is left of a cancellation is only the operands'
-/// binary representation error — the result is 0. Excel-recorded:
+/// of the formula is `+` or `-` and its result is smaller than 8 units in the
+/// last place of the larger operand — what is left of a cancellation is only
+/// the operands' binary representation error — the result is 0 (recorded:
+/// `=1+1E-15-1`, 5 units, is 0; `=1E+15+1-1E+15`, 8 units, is 1). Excel-recorded:
 /// `=0.1+0.2-0.3` is 0, `=1*(0.1+0.2-0.3)` 5.55E-17 (the last operation is
 /// `*`), `=2.675-2.67-0.005` -1.07E-16 (a real difference). A root written in
 /// parentheses defeats the snap in Excel; the AST keeps no parentheses, so
@@ -156,9 +157,12 @@ fn snapped(op: BinOp, l: CellValue, r: CellValue) -> CellValue {
     let (x, y) = (coerce::to_number(&l), coerce::to_number(&r));
     let v = binary_values(op, l, r);
     match (v, x, y) {
-        (CellValue::Number(z), Ok(x), Ok(y)) if z != 0.0 => {
-            let scale = x.abs().max(y.abs());
-            if z.abs() < scale * f64::EPSILON * 16.0 {
+        (CellValue::Number(z), Ok(x), Ok(y)) if z != 0.0 && z.is_finite() => {
+            // Fewer than 8 units in the last place of the larger operand:
+            // what is left is the operands' representation error.
+            let m = x.abs().max(y.abs());
+            let exp = ((m.to_bits() >> 52) & 0x7ff) as i32 - 1023;
+            if z.abs() < 2f64.powi(exp - 49) {
                 CellValue::Number(0.0)
             } else {
                 CellValue::Number(z)
@@ -274,24 +278,6 @@ pub fn keeps_cached_value(e: &Expr) -> bool {
         Expr::Array(rows) => rows.iter().any(|r| any(r)),
         _ => false,
     }
-}
-
-thread_local! {
-    static LEGACY: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
-}
-
-/// Run `f` as the evaluation of a LEGACY formula (`legacy == true`) or a
-/// dynamic one — what the engine knows per cell and the evaluator needs for
-/// scalar-parameter arguments (`plan_args`).
-pub fn with_legacy<T>(legacy: bool, f: impl FnOnce() -> T) -> T {
-    let prev = LEGACY.with(|c| c.replace(legacy));
-    let out = f();
-    LEGACY.with(|c| c.set(prev));
-    out
-}
-
-fn in_legacy_formula() -> bool {
-    LEGACY.with(|c| c.get())
 }
 
 /// Excel's implicit intersection of the area `r` with the formula cell `at`:
@@ -876,23 +862,11 @@ fn plan_args<'m>(
         }
     };
 
-    // A LEGACY formula (stored without the dynamic-array mark) feeding an
-    // array to a function of scalar parameters reads it by implicit
-    // intersection, as Excel 2016 computed it (`=ABS(A1:A3)` in row 3 is
-    // ABS(A3)); a dynamic formula lifts the call element-wise instead
-    // (sheet ADR 513).
-    let intersect_args = in_legacy_formula() && lift::liftable(fid);
     for arg in args {
         // A formula-target name stands for its expression (`SUM(Arr)` with
         // `Arr = {1,2,3}`, `SUM(Dyn)` with `Dyn = OFFSET(…)`).
         let arg_c = deref_name(model, arg, ctx.current);
         let arg: &Expr = &arg_c;
-        if intersect_args
-            && (lift::needs_lift(model, arg) || matches!(arg, Expr::Range(_) | Expr::Name(_)))
-        {
-            plans.push(ArgPlan::Scalar(eval(model, arg, ctx, spills)));
-            continue;
-        }
         // An operator / scalar-function tree over an array operand is an
         // ARRAY argument (`SUM(A1:A3*2)`, `MIN(IF(ISNUMBER(r),r))`).
         if lift::needs_lift(model, arg) {
@@ -1204,6 +1178,84 @@ fn lazy_args(
         _ => return None,
     }
     Some(out)
+}
+
+/// Functions with an ARRAY-class parameter in Excel's legacy (pre-dynamic)
+/// evaluation: an array expression passed to them is evaluated as an array
+/// even in a formula entered without Ctrl+Shift+Enter (`SUMPRODUCT(A1:A3*2)`
+/// is 12, recorded). Every other function reads such an argument by implicit
+/// intersection in a legacy formula.
+pub(crate) fn array_class(fid: FuncId) -> bool {
+    let m = sheet_core::funcs::meta(fid);
+    m.returns_array
+        || m.special_form
+        || matches!(
+            m.name,
+            "SUMPRODUCT"
+                | "MMULT"
+                | "MDETERM"
+                | "MINVERSE"
+                | "TRANSPOSE"
+                | "FREQUENCY"
+                | "LINEST"
+                | "LOGEST"
+                | "TREND"
+                | "GROWTH"
+                | "SUMX2MY2"
+                | "SUMX2PY2"
+                | "SUMXMY2"
+                | "CORREL"
+                | "COVAR"
+                | "COVARIANCE.P"
+                | "COVARIANCE.S"
+                | "PEARSON"
+                | "RSQ"
+                | "SLOPE"
+                | "INTERCEPT"
+                | "STEYX"
+                | "FORECAST"
+                | "FORECAST.LINEAR"
+                | "TTEST"
+                | "T.TEST"
+                | "CHITEST"
+                | "CHISQ.TEST"
+                | "FTEST"
+                | "F.TEST"
+                | "PROB"
+                | "LOOKUP"
+                | "INDEX"
+                | "MATCH"
+                | "XMATCH"
+                | "XLOOKUP"
+                | "VLOOKUP"
+                | "HLOOKUP"
+                | "LARGE"
+                | "SMALL"
+                | "PERCENTILE"
+                | "PERCENTILE.INC"
+                | "PERCENTILE.EXC"
+                | "QUARTILE"
+                | "QUARTILE.INC"
+                | "QUARTILE.EXC"
+                | "PERCENTRANK"
+                | "PERCENTRANK.INC"
+                | "PERCENTRANK.EXC"
+                | "RANK"
+                | "RANK.EQ"
+                | "RANK.AVG"
+                | "MODE"
+                | "MODE.SNGL"
+                | "MODE.MULT"
+                | "IRR"
+                | "MIRR"
+                | "NPV"
+                | "ROWS"
+                | "COLUMNS"
+                | "AREAS"
+                | "AGGREGATE"
+                | "TEXTJOIN"
+                | "CONCAT"
+        )
 }
 
 /// A 3D reference handed to a function that takes none: the call is

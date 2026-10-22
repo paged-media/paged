@@ -742,7 +742,16 @@ impl SheetSession {
                 parse(&strip_storage_prefixes(&text), &ctx)
             };
             match parsed {
-                Ok(formula) => {
+                Ok(mut formula) => {
+                    // A plain `<f>` (no array area, no dynamic-array mark) is
+                    // a legacy formula: Excel 365 reads it with `@` wherever
+                    // it intersected (sheet ADR 513).
+                    let legacy = model
+                        .sheet(sheet)
+                        .is_some_and(|ws| !ws.array_formulas.contains_key(&(row, col)));
+                    if legacy {
+                        sheet_calc::legacy::mark_implicit_intersections(&model, &mut formula.root);
+                    }
                     let fid = model.intern_formula(formula);
                     if let Some(ws) = model.sheet_mut(sheet) {
                         if let Some(cell) = ws.cells.get_mut(&(row, col)) {

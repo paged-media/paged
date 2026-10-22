@@ -113,8 +113,9 @@ Two rules changed ([ADR 513](513-calc-model-amendment.md), [ADR 514](514-circula
 - **What spills.** A formula typed into the engine is a dynamic-array formula: when its root can
   produce an array (a range, an operator or scalar function over one, a lambda call, a
   reference-returning form) it is marked `Worksheet::dynamic_arrays` and spills by the shape of
-  its result. A formula loaded without the dynamic-array mark is legacy and keeps implicit
-  intersection, so a workbook never starts spilling on open. `@` reduces to one value. An empty
+  its result. A formula loaded without the dynamic-array mark is legacy: the loader gives it the
+  `@` Excel 365 shows, so it keeps implicit intersection and a workbook never starts spilling on
+  open. `@` reduces to one value. An empty
   array is `#CALC!`.
 - **Cycles.** With iteration off a cycle member is not calculated and keeps its last value (0
   when never calculated) instead of `#REF!`; the cycle set is still reported on
