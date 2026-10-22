@@ -3,13 +3,30 @@
 import type { SelectionModifyOp } from "../../engine";
 import type { ImageSession } from "../../session";
 import type { WandOptions } from "../../selection-machine";
+import { defineMessages, t } from "@paged-media/strings";
+
 import { mono, note, row, sectionTitle } from "./styles";
 
+const M = defineMessages("image.selectModify", {
+  title: "Selection",
+  modifyBy: "Modify by",
+  expand: "Expand",
+  contract: "Contract",
+  border: "Border",
+  smooth: "Smooth",
+  tolerance: "Wand / bucket tolerance",
+  contiguous: "Contiguous",
+  note:
+    "Expand, contract and border make a hard-edged selection; smooth rounds " +
+    "corners and drops specks smaller than about the radius.",
+});
+
+/** The operations and their message keys (read through `t` at render). */
 const OPS: Array<[SelectionModifyOp, string]> = [
-  ["expand", "Expand"],
-  ["contract", "Contract"],
-  ["border", "Border"],
-  ["smooth", "Smooth"],
+  ["expand", M.expand],
+  ["contract", M.contract],
+  ["border", M.border],
+  ["smooth", M.smooth],
 ];
 
 export function SelectModifySection({
@@ -27,9 +44,9 @@ export function SelectModifySection({
 }) {
   return (
     <>
-      <div style={sectionTitle}>Selection</div>
+      <div style={sectionTitle}>{t(M.title)}</div>
       <div style={row}>
-        <label htmlFor="pg-image-modify-radius">Modify by</label>
+        <label htmlFor="pg-image-modify-radius">{t(M.modifyBy)}</label>
         <input
           id="pg-image-modify-radius"
           type="range"
@@ -50,12 +67,12 @@ export function SelectModifySection({
             disabled={!hasSelection}
             onClick={() => session.modifySelection(op, radius)}
           >
-            {label}
+            {t(label)}
           </button>
         ))}
       </div>
       <div style={row}>
-        <label htmlFor="pg-image-wand-tolerance">Wand / bucket tolerance</label>
+        <label htmlFor="pg-image-wand-tolerance">{t(M.tolerance)}</label>
         <input
           id="pg-image-wand-tolerance"
           type="range"
@@ -70,7 +87,7 @@ export function SelectModifySection({
         <span style={mono}>{wand.tolerance}</span>
       </div>
       <div style={row}>
-        <label htmlFor="pg-image-wand-contiguous">Contiguous</label>
+        <label htmlFor="pg-image-wand-contiguous">{t(M.contiguous)}</label>
         <input
           id="pg-image-wand-contiguous"
           type="checkbox"
@@ -80,10 +97,7 @@ export function SelectModifySection({
           }
         />
       </div>
-      <div style={note}>
-        Expand, contract and border make a hard-edged selection; smooth rounds
-        corners and drops specks smaller than about the radius.
-      </div>
+      <div style={note}>{t(M.note)}</div>
     </>
   );
 }

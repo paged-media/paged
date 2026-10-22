@@ -56,29 +56,61 @@ import {
   About,
   color,
   font,
-  humanize,
   Refusal,
   useActionFeedback,
 } from "@paged-media/panel-kit";
-import { PanelIntro } from "./panel-parts";
+import { PanelIntro, tokenLabel } from "./panel-parts";
+import { defineMessages, t, useStrings } from "@paged-media/strings";
+
+const M = defineMessages("draw.patternPanel", {
+  summary:
+    "Tile the selected artwork into rows and columns of copies you can re-plan later. The result is artwork, not a pattern swatch.",
+  note: "A pattern here makes real copies of the artwork, which you can re-plan, select, delete or release. It is not a fill you can apply to other objects: the document format has no pattern swatch. The copies always sit above the original; the overlap setting only decides how the copies cover each other, and the vertical choice wins. Dimming sets the copies' opacity and is saved with the document. Making, re-planning, releasing and deleting the copies are one undo step each; the saved settings are kept outside undo.",
+  rowLabel:
+    "{layout} · {columns} × {rows} ({requested, plural, one {# copy} other {# copies}} requested, {placed} placed)",
+  heading: "Patterns",
+  makeHint: "Tile the selection with the settings below",
+  selectArtwork: "Select artwork first",
+  fromSelection: "+ From selection",
+  degraded:
+    "This editor cannot save data into the document, so pattern settings are not kept. Copies can still be released or deleted.",
+  tile: "Tile",
+  layout: "Layout",
+  hSpacing: "Horizontal spacing (pt, negative overlaps)",
+  vSpacing: "Vertical spacing (pt, negative overlaps)",
+  rowShift: "Row shift (0–1, brick and hex)",
+  copies: "Copies",
+  columns: "Columns",
+  rows: "Rows",
+  dim: "Dim copies to (%)",
+  overlap: "Overlap (which copy is in front)",
+  rightInFront: "Right in front",
+  leftInFront: "Left in front",
+  bottomInFront: "Bottom in front",
+  topInFront: "Top in front",
+  keepOnPage: "Keep tiles on the page",
+  empty: "No patterns yet. Select artwork and choose + From selection.",
+  replanHint:
+    "Rebuild the copies with the settings above and the artwork's current shape",
+  replan: "Re-plan",
+  selectHint: "Select this pattern's copies",
+  select: "Select",
+  deleteHint: "Remove every copy and keep the original artwork",
+  deleteCopies: "Delete copies",
+  releaseHint: "Stop tracking this pattern; all the artwork stays",
+  release: "Release",
+  legacy:
+    "{count} copies come from an older version that saved no settings. They can be released or deleted, but not re-planned.",
+  title: "Pattern options",
+});
 
 export const PATTERN_PANEL_ID = "media.paged.draw.panel.pattern";
 
 /** What the panel is for, in one sentence (shown at the top). */
-export const PATTERN_SUMMARY =
-  "Tile the selected artwork into rows and columns of copies you can " +
-  "re-plan later. The result is artwork, not a pattern swatch.";
+export const PATTERN_SUMMARY = M.summary;
 
 /** The "About" text. Exported so the conformance spec pins the wording. */
-export const PATTERN_PANEL_NOTE =
-  "A pattern here makes real copies of the artwork, which you can re-plan, " +
-  "select, delete or release. It is not a fill you can apply to other " +
-  "objects: the document format has no pattern swatch. The copies always " +
-  "sit above the original; the overlap setting only decides how the " +
-  "copies cover each other, and the vertical choice wins. Dimming sets " +
-  "the copies' opacity and is saved with the document. Making, " +
-  "re-planning, releasing and deleting the copies are one undo step each; " +
-  "the saved settings are kept outside undo.";
+export const PATTERN_PANEL_NOTE = M.note;
 
 const rowStyle: React.CSSProperties = {
   display: "flex",
@@ -116,10 +148,13 @@ const inputStyle: React.CSSProperties = {
  *  exported so the conformance spec pins the wording without a DOM. */
 export function patternRowLabel(field: PatternField, placed: number): string {
   const requested = field.params.columns * field.params.rows - 1;
-  return (
-    `${humanize(field.params.layout)} · ${field.params.columns} × ${field.params.rows} ` +
-    `(${requested} cop${requested === 1 ? "y" : "ies"} requested, ${placed} placed)`
-  );
+  return t(M.rowLabel, {
+    layout: tokenLabel(field.params.layout),
+    columns: field.params.columns,
+    rows: field.params.rows,
+    requested,
+    placed,
+  });
 }
 
 const LAYOUTS: readonly PatternLayout[] = ["grid", "brick", "hex"];
@@ -130,6 +165,7 @@ export function makePatternPanel(host: BundleHost): {
   defaultDock: "right";
 } {
   const Component: React.FC<PanelProps> = () => {
+    const s = useStrings();
     const [fields, setFields] = React.useState<PatternField[]>([]);
     const [active, setActive] = React.useState<string | null>(null);
     const [placed, setPlaced] = React.useState<Record<string, number>>({});
@@ -196,24 +232,23 @@ export function makePatternPanel(host: BundleHost): {
         data-draw-pattern-portable={portable ? "true" : "false"}
         data-draw-pattern-active={active ?? ""}
       >
-        <PanelIntro summary={PATTERN_SUMMARY} attr="data-draw-pattern-intro" />
+        <PanelIntro
+          summary={s.t(PATTERN_SUMMARY)}
+          attr="data-draw-pattern-intro"
+        />
         <div style={{ ...rowStyle, justifyContent: "space-between" }}>
           <span style={{ ...sectionStyle, paddingTop: 0 }}>
-            Patterns ({fields.length})
+            {s.t(M.heading)} ({fields.length})
           </span>
           <button
             type="button"
             style={iconBtn}
-            title={
-              hasSelection
-                ? "Tile the selection with the settings below"
-                : "Select artwork first"
-            }
+            title={hasSelection ? s.t(M.makeHint) : s.t(M.selectArtwork)}
             data-draw-pattern-make
             disabled={!hasSelection}
             onClick={() => void run(() => applyMakePattern(host, draft))}
           >
-            + From selection
+            {s.t(M.fromSelection)}
           </button>
         </div>
 
@@ -221,14 +256,13 @@ export function makePatternPanel(host: BundleHost): {
 
         {!portable && (
           <div style={mutedStyle} data-draw-pattern-degraded>
-            This editor cannot save data into the document, so pattern settings
-            are not kept. Copies can still be released or deleted.
+            {s.t(M.degraded)}
           </div>
         )}
 
-        <div style={sectionStyle}>Tile</div>
+        <div style={sectionStyle}>{s.t(M.tile)}</div>
         <div style={rowStyle}>
-          <span style={{ flex: 1 }}>Layout</span>
+          <span style={{ flex: 1 }}>{s.t(M.layout)}</span>
           <select
             style={{ font: `12px ${font.sans}` }}
             data-draw-pattern-layout
@@ -239,52 +273,52 @@ export function makePatternPanel(host: BundleHost): {
           >
             {LAYOUTS.map((l) => (
               <option key={l} value={l}>
-                {humanize(l)}
+                {tokenLabel(l)}
               </option>
             ))}
           </select>
         </div>
         {numberRow(
-          "Horizontal spacing (pt, negative overlaps)",
+          s.t(M.hSpacing),
           draft.spacing[0],
           (n) => setDraft({ ...draft, spacing: [n, draft.spacing[1]] }),
           "spacingX",
         )}
         {numberRow(
-          "Vertical spacing (pt, negative overlaps)",
+          s.t(M.vSpacing),
           draft.spacing[1],
           (n) => setDraft({ ...draft, spacing: [draft.spacing[0], n] }),
           "spacingY",
         )}
         {numberRow(
-          "Row shift (0–1, brick and hex)",
+          s.t(M.rowShift),
           draft.offset,
           (n) => setDraft({ ...draft, offset: n }),
           "offset",
           0.05,
         )}
 
-        <div style={sectionStyle}>Copies</div>
+        <div style={sectionStyle}>{s.t(M.copies)}</div>
         {numberRow(
-          "Columns",
+          s.t(M.columns),
           draft.columns,
           (n) => setDraft({ ...draft, columns: n }),
           "columns",
         )}
         {numberRow(
-          "Rows",
+          s.t(M.rows),
           draft.rows,
           (n) => setDraft({ ...draft, rows: n }),
           "rows",
         )}
         {numberRow(
-          "Dim copies to (%)",
+          s.t(M.dim),
           draft.dim,
           (n) => setDraft({ ...draft, dim: n }),
           "dim",
         )}
         <div style={rowStyle}>
-          <span style={{ flex: 1 }}>Overlap (which copy is in front)</span>
+          <span style={{ flex: 1 }}>{s.t(M.overlap)}</span>
           <select
             style={{ font: `12px ${font.sans}` }}
             data-draw-pattern-overlap-h
@@ -300,8 +334,8 @@ export function makePatternPanel(host: BundleHost): {
               })
             }
           >
-            <option value="rightInFront">Right in front</option>
-            <option value="leftInFront">Left in front</option>
+            <option value="rightInFront">{s.t(M.rightInFront)}</option>
+            <option value="leftInFront">{s.t(M.leftInFront)}</option>
           </select>
           <select
             style={{ font: `12px ${font.sans}` }}
@@ -318,13 +352,13 @@ export function makePatternPanel(host: BundleHost): {
               })
             }
           >
-            <option value="bottomInFront">Bottom in front</option>
-            <option value="topInFront">Top in front</option>
+            <option value="bottomInFront">{s.t(M.bottomInFront)}</option>
+            <option value="topInFront">{s.t(M.topInFront)}</option>
           </select>
         </div>
         <div style={rowStyle}>
           <label style={{ flex: 1 }} htmlFor="draw-pattern-fit">
-            Keep tiles on the page
+            {s.t(M.keepOnPage)}
           </label>
           <input
             id="draw-pattern-fit"
@@ -338,9 +372,7 @@ export function makePatternPanel(host: BundleHost): {
         </div>
 
         {fields.length === 0 ? (
-          <div style={mutedStyle}>
-            No patterns yet. Select artwork and choose + From selection.
-          </div>
+          <div style={mutedStyle}>{s.t(M.empty)}</div>
         ) : (
           fields.map((field) => (
             <div key={field.id} data-draw-pattern-row={field.id}>
@@ -360,7 +392,7 @@ export function makePatternPanel(host: BundleHost): {
                 <button
                   type="button"
                   style={iconBtn}
-                  title="Rebuild the copies with the settings above and the artwork's current shape"
+                  title={s.t(M.replanHint)}
                   data-draw-pattern-replan
                   onClick={() =>
                     void run(() =>
@@ -368,12 +400,12 @@ export function makePatternPanel(host: BundleHost): {
                     )
                   }
                 >
-                  Re-plan
+                  {s.t(M.replan)}
                 </button>
                 <button
                   type="button"
                   style={iconBtn}
-                  title="Select this pattern's copies"
+                  title={s.t(M.selectHint)}
                   data-draw-pattern-select
                   onClick={() =>
                     void run(() =>
@@ -381,12 +413,12 @@ export function makePatternPanel(host: BundleHost): {
                     )
                   }
                 >
-                  Select
+                  {s.t(M.select)}
                 </button>
                 <button
                   type="button"
                   style={iconBtn}
-                  title="Remove every copy and keep the original artwork"
+                  title={s.t(M.deleteHint)}
                   data-draw-pattern-unbake
                   onClick={() =>
                     void run(() =>
@@ -394,12 +426,12 @@ export function makePatternPanel(host: BundleHost): {
                     )
                   }
                 >
-                  Delete copies
+                  {s.t(M.deleteCopies)}
                 </button>
                 <button
                   type="button"
                   style={iconBtn}
-                  title="Stop tracking this pattern; all the artwork stays"
+                  title={s.t(M.releaseHint)}
                   data-draw-pattern-release
                   onClick={() =>
                     void run(() =>
@@ -407,7 +439,7 @@ export function makePatternPanel(host: BundleHost): {
                     )
                   }
                 >
-                  Release
+                  {s.t(M.release)}
                 </button>
               </div>
               <div style={mutedStyle}>
@@ -419,18 +451,16 @@ export function makePatternPanel(host: BundleHost): {
 
         {(placed[PATTERN_LEGACY_FIELD] ?? 0) > 0 && (
           <div style={mutedStyle} data-draw-pattern-legacy>
-            {placed[PATTERN_LEGACY_FIELD]} copies come from an older version
-            that saved no settings. They can be released or deleted, but not
-            re-planned.
+            {s.t(M.legacy, { count: placed[PATTERN_LEGACY_FIELD] ?? 0 })}
           </div>
         )}
 
-        <About attr="data-draw-pattern-note">{PATTERN_PANEL_NOTE}</About>
+        <About attr="data-draw-pattern-note">{s.t(PATTERN_PANEL_NOTE)}</About>
       </div>
     );
   };
   return {
-    title: "Pattern options",
+    title: t(M.title),
     component: Component,
     defaultDock: "right",
   };

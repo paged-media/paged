@@ -41,6 +41,7 @@
 //   (6) the honest refusals (a BAKED appearance, a host with no
 //       container writer) and the panel's registration + inline note.
 
+import { t } from "@paged-media/strings";
 import { describe, expect, it, beforeAll, afterAll } from "bun:test";
 
 import type {
@@ -967,30 +968,30 @@ describe("draw conformance — GRAPHIC STYLES (Illustrator Phase 2)", () => {
 
     it("the inline note NAMES the link semantics and every honest limit", () => {
       // The feature's substance, in plain words: link, redefine, break.
-      expect(GRAPHIC_STYLES_NOTE).toContain(
+      expect(t(GRAPHIC_STYLES_NOTE)).toContain(
         "stacked fills and strokes plus the object's",
       );
-      expect(GRAPHIC_STYLES_NOTE).toContain(
+      expect(t(GRAPHIC_STYLES_NOTE)).toContain(
         "Redefine updates every linked object",
       );
-      expect(GRAPHIC_STYLES_NOTE).toContain(
+      expect(t(GRAPHIC_STYLES_NOTE)).toContain(
         "Break link keeps the look and drops the link",
       );
       // The OVERRIDE decision, stated where the author can read it.
-      expect(GRAPHIC_STYLES_NOTE).toContain(
+      expect(t(GRAPHIC_STYLES_NOTE)).toContain(
         "keeps the link and marks the object overridden",
       );
-      expect(GRAPHIC_STYLES_NOTE).toContain(
+      expect(t(GRAPHIC_STYLES_NOTE)).toContain(
         "the next Redefine replaces that change",
       );
       // Where the library lives — and that it is outside the undo stack.
-      expect(GRAPHIC_STYLES_NOTE).toContain(
+      expect(t(GRAPHIC_STYLES_NOTE)).toContain(
         "The library is saved in the document",
       );
-      expect(GRAPHIC_STYLES_NOTE).toContain("cannot be undone");
+      expect(t(GRAPHIC_STYLES_NOTE)).toContain("cannot be undone");
       // The limits that are real and must not quietly disappear.
-      expect(GRAPHIC_STYLES_NOTE).toContain("Lines have no fill");
-      expect(GRAPHIC_STYLES_NOTE).toContain(
+      expect(t(GRAPHIC_STYLES_NOTE)).toContain("Lines have no fill");
+      expect(t(GRAPHIC_STYLES_NOTE)).toContain(
         "a baked appearance has to be released",
       );
     });

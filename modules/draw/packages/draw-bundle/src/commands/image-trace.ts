@@ -148,6 +148,13 @@ import {
 import { insertPathMutationFor } from "../handlers/insert-path";
 
 import { registerCommand } from "../command-registry";
+import { defineMessages } from "@paged-media/strings";
+
+/** Command titles, message keys `registerCommand` reads in the editor's locale. */
+const M = defineMessages("draw.imageTrace", {
+  title:
+    "Image: Trace placed image to vector paths (one-shot, fills only — not Illustrator's live Image Trace)",
+});
 export const IMAGE_TRACE_COMMAND_CATEGORY = "Image";
 
 export const IMAGE_TRACE_COMMAND_ID = "media.paged.draw.command.imageTrace";
@@ -155,12 +162,11 @@ export const IMAGE_TRACE_COMMAND_ID = "media.paged.draw.command.imageTrace";
 /** The contributed command ids, in registration order. */
 export const IMAGE_TRACE_COMMAND_IDS = [IMAGE_TRACE_COMMAND_ID];
 
-/** The command title. Long on purpose: `CommandContribution` has no
+/** The command title's message key (`registerCommand` reads it in the
+ *  editor's locale). Long on purpose: `CommandContribution` has no
  *  description field, so the title is the ONLY place the honest scope can
  *  reach a user who never opens the source. */
-export const IMAGE_TRACE_COMMAND_TITLE =
-  "Image: Trace placed image to vector paths " +
-  "(one-shot, fills only — not Illustrator's live Image Trace)";
+export const IMAGE_TRACE_COMMAND_TITLE = M.title;
 
 // ------------------------------------------------------------- record
 

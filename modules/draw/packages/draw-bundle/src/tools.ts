@@ -36,6 +36,7 @@ import type {
   CursorSpec,
   ToolContribution,
 } from "@paged-media/plugin-api";
+import { defineMessages, t } from "@paged-media/strings";
 
 import { createAnchorEditHandler } from "./handlers/anchors";
 import {
@@ -67,6 +68,30 @@ import {
   WIDTH_OPTIONS,
   toolOptionsSpecOf,
 } from "./tool-options";
+
+/** The tool names, read in the editor's locale when the bundle activates. */
+const M = defineMessages("draw.tools", {
+  addAnchor: "Add Anchor Point",
+  deleteAnchor: "Delete Anchor Point",
+  convertAnchor: "Convert Direction Point",
+  curvature: "Curvature",
+  gradientAnnotator: "Gradient Annotator",
+  measure: "Measure",
+  shapeBuilder: "Shape Builder",
+  cornerRadius: "Corner Radius",
+  paintbrush: "Paintbrush",
+  blobBrush: "Blob Brush",
+  eraser: "Eraser",
+  eyedropper: "Eyedropper",
+  width: "Width",
+  lassoSelect: "Lasso Select",
+  livePaintBucket: "Live Paint Bucket",
+  livePaintSelection: "Live Paint Selection",
+  typeOnPath: "Type on a Path (attach story)",
+  repeat: "Repeat (steer the selected repeat)",
+  knife: "Knife",
+  scissorsAnyPoint: "Scissors (any point)",
+});
 
 const CROSS: CursorSpec = { kind: "css", token: "crosshair" };
 
@@ -137,7 +162,7 @@ export function drawTools(host: BundleHost): ToolContribution[] {
   return [
     {
       id: "media.paged.draw.tool.addAnchor",
-      title: "Add Anchor Point",
+      title: t(M.addAnchor),
       icon: "tool-addAnchor",
       shortcut: "=",
       group: "pen",
@@ -148,7 +173,7 @@ export function drawTools(host: BundleHost): ToolContribution[] {
     },
     {
       id: "media.paged.draw.tool.deleteAnchor",
-      title: "Delete Anchor Point",
+      title: t(M.deleteAnchor),
       icon: "tool-deleteAnchor",
       shortcut: "-",
       group: "pen",
@@ -159,7 +184,7 @@ export function drawTools(host: BundleHost): ToolContribution[] {
     },
     {
       id: "media.paged.draw.tool.convertAnchor",
-      title: "Convert Direction Point",
+      title: t(M.convertAnchor),
       icon: "tool-convertAnchor",
       shortcut: "shift+c",
       group: "pen",
@@ -175,7 +200,7 @@ export function drawTools(host: BundleHost): ToolContribution[] {
     // Pencil (`paged.tool.pencil`, ADR 359).
     {
       id: "media.paged.draw.tool.curvature",
-      title: "Curvature",
+      title: t(M.curvature),
       icon: "tool-curvature",
       // shift+u — yields shift+p to the built-in Page tool (InDesign-canonical);
       // INV-REG-1 keeps every single-key tool shortcut unique across bundles.
@@ -188,7 +213,7 @@ export function drawTools(host: BundleHost): ToolContribution[] {
     },
     {
       id: "media.paged.draw.tool.gradientAnnotator",
-      title: "Gradient Annotator",
+      title: t(M.gradientAnnotator),
       icon: "tool-gradient",
       // shift+a — yields shift+g to the built-in Gradient Feather tool
       // (InDesign-canonical); INV-REG-1 keeps tool shortcuts unique.
@@ -201,7 +226,7 @@ export function drawTools(host: BundleHost): ToolContribution[] {
     },
     {
       id: "media.paged.draw.tool.measure",
-      title: "Measure",
+      title: t(M.measure),
       icon: "tool-measure",
       shortcut: "shift+m",
       group: "measure",
@@ -215,7 +240,7 @@ export function drawTools(host: BundleHost): ToolContribution[] {
     // the gesture decides the operand set + mode (handlers/shape-builder.ts).
     {
       id: "media.paged.draw.tool.shapeBuilder",
-      title: "Shape Builder",
+      title: t(M.shapeBuilder),
       icon: "tool-shapeBuilder",
       shortcut: "shift+b",
       group: "shapeBuilder",
@@ -231,7 +256,7 @@ export function drawTools(host: BundleHost): ToolContribution[] {
     // uniform one).
     {
       id: "media.paged.draw.tool.cornerRadius",
-      title: "Corner Radius",
+      title: t(M.cornerRadius),
       icon: "tool-cornerRadius",
       shortcut: "shift+r",
       group: "cornerRadius",
@@ -256,7 +281,7 @@ export function drawTools(host: BundleHost): ToolContribution[] {
     // other plugin bundles (paged.image holds shift+x).
     {
       id: "media.paged.draw.tool.paintbrush",
-      title: "Paintbrush",
+      title: t(M.paintbrush),
       icon: "tool-paintbrush",
       shortcut: "shift+j",
       group: "pen",
@@ -268,7 +293,7 @@ export function drawTools(host: BundleHost): ToolContribution[] {
     },
     {
       id: "media.paged.draw.tool.blobBrush",
-      title: "Blob Brush",
+      title: t(M.blobBrush),
       icon: "tool-blobBrush",
       shortcut: "shift+k",
       group: "pen",
@@ -280,7 +305,7 @@ export function drawTools(host: BundleHost): ToolContribution[] {
     },
     {
       id: "media.paged.draw.tool.eraserBrush",
-      title: "Eraser",
+      title: t(M.eraser),
       icon: "tool-eraserBrush",
       shortcut: "shift+i",
       group: "pen",
@@ -308,7 +333,7 @@ export function drawTools(host: BundleHost): ToolContribution[] {
     // scope) and apply them to the selection; Alt+click samples only.
     {
       id: "media.paged.draw.tool.eyedropper",
-      title: "Eyedropper",
+      title: t(M.eyedropper),
       icon: "tool-eyedropper",
       shortcut: "shift+d",
       group: "eyedropper",
@@ -322,7 +347,7 @@ export function drawTools(host: BundleHost): ToolContribution[] {
     // outlineStrokeVariable on release (handlers/width.ts).
     {
       id: "media.paged.draw.tool.width",
-      title: "Width",
+      title: t(M.width),
       icon: "tool-width",
       shortcut: "shift+s",
       group: "width",
@@ -339,7 +364,7 @@ export function drawTools(host: BundleHost): ToolContribution[] {
     // what intersection costs.
     {
       id: "media.paged.draw.tool.lassoSelect",
-      title: "Lasso Select",
+      title: t(M.lassoSelect),
       icon: "tool-lassoSelect",
       shortcut: "shift+q",
       group: "lassoSelect",
@@ -387,7 +412,7 @@ export function drawTools(host: BundleHost): ToolContribution[] {
     // of a compound thing".
     {
       id: "media.paged.draw.tool.livePaintBucket",
-      title: "Live Paint Bucket",
+      title: t(M.livePaintBucket),
       icon: "tool-gradientSwatch",
       shortcut: "k",
       group: "livePaintBucket",
@@ -398,7 +423,7 @@ export function drawTools(host: BundleHost): ToolContribution[] {
     },
     {
       id: "media.paged.draw.tool.livePaintSelect",
-      title: "Live Paint Selection",
+      title: t(M.livePaintSelection),
       icon: "tool-directSelect",
       shortcut: "shift+v",
       group: "livePaintSelect",
@@ -435,7 +460,7 @@ export function drawTools(host: BundleHost): ToolContribution[] {
     // every platform and binding it to a tool would be a trap.
     {
       id: "media.paged.draw.tool.typeOnPath",
-      title: "Type on a Path (attach story)",
+      title: t(M.typeOnPath),
       icon: "tool-typePath",
       shortcut: "shift+h",
       group: "type",
@@ -476,7 +501,7 @@ export function drawTools(host: BundleHost): ToolContribution[] {
     // a shared real glyph beats a made-up specific one.
     {
       id: "media.paged.draw.tool.repeat",
-      title: "Repeat (steer the selected repeat)",
+      title: t(M.repeat),
       icon: "tool-rotate",
       group: "repeat",
       section: "transform",
@@ -498,7 +523,7 @@ export function drawTools(host: BundleHost): ToolContribution[] {
     // token renders the rail button glyphless.
     {
       id: "media.paged.draw.tool.knife",
-      title: "Knife",
+      title: t(M.knife),
       icon: "tool-scissors",
       group: "scissors",
       section: "transform",
@@ -513,7 +538,7 @@ export function drawTools(host: BundleHost): ToolContribution[] {
     // reason as the Knife above.
     {
       id: "media.paged.draw.tool.scissorsAnyPoint",
-      title: "Scissors (any point)",
+      title: t(M.scissorsAnyPoint),
       icon: "tool-scissors",
       group: "scissors",
       section: "transform",

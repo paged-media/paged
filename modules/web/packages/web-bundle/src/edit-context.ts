@@ -37,6 +37,7 @@
 // web-model's `isWebFrameEnvelope` (an inline source, or a pointer to a
 // large source's container part) — no second predicate to drift.
 
+import { defineMessages, t } from "@paged-media/strings";
 import type {
   EditContextContribution,
   ObjectTypeContribution,
@@ -50,6 +51,13 @@ import {
 
 import type { InFrameEditSession } from "./in-frame-edit";
 import type { DraftSession } from "./panels/draft-store";
+
+const M = defineMessages("web.edit", {
+  undoSource: "Undo source edit",
+  redoSource: "Redo source edit",
+  undoTyping: "Undo typing",
+  redoTyping: "Redo typing",
+});
 
 export const WEB_FRAME_TYPE = "webFrame";
 
@@ -100,8 +108,8 @@ export function makeWebFrameEditContext(
         onRedo: () => (active ? session.redo(active) : false),
         onCanUndo: () => (active ? session.canUndo(active) : false),
         onCanRedo: () => (active ? session.canRedo(active) : false),
-        undoLabel: () => "Undo source edit",
-        redoLabel: () => "Redo source edit",
+        undoLabel: () => t(M.undoSource),
+        redoLabel: () => t(M.redoSource),
       }
     : {};
   // In-frame text editing (in-frame-edit.ts): a click on rendered text opens
@@ -156,10 +164,8 @@ export function makeWebFrameEditContext(
           inFrame.isEditing()
             ? inFrame.canRedo()
             : (undoHooks.onCanRedo?.() ?? false),
-        undoLabel: () =>
-          inFrame.isEditing() ? "Undo typing" : "Undo source edit",
-        redoLabel: () =>
-          inFrame.isEditing() ? "Redo typing" : "Redo source edit",
+        undoLabel: () => t(inFrame.isEditing() ? M.undoTyping : M.undoSource),
+        redoLabel: () => t(inFrame.isEditing() ? M.redoTyping : M.redoSource),
       }
     : {};
   return {

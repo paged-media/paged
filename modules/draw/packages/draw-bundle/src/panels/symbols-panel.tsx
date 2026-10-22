@@ -61,28 +61,54 @@ import {
   color,
   ConfirmButton,
   font,
-  humanize,
   Refusal,
   useActionFeedback,
 } from "@paged-media/panel-kit";
-import { PanelIntro } from "./panel-parts";
+import { PanelIntro, tokenLabel } from "./panel-parts";
+import { defineMessages, t, useStrings } from "@paged-media/strings";
+
+const M = defineMessages("draw.symbolsPanel", {
+  summary:
+    "Save artwork as a named symbol and place linked copies of it; Redefine updates every copy.",
+  note: "Placing a symbol adds an instance linked to its definition. Redefine rebuilds every instance, so changes made to an instance are lost. Reset transform rebuilds the selected instance where it is, undoing any scaling or edits. Break link keeps the artwork and drops the link. The library is saved in the document. Defining, renaming and deleting a symbol cannot be undone. Text cannot go into a symbol, and live corners, placed images, gradients and appearance stacks are not kept.",
+  rowLabel:
+    "{pieces, plural, one {# piece} other {# pieces}} · {registration} registration · {instances, plural, one {# instance} other {# instances}}",
+  heading: "Symbols",
+  defineHint:
+    "Save the selection as a new symbol (the selection itself is not changed)",
+  selectArtwork: "Select artwork first",
+  fromSelection: "+ From selection",
+  resetHint:
+    "Rebuild the selected instance where it is, undoing any scaling or edits",
+  selectInstance: "Select a symbol instance first",
+  resetTransform: "Reset transform",
+  breakHint: "Keep the selected instance's artwork and drop its link",
+  breakLink: "Break link",
+  degraded:
+    "This editor cannot save data into the document, so symbols are not available here.",
+  selectHint:
+    "Select artwork to capture it as a symbol, or select an instance to reset or unlink it.",
+  library: "Library",
+  empty: "No symbols yet — select artwork and capture its definition.",
+  instance: "instance",
+  placeHint: "Place an instance at the definition's capture point",
+  place: "Place",
+  redefineHint:
+    "Redefine from the selection: {count, plural, one {# instance is rebuilt and loses its own edits} other {# instances are rebuilt and lose their own edits}}",
+  redefine: "Redefine",
+  delete: "Delete",
+  deleteHint:
+    "Delete the symbol and unlink its instances (the placed artwork stays). Cannot be undone.",
+  title: "Symbols",
+});
 
 export const SYMBOLS_PANEL_ID = "media.paged.draw.panel.symbols";
 
 /** What the panel is for, in one sentence (shown at the top). */
-export const SYMBOLS_SUMMARY =
-  "Save artwork as a named symbol and place linked copies of it; " +
-  "Redefine updates every copy.";
+export const SYMBOLS_SUMMARY = M.summary;
 
 /** The "About" text. Exported so the conformance spec pins the wording. */
-export const SYMBOLS_NOTE =
-  "Placing a symbol adds an instance linked to its definition. Redefine " +
-  "rebuilds every instance, so changes made to an instance are lost. " +
-  "Reset transform rebuilds the selected instance where it is, undoing " +
-  "any scaling or edits. Break link keeps the artwork and drops the link. " +
-  "The library is saved in the document. Defining, renaming and deleting " +
-  "a symbol cannot be undone. Text cannot go into a symbol, and live " +
-  "corners, placed images, gradients and appearance stacks are not kept.";
+export const SYMBOLS_NOTE = M.note;
 
 const rowStyle: React.CSSProperties = {
   display: "flex",
@@ -128,11 +154,11 @@ export function symbolRowLabel(
   instances: number,
 ): string {
   const pieces = symbol.pieces.length;
-  return (
-    `${pieces} piece${pieces === 1 ? "" : "s"} · ` +
-    `${humanize(symbol.registration).toLowerCase()} registration · ` +
-    `${instances} instance${instances === 1 ? "" : "s"}`
-  );
+  return t(M.rowLabel, {
+    pieces,
+    registration: tokenLabel(symbol.registration).toLowerCase(),
+    instances,
+  });
 }
 
 export function makeSymbolsPanel(host: BundleHost): {
@@ -141,6 +167,7 @@ export function makeSymbolsPanel(host: BundleHost): {
   defaultDock: "right";
 } {
   const Component: React.FC<PanelProps> = () => {
+    const s = useStrings();
     const [symbols, setSymbols] = React.useState<SymbolDefinition[]>([]);
     const [counts, setCounts] = React.useState<Record<string, number>>({});
     const [selected, setSelected] = React.useState<string[]>([]);
@@ -189,53 +216,44 @@ export function makeSymbolsPanel(host: BundleHost): {
         data-draw-symbols-portable={portable ? "true" : "false"}
         data-draw-symbol-selected={selected[0] ?? ""}
       >
-        <PanelIntro summary={SYMBOLS_SUMMARY} attr="data-draw-symbols-intro" />
+        <PanelIntro
+          summary={s.t(SYMBOLS_SUMMARY)}
+          attr="data-draw-symbols-intro"
+        />
         <div style={{ ...rowStyle, justifyContent: "space-between" }}>
           <span style={{ ...sectionStyle, paddingTop: 0 }}>
-            Symbols ({symbols.length})
+            {s.t(M.heading)} ({symbols.length})
           </span>
           <span style={{ display: "flex", gap: 4 }}>
             <button
               type="button"
               style={iconBtn}
-              title={
-                hasSelection
-                  ? "Save the selection as a new symbol (the selection itself is not changed)"
-                  : "Select artwork first"
-              }
+              title={hasSelection ? s.t(M.defineHint) : s.t(M.selectArtwork)}
               data-draw-symbol-define
               disabled={!hasSelection}
               onClick={() => void run(() => applyDefineSymbol(host))}
             >
-              + From selection
+              {s.t(M.fromSelection)}
             </button>
             <button
               type="button"
               style={iconBtn}
-              title={
-                isInstance
-                  ? "Rebuild the selected instance where it is, undoing any scaling or edits"
-                  : "Select a symbol instance first"
-              }
+              title={isInstance ? s.t(M.resetHint) : s.t(M.selectInstance)}
               data-draw-symbol-reset
               disabled={!isInstance}
               onClick={() => void run(() => applyResetSymbolTransform(host))}
             >
-              Reset transform
+              {s.t(M.resetTransform)}
             </button>
             <button
               type="button"
               style={iconBtn}
-              title={
-                isInstance
-                  ? "Keep the selected instance's artwork and drop its link"
-                  : "Select a symbol instance first"
-              }
+              title={isInstance ? s.t(M.breakHint) : s.t(M.selectInstance)}
               data-draw-symbol-break
               disabled={!isInstance}
               onClick={() => void run(() => applyBreakSymbolLink(host))}
             >
-              Break link
+              {s.t(M.breakLink)}
             </button>
           </span>
         </div>
@@ -244,23 +262,15 @@ export function makeSymbolsPanel(host: BundleHost): {
 
         {!portable && (
           <div style={mutedStyle} data-draw-symbols-degraded>
-            This editor cannot save data into the document, so symbols are not
-            available here.
+            {s.t(M.degraded)}
           </div>
         )}
 
-        {!hasSelection && (
-          <div style={mutedStyle}>
-            Select artwork to capture it as a symbol, or select an instance to
-            reset or unlink it.
-          </div>
-        )}
+        {!hasSelection && <div style={mutedStyle}>{s.t(M.selectHint)}</div>}
 
-        <div style={sectionStyle}>Library</div>
+        <div style={sectionStyle}>{s.t(M.library)}</div>
         {symbols.length === 0 ? (
-          <div style={mutedStyle}>
-            No symbols yet — select artwork and capture its definition.
-          </div>
+          <div style={mutedStyle}>{s.t(M.empty)}</div>
         ) : (
           symbols.map((symbol) => {
             const instances = counts[symbol.id] ?? 0;
@@ -284,25 +294,25 @@ export function makeSymbolsPanel(host: BundleHost): {
                 >
                   {symbol.name}
                 </span>
-                {followed && <span style={tagStyle}>instance</span>}
+                {followed && <span style={tagStyle}>{s.t(M.instance)}</span>}
                 <button
                   type="button"
                   style={iconBtn}
-                  title="Place an instance at the definition's capture point"
+                  title={s.t(M.placeHint)}
                   data-draw-symbol-place
                   onClick={() =>
                     void run(() => applyPlaceSymbolInstance(host, symbol.id))
                   }
                 >
-                  Place
+                  {s.t(M.place)}
                 </button>
                 <button
                   type="button"
                   style={iconBtn}
                   title={
                     hasSelection
-                      ? `Redefine from the selection: ${instances} instance${instances === 1 ? " is" : "s are"} rebuilt and lose their own edits`
-                      : "Select artwork first"
+                      ? s.t(M.redefineHint, { count: instances })
+                      : s.t(M.selectArtwork)
                   }
                   data-draw-symbol-redefine
                   disabled={!hasSelection}
@@ -310,12 +320,12 @@ export function makeSymbolsPanel(host: BundleHost): {
                     void run(() => applyRedefineSymbol(host, symbol.id))
                   }
                 >
-                  Redefine
+                  {s.t(M.redefine)}
                 </button>
                 <ConfirmButton
                   style={iconBtn}
-                  label="Delete"
-                  title="Delete the symbol and unlink its instances (the placed artwork stays). Cannot be undone."
+                  label={s.t(M.delete)}
+                  title={s.t(M.deleteHint)}
                   data-draw-symbol-delete
                   onConfirm={() =>
                     void run(() => applyDeleteSymbol(host, symbol.id))
@@ -326,12 +336,12 @@ export function makeSymbolsPanel(host: BundleHost): {
           })
         )}
 
-        <About attr="data-draw-symbols-note">{SYMBOLS_NOTE}</About>
+        <About attr="data-draw-symbols-note">{s.t(SYMBOLS_NOTE)}</About>
       </div>
     );
   };
   return {
-    title: "Symbols",
+    title: t(M.title),
     component: Component,
     defaultDock: "right",
   };

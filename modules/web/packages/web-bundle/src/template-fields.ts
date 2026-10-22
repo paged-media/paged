@@ -41,6 +41,7 @@
 // loads), and content that no longer fits the frame answers the field's
 // problem: the value stays written, as an overset story stays typed.
 
+import { defineMessages, t } from "@paged-media/strings";
 import type {
   Address,
   BundleHost,
@@ -65,6 +66,34 @@ import { resolveDocumentVars } from "./bindings";
 import { loadWebEngine } from "./engine-loader";
 import { ingestHtml } from "./panels/ingest";
 import { DOCUMENT_VALUE_KEY, loadWebSource } from "./source-part";
+
+const M = defineMessages("web.templateFields", {
+  wrongFrame:
+    "The field names the web frame {frame}, but it is on item {item}.",
+  none: "(none)",
+  notPermitted: "{permission} is not permitted on {target}",
+  refused: "refused",
+  notWebFrame: "Item {item} is not a web frame.",
+  sourceMissing: "The source of web frame {item} is missing.",
+  undoLabel: "Fill template field",
+  // `{why}` is the reason in its parentheses (see web.source.tags).
+  notAllowed:
+    "The template does not let this field change the web frame {why}.",
+  noLongerFits:
+    "The value was written, but the content no longer fits the web frame.",
+  valueTitle: "Web value",
+  sourceTitle: "Web source",
+  cssVarTitle: "Web CSS variable",
+  needsDocName: `The field's definition needs a name of the form "doc.<key>".`,
+  valueMustBeText: "The value must be text.",
+  doesNotUse: "This web frame does not use {name}.",
+  needsLane: `The field's definition needs a lane, "html" or "css".`,
+  sourceMustBeText: "The source must be text.",
+  noClosingStyle: "The CSS may not contain a closing style tag.",
+  needsCssName: `The field's definition needs a custom property name ("--name").`,
+  notAllowedValue: `"{value}" is not one of the values this field allows.`,
+  notCssValue: "The value is not a CSS value: {problem}.",
+});
 
 const KIND = {
   value: "media.paged.web.value",
@@ -101,16 +130,19 @@ async function frameOf(
     const id = raw.includes(":") ? raw.slice(raw.lastIndexOf(":") + 1) : raw;
     if (id !== field.targetId)
       return {
-        problem: `The field names the web frame ${raw || "(none)"}, but it is on item ${field.targetId}.`,
+        problem: t(M.wrongFrame, {
+          frame: raw || t(M.none),
+          item: field.targetId,
+        }),
       };
   }
   const { found } = await discoverWebFrames(host);
   const hit = found.find((f) => (f.id as { id: string }).id === field.targetId);
-  if (!hit) return { problem: `Item ${field.targetId} is not a web frame.` };
+  if (!hit) return { problem: t(M.notWebFrame, { item: field.targetId }) };
   const source = await loadWebSource(host, hit.id);
   if (!source)
     return {
-      problem: `The source of web frame ${field.targetId} is missing.`,
+      problem: t(M.sourceMissing, { item: field.targetId }),
     };
   return {
     id: hit.id,
@@ -129,11 +161,11 @@ function why(reason: string | undefined): string {
       }
     ).error?.details;
     if (d?.permission && d.target)
-      return `${d.permission} is not permitted on ${d.target}`;
+      return t(M.notPermitted, { permission: d.permission, target: d.target });
   } catch {
     // a plain sentence
   }
-  return reason ?? "refused";
+  return reason ?? t(M.refused);
 }
 
 /** Write one path of the frame's object through `host.objects`, then
@@ -147,12 +179,10 @@ async function writeAndRender(
   value: unknown,
 ): Promise<TemplateFieldWrite> {
   const out = await ctx.objects.set(address, path, value, {
-    label: "Fill template field",
+    label: t(M.undoLabel),
   });
   if (!out.applied)
-    return refuse(
-      `The template does not let this field change the web frame (${why(out.reason)}).`,
-    );
+    return refuse(t(M.notAllowed, { why: `(${why(out.reason)})` }));
   const engine = await loadWebEngine(host).catch(() => null);
   if (!engine) return { ok: true };
   const source = await loadWebSource(host, frame.id);
@@ -160,11 +190,7 @@ async function writeAndRender(
     ? (await bakeWebFlows(host, frame.id, engine)).overset
     : (await bakeWebFrame(host, frame.id, engine, { allowGrow: false }))
         .overset;
-  return overset
-    ? refuse(
-        "The value was written, but the content no longer fits the web frame.",
-      )
-    : { ok: true };
+  return overset ? refuse(t(M.noLongerFits)) : { ok: true };
 }
 
 // ------------------------------------------------------------- value
@@ -188,7 +214,7 @@ const unescapeText = (s: string) =>
 function valueKind(host: BundleHost): TemplateFieldKindContribution<string> {
   return {
     kind: KIND.value,
-    title: "Web value",
+    title: t(M.valueTitle),
     control: { kind: "text" },
     grants: [],
     async read(_ctx, field) {
@@ -202,15 +228,12 @@ function valueKind(host: BundleHost): TemplateFieldKindContribution<string> {
     },
     async write(ctx, field, value) {
       const name = valueName(field);
-      if (!name)
-        return refuse(
-          'The field\'s definition needs a name of the form "doc.<key>".',
-        );
-      if (typeof value !== "string") return refuse("The value must be text.");
+      if (!name) return refuse(t(M.needsDocName));
+      if (typeof value !== "string") return refuse(t(M.valueMustBeText));
       const frame = await frameOf(host, field);
       if ("problem" in frame) return refuse(frame.problem);
       if (!boundNamesIn(frame.source).includes(name))
-        return refuse(`This web frame does not use {{${name}}}.`);
+        return refuse(t(M.doesNotUse, { name: `{{${name}}}` }));
       return writeAndRender(host, ctx, frame, frame.address, "vars", {
         ...frame.source.vars,
         [name]: escapeText(value),
@@ -229,7 +252,7 @@ const laneOf = (field: TemplateFieldRef): "html" | "css" | null => {
 function sourceKind(host: BundleHost): TemplateFieldKindContribution<string> {
   return {
     kind: KIND.source,
-    title: "Web source",
+    title: t(M.sourceTitle),
     control: { kind: "text", multiline: true },
     grants: [],
     async read(_ctx, field) {
@@ -240,16 +263,15 @@ function sourceKind(host: BundleHost): TemplateFieldKindContribution<string> {
     },
     async write(ctx, field, value) {
       const lane = laneOf(field);
-      if (!lane)
-        return refuse('The field\'s definition needs a lane, "html" or "css".');
-      if (typeof value !== "string") return refuse("The source must be text.");
+      if (!lane) return refuse(t(M.needsLane));
+      if (typeof value !== "string") return refuse(t(M.sourceMustBeText));
       const frame = await frameOf(host, field);
       if ("problem" in frame) return refuse(frame.problem);
       // HTML from outside is sanitised on the way in, as a paste is (page
       // JavaScript never runs); CSS may not close the style element the
       // frame's document puts it in.
       if (lane === "css" && /<\/style/i.test(value))
-        return refuse("The CSS may not contain a closing style tag.");
+        return refuse(t(M.noClosingStyle));
       const text = lane === "html" ? ingestHtml(value).html : value;
       return writeAndRender(host, ctx, frame, frame.address, lane, text);
     },
@@ -287,7 +309,7 @@ const cssVarName = (field: TemplateFieldRef): string | null => {
 function cssVarKind(host: BundleHost): TemplateFieldKindContribution<string> {
   return {
     kind: KIND.cssVar,
-    title: "Web CSS variable",
+    title: t(M.cssVarTitle),
     control: { kind: "text" },
     grants: [],
     describe(_ctx, field): TemplateFieldControl {
@@ -307,16 +329,13 @@ function cssVarKind(host: BundleHost): TemplateFieldKindContribution<string> {
     },
     async write(ctx, field, value) {
       const name = cssVarName(field);
-      if (!name)
-        return refuse(
-          'The field\'s definition needs a custom property name ("--name").',
-        );
-      if (typeof value !== "string") return refuse("The value must be text.");
+      if (!name) return refuse(t(M.needsCssName));
+      if (typeof value !== "string") return refuse(t(M.valueMustBeText));
       const allowed = allowedOf(field);
       if (allowed.length > 0 && !allowed.some((a) => a.value === value))
-        return refuse(`"${value}" is not one of the values this field allows.`);
+        return refuse(t(M.notAllowedValue, { value }));
       const problem = cssVarValueProblem(value);
-      if (problem) return refuse(`The value is not a CSS value: ${problem}.`);
+      if (problem) return refuse(t(M.notCssValue, { problem }));
       const frame = await frameOf(host, field);
       if ("problem" in frame) return refuse(frame.problem);
       return writeAndRender(

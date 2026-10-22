@@ -30,6 +30,12 @@ import { Fragment, useState } from "react";
 import type { ReactNode } from "react";
 import { onDidChangeOf, useLive } from "@paged-media/react-live";
 import {
+  createStrings,
+  defineMessages,
+  t,
+  useStrings,
+} from "@paged-media/strings";
+import {
   About,
   color,
   Disclosure,
@@ -69,6 +75,12 @@ import {
   isIdentity,
 } from "../engine";
 import type { AspectPreset } from "../crop-machine";
+import {
+  COLOR_NAMES,
+  gradientKindLabel,
+  toneRangeLabel,
+  warpKindLabel,
+} from "../words";
 
 import { CanvasSection, type CanvasSize } from "./sections/canvas-section";
 import { HueSatSection } from "./sections/hue-sat-section";
@@ -219,6 +231,11 @@ function Gate({
 
 // ── histogram ────────────────────────────────────────────────────────
 
+const GRAPH = defineMessages("image.graph", {
+  histogram: "RGB and luma histogram",
+  curve: "Tone curve editor",
+});
+
 const HIST_W = 256;
 const HIST_H = 60;
 
@@ -260,7 +277,7 @@ function HistogramView({ hist }: { hist: ImageHistogram }) {
         borderRadius: "3px",
       }}
       role="img"
-      aria-label="RGB and luma histogram"
+      aria-label={t(GRAPH.histogram)}
     >
       <path d={channelPath(hist.luma, max)} fill="rgba(160,160,160,0.5)" />
       <path d={channelPath(hist.r, max)} fill="rgba(220,60,60,0.55)" />
@@ -349,7 +366,7 @@ function CurveEditor({
       onPointerUp={() => setDrag(null)}
       onPointerLeave={() => setDrag(null)}
       role="img"
-      aria-label="Tone curve editor"
+      aria-label={t(GRAPH.curve)}
     >
       <line
         x1="0"
@@ -394,38 +411,46 @@ const ASPECTS: AspectPreset[] = [
 
 // ── colour presets ───────────────────────────────────────────────────
 
-/** A few conventional photo-filter gels (straight RGB in [0,1]). The
+/** A few conventional photo-filter gels (straight RGB in [0,1]), named by
+ *  message key (read through `t` at render). The
  *  kernel takes an arbitrary colour — this is the shortlist the panel
  *  offers instead of a colour picker the shell does not provide. */
 const PHOTO_FILTERS: Array<{ name: string; rgb: [number, number, number] }> = [
-  { name: "Warming (85)", rgb: [0.925, 0.639, 0.365] },
-  { name: "Warming (81)", rgb: [0.92, 0.78, 0.55] },
-  { name: "Cooling (80)", rgb: [0.0, 0.44, 0.88] },
-  { name: "Cooling (82)", rgb: [0.44, 0.71, 0.94] },
-  { name: "Sepia", rgb: [0.67, 0.51, 0.25] },
-  { name: "Red", rgb: [0.91, 0.14, 0.16] },
-  { name: "Green", rgb: [0.14, 0.71, 0.32] },
-  { name: "Blue", rgb: [0.11, 0.28, 0.82] },
+  { name: COLOR_NAMES.warming85, rgb: [0.925, 0.639, 0.365] },
+  { name: COLOR_NAMES.warming81, rgb: [0.92, 0.78, 0.55] },
+  { name: COLOR_NAMES.cooling80, rgb: [0.0, 0.44, 0.88] },
+  { name: COLOR_NAMES.cooling82, rgb: [0.44, 0.71, 0.94] },
+  { name: COLOR_NAMES.sepia, rgb: [0.67, 0.51, 0.25] },
+  { name: COLOR_NAMES.red, rgb: [0.91, 0.14, 0.16] },
+  { name: COLOR_NAMES.green, rgb: [0.14, 0.71, 0.32] },
+  { name: COLOR_NAMES.blue, rgb: [0.11, 0.28, 0.82] },
 ];
 
 /** The gradient stop wells (no colour-picker door in the contract, so
  *  the panel offers a shortlist — the ENGINE takes any RGBA). */
 const STOPS: Array<{ name: string; rgba: Rgba01 }> = [
-  { name: "Black", rgba: [0, 0, 0, 1] },
-  { name: "White", rgba: [1, 1, 1, 1] },
-  { name: "Red", rgba: [1, 0, 0, 1] },
-  { name: "Green", rgba: [0, 1, 0, 1] },
-  { name: "Blue", rgba: [0, 0, 1, 1] },
-  { name: "Transparent", rgba: [0, 0, 0, 0] },
+  { name: COLOR_NAMES.black, rgba: [0, 0, 0, 1] },
+  { name: COLOR_NAMES.white, rgba: [1, 1, 1, 1] },
+  { name: COLOR_NAMES.red, rgba: [1, 0, 0, 1] },
+  { name: COLOR_NAMES.green, rgba: [0, 1, 0, 1] },
+  { name: COLOR_NAMES.blue, rgba: [0, 0, 1, 1] },
+  { name: COLOR_NAMES.transparent, rgba: [0, 0, 0, 0] },
 ];
 
-/** Pen-pressure targets in the panel's words. */
-const PRESSURE_LABELS: Record<string, string> = {
-  none: "Nothing",
-  size: "Size",
-  opacity: "Opacity",
-  both: "Size and opacity",
-};
+/** Pen-pressure targets in the panel's words (message keys). */
+const PRESSURE_LABELS: Record<string, string> = defineMessages(
+  "image.pressure",
+  {
+    none: "Nothing",
+    size: "Size",
+    opacity: "Opacity",
+    both: "Size and opacity",
+  },
+);
+
+/** "shadows" → "Shadows" (a row label from a lower-case word). */
+const capitalize = (s: string): string =>
+  s.length === 0 ? s : s[0]!.toUpperCase() + s.slice(1);
 
 const stopCss = (c: Rgba01) =>
   `rgba(${Math.round(c[0] * 255)}, ${Math.round(c[1] * 255)}, ${Math.round(
@@ -438,15 +463,15 @@ const stopCss = (c: Rgba01) =>
  *  the shortlist the panel offers because the host contract wires no
  *  colour-picker door (the same reason the gradient stops are a list). */
 const BRUSH_COLORS: Array<{ name: string; rgba: Rgba01 }> = [
-  { name: "Black", rgba: [0, 0, 0, 1] },
-  { name: "White", rgba: [1, 1, 1, 1] },
-  { name: "50% grey", rgba: [0.5, 0.5, 0.5, 1] },
-  { name: "Red", rgba: [1, 0, 0, 1] },
-  { name: "Green", rgba: [0, 1, 0, 1] },
-  { name: "Blue", rgba: [0, 0, 1, 1] },
-  { name: "Yellow", rgba: [1, 1, 0, 1] },
-  { name: "Magenta", rgba: [1, 0, 1, 1] },
-  { name: "Cyan", rgba: [0, 1, 1, 1] },
+  { name: COLOR_NAMES.black, rgba: [0, 0, 0, 1] },
+  { name: COLOR_NAMES.white, rgba: [1, 1, 1, 1] },
+  { name: COLOR_NAMES.grey50, rgba: [0.5, 0.5, 0.5, 1] },
+  { name: COLOR_NAMES.red, rgba: [1, 0, 0, 1] },
+  { name: COLOR_NAMES.green, rgba: [0, 1, 0, 1] },
+  { name: COLOR_NAMES.blue, rgba: [0, 0, 1, 1] },
+  { name: COLOR_NAMES.yellow, rgba: [1, 1, 0, 1] },
+  { name: COLOR_NAMES.magenta, rgba: [1, 0, 1, 1] },
+  { name: COLOR_NAMES.cyan, rgba: [0, 1, 1, 1] },
 ];
 
 /**
@@ -456,39 +481,56 @@ const BRUSH_COLORS: Array<{ name: string; rgba: Rgba01 }> = [
  * edited away silently is not a guarantee (the paged.draw Appearance
  * panel's `APPEARANCE_BAKE_NOTE` convention).
  */
-export const BRUSH_SCOPE_NOTE =
-  "A stroke paints the active layer, not the flattened image — add a layer " +
-  "and what is underneath survives. A committed stroke is undoable: the " +
-  "tiles it touched are journaled and Undo restores them byte for byte. " +
-  "That history is bounded — 32 steps or 256 MB, whichever runs out first; " +
-  "past the bound the oldest edits are dropped and become permanent, and " +
-  "the panel says how many. Painting still replaces what it covers in its " +
-  "own layer: paint on the background and what it covered is gone until " +
-  "you undo. The document and the source file are never touched (the " +
-  "in-frame result stays a preview layer). A stroke still in flight can be " +
-  "abandoned — the base pixels are held until you release. While you drag, " +
-  "the frame shows the whole stack with the stroke composited into it; the " +
-  "adjustment chain re-runs on release.";
+const SCOPE = defineMessages("image.scope", {
+  brush:
+    "A stroke paints the active layer, not the flattened image — add a layer " +
+    "and what is underneath survives. A committed stroke is undoable: the " +
+    "tiles it touched are journaled and Undo restores them byte for byte. " +
+    "That history is bounded — 32 steps or 256 MB, whichever runs out first; " +
+    "past the bound the oldest edits are dropped and become permanent, and " +
+    "the panel says how many. Painting still replaces what it covers in its " +
+    "own layer: paint on the background and what it covered is gone until " +
+    "you undo. The document and the source file are never touched (the " +
+    "in-frame result stays a preview layer). A stroke still in flight can be " +
+    "abandoned — the base pixels are held until you release. While you drag, " +
+    "the frame shows the whole stack with the stroke composited into it; the " +
+    "adjustment chain re-runs on release.",
+  layers:
+    "Layers are canvas-extent layers composited bottom-up through the " +
+    "engine's own blend kernels — the same 26 blend modes the brush paints " +
+    "through. A layer holds pixels, an adjustment (it transforms everything " +
+    "beneath it) or a smart object (rescaling re-renders from the original); " +
+    "layers can be grouped, clipped and masked. Undo is one list for paint, " +
+    "fills and bakes and every change to the stack — adding, removing, " +
+    "reordering, opacity, blend, masks, groups, rotate, flip and canvas size; " +
+    "it is bounded, and the panel says when old steps fall off. A crop, " +
+    "resize or straighten flattens the stack, and the undo history goes with " +
+    "it. Export and save-back write the flattened composite, not the layers. " +
+    "A PSD opens as its own layers only when this model reproduces it " +
+    "exactly — 8- or 16-bit RGB, with no groups and no layer masks; anything " +
+    "else keeps Photoshop's merged composite as a single layer and says why.",
+  psdFlattened:
+    "While adjustments are set, the PSD export writes the adjusted image " +
+    "as one layer: these layers and their edits are not kept. Reset the " +
+    "adjustments to export the layers. The canvas shows the import-time " +
+    "flatten.",
+  psdKept:
+    "Edits land in the exported PSD (preservation-safe — a zero-edit " +
+    "export is byte-identical). The canvas shows the import-time flatten.",
+});
+
+/** The English source, which the specs pin (the panel renders the editor's
+ *  language through `t`). */
+const english = createStrings();
+
+export const BRUSH_SCOPE_NOTE = english.t(SCOPE.brush);
 
 /**
  * THE SCOPE OF THE LAYER GRAPH itself — what a layer here is and, more
  * to the point, what it is not. Exported and spec-pinned for the same
  * reason as [`BRUSH_SCOPE_NOTE`].
  */
-export const LAYERS_SCOPE_NOTE =
-  "Layers are canvas-extent layers composited bottom-up through the " +
-  "engine's own blend kernels — the same 26 blend modes the brush paints " +
-  "through. A layer holds pixels, an adjustment (it transforms everything " +
-  "beneath it) or a smart object (rescaling re-renders from the original); " +
-  "layers can be grouped, clipped and masked. Undo is one list for paint, " +
-  "fills and bakes and every change to the stack — adding, removing, " +
-  "reordering, opacity, blend, masks, groups, rotate, flip and canvas size; " +
-  "it is bounded, and the panel says when old steps fall off. A crop, " +
-  "resize or straighten flattens the stack, and the undo history goes with " +
-  "it. Export and save-back write the flattened composite, not the layers. " +
-  "A PSD opens as its own layers only when this model reproduces it " +
-  "exactly — 8- or 16-bit RGB, with no groups and no layer masks; anything " +
-  "else keeps Photoshop's merged composite as a single layer and says why.";
+export const LAYERS_SCOPE_NOTE = english.t(SCOPE.layers);
 
 /**
  * What the PSD exporter will do with the file's layers, given the
@@ -500,23 +542,41 @@ export function psdLayersNote(
   params: AdjustParams,
   layerCount: number,
 ): string {
-  if (!isIdentity(params) && layerCount > 1) {
-    return (
-      "While adjustments are set, the PSD export writes the adjusted image " +
-      "as one layer: these layers and their edits are not kept. Reset the " +
-      "adjustments to export the layers. The canvas shows the import-time " +
-      "flatten."
-    );
-  }
-  return (
-    "Edits land in the exported PSD (preservation-safe — a zero-edit " +
-    "export is byte-identical). The canvas shows the import-time flatten."
+  return t(
+    !isIdentity(params) && layerCount > 1 ? SCOPE.psdFlattened : SCOPE.psdKept,
   );
 }
 
+const BRUSH = defineMessages("image.brush", {
+  title: "Brush",
+  titleClipped: "Brush, clipped to the selection",
+  intro:
+    "Settings for the paint, pencil and eraser tools; size, hardness, " +
+    "opacity and flow are also in the tool options bar.",
+  size: "Size (px)",
+  hardness: "Hardness",
+  opacity: "Opacity",
+  flow: "Flow",
+  spacing: "Spacing (× diameter)",
+  blend: "Blend",
+  engineNotStarted: "{blend} (engine not started)",
+  colour: "Colour",
+  pressure: "Pen pressure drives",
+  stroke: "Stroke",
+  stats: "{dabs} dabs · {x},{y} {w}×{h}",
+  inProgress: "in progress",
+  needsGpu: "Painting needs WebGPU, so the paint tools are disabled here.",
+  undo: "Strokes paint the active layer, and Undo takes them back.",
+  shortlist:
+    "The colours are a shortlist, and the blend list comes from the engine " +
+    "itself. Settings are fixed for a stroke when it starts.",
+});
+
 /** The paint parameters section — a PURE component (props in, elements
  *  out, no hooks) so a spec can render it without a DOM and assert what
- *  it says. */
+ *  it says. Its words come from the active catalogue (`t`), which the
+ *  editor's provider sets, for the same reason: no context hook. The
+ *  sections below follow it. */
 export function BrushSection({
   brush,
   blendModes,
@@ -547,15 +607,12 @@ export function BrushSection({
   );
   return (
     <Section
-      title={`Brush${masked ? ", clipped to the selection" : ""}`}
+      title={t(masked ? BRUSH.titleClipped : BRUSH.title)}
       data-image-brush-section
     >
-      <div style={note}>
-        Settings for the paint, pencil and eraser tools; size, hardness, opacity
-        and flow are also in the tool options bar.
-      </div>
+      <div style={note}>{t(BRUSH.intro)}</div>
       <Slider
-        label="Size (px)"
+        label={t(BRUSH.size)}
         min={1}
         max={512}
         step={1}
@@ -564,7 +621,7 @@ export function BrushSection({
         onChange={(size) => onChange({ size })}
       />
       <Slider
-        label="Hardness"
+        label={t(BRUSH.hardness)}
         min={0}
         max={1}
         step={0.05}
@@ -573,7 +630,7 @@ export function BrushSection({
         onChange={(hardness) => onChange({ hardness })}
       />
       <Slider
-        label="Opacity"
+        label={t(BRUSH.opacity)}
         min={0}
         max={1}
         step={0.05}
@@ -582,7 +639,7 @@ export function BrushSection({
         onChange={(opacity) => onChange({ opacity })}
       />
       <Slider
-        label="Flow"
+        label={t(BRUSH.flow)}
         min={0}
         max={1}
         step={0.05}
@@ -591,7 +648,7 @@ export function BrushSection({
         onChange={(flow) => onChange({ flow })}
       />
       <Slider
-        label="Spacing (× diameter)"
+        label={t(BRUSH.spacing)}
         min={0.01}
         max={1}
         step={0.01}
@@ -600,7 +657,7 @@ export function BrushSection({
         onChange={(spacing) => onChange({ spacing })}
       />
       <div style={row}>
-        <label htmlFor="pg-image-brush-blend">Blend</label>
+        <label htmlFor="pg-image-brush-blend">{t(BRUSH.blend)}</label>
         <select
           id="pg-image-brush-blend"
           data-image-brush-blend
@@ -615,14 +672,14 @@ export function BrushSection({
               </option>
             ))
           ) : (
-            <option
-              value={brush.blend}
-            >{`${brush.blend} (engine not started)`}</option>
+            <option value={brush.blend}>
+              {t(BRUSH.engineNotStarted, { blend: brush.blend })}
+            </option>
           )}
         </select>
       </div>
       <div style={row}>
-        <label htmlFor="pg-image-brush-color">Colour</label>
+        <label htmlFor="pg-image-brush-color">{t(BRUSH.colour)}</label>
         <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
           <span style={swatch(stopCss(brush.color))} aria-hidden="true" />
           <select
@@ -638,14 +695,14 @@ export function BrushSection({
           >
             {BRUSH_COLORS.map((c, i) => (
               <option key={c.name} value={i}>
-                {c.name}
+                {t(c.name)}
               </option>
             ))}
           </select>
         </span>
       </div>
       <div style={row}>
-        <label htmlFor="pg-image-brush-pressure">Pen pressure drives</label>
+        <label htmlFor="pg-image-brush-pressure">{t(BRUSH.pressure)}</label>
         <select
           id="pg-image-brush-pressure"
           data-image-brush-pressure
@@ -655,45 +712,64 @@ export function BrushSection({
             onChange({ pressureTarget: e.target.value as PressureTarget })
           }
         >
-          {PRESSURE_TARGETS.map((t) => (
-            <option key={t} value={t}>
-              {PRESSURE_LABELS[t] ?? t}
+          {PRESSURE_TARGETS.map((target) => (
+            <option key={target} value={target}>
+              {PRESSURE_LABELS[target] ? t(PRESSURE_LABELS[target]) : target}
             </option>
           ))}
         </select>
       </div>
       {strokeActive ? (
         <div style={row}>
-          <span>Stroke</span>
+          <span>{t(BRUSH.stroke)}</span>
           <span style={mono} data-image-brush-stats>
             {strokeStats
-              ? `${strokeStats.dabs} dabs · ${Math.round(strokeStats.x)},${Math.round(
-                  strokeStats.y,
-                )} ${Math.round(strokeStats.w)}×${Math.round(strokeStats.h)}`
-              : "in progress"}
+              ? t(BRUSH.stats, {
+                  dabs: strokeStats.dabs,
+                  x: Math.round(strokeStats.x),
+                  y: Math.round(strokeStats.y),
+                  w: Math.round(strokeStats.w),
+                  h: Math.round(strokeStats.h),
+                })
+              : t(BRUSH.inProgress)}
           </span>
         </div>
       ) : null}
-      {!gpu ? (
-        <div style={note}>
-          Painting needs WebGPU, so the paint tools are disabled here.
-        </div>
-      ) : null}
-      <div style={note}>
-        Strokes paint the active layer, and Undo takes them back.
-      </div>
+      {!gpu ? <div style={note}>{t(BRUSH.needsGpu)}</div> : null}
+      <div style={note}>{t(BRUSH.undo)}</div>
       <About>
-        <p data-image-brush-note>{BRUSH_SCOPE_NOTE}</p>
-        <p>
-          The colours are a shortlist, and the blend list comes from the engine
-          itself. Settings are fixed for a stroke when it starts.
-        </p>
+        <p data-image-brush-note>{t(SCOPE.brush)}</p>
+        <p>{t(BRUSH.shortlist)}</p>
       </About>
     </Section>
   );
 }
 
 // ── raster type ──────────────────────────────────────────────────────
+
+const TYPE = defineMessages("image.type", {
+  title: "Type",
+  text: "Text",
+  placeholder: "Type here, then click the canvas",
+  face: "Face",
+  size: "Size (px)",
+  note:
+    "Click the canvas to set the baseline and paint the text as pixels in " +
+    "the brush colour; the Character panel styles it.",
+  shaping:
+    "Glyphs are shaped by the font's own tables — joining, reordering, " +
+    "ligatures and kerning. Only fonts the document already embeds can be " +
+    "used, and nothing is fetched from the network. A character with no " +
+    "glyph in the chosen face is reported and left undrawn rather than " +
+    "replaced with a box.",
+  pixels:
+    "This paints pixels, not a text object. The Character panel applies " +
+    "family, style, size, tracking, leading, case, scale, slant, baseline " +
+    "shift, super/subscript, underline, strikethrough, ligatures and line " +
+    "alignment. Anything that needs a text column — wrapping, indents, " +
+    "hyphenation — is absent: a line ends where you end it. For live, " +
+    "editable, wrapping text use a text frame.",
+});
 
 /** The TYPE section — the string, face and size the type tool paints on
  *  its next click. PURE, like the sections around it.
@@ -715,21 +791,21 @@ export function TypeSection({
   ) => void;
 }) {
   return (
-    <Section title="Type" data-image-type-section>
+    <Section title={t(TYPE.title)} data-image-type-section>
       <div style={row}>
-        <label htmlFor="pg-image-type-text">Text</label>
+        <label htmlFor="pg-image-type-text">{t(TYPE.text)}</label>
         <input
           id="pg-image-type-text"
           type="text"
           data-image-type-text
           value={type.text}
           disabled={disabled}
-          placeholder="Type here, then click the canvas"
+          placeholder={t(TYPE.placeholder)}
           onChange={(e) => onChange({ text: e.target.value })}
         />
       </div>
       <div style={row}>
-        <label htmlFor="pg-image-type-family">Face</label>
+        <label htmlFor="pg-image-type-family">{t(TYPE.face)}</label>
         <input
           id="pg-image-type-family"
           type="text"
@@ -740,7 +816,7 @@ export function TypeSection({
         />
       </div>
       <Slider
-        label="Size (px)"
+        label={t(TYPE.size)}
         min={4}
         max={512}
         step={1}
@@ -749,31 +825,44 @@ export function TypeSection({
         onChange={(sizePx) => onChange({ sizePx })}
       />
       <div style={note} data-image-type-note>
-        Click the canvas to set the baseline and paint the text as pixels in the
-        brush colour; the Character panel styles it.
+        {t(TYPE.note)}
       </div>
       <About>
-        <p>
-          Glyphs are shaped by the font&apos;s own tables — joining, reordering,
-          ligatures and kerning. Only fonts the document already embeds can be
-          used, and nothing is fetched from the network. A character with no
-          glyph in the chosen face is reported and left undrawn rather than
-          replaced with a box.
-        </p>
-        <p>
-          This paints pixels, not a text object. The Character panel applies
-          family, style, size, tracking, leading, case, scale, slant, baseline
-          shift, super/subscript, underline, strikethrough, ligatures and line
-          alignment. Anything that needs a text column — wrapping, indents,
-          hyphenation — is absent: a line ends where you end it. For live,
-          editable, wrapping text use a text frame.
-        </p>
+        <p>{t(TYPE.shaping)}</p>
+        <p>{t(TYPE.pixels)}</p>
       </About>
     </Section>
   );
 }
 
 // ── retouching (clone / heal) ────────────────────────────────────────
+
+const RETOUCH = defineMessages("image.retouch", {
+  title: "Retouch",
+  cloneSource: "Clone source",
+  notSet: "not set",
+  aligned: "Aligned",
+  setSource:
+    "Alt-click with the Clone stamp or the Healing brush to set the source.",
+  alignedAbout:
+    "The source survives between strokes, and Aligned keeps a fixed offset " +
+    "from the cursor so the copy moves with it instead of repeating.",
+  healLimit:
+    "The healing brush fits its correction to the mismatch around the " +
+    "dab's edge, so it follows a ramp instead of shifting the patch by one " +
+    "number. Where the sampled area runs off the image there is no edge to " +
+    "fit, and it falls back to a plain clone.",
+  contentAwareFill: "Content-aware fill",
+  selectFirst: "Select an area first.",
+  cafNote:
+    "Fills the selection with texture copied from elsewhere in the image.",
+  cafAbout:
+    "It works patch by patch from the edge inward, so it keeps grain and " +
+    "continues edges rather than blurring across them, and decides " +
+    "large-scale structure at half resolution before matching texture at " +
+    "full. Its search is limited to a window around the hole: a match on " +
+    "the far side of a large image will not be found.",
+});
 
 /** The RETOUCH section: the clone source, and the honest limit of the
  *  healing brush. PURE, like the sections around it.
@@ -794,17 +883,17 @@ export function RetouchSection({
   onContentAwareFill: () => void;
 }) {
   return (
-    <Section title="Retouch" data-image-retouch-section>
+    <Section title={t(RETOUCH.title)} data-image-retouch-section>
       <div style={row}>
-        <span>Clone source</span>
+        <span>{t(RETOUCH.cloneSource)}</span>
         <span style={mono} data-image-clone-source>
           {source
             ? `${Math.round(source.x)}, ${Math.round(source.y)}`
-            : "not set"}
+            : t(RETOUCH.notSet)}
         </span>
       </div>
       <div style={row}>
-        <label htmlFor="pg-image-clone-aligned">Aligned</label>
+        <label htmlFor="pg-image-clone-aligned">{t(RETOUCH.aligned)}</label>
         <input
           id="pg-image-clone-aligned"
           type="checkbox"
@@ -814,20 +903,10 @@ export function RetouchSection({
           onChange={(e) => onAligned(e.target.checked)}
         />
       </div>
-      <div style={note}>
-        Alt-click with the Clone stamp or the Healing brush to set the source.
-      </div>
+      <div style={note}>{t(RETOUCH.setSource)}</div>
       <About>
-        <p>
-          The source survives between strokes, and Aligned keeps a fixed offset
-          from the cursor so the copy moves with it instead of repeating.
-        </p>
-        <p data-image-heal-limit>
-          The healing brush fits its correction to the mismatch around the
-          dab&apos;s edge, so it follows a ramp instead of shifting the patch by
-          one number. Where the sampled area runs off the image there is no edge
-          to fit, and it falls back to a plain clone.
-        </p>
+        <p>{t(RETOUCH.alignedAbout)}</p>
+        <p data-image-heal-limit>{t(RETOUCH.healLimit)}</p>
       </About>
       <div style={row}>
         <button
@@ -836,25 +915,36 @@ export function RetouchSection({
           disabled={!hasSelection}
           onClick={onContentAwareFill}
         >
-          Content-aware fill
+          {t(RETOUCH.contentAwareFill)}
         </button>
-        <span style={note}>{hasSelection ? "" : "Select an area first."}</span>
+        <span style={note}>{hasSelection ? "" : t(RETOUCH.selectFirst)}</span>
       </div>
       <div style={note} data-image-caf-note>
-        Fills the selection with texture copied from elsewhere in the image.
-        <About>
-          It works patch by patch from the edge inward, so it keeps grain and
-          continues edges rather than blurring across them, and decides
-          large-scale structure at half resolution before matching texture at
-          full. Its search is limited to a window around the hole: a match on
-          the far side of a large image will not be found.
-        </About>
+        {t(RETOUCH.cafNote)}
+        <About>{t(RETOUCH.cafAbout)}</About>
       </div>
     </Section>
   );
 }
 
 // ── paths (raster ↔ vector) ──────────────────────────────────────────
+
+const PATHS = defineMessages("image.paths", {
+  title: "Paths",
+  trace: "Trace at coverage ≥",
+  toPath: "Selection → path",
+  fromPath: "Path → selection",
+  note:
+    "Turns the selection into a vector shape on the page, or a selected " +
+    "shape back into a selection.",
+  pageShape:
+    "A traced path becomes an ordinary page shape, so the Pen, the shape " +
+    "tools and the Pathfinder apply, and its undo is the document's. Each " +
+    "contour becomes its own polygon, holes included: a ring is two paths.",
+  corners:
+    "The trace follows pixel edges and its corners carry no handles; " +
+    "smooth it with the Pen once it is a path.",
+});
 
 /** The PATHS section — the raster↔vector bridge, and only that.
  *
@@ -884,9 +974,9 @@ export function PathsSection({
   onFromPath: () => void;
 }) {
   return (
-    <Section title="Paths" data-image-paths-section>
+    <Section title={t(PATHS.title)} data-image-paths-section>
       <Slider
-        label="Trace at coverage ≥"
+        label={t(PATHS.trace)}
         min={1}
         max={255}
         step={1}
@@ -901,7 +991,7 @@ export function PathsSection({
           disabled={disabled || !hasSelection}
           onClick={onToPath}
         >
-          Selection → path
+          {t(PATHS.toPath)}
         </button>
         <button
           type="button"
@@ -909,30 +999,36 @@ export function PathsSection({
           disabled={disabled}
           onClick={onFromPath}
         >
-          Path → selection
+          {t(PATHS.fromPath)}
         </button>
       </div>
-      <div style={note}>
-        Turns the selection into a vector shape on the page, or a selected shape
-        back into a selection.
-      </div>
+      <div style={note}>{t(PATHS.note)}</div>
       <About>
-        <p>
-          A traced path becomes an ordinary page shape, so the Pen, the shape
-          tools and the Pathfinder apply, and its undo is the document&apos;s.
-          Each contour becomes its own polygon, holes included: a ring is two
-          paths.
-        </p>
-        <p>
-          The trace follows pixel edges and its corners carry no handles; smooth
-          it with the Pen once it is a path.
-        </p>
+        <p>{t(PATHS.pageShape)}</p>
+        <p>{t(PATHS.corners)}</p>
       </About>
     </Section>
   );
 }
 
 // ── channels ─────────────────────────────────────────────────────────
+
+const CHANNELS = defineMessages("image.channels", {
+  title: "Channels",
+  empty: "Choose Use selected frame to read the image's channels.",
+  loadTitle: "Load the {channel} channel as the selection",
+  unmeasured: "unmeasured",
+  stats: "{min}–{max} · mean {mean}",
+  note: "Click a channel to load it as the selection, replacing the current one.",
+  coverage:
+    "The channel's values are the coverage directly, with no threshold, so " +
+    "a mid-grey channel selects at 50%. Luma is the Rec.709 luminance, the " +
+    "usual luminosity mask.",
+  noView:
+    "Viewing one channel on its own is not offered: the frame shows the " +
+    "composited image, and faking a channel view would mean writing a " +
+    "greyscale image into the document.",
+});
 
 /** The CHANNELS list — per-channel statistics and the one operation a
  *  channel list exists to enable: loading a channel as the selection.
@@ -954,11 +1050,9 @@ export function ChannelsSection({
   onLoadSelection: (channel: string) => void;
 }) {
   return (
-    <Section title="Channels" data-image-channels-section>
+    <Section title={t(CHANNELS.title)} data-image-channels-section>
       {channels === null ? (
-        <div style={note}>
-          Choose Use selected frame to read the image&apos;s channels.
-        </div>
+        <div style={note}>{t(CHANNELS.empty)}</div>
       ) : (
         <>
           <div data-image-channels>
@@ -969,33 +1063,26 @@ export function ChannelsSection({
                   data-image-channel={c.name}
                   disabled={disabled}
                   onClick={() => onLoadSelection(c.name)}
-                  title={`Load the ${c.name} channel as the selection`}
+                  title={t(CHANNELS.loadTitle, { channel: c.name })}
                 >
                   {c.name}
                 </button>
                 <span style={mono} data-image-channel-stats={c.name}>
                   {c.mean === null
-                    ? "unmeasured"
-                    : `${c.min}–${c.max} · mean ${c.mean.toFixed(1)}`}
+                    ? t(CHANNELS.unmeasured)
+                    : t(CHANNELS.stats, {
+                        min: String(c.min),
+                        max: String(c.max),
+                        mean: c.mean.toFixed(1),
+                      })}
                 </span>
               </div>
             ))}
           </div>
-          <div style={note}>
-            Click a channel to load it as the selection, replacing the current
-            one.
-          </div>
+          <div style={note}>{t(CHANNELS.note)}</div>
           <About>
-            <p>
-              The channel&apos;s values are the coverage directly, with no
-              threshold, so a mid-grey channel selects at 50%. Luma is the
-              Rec.709 luminance, the usual luminosity mask.
-            </p>
-            <p>
-              Viewing one channel on its own is not offered: the frame shows the
-              composited image, and faking a channel view would mean writing a
-              greyscale image into the document.
-            </p>
+            <p>{t(CHANNELS.coverage)}</p>
+            <p>{t(CHANNELS.noView)}</p>
           </About>
         </>
       )}
@@ -1009,6 +1096,34 @@ export function ChannelsSection({
  *  panel's words. The engine's tip is a parametric circle, so an
  *  elliptical or angled preset is applied in part — and the row says so
  *  rather than letting the designer discover it mid-stroke. */
+const PRESETS = defineMessages("image.brushPresets", {
+  title: "Brush presets",
+  load: "Load .abr…",
+  close: "Close",
+  library: "library",
+  presets: "{count, plural, one {# preset} other {# presets}}",
+  bitmaps: "{count} bitmap",
+  empty:
+    "The library parsed and contains no presets — a real state, and not the " +
+    "same as a file that failed to read.",
+  tip: "{kind} tip",
+  unnamed: "(unnamed {index}" + ")",
+  warnings:
+    "The reader parsed this file with {count, plural, one {# warning} other {# warnings}}: {list}",
+  format:
+    "`.abr` is a parameter format, and only size, hardness and spacing have " +
+    "a home in this engine's tip. Roundness and angle are shown but not " +
+    "applied — the tip is circular — and a sampled (bitmap) tip contributes " +
+    "its size only, because stamping a bitmap is a different engine from " +
+    "the parametric dab that ships.",
+  none:
+    "No library loaded. Photoshop `.abr` files carry brush parameters, not " +
+    "pixels — loading one changes nothing until a preset is applied.",
+  hardness: "hardness {value}",
+  spacingOff: "spacing off",
+  spacing: "spacing {value}",
+});
+
 function presetSummary(p: BrushPresetInfo): string {
   const bits: string[] = [];
   if (p.diameter !== null) {
@@ -1018,12 +1133,13 @@ function presetSummary(p: BrushPresetInfo): string {
         : `${Math.round(p.diameter)} ${p.diameterUnit ?? "?"}`,
     );
   }
-  if (p.hardness !== null) bits.push(`hardness ${p.hardness.toFixed(2)}`);
+  if (p.hardness !== null)
+    bits.push(t(PRESETS.hardness, { value: p.hardness.toFixed(2) }));
   if (p.spacing !== null) {
     bits.push(
       p.spacingEnabled === false
-        ? "spacing off"
-        : `spacing ${p.spacing.toFixed(2)}`,
+        ? t(PRESETS.spacingOff)
+        : t(PRESETS.spacing, { value: p.spacing.toFixed(2) }),
     );
   }
   if (bits.length === 0) bits.push(p.kind);
@@ -1060,7 +1176,7 @@ export function BrushPresetsSection({
 }) {
   return (
     <>
-      <div style={sectionTitle}>Brush presets</div>
+      <div style={sectionTitle}>{t(PRESETS.title)}</div>
       <div style={row}>
         <button
           type="button"
@@ -1068,31 +1184,28 @@ export function BrushPresetsSection({
           onClick={onLoad}
           disabled={disabled}
         >
-          Load .abr…
+          {t(PRESETS.load)}
         </button>
         {library ? (
           <button type="button" data-image-abr-close onClick={onClose}>
-            Close
+            {t(PRESETS.close)}
           </button>
         ) : null}
       </div>
       {library ? (
         <>
           <div style={row}>
-            <span>{libraryName ?? "library"}</span>
+            <span>{libraryName ?? t(PRESETS.library)}</span>
             <span style={mono} data-image-abr-summary>
-              v{library.version}.{library.minorVersion} · {library.presetCount}{" "}
-              preset{library.presetCount === 1 ? "" : "s"}
+              v{library.version}.{library.minorVersion} ·{" "}
+              {t(PRESETS.presets, { count: library.presetCount })}
               {library.sampleCount > 0
-                ? ` · ${library.sampleCount} bitmap`
+                ? ` · ${t(PRESETS.bitmaps, { count: library.sampleCount })}`
                 : ""}
             </span>
           </div>
           {library.presetCount === 0 ? (
-            <div style={note}>
-              The library parsed and contains no presets — a real state, and not
-              the same as a file that failed to read.
-            </div>
+            <div style={note}>{t(PRESETS.empty)}</div>
           ) : null}
           <div data-image-abr-presets>
             {library.presets.map((p) => (
@@ -1108,9 +1221,9 @@ export function BrushPresetsSection({
                   data-image-abr-preset={p.index}
                   onClick={() => onApply(p.index)}
                   disabled={p.kind === "unsupported" || p.kind === "missing"}
-                  title={`${p.kind} tip`}
+                  title={t(PRESETS.tip, { kind: p.kind })}
                 >
-                  {p.name || `(unnamed ${p.index})`}
+                  {p.name || t(PRESETS.unnamed, { index: p.index })}
                 </button>
                 <span style={mono}>{presetSummary(p)}</span>
               </div>
@@ -1118,24 +1231,16 @@ export function BrushPresetsSection({
           </div>
           {library.warnings.length > 0 ? (
             <div style={note} data-image-abr-warnings>
-              The reader parsed this file with {library.warnings.length} warning
-              {library.warnings.length === 1 ? "" : "s"}:{" "}
-              {library.warnings.join("; ")}
+              {t(PRESETS.warnings, {
+                count: library.warnings.length,
+                list: library.warnings.join("; "),
+              })}
             </div>
           ) : null}
-          <div style={note}>
-            `.abr` is a parameter format, and only size, hardness and spacing
-            have a home in this engine&apos;s tip. Roundness and angle are shown
-            but not applied — the tip is circular — and a sampled (bitmap) tip
-            contributes its size only, because stamping a bitmap is a different
-            engine from the parametric dab that ships.
-          </div>
+          <div style={note}>{t(PRESETS.format)}</div>
         </>
       ) : (
-        <div style={note}>
-          No library loaded. Photoshop `.abr` files carry brush parameters, not
-          pixels — loading one changes nothing until a preset is applied.
-        </div>
+        <div style={note}>{t(PRESETS.none)}</div>
       )}
     </>
   );
@@ -1145,6 +1250,92 @@ export function BrushPresetsSection({
 function mb(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
+
+const LAYERS = defineMessages("image.layers", {
+  title: "Layers",
+  titleCount: "Layers ({count}" + ")",
+  empty: "Choose Use selected frame to open the image's layers.",
+  sameStack:
+    "While you edit the image, the Layers panel and Image properties show " +
+    "this same stack.",
+  groupForcedIsolation:
+    "Pass through — but the opacity is below 100%, which forces isolation",
+  groupIsolated: "Isolated: members composite into their own buffer first",
+  groupPassThrough:
+    "Pass through: members reach the stack below, so an adjustment inside " +
+    "affects everything beneath",
+  iso: "iso",
+  pass: "pass",
+  dissolve: "Dissolve group",
+  dissolveTitle: "Dissolve this group (its layers stay)",
+  visible: "Visible",
+  blendMode: "Blend mode",
+  opacity: "Opacity",
+  lock: "Lock pixels (paint, fills and bakes refuse; properties still move)",
+  paintingMask:
+    "Painting the MASK (brush = foreground grey, eraser reveals) — click to " +
+    "paint the pixels",
+  paintMask: "Paint this layer's mask instead of its pixels",
+  maskApplying:
+    "Mask is applying — uncheck to disable it (the coverage is kept)",
+  maskDisabled: "Mask is disabled but retained — check to apply it again",
+  deleteMask: "Delete layer mask",
+  deleteMaskTitle: "Delete this layer's mask (the coverage is lost)",
+  selectionToMask: "Selection to layer mask",
+  selectionToMaskTitle: "Make the current selection this layer's mask",
+  addMask: "Add layer mask",
+  addMaskTitle: "Add layer mask — reveal all (Alt-click: hide all)",
+  releaseClip: "Release clipping mask",
+  clip: "Clip to the layer below",
+  clippedTitle: "Clipped to the layer below — click to release",
+  clipTitle:
+    "Clip to the layer below (an adjustment clipped to a smart object is a " +
+    "smart filter)",
+  moveUp: "Move layer up",
+  moveUpTitle: "Move up",
+  moveDown: "Move layer down",
+  moveDownTitle: "Move down",
+  duplicate: "Duplicate layer",
+  duplicateTitle: "Duplicate",
+  remove: "Remove layer",
+  removeTitle: "Remove layer (Undo brings it back)",
+  keepOne: "A document keeps at least one layer",
+  groupsNote: "Groups pass through by default, as in Photoshop.",
+  groupsAbout:
+    "A pass-through group's members composite straight into the stack " +
+    "below, so an adjustment inside reaches everything beneath it. Switch " +
+    "it to isolated and the members composite into their own buffer first " +
+    "— that makes group opacity fade the result rather than each member, " +
+    "and confines an adjustment to its group. Opacity below 100% forces " +
+    "isolation either way. Groups nest up to eight deep.",
+  groupTitle: "Group the two layers below the active one",
+  group: "Group",
+  add: "Add layer",
+  addAdjustmentTitle:
+    "Stack the adjustment chain as a non-destructive layer — it transforms " +
+    "everything beneath it, and deleting it restores the original exactly",
+  addAdjustment: "Add adjustment layer",
+  bakeTitle:
+    "Bake the adjustment chain destructively into the active layer " +
+    "(undoable)",
+  bake: "Bake adjustments into layer",
+  undo: "Undo",
+  undoStep: "Undo {label}",
+  redo: "Redo",
+  redoStep: "Redo {label}",
+  stepBack: "Step back to just after “{label}”",
+  here: "▸ here",
+  stepForward: "Step forward through “{label}”",
+  history:
+    "History: {depth} undo / {redoDepth} redo, {bytes} of {maxBytes} and " +
+    "{steps} steps.",
+  dropped:
+    "{count, plural, one {# older edit fell past that bound and is now permanent.} other {# older edits fell past that bound and are now permanent.}}",
+  nothingDropped: "Nothing has fallen past the bound yet.",
+  noGpu:
+    "Compositing more than one layer needs WebGPU; without it only a " +
+    "single visible layer at full opacity in Normal mode can be shown.",
+});
 
 /** The LAYERS palette + the undo readout — a PURE component (props in,
  *  elements out, no hooks) so a spec can render it without a DOM and
@@ -1241,20 +1432,17 @@ export function LayersSection({
     <Section
       title={
         <span data-image-layers-title>
-          Layers{layers.length > 0 ? ` (${layers.length})` : ""}
+          {layers.length > 0
+            ? t(LAYERS.titleCount, { count: layers.length })
+            : t(LAYERS.title)}
         </span>
       }
       data-image-layers-section
     >
       {layers.length === 0 ? (
-        <div style={note}>
-          Choose Use selected frame to open the image&apos;s layers.
-        </div>
+        <div style={note}>{t(LAYERS.empty)}</div>
       ) : (
-        <div style={note}>
-          While you edit the image, the Layers panel and Image properties show
-          this same stack.
-        </div>
+        <div style={note}>{t(LAYERS.sameStack)}</div>
       )}
       {rows.map((l, i) => (
         <Fragment key={l.id}>
@@ -1293,19 +1481,19 @@ export function LayersSection({
                       title={
                         g.isolates
                           ? g.passThrough
-                            ? "Pass through — but the opacity is below 100%, which forces isolation"
-                            : "Isolated: members composite into their own buffer first"
-                          : "Pass through: members reach the stack below, so an adjustment inside affects everything beneath"
+                            ? t(LAYERS.groupForcedIsolation)
+                            : t(LAYERS.groupIsolated)
+                          : t(LAYERS.groupPassThrough)
                       }
                       data-image-group-mode={g.id}
                       disabled={disabled}
                       onClick={() => onGroupPassThrough(g.id, !g.passThrough)}
                     >
-                      {g.isolates ? "iso" : "pass"}
+                      {t(g.isolates ? LAYERS.iso : LAYERS.pass)}
                     </button>
                     <IconButton
-                      label="Dissolve group"
-                      title="Dissolve this group (its layers stay)"
+                      label={t(LAYERS.dissolve)}
+                      title={t(LAYERS.dissolveTitle)}
                       data-image-group-ungroup={g.id}
                       disabled={disabled}
                       onClick={() => onUngroup(g.id)}
@@ -1334,7 +1522,7 @@ export function LayersSection({
             >
               <input
                 type="checkbox"
-                title="Visible"
+                title={t(LAYERS.visible)}
                 data-image-layer-visible={l.index}
                 checked={l.visible}
                 disabled={disabled}
@@ -1365,7 +1553,7 @@ export function LayersSection({
                 data-image-layer-blend={l.index}
                 value={l.blend}
                 disabled={disabled || blendModes.length === 0}
-                title="Blend mode"
+                title={t(LAYERS.blendMode)}
                 onChange={(e) => onBlend(l.index, e.target.value)}
                 style={{
                   font: `11px ${font.sans}`,
@@ -1383,7 +1571,7 @@ export function LayersSection({
                 min={0}
                 max={1}
                 step={0.05}
-                title="Opacity"
+                title={t(LAYERS.opacity)}
                 data-image-layer-opacity={l.index}
                 value={l.opacity}
                 disabled={disabled}
@@ -1392,7 +1580,7 @@ export function LayersSection({
               />
               <input
                 type="checkbox"
-                title="Lock pixels (paint, fills and bakes refuse; properties still move)"
+                title={t(LAYERS.lock)}
                 data-image-layer-lock={l.index}
                 checked={l.locked}
                 disabled={disabled}
@@ -1411,8 +1599,8 @@ export function LayersSection({
                     type="button"
                     title={
                       l.index === active && editTarget === "mask"
-                        ? "Painting the MASK (brush = foreground grey, eraser reveals) — click to paint the pixels"
-                        : "Paint this layer's mask instead of its pixels"
+                        ? t(LAYERS.paintingMask)
+                        : t(LAYERS.paintMask)
                     }
                     data-image-layer-edit-target={l.index}
                     data-target={l.index === active ? editTarget : "pixels"}
@@ -1438,8 +1626,8 @@ export function LayersSection({
                     type="checkbox"
                     title={
                       l.maskEnabled
-                        ? "Mask is applying — uncheck to disable it (the coverage is kept)"
-                        : "Mask is disabled but retained — check to apply it again"
+                        ? t(LAYERS.maskApplying)
+                        : t(LAYERS.maskDisabled)
                     }
                     data-image-layer-mask={l.index}
                     checked={l.maskEnabled}
@@ -1447,8 +1635,8 @@ export function LayersSection({
                     onChange={(e) => onMaskToggle(l.index, e.target.checked)}
                   />
                   <IconButton
-                    label="Delete layer mask"
-                    title="Delete this layer's mask (the coverage is lost)"
+                    label={t(LAYERS.deleteMask)}
+                    title={t(LAYERS.deleteMaskTitle)}
                     data-image-layer-mask-clear={l.index}
                     disabled={disabled}
                     onClick={() => onMaskClear(l.index)}
@@ -1459,8 +1647,8 @@ export function LayersSection({
               ) : (
                 <>
                   <IconButton
-                    label="Selection to layer mask"
-                    title="Make the current selection this layer's mask"
+                    label={t(LAYERS.selectionToMask)}
+                    title={t(LAYERS.selectionToMaskTitle)}
                     data-image-layer-mask-add={l.index}
                     disabled={disabled}
                     onClick={() => onMaskFromSelection(l.index)}
@@ -1468,8 +1656,8 @@ export function LayersSection({
                     ⬚
                   </IconButton>
                   <IconButton
-                    label="Add layer mask"
-                    title="Add layer mask — reveal all (Alt-click: hide all)"
+                    label={t(LAYERS.addMask)}
+                    title={t(LAYERS.addMaskTitle)}
                     data-image-layer-mask-new={l.index}
                     disabled={disabled || !onAddMask}
                     onClick={(e) => onAddMask?.(l.index, !e.altKey)}
@@ -1479,16 +1667,8 @@ export function LayersSection({
                 </>
               )}
               <IconButton
-                label={
-                  l.clipped
-                    ? "Release clipping mask"
-                    : "Clip to the layer below"
-                }
-                title={
-                  l.clipped
-                    ? "Clipped to the layer below — click to release"
-                    : "Clip to the layer below (an adjustment clipped to a smart object is a smart filter)"
-                }
+                label={l.clipped ? t(LAYERS.releaseClip) : t(LAYERS.clip)}
+                title={l.clipped ? t(LAYERS.clippedTitle) : t(LAYERS.clipTitle)}
                 data-image-layer-clip={l.index}
                 disabled={disabled || l.index === 0}
                 onClick={() => onClip(l.index, !l.clipped)}
@@ -1497,8 +1677,8 @@ export function LayersSection({
                 ⌐
               </IconButton>
               <IconButton
-                label="Move layer up"
-                title="Move up"
+                label={t(LAYERS.moveUp)}
+                title={t(LAYERS.moveUpTitle)}
                 data-image-layer-up={l.index}
                 disabled={disabled || l.index === layers.length - 1}
                 onClick={() => onMove(l.index, l.index + 1)}
@@ -1506,8 +1686,8 @@ export function LayersSection({
                 ↑
               </IconButton>
               <IconButton
-                label="Move layer down"
-                title="Move down"
+                label={t(LAYERS.moveDown)}
+                title={t(LAYERS.moveDownTitle)}
                 data-image-layer-down={l.index}
                 disabled={disabled || l.index === 0}
                 onClick={() => onMove(l.index, l.index - 1)}
@@ -1515,8 +1695,8 @@ export function LayersSection({
                 ↓
               </IconButton>
               <IconButton
-                label="Duplicate layer"
-                title="Duplicate"
+                label={t(LAYERS.duplicate)}
+                title={t(LAYERS.duplicateTitle)}
                 data-image-layer-duplicate={l.index}
                 disabled={disabled}
                 onClick={() => onDuplicate(l.index)}
@@ -1524,12 +1704,8 @@ export function LayersSection({
                 ⧉
               </IconButton>
               <IconButton
-                label="Remove layer"
-                title={
-                  multi
-                    ? "Remove layer (Undo brings it back)"
-                    : "A document keeps at least one layer"
-                }
+                label={t(LAYERS.remove)}
+                title={multi ? t(LAYERS.removeTitle) : t(LAYERS.keepOne)}
                 data-image-layer-remove={l.index}
                 disabled={disabled || !multi}
                 onClick={() => onRemove(l.index)}
@@ -1542,26 +1718,19 @@ export function LayersSection({
       ))}
       {groups.length > 0 ? (
         <div style={note} data-image-groups-note>
-          Groups pass through by default, as in Photoshop.
-          <About>
-            A pass-through group&apos;s members composite straight into the
-            stack below, so an adjustment inside reaches everything beneath it.
-            Switch it to isolated and the members composite into their own
-            buffer first — that makes group opacity fade the result rather than
-            each member, and confines an adjustment to its group. Opacity below
-            100% forces isolation either way. Groups nest up to eight deep.
-          </About>
+          {t(LAYERS.groupsNote)}
+          <About>{t(LAYERS.groupsAbout)}</About>
         </div>
       ) : null}
       <div style={{ display: "flex", gap: 6, marginTop: space[1] }}>
         <button
           type="button"
-          title="Group the two layers below the active one"
+          title={t(LAYERS.groupTitle)}
           data-image-layers-group
           disabled={disabled || layers.length < 2}
           onClick={onGroup}
         >
-          Group
+          {t(LAYERS.group)}
         </button>
         <button
           type="button"
@@ -1569,25 +1738,25 @@ export function LayersSection({
           disabled={disabled}
           onClick={onAdd}
         >
-          Add layer
+          {t(LAYERS.add)}
         </button>
         <button
           type="button"
           data-image-layer-add-adjustment
           disabled={disabled}
-          title="Stack the adjustment chain as a non-destructive layer — it transforms everything beneath it, and deleting it restores the original exactly"
+          title={t(LAYERS.addAdjustmentTitle)}
           onClick={onAddAdjustment}
         >
-          Add adjustment layer
+          {t(LAYERS.addAdjustment)}
         </button>
         <button
           type="button"
           data-image-layer-bake
           disabled={disabled || !gpu}
-          title="Bake the adjustment chain destructively into the active layer (undoable)"
+          title={t(LAYERS.bakeTitle)}
           onClick={onBake}
         >
-          Bake adjustments into layer
+          {t(LAYERS.bake)}
         </button>
       </div>
       <div style={{ display: "flex", gap: 6, marginTop: space[1] }}>
@@ -1597,7 +1766,9 @@ export function LayersSection({
           disabled={disabled || !history?.canUndo}
           onClick={onUndo}
         >
-          Undo{history?.undoLabel ? ` ${history.undoLabel}` : ""}
+          {history?.undoLabel
+            ? t(LAYERS.undoStep, { label: history.undoLabel })
+            : t(LAYERS.undo)}
         </button>
         <button
           type="button"
@@ -1605,7 +1776,9 @@ export function LayersSection({
           disabled={disabled || !history?.canRedo}
           onClick={onRedo}
         >
-          Redo{history?.redoLabel ? ` ${history.redoLabel}` : ""}
+          {history?.redoLabel
+            ? t(LAYERS.redoStep, { label: history.redoLabel })
+            : t(LAYERS.redo)}
         </button>
       </div>
       {/* HISTORY — the list, not just the counter. The catalog records
@@ -1623,7 +1796,7 @@ export function LayersSection({
               type="button"
               data-image-history-step={i}
               disabled={disabled}
-              title={`Step back to just after "${label}"`}
+              title={t(LAYERS.stepBack, { label })}
               // Walking back N steps is N undos — the journal is a stack,
               // not a random-access log, and pretending otherwise would
               // mean holding every intermediate state.
@@ -1639,7 +1812,7 @@ export function LayersSection({
             </button>
           ))}
           <div style={{ ...note, fontWeight: 600 }} data-image-history-here>
-            ▸ here
+            {t(LAYERS.here)}
           </div>
           {history.redoSteps.map((label, i) => (
             <button
@@ -1647,7 +1820,7 @@ export function LayersSection({
               type="button"
               data-image-history-redo-step={i}
               disabled={disabled}
-              title={`Step forward through "${label}"`}
+              title={t(LAYERS.stepForward, { label })}
               onClick={() => onRedoTo(i + 1)}
               style={{
                 display: "block",
@@ -1663,16 +1836,16 @@ export function LayersSection({
       ) : null}
       {history ? (
         <div style={note} data-image-history-readout>
-          History: {history.depth} undo / {history.redoDepth} redo,{" "}
-          {mb(history.bytes)} of {mb(history.maxBytes)} and {history.maxEntries}{" "}
-          steps.
+          {t(LAYERS.history, {
+            depth: history.depth,
+            redoDepth: history.redoDepth,
+            bytes: mb(history.bytes),
+            maxBytes: mb(history.maxBytes),
+            steps: history.maxEntries,
+          })}{" "}
           {history.dropped > 0
-            ? ` ${history.dropped} older edit${
-                history.dropped === 1 ? "" : "s"
-              } fell past that bound and ${
-                history.dropped === 1 ? "is" : "are"
-              } now permanent.`
-            : " Nothing has fallen past the bound yet."}
+            ? t(LAYERS.dropped, { count: history.dropped })
+            : t(LAYERS.nothingDropped)}
         </div>
       ) : null}
       {layersNote ? (
@@ -1681,17 +1854,296 @@ export function LayersSection({
         </div>
       ) : null}
       {!gpu && layers.length > 1 ? (
-        <div style={note}>
-          Compositing more than one layer needs WebGPU; without it only a single
-          visible layer at full opacity in Normal mode can be shown.
-        </div>
+        <div style={note}>{t(LAYERS.noGpu)}</div>
       ) : null}
       <About>
-        <p data-image-layers-note>{LAYERS_SCOPE_NOTE}</p>
+        <p data-image-layers-note>{t(SCOPE.layers)}</p>
       </About>
     </Section>
   );
 }
+
+const P = defineMessages("image.panel", {
+  title: "Image adjustments",
+  ingestFrame: "Use selected frame",
+  ingestFrameTitle: "Load the selected image frame into the panel",
+  liveTitle:
+    "Sliders update the frame as they move; full resolution follows when " +
+    "they rest",
+  live: "Live",
+  working: "Working…",
+  loadFirst: "Load an image first",
+  applyTitle:
+    "Show the adjusted image in its frame (the placed file is unchanged)",
+  apply: "Apply",
+  resetTitle: "Return every adjustment to its starting value",
+  reset: "Reset",
+  noGpu:
+    "WebGPU is not available here, so adjustments, filters and painting " +
+    "are disabled.",
+  engineUnavailable:
+    "The image engine could not start. Diagnostics, at the bottom of the " +
+    "panel, has the reason.",
+  image: "Image",
+  colour: "Colour",
+  cmykConverted:
+    "This CMYK image was converted to sRGB through its embedded profile; " +
+    "edits and save-back are RGB.",
+  cmykUnmanaged:
+    "This CMYK image has no usable profile, so it was converted to sRGB " +
+    "without colour management; edits and save-back are RGB.",
+  cmykAbout:
+    "The conversion follows Photoshop's default view: relative colorimetric " +
+    "with black-point compensation, approximated by the profile's " +
+    "perceptual table. Layers that use a blend mode other than Normal are " +
+    "not imported, because Photoshop blends them in CMYK.",
+  depth: "Depth",
+  depthReduced: "16-bit source, reduced to 8",
+  depthNote:
+    "Layers, edits and save-back work in 8 bits, so the extra precision is " +
+    "not kept.",
+  histogram: "Histogram (R / G / B / luma)",
+  histogramEmpty: "Choose Use selected frame to see the histogram.",
+  autoEnhance: "Auto-enhance",
+  autoEnhanceNote:
+    "Auto-enhance sets levels and white balance from the histogram; Apply " +
+    "shows the result.",
+  selection: "Selection",
+  bounds: "Bounds",
+  coverage: "Coverage",
+  deselect: "Deselect",
+  noSelection:
+    "No selection — adjustments apply to the whole image. Use the marquee / " +
+    "lasso / wand tools (shift = add, alt = subtract, shift+alt = " +
+    "intersect).",
+  tone: "Tone",
+  toneSelection: "Tone — applies to selection",
+  exposure: "Exposure (EV)",
+  brightness: "Brightness",
+  contrast: "Contrast",
+  saturation: "Saturation",
+  whiteBalance: "White balance",
+  temp: "Temp",
+  tint: "Tint",
+  levels: "Levels (composite)",
+  inBlack: "In black",
+  gamma: "Gamma",
+  inWhite: "In white",
+  outBlack: "Out black",
+  outWhite: "Out white",
+  levelsPerChannel: "Levels (per channel)",
+  blk: "blk",
+  gam: "gam",
+  wht: "wht",
+  channelInBlack: "{channel} in black",
+  channelGamma: "{channel} gamma",
+  channelInWhite: "{channel} in white",
+  color: "Color",
+  vibrance: "Vibrance",
+  colorBalance: "Color balance",
+  photoFilter: "Photo filter",
+  gel: "Gel",
+  density: "Density",
+  preserveLuminosity: "Preserve luminosity",
+  channelMixer: "Channel mixer",
+  mixerOut: "out {channel}",
+  effects: "Effects",
+  blackWhite: "Black & white",
+  defaultMix: "Default mix",
+  posterize: "Posterize",
+  posterizeLevels: "Levels",
+  threshold: "Threshold",
+  cut: "Cut (luma)",
+  generateSelection: "Generate — fills the selection",
+  generateImage: "Generate — fills the whole image",
+  gradient: "Gradient",
+  startColour: "Start colour",
+  endColour: "End colour",
+  fillGradientTitle: "Paint the gradient into the selection",
+  generatorsGpuOnly: "Generators are GPU-only — no WebGPU device",
+  fill: "Fill",
+  noise: "Noise",
+  fillNote:
+    "A fill is DESTRUCTIVE into the engine source (the document and the " +
+    "placed file are untouched — re-ingest restores). Two stops only in " +
+    "v0; the gradient geometry follows the selection bounds.",
+  filters: "Filters",
+  blur: "Blur (σ px)",
+  sharpen: "Sharpen",
+  hueRotate: "Hue rotate (°)",
+  invert: "Invert colors",
+  gradientMapDistort: "Gradient map & distort",
+  gradientMapTitle:
+    "Map luminance through a two-stop colour ramp (shadows to highlights)",
+  gradientMap: "Gradient map",
+  warpTitle: "Apply the {kind} distortion (amount 0 is the identity)",
+  gradientMapNote:
+    "A gradient map replaces colour with a ramp read from luminance; the " +
+    "distortions resample through one backward map, so they share a " +
+    "reconstruction filter and edge rule with the crop straighten.",
+  stylize: "Stylize, blur & pixelate",
+  galleryNote:
+    "One-click defaults, not a parameter surface: each of these is a single " +
+    "kernel and every one has an identity setting, so a slider adds nothing " +
+    "a designer cannot get by applying twice. Emboss and find edges share " +
+    "one 3×3 neighbourhood read; the two radial modes are one kernel, where " +
+    "zoom is the degenerate arc.",
+  resize: "Resize",
+  nearest: "Nearest",
+  resampleTitle: "Resample the source",
+  resampleGpuOnly: "Resample is GPU-only — no WebGPU device",
+  resample: "Resample",
+  psdLayers: "PSD layers ({count}" + ")",
+  psdHidden: "{name} (hidden in the PSD)",
+  layerName: "Layer name",
+  psdOpacity: "Layer opacity (%)",
+  psdRemove: "Remove layer from the PSD",
+  psdRemoveTitle: "Remove layer (in the exported PSD)",
+  curves: "Curves",
+  curveChannel: "Curve channel",
+  red: "Red",
+  green: "Green",
+  blue: "Blue",
+  resetCurve: "Reset curve",
+  crop: "Crop + straighten",
+  aspect: "Aspect",
+  aspectFree: "free",
+  aspectOriginal: "original",
+  straighten: "Straighten°",
+  applyCrop: "Apply crop",
+  resetCrop: "Reset crop",
+  applyToFile: "Apply to file",
+  save: "Save…",
+  ready: "Ready",
+  saveNote:
+    "Writes the adjustments into a copy of the source file at full " +
+    "resolution.",
+  saveAbout:
+    "A single-layer PSD gets its channel pixels written back; a multi-layer " +
+    "PSD is flattened into a new single-layer PSD, and the panel says so. A " +
+    "PNG or JPEG is re-encoded. Save… hands the result to the editor's file " +
+    "saver; where there is none, the Export Center delivers the same bytes.",
+  diagnostics: "Diagnostics",
+  bundle: "Bundle",
+  engine: "Engine",
+  source: "Source",
+  none: "none",
+  diagnosticsNote:
+    "Apply shows a preview layer in the frame; the document and the placed " +
+    "file stay unchanged until Apply to file. A crop cuts the image itself, " +
+    "straightening first when the angle is not zero (straightening needs " +
+    "WebGPU). The paint tools preview every pointer sample; the adjustment " +
+    "sliders preview when Live is on.",
+  engineReady: "ready (WebGPU)",
+  engineReadyNoGpu: "ready (no WebGPU — adjustments disabled)",
+});
+
+/** The one-click filter gallery: each button's name and what it does. */
+const GALLERY = defineMessages("image.gallery", {
+  emboss: "Emboss",
+  embossTitle:
+    "Directional relief. A flat region stays mid-grey, which is what makes " +
+    "it read as relief rather than as an edge map.",
+  findEdges: "Find edges",
+  findEdgesTitle:
+    "Sobel magnitude, inverted — dark lines on white, and run per channel " +
+    "so an equal-luminance colour edge still registers.",
+  motionBlur: "Motion blur",
+  motionBlurTitle:
+    "Directional blur along a line, centred on the pixel so the subject " +
+    "smears symmetrically.",
+  spinBlur: "Spin blur",
+  spinBlurTitle:
+    "Radial blur, spin: the smear grows outward because arc length scales " +
+    "with radius.",
+  zoomBlur: "Zoom blur",
+  zoomBlurTitle:
+    "Radial blur, zoom: the same arc walk holding the angle and varying " +
+    "the radius.",
+  mosaic: "Mosaic",
+  mosaicTitle:
+    "Pixelate by quantizing the source coordinate and sampling the cell " +
+    "centre — hard blocks, not smoothed steps.",
+  paintDaubs: "Paint daubs",
+  paintDaubsTitle:
+    "Kuwahara: takes the lowest-variance quadrant's mean, so a region " +
+    "flattens toward paint while its boundary stays put.",
+  posterEdges: "Poster edges",
+  posterEdgesTitle:
+    "Posterised colour plus a darkened outline. The two halves are " +
+    "independent — that is what separates Cutout from Ink Outlines.",
+  glowingEdges: "Glowing edges",
+  glowingEdgesTitle:
+    "Edge magnitude colourised and boosted; keeps the source hue instead of " +
+    "going grey.",
+  halftone: "Halftone",
+  halftoneTitle:
+    "Screen-angle halftone. Dot AREA carries the tone, not dot darkness — " +
+    "which is what lets it survive a 1-bit output.",
+  filmGrain: "Film grain",
+  filmGrainTitle:
+    "Deterministic hash of the coordinate and seed, never host randomness, " +
+    "so undo/redo cannot shimmer.",
+  spatter: "Spatter",
+  spatterTitle:
+    "Random local displacement. Anisotropy is the whole difference between " +
+    "Spatter and Sprayed Strokes.",
+  crosshatch: "Crosshatch",
+  crosshatchTitle:
+    "Hatching modulated by luminance. The SET COUNT alone gives Graphic Pen " +
+    "(1), Crosshatch (2) and Sumi-e (3).",
+  basRelief: "Bas relief",
+  basReliefTitle:
+    "Directional lighting over a luminance heightfield. Chrome and Plastic " +
+    "Wrap are approximated at extreme settings, not modelled.",
+  photocopy: "Photocopy",
+  photocopyTitle:
+    "Luminance threshold with a soft ramp; the ramp width is what makes " +
+    "Stamp hard and Charcoal soft.",
+  stainedGlass: "Stained glass",
+  stainedGlassTitle:
+    "Cellular tiling with a border term. The border weight alone separates " +
+    "Crystallize from Stained Glass.",
+  glass: "Glass",
+  glassTitle:
+    "Refraction-style displacement through a procedural normal field.",
+  texturizer: "Texturizer",
+  texturizerTitle:
+    "Procedural surface texture modulating shading; kind picks Canvas / " +
+    "Burlap / Brick rather than a kernel per material.",
+  despeckle: "Despeckle",
+  despeckleTitle:
+    "Smooths speckle without softening edges: it gates on the INNER range, " +
+    "which a speckle inflates and an edge does not.",
+  dustScratches: "Dust & scratches",
+  dustScratchesTitle:
+    "Replaces a pixel with the neighbourhood median only where it differs " +
+    "by more than the threshold. Threshold 1 is the identity; 0 is a plain " +
+    "median.",
+  offset: "Offset (wrap)",
+  offsetTitle:
+    "Filter > Other > Offset — moves the pixels and wraps at the edge, " +
+    "which is what makes a texture tile seamlessly.",
+  lensBlur: "Lens blur",
+  lensBlurTitle:
+    "Bokeh: a flat-topped disc, with highlights weighted up before the " +
+    "average and pulled back after — so a bright speck spreads as a bright " +
+    "ball, not a dim smudge.",
+  reduceNoise: "Reduce noise",
+  reduceNoiseTitle:
+    "Bilateral denoise: taps are weighted by colour distance as well as " +
+    "distance, so it refuses to average across an edge.",
+  smartSharpen: "Smart sharpen",
+  smartSharpenTitle:
+    "Unsharp with two gates: local contrast below the threshold is left " +
+    "alone as noise, and the correction is clamped so a strong edge cannot " +
+    "ring into a halo.",
+  selectiveColour: "Selective colour",
+  selectiveColourTitle:
+    "Per-range CMYK shift — this button targets the reds. Range membership " +
+    "goes by channel ORDER, so there is no seam at a hue boundary and no " +
+    "wraparound case.",
+});
 
 export function makeImagePanel(session: ImageSession) {
   // A declaration, so the React Compiler sees the component (it cannot see
@@ -1700,6 +2152,7 @@ export function makeImagePanel(session: ImageSession) {
     // The session as a render value (react-live): a new view after every
     // change, so what is read from it during render is read again.
     const live = useLive(session, onDidChangeOf);
+    const { t } = useStrings();
     // Control points per curve: the composite and each channel's.
     const [curveChannel, setCurveChannel] = useState<CurveChannel>("rgb");
     const [curvePointsBy, setCurvePointsBy] = useState<
@@ -1775,8 +2228,8 @@ export function makeImagePanel(session: ImageSession) {
     const engineLine =
       s.engine === "ready"
         ? s.gpu
-          ? "ready (WebGPU)"
-          : "ready (no WebGPU — adjustments disabled)"
+          ? t(P.engineReady)
+          : t(P.engineReadyNoGpu)
         : s.engine;
 
     const setBase = (k: keyof AdjustParams, v: number) =>
@@ -1825,7 +2278,7 @@ export function makeImagePanel(session: ImageSession) {
 
     return (
       <div style={{ padding: space[2], fontSize: "12px" }}>
-        <div style={panelTitle}>Image adjustments</div>
+        <div style={panelTitle}>{t(P.title)}</div>
 
         {/* THE COMMIT BAR — sticky, so Apply, Reset and the status line
             (where every refusal is written) stay in view while the
@@ -1843,18 +2296,18 @@ export function makeImagePanel(session: ImageSession) {
               type="button"
               disabled={s.busy}
               onClick={() => void session.ingestSelection()}
-              title="Load the selected image frame into the panel"
+              title={t(P.ingestFrameTitle)}
             >
-              Use selected frame
+              {t(P.ingestFrame)}
             </button>
-            <label title="Sliders update the frame as they move; full resolution follows when they rest">
+            <label title={t(P.liveTitle)}>
               <input
                 type="checkbox"
                 data-image-live-preview
                 checked={s.livePreview}
                 onChange={(e) => session.setLivePreview(e.target.checked)}
               />{" "}
-              Live
+              {t(P.live)}
             </label>
             <button
               type="button"
@@ -1862,19 +2315,19 @@ export function makeImagePanel(session: ImageSession) {
               title={
                 disabled
                   ? s.busy
-                    ? "Working…"
-                    : "Load an image first"
-                  : "Show the adjusted image in its frame (the placed file is unchanged)"
+                    ? t(P.working)
+                    : t(P.loadFirst)
+                  : t(P.applyTitle)
               }
               onClick={() => void session.apply()}
             >
-              Apply
+              {t(P.apply)}
             </button>
             <button
               type="button"
               data-image-reset
               disabled={s.busy}
-              title="Return every adjustment to its starting value"
+              title={t(P.resetTitle)}
               onClick={() => {
                 // session.reset() restores the FULL identity params — every
                 // stage below, including the extended ones; the local
@@ -1894,7 +2347,7 @@ export function makeImagePanel(session: ImageSession) {
                 setNoiseAmount(0.5);
               }}
             >
-              Reset
+              {t(P.reset)}
             </button>
           </div>
           {/* The one line every door writes its outcome to — a result, or
@@ -1910,21 +2363,19 @@ export function makeImagePanel(session: ImageSession) {
           </div>
           {s.engine === "ready" && !s.gpu ? (
             <div style={note} data-image-no-gpu>
-              WebGPU is not available here, so adjustments, filters and painting
-              are disabled.
+              {t(P.noGpu)}
             </div>
           ) : null}
           {s.engine === "unavailable" ? (
             <div style={note} data-image-engine-unavailable>
-              The image engine could not start. Diagnostics, at the bottom of
-              the panel, has the reason.
+              {t(P.engineUnavailable)}
             </div>
           ) : null}
         </div>
 
         {s.source ? (
           <div style={row}>
-            <span>Image</span>
+            <span>{t(P.image)}</span>
             <span style={{ ...mono, textAlign: "right" }}>
               {`${s.source.name} · ${s.source.width}×${s.source.height} px`}
             </span>
@@ -1937,7 +2388,7 @@ export function makeImagePanel(session: ImageSession) {
             is stated rather than defaulted silently. */}
         {s.source ? (
           <div style={row}>
-            <span>Colour</span>
+            <span>{t(P.colour)}</span>
             <span style={mono} data-image-colour-treatment={s.source.display}>
               {displayTreatmentLabel(s.source.display)}
             </span>
@@ -1950,15 +2401,9 @@ export function makeImagePanel(session: ImageSession) {
         {s.source && isCmykConversion(s.source.display) ? (
           <div style={note} data-image-cmyk-converted>
             {s.source.display === "cmyk-converted"
-              ? "This CMYK image was converted to sRGB through its embedded profile; edits and save-back are RGB."
-              : "This CMYK image has no usable profile, so it was converted to sRGB without colour management; edits and save-back are RGB."}
-            <About>
-              The conversion follows Photoshop&apos;s default view: relative
-              colorimetric with black-point compensation, approximated by the
-              profile&apos;s perceptual table. Layers that use a blend mode
-              other than Normal are not imported, because Photoshop blends them
-              in CMYK.
-            </About>
+              ? t(P.cmykConverted)
+              : t(P.cmykUnmanaged)}
+            <About>{t(P.cmykAbout)}</About>
           </div>
         ) : null}
 
@@ -1967,27 +2412,22 @@ export function makeImagePanel(session: ImageSession) {
             happened — an 8-bit file needs no announcement. */}
         {s.source?.depthReduced ? (
           <div style={row}>
-            <span>Depth</span>
+            <span>{t(P.depth)}</span>
             <span style={mono} data-image-depth-reduced>
-              16-bit source, reduced to 8
+              {t(P.depthReduced)}
             </span>
           </div>
         ) : null}
         {s.source?.depthReduced ? (
-          <div style={note}>
-            Layers, edits and save-back work in 8 bits, so the extra precision
-            is not kept.
-          </div>
+          <div style={note}>{t(P.depthNote)}</div>
         ) : null}
 
         {/* Histogram */}
-        <div style={sectionTitle}>Histogram (R / G / B / luma)</div>
+        <div style={sectionTitle}>{t(P.histogram)}</div>
         {s.histogram ? (
           <HistogramView hist={s.histogram} />
         ) : (
-          <div style={note}>
-            Choose Use selected frame to see the histogram.
-          </div>
+          <div style={note}>{t(P.histogramEmpty)}</div>
         )}
         <div
           style={{
@@ -2002,30 +2442,27 @@ export function makeImagePanel(session: ImageSession) {
             disabled={disabled || !s.histogram}
             onClick={() => session.autoEnhance()}
           >
-            Auto-enhance
+            {t(P.autoEnhance)}
           </button>
         </div>
-        <div style={note}>
-          Auto-enhance sets levels and white balance from the histogram; Apply
-          shows the result.
-        </div>
+        <div style={note}>{t(P.autoEnhanceNote)}</div>
 
         {/* Selection readout — the engine-side coverage the marquee /
             lasso / wand tools build. When one exists, the committed Apply
             masks every adjust/filter dispatch (GPU mix(a, result, mask))
             + the CPU curves pass by it. */}
-        <div style={sectionTitle}>Selection</div>
+        <div style={sectionTitle}>{t(P.selection)}</div>
         {s.selection ? (
           <>
             <div style={row}>
-              <span>Bounds</span>
+              <span>{t(P.bounds)}</span>
               <span style={mono} data-image-selection-bounds>
                 {`${Math.round(s.selection.x)},${Math.round(s.selection.y)} ` +
                   `${Math.round(s.selection.w)}×${Math.round(s.selection.h)}`}
               </span>
             </div>
             <div style={row}>
-              <span>Coverage</span>
+              <span>{t(P.coverage)}</span>
               <span style={mono} data-image-selection-coverage>
                 {(s.selection.coverage * 100).toFixed(1)}%
               </span>
@@ -2043,24 +2480,20 @@ export function makeImagePanel(session: ImageSession) {
                 disabled={s.busy}
                 onClick={() => session.deselect()}
               >
-                Deselect
+                {t(P.deselect)}
               </button>
             </div>
           </>
         ) : (
-          <div style={note}>
-            No selection — adjustments apply to the whole image. Use the marquee
-            / lasso / wand tools (shift = add, alt = subtract, shift+alt =
-            intersect).
-          </div>
+          <div style={note}>{t(P.noSelection)}</div>
         )}
 
         {/* Tone / color base */}
         <div style={sectionTitle}>
-          Tone{s.selection ? " — applies to selection" : ""}
+          {t(s.selection ? P.toneSelection : P.tone)}
         </div>
         <Slider
-          label="Exposure (EV)"
+          label={t(P.exposure)}
           min={-5}
           max={5}
           step={0.1}
@@ -2069,7 +2502,7 @@ export function makeImagePanel(session: ImageSession) {
           onChange={(v) => setBase("exposureEv", v)}
         />
         <Slider
-          label="Brightness"
+          label={t(P.brightness)}
           min={-1}
           max={1}
           step={0.05}
@@ -2078,7 +2511,7 @@ export function makeImagePanel(session: ImageSession) {
           onChange={(v) => setBase("brightness", v)}
         />
         <Slider
-          label="Contrast"
+          label={t(P.contrast)}
           min={0}
           max={4}
           step={0.05}
@@ -2087,7 +2520,7 @@ export function makeImagePanel(session: ImageSession) {
           onChange={(v) => setBase("contrast", v)}
         />
         <Slider
-          label="Saturation"
+          label={t(P.saturation)}
           min={0}
           max={4}
           step={0.05}
@@ -2097,9 +2530,9 @@ export function makeImagePanel(session: ImageSession) {
         />
 
         {/* White balance */}
-        <div style={sectionTitle}>White balance</div>
+        <div style={sectionTitle}>{t(P.whiteBalance)}</div>
         <Slider
-          label="Temp"
+          label={t(P.temp)}
           min={-1}
           max={1}
           step={0.02}
@@ -2108,7 +2541,7 @@ export function makeImagePanel(session: ImageSession) {
           onChange={(v) => setBase("temp", v)}
         />
         <Slider
-          label="Tint"
+          label={t(P.tint)}
           min={-1}
           max={1}
           step={0.02}
@@ -2118,9 +2551,9 @@ export function makeImagePanel(session: ImageSession) {
         />
 
         {/* Levels */}
-        <div style={sectionTitle}>Levels (composite)</div>
+        <div style={sectionTitle}>{t(P.levels)}</div>
         <Slider
-          label="In black"
+          label={t(P.inBlack)}
           min={0}
           max={1}
           step={0.01}
@@ -2129,7 +2562,7 @@ export function makeImagePanel(session: ImageSession) {
           onChange={(v) => session.setLevels({ inBlack: v })}
         />
         <Slider
-          label="Gamma"
+          label={t(P.gamma)}
           min={0.1}
           max={4}
           step={0.05}
@@ -2138,7 +2571,7 @@ export function makeImagePanel(session: ImageSession) {
           onChange={(v) => session.setLevels({ gamma: v })}
         />
         <Slider
-          label="In white"
+          label={t(P.inWhite)}
           min={0}
           max={1}
           step={0.01}
@@ -2147,7 +2580,7 @@ export function makeImagePanel(session: ImageSession) {
           onChange={(v) => session.setLevels({ inWhite: v })}
         />
         <Slider
-          label="Out black"
+          label={t(P.outBlack)}
           min={0}
           max={1}
           step={0.01}
@@ -2156,7 +2589,7 @@ export function makeImagePanel(session: ImageSession) {
           onChange={(v) => session.setLevels({ outBlack: v })}
         />
         <Slider
-          label="Out white"
+          label={t(P.outWhite)}
           min={0}
           max={1}
           step={0.01}
@@ -2168,7 +2601,7 @@ export function makeImagePanel(session: ImageSession) {
         {/* Levels — PER CHANNEL (adjust.levels_rgb). Same Levels row
             idiom, three columns: in black / gamma / in white. The OUTPUT
             range stays composite above (the kernel has no output remap). */}
-        <div style={sectionTitle}>Levels (per channel)</div>
+        <div style={sectionTitle}>{t(P.levelsPerChannel)}</div>
         <NumRow label="&nbsp;">
           <span
             style={{
@@ -2179,7 +2612,7 @@ export function makeImagePanel(session: ImageSession) {
               textAlign: "center",
             }}
           >
-            blk
+            {t(P.blk)}
           </span>
           <span
             style={{
@@ -2190,7 +2623,7 @@ export function makeImagePanel(session: ImageSession) {
               textAlign: "center",
             }}
           >
-            gam
+            {t(P.gam)}
           </span>
           <span
             style={{
@@ -2201,7 +2634,7 @@ export function makeImagePanel(session: ImageSession) {
               textAlign: "center",
             }}
           >
-            wht
+            {t(P.wht)}
           </span>
         </NumRow>
         {(["r", "g", "b"] as const).map((ch) => (
@@ -2212,7 +2645,7 @@ export function makeImagePanel(session: ImageSession) {
               value={p.levelsRgb[ch].inBlack}
               disabled={disabled}
               onChange={(v) => setLevelsRgb(ch, "inBlack", v)}
-              title={`${ch.toUpperCase()} in black`}
+              title={t(P.channelInBlack, { channel: ch.toUpperCase() })}
             />
             <Num
               testAttr={`data-image-levels-${ch}-gamma`}
@@ -2220,7 +2653,7 @@ export function makeImagePanel(session: ImageSession) {
               value={p.levelsRgb[ch].gamma}
               disabled={disabled}
               onChange={(v) => setLevelsRgb(ch, "gamma", v)}
-              title={`${ch.toUpperCase()} gamma`}
+              title={t(P.channelGamma, { channel: ch.toUpperCase() })}
             />
             <Num
               testAttr={`data-image-levels-${ch}-white`}
@@ -2228,7 +2661,7 @@ export function makeImagePanel(session: ImageSession) {
               value={p.levelsRgb[ch].inWhite}
               disabled={disabled}
               onChange={(v) => setLevelsRgb(ch, "inWhite", v)}
-              title={`${ch.toUpperCase()} in white`}
+              title={t(P.channelInWhite, { channel: ch.toUpperCase() })}
             />
           </NumRow>
         ))}
@@ -2237,9 +2670,9 @@ export function makeImagePanel(session: ImageSession) {
             .photo_filter, .channel_mixer). Chain order is fixed in the
             engine (documented on ingest::adjust_rgba8); this section only
             edits + forwards. */}
-        <div style={sectionTitle}>Color</div>
+        <div style={sectionTitle}>{t(P.color)}</div>
         <Slider
-          label="Vibrance"
+          label={t(P.vibrance)}
           min={-1}
           max={1}
           step={0.05}
@@ -2248,7 +2681,9 @@ export function makeImagePanel(session: ImageSession) {
           onChange={(v) => setBase("vibrance", v)}
         />
 
-        <div style={{ ...kicker, marginTop: space[2] }}>Color balance</div>
+        <div style={{ ...kicker, marginTop: space[2] }}>
+          {t(P.colorBalance)}
+        </div>
         <NumRow label="&nbsp;">
           <span
             style={{
@@ -2285,7 +2720,7 @@ export function makeImagePanel(session: ImageSession) {
           </span>
         </NumRow>
         {(["shadows", "midtones", "highlights"] as const).map((range) => (
-          <NumRow key={range} label={range[0].toUpperCase() + range.slice(1)}>
+          <NumRow key={range} label={capitalize(toneRangeLabel(range))}>
             {([0, 1, 2] as const).map((axis) => (
               <Num
                 key={axis}
@@ -2299,9 +2734,9 @@ export function makeImagePanel(session: ImageSession) {
           </NumRow>
         ))}
 
-        <div style={{ ...kicker, marginTop: space[2] }}>Photo filter</div>
+        <div style={{ ...kicker, marginTop: space[2] }}>{t(P.photoFilter)}</div>
         <div style={row}>
-          <label htmlFor="pg-image-photofilter">Gel</label>
+          <label htmlFor="pg-image-photofilter">{t(P.gel)}</label>
           <select
             id="pg-image-photofilter"
             data-image-photo-filter
@@ -2332,13 +2767,13 @@ export function makeImagePanel(session: ImageSession) {
           >
             {PHOTO_FILTERS.map((f, i) => (
               <option key={f.name} value={i}>
-                {f.name}
+                {t(f.name)}
               </option>
             ))}
           </select>
         </div>
         <Slider
-          label="Density"
+          label={t(P.density)}
           min={0}
           max={1}
           step={0.05}
@@ -2349,7 +2784,7 @@ export function makeImagePanel(session: ImageSession) {
           }
         />
         <Gate
-          label="Preserve luminosity"
+          label={t(P.preserveLuminosity)}
           testAttr="data-image-photo-preserve"
           checked={p.photoFilter.preserveLuminosity}
           disabled={disabled}
@@ -2360,7 +2795,9 @@ export function makeImagePanel(session: ImageSession) {
           }
         />
 
-        <div style={{ ...kicker, marginTop: space[2] }}>Channel mixer</div>
+        <div style={{ ...kicker, marginTop: space[2] }}>
+          {t(P.channelMixer)}
+        </div>
         <NumRow label="&nbsp;">
           {["R", "G", "B", "+"].map((h) => (
             <span
@@ -2378,7 +2815,10 @@ export function makeImagePanel(session: ImageSession) {
           ))}
         </NumRow>
         {(["r", "g", "b"] as const).map((out) => (
-          <NumRow key={out} label={`out ${out.toUpperCase()}`}>
+          <NumRow
+            key={out}
+            label={t(P.mixerOut, { channel: out.toUpperCase() })}
+          >
             {([0, 1, 2, 3] as const).map((i) => (
               <Num
                 key={i}
@@ -2395,9 +2835,9 @@ export function makeImagePanel(session: ImageSession) {
         {/* EFFECTS — the range-destroying stages. Each sits behind an
             enable GATE (they look destructive, so they never ride a
             "neutral value" default the user could hit by accident). */}
-        <div style={sectionTitle}>Effects</div>
+        <div style={sectionTitle}>{t(P.effects)}</div>
         <Gate
-          label="Black &amp; white"
+          label={t(P.blackWhite)}
           testAttr="data-image-bw-enable"
           checked={p.blackWhite.enabled}
           disabled={disabled}
@@ -2441,12 +2881,12 @@ export function makeImagePanel(session: ImageSession) {
                 })
               }
             >
-              Default mix
+              {t(P.defaultMix)}
             </button>
           </>
         )}
         <Gate
-          label="Posterize"
+          label={t(P.posterize)}
           testAttr="data-image-posterize-enable"
           checked={p.posterizeLevels !== null}
           disabled={disabled}
@@ -2456,7 +2896,7 @@ export function makeImagePanel(session: ImageSession) {
         />
         {p.posterizeLevels !== null && (
           <Slider
-            label="Levels"
+            label={t(P.posterizeLevels)}
             min={2}
             max={32}
             step={1}
@@ -2466,7 +2906,7 @@ export function makeImagePanel(session: ImageSession) {
           />
         )}
         <Gate
-          label="Threshold"
+          label={t(P.threshold)}
           testAttr="data-image-threshold-enable"
           checked={p.threshold !== null}
           disabled={disabled}
@@ -2474,7 +2914,7 @@ export function makeImagePanel(session: ImageSession) {
         />
         {p.threshold !== null && (
           <Slider
-            label="Cut (luma)"
+            label={t(P.cut)}
             min={0}
             max={1}
             step={0.01}
@@ -2491,11 +2931,10 @@ export function makeImagePanel(session: ImageSession) {
             fixed TWO-STOP gradient whose geometry is derived from the
             selection bounds (no on-canvas drag handle yet). */}
         <div style={sectionTitle}>
-          Generate
-          {s.selection ? " — fills the selection" : " — fills the whole image"}
+          {t(s.selection ? P.generateSelection : P.generateImage)}
         </div>
         <div style={row}>
-          <label htmlFor="pg-image-gradient">Gradient</label>
+          <label htmlFor="pg-image-gradient">{t(P.gradient)}</label>
           <span style={{ display: "flex", gap: 4, alignItems: "center" }}>
             <select
               id="pg-image-gradient"
@@ -2506,7 +2945,7 @@ export function makeImagePanel(session: ImageSession) {
             >
               {GRADIENT_KINDS.map((k) => (
                 <option key={k} value={k}>
-                  {k}
+                  {gradientKindLabel(k)}
                 </option>
               ))}
             </select>
@@ -2519,11 +2958,11 @@ export function makeImagePanel(session: ImageSession) {
               value={stop0}
               disabled={disabled}
               onChange={(e) => setStop0(Number(e.target.value))}
-              title="Start colour"
+              title={t(P.startColour)}
             >
               {STOPS.map((c, i) => (
                 <option key={c.name} value={i}>
-                  {c.name}
+                  {t(c.name)}
                 </option>
               ))}
             </select>
@@ -2536,11 +2975,11 @@ export function makeImagePanel(session: ImageSession) {
               value={stop1}
               disabled={disabled}
               onChange={(e) => setStop1(Number(e.target.value))}
-              title="End colour"
+              title={t(P.endColour)}
             >
               {STOPS.map((c, i) => (
                 <option key={c.name} value={i}>
-                  {c.name}
+                  {t(c.name)}
                 </option>
               ))}
             </select>
@@ -2548,11 +2987,7 @@ export function makeImagePanel(session: ImageSession) {
               type="button"
               data-image-fill-gradient
               disabled={disabled || !s.gpu}
-              title={
-                s.gpu
-                  ? "Paint the gradient into the selection"
-                  : "Generators are GPU-only — no WebGPU device"
-              }
+              title={s.gpu ? t(P.fillGradientTitle) : t(P.generatorsGpuOnly)}
               onClick={() =>
                 void session.fillSelection({
                   kind: "gradient",
@@ -2562,12 +2997,12 @@ export function makeImagePanel(session: ImageSession) {
                 })
               }
             >
-              Fill
+              {t(P.fill)}
             </button>
           </span>
         </div>
         <div style={row}>
-          <label htmlFor="pg-image-noise">Noise</label>
+          <label htmlFor="pg-image-noise">{t(P.noise)}</label>
           <span style={{ display: "flex", gap: 4, alignItems: "center" }}>
             <input
               id="pg-image-noise"
@@ -2594,15 +3029,11 @@ export function makeImagePanel(session: ImageSession) {
                 })
               }
             >
-              Fill
+              {t(P.fill)}
             </button>
           </span>
         </div>
-        <div style={note}>
-          A fill is DESTRUCTIVE into the engine source (the document and the
-          placed file are untouched — re-ingest restores). Two stops only in v0;
-          the gradient geometry follows the selection bounds.
-        </div>
+        <div style={note}>{t(P.fillNote)}</div>
 
         <PatternSection
           session={session}
@@ -2636,7 +3067,9 @@ export function makeImagePanel(session: ImageSession) {
           lookupName={lookupName}
           onLookupFile={(f) => {
             setLookupName(f.name);
-            void f.text().then((t) => session.applyColorLookup(t, f.name));
+            void f
+              .text()
+              .then((text) => session.applyColorLookup(text, f.name));
           }}
         />
         <SelectModifySection
@@ -2666,9 +3099,9 @@ export function makeImagePanel(session: ImageSession) {
 
         {/* Filters — the T1/T2 kernels' first editor reach (blur, unsharp,
             hue rotation, invert); same GPU chain, same Apply commit. */}
-        <div style={sectionTitle}>Filters</div>
+        <div style={sectionTitle}>{t(P.filters)}</div>
         <Slider
-          label="Blur (σ px)"
+          label={t(P.blur)}
           min={0}
           max={8}
           step={0.1}
@@ -2677,7 +3110,7 @@ export function makeImagePanel(session: ImageSession) {
           onChange={(v) => setBase("blurSigma", v)}
         />
         <Slider
-          label="Sharpen"
+          label={t(P.sharpen)}
           min={0}
           max={3}
           step={0.05}
@@ -2686,7 +3119,7 @@ export function makeImagePanel(session: ImageSession) {
           onChange={(v) => setBase("sharpenAmount", v)}
         />
         <Slider
-          label="Hue rotate (°)"
+          label={t(P.hueRotate)}
           min={-180}
           max={180}
           step={1}
@@ -2709,7 +3142,7 @@ export function makeImagePanel(session: ImageSession) {
             disabled={disabled}
             onChange={(e) => session.setParams({ invert: e.target.checked })}
           />
-          Invert colors
+          {t(P.invert)}
         </label>
 
         {/* EFFECTS over the new kernel classes — Gradient Map
@@ -2718,7 +3151,7 @@ export function makeImagePanel(session: ImageSession) {
             active layer when a stack is bound, journaled and
             selection-masked, so they are undoable and confinable without
             any special casing. */}
-        <div style={sectionTitle}>Gradient map &amp; distort</div>
+        <div style={sectionTitle}>{t(P.gradientMapDistort)}</div>
         <div
           style={{
             display: "flex",
@@ -2730,7 +3163,7 @@ export function makeImagePanel(session: ImageSession) {
             type="button"
             data-image-gradient-map
             disabled={s.busy || !s.gpu || !s.source}
-            title="Map luminance through a two-stop colour ramp (shadows to highlights)"
+            title={t(P.gradientMapTitle)}
             onClick={() =>
               void session.applyGradientMap(
                 [0.05, 0.1, 0.25],
@@ -2738,7 +3171,7 @@ export function makeImagePanel(session: ImageSession) {
               )
             }
           >
-            Gradient map
+            {t(P.gradientMap)}
           </button>
           {WARP_KINDS.map((kind) => (
             <button
@@ -2746,258 +3179,248 @@ export function makeImagePanel(session: ImageSession) {
               type="button"
               data-image-warp={kind}
               disabled={s.busy || !s.gpu || !s.source}
-              title={`Apply the ${kind} distortion (amount 0 is the identity)`}
+              title={t(P.warpTitle, { kind: warpKindLabel(kind) })}
               onClick={() => void session.applyWarp(kind, 0.4)}
             >
-              {kind}
+              {warpKindLabel(kind)}
             </button>
           ))}
         </div>
-        <div style={note}>
-          A gradient map replaces colour with a ramp read from luminance; the
-          distortions resample through one backward map, so they share a
-          reconstruction filter and edge rule with the crop straighten.
-        </div>
+        <div style={note}>{t(P.gradientMapNote)}</div>
 
-        <div style={sectionTitle}>Stylize, blur &amp; pixelate</div>
+        <div style={sectionTitle}>{t(P.stylize)}</div>
         <div style={row}>
           <button
             type="button"
             data-image-emboss
             disabled={s.busy || !s.gpu || !s.source}
-            title="Directional relief. A flat region stays mid-grey, which is what makes it read as relief rather than as an edge map."
+            title={t(GALLERY.embossTitle)}
             onClick={() => void session.applyEmboss(135, 1)}
           >
-            Emboss
+            {t(GALLERY.emboss)}
           </button>
           <button
             type="button"
             data-image-find-edges
             disabled={s.busy || !s.gpu || !s.source}
-            title="Sobel magnitude, inverted — dark lines on white, and run per channel so an equal-luminance colour edge still registers."
+            title={t(GALLERY.findEdgesTitle)}
             onClick={() => void session.applyFindEdges(1)}
           >
-            Find edges
+            {t(GALLERY.findEdges)}
           </button>
           <button
             type="button"
             data-image-motion-blur
             disabled={s.busy || !s.gpu || !s.source}
-            title="Directional blur along a line, centred on the pixel so the subject smears symmetrically."
+            title={t(GALLERY.motionBlurTitle)}
             onClick={() => void session.applyMotionBlur(0, 24)}
           >
-            Motion blur
+            {t(GALLERY.motionBlur)}
           </button>
           <button
             type="button"
             data-image-spin-blur
             disabled={s.busy || !s.gpu || !s.source}
-            title="Radial blur, spin: the smear grows outward because arc length scales with radius."
+            title={t(GALLERY.spinBlurTitle)}
             onClick={() => void session.applyRadialBlur(0.5, 0.5, 0.15, true)}
           >
-            Spin blur
+            {t(GALLERY.spinBlur)}
           </button>
           <button
             type="button"
             data-image-zoom-blur
             disabled={s.busy || !s.gpu || !s.source}
-            title="Radial blur, zoom: the same arc walk holding the angle and varying the radius."
+            title={t(GALLERY.zoomBlurTitle)}
             onClick={() => void session.applyRadialBlur(0.5, 0.5, 0.15, false)}
           >
-            Zoom blur
+            {t(GALLERY.zoomBlur)}
           </button>
           <button
             type="button"
             data-image-mosaic
             disabled={s.busy || !s.gpu || !s.source}
-            title="Pixelate by quantizing the source coordinate and sampling the cell centre — hard blocks, not smoothed steps."
+            title={t(GALLERY.mosaicTitle)}
             onClick={() => void session.applyMosaic(12)}
           >
-            Mosaic
+            {t(GALLERY.mosaic)}
           </button>
           <button
             type="button"
             data-image-paint-daubs
             disabled={s.busy || !s.gpu || !s.source}
-            title="Kuwahara: takes the lowest-variance quadrant's mean, so a region flattens toward paint while its boundary stays put."
+            title={t(GALLERY.paintDaubsTitle)}
             onClick={() => void session.galleryKuwahara(6, 1)}
           >
-            Paint daubs
+            {t(GALLERY.paintDaubs)}
           </button>
           <button
             type="button"
             data-image-poster-edges
             disabled={s.busy || !s.gpu || !s.source}
-            title="Posterised colour plus a darkened outline. The two halves are independent — that is what separates Cutout from Ink Outlines."
+            title={t(GALLERY.posterEdgesTitle)}
             onClick={() => void session.galleryPosterizeEdges(6, 1, 0.08, 1)}
           >
-            Poster edges
+            {t(GALLERY.posterEdges)}
           </button>
           <button
             type="button"
             data-image-glowing-edges
             disabled={s.busy || !s.gpu || !s.source}
-            title="Edge magnitude colourised and boosted; keeps the source hue instead of going grey."
+            title={t(GALLERY.glowingEdgesTitle)}
             onClick={() => void session.galleryGlowingEdges(1.6, 0.4, 1)}
           >
-            Glowing edges
+            {t(GALLERY.glowingEdges)}
           </button>
           <button
             type="button"
             data-image-halftone
             disabled={s.busy || !s.gpu || !s.source}
-            title="Screen-angle halftone. Dot AREA carries the tone, not dot darkness — which is what lets it survive a 1-bit output."
+            title={t(GALLERY.halftoneTitle)}
             onClick={() => void session.galleryHalftone(6, 45, 1.2, 1)}
           >
-            Halftone
+            {t(GALLERY.halftone)}
           </button>
           <button
             type="button"
             data-image-film-grain
             disabled={s.busy || !s.gpu || !s.source}
-            title="Deterministic hash of the coordinate and seed, never host randomness, so undo/redo cannot shimmer."
+            title={t(GALLERY.filmGrainTitle)}
             onClick={() => void session.galleryGrain(1, 1, false, 0.5)}
           >
-            Film grain
+            {t(GALLERY.filmGrain)}
           </button>
           <button
             type="button"
             data-image-spatter
             disabled={s.busy || !s.gpu || !s.source}
-            title="Random local displacement. Anisotropy is the whole difference between Spatter and Sprayed Strokes."
+            title={t(GALLERY.spatterTitle)}
             onClick={() => void session.galleryDiffuse(1, 4, 0, 0, 1)}
           >
-            Spatter
+            {t(GALLERY.spatter)}
           </button>
           <button
             type="button"
             data-image-crosshatch
             disabled={s.busy || !s.gpu || !s.source}
-            title="Hatching modulated by luminance. The SET COUNT alone gives Graphic Pen (1), Crosshatch (2) and Sumi-e (3)."
+            title={t(GALLERY.crosshatchTitle)}
             onClick={() => void session.galleryCrosshatch(45, 6, 0.7, 2, 1)}
           >
-            Crosshatch
+            {t(GALLERY.crosshatch)}
           </button>
           <button
             type="button"
             data-image-bas-relief
             disabled={s.busy || !s.gpu || !s.source}
-            title="Directional lighting over a luminance heightfield. Chrome and Plastic Wrap are approximated at extreme settings, not modelled."
+            title={t(GALLERY.basReliefTitle)}
             onClick={() => void session.galleryBasRelief(135, 30, 1.5, 1)}
           >
-            Bas relief
+            {t(GALLERY.basRelief)}
           </button>
           <button
             type="button"
             data-image-photocopy
             disabled={s.busy || !s.gpu || !s.source}
-            title="Luminance threshold with a soft ramp; the ramp width is what makes Stamp hard and Charcoal soft."
+            title={t(GALLERY.photocopyTitle)}
             onClick={() => void session.galleryThresholdInk(0.5, 0.08, 1)}
           >
-            Photocopy
+            {t(GALLERY.photocopy)}
           </button>
           <button
             type="button"
             data-image-stained-glass
             disabled={s.busy || !s.gpu || !s.source}
-            title="Cellular tiling with a border term. The border weight alone separates Crystallize from Stained Glass."
+            title={t(GALLERY.stainedGlassTitle)}
             onClick={() => void session.galleryStainedGlass(1, 24, 0.5, 1)}
           >
-            Stained glass
+            {t(GALLERY.stainedGlass)}
           </button>
           <button
             type="button"
             data-image-glass
             disabled={s.busy || !s.gpu || !s.source}
-            title="Refraction-style displacement through a procedural normal field."
+            title={t(GALLERY.glassTitle)}
             onClick={() => void session.galleryGlass(1, 24, 0.4, 1)}
           >
-            Glass
+            {t(GALLERY.glass)}
           </button>
           <button
             type="button"
             data-image-texturizer
             disabled={s.busy || !s.gpu || !s.source}
-            title="Procedural surface texture modulating shading; kind picks Canvas / Burlap / Brick rather than a kernel per material."
+            title={t(GALLERY.texturizerTitle)}
             onClick={() =>
               void session.galleryTexturizer(1, 0, 24, 0.6, 135, 1)
             }
           >
-            Texturizer
+            {t(GALLERY.texturizer)}
           </button>
           <button
             type="button"
             data-image-despeckle
             disabled={s.busy || !s.gpu || !s.source}
-            title="Smooths speckle without softening edges: it gates on the INNER range, which a speckle inflates and an edge does not."
+            title={t(GALLERY.despeckleTitle)}
             onClick={() => void session.applyDespeckle(0.12, 1)}
           >
-            Despeckle
+            {t(GALLERY.despeckle)}
           </button>
           <button
             type="button"
             data-image-dust-scratches
             disabled={s.busy || !s.gpu || !s.source}
-            title="Replaces a pixel with the neighbourhood median only where it differs by more than the threshold. Threshold 1 is the identity; 0 is a plain median."
+            title={t(GALLERY.dustScratchesTitle)}
             onClick={() => void session.applyDustScratches(2, 0.15)}
           >
-            Dust &amp; scratches
+            {t(GALLERY.dustScratches)}
           </button>
           <button
             type="button"
             data-image-offset
             disabled={s.busy || !s.gpu || !s.source}
-            title="Filter &gt; Other &gt; Offset — moves the pixels and wraps at the edge, which is what makes a texture tile seamlessly."
+            title={t(GALLERY.offsetTitle)}
             onClick={() => void session.offsetFilter(32, 32)}
           >
-            Offset (wrap)
+            {t(GALLERY.offset)}
           </button>
           <button
             type="button"
             data-image-lens-blur
             disabled={s.busy || !s.gpu || !s.source}
-            title="Bokeh: a flat-topped disc, with highlights weighted up before the average and pulled back after — so a bright speck spreads as a bright ball, not a dim smudge."
+            title={t(GALLERY.lensBlurTitle)}
             onClick={() => void session.applyLensBlur(8, 0.75, 4)}
           >
-            Lens blur
+            {t(GALLERY.lensBlur)}
           </button>
           <button
             type="button"
             data-image-reduce-noise
             disabled={s.busy || !s.gpu || !s.source}
-            title="Bilateral denoise: taps are weighted by colour distance as well as distance, so it refuses to average across an edge."
+            title={t(GALLERY.reduceNoiseTitle)}
             onClick={() => void session.applyReduceNoise(4, 0.12, 0.8)}
           >
-            Reduce noise
+            {t(GALLERY.reduceNoise)}
           </button>
           <button
             type="button"
             data-image-smart-sharpen
             disabled={s.busy || !s.gpu || !s.source}
-            title="Unsharp with two gates: local contrast below the threshold is left alone as noise, and the correction is clamped so a strong edge cannot ring into a halo."
+            title={t(GALLERY.smartSharpenTitle)}
             onClick={() => void session.applySmartSharpen(2, 1.2, 0.02, 0.25)}
           >
-            Smart sharpen
+            {t(GALLERY.smartSharpen)}
           </button>
           <button
             type="button"
             data-image-selective-color
             disabled={s.busy || !s.gpu || !s.source}
-            title="Per-range CMYK shift — this button targets the reds. Range membership goes by channel ORDER, so there is no seam at a hue boundary and no wraparound case."
+            title={t(GALLERY.selectiveColourTitle)}
             onClick={() =>
               void session.applySelectiveColor(0, [0, 0.2, 0.2, 0], false)
             }
           >
-            Selective colour
+            {t(GALLERY.selectiveColour)}
           </button>
         </div>
-        <div style={note}>
-          One-click defaults, not a parameter surface: each of these is a single
-          kernel and every one has an identity setting, so a slider adds nothing
-          a designer cannot get by applying twice. Emboss and find edges share
-          one 3&times;3 neighbourhood read; the two radial modes are one kernel,
-          where zoom is the degenerate arc.
-        </div>
+        <div style={note}>{t(P.galleryNote)}</div>
 
         {/* LAYERS — the layer graph itself: order, visibility, opacity,
             blend and the active-layer choice paint/fill/bake land in,
@@ -3040,7 +3463,7 @@ export function makeImagePanel(session: ImageSession) {
           onMaskClear={(i) => void session.clearLayerMask(i)}
           editTarget={s.layers.editTarget}
           onAddMask={(i, reveal) => void session.addLayerMask(i, reveal)}
-          onEditTarget={(i, t) => session.setEditTarget(i, t)}
+          onEditTarget={(i, target) => session.setEditTarget(i, target)}
           onUndoTo={(n) => void session.undoSteps(n)}
           onRedoTo={(n) => void session.redoSteps(n)}
           onBake={() => void session.bakeAdjustToLayer()}
@@ -3138,7 +3561,7 @@ export function makeImagePanel(session: ImageSession) {
 
         {/* Resize — the T1 resample kernels (GPU-only; the button says so
             when no device). Swaps the engine source like a crop commit. */}
-        <div style={sectionTitle}>Resize</div>
+        <div style={sectionTitle}>{t(P.resize)}</div>
         <div
           style={{
             display: "flex",
@@ -3178,22 +3601,18 @@ export function makeImagePanel(session: ImageSession) {
           >
             <option value="lanczos3">Lanczos 3</option>
             <option value="mitchell">Mitchell</option>
-            <option value="nearest">Nearest</option>
+            <option value="nearest">{t(P.nearest)}</option>
           </select>
           <button
             type="button"
             data-image-resize-apply
             disabled={disabled || !s.gpu}
-            title={
-              s.gpu
-                ? "Resample the source"
-                : "Resample is GPU-only — no WebGPU device"
-            }
+            title={s.gpu ? t(P.resampleTitle) : t(P.resampleGpuOnly)}
             onClick={() =>
               void session.resizeTo(resizeW, resizeH, resizeFilter)
             }
           >
-            Resample
+            {t(P.resample)}
           </button>
         </div>
 
@@ -3203,7 +3622,9 @@ export function makeImagePanel(session: ImageSession) {
             stays the import-time flatten (re-flatten is a follow-up). */}
         {s.psd && (
           <>
-            <div style={sectionTitle}>PSD layers ({s.psd.layers.length})</div>
+            <div style={sectionTitle}>
+              {t(P.psdLayers, { count: s.psd.layers.length })}
+            </div>
             {s.psd.layers.map((l) => (
               <div
                 key={l.index}
@@ -3225,9 +3646,9 @@ export function makeImagePanel(session: ImageSession) {
                     whiteSpace: "nowrap",
                     opacity: l.hidden ? 0.5 : 1,
                   }}
-                  title={l.hidden ? `${l.name} (hidden in the PSD)` : l.name}
+                  title={l.hidden ? t(P.psdHidden, { name: l.name }) : l.name}
                   onDoubleClick={() => {
-                    const name = window.prompt("Layer name", l.name);
+                    const name = window.prompt(t(P.layerName), l.name);
                     if (name && name !== l.name)
                       session.psdRenameLayer(l.index, name);
                   }}
@@ -3245,7 +3666,7 @@ export function makeImagePanel(session: ImageSession) {
                     width: 52,
                     font: `11px ${font.mono}`,
                   }}
-                  title="Layer opacity (%)"
+                  title={t(P.psdOpacity)}
                   onChange={(e) =>
                     session.psdSetLayerOpacity(
                       l.index,
@@ -3254,9 +3675,9 @@ export function makeImagePanel(session: ImageSession) {
                   }
                 />
                 <IconButton
-                  label="Remove layer from the PSD"
+                  label={t(P.psdRemove)}
                   data-image-psd-remove
-                  title="Remove layer (in the exported PSD)"
+                  title={t(P.psdRemoveTitle)}
                   style={{
                     border: "none",
                     background: "none",
@@ -3283,7 +3704,7 @@ export function makeImagePanel(session: ImageSession) {
         )}
 
         {/* Curves */}
-        <div style={sectionTitle}>Curves</div>
+        <div style={sectionTitle}>{t(P.curves)}</div>
         <div
           style={{
             display: "flex",
@@ -3292,16 +3713,16 @@ export function makeImagePanel(session: ImageSession) {
           }}
         >
           <select
-            aria-label="Curve channel"
+            aria-label={t(P.curveChannel)}
             data-image-curve-channel
             value={curveChannel}
             disabled={disabled}
             onChange={(e) => setCurveChannel(e.target.value as CurveChannel)}
           >
             <option value="rgb">RGB</option>
-            <option value="r">Red</option>
-            <option value="g">Green</option>
-            <option value="b">Blue</option>
+            <option value="r">{t(P.red)}</option>
+            <option value="g">{t(P.green)}</option>
+            <option value="b">{t(P.blue)}</option>
           </select>
           <CurveEditor
             points={curvePoints}
@@ -3315,14 +3736,14 @@ export function makeImagePanel(session: ImageSession) {
               pushCurve(IDENTITY_CURVE.map((q) => [...q] as [number, number]))
             }
           >
-            Reset curve
+            {t(P.resetCurve)}
           </button>
         </div>
 
         {/* Crop + straighten */}
-        <div style={sectionTitle}>Crop + straighten</div>
+        <div style={sectionTitle}>{t(P.crop)}</div>
         <div style={row}>
-          <label htmlFor="pg-image-aspect">Aspect</label>
+          <label htmlFor="pg-image-aspect">{t(P.aspect)}</label>
           <select
             id="pg-image-aspect"
             value={aspect}
@@ -3335,13 +3756,17 @@ export function makeImagePanel(session: ImageSession) {
           >
             {ASPECTS.map((a) => (
               <option key={a} value={a}>
-                {a}
+                {a === "free"
+                  ? t(P.aspectFree)
+                  : a === "original"
+                    ? t(P.aspectOriginal)
+                    : a}
               </option>
             ))}
           </select>
         </div>
         <Slider
-          label="Straighten°"
+          label={t(P.straighten)}
           min={-45}
           max={45}
           step={0.5}
@@ -3364,7 +3789,7 @@ export function makeImagePanel(session: ImageSession) {
             disabled={disabled || !machine}
             onClick={() => void session.commitCrop()}
           >
-            Apply crop
+            {t(P.applyCrop)}
           </button>
           <button
             type="button"
@@ -3375,7 +3800,7 @@ export function makeImagePanel(session: ImageSession) {
               setAngle(0);
             }}
           >
-            Reset crop
+            {t(P.resetCrop)}
           </button>
         </div>
 
@@ -3385,7 +3810,7 @@ export function makeImagePanel(session: ImageSession) {
             this consumer and this bundle had never called it, so the
             Export Center was doing work the panel could do itself. The
             exporters remain the fallback for a host with no saver. */}
-        <div style={sectionTitle}>Apply to file</div>
+        <div style={sectionTitle}>{t(P.applyToFile)}</div>
         <div style={{ display: "flex", gap: space[2] }}>
           <button
             type="button"
@@ -3393,7 +3818,7 @@ export function makeImagePanel(session: ImageSession) {
             disabled={disabled}
             onClick={() => void session.applyToFile()}
           >
-            Apply to file
+            {t(P.applyToFile)}
           </button>
           <button
             type="button"
@@ -3401,13 +3826,13 @@ export function makeImagePanel(session: ImageSession) {
             disabled={disabled}
             onClick={() => void session.saveToFile()}
           >
-            Save…
+            {t(P.save)}
           </button>
         </div>
         {s.saveBack ? (
           <>
             <div style={row}>
-              <span>Ready</span>
+              <span>{t(P.ready)}</span>
               <span style={mono} data-image-saveback-file>
                 {s.saveBack.fileName} · {s.saveBack.bytes.length} B
               </span>
@@ -3418,15 +3843,8 @@ export function makeImagePanel(session: ImageSession) {
           </>
         ) : (
           <div style={note}>
-            Writes the adjustments into a copy of the source file at full
-            resolution.
-            <About>
-              A single-layer PSD gets its channel pixels written back; a
-              multi-layer PSD is flattened into a new single-layer PSD, and the
-              panel says so. A PNG or JPEG is re-encoded. Save… hands the result
-              to the editor&apos;s file saver; where there is none, the Export
-              Center delivers the same bytes.
-            </About>
+            {t(P.saveNote)}
+            <About>{t(P.saveAbout)}</About>
           </div>
         )}
 
@@ -3434,36 +3852,30 @@ export function makeImagePanel(session: ImageSession) {
             collapsed at the bottom. The Source row keeps its exact
             span/span shape: journeys read it by text. */}
         <Disclosure
-          summary="Diagnostics"
+          summary={t(P.diagnostics)}
           style={{ ...note, marginTop: space[3] }}
           data-image-diagnostics
         >
           <div style={row}>
-            <span>Bundle</span>
+            <span>{t(P.bundle)}</span>
             <span style={mono}>
               {manifest.id}@{manifest.version}
             </span>
           </div>
           <div style={row}>
-            <span>Engine</span>
+            <span>{t(P.engine)}</span>
             <span style={{ textAlign: "right" }}>{engineLine}</span>
           </div>
           {s.engineDetail ? <div>{s.engineDetail}</div> : null}
           <div style={row}>
-            <span>Source</span>
+            <span>{t(P.source)}</span>
             <span style={{ ...mono, textAlign: "right" }}>
               {s.source
                 ? `${s.source.name} ${s.source.width}×${s.source.height}`
-                : "none"}
+                : t(P.none)}
             </span>
           </div>
-          <p>
-            Apply shows a preview layer in the frame; the document and the
-            placed file stay unchanged until Apply to file. A crop cuts the
-            image itself, straightening first when the angle is not zero
-            (straightening needs WebGPU). The paint tools preview every pointer
-            sample; the adjustment sliders preview when Live is on.
-          </p>
+          <p>{t(P.diagnosticsNote)}</p>
         </Disclosure>
       </div>
     );

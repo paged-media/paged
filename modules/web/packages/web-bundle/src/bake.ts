@@ -32,6 +32,7 @@
 // Baking a rendered scene into native page items (so a foreign open and
 // IDML/PDF export see the content) is bake-plan.ts + bake-to-document.ts.
 
+import { defineMessages, t } from "@paged-media/strings";
 import type {
   BundleHost,
   ElementId,
@@ -67,6 +68,20 @@ import {
 import type { WebEngine } from "./engine-loader";
 import { renderWithPolicy } from "./overflow";
 import { describeRefusal, loadWebSource } from "./source-part";
+
+const M = defineMessages("web.render", {
+  selectOne: "select a single web frame to render",
+  notWebFrame:
+    "the selected frame is not a web frame — make it one in the Web frame panel",
+  // `{why}` is the reason in its parentheses (see web.source.tags).
+  growRefused: "overflow grow: the frame could not be resized {why}",
+  continuesPast:
+    "content continues past the frame — thread it into more frames (Thread web flow into frames)",
+  shrinkClipped: "content does not fit even at 5 % — it is clipped",
+  clipped: "content does not fit the frame — it is clipped",
+  flowOverset:
+    "web flow overset — content does not fit the frame chain; add a frame or enlarge the last",
+});
 
 /** Points per inch — frame bounds are in points already; `dpi` only
  *  drives a raster escape hatch, defaulted at the page's print
@@ -196,7 +211,7 @@ export async function bakeWebFrame(
     return notRendered([
       {
         severity: "info",
-        message: "select a single web frame to render",
+        message: t(M.selectOne),
         source: "render",
       },
     ]);
@@ -207,8 +222,7 @@ export async function bakeWebFrame(
     return notRendered([
       {
         severity: "info",
-        message:
-          "the selected frame is not a web frame — make it one in the Web frame panel",
+        message: t(M.notWebFrame),
         source: "render",
       },
     ]);
@@ -366,7 +380,7 @@ async function renderWithEngine(
       if (!out.applied) {
         diagnostics.push({
           severity: "warning",
-          message: `overflow grow: the frame could not be resized (${describeRefusal(out.error)})`,
+          message: t(M.growRefused, { why: `(${describeRefusal(out.error)})` }),
           source: "render",
         });
       }
@@ -377,10 +391,10 @@ async function renderWithEngine(
       severity: "warning",
       message:
         policy === "thread" && !source.flow
-          ? "content continues past the frame — thread it into more frames (Thread web flow into frames)"
+          ? t(M.continuesPast)
           : policy === "shrink"
-            ? "content does not fit even at 5 % — it is clipped"
-            : "content does not fit the frame — it is clipped",
+            ? t(M.shrinkClipped)
+            : t(M.clipped),
       source: "render",
     });
   }
@@ -576,8 +590,7 @@ export async function bakeWebFlow(
   if (flow.overset) {
     diagnostics.push({
       severity: "warning",
-      message:
-        "web flow overset — content does not fit the frame chain; add a frame or enlarge the last",
+      message: t(M.flowOverset),
       source: "render",
     });
   }
@@ -709,8 +722,7 @@ export async function bakeWebFlows(
   if (anyOverset) {
     diagnostics.push({
       severity: "warning",
-      message:
-        "web flow overset — content does not fit the frame chain; add a frame or enlarge the last",
+      message: t(M.flowOverset),
       source: "render",
     });
   }
