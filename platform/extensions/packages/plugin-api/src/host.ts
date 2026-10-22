@@ -48,6 +48,7 @@ import type {
 import type {
   CommandContribution,
   ExporterContribution,
+  FrameSurfaceContribution,
   ImporterContribution,
   KeybindingContribution,
   OverlayContribution,
@@ -472,6 +473,16 @@ export interface ContributionSurface {
    * + scope; the plugin owns the matcher + the onEnter/onExit hooks.
    */
   editContext(contribution: EditContextContribution): Disposable;
+  /**
+   * Register a FRAME SURFACE (extensions ADR 334): a live DOM surface the
+   * host mounts exactly over the frame while this bundle's edit context
+   * `contextType` is active on it. See {@link FrameSurfaceContribution}.
+   * The context must already be registered by this bundle (the surface
+   * borrows its declaration). Probe `supports("editContext.frameSurface@1")`
+   * — false when the host wires no frame-surface registry (the door then
+   * warns and registers nothing).
+   */
+  frameSurface(contribution: FrameSurfaceContribution): Disposable;
   /**
    * Register an OBJECT TYPE (W3.2, closes W-03): a plugin-defined object
    * (a webFrame is a rectangle with attached source metadata). A
@@ -1734,6 +1745,14 @@ export interface ShellSurface {
    * exist / is not the context's).
    */
   enterEditContext(type: string, elementId: ElementId): Promise<boolean>;
+  /**
+   * Leave the ACTIVE edit context if it is one of THIS bundle's: with
+   * `commit: true` its `onCommit` runs first, otherwise its `onCancel`,
+   * then `onExit` (extensions ADR 334). Answers whether a context was left;
+   * `false` when none of this bundle's is active or the host cannot (probe
+   * `supports("shell.exitEditContext@1")`).
+   */
+  exitEditContext(opts: { commit: boolean }): Promise<boolean>;
 }
 
 /** What `ShellSurface.saveFile` delivers (K-10) — the inverse of

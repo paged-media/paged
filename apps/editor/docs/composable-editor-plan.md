@@ -1056,6 +1056,81 @@ id, method, args }`, answered by `paged:reply`; plus `paged:event`. `ArrayBuffer
 
 ---
 
+## 9a. Workstream G — Every module in templates
+
+Goal: a template may contain a module's frame (a sheet, a doc frame, a drawing, an edited
+image, a slide, a web frame, a data-bound region), and its open parts are fields like any
+other: listed in `templateFields`, filled through the form, the host and `paged template fill`,
+checked by the policy. Every built-in module takes part: draw, image, sheet, doc, slide, web,
+data and publish (pdf), each for the content it owns.
+
+### G1 — The contract: module field kinds
+
+- **Files.** `platform/extensions/packages/plugin-api/src/` (a `templateField` contribution on
+  `host.contribute`), `plugin-sdk/src/host-impl.ts` and the headless harness; a plugin-sdk
+  version bump.
+- **Shape.** A module registers field kinds of its own:
+  `{ kind: "media.paged.sheet.cell", describe(item, def) → FieldInfo, read(item, def) → value,
+write(item, def, value) → outcome }`. A field definition names the module kind and its
+  module-specific address inside the item (a cell, a range, a block id, a shape, a layer).
+- **Writes** go through the module's usual door (`host.document.mutate`, the module's parts),
+  so the engine's policy check holds: the item must grant the permission the kind declares
+  (`text.edit`, `image.replace`, or a module permission mapped onto one).
+
+### G2 — The editor and the CLI route module fields
+
+- The template form shows module fields with the control their kind declares (text, number,
+  choice, picture), the overlay outlines them, and `setTemplateFields` hands a module field's
+  value to its module instead of the engine's lowering. `paged template fields | fill | check`
+  load the bundles (as `apply` and `merge` already do) and route the same way.
+
+### G3 — Each module's field kinds
+
+| Module        | Field kinds (first set)                                                                                            |
+| ------------- | ------------------------------------------------------------------------------------------------------------------ |
+| sheet         | a cell's value, a range's values (a table of data), a chart's series source                                        |
+| doc           | a block's text (a heading, a paragraph), a list's items                                                            |
+| draw          | a shape's fill or stroke from an allowed list, a text-on-path's text, a symbol choice                              |
+| image         | the picture of an edited image frame (replace, keeping the adjustments), an adjustment preset from an allowed list |
+| slide         | a placeholder's text, a slide's visibility                                                                         |
+| web           | a web frame's source text or URL                                                                                   |
+| data          | a binding's record (choose which record fills the region)                                                          |
+| publish / pdf | an imported PDF page's choice of page                                                                              |
+
+Each module ships its kinds, a DOM test over the form, and a CLI fill test, and its docs say
+which of its parts can be fields. A module's own panels honour the session's role: a filler
+sees the module's editing UI only for the parts its fields open.
+
+## 9b. Workstream H — Demos
+
+A demo gallery, built on the embedding API (E), deployed with the editor's demo build. Modelled
+on what an embeddable editor's users expect to see:
+
+- **Configured editors:** the full design editor; the focused module editors (draw, image,
+  sheet, doc, slide, web, data); theming (light, dark, a partner's tokens); translation (English
+  and German); a viewer.
+- **Template editing:** design placeholders (a locked business card with fields); form-based
+  template adoption (a postcard filled from a form beside a live preview); a custom host UI
+  around the editor (host components, the actions bar, submit); a multi-page product (a
+  photobook-style document whose picture fields fill page by page, with print checks); a
+  template with module fields (a price list from a sheet, a doc text block, a drawing's colour).
+- **Print and data:** print-ready PDF (PDF/X-4) with validation; automatic generation and batch
+  (a set of cards from a data set, through `paged template fill` and the data module).
+- **Embedding:** the same template through `createEditor` and through the iframe.
+
+Each demo is one page under `apps/editor/apps/canvas/demos/`, listed on a gallery page, and
+covered by a journey that opens it.
+
+## 9c. Workstream I — Documentation and website
+
+- The docs site (`paged-media/docs`): an "Embedding the editor" section (profiles, presets,
+  features, roles, host actions, `createEditor` and the iframe), a "Templates" section (fields,
+  policies, authoring in paged and in InDesign with tags, filling in the browser and with
+  `paged template`, checking submissions, module fields), and the CLI reference for
+  `paged template`.
+- The website (`paged-media/website`): a page for the embeddable editor and template editing,
+  linking the demos.
+
 ## 10. Milestones
 
 | Milestone              | Contains          | An embedder or user can…                                                                                       |

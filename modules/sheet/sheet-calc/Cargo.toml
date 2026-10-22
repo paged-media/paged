@@ -14,6 +14,9 @@ workspace = true
 sheet-core = { path = "../sheet-core" }
 sheet-parser = { path = "../sheet-parser" }
 sheet-fn = { path = "../sheet-fn" }
+# Typed cell entry (sheet_format::entry) — the one parser `enter` and the
+# CSV import share. sheet-fn already depends on it.
+sheet-format = { path = "../sheet-format" }
 rustc-hash.workspace = true
 smallvec.workspace = true
 

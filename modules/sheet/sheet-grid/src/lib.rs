@@ -324,7 +324,11 @@ pub fn frame_window(model: &SheetModel, sheet: SheetId, spec: &FrameWindowSpec) 
     let mut col_widths_pt = Vec::new();
     let mut x = 0.0_f64;
     let freeze_cols = spec.freeze_cols.min(sheet_core::MAX_COL + 1);
+    let col_hidden = |c: u32| ws.is_some_and(|w| w.col_hidden(c));
     for c in 0..freeze_cols {
+        if col_hidden(c) {
+            continue;
+        }
         let w = col_width_pt(ws, c);
         cols.push(c);
         col_widths_pt.push(w);
@@ -335,17 +339,19 @@ pub fn frame_window(model: &SheetModel, sheet: SheetId, spec: &FrameWindowSpec) 
     let mut body_cols = 0u32;
     let mut c = spec.left_col.max(freeze_cols);
     while c <= sheet_core::MAX_COL {
-        let w = col_width_pt(ws, c);
-        if body_cols > 0 && x + w > spec.width_pt {
-            if x < spec.width_pt {
-                partial_col = Some(c);
+        if !col_hidden(c) {
+            let w = col_width_pt(ws, c);
+            if body_cols > 0 && x + w > spec.width_pt {
+                if x < spec.width_pt {
+                    partial_col = Some(c);
+                }
+                break;
             }
-            break;
+            cols.push(c);
+            col_widths_pt.push(w);
+            x += w;
+            body_cols += 1;
         }
-        cols.push(c);
-        col_widths_pt.push(w);
-        x += w;
-        body_cols += 1;
         if c == sheet_core::MAX_COL {
             break;
         }
@@ -1184,6 +1190,32 @@ mod tests {
         assert!((w.width_pt - 4.0 * 44.2575).abs() < 1e-9);
         assert_eq!(w.height_pt, 60.0);
         assert_eq!((w.frozen_rows, w.frozen_cols), (0, 0));
+    }
+
+    #[test]
+    #[allow(non_snake_case)]
+    fn sheet_frame_window_skips_hidden_columns__feat__sheet_grid_inframe() {
+        let mut m = SheetModel::new();
+        let s = m.add_sheet("S");
+        m.sheet_mut(s).unwrap().col_meta.push(sheet_core::ColMeta {
+            min: 1,
+            max: 2,
+            hidden: true,
+            ..Default::default()
+        });
+        let w = frame_window(
+            &m,
+            s,
+            &FrameWindowSpec {
+                top_row: 0,
+                left_col: 0,
+                width_pt: 200.0,
+                height_pt: 30.0,
+                freeze_rows: 0,
+                freeze_cols: 0,
+            },
+        );
+        assert_eq!(&w.cols[..3], &[0, 3, 4]);
     }
 
     #[test]

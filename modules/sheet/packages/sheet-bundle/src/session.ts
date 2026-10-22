@@ -62,6 +62,7 @@ import {
   type ChartInfo,
   type FindMatch,
   type FindOptions,
+  type Restyle,
   type SheetEngine,
   type SheetInfo,
   type StructuralEditKind,
@@ -124,6 +125,10 @@ export type SessionResult = { ok: true } | { ok: false; message: string };
 interface FormatStep {
   undo(engine: SheetEngine): void;
   redo(engine: SheetEngine): void;
+  /** Undo this step AFTER the cell writes of its batch (a typed entry's
+   *  format: the prior input is re-typed first, then the prior style is put
+   *  back over whatever that re-typing implied). Default: before them. */
+  undoAfterCells?: boolean;
 }
 
 /** S-08 persistence keys: the workbook bytes live in `host.blob` (binary),
@@ -380,6 +385,16 @@ export interface WorkbookSession {
   /** Clear the in-frame grid layer (the frame returns to its native
    *  lowered content). */
   hideGridInFrame(): void;
+  /** Extensions ADR 334 — route the in-frame grid to a FRAME SURFACE
+   *  instead of the scene layer: every grid state (window, selection, the
+   *  open cell edit, the fill preview) goes to `sink`, windowed to
+   *  `cellArea` (the frame's content box minus the surface's heading
+   *  strips). Returns the detach. While attached no scene layer is
+   *  submitted, and any already shown is cleared. */
+  attachFrameSurface(
+    sink: (scene: GridScene) => void,
+    cellArea: { wPt: number; hPt: number },
+  ): () => void;
   /** Enumerate the workbook's parsed charts (M2 charts track, spec §8.4).
    *  Empty when there is no engine / no charts. */
   listCharts(): ChartInfo[];
@@ -938,6 +953,10 @@ export function createWorkbookSession(
   };
 
   let sceneSurface: SceneLayerSurface | null = null;
+  // Extensions ADR 334 — the mounted frame surface's sink and cell area;
+  // while set, the grid goes there instead of the scene layer.
+  let surfaceSink: ((scene: GridScene) => void) | null = null;
+  let surfaceArea: { wPt: number; hPt: number } | null = null;
   const sceneChannel = (): SceneLayerSurface | null => {
     if (!host.supports("rendering.sceneLayer@1")) return null;
     if (!sceneSurface) sceneSurface = host.contribute.sceneLayer();
@@ -1048,15 +1067,32 @@ export function createWorkbookSession(
   ): boolean {
     const engine = state.engine;
     if (!engine) return false;
-    let prev: string;
+    let written: { prev: string; restyled: readonly Restyle[] };
     try {
-      prev = writeOneCell(engine, sheet, row, col, input);
+      written = writeOneCell(engine, sheet, row, col, input);
     } catch (err) {
       host.log.error("setCell failed", err);
       return false;
     }
+    const { prev, restyled } = written;
     editJournal.length = journalCursor; // drop any redo tail
-    editJournal.push({ sheet, row, col, prev, next: input });
+    if (restyled.length > 0) {
+      // Typed entry: the value AND the format it implied (`45%` → `0%`) are
+      // ONE step — one Cmd-Z puts back both the input and the style.
+      const batch = nextJournalBatch++;
+      editJournal.push({
+        sheet,
+        row,
+        col,
+        prev: "",
+        next: "",
+        batch,
+        fmt: restyleStep(restyled),
+      });
+      editJournal.push({ sheet, row, col, prev, next: input, batch });
+    } else {
+      editJournal.push({ sheet, row, col, prev, next: input });
+    }
     journalCursor = editJournal.length;
     markEdited();
     stampRev();
@@ -1077,7 +1113,7 @@ export function createWorkbookSession(
     row: number,
     col: number,
     input: string,
-  ): string {
+  ): { prev: string; restyled: readonly Restyle[] } {
     const readPrev = () =>
       cachedRead(`input:${sheet}:${row}:${col}`, () =>
         engine.getCellInput(sheet, row, col),
@@ -1093,17 +1129,38 @@ export function createWorkbookSession(
         // fall through: setCell is the authority on a single input
       }
       if (res) {
+        const restyled = res.restyled ?? [];
         const prev = res.prevInputs?.[0];
-        if (prev !== undefined) return prev;
+        if (prev !== undefined) return { prev, restyled };
         host.log.warn(
           "setCells reply has no prevInputs — the journal reads the new input",
         );
-        return readPrev();
+        return { prev: readPrev(), restyled };
       }
     }
     const prev = readPrev();
-    engine.setCell(sheet, row, col, input);
-    return prev;
+    const res = engine.setCell(sheet, row, col, input);
+    return { prev, restyled: res?.restyled ?? [] };
+  }
+
+  /** The format step of a typed entry's restyle: each cell's style id
+   *  before / after (one-cell `setStyleIds` writes). Undone after the cell
+   *  writes, so the prior style wins over what re-typing the prior input
+   *  implies. */
+  function restyleStep(restyled: readonly Restyle[]): FormatStep {
+    const put = (e: SheetEngine, which: "before" | "after") => {
+      if (!e.setStyleIds) return;
+      for (const r of restyled) {
+        e.setStyleIds(r.sheet, selectionRangeA1(r.row, r.col, 1, 1), [
+          r[which],
+        ]);
+      }
+    };
+    return {
+      undo: (e) => put(e, "before"),
+      redo: (e) => put(e, "after"),
+      undoAfterCells: true,
+    };
   }
 
   /** Stamp the content version on the entries a commit just pushed. */
@@ -1144,10 +1201,12 @@ export function createWorkbookSession(
       : editJournal.slice(first, last + 1);
     // Format steps run in journal order (reversed for undo), before the
     // cell writes on undo (a merge's anchor must be unmerged before its
-    // cleared cells get their inputs back) and after them on redo.
+    // cleared cells get their inputs back) and after them on redo. A typed
+    // entry's restyle (`undoAfterCells`) undoes after the writes too.
     const steps = entries.filter((e) => e.fmt);
-    const runSteps = (): boolean => {
+    const runSteps = (late = false): boolean => {
       for (const e of steps) {
+        if (undo && (e.fmt!.undoAfterCells ?? false) !== late) continue;
         try {
           if (undo) e.fmt!.undo(engine);
           else e.fmt!.redo(engine);
@@ -1185,7 +1244,7 @@ export function createWorkbookSession(
         }
       }
     }
-    if (!undo && !runSteps()) return false;
+    if (!runSteps(true)) return false;
     journalCursor = undo ? last : last + 1;
     markEdited();
     emitter.emit(
@@ -1917,8 +1976,8 @@ export function createWorkbookSession(
    *  buffer is overlaid on a copy. */
   async function flushInFrameGrid(): Promise<boolean> {
     if (!lastFrameId || !lastGridWindow) return false;
-    const surface = sceneChannel();
-    if (!surface) return false;
+    const surface = surfaceSink ? null : sceneChannel();
+    if (!surface && !surfaceSink) return false;
     const base = computeGridScene(
       lastGridWindow.firstRow,
       lastGridWindow.firstCol,
@@ -1935,6 +1994,11 @@ export function createWorkbookSession(
     // window is memoised).
     const scene = fillPreview ? { ...edited, fillPreview } : edited;
     lastGridScene = scene;
+    if (surfaceSink) {
+      surfaceSink(scene);
+      return true;
+    }
+    if (!surface) return false;
     try {
       await surface.submit(lastFrameId, gridSceneToSceneLayer(scene));
     } catch (err) {
@@ -3000,7 +3064,11 @@ export function createWorkbookSession(
       const prevFrame = lastFrameId;
       lastFrameId = target; // the in-frame grid + hide now track this frame
       const surface = sceneChannel();
-      if (!surface) {
+      if (
+        !surface &&
+        !surfaceSink &&
+        !host.supports("editContext.frameSurface@1")
+      ) {
         host.log.warn(
           "showGridInFrame: no scene channel (supports('rendering.sceneLayer@1') is false)",
         );
@@ -3036,8 +3104,10 @@ export function createWorkbookSession(
       lastGridWindow = {
         firstRow: keep?.firstRow ?? start.row,
         firstCol: keep?.firstCol ?? start.col,
-        wPt,
-        hPt,
+        // A mounted frame surface windows to its cell area (its headings
+        // take part of the content box).
+        wPt: surfaceArea?.wPt ?? wPt,
+        hPt: surfaceArea?.hPt ?? hPt,
       };
       if (!inFrameActive) sessionFloor = journalCursor; // the modal boundary
       inFrameActive = true;
@@ -3080,6 +3150,26 @@ export function createWorkbookSession(
 
     cancelCellEdit() {
       cancelEdit();
+    },
+
+    attachFrameSurface(sink, cellArea) {
+      surfaceSink = sink;
+      surfaceArea = {
+        wPt: Math.max(cellArea.wPt, 0),
+        hPt: Math.max(cellArea.hPt, 0),
+      };
+      // A scene layer shown before the surface mounted would sit under it.
+      if (lastFrameId) void sceneSurface?.clear(lastFrameId);
+      if (lastGridWindow) {
+        lastGridWindow = { ...lastGridWindow, ...surfaceArea };
+        void submitInFrameGrid();
+      }
+      return () => {
+        if (surfaceSink === sink) {
+          surfaceSink = null;
+          surfaceArea = null;
+        }
+      };
     },
 
     hideGridInFrame() {

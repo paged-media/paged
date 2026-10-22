@@ -123,3 +123,43 @@ too. `OpcContainer`, its part kinds and the writer stay here, and the decision s
 reads keep their behaviour (`Relationships::try_parse` is this crate's strict parse), and the
 save writes the same bytes. The line numbers above refer to the code before the move.
 
+
+## Amendment 2026-10-22 — an edited worksheet is patched too
+
+The decision now reaches inside the worksheet part. An edited sheet is no longer encoded again
+from the model; its part as read is patched (`sheet-xlsx/src/patch.rs`):
+
+- **Row by row.** A `<row>` whose cells, height, visibility and attributes still read as they
+  were is copied byte for byte. A changed row keeps its start tag, with `r`, `ht`,
+  `customHeight`, `hidden`, `s`, `customFormat`, `outlineLevel`, `collapsed`, `thickTop` and
+  `thickBot` set from the model and every other attribute (`x14ac:dyDescent`, `spans` while the
+  cells stay inside it) kept. Inside it the same rule holds per `<c>`: an unchanged cell is
+  copied; a changed one keeps its start tag (`ph`, unknown attributes; `vm` goes when the value
+  changes) with `t`, `s` and `cm` set and `<f>`/`<v>`/`<is>` replaced, and keeps its other
+  children. A literal text cell whose text is still its shared string keeps `t="s"` and the
+  index, so `sharedStrings.xml` is written back unchanged and its rich-text runs survive; an
+  inline rich string whose text did not change keeps its `<is>`. Unknown elements inside
+  `<sheetData>` are kept.
+- **Shared formulas.** A group a change touches (its master or a member edited, moved or
+  removed) is written out cell by cell, each member with its own `<f>`; untouched groups keep
+  `t="shared"`.
+- **`<dimension>`, `<cols>`, `<mergeCells>`** are rewritten only when the model's differ from
+  what the part holds (`<dimension>` is added when the part has none); the captured children
+  are spliced back where they stood, so only those a structural edit rewrote change.
+- **The model carries what the rows and columns say** (an additive amendment of the frozen
+  `Worksheet`): `row_meta: BTreeMap<u32, RowMeta>` (style, `customFormat`, outline level,
+  `collapsed`, `thickTop`, `thickBot`), `col_meta: Vec<ColMeta>` (the `<col>` ranges: style,
+  hidden, outline level, `collapsed`, `bestFit`, `customWidth`, `phonetic`; the width stays in
+  `col_widths`, the per-column view every reader already uses) and `state: SheetState` from the
+  workbook's `<sheet state>`. A row or column insert or delete moves them (and the hidden rows,
+  which it did not before), and is recorded on the sheet's binding so the save finds each
+  original row and cell at its new address.
+
+What the Consequences section lists as lost from an edited sheet is kept now: unknown
+attributes on `<row>` and `<c>`, unknown elements inside `<sheetData>`, the rows' and columns'
+attributes, and the shared strings of unedited cells. A new or changed literal text cell is
+still written as an inline string. Evidence: `sheet-conformance/tests/it/xlsx_saveloss.rs`
+(the fixture `corpus/xlsx-corpus/15-saveloss.xlsx`, and the property that a new cell changes
+only its own row and `<dimension>` across every round-trip fixture), the re-recorded golden
+`sheet-conformance/tests/golden/zip-container/02-formulas.edited.xlsx` (the untouched rows of
+an edited sheet keep `t="n"` and their shared strings).
