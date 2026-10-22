@@ -884,6 +884,8 @@ export {
 export {
   REGION_IDS,
   baseProfile,
+  BUNDLES_ENTRY,
+  filterByRegion,
   resolveProfile,
   validateProfile,
   applyRegionEdit,

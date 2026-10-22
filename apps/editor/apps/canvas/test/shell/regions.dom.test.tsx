@@ -168,3 +168,93 @@ describe("chrome regions", () => {
     expect(shell.has(CHROME.toolRail)).toBe(true);
   });
 });
+
+describe("region contents (A3)", () => {
+  const triggers = (root: Element) =>
+    [...root.querySelectorAll("[data-menu-trigger]")].map((el) =>
+      el.getAttribute("data-menu-trigger"),
+    );
+  const railTools = (root: Element) =>
+    [...root.querySelectorAll("[data-tool-slot]")].map((el) =>
+      el.getAttribute("data-tool"),
+    );
+
+  test("a menu bar list keeps the menus it names, in its order", async () => {
+    const shell = await mount({
+      regions: { menubar: { items: ["Help", "File"] } },
+    });
+    expect(triggers(shell.root)).toEqual(["Help", "File"]);
+  });
+
+  test("removing a menu from the whole bar keeps the others", async () => {
+    const all = triggers((await mount()).root);
+    cleanup();
+    const shell = await mount({
+      adjust: [{ region: "menubar", op: "remove", match: "Help" }],
+    });
+    expect(triggers(shell.root)).toEqual(all.filter((l) => l !== "Help"));
+  });
+
+  test("a tool rail list keeps only the tools it names", async () => {
+    const shell = await mount({
+      regions: {
+        "tool-rail": { items: ["paged.tool.select", "paged.tool.hand"] },
+      },
+    });
+    const shown = railTools(shell.root);
+    expect(shown).toContain("paged.tool.select");
+    expect(shown).toContain("paged.tool.hand");
+    expect(
+      shown.filter(
+        (id) => id !== "paged.tool.select" && id !== "paged.tool.hand",
+      ),
+    ).toEqual([]);
+  });
+
+  test("a panel rail list drops what it does not name", async () => {
+    const shell = await mount({
+      regions: { "panel-rail": { items: ["nothing.here"] } },
+    });
+    expect(shell.has(CHROME.panelRail)).toBe(false);
+  });
+
+  test("a header list replaces the right-hand cluster with commands", async () => {
+    const shell = await mount({
+      regions: {
+        header: { items: ["paged.file.exportPdf", "no.such.command"] },
+      },
+    });
+    const buttons = [
+      ...shell.root.querySelectorAll("header [data-region-command]"),
+    ];
+    expect(buttons.map((b) => b.getAttribute("data-region-command"))).toEqual([
+      "paged.file.exportPdf",
+    ]);
+    expect(buttons[0]!.textContent).toBeTruthy();
+  });
+
+  test("the actions bar exists only when a profile gives it items", async () => {
+    expect((await mount()).has("[data-actions-bar]")).toBe(false);
+    cleanup();
+    const shell = await mount({
+      regions: {
+        "actions-bar": {
+          items: [
+            { kind: "host", id: "price" },
+            { kind: "spacer" },
+            "paged.file.exportPdf",
+          ],
+        },
+      },
+    });
+    expect(shell.has("[data-actions-bar]")).toBe(true);
+    expect(shell.has('[data-actions-bar] [data-host-component="price"]')).toBe(
+      true,
+    );
+    expect(
+      shell.has(
+        '[data-actions-bar] [data-region-command="paged.file.exportPdf"]',
+      ),
+    ).toBe(true);
+  });
+});
