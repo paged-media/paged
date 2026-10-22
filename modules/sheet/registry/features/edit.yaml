@@ -186,3 +186,13 @@
   provenance: ["sheet-js/src/core/fill.rs::series_of"]
   tests:
     rust: ["sheet-conformance/tests/it/edit_fill.rs::sheet_edit_fill_lanes"]
+
+- id: sheet.edit.typed-entry
+  title: "Typed cell entry is stored as Excel stores it — percent, currency, groups, fractions, scientific, dates, times, quote prefix, 15 significant digits — with the implied number format applied by Excel's replace rule and value + format one undo step (ADR 511)"
+  status: implemented
+  provenance: ["sheet-format/src/entry.rs::parse_entry", "sheet-format/src/entry.rs::resolve_format", "sheet-js/src/core/format.rs::typed_patches", "Excel 16.114 entry lane (oracle/excel/recorded/entry*.tsv)"]
+  tests:
+    rust:
+      - "sheet-conformance/tests/it/entry_oracle.rs::excel_entry_lane_parse__feat__sheet_edit_typed_entry"
+      - "sheet-conformance/tests/it/entry_oracle.rs::excel_entry_lane_session__feat__sheet_edit_typed_entry"
+      - "sheet-conformance/tests/it/entry_oracle.rs::typed_entry_display_retypes_to_the_same_value__feat__sheet_edit_typed_entry"

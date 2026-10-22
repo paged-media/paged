@@ -62,6 +62,7 @@ import {
   type ChartInfo,
   type FindMatch,
   type FindOptions,
+  type Restyle,
   type SheetEngine,
   type SheetInfo,
   type StructuralEditKind,
@@ -124,6 +125,10 @@ export type SessionResult = { ok: true } | { ok: false; message: string };
 interface FormatStep {
   undo(engine: SheetEngine): void;
   redo(engine: SheetEngine): void;
+  /** Undo this step AFTER the cell writes of its batch (a typed entry's
+   *  format: the prior input is re-typed first, then the prior style is put
+   *  back over whatever that re-typing implied). Default: before them. */
+  undoAfterCells?: boolean;
 }
 
 /** S-08 persistence keys: the workbook bytes live in `host.blob` (binary),
@@ -1048,15 +1053,32 @@ export function createWorkbookSession(
   ): boolean {
     const engine = state.engine;
     if (!engine) return false;
-    let prev: string;
+    let written: { prev: string; restyled: readonly Restyle[] };
     try {
-      prev = writeOneCell(engine, sheet, row, col, input);
+      written = writeOneCell(engine, sheet, row, col, input);
     } catch (err) {
       host.log.error("setCell failed", err);
       return false;
     }
+    const { prev, restyled } = written;
     editJournal.length = journalCursor; // drop any redo tail
-    editJournal.push({ sheet, row, col, prev, next: input });
+    if (restyled.length > 0) {
+      // Typed entry: the value AND the format it implied (`45%` → `0%`) are
+      // ONE step — one Cmd-Z puts back both the input and the style.
+      const batch = nextJournalBatch++;
+      editJournal.push({
+        sheet,
+        row,
+        col,
+        prev: "",
+        next: "",
+        batch,
+        fmt: restyleStep(restyled),
+      });
+      editJournal.push({ sheet, row, col, prev, next: input, batch });
+    } else {
+      editJournal.push({ sheet, row, col, prev, next: input });
+    }
     journalCursor = editJournal.length;
     markEdited();
     stampRev();
@@ -1077,7 +1099,7 @@ export function createWorkbookSession(
     row: number,
     col: number,
     input: string,
-  ): string {
+  ): { prev: string; restyled: readonly Restyle[] } {
     const readPrev = () =>
       cachedRead(`input:${sheet}:${row}:${col}`, () =>
         engine.getCellInput(sheet, row, col),
@@ -1093,17 +1115,38 @@ export function createWorkbookSession(
         // fall through: setCell is the authority on a single input
       }
       if (res) {
+        const restyled = res.restyled ?? [];
         const prev = res.prevInputs?.[0];
-        if (prev !== undefined) return prev;
+        if (prev !== undefined) return { prev, restyled };
         host.log.warn(
           "setCells reply has no prevInputs — the journal reads the new input",
         );
-        return readPrev();
+        return { prev: readPrev(), restyled };
       }
     }
     const prev = readPrev();
-    engine.setCell(sheet, row, col, input);
-    return prev;
+    const res = engine.setCell(sheet, row, col, input);
+    return { prev, restyled: res?.restyled ?? [] };
+  }
+
+  /** The format step of a typed entry's restyle: each cell's style id
+   *  before / after (one-cell `setStyleIds` writes). Undone after the cell
+   *  writes, so the prior style wins over what re-typing the prior input
+   *  implies. */
+  function restyleStep(restyled: readonly Restyle[]): FormatStep {
+    const put = (e: SheetEngine, which: "before" | "after") => {
+      if (!e.setStyleIds) return;
+      for (const r of restyled) {
+        e.setStyleIds(r.sheet, selectionRangeA1(r.row, r.col, 1, 1), [
+          r[which],
+        ]);
+      }
+    };
+    return {
+      undo: (e) => put(e, "before"),
+      redo: (e) => put(e, "after"),
+      undoAfterCells: true,
+    };
   }
 
   /** Stamp the content version on the entries a commit just pushed. */
@@ -1144,10 +1187,12 @@ export function createWorkbookSession(
       : editJournal.slice(first, last + 1);
     // Format steps run in journal order (reversed for undo), before the
     // cell writes on undo (a merge's anchor must be unmerged before its
-    // cleared cells get their inputs back) and after them on redo.
+    // cleared cells get their inputs back) and after them on redo. A typed
+    // entry's restyle (`undoAfterCells`) undoes after the writes too.
     const steps = entries.filter((e) => e.fmt);
-    const runSteps = (): boolean => {
+    const runSteps = (late = false): boolean => {
       for (const e of steps) {
+        if (undo && (e.fmt!.undoAfterCells ?? false) !== late) continue;
         try {
           if (undo) e.fmt!.undo(engine);
           else e.fmt!.redo(engine);
@@ -1185,7 +1230,7 @@ export function createWorkbookSession(
         }
       }
     }
-    if (!undo && !runSteps()) return false;
+    if (!runSteps(true)) return false;
     journalCursor = undo ? last : last + 1;
     markEdited();
     emitter.emit(

@@ -81,7 +81,10 @@ pub fn builtin_num_fmt(id: u32) -> Option<&'static str> {
         11 => "0.00E+00",
         12 => "# ?/?",
         13 => "# ??/??",
-        14 => "mm-dd-yy",
+        // ECMA-376 lists 14 as `mm-dd-yy`, but the id is the SYSTEM short
+        // date: Excel (16, en-US) shows and reports it as `m/d/yy`
+        // (recorded, oracle entry lane — ruling sheet.edit.typed-entry).
+        14 => "m/d/yy",
         15 => "d-mmm-yy",
         16 => "d-mmm",
         17 => "mmm-yy",
@@ -96,7 +99,9 @@ pub fn builtin_num_fmt(id: u32) -> Option<&'static str> {
         40 => "#,##0.00;[Red](#,##0.00)",
         45 => "mm:ss",
         46 => "[h]:mm:ss",
-        47 => "mmss.0",
+        // ECMA-376's `mmss.0` is an erratum: Excel reports and renders 47 as
+        // `mm:ss.0` (recorded, oracle entry lane).
+        47 => "mm:ss.0",
         48 => "##0.0E+0",
         49 => "@",
         _ => return None,
@@ -1033,7 +1038,8 @@ mod tests {
         assert_eq!(builtin_num_fmt(0), Some("General"));
         assert_eq!(builtin_num_fmt(2), Some("0.00"));
         assert_eq!(builtin_num_fmt(9), Some("0%"));
-        assert_eq!(builtin_num_fmt(14), Some("mm-dd-yy"));
+        assert_eq!(builtin_num_fmt(14), Some("m/d/yy"));
+        assert_eq!(builtin_num_fmt(47), Some("mm:ss.0"));
         assert_eq!(builtin_num_fmt(49), Some("@"));
         // locale/currency ids have no canonical code in T0
         assert_eq!(builtin_num_fmt(5), None);

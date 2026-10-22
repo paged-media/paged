@@ -3,6 +3,9 @@
 #
 # Usage:  sheet-conformance/oracle/excel/drive.sh [family ...]
 #   then: python3 sheet-conformance/oracle/excel/read.py
+#         sheet-conformance/oracle/excel/drive.sh --entry [locale]
+#   (the ENTRY lane: types entry_cases.py's raw texts into a fresh workbook
+#   under <locale> (default en-US) and records recorded/entry*.tsv itself)
 #
 # MAINTAINER tool (macOS + Microsoft Excel 16). CI never runs it; CI consumes
 # the committed recorded/*.tsv through tests/it/excel_oracle.rs.
@@ -65,9 +68,15 @@ pin_key() {  # pin_key <key> <type-flag> <value> <expected-read>
         ADDED_KEYS="$ADDED_KEYS $1"
     fi
 }
+# A non-en entry run overrides the region key for the run and puts the
+# prior value back on exit (RESTORE holds `key<TAB>value` of the prior).
+RESTORE_LOCALE=""
 cleanup() {
     rm -rf "$SCRATCH"
     for k in $ADDED_KEYS; do defaults delete "$DOMAIN" "$k" >/dev/null 2>&1; done
+    if [ -n "$RESTORE_LOCALE" ]; then
+        defaults write "$DOMAIN" AppleLocale -string "$RESTORE_LOCALE"
+    fi
 }
 trap cleanup EXIT
 
@@ -104,7 +113,11 @@ kill_app() {
     pkill -9 -x "$APP" 2>/dev/null; sleep 1
 }
 
-if [ $# -gt 0 ]; then
+ENTRY_LOCALE=""
+if [ "${1:-}" = "--entry" ]; then
+    ENTRY_LOCALE="${2:-en-US}"
+    FAMS=()
+elif [ $# -gt 0 ]; then
     FAMS=("$@")
 else
     FAMS=()
@@ -113,12 +126,43 @@ else
         FAMS+=("$(basename "$f" .xlsx)")
     done
 fi
-[ ${#FAMS[@]} -gt 0 ] || { echo "error: nothing in $BUILD — run generate.py" >&2; exit 1; }
+[ -n "$ENTRY_LOCALE" ] || [ ${#FAMS[@]} -gt 0 ] || {
+    echo "error: nothing in $BUILD — run generate.py" >&2; exit 1; }
 
 if pgrep -x "$APP" >/dev/null 2>&1; then kill_app; fi   # locale is read at launch
 pin_key AppleLanguages -array en-US en-US || exit 1
-pin_key AppleLocale -string en_US en_US || exit 1
+if [ -n "$ENTRY_LOCALE" ] && [ "$ENTRY_LOCALE" != "en-US" ]; then
+    # The ENTRY lane under another region: the UI (and the formula dialect)
+    # stays en-US, the region — separators, date order, currency — moves.
+    want="$(echo "$ENTRY_LOCALE" | tr '-' '_')"
+    if prior="$(defaults read "$DOMAIN" AppleLocale 2>/dev/null)"; then
+        RESTORE_LOCALE="$prior"
+    else
+        ADDED_KEYS="$ADDED_KEYS AppleLocale"
+    fi
+    defaults write "$DOMAIN" AppleLocale -string "$want" || exit 1
+else
+    pin_key AppleLocale -string en_US en_US || exit 1
+fi
 launch_app || exit 1
+
+if [ -n "$ENTRY_LOCALE" ]; then
+    python3 "$HERE/entry.py" build "$ENTRY_LOCALE" >/dev/null || exit 1
+    cp "$BUILD/entry-$ENTRY_LOCALE.txt" "$SCRATCH/entry.txt"
+    cp "$HERE/entry.applescript" "$SCRATCH/entry.applescript"
+    rm -f "$BUILD/entry-$ENTRY_LOCALE.excel.xlsx"
+    timeout "$TIMEOUT" osascript "$SCRATCH/entry.applescript" \
+        "$SCRATCH/entry.txt" "$SCRATCH/entry.xlsx" > "$BUILD/entry-$ENTRY_LOCALE.meta" 2>&1 < /dev/null
+    rc=$?
+    kill_app
+    if [ ! -f "$SCRATCH/entry.xlsx" ]; then
+        echo "error: entry lane rc=$rc: $(head -c 400 "$BUILD/entry-$ENTRY_LOCALE.meta")" >&2
+        exit 1
+    fi
+    mv "$SCRATCH/entry.xlsx" "$BUILD/entry-$ENTRY_LOCALE.excel.xlsx"
+    python3 "$HERE/entry.py" read "$ENTRY_LOCALE" "$BUILD/entry-$ENTRY_LOCALE.meta"
+    exit $?
+fi
 ok=0; failed=0
 for fam in "${FAMS[@]}"; do
     src="$BUILD/$fam.xlsx"
