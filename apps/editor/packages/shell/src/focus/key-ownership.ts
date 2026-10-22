@@ -174,7 +174,9 @@ export const FRAME_SURFACE_ATTR = "data-paged-frame-surface";
 const FRAME_SURFACE_SELECTOR = `[${FRAME_SURFACE_ATTR}]`;
 
 /** Is `target` inside a mounted frame surface (extensions ADR 334)? */
-export function insideFrameSurface(target: EventTarget | null | undefined): boolean {
+export function insideFrameSurface(
+  target: EventTarget | null | undefined,
+): boolean {
   const el = asElement(target);
   return el !== null && closest(el, FRAME_SURFACE_SELECTOR);
 }
