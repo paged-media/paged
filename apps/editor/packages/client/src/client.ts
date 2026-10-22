@@ -52,6 +52,7 @@ import {
   type ElementProperties,
   type FrameChainLink,
   type GestureType,
+  type SessionPolicy,
   type GradientDetail,
   type LayerSummary,
   type LineBounds,
@@ -618,6 +619,22 @@ export class CanvasClient {
    */
   async mutate(mutation: Mutation): Promise<WorkerToMain> {
     return this.send({ kind: "mutate", payload: mutation });
+  }
+
+  /**
+   * v75 (engine ADR 1000) — the session's role and the host's overrides,
+   * against which a template's policy applies: a filler may change what the
+   * template permits and nothing else, and refused writes come back as
+   * `notPermitted`. Survives document loads; not saved, not undoable.
+   * Resolves to the policy now in force.
+   */
+  async setSessionPolicy(policy: SessionPolicy): Promise<SessionPolicy> {
+    const reply = await this.send({
+      kind: "setSessionPolicy",
+      payload: { policy },
+    });
+    if (reply.kind === "sessionPolicyApplied") return reply.payload.policy;
+    throw new Error(`unexpected reply: ${reply.kind}`);
   }
 
   /** Phase 3 — replace the worker's selection state. */

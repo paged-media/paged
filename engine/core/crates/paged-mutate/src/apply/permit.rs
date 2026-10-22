@@ -59,6 +59,23 @@ pub struct Requirement {
     pub also_author_if_field: bool,
 }
 
+impl Requirement {
+    /// A permission on a page item, by `Self` id.
+    pub fn on_item(permission: Permission, self_id: &str) -> Requirement {
+        req(permission, Target::Item(self_id.to_string()))
+    }
+
+    /// A permission on a story, decided by the frame that hosts it.
+    pub fn on_story(permission: Permission, story_id: &str) -> Requirement {
+        story(permission, story_id)
+    }
+
+    /// A permission on the document.
+    pub fn on_document(permission: Permission) -> Requirement {
+        doc(permission)
+    }
+}
+
 fn req(permission: Permission, target: Target) -> Requirement {
     Requirement {
         permission,
@@ -349,13 +366,26 @@ pub fn check(
     op: &Operation,
     session: &SessionPolicy,
 ) -> Result<(), OperationError> {
-    let requirements = required(op);
+    check_requirements(doc, &required(op), session)
+}
+
+/// Refuses when `session` lacks any of `requirements` on `doc`: the check
+/// for writes that never become an [`Operation`] (text insertion and
+/// deletion, document settings, the start of a gesture).
+pub fn check_requirements(
+    doc: &Document,
+    requirements: &[Requirement],
+    session: &SessionPolicy,
+) -> Result<(), OperationError> {
+    if requirements.is_empty() {
+        return Ok(());
+    }
     let unbound = session.unbound();
     let needs_index = unbound.is_none() || requirements.iter().any(|r| r.also_author_if_field);
     let index = needs_index.then(|| PolicyIndex::build(doc).0);
     let item_of_story = |story_id: &str| doc.frame_for(story_id).and_then(|f| f.self_id.clone());
 
-    for r in &requirements {
+    for r in requirements {
         let allowed = match (&unbound, &index) {
             (Some(set), _) => *set,
             (None, Some(ix)) => match &r.target {

@@ -704,7 +704,14 @@ export type WorkerToMain = WorkerToMainKind & {
 // Additive on 74, no bump (governance rule 1) — ADR 205,
 //   `RequestSnapshot.markers`: a snapshot is drawn as the exports draw the
 //   page unless it asks for the canvas's markers. Optional, default false.
-pub const PROTOCOL_VERSION: ProtocolVersion = ProtocolVersion(74);
+// v75 — template permissions (editor `docs/composable-editor.md` §7, engine
+//   ADR 1000): `SetSessionPolicy { policy }` → `SessionPolicyApplied`; the
+//   typed refusals `WorkerError::NotPermitted` and `WorkerError::Locked`
+//   (a locked item's refusal was `NotImplemented` before); the gesture
+//   failure `NotPermitted`. A filler session's hit test skips items it may
+//   not select. A new message kind an older worker cannot answer, hence
+//   the bump.
+pub const PROTOCOL_VERSION: ProtocolVersion = ProtocolVersion(75);
 
 /// A per-run script budget on the wire (v63). Every field is optional
 /// and falls back to the engine's default, so a caller overrides only
@@ -1292,6 +1299,13 @@ pub enum MainToWorkerKind {
     /// loads; not saved, not undoable. Reply: `SnapSettingsApplied`.
     SetSnapSettings {
         settings: crate::snap_point::SnapSettings,
+    },
+    /// v75 — the session's role and the host's overrides, against which
+    /// the document's template policy is applied (editor
+    /// `docs/composable-editor.md` §7). Survives document loads; not saved,
+    /// not undoable. Reply: `SessionPolicyApplied`.
+    SetSessionPolicy {
+        policy: paged_template::SessionPolicy,
     },
     /// B-06 (protocol v30) — closest on-curve point on the element's
     /// path. `point` is in the element's LOCAL coordinate space (the
@@ -2110,6 +2124,10 @@ pub enum WorkerToMainKind {
     SnapSettingsApplied {
         settings: crate::snap_point::SnapSettings,
     },
+    /// v75 — `SetSessionPolicy` reply: the policy now in force.
+    SessionPolicyApplied {
+        policy: paged_template::SessionPolicy,
+    },
     /// B-22 (protocol v57) — `RequestPlanarRegions` reply.
     PlanarRegions { result: PlanarRegionsResult },
     /// B-06 — `RequestNearestPathPoint` reply. `None` when the id
@@ -2528,6 +2546,11 @@ pub enum GestureFailure {
     Locked {
         id: crate::element_selection::ElementId,
     },
+    /// v75 — the session may not transform the element (template policy).
+    NotPermitted {
+        id: crate::element_selection::ElementId,
+        permission: String,
+    },
     Other {
         message: String,
     },
@@ -2550,6 +2573,7 @@ impl From<crate::gesture::GestureError> for GestureFailure {
             MissingAnchor => GestureFailure::MissingAnchor,
             UnknownAnchorPage(page_id) => GestureFailure::UnknownAnchorPage { page_id },
             Locked(id) => GestureFailure::Locked { id },
+            NotPermitted(id, permission) => GestureFailure::NotPermitted { id, permission },
         }
     }
 }
@@ -4300,6 +4324,15 @@ pub enum WorkerError {
     /// Worker has no document loaded — `LoadDocument` must come first.
     #[error("no document loaded")]
     NoDocument,
+    /// v75 — the session's role and the document's template policy do not
+    /// permit the write: `permission` is its name (`text.edit`), `target`
+    /// what it was asked of.
+    #[error("not permitted: {permission} on {target}")]
+    NotPermitted { permission: String, target: String },
+    /// v75 — the item is locked (C-77); it used to arrive as
+    /// `NotImplemented` with the apply layer's sentence.
+    #[error("{node} is locked — unlock it to {action}")]
+    Locked { node: String, action: String },
 }
 
 #[cfg(test)]
@@ -4670,7 +4703,7 @@ mod tests {
     /// record exists because nine bumps once shipped untagged.
     #[test]
     fn protocol_version_is_v74() {
-        assert_eq!(PROTOCOL_VERSION.0, 74);
+        assert_eq!(PROTOCOL_VERSION.0, 75);
     }
 
     /// v59 (Arrange) — the `reorderElement` wire shape. The tag is the
