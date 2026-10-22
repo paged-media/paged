@@ -28,7 +28,7 @@ use paged_canvas::{
     CanvasModel, CanvasOptions, GestureError, GestureType, PageId,
 };
 use paged_mutate::{PropertyPath, Value};
-use paged_template::{FieldDef, FieldKind, ItemPolicy, Role, SessionPolicy, TEMPLATE_KEY};
+use paged_template::{FieldDef, ItemPolicy, Role, SessionPolicy, TemplateFieldKind, TEMPLATE_KEY};
 
 fn model() -> CanvasModel {
     let sample = paged_gen::samples::build("geometry").expect("geometry sample");
@@ -76,7 +76,7 @@ fn rect(m: &mut CanvasModel, bounds: (f32, f32, f32, f32)) -> ElementId {
     .expect("created id")
 }
 
-fn make_field(m: &mut CanvasModel, id: &ElementId, name: &str, kind: FieldKind) {
+fn make_field(m: &mut CanvasModel, id: &ElementId, name: &str, kind: TemplateFieldKind) {
     let policy = ItemPolicy {
         field: Some(FieldDef {
             name: name.into(),
@@ -137,7 +137,7 @@ fn a_filler_types_into_a_field_and_not_into_scenery() {
     role(&mut m, Role::Author);
     let (headline, headline_story) = text_frame(&mut m, 100.0);
     let (_body, body_story) = text_frame(&mut m, 200.0);
-    make_field(&mut m, &headline, "headline", FieldKind::Text);
+    make_field(&mut m, &headline, "headline", TemplateFieldKind::Text);
     role(&mut m, Role::Filler);
     type_into(&mut m, &headline_story).expect("the field takes text");
     assert_not_permitted(type_into(&mut m, &body_story), "text.edit");
@@ -157,7 +157,7 @@ fn a_drag_the_filler_may_not_commit_is_refused_at_begin() {
     let mut m = model();
     role(&mut m, Role::Author);
     let photo = rect(&mut m, (100.0, 100.0, 160.0, 140.0));
-    make_field(&mut m, &photo, "photo", FieldKind::Image);
+    make_field(&mut m, &photo, "photo", TemplateFieldKind::Image);
     role(&mut m, Role::Filler);
     match m.begin_gesture(vec![photo.clone()], GestureType::Translate, None) {
         Err(GestureError::NotPermitted(id, permission)) => {
@@ -174,7 +174,7 @@ fn a_filler_clicks_through_scenery_to_the_field_beneath() {
     role(&mut m, Role::Author);
     let photo = rect(&mut m, (100.0, 100.0, 160.0, 140.0));
     let overlay = rect(&mut m, (100.0, 100.0, 160.0, 140.0));
-    make_field(&mut m, &photo, "photo", FieldKind::Image);
+    make_field(&mut m, &photo, "photo", TemplateFieldKind::Image);
     let p = page(&m);
     let point = (120.0, 130.0);
     assert_eq!(

@@ -2096,3 +2096,40 @@ fn a_snapshot_request_draws_without_the_canvas_markers_by_default() {
         "`markers: true` draws the canvas's highlight"
     );
 }
+
+/// v75 (engine ADR 1001) — the session's role survives a document load,
+/// like the snap settings, and a field write that does not fit is refused
+/// before anything applies.
+#[test]
+fn the_session_policy_survives_a_load_and_unfit_field_values_are_refused() {
+    let mut core = WorkerCore::new();
+    let reply = roundtrip(
+        &mut core,
+        &serde_json::json!({
+            "seq": 1,
+            "protocol": protocol(),
+            "kind": "setSessionPolicy",
+            "payload": { "policy": { "role": "filler" } }
+        }),
+    );
+    assert_eq!(reply["kind"], "sessionPolicyApplied", "{reply}");
+    assert_eq!(reply["payload"]["policy"]["role"], "filler");
+    let loaded = roundtrip(&mut core, &load_msg(2));
+    assert_eq!(loaded["kind"], "documentLoaded");
+    assert_eq!(
+        core.model.as_ref().expect("model").session_policy().role,
+        paged_template::Role::Filler,
+        "the loaded document runs in the session's role"
+    );
+    let refused = roundtrip(
+        &mut core,
+        &serde_json::json!({
+            "seq": 3,
+            "protocol": protocol(),
+            "kind": "setTemplateFields",
+            "payload": { "values": [{ "name": "nobody", "value": { "kind": "text", "text": "x" } }] }
+        }),
+    );
+    assert_eq!(refused["kind"], "templateFieldsRefused", "{refused}");
+    assert_eq!(refused["payload"]["problems"][0]["name"], "nobody");
+}

@@ -410,3 +410,17 @@ describe("feature switches in a profile", () => {
     );
   });
 });
+
+describe("the session role in a profile", () => {
+  test("defaults to editor, follows the chain, and is shape-checked", () => {
+    expect(resolveProfile({}, {}).profile.role).toBe("editor");
+    const { profile } = resolveProfile(
+      { extends: "fill" },
+      { fill: { role: "filler" } },
+    );
+    expect(profile.role).toBe("filler");
+    const bad = validateProfile({ role: "admin" });
+    expect(bad.profile.role).toBeUndefined();
+    expect(bad.problems.map((p) => p.path)).toEqual(["role"]);
+  });
+});

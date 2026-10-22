@@ -23,6 +23,8 @@
 // ADR 213). A profile names a preset it `extends` and adjusts it; the
 // resolver expands the chain into a `ResolvedProfile` that has no gaps.
 
+import type { Role } from "@paged-media/client";
+
 import type { ModeCockpitSlots } from "../registries/mode";
 
 /** The regions of the chrome, by stable id. */
@@ -142,6 +144,9 @@ export interface EditorProfile {
   /** Feature switches seeded at start, by feature id or glob
    *  (`command:paged.object.*`, `chrome:rulers`); docs/composable-editor.md §6. */
   readonly features?: Readonly<Record<string, boolean>>;
+  /** The session's role (docs/composable-editor.md §7.6): what the engine
+   *  lets this editor do to a template. Not stored in the document. */
+  readonly role?: Role;
 }
 
 /**
@@ -172,6 +177,7 @@ export interface ResolvedProfile {
   readonly storageScope: string;
   /** Every layer's switches, base first; a later key overrides. */
   readonly features: Readonly<Record<string, boolean>>;
+  readonly role: Role;
 }
 
 /** Something about a profile that was ignored, with where it was. */

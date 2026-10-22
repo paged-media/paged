@@ -70,8 +70,76 @@ export function soloPresetId(soloName: string): string {
   return `solo:${soloName.replace(/^paged\./, "")}`;
 }
 
+/** Fill in a template (docs/composable-editor.md §5.4): the canvas and the
+ *  template form, a short tool rail, and Undo, Redo and Save; the session
+ *  is a filler, so the engine lets it change only what the template
+ *  permits. */
+const TEMPLATE_FILL: EditorProfile = {
+  extends: "full",
+  title: "Fill in",
+  role: "filler",
+  panels: ["paged.template.form"],
+  modes: [
+    {
+      id: "fill",
+      title: "Fill in",
+      blurb: "Fill in the template's fields",
+      slots: { left: "paged.template.form", inspector: "paged.template.form" },
+    },
+  ],
+  regions: {
+    header: {
+      items: ["paged.editor.undo", "paged.editor.redo", "paged.file.savePaged"],
+    },
+    menubar: null,
+    "context-toolbar": null,
+    "tool-rail": {
+      items: [
+        "paged.tool.select",
+        "paged.tool.type",
+        "paged.tool.hand",
+        "paged.tool.zoom",
+      ],
+    },
+    left: null,
+    "panel-rail": null,
+    "mode-bar": null,
+    palette: null,
+  },
+  canvas: { rulers: false, titleBar: false, thumbnails: true },
+  features: { "chrome:context-menu": false },
+  storageScope: ".fill",
+};
+
+/** Look at a document: the canvas and its pages, nothing to change. */
+const VIEWER: EditorProfile = {
+  extends: "full",
+  title: "View",
+  role: "viewer",
+  panels: [],
+  modes: [{ id: "view", title: "View", slots: { left: "" } }],
+  regions: {
+    header: null,
+    menubar: null,
+    "context-toolbar": null,
+    "tool-rail": { items: ["paged.tool.hand", "paged.tool.zoom"] },
+    left: null,
+    right: null,
+    "panel-rail": null,
+    "mode-bar": null,
+    palette: null,
+  },
+  canvas: { rulers: false, titleBar: false, thumbnails: true },
+  features: { "chrome:context-menu": false },
+  storageScope: ".viewer",
+};
+
 function buildPresets(): Record<string, EditorProfile> {
-  const presets: Record<string, EditorProfile> = { full: {} };
+  const presets: Record<string, EditorProfile> = {
+    full: {},
+    "template-fill": TEMPLATE_FILL,
+    viewer: VIEWER,
+  };
   for (const [name, profile] of Object.entries(SOLO_PROFILES)) {
     presets[soloPresetId(name)] = soloPreset(profile);
   }

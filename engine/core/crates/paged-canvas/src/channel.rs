@@ -1307,6 +1307,14 @@ pub enum MainToWorkerKind {
     SetSessionPolicy {
         policy: paged_template::SessionPolicy,
     },
+    /// v75 — fill template fields: the values are checked against the
+    /// fields' constraints and applied as ONE batch mutation (one undo step,
+    /// checked against the session's policy). Reply: `MutationApplied` /
+    /// `MutationFailed` as for `Mutate`, or `TemplateFieldsRefused` when a
+    /// value does not fit its field (then nothing is applied).
+    SetTemplateFields {
+        values: Vec<crate::template::TemplateFieldValue>,
+    },
     /// B-06 (protocol v30) — closest on-curve point on the element's
     /// path. `point` is in the element's LOCAL coordinate space (the
     /// same space `PathAnchors` reports — callers inverse-apply
@@ -2128,6 +2136,10 @@ pub enum WorkerToMainKind {
     SessionPolicyApplied {
         policy: paged_template::SessionPolicy,
     },
+    /// v75 — `SetTemplateFields` refused before anything applied.
+    TemplateFieldsRefused {
+        problems: Vec<crate::template::TemplateFieldProblem>,
+    },
     /// B-22 (protocol v57) — `RequestPlanarRegions` reply.
     PlanarRegions { result: PlanarRegionsResult },
     /// B-06 — `RequestNearestPathPoint` reply. `None` when the id
@@ -2867,6 +2879,9 @@ pub enum CollectionName {
     Notes,
     /// D-02 — the document's XML tags (`XML/Tags.xml`), one row per tag.
     XmlTags,
+    /// v75 — the template's fields (engine ADR 1001), in form order, with
+    /// their definitions and current values (`TemplateFieldSummary`).
+    TemplateFields,
     /// D-02 — the document's XML structure depth-first, one row per
     /// element: its tag, depth, what it tags, its attributes. An element
     /// tagging a story is followed by the elements tagging its ranges.
@@ -2938,6 +2953,7 @@ impl CollectionName {
             Self::Footnotes => "footnotes",
             Self::Notes => "notes",
             Self::XmlTags => "xmlTags",
+            Self::TemplateFields => "templateFields",
             Self::XmlElements => "xmlElements",
             Self::TrackedChanges => "trackedChanges",
             Self::Endnotes => "endnotes",
@@ -2978,6 +2994,7 @@ impl CollectionName {
             "footnotes" => Self::Footnotes,
             "notes" => Self::Notes,
             "xmlTags" => Self::XmlTags,
+            "templateFields" => Self::TemplateFields,
             "xmlElements" => Self::XmlElements,
             "trackedChanges" => Self::TrackedChanges,
             "endnotes" => Self::Endnotes,

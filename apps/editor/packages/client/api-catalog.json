@@ -3,8 +3,8 @@
   "package": "@paged-media/client",
   "protocol": 75,
   "counts": {
-    "clientMembers": 82,
-    "wireKinds": 53,
+    "clientMembers": 84,
+    "wireKinds": 54,
     "exports": 74
   },
   "wireKinds": [
@@ -57,6 +57,7 @@
     "setElementSelection",
     "setSelection",
     "setSessionPolicy",
+    "setTemplateFields",
     "submitResourceTiles",
     "submitSceneLayer",
     "undo",
@@ -134,6 +135,18 @@
           "kind": "method",
           "signature": "async setSessionPolicy(policy: SessionPolicy): Promise<SessionPolicy>",
           "summary": "v75 (engine ADR 1000) — the session's role and the host's overrides, against which a template's policy applies: a filler may change what the template permits and nothing else, and refused writes come back as `notPermitted`."
+        },
+        {
+          "name": "CanvasClient.templateFields",
+          "kind": "method",
+          "signature": "async templateFields(): Promise<readonly TemplateFieldSummary[]>",
+          "summary": "v75 (engine ADR 1001) — the template's fields, in form order, with their definitions and current values: the `templateFields` collection."
+        },
+        {
+          "name": "CanvasClient.setTemplateFields",
+          "kind": "method",
+          "signature": "async setTemplateFields(values: readonly TemplateFieldValue[]): Promise<| { ok: true; reply: WorkerToMain } | { ok: false; problems: readonly TemplateFieldProblem[] } | { ok: false; reply: WorkerToMain }>",
+          "summary": "v75 (engine ADR 1001) — fill template fields."
         },
         {
           "name": "CanvasClient.setSelection",
@@ -836,6 +849,54 @@
           "name": "SessionPolicy",
           "kind": "type",
           "signature": "SessionPolicy",
+          "summary": null
+        },
+        {
+          "name": "Constraints",
+          "kind": "type",
+          "signature": "Constraints",
+          "summary": null
+        },
+        {
+          "name": "FieldDef",
+          "kind": "type",
+          "signature": "FieldDef",
+          "summary": null
+        },
+        {
+          "name": "TemplateFieldKind",
+          "kind": "type",
+          "signature": "TemplateFieldKind",
+          "summary": null
+        },
+        {
+          "name": "FieldValue",
+          "kind": "type",
+          "signature": "FieldValue",
+          "summary": null
+        },
+        {
+          "name": "OverflowRule",
+          "kind": "type",
+          "signature": "OverflowRule",
+          "summary": null
+        },
+        {
+          "name": "TemplateFieldProblem",
+          "kind": "type",
+          "signature": "TemplateFieldProblem",
+          "summary": null
+        },
+        {
+          "name": "TemplateFieldSummary",
+          "kind": "type",
+          "signature": "TemplateFieldSummary",
+          "summary": null
+        },
+        {
+          "name": "TemplateFieldValue",
+          "kind": "type",
+          "signature": "TemplateFieldValue",
           "summary": null
         },
         {

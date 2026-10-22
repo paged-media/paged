@@ -70,3 +70,27 @@ the document's revision is the next step if it shows in a profile.
 ## Related
 
 - [ADR 1000](1000-a-template-policy-lives-in-labels.md) — the policy and the operation-level check
+
+## Amendment — 2026-10-22: fields as a read and write surface
+
+Protocol 75 also carries the template's fields (task C8, `crates/paged-canvas/src/template.rs`):
+
+- The `templateFields` collection lists them in the policy's form order, each with its
+  definition, its target (the page item or text variable), the story a text field edits, its
+  current value (`text`, `image` by URI, `visible`) and whether its story is overset.
+- `SetTemplateFields { values }` checks each value against its field (the kind, `required`,
+  `maxLength`) and lowers all of them to ONE batch of ordinary mutations, applied as a
+  `Mutate` would be: one undo step, the reply and repaint of a mutation, every write checked
+  at the doors above. A value that does not fit refuses them all with
+  `TemplateFieldsRefused { problems }`. A text field's new text is inserted before the old and
+  the old deleted, so it takes the first run's style (content, not design). `textRun`, `choice`
+  and `data` fields are listed but cannot be set yet; `pattern`, `maxLines`, `minPpi` and the
+  overflow rule are carried and not yet checked.
+- A message rather than a wire `Mutation`, so the schema, the plugin SDK's generated core
+  commands and the scripting surface do not grow a second way to write what existing mutations
+  already write; the CLI and the server send the same message.
+
+Evidence: `crates/paged-canvas/tests/it/template_fields.rs` (form order and values; a filler
+fills the form in one undo step; unfit values refuse everything; replaced text keeps its
+style; the template survives IDML and `.paged` round trips) and the dispatch test
+`the_session_policy_survives_a_load_and_unfit_field_values_are_refused`.

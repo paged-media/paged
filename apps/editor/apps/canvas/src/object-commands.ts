@@ -1102,6 +1102,11 @@ export function refusalOf(reply: WorkerToMain): string | null {
   const error = reply.payload.error;
   if (error.kind === "notImplemented") return error.details.what;
   if (error.kind === "noDocument") return "no document loaded";
+  // v75 — the typed refusals (engine ADR 1001), in the engine's words.
+  if (error.kind === "locked")
+    return `${error.details.node} is locked — unlock it to ${error.details.action}`;
+  if (error.kind === "notPermitted")
+    return `the template does not permit ${error.details.permission} on ${error.details.target}`;
   return `the engine refused the operation (${error.kind})`;
 }
 

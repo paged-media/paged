@@ -1633,6 +1633,7 @@ function CanvasAppRoot() {
       regions={PROFILE.regions}
       canvasFurniture={PROFILE.canvas}
       features={PROFILE.features}
+      sessionPolicy={{ role: PROFILE.role, overrides: [] }}
       bindingProviders={bindingProviders}
       objectModel={editorObjectModel}
     >
