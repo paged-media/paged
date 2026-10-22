@@ -719,7 +719,7 @@ function PluginBundles() {
         .__loadTestBundle;
     };
     // Mount-once by design; the ref keeps the handle live.
-  }, []);
+  }, [surfaces.bundles]);
   return null;
 }
 
@@ -1564,6 +1564,8 @@ function CanvasAppIntegration() {
     };
   }, [
     registries,
+    instance.actions.save,
+    instance.surfaces,
     client,
     camera,
     viewportSize,
