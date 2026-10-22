@@ -31,6 +31,7 @@ projects:
   ooxml: "platform/shared/ooxml"
   panel-kit: "platform/shared/panel-kit"
   react-live: "platform/shared/react-live"
+  strings: "platform/shared/strings"
   test-kit: "platform/shared/test-kit"
   test-resources: "platform/shared/test-resources"
   wasm-boot: "platform/shared/wasm-boot"

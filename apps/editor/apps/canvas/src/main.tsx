@@ -81,7 +81,13 @@ import {
   setDocumentSourceSink,
   resolveProfile,
   type EditorProfile,
+  useOptionalTheme,
 } from "@paged-media/shell";
+import {
+  StringsProvider,
+  createStrings,
+  type Strings,
+} from "@paged-media/strings";
 import "@paged-media/shell/styles/globals.css";
 
 import {
@@ -1612,12 +1618,19 @@ function InstanceBridge() {
   const paged = usePaged();
   const registries = useRegistries();
   const client = useCanvasClient();
+  const theme = useOptionalTheme();
+  const setThemeMode = theme?.setTheme;
   const handed = useRef(false);
   useEffect(() => {
     if (handed.current || !instance.onShell) return;
     handed.current = true;
-    instance.onShell({ paged, registries, client });
-  }, [instance, paged, registries, client]);
+    instance.onShell({
+      paged,
+      registries,
+      client,
+      setThemeMode: (mode) => setThemeMode?.(mode),
+    });
+  }, [instance, paged, registries, client, setThemeMode]);
   return null;
 }
 
@@ -1773,6 +1786,8 @@ export interface MountOptions {
   onClient?: (client: CanvasClient) => void;
   /** Called once the shell is mounted (the embedding API's handle). */
   onShell?: (shell: ShellAccess) => void;
+  /** The words the editor shows (a locale's catalogue); else English. */
+  strings?: Strings;
 }
 
 export function createEditorInstance(
@@ -1856,9 +1871,11 @@ export function mountEditor(
   const root = createRoot(element);
   root.render(
     <StrictMode>
-      <EditorInstanceProvider instance={instance}>
-        <CanvasAppRoot />
-      </EditorInstanceProvider>
+      <StringsProvider strings={options.strings ?? createStrings()}>
+        <EditorInstanceProvider instance={instance}>
+          <CanvasAppRoot />
+        </EditorInstanceProvider>
+      </StringsProvider>
     </StrictMode>,
   );
   return { instance, dispose: () => root.unmount() };
