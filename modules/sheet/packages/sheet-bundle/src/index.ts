@@ -61,6 +61,7 @@ export {
   type SortResult,
   type SheetWasmEngine,
   type SheetWasmModule,
+  type CalcMode,
   type CalcSettingsInfo,
   type HostClock,
   type StructuralEditKind,

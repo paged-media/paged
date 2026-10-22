@@ -791,9 +791,14 @@ impl SheetSession {
         // one read `#NAME?`.
         format::resolve_name_targets(&mut model);
 
+        // A load always calculates, whatever the calculation mode: the
+        // cached values of a manual workbook are not trusted (sheet ADR 513).
+        // The mode applies to the edits that follow.
+        let mode = std::mem::take(&mut model.calc.calc_mode);
         let mut engine = Engine::new(model, config);
         engine.recalc_all();
         read_unmarked_spill_caches(&mut engine, &file_spills, config.now_serial);
+        engine.set_calc_mode(mode);
 
         Ok(SheetSession {
             engine: Some(engine),
@@ -905,8 +910,13 @@ impl SheetSession {
         let empty = matches!(typed.input, sheet_calc::SetInput::Value(CellValue::Empty));
         let pending = vec![((sheet, row, col), typed.hint, typed.quote_prefix, empty)];
         let patches = self.typed_patches(&pending)?;
-        let result = self.engine_mut().set_cell(sheet, row, col, typed.input);
+        let mut result = self.engine_mut().set_cell(sheet, row, col, typed.input);
         let restyled = self.apply_cell_patches(patches)?;
+        if let Some(more) = self.round_as_displayed(&[(sheet, row, col)]) {
+            result.changed.extend(more.changed);
+            result.changed.sort();
+            result.changed.dedup();
+        }
 
         // Record the entered cell as edited (for save re-printing).
         self.edited.insert((sheet, row, col));
@@ -1021,8 +1031,12 @@ impl SheetSession {
             .map(|(_, p)| p)
             .collect();
         let patches = self.typed_patches(&typed_pending)?;
-        let res = self.engine_mut().set_cells(parsed);
+        let mut res = self.engine_mut().set_cells(parsed);
         let restyled = self.apply_cell_patches(patches)?;
+        let keys: Vec<(u16, u32, u32)> = written.iter().copied().collect();
+        if let Some(more) = self.round_as_displayed(&keys) {
+            res.changed.extend(more.changed);
+        }
         self.edited.extend(written.iter().copied());
         let mut changed = written;
         changed.extend(res.changed.iter().map(|c| (c.sheet, c.row, c.col)));
@@ -1040,6 +1054,44 @@ impl SheetSession {
             prev_inputs,
             restyled,
         })
+    }
+
+    /// Precision as displayed (`<calcPr fullPrecision="0">`, sheet ADR 513):
+    /// the numbers just entered at `keys` are stored as their cell's format
+    /// shows them (`1.2345` under `0.00` is stored `1.23`). `None` when the
+    /// workbook keeps full precision or nothing needed rounding; else the
+    /// recalc of the rewritten cells.
+    fn round_as_displayed(&mut self, keys: &[(u16, u32, u32)]) -> Option<sheet_calc::RecalcResult> {
+        let model = self.engine().model();
+        if model.calc.full_precision {
+            return None;
+        }
+        let mut cache = FormatCache::default();
+        let mut rewrites = Vec::new();
+        for &(s, r, c) in keys {
+            let Some(cell) = model.sheet(s).and_then(|ws| ws.cell(r, c)) else {
+                continue;
+            };
+            let (None, CellValue::Number(x)) = (cell.formula, &cell.value) else {
+                continue;
+            };
+            let Ok(fmt) = cache.get(model.styles.num_fmt_of(cell.style)) else {
+                continue;
+            };
+            let shown = sheet_format::as_displayed(*x, fmt);
+            if shown != *x {
+                rewrites.push((
+                    s,
+                    r,
+                    c,
+                    sheet_calc::SetInput::Value(CellValue::Number(shown)),
+                ));
+            }
+        }
+        if rewrites.is_empty() {
+            return None;
+        }
+        Some(self.engine_mut().set_cells(rewrites))
     }
 
     /// The current formatted display of one cell (spec §9). `""` for an empty

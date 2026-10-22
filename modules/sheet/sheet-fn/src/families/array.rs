@@ -31,8 +31,7 @@
 //! - **SEQUENCE(rows, [cols], [start], [step])** — column-major *fill* order:
 //!   the n-th produced value (reading the output row-major) is
 //!   `start + n*step`. `rows`/`cols` truncate toward zero; a non-positive
-//!   `rows`/`cols` is `#VALUE!` (Excel surfaces `#CALC!`/`#VALUE!`; we ground
-//!   it to `#VALUE!` since the wire enum has no `#CALC!`).
+//!   `rows`/`cols` is `#CALC!` (an empty array, Excel-recorded).
 //! - **TRANSPOSE(range)** — `out[c][r] = in[r][c]`; empty input → `#VALUE!`.
 //! - **UNIQUE(range, [by_col], [exactly_once])** — first-seen order; equality
 //!   is the cross-type [`coerce::compare`] order with TEXT compared
@@ -47,22 +46,19 @@
 //!   key pairs; every `by_range` must match `range`'s sort length or `#VALUE!`.
 //! - **FILTER(range, include, [if_empty])** — `include` is a 1-column or
 //!   1-row boolean mask matching `range`'s rows (or cols); kept rows are the
-//!   truthy ones; an empty result yields `if_empty` (a 1×1 array) or `#CALC!`
-//!   ground-truthed to `#N/A` (Excel returns `#CALC!`; no wire variant).
+//!   truthy ones; an empty result yields `if_empty` (a 1×1 array) or `#CALC!`.
 //! - **TEXTSPLIT(text, col_delim, [row_delim], [ignore_empty], [match_mode],
 //!   [pad_with])** — split into a 2-D block; `match_mode = 1` is
 //!   case-insensitive; ragged rows pad with `pad_with` (default `#N/A`).
 //! - **RANDARRAY([rows], [cols], [min], [max], [integer])** — volatile, draws
 //!   from [`EvalCtx::next_f64`] (deterministic under a fixed seed).
 //!
-//! ## The "ground #CALC! to a wire error" ruling (documented once, here)
+//! ## Empty results are `#CALC!`
 //!
-//! Modern Excel raises `#CALC!` for an empty dynamic-array result (an empty
-//! `FILTER`, a zero-length `SEQUENCE`). The frozen [`CellError`] wire enum has
-//! no `#CALC!` variant (it is the 8 OOXML codes). We therefore ground every
-//! such case to the nearest classic wire error: a degenerate *shape* (rows/cols
-//! ≤ 0) is `#VALUE!`; an empty *filter* with no `if_empty` is `#N/A` (the value
-//! Excel itself shows in legacy mode). Each grounding is noted on its kernel.
+//! Excel raises `#CALC!` for an empty dynamic-array result (an empty
+//! `FILTER`, a zero-length `SEQUENCE`). Until the W1.0 amendment (sheet ADR
+//! 513) the value enum had no `#CALC!`, and these kernels grounded it to
+//! `#VALUE!` / `#N/A`; they now return it.
 
 use compact_str::CompactString;
 use sheet_core::{CellError, CellValue};
@@ -139,7 +135,7 @@ fn first_error_in_grid(grid: &[Vec<CellValue>]) -> Option<CellError> {
 
 /// `SEQUENCE(rows, [columns], [start], [step])` (spec §6.4). Produces a
 /// `rows × cols` block filled row-major with `start + n*step`. `rows`/`cols`
-/// truncate toward zero; ≤ 0 → `#VALUE!` (the grounded `#CALC!`). `start`
+/// truncate toward zero; 0 → `#CALC!` (an empty array), < 0 → `#VALUE!`. `start`
 /// defaults to `1`, `step` to `1`.
 pub fn sequence(args: &[Arg], _ctx: &EvalCtx) -> FnResult {
     let rows = match scalar_num(&args[0]) {
@@ -171,8 +167,13 @@ pub fn sequence(args: &[Arg], _ctx: &EvalCtx) -> FnResult {
         1.0
     };
 
-    if rows <= 0 || cols <= 0 {
+    // A negative extent is #VALUE!, a zero one an empty array: #CALC!
+    // (both Excel-recorded).
+    if rows < 0 || cols < 0 {
         return err(CellError::Value);
+    }
+    if rows == 0 || cols == 0 {
+        return err(CellError::Calc);
     }
 
     let mut out = Vec::with_capacity(rows as usize);
@@ -286,8 +287,8 @@ pub fn unique(args: &[Arg], _ctx: &EvalCtx) -> FnResult {
         .collect();
 
     if kept.is_empty() {
-        // No entry survived exactly-once → the grounded #CALC! is #N/A.
-        return err(CellError::Na);
+        // No entry survived exactly-once: an empty array, #CALC!.
+        return err(CellError::Calc);
     }
 
     FnResult::Array(if by_col { transpose_grid(&kept) } else { kept })
@@ -459,7 +460,7 @@ fn flatten_to_vec(arg: &Arg) -> Vec<CellValue> {
 /// `range` whose aligned `include` mask entry is truthy. `include` is a
 /// 1-column or 1-row boolean vector matching `range`'s row count (or column
 /// count for a horizontal mask). An empty result returns `if_empty` (as a
-/// 1×1 block) or, if absent, `#N/A` (the grounded `#CALC!`). A mask-length
+/// 1×1 block) or, if absent, `#CALC!` (an empty array). A mask-length
 /// mismatch → `#VALUE!`.
 pub fn filter(args: &[Arg], _ctx: &EvalCtx) -> FnResult {
     let grid = grid_of(&args[0]);
@@ -504,7 +505,7 @@ pub fn filter(args: &[Arg], _ctx: &EvalCtx) -> FnResult {
         return if args.len() >= 3 {
             FnResult::Array(vec![vec![scalar_value(&args[2])]])
         } else {
-            err(CellError::Na)
+            err(CellError::Calc)
         };
     }
 

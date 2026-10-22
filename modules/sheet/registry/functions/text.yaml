@@ -54,6 +54,7 @@
 
 - id: sheet.fn.text.concat
   name: CONCAT
+  xlfn_prefix: "_xlfn."
   family: text
   arity: { min: 1, max: null }
   volatility: none

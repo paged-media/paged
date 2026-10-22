@@ -584,6 +584,34 @@ mod wasm {
             to_js(&self.session.set_iterative(on, max_iter, max_change))
         }
 
+        /// Set the calculation mode (`auto` | `autoNoTable` | `manual`;
+        /// written back to `<calcPr calcMode>`): `{changed,circular}`.
+        pub fn set_calc_mode(&mut self, mode: &str) -> Result<JsValue, JsValue> {
+            let r = self.session.set_calc_mode(mode).map_err(map_err)?;
+            to_js(&r)
+        }
+
+        /// Calculate Now (F9): every pending cell and the volatile ones.
+        pub fn calculate_now(&mut self) -> Result<JsValue, JsValue> {
+            to_js(&self.session.calculate_now())
+        }
+
+        /// Calculate Sheet (Shift+F9): the pending cells of one sheet.
+        pub fn calculate_sheet(&mut self, sheet: u16) -> Result<JsValue, JsValue> {
+            let r = self.session.calculate_sheet(sheet).map_err(map_err)?;
+            to_js(&r)
+        }
+
+        /// Whether edits wait for a calculation (manual mode).
+        pub fn is_calc_pending(&self) -> bool {
+            self.session.is_calc_pending()
+        }
+
+        /// Precision as displayed (`<calcPr fullPrecision>`).
+        pub fn set_full_precision(&mut self, full: bool) {
+            self.session.set_full_precision(full);
+        }
+
         /// Add a worksheet at the end (empty name = next free `SheetN`);
         /// returns its id.
         pub fn add_sheet(&mut self, name: &str) -> Result<u16, JsValue> {

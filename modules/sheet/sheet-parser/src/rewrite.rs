@@ -27,7 +27,8 @@
 //!   by an insert collapses to `Expr::Lit(Error(Ref))`.
 //! - **A ref inside a deleted span → `#REF!`.** A range fully inside the span
 //!   collapses; a range partially overlapping the span clips to the survivor.
-//! - Only refs on the SAME `sheet` as the edit move.
+//! - Only refs on the SAME `sheet` as the edit move; a 3D reference never
+//!   moves (it addresses every sheet of its span).
 
 use sheet_core::ast::{Expr, Formula, LitValue};
 use sheet_core::{CellError, CellRef, RangeRef, SheetId, MAX_COL, MAX_ROW};
@@ -155,6 +156,25 @@ fn fill_expr(e: &Expr, drow: i64, dcol: i64) -> Expr {
         Expr::Array(rows) => Expr::Array(rows.iter().map(|r| r.iter().map(f).collect()).collect()),
         Expr::SpillRef(a) => Expr::SpillRef(Box::new(f(a))),
         Expr::Call(c, args) => Expr::Call(Box::new(f(c)), args.iter().map(f).collect()),
+        // A copied 3D reference moves like a plain one (on every sheet).
+        Expr::Ref3D(r) => match fill_cell(r.cell, drow, dcol) {
+            Some(cell) => Expr::Ref3D(sheet_core::ast::Ref3D { cell, ..*r }),
+            None => ref_error(),
+        },
+        Expr::Range3D(r) => match (
+            fill_cell(r.range.start, drow, dcol),
+            fill_cell(r.range.end, drow, dcol),
+        ) {
+            (Some(start), Some(end)) => Expr::Range3D(sheet_core::ast::Range3D {
+                range: RangeRef { start, end },
+                ..*r
+            }),
+            _ => ref_error(),
+        },
+        Expr::UnknownName(_) => e.clone(),
+        Expr::UnknownFunc(name, args) => {
+            Expr::UnknownFunc(name.clone(), args.iter().map(f).collect())
+        }
     }
 }
 
@@ -194,6 +214,14 @@ fn rewrite_expr(e: &Expr, plan: &Plan) -> Expr {
         Expr::Local(_) => e.clone(),
         Expr::Call(callee, args) => Expr::Call(
             Box::new(rewrite_expr(callee, plan)),
+            args.iter().map(|a| rewrite_expr(a, plan)).collect(),
+        ),
+        // A 3D reference addresses the same cells on EVERY sheet of its span,
+        // so a row or column inserted on one of them does not move it (Excel
+        // keeps a 3D reference's address; sheet ADR 513).
+        Expr::Ref3D(_) | Expr::Range3D(_) | Expr::UnknownName(_) => e.clone(),
+        Expr::UnknownFunc(name, args) => Expr::UnknownFunc(
+            name.clone(),
             args.iter().map(|a| rewrite_expr(a, plan)).collect(),
         ),
     }

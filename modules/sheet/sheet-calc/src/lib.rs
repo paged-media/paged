@@ -35,17 +35,16 @@
 //! [`Engine::recalc_all`] / [`Engine::recalc_dirty`]; structural edits go
 //! through [`Engine::apply_edit`].
 //!
-//! ## The circular-reference encoding (registry `sheet.calc.circular`)
+//! ## Circular references (registry `sheet.calc.circular`, sheet ADR 514)
 //!
-//! [`CellError`] has no `Circular` variant (the wire enum is frozen at 8
-//! codes). When the scheduler detects a cycle AND iterative calculation is OFF
-//! (the default), each cycle member's STORED value becomes
-//! [`CellValue::Error`]`(`[`CellError::Ref`]`)` (the `#REF!`-class display the
-//! registry row's title calls for), AND the full cycle set is reported on
-//! [`RecalcResult::circular`]. The glue surfaces the circular WARNING from
-//! `circular`; the cell displays the `#REF!`-class error. Breaking the cycle
-//! (re-entering one member as a non-cyclic formula or a literal) clears both on
-//! the next recalc.
+//! [`CellError`] has no `Circular` variant: circularity is a diagnostic. When
+//! the scheduler detects a cycle AND iterative calculation is OFF (the
+//! default), the cycle members are not calculated — as in Excel, each keeps
+//! its LAST value, and one never calculated shows `0` — and the full cycle set
+//! is reported on [`RecalcResult::circular`] (the glue's circular WARNING).
+//! Cells downstream of the cycle compute from those values. Breaking the cycle
+//! (re-entering one member as a non-cyclic formula or a literal) recalculates
+//! normally. (Until 2026-10-22 every member stored `#REF!`.)
 //!
 //! ## Iterative calculation (registry `sheet.calc.iterative.*`, D-7)
 //!
@@ -56,7 +55,7 @@
 //! per-cell change falls to/below `max_change` (see [`iterate`]). On convergence
 //! [`RecalcResult::circular`] is EMPTY; a system that exhausts `max_iter` is
 //! reported on [`RecalcResult::non_converged`] (its last-iterate values kept).
-//! This SUPERSEDES the `#REF!` ruling for that cycle only while the flag is on.
+//! This SUPERSEDES the keep-the-last-value ruling for that cycle only while the flag is on.
 //!
 //! ## Determinism
 //!
@@ -125,7 +124,8 @@ impl Default for EngineConfig {
 pub struct RecalcResult {
     /// Formula cells whose stored value changed during this recalc.
     pub changed: Vec<CellRef>,
-    /// Formula cells on a circular reference stored as `#REF!` (iteration OFF).
+    /// Formula cells on a circular reference (iteration OFF): not calculated,
+    /// they keep their last value (0 when never calculated) — sheet ADR 514.
     /// EMPTY when iterative calculation is enabled — a cycle then iterates to a
     /// fixed point (its members move to `non_converged` only if they fail to
     /// settle within `max_iter`).
@@ -175,6 +175,9 @@ pub struct Engine {
     /// Whether recalcs use the range accelerators (`accel`, sheet ADR 512).
     /// On by default; off only to prove the fast paths equal the kernels.
     accelerate: bool,
+    /// Formula cells staged since the last recalc — what manual calculation
+    /// evaluates on entry.
+    entered: Vec<CellRef>,
 }
 
 impl Engine {
@@ -183,6 +186,7 @@ impl Engine {
     /// recalc — the caller chooses `recalc_all`/`recalc_dirty`.
     pub fn new(mut model: SheetModel, config: EngineConfig) -> Engine {
         names::compile_names(&mut model);
+        names::resolve_unknowns(&mut model);
         let mut graph = DepGraph::new();
         graph.rebuild(&model);
         let mut dirty = Dirty::new();
@@ -197,6 +201,7 @@ impl Engine {
             pass: 0,
             spills: SpillState::new(),
             accelerate: true,
+            entered: Vec::new(),
         }
     }
 
@@ -263,7 +268,7 @@ impl Engine {
     /// full recalc so cycle members switch policy immediately:
     ///
     /// - `on == false`: a cycle keeps the `sheet.calc.circular` ruling (each
-    ///   member stored as `#REF!`, reported on [`RecalcResult::circular`]).
+    ///   member keeps its last value, reported on [`RecalcResult::circular`]).
     /// - `on == true`: a cycle iterates to a fixed point (seeded at `0`,
     ///   recomputed in stable order up to `max_iter` passes, stopping early at
     ///   `max_change`). [`RecalcResult::circular`] is then empty; cells that do
@@ -391,7 +396,7 @@ impl Engine {
     ) -> RecalcResult {
         self.stage_cell(sheet, row, col, input);
         self.redirty_blocked_spills();
-        self.recalc_dirty()
+        self.recalc_if_automatic()
     }
 
     /// The batch door: commit every input in order (exactly as a sequence of
@@ -408,7 +413,81 @@ impl Engine {
             self.stage_cell(sheet, row, col, input);
         }
         self.redirty_blocked_spills();
+        self.recalc_if_automatic()
+    }
+
+    /// After an edit: recalculate the dirty cut, unless the workbook
+    /// calculates manually (`<calcPr calcMode="manual">`, sheet ADR 513) —
+    /// then the edit only marks its dependents dirty and they wait for
+    /// [`Engine::calculate_now`] / [`Engine::calculate_sheet`].
+    fn recalc_if_automatic(&mut self) -> RecalcResult {
+        let entered = std::mem::take(&mut self.entered);
+        if self.model.calc.calc_mode != sheet_core::CalcMode::Manual {
+            return self.recalc_dirty();
+        }
+        // Manual: as in Excel, a formula just entered is calculated (from
+        // whatever its precedents hold); nothing else is.
+        let mut changed = Vec::new();
+        let _accel = accel::Scope::enter(&self.model, false);
+        for cref in entered {
+            if self.graph.is_formula(cref) {
+                self.evaluate_in_order(cref, &mut changed);
+                self.dirty.unmark(cref);
+            }
+        }
+        changed.sort();
+        changed.dedup();
+        RecalcResult {
+            changed,
+            ..RecalcResult::default()
+        }
+    }
+
+    /// Whether edits are waiting for a calculation (manual mode; in
+    /// automatic mode this is false between edits).
+    pub fn is_calc_pending(&self) -> bool {
+        !self.dirty.is_empty()
+    }
+
+    /// Excel's Calculate Now (F9): recalculate every pending cell, and the
+    /// volatile ones, in every sheet.
+    pub fn calculate_now(&mut self) -> RecalcResult {
         self.recalc_dirty()
+    }
+
+    /// Excel's Calculate Sheet (Shift+F9): recalculate the pending cells of
+    /// `sheet` (and the volatile ones); pending cells of other sheets stay
+    /// pending.
+    pub fn calculate_sheet(&mut self, sheet: SheetId) -> RecalcResult {
+        let pending = self.dirty.drain_set();
+        let mut later = Vec::new();
+        for c in pending {
+            if c.sheet == sheet {
+                self.dirty.mark(c);
+            } else {
+                later.push(c);
+            }
+        }
+        let r = self.recalc_dirty();
+        for c in later {
+            self.dirty.mark(c);
+        }
+        r
+    }
+
+    /// Set the calculation mode (`<calcPr calcMode>`, written back on save).
+    /// Switching to an automatic mode calculates what is pending.
+    /// `AutoNoTable` calculates like `Auto`: the engine has no data tables.
+    pub fn set_calc_mode(&mut self, mode: sheet_core::CalcMode) -> RecalcResult {
+        self.model.calc.calc_mode = mode;
+        self.recalc_if_automatic()
+    }
+
+    /// Set precision as displayed (`<calcPr fullPrecision>`): with `false`
+    /// a constant entered is stored rounded to its number format (the
+    /// rounding is the session's, which knows the formats).
+    pub fn set_full_precision(&mut self, full: bool) {
+        self.model.calc.full_precision = full;
     }
 
     /// Commit one input to the model, graph and dirty set — no recalc.
@@ -467,6 +546,10 @@ impl Engine {
             SetInput::Formula(f) => {
                 let refs = names::refs_with_names(&self.model, &f, cref);
                 let volatile = refs.has_volatile;
+                // A formula entered here is a dynamic-array formula, as in
+                // Excel 365: one that can produce an array spills by its
+                // result's shape (sheet ADR 513).
+                let dynamic = eval::root_may_spill(&self.model, &f.root);
                 let fid = self.model.intern_formula(f);
                 let style = self.style_of(cref);
                 if let Some(ws) = self.model.sheet_mut(sheet) {
@@ -480,8 +563,14 @@ impl Engine {
                         },
                     );
                 }
+                if dynamic {
+                    if let Some(ws) = self.model.sheet_mut(sheet) {
+                        ws.dynamic_arrays.insert((row, col));
+                    }
+                }
                 self.graph.register(cref, &refs, &self.model);
                 self.dirty.set_volatile(cref, volatile);
+                self.entered.push(cref);
                 // The formula cell itself is dirty.
                 self.dirty.mark(cref);
             }
@@ -573,9 +662,13 @@ impl Engine {
                     non_converged = nc;
                 }
             } else {
+                // Excel with iteration off: a cycle member is not calculated
+                // — it keeps its last value, and one never calculated shows 0
+                // (sheet ADR 514). The cycle is reported on `circular`.
                 for cref in &to.cycle {
-                    let ref_err = CellValue::Error(CellError::Ref);
-                    if self.commit_value(*cref, ref_err) {
+                    if self.stored_value(*cref) == CellValue::Empty
+                        && self.commit_value(*cref, CellValue::Number(0.0))
+                    {
                         changed.push(*cref);
                     }
                 }
@@ -680,6 +773,9 @@ impl Engine {
         let Some(f) = self.model.formula(fid) else {
             return CellValue::Error(CellError::Ref);
         };
+        if let Some(v) = self.kept_cached_value(cref, &f.root) {
+            return v;
+        }
         let seed = volatile::cell_seed(self.config.rng_seed, self.pass, cref);
         let ctx = eval::ctx_for(&self.model, cref, self.config.now_serial, seed);
         perf_count!(evaluations, 1);
@@ -696,7 +792,23 @@ impl Engine {
             }
             .into_shown();
         }
-        eval::eval_expr(&self.model, &f.root, &ctx, &self.spills).into_shown()
+        // Not marked dynamic: a legacy formula (or one whose root cannot
+        // produce an array, where the two read the same).
+        eval::with_legacy(true, || {
+            eval::eval_root(&self.model, &f.root, &ctx, &self.spills)
+        })
+        .into_shown()
+    }
+
+    /// The value a formula this engine cannot compute keeps
+    /// ([`eval::keeps_cached_value`]): the cell's stored value, when it has
+    /// one. `None` = evaluate.
+    fn kept_cached_value(&self, cref: CellRef, root: &sheet_core::Expr) -> Option<CellValue> {
+        if !eval::keeps_cached_value(root) {
+            return None;
+        }
+        let v = self.stored_value(cref);
+        (v != CellValue::Empty).then_some(v)
     }
 
     /// The `(rows, cols)` area of the legacy array formula anchored at
@@ -846,6 +958,9 @@ impl Engine {
         let Some(f) = self.model.formula(fid) else {
             return FnResult::Scalar(CellValue::Error(CellError::Ref));
         };
+        if let Some(v) = self.kept_cached_value(cref, &f.root) {
+            return FnResult::Scalar(v);
+        }
         let seed = volatile::cell_seed(self.config.rng_seed, self.pass, cref);
         let ctx = eval::ctx_for(&self.model, cref, self.config.now_serial, seed);
         perf_count!(evaluations, 1);
@@ -856,7 +971,12 @@ impl Engine {
         // A dynamic array (`H1:H6*2` stored with the dynamic-array marker)
         // evaluates as an array and spills its natural size, as in Excel.
         if ws.dynamic_arrays.contains(&(cref.row, cref.col)) {
-            return shown_result(eval::eval_array(&self.model, &f.root, &ctx, &self.spills));
+            return shown_result(eval::eval_root_array(
+                &self.model,
+                &f.root,
+                &ctx,
+                &self.spills,
+            ));
         }
         shown_result(eval::eval_expr_rich(
             &self.model,
@@ -880,10 +1000,10 @@ impl Engine {
     ) {
         let rows = grid.len() as u32;
         let cols = grid.first().map(|r| r.len()).unwrap_or(0) as u32;
-        // A degenerate (empty) grid should not arise — kernels ground to a
-        // scalar error — but stay total: treat it as a single blank.
+        // An empty array is Excel's #CALC! (kernels return it themselves;
+        // this catches an empty block from anywhere else).
         if rows == 0 || cols == 0 {
-            if self.commit_value(anchor, CellValue::Empty) {
+            if self.commit_value(anchor, CellValue::Error(CellError::Calc)) {
                 changed.push(anchor);
             }
             return;
@@ -1457,18 +1577,23 @@ mod tests {
     fn enter_bad_formula_is_err() {
         let mut e = engine();
         assert!(e.enter(0, 0, 0, "=1+").is_err());
-        // Unknown function -> ParseError.
-        assert!(e.enter(0, 0, 0, "=NOTAFUNC(1)").is_err());
+        // An unknown function is no syntax error: it is #NAME? (W1.0).
+        e.enter(0, 0, 0, "=NOTAFUNC(1)").unwrap();
+        assert_eq!(
+            e.model().sheet(0).unwrap().cell(0, 0).unwrap().value,
+            CellValue::Error(CellError::Name)
+        );
     }
 
     #[test]
-    fn circular_stores_ref_and_reports() {
+    fn circular_keeps_last_values_and_reports() {
+        // ADR 514: a cycle member keeps its last value; never calculated, 0.
         let mut e = engine();
         e.enter(0, 0, 0, "=B1").unwrap();
         let r = e.enter(0, 0, 1, "=A1").unwrap();
         assert!(r.circular.contains(&cr(0, 0)) || r.circular.contains(&cr(0, 1)));
-        assert_eq!(value_at(&e, 0, 0), CellValue::Error(CellError::Ref));
-        assert_eq!(value_at(&e, 0, 1), CellValue::Error(CellError::Ref));
+        assert_eq!(value_at(&e, 0, 0), CellValue::Number(0.0));
+        assert_eq!(value_at(&e, 0, 1), CellValue::Number(0.0));
         // Break the cycle.
         let r2 = e.enter(0, 0, 1, "5").unwrap();
         assert!(r2.circular.is_empty());
@@ -1512,15 +1637,16 @@ mod tests {
     }
 
     #[test]
-    fn iterative_off_yields_ref() {
-        // Same system, iteration OFF (default): #REF! + circular reported.
+    fn iterative_off_keeps_last_values() {
+        // Same system, iteration OFF (default): A1 keeps the 10 it had before
+        // the cycle closed, B1 (never calculated) is 0; circular reported.
         let mut e = engine();
         e.enter(0, 0, 0, "=B1*0.5+10").unwrap();
         let r = e.enter(0, 0, 1, "=A1+5").unwrap();
         assert!(!r.circular.is_empty());
         assert!(r.non_converged.is_empty());
-        assert_eq!(value_at(&e, 0, 0), CellValue::Error(CellError::Ref));
-        assert_eq!(value_at(&e, 0, 1), CellValue::Error(CellError::Ref));
+        assert_eq!(value_at(&e, 0, 0), CellValue::Number(10.0));
+        assert_eq!(value_at(&e, 0, 1), CellValue::Number(0.0));
     }
 
     #[test]
@@ -1549,18 +1675,20 @@ mod tests {
 
     #[test]
     fn set_iterative_toggles_policy_live() {
-        // Enter a cycle with iteration off -> #REF!, then turn iteration on and
-        // the SAME cells settle (set_iterative recalcs).
+        // Enter a cycle with iteration off (A1 keeps 10), then turn iteration
+        // on and the SAME cells settle (set_iterative recalcs).
         let mut e = engine();
         e.enter(0, 0, 0, "=B1*0.5+10").unwrap();
         e.enter(0, 0, 1, "=A1+5").unwrap();
-        assert_eq!(value_at(&e, 0, 0), CellValue::Error(CellError::Ref));
+        assert_eq!(value_at(&e, 0, 0), CellValue::Number(10.0));
         let r = e.set_iterative(true, 1000, 1e-9);
         assert!(r.circular.is_empty());
         assert!(r.non_converged.is_empty());
         approx(value_at(&e, 0, 0), 25.0, 1e-6);
-        // And back off -> #REF! again.
-        e.set_iterative(false, 100, 0.001);
-        assert_eq!(value_at(&e, 0, 0), CellValue::Error(CellError::Ref));
+        // And back off: the cycle is no longer calculated and keeps the
+        // converged values.
+        let r = e.set_iterative(false, 100, 0.001);
+        assert!(!r.circular.is_empty());
+        approx(value_at(&e, 0, 0), 25.0, 1e-6);
     }
 }

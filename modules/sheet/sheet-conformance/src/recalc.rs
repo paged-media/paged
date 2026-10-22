@@ -27,7 +27,8 @@
 //! module keeps the cached values that load overwrites.
 //!
 //! Every formula cell lands in exactly one class, so a report adds up:
-//! `agree`, `differs`, `unparsed` (the parser refused the text), `volatile`
+//! `agree`, `differs`, `unparsed` (the parser refused the text, or it calls a
+//! function the engine does not know and so keeps its cached value), `volatile`
 //! (NOW/RAND/OFFSET/INDIRECT/... — a cached value is a moment, not a fact),
 //! `no-cache` (the file carries no `<v>`).
 
@@ -170,11 +171,19 @@ pub fn recalc_workbook(bytes: &[u8]) -> Result<Vec<CellOutcome>, String> {
         })
         .collect();
     let model = session.model();
-    // A formula text the loader could not parse leaves a value cell.
+    // A formula text the loader could not parse leaves a value cell; one that
+    // calls a function the engine does not know keeps its cached value
+    // (sheet ADR 513) — neither is a computed answer.
     let unparsed: std::collections::BTreeSet<(SheetId, u32, u32)> = texts
         .iter()
         .map(|(k, _)| *k)
-        .filter(|k| cell(model, *k).is_none_or(|c| c.formula.is_none()))
+        .filter(|k| {
+            cell(model, *k).is_none_or(|c| {
+                c.formula
+                    .and_then(|fid| model.formula(fid))
+                    .is_none_or(|f| sheet_calc::eval::keeps_cached_value(&f.root))
+            })
+        })
         .collect();
 
     let mut out = Vec::with_capacity(texts.len());

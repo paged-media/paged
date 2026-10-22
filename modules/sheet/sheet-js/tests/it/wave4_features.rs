@@ -202,14 +202,14 @@ fn calc_pr_iteration_is_honoured_and_round_trips__feat__sheet_calc_iterative() {
     );
 }
 
-/// Without `<calcPr iterate>` the same cycle is the circular ruling
-/// (`#REF!`); switching iteration on is written back into `<calcPr>`, other
+/// Without `<calcPr iterate>` the same cycle is not calculated (its members
+/// keep their value, 0 here — sheet ADR 514); switching iteration on is written back into `<calcPr>`, other
 /// attributes kept, and a reload honours it.
 #[test]
 fn calc_pr_toggle_writes_back__feat__sheet_calc_iterative() {
     let bytes = package(r#"<calcPr calcId="191029"/>"#, CYCLE);
     let mut s = SheetSession::load_xlsx(&bytes).unwrap();
-    assert_eq!(s.get_cell_display(0, 0, 0), "#REF!");
+    assert_eq!(s.get_cell_display(0, 0, 0), "0");
     s.set_iterative(true, 100, 0.0001);
     assert!(s.metadata().dirty, "a settings change is a pending save");
     let saved = s.save_xlsx().unwrap();

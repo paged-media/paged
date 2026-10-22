@@ -61,6 +61,11 @@ struct FnRow {
     /// intercepts first; reaching the pure door is an internal invariant break).
     #[serde(default)]
     special_form: bool,
+    /// W1.0 amendment: `connect` | `blocked` — a function this engine never
+    /// runs; both doors return `#CONNECT!` / `#BLOCKED!` (the evaluator keeps a
+    /// formula's cached value before it ever gets here). No kernel.
+    #[serde(default)]
+    cached_only: Option<String>,
     #[serde(default)]
     status: String,
     // Unknown fields (family, volatility, provenance, tests, …) ignored.
@@ -100,7 +105,7 @@ fn main() {
         let implemented = r.status.eq_ignore_ascii_case("implemented");
         // A special-form row has NO pure kernel (it is handled in eval.rs), so
         // it is exempt from the `rust` symbol requirement.
-        if implemented && !r.special_form && r.rust.trim().is_empty() {
+        if implemented && !r.special_form && r.cached_only.is_none() && r.rust.trim().is_empty() {
             panic!(
                 "sheet-fn build.rs: function {} is implemented but has no `rust` symbol",
                 r.id
@@ -151,7 +156,19 @@ fn main() {
 
     for (i, r) in rows.iter().enumerate() {
         let implemented = r.status.eq_ignore_ascii_case("implemented");
-        if implemented && r.special_form {
+        if let Some(err) = cached_only_error(r) {
+            let max_guard = match r.arity.max {
+                Some(m) => format!(" || args.len() > {m}"),
+                None => String::new(),
+            };
+            writeln!(
+                out,
+                "        {i} => if args.len() < {min}{max_guard} {{ CellValue::Error(CellError::Value) }} else {{ CellValue::Error(CellError::{err}) }}, // {name} (cached_only)",
+                min = r.arity.min,
+                name = r.name,
+            )
+            .unwrap();
+        } else if implemented && r.special_form {
             // A special-form row (OFFSET/INDIRECT/FORMULATEXT/ISFORMULA) is
             // handled in `sheet-calc/eval.rs` BEFORE dispatch — it reads the
             // model and has no pure kernel. Reaching the pure door is an
@@ -242,7 +259,19 @@ fn main() {
 
     for (i, r) in rows.iter().enumerate() {
         let implemented = r.status.eq_ignore_ascii_case("implemented");
-        if implemented && r.special_form {
+        if let Some(err) = cached_only_error(r) {
+            let max_guard = match r.arity.max {
+                Some(m) => format!(" || args.len() > {m}"),
+                None => String::new(),
+            };
+            writeln!(
+                out,
+                "        {i} => FnResult::Scalar(if args.len() < {min}{max_guard} {{ CellValue::Error(CellError::Value) }} else {{ CellValue::Error(CellError::{err}) }}), // {name} (cached_only)",
+                min = r.arity.min,
+                name = r.name,
+            )
+            .unwrap();
+        } else if implemented && r.special_form {
             // Special form — handled in eval.rs before dispatch_rich too.
             writeln!(
                 out,
@@ -312,4 +341,12 @@ fn main() {
     let out_dir = std::env::var("OUT_DIR").expect("OUT_DIR");
     let dest = Path::new(&out_dir).join("dispatch.rs");
     fs::write(&dest, out).unwrap_or_else(|e| panic!("sheet-fn build.rs: write {dest:?}: {e}"));
+}
+
+/// The `CellError` variant a `cached_only` row's doors return.
+fn cached_only_error(r: &FnRow) -> Option<&'static str> {
+    match r.cached_only.as_deref()? {
+        "connect" => Some("Connect"),
+        _ => Some("Blocked"),
+    }
 }

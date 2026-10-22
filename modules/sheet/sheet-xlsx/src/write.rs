@@ -571,8 +571,19 @@ fn encode_cell(
 /// blocked spill as `#VALUE!` itself (the real error rides a rich value Paged
 /// does not write). The anchor's formula recomputes `#SPILL!` on load.
 fn stored_error(e: sheet_core::value::CellError) -> &'static str {
+    use sheet_core::value::CellError;
     match e {
-        sheet_core::value::CellError::Spill => "#VALUE!",
+        // The errors newer than the file format have no `<v>` literal: Excel
+        // writes `#VALUE!` (plus a rich value naming the real error, which
+        // this writer does not emit) and refuses a workbook that stores the
+        // token itself.
+        CellError::Spill
+        | CellError::Calc
+        | CellError::Field
+        | CellError::Busy
+        | CellError::Connect
+        | CellError::Blocked
+        | CellError::Unknown => "#VALUE!",
         e => e.as_str(),
     }
 }

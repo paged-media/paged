@@ -29,7 +29,7 @@
 //! - `sheet_calc_volatile`             (sheet.calc.volatile)
 
 use sheet_calc::{Engine, EngineConfig};
-use sheet_core::{CellError, CellRef, CellValue, SheetModel};
+use sheet_core::{CellRef, CellValue, SheetModel};
 
 // ---- helpers ----
 
@@ -175,12 +175,13 @@ fn sheet_calc_circular() {
     e.enter(0, 0, 0, "=B1").unwrap();
     let r = e.enter(0, 0, 1, "=A1").unwrap();
 
-    // Both members report on `circular` and STORE #REF! (the wire encoding of
-    // the internal Circular diagnostic — CellError has no Circular variant).
+    // Both members report on `circular`; they are not calculated and keep
+    // their last value — never calculated, 0 (sheet ADR 514; CellError has no
+    // Circular variant).
     assert!(r.circular.contains(&cr(0, 0)));
     assert!(r.circular.contains(&cr(0, 1)));
-    assert_eq!(val(&e, 0, 0, 0), CellValue::Error(CellError::Ref));
-    assert_eq!(val(&e, 0, 0, 1), CellValue::Error(CellError::Ref));
+    assert_eq!(val(&e, 0, 0, 0), CellValue::Number(0.0));
+    assert_eq!(val(&e, 0, 0, 1), CellValue::Number(0.0));
 
     // A longer cycle (3 members) is fully reported.
     let mut e3 = engine();
@@ -189,7 +190,7 @@ fn sheet_calc_circular() {
     let r3 = e3.enter(0, 2, 0, "=A1").unwrap();
     for c in [cr(0, 0), cr(1, 0), cr(2, 0)] {
         assert!(r3.circular.contains(&c), "{c:?} on the 3-cycle");
-        assert_eq!(val(&e3, 0, c.row, c.col), CellValue::Error(CellError::Ref));
+        assert_eq!(val(&e3, 0, c.row, c.col), CellValue::Number(0.0));
     }
 
     // Breaking the cycle clears it: re-enter B1 as a literal.

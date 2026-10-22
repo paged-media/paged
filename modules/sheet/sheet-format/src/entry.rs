@@ -406,13 +406,15 @@ pub fn parse_entry(raw: &str, ctx: &EntryCtx) -> Entry {
 }
 
 /// The error literals a person can type (exact, any case). The newer errors
-/// (`#SPILL!`, `#CALC!`) are text when typed; `#GETTING_DATA` has no model
+/// (`#SPILL!`, `#CALC!`, `#BLOCKED!`, …) are text when typed; `#GETTING_DATA` has no model
 /// value (recorded divergence).
 fn typed_error(raw: &str) -> Option<CellError> {
-    if !raw.starts_with('#') || matches!(CellError::parse(raw), Some(CellError::Spill)) {
+    if !raw.starts_with('#') {
         return None;
     }
-    CellError::parse(raw)
+    // Only the classic eight (less `#SPILL!`): the codes newer than the file
+    // format (sheet ADR 513) are text when typed.
+    CellError::parse(raw).filter(|e| e.type_number() <= 8)
 }
 
 /// The locale's entry spellings.

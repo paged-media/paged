@@ -2,6 +2,7 @@
 
 - id: sheet.fn.logical.if
   name: IF
+  lazy_args: true
   family: logical
   arity: { min: 2, max: 3 }
   volatility: none
@@ -80,6 +81,7 @@
 
 - id: sheet.fn.logical.iferror
   name: IFERROR
+  lazy_args: true
   family: logical
   arity: { min: 2, max: 2 }
   volatility: none
