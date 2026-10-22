@@ -25,6 +25,8 @@
 // callbacks (typically the setters from DocumentContext). It does
 // NOT depend on React; pass it the setters and it dispatches.
 
+import { t } from "@paged-media/strings";
+import { LOAD } from "./messages";
 import type { CanvasClient } from "@paged-media/client";
 import type { DocumentHandle, PageId } from "@paged-media/client";
 
@@ -260,9 +262,7 @@ function isFontFile(bytes: Uint8Array): boolean {
 /** U5/A7 — a missing default font is the "blank text" precondition;
  *  say so where the user can see it instead of failing silently. */
 function warnDefaultFontUnavailable(cb: DocumentLoaderCallbacks): void {
-  cb.pushWarning(
-    "default font unavailable — text in documents with missing fonts will not render",
-  );
+  cb.pushWarning(t(LOAD.fontUnavailable));
 }
 
 /** One page's thumbnail as an object URL (the caller revokes it). The

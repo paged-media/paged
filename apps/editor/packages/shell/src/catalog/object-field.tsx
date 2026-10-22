@@ -44,8 +44,10 @@ import { useCallback, useEffect, useState, type ReactNode } from "react";
 
 import type { ElementId, Value } from "@paged-media/client";
 import { refusalText, status } from "@paged-media/panel-kit";
+import { useStrings } from "@paged-media/strings";
 
 import { Icon } from "../icons";
+import { FIELD } from "./messages";
 import { useRegistries } from "../state/registries-context";
 import { useCanvasClient } from "../state/canvas-client-context";
 import {
@@ -187,13 +189,14 @@ export function Badges({
   bound: boolean;
   inferred: boolean;
 }) {
+  const strings = useStrings();
   if (!bound && !inferred) return null;
   return (
     <span className="ml-1 inline-flex items-center gap-[3px] align-middle">
       {bound && (
         <span
           data-badge="bound"
-          title="Bound to data"
+          title={strings.t(FIELD.boundToData)}
           className="inline-flex"
           style={{ color: "var(--pg-primary)" }}
         >
@@ -203,7 +206,7 @@ export function Badges({
       {inferred && (
         <span
           data-badge="inferred"
-          title="type inferred"
+          title={strings.t(FIELD.typeInferred)}
           className="inline-block h-[5px] w-[5px] rounded-full border"
           style={{ borderColor: "var(--pg-muted-fg)", opacity: 0.7 }}
         />
@@ -322,31 +325,38 @@ export function BindNoticeDialog({
   notice: BindNotice | null;
   onClose: () => void;
 }) {
+  const strings = useStrings();
   return (
     <Dialog open={notice !== null} onOpenChange={(o) => !o && onClose()}>
       <DialogContent data-bind-to-data="" className="max-w-md">
         <DialogHeader>
-          <DialogTitle>Bind to data</DialogTitle>
+          <DialogTitle>{strings.t(FIELD.bindToData)}</DialogTitle>
           <DialogDescription data-bind-notice="">
             {notice?.reason
-              ? `The binding could not be made: ${notice.reason}`
-              : "Property binding arrives with paged.data's universal binding. This is the request it will receive."}
+              ? strings.t(FIELD.bindFailed, { reason: notice.reason })
+              : strings.t(FIELD.bindPending)}
           </DialogDescription>
         </DialogHeader>
         {notice && (
           <dl className="grid grid-cols-[72px_1fr] gap-x-2 gap-y-1 text-xs">
-            <dt style={{ color: "var(--pg-muted-fg)" }}>Target</dt>
+            <dt style={{ color: "var(--pg-muted-fg)" }}>
+              {strings.t(FIELD.target)}
+            </dt>
             <dd
               className="font-mono break-all"
               data-bind-selector={notice.selector}
             >
               {notice.selector}
             </dd>
-            <dt style={{ color: "var(--pg-muted-fg)" }}>Property</dt>
+            <dt style={{ color: "var(--pg-muted-fg)" }}>
+              {strings.t(FIELD.property)}
+            </dt>
             <dd className="font-mono" data-bind-path={notice.path}>
               {notice.path}
             </dd>
-            <dt style={{ color: "var(--pg-muted-fg)" }}>Type</dt>
+            <dt style={{ color: "var(--pg-muted-fg)" }}>
+              {strings.t(FIELD.type)}
+            </dt>
             <dd className="font-mono break-all" data-bind-schema="">
               {(JSON.parse(notice.schema) as ShellPropertySchema).type.kind}
             </dd>
@@ -358,7 +368,7 @@ export function BindNoticeDialog({
             className="h-[28px] rounded-[6px] border border-input px-3 text-xs"
             onClick={onClose}
           >
-            Close
+            {strings.t(FIELD.close)}
           </button>
         </DialogFooter>
       </DialogContent>
@@ -375,6 +385,7 @@ export function FieldMenu({
   onBind: () => void;
   onClose: () => void;
 }) {
+  const strings = useStrings();
   useEffect(() => {
     const close = () => onClose();
     window.addEventListener("pointerdown", close);
@@ -404,7 +415,7 @@ export function FieldMenu({
           onBind();
         }}
       >
-        Bind to data…
+        {strings.t(FIELD.bindToDataMenu)}
       </button>
     </div>
   );

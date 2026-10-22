@@ -25,6 +25,7 @@
 // (plan task E5). An id no command answers to renders nothing.
 
 import { Fragment } from "react";
+import { useStrings } from "@paged-media/strings";
 
 import { Button } from "../components/ui/button";
 import type { RegionItem } from "../profile/types";
@@ -32,6 +33,7 @@ import { entryApplies } from "../registries/types";
 import { useRegistryView } from "../state/live";
 import { useOptionalPaged } from "../state/paged-editor";
 import { useRegistries } from "../state/registries-context";
+import { REGIONS } from "./messages";
 
 export function RegionItems({
   items,
@@ -97,11 +99,12 @@ export function RegionItems({
 
 /** The actions bar: a row of host actions and commands, full width. */
 export function ActionsBar({ items }: { items: readonly RegionItem[] }) {
+  const strings = useStrings();
   return (
     <div
       data-actions-bar
       role="toolbar"
-      aria-label="Actions"
+      aria-label={strings.t(REGIONS.actions)}
       style={{
         display: "flex",
         alignItems: "center",

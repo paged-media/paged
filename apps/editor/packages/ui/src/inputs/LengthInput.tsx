@@ -17,6 +17,8 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
+import { useStrings } from "@paged-media/strings";
+import { INPUT } from "../messages";
 import { useState } from "react";
 
 import { parseLengthText, unitDigits, useDocumentUnit } from "./document-unit";
@@ -54,6 +56,7 @@ const UNITS: LengthUnit[] = ["pt", "pc", "px", "mm", "cm", "in"];
  * ("16 pt"); the explicit unit-picker select is opt-in legacy.
  */
 export function LengthInput(props: LengthInputProps) {
+  const strings = useStrings();
   const {
     valuePt,
     defaultUnit,
@@ -97,7 +100,7 @@ export function LengthInput(props: LengthInputProps) {
           value={unit}
           onChange={(e) => setUnit(e.target.value as LengthUnit)}
           className="text-xs h-[28px] px-1 rounded-[6px] border border-input bg-background text-foreground"
-          aria-label="unit"
+          aria-label={strings.t(INPUT.unit)}
         >
           {UNITS.map((u) => (
             <option key={u} value={u}>

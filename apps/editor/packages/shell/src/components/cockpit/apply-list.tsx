@@ -29,8 +29,11 @@
 
 import type { ReactNode } from "react";
 
+import { useStrings } from "@paged-media/strings";
+
 import { Icon } from "../../icons";
 import { displayName } from "../../catalog/leaves";
+import { APPLY_LIST as M } from "../messages";
 
 export interface ApplyStyleItem {
   /** IDML `Self` id — the apply payload + react key. */
@@ -89,6 +92,7 @@ export function ApplyList({
   readonlyNote?: ReactNode;
   testId?: string;
 }) {
+  const strings = useStrings();
   const flat = groups.flatMap((g) => g.items);
   return (
     <div data-apply-list={testId}>
@@ -99,7 +103,7 @@ export function ApplyList({
               value={mixed ? MIXED_VALUE : appliedId}
               data-mixed={mixed ? "" : undefined}
               disabled={readonly || onApply == null}
-              aria-label="Applied style"
+              aria-label={strings.t(M.appliedStyle)}
               data-apply-select
               data-collection={collection}
               onChange={(e) => {
@@ -113,10 +117,10 @@ export function ApplyList({
             >
               {mixed && (
                 <option value={MIXED_VALUE} disabled>
-                  (Mixed)
+                  {strings.t(M.mixed)}
                 </option>
               )}
-              <option value="">[None]</option>
+              <option value="">{strings.t(M.none)}</option>
               {flat.map((i) => (
                 <option key={i.selfId} value={i.selfId}>
                   {displayName(i.name)}
@@ -135,7 +139,7 @@ export function ApplyList({
               (style-infra roadmap). */}
           <button
             type="button"
-            title="Clear override — awaiting engine support"
+            title={strings.t(M.clearOverride)}
             disabled
             data-apply-action="clear-override"
             className="h-[28px] w-[28px] shrink-0 rounded-[6px] border border-input bg-background opacity-45"
@@ -153,7 +157,8 @@ export function ApplyList({
             className="mt-2 flex items-center gap-[6px] text-[11px]"
             style={{ color: "var(--pg-muted-fg)" }}
           >
-            Next: <span style={{ color: "var(--pg-fg)" }}>{next}</span>
+            {strings.t(M.next)}{" "}
+            <span style={{ color: "var(--pg-fg)" }}>{next}</span>
           </div>
         )}
       </div>
@@ -210,7 +215,7 @@ export function ApplyList({
                   </span>
                   {it.override && (
                     <span
-                      title="Overrides"
+                      title={strings.t(M.overrides)}
                       className="shrink-0 text-[10px] font-bold"
                       style={{ color: "var(--status-review)" }}
                     >
@@ -246,19 +251,19 @@ export function ApplyList({
         <div className="flex gap-[5px] border-t border-input px-3 pb-3 pt-[6px]">
           <FooterIconBtn
             icon="ui-plus"
-            label="New style"
+            label={strings.t(M.newStyle)}
             action="new"
             onClick={onNew}
           />
           <FooterIconBtn
             icon="ui-check"
-            label="Redefine style from selection — awaiting engine support"
+            label={strings.t(M.redefineStyle)}
             action="redefine"
             onClick={onRedefine}
           />
           <FooterIconBtn
             icon="ui-x"
-            label="Delete style"
+            label={strings.t(M.deleteStyle)}
             action="delete"
             onClick={onDelete}
             className="ml-auto"

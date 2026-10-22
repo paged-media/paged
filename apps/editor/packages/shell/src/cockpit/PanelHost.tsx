@@ -23,12 +23,15 @@
 // registered later resolve the same way — the registry stays the
 // single source of truth.
 
+import { useStrings } from "@paged-media/strings";
+import { COCKPIT } from "./messages";
 import { PanelBindingScope } from "../catalog/panel-binding-surface";
 import { usePaged } from "../state/paged-editor";
 import { useRegistries } from "../state/registries-context";
 import { useRegistryView } from "../state/live";
 
 export function PanelHost({ id }: { id: string }) {
+  const strings = useStrings();
   const paged = usePaged();
   // A view (state/live.ts, ADR 229): the panel a mode slot names may
   // register after this host first rendered.
@@ -48,10 +51,7 @@ export function PanelHost({ id }: { id: string }) {
             "Panel media.paged.data.panel.sources not registered" is a
             developer's sentence in a designer's workspace. The id stays,
             in a title, because a bug report needs it. */}
-        <span title={id}>
-          This panel is unavailable. It may belong to a plugin that failed to
-          load.
-        </span>
+        <span title={id}>{strings.t(COCKPIT.panelUnavailable)}</span>
       </div>
     );
   }

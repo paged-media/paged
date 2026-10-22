@@ -25,8 +25,10 @@
 import { useId, type ReactNode } from "react";
 
 import { LabelledBy, status, useDisclosure } from "@paged-media/panel-kit";
+import { useStrings } from "@paged-media/strings";
 
 import { Icon } from "../../icons";
+import { PANEL_STATUS_TEXT } from "../messages";
 
 export function PanelHeader({
   title,
@@ -325,18 +327,33 @@ export type PanelStatus = "live" | "partial" | "concept";
 
 const PANEL_STATUS: Record<
   PanelStatus,
+  /** `label` is a message key. */
   { label: string; color: string; glyph: "check" | "half" | "ring" }
 > = {
-  live: { label: "Live", color: "var(--status-approved)", glyph: "check" },
-  partial: { label: "Partial", color: "var(--status-review)", glyph: "half" },
-  concept: { label: "Concept", color: "var(--pg-muted-fg)", glyph: "ring" },
+  live: {
+    label: PANEL_STATUS_TEXT.live,
+    color: "var(--status-approved)",
+    glyph: "check",
+  },
+  partial: {
+    label: PANEL_STATUS_TEXT.partial,
+    color: "var(--status-review)",
+    glyph: "half",
+  },
+  concept: {
+    label: PANEL_STATUS_TEXT.concept,
+    color: "var(--pg-muted-fg)",
+    glyph: "ring",
+  },
 };
 
 export function StatusBadge({ status }: { status: PanelStatus }) {
+  const strings = useStrings();
   const s = PANEL_STATUS[status];
+  const label = strings.t(s.label);
   return (
     <span
-      title={s.label}
+      title={label}
       data-panel-status={status}
       style={{
         display: "inline-flex",
@@ -375,7 +392,7 @@ export function StatusBadge({ status }: { status: PanelStatus }) {
           }}
         />
       )}
-      {s.label}
+      {label}
     </span>
   );
 }
@@ -384,6 +401,7 @@ export function StatusBadge({ status }: { status: PanelStatus }) {
  *  concept/partial panel so the intended final behaviour ships
  *  with the seam. */
 export function PanelTarget({ children }: { children: ReactNode }) {
+  const strings = useStrings();
   return (
     <div
       data-panel-target
@@ -409,7 +427,9 @@ export function PanelTarget({ children }: { children: ReactNode }) {
           fontFamily: "var(--font-sans)",
         }}
       >
-        <b style={{ color: "var(--pg-primary)", fontWeight: 600 }}>Target · </b>
+        <b style={{ color: "var(--pg-primary)", fontWeight: 600 }}>
+          {strings.t(PANEL_STATUS_TEXT.target)}
+        </b>
         {children}
       </span>
     </div>

@@ -18,6 +18,7 @@
  */
 
 import { useEffect, useState } from "react";
+import { useStrings } from "@paged-media/strings";
 
 import {
   CommandDialog,
@@ -29,7 +30,7 @@ import {
   CommandSeparator,
 } from "../components/ui/command";
 import { AI_ASK_COMMAND } from "../ai/editor-ai";
-import { AI_UNAVAILABLE_TEXT, useAiAvailability } from "../ai/availability";
+import { aiUnavailableText, useAiAvailability } from "../ai/availability";
 import { acceleratorLookup } from "./MenuBar";
 import { PoweredByClaude } from "../ai/powered-by-claude";
 import { Icon } from "../icons";
@@ -41,6 +42,7 @@ import { useOptionalPaged } from "../state/paged-editor";
 import type { PagedEditor } from "../state/paged-editor";
 import { isEnabled } from "../registries/types";
 import { useOptionalWorkflowMode } from "../state/workflow-mode-context";
+import { categoryLabel, PALETTE } from "./messages";
 
 /**
  * Module-level event emitter for the palette's open/toggle state.
@@ -140,6 +142,7 @@ function applicableCommands(
 }
 
 export function CommandPalette() {
+  const strings = useStrings();
   const paged = useOptionalPaged();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -251,20 +254,22 @@ export function CommandPalette() {
       filter={paletteScore}
     >
       <CommandInput
-        placeholder="Ask or search anything…"
+        placeholder={strings.t(PALETTE.placeholder)}
         value={query}
         onValueChange={setQuery}
       />
       <CommandList>
         {/* The ask row answers any prompt, so a prompt is never "no results". */}
-        {!showAiSeam && <CommandEmpty>No results.</CommandEmpty>}
+        {!showAiSeam && (
+          <CommandEmpty>{strings.t(PALETTE.noResults)}</CommandEmpty>
+        )}
 
         {showAiSeam && (
           <>
             {/* forceMount on the group too: cmdk does not register a
                 force-mounted item for filtering, so a group of only that
                 item never counts as matched and is hidden. */}
-            <CommandGroup heading="Assistant" forceMount>
+            <CommandGroup heading={strings.t(PALETTE.assistant)} forceMount>
               <CommandItem
                 value={`assistant ${query}`}
                 // The assistant answers any query; ranking must not hide it.
@@ -283,14 +288,14 @@ export function CommandPalette() {
                   size={15}
                   style={{ color: "var(--pg-primary)", marginRight: 8 }}
                 />
-                <span>Ask Claude: “{query}”</span>
+                <span>{strings.t(PALETTE.askClaude, { query })}</span>
                 <span className="ml-auto">
                   {aiUnavailable ? (
                     <span
                       className="text-xs opacity-60"
                       data-palette-ai-unavailable
                     >
-                      {AI_UNAVAILABLE_TEXT}
+                      {aiUnavailableText()}
                     </span>
                   ) : (
                     <PoweredByClaude size={9} />
@@ -304,7 +309,7 @@ export function CommandPalette() {
 
         {query.length === 0 && recentItems.length > 0 && (
           <>
-            <CommandGroup heading="Recent">
+            <CommandGroup heading={strings.t(PALETTE.recent)}>
               {recentItems.map((cmd) => (
                 <CommandItem
                   key={`recent-${cmd.id}`}
@@ -327,7 +332,13 @@ export function CommandPalette() {
 
         {query.length === 0 && suggested.length > 0 && (
           <>
-            <CommandGroup heading={`Suggested in ${modeTitle ?? "this mode"}`}>
+            <CommandGroup
+              heading={
+                modeTitle
+                  ? strings.t(PALETTE.suggestedIn, { mode: modeTitle })
+                  : strings.t(PALETTE.suggestedHere)
+              }
+            >
               {suggested.map((cmd) => (
                 <CommandItem
                   key={`suggested-${cmd.id}`}
@@ -353,14 +364,19 @@ export function CommandPalette() {
         {visibleGroups.map(([category, items], idx) => (
           <div key={category}>
             {idx > 0 && <CommandSeparator />}
-            <CommandGroup heading={category}>
+            <CommandGroup heading={categoryLabel(strings, category)}>
               {items.map((cmd) => (
                 <CommandItem
                   key={cmd.id}
                   // Ranked by `paletteScore`: the id is the value (unique),
-                  // the title and category the words a person searches.
+                  // the title and category the words a person searches
+                  // (the category in English and in the editor's language).
                   value={cmd.id}
-                  keywords={[cmd.title, category]}
+                  keywords={[
+                    cmd.title,
+                    category,
+                    categoryLabel(strings, category),
+                  ]}
                   onSelect={() => run(cmd)}
                 >
                   <span>{cmd.title}</span>
@@ -389,10 +405,10 @@ export function CommandPalette() {
         }}
       >
         <span>
-          <kbd style={kbdStyle}>↵</kbd> run
+          <kbd style={kbdStyle}>↵</kbd> {strings.t(PALETTE.run)}
         </span>
         <span>
-          <kbd style={kbdStyle}>↑↓</kbd> navigate
+          <kbd style={kbdStyle}>↑↓</kbd> {strings.t(PALETTE.navigate)}
         </span>
         {/* E8 — the footer once claimed "AI-assisted" beside a
               disabled assistant row. The row is live now (ADR 221), so
