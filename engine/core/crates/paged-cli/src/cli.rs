@@ -350,6 +350,12 @@ pub enum Command {
         #[command(flatten)]
         assets: DocumentOptions,
     },
+    /// A template's fields: list them, fill them as a filler, check a
+    /// submission changed only its fields.
+    Template {
+        #[command(subcommand)]
+        what: TemplateCommand,
+    },
     /// The local library of documents `paged mcp` serves.
     Library {
         #[command(subcommand)]
@@ -357,6 +363,48 @@ pub enum Command {
         /// The library directory. Default: `$PAGED_LIBRARY`, else `~/.paged/library`.
         #[arg(long, global = true)]
         library: Option<PathBuf>,
+    },
+}
+
+#[derive(Debug, clap::Subcommand)]
+pub enum TemplateCommand {
+    /// The template's fields, their kinds and values.
+    Fields {
+        /// The `.paged` or `.idml` template.
+        doc: PathBuf,
+        /// Answer JSON.
+        #[arg(long)]
+        json: bool,
+        #[command(flatten)]
+        assets: DocumentOptions,
+    },
+    /// Fill the fields as a filler and write the result (.paged, .idml, .pdf).
+    Fill {
+        /// The template.
+        template: PathBuf,
+        /// A JSON list of {name, value}, an object of name → text, or a file
+        /// holding either.
+        #[arg(long)]
+        values: String,
+        /// Where to write; the extension names the format.
+        #[arg(short, long)]
+        out: PathBuf,
+        #[command(flatten)]
+        pdf: crate::export::PdfOptions,
+        #[command(flatten)]
+        assets: DocumentOptions,
+    },
+    /// Is <filled> the template with only its fields changed? Exits 1 when not.
+    Check {
+        /// The template.
+        template: PathBuf,
+        /// The filled document to check.
+        filled: PathBuf,
+        /// Answer JSON.
+        #[arg(long)]
+        json: bool,
+        #[command(flatten)]
+        assets: DocumentOptions,
     },
 }
 

@@ -1,0 +1,11 @@
+$ paged template fill t.paged -o out.paged
+--- exit: 2
+--- stdout
+(empty)
+--- stderr
+error: the following required arguments were not provided:
+  --values <VALUES>
+
+Usage: paged template fill --values <VALUES> --out <OUT> <TEMPLATE>
+
+For more information, try '--help'.
