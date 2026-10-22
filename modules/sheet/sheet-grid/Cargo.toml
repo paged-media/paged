@@ -24,3 +24,12 @@ serde.workspace = true
 
 [dev-dependencies]
 serde_json.workspace = true
+# tests/parity.rs: random sheets, grid scene vs page lowering.
+proptest.workspace = true
+# Wall-clock bench (benches/): trended, never gated — the gate is the
+# work-count test in src/lib.rs.
+criterion = { version = "0.8", default-features = false, features = ["cargo_bench_support"] }
+
+[[bench]]
+name = "grid_scene"
+harness = false
