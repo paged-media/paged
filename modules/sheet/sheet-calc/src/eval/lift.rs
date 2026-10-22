@@ -49,7 +49,7 @@ const MAX_CELLS: u64 = 1 << 22;
 
 /// Whether `fid` takes scalars only, so an array argument lifts it element
 /// by element (a range-aware function consumes ranges itself).
-pub(super) fn liftable(fid: sheet_core::ast::FuncId) -> bool {
+pub(crate) fn liftable(fid: sheet_core::ast::FuncId) -> bool {
     let m = sheet_core::funcs::meta(fid);
     !m.range_aware && !m.ref_args && !m.special_form && !m.returns_array
 }
@@ -57,7 +57,7 @@ pub(super) fn liftable(fid: sheet_core::ast::FuncId) -> bool {
 /// The SCALAR parameters (0-based) of range-aware functions whose other
 /// parameters take ranges: an array there lifts the call over that
 /// parameter only (`MATCH($M20:$M119, K20:K119, 0)` is a block of positions).
-fn scalar_params(fid: sheet_core::ast::FuncId) -> &'static [usize] {
+pub(crate) fn scalar_params(fid: sheet_core::ast::FuncId) -> &'static [usize] {
     match sheet_core::funcs::meta(fid).name {
         "MATCH" | "XMATCH" => &[0, 2],
         "INDEX" => &[1, 2, 3],
@@ -127,7 +127,7 @@ pub(super) fn is_array_operand(model: &SheetModel, e: &Expr) -> bool {
 
 /// Whether evaluating `e` as an argument should go through [`eval_array`]: an
 /// operator or scalar-function tree over an array operand.
-pub(super) fn needs_lift(model: &SheetModel, e: &Expr) -> bool {
+pub(crate) fn needs_lift(model: &SheetModel, e: &Expr) -> bool {
     contains_array(model, e, 0)
 }
 
