@@ -125,7 +125,7 @@ impl PolicyIndex {
         let mut set = session.role.defaults().union(self.document_defaults());
         if let Some(policy) = self_id.and_then(|id| self.items.get(id)) {
             if let Some(field) = &policy.field {
-                set = set.union(field.kind.grants());
+                set = set.union(field.grants());
             }
             set = set
                 .union(PermSet::of(policy.allow.iter().copied()))
@@ -145,7 +145,7 @@ impl PolicyIndex {
             .as_ref()
             .and_then(|d| d.variables.get(variable_id))
         {
-            set = set.union(field.kind.grants());
+            set = set.union(field.grants());
         }
         session.apply_overrides(set)
     }
@@ -166,6 +166,7 @@ mod tests {
             group: None,
             required: false,
             constraints: Default::default(),
+            module: None,
         }
     }
 
@@ -275,5 +276,29 @@ mod tests {
                 serde_json::Value::String((*n).to_string())
             );
         }
+    }
+
+    #[test]
+    fn a_module_field_grants_its_label_and_what_its_module_declares() {
+        let raw = r#"{"v":1,"data":{"field":{"name":"price","kind":"module",
+            "module":{"kind":"media.paged.sheet.cell","grants":["text.edit","template.author"],
+            "def":{"ref":"Prices!B4"}}}}}"#;
+        let p: ItemPolicy = read_envelope(raw).unwrap();
+        let mut items = HashMap::new();
+        items.insert("sheet".to_string(), p.clone());
+        let ix = PolicyIndex {
+            document: None,
+            items,
+        };
+        let set = ix.effective(&session(Role::Filler), Some("sheet"));
+        assert!(set.has(P::Select) && set.has(P::DocumentMetadata) && set.has(P::TextEdit));
+        assert!(
+            !set.has(P::TemplateAuthor),
+            "a module cannot grant the template's own permission"
+        );
+        assert!(!set.has(P::ItemMove));
+        let module = p.field.unwrap().module.unwrap();
+        assert_eq!(module.kind, "media.paged.sheet.cell");
+        assert_eq!(module.def["ref"], "Prices!B4");
     }
 }
