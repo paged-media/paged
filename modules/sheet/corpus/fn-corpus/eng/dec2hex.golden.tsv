@@ -1,0 +1,16 @@
+# DEC2HEX(number,[places]).
+# id	formula	setup	expected
+dec2hex-0	=DEC2HEX(100,4)	-	0064
+dec2hex-1	=DEC2HEX(-54)	-	FFFFFFFFCA
+dec2hex-2	=DEC2HEX(28)	-	1C
+dec2hex-3	=DEC2HEX(64,1)	-	#NUM!
+dec2hex-4	=DEC2HEX(549755813887)	-	7FFFFFFFFF
+dec2hex-5	=DEC2HEX(-549755813888)	-	8000000000
+dec2hex-6	=DEC2HEX(549755813888)	-	#NUM!
+dec2hex-7	=DEC2HEX(-549755813889)	-	#NUM!
+dec2hex-8	=DEC2HEX(255,10)	-	00000000FF
+dec2hex-9	=DEC2HEX(255,11)	-	#NUM!
+dec2hex-10	=DEC2HEX(1E+15)	-	#NUM!
+dec2hex-11	=DEC2HEX(-1)	-	FFFFFFFFFF
+dec2hex-x0	=DEC2HEX(A1)	A1=#N/A	#N/A
+dec2hex-x1	=CONCAT(DEC2HEX({10,11,255}))	-	ABFF

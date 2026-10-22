@@ -1,0 +1,12 @@
+# BITXOR(number1,number2).
+# id	formula	setup	expected
+bitxor-0	=BITXOR(5,3)	-	6
+bitxor-1	=BITXOR(0,0)	-	0
+bitxor-2	=BITXOR(281474976710655,1)	-	281474976710654
+bitxor-3	=BITXOR(281474976710656,1)	-	#NUM!
+bitxor-4	=BITXOR(-1,1)	-	#NUM!
+bitxor-5	=BITXOR(1.5,1)	-	#NUM!
+bitxor-6	=BITXOR("a",1)	-	#VALUE!
+bitxor-7	=BITXOR(2^47+5,2^47)	-	5
+bitxor-x0	=BITXOR(A1,1)	A1=#N/A	#N/A
+bitxor-x1	=SUM(BITXOR({1,2},3))	-	3

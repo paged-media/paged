@@ -23,11 +23,13 @@
 
 export {
   CANVAS_SURFACE_ATTR,
+  FRAME_SURFACE_ATTR,
   KEY_OWNING_CONTAINERS,
   WIDGET_KEYS,
   WIDGET_KEY_OWNERS,
   canvasKeyYields,
   canvasSurfaceOf,
+  insideFrameSurface,
   insideKeyOwningContainer,
   isActivatable,
   isCanvasSurface,

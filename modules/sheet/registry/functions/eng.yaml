@@ -1,0 +1,695 @@
+# sheet.fn.engineering.* (W3) — radix conversion, bitwise operations,
+# DELTA/GESTEP, the error function, complex numbers and Bessel functions.
+# Kernels in sheet-fn/src/families/{eng,complex}.rs + sheet-fn/src/special.rs
+# (CONVERT stays in t2misc.yaml, kernel units.rs). Expected values are recorded
+# from Excel (oracle/excel/recorded/eng.tsv); provenance: Microsoft's public
+# function reference, Abramowitz & Stegun, Hart (Computer Approximations).
+
+- id: sheet.fn.engineering.bin2dec
+  name: BIN2DEC
+  family: engineering
+  arity: { min: 1, max: 1 }
+  volatility: none
+  range_aware: false
+  rust: eng::bin2dec
+  status: implemented
+  provenance: ["Microsoft function reference — at most 10 digits, ten-digit two's complement for negatives, places 1..=10 (BIN2DEC)"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_eng.rs::sheet_fn_eng_bin2dec"]
+    corpus: ["corpus/fn-corpus/eng/bin2dec.golden.tsv"]
+
+- id: sheet.fn.engineering.bin2hex
+  name: BIN2HEX
+  family: engineering
+  arity: { min: 1, max: 2 }
+  volatility: none
+  range_aware: false
+  rust: eng::bin2hex
+  status: implemented
+  provenance: ["Microsoft function reference — at most 10 digits, ten-digit two's complement for negatives, places 1..=10 (BIN2HEX)"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_eng.rs::sheet_fn_eng_bin2hex"]
+    corpus: ["corpus/fn-corpus/eng/bin2hex.golden.tsv"]
+
+- id: sheet.fn.engineering.bin2oct
+  name: BIN2OCT
+  family: engineering
+  arity: { min: 1, max: 2 }
+  volatility: none
+  range_aware: false
+  rust: eng::bin2oct
+  status: implemented
+  provenance: ["Microsoft function reference — at most 10 digits, ten-digit two's complement for negatives, places 1..=10 (BIN2OCT)"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_eng.rs::sheet_fn_eng_bin2oct"]
+    corpus: ["corpus/fn-corpus/eng/bin2oct.golden.tsv"]
+
+- id: sheet.fn.engineering.dec2bin
+  name: DEC2BIN
+  family: engineering
+  arity: { min: 1, max: 2 }
+  volatility: none
+  range_aware: false
+  rust: eng::dec2bin
+  status: implemented
+  provenance: ["Microsoft function reference — at most 10 digits, ten-digit two's complement for negatives, places 1..=10 (DEC2BIN)"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_eng.rs::sheet_fn_eng_dec2bin"]
+    corpus: ["corpus/fn-corpus/eng/dec2bin.golden.tsv"]
+
+- id: sheet.fn.engineering.dec2hex
+  name: DEC2HEX
+  family: engineering
+  arity: { min: 1, max: 2 }
+  volatility: none
+  range_aware: false
+  rust: eng::dec2hex
+  status: implemented
+  provenance: ["Microsoft function reference — at most 10 digits, ten-digit two's complement for negatives, places 1..=10 (DEC2HEX)"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_eng.rs::sheet_fn_eng_dec2hex"]
+    corpus: ["corpus/fn-corpus/eng/dec2hex.golden.tsv"]
+
+- id: sheet.fn.engineering.dec2oct
+  name: DEC2OCT
+  family: engineering
+  arity: { min: 1, max: 2 }
+  volatility: none
+  range_aware: false
+  rust: eng::dec2oct
+  status: implemented
+  provenance: ["Microsoft function reference — at most 10 digits, ten-digit two's complement for negatives, places 1..=10 (DEC2OCT)"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_eng.rs::sheet_fn_eng_dec2oct"]
+    corpus: ["corpus/fn-corpus/eng/dec2oct.golden.tsv"]
+
+- id: sheet.fn.engineering.hex2bin
+  name: HEX2BIN
+  family: engineering
+  arity: { min: 1, max: 2 }
+  volatility: none
+  range_aware: false
+  rust: eng::hex2bin
+  status: implemented
+  provenance: ["Microsoft function reference — at most 10 digits, ten-digit two's complement for negatives, places 1..=10 (HEX2BIN)"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_eng.rs::sheet_fn_eng_hex2bin"]
+    corpus: ["corpus/fn-corpus/eng/hex2bin.golden.tsv"]
+
+- id: sheet.fn.engineering.hex2dec
+  name: HEX2DEC
+  family: engineering
+  arity: { min: 1, max: 1 }
+  volatility: none
+  range_aware: false
+  rust: eng::hex2dec
+  status: implemented
+  provenance: ["Microsoft function reference — at most 10 digits, ten-digit two's complement for negatives, places 1..=10 (HEX2DEC)"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_eng.rs::sheet_fn_eng_hex2dec"]
+    corpus: ["corpus/fn-corpus/eng/hex2dec.golden.tsv"]
+
+- id: sheet.fn.engineering.hex2oct
+  name: HEX2OCT
+  family: engineering
+  arity: { min: 1, max: 2 }
+  volatility: none
+  range_aware: false
+  rust: eng::hex2oct
+  status: implemented
+  provenance: ["Microsoft function reference — at most 10 digits, ten-digit two's complement for negatives, places 1..=10 (HEX2OCT)"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_eng.rs::sheet_fn_eng_hex2oct"]
+    corpus: ["corpus/fn-corpus/eng/hex2oct.golden.tsv"]
+
+- id: sheet.fn.engineering.oct2bin
+  name: OCT2BIN
+  family: engineering
+  arity: { min: 1, max: 2 }
+  volatility: none
+  range_aware: false
+  rust: eng::oct2bin
+  status: implemented
+  provenance: ["Microsoft function reference — at most 10 digits, ten-digit two's complement for negatives, places 1..=10 (OCT2BIN)"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_eng.rs::sheet_fn_eng_oct2bin"]
+    corpus: ["corpus/fn-corpus/eng/oct2bin.golden.tsv"]
+
+- id: sheet.fn.engineering.oct2dec
+  name: OCT2DEC
+  family: engineering
+  arity: { min: 1, max: 1 }
+  volatility: none
+  range_aware: false
+  rust: eng::oct2dec
+  status: implemented
+  provenance: ["Microsoft function reference — at most 10 digits, ten-digit two's complement for negatives, places 1..=10 (OCT2DEC)"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_eng.rs::sheet_fn_eng_oct2dec"]
+    corpus: ["corpus/fn-corpus/eng/oct2dec.golden.tsv"]
+
+- id: sheet.fn.engineering.oct2hex
+  name: OCT2HEX
+  family: engineering
+  arity: { min: 1, max: 2 }
+  volatility: none
+  range_aware: false
+  rust: eng::oct2hex
+  status: implemented
+  provenance: ["Microsoft function reference — at most 10 digits, ten-digit two's complement for negatives, places 1..=10 (OCT2HEX)"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_eng.rs::sheet_fn_eng_oct2hex"]
+    corpus: ["corpus/fn-corpus/eng/oct2hex.golden.tsv"]
+
+- id: sheet.fn.engineering.bitand
+  name: BITAND
+  family: engineering
+  arity: { min: 2, max: 2 }
+  volatility: none
+  range_aware: false
+  rust: eng::bitand
+  status: implemented
+  provenance: ["Microsoft function reference (BITAND) — integers 0..2^48-1 else #NUM!"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_eng.rs::sheet_fn_eng_bitand"]
+    corpus: ["corpus/fn-corpus/eng/bitand.golden.tsv"]
+
+- id: sheet.fn.engineering.bitor
+  name: BITOR
+  family: engineering
+  arity: { min: 2, max: 2 }
+  volatility: none
+  range_aware: false
+  rust: eng::bitor
+  status: implemented
+  provenance: ["Microsoft function reference (BITOR)"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_eng.rs::sheet_fn_eng_bitor"]
+    corpus: ["corpus/fn-corpus/eng/bitor.golden.tsv"]
+
+- id: sheet.fn.engineering.bitxor
+  name: BITXOR
+  family: engineering
+  arity: { min: 2, max: 2 }
+  volatility: none
+  range_aware: false
+  rust: eng::bitxor
+  status: implemented
+  provenance: ["Microsoft function reference (BITXOR)"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_eng.rs::sheet_fn_eng_bitxor"]
+    corpus: ["corpus/fn-corpus/eng/bitxor.golden.tsv"]
+
+- id: sheet.fn.engineering.bitlshift
+  name: BITLSHIFT
+  family: engineering
+  arity: { min: 2, max: 2 }
+  volatility: none
+  range_aware: false
+  rust: eng::bitlshift
+  status: implemented
+  provenance: ["Microsoft function reference (BITLSHIFT) — |shift| > 53 #NUM!; shifts of 49..53 bits are 0 (Excel-recorded)"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_eng.rs::sheet_fn_eng_bitlshift"]
+    corpus: ["corpus/fn-corpus/eng/bitlshift.golden.tsv"]
+
+- id: sheet.fn.engineering.bitrshift
+  name: BITRSHIFT
+  family: engineering
+  arity: { min: 2, max: 2 }
+  volatility: none
+  range_aware: false
+  rust: eng::bitrshift
+  status: implemented
+  provenance: ["Microsoft function reference (BITRSHIFT)"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_eng.rs::sheet_fn_eng_bitrshift"]
+    corpus: ["corpus/fn-corpus/eng/bitrshift.golden.tsv"]
+
+- id: sheet.fn.engineering.delta
+  name: DELTA
+  family: engineering
+  arity: { min: 1, max: 2 }
+  volatility: none
+  range_aware: false
+  rust: eng::delta
+  status: implemented
+  provenance: ["Microsoft function reference (DELTA) — logical #VALUE!"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_eng.rs::sheet_fn_eng_delta"]
+    corpus: ["corpus/fn-corpus/eng/delta.golden.tsv"]
+
+- id: sheet.fn.engineering.gestep
+  name: GESTEP
+  family: engineering
+  arity: { min: 1, max: 2 }
+  volatility: none
+  range_aware: false
+  rust: eng::gestep
+  status: implemented
+  provenance: ["Microsoft function reference (GESTEP) — logical #VALUE!"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_eng.rs::sheet_fn_eng_gestep"]
+    corpus: ["corpus/fn-corpus/eng/gestep.golden.tsv"]
+
+- id: sheet.fn.engineering.erf
+  name: ERF
+  family: engineering
+  arity: { min: 1, max: 2 }
+  volatility: none
+  range_aware: false
+  rust: eng::erf
+  status: implemented
+  provenance: ["Microsoft function reference (ERF) — A&S 7.1 series / continued fraction"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_eng.rs::sheet_fn_eng_erf"]
+    corpus: ["corpus/fn-corpus/eng/erf.golden.tsv"]
+
+- id: sheet.fn.engineering.erf-precise
+  name: ERF.PRECISE
+  family: engineering
+  arity: { min: 1, max: 1 }
+  volatility: none
+  range_aware: false
+  rust: eng::erf_precise
+  status: implemented
+  provenance: ["Microsoft function reference (ERF.PRECISE)"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_eng.rs::sheet_fn_eng_erf_precise"]
+    corpus: ["corpus/fn-corpus/eng/erf_precise.golden.tsv"]
+
+- id: sheet.fn.engineering.erfc
+  name: ERFC
+  family: engineering
+  arity: { min: 1, max: 1 }
+  volatility: none
+  range_aware: false
+  rust: eng::erfc
+  status: implemented
+  provenance: ["Microsoft function reference (ERFC) — underflow below the smallest normal is 0"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_eng.rs::sheet_fn_eng_erfc"]
+    corpus: ["corpus/fn-corpus/eng/erfc.golden.tsv"]
+
+- id: sheet.fn.engineering.erfc-precise
+  name: ERFC.PRECISE
+  family: engineering
+  arity: { min: 1, max: 1 }
+  volatility: none
+  range_aware: false
+  rust: eng::erfc
+  status: implemented
+  provenance: ["Microsoft function reference (ERFC.PRECISE)"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_eng.rs::sheet_fn_eng_erfc_precise"]
+    corpus: ["corpus/fn-corpus/eng/erfc_precise.golden.tsv"]
+
+- id: sheet.fn.engineering.complex
+  name: COMPLEX
+  family: engineering
+  arity: { min: 2, max: 3 }
+  volatility: none
+  range_aware: false
+  rust: complex::complex
+  status: implemented
+  provenance: ["Microsoft function reference (COMPLEX) — suffix i or j, anything else #VALUE!"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_eng.rs::sheet_fn_eng_complex"]
+    corpus: ["corpus/fn-corpus/eng/complex.golden.tsv"]
+
+- id: sheet.fn.engineering.imabs
+  name: IMABS
+  family: engineering
+  arity: { min: 1, max: 1 }
+  volatility: none
+  range_aware: false
+  rust: complex::imabs
+  status: implemented
+  provenance: ["Microsoft function reference (IMABS) — modulus; Excel's complex text form"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_eng.rs::sheet_fn_eng_imabs"]
+    corpus: ["corpus/fn-corpus/eng/imabs.golden.tsv"]
+
+- id: sheet.fn.engineering.imaginary
+  name: IMAGINARY
+  family: engineering
+  arity: { min: 1, max: 1 }
+  volatility: none
+  range_aware: false
+  rust: complex::imaginary
+  status: implemented
+  provenance: ["Microsoft function reference (IMAGINARY) — imaginary part; Excel's complex text form"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_eng.rs::sheet_fn_eng_imaginary"]
+    corpus: ["corpus/fn-corpus/eng/imaginary.golden.tsv"]
+
+- id: sheet.fn.engineering.imreal
+  name: IMREAL
+  family: engineering
+  arity: { min: 1, max: 1 }
+  volatility: none
+  range_aware: false
+  rust: complex::imreal
+  status: implemented
+  provenance: ["Microsoft function reference (IMREAL) — real part; Excel's complex text form"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_eng.rs::sheet_fn_eng_imreal"]
+    corpus: ["corpus/fn-corpus/eng/imreal.golden.tsv"]
+
+- id: sheet.fn.engineering.imargument
+  name: IMARGUMENT
+  family: engineering
+  arity: { min: 1, max: 1 }
+  volatility: none
+  range_aware: false
+  rust: complex::imargument
+  status: implemented
+  provenance: ["Microsoft function reference (IMARGUMENT) — argument; 0 #DIV/0!; Excel's complex text form"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_eng.rs::sheet_fn_eng_imargument"]
+    corpus: ["corpus/fn-corpus/eng/imargument.golden.tsv"]
+
+- id: sheet.fn.engineering.imconjugate
+  name: IMCONJUGATE
+  family: engineering
+  arity: { min: 1, max: 1 }
+  volatility: none
+  range_aware: false
+  rust: complex::imconjugate
+  status: implemented
+  provenance: ["Microsoft function reference (IMCONJUGATE) — conjugate; Excel's complex text form"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_eng.rs::sheet_fn_eng_imconjugate"]
+    corpus: ["corpus/fn-corpus/eng/imconjugate.golden.tsv"]
+
+- id: sheet.fn.engineering.imcos
+  name: IMCOS
+  family: engineering
+  arity: { min: 1, max: 1 }
+  volatility: none
+  range_aware: false
+  rust: complex::imcos
+  status: implemented
+  provenance: ["Microsoft function reference (IMCOS) — cosine; Excel's complex text form"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_eng.rs::sheet_fn_eng_imcos"]
+    corpus: ["corpus/fn-corpus/eng/imcos.golden.tsv"]
+
+- id: sheet.fn.engineering.imcosh
+  name: IMCOSH
+  family: engineering
+  arity: { min: 1, max: 1 }
+  volatility: none
+  range_aware: false
+  rust: complex::imcosh
+  status: implemented
+  provenance: ["Microsoft function reference (IMCOSH) — hyperbolic cosine; Excel's complex text form"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_eng.rs::sheet_fn_eng_imcosh"]
+    corpus: ["corpus/fn-corpus/eng/imcosh.golden.tsv"]
+
+- id: sheet.fn.engineering.imcot
+  name: IMCOT
+  family: engineering
+  arity: { min: 1, max: 1 }
+  volatility: none
+  range_aware: false
+  rust: complex::imcot
+  status: implemented
+  provenance: ["Microsoft function reference (IMCOT) — cotangent; Excel's complex text form"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_eng.rs::sheet_fn_eng_imcot"]
+    corpus: ["corpus/fn-corpus/eng/imcot.golden.tsv"]
+
+- id: sheet.fn.engineering.imcsc
+  name: IMCSC
+  family: engineering
+  arity: { min: 1, max: 1 }
+  volatility: none
+  range_aware: false
+  rust: complex::imcsc
+  status: implemented
+  provenance: ["Microsoft function reference (IMCSC) — cosecant; Excel's complex text form"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_eng.rs::sheet_fn_eng_imcsc"]
+    corpus: ["corpus/fn-corpus/eng/imcsc.golden.tsv"]
+
+- id: sheet.fn.engineering.imcsch
+  name: IMCSCH
+  family: engineering
+  arity: { min: 1, max: 1 }
+  volatility: none
+  range_aware: false
+  rust: complex::imcsch
+  status: implemented
+  provenance: ["Microsoft function reference (IMCSCH) — hyperbolic cosecant; Excel's complex text form"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_eng.rs::sheet_fn_eng_imcsch"]
+    corpus: ["corpus/fn-corpus/eng/imcsch.golden.tsv"]
+
+- id: sheet.fn.engineering.imsec
+  name: IMSEC
+  family: engineering
+  arity: { min: 1, max: 1 }
+  volatility: none
+  range_aware: false
+  rust: complex::imsec
+  status: implemented
+  provenance: ["Microsoft function reference (IMSEC) — secant; Excel's complex text form"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_eng.rs::sheet_fn_eng_imsec"]
+    corpus: ["corpus/fn-corpus/eng/imsec.golden.tsv"]
+
+- id: sheet.fn.engineering.imsech
+  name: IMSECH
+  family: engineering
+  arity: { min: 1, max: 1 }
+  volatility: none
+  range_aware: false
+  rust: complex::imsech
+  status: implemented
+  provenance: ["Microsoft function reference (IMSECH) — hyperbolic secant; Excel's complex text form"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_eng.rs::sheet_fn_eng_imsech"]
+    corpus: ["corpus/fn-corpus/eng/imsech.golden.tsv"]
+
+- id: sheet.fn.engineering.imsin
+  name: IMSIN
+  family: engineering
+  arity: { min: 1, max: 1 }
+  volatility: none
+  range_aware: false
+  rust: complex::imsin
+  status: implemented
+  provenance: ["Microsoft function reference (IMSIN) — sine; Excel's complex text form"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_eng.rs::sheet_fn_eng_imsin"]
+    corpus: ["corpus/fn-corpus/eng/imsin.golden.tsv"]
+
+- id: sheet.fn.engineering.imsinh
+  name: IMSINH
+  family: engineering
+  arity: { min: 1, max: 1 }
+  volatility: none
+  range_aware: false
+  rust: complex::imsinh
+  status: implemented
+  provenance: ["Microsoft function reference (IMSINH) — hyperbolic sine; Excel's complex text form"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_eng.rs::sheet_fn_eng_imsinh"]
+    corpus: ["corpus/fn-corpus/eng/imsinh.golden.tsv"]
+
+- id: sheet.fn.engineering.imtan
+  name: IMTAN
+  family: engineering
+  arity: { min: 1, max: 1 }
+  volatility: none
+  range_aware: false
+  rust: complex::imtan
+  status: implemented
+  provenance: ["Microsoft function reference (IMTAN) — tangent; Excel's complex text form"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_eng.rs::sheet_fn_eng_imtan"]
+    corpus: ["corpus/fn-corpus/eng/imtan.golden.tsv"]
+
+- id: sheet.fn.engineering.imexp
+  name: IMEXP
+  family: engineering
+  arity: { min: 1, max: 1 }
+  volatility: none
+  range_aware: false
+  rust: complex::imexp
+  status: implemented
+  provenance: ["Microsoft function reference (IMEXP) — exponential; Excel's complex text form"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_eng.rs::sheet_fn_eng_imexp"]
+    corpus: ["corpus/fn-corpus/eng/imexp.golden.tsv"]
+
+- id: sheet.fn.engineering.imln
+  name: IMLN
+  family: engineering
+  arity: { min: 1, max: 1 }
+  volatility: none
+  range_aware: false
+  rust: complex::imln
+  status: implemented
+  provenance: ["Microsoft function reference (IMLN) — natural logarithm; Excel's complex text form"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_eng.rs::sheet_fn_eng_imln"]
+    corpus: ["corpus/fn-corpus/eng/imln.golden.tsv"]
+
+- id: sheet.fn.engineering.imlog10
+  name: IMLOG10
+  family: engineering
+  arity: { min: 1, max: 1 }
+  volatility: none
+  range_aware: false
+  rust: complex::imlog10
+  status: implemented
+  provenance: ["Microsoft function reference (IMLOG10) — base-10 logarithm; Excel's complex text form"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_eng.rs::sheet_fn_eng_imlog10"]
+    corpus: ["corpus/fn-corpus/eng/imlog10.golden.tsv"]
+
+- id: sheet.fn.engineering.imlog2
+  name: IMLOG2
+  family: engineering
+  arity: { min: 1, max: 1 }
+  volatility: none
+  range_aware: false
+  rust: complex::imlog2
+  status: implemented
+  provenance: ["Microsoft function reference (IMLOG2) — base-2 logarithm; Excel's complex text form"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_eng.rs::sheet_fn_eng_imlog2"]
+    corpus: ["corpus/fn-corpus/eng/imlog2.golden.tsv"]
+
+- id: sheet.fn.engineering.imsqrt
+  name: IMSQRT
+  family: engineering
+  arity: { min: 1, max: 1 }
+  volatility: none
+  range_aware: false
+  rust: complex::imsqrt
+  status: implemented
+  provenance: ["Microsoft function reference (IMSQRT) — square root (polar); Excel's complex text form"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_eng.rs::sheet_fn_eng_imsqrt"]
+    corpus: ["corpus/fn-corpus/eng/imsqrt.golden.tsv"]
+
+- id: sheet.fn.engineering.impower
+  name: IMPOWER
+  family: engineering
+  arity: { min: 2, max: 2 }
+  volatility: none
+  range_aware: false
+  rust: complex::impower
+  status: implemented
+  provenance: ["Microsoft function reference (IMPOWER) — polar form; 0^0 and 0^negative #NUM!"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_eng.rs::sheet_fn_eng_impower"]
+    corpus: ["corpus/fn-corpus/eng/impower.golden.tsv"]
+
+- id: sheet.fn.engineering.imdiv
+  name: IMDIV
+  family: engineering
+  arity: { min: 2, max: 2 }
+  volatility: none
+  range_aware: false
+  rust: complex::imdiv
+  status: implemented
+  provenance: ["Microsoft function reference (IMDIV) — zero divisor #NUM!"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_eng.rs::sheet_fn_eng_imdiv"]
+    corpus: ["corpus/fn-corpus/eng/imdiv.golden.tsv"]
+
+- id: sheet.fn.engineering.imsub
+  name: IMSUB
+  family: engineering
+  arity: { min: 2, max: 2 }
+  volatility: none
+  range_aware: false
+  rust: complex::imsub
+  status: implemented
+  provenance: ["Microsoft function reference (IMSUB)"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_eng.rs::sheet_fn_eng_imsub"]
+    corpus: ["corpus/fn-corpus/eng/imsub.golden.tsv"]
+
+- id: sheet.fn.engineering.imsum
+  name: IMSUM
+  family: engineering
+  arity: { min: 1, max: null }
+  volatility: none
+  range_aware: true
+  rust: complex::imsum
+  status: implemented
+  provenance: ["Microsoft function reference (IMSUM) — blanks in a range skipped; mixed suffixes #VALUE!"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_eng.rs::sheet_fn_eng_imsum"]
+    corpus: ["corpus/fn-corpus/eng/imsum.golden.tsv"]
+
+- id: sheet.fn.engineering.improduct
+  name: IMPRODUCT
+  family: engineering
+  arity: { min: 1, max: null }
+  volatility: none
+  range_aware: true
+  rust: complex::improduct
+  status: implemented
+  provenance: ["Microsoft function reference (IMPRODUCT)"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_eng.rs::sheet_fn_eng_improduct"]
+    corpus: ["corpus/fn-corpus/eng/improduct.golden.tsv"]
+
+- id: sheet.fn.engineering.besseli
+  name: BESSELI
+  family: engineering
+  arity: { min: 2, max: 2 }
+  volatility: none
+  range_aware: false
+  rust: eng::besseli
+  status: implemented
+  provenance: ["Microsoft function reference (BESSELI) — A&S 9.8.1-9.8.4, Miller recurrence"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_eng.rs::sheet_fn_eng_besseli"]
+    corpus: ["corpus/fn-corpus/eng/besseli.golden.tsv"]
+
+- id: sheet.fn.engineering.besselj
+  name: BESSELJ
+  family: engineering
+  arity: { min: 2, max: 2 }
+  volatility: none
+  range_aware: false
+  rust: eng::besselj
+  status: implemented
+  provenance: ["Microsoft function reference (BESSELJ) — Hart rational approximations, Miller recurrence"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_eng.rs::sheet_fn_eng_besselj"]
+    corpus: ["corpus/fn-corpus/eng/besselj.golden.tsv"]
+
+- id: sheet.fn.engineering.besselk
+  name: BESSELK
+  family: engineering
+  arity: { min: 2, max: 2 }
+  volatility: none
+  range_aware: false
+  rust: eng::besselk
+  status: implemented
+  provenance: ["Microsoft function reference (BESSELK) — A&S 9.8.5-9.8.8, forward recurrence; x <= 0 #NUM!"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_eng.rs::sheet_fn_eng_besselk"]
+    corpus: ["corpus/fn-corpus/eng/besselk.golden.tsv"]
+
+- id: sheet.fn.engineering.bessely
+  name: BESSELY
+  family: engineering
+  arity: { min: 2, max: 2 }
+  volatility: none
+  range_aware: false
+  rust: eng::bessely
+  status: implemented
+  provenance: ["Microsoft function reference (BESSELY) — Hart rational approximations, forward recurrence; x <= 0 #NUM!"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_eng.rs::sheet_fn_eng_bessely"]
+    corpus: ["corpus/fn-corpus/eng/bessely.golden.tsv"]

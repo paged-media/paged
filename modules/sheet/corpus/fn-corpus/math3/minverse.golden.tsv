@@ -1,0 +1,12 @@
+# MINVERSE(array) - inverse; read back with INDEX.
+# id	formula	setup	expected
+mi-2x2-11	=INDEX(MINVERSE({4,-1;2,0}),1,1)	-	0
+mi-2x2-12	=INDEX(MINVERSE({4,-1;2,0}),1,2)	-	0.5
+mi-2x2-21	=INDEX(MINVERSE({4,-1;2,0}),2,1)	-	-1
+mi-3x3	=INDEX(MINVERSE({1,2,1;3,4,-1;0,2,0}),3,2)	-	-0.25
+mi-sum	=SUM(MINVERSE({2,1,0;1,3,1;0,1,4}))	-	0.777777777777778
+mi-singular	=MINVERSE({1,2;2,4})	-	#NUM!
+mi-nonsquare	=MINVERSE({1,2,3})	-	#VALUE!
+mi-text	=MINVERSE(A1:B2)	A1=1;B1=text:a;A2=3;B2=4	#VALUE!
+mi-1x1	=MINVERSE(4)	-	0.25
+mi-rows	=ROWS(MINVERSE({1,2;3,4}))	-	2
