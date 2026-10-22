@@ -458,6 +458,12 @@ export interface SheetObjectModel {
   /** Re-read the version label and load the version it names (document
    *  undo / redo / open). Serialised; never rejects. */
   reconcile(): Promise<void>;
+  /** A typed command's write (`layout-commands.ts`): applied to the
+   *  engine, saved as a version and labelled as ONE undo step. `touched`
+   *  names the cells it changed, for the placements' refresh. */
+  commandWrite(
+    apply: (engine: SheetEngine, touched: (r: ResolvedRange) => void) => void,
+  ): Promise<void>;
   dispose(): void;
 }
 
@@ -1833,6 +1839,10 @@ export function contributeObjectModel(
 
   return {
     reconcile,
+    commandWrite: (apply) =>
+      commandWrite((engine, p) =>
+        apply(engine, (r) => p.regions.push(regionOf(r))),
+      ),
     dispose() {
       historySub.dispose();
       changeSub.dispose();

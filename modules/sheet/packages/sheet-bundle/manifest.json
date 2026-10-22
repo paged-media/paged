@@ -473,6 +473,142 @@
             "kind": "number",
             "integer": true
           }
+        },
+        {
+          "id": "media.paged.sheet.command.importCsv",
+          "title": "Import delimited text (.csv, .tsv)",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "text": {
+                "kind": "text"
+              },
+              "name": {
+                "kind": "text",
+                "default": "data.csv"
+              }
+            }
+          },
+          "result": {
+            "kind": "text"
+          }
+        },
+        {
+          "id": "media.paged.sheet.command.mergeCells",
+          "title": "Merge cells",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "range": {
+                "kind": "text"
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.sheet.command.unmergeCells",
+          "title": "Unmerge cells",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "range": {
+                "kind": "text"
+              }
+            }
+          },
+          "result": {
+            "kind": "number",
+            "integer": true
+          }
+        },
+        {
+          "id": "media.paged.sheet.command.setBorders",
+          "title": "Set borders",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "range": {
+                "kind": "text"
+              },
+              "edges": {
+                "kind": "enum",
+                "members": ["all", "outline", "top", "right", "bottom", "left"],
+                "default": "all"
+              },
+              "style": {
+                "kind": "text",
+                "default": "thin"
+              },
+              "color": {
+                "kind": "text",
+                "optional": true
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.sheet.command.setColumnWidth",
+          "title": "Set column width",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "sheet": {
+                "kind": "text"
+              },
+              "first": {
+                "kind": "number",
+                "integer": true
+              },
+              "last": {
+                "kind": "number",
+                "integer": true,
+                "optional": true
+              },
+              "size": {
+                "kind": "number",
+                "optional": true
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.sheet.command.setRowHeight",
+          "title": "Set row height",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "sheet": {
+                "kind": "text"
+              },
+              "first": {
+                "kind": "number",
+                "integer": true
+              },
+              "last": {
+                "kind": "number",
+                "integer": true,
+                "optional": true
+              },
+              "size": {
+                "kind": "number",
+                "optional": true
+              }
+            }
+          }
+        }
+      ],
+      "templateFields": [
+        {
+          "kind": "media.paged.sheet.cell",
+          "title": "Sheet cell"
+        },
+        {
+          "kind": "media.paged.sheet.range",
+          "title": "Sheet range"
+        },
+        {
+          "kind": "media.paged.sheet.chartSource",
+          "title": "Chart data"
         }
       ]
     }

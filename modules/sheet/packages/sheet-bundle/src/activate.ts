@@ -57,6 +57,8 @@ import { subscribeProviderInvalidation } from "./binding-provider/invalidation";
 import { makeTextBindingProvider } from "./binding-provider/text-provider";
 import { createWorkbookSession } from "./session";
 import { contributeObjectModel } from "./object-model";
+import { contributeLayoutCommands } from "./layout-commands";
+import { contributeSheetTemplateFields } from "./template-fields";
 import { makeWorkbookPanel } from "./panels/workbook-panel";
 import { makeGridPanel } from "./panels/grid-panel";
 import { makeSheetFrameSurface } from "./surface/sheet-frame-surface";
@@ -143,6 +145,14 @@ export function activate(host: BundleHost): BundleHandle {
   // open and a document undo/redo all end in `reconcile`, which loads the
   // workbook version the document's label names.
   const objectModel = contributeObjectModel(host, session);
+  // Plan G3/G4: the template field kinds and the layout commands, through
+  // the object model's write door.
+  const templateFields = contributeSheetTemplateFields(
+    host,
+    session,
+    objectModel,
+  );
+  const layoutCommands = contributeLayoutCommands(host, session, objectModel);
   void session.restore().then(() => objectModel.reconcile());
   // The workbook belongs to the DOCUMENT, and activation runs at app boot —
   // before any document is open. Every later open (File ▸ Open, File ▸ New,
@@ -694,6 +704,8 @@ export function activate(host: BundleHost): BundleHandle {
       textProviderHandle = null;
       documentOpenedSub.dispose();
       propertyBindings?.dispose();
+      templateFields.dispose();
+      layoutCommands.dispose();
       objectModel.dispose();
       session.dispose();
     },
