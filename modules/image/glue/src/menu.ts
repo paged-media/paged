@@ -24,6 +24,55 @@
  */
 
 import type { BundleHost, Disposable } from "@paged-media/plugin-api";
+import { defineMessages } from "@paged-media/strings";
+
+// The paths stay English: they are the entries' identities (the host's
+// Edit menu among them). Each segment this bundle creates is a message
+// under "menu", which the shell shows through its menu labels.
+defineMessages("menu", {
+  Image: "Image",
+  "Open image panel": "Open image panel",
+  "Adjust…": "Adjust…",
+  "Auto-enhance": "Auto-enhance",
+  "Bake adjustments into layer": "Bake adjustments into layer",
+  "Rotate 90° clockwise": "Rotate 90° clockwise",
+  "Rotate 90° counter-clockwise": "Rotate 90° counter-clockwise",
+  "Rotate 180°": "Rotate 180°",
+  "Flip horizontal": "Flip horizontal",
+  "Flip vertical": "Flip vertical",
+  Layer: "Layer",
+  Add: "Add",
+  "Add mask (reveal all)": "Add mask (reveal all)",
+  "Add mask (hide all)": "Add mask (hide all)",
+  "Convert to smart object": "Convert to smart object",
+  Selection: "Selection",
+  "Select all": "Select all",
+  Deselect: "Deselect",
+  Invert: "Invert",
+  "Feather…": "Feather…",
+  "From luminosity channel": "From luminosity channel",
+  Fill: "Fill",
+  "Gradient…": "Gradient…",
+  "Noise…": "Noise…",
+  "Content-aware": "Content-aware",
+  "Foreground colour": "Foreground colour",
+  "Define pattern": "Define pattern",
+  Pattern: "Pattern",
+  Filter: "Filter",
+  "Shape blur": "Shape blur",
+  Median: "Median",
+  Maximum: "Maximum",
+  Minimum: "Minimum",
+  "Apply crop": "Apply crop",
+  "Set type": "Set type",
+  "Load brush library (.abr)…": "Load brush library (.abr)…",
+  "Commit edits to the document": "Commit edits to the document",
+  File: "File",
+  "Apply adjustments to the file": "Apply adjustments to the file",
+  "Save the adjusted file": "Save the adjusted file",
+  "Selection to path": "Selection to path",
+  "Path to selection": "Path to selection",
+});
 
 const C = "media.paged.image.command";
 

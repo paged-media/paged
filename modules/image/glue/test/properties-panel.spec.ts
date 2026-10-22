@@ -35,9 +35,12 @@ import { KIND_PREFIX, KIND_ROWS } from "../src/object-model/image-objects";
 import {
   BIND,
   IMAGE_PANEL_FIELDS,
-  IMAGE_PROPERTIES_PANEL,
+  imagePropertiesPanel,
   PROPERTIES_PANEL_ID,
 } from "../src/panels/properties-panel";
+
+/** The panel as the bundle contributes it (in English here). */
+const IMAGE_PROPERTIES_PANEL = imagePropertiesPanel();
 
 const schemaOf = (k: string): readonly PropertySchema[] | undefined =>
   k.startsWith(KIND_PREFIX)
