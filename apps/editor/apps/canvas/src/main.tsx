@@ -1693,7 +1693,7 @@ setChromeStorageScope(PROFILE.storageScope);
  *  deny-list would leak every new DTP panel into every preset — the
  *  fail-open shape this codebase keeps finding. The cost is the opposite
  *  failure (a renamed panel silently drops out), which is what
- *  `scripts/solo-profiles-guard.mjs` exists to catch. */
+ *  `scripts/profile-presets-guard.mjs` exists to catch. */
 const SURFACES = applyProfile(PROFILE, {
   panels: BUILT_IN_PANELS,
   tools: BUILT_IN_TOOLS,
