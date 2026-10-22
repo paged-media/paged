@@ -19,7 +19,7 @@
 // THE VERB TABLE. `--help`, argument checking and the cli_surface spec are
 // all generated from it: a verb exists iff it has a row here.
 
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -28,6 +28,7 @@ import type {
   ObjectOp,
   ObjectWriteResult,
   PropertySchema,
+  ValueType,
 } from "@paged-media/plugin-api";
 import {
   normalizeAddress,
@@ -1214,13 +1215,70 @@ const commands: Verb = {
   },
 };
 
+/** A `bytes` argument given on the command line: `"@path"`,
+ *  `{ "$file": path }` or `{ "base64": … }`, read into a Uint8Array where
+ *  the command's schema says `bytes` (JSON cannot carry one). */
+export function withBytes(
+  type: ValueType,
+  value: unknown,
+  cwd: string,
+): unknown {
+  if (type.kind === "bytes") {
+    if (typeof value === "string" && value.startsWith("@"))
+      return new Uint8Array(readFileSync(resolve(cwd, value.slice(1))));
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      const o = value as Record<string, unknown>;
+      if (typeof o["$file"] === "string")
+        return new Uint8Array(readFileSync(resolve(cwd, o["$file"])));
+      if (typeof o["base64"] === "string")
+        return new Uint8Array(Buffer.from(o["base64"], "base64"));
+    }
+    return value;
+  }
+  if (type.kind === "list" && Array.isArray(value))
+    return value.map((v) => withBytes(type.of, v, cwd));
+  if (type.kind === "map" && value && typeof value === "object")
+    return Object.fromEntries(
+      Object.entries(value).map(([k, v]) => [k, withBytes(type.of, v, cwd)]),
+    );
+  if (type.kind === "struct" && value && typeof value === "object") {
+    const fields = (type as { fields: Record<string, ValueType> }).fields;
+    return Object.fromEntries(
+      Object.entries(value).map(([k, v]) => [
+        k,
+        fields[k] ? withBytes(fields[k], v, cwd) : v,
+      ]),
+    );
+  }
+  return value;
+}
+
+/** The bytes a command answered: the result itself, or its one `bytes`
+ *  field (`{ bytes, diagnostics }`). */
+export function resultBytes(result: unknown): Uint8Array | null {
+  if (result instanceof Uint8Array) return result;
+  if (result && typeof result === "object") {
+    const found = Object.values(result).filter(
+      (v): v is Uint8Array => v instanceof Uint8Array,
+    );
+    if (found.length === 1) return found[0]!;
+  }
+  return null;
+}
+
+const RESULT_OUT: OptionSpec = {
+  name: "result-out",
+  value: "file",
+  help: "write the bytes the command answers (an exported file) here",
+};
+
 const invoke: Verb = {
   name: "invoke",
   usage: "<doc> <commandId> [args.json|{json}]",
   summary: `run one typed command (\`${BIN} commands\` lists them; a core command is ONE undo step and answers created[]: what it made), then save`,
   min: 2,
   max: 3,
-  options: [OUT, NO_SAVE, OUTPUT_FORMAT],
+  options: [OUT, NO_SAVE, RESULT_OUT, OUTPUT_FORMAT],
   reaches: ["commands", "invoke"],
   async run({ args, session, cwd }) {
     const [doc, id, argsArg] = args.positionals as [
@@ -1239,7 +1297,7 @@ const invoke: Verb = {
       );
     let result: unknown;
     try {
-      result = await s.h.objects.invoke(id, given);
+      result = await s.h.objects.invoke(id, withBytes(known.args, given, cwd));
     } catch (err) {
       const message = (err as Error).message ?? String(err);
       return {
@@ -1250,9 +1308,21 @@ const invoke: Verb = {
     }
     const saved = await saveIfAsked(s, args, true);
     const created = (result as { created?: string[] } | null)?.created;
+    const resultOut = flagStr(args, "result-out");
+    let wrote: string | null = null;
+    if (resultOut) {
+      const bytes = resultBytes(result);
+      if (!bytes)
+        throw new CliError(
+          EXIT.failed,
+          `${id} answered no bytes to write to ${resultOut}`,
+        );
+      wrote = resolve(cwd, resultOut);
+      writeFileSync(wrote, bytes);
+    }
     return {
-      json: { command: id, applied: true, result: plain(result), saved },
-      text: `ran ${id}${created?.length ? `; created ${created.join(", ")}` : ""}${saved ? `; saved ${(saved as { path: string }).path}` : ""}`,
+      json: { command: id, applied: true, result: plain(result), saved, wrote },
+      text: `ran ${id}${created?.length ? `; created ${created.join(", ")}` : ""}${saved ? `; saved ${(saved as { path: string }).path}` : ""}${wrote ? `; wrote ${wrote}` : ""}`,
     };
   },
 };

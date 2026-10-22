@@ -54,7 +54,9 @@ import {
 import { installNodeShims } from "./node-shims";
 import { CliError, EXIT } from "./errors";
 
-export type DocFormat = "paged" | "idml";
+/** `import`: a file a loaded module's importer opens (.docx, .pptx, .pdf,
+ *  .xlsx, .html, …), onto a new blank document. */
+export type DocFormat = "paged" | "idml" | "import";
 export type CoreExportFormat = "paged" | "idml" | "pdf";
 
 export interface SessionOptions {
@@ -208,6 +210,7 @@ export function docFormatOf(path: string): DocFormat {
   const ext = extname(path).toLowerCase();
   if (ext === ".paged") return "paged";
   if (ext === ".idml") return "idml";
+  if (ext) return "import";
   throw new CliError(EXIT.usage, `${path}: not a .paged or .idml document`);
 }
 
@@ -338,7 +341,7 @@ export async function openSession(
   // first call, so a run that never asks needs no key.
   h.objects.register({ plugin: "paged.ai", model: aiObjectModel(cliComplete) });
 
-  if (docBytes) {
+  if (docBytes && format !== "import") {
     try {
       await h.load(docBytes);
     } catch (err) {
@@ -419,6 +422,38 @@ export async function openSession(
       host: captured!,
       module: found.module,
     });
+  }
+
+  // A file a module imports: its importer opens it onto a new blank
+  // document, as the editor's File ▸ Open does with nothing open.
+  if (docBytes && format === "import") {
+    const ext = extname(docPath!).toLowerCase();
+    const importer = h
+      .importersContributed()
+      .find((i) => i.extensions.includes(ext));
+    if (!importer)
+      fail(
+        new CliError(
+          EXIT.usage,
+          `${docPath}: not a .paged or .idml document, and no loaded module imports ${ext}`,
+        ),
+      );
+    try {
+      await h.newBlank(612, 792);
+      await importer!.import({
+        name: basename(docPath!),
+        bytes: docBytes,
+        mimeType: "",
+        newDocument: true,
+      });
+    } catch (err) {
+      fail(
+        new CliError(
+          EXIT.usage,
+          `${docPath}: ${importer!.title} import failed: ${(err as Error).message}`,
+        ),
+      );
+    }
   }
 
   const session: CliSession = {
