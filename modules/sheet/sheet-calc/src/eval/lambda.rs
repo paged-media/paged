@@ -110,10 +110,10 @@ pub(super) fn special_rich(
     Some(match name {
         "LET" => match reduce_let(model, args, ctx, spills) {
             Reduced::Value(v) => v,
-            // A lambda as a cell value: #CALC! grounded to #VALUE!.
-            Reduced::Lambda(..) => err(CellError::Value),
+            // A lambda as a cell value is #CALC! (Excel-recorded).
+            Reduced::Lambda(..) => err(CellError::Calc),
         },
-        "LAMBDA" => err(CellError::Value),
+        "LAMBDA" => err(CellError::Calc),
         "MAP" => map(model, args, ctx, spills),
         "REDUCE" => reduce_scan(model, args, ctx, spills, false),
         "SCAN" => reduce_scan(model, args, ctx, spills, true),
@@ -134,7 +134,7 @@ pub(super) fn eval_call(
 ) -> FnResult {
     match reduce_call(model, callee, args, ctx, spills) {
         Reduced::Value(v) => v,
-        Reduced::Lambda(..) => err(CellError::Value),
+        Reduced::Lambda(..) => err(CellError::Calc),
     }
 }
 
@@ -161,6 +161,17 @@ fn reduce(model: &SheetModel, e: &Expr, ctx: &EvalCtx, spills: &SpillState) -> R
         }
         Expr::Func(_, args) if is_func(e, "LET") => reduce_let(model, args, ctx, spills),
         Expr::Call(callee, args) => reduce_call(model, callee, args, ctx, spills),
+        // A defined name whose formula is a LAMBDA (a named LAMBDA, sheet
+        // ADR 513) reduces to that lambda; any other name to its value.
+        Expr::Name(nid) => match crate::names::name_expr_at(model, *nid, ctx.current) {
+            Some(inner) if matches!(&*inner, Expr::Func(..) | Expr::Call(..)) => {
+                let inner = inner.into_owned();
+                super::with_name_depth(Reduced::Value(err(CellError::Name)), || {
+                    reduce(model, &inner, ctx, spills)
+                })
+            }
+            _ => Reduced::Value(eval_value(model, e, ctx, spills)),
+        },
         _ => Reduced::Value(eval_value(model, e, ctx, spills)),
     }
 }
@@ -214,7 +225,24 @@ fn reduce_call(
         Reduced::Value(_) => return Reduced::Value(err(CellError::Value)),
     };
     let bound: Vec<Expr> = args.iter().map(|a| bind(model, a, ctx, spills)).collect();
-    apply(model, &params, &body, &bound, ctx, spills)
+    // A recursive named LAMBDA calls itself through this function: past
+    // MAX_CALL_DEPTH nested calls the call is #NUM! instead of a stack
+    // overflow (a recursion without a reachable base case).
+    let depth = CALL_DEPTH.with(|d| d.get());
+    if depth >= MAX_CALL_DEPTH {
+        return Reduced::Value(err(CellError::Num));
+    }
+    CALL_DEPTH.with(|d| d.set(depth + 1));
+    let out = apply(model, &params, &body, &bound, ctx, spills);
+    CALL_DEPTH.with(|d| d.set(depth));
+    out
+}
+
+/// How deep lambda calls may nest (recursion through a named LAMBDA).
+const MAX_CALL_DEPTH: u32 = 128;
+
+thread_local! {
+    static CALL_DEPTH: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
 }
 
 /// Apply a lambda to already-bound argument expressions.
@@ -349,7 +377,11 @@ fn subst(e: &Expr, name: &str, repl: &Expr) -> Expr {
         | Expr::Name(_)
         | Expr::StructuredRef(_)
         | Expr::Local(_)
-        | Expr::Missing => e.clone(),
+        | Expr::Missing
+        | Expr::Ref3D(_)
+        | Expr::Range3D(_)
+        | Expr::UnknownName(_) => e.clone(),
+        Expr::UnknownFunc(n, args) => Expr::UnknownFunc(n.clone(), args.iter().map(s).collect()),
         Expr::Unary(op, a) => Expr::Unary(*op, Box::new(s(a))),
         Expr::Binary(op, a, b) => Expr::Binary(*op, Box::new(s(a)), Box::new(s(b))),
         Expr::SpillRef(a) => Expr::SpillRef(Box::new(s(a))),

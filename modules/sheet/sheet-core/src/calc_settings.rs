@@ -17,8 +17,9 @@
  */
 
 //! Workbook calculation settings (spec §5.1). Mirrors the OOXML
-//! `<calcPr>` knobs the engine honors in T0: the date epoch, the document
-//! locale, and the iterative-calculation parameters.
+//! `<calcPr>` knobs the engine honors: the date epoch, the document locale,
+//! the iterative-calculation parameters, and (W1.0 amendment, sheet ADR 513)
+//! the calculation mode, precision as displayed and full calc on load.
 
 /// Per-workbook calc configuration. Defaults match Excel's out-of-box
 /// values (1900 date system, en-US locale, iteration off, 100 iterations,
@@ -36,6 +37,50 @@ pub struct CalcSettings {
     pub iterative: bool,
     pub max_iter: u32,
     pub max_change: f64,
+    /// `<calcPr calcMode>`: when formulas recalculate.
+    pub calc_mode: CalcMode,
+    /// `<calcPr fullPrecision>`: `false` is Excel's "precision as displayed"
+    /// — a constant entered into a cell is stored rounded to its number
+    /// format.
+    pub full_precision: bool,
+    /// `<calcPr fullCalcOnLoad>`: the file asks for a full recalculation when
+    /// it is opened (the engine always recalculates on load; kept for save).
+    pub full_calc_on_load: bool,
+}
+
+/// `<calcPr calcMode>` (ECMA-376 §18.18.5 ST_CalcMode).
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Default)]
+pub enum CalcMode {
+    /// `auto` — every edit recalculates its dependents.
+    #[default]
+    Auto,
+    /// `autoNoTable` — automatic except data tables (`TABLE()`), which
+    /// recalculate only on an explicit calculate.
+    AutoNoTable,
+    /// `manual` — edits mark cells dirty; nothing recalculates until an
+    /// explicit calculate.
+    Manual,
+}
+
+impl CalcMode {
+    /// The OOXML attribute value.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            CalcMode::Auto => "auto",
+            CalcMode::AutoNoTable => "autoNoTable",
+            CalcMode::Manual => "manual",
+        }
+    }
+
+    /// Parse the OOXML attribute value (`None` for anything else).
+    pub fn parse(s: &str) -> Option<CalcMode> {
+        match s {
+            "auto" => Some(CalcMode::Auto),
+            "autoNoTable" => Some(CalcMode::AutoNoTable),
+            "manual" => Some(CalcMode::Manual),
+            _ => None,
+        }
+    }
 }
 
 /// Display locale for the number-format engine (spec §9; D-8 v1 set =
@@ -85,6 +130,9 @@ impl Default for CalcSettings {
             iterative: false,
             max_iter: 100,
             max_change: 0.001,
+            calc_mode: CalcMode::Auto,
+            full_precision: true,
+            full_calc_on_load: false,
         }
     }
 }
@@ -101,6 +149,17 @@ mod tests {
         assert!(!c.iterative);
         assert_eq!(c.max_iter, 100);
         assert_eq!(c.max_change, 0.001);
+        assert_eq!(c.calc_mode, CalcMode::Auto);
+        assert!(c.full_precision);
+        assert!(!c.full_calc_on_load);
+    }
+
+    #[test]
+    fn calc_mode_round_trips_its_attribute() {
+        for m in [CalcMode::Auto, CalcMode::AutoNoTable, CalcMode::Manual] {
+            assert_eq!(CalcMode::parse(m.as_str()), Some(m));
+        }
+        assert_eq!(CalcMode::parse("Manual"), None);
     }
 
     #[test]

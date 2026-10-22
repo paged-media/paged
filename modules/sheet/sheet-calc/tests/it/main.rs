@@ -5,4 +5,5 @@
 
 mod accel_equivalence;
 mod set_cells;
+mod short_circuit;
 mod volatile_dependents;

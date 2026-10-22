@@ -86,6 +86,8 @@ pub enum TokKind {
     Structured(sheet_core::ast::StructuredRef),
     /// The postfix spill operator `#` (`A1#` → the anchor's spill range).
     Hash,
+    /// The prefix implicit-intersection operator `@` (`@A1:A3`).
+    At,
     LParen,
     RParen,
     LBrace,
@@ -203,6 +205,7 @@ impl Lexer<'_> {
             b'^' => self.one(TokKind::Caret),
             b'&' => self.one(TokKind::Amp),
             b'%' => self.one(TokKind::Percent),
+            b'@' => self.one(TokKind::At),
             b'=' => self.one(TokKind::Eq),
             b'<' => {
                 self.pos += 1;
@@ -418,6 +421,23 @@ impl Lexer<'_> {
             let name = self.src[self.pos..j].to_string();
             self.pos = j + 1; // consume the '!'
             return Ok(TokKind::SheetQual(name));
+        }
+        // A 3D span `First:Last!` — two unquoted sheet names around `:`. The
+        // qualifier carries `First:Last`; the parser splits it.
+        if self.bytes.get(j) == Some(&b':') && j > self.pos && self.bytes[self.pos] != b'$' {
+            let mut k = j + 1;
+            while k < self.bytes.len()
+                && (self.bytes[k].is_ascii_alphanumeric()
+                    || self.bytes[k] == b'_'
+                    || self.bytes[k] == b'.')
+            {
+                k += 1;
+            }
+            if k > j + 1 && self.bytes.get(k) == Some(&b'!') {
+                let name = self.src[self.pos..k].to_string();
+                self.pos = k + 1;
+                return Ok(TokKind::SheetQual(name));
+            }
         }
 
         // Otherwise: consume an A1/identifier run including a leading `$`,

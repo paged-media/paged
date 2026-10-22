@@ -172,8 +172,8 @@ fn sheet_calc_spill_ref_operator() {
     assert_eq!(value_at(&e, 0, 2), CellValue::Number(1.0));
     assert_eq!(value_at(&e, 2, 2), CellValue::Number(3.0));
 
-    // In SCALAR position (an operand; a typed operator root does not spill)
-    // the multi-cell region is #VALUE!.
+    // As an operand of a typed formula the region is an array too: the
+    // formula spills (Excel 365 — `=A1#+0` spills like `=A1#`; sheet ADR 513).
     set_formula(
         &mut e,
         0,
@@ -184,7 +184,8 @@ fn sheet_calc_spill_ref_operator() {
             Box::new(num_lit(0.0)),
         ),
     );
-    assert_eq!(value_at(&e, 0, 3), CellValue::Error(CellError::Value));
+    assert_eq!(value_at(&e, 0, 3), CellValue::Number(1.0));
+    assert_eq!(value_at(&e, 2, 3), CellValue::Number(3.0));
 }
 
 // ---- cse-parse (array literal through the same machinery) -------------------

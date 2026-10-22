@@ -1,0 +1,95 @@
+# sheet.calc.model.* — the calculation model (W1.0 versioned amendment + W1.3,
+# docs/adr/513-calc-model-amendment.md and 514-circular-references.md).
+# Schema: id/title/status/provenance/tests (+ ruling:/note:), see calc.yaml.
+# The Excel-recorded lane is sheet-conformance/tests/it/calc_model.rs over
+# corpus/calc-model/cases.tsv.
+
+- id: sheet.calc.model.error-codes
+  title: Excel 365 error values (#CALC! #FIELD! #BUSY! #CONNECT! #BLOCKED! #UNKNOWN!) with their ERROR.TYPE numbers; stored in xlsx as #VALUE!
+  status: implemented
+  provenance: ["Microsoft ERROR.TYPE (public docs)", "Excel-recorded corpus/calc-model"]
+  tests:
+    rust:
+      - "sheet-conformance/tests/it/calc_model.rs::excel_365_error_codes_are_values__feat__sheet_calc_model"
+      - "sheet-conformance/tests/it/calc_model.rs::excel_calcmodel_lane__feat__sheet_calc_model"
+
+- id: sheet.calc.model.unknown-names
+  title: An unknown name or function is #NAME?, kept as written; defining the name re-resolves it; an unknown function keeps a loaded cached value
+  status: implemented
+  ruling: "Amends the ADR 509 ParseError ruling (sheet ADR 513)."
+  provenance: ["Excel behaviour, Excel-recorded corpus/calc-model unknown-names"]
+  tests:
+    rust:
+      - "sheet-conformance/tests/it/calc_model.rs::unknown_names_and_functions_are_name_errors__feat__sheet_calc_model"
+      - "sheet-conformance/tests/it/calc_model.rs::defining_a_name_resolves_formulas_that_used_it__feat__sheet_calc_model"
+      - "sheet-parser/src/tests.rs::func_unknown_is_a_name_error_node__feat__sheet_calc_model"
+
+- id: sheet.calc.model.spill-any-root
+  title: A typed formula that can produce an array spills by its result's shape (=A1:A3, =A1:A3*2, IF over a range, OFFSET/INDEX areas, lambda calls); legacy formulas keep implicit intersection
+  status: implemented
+  ruling: "Amends ADR 502 (sheet ADR 513). Empty arrays are #CALC!."
+  provenance: ["Excel-recorded corpus/calc-model spill-* legacy-*"]
+  tests:
+    rust: ["sheet-conformance/tests/it/calc_model.rs::excel_calcmodel_lane__feat__sheet_calc_model"]
+
+- id: sheet.calc.model.implicit-intersection
+  title: The @ operator (stored _xlfn.SINGLE) and implicit intersection of ranges in scalar positions
+  status: implemented
+  provenance: ["Microsoft implicit intersection operator (public docs)", "Excel-recorded corpus/calc-model at-*"]
+  tests:
+    rust:
+      - "sheet-conformance/tests/it/calc_model.rs::implicit_intersection_operator__feat__sheet_calc_model"
+      - "sheet-parser/src/tests.rs::implicit_intersection_parses_prints_and_stores__feat__sheet_calc_model"
+
+- id: sheet.calc.model.three-d
+  title: 3D references First:Last!A1 — parsed and printed, one dependency box per sheet, a stack of views for the aggregates, spans shrink on sheet delete
+  status: implemented
+  provenance: ["Microsoft 3-D reference (public docs)", "Excel-recorded corpus/calc-model 3d-*"]
+  tests:
+    rust:
+      - "sheet-conformance/tests/it/calc_model.rs::three_d_references__feat__sheet_calc_model"
+      - "sheet-conformance/tests/it/calc_model.rs::deleting_a_sheet_shrinks_a_3d_span__feat__sheet_calc_model"
+      - "sheet-parser/src/tests.rs::three_d_references_parse_and_print__feat__sheet_calc_model"
+
+- id: sheet.calc.model.named-lambda
+  title: A defined name called as a function is a named LAMBDA (recursion bounded at 128 calls)
+  status: implemented
+  provenance: ["Microsoft LAMBDA (public docs)", "Excel-recorded corpus/calc-model lambda-named"]
+  tests:
+    rust:
+      - "sheet-parser/src/tests.rs::a_defined_name_called_is_a_lambda_call__feat__sheet_calc_model"
+      - "sheet-calc/tests/it/short_circuit.rs::an_untaken_error_or_volatile_is_never_evaluated__feat__sheet_calc_model"
+
+- id: sheet.calc.model.short-circuit
+  title: IF/IFS/IFERROR/IFNA/CHOOSE/SWITCH evaluate only the branch they return (registry lazy_args); every branch stays a dependency
+  status: implemented
+  provenance: ["Excel short-circuit evaluation"]
+  tests:
+    rust:
+      - "sheet-calc/tests/it/short_circuit.rs::the_untaken_branch_reads_no_cell__feat__sheet_calc_model"
+      - "sheet-calc/tests/it/short_circuit.rs::an_untaken_branch_is_still_a_dependency__feat__sheet_calc_model"
+
+- id: sheet.calc.model.fifteen-digits
+  title: Comparisons and COUNTIF/SUMIF criteria at 15 significant digits; the final + or - of a formula snaps a cancellation to 0
+  status: implemented
+  ruling: "MATCH/VLOOKUP/XMATCH compare exactly; a parenthesised root is snapped (Excel does not; the AST keeps no parentheses)."
+  provenance: ["Microsoft floating-point arithmetic note (public docs)", "Excel-recorded corpus/calc-model digits-*"]
+  tests:
+    rust: ["sheet-conformance/tests/it/calc_model.rs::excel_calcmodel_lane__feat__sheet_calc_model"]
+
+- id: sheet.calc.model.manual-calc
+  title: calcPr calcMode/fullPrecision/fullCalcOnLoad read and written; manual calculation with Calculate Now / Calculate Sheet; precision as displayed on entry
+  status: implemented
+  provenance: ["ECMA-376 §18.2.2 calcPr"]
+  tests:
+    rust:
+      - "sheet-conformance/tests/it/calc_model.rs::manual_calculation_waits_for_calculate__feat__sheet_calc_model"
+      - "sheet-conformance/tests/it/calc_model.rs::calc_pr_round_trips_mode_and_precision__feat__sheet_calc_model"
+      - "sheet-conformance/tests/it/calc_model.rs::precision_as_displayed_rounds_entered_numbers__feat__sheet_calc_model"
+
+- id: sheet.calc.model.cached-only
+  title: Functions the engine never runs (registry cached_only) keep the cached value, else #BLOCKED!/#CONNECT!
+  status: implemented
+  provenance: ["spec §1.1 no-network ruling"]
+  tests:
+    rust: ["sheet-conformance/tests/it/calc_model.rs::cached_only_functions_keep_the_cached_value__feat__sheet_calc_model"]

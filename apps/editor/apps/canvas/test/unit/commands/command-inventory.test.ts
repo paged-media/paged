@@ -52,6 +52,7 @@ import { buildClipboardCommands } from "../../../src/clipboard-commands";
 import { CANVAS_CONTEXT_MENU_COMMAND } from "../../../src/canvas-context-menu";
 import { GLOBAL_LIGHT_COMMANDS } from "../../../src/panels/global-light-dialog";
 import { SELECT_ALL_COMMAND } from "../../../src/select-all";
+import { hostCommands } from "../../../src/app/instance";
 import { AI_ASK_COMMAND } from "@paged-media/shell";
 
 const EDITOR = fileURLToPath(new URL("../../../../../", import.meta.url));
@@ -87,7 +88,8 @@ const SITES: Record<string, number> = {
   "packages/shell/src/actions/actions-context.tsx": 3,
   "packages/shell/src/bundles/loader.ts": 1,
   "packages/shell/src/bundles/sample-bundle.worker.ts": 1,
-  "apps/canvas/src/main.tsx": 1,
+  // The app tables, and the host actions as commands (hostCommands).
+  "apps/canvas/src/main.tsx": 2,
   "apps/canvas/src/panels/schema-list-demo-panel.tsx": 1,
   "apps/canvas/src/panels/schema-tree-demo-panel.tsx": 2,
   "apps/canvas/src/panels/layers-panel.tsx": 1,
@@ -158,6 +160,8 @@ function tableIds(): string[] {
     ...buildCoreCommandEntries(),
     ...GLOBAL_LIGHT_COMMANDS,
     SELECT_ALL_COMMAND,
+    // Registered only when an embedding host supplies the action.
+    ...hostCommands({ submit: noop, close: noop, back: noop }),
   ].map((c) => c.id);
 }
 

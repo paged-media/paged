@@ -201,9 +201,12 @@ fn sheet_parser_functions() {
     // TRUE() is the zero-arg function; bare TRUE is the literal.
     assert!(matches!(parse_ok("TRUE()"), Expr::Func(_, a) if a.is_empty()));
     assert_eq!(parse_ok("TRUE"), Expr::Lit(LitValue::Bool(true)));
-    // Unknown function name -> parse error (ruling: not a #NAME? literal).
-    let err = parse("NOPENOPE(1)", &FakeCtx::new()).unwrap_err();
-    assert!(err.message.contains("unknown function"), "{}", err.message);
+    // An unknown function name is a node that evaluates to #NAME? and
+    // prints as written (W1.0 amendment of the ADR 509 ruling).
+    assert!(
+        matches!(parse_ok("NOPENOPE(1)"), Expr::UnknownFunc(n, a) if n == "NOPENOPE" && a.len() == 1)
+    );
+    assert_canonical("NopeNope(1)", "NopeNope(1)");
     // Nested function with an arithmetic argument.
     assert_canonical("ABS(A1-B1)", "ABS(A1-B1)");
 }
@@ -287,9 +290,8 @@ fn sheet_parser_names() {
     let f = parse("Revenue*Tax", &FakeCtx::new()).unwrap();
     let set = extract_refs(&f);
     assert_eq!(set.names, vec![NameId(1), NameId(0)]);
-    // Unknown name -> parse error.
-    let err = parse("Undefined", &FakeCtx::new()).unwrap_err();
-    assert!(err.message.contains("unknown name"), "{}", err.message);
+    // An unknown name evaluates to #NAME? and prints as written (W1.0).
+    assert_eq!(parse_ok("Undefined"), Expr::UnknownName("Undefined".into()));
     // The T0 name placeholder round-trips through print.
     assert_canonical("_NAME0+_NAME2", "_NAME0+_NAME2");
 }

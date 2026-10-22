@@ -43,6 +43,18 @@ each published canary added is under [Releases](#releases).
   and whole-row references, omitted arguments, legacy array formulas and element-wise array
   arguments evaluate as Excel does. A number literal beyond the double-precision range is a
   formula error, as in Excel.
+- **Calculation model** (ADRs 513, 514). A typed formula that can produce an array spills by its
+  result (`=A1:A3`, `=A1:A3*2`, `=IF(A1:A3>1,A1:A3,0)`, `=OFFSET(A1,0,0,3)`, a LAMBDA over a
+  range); a formula loaded without Excel's dynamic-array mark keeps implicit intersection; `@`;
+  3D references (`Jan:Mar!A1`) for the aggregates; a defined name called as a function is a
+  named LAMBDA; an unknown name or function is `#NAME?` and keeps its spelling; IF, IFS,
+  IFERROR, IFNA, CHOOSE and SWITCH evaluate only the branch they return; `#CALC!` and Excel 365's
+  other errors; comparisons and COUNTIF/SUMIF criteria at 15 significant digits and the
+  final-operation cancellation snap (`=0.1+0.2=0.3` is TRUE, `=0.1+0.2-0.3` is 0); a cycle keeps
+  its last values (0 when never calculated) with the circular warning; manual calculation
+  (`calcMode`, Calculate Now / Calculate Sheet) and precision as displayed, read from and written
+  to `<calcPr>`. Recorded from Excel and replayed in CI: 207 of 220 probed cells agree, every
+  disagreement a recorded ruling or a listed defect.
 - **Typed entry.** What a person types into a cell is stored as Excel stores it (ADR 511):
   percentages, currency, group separators, fractions, scientific notation, dates, times and
   date-times become numbers with the number format Excel gives them, a leading `'` forces text
@@ -75,6 +87,19 @@ each published canary added is under [Releases](#releases).
   a grid drawn on the main thread over the frame, with row and column headings inside it,
   instead of the scene layer; pointer, wheel and keys go straight to it. The page table does not
   follow the scrolled window yet: it still shows the placed range.
+- **The live grid looks like the page (ADR 510).** `get_grid_scene` builds on `frame_window`:
+  the frozen rows and columns stay pinned while the body scrolls, hidden and filtered rows are
+  skipped, and the viewport lists the shown sheet rows and columns (`rowIndices`/`colIndices`,
+  `frozenRows`/`frozenCols`, `partialRow`/`partialCol`). Cells take the workbook's styles
+  through `CellStyler`, the per-cell path the page lowering (`get_range_page`) uses as well —
+  fills, fonts, text colour, per-edge borders, vertical alignment, wrap, the number-format text,
+  and conditional formatting (dxf rules, colour scales, data bars) — so a cell has the same style
+  key and style on both surfaces (pinned by a property test over random sheets). Merged areas
+  come as rects with the anchor's text and style, split at the frozen band, with the gridlines
+  inside them left out; text cells name the empty neighbours they may overflow into. The
+  painter (`paintGridScene`) and the SVG/scene-layer views draw all of it. Hidden columns are skipped
+  like hidden rows. Still open: number-format colours; a merged area clipped by the page window does not carry its anchor's
+  text onto the page.
 - **Grid panel and in-frame grid.** Range selection by click, drag and shift; arrows, Tab, F2,
   Delete and scrolling in the frame; a cell editor with function completion; copy and paste of
   ranges with relative references re-addressed; the fill handle with number, date, weekday and
@@ -197,8 +222,14 @@ each published canary added is under [Releases](#releases).
 - **Filter views** hide rows from the page lowering; they are not written into the xlsx and no
   panel calls them yet.
 - **Formulas** are the Excel en-US dialect only. On load, a formula the parser does not read
-  keeps its cached value: an unregistered function, an external defined name or DDE item
-  (`[1]!Name`).
+  keeps its cached value (an external defined name or DDE item, `[1]!Name`), and so does one
+  calling a function the engine does not know or never runs (WEBSERVICE, CUBEVALUE).
+- **Calculation model limits** (ADR 513): a legacy formula feeding an array to a range-aware
+  function (`=SUM(A1:A3*2)`) is lifted element-wise where Excel 2016 intersects; a root in
+  parentheses is snapped where Excel does not; SUM's own cancellation is not snapped; a row
+  insert does not move a 3D reference; a recursive LAMBDA stops at 128 nested calls (`#NUM!`);
+  a load always calculates, also in manual mode; loaded rich-value errors read as `#VALUE!` until
+  recalculated.
   `TREND` fits one regressor only.
 - **Typed entry** follows Excel (ADR 511): month names and `TRUE`/`FALSE` are English in every
   locale; `#GETTING_DATA` typed stays text; a number re-entered by undo keeps 15 significant
