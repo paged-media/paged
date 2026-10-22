@@ -105,3 +105,22 @@ The decision stands. Two spill rules changed to what Excel 16 answers (recorded 
 
 Tests: `sheet-conformance/tests/it/spill_ref.rs`, `sheet-conformance/tests/it/spill.rs`.
 
+
+## Amendment — 2026-10-22
+
+Two rules changed ([ADR 513](513-calc-model-amendment.md), [ADR 514](514-circular-references.md)):
+
+- **What spills.** A formula typed into the engine is a dynamic-array formula: when its root can
+  produce an array (a range, an operator or scalar function over one, a lambda call, a
+  reference-returning form) it is marked `Worksheet::dynamic_arrays` and spills by the shape of
+  its result. A formula loaded without the dynamic-array mark is legacy and keeps implicit
+  intersection, so a workbook never starts spilling on open. `@` reduces to one value. An empty
+  array is `#CALC!`.
+- **Cycles.** With iteration off a cycle member is not calculated and keeps its last value (0
+  when never calculated) instead of `#REF!`; the cycle set is still reported on
+  `RecalcResult::circular`.
+
+Also new: `lazy_args` short-circuit evaluation (an untaken branch is never evaluated, but stays
+a dependency), 15-digit comparisons and the final-operation cancellation snap, 3D references
+(one dependency box per sheet of the span), and manual calculation (`calcMode="manual"`: an edit
+marks dirty; `calculate_now` / `calculate_sheet`).

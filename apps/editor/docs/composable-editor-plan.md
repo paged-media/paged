@@ -1101,6 +1101,76 @@ Each module ships its kinds, a DOM test over the form, and a CLI fill test, and 
 which of its parts can be fields. A module's own panels honour the session's role: a filler
 sees the module's editing UI only for the parts its fields open.
 
+### G3a — The field kinds in detail (from the module audits)
+
+| Kind                                 | Definition                                      | Read and write                                                                                |
+| ------------------------------------ | ----------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `media.paged.sheet.cell`             | `{ ref }` (a named range or `Sheet!A1`), a type | the cell's `value` through the object model's write door; a list validation makes it a choice |
+| `media.paged.sheet.range`            | `{ ref, columns?, rows: fixed or { max } }`     | `range.values`; a growable range inserts or deletes rows first                                |
+| `media.paged.sheet.chartSource`      | `{ chart, allowed }`                            | the chart's series through `updateChart`                                                      |
+| `media.paged.doc.blockText`          | `{ frame, anchor }` (a bookmark or style + nth) | `block.text` planned like a merge field: the first run takes the text, the rest empty         |
+| `media.paged.doc.mergeField`         | `{ name }`                                      | `mergeField.value` (already writable)                                                         |
+| `media.paged.doc.listItems`          | `{ frame, anchor }`                             | needs list identity in the lowering and an insert that copies a paragraph's properties        |
+| `media.paged.draw.paint`             | `{ target, channel: fill or stroke, allowed }`  | the frame's fill or stroke, or the front layer of its appearance stack                        |
+| `media.paged.draw.graphicStyle`      | `{ targets, allowed }`                          | `appearance.graphicStyle`                                                                     |
+| `media.paged.draw.textOnPath`        | `{ path }`                                      | the attached story's text                                                                     |
+| `media.paged.draw.symbolChoice`      | `{ instance, allowed }`                         | re-place the instance with the chosen symbol in one batch                                     |
+| `media.paged.image.picture`          | `{ frame, layer }` (by layer name)              | `replaceLayerPixels`; adjustment layers above stay; reports a pending composite               |
+| `media.paged.image.adjustmentPreset` | `{ frame, allowed: [{ name, rows }] }`          | creates or sets one named adjustment layer with the preset's rows                             |
+| `media.paged.image.layerVisibility`  | `{ frame, layer }`                              | `layer.visible`                                                                               |
+| `media.paged.slide.placeholderText`  | `{ slide, placeholder: { type, idx } }`         | delegates to the engine's text lowering on the placeholder's story                            |
+| `media.paged.slide.visibility`       | `{ slide }`                                     | the slide's `hidden` flag; PDF export must skip hidden slides                                 |
+| `media.paged.web.value`              | `{ name }` (a `{{doc.key}}` value)              | `templateVar.value`: one field fills every web frame that uses it                             |
+| `media.paged.web.source`             | `{ frame, lane: html or css }`                  | `webFrame.html` or `.css`, sanitised on write                                                 |
+| `media.paged.web.cssVar`             | `{ frame, name, allowed }`                      | `cssVar.value`                                                                                |
+| `media.paged.data.record`            | `{ query or binding, label }`                   | previews the chosen record; the choice must be persisted (it is in memory today)              |
+| `media.paged.data.bindingValue`      | `{ binding }`                                   | the control follows the binding kind; a write pins the value                                  |
+| `media.paged.data.dataSet`           | `{ allowed? }`                                  | applies a captured data set in one batch                                                      |
+| `media.paged.pdf.page`               | `{ frame }`                                     | needs the engine to honour a placed PDF's page number (it always draws the first page today)  |
+
+Every write maps onto a core permission (`text.edit`, `image.replace`, `style.edit`,
+visibility), so a module field is never a way around the policy. Template-level output
+settings (a locked PDF standard, profile, bleed and marks) live in the template's own label
+and are merged into `paged template fill` and the editor's export dialog for a filler.
+
+### G4 — Module coverage: CLI, SDK and scripts
+
+Audited per module: what the editor's UI can do that the Node CLI (`paged-node`), the Rust CLI,
+the SDK (`host.objects` and typed commands) and scripts (`paged.*`) cannot. The shared gaps
+first, since they unblock several modules at once:
+
+1. **Bytes across JSON surfaces.** A typed command argument of kind `bytes` cannot be passed
+   through `paged-node invoke` or a script. Accept `"@path"` (CLI) and `{ base64 }` (script
+   bridge) for a `bytes` field, and write a `bytes` result to `-o`. Unblocks `importXlsx`,
+   `placeDoc`, `importPptx`, `importPdf`, `importIdml`.
+2. **An import path.** `paged-node` opens only `.paged` and `.idml`. Open any extension a loaded
+   importer claims, and add `import <file>` for placing (SVG, raster, HTML, CSV).
+3. **Per-module CLI tests.** No CLI spec loads draw, image, sheet or web; add one each.
+4. **Headless rendering of module content.** Image composites with adjustments need a GPU and
+   web frames are not stored as rendered content, so a headless PDF shows stale pixels or a
+   fallback. Fail loudly (`pending` reported by `template check`), and bake web frames before
+   export.
+5. **The Rust CLI** has no plugin host; the module surface is `paged-node` only, and its docs say
+   so.
+
+Per module:
+
+- **draw:** typed twins for the tool-only operations (knife, scissors, shape builder); a
+  width-profile row; an update flag that rebuilds a recipe after its source changes.
+- **image:** targeted crop, rotate, flip and canvas size; a typed `applyAdjustment`; filters with
+  a region; the session-only commands refuse headless with a code instead of doing nothing.
+- **sheet:** a placement kind (range, view, print, sizing) with `paginateToChain` and
+  `placeName`; merge, borders, column widths and row heights; `importCsv`; chart delete.
+- **data:** `apply` and `merge` rebased on typed commands (`importSource`); a batch verb per
+  record or group; read-only inspection commands (preview, expression check, refresh diff).
+- **doc:** the exporter works after reopening a saved document (today only in the importing
+  session); `block.text` writable; table-cell runs; a heading kind; open standalone headless.
+- **slide:** the typed `newSlide` places the layout's placeholders like the panel does; reorder
+  and duplicate; a typed `exportPptx`; menus and commands.
+- **web:** `importHtml`; turn an existing frame into a web frame; diagnostics as a row.
+- **publish / pdf:** bookmarks and tagged PDF in the typed exporter; `template fill -o x.pdf` and
+  `merge` through the typed exporter; a `preflight` command and verb; `paged-node package`.
+
 ## 9b. Workstream H — Demos
 
 A demo gallery, built on the embedding API (E), deployed with the editor's demo build. Modelled

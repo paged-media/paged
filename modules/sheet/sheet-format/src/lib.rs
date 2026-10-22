@@ -110,6 +110,46 @@ pub fn format_value(v: &CellValue, fmt: &CompiledFormat, ctx: &FormatCtx) -> Str
     format_value_styled(v, fmt, ctx).0
 }
 
+/// The number `x` as its format displays it — Excel's "precision as
+/// displayed" (`<calcPr fullPrecision="0">`, sheet ADR 513): a numeric
+/// section keeps the decimals it shows (`0.00` → 2, `0%` → 0 of the percent).
+/// General, date/time, scientific, fraction and conditional formats keep the
+/// full value (their displayed precision is not a fixed decimal count).
+pub fn as_displayed(x: f64, fmt: &CompiledFormat) -> f64 {
+    use sections::Token;
+    if !x.is_finite()
+        || fmt.pos.condition.is_some()
+        || fmt.neg.as_ref().is_some_and(|s| s.condition.is_some())
+    {
+        return x;
+    }
+    let section = match (&fmt.neg, x < 0.0) {
+        (Some(neg), true) => neg,
+        _ => &fmt.pos,
+    };
+    if section.general
+        || !section.is_number()
+        || section
+            .tokens
+            .iter()
+            .any(|t| matches!(t, Token::Exponent { .. }))
+    {
+        return x;
+    }
+    let percents = section
+        .tokens
+        .iter()
+        .filter(|t| matches!(t, Token::Percent))
+        .count() as i32;
+    let scale = 10f64.powi(section.decimals() as i32 + 2 * percents);
+    let r = (x.abs() * scale).round() / scale;
+    if x < 0.0 {
+        -r
+    } else {
+        r
+    }
+}
+
 /// Format a [`CellValue`] AND return the [`FormatColor`] requested by a
 /// `[Red]`-style color bracket on the SELECTED section (spec §9; ruling
 /// `sheet.format.color-brackets`).
@@ -229,6 +269,18 @@ fn render_text_section(section: &sections::Section, value: &str) -> String {
 #[cfg(test)]
 #[allow(non_snake_case)]
 mod tests {
+    #[test]
+    fn as_displayed_keeps_the_shown_decimals__feat__sheet_calc_model() {
+        let f = |code: &str, x: f64| super::as_displayed(x, &super::compile(code).unwrap());
+        assert_eq!(f("0.00", 1.23456), 1.23);
+        assert_eq!(f("0.00", -1.235), -1.24);
+        assert_eq!(f("0%", 0.12345), 0.12);
+        assert_eq!(f("#,##0", 1234.5), 1235.0);
+        assert_eq!(f("General", 1.23456), 1.23456);
+        assert_eq!(f("0.00E+00", 1.23456), 1.23456);
+        assert_eq!(f("yyyy-mm-dd", 45000.75), 45000.75);
+    }
+
     use super::*;
 
     fn fv(code: &str, v: CellValue) -> String {

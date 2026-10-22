@@ -194,6 +194,23 @@ export async function openFile(
   // not necessarily replace the document — paged.sheet's .xlsx adds
   // a frame. This branch is the one that always replaces.
   if (!(await confirmDiscard(editor, `Opening ${file.name}`))) return;
+  await openDocumentFile(editor, file, sinks);
+}
+
+/**
+ * Replace the open document with `file` through the one IDML / `.paged`
+ * load path, without asking: the half of Open after its question. An
+ * embedding host's `load` (docs/composable-editor.md §8.2) replaces the
+ * document on purpose, so it does not ask its user.
+ */
+export async function openDocumentFile(
+  editor: PagedEditor,
+  file: File,
+  sinks: {
+    setStatus: (s: string) => void;
+    pushWarning: (w: string) => void;
+  },
+): Promise<void> {
   await loadDocumentFile(editor.client, file, {
     setHandle: editor.document.setHandle,
     setSourceName: editor.document.setSourceName,

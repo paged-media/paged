@@ -228,6 +228,7 @@
 
 - id: sheet.fn.math.base
   name: BASE
+  xlfn_prefix: "_xlfn."
   family: math
   arity: { min: 2, max: 3 }
   volatility: none
@@ -241,6 +242,7 @@
 
 - id: sheet.fn.math.decimal
   name: DECIMAL
+  xlfn_prefix: "_xlfn."
   family: math
   arity: { min: 2, max: 2 }
   volatility: none

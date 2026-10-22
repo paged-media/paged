@@ -6,6 +6,7 @@
 
 - id: sheet.fn.math.ceiling-math
   name: CEILING.MATH
+  xlfn_prefix: "_xlfn."
   family: math
   arity: { min: 1, max: 3 }
   volatility: none
@@ -19,6 +20,7 @@
 
 - id: sheet.fn.math.ceiling-precise
   name: CEILING.PRECISE
+  xlfn_prefix: "_xlfn."
   family: math
   arity: { min: 1, max: 2 }
   volatility: none
@@ -45,6 +47,7 @@
 
 - id: sheet.fn.math.floor-math
   name: FLOOR.MATH
+  xlfn_prefix: "_xlfn."
   family: math
   arity: { min: 1, max: 3 }
   volatility: none
@@ -58,6 +61,7 @@
 
 - id: sheet.fn.math.floor-precise
   name: FLOOR.PRECISE
+  xlfn_prefix: "_xlfn."
   family: math
   arity: { min: 1, max: 2 }
   volatility: none
@@ -111,6 +115,7 @@
 
 - id: sheet.fn.math.munit
   name: MUNIT
+  xlfn_prefix: "_xlfn."
   family: math
   arity: { min: 1, max: 1 }
   volatility: none
@@ -138,6 +143,7 @@
 
 - id: sheet.fn.math.combina
   name: COMBINA
+  xlfn_prefix: "_xlfn."
   family: math
   arity: { min: 2, max: 2 }
   volatility: none
@@ -151,6 +157,7 @@
 
 - id: sheet.fn.math.acot
   name: ACOT
+  xlfn_prefix: "_xlfn."
   family: math
   arity: { min: 1, max: 1 }
   volatility: none
@@ -164,6 +171,7 @@
 
 - id: sheet.fn.math.acoth
   name: ACOTH
+  xlfn_prefix: "_xlfn."
   family: math
   arity: { min: 1, max: 1 }
   volatility: none
@@ -177,6 +185,7 @@
 
 - id: sheet.fn.math.cot
   name: COT
+  xlfn_prefix: "_xlfn."
   family: math
   arity: { min: 1, max: 1 }
   volatility: none
@@ -190,6 +199,7 @@
 
 - id: sheet.fn.math.coth
   name: COTH
+  xlfn_prefix: "_xlfn."
   family: math
   arity: { min: 1, max: 1 }
   volatility: none
@@ -203,6 +213,7 @@
 
 - id: sheet.fn.math.csc
   name: CSC
+  xlfn_prefix: "_xlfn."
   family: math
   arity: { min: 1, max: 1 }
   volatility: none
@@ -216,6 +227,7 @@
 
 - id: sheet.fn.math.csch
   name: CSCH
+  xlfn_prefix: "_xlfn."
   family: math
   arity: { min: 1, max: 1 }
   volatility: none
@@ -229,6 +241,7 @@
 
 - id: sheet.fn.math.sec
   name: SEC
+  xlfn_prefix: "_xlfn."
   family: math
   arity: { min: 1, max: 1 }
   volatility: none
@@ -242,6 +255,7 @@
 
 - id: sheet.fn.math.sech
   name: SECH
+  xlfn_prefix: "_xlfn."
   family: math
   arity: { min: 1, max: 1 }
   volatility: none
@@ -307,6 +321,7 @@
 
 - id: sheet.fn.math.percentof
   name: PERCENTOF
+  xlfn_prefix: "_xlfn."
   family: math
   arity: { min: 2, max: 2 }
   volatility: none
