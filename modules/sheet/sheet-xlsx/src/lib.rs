@@ -54,6 +54,7 @@ pub mod preserve;
 pub mod rels;
 pub mod sheet_doc;
 pub mod sheet_view;
+mod shift;
 pub mod splice;
 pub mod structure;
 pub mod style_edit;
