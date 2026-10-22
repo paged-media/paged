@@ -35,17 +35,20 @@ import type {
   PropertyFieldAddress,
 } from "@paged-media/plugin-api";
 import { propertyRows } from "@paged-media/plugin-sdk";
+import { t } from "@paged-media/strings";
 
+import { PANELS } from "./messages.js";
 import { SLIDE_PANEL_FIELDS, type PanelFieldList } from "./panel-fields.js";
 
 const DECK = "plugin:media.paged.slide/deck";
 
+/** Each panel's title, a message key. */
 const TITLES: Record<string, string> = {
-  "media.paged.slide.panel.slide": "Slide",
-  "media.paged.slide.panel.transition": "Transition",
-  "media.paged.slide.panel.notes": "Speaker notes",
-  "media.paged.slide.panel.placeholder": "Placeholder",
-  "media.paged.slide.panel.deck": "Deck",
+  "media.paged.slide.panel.slide": PANELS.slide,
+  "media.paged.slide.panel.transition": PANELS.transition,
+  "media.paged.slide.panel.notes": PANELS.notes,
+  "media.paged.slide.panel.placeholder": PANELS.placeholder,
+  "media.paged.slide.panel.deck": PANELS.deck,
 };
 
 /** The address a list's rows edit. */
@@ -56,7 +59,7 @@ export function addressFor(kind: string): PropertyFieldAddress {
 function panelOf(list: PanelFieldList): PanelSchema {
   return {
     id: list.panel,
-    title: TITLES[list.panel] ?? list.panel,
+    title: t(TITLES[list.panel] ?? list.panel),
     icon: "panel-pages",
     defaultDock: "right",
     sections: [
@@ -65,6 +68,7 @@ function panelOf(list: PanelFieldList): PanelSchema {
   };
 }
 
-/** One schema panel per field list, in declaration order. */
-export const SLIDE_PANELS: readonly PanelSchema[] =
+/** One schema panel per field list, in declaration order, titled in the
+ *  editor's language when they are registered. */
+export const slidePanels = (): readonly PanelSchema[] =>
   SLIDE_PANEL_FIELDS.map(panelOf);

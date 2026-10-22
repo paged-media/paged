@@ -29,7 +29,10 @@
 
 import type { DockEdge, PanelProps } from "@paged-media/plugin-api";
 import { subscribeOf, useLive } from "@paged-media/react-live";
+import { t as tActive, useStrings } from "@paged-media/strings";
 import * as React from "react";
+
+import { OUTLINE } from "../messages.js";
 
 import {
   OUTLINE_CAP,
@@ -66,10 +69,10 @@ export interface OutlinePanelActions {
   revealHeading?: (text: string, occurrence: number) => Promise<boolean>;
 }
 
-/** The menu's verb, used everywhere a document is placed. */
-export const INSERT_LABEL = "Insert Word document…";
-export const NO_PICKER_REASON =
-  "This editor has no file picker. Open the .docx with File ▸ Open, or drop it on the canvas.";
+/** The menu's verb, used everywhere a document is placed (a message key). */
+export const INSERT_LABEL = OUTLINE.insert;
+/** Why the insert button is disabled (a message key). */
+export const NO_PICKER_REASON = OUTLINE.noPicker;
 /** Rows shown before a list collapses behind "Show all". */
 export const LIST_CAP = 12;
 /** Diagnostics are long sentences: fewer of them before "Show all". */
@@ -120,23 +123,20 @@ const SEVERITY: Record<
   DocPanelNotice["severity"],
   { color: string; label: string }
 > = {
-  error: { color: "var(--status-error)", label: "Error" },
-  warning: { color: "var(--status-review)", label: "Warning" },
-  info: { color: "var(--status-info)", label: "Note" },
+  error: { color: "var(--status-error)", label: OUTLINE.error },
+  warning: { color: "var(--status-review)", label: OUTLINE.warning },
+  info: { color: "var(--status-info)", label: OUTLINE.note },
 };
-
-function plural(n: number, one: string, many = `${one}s`): string {
-  return `${n} ${n === 1 ? one : many}`;
-}
 
 /** A status dot (CSS, not a text glyph) with its severity as the label. */
 function SeverityDot({ severity }: { severity: DocPanelNotice["severity"] }) {
+  const { t } = useStrings();
   const s = SEVERITY[severity];
   return (
     <span
       role="img"
-      aria-label={s.label}
-      title={s.label}
+      aria-label={t(s.label)}
+      title={t(s.label)}
       style={{
         width: 7,
         height: 7,
@@ -168,6 +168,7 @@ function InsertButton({
   actions: OutlinePanelActions;
   style?: React.CSSProperties;
 }) {
+  const { t } = useStrings();
   const can = actions.canInsert();
   return (
     <button
@@ -175,12 +176,10 @@ function InsertButton({
       data-doc-insert
       style={style}
       disabled={!can}
-      title={
-        can ? "Pick a .docx and insert it into this document" : NO_PICKER_REASON
-      }
+      title={t(can ? OUTLINE.insertTitle : NO_PICKER_REASON)}
       onClick={() => actions.insert()}
     >
-      {INSERT_LABEL}
+      {t(INSERT_LABEL)}
     </button>
   );
 }
@@ -193,10 +192,12 @@ function CappedList<T>({
   cap = LIST_CAP,
 }: {
   items: readonly T[];
+  /** The "Show all" message, with `{count}`. */
   noun: string;
   render: (item: T, index: number) => React.ReactNode;
   cap?: number;
 }) {
+  const { t } = useStrings();
   const [all, setAll] = React.useState(false);
   const shown = all ? items : items.slice(0, cap);
   return (
@@ -209,7 +210,7 @@ function CappedList<T>({
           style={{ marginTop: 4, fontSize: 12 }}
           onClick={() => setAll((v) => !v)}
         >
-          {all ? "Show fewer" : `Show all ${items.length} ${noun}`}
+          {all ? t(OUTLINE.showFewer) : t(noun, { count: items.length })}
         </button>
       )}
     </>
@@ -217,11 +218,9 @@ function CappedList<T>({
 }
 
 function readinessLine(live: boolean, readStory: boolean): string {
-  if (live)
-    return "Your edits are written back into the .docx when you export it.";
-  if (readStory)
-    return "Export writes the original .docx unchanged: this document's text was not captured.";
-  return "Export writes the original .docx unchanged: this editor cannot read edited text back.";
+  if (live) return OUTLINE.live;
+  if (readStory) return OUTLINE.notCaptured;
+  return OUTLINE.cannotReadBack;
 }
 
 export function makeOutlinePanel(
@@ -231,6 +230,7 @@ export function makeOutlinePanel(
   const Component: React.FC<PanelProps> = () => {
     // The store as a render value (react-live, editor ADR 229): a new view
     // after every change, so the document and the notice are read again.
+    const { t } = useStrings();
     const live = useLive(store, subscribeOf);
     const doc = live.get();
     const notice = live.notice();
@@ -240,7 +240,7 @@ export function makeOutlinePanel(
         <div style={{ padding: 12, fontSize: 13 }} data-doc-panel="empty">
           {notice && <Notice notice={notice} />}
           <p style={{ ...note, fontSize: 13, marginBottom: 8 }}>
-            Insert a Word document to see its outline, styles and diagnostics.
+            {t(OUTLINE.empty)}
           </p>
           <InsertButton actions={actions} />
         </div>
@@ -254,10 +254,12 @@ export function makeOutlinePanel(
     const ready = actions.readiness();
     const saveBackLive = ready.readStory && doc.storyId != null;
     const counts = [
-      plural(summary.paragraphs, "paragraph"),
-      summary.tables > 0 ? plural(summary.tables, "table") : null,
-      summary.images > 0 ? plural(summary.images, "image") : null,
-      summary.hyperlinks > 0 ? plural(summary.hyperlinks, "link") : null,
+      t(OUTLINE.paragraphs, { count: summary.paragraphs }),
+      summary.tables > 0 ? t(OUTLINE.tables, { count: summary.tables }) : null,
+      summary.images > 0 ? t(OUTLINE.images, { count: summary.images }) : null,
+      summary.hyperlinks > 0
+        ? t(OUTLINE.links, { count: summary.hyperlinks })
+        : null,
     ].filter(Boolean);
 
     return (
@@ -275,10 +277,10 @@ export function makeOutlinePanel(
             <button
               type="button"
               data-doc-select-frame
-              title="Select the frame the document is placed in"
+              title={t(OUTLINE.selectFrameTitle)}
               onClick={() => actions.selectFrame(doc.frameId)}
             >
-              Select frame
+              {t(OUTLINE.selectFrame)}
             </button>
           )}
         </div>
@@ -290,9 +292,9 @@ export function makeOutlinePanel(
 
         {/* Outline */}
         <div style={section} data-doc-outline>
-          <h4 style={h4}>Outline</h4>
+          <h4 style={h4}>{t(OUTLINE.outline)}</h4>
           {outline.length === 0 ? (
-            <p style={note}>This document has no headings.</p>
+            <p style={note}>{t(OUTLINE.noHeadings)}</p>
           ) : (
             outline.map((entry, i) => (
               <div
@@ -309,7 +311,7 @@ export function makeOutlinePanel(
                   <button
                     type="button"
                     data-doc-outline-reveal={i}
-                    title={`Go to “${entry.text}”`}
+                    title={t(OUTLINE.goTo, { text: entry.text })}
                     onClick={() => {
                       const occurrence = headingOccurrence(outline, i);
                       void actions.revealHeading!(entry.text, occurrence).then(
@@ -317,7 +319,9 @@ export function makeOutlinePanel(
                           if (!ok) {
                             store.setNotice({
                               severity: "info",
-                              message: `“${entry.text}” isn't on the page — the heading was edited, or it is in overset text.`,
+                              message: t(OUTLINE.notOnPage, {
+                                text: entry.text,
+                              }),
                             });
                           }
                         },
@@ -344,8 +348,7 @@ export function makeOutlinePanel(
                   </span>
                 ) : (
                   <span style={{ color: muted }}>
-                    Table, {plural(entry.rows, "row")} ×{" "}
-                    {plural(entry.cols, "column")}
+                    {t(OUTLINE.table, { rows: entry.rows, cols: entry.cols })}
                   </span>
                 )}
               </div>
@@ -353,7 +356,7 @@ export function makeOutlinePanel(
           )}
           {outline.length >= OUTLINE_CAP && (
             <p style={{ ...note, marginTop: 4 }}>
-              Showing the first {OUTLINE_CAP} entries.
+              {t(OUTLINE.showingFirst, { count: OUTLINE_CAP })}
             </p>
           )}
         </div>
@@ -361,12 +364,15 @@ export function makeOutlinePanel(
         {/* Styles + swatches */}
         <div style={section} data-doc-styles>
           <h4 style={h4}>
-            Styles ({ir.styles.length}) and swatches ({ir.swatches.length})
+            {t(OUTLINE.styles, {
+              styles: ir.styles.length,
+              swatches: ir.swatches.length,
+            })}
           </h4>
-          {ir.styles.length === 0 && <p style={note}>No styles.</p>}
+          {ir.styles.length === 0 && <p style={note}>{t(OUTLINE.noStyles)}</p>}
           <CappedList
             items={ir.styles}
-            noun="styles"
+            noun={OUTLINE.showAllStyles}
             render={(s) => (
               <div
                 key={s.id}
@@ -385,8 +391,16 @@ export function makeOutlinePanel(
                     fontSize: 11,
                   }}
                 >
-                  {s.collection === "paragraph" ? "Paragraph" : "Character"}
-                  {s.basedOn ? `, based on ${s.basedOn.split("/").pop()}` : ""}
+                  {t(
+                    s.collection === "paragraph"
+                      ? OUTLINE.paragraphStyle
+                      : OUTLINE.characterStyle,
+                  )}
+                  {s.basedOn
+                    ? t(OUTLINE.basedOn, {
+                        name: s.basedOn.split("/").pop() ?? "",
+                      })
+                    : ""}
                 </span>
               </div>
             )}
@@ -414,13 +428,15 @@ export function makeOutlinePanel(
 
         {/* Diagnostics — what the lowering could not carry (ADR-007). */}
         <div style={section} data-doc-diagnostics>
-          <h4 style={h4}>Diagnostics ({diagnostics.length})</h4>
+          <h4 style={h4}>
+            {t(OUTLINE.diagnostics, { count: diagnostics.length })}
+          </h4>
           {diagnostics.length === 0 ? (
-            <p style={note}>Everything in the document was carried over.</p>
+            <p style={note}>{t(OUTLINE.allCarried)}</p>
           ) : (
             <CappedList
               items={diagnostics}
-              noun="diagnostics"
+              noun={OUTLINE.showAllDiagnostics}
               cap={DIAGNOSTICS_CAP}
               render={(d, i) => (
                 <div key={i} data-doc-diagnostic={d.severity} style={dotRow}>
@@ -439,8 +455,8 @@ export function makeOutlinePanel(
           style={section}
           data-doc-readiness={saveBackLive ? "live" : "verbatim"}
         >
-          <h4 style={h4}>Saving back to Word</h4>
-          <p style={note}>{readinessLine(saveBackLive, ready.readStory)}</p>
+          <h4 style={h4}>{t(OUTLINE.savingBack)}</h4>
+          <p style={note}>{t(readinessLine(saveBackLive, ready.readStory))}</p>
         </div>
       </div>
     );
@@ -448,7 +464,7 @@ export function makeOutlinePanel(
   // U9 — the tab says what the panel IS ("Document outline"); the owning
   // bundle ("paged.doc") is carried by the host-stamped `source` provenance.
   return {
-    title: "Document outline",
+    title: tActive(OUTLINE.title),
     component: Component,
     defaultDock: "right",
     icon: "panel-outline",

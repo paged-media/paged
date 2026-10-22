@@ -69,8 +69,10 @@ import type {
 } from "@paged-media/plugin-api";
 import { formatAddress, parseAddress } from "@paged-media/plugin-sdk";
 import { encodeEnvelope, labelKey } from "@paged-media/helpers";
+import { t } from "@paged-media/strings";
 
 import type { ImportReport, SlideReport, Transition } from "./engine.js";
+import { MODEL } from "./messages.js";
 import { slideTemplateFields } from "./template-fields.js";
 import {
   layouts,
@@ -623,7 +625,7 @@ export function contributeSlideObjectModel(
 
   const slideKind: ObjectKindContribution = {
     kind: SLIDE_KIND,
-    title: "Slide",
+    title: t(MODEL.kindSlide),
     schema: SLIDE_SCHEMA,
     // A slide IS its page: its label lives there, and `page:#2 > slide`
     // selects through it.
@@ -679,7 +681,7 @@ export function contributeSlideObjectModel(
 
   const layoutKind: ObjectKindContribution = {
     kind: LAYOUT_KIND,
-    title: "Slide layout",
+    title: t(MODEL.kindLayout),
     schema: LAYOUT_SCHEMA,
     hostOf: (address) => {
       const id = ownId(address, LAYOUT_KIND);
@@ -765,7 +767,7 @@ export function contributeSlideObjectModel(
 
   const placeholderKind: ObjectKindContribution = {
     kind: PLACEHOLDER_KIND,
-    title: "Placeholder",
+    title: t(MODEL.kindPlaceholder),
     schema: PLACEHOLDER_SCHEMA,
     content: { kind: "text" },
     hostOf: (address) => {
@@ -850,7 +852,7 @@ export function contributeSlideObjectModel(
 
   const deckKind: ObjectKindContribution = {
     kind: DECK_KIND,
-    title: "Deck",
+    title: t(MODEL.kindDeck),
     schema: DECK_SCHEMA,
     hostOf: () => "doc",
     async list() {
@@ -1043,7 +1045,7 @@ export function contributeSlideObjectModel(
     { slide: Address }
   > = {
     id: NEW_SLIDE_COMMAND,
-    title: "New slide",
+    title: t(MODEL.newSlide),
     args: newSlideArgs as ValueType,
     result: newSlideResult as ValueType,
     async handler(_ctx, args) {
@@ -1098,7 +1100,7 @@ export function contributeSlideObjectModel(
     { slides: Address[]; fonts: string[]; diagnostics: string[] }
   > = {
     id: IMPORT_PPTX_COMMAND,
-    title: "Open a PowerPoint deck",
+    title: t(MODEL.importPptx),
     args: importPptxArgs as ValueType,
     result: importPptxResult as ValueType,
     async handler(_ctx, args) {
@@ -1117,7 +1119,7 @@ export function contributeSlideObjectModel(
     { slide: Address }
   > = {
     id: DUPLICATE_SLIDE_COMMAND,
-    title: "Duplicate slide",
+    title: t(MODEL.duplicateSlide),
     args: duplicateSlideArgs as ValueType,
     result: duplicateSlideResult as ValueType,
     async handler(_ctx, args) {
@@ -1153,7 +1155,7 @@ export function contributeSlideObjectModel(
     { bytes: Uint8Array; fileName: string; diagnostics: string[] }
   > = {
     id: EXPORT_PPTX_COMMAND,
-    title: "Export as a PowerPoint deck",
+    title: t(MODEL.exportPptx),
     args: exportPptxArgs as ValueType,
     result: exportPptxResult as ValueType,
     async handler() {

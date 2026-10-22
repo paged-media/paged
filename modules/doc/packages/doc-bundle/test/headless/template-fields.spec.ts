@@ -235,7 +235,7 @@ describe.skipIf(!docxPresent)(
       expect((await h.objects.readTemplateField(nowhere)).value).toBeNull();
       expect(await h.objects.writeTemplateField(nowhere, "x")).toEqual({
         ok: false,
-        problem: 'The Word document has no bookmark named "nope".',
+        problem: "The Word document has no bookmark named “nope”.",
       });
       expect((await storyTexts(host, story))[0]).toBe("Spring letter");
     });
