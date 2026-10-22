@@ -1,0 +1,11 @@
+# IMSUB.
+# id	formula	setup	expected
+imsub-0	=IMSUB("13+4i","5+3i")	-	8+i
+imsub-1	=IMSUB("1","i")	-	1-i
+imsub-2	=IMSUB("i","i")	-	0
+imsub-3	=IMSUB("abc","1")	-	#NUM!
+imsub-4	=IMSUB("1+i","1+j")	-	#NUM!
+imsub-5	=IMSUB("1+2j","3+4j")	-	-2-2j
+imsub-6	=IMSUB(5,2)	-	3
+imsub-7	=IMSUB("1","1")	-	0
+imsub-x0	=IMSUB(A1,1)	A1=#N/A	#N/A

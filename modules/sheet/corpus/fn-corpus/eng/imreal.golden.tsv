@@ -1,0 +1,19 @@
+# IMREAL.
+# id	formula	setup	expected
+imreal-0	=IMREAL("3+4i")	-	3
+imreal-1	=IMREAL("3-4i")	-	3
+imreal-2	=IMREAL("-2.5+0.5j")	-	-2.5
+imreal-3	=IMREAL("i")	-	0
+imreal-4	=IMREAL("-i")	-	0
+imreal-5	=IMREAL("5")	-	5
+imreal-6	=IMREAL("0")	-	0
+imreal-7	=IMREAL("4j")	-	0
+imreal-8	=IMREAL("1E2+1E-3i")	-	100
+imreal-9	=IMREAL("0.5-i")	-	0.5
+imreal-10	=IMREAL("abc")	-	#NUM!
+imreal-11	=IMREAL(7)	-	7
+imreal-12	=IMREAL(TRUE)	-	#VALUE!
+imreal-13	=IMREAL("1+2j")	-	1
+imreal-14	=IMREAL("3.5e-2-4i")	-	0.035
+imreal-x0	=IMREAL(A1)	A1=#N/A	#N/A
+imreal-x1	=SUM(IMREAL({"3+4i","5j"}))	-	3

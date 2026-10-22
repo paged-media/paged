@@ -1,0 +1,11 @@
+# QUOTIENT(numerator,denominator) - integer portion of a division.
+# id	formula	setup	expected
+q-basic	=QUOTIENT(5,2)	-	2
+q-frac	=QUOTIENT(4.5,3.1)	-	1
+q-neg	=QUOTIENT(-10,3)	-	-3
+q-div0	=QUOTIENT(1,0)	-	#DIV/0!
+q-text	=QUOTIENT("a",1)	-	#VALUE!
+q-numtext	=QUOTIENT("9",2)	-	4
+q-err	=QUOTIENT(A1,2)	A1=#VALUE!	#VALUE!
+q-array	=SUM(QUOTIENT({7,9},{2,4}))	-	5
+q-bool	=QUOTIENT(TRUE,1)	-	#VALUE!

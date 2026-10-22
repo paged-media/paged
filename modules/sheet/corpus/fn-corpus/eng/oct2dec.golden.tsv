@@ -1,0 +1,14 @@
+# OCT2DEC(number).
+# id	formula	setup	expected
+oct2dec-0	=OCT2DEC(54)	-	44
+oct2dec-1	=OCT2DEC(7777777533)	-	-165
+oct2dec-2	=OCT2DEC(3777777777)	-	536870911
+oct2dec-3	=OCT2DEC(4000000000)	-	-536870912
+oct2dec-4	=OCT2DEC(7777777777)	-	-1
+oct2dec-5	=OCT2DEC(8)	-	#NUM!
+oct2dec-6	=OCT2DEC(10000000000)	-	#NUM!
+oct2dec-7	=OCT2DEC("17")	-	15
+oct2dec-8	=OCT2DEC("")	-	0
+oct2dec-9	=OCT2DEC(1.5)	-	#NUM!
+oct2dec-x0	=OCT2DEC(A1)	A1=#N/A	#N/A
+oct2dec-x1	=SUM(OCT2DEC({7,10}))	-	15

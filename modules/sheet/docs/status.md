@@ -19,8 +19,11 @@ each published canary added is under [Releases](#releases).
   (`document.onWillSave`), the workbook is written before the save takes the document's bytes.
   A reopened document restores its workbook when the host reports the open
   (`document.onDidOpen`).
-- **Calculation.** 263 registered functions, all implemented, among them `LET`, `LAMBDA` and its
-  helpers; dynamic arrays that spill and nest; Excel tables with structured references;
+- **Calculation.** 340 registered functions, all implemented, among them `LET`, `LAMBDA` and its
+  helpers, the engineering set (radix and bit functions, `CONVERT` with Excel's full unit table and
+  prefixes, the complex-number `IM*` functions on Excel's text form, the error and Bessel
+  functions with Excel's own approximations) and the modern math set (`CEILING.MATH`,
+  `FLOOR.MATH`, `MDETERM`/`MINVERSE`/`MUNIT`, the reciprocal trigonometric functions); dynamic arrays that spill and nest; Excel tables with structured references;
   incremental recalculation with an interval index for range dependencies, and range
   accelerators within a recalc (column snapshots, anchored prefix aggregates for SUM/COUNT/
   COUNTA/AVERAGE/MIN/MAX, exact-match indexes for VLOOKUP/MATCH/XMATCH/XLOOKUP/COUNTIF/SUMIF,
@@ -28,7 +31,7 @@ each published canary added is under [Releases](#releases).
   and 10,000 lookups into an edited 10,000-row table in about 9 ms natively; dependents of
   volatile cells recalculate with them; iterative calculation when the workbook's `calcPr`
   asks for it; `NOW` and `TODAY` follow the host clock. Number formats render in five display
-  locales. Expected values are recorded from Excel and replayed in CI: 1,470 of 1,485 function
+  locales. Expected values are recorded from Excel and replayed in CI: 3,089 of 3,108 function
   cases and 148 of 164 number-format cases agree, every disagreement a recorded ruling.
   Recalculating real workbooks reproduces Excel's saved value in 93.6% of comparable formula
   cells (56,533 of 60,419 over 201 workbooks): shared formulas, defined names of every kind,
