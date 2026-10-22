@@ -412,6 +412,7 @@ export {
   loadDocumentFile,
   fetchDefaultFont,
   fetchDefaultFontFaces,
+  setDefaultFontUrls,
   DEFAULT_FONT_FAMILY,
   type DocumentLoaderCallbacks,
 } from "./state/document-loader";

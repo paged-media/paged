@@ -65,6 +65,12 @@ export interface EditorConfig {
   messages?: Readonly<Record<string, string>>;
   /** Where the editor's files are served from (locales). */
   assetBase?: string;
+  /**
+   * Where the engine's wasm is served (`paged_canvas_wasm_bg.wasm` of
+   * `@paged-media/paged`). The editor's own build when absent; the
+   * `@paged-media/editor` package fills it from its dependency (PM-0013).
+   */
+  engineWasm?: string;
 }
 
 export type EditorEvent =
@@ -163,6 +169,7 @@ export async function createEditor(
     library: false,
     strings,
     onShell: (shell) => resolveShell(shell),
+    ...(config.engineWasm ? { engineWasm: config.engineWasm } : {}),
   });
   const shell = await shellReady;
   await bootBundlesSettled();
