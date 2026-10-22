@@ -27,7 +27,16 @@
 import { useMemo } from "react";
 import type { Camera } from "@paged-media/client";
 import type { PageId, ResolutionResult } from "@paged-media/client";
+import { defineMessages, useStrings } from "@paged-media/strings";
+
 import { fitCamera, layoutPages, type PageRect } from "./layout";
+
+const M = defineMessages("app.uiOutline", {
+  outline: "Outline",
+  toc: "TOC",
+  empty: "No heading anchors or TOC entries detected.",
+  page: "page {page}",
+});
 
 export interface OutlineProps {
   resolution: ResolutionResult | null;
@@ -54,6 +63,7 @@ function headingPosition(
 }
 
 export function Outline(props: OutlineProps) {
+  const strings = useStrings();
   // eslint-disable-next-line no-restricted-syntax -- a computed block, not a single expression (ADR 229)
   const entries = useMemo<OutlineEntry[]>(() => {
     if (!props.resolution) return [];
@@ -116,12 +126,10 @@ export function Outline(props: OutlineProps) {
     return (
       <aside style={panelStyle}>
         <header style={headerStyle}>
-          <strong>Outline</strong>
+          <strong>{strings.t(M.outline)}</strong>
           <span style={{ opacity: 0.6 }}>0</span>
         </header>
-        <div style={emptyStyle}>
-          No heading anchors or TOC entries detected.
-        </div>
+        <div style={emptyStyle}>{strings.t(M.empty)}</div>
       </aside>
     );
   }
@@ -130,7 +138,7 @@ export function Outline(props: OutlineProps) {
       {entries.length > 0 && (
         <>
           <header style={headerStyle}>
-            <strong>Outline</strong>
+            <strong>{strings.t(M.outline)}</strong>
             <span style={{ opacity: 0.6 }}>{entries.length}</span>
           </header>
           <div style={listStyle}>
@@ -143,7 +151,7 @@ export function Outline(props: OutlineProps) {
                   ...rowStyle,
                   paddingLeft: 8 + Math.max(0, entry.level - 1) * 14,
                 }}
-                title={`${entry.text} (page ${entry.pageNumber})`}
+                title={`${entry.text} (${strings.t(M.page, { page: entry.pageNumber })})`}
               >
                 <span style={titleStyle}>{entry.text}</span>
                 <span style={pageStyle}>{entry.pageNumber}</span>
@@ -160,7 +168,7 @@ export function Outline(props: OutlineProps) {
               borderTop: "1px solid var(--chrome-border)",
             }}
           >
-            <strong>TOC</strong>
+            <strong>{strings.t(M.toc)}</strong>
             <span style={{ opacity: 0.6 }}>{toc.length}</span>
           </header>
           <div style={listStyle}>
@@ -173,7 +181,7 @@ export function Outline(props: OutlineProps) {
                   ...rowStyle,
                   paddingLeft: 8 + Math.max(0, entry.level - 1) * 14,
                 }}
-                title={`${entry.text} (page ${entry.pageNumber || "?"})`}
+                title={`${entry.text} (${strings.t(M.page, { page: entry.pageNumber || "?" })})`}
               >
                 <span style={titleStyle}>{entry.text}</span>
                 <span style={pageStyle}>{entry.pageNumber || "—"}</span>

@@ -23,6 +23,20 @@
 // (no fake data, no dead interactive chrome).
 
 import { CockpitPanelHeader, ComingSoon } from "@paged-media/shell";
+import { defineMessages, useStrings } from "@paged-media/strings";
+
+const M = defineMessages("app.cockpitStubPanels", {
+  comments: "Comments",
+  noComments: "No comments yet",
+  commentsBody:
+    "Threaded review comments, approvals and version compare land with the " +
+    "collaboration backend.",
+  library: "Library",
+  librarySoon: "Component library coming soon",
+  libraryBody:
+    "Browse, drag and configure reusable components — slots bound to data, " +
+    "variants, and usage rules.",
+});
 
 // StoriesPanel moved to `./stories-panel` (W2.12 — now a real story
 // list off `paged.stories()`). DataMappingPanel deleted (U8 — the
@@ -31,12 +45,12 @@ import { CockpitPanelHeader, ComingSoon } from "@paged-media/shell";
 /** Review mode — threaded comments. Needs the collaboration
  * backend. */
 export function CommentsPanel() {
+  const strings = useStrings();
   return (
     <div data-comments-panel style={{ overflowY: "auto", height: "100%" }}>
-      <CockpitPanelHeader title="Comments" />
-      <ComingSoon icon="ui-comment" title="No comments yet">
-        Threaded review comments, approvals and version compare land with the
-        collaboration backend.
+      <CockpitPanelHeader title={strings.t(M.comments)} />
+      <ComingSoon icon="ui-comment" title={strings.t(M.noComments)}>
+        {strings.t(M.commentsBody)}
       </ComingSoon>
     </div>
   );
@@ -44,15 +58,15 @@ export function CommentsPanel() {
 
 /** Component library — reusable layout components. */
 export function ComponentLibraryPanel() {
+  const strings = useStrings();
   return (
     <div
       data-component-library-panel
       style={{ overflowY: "auto", height: "100%" }}
     >
-      <CockpitPanelHeader title="Library" />
-      <ComingSoon icon="ui-component" title="Component library coming soon">
-        Browse, drag and configure reusable components — slots bound to data,
-        variants, and usage rules.
+      <CockpitPanelHeader title={strings.t(M.library)} />
+      <ComingSoon icon="ui-component" title={strings.t(M.librarySoon)}>
+        {strings.t(M.libraryBody)}
       </ComingSoon>
     </div>
   );

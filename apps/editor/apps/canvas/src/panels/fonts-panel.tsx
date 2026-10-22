@@ -36,10 +36,30 @@ import { useState } from "react";
 import { ListRows, useCollection, type ListRowSpec } from "@paged-media/shell";
 import type { FontSummary } from "@paged-media/client";
 import { Segment } from "@paged-media/panel-kit";
+import { defineMessages, useStrings } from "@paged-media/strings";
 
 type FontFilter = "All" | "In use" | "Missing";
 
+const M = defineMessages("app.fontsPanel", {
+  loading: "Loading fonts…",
+  refs: "{count, plural, one {# ref} other {# refs}}",
+  refsSubstituted: "{count, plural, one {# ref} other {# refs}} · substituted",
+  missingBadge: "missing",
+  all: "All",
+  inUse: "In use",
+  missing: "Missing",
+  empty: "No fonts in use.",
+  noneMissing: "No missing fonts — every referenced family resolved.",
+});
+
+const FILTER_LABEL: Record<FontFilter, string> = {
+  All: M.all,
+  "In use": M.inUse,
+  Missing: M.missing,
+};
+
 export function FontsPanel() {
+  const strings = useStrings();
   const items = useCollection<FontSummary>("fonts");
   const [filter, setFilter] = useState<FontFilter>("All");
   if (items === null) {
@@ -48,7 +68,7 @@ export function FontsPanel() {
         className="p-3 text-xs text-muted-foreground"
         data-fonts-panel="loading"
       >
-        Loading fonts…
+        {strings.t(M.loading)}
       </div>
     );
   }
@@ -65,10 +85,12 @@ export function FontsPanel() {
     dot: f.isMissing ? "error" : "ready",
     icon: "panel-fonts",
     primary: f.family,
-    secondary: `${f.referenceCount} ref${f.referenceCount === 1 ? "" : "s"}${
-      f.isMissing ? " · substituted" : ""
-    }`,
-    badge: f.isMissing ? { label: "missing", tone: "error" } : undefined,
+    secondary: strings.t(f.isMissing ? M.refsSubstituted : M.refs, {
+      count: f.referenceCount,
+    }),
+    badge: f.isMissing
+      ? { label: strings.t(M.missingBadge), tone: "error" }
+      : undefined,
   }));
 
   return (
@@ -89,7 +111,7 @@ export function FontsPanel() {
               color: filter === f ? "var(--pg-primary)" : "var(--pg-muted-fg)",
             }}
           >
-            {f}
+            {strings.t(FILTER_LABEL[f])}
             {f === "Missing" && missingCount > 0 && (
               <span
                 data-missing-count
@@ -104,14 +126,14 @@ export function FontsPanel() {
       </div>
       {items.length === 0 ? (
         <div className="p-3 text-xs text-muted-foreground" data-empty-fonts>
-          No fonts in use.
+          {strings.t(M.empty)}
         </div>
       ) : filter === "Missing" && missingCount === 0 ? (
         <div
           className="p-3 text-xs text-muted-foreground italic"
           data-fonts-missing-empty
         >
-          No missing fonts — every referenced family resolved.
+          {strings.t(M.noneMissing)}
         </div>
       ) : (
         <div data-font-list>

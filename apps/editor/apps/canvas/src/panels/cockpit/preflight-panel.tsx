@@ -43,7 +43,35 @@ import {
 } from "@paged-media/shell";
 import type { LinkSummary, PreflightFinding } from "@paged-media/client";
 
+import { defineMessages, useStrings } from "@paged-media/strings";
+
 import { recordFindings, usePreflightFindings } from "./preflight-findings";
+
+const M = defineMessages("app.cockpitPreflightPanel", {
+  title: "Preflight",
+  outputCheck: "Output check",
+  noFindings: "No findings",
+  findings: "{count, plural, one {# finding} other {# findings}}",
+  validating: "Validating…",
+  validateOutput: "Validate output",
+  validateHint:
+    "Runs the real PDF pipeline and reports its findings — the same " +
+    "checks the export performs.",
+  errors: "Errors",
+  warnings: "Warnings",
+  clean: "No findings — the document exports cleanly.",
+  links: "Links",
+  noLinks: "No placed links.",
+  openToInspectLinks: "Open a document to inspect links.",
+  imagesBleed: "Images & bleed",
+  openToCheckImages: "Open a document to check its images.",
+  noResolution: "No placed image reports its resolution.",
+  allAbove: "Every placed image is at {ppi} ppi or more.",
+  someBelow: "{low} of {total} placed images below {ppi} ppi.",
+  bleedNotChecked: "Bleed coverage is not checked yet.",
+  goToPage: "Go to page {page}",
+  page: "page {page}",
+});
 
 type RunState =
   | { state: "idle" }
@@ -52,6 +80,7 @@ type RunState =
   | { state: "error"; message: string };
 
 export function PreflightPanel() {
+  const strings = useStrings();
   const client = useCanvasClient();
   const meta = useDocumentMeta();
   const links = useCollection<LinkSummary>("links");
@@ -87,17 +116,19 @@ export function PreflightPanel() {
 
   return (
     <div data-preflight-panel style={{ overflowY: "auto", height: "100%" }}>
-      <CockpitPanelHeader title="Preflight" />
+      <CockpitPanelHeader title={strings.t(M.title)} />
 
       <CockpitSection
-        title="Output check"
+        title={strings.t(M.outputCheck)}
         right={
           hasRun && run.state !== "error" ? (
             <StatusPill
               tone={total === 0 ? "ok" : errors.length > 0 ? "error" : "warn"}
               testId="validation-state"
             >
-              {total === 0 ? "No findings" : `${total} finding(s)`}
+              {total === 0
+                ? strings.t(M.noFindings)
+                : strings.t(M.findings, { count: total })}
             </StatusPill>
           ) : undefined
         }
@@ -111,12 +142,11 @@ export function PreflightPanel() {
             testId="run-validation"
             onClick={() => void validate()}
           >
-            {run.state === "running" ? "Validating…" : "Validate output"}
+            {run.state === "running"
+              ? strings.t(M.validating)
+              : strings.t(M.validateOutput)}
           </CockpitBtn>
-          <span className="pg-ui-xs">
-            Runs the real PDF pipeline and reports its findings — the same
-            checks the export performs.
-          </span>
+          <span className="pg-ui-xs">{strings.t(M.validateHint)}</span>
           {run.state === "error" && (
             <StatusPill tone="error">{run.message}</StatusPill>
           )}
@@ -126,7 +156,7 @@ export function PreflightPanel() {
               {errors.length > 0 && (
                 <FindingGroup
                   groupKey="errors"
-                  label="Errors"
+                  label={strings.t(M.errors)}
                   tone="var(--status-error)"
                   findings={errors}
                 />
@@ -134,7 +164,7 @@ export function PreflightPanel() {
               {warnings.length > 0 && (
                 <FindingGroup
                   groupKey="warnings"
-                  label="Warnings"
+                  label={strings.t(M.warnings)}
                   tone="var(--status-review)"
                   findings={warnings}
                 />
@@ -148,7 +178,7 @@ export function PreflightPanel() {
             <>
               <GroupKicker
                 groupKey="warnings"
-                label="Warnings"
+                label={strings.t(M.warnings)}
                 count={diagnostics.length}
                 tone="var(--status-review)"
               />
@@ -173,14 +203,14 @@ export function PreflightPanel() {
 
           {hasRun && total === 0 && run.state !== "error" && (
             <span className="pg-ui-xs" data-preflight-clean>
-              No findings — the document exports cleanly.
+              {strings.t(M.clean)}
             </span>
           )}
         </div>
       </CockpitSection>
 
       <CockpitSection
-        title="Links"
+        title={strings.t(M.links)}
         right={
           <span className="pg-mono-meta">{links ? links.length : "—"}</span>
         }
@@ -216,12 +246,12 @@ export function PreflightPanel() {
           </div>
         ) : (
           <span className="pg-ui-xs">
-            {loaded ? "No placed links." : "Open a document to inspect links."}
+            {loaded ? strings.t(M.noLinks) : strings.t(M.openToInspectLinks)}
           </span>
         )}
       </CockpitSection>
 
-      <CockpitSection title="Images & bleed" defaultOpen={false}>
+      <CockpitSection title={strings.t(M.imagesBleed)} defaultOpen={false}>
         <ImagesCheck links={links} loaded={loaded} />
       </CockpitSection>
     </div>
@@ -244,20 +274,23 @@ function ImagesCheck({
   links: readonly LinkSummary[] | null;
   loaded: boolean;
 }) {
+  const strings = useStrings();
   if (!links || !loaded)
-    return (
-      <span className="pg-ui-xs">Open a document to check its images.</span>
-    );
+    return <span className="pg-ui-xs">{strings.t(M.openToCheckImages)}</span>;
   const measured = links.filter((l) => l.effectivePpi != null);
   const low = measured.filter((l) => (l.effectivePpi ?? 0) < LOW_RES_PPI);
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
       <span className="pg-ui-xs" data-preflight-ppi={low.length}>
         {measured.length === 0
-          ? "No placed image reports its resolution."
+          ? strings.t(M.noResolution)
           : low.length === 0
-            ? `Every placed image is at ${LOW_RES_PPI} ppi or more.`
-            : `${low.length} of ${measured.length} placed images below ${LOW_RES_PPI} ppi.`}
+            ? strings.t(M.allAbove, { ppi: LOW_RES_PPI })
+            : strings.t(M.someBelow, {
+                low: low.length,
+                total: measured.length,
+                ppi: LOW_RES_PPI,
+              })}
       </span>
       {low.map((l, i) => (
         <span
@@ -270,7 +303,7 @@ function ImagesCheck({
         </span>
       ))}
       <span className="pg-ui-xs" style={{ color: "var(--pg-muted-fg)" }}>
-        Bleed coverage is not checked yet.
+        {strings.t(M.bleedNotChecked)}
       </span>
     </div>
   );
@@ -324,6 +357,7 @@ function FindingGroup({
   tone: string;
   findings: PreflightFinding[];
 }) {
+  const strings = useStrings();
   return (
     <>
       <GroupKicker
@@ -342,7 +376,11 @@ function FindingGroup({
             data-finding-code={f.code}
             data-finding-page={hasPage ? f.pageIndex : undefined}
             disabled={!hasPage}
-            title={hasPage ? `Go to page ${f.pageIndex! + 1}` : f.code}
+            title={
+              hasPage
+                ? strings.t(M.goToPage, { page: f.pageIndex! + 1 })
+                : f.code
+            }
             onClick={
               hasPage ? () => navigateToPages([f.pageIndex!]) : undefined
             }
@@ -368,7 +406,9 @@ function FindingGroup({
               style={{ display: "flex", gap: 6, marginTop: 2 }}
             >
               <span>{f.code}</span>
-              {hasPage && <span>· page {f.pageIndex! + 1}</span>}
+              {hasPage && (
+                <span>· {strings.t(M.page, { page: f.pageIndex! + 1 })}</span>
+              )}
             </span>
           </button>
         );

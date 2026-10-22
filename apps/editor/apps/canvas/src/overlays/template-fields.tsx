@@ -41,6 +41,12 @@ import {
   type OverlayContribution,
   type OverlayProps,
 } from "@paged-media/shell";
+import { defineMessages, useStrings } from "@paged-media/strings";
+
+const M = defineMessages("app.overlaysTemplateFields", {
+  replaceLabel: "Replace {label}",
+  replace: "Replace…",
+});
 
 const IMAGE_TYPES = [
   ".jpg",
@@ -55,6 +61,7 @@ const IMAGE_TYPES = [
 
 function TemplateFieldsRender(props: OverlayProps): ReactElement | null {
   const role = useSessionRole();
+  const strings = useStrings();
   const client = useCanvasClient();
   const rows = useCollection<TemplateFieldSummary>("templateFields");
   const [geometry, setGeometry] = useState<readonly ElementGeometryItem[]>([]);
@@ -146,7 +153,7 @@ function TemplateFieldsRender(props: OverlayProps): ReactElement | null {
             <g
               data-template-field-replace={row.field.name}
               role="button"
-              aria-label={`Replace ${label}`}
+              aria-label={strings.t(M.replaceLabel, { label })}
               tabIndex={0}
               pointerEvents="all"
               style={{ cursor: "pointer" }}
@@ -173,7 +180,7 @@ function TemplateFieldsRender(props: OverlayProps): ReactElement | null {
                   fontFamily: "var(--font-sans)",
                 }}
               >
-                Replace…
+                {strings.t(M.replace)}
               </text>
             </g>
           ) : null}

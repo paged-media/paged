@@ -24,6 +24,16 @@
 
 import { ListRows, useCollection } from "@paged-media/shell";
 import type { HyperlinkSummary, PageSummary } from "@paged-media/client";
+import { defineMessages, t, useStrings } from "@paged-media/strings";
+
+const M = defineMessages("app.hyperlinksPanel", {
+  numbered: "Hyperlink {number}",
+  page: "Page {name}",
+  aPage: "A page",
+  aTextAnchor: "A text anchor",
+  loading: "Loading hyperlinks…",
+  empty: "No hyperlinks in this document.",
+});
 
 // R13 (ADR 254) — what a row says, in words. The destination is where
 // the link goes (its URL, or the page by its folio), never the
@@ -37,7 +47,7 @@ export function hyperlinkName(h: HyperlinkSummary, index: number): string {
   const named =
     h.name && h.name !== h.selfId && !h.name.startsWith("Hyperlink/");
   if (named) return h.name;
-  return h.destinationUrl ?? `Hyperlink ${index + 1}`;
+  return h.destinationUrl ?? t(M.numbered, { number: index + 1 });
 }
 
 export function hyperlinkDestination(
@@ -47,13 +57,14 @@ export function hyperlinkDestination(
   if (h.destinationUrl) return h.destinationUrl;
   if (h.destinationPage) {
     const page = pages?.find((p) => p.selfId === h.destinationPage);
-    return page ? `Page ${page.name ?? page.index}` : "A page";
+    return page ? t(M.page, { name: page.name ?? page.index }) : t(M.aPage);
   }
   // A text anchor: the summary names no place in words yet.
-  return h.destination ? "A text anchor" : undefined;
+  return h.destination ? t(M.aTextAnchor) : undefined;
 }
 
 export function HyperlinksPanel() {
+  const strings = useStrings();
   const items = useCollection<HyperlinkSummary>("hyperlinks");
   const pages = useCollection<PageSummary>("pages");
   if (items === null) {
@@ -62,7 +73,7 @@ export function HyperlinksPanel() {
         className="p-3 text-xs text-muted-foreground"
         data-hyperlinks-panel="loading"
       >
-        Loading hyperlinks…
+        {strings.t(M.loading)}
       </div>
     );
   }
@@ -73,7 +84,7 @@ export function HyperlinksPanel() {
           className="p-3 text-xs text-muted-foreground"
           data-empty-hyperlinks
         >
-          No hyperlinks in this document.
+          {strings.t(M.empty)}
         </div>
       ) : (
         <div data-hyperlink-list>

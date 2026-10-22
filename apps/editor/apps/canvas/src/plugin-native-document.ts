@@ -38,6 +38,7 @@
 //     user said so. Keeping it rejects with an `AbortError`.
 
 import type { CanvasClient } from "@paged-media/client";
+import { defineMessages, t } from "@paged-media/strings";
 import type { CreateBundleHostOptions } from "@paged-media/plugin-sdk";
 import {
   allowImportReplace,
@@ -46,6 +47,12 @@ import {
   importReplaceAllowed,
   replaceDeclinedError,
 } from "@paged-media/shell";
+
+const M = defineMessages("app.pluginNativeDocument", {
+  opening: "Opening {name}",
+  openingImported: "Opening the imported document",
+  importedDocument: "Imported document",
+});
 
 /** The injected backend the SDK's `host.nativeDocument` door forwards to. */
 type NativeDocumentBackend = NonNullable<
@@ -122,7 +129,7 @@ export function createEditorNativeDocumentBackend(
       if (!importReplaceAllowed()) {
         const name = currentImportName();
         const proceed = await confirmReplace(client, {
-          action: name ? `Opening ${name}` : "Opening the imported document",
+          action: name ? t(M.opening, { name }) : t(M.openingImported),
         });
         if (!proceed) throw replaceDeclinedError();
         allowImportReplace();
@@ -135,7 +142,7 @@ export function createEditorNativeDocumentBackend(
       // imported document cannot resolve still renders instead of
       // silently disappearing.
       if (openBytes) {
-        await openBytes(bytes, "Imported document");
+        await openBytes(bytes, t(M.importedDocument));
         return;
       }
       await client.loadDocument(bytes);

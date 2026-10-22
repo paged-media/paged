@@ -35,12 +35,23 @@ import {
 
 import { appCatalogRegistry } from "./catalog-registry";
 import { textFrameOptionsComposition } from "./text-frame-options.composition";
+import { defineMessages, useStrings } from "@paged-media/strings";
+
+const M = defineMessages("app.textFrameOptionsPanel", {
+  pageGrowth: "Page growth",
+  addPages: "Add pages as text overflows",
+  atMost: "At most (pages)",
+  copyFrameOptions: "Copy frame options",
+});
 
 export function TextFrameOptionsPanel() {
+  const strings = useStrings();
   return (
     <CatalogRegistryProvider registry={appCatalogRegistry()}>
       <div className="p-3" data-text-frame-options-panel="ready">
-        <CompositionRenderer composition={textFrameOptionsComposition} />
+        <CompositionRenderer
+          composition={textFrameOptionsComposition(strings)}
+        />
         <FlowGrowSection />
       </div>
     </CatalogRegistryProvider>
@@ -52,6 +63,7 @@ export function TextFrameOptionsPanel() {
  *  text frames show (or the caret's), as PropertyFields — all of them
  *  in one batch = one undo step, with "Bind to data…". */
 function FlowGrowSection() {
+  const strings = useStrings();
   const { elementGeometry } = useSelection();
   const { contentSelection } = useContentSelection();
   const fromFrames = elementGeometry
@@ -66,26 +78,26 @@ function FlowGrowSection() {
   const targets = key ? key.split(" ").map((id) => `story:${id}`) : [];
   if (!targets.length) return null;
   return (
-    <CockpitSection title="Page growth">
+    <CockpitSection title={strings.t(M.pageGrowth)}>
       <div
         className="flex flex-col gap-1.5 pb-2"
         data-flow-grow={targets.join(" ")}
       >
         <PropertyField
           path="flowGrow"
-          label="Add pages as text overflows"
+          label={strings.t(M.addPages)}
           targets={targets}
           schemaKind="story"
         />
         <PropertyField
           path="flowGrowMaxPages"
-          label="At most (pages)"
+          label={strings.t(M.atMost)}
           targets={targets}
           schemaKind="story"
         />
         <PropertyField
           path="flowGrowCopyFrameOptions"
-          label="Copy frame options"
+          label={strings.t(M.copyFrameOptions)}
           targets={targets}
           schemaKind="story"
         />

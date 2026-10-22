@@ -27,22 +27,46 @@
 
 import { useCollection, useDocumentMeta } from "@paged-media/shell";
 import { DOCUMENT_UNITS, useDocumentUnit } from "@paged-media/ui";
+import { defineMessages, useStrings, type Strings } from "@paged-media/strings";
+
+const M = defineMessages("app.infoPanel", {
+  page: "Page {number}",
+  loading: "Loading document info…",
+  document: "Document",
+  pages: "Pages",
+  activePage: "Active page",
+  units: "Units",
+  colorMode: "Color mode",
+  dirty: "Dirty",
+  yes: "yes",
+  no: "no",
+});
 
 /** "Page 3", not the page's IDML id. */
 function pageLabel(
+  strings: Strings,
   id: unknown,
   pages: ReadonlyArray<{ selfId?: string }> | null,
 ): string {
   if (!id) return "—";
   const i = pages?.findIndex((p) => p.selfId === String(id)) ?? -1;
-  return i >= 0 ? `Page ${i + 1}` : String(id);
+  return i >= 0 ? strings.t(M.page, { number: i + 1 }) : String(id);
 }
 
-function Row({ label, value }: { label: string; value: string }) {
+/** `row` names the row for tests (English); `label` is what it shows. */
+function Row({
+  row,
+  label,
+  value,
+}: {
+  row: string;
+  label: string;
+  value: string;
+}) {
   return (
     <div
       className="flex items-center justify-between gap-3 py-1.5 border-b border-input last:border-b-0"
-      data-info-row={label}
+      data-info-row={row}
     >
       <span className="text-xs text-muted-foreground">{label}</span>
       <span className="pg-value text-xs" data-info-value>
@@ -53,6 +77,7 @@ function Row({ label, value }: { label: string; value: string }) {
 }
 
 export function InfoPanel() {
+  const strings = useStrings();
   const meta = useDocumentMeta();
   const pages = useCollection<{ selfId?: string }>("pages");
   // The unit lengths are shown in (ADR 245), once there is a document.
@@ -64,18 +89,42 @@ export function InfoPanel() {
         className="p-3 text-xs text-muted-foreground"
         data-info-panel="loading"
       >
-        Loading document info…
+        {strings.t(M.loading)}
       </div>
     );
   }
   return (
     <div className="p-3 flex flex-col" data-info-panel="ready">
-      <Row label="Document" value={meta.documentName || "—"} />
-      <Row label="Pages" value={String(meta.pageCount)} />
-      <Row label="Active page" value={pageLabel(meta.activePage, pages)} />
-      <Row label="Units" value={meta.pageCount > 0 ? unitName : "—"} />
-      <Row label="Color mode" value={meta.colorMode || "—"} />
-      <Row label="Dirty" value={meta.dirty ? "yes" : "no"} />
+      <Row
+        row="Document"
+        label={strings.t(M.document)}
+        value={meta.documentName || "—"}
+      />
+      <Row
+        row="Pages"
+        label={strings.t(M.pages)}
+        value={String(meta.pageCount)}
+      />
+      <Row
+        row="Active page"
+        label={strings.t(M.activePage)}
+        value={pageLabel(strings, meta.activePage, pages)}
+      />
+      <Row
+        row="Units"
+        label={strings.t(M.units)}
+        value={meta.pageCount > 0 ? unitName : "—"}
+      />
+      <Row
+        row="Color mode"
+        label={strings.t(M.colorMode)}
+        value={meta.colorMode || "—"}
+      />
+      <Row
+        row="Dirty"
+        label={strings.t(M.dirty)}
+        value={meta.dirty ? strings.t(M.yes) : strings.t(M.no)}
+      />
     </div>
   );
 }

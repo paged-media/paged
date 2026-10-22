@@ -35,8 +35,17 @@ import {
   useCollection,
 } from "@paged-media/shell";
 import type { ConditionSetSummary } from "@paged-media/client";
+import { defineMessages, useStrings } from "@paged-media/strings";
+
+const M = defineMessages("app.conditionSetsPanel", {
+  apply: "Apply",
+  loading: "Loading condition sets…",
+  empty: "No condition sets in this document.",
+  conditions: "{count, plural, one {# condition} other {# conditions}}",
+});
 
 export function ConditionSetsPanel() {
+  const strings = useStrings();
   const client = useCanvasClient();
   const items = useCollection<ConditionSetSummary>("conditionSets");
   const [refused, setRefused] = useState<string | null>(null);
@@ -53,7 +62,7 @@ export function ConditionSetsPanel() {
     setRefused(
       reply.kind === "mutationApplied"
         ? null
-        : refusalText(reply.payload?.error ?? reply.kind, "Apply"),
+        : refusalText(reply.payload?.error ?? reply.kind, strings.t(M.apply)),
     );
   };
   if (items === null) {
@@ -62,7 +71,7 @@ export function ConditionSetsPanel() {
         className="p-3 text-xs text-muted-foreground"
         data-condition-sets-panel="loading"
       >
-        Loading condition sets…
+        {strings.t(M.loading)}
       </div>
     );
   }
@@ -73,7 +82,7 @@ export function ConditionSetsPanel() {
           className="p-3 text-xs text-muted-foreground"
           data-empty-condition-sets
         >
-          No condition sets in this document.
+          {strings.t(M.empty)}
         </div>
       ) : (
         <div data-condition-set-list>
@@ -82,16 +91,16 @@ export function ConditionSetsPanel() {
               key: set.selfId,
               icon: "panel-condition-sets",
               primary: set.name,
-              secondary: `${set.conditions.length} condition${
-                set.conditions.length === 1 ? "" : "s"
-              }`,
+              secondary: strings.t(M.conditions, {
+                count: set.conditions.length,
+              }),
               trail: (
                 <CockpitBtn
                   sm
                   tone="soft"
                   onClick={() => void apply(set.selfId)}
                 >
-                  Apply
+                  {strings.t(M.apply)}
                 </CockpitBtn>
               ),
             }))}

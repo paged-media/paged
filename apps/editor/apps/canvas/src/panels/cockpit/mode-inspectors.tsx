@@ -37,6 +37,40 @@ import {
 } from "@paged-media/shell";
 import type { FontSummary, LinkSummary } from "@paged-media/client";
 import { formatLength, useDocumentUnit } from "@paged-media/ui";
+import { defineMessages, useStrings } from "@paged-media/strings";
+
+const M = defineMessages("app.cockpitModeInspectors", {
+  story: "Story",
+  stories: "{count, plural, one {# story} other {# stories}}",
+  storySoon: "Story status coming soon",
+  storyBody:
+    "Words, overset risk, language expansion and approval state land with " +
+    "the engine's stories collection and the collaboration backend.",
+  cmyk: "CMYK working space active",
+  fonts: "All fonts available",
+  ok: "ok",
+  missing: "{count} missing",
+  links: "All links present",
+  ppi: "Images ≥ {ppi} PPI",
+  lowRes: "{count} low-res",
+  unknown: "{count} unknown",
+  bleed: "Bleed {length}",
+  title: "Output readiness",
+  x4Ready: "PDF/X-4 ready",
+  notReady: "Not ready",
+  unverified: "Unverified",
+  checklist: "PDF/X-4 checklist",
+  color: "Color",
+  colorBody:
+    "Profile, rendering intent and ink limits read from the document's " +
+    "color settings — see the Color settings panel.",
+  soon: "soon",
+  review: "Review",
+  approvalsSoon: "Approvals coming soon",
+  approvalsBody:
+    "Approve, request changes and version compare land with the " +
+    "collaboration backend.",
+});
 
 /** Low-res convention shared with Preflight/Health — placements below
  *  this effective PPI warn (the editor's "warn, not fail" floor). */
@@ -53,6 +87,7 @@ const VECTOR_PLACEMENT = /\.(pdf|ai|eps|svg)$/i;
  *  per-story words/risk/approval await the stories collection +
  *  collaboration backend. */
 export function StoryInspectorPanel(_props: PanelProps) {
+  const strings = useStrings();
   const stats = useDocumentStats();
   return (
     <div
@@ -60,16 +95,17 @@ export function StoryInspectorPanel(_props: PanelProps) {
       style={{ overflowY: "auto", height: "100%" }}
     >
       <CockpitPanelHeader
-        title="Story"
+        title={strings.t(M.story)}
         action={
           stats ? (
-            <span className="pg-mono-meta">{stats.stories} stories</span>
+            <span className="pg-mono-meta">
+              {strings.t(M.stories, { count: stats.stories })}
+            </span>
           ) : undefined
         }
       />
-      <ComingSoon icon="panel-paragraph" title="Story status coming soon">
-        Words, overset risk, language expansion and approval state land with the
-        engine's stories collection and the collaboration backend.
+      <ComingSoon icon="panel-paragraph" title={strings.t(M.storySoon)}>
+        {strings.t(M.storyBody)}
       </ComingSoon>
     </div>
   );
@@ -96,6 +132,7 @@ interface ReadinessCheck {
  *  (`LinkSummary.status` / `.effectivePpi`). Bleed stays an HONEST
  *  seam until the engine grows a bleed-coverage accessor. */
 export function OutputReadinessPanel(_props: PanelProps) {
+  const strings = useStrings();
   const unit = useDocumentUnit();
   const meta = useDocumentMeta();
   const fonts = useCollection<FontSummary>("fonts");
@@ -131,35 +168,35 @@ export function OutputReadinessPanel(_props: PanelProps) {
   const checks: ReadinessCheck[] = [
     {
       key: "cmyk",
-      label: "CMYK working space active",
+      label: strings.t(M.cmyk),
       pass: loaded ? print.profileActive : null,
       detail: loaded ? workingProfileLabel(print) : undefined,
     },
     {
       key: "fonts",
-      label: "All fonts available",
+      label: strings.t(M.fonts),
       pass: missingFonts == null ? null : missingFonts === 0,
       detail:
         missingFonts == null
           ? undefined
           : missingFonts === 0
-            ? "ok"
-            : `${missingFonts} missing`,
+            ? strings.t(M.ok)
+            : strings.t(M.missing, { count: missingFonts }),
     },
     {
       key: "links",
-      label: "All links present",
+      label: strings.t(M.links),
       pass: missingLinks == null ? null : missingLinks === 0,
       detail:
         missingLinks == null
           ? undefined
           : missingLinks === 0
-            ? "ok"
-            : `${missingLinks} missing`,
+            ? strings.t(M.ok)
+            : strings.t(M.missing, { count: missingLinks }),
     },
     {
       key: "ppi",
-      label: `Images ≥ ${LOW_RES_PPI} PPI`,
+      label: strings.t(M.ppi, { ppi: LOW_RES_PPI }),
       pass:
         lowRes == null || ppiUnknown == null
           ? null
@@ -172,15 +209,15 @@ export function OutputReadinessPanel(_props: PanelProps) {
         lowRes == null || ppiUnknown == null
           ? undefined
           : lowRes > 0
-            ? `${lowRes} low-res`
+            ? strings.t(M.lowRes, { count: lowRes })
             : ppiUnknown > 0
-              ? `${ppiUnknown} unknown`
-              : "ok",
+              ? strings.t(M.unknown, { count: ppiUnknown })
+              : strings.t(M.ok),
     },
     // HONEST seam — no bleed-coverage accessor on the wire yet.
     {
       key: "bleed",
-      label: `Bleed ${formatLength(BLEED_PT, unit)}`,
+      label: strings.t(M.bleed, { length: formatLength(BLEED_PT, unit) }),
       pass: null,
     },
   ];
@@ -198,27 +235,30 @@ export function OutputReadinessPanel(_props: PanelProps) {
       style={{ overflowY: "auto", height: "100%" }}
     >
       <CockpitPanelHeader
-        title="Output readiness"
+        title={strings.t(M.title)}
         action={
           loaded ? (
             <StatusPill
               tone={allPass ? "ready" : anyFail ? "warn" : "info"}
               testId="readiness-x4"
             >
-              {allPass ? "PDF/X-4 ready" : anyFail ? "Not ready" : "Unverified"}
+              {allPass
+                ? strings.t(M.x4Ready)
+                : anyFail
+                  ? strings.t(M.notReady)
+                  : strings.t(M.unverified)}
             </StatusPill>
           ) : undefined
         }
       />
-      <CockpitSection title="PDF/X-4 checklist">
+      <CockpitSection title={strings.t(M.checklist)}>
         {checks.map((c) => (
           <ReadinessRow key={c.key} check={c} />
         ))}
       </CockpitSection>
-      <CockpitSection title="Color" defaultOpen={false}>
+      <CockpitSection title={strings.t(M.color)} defaultOpen={false}>
         <span className="pg-ui-xs" style={{ lineHeight: 1.45 }}>
-          Profile, rendering intent and ink limits read from the document's
-          color settings — see the Color settings panel.
+          {strings.t(M.colorBody)}
         </span>
       </CockpitSection>
     </div>
@@ -226,6 +266,7 @@ export function OutputReadinessPanel(_props: PanelProps) {
 }
 
 function ReadinessRow({ check }: { check: ReadinessCheck }) {
+  const strings = useStrings();
   const seam = check.pass == null;
   const unknown = check.pass === "unknown";
   return (
@@ -271,7 +312,7 @@ function ReadinessRow({ check }: { check: ReadinessCheck }) {
         {check.label}
       </span>
       <span className="pg-mono-meta" style={{ marginLeft: "auto" }}>
-        {seam ? "soon" : (check.detail ?? "")}
+        {seam ? strings.t(M.soon) : (check.detail ?? "")}
       </span>
     </div>
   );
@@ -280,15 +321,15 @@ function ReadinessRow({ check }: { check: ReadinessCheck }) {
 /** Review mode — approval inspector. Approvals + version history
  *  await the collaboration backend. */
 export function ReviewInspectorPanel(_props: PanelProps) {
+  const strings = useStrings();
   return (
     <div
       data-review-inspector-panel
       style={{ overflowY: "auto", height: "100%" }}
     >
-      <CockpitPanelHeader title="Review" />
-      <ComingSoon icon="ui-pin" title="Approvals coming soon">
-        Approve, request changes and version compare land with the collaboration
-        backend.
+      <CockpitPanelHeader title={strings.t(M.review)} />
+      <ComingSoon icon="ui-pin" title={strings.t(M.approvalsSoon)}>
+        {strings.t(M.approvalsBody)}
       </ComingSoon>
     </div>
   );

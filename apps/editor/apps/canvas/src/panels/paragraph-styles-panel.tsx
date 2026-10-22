@@ -29,9 +29,16 @@
 
 import { useObjectField } from "@paged-media/shell";
 
+import { defineMessages, useStrings } from "@paged-media/strings";
+
 import { StyleApplyPanel } from "./style-apply";
 
+const M = defineMessages("app.paragraphStylesPanel", {
+  newStyle: "New paragraph style",
+});
+
 export function ParagraphStylesPanel() {
+  const strings = useStrings();
   // ADR 323 — the applied style is an object-model field on the selection.
   const applied = useObjectField({
     path: "appliedParagraphStyle",
@@ -47,7 +54,7 @@ export function ParagraphStylesPanel() {
         testId="paragraph-styles"
         createOp="createParagraphStyle"
         deleteOp="deleteParagraphStyle"
-        newName="New paragraph style"
+        newName={strings.t(M.newStyle)}
       />
     </div>
   );

@@ -118,6 +118,13 @@ import {
 import type { ElementId, LayerSummary, Mutation } from "@paged-media/client";
 import type { ShellObjectOp } from "@paged-media/shell";
 
+import {
+  defineMessages,
+  t,
+  useStrings,
+  type Strings,
+} from "@paged-media/strings";
+
 import { appCatalogRegistry } from "./catalog-registry";
 import { layerAddress } from "../object-model";
 
@@ -150,9 +157,42 @@ const CAN_ASSIGN_BINDING = "paged.layers.canAssignSelection";
 // same reason the schema-tree demo panel holds its surface here.
 const layersBindings = createLocalBindingsSurface();
 
-const LAYERS_SCHEMA: ShellPanelSchema = {
-  id: LAYERS_PANEL_ID,
+const M = defineMessages("app.layersPanel", {
   title: "Layers",
+  hide: "Hide",
+  show: "Show",
+  unlock: "Unlock",
+  lock: "Lock",
+  moveSelectionHere: "Move selection here",
+  printable: "Printable",
+  notPrintable: "Not printable",
+  delete: "Delete",
+  moveLayer: "Move layer",
+  renameLayer: "Rename layer",
+  showOrHide: "Show or hide layer",
+  moveSelectionToLayer: "Move the selection to this layer",
+  printableToggle: "Include or exclude this layer when printing",
+  lockOrUnlock: "Lock or unlock layer",
+  deleteLayer: "Delete layer",
+  newLayer: "New layer",
+  defaultName: "Layer",
+  document: "Document",
+  layerOptions: "Layer Options",
+  name: "Name",
+  showLayer: "Show layer",
+  lockLayer: "Lock layer",
+  printLayer: "Print layer",
+  selectionOn: "Selection on",
+});
+
+// The category its commands register under stays English (an identity);
+// the shell shows it through `commandCategory.<category>`.
+defineMessages("commandCategory", { Layers: "Layers" });
+
+/** The panel's schema, in the editor's words. */
+const layersSchema = (strings: Strings): ShellPanelSchema => ({
+  id: LAYERS_PANEL_ID,
+  title: strings.t(M.title),
   sections: [
     {
       rows: [
@@ -193,8 +233,8 @@ const LAYERS_SCHEMA: ShellPanelSchema = {
                 // the toggles worked and showed nothing, and a row said
                 // `Layer 1 [Hide/show] [Lock/unlock]` whether the layer
                 // was visible or hidden.
-                label: "Hide",
-                state: { field: "visible", labelWhenOff: "Show" },
+                label: strings.t(M.hide),
+                state: { field: "visible", labelWhenOff: strings.t(M.show) },
                 // PN-358: glyphs, as InDesign's Layers panel draws them, so
                 // four toggles leave the name its column.
                 icon: "ui-eye",
@@ -206,8 +246,8 @@ const LAYERS_SCHEMA: ShellPanelSchema = {
                 enabled: { bind: CAN_TOGGLE_VISIBLE_BINDING },
               },
               {
-                label: "Unlock",
-                state: { field: "locked", labelWhenOff: "Lock" },
+                label: strings.t(M.unlock),
+                state: { field: "locked", labelWhenOff: strings.t(M.lock) },
                 icon: "ui-lock",
                 iconWhenOff: "ui-unlock",
                 action: {
@@ -231,7 +271,7 @@ const LAYERS_SCHEMA: ShellPanelSchema = {
                 // read back out of that seam — which the module header
                 // argues against at length. Sending the selection to a
                 // layer is the verb a designer actually reaches for.
-                label: "Move selection here",
+                label: strings.t(M.moveSelectionHere),
                 icon: "ui-target",
                 action: {
                   kind: "command",
@@ -242,8 +282,11 @@ const LAYERS_SCHEMA: ShellPanelSchema = {
               {
                 // `layerSetPrintable` is capability-verified on the wire
                 // and was simply absent from this panel.
-                label: "Printable",
-                state: { field: "printable", labelWhenOff: "Not printable" },
+                label: strings.t(M.printable),
+                state: {
+                  field: "printable",
+                  labelWhenOff: strings.t(M.notPrintable),
+                },
                 icon: "ui-print",
                 iconWhenOff: "ui-minus",
                 action: {
@@ -252,7 +295,7 @@ const LAYERS_SCHEMA: ShellPanelSchema = {
                 },
               },
               {
-                label: "Delete",
+                label: strings.t(M.delete),
                 action: { kind: "command", command: LAYERS_REMOVE_COMMAND },
               },
             ],
@@ -261,7 +304,7 @@ const LAYERS_SCHEMA: ShellPanelSchema = {
       ],
     },
   ],
-};
+});
 
 /** A row as the panel reads it. Structurally `LayerSummary` — the
  *  vocabulary rule means a PROVIDER's rows carry the same shape, which
@@ -272,6 +315,7 @@ type LayerRow = LayerSummary;
 type PanelProps = any;
 
 export function LayersPanel(_: PanelProps) {
+  const strings = useStrings();
   const registries = useRegistries();
   const mutate = useProviderFirstMutate();
   // The rows THE PANEL IS SHOWING, whoever answered. The commands read
@@ -356,7 +400,7 @@ export function LayersPanel(_: PanelProps) {
     const defs = [
       {
         id: LAYERS_REORDER_COMMAND,
-        title: "Move layer",
+        title: t(M.moveLayer),
         run: (payload?: unknown) => {
           const p = payload as ShellSchemaReorderPayload | undefined;
           if (!p || typeof p.id !== "string") return;
@@ -375,7 +419,7 @@ export function LayersPanel(_: PanelProps) {
       },
       {
         id: LAYERS_RENAME_COMMAND,
-        title: "Rename layer",
+        title: t(M.renameLayer),
         run: (payload?: unknown) => {
           const p = payload as ShellSchemaRenamePayload | undefined;
           if (!p || typeof p.id !== "string" || typeof p.name !== "string") {
@@ -400,7 +444,7 @@ export function LayersPanel(_: PanelProps) {
       },
       {
         id: LAYERS_TOGGLE_VISIBLE_COMMAND,
-        title: "Show or hide layer",
+        title: t(M.showOrHide),
         run: (payload?: unknown) => {
           const row =
             typeof payload === "string" ? rowById(payload) : undefined;
@@ -424,7 +468,7 @@ export function LayersPanel(_: PanelProps) {
       },
       {
         id: LAYERS_ASSIGN_SELECTION_COMMAND,
-        title: "Move the selection to this layer",
+        title: t(M.moveSelectionToLayer),
         run: (payload?: unknown) => {
           const row =
             typeof payload === "string" ? rowById(payload) : undefined;
@@ -462,7 +506,7 @@ export function LayersPanel(_: PanelProps) {
       },
       {
         id: LAYERS_TOGGLE_PRINTABLE_COMMAND,
-        title: "Include or exclude this layer when printing",
+        title: t(M.printableToggle),
         run: (payload?: unknown) => {
           const row =
             typeof payload === "string" ? rowById(payload) : undefined;
@@ -486,7 +530,7 @@ export function LayersPanel(_: PanelProps) {
       },
       {
         id: LAYERS_TOGGLE_LOCKED_COMMAND,
-        title: "Lock or unlock layer",
+        title: t(M.lockOrUnlock),
         run: (payload?: unknown) => {
           const row =
             typeof payload === "string" ? rowById(payload) : undefined;
@@ -510,7 +554,7 @@ export function LayersPanel(_: PanelProps) {
       },
       {
         id: LAYERS_REMOVE_COMMAND,
-        title: "Delete layer",
+        title: t(M.deleteLayer),
         run: (payload?: unknown) => {
           if (typeof payload !== "string") return;
           return run(
@@ -522,7 +566,7 @@ export function LayersPanel(_: PanelProps) {
       },
       {
         id: LAYERS_ADD_COMMAND,
-        title: "New layer",
+        title: t(M.newLayer),
         run: () =>
           run(
             {
@@ -532,7 +576,7 @@ export function LayersPanel(_: PanelProps) {
               // the current layer; matching that needs a selection-aware
               // insert and is a separate change — this keeps the old
               // panel's behaviour rather than quietly altering it.
-              args: { position: 0, name: "Layer" },
+              args: { position: 0, name: t(M.defaultName) },
             } as Mutation,
             "layerInsert",
           ),
@@ -575,7 +619,7 @@ export function LayersPanel(_: PanelProps) {
             user is told which content type they are looking at, and no
             code reads it. */}
         <span className="pg-ui-xs px-1" style={{ color: "var(--pg-muted-fg)" }}>
-          {ownerNote ?? "Document"}
+          {ownerNote ?? strings.t(M.document)}
         </span>
         <button
           type="button"
@@ -583,13 +627,16 @@ export function LayersPanel(_: PanelProps) {
           data-action="add-layer"
           onClick={onAdd}
         >
-          New layer
+          {strings.t(M.newLayer)}
         </button>
       </div>
       {/* The seam host is already in context (PagedShell publishes it
           above the dock); only the CATALOG registry is panel-local. */}
       <CatalogRegistryProvider registry={appCatalogRegistry()}>
-        <SchemaPanelRenderer schema={LAYERS_SCHEMA} bindings={layersBindings} />
+        <SchemaPanelRenderer
+          schema={layersSchema(strings)}
+          bindings={layersBindings}
+        />
       </CatalogRegistryProvider>
       {!provider && rows && rows.length > 0 && <LayerOptions rows={rows} />}
     </div>
@@ -601,19 +648,20 @@ export function LayersPanel(_: PanelProps) {
 // + badge), and the selection's layer (`itemLayer`, one batch over the
 // selected items).
 const LAYER_OPTION_FIELDS: ReadonlyArray<{ path: string; label: string }> = [
-  { path: "layerName", label: "Name" },
-  { path: "layerVisible", label: "Show layer" },
-  { path: "layerLocked", label: "Lock layer" },
-  { path: "layerPrintable", label: "Print layer" },
+  { path: "layerName", label: M.name },
+  { path: "layerVisible", label: M.showLayer },
+  { path: "layerLocked", label: M.lockLayer },
+  { path: "layerPrintable", label: M.printLayer },
 ];
 
 function LayerOptions({ rows }: { rows: readonly LayerRow[] }) {
+  const strings = useStrings();
   const [pick, setPick] = useState("");
   const id = rows.some((r) => r.selfId === pick) ? pick : rows[0]!.selfId;
   const address = layerAddress(id);
   const targets = [address];
   return (
-    <CockpitSection title="Layer Options" defaultOpen={false}>
+    <CockpitSection title={strings.t(M.layerOptions)} defaultOpen={false}>
       <div className="flex flex-col gap-1.5 pb-2" data-layer-options={address}>
         <select
           data-layer-options-select=""
@@ -631,14 +679,14 @@ function LayerOptions({ rows }: { rows: readonly LayerRow[] }) {
           <PropertyField
             key={f.path}
             path={f.path}
-            label={f.label}
+            label={strings.t(f.label)}
             targets={targets}
             schemaKind={address}
           />
         ))}
         <PropertyField
           path="itemLayer"
-          label="Selection on"
+          label={strings.t(M.selectionOn)}
           style="collection"
           collection="layers"
         />

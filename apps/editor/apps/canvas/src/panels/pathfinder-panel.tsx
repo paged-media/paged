@@ -56,6 +56,7 @@ import { useCanvasClient, useSelection, Icon } from "@paged-media/shell";
 
 import { CoreCommandButton } from "../core-command-dialog";
 import { CORE_COMMAND_ENTRIES } from "../core-command-entries";
+import { defineMessages, useStrings } from "@paged-media/strings";
 import { KitSelect } from "@paged-media/ui";
 import type {
   ElementId,
@@ -94,32 +95,67 @@ interface RegionDef {
   hint: string;
 }
 
+const M = defineMessages("app.pathfinderPanel", {
+  union: "Union",
+  unionHint: "Combine paths (Union)",
+  intersect: "Intersect",
+  intersectHint: "Keep overlap (Intersect)",
+  subtract: "Subtract",
+  subtractHint: "Top minus rest (Subtract)",
+  exclude: "Exclude",
+  excludeHint: "Symmetric difference (Exclude)",
+  divide: "Divide",
+  divideHint: "Every overlapping area becomes its own object (Divide)",
+  trim: "Trim",
+  trimHint: "Clip each object to the part nothing above it covers (Trim)",
+  merge: "Merge",
+  mergeHint: "Trim, then combine objects that share a fill (Merge)",
+  crop: "Crop",
+  cropHint: "Keep only what falls inside the frontmost object (Crop)",
+  outline: "Outline",
+  outlineHint: "Turn fills into stroked lines along every edge (Outline)",
+  minusBack: "Minus back",
+  minusBackHint: "The frontmost object minus everything behind it (Minus back)",
+  toRectangle: "Convert to rectangle",
+  toEllipse: "Convert to ellipse",
+  toPolygon: "Convert to polygon",
+  toLine: "Convert to line",
+  seam: "{hint} — awaiting engine support",
+  shapeModes: "Shape modes",
+  pathfinders: "Pathfinders",
+  selectTwo: "Select 2 or more frames to combine.",
+  paths: "Paths",
+  convertShape: "Convert shape",
+  corner: "Corner",
+  cornerSample: "Rounded · 4 pt",
+});
+
 // Icon + 9.5px label tiles in the deep1 3×2 grid (glyph stand-ins
-// from the existing registry).
+// from the existing registry). `label` and `hint` are message keys.
 const BUTTONS: ButtonDef[] = [
   {
     kind: "union",
     icon: "panel-pathfinder",
-    label: "Union",
-    hint: "Combine paths (Union)",
+    label: M.union,
+    hint: M.unionHint,
   },
   {
     kind: "intersect",
     icon: "tool-ellipse",
-    label: "Intersect",
-    hint: "Keep overlap (Intersect)",
+    label: M.intersect,
+    hint: M.intersectHint,
   },
   {
     kind: "subtract",
     icon: "tool-erase",
-    label: "Subtract",
-    hint: "Top minus rest (Subtract)",
+    label: M.subtract,
+    hint: M.subtractHint,
   },
   {
     kind: "exclude",
     icon: "tool-scissors",
-    label: "Exclude",
-    hint: "Symmetric difference (Exclude)",
+    label: M.exclude,
+    hint: M.excludeHint,
   },
 ];
 
@@ -127,46 +163,46 @@ const REGION_BUTTONS: RegionDef[] = [
   {
     verb: "pathfinderDivide",
     icon: "ui-grid",
-    label: "Divide",
-    hint: "Every overlapping area becomes its own object (Divide)",
+    label: M.divide,
+    hint: M.divideHint,
   },
   {
     verb: "pathfinderTrim",
     icon: "tool-scissors",
-    label: "Trim",
-    hint: "Clip each object to the part nothing above it covers (Trim)",
+    label: M.trim,
+    hint: M.trimHint,
   },
   {
     verb: "pathfinderMerge",
     icon: "ui-component",
-    label: "Merge",
-    hint: "Trim, then combine objects that share a fill (Merge)",
+    label: M.merge,
+    hint: M.mergeHint,
   },
   {
     verb: "pathfinderCrop",
     icon: "tool-crop",
-    label: "Crop",
-    hint: "Keep only what falls inside the frontmost object (Crop)",
+    label: M.crop,
+    hint: M.cropHint,
   },
   {
     verb: "pathfinderOutline",
     icon: "panel-outline",
-    label: "Outline",
-    hint: "Turn fills into stroked lines along every edge (Outline)",
+    label: M.outline,
+    hint: M.outlineHint,
   },
   {
     verb: "pathfinderMinusBack",
     icon: "tool-marquee-rect",
-    label: "Minus back",
-    hint: "The frontmost object minus everything behind it (Minus back)",
+    label: M.minusBack,
+    hint: M.minusBackHint,
   },
 ];
 
 const SHAPES = [
-  { icon: "tool-rectangle", hint: "Convert to rectangle" },
-  { icon: "tool-ellipse", hint: "Convert to ellipse" },
-  { icon: "tool-polygon", hint: "Convert to polygon" },
-  { icon: "tool-line", hint: "Convert to line" },
+  { icon: "tool-rectangle", hint: M.toRectangle },
+  { icon: "tool-ellipse", hint: M.toEllipse },
+  { icon: "tool-polygon", hint: M.toPolygon },
+  { icon: "tool-line", hint: M.toLine },
 ];
 
 const TILE_CLASS =
@@ -222,6 +258,7 @@ const PATH_ENTRIES = CORE_COMMAND_ENTRIES.filter(
 );
 
 export function PathfinderPanel() {
+  const strings = useStrings();
   const client = useCanvasClient();
   const { elementSelection } = useSelection();
   const [status, setStatus] = useState<string | null>(null);
@@ -259,11 +296,11 @@ export function PathfinderPanel() {
 
   return (
     <div className="p-3 flex flex-col gap-2" data-pathfinder-panel="ready">
-      <div className="pg-label">Shape modes</div>
+      <div className="pg-label">{strings.t(M.shapeModes)}</div>
       <div
         className="grid grid-cols-4 gap-[6px]"
         role="group"
-        aria-label="Shape modes"
+        aria-label={strings.t(M.shapeModes)}
       >
         {BUTTONS.map((btn) => (
           <button
@@ -271,10 +308,10 @@ export function PathfinderPanel() {
             key={btn.kind}
             data-pathfinder-kind={btn.kind}
             disabled={!enabled}
-            title={btn.hint}
+            title={strings.t(btn.hint)}
             className={TILE_CLASS}
             onClick={() => {
-              void run(btn.kind, btn.label);
+              void run(btn.kind, strings.t(btn.label));
             }}
           >
             <Icon
@@ -283,16 +320,16 @@ export function PathfinderPanel() {
               style={{ color: "var(--pg-muted-fg)" }}
             />
             <span className="text-[9.5px]" style={{ color: "var(--pg-fg)" }}>
-              {btn.label}
+              {strings.t(btn.label)}
             </span>
           </button>
         ))}
       </div>
-      <div className="pg-label pt-1">Pathfinders</div>
+      <div className="pg-label pt-1">{strings.t(M.pathfinders)}</div>
       <div
         className="grid grid-cols-3 gap-[6px]"
         role="group"
-        aria-label="Pathfinders"
+        aria-label={strings.t(M.pathfinders)}
       >
         {REGION_BUTTONS.map((btn) => (
           <button
@@ -300,10 +337,10 @@ export function PathfinderPanel() {
             key={btn.verb}
             data-pathfinder-verb={btn.verb}
             disabled={!enabled}
-            title={btn.hint}
+            title={strings.t(btn.hint)}
             className={TILE_CLASS}
             onClick={() => {
-              void runRegion(btn.verb, btn.label);
+              void runRegion(btn.verb, strings.t(btn.label));
             }}
           >
             <Icon
@@ -312,14 +349,14 @@ export function PathfinderPanel() {
               style={{ color: "var(--pg-muted-fg)" }}
             />
             <span className="text-[9.5px]" style={{ color: "var(--pg-fg)" }}>
-              {btn.label}
+              {strings.t(btn.label)}
             </span>
           </button>
         ))}
       </div>
       {enabled ? null : (
         <div className="text-xs text-muted-foreground" data-pathfinder-hint>
-          Select 2 or more frames to combine.
+          {strings.t(M.selectTwo)}
         </div>
       )}
       <StatusLine tone="warn" attr="data-pathfinder-error">
@@ -329,7 +366,9 @@ export function PathfinderPanel() {
           edits, close / join, outline stroke, offset, faces, type on a
           path, opacity masks, step and repeat. Each opens the generated
           form prefilled from the selection; Run = one undo step. */}
-      <div className="pg-label pt-2 border-t border-input">Paths</div>
+      <div className="pg-label pt-2 border-t border-input">
+        {strings.t(M.paths)}
+      </div>
       <div className="flex flex-wrap gap-[5px]" data-path-commands="">
         {PATH_ENTRIES.map((e) => (
           <CoreCommandButton
@@ -344,7 +383,9 @@ export function PathfinderPanel() {
         ))}
       </div>
       {/* Engine gap — no convert-shape / corner-option Operations. */}
-      <div className="pg-label pt-2 border-t border-input">Convert shape</div>
+      <div className="pg-label pt-2 border-t border-input">
+        {strings.t(M.convertShape)}
+      </div>
       <div className="flex gap-[5px]" data-convert-shape-seam>
         {SHAPES.map((s) => (
           <button
@@ -352,7 +393,7 @@ export function PathfinderPanel() {
             type="button"
             disabled
             data-seam
-            title={`${s.hint} — awaiting engine support`}
+            title={strings.t(M.seam, { hint: strings.t(s.hint) })}
             className="w-[34px] h-[30px] rounded-[6px] border border-input bg-background text-muted-foreground opacity-55 flex items-center justify-center"
           >
             <Icon name={s.icon} size={16} />
@@ -360,9 +401,17 @@ export function PathfinderPanel() {
         ))}
       </div>
       <div className="grid grid-cols-[84px_1fr] items-center gap-2">
-        <span className="text-xs text-muted-foreground">Corner</span>
-        <KitSelect aria-label="Corner" value="" soft disabled data-seam>
-          <option value="">Rounded · 4 pt</option>
+        <span className="text-xs text-muted-foreground">
+          {strings.t(M.corner)}
+        </span>
+        <KitSelect
+          aria-label={strings.t(M.corner)}
+          value=""
+          soft
+          disabled
+          data-seam
+        >
+          <option value="">{strings.t(M.cornerSample)}</option>
         </KitSelect>
       </div>
     </div>

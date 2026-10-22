@@ -42,6 +42,72 @@ import type {
   KeybindingContribution,
   MenuItemContribution,
 } from "@paged-media/shell";
+import { defineMessages, t } from "@paged-media/strings";
+
+const M = defineMessages("app.appCommands", {
+  undo: "Undo",
+  redo: "Redo",
+  openPdf: "Open PDF…",
+  saveAsIdml: "Save As IDML…",
+  savePaged: "Save (.paged)",
+  zoomIn: "Zoom in",
+  zoomOut: "Zoom out",
+  zoom100: "Zoom to 100%",
+  zoomFit: "Fit document",
+  fitPage: "Fit page in window",
+  fitSpread: "Fit spread in window",
+  fitSelection: "Fit selection in window",
+  firstPage: "First page",
+  previousPage: "Previous page",
+  nextPage: "Next page",
+  lastPage: "Last page",
+  showTextThreads: "Show text threads",
+  snapToPoints: "Snap to points",
+  showHeadingAnchors: "Show heading anchors",
+  docs: "Documentation",
+  idmlReference: "IDML format reference",
+  reportIssue: "Report an issue…",
+  undoNamed: "Undo {name}",
+  redoNamed: "Redo {name}",
+  about: "paged editor · engine {version}",
+});
+
+// The words of this file's menu rows; the shell's menu bar shows each
+// path segment through them (`menu.<segment>`).
+defineMessages("menu", {
+  About: "About",
+  "Open PDF…": "Open PDF…",
+  "Save (.paged)": "Save (.paged)",
+  "Save As IDML…": "Save As IDML…",
+  Undo: "Undo",
+  Redo: "Redo",
+  "Zoom in": "Zoom in",
+  "Zoom out": "Zoom out",
+  "Zoom to 100%": "Zoom to 100%",
+  "Fit page in window": "Fit page in window",
+  "Fit spread in window": "Fit spread in window",
+  "Fit selection in window": "Fit selection in window",
+  "Fit document": "Fit document",
+  "First page": "First page",
+  "Previous page": "Previous page",
+  "Next page": "Next page",
+  "Last page": "Last page",
+  "Show text threads": "Show text threads",
+  "Snap to points": "Snap to points",
+  "Show heading anchors": "Show heading anchors",
+  Documentation: "Documentation",
+  "IDML format reference": "IDML format reference",
+  "Report an issue…": "Report an issue…",
+});
+
+// The palette categories of this file's commands (`commandCategory.<name>`).
+defineMessages("commandCategory", {
+  Edit: "Edit",
+  File: "File",
+  Help: "Help",
+  Layout: "Layout",
+  View: "View",
+});
 
 export const PAGED_EDITOR_UNDO = "paged.editor.undo";
 export const PAGED_EDITOR_REDO = "paged.editor.redo";
@@ -75,6 +141,7 @@ const HELP_LINKS = [
   {
     id: "paged.help.docs",
     title: "Documentation",
+    label: M.docs,
     url: "https://docs.paged.media/",
     icon: "ui-doc",
     order: 10,
@@ -82,6 +149,7 @@ const HELP_LINKS = [
   {
     id: "paged.help.idmlReference",
     title: "IDML format reference",
+    label: M.idmlReference,
     url: "https://idml.paged.media/",
     icon: "ui-component",
     order: 11,
@@ -89,6 +157,7 @@ const HELP_LINKS = [
   {
     id: "paged.help.reportIssue",
     title: "Report an issue…",
+    label: M.reportIssue,
     url: "https://github.com/paged-media/paged/issues/new",
     icon: "ui-warn",
     order: 30,
@@ -165,7 +234,7 @@ function undoOwnerLabel(state: unknown, which: "undo" | "redo"): string | null {
     ? (which === "undo" ? owner.undoLabel : owner.redoLabel)?.call(owner)
     : null;
   if (!name) return null;
-  return `${which === "undo" ? "Undo" : "Redo"} ${name}`;
+  return t(which === "undo" ? M.undoNamed : M.redoNamed, { name });
 }
 
 /** Build the canvas-app's command set. `handlers` is the bag of
@@ -178,103 +247,103 @@ export function buildAppCommands(
   return [
     {
       id: PAGED_EDITOR_UNDO,
-      title: "Undo",
+      title: t(M.undo),
       category: "Edit",
       handler: () => handlers.undo(),
     },
     {
       id: PAGED_EDITOR_REDO,
-      title: "Redo",
+      title: t(M.redo),
       category: "Edit",
       handler: () => handlers.redo(),
     },
     {
       id: PAGED_FILE_OPEN_PDF,
-      title: "Open PDF…",
+      title: t(M.openPdf),
       category: "File",
       handler: () => handlers.openPdf(),
     },
     {
       id: PAGED_FILE_SAVE_AS_IDML,
-      title: "Save As IDML…",
+      title: t(M.saveAsIdml),
       category: "File",
       handler: () => handlers.saveAsIdml(),
     },
     {
       id: PAGED_FILE_SAVE_PAGED,
-      title: "Save (.paged)",
+      title: t(M.savePaged),
       category: "File",
       handler: () => handlers.savePaged(),
     },
     {
       id: PAGED_VIEW_ZOOM_IN,
-      title: "Zoom in",
+      title: t(M.zoomIn),
       category: "View",
       handler: () => handlers.zoomIn(),
     },
     {
       id: PAGED_VIEW_ZOOM_OUT,
-      title: "Zoom out",
+      title: t(M.zoomOut),
       category: "View",
       handler: () => handlers.zoomOut(),
     },
     {
       id: PAGED_VIEW_ZOOM_100,
-      title: "Zoom to 100%",
+      title: t(M.zoom100),
       category: "View",
       handler: () => handlers.zoom100(),
     },
     {
       id: PAGED_VIEW_ZOOM_FIT,
-      title: "Fit document",
+      title: t(M.zoomFit),
       category: "View",
       handler: () => handlers.zoomFit(),
     },
     {
       id: PAGED_VIEW_FIT_PAGE,
-      title: "Fit page in window",
+      title: t(M.fitPage),
       category: "View",
       handler: () => handlers.fitPage(),
     },
     {
       id: PAGED_VIEW_FIT_SPREAD,
-      title: "Fit spread in window",
+      title: t(M.fitSpread),
       category: "View",
       handler: () => handlers.fitSpread(),
     },
     {
       id: PAGED_VIEW_FIT_SELECTION,
-      title: "Fit selection in window",
+      title: t(M.fitSelection),
       category: "View",
       handler: () => handlers.fitSelection(),
     },
     {
       id: PAGED_VIEW_FIRST_PAGE,
-      title: "First page",
+      title: t(M.firstPage),
       category: "Layout",
       handler: () => handlers.goToPage("first"),
     },
     {
       id: PAGED_VIEW_PREVIOUS_PAGE,
-      title: "Previous page",
+      title: t(M.previousPage),
       category: "Layout",
       handler: () => handlers.goToPage("previous"),
     },
     {
       id: PAGED_VIEW_NEXT_PAGE,
-      title: "Next page",
+      title: t(M.nextPage),
       category: "Layout",
       handler: () => handlers.goToPage("next"),
     },
     {
       id: PAGED_VIEW_LAST_PAGE,
-      title: "Last page",
+      title: t(M.lastPage),
       category: "Layout",
       handler: () => handlers.goToPage("last"),
     },
     {
       id: PAGED_VIEW_TOGGLE_TEXT_THREADS,
-      title: "Show text threads",
+      title: t(M.showTextThreads),
       category: "View",
       handler: () => {
         toggleViewToggle("textThreads");
@@ -282,7 +351,7 @@ export function buildAppCommands(
     },
     {
       id: PAGED_VIEW_TOGGLE_SNAP_TO_POINTS,
-      title: "Snap to points",
+      title: t(M.snapToPoints),
       category: "View",
       handler: () => {
         toggleViewToggle("snapToPoints");
@@ -290,7 +359,7 @@ export function buildAppCommands(
     },
     {
       id: PAGED_VIEW_TOGGLE_HEADING_ANCHORS,
-      title: "Show heading anchors",
+      title: t(M.showHeadingAnchors),
       category: "View",
       handler: () => {
         toggleViewToggle("headingAnchors");
@@ -298,7 +367,7 @@ export function buildAppCommands(
     },
     ...HELP_LINKS.map((l) => ({
       id: l.id,
-      title: l.title,
+      title: t(l.label),
       category: "Help",
       handler: () => openExternal(l.url),
     })),
@@ -326,7 +395,7 @@ export const APP_MENU_ITEMS: MenuItemContribution[] = [
     order: 90,
     group: "about",
     kind: "label",
-    labelFor: () => `paged editor · engine ${ENGINE_VERSION}`,
+    labelFor: () => t(M.about, { version: ENGINE_VERSION }),
   },
   // File menu — "Open PDF…" sits right after the shell's "Open IDML…"
   // (order 10, group "open"), the plugin-format sibling of the native open.

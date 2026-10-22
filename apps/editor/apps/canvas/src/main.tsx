@@ -19,6 +19,8 @@
 
 // First: the Trusted Types default policy, before anything starts a worker.
 import "./boot/install-trusted-types";
+// The app's translations, registered before anything shows a word.
+import "./strings";
 
 import {
   StrictMode,
@@ -86,6 +88,10 @@ import {
 import {
   StringsProvider,
   createStrings,
+  defineMessages,
+  setActiveStrings,
+  t,
+  useStrings,
   type Strings,
 } from "@paged-media/strings";
 import "@paged-media/shell/styles/globals.css";
@@ -843,12 +849,25 @@ async function savePagedFile(
  *  channel the insert refusals use, and keeps the console line for a
  *  developer reading a trace. */
 const FILE_DIAGNOSTIC_SOURCE = "paged.file";
+
+const M = defineMessages("app.main", {
+  openPdf: "Open PDF",
+  saveAsIdml: "Save As IDML",
+  savePaged: "Save (.paged)",
+  fileFailed: "{what} failed — {message}",
+  alignObjects: "Align objects",
+  askClaude: "Ask Claude",
+  defaultFontUnavailable:
+    "The default font is unavailable — text in documents with missing " +
+    "fonts will not render.",
+  initialising: "Starting the editor…",
+});
 function reportFileFailure(what: string, err: unknown): void {
   const message = err instanceof Error ? err.message : String(err);
   problemsSink.publish(FILE_DIAGNOSTIC_SOURCE, "file", [
     {
       severity: "error",
-      message: `${what} failed — ${message}`,
+      message: t(M.fileFailed, { what, message }),
       source: "file",
     },
   ]);
@@ -1203,7 +1222,7 @@ function CanvasAppIntegration() {
             }),
           )
           .catch((err: unknown) => {
-            if (!isReplaceDeclined(err)) reportFileFailure("Open PDF", err);
+            if (!isReplaceDeclined(err)) reportFileFailure(t(M.openPdf), err);
           })
           .finally(() => setPendingImportSource(null));
       },
@@ -1236,7 +1255,7 @@ function CanvasAppIntegration() {
           a.click();
           URL.revokeObjectURL(url);
         } catch (err) {
-          reportFileFailure("Save As IDML", err);
+          reportFileFailure(t(M.saveAsIdml), err);
         }
       },
       // Save (.paged) — the native container. Same download shape as
@@ -1253,7 +1272,7 @@ function CanvasAppIntegration() {
             // A failed save that reaches only the devtools console is a
             // failed save the user believes succeeded — and with no
             // autosave behind it, believing wrongly is how work is lost.
-            reportFileFailure("Save (.paged)", err);
+            reportFileFailure(t(M.savePaged), err);
           },
         );
       },
@@ -1480,7 +1499,7 @@ function CanvasAppIntegration() {
     const alignCommands = [
       {
         id: ALIGN_COMMAND,
-        title: "Align objects",
+        title: t(M.alignObjects),
         category: "Object",
         args: ALIGN_ARGS,
         handler: (_paged: unknown, payload?: unknown) =>
@@ -1499,7 +1518,7 @@ function CanvasAppIntegration() {
     const aiCommands = [
       {
         id: AI_ASK_COMMAND,
-        title: "Ask Claude",
+        title: t(M.askClaude),
         category: "Assistant",
         args: { kind: "text" } as const,
         handler: (_paged: unknown, payload?: unknown) => {
@@ -1636,6 +1655,7 @@ function InstanceBridge() {
 
 function CanvasAppRoot() {
   const instance = useEditorInstance();
+  const strings = useStrings();
   const role = useSyncExternalStore(
     instance.role.subscribe,
     instance.role.get,
@@ -1666,8 +1686,7 @@ function CanvasAppRoot() {
           problemsSink.publish("paged.editor", "default-font", [
             {
               severity: "warning",
-              message:
-                "default font unavailable — text in documents with missing fonts will not render",
+              message: t(M.defaultFontUnavailable),
               source: "fonts",
             },
           ]);
@@ -1695,7 +1714,7 @@ function CanvasAppRoot() {
           padding: 16,
         }}
       >
-        initialising worker…
+        {strings.t(M.initialising)}
       </div>
     );
   }
@@ -1866,12 +1885,16 @@ export function mountEditor(
   element: HTMLElement,
   options: MountOptions = {},
 ): MountedEditor {
+  const strings = options.strings ?? createStrings();
+  // The words of what is built before the first render (the profile's
+  // panels and modes) follow the editor's locale too.
+  setActiveStrings(strings);
   const instance = createEditorInstance(options);
   if (options.library ?? instance.surfaces.plain) startLibrary();
   const root = createRoot(element);
   root.render(
     <StrictMode>
-      <StringsProvider strings={options.strings ?? createStrings()}>
+      <StringsProvider strings={strings}>
         <EditorInstanceProvider instance={instance}>
           <CanvasAppRoot />
         </EditorInstanceProvider>

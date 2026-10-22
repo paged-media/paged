@@ -39,24 +39,47 @@ import {
   useSelection,
 } from "@paged-media/shell";
 import { KitSelect, useDocumentUnit } from "@paged-media/ui";
+import { defineMessages, useStrings } from "@paged-media/strings";
 
 import { ALIGN_COMMAND, type AlignKind } from "../align-plan";
 
+const M = defineMessages("app.alignPanel", {
+  alignLeft: "Align left",
+  centerH: "Center horizontally",
+  alignRight: "Align right",
+  alignTop: "Align top",
+  centerV: "Center vertically",
+  alignBottom: "Align bottom",
+  distributeH: "Distribute horizontally",
+  distributeV: "Distribute vertically",
+  alignTo: "Align to",
+  selection: "Selection",
+  page: "Page — awaiting engine support",
+  margins: "Margins — awaiting engine support",
+  spread: "Spread — awaiting engine support",
+  alignObjects: "Align objects",
+  align: "Align",
+  distribute: "Distribute",
+  spacingToggle: "Use spacing",
+  selectToAlign: "Select 2 or more frames to align.",
+  selectToDistribute: "Select 3 or more frames to distribute.",
+});
+
 // Object-alignment glyphs (objects against a key edge), shared with the
-// control bar.
+// control bar. `hint` is a message key, shown through the editor's strings.
 export const ALIGN_H: Array<{ kind: AlignKind; icon: string; hint: string }> = [
-  { kind: "left", icon: "ui-obj-align-left", hint: "Align left" },
+  { kind: "left", icon: "ui-obj-align-left", hint: M.alignLeft },
   {
     kind: "centerH",
     icon: "ui-obj-align-center-h",
-    hint: "Center horizontally",
+    hint: M.centerH,
   },
-  { kind: "right", icon: "ui-obj-align-right", hint: "Align right" },
+  { kind: "right", icon: "ui-obj-align-right", hint: M.alignRight },
 ];
 export const ALIGN_V: Array<{ kind: AlignKind; icon: string; hint: string }> = [
-  { kind: "top", icon: "ui-obj-align-top", hint: "Align top" },
-  { kind: "centerV", icon: "ui-obj-align-center-v", hint: "Center vertically" },
-  { kind: "bottom", icon: "ui-obj-align-bottom", hint: "Align bottom" },
+  { kind: "top", icon: "ui-obj-align-top", hint: M.alignTop },
+  { kind: "centerV", icon: "ui-obj-align-center-v", hint: M.centerV },
+  { kind: "bottom", icon: "ui-obj-align-bottom", hint: M.alignBottom },
 ];
 
 const DISTRIBUTE_BUTTONS: Array<{
@@ -64,11 +87,12 @@ const DISTRIBUTE_BUTTONS: Array<{
   icon: string;
   hint: string;
 }> = [
-  { kind: "distributeH", icon: "ui-cols-2", hint: "Distribute horizontally" },
-  { kind: "distributeV", icon: "ui-rows", hint: "Distribute vertically" },
+  { kind: "distributeH", icon: "ui-cols-2", hint: M.distributeH },
+  { kind: "distributeV", icon: "ui-rows", hint: M.distributeV },
 ];
 
 export function AlignPanel() {
+  const strings = useStrings();
   const unit = useDocumentUnit();
   const registries = useRegistries();
   const model = useObjectModel();
@@ -96,7 +120,7 @@ export function AlignPanel() {
       key={btn.kind}
       data-align-kind={btn.kind}
       disabled={!on}
-      title={btn.hint}
+      title={strings.t(btn.hint)}
       className="flex h-[30px] w-[32px] items-center justify-center rounded-[6px] border border-input bg-background hover:bg-muted/60 disabled:opacity-50"
       style={{ color: "var(--chrome-icon)" }}
       onClick={() => {
@@ -116,28 +140,28 @@ export function AlignPanel() {
           className="text-[11.5px] mb-[5px]"
           style={{ color: "var(--pg-muted-fg)" }}
         >
-          Align to
+          {strings.t(M.alignTo)}
         </div>
         <KitSelect
-          aria-label="Align to"
+          aria-label={strings.t(M.alignTo)}
           value="selection"
           onChange={() => {}}
           data-align-scope
         >
-          <option value="selection">Selection</option>
+          <option value="selection">{strings.t(M.selection)}</option>
           <option value="page" disabled>
-            Page — awaiting engine support
+            {strings.t(M.page)}
           </option>
           <option value="margins" disabled>
-            Margins — awaiting engine support
+            {strings.t(M.margins)}
           </option>
           <option value="spread" disabled>
-            Spread — awaiting engine support
+            {strings.t(M.spread)}
           </option>
         </KitSelect>
       </div>
-      <div className="pg-label pt-1">Align objects</div>
-      <div className="flex gap-2" role="group" aria-label="Align">
+      <div className="pg-label pt-1">{strings.t(M.alignObjects)}</div>
+      <div className="flex gap-2" role="group" aria-label={strings.t(M.align)}>
         <div className="flex gap-1">
           {ALIGN_H.map((b) => iconBtn(b, enabled))}
         </div>
@@ -149,8 +173,12 @@ export function AlignPanel() {
           {ALIGN_V.map((b) => iconBtn(b, enabled))}
         </div>
       </div>
-      <div className="pg-label pt-2">Distribute</div>
-      <div className="flex gap-1" role="group" aria-label="Distribute">
+      <div className="pg-label pt-2">{strings.t(M.distribute)}</div>
+      <div
+        className="flex gap-1"
+        role="group"
+        aria-label={strings.t(M.distribute)}
+      >
         {DISTRIBUTE_BUTTONS.map((b) => iconBtn(b, distributeEnabled))}
       </div>
       {/* Equal-spacing distribute — honest seam until the panel
@@ -161,7 +189,7 @@ export function AlignPanel() {
             type="button"
             role="switch"
             aria-checked={false}
-            aria-label="Use spacing"
+            aria-label={strings.t(M.spacingToggle)}
             disabled
             data-use-spacing
             className="relative w-[30px] h-[17px] shrink-0 rounded-full border-0 opacity-55"
@@ -170,7 +198,7 @@ export function AlignPanel() {
             <span className="absolute top-[2px] left-[2px] w-[13px] h-[13px] rounded-full bg-white shadow" />
           </button>
           <span className="flex-1 text-xs" style={{ color: "var(--pg-fg)" }}>
-            Use spacing
+            {strings.t(M.spacingToggle)}
           </span>
           <span
             className="pg-value text-xs"
@@ -182,12 +210,12 @@ export function AlignPanel() {
       </div>
       {enabled ? null : (
         <div className="text-xs text-muted-foreground" data-align-hint>
-          Select 2 or more frames to align.
+          {strings.t(M.selectToAlign)}
         </div>
       )}
       {!distributeEnabled && enabled ? (
         <div className="text-xs text-muted-foreground" data-distribute-hint>
-          Select 3 or more frames to distribute.
+          {strings.t(M.selectToDistribute)}
         </div>
       ) : null}
     </div>
