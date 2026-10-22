@@ -38,7 +38,8 @@
 //! v71's `paged get` → `RequestGet`, 39 of 70 once v71's script host
 //! bridge added `HostObjectsResult`, which only a host with an object
 //! registry sends; 40 of 71 with ADR 193's `paged read snippet` →
-//! `ExportElements`); what
+//! `ExportElements`; 42 of 73 with `paged template`, which sends
+//! `SetSessionPolicy` and `SetTemplateFields`); what
 //! remains is almost entirely the first kind.
 //!
 //! **What this gate cannot see.** It counts message KINDS, and
@@ -278,9 +279,9 @@ fn every_reason_is_a_reason() {
 
 /// The headline in the module doc, pinned against the code.
 #[test]
-fn the_cli_reaches_40_of_71() {
-    assert_eq!(kinds_the_cli_sends().len(), 40);
-    assert_eq!(every_kind().len(), 71);
+fn the_cli_reaches_42_of_73() {
+    assert_eq!(kinds_the_cli_sends().len(), 42);
+    assert_eq!(every_kind().len(), 73);
 }
 
 /// The second axis, started (ADR 132): the CLI's own source names

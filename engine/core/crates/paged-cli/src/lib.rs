@@ -47,3 +47,4 @@ pub mod read;
 pub mod render;
 pub mod script;
 pub mod session;
+pub mod template;
