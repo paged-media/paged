@@ -328,6 +328,7 @@ impl WorkerCore {
         clock: &Clock<'_>,
     ) -> (WorkerToMain, CacheEffect) {
         let seq = Some(msg.seq);
+        let msg_seq = msg.seq;
         let mut effect = CacheEffect::None;
         // Helper to wrap an early-return reply with no cache effect.
         macro_rules! reply {
@@ -851,6 +852,28 @@ impl WorkerCore {
                     },
                 };
                 WorkerToMainKind::SnapPoint { result }
+            }
+            MainToWorkerKind::SetTemplateFields { values } => {
+                let Some(model) = self.model.as_ref() else {
+                    reply!(WorkerToMainKind::MutationFailed {
+                        error: WorkerError::NoDocument,
+                    });
+                };
+                match model.lower_template_fields(&values) {
+                    // Applied as the mutation it lowers to, so the reply and
+                    // the repaint are a mutation's.
+                    Ok(mutation) => {
+                        return self.dispatch(
+                            MainToWorker {
+                                seq: msg_seq,
+                                protocol: PROTOCOL_VERSION,
+                                kind: MainToWorkerKind::Mutate(mutation),
+                            },
+                            clock,
+                        );
+                    }
+                    Err(problems) => WorkerToMainKind::TemplateFieldsRefused { problems },
+                }
             }
             MainToWorkerKind::SetSessionPolicy { policy } => {
                 self.session_policy = policy.clone();

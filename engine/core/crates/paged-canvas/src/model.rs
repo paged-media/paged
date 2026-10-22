@@ -10741,6 +10741,7 @@ impl CanvasModel {
             Footnotes => json(self.footnotes()),
             Notes => json(self.notes()),
             XmlTags => json(&self.scene.designmap.xml_tags),
+            TemplateFields => json(self.template_fields()),
             XmlElements => json(self.xml_elements()),
             TrackedChanges => json(self.tracked_changes()),
             Endnotes => json(self.endnotes()),
