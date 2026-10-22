@@ -14,24 +14,13 @@
  * */
 
 import type { BundleHost, Disposable } from "@paged-media/plugin-api";
-import { t } from "@paged-media/strings";
-
-import { INSERT_LABEL } from "./panels/outline-panel.js";
 
 const C = "media.paged.doc.command";
 
-/** `[path, command suffix, group]`. A path's first segment names the
- *  host menu it merges into; the segments after it are message keys. */
+/** `[path, command suffix, group]`. */
 const ENTRIES: [path: string, suffix: string, group: string][] = [
-  [`Object/${INSERT_LABEL}`, "placeDoc", "insert-plugin"],
+  ["Object/Insert Word document…", "placeDoc", "insert-plugin"],
 ];
-
-/** A path in the editor's language: the menu it merges into stays, the
- *  rest is read from the active strings. */
-function localPath(path: string): string {
-  const [menu, ...rest] = path.split("/");
-  return [menu, ...rest.map((key) => t(key))].join("/");
-}
 
 /** Register every entry; one Disposable drops them all. */
 export function contributeMenu(host: BundleHost): Disposable {
@@ -42,7 +31,7 @@ export function contributeMenu(host: BundleHost): Disposable {
     perGroup.set(group, n);
     handles.push(
       host.contribute.menu({
-        path: localPath(path),
+        path,
         command: `${C}.${suffix}`,
         group,
         order: n * 10,

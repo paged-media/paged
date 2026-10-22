@@ -97,6 +97,12 @@ export const DOC = defineMessages("doc.bundle", {
   cannotApply: "This engine cannot apply {what}: {reason}",
 });
 
+/** The menu item this bundle adds: the path stays English (it is the
+ *  item's identity) and the shell shows the segment through this message. */
+export const MENU = defineMessages("menu", {
+  "Insert Word document…": "Insert Word document…",
+});
+
 export const TEMPLATE = defineMessages("doc.template", {
   noDocument: "There is no Word document on the field's frame {frame}.",
   partsMissing: "The Word document's parts are missing from this file.",
