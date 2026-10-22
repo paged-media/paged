@@ -17,9 +17,8 @@
  */
 
 //! Workbook-STRUCTURE writes (Wave 4): the `<calcPr>` iteration knobs, adding
-//! / renaming / deleting a worksheet, and the structural-edit preservation
-//! check (which preserved content would a row/column insert or delete leave
-//! pointing at the wrong cells).
+//! / renaming / deleting a worksheet. (What a row/column insert or delete
+//! does to the preserved content is `shift.rs`.)
 //!
 //! Every write here is a byte splice (`splice.rs`) of the one element it
 //! changes — the workbook part, the workbook `.rels` and `[Content_Types].xml`
@@ -32,7 +31,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use sheet_core::calc_settings::CalcSettings;
-use sheet_core::{SheetId, SheetModel};
+use sheet_core::SheetId;
 
 use crate::error::XlsxError;
 use crate::opc::{ModeledKind, PartEntry, CONTENT_TYPES_PART};
@@ -90,34 +89,6 @@ impl CalcPr {
         }
     }
 }
-
-/// `<worksheet>` children whose content addresses cells of THIS sheet and
-/// which the writer re-emits verbatim — a row/column insert or delete would
-/// leave them pointing at the wrong cells. (`<mergeCells>`, `<cols>` and the
-/// rows are modelled and shift with the edit; a `<sheetViews>` selection is
-/// cosmetic and allowed to go stale.)
-const ADDRESSED_CHILDREN: &[&str] = &[
-    "conditionalFormatting",
-    "dataValidations",
-    "hyperlinks",
-    "autoFilter",
-    "sortState",
-    "protectedRanges",
-    "scenarios",
-    "dataConsolidate",
-    "customSheetViews",
-    "rowBreaks",
-    "colBreaks",
-    "ignoredErrors",
-    "smartTags",
-    "cellWatches",
-    "tableParts",
-    "drawing",
-    "legacyDrawing",
-    "oleObjects",
-    "controls",
-    "webPublishItems",
-];
 
 /// Format `true`/`false` as the OOXML boolean the writer emits.
 fn xml_bool(b: bool) -> String {
@@ -451,7 +422,7 @@ impl XlsxDocument {
     }
 
     /// Remove the `<Relationship Id=id>` row from a `.rels` part.
-    fn remove_rel(&mut self, rels_part: &str, id: &str) -> Result<(), XlsxError> {
+    pub(crate) fn remove_rel(&mut self, rels_part: &str, id: &str) -> Result<(), XlsxError> {
         let Some(raw) = self.part_bytes(rels_part) else {
             return Ok(());
         };
@@ -497,7 +468,7 @@ impl XlsxDocument {
     }
 
     /// Remove a `[Content_Types]` override (model + bytes).
-    fn remove_override(&mut self, part: &str) -> Result<(), XlsxError> {
+    pub(crate) fn remove_override(&mut self, part: &str) -> Result<(), XlsxError> {
         let pn = format!("/{part}");
         self.container
             .content_types
@@ -785,59 +756,6 @@ impl XlsxDocument {
         }
     }
 
-    /// The preserved content that a row/column insert or delete on `sheet_id`
-    /// cannot carry along — each entry names one blocker. EMPTY means the
-    /// structural edit is safe for the package (the modelled cells, merges,
-    /// column widths and row heights shift with the edit; formulas are
-    /// re-printed by the consumer).
-    pub fn structural_edit_blockers(&self, sheet_id: SheetId, model: &SheetModel) -> Vec<String> {
-        let mut out = Vec::new();
-        if let Some(b) = self.bindings.iter().find(|b| b.sheet_id == sheet_id) {
-            for c in &b.captured.items {
-                let local = element_local_name(&c.bytes);
-                if ADDRESSED_CHILDREN.contains(&local.as_str()) {
-                    out.push(format!("<{local}>"));
-                } else if local == "extLst" {
-                    let s = String::from_utf8_lossy(&c.bytes);
-                    if s.contains("sqref") || s.contains(":f>") {
-                        out.push("<extLst> with cell references".into());
-                    }
-                }
-            }
-            let rels_part = rels_part_name(&b.part_name);
-            if let Some(p) = self.container.part(&rels_part) {
-                if let Ok(rels) = parse_rels(p.bytes()) {
-                    for kind in ["/table", "/drawing", "/comments", "/pivotTable"] {
-                        if rels.items.iter().any(|r| r.is_type(kind)) {
-                            out.push(format!("{} part", &kind[1..]));
-                        }
-                    }
-                }
-            }
-        }
-        if self.charts.iter().any(|c| {
-            c.host_sheet == sheet_id
-                || c.model.series.iter().any(|s| {
-                    s.values.start.sheet == sheet_id
-                        || s.categories.is_some_and(|r| r.start.sheet == sheet_id)
-                })
-        }) {
-            out.push("chart".into());
-        }
-        if let Some(ws) = model.sheet(sheet_id) {
-            for (_, def) in model.names.iter() {
-                if let sheet_core::names::NameTarget::Formula(text) = &def.target {
-                    if rewrite_sheet_refs(text, &ws.name, "X").1 {
-                        out.push(format!("defined name {}", def.name));
-                    }
-                }
-            }
-        }
-        out.sort();
-        out.dedup();
-        out
-    }
-
     /// The `<calcPr>` the workbook part needs for `model`'s calc settings, or
     /// `None` when the knobs are what the file was loaded with (the part then
     /// stays verbatim). `model` is the one being saved (the session lends the
@@ -860,18 +778,6 @@ impl XlsxDocument {
         let wb = self.workbook_bytes()?;
         Ok(Some(patch_calc_pr(&wb, now)?))
     }
-}
-
-/// The local name of the element a captured subtree starts with.
-fn element_local_name(bytes: &[u8]) -> String {
-    let s = String::from_utf8_lossy(bytes);
-    let s = s.trim_start();
-    let s = s.strip_prefix('<').unwrap_or(s);
-    let end = s
-        .find(|c: char| c.is_whitespace() || c == '>' || c == '/')
-        .unwrap_or(s.len());
-    let q = &s[..end];
-    q.rsplit(':').next().unwrap_or(q).to_string()
 }
 
 #[cfg(test)]
@@ -912,14 +818,5 @@ mod tests {
         assert_eq!(quote_sheet("Plain_1"), "Plain_1");
         assert_eq!(quote_sheet("It's"), "'It''s'");
         assert_eq!(quote_sheet("1st"), "'1st'");
-    }
-
-    #[test]
-    fn captured_local_name() {
-        assert_eq!(
-            element_local_name(b"<x:hyperlinks><a/></x:hyperlinks>"),
-            "hyperlinks"
-        );
-        assert_eq!(element_local_name(b"<extLst>"), "extLst");
     }
 }

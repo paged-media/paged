@@ -612,6 +612,12 @@ mod wasm {
             self.session.set_full_precision(full);
         }
 
+        /// Name the document for `CELL("filename")` (empty: unsaved).
+        pub fn set_document_name(&mut self, name: &str) -> Result<JsValue, JsValue> {
+            let r = self.session.set_document_name(name);
+            to_js(&r)
+        }
+
         /// Add a worksheet at the end (empty name = next free `SheetN`);
         /// returns its id.
         pub fn add_sheet(&mut self, name: &str) -> Result<u16, JsValue> {

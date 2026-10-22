@@ -374,6 +374,10 @@ pub struct TextShift<'a> {
     pub sheet_name: &'a str,
     /// True when unqualified references in the text are on the edited sheet.
     pub host_is_target: bool,
+    /// Every sheet's name in tab order (empty when unknown). Context only: a
+    /// reference over a span of sheets (`Jan:Mar!A1`) keeps its address
+    /// whatever the span holds (sheet ADR 513).
+    pub sheets: &'a [String],
 }
 
 /// Why a reference text cannot be shifted. The caller keeps the text and
@@ -406,11 +410,23 @@ enum RefShape {
     Rows,
 }
 
-/// The references of `text`, in order. `Err` when the text does not lex or
-/// names a sheet span (`Sheet1:Sheet3!A1`) the text alone cannot place.
+/// The references of `text`, in order, found by a scanner of its own rather
+/// than the formula lexer: preserved text is whatever Excel (or another
+/// writer) put there — non-ASCII names, external `[1]Sheet!` prefixes,
+/// structured references, names the parser does not know — and only the
+/// references matter. Strings, bracketed parts and error literals are
+/// skipped; a word followed by `!` qualifies the next reference; an A1 cell,
+/// `A:C` or `1:3` is a reference unless a `(` follows it (a function).
+/// A reference over a span of sheets (`Jan:Mar!A1`) keeps its address, as
+/// the AST rewrite keeps it (sheet ADR 513). `Err` only for an unterminated
+/// string or quoted name.
 fn text_refs(text: &str, s: &TextShift<'_>) -> Result<Vec<TextRef>, Unshiftable> {
-    use crate::lexer::{lex, TokKind};
-    let toks = lex(text).map_err(|e| Unshiftable(format!("does not lex: {}", e.message)))?;
+    let b = text.as_bytes();
+    let mut out = Vec::new();
+    let mut i = 0usize;
+    // The qualifier in force for the next reference: (span, on_target).
+    let mut qual: Option<(std::ops::Range<usize>, bool)> = None;
+    let is_word = |c: char| c.is_alphanumeric() || c == '_' || c == '.' || c == '$' || c == '\\';
     let cell = |row: u32, col: u32, row_abs: bool, col_abs: bool, on: bool| CellRef {
         sheet: if on { 0 } else { 1 },
         row,
@@ -418,107 +434,301 @@ fn text_refs(text: &str, s: &TextShift<'_>) -> Result<Vec<TextRef>, Unshiftable>
         row_abs,
         col_abs,
     };
-    let mut out = Vec::new();
-    let mut i = 0;
-    while i < toks.len() {
-        let start_tok = i;
-        let mut on = s.host_is_target;
-        let mut qual = None;
-        if let TokKind::SheetQual(name) = &toks[i].kind {
-            // `Jan:Mar!A1` lexes as `Jan` `:` `Mar!` — a 3D reference over a
-            // span of sheets the text alone cannot place.
-            let spans_sheets = i >= 2
-                && matches!(toks[i - 1].kind, TokKind::Colon)
-                && matches!(toks[i - 2].kind, TokKind::Ident(_) | TokKind::Cell { .. });
-            if name.contains(':') || spans_sheets {
-                return Err(Unshiftable(format!(
-                    "a reference over a span of sheets (…:{name}!)"
-                )));
+    while i < b.len() {
+        let c = text[i..].chars().next().expect("in bounds");
+        match c {
+            '"' => {
+                let mut j = i + 1;
+                loop {
+                    match b.get(j) {
+                        None => return Err(Unshiftable("an unterminated string".into())),
+                        Some(b'"') if b.get(j + 1) == Some(&b'"') => j += 2,
+                        Some(b'"') => break,
+                        Some(_) => j += 1,
+                    }
+                }
+                i = j + 1;
+                qual = None;
             }
-            on = name.eq_ignore_ascii_case(s.sheet_name);
-            qual = Some(toks[i].span.clone());
-            i += 1;
-            if i >= toks.len() {
-                break;
-            }
-        }
-        let start = toks[start_tok].span.start;
-        match toks[i].kind {
-            TokKind::Cell {
-                row,
-                col,
-                row_abs,
-                col_abs,
-            } => {
-                let a = cell(row, col, row_abs, col_abs, on);
-                // `A1:B2` (optionally `A1:Sheet!B2` with the same sheet).
-                let mut end_tok = i;
-                let mut b = a;
-                if let (Some(colon), Some(next)) = (toks.get(i + 1), toks.get(i + 2)) {
-                    if matches!(colon.kind, TokKind::Colon) && !colon.ws_before {
-                        let (k, nq) = match &next.kind {
-                            TokKind::SheetQual(n) => (i + 3, Some(n.as_str())),
-                            _ => (i + 2, None),
-                        };
-                        let same_sheet =
-                            nq.is_none_or(|n| n.eq_ignore_ascii_case(s.sheet_name) == on);
-                        if let Some(TokKind::Cell {
-                            row,
-                            col,
-                            row_abs,
-                            col_abs,
-                        }) = toks.get(k).map(|t| &t.kind)
-                        {
-                            if same_sheet && !toks[k].ws_before {
-                                b = cell(*row, *col, *row_abs, *col_abs, on);
-                                end_tok = k;
-                            }
+            '\'' => {
+                let mut j = i + 1;
+                let mut name = String::new();
+                loop {
+                    match text[j..].chars().next() {
+                        None => return Err(Unshiftable("an unterminated sheet name".into())),
+                        Some('\'') if b.get(j + 1) == Some(&b'\'') => {
+                            name.push('\'');
+                            j += 2;
+                        }
+                        Some('\'') => break,
+                        Some(ch) => {
+                            name.push(ch);
+                            j += ch.len_utf8();
                         }
                     }
                 }
-                out.push(TextRef {
-                    span: start..toks[end_tok].span.end,
-                    qual,
-                    on_target: on,
-                    range: RangeRef { start: a, end: b },
-                    shape: if end_tok == i {
-                        RefShape::Cell
-                    } else {
-                        RefShape::Area
-                    },
-                });
-                i = end_tok + 1;
+                j += 1;
+                if b.get(j) == Some(&b'!') {
+                    let bare = name.rsplit(']').next().unwrap_or(&name);
+                    if bare.contains(':') {
+                        // A 3D reference keeps its address (sheet ADR 513).
+                        qual = Some((i..j + 1, false));
+                        i = j + 1;
+                        continue;
+                    }
+                    let on = !name.starts_with('[') && bare.eq_ignore_ascii_case(s.sheet_name);
+                    qual = Some((i..j + 1, on));
+                    i = j + 1;
+                } else {
+                    i = j;
+                    qual = None;
+                }
             }
-            TokKind::Cols { c0, c1, abs0, abs1 } => {
-                out.push(TextRef {
-                    span: start..toks[i].span.end,
-                    qual,
-                    on_target: on,
-                    range: RangeRef {
-                        start: cell(0, c0, true, abs0, on),
-                        end: cell(MAX_ROW, c1, true, abs1, on),
-                    },
-                    shape: RefShape::Cols,
-                });
-                i += 1;
+            '[' => {
+                // A bracketed part: an external book index or a structured
+                // reference — never an A1 reference itself.
+                let start = i;
+                let mut depth = 0i32;
+                let mut j = i;
+                while j < b.len() {
+                    match b[j] {
+                        b'[' => depth += 1,
+                        b']' => {
+                            depth -= 1;
+                            if depth == 0 {
+                                break;
+                            }
+                        }
+                        _ => {}
+                    }
+                    j += 1;
+                }
+                i = (j + 1).min(b.len());
+                // `[1]Sheet1!` / `[1]!Name`: an external qualifier.
+                let mut k = i;
+                while k < b.len() {
+                    let ch = text[k..].chars().next().expect("in bounds");
+                    if !is_word(ch) {
+                        break;
+                    }
+                    k += ch.len_utf8();
+                }
+                if b.get(k) == Some(&b'!') && b.get(start + 1).is_some_and(u8::is_ascii_digit) {
+                    qual = Some((start..k + 1, false));
+                    i = k + 1;
+                } else {
+                    qual = None;
+                }
             }
-            TokKind::Rows { r0, r1, abs0, abs1 } => {
-                out.push(TextRef {
-                    span: start..toks[i].span.end,
-                    qual,
-                    on_target: on,
-                    range: RangeRef {
-                        start: cell(r0, 0, abs0, true, on),
-                        end: cell(r1, MAX_COL, abs1, true, on),
-                    },
-                    shape: RefShape::Rows,
-                });
-                i += 1;
+            '#' => {
+                // An error literal (`#REF!`, `#N/A`) — or the spill operator.
+                const ERRORS: &[&str] = &[
+                    "#NULL!",
+                    "#DIV/0!",
+                    "#VALUE!",
+                    "#REF!",
+                    "#NAME?",
+                    "#NUM!",
+                    "#N/A",
+                    "#SPILL!",
+                    "#CALC!",
+                    "#GETTING_DATA",
+                    "#FIELD!",
+                    "#BUSY!",
+                    "#BLOCKED!",
+                    "#CONNECT!",
+                    "#UNKNOWN!",
+                ];
+                let rest = &text[i..];
+                let len = ERRORS
+                    .iter()
+                    .find(|e| rest.len() >= e.len() && rest[..e.len()].eq_ignore_ascii_case(e))
+                    .map_or(1, |e| e.len());
+                i += len;
+                qual = None;
             }
-            _ => i += 1,
+            ch if is_word(ch) => {
+                let start = i;
+                let mut j = i;
+                while j < b.len() {
+                    let ch = text[j..].chars().next().expect("in bounds");
+                    if !is_word(ch) {
+                        break;
+                    }
+                    j += ch.len_utf8();
+                }
+                let word = &text[start..j];
+                if b.get(j) == Some(&b'!') {
+                    // `…:Mar!` closes a 3D span (`Jan:Mar!A1`): it keeps its
+                    // address (sheet ADR 513).
+                    let span_end =
+                        start >= 1 && b[start - 1] == b':' && out_last_is_sheetish(text, start - 1);
+                    let name = word.trim_start_matches('$');
+                    qual = Some((
+                        start..j + 1,
+                        !span_end && name.eq_ignore_ascii_case(s.sheet_name),
+                    ));
+                    i = j + 1;
+                    continue;
+                }
+                let on = qual.as_ref().map_or(s.host_is_target, |q| q.1);
+                let qspan = qual.take().map(|q| q.0);
+                let ref_start = qspan.as_ref().map_or(start, |q| q.start);
+                let followed_by_paren = text[j..].trim_start().starts_with('(');
+                if followed_by_paren {
+                    i = j;
+                    continue;
+                }
+                // `A1`, then `A1:B2` (the second end may repeat the sheet).
+                if let Some((row, col, ra, ca)) =
+                    sheet_core::parse_a1(word).filter(|_| a1_shape(word))
+                {
+                    let a = cell(row, col, ra, ca, on);
+                    let mut end = j;
+                    let mut bcell = a;
+                    let mut shape = RefShape::Cell;
+                    if b.get(j) == Some(&b':') {
+                        let mut k = j + 1;
+                        // An optional repeated qualifier.
+                        if let Some(q) =
+                            word_at(text, k).filter(|w| b.get(k + w.len()) == Some(&b'!'))
+                        {
+                            k += q.len() + 1;
+                        }
+                        if let Some(w2) = word_at(text, k) {
+                            if let Some((r2, c2, ra2, ca2)) =
+                                sheet_core::parse_a1(w2).filter(|_| a1_shape(w2))
+                            {
+                                if !text[k + w2.len()..].trim_start().starts_with('(') {
+                                    bcell = cell(r2, c2, ra2, ca2, on);
+                                    end = k + w2.len();
+                                    shape = RefShape::Area;
+                                }
+                            }
+                        }
+                    }
+                    out.push(TextRef {
+                        span: ref_start..end,
+                        qual: qspan,
+                        on_target: on,
+                        range: RangeRef {
+                            start: a,
+                            end: bcell,
+                        },
+                        shape,
+                    });
+                    i = end;
+                    continue;
+                }
+                // `A:C` / `$1:$3`.
+                if b.get(j) == Some(&b':') {
+                    if let Some(w2) = word_at(text, j + 1) {
+                        let end = j + 1 + w2.len();
+                        if b.get(end) == Some(&b'!') {
+                            // `Jan:Mar!A1`: a 3D reference keeps its address
+                            // (sheet ADR 513).
+                            qual = Some((ref_start..end + 1, false));
+                            i = end + 1;
+                            continue;
+                        }
+                        if let (Some((c0, a0)), Some((c1, a1))) = (col_word(word), col_word(w2)) {
+                            out.push(TextRef {
+                                span: ref_start..end,
+                                qual: qspan,
+                                on_target: on,
+                                range: RangeRef {
+                                    start: cell(0, c0, true, a0, on),
+                                    end: cell(MAX_ROW, c1, true, a1, on),
+                                },
+                                shape: RefShape::Cols,
+                            });
+                            i = end;
+                            continue;
+                        }
+                        if let (Some((r0, a0)), Some((r1, a1))) = (row_word(word), row_word(w2)) {
+                            out.push(TextRef {
+                                span: ref_start..end,
+                                qual: qspan,
+                                on_target: on,
+                                range: RangeRef {
+                                    start: cell(r0, 0, a0, true, on),
+                                    end: cell(r1, MAX_COL, a1, true, on),
+                                },
+                                shape: RefShape::Rows,
+                            });
+                            i = end;
+                            continue;
+                        }
+                    }
+                }
+                i = j;
+            }
+            ch => {
+                i += ch.len_utf8();
+                if !ch.is_whitespace() {
+                    qual = None;
+                }
+            }
         }
     }
     Ok(out)
+}
+
+/// Whether the word that ends at `colon` (exclusive) reads as a sheet name
+/// rather than a cell (`Jan:` vs `A1:`).
+fn out_last_is_sheetish(text: &str, colon: usize) -> bool {
+    let before = &text[..colon];
+    let start = before
+        .char_indices()
+        .rev()
+        .take_while(|(_, c)| c.is_alphanumeric() || *c == '_' || *c == '.')
+        .last()
+        .map_or(colon, |(i, _)| i);
+    let w = &text[start..colon];
+    !w.is_empty() && !(sheet_core::parse_a1(w).is_some() && a1_shape(w))
+}
+
+/// The word (as the scanner reads one) starting at byte `at`.
+fn word_at(text: &str, at: usize) -> Option<&str> {
+    let rest = text.get(at..)?;
+    let len: usize = rest
+        .chars()
+        .take_while(|c| c.is_alphanumeric() || *c == '_' || *c == '.' || *c == '$')
+        .map(char::len_utf8)
+        .sum();
+    (len > 0).then(|| &rest[..len])
+}
+
+/// `$?LETTERS$?DIGITS` with at most three letters (an A1 cell's shape).
+fn a1_shape(w: &str) -> bool {
+    let w = w.strip_prefix('$').unwrap_or(w);
+    let letters = w.bytes().take_while(u8::is_ascii_alphabetic).count();
+    let rest = &w[letters..];
+    let rest = rest.strip_prefix('$').unwrap_or(rest);
+    (1..=3).contains(&letters) && !rest.is_empty() && rest.bytes().all(|c| c.is_ascii_digit())
+}
+
+/// A whole-column end (`$C`): 0-based column + `$`.
+fn col_word(w: &str) -> Option<(u32, bool)> {
+    let (abs, w) = match w.strip_prefix('$') {
+        Some(r) => (true, r),
+        None => (false, w),
+    };
+    if w.is_empty() || w.len() > 3 || !w.bytes().all(|c| c.is_ascii_alphabetic()) {
+        return None;
+    }
+    let col = sheet_core::a1_to_col(w)?;
+    (col <= MAX_COL).then_some((col, abs))
+}
+
+/// A whole-row end (`$3`): 0-based row + `$`.
+fn row_word(w: &str) -> Option<(u32, bool)> {
+    let (abs, w) = match w.strip_prefix('$') {
+        Some(r) => (true, r),
+        None => (false, w),
+    };
+    let n: u32 = w.parse().ok()?;
+    (1..=MAX_ROW + 1).contains(&n).then_some((n - 1, abs))
 }
 
 /// Print a shifted reference in the shape it was written in.
@@ -620,7 +830,15 @@ pub fn shift_sqref(text: &str, s: &TextShift<'_>) -> Result<Option<String>, Unsh
                 item.to_string()
             } else {
                 let prefix = r.qual.as_ref().map_or("", |q| &item[q.clone()]);
-                format!("{prefix}{}", print_text_ref(&nr, r.shape))
+                // A range clipped to one cell is written as the cell (Excel).
+                let shape = if r.shape == RefShape::Area
+                    && (nr.start.row, nr.start.col) == (nr.end.row, nr.end.col)
+                {
+                    RefShape::Cell
+                } else {
+                    r.shape
+                };
+                format!("{prefix}{}", print_text_ref(&nr, shape))
             });
         }
     }
@@ -737,6 +955,7 @@ mod text_shift_tests {
             edit,
             sheet_name: "Data",
             host_is_target: host,
+            sheets: &[],
         }
     }
     const INS_ROW_2: Edit = Edit::InsertRows {
@@ -792,7 +1011,33 @@ mod text_shift_tests {
         let t = "IF( A1 > 0 , \"x\" ,  Name1 )";
         assert_eq!(shift_ref_text(t, &s).unwrap(), t);
         assert!(shift_ref_text("\"open", &s).is_err());
-        assert!(shift_ref_text("SUM(Jan:Mar!A1)", &s).is_err());
+        // A 3D reference keeps its address (sheet ADR 513), quoted or not.
+        assert_eq!(
+            shift_ref_text("SUM(Jan:Mar!A5)", &s).unwrap(),
+            "SUM(Jan:Mar!A5)"
+        );
+        assert_eq!(
+            shift_ref_text("SUM('Jan:Data'!A5)+Data!A5", &ts(INS_ROW_2, false)).unwrap(),
+            "SUM('Jan:Data'!A5)+Data!A7"
+        );
+        assert_eq!(
+            shift_ref_text("SUM(Jan:Data!A5)", &ts(INS_ROW_2, false)).unwrap(),
+            "SUM(Jan:Data!A5)"
+        );
+        // What the formula lexer refuses still shifts: non-ASCII names,
+        // external books, structured references, error literals.
+        assert_eq!(
+            shift_ref_text(
+                "Ссылка+'日本'!B2+[1]Data!A5+[1]!Rate+T[[#This Row],[A1]]+#N/A+A5",
+                &s
+            )
+            .unwrap(),
+            "Ссылка+'日本'!B2+[1]Data!A5+[1]!Rate+T[[#This Row],[A1]]+#N/A+A7"
+        );
+        assert_eq!(
+            shift_ref_text("data!A2:data!B3+LOG10(A2)", &ts(INS_ROW_2, false)).unwrap(),
+            "data!A4:B5+LOG10(A2)"
+        );
     }
 
     #[test]
@@ -809,6 +1054,7 @@ mod text_shift_tests {
             Some("A1:B3")
         );
         assert_eq!(shift_sqref("B2:B9", &d).unwrap(), None);
+        assert_eq!(shift_sqref("A1:B1", &d).unwrap().as_deref(), Some("A1"));
         assert_eq!(shift_sqref("", &d).unwrap().as_deref(), Some(""));
     }
 

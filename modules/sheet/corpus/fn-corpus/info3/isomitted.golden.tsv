@@ -1,0 +1,12 @@
+# ISOMITTED(argument) inside LAMBDA.
+# id	formula	setup	expected
+iso-0	=LAMBDA(a,b,IF(ISOMITTED(b),a,a+b))(2,)	-	2
+iso-1	=LAMBDA(a,b,IF(ISOMITTED(b),a,a+b))(2,3)	-	5
+iso-2	=LAMBDA(a,b,ISOMITTED(b))(2)	-	#VALUE!
+iso-3	=LAMBDA(a,b,ISOMITTED(a))(,5)	-	TRUE
+iso-4	=LAMBDA(a,ISOMITTED(a))(0)	-	FALSE
+iso-5	=LAMBDA(a,b,IF(ISOMITTED(b),"none",b))(1,)	-	none
+iso-6	=ISOMITTED(1)	-	FALSE
+iso-7	=LET(x,1,ISOMITTED(x))	-	FALSE
+iso-8	=LAMBDA(a,b,a+b)(2,)	-	2
+iso-9	=LAMBDA(a,b,a)(2)	-	#VALUE!
