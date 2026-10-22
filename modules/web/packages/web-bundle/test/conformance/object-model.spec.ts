@@ -111,7 +111,7 @@ describe.skipIf(!blitzPresent)(
       return out;
     }
 
-    it("registers three kinds and the seven commands typed", async () => {
+    it("registers three kinds and the nine commands typed", async () => {
       const kinds = (await h.objects.kinds())
         .filter((k) => k.owner === "media.paged.web")
         .map((k) => k.kind);
@@ -123,7 +123,7 @@ describe.skipIf(!blitzPresent)(
       const commands = (await h.objects.commands())
         .filter((c) => c.owner === "media.paged.web")
         .map((c) => c.id);
-      expect(commands).toHaveLength(7);
+      expect(commands).toHaveLength(9);
       expect(commands).toContain(INSERT);
     });
 
