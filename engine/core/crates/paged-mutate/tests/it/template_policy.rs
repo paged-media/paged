@@ -28,8 +28,8 @@ use paged_mutate::operation::NodeSpec;
 use paged_mutate::{apply, apply_checked, NodeId, Operation, OperationError, PropertyPath, Value};
 use paged_scene::Document;
 use paged_template::{
-    DocumentPolicy, FieldDef, FieldKind, ItemPolicy, Override, Permission, Role, SessionPolicy,
-    TEMPLATE_KEY,
+    DocumentPolicy, FieldDef, ItemPolicy, Override, Permission, Role, SessionPolicy,
+    TemplateFieldKind, TEMPLATE_KEY,
 };
 
 fn fixture() -> Document {
@@ -79,7 +79,7 @@ fn label(node: &NodeId, value: String) -> Operation {
     }
 }
 
-fn field(name: &str, kind: FieldKind) -> FieldDef {
+fn field(name: &str, kind: TemplateFieldKind) -> FieldDef {
     FieldDef {
         name: name.into(),
         kind,
@@ -98,7 +98,7 @@ fn template() -> (Document, NodeId, NodeId) {
     let photo = add_rect(&mut doc, "photo", 50.0);
     let logo = add_rect(&mut doc, "logo", 200.0);
     let photo_policy = ItemPolicy {
-        field: Some(field("photo", FieldKind::Image)),
+        field: Some(field("photo", TemplateFieldKind::Image)),
         allow: vec![Permission::ImageCrop],
         ..Default::default()
     };

@@ -25,6 +25,7 @@
 use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
+use tsify_next::Tsify;
 
 use crate::permission::{PermSet, Permission};
 
@@ -35,9 +36,11 @@ pub const TEMPLATE_KEY: &str = "x-paged:template";
 const ENVELOPE_VERSION: u64 = 1;
 
 /// What kind of value a field takes.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Tsify)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
 #[serde(rename_all = "camelCase")]
-pub enum FieldKind {
+pub enum TemplateFieldKind {
     /// A whole text frame's story.
     Text,
     /// A placeholder run inside a story.
@@ -54,25 +57,27 @@ pub enum FieldKind {
     Data,
 }
 
-impl FieldKind {
+impl TemplateFieldKind {
     /// The permissions a field of this kind grants on its item: what filling
     /// it in takes. The author may grant more on the item.
     pub fn grants(self) -> PermSet {
         use Permission as P;
         match self {
-            FieldKind::Text | FieldKind::TextRun | FieldKind::Variable => {
+            TemplateFieldKind::Text | TemplateFieldKind::TextRun | TemplateFieldKind::Variable => {
                 PermSet::of([P::Select, P::TextEdit])
             }
-            FieldKind::Image => PermSet::of([P::Select, P::ImageReplace]),
-            FieldKind::Choice => PermSet::of([P::Select]),
-            FieldKind::Visibility => PermSet::of([P::Select, P::ItemVisibility]),
-            FieldKind::Data => PermSet::of([P::Select, P::TextEdit, P::ImageReplace]),
+            TemplateFieldKind::Image => PermSet::of([P::Select, P::ImageReplace]),
+            TemplateFieldKind::Choice => PermSet::of([P::Select]),
+            TemplateFieldKind::Visibility => PermSet::of([P::Select, P::ItemVisibility]),
+            TemplateFieldKind::Data => PermSet::of([P::Select, P::TextEdit, P::ImageReplace]),
         }
     }
 }
 
 /// What happens when a text field's value does not fit its frame.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Tsify)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
 #[serde(rename_all = "kebab-case")]
 pub enum OverflowRule {
     /// The value is refused.
@@ -84,7 +89,9 @@ pub enum OverflowRule {
 }
 
 /// What a field's value must meet.
-#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, Tsify)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Constraints {
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -107,12 +114,14 @@ pub struct Constraints {
 }
 
 /// A field: an open part of the template.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Tsify)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
 #[serde(rename_all = "camelCase")]
 pub struct FieldDef {
     /// The field's name; for an item field, the item's IDML `Name`.
     pub name: String,
-    pub kind: FieldKind,
+    pub kind: TemplateFieldKind,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub label: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -126,7 +135,9 @@ pub struct FieldDef {
 }
 
 /// One item's policy.
-#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, Tsify)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
 #[serde(rename_all = "camelCase", default)]
 pub struct ItemPolicy {
     /// The field this item is, if it is one.
@@ -141,7 +152,9 @@ pub struct ItemPolicy {
 }
 
 /// The document's policy.
-#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, Tsify)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
 #[serde(rename_all = "camelCase", default)]
 pub struct DocumentPolicy {
     /// What a filler may do to every item and the document; the default is
