@@ -11,6 +11,8 @@ always used:
 | 200–299 | `apps/editor` |
 | 300–349 | `platform/extensions` |
 | 350–749 | `modules/*` |
+| 950–999 | `apps/server` |
+| 1000–1099 | `engine/core` (from 2026-10-22, PM-0012; its records 200–209 keep their numbers) |
 
 A PM record may supersede or amend a component record; it names it, and the component record
 keeps its text.
@@ -25,3 +27,4 @@ keeps its text.
 | [PM-0008](PM-0008-npm-packages-and-release.md) | Four public npm packages, one release workflow; three since amendment 3 (viewer, paged, plugin-sdk) |
 | [PM-0010](PM-0010-history-import.md) | The repository was assembled from twelve repositories, with their history |
 | [PM-0011](PM-0011-dependency-updates-and-supply-chain.md) | Dependency updates by Renovate; licences and advisories checked daily over every workspace |
+| [PM-0012](PM-0012-engine-adr-range.md) | The engine's records continue at 1000–1099; its 200–209 keep their numbers |

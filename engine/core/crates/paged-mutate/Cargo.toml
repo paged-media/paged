@@ -18,6 +18,7 @@ schema = ["dep:schemars"]
 [dependencies]
 paged-model = { path = "../paged-model" }
 paged-scene = { path = "../paged-scene" }
+paged-template = { path = "../paged-template" }
 serde = { workspace = true }
 # Lossless style-delete undo serialises the captured StyleDef to JSON
 # (the def is Serialize+Deserialize) and restores it verbatim.

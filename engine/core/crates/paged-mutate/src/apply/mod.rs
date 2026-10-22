@@ -109,6 +109,18 @@ pub fn apply(doc: &mut Document, op: &Operation) -> Result<AppliedOperation, Ope
 /// The dispatch itself, without the index-refresh post-condition. In-crate
 /// recursion goes through here so one logical mutation rebuilds once; see
 /// [`apply`].
+/// [`apply`] after [`permit::check`]: refuses an operation the session's
+/// role and the document's template policy do not permit, before anything
+/// applies. Undo, redo and rollback use [`apply`]: they are exempt.
+pub fn apply_checked(
+    doc: &mut Document,
+    op: &Operation,
+    session: &paged_template::SessionPolicy,
+) -> Result<AppliedOperation, OperationError> {
+    permit::check(doc, op, session)?;
+    apply(doc, op)
+}
+
 pub(crate) fn apply_inner(
     doc: &mut Document,
     op: &Operation,
@@ -1123,6 +1135,7 @@ mod insert_node;
 mod layer;
 mod lock;
 mod note;
+pub mod permit;
 mod tracked_change;
 /// ADR 132 — model → wire-spec readers, for the `Set` resolver: a
 /// virtual path on a swatch, gradient or numbering list is an edit of the

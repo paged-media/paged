@@ -1,0 +1,25 @@
+[package]
+name = "paged-template"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "Template policies for paged documents: which items are fields an end user fills in, which permissions hold for whom, and the session role that decides which of them apply (editor docs/composable-editor.md §7)."
+
+[lints]
+workspace = true
+
+[features]
+# ADR 187 — `schemars::JsonSchema` beside each `Tsify` derive of a type the
+# wire carries; `paged-wire`'s `schema` feature turns it on.
+schema = ["dep:schemars"]
+
+[dependencies]
+paged-model = { path = "../paged-model" }
+paged-scene = { path = "../paged-scene" }
+serde = { workspace = true }
+serde_json = "1"
+tsify-next = { workspace = true }
+wasm-bindgen = { workspace = true }
+schemars = { workspace = true, optional = true }
