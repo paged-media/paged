@@ -72,6 +72,9 @@ import {
   openAssistant,
   setAssistantOpener,
   setDocumentSourceSink,
+  resolveProfile,
+  type EditorProfile,
+  type CommandContribution,
 } from "@paged-media/shell";
 import "@paged-media/shell/styles/globals.css";
 
@@ -281,6 +284,13 @@ import {
 } from "./select-all";
 import { CorpusPicker } from "./ui/CorpusPicker";
 import { templateFieldsContribution } from "./overlays/template-fields";
+import {
+  EditorInstanceProvider,
+  useEditorInstance,
+  type EditorInstance,
+  type HostActions,
+} from "./app/instance";
+import { PRESETS } from "./profiles/presets";
 
 // Default overlay contributions for the canvas app. Order is
 // descriptive — actual paint order is determined by the
@@ -453,6 +463,7 @@ if (!import.meta.env.PROD || import.meta.env.MODE === "demo") {
 }
 
 function PluginBundles() {
+  const { surfaces } = useEditorInstance();
   const paged = usePaged();
   const pagedRef = useRef(paged);
   pagedRef.current = paged;
@@ -685,7 +696,7 @@ function PluginBundles() {
     // and, since the bundles are dynamic imports (ADR 222), their chunks
     // are never fetched either.
     const activator = createBundleActivator({
-      entries: SURFACES.bundles,
+      entries: surfaces.bundles,
       activate: loadGuarded,
       record: (entry) => journal.record(entry),
       publishProblem: (bundleId, key, diagnostics) =>
@@ -708,7 +719,7 @@ function PluginBundles() {
         .__loadTestBundle;
     };
     // Mount-once by design; the ref keeps the handle live.
-  }, []);
+  }, [surfaces.bundles]);
   return null;
 }
 
@@ -719,6 +730,7 @@ function PluginBundles() {
 async function savePagedFile(
   client: CanvasClient,
   sourceName: string | null | undefined,
+  hostSave?: HostActions["save"],
 ): Promise<void> {
   // v66 — plugins with an edit session outside the document
   // commit it first (bounded; a stuck one is reported, not
@@ -741,6 +753,14 @@ async function savePagedFile(
     if (meta.documentName) baseName = meta.documentName;
   } catch {
     /* meta unavailable — keep the fallback name */
+  }
+  // An embedding host stores the document itself (concept §8.3): the
+  // bytes go to its `save` action, not to the library, a file or a
+  // download.
+  if (hostSave) {
+    await hostSave({ bytes, name: baseName });
+    client.markSaved(savedMark);
+    return;
   }
   // ADR 180 — the save is a commit in the local library, alongside
   // (never instead of) the file write below. A library failure is
@@ -810,11 +830,48 @@ function reportFileFailure(what: string, err: unknown): void {
 }
 
 function CanvasAppIntegration() {
+  const instance = useEditorInstance();
   const client = useCanvasClient();
   const { camera, setCamera, viewportSize } = useCamera();
   const { handle, sourceName } = useDocument();
   const { contentSelection, setContentSelection } = useContentSelection();
   const registries = useRegistries();
+
+  // Host actions as commands (docs/composable-editor.md §8.3): registered
+  // only when the host supplies them, so a profile can place them in a
+  // region (the actions bar, the header) and a feature can switch them off.
+  useEffect(() => {
+    const { actions } = instance;
+    const host: CommandContribution[] = [];
+    if (actions.submit) {
+      const submit = actions.submit;
+      host.push({
+        id: "paged.host.submit",
+        title: "Submit",
+        handler: () => submit(),
+      });
+    }
+    if (actions.close) {
+      const close = actions.close;
+      host.push({
+        id: "paged.host.close",
+        title: "Close",
+        handler: () => close(),
+      });
+    }
+    if (actions.back) {
+      const back = actions.back;
+      host.push({
+        id: "paged.host.back",
+        title: "Back",
+        handler: () => back(),
+      });
+    }
+    const disposables = host.map((c) => registries.commands.register(c));
+    return () => {
+      for (const d of disposables) d.dispose();
+    };
+  }, [instance, registries]);
   // ADR 230 — the replace question's Save is the save Cmd+S runs.
   useEffect(
     () =>
@@ -1189,12 +1246,14 @@ function CanvasAppIntegration() {
       // original OPC — none of which an IDML export can carry.
       savePaged: async () => {
         if (!handle || handle.pageCount === 0) return;
-        await savePagedFile(client, sourceName).catch((err: unknown) => {
-          // A failed save that reaches only the devtools console is a
-          // failed save the user believes succeeded — and with no
-          // autosave behind it, believing wrongly is how work is lost.
-          reportFileFailure("Save (.paged)", err);
-        });
+        await savePagedFile(client, sourceName, instance.actions.save).catch(
+          (err: unknown) => {
+            // A failed save that reaches only the devtools console is a
+            // failed save the user believes succeeded — and with no
+            // autosave behind it, believing wrongly is how work is lost.
+            reportFileFailure("Save (.paged)", err);
+          },
+        );
       },
       zoomIn: () => {
         const cx = vw / 2;
@@ -1488,7 +1547,7 @@ function CanvasAppIntegration() {
       // menu only if at least one item carries that first path segment,
       // so dropping every `Layout/…` item removes the Layout menu — no
       // per-menu predicate needed, and none exists.
-      .filter((m) => SURFACES.keepMenu(m))
+      .filter((m) => instance.surfaces.keepMenu(m))
       .map((m) => registries.menus.register(m));
     const keyDisposables = [
       ...APP_KEYBINDINGS,
@@ -1505,6 +1564,8 @@ function CanvasAppIntegration() {
     };
   }, [
     registries,
+    instance.actions.save,
+    instance.surfaces,
     client,
     camera,
     viewportSize,
@@ -1550,6 +1611,7 @@ class GatedCanvasClient extends CanvasClient {
  * Root: owns the CanvasClient lifecycle and hands it to PagedShell.
  */
 function CanvasAppRoot() {
+  const instance = useEditorInstance();
   const [client, setClient] = useState<CanvasClient | null>(null);
 
   useEffect(() => {
@@ -1588,11 +1650,12 @@ function CanvasAppRoot() {
       defaultFontFaces: fetchDefaultFontFaces,
     });
     setClient(c);
+    instance.onClient?.(c);
     return () => {
       c.dispose();
       setClient(null);
     };
-  }, []);
+  }, [instance]);
 
   if (!client) {
     return (
@@ -1611,21 +1674,21 @@ function CanvasAppRoot() {
   return (
     <PagedShell
       client={client}
-      panels={SURFACES.panels}
+      panels={instance.surfaces.panels}
       overlays={BUILT_IN_OVERLAYS}
-      tools={SURFACES.tools}
-      modes={SURFACES.modes}
-      panelRail={SURFACES.panelRail}
+      tools={instance.surfaces.tools}
+      modes={instance.surfaces.modes}
+      panelRail={instance.surfaces.panelRail}
       canvasComponent={CanvasPanel}
       // The corpus picker is an Envato IDML-pack browser — DTP
       // furniture with no meaning in a drawing app.
-      headerExtras={SURFACES.plain ? <CorpusPicker /> : null}
-      initialMode={SURFACES.initialMode}
-      initialDocumentSizePt={SURFACES.initialDocumentSizePt}
-      regions={PROFILE.regions}
-      canvasFurniture={PROFILE.canvas}
-      features={PROFILE.features}
-      sessionPolicy={{ role: PROFILE.role, overrides: [] }}
+      headerExtras={instance.surfaces.plain ? <CorpusPicker /> : null}
+      initialMode={instance.surfaces.initialMode}
+      initialDocumentSizePt={instance.surfaces.initialDocumentSizePt}
+      regions={instance.profile.regions}
+      canvasFurniture={instance.profile.canvas}
+      features={instance.profile.features}
+      sessionPolicy={{ role: instance.profile.role, overrides: [] }}
       bindingProviders={bindingProviders}
       objectModel={editorObjectModel}
     >
@@ -1666,49 +1729,71 @@ if (!import.meta.env.PROD) {
 
 // ── THE EDITOR PROFILE ───────────────────────────────────────────────
 //
-// Resolved ONCE, at module scope, before anything renders
-// (docs/composable-editor.md §5; solo mode is the preset `solo:<name>`,
-// ADR 213).
+// Resolved ONCE PER MOUNT, before anything renders (docs/composable-editor.md
+// §5; solo mode is the preset `solo:<name>`, ADR 213), and handed down in an
+// EditorInstance (plan task E1).
 //
-// NOT in JSX, and not memoized: `PagedShell` registers panels in an
-// effect whose deps include the `panels` array and whose ref guard
-// resets on cleanup, so a NEW ARRAY IDENTITY disposes ~55 panels and
-// re-registers them — cascading through the Window menu and every
-// derived show/hide command. The URL cannot change without a reload, so
-// there is nothing to memoize and no reason to involve React at all.
+// NOT recomputed in render: `PagedShell` registers panels in an effect whose
+// deps include the `panels` array and whose ref guard resets on cleanup, so a
+// NEW ARRAY IDENTITY disposes ~55 panels and re-registers them. One instance
+// per mount keeps every list's identity for the editor's lifetime.
 //
-// Resolution is TOTAL: an unknown preset resolves to the ordinary editor
-// and reports a problem. This runs before `installGlobalErrorCapture()` at
-// the bottom of this file, so a throw here would white-screen with nothing
-// in the journal.
-const RESOLVED = profileFromSearch(
-  typeof location === "undefined" ? "" : location.search,
-);
-const PROFILE = RESOLVED.profile;
-// Namespace the chrome's localStorage before the first read. A solo
-// preset runs the cockpit under the mode id "design" (the union is
-// closed), and `paged.cockpit.v1` is keyed BY MODE ID — unscoped, solo and
-// the ordinary editor would overwrite each other's right-dock tabs, and
-// the unresolvable ids would then be dropped in silence.
-setChromeStorageScope(PROFILE.storageScope);
+// Resolution is TOTAL: an unknown preset resolves to the ordinary editor and
+// reports a problem.
 
-/** Surfaces the app hands the shell, filtered to the profile.
- *
- *  ALLOW-LIST: a profile names what it SHOWS, so a host panel added later
- *  is absent from a preset until someone puts it there deliberately. A
- *  deny-list would leak every new DTP panel into every preset — the
- *  fail-open shape this codebase keeps finding. The cost is the opposite
- *  failure (a renamed panel silently drops out), which is what
- *  `scripts/profile-presets-guard.mjs` exists to catch. */
-const SURFACES = applyProfile(PROFILE, {
-  panels: BUILT_IN_PANELS,
-  tools: BUILT_IN_TOOLS,
-  panelRail: PANEL_RAIL,
-  modes: COCKPIT_MODES,
-  bundles: PLUGIN_BUNDLES,
-});
-for (const problem of [...RESOLVED.problems, ...SURFACES.problems]) {
-  console.warn(`[editor profile] ${problem.path}: ${problem.message}`);
+/** How a host mounts an editor (concept §8.1). */
+export interface MountOptions {
+  /** A preset id (`template-fill`) or a profile; else the URL's. */
+  profile?: string | EditorProfile;
+  /** The query string a URL-configured editor reads (`?profile=`, `?solo=`). */
+  search?: string;
+  /** What the host decides: save, submit, close, back. */
+  actions?: HostActions;
+  /** Start the local document library (OPFS). Default: the plain editor only. */
+  library?: boolean;
+  /** Called once the editor's client exists. */
+  onClient?: (client: CanvasClient) => void;
+}
+
+export function createEditorInstance(
+  options: MountOptions = {},
+): EditorInstance {
+  const resolved =
+    options.profile === undefined
+      ? profileFromSearch(options.search ?? "")
+      : resolveProfile(
+          typeof options.profile === "string"
+            ? { extends: options.profile }
+            : options.profile,
+          PRESETS,
+        );
+  const profile = resolved.profile;
+  // Namespace the chrome's localStorage before the first read. A solo
+  // preset runs the cockpit under the mode id "design", and
+  // `paged.cockpit.v1` is keyed BY MODE ID — unscoped, solo and the
+  // ordinary editor would overwrite each other's right-dock tabs.
+  setChromeStorageScope(profile.storageScope);
+  // ALLOW-LIST: a profile names what it SHOWS, so a host panel added later
+  // is absent from a preset until someone puts it there deliberately
+  // (`scripts/profile-presets-guard.mjs` catches a renamed id).
+  const surfaces = applyProfile(profile, {
+    panels: BUILT_IN_PANELS,
+    tools: BUILT_IN_TOOLS,
+    panelRail: PANEL_RAIL,
+    modes: COCKPIT_MODES,
+    bundles: PLUGIN_BUNDLES,
+  });
+  const problems = [...resolved.problems, ...surfaces.problems];
+  for (const problem of problems) {
+    console.warn(`[editor profile] ${problem.path}: ${problem.message}`);
+  }
+  return {
+    profile,
+    surfaces,
+    actions: options.actions ?? {},
+    problems,
+    onClient: options.onClient,
+  };
 }
 
 // ADR 180 — the local library (every document a repository in the
@@ -1728,14 +1813,31 @@ function startLibrary(): void {
   // Ask the browser not to evict the library under storage pressure.
   void storage.persist?.().catch(() => false);
 }
-startLibrary();
-
-const root = document.getElementById("root");
-if (!root) {
-  throw new Error("missing #root");
+/** A mounted editor (concept §8). */
+export interface MountedEditor {
+  readonly instance: EditorInstance;
+  /** Unmount the editor and release its worker. */
+  dispose(): void;
 }
-createRoot(root).render(
-  <StrictMode>
-    <CanvasAppRoot />
-  </StrictMode>,
-);
+
+/**
+ * Mount an editor into `element` (plan task E1). The page entry
+ * (`entry.tsx`) mounts one into `#root` configured by the URL; an embedding
+ * host passes a preset or a profile and its actions.
+ */
+export function mountEditor(
+  element: HTMLElement,
+  options: MountOptions = {},
+): MountedEditor {
+  const instance = createEditorInstance(options);
+  if (options.library ?? instance.surfaces.plain) startLibrary();
+  const root = createRoot(element);
+  root.render(
+    <StrictMode>
+      <EditorInstanceProvider instance={instance}>
+        <CanvasAppRoot />
+      </EditorInstanceProvider>
+    </StrictMode>,
+  );
+  return { instance, dispose: () => root.unmount() };
+}
