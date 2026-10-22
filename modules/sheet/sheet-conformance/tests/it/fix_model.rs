@@ -74,3 +74,34 @@ fn subtotal_recalculates_when_rows_hide__feat__sheet_fn_library() {
     assert_eq!(value(&e, 5, 0), CellValue::Number(30.0));
     assert_eq!(value(&e, 6, 0), CellValue::Number(30.0));
 }
+
+#[allow(non_snake_case)]
+#[test]
+fn cached_only_w3_functions_keep_their_error__feat__sheet_fn_library() {
+    use sheet_core::CellError;
+    // Typed fresh (no cached value): the row's error. A cached value from a
+    // workbook is kept — tested for the family in calc_model.rs.
+    let mut e = engine(Locale::EnUs);
+    let cases = [
+        ("=CUBEMEMBER(\"c\",\"[m]\")", CellError::Connect),
+        ("=CUBESETCOUNT(A9)", CellError::Connect),
+        ("=CUBEKPIMEMBER(\"c\",\"k\",1)", CellError::Connect),
+        ("=CUBEMEMBERPROPERTY(\"c\",\"m\",\"p\")", CellError::Connect),
+        ("=CUBERANKEDMEMBER(\"c\",\"s\",1)", CellError::Connect),
+        ("=CUBESET(\"c\",\"s\")", CellError::Connect),
+        ("=RTD(\"p\",\"\",\"t\")", CellError::Blocked),
+        ("=STOCKHISTORY(\"MSFT\",1)", CellError::Blocked),
+        ("=IMAGE(\"https://example.com/a.png\")", CellError::Blocked),
+        ("=TRANSLATE(\"Hallo\")", CellError::Blocked),
+        ("=DETECTLANGUAGE(\"Hallo\")", CellError::Blocked),
+        ("=COPILOT(\"x\")", CellError::Blocked),
+        ("=PY(\"1+1\",0)", CellError::Blocked),
+        ("=CALL(1)", CellError::Blocked),
+        ("=REGISTER.ID(\"m\",\"p\")", CellError::Blocked),
+        ("=GETPIVOTDATA(\"Sales\",A1)", CellError::Blocked),
+    ];
+    for (i, (formula, want)) in cases.iter().enumerate() {
+        e.enter(0, i as u32, 3, formula).unwrap();
+        assert_eq!(value(&e, i as u32, 3), CellValue::Error(*want), "{formula}");
+    }
+}
