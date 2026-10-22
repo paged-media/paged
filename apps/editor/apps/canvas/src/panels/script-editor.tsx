@@ -36,7 +36,7 @@
 import { useRef, useState } from "react";
 
 import {
-  AI_UNAVAILABLE_TEXT,
+  aiUnavailableText,
   describeAiError,
   plainSummary,
   PoweredByClaude,
@@ -231,7 +231,7 @@ export function ScriptEditorPanel(_: PanelProps) {
           <button
             type="submit"
             disabled={!ask.trim() || running || offline}
-            title={offline ? AI_UNAVAILABLE_TEXT : undefined}
+            title={offline ? aiUnavailableText() : undefined}
             className="px-2 py-0.5 rounded hover:bg-muted/60 disabled:opacity-50 text-xs"
             data-action="ask"
           >
@@ -246,7 +246,7 @@ export function ScriptEditorPanel(_: PanelProps) {
           data-script-ai-unavailable
           className="px-2 py-1 text-xs text-muted-foreground border-b border-input"
         >
-          {AI_UNAVAILABLE_TEXT}
+          {aiUnavailableText()}
         </div>
       ) : null}
       <div className="flex items-center justify-between p-1 border-b border-input">
