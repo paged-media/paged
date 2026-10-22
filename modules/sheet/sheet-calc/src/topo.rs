@@ -59,66 +59,91 @@ pub struct TopoOrder {
 /// Order the dirty subgraph `dirty` using `graph`'s edges. Only edges WITHIN
 /// `dirty` matter (a clean precedent already holds its fresh value).
 pub fn order(dirty: &FxHashSet<CellRef>, graph: &DepGraph) -> TopoOrder {
-    // In-degree of each dirty node = number of its precedents that are also
-    // dirty. Build the dependent adjacency (precedent -> dependents) at the
-    // same time so we can decrement on drain.
-    let mut in_degree: FxHashMap<CellRef, usize> = FxHashMap::default();
-    let mut dependents: FxHashMap<CellRef, Vec<CellRef>> = FxHashMap::default();
+    // Dense node ids in CellRef order, so the stable "smallest CellRef
+    // first" frontier is a heap of integers and the per-node state is a
+    // Vec, not a hash map (2026-10: half of a 100 000-cell chain edit was
+    // spent in this function's maps, sets and per-node clones).
+    let mut cells: Vec<CellRef> = dirty.iter().copied().collect();
+    cells.sort_unstable();
+    let id: FxHashMap<CellRef, u32> = cells
+        .iter()
+        .enumerate()
+        .map(|(i, c)| (*c, i as u32))
+        .collect();
+    let n = cells.len();
 
+    // Edges precedent -> dependent within the cut, de-duplicated once (a cell
+    // read directly and through a range is one edge).
     let candidates = Candidates::new(dirty);
-    for &cell in dirty {
-        let precedents = graph.precedents_in(cell, &candidates);
-        in_degree.entry(cell).or_insert(0);
-        for p in precedents {
-            // Edge p -> cell.
-            *in_degree.entry(cell).or_insert(0) += 1;
-            dependents.entry(p).or_default().push(cell);
-            in_degree.entry(p).or_insert(0);
+    let mut edges: Vec<(u32, u32)> = Vec::new();
+    for (ci, &cell) in cells.iter().enumerate() {
+        // Direct cell edges: the id map is the membership test.
+        for d in graph.cell_deps(cell) {
+            if let Some(&pi) = id.get(d) {
+                edges.push((pi, ci as u32));
+            }
         }
-    }
-
-    // Stable frontier: min-CellRef pops first (Reverse over a max-heap).
-    let mut frontier: BinaryHeap<Reverse<CellRef>> = BinaryHeap::new();
-    for (&cell, &deg) in &in_degree {
-        if deg == 0 {
-            frontier.push(Reverse(cell));
-        }
-    }
-
-    let mut order: Vec<CellRef> = Vec::with_capacity(dirty.len());
-    while let Some(Reverse(cell)) = frontier.pop() {
-        order.push(cell);
-        if let Some(deps) = dependents.get(&cell) {
-            // Sort the freed dependents so equal-rank reveals are deterministic
-            // even before they reach the heap (belt-and-suspenders with the
-            // heap's own ordering).
-            let mut deps = deps.clone();
-            deps.sort();
-            for d in deps {
-                if let Some(deg) = in_degree.get_mut(&d) {
-                    *deg -= 1;
-                    if *deg == 0 {
-                        frontier.push(Reverse(d));
-                    }
+        for k in graph.range_deps(cell) {
+            candidates.inside(k, |p| {
+                if let Some(&pi) = id.get(&p) {
+                    edges.push((pi, ci as u32));
                 }
+            });
+        }
+    }
+    edges.sort_unstable();
+    edges.dedup();
+
+    // CSR adjacency: the dependents of node p are `adj[start[p]..start[p+1]]`,
+    // already in CellRef order (edges sorted by (p, dependent)).
+    let mut start = vec![0u32; n + 1];
+    let mut in_degree = vec![0u32; n];
+    for &(p, d) in &edges {
+        start[p as usize + 1] += 1;
+        in_degree[d as usize] += 1;
+    }
+    for i in 0..n {
+        start[i + 1] += start[i];
+    }
+    let adj: Vec<u32> = edges.iter().map(|&(_, d)| d).collect();
+    let deps_of = |p: u32| &adj[start[p as usize] as usize..start[p as usize + 1] as usize];
+
+    // Stable frontier: min-CellRef (= min id) pops first.
+    let mut frontier: BinaryHeap<Reverse<u32>> = (0..n as u32)
+        .filter(|&i| in_degree[i as usize] == 0)
+        .map(Reverse)
+        .collect();
+    let mut emitted = vec![false; n];
+    let mut order: Vec<CellRef> = Vec::with_capacity(n);
+    while let Some(Reverse(i)) = frontier.pop() {
+        order.push(cells[i as usize]);
+        emitted[i as usize] = true;
+        for &d in deps_of(i) {
+            let deg = &mut in_degree[d as usize];
+            *deg -= 1;
+            if *deg == 0 {
+                frontier.push(Reverse(d));
             }
         }
     }
 
     // Anything not emitted is on a cycle or downstream of one.
-    let emitted: FxHashSet<CellRef> = order.iter().copied().collect();
-    let mut rest: Vec<CellRef> = dirty
-        .iter()
-        .filter(|c| !emitted.contains(c))
-        .copied()
-        .collect();
-    rest.sort();
-    if rest.is_empty() {
+    if order.len() == n {
         return TopoOrder {
             order,
             cycle: Vec::new(),
             after: Vec::new(),
         };
+    }
+    let rest: Vec<CellRef> = (0..n).filter(|&i| !emitted[i]).map(|i| cells[i]).collect();
+    // The cycle analysis below runs on the (small) remainder with a map
+    // adjacency, as before.
+    let mut dependents: FxHashMap<CellRef, Vec<CellRef>> = FxHashMap::default();
+    for &(p, d) in &edges {
+        dependents
+            .entry(cells[p as usize])
+            .or_default()
+            .push(cells[d as usize]);
     }
     let rest_set: FxHashSet<CellRef> = rest.iter().copied().collect();
     let on_cycle = cycle_members(&rest, &rest_set, &dependents);
