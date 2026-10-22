@@ -201,6 +201,35 @@ each published canary added is under [Releases](#releases).
   budget). Typed commands (16 typed twins of palette commands, plus `publishDataset` /
   `unpublishDataset`) take value-typed arguments; 8 commands remain untyped. The bundle boots in
   `createHeadlessHost` with the real engine for get, set, batch and undo.
+- **Template fields** (editor plan G3; extensions ADR 335). Three module field kinds, in
+  `packages/sheet-bundle/src/template-fields.ts`, are the parts of a workbook a template can
+  open to a filler; each reads and writes through `host.objects` (one batch, one undo step,
+  checked by the engine against the session's role) and refuses a value with one sentence:
+  - `media.paged.sheet.cell` `{ ref, type?, allowed?, min?, max? }`: one cell's constant
+    (`ref` is `Sheet!A1` or a defined name); a text, a number (`type: "number"`, with bounds)
+    or a choice (`allowed`). Grants `text.edit` and `text.style`.
+  - `media.paged.sheet.range` `{ ref, columns?, rows? }`: a range's values as a table (rows of
+    strings, column order; `columns` titles them). `rows: "fixed"` (the default) takes exactly
+    the range's rows; `rows: { min?, max? }` takes up to the range's own rows and clears the
+    rest. Grants `text.edit` and `text.style`.
+  - `media.paged.sheet.chartSource` `{ chart, allowed: [{ name, label?, series }] }`: which of
+    the author's series lists a chart draws.
+
+  A cell holding a formula, and a value starting with `=`, are refused. The workbook's version
+  label is the document's, so a filler writes a sheet field only where the template's document
+  policy grants `document.metadata`. Every placed table that shows a written cell is re-poured
+  after the write: each must be a sheet field itself (its grants say it may be re-poured), or
+  the write is refused before anything changes. A placed chart is redrawn by replacing its art,
+  so a chart's source is writable only where the template lets a filler add and delete items.
+  Not a field kind yet: a list data validation as a cell's choice (the engine reports how many
+  validations a sheet has, not their lists), and a growable range that inserts rows (a placed
+  table keeps the range it was placed with).
+
+- **Layout commands** (plan G4; `src/layout-commands.ts`). Typed `importCsv { text, name }`,
+  `mergeCells`, `unmergeCells`, `setBorders { range, edges: all | outline | top | right |
+bottom | left, style, color? }`, `setColumnWidth` and `setRowHeight { sheet, first, last?,
+size? }` (no size clears it), each one workbook version and one undo step. Deleting a chart
+  is not a command: the engine has no door that removes one.
 - **Datasets, both ways.** A dataset-sourced sheet re-pulls on every provider revision by default
   (`live: false` keeps the old mark-stale behaviour), and a sheet range can be published as a
   `dataset` provider whose revision moves with every edit.

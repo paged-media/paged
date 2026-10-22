@@ -757,6 +757,9 @@ export interface DataSourceSession extends ReviewSession, PropertyMethods {
   /** §9 record-preview stepper: remember the record it shows for a query
    *  (`getState().preview`). */
   setPreviewPosition(queryId: string, record: number): void;
+  /** The data set `applyDataSet` last applied, or null (saved with the
+   *  session, so a reopened document knows it). */
+  appliedDataSet(): string | null;
   /** §9 field-mapping wizard: the engine's column → variable-binding suggestions
    *  for a query's ingested result. Requires the query's result to be ingested
    *  first (`refreshData`); returns `[]` honestly when no result is ingested or
@@ -1075,13 +1078,17 @@ export function createSession(
   // both (it starts from "— / —" only when nothing has run).
   const recordCounts = new Map<string, number>();
   const previewAt = new Map<string, number>();
+  /** The data set last applied to the document (saved with the session). */
+  let appliedSet: string | null = null;
   /** Keep how many records a query delivered (and a stepped-to record
    *  within them). */
   function keepRecordCount(queryId: string, n: number): number {
     if (n > 0) recordCounts.set(queryId, n);
     else recordCounts.delete(queryId);
     const at = previewAt.get(queryId);
-    if (at !== undefined && at >= n) previewAt.set(queryId, Math.max(0, n - 1));
+    // Nothing ingested yet (a reopened document before its refresh) says
+    // nothing about the saved record: only a real count clamps it.
+    if (at !== undefined && n > 0 && at >= n) previewAt.set(queryId, n - 1);
     return n;
   }
   /** Read (and keep) how many records the engine holds for a query; 0 before
@@ -1308,6 +1315,8 @@ export function createSession(
         ...(r.credentialRef ? { credentialRef: r.credentialRef } : {}),
       })),
       refresh: Object.fromEntries(refreshPolicies),
+      ...(previewAt.size > 0 ? { preview: Object.fromEntries(previewAt) } : {}),
+      ...(appliedSet !== null ? { dataSet: appliedSet } : {}),
     };
   }
 
@@ -2127,6 +2136,7 @@ export function createSession(
     queries.clear();
     recordCounts.clear();
     previewAt.clear();
+    appliedSet = null;
     bindingKinds.clear();
     visibilityTargets.clear();
     imageTargets.clear();
@@ -2334,6 +2344,10 @@ export function createSession(
         });
       if (!sourceNames.includes(d.source)) sourceNames.push(d.source);
     }
+
+    for (const [q, n] of Object.entries(saved.preview ?? {}))
+      previewAt.set(q, n);
+    appliedSet = saved.dataSet ?? null;
 
     for (const [name, p] of Object.entries(saved.refresh ?? {})) {
       const policy = readPolicy(p);
@@ -3185,6 +3199,10 @@ export function createSession(
           };
         }
         state.status = "ready";
+        if (result.applied > 0) {
+          appliedSet = name;
+          markDirty();
+        }
         const skippedCount = Object.keys(result.skipped).length;
         state.message =
           `Applied data set "${name}": ${result.applied} variable(s) in one undo step` +
@@ -3595,6 +3613,10 @@ export function createSession(
 
     setPreviewPosition(queryId, record) {
       previewAt.set(queryId, Math.max(0, Math.floor(record)));
+    },
+
+    appliedDataSet() {
+      return appliedSet;
     },
 
     async queryMappings(queryId) {
