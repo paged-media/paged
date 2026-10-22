@@ -48,7 +48,7 @@ import { expect, test, type Page } from "@playwright/test";
 
 import { openPanel } from "../../fidelity/canvas-driver";
 import { Designer } from "../driver/designer";
-import { placedValues } from "./sheet-kit";
+import { placedValues, expectGridSurfaceDrawn } from "./sheet-kit";
 
 import { dirname, resolve as pathResolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -268,7 +268,10 @@ test.describe("journey · paged.sheet calc + functions through the grid", () => 
     await page.mouse.dblclick(at!.x, at!.y);
     await expect(breadcrumb).toBeVisible({ timeout: 10_000 });
     await page.waitForTimeout(800);
-    const gridPx = await designer.expectRenderChangesFrom(beforeEnter);
+    const gridPx = await expectGridSurfaceDrawn(page, (a, b) =>
+      designer.renderDiffPixels(a, b),
+    );
+    void beforeEnter;
     expect(
       gridPx,
       "the in-frame grid (with computed cells) rendered onto the page",

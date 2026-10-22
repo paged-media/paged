@@ -347,10 +347,60 @@ test.describe("sheet frame — keys and wheel reach the active edit context", ()
       expect(await placedValues(page)).toEqual(original);
     });
 
+    test("AC-SURFACE-1 — the entered sheet frame is a frame surface with headings, on the frame through a zoom; a wheel scrolls the grid @feat:sheet.grid.inframe @level:gesture", async ({
+      page,
+    }) => {
+      const frame = await importAndLower(page, "A1:B3");
+      const at = await enterSheet(page, frame);
+      const surface = page.locator('[data-testid="sheet-frame-surface"]');
+      await expect(surface).toBeVisible({ timeout: 10_000 });
+      const centred = async () => {
+        const box = (await surface.boundingBox())!;
+        const c = await elementScreenCenter(page, frame);
+        return [box.x + box.width / 2 - c.x, box.y + box.height / 2 - c.y];
+      };
+      for (const off of await centred()) expect(Math.abs(off)).toBeLessThanOrEqual(1);
+      // Through a zoom the surface stays on the frame.
+      await page.keyboard.down(MOD);
+      await page.mouse.wheel(0, -240);
+      await page.keyboard.up(MOD);
+      await page.waitForTimeout(400);
+      for (const off of await centred()) expect(Math.abs(off)).toBeLessThanOrEqual(1);
+      // The keys are the surface's: the grid's cell badge follows an arrow.
+      await surface.click();
+      const badge = await cellRef(page).textContent();
+      await page.keyboard.press("ArrowDown");
+      await expect(cellRef(page)).not.toHaveText(badge ?? "", { timeout: 5_000 });
+      // A plain wheel scrolls the grid, not the canvas.
+      const camera = () =>
+        page.evaluate(() =>
+          (globalThis as unknown as CanvasHandle).__canvas.client.camera.read(),
+        );
+      const before = await camera();
+      const b = (await surface.boundingBox())!;
+      await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2);
+      await page.mouse.wheel(0, 200);
+      await page.waitForTimeout(300);
+      expect(await camera(), "a wheel the grid uses does not pan").toEqual(before);
+      void at;
+    });
+
     test("AC-WHEEL-1 — a wheel over the active frame goes to onContentWheel; the canvas pans only when it declines @feat:plugin-platform.modal-edit-session @feat:sheet.grid.inframe @level:gesture", async ({
       page,
     }) => {
       const frame = await importAndLower(page, "A1:B3");
+      // This pins the HOST's context-wheel lane, the one a context without
+      // a frame surface uses: take the sheet's surface out of the registry
+      // first (with it, the wheel is the surface's own; AC-SURFACE-1).
+      await page.evaluate(() => {
+        const w = globalThis as unknown as CanvasHandle;
+        const reg = (
+          w.__canvas.registries as unknown as {
+            frameSurfaces?: { get(t: string): unknown };
+          }
+        ).frameSurfaces;
+        if (reg) reg.get = () => undefined;
+      });
       const at = await enterSheet(page, frame);
 
       // Stand in for the bundle's hook on the live contribution — the

@@ -29,6 +29,7 @@ export {
   WIDGET_KEY_OWNERS,
   canvasKeyYields,
   canvasSurfaceOf,
+  insideFrameSurface,
   insideKeyOwningContainer,
   isActivatable,
   isCanvasSurface,

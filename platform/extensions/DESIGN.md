@@ -2717,7 +2717,7 @@ over the frame's content box while the context is active on it (editor ADR 281).
   same bundle first (the surface borrows the context, like a binding provider, §18). No
   separate capability.
 - **Input.** Events inside the surface are its own; the canvas does not run tools on them and
-  key ownership yields to it. Cmd/Ctrl-wheel still zooms the canvas.
+  key ownership yields to it. A wheel it does not stop goes on to the canvas (pan or zoom).
 - **Leaving.** `exit` and `host.shell.exitEditContext({ commit })` end the bundle's own active
   context (`onCommit` or `onCancel`, then `onExit`); never another bundle's.
 - **Probes.** `contribute.frameSurface@1` (door, static), `editContext.frameSurface@1` (the host

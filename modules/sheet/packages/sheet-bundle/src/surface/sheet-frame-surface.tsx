@@ -156,7 +156,9 @@ export function makeSheetFrameSurface(
           const k = e.deltaMode === 0 ? 1 / Math.max(props.pxPerPt, 0.01) : 15;
           const dx = e.shiftKey && e.deltaX === 0 ? e.deltaY * k : e.deltaX * k;
           const dy = e.shiftKey && e.deltaX === 0 ? 0 : e.deltaY * k;
-          session.wheelInFrame(dx, dy);
+          // Used: the grid scrolled, the canvas stays put. Declined (the
+          // window is at that edge): the wheel goes on to the canvas.
+          if (session.wheelInFrame(dx, dy)) e.stopPropagation();
         }}
         onKeyDown={(e) => {
           // Esc with no cell edit open leaves the frame (Excel's second Esc).

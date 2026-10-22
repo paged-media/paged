@@ -18,10 +18,11 @@ and end the context when the surface asks.
   the overlay SVG and below the HUD, when the active edit context has a registered surface and
   its frame has geometry on a laid-out page. Its transform is computed from the same camera,
   page rectangles and element geometry the selection chrome and the content-point mapping use.
-- **Events.** Pointer, double-click, context-menu and (plain) wheel events stop at the surface's
-  root, so the canvas's tools and the click-outside commit do not see them. A press outside the
-  surface still reaches the canvas and commits the context as before. Cmd/Ctrl-wheel passes
-  through and zooms.
+- **Events.** Pointer, double-click and context-menu events stop at the surface's root, so the
+  canvas's tools and the click-outside commit do not see them. A press outside the surface still
+  reaches the canvas and commits the context as before. A wheel is the surface's to stop: one it
+  uses stops there, one it declines (the grid is at that edge, or Cmd/Ctrl-wheel) bubbles on and
+  the canvas pans or zooms as ever.
 - **Keys.** The root carries `data-paged-frame-surface`; `canvasKeyYields` treats focus inside
   it as owning the key, as it does for a dialog.
 - **Exit.** The surface's `exit` and `host.shell.exitEditContext` commit or cancel the stack's
