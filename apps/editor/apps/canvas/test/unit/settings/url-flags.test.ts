@@ -21,15 +21,21 @@
 //
 //   · `url.debug` (debug-flags.ts): `?debug=a,b` turns on per-load
 //     developer diagnostics; read once at module load.
-//   · `url.solo` (solo/profiles.ts): `?solo=<profile>` boots a
-//     single-plugin application; resolution is TOTAL — anything that is
-//     not a known profile boots the ordinary editor.
+//   · `url.solo` (profiles/from-url.ts): `?solo=<profile>` boots a
+//     single-plugin application, the preset `solo:<name>`; resolution is
+//     TOTAL — anything that is not a known profile boots the ordinary
+//     editor.
+//   · `url.profile` (profiles/from-url.ts): `?profile=<preset>` boots the
+//     editor as a named preset (docs/composable-editor.md §5.4); an
+//     unknown name boots the ordinary editor with a problem.
 
 import { afterEach, describe, expect, test } from "bun:test";
 
 import { covers, stubGlobal, unstubAllGlobals } from "@paged-media/test-kit";
 
-import { resolveSoloProfile, SOLO_PROFILES } from "../../../src/solo/profiles";
+import { profileFromSearch } from "../../../src/profiles/from-url";
+import { PRESETS } from "../../../src/profiles/presets";
+import { SOLO_PROFILES } from "../../../src/solo/profiles";
 
 type DebugFlags = typeof import("../../../src/debug-flags");
 
@@ -78,7 +84,7 @@ describe("setting url.debug", () => {
 });
 
 describe("setting url.solo", () => {
-  test("absent, empty or unknown: the ordinary editor (null)", () => {
+  test("absent, empty or unknown: the ordinary editor", () => {
     covers("setting:url.solo");
     for (const search of [
       "",
@@ -86,14 +92,21 @@ describe("setting url.solo", () => {
       "?solo=paged.pdf",
       "?solo=draw",
       "?other=1",
-    ])
-      expect({ search, profile: resolveSoloProfile(search) }).toEqual({
+    ]) {
+      const { profile } = profileFromSearch(search);
+      expect({
         search,
-        profile: null,
+        bundles: profile.bundles,
+        scope: profile.storageScope,
+      }).toEqual({
+        search,
+        bundles: "all",
+        scope: "",
       });
+    }
   });
 
-  test("every declared profile resolves to itself", () => {
+  test("every declared profile boots its one bundle in its own storage scope", () => {
     covers("setting:url.solo");
     const names = Object.keys(SOLO_PROFILES).sort();
     expect(names).toEqual([
@@ -105,19 +118,50 @@ describe("setting url.solo", () => {
       "paged.web",
     ]);
     for (const name of names) {
-      const p = resolveSoloProfile(`?solo=${encodeURIComponent(name)}`);
-      expect(p).toBe(SOLO_PROFILES[name]);
-      // The profile names the bundle the solo app is: its storage scope
-      // (`.solo.<bundleId>`) and its one mode's layout come from it.
-      expect(typeof p?.bundleId).toBe("string");
-      expect(p?.slots).toBeDefined();
+      const { profile, problems } = profileFromSearch(
+        `?solo=${encodeURIComponent(name)}`,
+      );
+      const solo = SOLO_PROFILES[name]!;
+      expect(problems).toEqual([]);
+      expect(profile.bundles).toEqual([solo.bundleId]);
+      expect(profile.storageScope).toBe(`.solo.${solo.bundleId}`);
+      expect(profile.modes).not.toBe("all");
     }
   });
 
   test("other parameters do not get in the way", () => {
     covers("setting:url.solo");
-    expect(resolveSoloProfile("?debug=hits&solo=paged.sheet&x")).toBe(
-      SOLO_PROFILES["paged.sheet"],
-    );
+    expect(
+      profileFromSearch("?debug=hits&solo=paged.sheet&x").profile.bundles,
+    ).toEqual(["media.paged.sheet"]);
+  });
+});
+
+describe("setting url.profile", () => {
+  test("names a preset", () => {
+    covers("setting:url.profile");
+    for (const name of Object.keys(PRESETS)) {
+      const { profile, problems } = profileFromSearch(
+        `?profile=${encodeURIComponent(name)}`,
+      );
+      expect({ name, problems }).toEqual({ name, problems: [] });
+      expect(profile.chain[profile.chain.length - 1]).toBe(name);
+    }
+  });
+
+  test("wins over ?solo= when both are given", () => {
+    covers("setting:url.profile");
+    expect(
+      profileFromSearch("?solo=paged.draw&profile=full").profile.bundles,
+    ).toBe("all");
+  });
+
+  test("an unknown preset is the ordinary editor with a problem", () => {
+    covers("setting:url.profile");
+    const { profile, problems } = profileFromSearch("?profile=nothing");
+    expect(profile.bundles).toBe("all");
+    expect(problems).toEqual([
+      { path: "extends", message: 'unknown preset "nothing"' },
+    ]);
   });
 });

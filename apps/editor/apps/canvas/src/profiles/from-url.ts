@@ -29,6 +29,7 @@ import {
 } from "@paged-media/shell";
 
 import { PRESETS, soloPresetId } from "./presets";
+import { SOLO_PROFILES } from "../solo/profiles";
 
 export function profileFromSearch(search: string): {
   profile: ResolvedProfile;
@@ -42,6 +43,9 @@ export function profileFromSearch(search: string): {
   }
   const named = params.get("profile");
   const solo = params.get("solo");
-  const preset = named || (solo ? soloPresetId(solo) : "full");
-  return resolveProfile({ extends: preset }, PRESETS);
+  // `?solo=` takes exactly the names ADR 213 declared (`paged.draw`, …);
+  // anything else is unknown, as it always was.
+  const soloPreset =
+    solo && Object.hasOwn(SOLO_PROFILES, solo) ? soloPresetId(solo) : solo;
+  return resolveProfile({ extends: named || soloPreset || "full" }, PRESETS);
 }

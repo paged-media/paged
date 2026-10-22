@@ -493,22 +493,5 @@ export const SOLO_PROFILES: Readonly<Record<string, SoloProfile>> = {
 // profile for either would be an application whose entire chrome came
 // from the host, which is a worse answer than not offering one.
 
-/**
- * Resolve `?solo=<name>` from a query string.
- *
- * Returns null for absent, empty, or unknown — an unknown profile boots
- * the ORDINARY editor rather than a broken one. A typo'd URL must not
- * produce an app with no panels and no explanation; the full editor is
- * the safe answer, and it is also the honest one, because the user
- * asked for something that does not exist.
- */
-export function resolveSoloProfile(search: string): SoloProfile | null {
-  let name: string | null = null;
-  try {
-    name = new URLSearchParams(search).get("solo");
-  } catch {
-    return null;
-  }
-  if (!name) return null;
-  return SOLO_PROFILES[name] ?? null;
-}
+// `?solo=<name>` is resolved by `profiles/from-url.ts`, which turns a
+// name above into the preset `solo:<name>` (`profiles/presets.ts`).

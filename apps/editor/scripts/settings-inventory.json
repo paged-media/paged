@@ -263,8 +263,28 @@
         "paged.data"
       ],
       "effect": "boots a single-plugin application; its chrome storage keys are scoped `.solo.<profile>`",
-      "source": "apps/editor/apps/canvas/src/solo/profiles.ts",
+      "source": "apps/editor/apps/canvas/src/profiles/from-url.ts",
       "marker": "get(\"solo\")",
+      "sites": []
+    },
+    {
+      "id": "url.profile",
+      "kind": "url-flag",
+      "storage": "url",
+      "key": "?profile=<preset>",
+      "default": "absent: the full editor",
+      "values": [
+        "full",
+        "solo:draw",
+        "solo:image",
+        "solo:sheet",
+        "solo:doc",
+        "solo:web",
+        "solo:data"
+      ],
+      "effect": "boots the editor as a named preset of the editor profile; it wins over ?solo=",
+      "source": "apps/editor/apps/canvas/src/profiles/from-url.ts",
+      "marker": "get(\"profile\")",
       "sites": []
     },
     {
