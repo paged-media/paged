@@ -232,6 +232,22 @@ pub struct LoweredParagraph {
     /// native paragraphs back into this one.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub segments: Vec<LoweredSegment>,
+    /// The Word bookmarks that start in this paragraph (by name): what a
+    /// template field anchors to. Empty when none.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub bookmarks: Vec<String>,
+    /// The Word list this paragraph is an item of, when it is one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub list: Option<LoweredListRef>,
+}
+
+/// A list paragraph's list identity: the `w:numId` its items share and its
+/// level. The marker itself is lowered into the paragraph's properties.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LoweredListRef {
+    pub num_id: i32,
+    pub level: u8,
 }
 
 /// The second or later part of a Word paragraph that a page or column break
