@@ -1064,6 +1064,94 @@ impl Engine {
                 ws.merges.push(nm);
             }
         }
+
+        // Row and column attributes go with their rows/columns (W1.2).
+        match axis {
+            EditAxis::Row => {
+                ws.hidden_rows = std::mem::take(&mut ws.hidden_rows)
+                    .into_iter()
+                    .filter_map(|r| shift_coord(r, kind, at, n))
+                    .collect();
+                ws.row_meta = std::mem::take(&mut ws.row_meta)
+                    .into_iter()
+                    .filter_map(|(r, m)| shift_coord(r, kind, at, n).map(|r| (r, m)))
+                    .collect();
+            }
+            EditAxis::Col => {
+                ws.col_meta = std::mem::take(&mut ws.col_meta)
+                    .into_iter()
+                    .filter_map(|mut m| {
+                        let (a, b) = shift_span(m.min, m.max, kind, at, n)?;
+                        m.min = a;
+                        m.max = b.min(sheet_core::MAX_COL);
+                        Some(m)
+                    })
+                    .collect();
+            }
+        }
+
+        // Tables move and grow with the edit; a column inserted inside one
+        // becomes a `ColumnN` column with its header cell written, as Excel
+        // does. A table the edit deletes whole goes.
+        let mut headers: Vec<(u32, u32, _)> = Vec::new();
+        ws.tables = std::mem::take(&mut ws.tables)
+            .into_iter()
+            .filter_map(|mut t| {
+                let sh = sheet_parser::shift_table(t.range, &t.columns, edit);
+                let range = sh.range?;
+                for off in sh.removed.iter().rev() {
+                    if (*off as usize) < t.columns.len() {
+                        t.columns.remove(*off as usize);
+                    }
+                }
+                for (off, name) in &sh.inserted {
+                    let i = (*off as usize).min(t.columns.len());
+                    t.columns.insert(i, name.clone());
+                    if t.header_row {
+                        let r = range.normalized();
+                        headers.push((r.start.row, r.start.col + off, name.clone()));
+                    }
+                }
+                t.range = range;
+                Some(t)
+            })
+            .collect();
+        for (r, c, name) in headers {
+            ws.cells.insert(
+                (r, c),
+                sheet_core::Cell {
+                    value: CellValue::Text(name),
+                    formula: None,
+                    style: ws
+                        .cells
+                        .get(&(r, c.saturating_sub(1)))
+                        .map(|c| c.style)
+                        .unwrap_or_default(),
+                },
+            );
+        }
+
+        // Filter views follow their range; a column criterion follows its
+        // column (and goes with it).
+        ws.filters = std::mem::take(&mut ws.filters)
+            .into_iter()
+            .filter_map(|mut f| {
+                let old = f.range.normalized();
+                let new = sheet_parser::shift_range_ref(old, edit)?;
+                if axis == EditAxis::Col {
+                    f.columns = std::mem::take(&mut f.columns)
+                        .into_iter()
+                        .filter_map(|mut cf| {
+                            let c = shift_coord(old.start.col + cf.col, kind, at, n)?;
+                            cf.col = c.checked_sub(new.start.col)?;
+                            Some(cf)
+                        })
+                        .collect();
+                }
+                f.range = new;
+                Some(f)
+            })
+            .collect();
     }
 
     /// Rewrite every formula in the model for the structural edit. Re-interns
@@ -1262,6 +1350,47 @@ fn shift_map(
         }
     }
     out
+}
+
+/// Shift an inclusive span `min..=max` on the edit's axis: an insert inside
+/// grows it, a delete clips it; `None` when it is deleted whole.
+fn shift_span(min: u32, max: u32, kind: EditKind, at: u32, n: u32) -> Option<(u32, u32)> {
+    match kind {
+        EditKind::Insert => {
+            let a = if min >= at {
+                shift_coord(min, kind, at, n)?
+            } else {
+                min
+            };
+            let b = if max >= at {
+                shift_coord(max, kind, at, n)?
+            } else {
+                max
+            };
+            Some((a, b))
+        }
+        EditKind::Delete => {
+            let end = at as u64 + n as u64;
+            if (min as u64) >= at as u64 && (max as u64) < end {
+                return None;
+            }
+            let a = if min < at {
+                min
+            } else if (min as u64) < end {
+                at
+            } else {
+                min - n
+            };
+            let b = if max < at {
+                max
+            } else if (max as u64) < end {
+                at.saturating_sub(1)
+            } else {
+                max - n
+            };
+            Some((a, b))
+        }
+    }
 }
 
 /// Shift a merge box along `axis`; `None` if it fully collapses (both

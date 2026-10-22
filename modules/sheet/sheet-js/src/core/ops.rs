@@ -572,6 +572,7 @@ impl SheetSession {
             StructuralEdit::DeleteCols => Edit::DeleteCols { sheet, at, n },
         };
         let result = self.engine_mut().apply_edit(&edit);
+        self.doc.record_structural_edit(sheet, edit);
 
         // The edited sheet's stored formula texts are positional: drop them
         // all and re-print every formula cell there (and re-encode the sheet,
