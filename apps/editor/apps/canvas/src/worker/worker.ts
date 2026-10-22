@@ -314,7 +314,7 @@ function assertSabContract(mod: CanvasWasmModule): string | null {
   return drift.length === 0 ? null : drift.join("; ");
 }
 
-async function init() {
+async function init(engineWasm: string | undefined) {
   // Decision-B package boundary — the wasm-bindgen loader is the
   // published `@paged-media/canvas-wasm` package (no longer the
   // vendored `packages/client/src/wasm` dir). Dynamic-import the loader
@@ -330,7 +330,12 @@ async function init() {
   // and streams the compile. In dev it is the file itself. A worker enforces
   // the CSP of ITS OWN script response, so the module host must be in the
   // connect-src floor that `_headers` sends with this file too.
-  await mod.default({ module_or_path: canvasWasmUrl });
+  //
+  // An embedding host that serves the engine elsewhere names its wasm in
+  // the worker's first message (`engineWasm`, from `createEditor`'s
+  // config); the `@paged-media/editor` package always does, since its
+  // engine comes from the `@paged-media/paged` dependency (PM-0013).
+  await mod.default({ module_or_path: engineWasm ?? canvasWasmUrl });
   worker = new mod.CanvasWorker();
   if (worker.protocolVersion !== PROTOCOL_VERSION) {
     postBack({
@@ -367,14 +372,21 @@ async function init() {
   }
 }
 
-const initPromise = init().catch((err) => {
-  postBack({
-    seq: null,
-    protocol: PROTOCOL_VERSION,
-    kind: "warning",
-    payload: { kind: "initFailed", details: String(err) },
+// The engine boots on the first message, which the client posts as it
+// constructs the worker: `engineWasm` when the host names the engine's
+// wasm (it is then the first), else the camera SAB, booting the engine
+// from this build's own asset.
+let initPromise: Promise<void> | null = null;
+function startInit(engineWasm: string | undefined): void {
+  initPromise ??= init(engineWasm).catch((err) => {
+    postBack({
+      seq: null,
+      protocol: PROTOCOL_VERSION,
+      kind: "warning",
+      payload: { kind: "initFailed", details: String(err) },
+    });
   });
-});
+}
 
 // Incoming messages must be processed strictly in order. The wasm
 // `handleMessage` call is synchronous and short, but `attachCanvas`'s
@@ -749,7 +761,14 @@ async function pump() {
 }
 
 self.addEventListener("message", (event: MessageEvent) => {
-  messageQueue.push(event.data as IncomingMessage);
+  const data = event.data as
+    IncomingMessage | { kind: "engineWasm"; url: string };
+  if (data.kind === "engineWasm") {
+    startInit(data.url);
+    return;
+  }
+  startInit(undefined);
+  messageQueue.push(data);
   void pump();
 });
 
