@@ -64,4 +64,5 @@ mod xlsx_recalc_corpus;
 mod xlsx_roundtrip;
 mod xlsx_roundtrip_prop;
 mod xlsx_saveloss;
+mod xlsx_structure;
 mod zip_container_bytes;

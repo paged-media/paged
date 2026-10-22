@@ -541,39 +541,93 @@ impl SheetSession {
                 "{axis} span {at}+{n} is past the sheet edge"
             )));
         }
-        let mut blockers = self
-            .doc
-            .structural_edit_blockers(sheet, self.engine().model());
-        // A formula kept verbatim (unparsed) cannot have its references
-        // rewritten — on this sheet, or elsewhere naming this sheet.
-        let sheet_name = self.engine().model().sheets[sheet as usize]
-            .name
-            .to_string();
-        let model = self.engine().model();
-        if self.doc.formula_texts.iter().any(|(&(s, r, c), t)| {
-            let unparsed = model
-                .sheet(s)
-                .and_then(|ws| ws.cell(r, c))
-                .is_none_or(|cell| cell.formula.is_none());
-            unparsed && (s == sheet || rewrite_sheet_refs(t, &sheet_name, "X").1)
-        }) {
-            blockers.push("a formula Paged keeps verbatim (unparsed)".into());
-        }
-        if !blockers.is_empty() {
-            return Err(SessionError(format!(
-                "cannot insert/delete {axis}s here without breaking preserved content: {}",
-                blockers.join(", ")
-            )));
-        }
-
         let edit = match kind {
             StructuralEdit::InsertRows => Edit::InsertRows { sheet, at, n },
             StructuralEdit::DeleteRows => Edit::DeleteRows { sheet, at, n },
             StructuralEdit::InsertCols => Edit::InsertCols { sheet, at, n },
             StructuralEdit::DeleteCols => Edit::DeleteCols { sheet, at, n },
         };
+        let sheet_names: Vec<String> = self
+            .engine()
+            .model()
+            .sheets
+            .iter()
+            .map(|w| w.name.to_string())
+            .collect();
+        let sheet_name = sheet_names[sheet as usize].clone();
+        let shift = |text: &str, host: bool| {
+            sheet_parser::shift_ref_text(
+                text,
+                &sheet_parser::TextShift {
+                    edit,
+                    sheet_name: &sheet_name,
+                    host_is_target: host,
+                    sheets: &sheet_names,
+                },
+            )
+        };
+
+        // Plan everything before anything changes: a formula kept verbatim
+        // (unparsed) is shifted as text; defined names are shifted; the
+        // package's preserved content is shifted by the document. Anything
+        // that cannot be shifted refuses the edit, the model untouched.
+        let mut blockers: Vec<String> = Vec::new();
+        let mut unparsed: Vec<((SheetId, u32, u32), String)> = Vec::new();
+        {
+            let model = self.engine().model();
+            for (&(s, r, c), t) in &self.doc.formula_texts {
+                let parsed = model
+                    .sheet(s)
+                    .and_then(|ws| ws.cell(r, c))
+                    .is_some_and(|cell| cell.formula.is_some());
+                if parsed {
+                    continue;
+                }
+                match shift(t, s == sheet) {
+                    Ok(new) => unparsed.push(((s, r, c), new)),
+                    Err(e) => blockers.push(format!(
+                        "a formula Paged keeps verbatim ({}!{}{}: {e})",
+                        sheet_names.get(s as usize).map_or("?", String::as_str),
+                        sheet_core::col_to_a1(c),
+                        r + 1
+                    )),
+                }
+            }
+        }
+        let mut names_err = Vec::new();
+        let new_names = rebuild_names(&self.engine().model().names, |scope, target| {
+            let host = scope == NameScope::Sheet(sheet);
+            let target = match target {
+                NameTarget::Formula(text) => match shift(text, host) {
+                    Ok(t) => NameTarget::Formula(t.into()),
+                    Err(e) => {
+                        names_err.push(format!("a defined name ({e})"));
+                        target.clone()
+                    }
+                },
+                NameTarget::Range(r) => {
+                    NameTarget::Range(sheet_parser::shift_range_ref(*r, &edit).unwrap_or(*r))
+                }
+            };
+            (Some(scope), target)
+        });
+        blockers.extend(names_err);
+        if !blockers.is_empty() {
+            return Err(SessionError(format!(
+                "cannot insert/delete {axis}s here without breaking preserved content: {}",
+                blockers.join(", ")
+            )));
+        }
+        let dirty = self.doc.shift_for_edit(&sheet_names, edit).map_err(|b| {
+            SessionError(format!(
+                "cannot insert/delete {axis}s here without breaking preserved content: {}",
+                b.join(", ")
+            ))
+        })?;
+
+        self.with_model(false, |m| m.names = new_names);
         let result = self.engine_mut().apply_edit(&edit);
-        self.doc.record_structural_edit(sheet, edit);
+        self.extra_dirty.extend(dirty);
 
         // The edited sheet's stored formula texts are positional: drop them
         // all and re-print every formula cell there (and re-encode the sheet,
@@ -581,6 +635,25 @@ impl SheetSession {
         self.doc.formula_texts.retain(|&(s, _, _), _| s != sheet);
         self.edited.retain(|&(s, _, _)| s != sheet);
         self.extra_dirty.insert(sheet);
+        // The verbatim formulas, shifted: those on the edited sheet at their
+        // new cells (a deleted cell takes its formula with it), the others
+        // in place.
+        for ((s, r, c), text) in unparsed {
+            if s == sheet {
+                let rows = sheet_parser::edit_is_rows(&edit);
+                let moved = if rows {
+                    sheet_parser::shift_index(&edit, r).map(|r| (r, c))
+                } else {
+                    sheet_parser::shift_index(&edit, c).map(|c| (r, c))
+                };
+                if let Some((r, c)) = moved {
+                    self.doc.formula_texts.insert((s, r, c), text);
+                }
+            } else if self.doc.formula_texts.get(&(s, r, c)) != Some(&text) {
+                self.doc.formula_texts.insert((s, r, c), text);
+                self.extra_dirty.insert(s);
+            }
+        }
         let mut reprint: BTreeSet<(SheetId, u32, u32)> = BTreeSet::new();
         {
             let model = self.engine().model();
