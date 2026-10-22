@@ -66,6 +66,15 @@ each published canary added is under [Releases](#releases).
   through the same parser. Recorded from Excel and replayed in CI: 741 of 742 en-US entries
   through the session agree (215 of 216 through the parser), de-DE, es-ES and it-IT 71 of 71,
   fr-FR 63 of 71, every disagreement a recorded ruling.
+- **Insert and delete rows and columns** on any sheet (ADR 515): references move in every
+  formula, and so does what the workbook keeps beside its cells — conditional formats,
+  validations, hyperlinks, filters and sorts, page breaks, sheet views, sparklines, tables (a
+  column inserted inside one becomes `ColumnN`; a table deleted whole goes with its part),
+  drawings and pictures, notes and threaded comments, defined names and print areas, chart
+  series, row and column attributes. What the delete removes entirely goes with its cells, as
+  in Excel. Still refused, with the reason: a pivot table on the sheet or a pivot cache over it,
+  and an extension Paged does not know that holds cell references. Over the Excel-written
+  workbooks of the private corpus, 1778 inserts and deletes: none refused.
 - **Workbook panel.** File and sheet controls on top (open, new, and sheets: add, rename,
   delete), then collapsible sections: Place on page (open by default), Rows and columns, Format
   and layout (borders, merge, column width, row height, freeze), Names, Sort range (formula cells
@@ -239,6 +248,10 @@ each published canary added is under [Releases](#releases).
 - **Locale.** The display locale is taken from the workbook's number formats on load.
 - **Saving an edited sheet** writes a new or changed literal text cell as an inline string
   (`t="inlineStr"`), not into the shared-string table. A sheet's tab state cannot be changed.
+  Two calculation findings show on a save of an edited sheet (measured on the Excel-converted
+  corpus): the members of a legacy array formula (`{=MINVERSE(…)}`) are not kept as cells, so
+  their cached values are not written; and a pre-dynamic-array formula that returns an array
+  (`MMULT` in one cell) is written back as a dynamic array.
 
 ## Not built
 

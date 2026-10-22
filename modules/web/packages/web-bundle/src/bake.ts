@@ -162,6 +162,10 @@ export interface BakeOutcome {
   /** The render contract's diagnostics — the not-loaded note when the
    *  engine is absent; template and overflow findings otherwise. */
   diagnostics: WebDiagnostic[];
+  /** Whether the content does not fit the frame under its overflow policy
+   *  (shrink at its smallest scale, or thread without a chain); `clip` is
+   *  not measured and reports false. */
+  overset: boolean;
   /** The scene layer, when one was produced (else null) — exposed for
    *  the B2 IDML-bake step (engine-gated) and for tests. */
   sceneLayer: SceneLayer | null;
@@ -183,6 +187,7 @@ export async function bakeWebFrame(
     rendered: false,
     submitted: false,
     diagnostics,
+    overset: false,
     sceneLayer: null,
   });
 
@@ -224,7 +229,7 @@ export async function bakeWebFrame(
   // size in CSS px, and take the REAL C-1 layer the engine painted. With
   // the engine NOT loaded (or it threw): the honest not-loaded path.
   const bound = (await resolveBindings(host, id, source)).vars;
-  const result: WebRenderResult = engine
+  const result: WebRenderResult & { overset?: boolean } = engine
     ? await renderWithEngine(
         host,
         id,
@@ -252,6 +257,7 @@ export async function bakeWebFrame(
       rendered: false,
       submitted: false,
       diagnostics: result.diagnostics,
+      overset: false,
       sceneLayer: null,
     };
   }
@@ -279,6 +285,7 @@ export async function bakeWebFrame(
     rendered: true,
     submitted,
     diagnostics: result.diagnostics,
+    overset: result.overset ?? false,
     sceneLayer: result.sceneLayer,
   };
 }
@@ -299,7 +306,7 @@ async function renderWithEngine(
   bounds: [number, number, number, number] | null,
   allowGrow: boolean,
   bound: TemplateVars = {},
-): Promise<WebRenderResult> {
+): Promise<WebRenderResult & { overset?: boolean }> {
   const notLoaded: WebRenderResult = {
     sceneLayer: null,
     diagnostics: [
@@ -377,7 +384,11 @@ async function renderWithEngine(
       source: "render",
     });
   }
-  return { sceneLayer: fit.layer, diagnostics };
+  return {
+    sceneLayer: fit.layer,
+    diagnostics,
+    overset: fit.overset === true,
+  };
 }
 
 /** grow leaves a frame alone when it is within this of the content height
