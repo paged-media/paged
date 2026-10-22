@@ -879,3 +879,28 @@ export {
   transitionWith,
   type TransitionDirection,
 } from "./view-transitions";
+
+// The editor profile (docs/composable-editor.md §5).
+export {
+  REGION_IDS,
+  baseProfile,
+  resolveProfile,
+  validateProfile,
+  applyRegionEdit,
+  excludedBy,
+  globMatches,
+  itemId,
+  matchIndices,
+  type BundleSelection,
+  type CanvasFurniture,
+  type EditorProfile,
+  type ItemMatcher,
+  type ProfileMode,
+  type ProfileProblem,
+  type RegionEdit,
+  type RegionId,
+  type RegionItem,
+  type RegionSpec,
+  type ResolvedProfile,
+  type ResolvedRegion,
+} from "./profile";
