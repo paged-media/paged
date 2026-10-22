@@ -1,0 +1,10 @@
+# CSCH(number).
+# id	formula	setup	expected
+csch-0	=CSCH(1.5)	-	0.469642440595225
+csch-1	=CSCH(-0.25)	-	-3.958635163302
+csch-2	=CSCH(30)	-	1.87152459376803E-13
+csch-3	=CSCH(1E-200)	-	1E+200
+csch-err0	=CSCH(0)	-	#DIV/0!
+csch-err1	=CSCH(A1)	A1=#N/A	#N/A
+csch-array	=SUM(CSCH({0.5,1.5,-2}))	-	2.11295662715838
+csch-text	=CSCH("abc")	-	#VALUE!

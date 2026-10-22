@@ -1,0 +1,12 @@
+# COMBINA(number,number_chosen) - combinations with repetition.
+# id	formula	setup	expected
+ca-doc	=COMBINA(4,3)	-	20
+ca-doc2	=COMBINA(10,3)	-	220
+ca-zero	=COMBINA(0,0)	-	1
+ca-n0	=COMBINA(0,2)	-	#NUM!
+ca-neg	=COMBINA(-1,2)	-	#NUM!
+ca-frac	=COMBINA(4.7,2.9)	-	10
+ca-text	=COMBINA("a",2)	-	#VALUE!
+ca-big	=COMBINA(100,50)	-	1.34191072731546E+40
+ca-array	=SUM(COMBINA({3,4},2))	-	16
+ca-k0	=COMBINA(5,0)	-	1

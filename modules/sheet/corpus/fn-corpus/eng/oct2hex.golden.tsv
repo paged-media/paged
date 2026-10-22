@@ -1,0 +1,12 @@
+# OCT2HEX(number,[places]).
+# id	formula	setup	expected
+oct2hex-0	=OCT2HEX(100,4)	-	0040
+oct2hex-1	=OCT2HEX(7777777533)	-	FFFFFFFF5B
+oct2hex-2	=OCT2HEX(3777777777)	-	1FFFFFFF
+oct2hex-3	=OCT2HEX(4000000000)	-	FFE0000000
+oct2hex-4	=OCT2HEX(7777777777)	-	FFFFFFFFFF
+oct2hex-5	=OCT2HEX(100,1)	-	#NUM!
+oct2hex-6	=OCT2HEX(100,11)	-	#NUM!
+oct2hex-7	=OCT2HEX(9)	-	#NUM!
+oct2hex-x0	=OCT2HEX(A1)	A1=#N/A	#N/A
+oct2hex-x1	=CONCAT(OCT2HEX({10,20}))	-	810

@@ -338,19 +338,12 @@ pub struct FrameWindow {
     pub partial_col: Option<u32>,
 }
 
-/// Whether a column is hidden. The sheet model has no column metadata yet;
-/// when per-column hidden state lands on the model, this is the one place
-/// that reads it (the window then skips hidden columns like hidden rows,
-/// and the grid scene and the page follow, since both read the window).
-fn col_hidden(_ws: Option<&sheet_core::Worksheet>, _col: u32) -> bool {
-    false
-}
-
 /// Compute the tracks a frame shows for `spec` (ADR 510). Pure and O(visible
 /// tracks + skipped hidden rows). At least one body row and column are always
 /// shown, even when the first one is wider or taller than the box, so a
 /// frame never renders empty. The listed rows and columns are strictly
-/// increasing (the body starts after the frozen band).
+/// increasing (the body starts after the frozen band). Hidden columns are
+/// skipped like hidden rows.
 pub fn frame_window(model: &SheetModel, sheet: SheetId, spec: &FrameWindowSpec) -> FrameWindow {
     let ws = model.sheet(sheet);
     let hidden = |r: u32| ws.is_some_and(|w| w.row_hidden(r));
@@ -398,8 +391,9 @@ pub fn frame_window(model: &SheetModel, sheet: SheetId, spec: &FrameWindowSpec) 
     let mut col_widths_pt = Vec::new();
     let mut x = 0.0_f64;
     let freeze_cols = spec.freeze_cols.min(sheet_core::MAX_COL + 1);
+    let col_hidden = |c: u32| ws.is_some_and(|w| w.col_hidden(c));
     for c in 0..freeze_cols {
-        if col_hidden(ws, c) {
+        if col_hidden(c) {
             continue;
         }
         let w = col_width_pt(ws, c);
@@ -412,7 +406,7 @@ pub fn frame_window(model: &SheetModel, sheet: SheetId, spec: &FrameWindowSpec) 
     let mut body_cols = 0u32;
     let mut c = spec.left_col.max(freeze_cols);
     while c <= sheet_core::MAX_COL {
-        if !col_hidden(ws, c) {
+        if !col_hidden(c) {
             let w = col_width_pt(ws, c);
             if body_cols > 0 && x + w > spec.width_pt {
                 if x < spec.width_pt {
@@ -1407,6 +1401,32 @@ mod tests {
     }
 
     #[test]
+    #[allow(non_snake_case)]
+    fn sheet_frame_window_skips_hidden_columns__feat__sheet_grid_inframe() {
+        let mut m = SheetModel::new();
+        let s = m.add_sheet("S");
+        m.sheet_mut(s).unwrap().col_meta.push(sheet_core::ColMeta {
+            min: 1,
+            max: 2,
+            hidden: true,
+            ..Default::default()
+        });
+        let w = frame_window(
+            &m,
+            s,
+            &FrameWindowSpec {
+                top_row: 0,
+                left_col: 0,
+                width_pt: 200.0,
+                height_pt: 30.0,
+                freeze_rows: 0,
+                freeze_cols: 0,
+            },
+        );
+        assert_eq!(&w.cols[..3], &[0, 3, 4]);
+    }
+
+    #[test]
     fn sheet_frame_window_starts_at_the_top_left_cell_and_skips_hidden_rows() {
         let (mut m, s) = model_with(&[]);
         {
@@ -1644,6 +1664,24 @@ mod tests {
     }
 
     #[test]
+    fn sheet_grid_scene_skips_hidden_columns__feat__sheet_grid_inframe() {
+        let (mut m, s) =
+            model_with(&[(0, 0, text("a")), (0, 1, text("hidden")), (0, 2, text("c"))]);
+        m.sheet_mut(s).unwrap().col_meta.push(sheet_core::ColMeta {
+            min: 1,
+            max: 1,
+            hidden: true,
+            ..Default::default()
+        });
+        let scene = grid_scene(&m, s, 0, 0, 100.0, 15.0, &GridOptions::default());
+        assert_eq!(scene.viewport.col_indices, vec![0, 2]);
+        let cols: Vec<u32> = scene.cells.iter().map(|c| c.col).collect();
+        assert_eq!(cols, vec![0, 2]);
+        // "a" may overflow over nothing: its neighbour (C) is occupied.
+        assert_eq!(scene.cells[0].overflow_to, None);
+    }
+
+    #[test]
     fn sheet_grid_scene_resolves_real_styles_and_text_facets__feat__sheet_style_mapping() {
         let (mut m, s) = model_with(&[
             (0, 0, styled(1.0, 1)),
@@ -1758,7 +1796,11 @@ mod tests {
                 .iter()
                 .find(|row| row.index == cell.row - r0)
                 .expect("row lowered");
-            let pc = &row.cells[(cell.col - c0) as usize];
+            let pc = row
+                .cells
+                .iter()
+                .find(|pc| pc.col == cell.col - c0)
+                .expect("column lowered");
             assert_eq!(cell.text, pc.text, "text at {:?}", (cell.row, cell.col));
             assert_eq!(cell.align, pc.align);
             assert_eq!(cell.style_key, pc.style_key);

@@ -1,0 +1,14 @@
+# DELTA(number1,[number2]).
+# id	formula	setup	expected
+delta-0	=DELTA(5,4)	-	0
+delta-1	=DELTA(5,5)	-	1
+delta-2	=DELTA(0.5,0)	-	0
+delta-3	=DELTA(0)	-	1
+delta-4	=DELTA(1)	-	0
+delta-5	=DELTA("5",5)	-	1
+delta-6	=DELTA("a",5)	-	#VALUE!
+delta-7	=DELTA(TRUE,1)	-	#VALUE!
+delta-8	=DELTA(1E-300,0)	-	0
+delta-x0	=DELTA(A1,1)	A1=#N/A	#N/A
+delta-x1	=SUM(DELTA({1,2,3},2))	-	1
+delta-x2	=DELTA(A1)	-	1
