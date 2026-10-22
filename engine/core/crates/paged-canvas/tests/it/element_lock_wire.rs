@@ -103,10 +103,11 @@ fn moving_resizing_or_deleting_a_locked_frame_is_refused_and_says_why() {
         let err = m
             .apply_mutation(&mutation)
             .expect_err(&format!("{what} on a locked frame"));
-        let message = format!("{err:?}");
+        // v75 — the refusal is typed: `WorkerError::Locked`, not a sentence
+        // inside `NotImplemented`.
         assert!(
-            message.contains("is locked"),
-            "{what}: the refusal names the lock: {message}"
+            matches!(err, paged_canvas::channel::WorkerError::Locked { .. }),
+            "{what}: the refusal names the lock: {err:?}"
         );
     }
     assert_eq!(read(&m, &f, PropertyPath::FrameBounds), bounds);

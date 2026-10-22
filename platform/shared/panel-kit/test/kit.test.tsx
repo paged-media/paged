@@ -113,6 +113,18 @@ describe("refusalText", () => {
     expect(refusalText({ kind: "unknownPage", details: { pageId: "p" } })).toBe(
       "That page is no longer in the document.",
     );
+    expect(
+      refusalText({
+        kind: "notPermitted",
+        details: { permission: "text.edit", target: "story u12" },
+      }),
+    ).toBe("This part of the template cannot be changed.");
+    expect(
+      refusalText({
+        kind: "locked",
+        details: { node: "oval:u3", action: "delete it" },
+      }),
+    ).toBe("The object is locked. Unlock it to change it.");
     expect(refusalText("invalidValue")).toBe("That value cannot be used here.");
     expect(refusalText({ applied: false, code: "readOnly" })).toBe(
       "This value cannot be changed.",

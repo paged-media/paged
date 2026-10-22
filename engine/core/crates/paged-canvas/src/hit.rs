@@ -158,6 +158,8 @@ impl CanvasModel {
         let layer_z = paged_scene::layer_z_index(designmap);
 
         let mut hits: Vec<(usize, usize, ElementId)> = Vec::new();
+        // Engine ADR 1000 — a marquee takes only what the session may select.
+        let selectability = self.selectability();
         for parsed in &scene.spreads {
             let on_this_spread = parsed
                 .spread
@@ -176,6 +178,9 @@ impl CanvasModel {
                     continue;
                 }
                 if paged_scene::lookup_layer_locked(&layer_lockeds, c.item_layer.as_deref()) {
+                    continue;
+                }
+                if !selectability.allows(c.element_id.raw_id()) {
                     continue;
                 }
                 if obb_intersects_aabb(c.bounds, c.item_transform, rect_spread) {
@@ -227,6 +232,9 @@ impl CanvasModel {
         let layer_lockeds = paged_scene::build_layer_locked_map(designmap);
         let layer_z = paged_scene::layer_z_index(designmap);
 
+        // Engine ADR 1000 — a session that may not select an item does not
+        // hit it; the point falls through to what lies beneath.
+        let selectability = self.selectability();
         for parsed in &scene.spreads {
             let on_this_spread = parsed
                 .spread
@@ -258,6 +266,9 @@ impl CanvasModel {
                     continue;
                 }
                 if !filter_allows(filter, c) {
+                    continue;
+                }
+                if !selectability.allows(c.element_id.raw_id()) {
                     continue;
                 }
                 if !point_in_oriented_frame(spread_point, c.bounds, c.item_transform) {
