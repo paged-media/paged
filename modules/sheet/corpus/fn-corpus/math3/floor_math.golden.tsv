@@ -1,0 +1,14 @@
+# FLOOR.MATH(number,[significance],[mode]).
+# id	formula	setup	expected
+fm-pos	=FLOOR.MATH(24.3,5)	-	20
+fm-def	=FLOOR.MATH(6.7)	-	6
+fm-neg	=FLOOR.MATH(-8.1,2)	-	-10
+fm-neg-mode	=FLOOR.MATH(-5.5,2,-1)	-	-4
+fm-neg-mode1	=FLOOR.MATH(-5.5,2,1)	-	-4
+fm-sig0	=FLOOR.MATH(5.5,0)	-	0
+fm-negsig	=FLOOR.MATH(5.5,-2)	-	4
+fm-cent	=FLOOR.MATH(4.43,0.01)	-	4.43
+fm-tenth	=FLOOR.MATH(0.3,0.1)	-	0.3
+fm-text	=FLOOR.MATH("a")	-	#VALUE!
+fm-err	=FLOOR.MATH(1,2,A1)	A1=#NUM!	#NUM!
+fm-array	=SUM(FLOOR.MATH({1.5,-1.5,2.7}))	-	1

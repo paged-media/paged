@@ -1,0 +1,9 @@
+# SECH(number).
+# id	formula	setup	expected
+sech-0	=SECH(45)	-	5.72503716109879E-20
+sech-1	=SECH(0)	-	1
+sech-2	=SECH(-1)	-	0.648054273663885
+sech-3	=SECH(800)	-	0
+sech-err0	=SECH(A1)	A1=#N/A	#N/A
+sech-array	=SUM(SECH({0.5,1.5,-2}))	-	1.57771714774643
+sech-text	=SECH("abc")	-	#VALUE!

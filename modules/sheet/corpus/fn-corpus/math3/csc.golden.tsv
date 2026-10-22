@@ -1,0 +1,11 @@
+# CSC(number).
+# id	formula	setup	expected
+csc-0	=CSC(15)	-	1.53778056154085
+csc-1	=CSC(1)	-	1.18839510577812
+csc-2	=CSC(-2)	-	-1.09975017029462
+csc-3	=CSC(1E-8)	-	100000000
+csc-err0	=CSC(0)	-	#DIV/0!
+csc-err1	=CSC(2^27)	-	#NUM!
+csc-err2	=CSC(A1)	A1=#N/A	#N/A
+csc-array	=SUM(CSC({0.5,1.5,-2}))	-	1.9885907768856
+csc-text	=CSC("abc")	-	#VALUE!

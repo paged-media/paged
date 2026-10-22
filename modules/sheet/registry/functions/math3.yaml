@@ -1,0 +1,335 @@
+# sheet.fn.math.* (W3 additions) — the modern rounding forms, matrix
+# functions, reciprocal trigonometry and paired-array sums. Kernels in
+# sheet-fn/src/families/math3.rs (+ linalg.rs). Expected values are recorded
+# from Excel (sheet-conformance/oracle/excel/recorded/math3.tsv); provenance:
+# Microsoft's public function reference.
+
+- id: sheet.fn.math.ceiling-math
+  name: CEILING.MATH
+  xlfn_prefix: "_xlfn."
+  family: math
+  arity: { min: 1, max: 3 }
+  volatility: none
+  range_aware: false
+  rust: math3::ceiling_math
+  status: implemented
+  provenance: ["Microsoft function reference (CEILING.MATH) — |significance|, mode rounds negatives away from zero; quotient rounded to 15 digits"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_math3.rs::sheet_fn_math3_ceiling_math"]
+    corpus: ["corpus/fn-corpus/math3/ceiling_math.golden.tsv"]
+
+- id: sheet.fn.math.ceiling-precise
+  name: CEILING.PRECISE
+  xlfn_prefix: "_xlfn."
+  family: math
+  arity: { min: 1, max: 2 }
+  volatility: none
+  range_aware: false
+  rust: math3::ceiling_precise
+  status: implemented
+  provenance: ["Microsoft function reference (CEILING.PRECISE) — toward +infinity regardless of signs"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_math3.rs::sheet_fn_math3_ceiling_precise"]
+    corpus: ["corpus/fn-corpus/math3/ceiling_precise.golden.tsv"]
+
+- id: sheet.fn.math.iso-ceiling
+  name: ISO.CEILING
+  family: math
+  arity: { min: 1, max: 2 }
+  volatility: none
+  range_aware: false
+  rust: math3::ceiling_precise
+  status: implemented
+  provenance: ["Microsoft function reference (ISO.CEILING) — same rule as CEILING.PRECISE"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_math3.rs::sheet_fn_math3_iso_ceiling"]
+    corpus: ["corpus/fn-corpus/math3/iso_ceiling.golden.tsv"]
+
+- id: sheet.fn.math.floor-math
+  name: FLOOR.MATH
+  xlfn_prefix: "_xlfn."
+  family: math
+  arity: { min: 1, max: 3 }
+  volatility: none
+  range_aware: false
+  rust: math3::floor_math
+  status: implemented
+  provenance: ["Microsoft function reference (FLOOR.MATH) — |significance|, mode rounds negatives toward zero"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_math3.rs::sheet_fn_math3_floor_math"]
+    corpus: ["corpus/fn-corpus/math3/floor_math.golden.tsv"]
+
+- id: sheet.fn.math.floor-precise
+  name: FLOOR.PRECISE
+  xlfn_prefix: "_xlfn."
+  family: math
+  arity: { min: 1, max: 2 }
+  volatility: none
+  range_aware: false
+  rust: math3::floor_precise
+  status: implemented
+  provenance: ["Microsoft function reference (FLOOR.PRECISE) — toward -infinity regardless of signs"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_math3.rs::sheet_fn_math3_floor_precise"]
+    corpus: ["corpus/fn-corpus/math3/floor_precise.golden.tsv"]
+
+- id: sheet.fn.math.quotient
+  name: QUOTIENT
+  family: math
+  arity: { min: 2, max: 2 }
+  volatility: none
+  range_aware: false
+  rust: math3::quotient
+  status: implemented
+  provenance: ["Microsoft function reference (QUOTIENT) — integer part of a division; logical scalars #VALUE!"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_math3.rs::sheet_fn_math3_quotient"]
+    corpus: ["corpus/fn-corpus/math3/quotient.golden.tsv"]
+
+- id: sheet.fn.math.mdeterm
+  name: MDETERM
+  family: math
+  arity: { min: 1, max: 1 }
+  volatility: none
+  range_aware: true
+  rust: math3::mdeterm
+  status: implemented
+  provenance: ["Microsoft function reference (MDETERM) — LU with partial pivoting; non-square or non-numeric #VALUE!"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_math3.rs::sheet_fn_math3_mdeterm"]
+    corpus: ["corpus/fn-corpus/math3/mdeterm.golden.tsv"]
+
+- id: sheet.fn.math.minverse
+  name: MINVERSE
+  family: math
+  arity: { min: 1, max: 1 }
+  volatility: none
+  range_aware: true
+  returns_array: true
+  rust: math3::minverse
+  status: implemented
+  provenance: ["Microsoft function reference (MINVERSE) — Gauss-Jordan; singular #NUM!"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_math3.rs::sheet_fn_math3_minverse"]
+    corpus: ["corpus/fn-corpus/math3/minverse.golden.tsv"]
+
+- id: sheet.fn.math.munit
+  name: MUNIT
+  xlfn_prefix: "_xlfn."
+  family: math
+  arity: { min: 1, max: 1 }
+  volatility: none
+  range_aware: false
+  returns_array: true
+  rust: math3::munit
+  status: implemented
+  provenance: ["Microsoft function reference (MUNIT) — identity matrix; dimension < 1 #VALUE!"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_math3.rs::sheet_fn_math3_munit"]
+    corpus: ["corpus/fn-corpus/math3/munit.golden.tsv"]
+
+- id: sheet.fn.math.multinomial
+  name: MULTINOMIAL
+  family: math
+  arity: { min: 1, max: null }
+  volatility: none
+  range_aware: true
+  rust: math3::multinomial
+  status: implemented
+  provenance: ["Microsoft function reference (MULTINOMIAL) — (sum)!/prod(a!); text #VALUE!, negative #NUM!"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_math3.rs::sheet_fn_math3_multinomial"]
+    corpus: ["corpus/fn-corpus/math3/multinomial.golden.tsv"]
+
+- id: sheet.fn.math.combina
+  name: COMBINA
+  xlfn_prefix: "_xlfn."
+  family: math
+  arity: { min: 2, max: 2 }
+  volatility: none
+  range_aware: false
+  rust: math3::combina
+  status: implemented
+  provenance: ["Microsoft function reference (COMBINA) — COMBIN(n+k-1,k)"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_math3.rs::sheet_fn_math3_combina"]
+    corpus: ["corpus/fn-corpus/math3/combina.golden.tsv"]
+
+- id: sheet.fn.math.acot
+  name: ACOT
+  xlfn_prefix: "_xlfn."
+  family: math
+  arity: { min: 1, max: 1 }
+  volatility: none
+  range_aware: false
+  rust: math3::acot
+  status: implemented
+  provenance: ["Microsoft function reference (ACOT) — principal value in (0, pi)"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_math3.rs::sheet_fn_math3_acot"]
+    corpus: ["corpus/fn-corpus/math3/acot.golden.tsv"]
+
+- id: sheet.fn.math.acoth
+  name: ACOTH
+  xlfn_prefix: "_xlfn."
+  family: math
+  arity: { min: 1, max: 1 }
+  volatility: none
+  range_aware: false
+  rust: math3::acoth
+  status: implemented
+  provenance: ["Microsoft function reference (ACOTH) — |x| <= 1 #NUM!"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_math3.rs::sheet_fn_math3_acoth"]
+    corpus: ["corpus/fn-corpus/math3/acoth.golden.tsv"]
+
+- id: sheet.fn.math.cot
+  name: COT
+  xlfn_prefix: "_xlfn."
+  family: math
+  arity: { min: 1, max: 1 }
+  volatility: none
+  range_aware: false
+  rust: math3::cot
+  status: implemented
+  provenance: ["Microsoft function reference (COT) — 0 #DIV/0!, |x| >= 2^27 #NUM!"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_math3.rs::sheet_fn_math3_cot"]
+    corpus: ["corpus/fn-corpus/math3/cot.golden.tsv"]
+
+- id: sheet.fn.math.coth
+  name: COTH
+  xlfn_prefix: "_xlfn."
+  family: math
+  arity: { min: 1, max: 1 }
+  volatility: none
+  range_aware: false
+  rust: math3::coth
+  status: implemented
+  provenance: ["Microsoft function reference (COTH) — 0 #DIV/0!"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_math3.rs::sheet_fn_math3_coth"]
+    corpus: ["corpus/fn-corpus/math3/coth.golden.tsv"]
+
+- id: sheet.fn.math.csc
+  name: CSC
+  xlfn_prefix: "_xlfn."
+  family: math
+  arity: { min: 1, max: 1 }
+  volatility: none
+  range_aware: false
+  rust: math3::csc
+  status: implemented
+  provenance: ["Microsoft function reference (CSC) — 0 #DIV/0!, |x| >= 2^27 #NUM!"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_math3.rs::sheet_fn_math3_csc"]
+    corpus: ["corpus/fn-corpus/math3/csc.golden.tsv"]
+
+- id: sheet.fn.math.csch
+  name: CSCH
+  xlfn_prefix: "_xlfn."
+  family: math
+  arity: { min: 1, max: 1 }
+  volatility: none
+  range_aware: false
+  rust: math3::csch
+  status: implemented
+  provenance: ["Microsoft function reference (CSCH) — 0 #DIV/0!"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_math3.rs::sheet_fn_math3_csch"]
+    corpus: ["corpus/fn-corpus/math3/csch.golden.tsv"]
+
+- id: sheet.fn.math.sec
+  name: SEC
+  xlfn_prefix: "_xlfn."
+  family: math
+  arity: { min: 1, max: 1 }
+  volatility: none
+  range_aware: false
+  rust: math3::sec
+  status: implemented
+  provenance: ["Microsoft function reference (SEC) — |x| >= 2^27 #NUM!"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_math3.rs::sheet_fn_math3_sec"]
+    corpus: ["corpus/fn-corpus/math3/sec.golden.tsv"]
+
+- id: sheet.fn.math.sech
+  name: SECH
+  xlfn_prefix: "_xlfn."
+  family: math
+  arity: { min: 1, max: 1 }
+  volatility: none
+  range_aware: false
+  rust: math3::sech
+  status: implemented
+  provenance: ["Microsoft function reference (SECH)"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_math3.rs::sheet_fn_math3_sech"]
+    corpus: ["corpus/fn-corpus/math3/sech.golden.tsv"]
+
+- id: sheet.fn.math.seriessum
+  name: SERIESSUM
+  family: math
+  arity: { min: 4, max: 4 }
+  volatility: none
+  range_aware: true
+  rust: math3::seriessum
+  status: implemented
+  provenance: ["Microsoft function reference (SERIESSUM) — sum a_i x^(n+i m); blank coefficients skipped"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_math3.rs::sheet_fn_math3_seriessum"]
+    corpus: ["corpus/fn-corpus/math3/seriessum.golden.tsv"]
+
+- id: sheet.fn.math.sumx2my2
+  name: SUMX2MY2
+  family: math
+  arity: { min: 2, max: 2 }
+  volatility: none
+  range_aware: true
+  rust: math3::sumx2my2
+  status: implemented
+  provenance: ["Microsoft function reference (SUMX2MY2) — count mismatch #N/A, non-numeric pairs skipped"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_math3.rs::sheet_fn_math3_sumx2my2"]
+    corpus: ["corpus/fn-corpus/math3/sumx2my2.golden.tsv"]
+
+- id: sheet.fn.math.sumx2py2
+  name: SUMX2PY2
+  family: math
+  arity: { min: 2, max: 2 }
+  volatility: none
+  range_aware: true
+  rust: math3::sumx2py2
+  status: implemented
+  provenance: ["Microsoft function reference (SUMX2PY2)"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_math3.rs::sheet_fn_math3_sumx2py2"]
+    corpus: ["corpus/fn-corpus/math3/sumx2py2.golden.tsv"]
+
+- id: sheet.fn.math.sumxmy2
+  name: SUMXMY2
+  family: math
+  arity: { min: 2, max: 2 }
+  volatility: none
+  range_aware: true
+  rust: math3::sumxmy2
+  status: implemented
+  provenance: ["Microsoft function reference (SUMXMY2)"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_math3.rs::sheet_fn_math3_sumxmy2"]
+    corpus: ["corpus/fn-corpus/math3/sumxmy2.golden.tsv"]
+
+- id: sheet.fn.math.percentof
+  name: PERCENTOF
+  xlfn_prefix: "_xlfn."
+  family: math
+  arity: { min: 2, max: 2 }
+  volatility: none
+  range_aware: true
+  ref_args: true
+  rust: math3::percentof
+  status: implemented
+  provenance: ["Microsoft function reference (PERCENTOF) — SUM(subset)/SUM(all); an error cell in a reference is #NUM! (Excel-recorded)"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_math3.rs::sheet_fn_math3_percentof"]
+    corpus: ["corpus/fn-corpus/math3/percentof.golden.tsv"]

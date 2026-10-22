@@ -1,0 +1,19 @@
+# DEC2BIN(number,[places]).
+# id	formula	setup	expected
+dec2bin-0	=DEC2BIN(9,4)	-	1001
+dec2bin-1	=DEC2BIN(-100)	-	1110011100
+dec2bin-2	=DEC2BIN(511)	-	111111111
+dec2bin-3	=DEC2BIN(-512)	-	1000000000
+dec2bin-4	=DEC2BIN(512)	-	#NUM!
+dec2bin-5	=DEC2BIN(-513)	-	#NUM!
+dec2bin-6	=DEC2BIN(9,3)	-	#NUM!
+dec2bin-7	=DEC2BIN(9,11)	-	#NUM!
+dec2bin-8	=DEC2BIN(9,0)	-	#NUM!
+dec2bin-9	=DEC2BIN(9.9)	-	1001
+dec2bin-10	=DEC2BIN(-0.5)	-	0
+dec2bin-11	=DEC2BIN("9")	-	1001
+dec2bin-12	=DEC2BIN("a")	-	#VALUE!
+dec2bin-13	=DEC2BIN(9,-1)	-	#NUM!
+dec2bin-14	=DEC2BIN(0)	-	0
+dec2bin-x0	=DEC2BIN(A1)	A1=#NUM!	#NUM!
+dec2bin-x1	=CONCAT(DEC2BIN({1,2,3}))	-	11011

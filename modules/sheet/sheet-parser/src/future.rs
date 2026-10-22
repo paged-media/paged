@@ -248,5 +248,11 @@ mod tests {
         assert_eq!(storage_prefix("SUMIFS"), "");
         assert_eq!(storage_prefix("sequence"), "_xlfn.");
         assert_eq!(storage_prefix("NOT_A_FUNCTION"), "");
+        // Excel's own save (oracle/excel): the 2013 functions carry the
+        // prefix, ISO.CEILING and the Analysis ToolPak set do not.
+        assert_eq!(storage_prefix("BITAND"), "_xlfn.");
+        assert_eq!(storage_prefix("IMCOSH"), "_xlfn.");
+        assert_eq!(storage_prefix("ISO.CEILING"), "");
+        assert_eq!(storage_prefix("BESSELJ"), "");
     }
 }

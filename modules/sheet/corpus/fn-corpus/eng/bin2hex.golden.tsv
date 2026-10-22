@@ -1,0 +1,15 @@
+# BIN2HEX(number,[places]).
+# id	formula	setup	expected
+bin2hex-0	=BIN2HEX(11111011,4)	-	00FB
+bin2hex-1	=BIN2HEX(1110)	-	E
+bin2hex-2	=BIN2HEX(1111111111)	-	FFFFFFFFFF
+bin2hex-3	=BIN2HEX(11111011,1)	-	#NUM!
+bin2hex-4	=BIN2HEX(11111011,11)	-	#NUM!
+bin2hex-5	=BIN2HEX(11111011,-1)	-	#NUM!
+bin2hex-6	=BIN2HEX(11111011,"a")	-	#VALUE!
+bin2hex-7	=BIN2HEX(1111111111,2)	-	FFFFFFFFFF
+bin2hex-8	=BIN2HEX(12)	-	#NUM!
+bin2hex-9	=BIN2HEX(1,2.9)	-	01
+bin2hex-10	=BIN2HEX(0,0)	-	#NUM!
+bin2hex-x0	=BIN2HEX(A1)	A1=#N/A	#N/A
+bin2hex-x1	=CONCAT(BIN2HEX({1,10,11}))	-	123

@@ -4,6 +4,10 @@
 # engine/excel are typed tokens (n: s: b: e: blank). The lane fails on an unlisted
 # disagreement, on a row whose values moved, and on a row that now agrees.
 # file	id	kind	engine	excel	reason
+complex.golden.tsv	cx-14	diverges	s:12345678901234600000	s:12345678901234500000	ruling: Excel truncates a number literal to 15 significant digits when the formula is entered (123456789012345678 is stored as 123456789012345000); the engine keeps the nearest double and COMPLEX prints its 15-digit rounding
+complex.golden.tsv	cx-6	diverges	s:123456789012346000	s:123456789012345000	ruling: Excel truncates a number literal to 15 significant digits when the formula is entered (123456789012345678 is stored as 123456789012345000); the engine keeps the nearest double and COMPLEX prints its 15-digit rounding
+imcsch.golden.tsv	imcsch-9	diverges	s:0.287408174140754+0.968610889043279i	s:0.287408174140753+0.968610889043279i	15th-digit rounding of a complex part: both parts agree with Excel within 1e-14 relative; Excel's exact evaluation order for this function is not reproducible on every input
+imtan.golden.tsv	imtan-8	diverges	s:-0.587213125460603+0.0013448192701602i	s:-0.587213125460604+0.0013448192701602i	15th-digit rounding of a complex part: both parts agree with Excel within 1e-14 relative; Excel's exact evaluation order for this function is not reproducible on every input
 irr.golden.tsv	irr-doc-pos	diverges	n:0.08663094803625213	n:8.663094803652216E-2	iterative solver: the engine converges to a tighter root than Excel's own stopping tolerance; both are roots within Excel's precision of the method
 rate.golden.tsv	rate-loan	diverges	n:0.007701472488233239	n:7.7014724882013682E-3	iterative solver: the engine converges to a tighter root than Excel's own stopping tolerance; both are roots within Excel's precision of the method
 sheet.golden.tsv	multi-cell-range-origin-sheet	diverges	n:1	n:39	harness artifact: the oracle workbook holds one sheet per case, so Excel's SHEET()/SHEETS() see a many-sheet workbook while the engine case has one sheet

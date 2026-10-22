@@ -45,11 +45,13 @@
 
 use sheet_core::{CellError, CellValue};
 
+use super::linalg::invert;
 use super::stat::{finite, numbers_or_error, paired, scalar_number, sorted};
 use crate::arg::Arg;
 use crate::coerce;
 use crate::ctx::EvalCtx;
 use crate::result::FnResult;
+use crate::special::{erf_series, erfc};
 
 // ---- PERCENTILE.EXC / QUARTILE.EXC -----------------------------------------
 
@@ -301,66 +303,6 @@ pub fn frequency(args: &[Arg], _ctx: &EvalCtx) -> FnResult {
 // ---- the normal distribution -----------------------------------------------
 
 const SQRT_2: f64 = std::f64::consts::SQRT_2;
-const FRAC_2_SQRT_PI: f64 = std::f64::consts::FRAC_2_SQRT_PI;
-
-/// `erf(x)` for `|x| <= 3` by the all-positive series
-/// `2/√π · e^{−x²} · Σ 2ⁿ x^{2n+1} / (1·3·…·(2n+1))` (no cancellation).
-fn erf_series(x: f64) -> f64 {
-    let x2 = x * x;
-    let mut term = x;
-    let mut sum = x;
-    let mut k = 1.0;
-    for _ in 0..200 {
-        term *= 2.0 * x2 / (2.0 * k + 1.0);
-        sum += term;
-        if term.abs() <= sum.abs() * 1e-17 {
-            break;
-        }
-        k += 1.0;
-    }
-    FRAC_2_SQRT_PI * (-x2).exp() * sum
-}
-
-/// `erfc(x)` for `x > 0` by the continued fraction (modified Lentz).
-fn erfc_cf(x: f64) -> f64 {
-    // erfc(x) = e^{-x²}/√π · 1/(x + (1/2)/(x + 1/(x + (3/2)/(x + 2/(x + …)))))
-    let tiny = 1e-300;
-    let mut f = x;
-    if f == 0.0 {
-        f = tiny;
-    }
-    let mut c = f;
-    let mut d = 0.0;
-    for i in 1..500 {
-        let a = i as f64 / 2.0;
-        d = x + a * d;
-        if d == 0.0 {
-            d = tiny;
-        }
-        c = x + a / c;
-        if c == 0.0 {
-            c = tiny;
-        }
-        d = 1.0 / d;
-        let delta = c * d;
-        f *= delta;
-        if (delta - 1.0).abs() < 1e-16 {
-            break;
-        }
-    }
-    (-x * x).exp() / std::f64::consts::PI.sqrt() / f
-}
-
-/// `erfc(x)` for any real `x`.
-fn erfc(x: f64) -> f64 {
-    if x < 0.0 {
-        2.0 - erfc(-x)
-    } else if x <= 3.0 {
-        1.0 - erf_series(x)
-    } else {
-        erfc_cf(x)
-    }
-}
 
 /// The standard normal CDF `Φ(z)`.
 pub(crate) fn std_norm_cdf(z: f64) -> f64 {
@@ -584,40 +526,6 @@ pub fn percentrank_exc(args: &[Arg], _ctx: &EvalCtx) -> CellValue {
 }
 
 // ---- LINEST ----------------------------------------------------------------
-
-/// Solve the normal equations: the inverse of the symmetric `a` (Gauss-Jordan
-/// with partial pivoting); `None` when singular.
-fn invert(mut a: Vec<Vec<f64>>) -> Option<Vec<Vec<f64>>> {
-    let k = a.len();
-    let mut inv: Vec<Vec<f64>> = (0..k)
-        .map(|i| (0..k).map(|j| if i == j { 1.0 } else { 0.0 }).collect())
-        .collect();
-    for col in 0..k {
-        let piv = (col..k).max_by(|&x, &y| a[x][col].abs().total_cmp(&a[y][col].abs()))?;
-        if a[piv][col].abs() < 1e-300 {
-            return None;
-        }
-        a.swap(col, piv);
-        inv.swap(col, piv);
-        let d = a[col][col];
-        for j in 0..k {
-            a[col][j] /= d;
-            inv[col][j] /= d;
-        }
-        for r in 0..k {
-            if r != col {
-                let f = a[r][col];
-                if f != 0.0 {
-                    for j in 0..k {
-                        a[r][j] -= f * a[col][j];
-                        inv[r][j] -= f * inv[col][j];
-                    }
-                }
-            }
-        }
-    }
-    Some(inv)
-}
 
 fn bool_arg(arg: Option<&Arg>, default: bool) -> Result<bool, CellError> {
     match arg {

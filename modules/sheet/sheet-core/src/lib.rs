@@ -77,4 +77,6 @@ pub use intern::Interner;
 
 pub use preserved::PreservedParts;
 
-pub use model::{SheetModel, UsedRange, Worksheet, EXTERNAL_SHEET_BASE};
+pub use model::{
+    ColMeta, RowMeta, SheetModel, SheetState, UsedRange, Worksheet, EXTERNAL_SHEET_BASE,
+};

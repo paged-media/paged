@@ -243,3 +243,14 @@ fn sheet_calc_corpus_lambda() {
 fn sheet_calc_corpus_refs() {
     run_family("refs");
 }
+
+// ── W3: the function library towards Excel's full set.
+#[test]
+fn sheet_calc_corpus_math3() {
+    run_family("math3");
+}
+
+#[test]
+fn sheet_calc_corpus_eng() {
+    run_family("eng");
+}

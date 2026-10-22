@@ -575,6 +575,7 @@ impl XlsxDocument {
             dirty: true,
         });
         self.bindings.push(SheetBinding {
+            edits: Vec::new(),
             sheet_id,
             part_name: part,
             captured: CapturedSubtrees::default(),
@@ -773,6 +774,15 @@ impl XlsxDocument {
             }
         }
         Ok(out)
+    }
+
+    /// Record a row/column insert or delete the consumer applied to its
+    /// model of `sheet_id`, so the next save finds each original row and cell
+    /// of the part at its new address (patch.rs).
+    pub fn record_structural_edit(&mut self, sheet_id: SheetId, edit: sheet_parser::Edit) {
+        if let Some(b) = self.bindings.iter_mut().find(|b| b.sheet_id == sheet_id) {
+            b.edits.push(edit);
+        }
     }
 
     /// The preserved content that a row/column insert or delete on `sheet_id`
