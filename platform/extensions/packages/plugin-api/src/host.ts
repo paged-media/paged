@@ -2210,6 +2210,30 @@ export interface ToolsSurface {
  * values from here — never import host values into a bundle's module
  * graph.
  */
+/** `{name}` parameters of a message. */
+export type MessageParams = Readonly<Record<string, string | number>>;
+
+/**
+ * `host.strings` (extensions ADR 333). Messages are `{name}`-parameterised
+ * text with one plural form (`{count, plural, one {# item} other {# items}}`);
+ * a key is `<manifest.id>.<name>`, so bundles cannot collide.
+ */
+export interface StringsSurface {
+  /** The editor's language (BCP 47 tag); `"en"` without one. */
+  readonly locale: string;
+  /** Defines this bundle's messages with their English text; answers their
+   *  keys (`<manifest.id>.<name>`). Defining a key again with other text
+   *  throws. */
+  define<K extends string>(
+    messages: Readonly<Record<K, string>>,
+  ): Readonly<Record<K, string>>;
+  /** This bundle's translation into `locale`, by key (`<manifest.id>.<name>`);
+   *  a key outside the bundle's namespace throws. */
+  translate(locale: string, catalogue: Readonly<Record<string, string>>): void;
+  /** The message for `key` in the editor's language, else its English. */
+  t(key: string, params?: MessageParams): string;
+}
+
 export interface BundleHost {
   /** The bundle's own manifest (read-only). */
   readonly manifest: PluginManifest;
@@ -2298,6 +2322,12 @@ export interface BundleHost {
    *  `supports("assets.fonts@1")` is false. Capability-gated:
    *  `getFontFace` requires `capabilities.assets` ∋ `"fonts"`. */
   readonly assets: AssetSurface;
+  /** The words a bundle shows, in the editor's language (extensions ADR
+   *  333): the bundle defines its English, may ship translations, and reads
+   *  each message through `t`. Without a host catalogue (headless) the
+   *  English answers; `supports("strings@1")` says whether the editor's
+   *  language is wired. */
+  readonly strings: StringsSurface;
   /** The capability-gated RENDERER RESOURCE-PROVIDER door (C-6 / I-06):
    *  claim a placed image's tiled mip pyramid so the renderer pulls tiles
    *  at the level its current scale needs (the v44 wire). The SDK adapter
