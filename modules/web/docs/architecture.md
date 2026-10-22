@@ -177,6 +177,31 @@ per face, `faces/<hash>.json` (`{ v: 1, family, style, face }`, the bytes in bas
 back on every open to the families the document's text names and lacks (`document-faces.ts`;
 [ADR 414](adr/414-baked-faces-are-kept-with-the-document.md)).
 
+## Template fields
+
+A template (engine ADR 1000) can open parts of a web frame to a filler. The bundle contributes
+three field kinds with its object model (`src/template-fields.ts`; extensions ADR 335); each
+field sits on the web frame's page item, and each write is one undo step through the object
+model, so the engine checks it against the session's role: a filler may write the frame the
+field is on and no other.
+
+| Kind                     | Definition                                             | Control                          | What a write does                                                                                                                                    |
+| ------------------------ | ------------------------------------------------------ | -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `media.paged.web.value`  | `{ name: "doc.<key>" }`                                | text                             | sets the frame's own template variable of that name (it wins over the document's value); stored as text, so markup in a value never reaches the HTML |
+| `media.paged.web.source` | `{ lane: "html" \| "css" }`                            | multi-line text                  | replaces the lane; HTML is sanitised as a paste is, CSS may not close the style element                                                              |
+| `media.paged.web.cssVar` | `{ name: "--x", allowed?: [value or {value, label}] }` | a choice of `allowed`, else text | sets the custom property's first declaration (`cssVar.value`); a value outside `allowed` is refused                                                  |
+
+A definition may repeat the item as `frame`; it must be the item the field is on. After a write
+the frame renders again; content that no longer fits it (an overflow policy that measures:
+`shrink`, `thread`, a flow chain) is the field's problem, with the value kept, as an overset
+story keeps its text.
+
+Not fields: the document value map (`templateVar.value`) is document metadata, which no item
+field can grant a filler, so a `value` field fills the frame it is on; an author who wants the
+same answer in several frames puts a field on each. The render is not stored in the document
+(scene layers are session state), so a headless export of a filled template shows a web frame
+only after it is baked to native items.
+
 ## Host doors
 
 | Door                                                                                                      | What the plugin uses it for                                                                                                                                                                                                                        |
