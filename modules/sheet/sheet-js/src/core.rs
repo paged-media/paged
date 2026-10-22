@@ -2028,6 +2028,29 @@ impl SheetSession {
         Ok(scene)
     }
 
+    /// The tracks a sheet frame shows (ADR 510): its top-left cell, the box the
+    /// cells must fit and the frozen split decide the rows and columns, in
+    /// display order, with their pt sizes. The live grid and the page lowering
+    /// both ask this, so the two surfaces show the same window. An OOB sheet
+    /// id is a boundary error, as for `get_grid_scene`.
+    pub fn get_frame_window(
+        &self,
+        sheet: u16,
+        spec: sheet_grid::FrameWindowSpec,
+    ) -> Result<sheet_grid::FrameWindow, SessionError> {
+        let sheet_count = self.engine().model().sheets.len();
+        if (sheet as usize) >= sheet_count {
+            return Err(SessionError(format!(
+                "sheet id {sheet} out of range ({sheet_count} sheets)"
+            )));
+        }
+        Ok(sheet_grid::frame_window(
+            self.engine().model(),
+            sheet,
+            &spec,
+        ))
+    }
+
     /// Record the sheets-mode selection rectangle for `sheet`, consumed by the
     /// next [`get_grid_scene`](Self::get_grid_scene) for the same sheet (spec
     /// §8.1 — selection is engine state, the panel only requests it). An OOB

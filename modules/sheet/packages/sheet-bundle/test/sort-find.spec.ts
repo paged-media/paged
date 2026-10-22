@@ -27,6 +27,7 @@
 // here. No DOM, no wasm: a stateful fake engine applies the edits it reports
 // so the journal inverses are real.
 
+import { stubFrameWindow } from "./frame-window-stub";
 import { describe, expect, it } from "bun:test";
 
 import type { BundleHost } from "@paged-media/plugin-api";
@@ -112,6 +113,7 @@ function statefulEngine() {
     }),
     getRangeValues: () => [],
     paginate: () => [],
+    getFrameWindow: stubFrameWindow,
     getGridScene: () => ({
       viewport: {
         firstRow: 0,

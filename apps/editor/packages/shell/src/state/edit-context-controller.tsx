@@ -377,8 +377,9 @@ export function EditContextController() {
       (id) => JSON.stringify(id) === rootKey,
     );
     if (!stillSelected && elementSelection.length > 0) {
-      // Selection moved to a DIFFERENT element — leave the context.
-      exitAll();
+      // Selection moved to a DIFFERENT element — leave the context,
+      // keeping the work the way a click outside does.
+      exitAll({ commit: true });
     }
   }, [active, elementSelection, exitAll]);
 

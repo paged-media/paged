@@ -36,6 +36,7 @@ import {
   gridSceneToSceneLayer,
   hitCell,
   hitFillHandle,
+  cellOfA1,
   contentHash,
   parseBinding,
   workbookPalette,
@@ -903,6 +904,39 @@ export function createWorkbookSession(
   // S-04 — a per-session counter so minted cell-style ids are unique within
   // one session (paired with a timestamp so they are unique across sessions).
   let nextCellStyleSeq = 1;
+  /** Where the in-frame grid starts for `frameId` (ADR 510): the bound
+   *  sheet, made active, and the view's top-left cell. Falls back to the
+   *  active sheet at A1 when the frame carries no binding, the binding names
+   *  a sheet the workbook does not have, or the read fails. */
+  const frameStart = async (
+    frameId: string,
+  ): Promise<{ row: number; col: number }> => {
+    if (!state.engine || !host.document.getMetadata) return { row: 0, col: 0 };
+    let binding: ReturnType<typeof parseBinding> = null;
+    try {
+      binding = parseBinding(
+        await host.document.getMetadata({
+          kind: "textFrame",
+          id: frameId,
+        } as ElementId),
+      );
+    } catch (err) {
+      host.log.debug("showGridInFrame: binding read failed", err);
+    }
+    if (!binding) return { row: 0, col: 0 };
+    const sheet = state.engine
+      .listSheets()
+      .find((x) => x.name === binding.data.sheet);
+    if (!sheet) return { row: 0, col: 0 };
+    if (state.activeSheet !== sheet.id) {
+      state.activeSheet = sheet.id;
+      state.gridSelection = null; // selection is sheet-relative
+      defaultRangeForActive();
+      emitter.emit();
+    }
+    return cellOfA1(binding.data.view.topLeft) ?? { row: 0, col: 0 };
+  };
+
   let sceneSurface: SceneLayerSurface | null = null;
   const sceneChannel = (): SceneLayerSurface | null => {
     if (!host.supports("rendering.sceneLayer@1")) return null;
@@ -2976,6 +3010,10 @@ export function createWorkbookSession(
         host.log.warn("showGridInFrame: no workbook / sheet");
         return false;
       }
+      // ADR 510 — the frame decides what the grid shows: its bound sheet
+      // (made the active sheet while it is edited) and its view's top-left
+      // cell. A frame without a binding keeps the active sheet at A1.
+      const start = await frameStart(target);
       // Size the grid window to the frame's content box (core clips to it).
       let wPt = 480;
       let hPt = 640;
@@ -2996,8 +3034,8 @@ export function createWorkbookSession(
       const keep =
         lastGridWindow && prevFrame === target ? lastGridWindow : null;
       lastGridWindow = {
-        firstRow: keep?.firstRow ?? 0,
-        firstCol: keep?.firstCol ?? 0,
+        firstRow: keep?.firstRow ?? start.row,
+        firstCol: keep?.firstCol ?? start.col,
         wPt,
         hPt,
       };

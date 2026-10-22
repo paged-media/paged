@@ -424,6 +424,20 @@ mod wasm {
             to_js(&scene)
         }
 
+        /// The tracks a sheet frame shows (ADR 510) for
+        /// `{topRow, leftCol, widthPt, heightPt, freezeRows?, freezeCols?}`:
+        /// `{rows, cols, rowHeightsPt, colWidthsPt, frozenRows, frozenCols,
+        /// widthPt, heightPt, partialRow, partialCol}`.
+        pub fn get_frame_window(&self, sheet: u16, spec: JsValue) -> Result<JsValue, JsValue> {
+            let spec: sheet_grid::FrameWindowSpec = serde_wasm_bindgen::from_value(spec)
+                .map_err(|e| JsValue::from_str(&e.to_string()))?;
+            let window = self
+                .session
+                .get_frame_window(sheet, spec)
+                .map_err(map_err)?;
+            to_js(&window)
+        }
+
         /// Record the sheets-mode selection rectangle (consumed by the next
         /// `get_grid_scene` for the same sheet).
         pub fn set_grid_selection(

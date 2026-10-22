@@ -28,6 +28,7 @@
 // session (so the session's gridScene overlay + editCell write-path are
 // exercised), and a fake host records nothing host-side beyond logging.
 
+import { stubFrameWindow } from "./frame-window-stub";
 import { createElement } from "react";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
 import { describe, expect, it } from "bun:test";
@@ -115,6 +116,7 @@ function fakeEngine() {
     }),
     getRangeValues: () => [],
     paginate: () => [],
+    getFrameWindow: stubFrameWindow,
     getGridScene: () => scene2x2(),
     setGridSelection(sheet, anchorRow, anchorCol, rows, cols) {
       setSelCalls.push([sheet, anchorRow, anchorCol, rows, cols]);

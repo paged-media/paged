@@ -38,6 +38,8 @@ import { isNodeRealm, wasmBindgenModule } from "@paged-media/wasm-boot";
 
 import type {
   ChartGeometry,
+  FrameWindow,
+  FrameWindowSpec,
   GridScene,
   LoweredContent,
   Page,
@@ -365,6 +367,10 @@ export interface SheetEngine {
     hPt: number,
     opts?: GridSceneOptions,
   ): GridScene;
+  /** The tracks a sheet frame shows (ADR 510): rows and columns in display
+   *  order with their pt sizes, decided in Rust for the live grid and the
+   *  page lowering alike. */
+  getFrameWindow(sheet: number, spec: FrameWindowSpec): FrameWindow;
   /** Record the sheets-mode selection rectangle in the engine model so the
    *  next [`getGridScene`] carries it (spec §8.1 — selection is engine
    *  state, the panel only requests it). `setGridSelection` forwards to
@@ -759,6 +765,7 @@ export interface SheetWasmEngine {
     h_pt: number,
     opts?: GridSceneOptions,
   ): GridScene;
+  get_frame_window(sheet: number, spec: FrameWindowSpec): FrameWindow;
   set_grid_selection(
     sheet: number,
     anchor_row: number,
@@ -939,6 +946,7 @@ export function wrapEngine(
       wasm.paginate(sheet, range, frames, opts),
     getGridScene: (sheet, firstRow, firstCol, wPt, hPt, opts) =>
       wasm.get_grid_scene(sheet, firstRow, firstCol, wPt, hPt, opts),
+    getFrameWindow: (sheet, spec) => wasm.get_frame_window(sheet, spec),
     setGridSelection: (sheet, anchorRow, anchorCol, rows, cols) =>
       wasm.set_grid_selection(sheet, anchorRow, anchorCol, rows, cols),
     listSheets: () => wasm.list_sheets(),

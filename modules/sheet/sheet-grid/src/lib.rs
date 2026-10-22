@@ -222,6 +222,150 @@ impl Default for GridOptions {
     }
 }
 
+// ---- The frame window: which tracks a sheet frame shows (ADR 510). ----
+
+/// What a sheet frame asks for: the top-left cell it was left at, the box
+/// the cells must fit (pt), and the frozen split. The SAME spec is asked by
+/// the live grid (with the heading strips taken off the box) and by the page
+/// lowering (the whole content box), so the two surfaces can never disagree
+/// about which rows and columns are shown or how wide they are.
+#[derive(serde::Deserialize, Copy, Clone, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct FrameWindowSpec {
+    /// The first scrolled (non-frozen) row and column shown.
+    pub top_row: u32,
+    pub left_col: u32,
+    /// The box the cells must fit, pt.
+    pub width_pt: f64,
+    pub height_pt: f64,
+    /// Leading sheet rows / columns held fixed above / left of the body.
+    #[serde(default)]
+    pub freeze_rows: u32,
+    #[serde(default)]
+    pub freeze_cols: u32,
+}
+
+/// The tracks a frame shows, in display order: the frozen tracks first, then
+/// the scrolled body from the top-left cell. Hidden and filtered rows are
+/// skipped. Only WHOLE tracks are listed (a native page table cannot clip a
+/// column); the first track that does not fit whole is reported separately
+/// as `partial_*`, so the live grid can draw it greyed past the print edge.
+#[derive(serde::Serialize, Clone, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct FrameWindow {
+    /// Sheet row indices shown, top to bottom (frozen rows first).
+    pub rows: Vec<u32>,
+    /// Sheet column indices shown, left to right (frozen columns first).
+    pub cols: Vec<u32>,
+    /// pt height of each entry in `rows`.
+    pub row_heights_pt: Vec<f64>,
+    /// pt width of each entry in `cols`.
+    pub col_widths_pt: Vec<f64>,
+    /// How many leading entries of `rows` / `cols` are frozen tracks.
+    pub frozen_rows: u32,
+    pub frozen_cols: u32,
+    /// Sum of `col_widths_pt` / `row_heights_pt`: the area the whole tracks
+    /// cover (the print edge).
+    pub width_pt: f64,
+    pub height_pt: f64,
+    /// The next track after the last whole one, if any of it is visible.
+    pub partial_row: Option<u32>,
+    pub partial_col: Option<u32>,
+}
+
+/// Compute the tracks a frame shows for `spec` (ADR 510). Pure and O(visible
+/// tracks + skipped hidden rows). At least one body row and column are always
+/// shown, even when the first one is wider or taller than the box, so a
+/// frame never renders empty.
+pub fn frame_window(model: &SheetModel, sheet: SheetId, spec: &FrameWindowSpec) -> FrameWindow {
+    let ws = model.sheet(sheet);
+    let hidden = |r: u32| ws.is_some_and(|w| w.row_hidden(r));
+
+    // Rows: the frozen band (visible ones only), then the body from top_row.
+    let mut rows = Vec::new();
+    let mut row_heights_pt = Vec::new();
+    let mut y = 0.0_f64;
+    let freeze_rows = spec.freeze_rows.min(sheet_core::MAX_ROW + 1);
+    for r in 0..freeze_rows {
+        if hidden(r) {
+            continue;
+        }
+        let h = row_height_pt(ws, r);
+        rows.push(r);
+        row_heights_pt.push(h);
+        y += h;
+    }
+    let frozen_rows = rows.len() as u32;
+    let mut partial_row = None;
+    let mut body_rows = 0u32;
+    let mut r = spec.top_row.max(freeze_rows);
+    while r <= sheet_core::MAX_ROW {
+        if !hidden(r) {
+            let h = row_height_pt(ws, r);
+            if body_rows > 0 && y + h > spec.height_pt {
+                if y < spec.height_pt {
+                    partial_row = Some(r);
+                }
+                break;
+            }
+            rows.push(r);
+            row_heights_pt.push(h);
+            y += h;
+            body_rows += 1;
+        }
+        if r == sheet_core::MAX_ROW {
+            break;
+        }
+        r += 1;
+    }
+
+    // Columns: the frozen band, then the body from left_col.
+    let mut cols = Vec::new();
+    let mut col_widths_pt = Vec::new();
+    let mut x = 0.0_f64;
+    let freeze_cols = spec.freeze_cols.min(sheet_core::MAX_COL + 1);
+    for c in 0..freeze_cols {
+        let w = col_width_pt(ws, c);
+        cols.push(c);
+        col_widths_pt.push(w);
+        x += w;
+    }
+    let frozen_cols = cols.len() as u32;
+    let mut partial_col = None;
+    let mut body_cols = 0u32;
+    let mut c = spec.left_col.max(freeze_cols);
+    while c <= sheet_core::MAX_COL {
+        let w = col_width_pt(ws, c);
+        if body_cols > 0 && x + w > spec.width_pt {
+            if x < spec.width_pt {
+                partial_col = Some(c);
+            }
+            break;
+        }
+        cols.push(c);
+        col_widths_pt.push(w);
+        x += w;
+        body_cols += 1;
+        if c == sheet_core::MAX_COL {
+            break;
+        }
+        c += 1;
+    }
+
+    FrameWindow {
+        rows,
+        cols,
+        row_heights_pt,
+        col_widths_pt,
+        frozen_rows,
+        frozen_cols,
+        width_pt: x,
+        height_pt: y,
+        partial_row,
+        partial_col,
+    }
+}
+
 /// serde hook: render `Align` as the agreed lowercase variant name (the
 /// same wire token the page lowering uses).
 fn serialize_align<S>(align: &Align, s: S) -> Result<S::Ok, S::Error>
@@ -1012,5 +1156,134 @@ mod tests {
         assert!(json.contains("\"fillFraction\""));
         assert!(json.contains("\"fill\":\"#123456\""));
         assert!(!json.contains("fill_fraction"));
+    }
+
+    // ---- frame_window (ADR 510) ----
+
+    fn spec(top_row: u32, left_col: u32, w: f64, h: f64) -> FrameWindowSpec {
+        FrameWindowSpec {
+            top_row,
+            left_col,
+            width_pt: w,
+            height_pt: h,
+            freeze_rows: 0,
+            freeze_cols: 0,
+        }
+    }
+
+    #[test]
+    fn sheet_frame_window_lists_whole_tracks_and_names_the_partial_one() {
+        let (m, s) = model_with(&[]);
+        let w = frame_window(&m, s, &spec(0, 0, 200.0, 60.0));
+        // Default column 8.43 chars x 5.25 pt = 44.2575 pt: four fit in 200.
+        assert_eq!(w.cols, vec![0, 1, 2, 3]);
+        assert_eq!(w.partial_col, Some(4));
+        // Default row 15 pt: exactly four fit in 60, nothing partial.
+        assert_eq!(w.rows, vec![0, 1, 2, 3]);
+        assert_eq!(w.partial_row, None);
+        assert!((w.width_pt - 4.0 * 44.2575).abs() < 1e-9);
+        assert_eq!(w.height_pt, 60.0);
+        assert_eq!((w.frozen_rows, w.frozen_cols), (0, 0));
+    }
+
+    #[test]
+    fn sheet_frame_window_starts_at_the_top_left_cell_and_skips_hidden_rows() {
+        let (mut m, s) = model_with(&[]);
+        {
+            let ws = m.sheet_mut(s).unwrap();
+            ws.hidden_rows.insert(11);
+            ws.filtered_rows.insert(12);
+            ws.row_heights.insert(13, 30.0);
+        }
+        let w = frame_window(&m, s, &spec(10, 2, 100.0, 61.0));
+        assert_eq!(w.rows, vec![10, 13, 14]);
+        assert_eq!(w.row_heights_pt, vec![15.0, 30.0, 15.0]);
+        assert_eq!(w.partial_row, Some(15));
+        assert_eq!(w.cols, vec![2, 3]);
+    }
+
+    #[test]
+    fn sheet_frame_window_pins_the_frozen_band_above_the_scrolled_body() {
+        let (m, s) = model_with(&[]);
+        let mut sp = spec(40, 7, 200.0, 75.0);
+        sp.freeze_rows = 2;
+        sp.freeze_cols = 1;
+        let w = frame_window(&m, s, &sp);
+        assert_eq!(w.rows, vec![0, 1, 40, 41, 42]);
+        assert_eq!(w.frozen_rows, 2);
+        assert_eq!(w.cols, vec![0, 7, 8, 9]);
+        assert_eq!(w.frozen_cols, 1);
+        // A top-left inside the frozen band starts the body right after it.
+        let w = frame_window(
+            &m,
+            s,
+            &FrameWindowSpec {
+                top_row: 0,
+                left_col: 0,
+                ..sp
+            },
+        );
+        assert_eq!(w.rows, vec![0, 1, 2, 3, 4]);
+        assert_eq!(w.cols, vec![0, 1, 2, 3]);
+    }
+
+    #[test]
+    fn sheet_frame_window_always_shows_one_body_track() {
+        let (mut m, s) = model_with(&[]);
+        m.sheet_mut(s).unwrap().col_widths.insert(0, 100.0);
+        let w = frame_window(&m, s, &spec(0, 0, 50.0, 5.0));
+        assert_eq!(w.cols, vec![0]);
+        assert_eq!(w.rows, vec![0]);
+        assert_eq!(w.partial_col, None);
+    }
+
+    #[test]
+    fn sheet_frame_window_agrees_with_the_grid_viewport() {
+        let (mut m, s) = model_with(&[]);
+        {
+            let ws = m.sheet_mut(s).unwrap();
+            ws.col_widths.insert(3, 20.0);
+            ws.col_widths.insert(5, 4.0);
+            ws.row_heights.insert(2, 40.0);
+        }
+        for (r0, c0, w, h) in [
+            (0, 0, 300.0, 200.0),
+            (1, 2, 123.4, 99.9),
+            (5, 4, 1000.0, 20.0),
+        ] {
+            let fw = frame_window(&m, s, &spec(r0, c0, w, h));
+            let scene = grid_scene(&m, s, r0, c0, w, h, &GridOptions::default());
+            let vp = &scene.viewport;
+            assert_eq!(
+                fw.rows,
+                (vp.first_row..vp.first_row + vp.rows).collect::<Vec<_>>()
+            );
+            assert_eq!(
+                fw.cols,
+                (vp.first_col..vp.first_col + vp.cols).collect::<Vec<_>>()
+            );
+            assert!((fw.width_pt - vp.x_offsets[vp.cols as usize]).abs() < 1e-9);
+            assert!((fw.height_pt - vp.y_offsets[vp.rows as usize]).abs() < 1e-9);
+        }
+    }
+
+    #[test]
+    fn sheet_frame_window_serializes_camel_case() {
+        let (m, s) = model_with(&[]);
+        let json = serde_json::to_string(&frame_window(&m, s, &spec(0, 0, 50.0, 20.0))).unwrap();
+        assert!(json.contains("\"colWidthsPt\"") && json.contains("\"partialRow\""));
+        let back: FrameWindowSpec =
+            serde_json::from_str(r#"{"topRow":3,"leftCol":1,"widthPt":10,"heightPt":20}"#).unwrap();
+        assert_eq!(
+            back,
+            FrameWindowSpec {
+                top_row: 3,
+                left_col: 1,
+                width_pt: 10.0,
+                height_pt: 20.0,
+                freeze_rows: 0,
+                freeze_cols: 0
+            }
+        );
     }
 }

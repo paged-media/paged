@@ -25,6 +25,7 @@
 // Rust; setCell re-types each string); the session is thin glue: read the
 // range → host.clipboard.write, and host.clipboard.read → journaled cells.
 
+import { stubFrameWindow } from "./frame-window-stub";
 import { describe, expect, it } from "bun:test";
 
 import type { BundleHost, ClipboardPayload } from "@paged-media/plugin-api";
@@ -68,6 +69,7 @@ function fakeEngine() {
       ["Apples", "12"],
     ],
     paginate: () => [],
+    getFrameWindow: stubFrameWindow,
     getGridScene: () => ({
       viewport: {
         firstRow: 0,

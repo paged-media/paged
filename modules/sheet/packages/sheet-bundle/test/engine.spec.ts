@@ -20,6 +20,7 @@
 // snake_case wasm surface; boot is exercised on BOTH sides of the
 // artifact gate (honest rejection when unbuilt, real boot when built).
 
+import { stubFrameWindow } from "./frame-window-stub";
 import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -142,6 +143,10 @@ function fakeWasm() {
       });
       return scene;
     },
+    get_frame_window(sheet, spec) {
+      calls.push({ method: "get_frame_window", args: [sheet, spec] });
+      return stubFrameWindow(sheet, spec);
+    },
     set_grid_selection(sheet, anchorRow, anchorCol, rows, cols) {
       calls.push({
         method: "set_grid_selection",
@@ -233,6 +238,14 @@ describe("sheet_plugin_engine_boot: facade mapping", () => {
     expect(
       engine.getGridScene(0, 0, 0, 480, 320, { includeGridlines: true }),
     ).toBe(scene);
+    expect(
+      engine.getFrameWindow(0, {
+        topRow: 2,
+        leftCol: 1,
+        widthPt: 100,
+        heightPt: 31,
+      }).rows,
+    ).toEqual([2, 3]);
     engine.setGridSelection(0, 1, 2, 3, 4);
     expect(engine.listSheets()).toEqual([
       { id: 0, name: "Sheet1", rows: 10, cols: 4 },
@@ -263,6 +276,7 @@ describe("sheet_plugin_engine_boot: facade mapping", () => {
       "get_range_values",
       "paginate",
       "get_grid_scene",
+      "get_frame_window",
       "set_grid_selection",
       "list_sheets",
       "list_charts",
@@ -292,8 +306,12 @@ describe("sheet_plugin_engine_boot: facade mapping", () => {
       320,
       { includeGridlines: true },
     ]);
-    expect(calls[9].args).toEqual([0, 1, 2, 3, 4]);
-    expect(calls[16].args).toEqual([0, 360, 240]); // get_chart_geometry
+    expect(calls[9].args).toEqual([
+      0,
+      { topRow: 2, leftCol: 1, widthPt: 100, heightPt: 31 },
+    ]);
+    expect(calls[10].args).toEqual([0, 1, 2, 3, 4]);
+    expect(calls[17].args).toEqual([0, 360, 240]); // get_chart_geometry
   });
 
   // §16.4 graphs: the kind vocabulary is READ from the engine, and the
