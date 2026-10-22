@@ -1621,8 +1621,10 @@ const shellStyle: React.CSSProperties = {
   color: "hsl(var(--paged-fg))",
   display: "flex",
   flexDirection: "column",
-  height: "100vh",
-  width: "100vw",
+  // The element the editor is mounted in decides its size (an embedding
+  // host's container, or the page's full-viewport #root).
+  height: "100%",
+  width: "100%",
 };
 
 const bodyRowStyle: React.CSSProperties = {
