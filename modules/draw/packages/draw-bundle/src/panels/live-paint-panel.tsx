@@ -67,26 +67,48 @@ import {
   useActionFeedback,
 } from "@paged-media/panel-kit";
 import { PanelIntro } from "./panel-parts";
+import { defineMessages, t, useStrings } from "@paged-media/strings";
+
+const M = defineMessages("draw.livePaintPanel", {
+  summary:
+    "Fill the areas where the selected paths overlap; after you edit the paths, choose Regenerate to update the fills.",
+  note: "A live paint group remembers its paths and a colour for each area, and each filled area is a real shape placed over that region. Editing a path does not repaint anything until you choose Regenerate, which rebuilds every area that still exists and removes the fills of areas that are gone. Paths must actually touch to enclose an area (gaps are not closed for you), and edges cannot be painted. A group can have at most 12 paths and 256 areas. Filled areas are placed on top of the other objects, over the inner half of the strokes around them. Making and releasing a group and deleting a fill change the group's record outside undo.",
+  rowLabel:
+    "{members, plural, one {# member} other {# members}} · {faces, plural, one {# painted face} other {# painted faces}}",
+  heading: "Live paint",
+  makeHint: "Make a live paint group from the selected paths (up to 12)",
+  selectPathsFirst: "Select two or more overlapping paths first",
+  fromSelection: "+ From selection",
+  degraded:
+    "This editor cannot save data into the document, so a live paint group could not be regenerated later.",
+  bucketFill: "Bucket fill",
+  none: "None",
+  empty:
+    "No live paint groups yet. Select two or more overlapping paths and choose + From selection.",
+  regenerateHint:
+    "Rebuild the fills from the paths' current shapes; areas that no longer exist lose their fill",
+  regenerate: "Regenerate",
+  selectFacesHint: "Select every filled area of this group",
+  selectFaces: "Select faces",
+  releaseHint:
+    "Stop tracking this group; the paths and the filled areas stay as ordinary artwork",
+  release: "Release",
+  area: "Area {n}",
+  noFill: "No fill",
+  selectAreaHint: "Select this area's fill",
+  select: "Select",
+  deleteAreaHint: "Delete this area's fill",
+  delete: "Delete",
+  title: "Live paint",
+});
 
 export const LIVE_PAINT_PANEL_ID = "media.paged.draw.panel.livePaint";
 
 /** What the panel is for, in one sentence (shown at the top). */
-export const LIVE_PAINT_SUMMARY =
-  "Fill the areas where the selected paths overlap; after you edit the " +
-  "paths, choose Regenerate to update the fills.";
+export const LIVE_PAINT_SUMMARY = M.summary;
 
 /** The "About" text. Exported so the conformance spec pins the wording. */
-export const LIVE_PAINT_NOTE =
-  "A live paint group remembers its paths and a colour for each area, and " +
-  "each filled area is a real shape placed over that region. Editing a " +
-  "path does not repaint anything until you choose Regenerate, which " +
-  "rebuilds every area that still exists and removes the fills of areas " +
-  "that are gone. Paths must actually touch to enclose an area (gaps are " +
-  "not closed for you), and edges cannot be painted. A group can have at " +
-  "most 12 paths and 256 areas. Filled areas are placed on top of the " +
-  "other objects, over the inner half of the strokes around them. Making " +
-  "and releasing a group and deleting a fill change the group's record " +
-  "outside undo.";
+export const LIVE_PAINT_NOTE = M.note;
 
 const rowStyle: React.CSSProperties = {
   display: "flex",
@@ -121,10 +143,7 @@ const mutedStyle: React.CSSProperties = {
 export function livePaintRowLabel(group: LivePaintRecipe): string {
   const members = group.inputs.length;
   const faces = group.faces.length;
-  return (
-    `${members} member${members === 1 ? "" : "s"} · ` +
-    `${faces} painted face${faces === 1 ? "" : "s"}`
-  );
+  return t(M.rowLabel, { members, faces });
 }
 
 export function makeLivePaintPanel(host: BundleHost): {
@@ -133,6 +152,7 @@ export function makeLivePaintPanel(host: BundleHost): {
   defaultDock: "right";
 } {
   const Component: React.FC<PanelProps> = () => {
+    const s = useStrings();
     const [groups, setGroups] = React.useState<LivePaintRecipe[]>([]);
     const [active, setActive] = React.useState<string | null>(null);
     const [swatches, setSwatches] = React.useState<SwatchSummary[]>([]);
@@ -188,26 +208,22 @@ export function makeLivePaintPanel(host: BundleHost): {
         data-draw-live-paint-active={active ?? ""}
       >
         <PanelIntro
-          summary={LIVE_PAINT_SUMMARY}
+          summary={s.t(LIVE_PAINT_SUMMARY)}
           attr="data-draw-live-paint-intro"
         />
         <div style={{ ...rowStyle, justifyContent: "space-between" }}>
           <span style={{ ...sectionStyle, paddingTop: 0 }}>
-            Live paint ({groups.length})
+            {s.t(M.heading)} ({groups.length})
           </span>
           <button
             type="button"
             style={iconBtn}
-            title={
-              hasSelection
-                ? "Make a live paint group from the selected paths (up to 12)"
-                : "Select two or more overlapping paths first"
-            }
+            title={hasSelection ? s.t(M.makeHint) : s.t(M.selectPathsFirst)}
             data-draw-live-paint-make
             disabled={!hasSelection}
             onClick={() => void run(() => applyMakeLivePaintGroup(host))}
           >
-            + From selection
+            {s.t(M.fromSelection)}
           </button>
         </div>
 
@@ -215,13 +231,12 @@ export function makeLivePaintPanel(host: BundleHost): {
 
         {!portable && (
           <div style={mutedStyle} data-draw-live-paint-degraded>
-            This editor cannot save data into the document, so a live paint
-            group could not be regenerated later.
+            {s.t(M.degraded)}
           </div>
         )}
 
         <div style={rowStyle}>
-          <span style={{ flex: 1 }}>Bucket fill</span>
+          <span style={{ flex: 1 }}>{s.t(M.bucketFill)}</span>
           <select
             style={{ font: `12px ${font.sans}` }}
             data-draw-live-paint-fill
@@ -232,7 +247,7 @@ export function makeLivePaintPanel(host: BundleHost): {
               setLivePaintFill(next);
             }}
           >
-            <option value="">None</option>
+            <option value="">{s.t(M.none)}</option>
             {swatches.map((s) => (
               <option key={s.selfId} value={s.selfId}>
                 {s.name}
@@ -242,10 +257,7 @@ export function makeLivePaintPanel(host: BundleHost): {
         </div>
 
         {groups.length === 0 ? (
-          <div style={mutedStyle}>
-            No live paint groups yet. Select two or more overlapping paths and
-            choose + From selection.
-          </div>
+          <div style={mutedStyle}>{s.t(M.empty)}</div>
         ) : (
           groups.map((group) => (
             <div key={group.id} data-draw-live-paint-row={group.id}>
@@ -265,7 +277,7 @@ export function makeLivePaintPanel(host: BundleHost): {
                 <button
                   type="button"
                   style={iconBtn}
-                  title="Rebuild the fills from the paths' current shapes; areas that no longer exist lose their fill"
+                  title={s.t(M.regenerateHint)}
                   data-draw-live-paint-regenerate
                   onClick={() =>
                     void run(() =>
@@ -273,12 +285,12 @@ export function makeLivePaintPanel(host: BundleHost): {
                     )
                   }
                 >
-                  Regenerate
+                  {s.t(M.regenerate)}
                 </button>
                 <button
                   type="button"
                   style={iconBtn}
-                  title="Select every filled area of this group"
+                  title={s.t(M.selectFacesHint)}
                   data-draw-live-paint-select
                   onClick={() =>
                     void run(() =>
@@ -286,12 +298,12 @@ export function makeLivePaintPanel(host: BundleHost): {
                     )
                   }
                 >
-                  Select faces
+                  {s.t(M.selectFaces)}
                 </button>
                 <button
                   type="button"
                   style={iconBtn}
-                  title="Stop tracking this group; the paths and the filled areas stay as ordinary artwork"
+                  title={s.t(M.releaseHint)}
                   data-draw-live-paint-release
                   onClick={() =>
                     void run(() =>
@@ -299,7 +311,7 @@ export function makeLivePaintPanel(host: BundleHost): {
                     )
                   }
                 >
-                  Release
+                  {s.t(M.release)}
                 </button>
               </div>
               <div style={mutedStyle}>{livePaintRowLabel(group)}</div>
@@ -317,18 +329,18 @@ export function makeLivePaintPanel(host: BundleHost): {
                     }
                   >
                     <span style={{ flex: 1 }} title={face.face}>
-                      Area {faceIndex + 1}
+                      {s.t(M.area, { n: faceIndex + 1 })}
                     </span>
                     <span style={mutedStyle}>
                       {face.fill === null
-                        ? "No fill"
+                        ? s.t(M.noFill)
                         : (swatches.find((s) => s.selfId === face.fill)?.name ??
                           face.fill)}
                     </span>
                     <button
                       type="button"
                       style={iconBtn}
-                      title="Select this area's fill"
+                      title={s.t(M.selectAreaHint)}
                       data-draw-live-paint-face-select
                       onClick={() =>
                         void run(() =>
@@ -339,12 +351,12 @@ export function makeLivePaintPanel(host: BundleHost): {
                         )
                       }
                     >
-                      Select
+                      {s.t(M.select)}
                     </button>
                     <button
                       type="button"
                       style={iconBtn}
-                      title="Delete this area's fill"
+                      title={s.t(M.deleteAreaHint)}
                       data-draw-live-paint-face-delete
                       onClick={() =>
                         void run(() =>
@@ -355,7 +367,7 @@ export function makeLivePaintPanel(host: BundleHost): {
                         )
                       }
                     >
-                      Delete
+                      {s.t(M.delete)}
                     </button>
                   </div>
                 );
@@ -364,12 +376,12 @@ export function makeLivePaintPanel(host: BundleHost): {
           ))
         )}
 
-        <About attr="data-draw-live-paint-note">{LIVE_PAINT_NOTE}</About>
+        <About attr="data-draw-live-paint-note">{s.t(LIVE_PAINT_NOTE)}</About>
       </div>
     );
   };
   return {
-    title: "Live paint",
+    title: t(M.title),
     component: Component,
     defaultDock: "right",
   };

@@ -36,6 +36,15 @@ import type {
 } from "@paged-media/plugin-api";
 
 import { registerCommand } from "../command-registry";
+import { defineMessages } from "@paged-media/strings";
+
+/** Command titles, message keys `registerCommand` reads in the editor's locale. */
+const M = defineMessages("draw.pathfinder", {
+  unite: "Pathfinder: Unite",
+  subtract: "Pathfinder: Subtract",
+  intersect: "Pathfinder: Intersect",
+  exclude: "Pathfinder: Exclude overlap",
+});
 export const PATHFINDER_COMMAND_CATEGORY = "Pathfinder";
 
 export interface PathfinderPreset {
@@ -50,22 +59,22 @@ export interface PathfinderPreset {
 export const PATHFINDER_PRESETS: readonly PathfinderPreset[] = [
   {
     id: "media.paged.draw.command.pathfinderUnite",
-    title: "Pathfinder: Unite",
+    title: M.unite,
     kind: "union",
   },
   {
     id: "media.paged.draw.command.pathfinderSubtract",
-    title: "Pathfinder: Subtract",
+    title: M.subtract,
     kind: "subtract",
   },
   {
     id: "media.paged.draw.command.pathfinderIntersect",
-    title: "Pathfinder: Intersect",
+    title: M.intersect,
     kind: "intersect",
   },
   {
     id: "media.paged.draw.command.pathfinderExclude",
-    title: "Pathfinder: Exclude overlap",
+    title: M.exclude,
     kind: "exclude",
   },
 ] as const;

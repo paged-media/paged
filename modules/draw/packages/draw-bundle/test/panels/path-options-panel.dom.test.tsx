@@ -41,6 +41,7 @@ import type {
   PathAnchorsResult,
 } from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
+import { t } from "@paged-media/strings";
 
 import {
   drawBundle,
@@ -228,7 +229,7 @@ describe("Path options panel — rendered against the engine", () => {
       ).toEqual([...PATH_OPTION_SECTIONS]);
       for (const section of PATH_OPTION_SECTIONS) {
         expect(panel.get(header(section)).textContent).toContain(
-          PATH_OPTION_SECTION_TITLES[section],
+          t(PATH_OPTION_SECTION_TITLES[section]),
         );
       }
       expect(panel.attr(PANEL, "data-draw-pathopts-panel")).toBe("offset");
@@ -241,7 +242,7 @@ describe("Path options panel — rendered against the engine", () => {
       expect(panel.disabled(apply("offset"))).toBe(true);
       expect(panel.count("[data-draw-pathopts-needs-selection]")).toBe(1);
       expect(panel.get("[data-draw-pathopts-note]").textContent).toBe(
-        PATH_OPTIONS_PANEL_NOTE,
+        t(PATH_OPTIONS_PANEL_NOTE),
       );
     });
 
@@ -382,7 +383,7 @@ describe("Path options panel — rendered against the engine", () => {
         panel.get<HTMLInputElement>(field("offset.miterLimit")).disabled,
       ).toBe(true);
       expect(panel.count("[data-draw-pathopts-offset-join-note]")).toBe(0);
-      expect(OFFSET_JOIN_NOTE).toMatch(/0\.65/);
+      expect(t(OFFSET_JOIN_NOTE)).toMatch(/0\.65/);
       expect(shapeOf(await tableOf(SQ))).toEqual(shapeOf(before));
     });
 
@@ -591,7 +592,7 @@ describe("Path options panel — rendered against the engine", () => {
       const panel = await mountPanel(h, makePathOptionsPanel);
       await panel.click(header("selectSameWeight"));
       expect(panel.get("[data-draw-pathopts-select-note]").textContent).toBe(
-        SELECT_SAME_TOLERANCE_NOTE,
+        t(SELECT_SAME_TOLERANCE_NOTE),
       );
       // No reference yet.
       expect(panel.disabled(apply("selectSameWeight"))).toBe(true);

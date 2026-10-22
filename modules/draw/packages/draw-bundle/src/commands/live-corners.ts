@@ -64,6 +64,16 @@ import type {
 import { registerCommand } from "../command-registry";
 import { stampDrawMetadata } from "./appearance-bake";
 import { oneBatchFor } from "./batch-handles";
+import { defineMessages } from "@paged-media/strings";
+
+/** Command titles, message keys `registerCommand` reads in the editor's locale. */
+const M = defineMessages("draw.corners", {
+  rounded: "Corners: Rounded",
+  inverseRounded: "Corners: Inverse rounded",
+  bevel: "Corners: Bevel",
+  fancy: "Corners: Fancy",
+  none: "Corners: None (square)",
+});
 export const LIVE_CORNERS_COMMAND_CATEGORY = "Corners";
 
 /** The IDML corner-option tokens the engine's `CornerOption::from_idml`
@@ -99,31 +109,31 @@ export const DEFAULT_CORNER_RADIUS_PT = 12;
 export const LIVE_CORNER_PRESETS: readonly LiveCornerPreset[] = [
   {
     id: "media.paged.draw.command.cornersRounded",
-    title: "Corners: Rounded",
+    title: M.rounded,
     style: "RoundedCorner",
     radius: DEFAULT_CORNER_RADIUS_PT,
   },
   {
     id: "media.paged.draw.command.cornersInverseRounded",
-    title: "Corners: Inverse rounded",
+    title: M.inverseRounded,
     style: "InverseRoundedCorner",
     radius: DEFAULT_CORNER_RADIUS_PT,
   },
   {
     id: "media.paged.draw.command.cornersBevel",
-    title: "Corners: Bevel",
+    title: M.bevel,
     style: "BeveledCorner",
     radius: DEFAULT_CORNER_RADIUS_PT,
   },
   {
     id: "media.paged.draw.command.cornersFancy",
-    title: "Corners: Fancy",
+    title: M.fancy,
     style: "FancyCorner",
     radius: DEFAULT_CORNER_RADIUS_PT,
   },
   {
     id: "media.paged.draw.command.cornersNone",
-    title: "Corners: None (square)",
+    title: M.none,
     style: "None",
     radius: 0,
   },

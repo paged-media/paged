@@ -230,6 +230,16 @@ import {
   writeRecipeBytes,
   type RecipeHost,
 } from "../recipe-store";
+import { defineMessages } from "@paged-media/strings";
+
+/** Command titles, message keys `registerCommand` reads in the editor's locale. */
+const M = defineMessages("draw.pattern", {
+  make: "Pattern: Bake a re-editable tile field from selection (artwork — NOT a pattern swatch)",
+  edit: "Pattern: Re-plan the field (layout, tile size, spacing, overlap, copies, dimming)",
+  selectTiles: "Pattern: Select the field's tiles",
+  deleteTiles: "Pattern: Delete the tiles (un-bake; the sources are kept)",
+  release: "Pattern: Release the field (keep the artwork, drop the recipe)",
+});
 export const PATTERN_COMMAND_CATEGORY = "Pattern";
 
 export const MAKE_PATTERN_COMMAND_ID =
@@ -1851,37 +1861,35 @@ export function contributePatternCommands(host: BundleHost): Disposable {
   const disposers = [
     registerCommand(host, {
       id: MAKE_PATTERN_COMMAND_ID,
-      title:
-        "Pattern: Bake a re-editable tile field from selection (artwork — NOT a pattern swatch)",
+      title: M.make,
       category: PATTERN_COMMAND_CATEGORY,
       handler: (_paged, payload) =>
         applyMakePattern(host, payload).then(() => undefined),
     }),
     registerCommand(host, {
       id: EDIT_PATTERN_COMMAND_ID,
-      title:
-        "Pattern: Re-plan the field (layout, tile size, spacing, overlap, copies, dimming)",
+      title: M.edit,
       category: PATTERN_COMMAND_CATEGORY,
       handler: (_paged, payload) =>
         applyEditPattern(host, payload).then(() => undefined),
     }),
     registerCommand(host, {
       id: SELECT_PATTERN_TILES_COMMAND_ID,
-      title: "Pattern: Select the field's tiles",
+      title: M.selectTiles,
       category: PATTERN_COMMAND_CATEGORY,
       handler: (_paged, payload) =>
         applySelectPatternTiles(host, payload).then(() => undefined),
     }),
     registerCommand(host, {
       id: DELETE_PATTERN_TILES_COMMAND_ID,
-      title: "Pattern: Delete the tiles (un-bake; the sources are kept)",
+      title: M.deleteTiles,
       category: PATTERN_COMMAND_CATEGORY,
       handler: (_paged, payload) =>
         applyDeletePatternTiles(host, payload).then(() => undefined),
     }),
     registerCommand(host, {
       id: RELEASE_PATTERN_COMMAND_ID,
-      title: "Pattern: Release the field (keep the artwork, drop the recipe)",
+      title: M.release,
       category: PATTERN_COMMAND_CATEGORY,
       handler: (_paged, payload) =>
         applyReleasePattern(host, payload).then(() => undefined),

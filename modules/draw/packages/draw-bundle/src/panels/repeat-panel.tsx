@@ -56,31 +56,67 @@ import {
   About,
   color,
   font,
-  humanize,
   Refusal,
   useActionFeedback,
 } from "@paged-media/panel-kit";
-import { PanelIntro } from "./panel-parts";
+import { PanelIntro, tokenLabel } from "./panel-parts";
+import { defineMessages, t, useStrings } from "@paged-media/strings";
+
+const M = defineMessages("draw.repeatPanel", {
+  summary:
+    "Repeat the selected artwork around a circle, in a grid or as a mirror image; Update rebuilds the copies after you edit the original.",
+  note: "A repeat makes real copies of the artwork and remembers how it built them. Editing the original does not move the copies until you choose Update. Dragging the on-canvas handle changes one setting and shows a guide; the copies are rebuilt when you let go, as one undo step. Clipping puts the copies inside a frame that crops them; a clipped repeat cannot be grouped, and the original stays outside the frame so you can keep editing it. Building or updating a repeat is one undo step, or two when it is clipped. Expand keeps the copies as ordinary artwork; Release removes them and keeps the original. The saved settings are kept outside undo.",
+  rowAround: "{count} around {radius} pt",
+  rowAxis: "axis {angle}°",
+  rowClipped: " · clipped",
+  rowPlaced: "({count, plural, one {# copy} other {# copies}} placed)",
+  heading: "Repeats",
+  buildHint: "Build a {kind} repeat from the selection",
+  selectArtwork: "Select artwork first",
+  degraded:
+    "This editor cannot save data into the document, so repeat settings are not kept and clipping is not available.",
+  kind: "Kind",
+  repeat: "Repeat",
+  radial: "Radial",
+  copiesIncl: "Copies (including the original)",
+  radius: "Radius (pt)",
+  startAngle: "Start angle (°)",
+  arc: "Arc (°, 360 = full ring)",
+  rotate: "Rotate copies to follow the arc",
+  grid: "Grid",
+  columns: "Columns",
+  rows: "Rows",
+  hSpacing: "Horizontal spacing (pt, negative overlaps)",
+  vSpacing: "Vertical spacing (pt, negative overlaps)",
+  flipColumns: "Flip odd columns",
+  flipRows: "Flip odd rows",
+  mirror: "Mirror",
+  axisAngle: "Axis angle (°, 90 = vertical)",
+  axisOffset: "Axis offset (pt, blank = the edge)",
+  frame: "Frame",
+  clip: "Clip the copies to a frame",
+  keepOnPage: "Keep copies on the page",
+  empty:
+    "No repeats yet. Select artwork and choose + Radial, + Grid or + Mirror.",
+  updateHint:
+    "Rebuild the copies with the settings above and the original's current shape",
+  update: "Update",
+  selectHint: "Select this repeat's copies",
+  select: "Select",
+  expandHint: "Stop tracking and keep every copy as ordinary artwork",
+  expand: "Expand",
+  releaseHint: "Remove every copy and keep the original",
+  release: "Release",
+  title: "Repeat options",
+});
 
 export const REPEAT_PANEL_ID = "media.paged.draw.panel.repeat";
 
 /** What the panel is for, in one sentence (shown at the top). */
-export const REPEAT_SUMMARY =
-  "Repeat the selected artwork around a circle, in a grid or as a mirror " +
-  "image; Update rebuilds the copies after you edit the original.";
+export const REPEAT_SUMMARY = M.summary;
 
 /** The "About" text. Exported so the conformance spec pins the wording. */
-export const REPEAT_PANEL_NOTE =
-  "A repeat makes real copies of the artwork and remembers how it built " +
-  "them. Editing the original does not move the copies until you choose " +
-  "Update. Dragging the on-canvas handle changes one setting and shows a " +
-  "guide; the copies are rebuilt when you let go, as one undo step. " +
-  "Clipping puts the copies inside a frame that crops them; a clipped " +
-  "repeat cannot be grouped, and the original stays outside the frame so " +
-  "you can keep editing it. Building or updating a repeat is one undo " +
-  "step, or two when it is clipped. Expand keeps the copies as ordinary " +
-  "artwork; Release removes them and keeps the original. The saved " +
-  "settings are kept outside undo.";
+export const REPEAT_PANEL_NOTE = M.note;
 
 const rowStyle: React.CSSProperties = {
   display: "flex",
@@ -120,13 +156,13 @@ export function repeatRowLabel(record: RepeatRecord, placed: number): string {
   const p = record.params;
   const asked =
     p.kind === "radial"
-      ? `${p.count} around ${Math.round(p.radiusPt)} pt`
+      ? t(M.rowAround, { count: p.count, radius: Math.round(p.radiusPt) })
       : p.kind === "grid"
         ? `${p.columns} × ${p.rows}`
-        : `axis ${Math.round(p.angleDeg)}°`;
+        : t(M.rowAxis, { angle: Math.round(p.angleDeg) });
   return (
-    `${humanize(p.kind)} · ${asked}${p.clip ? " · clipped" : ""} ` +
-    `(${placed} cop${placed === 1 ? "y" : "ies"} placed)`
+    `${tokenLabel(p.kind)} · ${asked}${p.clip ? t(M.rowClipped) : ""} ` +
+    t(M.rowPlaced, { count: placed })
   );
 }
 
@@ -136,6 +172,7 @@ export function makeRepeatPanel(host: BundleHost): {
   defaultDock: "right";
 } {
   const Component: React.FC<PanelProps> = () => {
+    const s = useStrings();
     const [records, setRecords] = React.useState<RepeatRecord[]>([]);
     const [active, setActive] = React.useState<string | null>(null);
     const [placed, setPlaced] = React.useState<Record<string, number>>({});
@@ -218,10 +255,13 @@ export function makeRepeatPanel(host: BundleHost): {
         data-draw-repeat-portable={portable ? "true" : "false"}
         data-draw-repeat-active={active ?? ""}
       >
-        <PanelIntro summary={REPEAT_SUMMARY} attr="data-draw-repeat-intro" />
+        <PanelIntro
+          summary={s.t(REPEAT_SUMMARY)}
+          attr="data-draw-repeat-intro"
+        />
         <div style={{ ...rowStyle, justifyContent: "space-between" }}>
           <span style={{ ...sectionStyle, paddingTop: 0 }}>
-            Repeats ({records.length})
+            {s.t(M.heading)} ({records.length})
           </span>
         </div>
         <div style={rowStyle}>
@@ -232,8 +272,8 @@ export function makeRepeatPanel(host: BundleHost): {
               style={iconBtn}
               title={
                 hasSelection
-                  ? `Build a ${kind} repeat from the selection`
-                  : "Select artwork first"
+                  ? s.t(M.buildHint, { kind: tokenLabel(kind) })
+                  : s.t(M.selectArtwork)
               }
               data-draw-repeat-make={kind}
               disabled={!hasSelection}
@@ -241,7 +281,7 @@ export function makeRepeatPanel(host: BundleHost): {
                 void run(() => applyMakeRepeat(host, kind, { ...draft, kind }))
               }
             >
-              + {humanize(kind)}
+              + {tokenLabel(kind)}
             </button>
           ))}
         </div>
@@ -250,14 +290,13 @@ export function makeRepeatPanel(host: BundleHost): {
 
         {!portable && (
           <div style={mutedStyle} data-draw-repeat-degraded>
-            This editor cannot save data into the document, so repeat settings
-            are not kept and clipping is not available.
+            {s.t(M.degraded)}
           </div>
         )}
 
-        <div style={sectionStyle}>Kind</div>
+        <div style={sectionStyle}>{s.t(M.kind)}</div>
         <div style={rowStyle}>
-          <span style={{ flex: 1 }}>Repeat</span>
+          <span style={{ flex: 1 }}>{s.t(M.repeat)}</span>
           <select
             style={{ font: `12px ${font.sans}` }}
             data-draw-repeat-kind
@@ -268,7 +307,7 @@ export function makeRepeatPanel(host: BundleHost): {
           >
             {REPEAT_KINDS.map((k) => (
               <option key={k} value={k}>
-                {humanize(k)}
+                {tokenLabel(k)}
               </option>
             ))}
           </select>
@@ -276,33 +315,33 @@ export function makeRepeatPanel(host: BundleHost): {
 
         {draft.kind === "radial" && (
           <>
-            <div style={sectionStyle}>Radial</div>
+            <div style={sectionStyle}>{s.t(M.radial)}</div>
             {numberRow(
-              "Copies (including the original)",
+              s.t(M.copiesIncl),
               draft.count,
               (n) => setDraft({ ...draft, count: n }),
               "count",
             )}
             {numberRow(
-              "Radius (pt)",
+              s.t(M.radius),
               draft.radiusPt,
               (n) => setDraft({ ...draft, radiusPt: n }),
               "radiusPt",
             )}
             {numberRow(
-              "Start angle (°)",
+              s.t(M.startAngle),
               draft.startDeg,
               (n) => setDraft({ ...draft, startDeg: n }),
               "startDeg",
             )}
             {numberRow(
-              "Arc (°, 360 = full ring)",
+              s.t(M.arc),
               draft.sweepDeg,
               (n) => setDraft({ ...draft, sweepDeg: n }),
               "sweepDeg",
             )}
             {checkRow(
-              "Rotate copies to follow the arc",
+              s.t(M.rotate),
               draft.rotateInstances,
               (b) => setDraft({ ...draft, rotateInstances: b }),
               "rotateInstances",
@@ -312,39 +351,39 @@ export function makeRepeatPanel(host: BundleHost): {
 
         {draft.kind === "grid" && (
           <>
-            <div style={sectionStyle}>Grid</div>
+            <div style={sectionStyle}>{s.t(M.grid)}</div>
             {numberRow(
-              "Columns",
+              s.t(M.columns),
               draft.columns,
               (n) => setDraft({ ...draft, columns: n }),
               "columns",
             )}
             {numberRow(
-              "Rows",
+              s.t(M.rows),
               draft.rows,
               (n) => setDraft({ ...draft, rows: n }),
               "rows",
             )}
             {numberRow(
-              "Horizontal spacing (pt, negative overlaps)",
+              s.t(M.hSpacing),
               draft.spacing[0],
               (n) => setDraft({ ...draft, spacing: [n, draft.spacing[1]] }),
               "spacingX",
             )}
             {numberRow(
-              "Vertical spacing (pt, negative overlaps)",
+              s.t(M.vSpacing),
               draft.spacing[1],
               (n) => setDraft({ ...draft, spacing: [draft.spacing[0], n] }),
               "spacingY",
             )}
             {checkRow(
-              "Flip odd columns",
+              s.t(M.flipColumns),
               draft.flipColumns,
               (b) => setDraft({ ...draft, flipColumns: b }),
               "flipColumns",
             )}
             {checkRow(
-              "Flip odd rows",
+              s.t(M.flipRows),
               draft.flipRows,
               (b) => setDraft({ ...draft, flipRows: b }),
               "flipRows",
@@ -354,15 +393,15 @@ export function makeRepeatPanel(host: BundleHost): {
 
         {draft.kind === "mirror" && (
           <>
-            <div style={sectionStyle}>Mirror</div>
+            <div style={sectionStyle}>{s.t(M.mirror)}</div>
             {numberRow(
-              "Axis angle (°, 90 = vertical)",
+              s.t(M.axisAngle),
               draft.angleDeg,
               (n) => setDraft({ ...draft, angleDeg: n }),
               "angleDeg",
             )}
             {numberRow(
-              "Axis offset (pt, blank = the edge)",
+              s.t(M.axisOffset),
               draft.offsetPt ?? 0,
               (n) => setDraft({ ...draft, offsetPt: n }),
               "offsetPt",
@@ -370,25 +409,22 @@ export function makeRepeatPanel(host: BundleHost): {
           </>
         )}
 
-        <div style={sectionStyle}>Frame</div>
+        <div style={sectionStyle}>{s.t(M.frame)}</div>
         {checkRow(
-          "Clip the copies to a frame",
+          s.t(M.clip),
           draft.clip,
           (b) => setDraft({ ...draft, clip: b }),
           "clip",
         )}
         {checkRow(
-          "Keep copies on the page",
+          s.t(M.keepOnPage),
           draft.fitToArtboard,
           (b) => setDraft({ ...draft, fitToArtboard: b }),
           "fitToArtboard",
         )}
 
         {records.length === 0 ? (
-          <div style={mutedStyle}>
-            No repeats yet. Select artwork and choose + Radial, + Grid or +
-            Mirror.
-          </div>
+          <div style={mutedStyle}>{s.t(M.empty)}</div>
         ) : (
           records.map((record) => (
             <div key={record.id} data-draw-repeat-row={record.id}>
@@ -408,7 +444,7 @@ export function makeRepeatPanel(host: BundleHost): {
                 <button
                   type="button"
                   style={iconBtn}
-                  title="Rebuild the copies with the settings above and the original's current shape"
+                  title={s.t(M.updateHint)}
                   data-draw-repeat-update
                   onClick={() =>
                     void run(() =>
@@ -419,12 +455,12 @@ export function makeRepeatPanel(host: BundleHost): {
                     )
                   }
                 >
-                  Update
+                  {s.t(M.update)}
                 </button>
                 <button
                   type="button"
                   style={iconBtn}
-                  title="Select this repeat's copies"
+                  title={s.t(M.selectHint)}
                   data-draw-repeat-select
                   onClick={() =>
                     void run(() =>
@@ -432,12 +468,12 @@ export function makeRepeatPanel(host: BundleHost): {
                     )
                   }
                 >
-                  Select
+                  {s.t(M.select)}
                 </button>
                 <button
                   type="button"
                   style={iconBtn}
-                  title="Stop tracking and keep every copy as ordinary artwork"
+                  title={s.t(M.expandHint)}
                   data-draw-repeat-expand
                   onClick={() =>
                     void run(() =>
@@ -445,12 +481,12 @@ export function makeRepeatPanel(host: BundleHost): {
                     )
                   }
                 >
-                  Expand
+                  {s.t(M.expand)}
                 </button>
                 <button
                   type="button"
                   style={iconBtn}
-                  title="Remove every copy and keep the original"
+                  title={s.t(M.releaseHint)}
                   data-draw-repeat-release
                   onClick={() =>
                     void run(() =>
@@ -458,7 +494,7 @@ export function makeRepeatPanel(host: BundleHost): {
                     )
                   }
                 >
-                  Release
+                  {s.t(M.release)}
                 </button>
               </div>
               <div style={mutedStyle}>
@@ -468,12 +504,12 @@ export function makeRepeatPanel(host: BundleHost): {
           ))
         )}
 
-        <About attr="data-draw-repeat-note">{REPEAT_PANEL_NOTE}</About>
+        <About attr="data-draw-repeat-note">{s.t(REPEAT_PANEL_NOTE)}</About>
       </div>
     );
   };
   return {
-    title: "Repeat options",
+    title: t(M.title),
     component: Component,
     defaultDock: "right",
   };

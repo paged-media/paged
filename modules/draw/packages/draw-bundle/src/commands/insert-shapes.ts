@@ -62,6 +62,15 @@ import {
 import { insertPathMutationsForShape, resolveTargetPage } from "../io/svg";
 
 import { registerCommand } from "../command-registry";
+import { defineMessages } from "@paged-media/strings";
+
+/** Command titles, message keys `registerCommand` reads in the editor's locale. */
+const M = defineMessages("draw.insertShapes", {
+  arc: "Insert: Arc (last used values)",
+  spiral: "Insert: Spiral (last used values)",
+  rectGrid: "Insert: Rectangular grid (last used values)",
+  polarGrid: "Insert: Polar grid (last used values)",
+});
 export const INSERT_SHAPE_COMMAND_CATEGORY = "Insert";
 
 export const INSERT_ARC_COMMAND_ID = "media.paged.draw.command.insertArc";
@@ -467,21 +476,21 @@ export function contributeInsertShapeCommands(
   const disposers = [
     registerCommand(host, {
       id: INSERT_ARC_COMMAND_ID,
-      title: "Insert: Arc (last used values)",
+      title: M.arc,
       category: INSERT_SHAPE_COMMAND_CATEGORY,
       handler: (_paged, payload) =>
         applyInsertArc(host, (payload as Payload) ?? lastUsed.arc?.()),
     }),
     registerCommand(host, {
       id: INSERT_SPIRAL_COMMAND_ID,
-      title: "Insert: Spiral (last used values)",
+      title: M.spiral,
       category: INSERT_SHAPE_COMMAND_CATEGORY,
       handler: (_paged, payload) =>
         applyInsertSpiral(host, (payload as Payload) ?? lastUsed.spiral?.()),
     }),
     registerCommand(host, {
       id: INSERT_RECT_GRID_COMMAND_ID,
-      title: "Insert: Rectangular grid (last used values)",
+      title: M.rectGrid,
       category: INSERT_SHAPE_COMMAND_CATEGORY,
       handler: (_paged, payload) =>
         applyInsertRectGrid(
@@ -491,7 +500,7 @@ export function contributeInsertShapeCommands(
     }),
     registerCommand(host, {
       id: INSERT_POLAR_GRID_COMMAND_ID,
-      title: "Insert: Polar grid (last used values)",
+      title: M.polarGrid,
       category: INSERT_SHAPE_COMMAND_CATEGORY,
       handler: (_paged, payload) =>
         applyInsertPolarGrid(

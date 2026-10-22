@@ -183,6 +183,23 @@ import {
   writeRecipeBytes,
   type RecipeHost,
 } from "../recipe-store";
+import { defineMessages } from "@paged-media/strings";
+
+/** Command titles, message keys `registerCommand` reads in the editor's locale. */
+const M = defineMessages("draw.blend", {
+  make: "Blend: Make from the two selected objects (smooth colour / steps / distance — artwork rebuilt by Update, not a live link)",
+  update:
+    "Blend: Update (new options + the keys' CURRENT geometry; the intermediates get new ids)",
+  replaceSpine:
+    "Blend: Replace spine with the selected path (it keeps its own paint and stays outside the blend's group)",
+  reverseSpine: "Blend: Reverse spine (the intermediates travel the other way)",
+  reverseFrontToBack:
+    "Blend: Reverse front to back (paint order only — nothing moves)",
+  selectKeys:
+    "Blend: Select the key objects (edit them, then Update — that is how a blend follows an edit)",
+  expand: "Blend: Expand (keep every intermediate as ordinary artwork)",
+  release: "Blend: Release (remove the intermediates, keep the key objects)",
+});
 export const BLEND_COMMAND_CATEGORY = "Blend";
 
 /** MAKE. The id is v0's and is deliberately UNCHANGED: it is declared in
@@ -2085,60 +2102,56 @@ export function contributeBlendCommands(host: BundleHost): Disposable {
   const disposers = [
     registerCommand(host, {
       id: BLEND_COMMAND_ID,
-      title:
-        "Blend: Make from the two selected objects (smooth colour / steps / distance — artwork rebuilt by Update, not a live link)",
+      title: M.make,
       category: BLEND_COMMAND_CATEGORY,
       handler: (_paged, payload) =>
         applyMakeBlend(host, payload).then(() => undefined),
     }),
     registerCommand(host, {
       id: UPDATE_BLEND_COMMAND_ID,
-      title:
-        "Blend: Update (new options + the keys' CURRENT geometry; the intermediates get new ids)",
+      title: M.update,
       category: BLEND_COMMAND_CATEGORY,
       handler: (_paged, payload) =>
         applyUpdateBlend(host, payload).then(() => undefined),
     }),
     registerCommand(host, {
       id: REPLACE_BLEND_SPINE_COMMAND_ID,
-      title:
-        "Blend: Replace spine with the selected path (it keeps its own paint and stays outside the blend's group)",
+      title: M.replaceSpine,
       category: BLEND_COMMAND_CATEGORY,
       handler: (_paged, payload) =>
         applyReplaceBlendSpine(host, payload).then(() => undefined),
     }),
     registerCommand(host, {
       id: REVERSE_BLEND_SPINE_COMMAND_ID,
-      title: "Blend: Reverse spine (the intermediates travel the other way)",
+      title: M.reverseSpine,
       category: BLEND_COMMAND_CATEGORY,
       handler: (_paged, payload) =>
         applyReverseBlendSpine(host, payload).then(() => undefined),
     }),
     registerCommand(host, {
       id: REVERSE_BLEND_ORDER_COMMAND_ID,
-      title: "Blend: Reverse front to back (paint order only — nothing moves)",
+      title: M.reverseFrontToBack,
       category: BLEND_COMMAND_CATEGORY,
       handler: (_paged, payload) =>
         applyReverseBlendOrder(host, payload).then(() => undefined),
     }),
     registerCommand(host, {
       id: SELECT_BLEND_OBJECTS_COMMAND_ID,
-      title:
-        "Blend: Select the key objects (edit them, then Update — that is how a blend follows an edit)",
+      title: M.selectKeys,
       category: BLEND_COMMAND_CATEGORY,
       handler: (_paged, payload) =>
         applySelectBlendObjects(host, payload).then(() => undefined),
     }),
     registerCommand(host, {
       id: EXPAND_BLEND_COMMAND_ID,
-      title: "Blend: Expand (keep every intermediate as ordinary artwork)",
+      title: M.expand,
       category: BLEND_COMMAND_CATEGORY,
       handler: (_paged, payload) =>
         applyExpandBlend(host, payload).then(() => undefined),
     }),
     registerCommand(host, {
       id: RELEASE_BLEND_COMMAND_ID,
-      title: "Blend: Release (remove the intermediates, keep the key objects)",
+      title: M.release,
       category: BLEND_COMMAND_CATEGORY,
       handler: (_paged, payload) =>
         applyReleaseBlend(host, payload).then(() => undefined),

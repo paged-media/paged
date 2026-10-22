@@ -46,6 +46,7 @@
 //       shapes, the bucket/selection GESTURES driven with synthetic
 //       pointer events, and the z-order fact a fill inherits.
 
+import { t } from "@paged-media/strings";
 import {
   describe,
   expect,
@@ -567,14 +568,16 @@ describe("draw conformance — LIVE PAINT v0 (the recipe, pure)", () => {
   describe("the honest wording is pinned (it cannot be edited away silently)", () => {
     it("the panel note states regenerable-not-live, the missing gaps and edges, the caps and the z-order", () => {
       // Plain words for each fact (the panel's About text).
-      expect(LIVE_PAINT_NOTE).toContain(
+      expect(t(LIVE_PAINT_NOTE)).toContain(
         "does not repaint anything until you choose Regenerate",
       );
-      expect(LIVE_PAINT_NOTE).toContain("gaps are not closed for you");
-      expect(LIVE_PAINT_NOTE).toContain("edges cannot be painted");
-      expect(LIVE_PAINT_NOTE).toContain("at most 12 paths and 256 areas");
-      expect(LIVE_PAINT_NOTE).toContain("placed on top of the other objects");
-      expect(LIVE_PAINT_NOTE).toContain("outside undo");
+      expect(t(LIVE_PAINT_NOTE)).toContain("gaps are not closed for you");
+      expect(t(LIVE_PAINT_NOTE)).toContain("edges cannot be painted");
+      expect(t(LIVE_PAINT_NOTE)).toContain("at most 12 paths and 256 areas");
+      expect(t(LIVE_PAINT_NOTE)).toContain(
+        "placed on top of the other objects",
+      );
+      expect(t(LIVE_PAINT_NOTE)).toContain("outside undo");
     });
 
     it("the command titles carry the honest verbs", () => {

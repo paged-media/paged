@@ -44,6 +44,7 @@
 //       wording and the registration surface (including the tool that
 //       deliberately carries NO shortcut).
 
+import { t } from "@paged-media/strings";
 import {
   describe,
   expect,
@@ -1382,11 +1383,13 @@ describe("draw conformance — REPEATS (radial / grid / mirror, §12.4)", () => 
       expect(REPEAT_CLIP_NOTE).toContain("orphaned");
       // The panel repeats both AND states the undo arithmetic.
       // The panel's About text says the same things in plain words.
-      expect(REPEAT_PANEL_NOTE).toContain(
+      expect(t(REPEAT_PANEL_NOTE)).toContain(
         "Editing the original does not move the copies until you choose Update",
       );
-      expect(REPEAT_PANEL_NOTE).toContain("a clipped repeat cannot be grouped");
-      expect(REPEAT_PANEL_NOTE).toContain(
+      expect(t(REPEAT_PANEL_NOTE)).toContain(
+        "a clipped repeat cannot be grouped",
+      );
+      expect(t(REPEAT_PANEL_NOTE)).toContain(
         "one undo step, or two when it is clipped",
       );
     });

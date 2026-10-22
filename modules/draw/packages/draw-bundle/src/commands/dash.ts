@@ -40,6 +40,15 @@ import type {
 } from "@paged-media/plugin-api";
 
 import { registerCommand } from "../command-registry";
+import { defineMessages } from "@paged-media/strings";
+
+/** Command titles, message keys `registerCommand` reads in the editor's locale. */
+const M = defineMessages("draw.dash", {
+  solid: "Stroke: Solid",
+  dashed: "Stroke: Dashed",
+  dotted: "Stroke: Dotted",
+  dashDot: "Stroke: Dash-dot",
+});
 /** The dash-array PropertyPath (already on the wire — protocol ≥ 35).
  *  A literal type so it satisfies the `PropertyPath` union in the
  *  mutation arg without a cast (the §12.3 compat alarm holds). */
@@ -65,22 +74,22 @@ export const DASH_COMMAND_CATEGORY = "Stroke";
 export const DASH_PRESETS: readonly DashPreset[] = [
   {
     id: "media.paged.draw.command.strokeDashSolid",
-    title: "Stroke: Solid",
+    title: M.solid,
     lengths: [],
   },
   {
     id: "media.paged.draw.command.strokeDashDashed",
-    title: "Stroke: Dashed",
+    title: M.dashed,
     lengths: [6, 3],
   },
   {
     id: "media.paged.draw.command.strokeDashDotted",
-    title: "Stroke: Dotted",
+    title: M.dotted,
     lengths: [1, 3],
   },
   {
     id: "media.paged.draw.command.strokeDashDashDot",
-    title: "Stroke: Dash-dot",
+    title: M.dashDot,
     lengths: [6, 3, 1, 3],
   },
 ] as const;

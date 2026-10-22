@@ -36,6 +36,7 @@ import {
 
 import type { BundleHost, ElementId } from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
+import { t } from "@paged-media/strings";
 
 import {
   dashLengthsOf,
@@ -155,7 +156,7 @@ describe("the pure half", () => {
   });
 
   it("the Stroke panel's Dashes readout points at the editor (the schema cannot bind a vector)", () => {
-    const section = strokePanel.schema.sections.find(
+    const section = strokePanel().schema.sections.find(
       (s) => s.title === "Dashes",
     )!;
     const text = (section.rows[0]!.props as { text: string }).text;
@@ -193,7 +194,7 @@ describe("Stroke dashes — rendered against the engine", () => {
       "6 · 3 · 1 · 3 pt",
     );
     expect(panel.get("[data-draw-pathopts-dash-note]").textContent).toBe(
-      DASH_SECTION_NOTE,
+      t(DASH_SECTION_NOTE),
     );
     expect(panel.count("[data-draw-pathopts-dash-hidden]")).toBe(0);
   });
