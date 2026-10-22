@@ -1,0 +1,16 @@
+# DBCS(text) - half-width to full-width.
+# id	formula	setup	expected
+dbcs-0	=DBCS("ABC123")	-	ABC123
+dbcs-1	=DBCS(" ")	-	 
+dbcs-2	=DBCS("ｶﾀｶﾅ")	-	ｶﾀｶﾅ
+dbcs-3	=DBCS("ｶﾞ")	-	ｶﾞ
+dbcs-4	=DBCS("ﾊﾟ")	-	ﾊﾟ
+dbcs-5	=DBCS("ｰ")	-	ｰ
+dbcs-6	=DBCS("｡｢｣､")	-	｡｢｣､
+dbcs-7	=DBCS("~")	-	~
+dbcs-8	=DBCS("\")	-	\
+dbcs-9	=DBCS(123)	-	123
+dbcs-10	=DBCS("漢字")	-	漢字
+dbcs-11	=UNICODE(DBCS("A"))	-	65
+dbcs-12	=DBCS("ﾞ")	-	ﾞ
+dbcs-13	=DBCS(A1)	A1=#N/A	#N/A
