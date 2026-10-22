@@ -62,6 +62,23 @@
 // these options persist with it and nothing here changes.
 
 import type { ToolOptionField, ToolOptionsSpec } from "@paged-media/plugin-api";
+import { defineMessages, t } from "@paged-media/strings";
+
+/** The option labels: message keys, read in the editor's locale when the
+ *  tool registers (`toolOptionsSpecOf`). */
+const M = defineMessages("draw.toolOptions", {
+  fidelity: "Fidelity",
+  size: "Size",
+  angle: "Angle",
+  roundness: "Roundness",
+  peakLimit: "Peak limit",
+  widthPerDrag: "Width per drag",
+  falloff: "Falloff",
+  anchors: "anchors",
+  selectObjects: "Select objects",
+  touched: "Touched by the lasso",
+  centre: "Centre inside the lasso",
+});
 
 type OptionValue = number | boolean | string;
 
@@ -85,6 +102,7 @@ export function toolSettingsDoorOf(paged: unknown): ToolSettingsDoor | null {
 export interface NumberOption {
   kind: "number";
   key: string;
+  /** A message key (`M` above); `toolOptionsSpecOf` reads it in the locale. */
   label: string;
   min: number;
   max: number;
@@ -148,18 +166,18 @@ export function toolOptionsSpecOf(def: ToolOptionsDef): ToolOptionsSpec {
         return {
           kind: "number",
           key: f.key,
-          label: f.label,
+          label: t(f.label),
           min: f.min,
           max: f.max,
           ...(f.step !== undefined ? { step: f.step } : {}),
-          ...(f.unit !== undefined ? { unit: f.unit } : {}),
+          ...(f.unit !== undefined ? { unit: t(f.unit) } : {}),
         };
       }
       return {
         kind: "select",
         key: f.key,
-        label: f.label,
-        options: f.options.map((o) => ({ value: o.value, label: o.label })),
+        label: t(f.label),
+        options: f.options.map((o) => ({ value: o.value, label: t(o.label) })),
       };
     }),
   };
@@ -241,7 +259,7 @@ export function createToolOptionsReader(
 const FIDELITY: Omit<NumberOption, "default"> = {
   kind: "number",
   key: "fidelity",
-  label: "Fidelity",
+  label: M.fidelity,
   min: 0.5,
   max: 20,
   step: 0.5,
@@ -254,7 +272,7 @@ const nibFields = (): OptionDef[] => [
   {
     kind: "number",
     key: "size",
-    label: "Size",
+    label: M.size,
     min: 0.5,
     max: 200,
     step: 0.5,
@@ -264,7 +282,7 @@ const nibFields = (): OptionDef[] => [
   {
     kind: "number",
     key: "angle",
-    label: "Angle",
+    label: M.angle,
     min: -180,
     max: 180,
     step: 1,
@@ -274,7 +292,7 @@ const nibFields = (): OptionDef[] => [
   {
     kind: "number",
     key: "roundness",
-    label: "Roundness",
+    label: M.roundness,
     min: 0,
     max: 100,
     step: 1,
@@ -302,7 +320,7 @@ export const ERASER_OPTIONS = defineToolOptions({
     {
       kind: "number",
       key: "size",
-      label: "Size",
+      label: M.size,
       min: 0.5,
       max: 200,
       step: 0.5,
@@ -319,7 +337,7 @@ export const WIDTH_OPTIONS = defineToolOptions({
     {
       kind: "number",
       key: "maxWidth",
-      label: "Peak limit",
+      label: M.peakLimit,
       min: 1,
       max: 500,
       step: 1,
@@ -329,7 +347,7 @@ export const WIDTH_OPTIONS = defineToolOptions({
     {
       kind: "number",
       key: "gain",
-      label: "Width per drag",
+      label: M.widthPerDrag,
       min: 0.1,
       max: 10,
       step: 0.1,
@@ -339,11 +357,11 @@ export const WIDTH_OPTIONS = defineToolOptions({
     {
       kind: "number",
       key: "falloff",
-      label: "Falloff",
+      label: M.falloff,
       min: 1,
       max: 20,
       step: 1,
-      unit: "anchors",
+      unit: M.anchors,
       default: 2,
     },
   ],
@@ -357,10 +375,10 @@ export const LASSO_OPTIONS = defineToolOptions({
     {
       kind: "select",
       key: "mode",
-      label: "Select objects",
+      label: M.selectObjects,
       options: [
-        { value: "intersect", label: "Touched by the lasso" },
-        { value: "centre", label: "Centre inside the lasso" },
+        { value: "intersect", label: M.touched },
+        { value: "centre", label: M.centre },
       ],
       default: "intersect",
     },

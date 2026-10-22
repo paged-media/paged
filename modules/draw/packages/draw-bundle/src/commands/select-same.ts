@@ -78,6 +78,14 @@ import type {
 import { leafIdsOf, linkIndex } from "../link-index";
 
 import { registerCommand } from "../command-registry";
+import { defineMessages } from "@paged-media/strings";
+
+/** Command titles, message keys `registerCommand` reads in the editor's locale. */
+const M = defineMessages("draw.selectSame", {
+  fill: "Select same: Fill",
+  stroke: "Select same: Stroke",
+  strokeWeight: "Select same: Stroke weight",
+});
 // The leaf walk lives beside the index that walks it; every other module
 // keeps importing it from here.
 export { leafIdsOf };
@@ -338,7 +346,7 @@ export function contributeSelectSameCommands(host: BundleHost): Disposable {
   const disposers = [
     registerCommand(host, {
       id: SELECT_SAME_FILL_COMMAND_ID,
-      title: "Select same: Fill",
+      title: M.fill,
       category: SELECT_SAME_COMMAND_CATEGORY,
       handler: async (_paged, payload) => {
         await applySelectSame(
@@ -351,7 +359,7 @@ export function contributeSelectSameCommands(host: BundleHost): Disposable {
     }),
     registerCommand(host, {
       id: SELECT_SAME_STROKE_COMMAND_ID,
-      title: "Select same: Stroke",
+      title: M.stroke,
       category: SELECT_SAME_COMMAND_CATEGORY,
       handler: async (_paged, payload) => {
         await applySelectSame(
@@ -369,7 +377,7 @@ export function contributeSelectSameCommands(host: BundleHost): Disposable {
       // applied here — "same" from the menu must not quietly mean
       // "within whatever was typed last week". The "within…" row is the
       // Path Options panel's.
-      title: "Select same: Stroke weight",
+      title: M.strokeWeight,
       category: SELECT_SAME_COMMAND_CATEGORY,
       handler: async (_paged, payload) => {
         await applySelectSame(

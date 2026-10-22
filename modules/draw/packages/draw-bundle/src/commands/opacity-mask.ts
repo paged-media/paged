@@ -171,6 +171,13 @@ export function releaseOpacityMaskMutationFor(targetId: ElementId): Mutation {
 }
 
 import { registerCommand } from "../command-registry";
+import { defineMessages } from "@paged-media/strings";
+
+/** Command titles, message keys `registerCommand` reads in the editor's locale. */
+const M = defineMessages("draw.opacityMask", {
+  make: "Transparency: Make opacity mask from top object (renders on canvas and in export)",
+  release: "Transparency: Release opacity mask (the artwork comes back on top)",
+});
 export const OPACITY_MASK_COMMAND_CATEGORY = "Transparency";
 
 export const MAKE_OPACITY_MASK_COMMAND_ID =
@@ -495,16 +502,14 @@ export function contributeOpacityMaskCommands(host: BundleHost): Disposable {
   const disposers = [
     registerCommand(host, {
       id: MAKE_OPACITY_MASK_COMMAND_ID,
-      title:
-        "Transparency: Make opacity mask from top object (renders on canvas and in export)",
+      title: M.make,
       category: OPACITY_MASK_COMMAND_CATEGORY,
       handler: (_paged, payload) =>
         applyMakeOpacityMask(host, payloadOf(payload)).then(() => undefined),
     }),
     registerCommand(host, {
       id: RELEASE_OPACITY_MASK_COMMAND_ID,
-      title:
-        "Transparency: Release opacity mask (the artwork comes back on top)",
+      title: M.release,
       category: OPACITY_MASK_COMMAND_CATEGORY,
       handler: (_paged, payload) =>
         applyReleaseOpacityMask(host, payloadOf(payload)).then(() => undefined),

@@ -67,6 +67,7 @@ import {
 } from "@paged-media/plugin-sdk";
 
 import manifest from "../manifest.json";
+import de from "../locales/de.json";
 
 import { drawTools } from "./tools";
 import {
@@ -196,10 +197,15 @@ import { makePathOptionsPanel } from "./panels/path-options-panel";
 import { contributeSvgIo } from "./io/svg";
 import { contributeDrawObjectModel } from "./object-model";
 import {
-  DRAW_PROPERTIES_PANEL,
+  drawPropertiesPanel,
   DRAW_PROPERTIES_PANEL_ID,
   publishDrawPropertyLists,
 } from "./panels/properties-panel";
+import { defineTranslations } from "@paged-media/strings";
+
+// The bundle's translations (`locales/<locale>.json`), registered beside
+// its English messages whenever the bundle loads.
+defineTranslations("de", de);
 
 export function activate(host: BundleHost): BundleHandle {
   // B-17 — the anchor-edit tools are built from a host-bound factory;
@@ -590,14 +596,15 @@ export function activate(host: BundleHost): BundleHandle {
   const objectModelHandle = contributeDrawObjectModel(host);
   // ADR 323 — draw's object properties as host-rendered PropertyFields (a
   // schema panel of property rows; needs the object model + bindings).
+  const propertiesPanel = drawPropertiesPanel();
   const propertyListsSub = objectModelHandle
     ? (contributeSchemaPanel(host, {
         id: DRAW_PROPERTIES_PANEL_ID,
-        title: DRAW_PROPERTIES_PANEL.title,
-        icon: DRAW_PROPERTIES_PANEL.icon,
+        title: propertiesPanel.title,
+        icon: propertiesPanel.icon,
         defaultDock: "right",
         defaultGroup: "draw",
-        schema: DRAW_PROPERTIES_PANEL,
+        schema: propertiesPanel,
       }),
       publishDrawPropertyLists(host))
     : null;

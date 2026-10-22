@@ -46,7 +46,9 @@ import type {
 import { propertyRows, publishObjectList } from "@paged-media/plugin-sdk";
 
 import { DRAW_ID } from "../object-model/shared";
-import { humanize } from "@paged-media/panel-kit";
+import { defineMessages, t } from "@paged-media/strings";
+
+import { tokenLabel } from "./panel-parts";
 
 export const DRAW_PROPERTIES_PANEL_ID = "media.paged.draw.panel.properties";
 
@@ -157,30 +159,60 @@ export const DRAW_PANEL_ITEM_ROWS: Readonly<
   },
 };
 
-/** Enum rows show human labels ("easeIn" → "Ease in"), never the token. */
+const M = defineMessages("draw.properties", {
+  across: "Across",
+  down: "Down",
+  smoothColor: "Smooth colour",
+  specifiedSteps: "Specified steps",
+  specifiedDistance: "Specified distance",
+  countEvenly: "Count (evenly)",
+  graphicStyle: "Graphic style",
+  linked: "Linked to symbol",
+  subpathStarts: "Contour starts",
+  clipRect: "Clip rectangle",
+  order: "Object order",
+  repeat: "Repeat",
+  blend: "Blend",
+  pattern: "Pattern",
+  objectsOnPath: "Objects on path",
+  symbol: "Symbol",
+  livePaint: "Live paint",
+  intro:
+    "Edit the saved settings of the selected vector object and of every repeat, blend, pattern, objects-on-path set, graphic style, symbol and live paint group in the document, in place. To make new ones or rebuild their artwork, use the panel for each feature.",
+  title: "Draw settings",
+  selectedObject: "Selected object",
+  path: "Path",
+});
+
+/** Enum rows show human labels ("easeIn" → "Ease in"), never the token;
+ *  `labels` are message keys. Read in the locale when the panel is built. */
 const choices = (
   values: readonly string[],
   labels: Record<string, string> = {},
 ) =>
-  values.map((value) => ({ value, label: labels[value] ?? humanize(value) }));
-const EASES = choices(["linear", "easeIn", "easeOut", "easeInOut"]);
-const PIVOTS = choices([
-  "topLeft",
-  "top",
-  "topRight",
-  "left",
-  "center",
-  "right",
-  "bottomLeft",
-  "bottom",
-  "bottomRight",
-]);
+  values.map((value) => ({
+    value,
+    label: labels[value] ? t(labels[value]) : tokenLabel(value),
+  }));
+const EASES = () => choices(["linear", "easeIn", "easeOut", "easeInOut"]);
+const PIVOTS = () =>
+  choices([
+    "topLeft",
+    "top",
+    "topRight",
+    "left",
+    "center",
+    "right",
+    "bottomLeft",
+    "bottom",
+    "bottomRight",
+  ]);
 
 /** List / struct presentation per (kind.path). */
 const STACK = { reversed: true, itemLabel: "color" } as const;
-const ROW_OPTIONS: Readonly<
+const rowOptions = (): Readonly<
   Record<string, Omit<PanelSchemaPropertyRow, "field" | "path" | "address">>
-> = {
+> => ({
   "path.points": {
     items: {
       fields: ["anchor", "left", "right"],
@@ -195,13 +227,13 @@ const ROW_OPTIONS: Readonly<
     fields: [
       {
         field: "horizontal",
-        label: "Across",
+        label: t(M.across),
         style: "segments",
         options: choices(["rightInFront", "leftInFront"]),
       },
       {
         field: "vertical",
-        label: "Down",
+        label: t(M.down),
         style: "segments",
         options: choices(["bottomInFront", "topInFront"]),
       },
@@ -211,36 +243,38 @@ const ROW_OPTIONS: Readonly<
   "repeat.kind": { options: choices(["radial", "grid", "mirror"]) },
   "blend.spacing": {
     options: choices(["smoothColor", "steps", "distance"], {
-      smoothColor: "Smooth colour",
-      steps: "Specified steps",
-      distance: "Specified distance",
+      smoothColor: M.smoothColor,
+      steps: M.specifiedSteps,
+      distance: M.specifiedDistance,
     }),
   },
   "blend.orientation": { options: choices(["page", "path"]) },
-  "blend.easing": { options: EASES },
-  "blend.colorEasing": { options: EASES },
+  "blend.easing": { options: EASES() },
+  "blend.colorEasing": { options: EASES() },
   "objectsOnPath.distribute": {
-    options: choices(["count", "spacing"], { count: "Count (evenly)" }),
+    options: choices(["count", "spacing"], { count: M.countEvenly }),
   },
-  "objectsOnPath.pivot": { options: PIVOTS },
-};
+  "objectsOnPath.pivot": { options: PIVOTS() },
+});
 
-const LABELS: Readonly<Record<string, string>> = {
-  graphicStyle: "Graphic style",
-  linked: "Linked to symbol",
-  subpathStarts: "Contour starts",
-  clipRect: "Clip rectangle",
-  order: "Object order",
-};
+const labels = (): Readonly<Record<string, string>> => ({
+  graphicStyle: t(M.graphicStyle),
+  linked: t(M.linked),
+  subpathStarts: t(M.subpathStarts),
+  clipRect: t(M.clipRect),
+  order: t(M.order),
+});
 
 const rowsOf = (
   kind: keyof typeof DRAW_PANEL_FIELDS,
   address: PropertyFieldAddress,
-) =>
-  propertyRows(kindOf(kind), DRAW_PANEL_FIELDS[kind], address, {
-    labels: LABELS,
-    row: (p) => ROW_OPTIONS[`${kind}.${p}`] ?? {},
+) => {
+  const options = rowOptions();
+  return propertyRows(kindOf(kind), DRAW_PANEL_FIELDS[kind], address, {
+    labels: labels(),
+    row: (p) => options[`${kind}.${p}`] ?? {},
   });
+};
 
 type DocKind =
   | "graphicStyle"
@@ -251,14 +285,15 @@ type DocKind =
   | "livePaint"
   | "objectsOnPath";
 
+/** Each kind's section title is a message key. */
 const DOC_KINDS: ReadonlyArray<{ kind: DocKind; title: string }> = [
-  { kind: "repeat", title: "Repeat" },
-  { kind: "blend", title: "Blend" },
-  { kind: "pattern", title: "Pattern" },
-  { kind: "objectsOnPath", title: "Objects on path" },
-  { kind: "graphicStyle", title: "Graphic style" },
-  { kind: "symbol", title: "Symbol" },
-  { kind: "livePaint", title: "Live paint" },
+  { kind: "repeat", title: M.repeat },
+  { kind: "blend", title: M.blend },
+  { kind: "pattern", title: M.pattern },
+  { kind: "objectsOnPath", title: M.objectsOnPath },
+  { kind: "graphicStyle", title: M.graphicStyle },
+  { kind: "symbol", title: M.symbol },
+  { kind: "livePaint", title: M.livePaint },
 ];
 
 /** Published bindings: the rows of a document kind's list, and the pick. */
@@ -276,45 +311,43 @@ const listRow = (kind: DocKind): PanelSchemaRow => ({
   },
 });
 
-/** The intro line: how this panel differs from the feature panels. */
-export const DRAW_PROPERTIES_INTRO =
-  "Edit the saved settings of the selected vector object and of every " +
-  "repeat, blend, pattern, objects-on-path set, graphic style, symbol and " +
-  "live paint group in the document, in place. To make new ones or " +
-  "rebuild their artwork, use " +
-  "the panel for each feature.";
+/** The intro line: how this panel differs from the feature panels (a
+ *  message key). */
+export const DRAW_PROPERTIES_INTRO = M.intro;
 
-export const DRAW_PROPERTIES_PANEL: PanelSchema = {
+/** The panel's schema, in the editor's locale (built when the bundle
+ *  activates). */
+export const drawPropertiesPanel = (): PanelSchema => ({
   id: DRAW_PROPERTIES_PANEL_ID,
   // "Draw settings", not "properties": the host has a Properties panel,
   // and the recipe panels (Blend options, Repeat options…) edit the same
   // settings one feature at a time.
-  title: "Draw settings",
+  title: t(M.title),
   // Its own glyph: `panel-stroke` belongs to the host Stroke panel.
   icon: "tool-pen",
   defaultDock: "right",
   defaultGroup: "draw",
   sections: [
     {
-      title: "Selected object",
+      title: t(M.selectedObject),
       rows: [
-        { widget: "paged.label", props: { text: DRAW_PROPERTIES_INTRO } },
+        { widget: "paged.label", props: { text: t(DRAW_PROPERTIES_INTRO) } },
         ...rowsOf("appearance", "selection"),
         ...rowsOf("symbolInstance", "selection"),
       ],
     },
     {
-      title: "Path",
+      title: t(M.path),
       collapsible: true,
       rows: rowsOf("path", "selection"),
     },
     ...DOC_KINDS.map(({ kind, title }) => ({
-      title,
+      title: t(title),
       collapsible: true,
       rows: [listRow(kind), ...rowsOf(kind, { bind: pickBinding(kind) })],
     })),
   ],
-};
+});
 
 /** The lists re-read on object-model changes. A batch announces several
  *  changes and seven lists follow it, so the lists see ONE coalesced

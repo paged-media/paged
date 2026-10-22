@@ -48,6 +48,18 @@ import type {
 
 import { createReloader, publishChanges } from "./reload";
 import { BIND_HAS_SELECTION } from "./stroke-panel";
+import { defineMessages, t } from "@paged-media/strings";
+
+const M = defineMessages("draw.fillPanel", {
+  title: "Vector fill",
+  intro:
+    "Fill color and tint of the selected shape, plus the angle and length of a gradient fill. Run Fill: Linear gradient or Fill: Radial gradient from the command palette to give a shape a gradient; edit swatches in the Swatches panel.",
+  color: "Color",
+  tint: "Tint",
+  gradient: "Gradient",
+  angle: "Angle",
+  length: "Length",
+});
 
 export const FILL_PANEL_ID = "media.paged.draw.panel.fill";
 
@@ -59,18 +71,15 @@ export const BIND_GRADIENT_CONTROLS_VISIBLE =
 
 /** The panel's title: "Fill" alone reads as a twin of the host's colour
  *  panels; this one is the vector shape's fill, gradient axis included. */
-export const FILL_PANEL_TITLE = "Vector fill";
+export const FILL_PANEL_TITLE = M.title;
 
 /** The intro line: what this panel is for and where the rest lives. */
-export const FILL_PANEL_INTRO =
-  "Fill color and tint of the selected shape, plus the angle and length " +
-  "of a gradient fill. Run Fill: Linear gradient or Fill: Radial gradient " +
-  "from the command palette to give a shape a gradient; edit swatches in " +
-  "the Swatches panel.";
+export const FILL_PANEL_INTRO = M.intro;
 
-export const fillPanel: SchemaPanelContribution = {
+/** The panel, in the editor's locale (built when it is contributed). */
+export const fillPanel = (): SchemaPanelContribution => ({
   id: FILL_PANEL_ID,
-  title: FILL_PANEL_TITLE,
+  title: t(FILL_PANEL_TITLE),
   // Its own glyph (the gradient tool's): `ui-swatch-fill` is also the
   // host Separations panel's tab icon.
   icon: "tool-gradient",
@@ -78,11 +87,11 @@ export const fillPanel: SchemaPanelContribution = {
   defaultGroup: "draw",
   schema: {
     id: FILL_PANEL_ID,
-    title: FILL_PANEL_TITLE,
+    title: t(FILL_PANEL_TITLE),
     sections: [
       {
         rows: [
-          { widget: "paged.label", props: { text: FILL_PANEL_INTRO } },
+          { widget: "paged.label", props: { text: t(FILL_PANEL_INTRO) } },
           {
             // ADR 323 — an object-model property row: the host renders
             // the core row with its schema-driven PropertyField over
@@ -90,7 +99,7 @@ export const fillPanel: SchemaPanelContribution = {
             field: "property",
             address: "selection",
             path: "frameFillColor",
-            label: "Color",
+            label: t(M.color),
             enabled: { bind: BIND_HAS_SELECTION },
           },
           {
@@ -100,7 +109,7 @@ export const fillPanel: SchemaPanelContribution = {
             field: "property",
             address: "selection",
             path: "frameFillTint",
-            label: "Tint",
+            label: t(M.tint),
             props: { suffix: "%", min: 0, max: 100 },
             enabled: { bind: BIND_HAS_SELECTION },
           },
@@ -111,7 +120,7 @@ export const fillPanel: SchemaPanelContribution = {
         // angle/length axis properties are meaningless on a solid fill.
         // Assigning a gradient in the first place is command-driven
         // (Fill: Linear/Radial gradient), pointed at by the readout.
-        title: "Gradient",
+        title: t(M.gradient),
         visible: { bind: BIND_GRADIENT_CONTROLS_VISIBLE },
         rows: [
           {
@@ -121,7 +130,7 @@ export const fillPanel: SchemaPanelContribution = {
             field: "property",
             address: "selection",
             path: "frameGradientFillAngle",
-            label: "Angle",
+            label: t(M.angle),
             props: { suffix: "°" },
             enabled: { bind: BIND_HAS_SELECTION },
           },
@@ -132,7 +141,7 @@ export const fillPanel: SchemaPanelContribution = {
             field: "property",
             address: "selection",
             path: "frameGradientFillLength",
-            label: "Length",
+            label: t(M.length),
             props: { suffix: "pt" },
             enabled: { bind: BIND_HAS_SELECTION },
           },
@@ -140,7 +149,7 @@ export const fillPanel: SchemaPanelContribution = {
       },
     ],
   },
-};
+});
 
 /** Read the first selected element's `frameFillColor` ref (or null).
  *

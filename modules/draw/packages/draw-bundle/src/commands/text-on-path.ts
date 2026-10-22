@@ -207,6 +207,14 @@ export function detachTextFromPathMutationFor(elementId: ElementId): Mutation {
 }
 
 import { registerCommand } from "../command-registry";
+import { defineMessages } from "@paged-media/strings";
+
+/** Command titles, message keys `registerCommand` reads in the editor's locale. */
+const M = defineMessages("draw.typeOnPath", {
+  attach:
+    "Type: Attach story to path (flows an EXISTING story — no story is created)",
+  detach: "Type: Detach text from path (the story survives, unflowed)",
+});
 export const TEXT_ON_PATH_COMMAND_CATEGORY = "Type";
 
 export const ATTACH_TEXT_TO_PATH_COMMAND_ID =
@@ -640,15 +648,14 @@ export function contributeTextOnPathCommands(host: BundleHost): Disposable {
   const disposers = [
     registerCommand(host, {
       id: ATTACH_TEXT_TO_PATH_COMMAND_ID,
-      title:
-        "Type: Attach story to path (flows an EXISTING story — no story is created)",
+      title: M.attach,
       category: TEXT_ON_PATH_COMMAND_CATEGORY,
       handler: (_paged, payload) =>
         applyAttachTextToPath(host, payloadOf(payload)).then(() => undefined),
     }),
     registerCommand(host, {
       id: DETACH_TEXT_FROM_PATH_COMMAND_ID,
-      title: "Type: Detach text from path (the story survives, unflowed)",
+      title: M.detach,
       category: TEXT_ON_PATH_COMMAND_CATEGORY,
       handler: (_paged, payload) =>
         applyDetachTextFromPath(host, payloadOf(payload)).then(() => undefined),
