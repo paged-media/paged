@@ -167,6 +167,10 @@ import type {
 import { ActionsBar } from "./chrome/RegionItems";
 import { useRegistryView } from "./state/live";
 import type { FeatureId } from "./state/features";
+import { SessionPolicyProvider } from "./state/session-role";
+import type { SessionPolicy } from "@paged-media/client";
+
+const DEFAULT_SESSION: SessionPolicy = { role: "editor", overrides: [] };
 import {
   ChromeRegionsProvider,
   chromeRegionsOf,
@@ -248,6 +252,9 @@ export interface PagedShellProps {
    *  (docs/composable-editor.md §6). Later changes go through
    *  `useRegistries().features`. */
   features?: Readonly<Record<string, boolean>>;
+  /** The session's role and overrides, handed to the engine (engine ADR
+   *  1001). Omitted = an editor, the engine's default. */
+  sessionPolicy?: SessionPolicy;
 }
 
 /**
@@ -272,6 +279,7 @@ export function PagedShell({
   regions,
   canvasFurniture,
   features,
+  sessionPolicy,
   children,
 }: PropsWithChildren<PagedShellProps>) {
   const chromeRegions = chromeRegionsOf(regions, canvasFurniture);
@@ -279,53 +287,54 @@ export function PagedShell({
     <DebugErrorBoundary label="paged-shell">
       <CanvasClientProvider client={client}>
         <ChromeRegionsProvider value={chromeRegions}>
-          <ThemeProvider>
-            <CameraProvider>
-              <DocumentProvider>
-                {/* ToolProvider above SelectionProvider: the selection
-                 *  context's `activeTool` facade reads the tool stack. */}
-                <ToolProvider>
-                  <WorkflowModeProvider initialMode={initialMode}>
-                    <ScreenModeProvider>
-                      <ToolSettingsProvider>
-                        <FormattingAffectsProvider>
-                          <SelectionProvider>
-                            <ContentSelectionProvider>
-                              <OverlaySignalsProvider>
-                                {/* W2.8 — guide creation/drag state, shared
+          <SessionPolicyProvider policy={sessionPolicy ?? DEFAULT_SESSION}>
+            <ThemeProvider>
+              <CameraProvider>
+                <DocumentProvider>
+                  {/* ToolProvider above SelectionProvider: the selection
+                   *  context's `activeTool` facade reads the tool stack. */}
+                  <ToolProvider>
+                    <WorkflowModeProvider initialMode={initialMode}>
+                      <ScreenModeProvider>
+                        <ToolSettingsProvider>
+                          <FormattingAffectsProvider>
+                            <SelectionProvider>
+                              <ContentSelectionProvider>
+                                <OverlaySignalsProvider>
+                                  {/* W2.8 — guide creation/drag state, shared
                                   by the ruler hit zones, the controller,
                                   and the guide overlay. */}
-                                <GuideDragProvider>
-                                  {/* W2.9 — text-frame threading state
+                                  <GuideDragProvider>
+                                    {/* W2.9 — text-frame threading state
                                     (ports + loaded cursor + controller). */}
-                                  <ThreadingProvider>
-                                    {/* W3.A2 — table cell selection,
+                                    <ThreadingProvider>
+                                      {/* W3.A2 — table cell selection,
                                       shared by the canvas hit handler,
                                       the Table panel, and the cell
                                       overlay. */}
-                                    <TableSelectionProvider>
-                                      <InstrumentationProvider>
-                                        {/* W3.2 — the edit-context stack
+                                      <TableSelectionProvider>
+                                        <InstrumentationProvider>
+                                          {/* W3.2 — the edit-context stack
                                         (B-02/W-03): the active scoped-
                                         editing-mode stack + breadcrumb +
                                         write-scope. Above PagedEditor so
                                         chrome + canvas integration can
                                         read it. */}
-                                        <EditContextStackProvider>
-                                          {/* ADR 023 phase C — the binding-
+                                          <EditContextStackProvider>
+                                            {/* ADR 023 phase C — the binding-
                                         provider seam. Deliberately
                                         INSIDE the edit-context stack:
                                         a provider's lifetime is that
                                         stack's, and reading them in
                                         that order is the point. */}
-                                          <BindingProviderProvider
-                                            host={bindingProviders ?? null}
-                                          >
-                                            <ObjectModelProvider
-                                              host={objectModel ?? null}
+                                            <BindingProviderProvider
+                                              host={bindingProviders ?? null}
                                             >
-                                              <PagedEditorProvider>
-                                                {/* Actions — the command recorder.
+                                              <ObjectModelProvider
+                                                host={objectModel ?? null}
+                                              >
+                                                <PagedEditorProvider>
+                                                  {/* Actions — the command recorder.
                                         INSIDE PagedEditorProvider (it
                                         needs the registries) and OUTSIDE
                                         ShellChrome, because the right
@@ -334,46 +343,49 @@ export function PagedShell({
                                         would stop recording the moment
                                         the user switched tabs to do the
                                         thing they were recording. */}
-                                                <ActionsProvider>
-                                                  <SeedFeatures
-                                                    features={features}
-                                                  />
-                                                  <ShellChrome
-                                                    panels={panels}
-                                                    overlays={overlays}
-                                                    tools={tools}
-                                                    headerExtras={headerExtras}
-                                                    modes={modes}
-                                                    panelRail={panelRail}
-                                                    canvasComponent={
-                                                      canvasComponent
-                                                    }
-                                                    initialDocumentSizePt={
-                                                      initialDocumentSizePt
-                                                    }
-                                                  >
-                                                    {children}
-                                                  </ShellChrome>
-                                                </ActionsProvider>
-                                              </PagedEditorProvider>
-                                            </ObjectModelProvider>
-                                          </BindingProviderProvider>
-                                        </EditContextStackProvider>
-                                      </InstrumentationProvider>
-                                    </TableSelectionProvider>
-                                  </ThreadingProvider>
-                                </GuideDragProvider>
-                              </OverlaySignalsProvider>
-                            </ContentSelectionProvider>
-                          </SelectionProvider>
-                        </FormattingAffectsProvider>
-                      </ToolSettingsProvider>
-                    </ScreenModeProvider>
-                  </WorkflowModeProvider>
-                </ToolProvider>
-              </DocumentProvider>
-            </CameraProvider>
-          </ThemeProvider>
+                                                  <ActionsProvider>
+                                                    <SeedFeatures
+                                                      features={features}
+                                                    />
+                                                    <ShellChrome
+                                                      panels={panels}
+                                                      overlays={overlays}
+                                                      tools={tools}
+                                                      headerExtras={
+                                                        headerExtras
+                                                      }
+                                                      modes={modes}
+                                                      panelRail={panelRail}
+                                                      canvasComponent={
+                                                        canvasComponent
+                                                      }
+                                                      initialDocumentSizePt={
+                                                        initialDocumentSizePt
+                                                      }
+                                                    >
+                                                      {children}
+                                                    </ShellChrome>
+                                                  </ActionsProvider>
+                                                </PagedEditorProvider>
+                                              </ObjectModelProvider>
+                                            </BindingProviderProvider>
+                                          </EditContextStackProvider>
+                                        </InstrumentationProvider>
+                                      </TableSelectionProvider>
+                                    </ThreadingProvider>
+                                  </GuideDragProvider>
+                                </OverlaySignalsProvider>
+                              </ContentSelectionProvider>
+                            </SelectionProvider>
+                          </FormattingAffectsProvider>
+                        </ToolSettingsProvider>
+                      </ScreenModeProvider>
+                    </WorkflowModeProvider>
+                  </ToolProvider>
+                </DocumentProvider>
+              </CameraProvider>
+            </ThemeProvider>
+          </SessionPolicyProvider>
         </ChromeRegionsProvider>
       </CanvasClientProvider>
     </DebugErrorBoundary>

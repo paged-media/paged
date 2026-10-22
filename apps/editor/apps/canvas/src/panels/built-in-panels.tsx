@@ -22,6 +22,7 @@
 // (test/panels) can enumerate and mount every entry without booting the
 // app; the surface gates read the literal here.
 
+import { TemplateFormPanel } from "./template/form-panel";
 import { AIAssistant, type PanelContribution } from "@paged-media/shell";
 
 import { CharacterPanel } from "./character-panel";
@@ -122,6 +123,16 @@ import {
 // CANVAS itself is not a panel — it is the cockpit's viewport slot
 // (`canvasComponent`).
 export const BUILT_IN_PANELS: PanelContribution[] = [
+  // The template form (docs/composable-editor.md §7.10): the fields a
+  // filler fills in. The fill presets put it in the inspector slot.
+  {
+    id: "paged.template.form",
+    title: "Template form",
+    component: TemplateFormPanel,
+    defaultDock: "right",
+    defaultGroup: "cockpit",
+    icon: "panel-properties",
+  },
   {
     id: "paged.pages",
     title: "Pages",
