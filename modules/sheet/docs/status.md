@@ -19,7 +19,10 @@ each published canary added is under [Releases](#releases).
   (`document.onWillSave`), the workbook is written before the save takes the document's bytes.
   A reopened document restores its workbook when the host reports the open
   (`document.onDidOpen`).
-- **Calculation.** 371 registered functions, all implemented, among them `LET`, `LAMBDA` and its
+- **Calculation.** 389 registered functions: 371 evaluated, and 18 that need a network, a cube
+  connection, a native library or a pivot table (`WEBSERVICE`, `CUBE*`, `RTD`, `STOCKHISTORY`,
+  `IMAGE`, `TRANSLATE`, `DETECTLANGUAGE`, `COPILOT`, `PY`, `CALL`, `REGISTER.ID`, `GETPIVOTDATA`)
+  keep the value the workbook cached (else `#BLOCKED!` / `#CONNECT!`). Among them `LET`, `LAMBDA` and its
   helpers, the engineering set (radix and bit functions, `CONVERT` with Excel's full unit table and
   prefixes, the complex-number `IM*` functions on Excel's text form, the error and Bessel
   functions with Excel's own approximations) and the modern math set (`CEILING.MATH`,
