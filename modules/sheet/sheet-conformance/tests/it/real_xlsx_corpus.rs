@@ -397,14 +397,9 @@ fn excel_workbooks_take_structural_edits_and_one_cell_edits() {
                     }
                     Err(e) => {
                         let msg = e.to_string();
-                        // The honest refusals: pivots (ADR 504), and a
-                        // reference shared by a span of sheets that holds
-                        // the edited one (the text alone cannot say how it
-                        // should move).
+                        // The one honest refusal is a pivot (ADR 504).
                         let reason = if msg.contains("pivot") {
                             "pivot".to_string()
-                        } else if msg.contains("span of sheets that holds this one") {
-                            "3D reference over the edited sheet".to_string()
                         } else {
                             unexpected.push(format!("{} sheet {sheet}: {msg}", path.display()));
                             msg.split(": ")

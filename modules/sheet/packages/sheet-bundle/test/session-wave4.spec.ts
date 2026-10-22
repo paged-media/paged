@@ -472,14 +472,14 @@ describe.skipIf(!built)(
       session.dispose();
     });
 
-    it("refuses on a sheet whose preserved content addresses its cells", async () => {
+    it("moves the preserved content that addresses the sheet's cells", async () => {
       const { host } = fakeDoc();
       const session = createWorkbookSession(host);
       await session.import(corpus("12-datavalidation.xlsx"), "dv.xlsx");
       session.setGridSelection(0, 0, 1, 1);
-      const r = session.structuralEdit("insertRows");
-      expect(r.ok).toBe(false);
-      expect(!r.ok && r.message).toContain("dataValidations");
+      const before = session.state().engine!.getCellDisplay(0, 1, 0);
+      expect(session.structuralEdit("insertRows")).toEqual({ ok: true });
+      expect(session.state().engine!.getCellDisplay(0, 2, 0)).toBe(before);
       session.dispose();
     });
 

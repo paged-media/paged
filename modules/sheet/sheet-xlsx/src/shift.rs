@@ -1341,7 +1341,7 @@ mod tests {
             "{out}"
         );
         assert!(shift_defined_names(
-            br#"<workbook><definedNames><definedName name="x">SUM(Jan:Mar!A1)</definedName></definedNames></workbook>"#,
+            br#"<workbook><definedNames><definedName name="x">"open</definedName></definedNames></workbook>"#,
             "Data",
             &[],
             0,
