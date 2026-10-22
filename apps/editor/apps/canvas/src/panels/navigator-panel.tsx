@@ -30,17 +30,26 @@ import {
   useDocument,
   type PanelProps,
 } from "@paged-media/shell";
+import { defineMessages, useStrings } from "@paged-media/strings";
 import { Navigator as PageNavigator } from "../ui/Navigator";
 import { useAnimatedCamera } from "../ui/useAnimatedCamera";
 
+const M = defineMessages("app.navigatorPanel", {
+  noDocument: "No document loaded.",
+  addPage: "Add page",
+});
+
 export function NavigatorPanel(_props: PanelProps) {
+  const strings = useStrings();
   const { handle, snapshots } = useDocument();
   const { camera, setCamera, viewportSize } = useCamera();
   const animateCamera = useAnimatedCamera(camera, setCamera);
   const client = useCanvasClient();
 
   if (!handle || handle.pageCount === 0) {
-    return <div style={{ padding: 12, opacity: 0.5 }}>No document loaded.</div>;
+    return (
+      <div style={{ padding: 12, opacity: 0.5 }}>{strings.t(M.noDocument)}</div>
+    );
   }
 
   // B3 — the page VERBS, on the panel a designer actually has open.
@@ -64,7 +73,11 @@ export function NavigatorPanel(_props: PanelProps) {
   return (
     <>
       <PanelToolbar>
-        <ToolbarBtn icon="ui-plus" label="Add page" onClick={onNew} />
+        <ToolbarBtn
+          icon="ui-plus"
+          label={strings.t(M.addPage)}
+          onClick={onNew}
+        />
       </PanelToolbar>
       <PageNavigator
         pageIds={handle.pageIds}

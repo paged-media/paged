@@ -61,16 +61,38 @@ import {
   type ExportTarget,
   type ExportTargetId,
 } from "./export-targets";
+import { defineMessages, useStrings, type Strings } from "@paged-media/strings";
+
+const M = defineMessages("app.cockpitExportCenterPanel", {
+  soon: "soon",
+  title: "Export Center",
+  outputsAvailable:
+    "{count, plural, one {# output available} other {# outputs available}}",
+  noDocument: "no document",
+  intro:
+    "Publish every format from one place. Readiness is checked before " +
+    "export.",
+  outputs: "Outputs",
+  working: "Working…",
+  export: "Export…",
+  fromPlugin: "{extension} · from a plugin",
+  ready: "ready",
+  fixIssues: "Fix issues first",
+  savePreset: "Save preset",
+  exportSelected: "Export selected",
+});
 
 function rowReadiness(
+  strings: Strings,
   t: ExportTarget,
   loaded: boolean,
   facts: PrintOutputFacts,
 ): ReturnType<typeof exportReadiness> {
-  return exportReadiness(t, loaded, facts, "soon");
+  return exportReadiness(t, loaded, facts, strings.t(M.soon));
 }
 
 export function ExportCenterPanel() {
+  const strings = useStrings();
   const client = useCanvasClient();
   const meta = useDocumentMeta();
   const { handle } = useDocument();
@@ -162,18 +184,19 @@ export function ExportCenterPanel() {
               whiteSpace: "nowrap",
             }}
           >
-            Export Center
+            {strings.t(M.title)}
           </h2>
           <span className="pg-ui-xs">
-            {loaded ? `${liveCount} outputs available` : "no document"}
+            {loaded
+              ? strings.t(M.outputsAvailable, { count: liveCount })
+              : strings.t(M.noDocument)}
           </span>
         </div>
         <p
           className="pg-ui-sm"
           style={{ color: "var(--pg-muted-fg)", margin: "0 0 20px" }}
         >
-          Publish every format from one place. Readiness is checked before
-          export.
+          {strings.t(M.intro)}
         </p>
 
         <div
@@ -184,10 +207,10 @@ export function ExportCenterPanel() {
             background: "var(--elevated)",
           }}
         >
-          <ChoiceGroup label="Outputs">
+          <ChoiceGroup label={strings.t(M.outputs)}>
             {EXPORT_TARGETS.map((t, i) => {
               const sel = selected === t.id;
-              const r = rowReadiness(t, loaded, facts);
+              const r = rowReadiness(strings, t, loaded, facts);
               const running = busy === t.id;
               return (
                 <ChoiceRow
@@ -245,11 +268,11 @@ export function ExportCenterPanel() {
                         testId={`export-center-${t.id}`}
                         onClick={() => void runTarget(t.id)}
                       >
-                        {running ? "Working…" : "Export…"}
+                        {running ? strings.t(M.working) : strings.t(M.export)}
                       </CockpitBtn>
                     </span>
                   ) : (
-                    <StatusPill tone="draft">soon</StatusPill>
+                    <StatusPill tone="draft">{strings.t(M.soon)}</StatusPill>
                   )}
                 </ChoiceRow>
               );
@@ -276,7 +299,7 @@ export function ExportCenterPanel() {
               <div style={{ flex: "1 1 160px", minWidth: 0 }}>
                 <div style={{ fontSize: 13.5, fontWeight: 500 }}>{e.title}</div>
                 <div className="pg-ui-xs" style={{ marginTop: 1 }}>
-                  {e.extension} · from a plugin
+                  {strings.t(M.fromPlugin, { extension: e.extension })}
                 </div>
               </div>
               <span
@@ -288,7 +311,7 @@ export function ExportCenterPanel() {
                 }}
               >
                 <StatusPill tone={loaded ? "ready" : "draft"}>
-                  {loaded ? "ready" : "no document"}
+                  {loaded ? strings.t(M.ready) : strings.t(M.noDocument)}
                 </StatusPill>
                 <CockpitBtn
                   sm
@@ -297,7 +320,9 @@ export function ExportCenterPanel() {
                   testId={`export-center-plugin-${e.id}`}
                   onClick={() => void runPlugin(e.id)}
                 >
-                  {pluginBusy === e.id ? "Working…" : "Export…"}
+                  {pluginBusy === e.id
+                    ? strings.t(M.working)
+                    : strings.t(M.export)}
                 </CockpitBtn>
               </span>
             </div>
@@ -314,10 +339,10 @@ export function ExportCenterPanel() {
           }}
         >
           <CockpitBtn disabled testId="export-fix-issues">
-            Fix issues first
+            {strings.t(M.fixIssues)}
           </CockpitBtn>
           <CockpitBtn tone="soft" disabled testId="export-save-preset">
-            Save preset
+            {strings.t(M.savePreset)}
           </CockpitBtn>
           <CockpitBtn
             primary
@@ -327,7 +352,7 @@ export function ExportCenterPanel() {
             testId="export-selected"
             onClick={() => void runTarget(selected)}
           >
-            <Icon name="ui-export" size={15} /> Export selected
+            <Icon name="ui-export" size={15} /> {strings.t(M.exportSelected)}
           </CockpitBtn>
         </div>
       </div>

@@ -52,12 +52,29 @@ import {
 } from "@paged-media/shell";
 import type { PageSummary } from "@paged-media/client";
 import { formatLengthPair, useDocumentUnit } from "@paged-media/ui";
+import { defineMessages, useStrings } from "@paged-media/strings";
 
 import { invokeCoreCommand } from "../core-command-dialog";
 import { fitCamera, layoutPages } from "../ui/layout";
 import { useAnimatedCamera } from "../ui/useAnimatedCamera";
 
+const M = defineMessages("app.pagesListPanel", {
+  loading: "Loading pages…",
+  newPage: "New page",
+  deletePage: "Delete page",
+  deletePageFirst: "Delete page (select one first)",
+  duplicatePage: "Duplicate page",
+  duplicatePageFirst: "Duplicate page (select one first)",
+  moveEarlier: "Move page earlier",
+  moveEarlierFirst: "Move page earlier (select one first)",
+  moveLater: "Move page later",
+  moveLaterFirst: "Move page later (select one first)",
+  empty: "No pages.",
+  page: "Page {name}",
+});
+
 export function PagesListPanel() {
+  const strings = useStrings();
   const client = useCanvasClient();
   const items = useCollection<PageSummary>("pages");
   const [selected, setSelected] = useState<string | null>(null);
@@ -85,7 +102,7 @@ export function PagesListPanel() {
         className="p-3 text-xs text-muted-foreground"
         data-pages-list-panel="loading"
       >
-        Loading pages…
+        {strings.t(M.loading)}
       </div>
     );
   }
@@ -156,11 +173,17 @@ export function PagesListPanel() {
   return (
     <div data-pages-list-panel="ready">
       <PanelToolbar>
-        <ToolbarBtn icon="ui-plus" label="New page" onClick={onNew} />
+        <ToolbarBtn
+          icon="ui-plus"
+          label={strings.t(M.newPage)}
+          onClick={onNew}
+        />
         <ToolbarBtn
           icon="ui-x"
           label={
-            selectedPage ? "Delete page" : "Delete page (select one first)"
+            selectedPage
+              ? strings.t(M.deletePage)
+              : strings.t(M.deletePageFirst)
           }
           onClick={onDelete}
         />
@@ -168,8 +191,8 @@ export function PagesListPanel() {
           icon="ui-component"
           label={
             selectedPage
-              ? "Duplicate page"
-              : "Duplicate page (select one first)"
+              ? strings.t(M.duplicatePage)
+              : strings.t(M.duplicatePageFirst)
           }
           onClick={onDuplicate}
         />
@@ -177,9 +200,7 @@ export function PagesListPanel() {
           icon="ui-chevron-left"
           testId="move-page-earlier"
           label={
-            onMoveUp
-              ? "Move page earlier"
-              : "Move page earlier (select one first)"
+            onMoveUp ? strings.t(M.moveEarlier) : strings.t(M.moveEarlierFirst)
           }
           onClick={onMoveUp}
         />
@@ -187,16 +208,14 @@ export function PagesListPanel() {
           icon="ui-chevron-right"
           testId="move-page-later"
           label={
-            onMoveDown
-              ? "Move page later"
-              : "Move page later (select one first)"
+            onMoveDown ? strings.t(M.moveLater) : strings.t(M.moveLaterFirst)
           }
           onClick={onMoveDown}
         />
       </PanelToolbar>
       {items.length === 0 ? (
         <div className="p-3 text-xs text-muted-foreground" data-empty-pages>
-          No pages.
+          {strings.t(M.empty)}
         </div>
       ) : (
         <div data-page-list>
@@ -204,7 +223,7 @@ export function PagesListPanel() {
             rows={items.map((p) => ({
               key: p.selfId,
               icon: "panel-pages-list",
-              primary: `Page ${p.index}`,
+              primary: strings.t(M.page, { name: p.index }),
               secondary: formatLengthPair(p.sizePt[0], p.sizePt[1], unit),
               selected: p.selfId === selected,
               onClick: () => {

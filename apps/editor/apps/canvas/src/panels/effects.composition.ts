@@ -53,57 +53,132 @@ import {
   PAGED_LAYOUT_SECTION,
   asPropertyFields,
 } from "@paged-media/shell";
+import { defineMessages, type Strings } from "@paged-media/strings";
+
+const M = defineMessages("app.effectsComposition", {
+  normal: "Normal",
+  multiply: "Multiply",
+  screen: "Screen",
+  overlay: "Overlay",
+  darken: "Darken",
+  lighten: "Lighten",
+  colorDodge: "Color dodge",
+  colorBurn: "Color burn",
+  hardLight: "Hard light",
+  softLight: "Soft light",
+  difference: "Difference",
+  exclusion: "Exclusion",
+  hue: "Hue",
+  saturation: "Saturation",
+  color: "Color",
+  luminosity: "Luminosity",
+  innerBevel: "Inner bevel",
+  outerBevel: "Outer bevel",
+  emboss: "Emboss",
+  pillowEmboss: "Pillow emboss",
+  strokeEmboss: "Stroke emboss",
+  smooth: "Smooth",
+  chiselHard: "Chisel hard",
+  chiselSoft: "Chisel soft",
+  up: "Up",
+  down: "Down",
+  edge: "Edge",
+  center: "Center",
+  sharp: "Sharp",
+  rounded: "Rounded",
+  diffusion: "Diffusion",
+  mode: "Mode",
+  drop: "Drop",
+  inner: "Inner",
+  blend: "Blend",
+  opacity: "Opacity",
+  useGlobalLight: "Use global light",
+  blur: "Blur",
+  spread: "Spread",
+  noise: "Noise",
+  objectKnocksOutShadow: "Object knocks out shadow",
+  angle: "Angle",
+  dist: "Dist",
+  size: "Size",
+  choke: "Choke",
+  source: "Source",
+  style: "Style",
+  technique: "Technique",
+  direction: "Direction",
+  depth: "Depth",
+  soften: "Soften",
+  altitude: "Altitude",
+  highlight: "Highlight",
+  hOpacity: "H opacity",
+  shadow: "Shadow",
+  sOpacity: "S opacity",
+  invert: "Invert",
+  width: "Width",
+  corner: "Corner",
+  left: "Left",
+  right: "Right",
+  top: "Top",
+  bottom: "Bottom",
+  dropShadow: "Drop shadow",
+  innerShadow: "Inner shadow",
+  outerGlow: "Outer glow",
+  innerGlow: "Inner glow",
+  bevelAndEmboss: "Bevel and emboss",
+  satin: "Satin",
+  feather: "Feather",
+  directionalFeather: "Directional feather",
+});
 
 // InDesign `BlendMode` enum strings (the parser stores the raw
 // attribute text). An out-of-list current value renders via
 // SelectLeaf's pass-through option.
-export const BLEND_MODES = [
-  { value: "Normal", label: "Normal" },
-  { value: "Multiply", label: "Multiply" },
-  { value: "Screen", label: "Screen" },
-  { value: "Overlay", label: "Overlay" },
-  { value: "Darken", label: "Darken" },
-  { value: "Lighten", label: "Lighten" },
-  { value: "ColorDodge", label: "Color dodge" },
-  { value: "ColorBurn", label: "Color burn" },
-  { value: "HardLight", label: "Hard light" },
-  { value: "SoftLight", label: "Soft light" },
-  { value: "Difference", label: "Difference" },
-  { value: "Exclusion", label: "Exclusion" },
-  { value: "Hue", label: "Hue" },
-  { value: "Saturation", label: "Saturation" },
-  { value: "Color", label: "Color" },
-  { value: "Luminosity", label: "Luminosity" },
+export const blendModes = (strings: Strings) => [
+  { value: "Normal", label: strings.t(M.normal) },
+  { value: "Multiply", label: strings.t(M.multiply) },
+  { value: "Screen", label: strings.t(M.screen) },
+  { value: "Overlay", label: strings.t(M.overlay) },
+  { value: "Darken", label: strings.t(M.darken) },
+  { value: "Lighten", label: strings.t(M.lighten) },
+  { value: "ColorDodge", label: strings.t(M.colorDodge) },
+  { value: "ColorBurn", label: strings.t(M.colorBurn) },
+  { value: "HardLight", label: strings.t(M.hardLight) },
+  { value: "SoftLight", label: strings.t(M.softLight) },
+  { value: "Difference", label: strings.t(M.difference) },
+  { value: "Exclusion", label: strings.t(M.exclusion) },
+  { value: "Hue", label: strings.t(M.hue) },
+  { value: "Saturation", label: strings.t(M.saturation) },
+  { value: "Color", label: strings.t(M.color) },
+  { value: "Luminosity", label: strings.t(M.luminosity) },
 ];
 
-const BEVEL_STYLES = [
-  { value: "InnerBevel", label: "Inner bevel" },
-  { value: "OuterBevel", label: "Outer bevel" },
-  { value: "Emboss", label: "Emboss" },
-  { value: "PillowEmboss", label: "Pillow emboss" },
-  { value: "StrokeEmboss", label: "Stroke emboss" },
+const bevelStyles = (strings: Strings) => [
+  { value: "InnerBevel", label: strings.t(M.innerBevel) },
+  { value: "OuterBevel", label: strings.t(M.outerBevel) },
+  { value: "Emboss", label: strings.t(M.emboss) },
+  { value: "PillowEmboss", label: strings.t(M.pillowEmboss) },
+  { value: "StrokeEmboss", label: strings.t(M.strokeEmboss) },
 ];
 
-const BEVEL_TECHNIQUES = [
-  { value: "Smooth", label: "Smooth" },
-  { value: "ChiselHard", label: "Chisel hard" },
-  { value: "ChiselSoft", label: "Chisel soft" },
+const bevelTechniques = (strings: Strings) => [
+  { value: "Smooth", label: strings.t(M.smooth) },
+  { value: "ChiselHard", label: strings.t(M.chiselHard) },
+  { value: "ChiselSoft", label: strings.t(M.chiselSoft) },
 ];
 
-const BEVEL_DIRECTIONS = [
-  { value: "Up", label: "Up" },
-  { value: "Down", label: "Down" },
+const bevelDirections = (strings: Strings) => [
+  { value: "Up", label: strings.t(M.up) },
+  { value: "Down", label: strings.t(M.down) },
 ];
 
-const INNER_GLOW_SOURCES = [
-  { value: "EdgeGlow", label: "Edge" },
-  { value: "CenterGlow", label: "Center" },
+const innerGlowSources = (strings: Strings) => [
+  { value: "EdgeGlow", label: strings.t(M.edge) },
+  { value: "CenterGlow", label: strings.t(M.center) },
 ];
 
-const FEATHER_CORNERS = [
-  { value: "Sharp", label: "Sharp" },
-  { value: "Rounded", label: "Rounded" },
-  { value: "Diffusion", label: "Diffusion" },
+const featherCorners = (strings: Strings) => [
+  { value: "Sharp", label: strings.t(M.sharp) },
+  { value: "Rounded", label: strings.t(M.rounded) },
+  { value: "Diffusion", label: strings.t(M.diffusion) },
 ];
 
 /** Element-scope selection-property binding for a frame effect path.
@@ -135,388 +210,34 @@ function section(title: string, children: CompositionNode[]): CompositionNode {
 // Kept on the legacy per-field `frameDropShadow*` arms; the enable
 // pill (in effects-panel) writes the `frameDropShadow` bool. Laid out
 // as InDesign's Drop Shadow dialog: blending, position, options.
-export const dropShadowComposition: CompositionNode = section("Drop shadow", [
-  {
-    catalogId: PAGED_INPUT_SELECT,
-    props: {
-      label: "Mode",
-      options: [
-        { value: "Drop", label: "Drop" },
-        { value: "Inner", label: "Inner" },
-      ],
+export function dropShadowComposition(strings: Strings): CompositionNode {
+  return section(strings.t(M.dropShadow), [
+    {
+      catalogId: PAGED_INPUT_SELECT,
+      props: {
+        label: strings.t(M.mode),
+        options: [
+          { value: "Drop", label: strings.t(M.drop) },
+          { value: "Inner", label: strings.t(M.inner) },
+        ],
+      },
+      bindings: bind("frameDropShadowMode"),
     },
-    bindings: bind("frameDropShadowMode"),
-  },
-  {
-    catalogId: PAGED_INPUT_SELECT,
-    props: { label: "Blend", options: BLEND_MODES },
-    bindings: bind("frameDropShadowBlendMode"),
-  },
-  {
-    catalogId: PAGED_INPUT_COLOR_SWATCH,
-    props: { label: "Color" },
-    bindings: bind("frameDropShadowColor"),
-  },
-  {
-    catalogId: PAGED_INPUT_NUMERIC_SCRUB,
-    props: { label: "Opacity", suffix: "%" },
-    bindings: bind("frameDropShadowOpacity"),
-  },
-  {
-    catalogId: PAGED_LAYOUT_CLUSTER,
-    props: { count: 2 },
-    bindings: {},
-    children: [
-      {
-        catalogId: PAGED_INPUT_LENGTH,
-        props: { prefix: "X", showUnit: false },
-        bindings: bind("frameDropShadowXOffset"),
-      },
-      {
-        catalogId: PAGED_INPUT_LENGTH,
-        props: { prefix: "Y", showUnit: false },
-        bindings: bind("frameDropShadowYOffset"),
-      },
-    ],
-  },
-  {
-    catalogId: PAGED_INPUT_TOGGLE_SWITCH,
-    props: { label: "Use global light" },
-    bindings: bind("frameDropShadowUseGlobalLight"),
-  },
-  {
-    catalogId: PAGED_LAYOUT_CLUSTER,
-    props: { count: 2 },
-    bindings: {},
-    children: [
-      {
-        catalogId: PAGED_INPUT_LENGTH,
-        props: { prefix: "Blur", showUnit: false },
-        bindings: bind("frameDropShadowSize"),
-      },
-      {
-        catalogId: PAGED_INPUT_NUMERIC_SCRUB,
-        props: { prefix: "Spread", suffix: "%" },
-        bindings: bind("frameDropShadowSpread"),
-      },
-    ],
-  },
-  {
-    catalogId: PAGED_INPUT_NUMERIC_SCRUB,
-    props: { label: "Noise", suffix: "%" },
-    bindings: bind("frameDropShadowNoise"),
-  },
-  {
-    catalogId: PAGED_INPUT_TOGGLE_SWITCH,
-    props: { label: "Object knocks out shadow" },
-    bindings: bind("frameDropShadowKnockedOut"),
-  },
-]);
-
-// ── Inner shadow ───────────────────────────────────────────────
-export const innerShadowComposition: CompositionNode = section("Inner shadow", [
-  {
-    catalogId: PAGED_INPUT_SELECT,
-    props: { label: "Blend", options: BLEND_MODES },
-    bindings: bind("frameInnerShadowBlendMode"),
-  },
-  {
-    catalogId: PAGED_INPUT_COLOR_SWATCH,
-    props: { label: "Color" },
-    bindings: bind("frameInnerShadowColor"),
-  },
-  {
-    catalogId: PAGED_INPUT_NUMERIC_SCRUB,
-    props: { label: "Opacity", suffix: "%" },
-    bindings: bind("frameInnerShadowOpacity"),
-  },
-  {
-    catalogId: PAGED_LAYOUT_CLUSTER,
-    props: { count: 2 },
-    bindings: {},
-    children: [
-      {
-        catalogId: PAGED_INPUT_NUMERIC_SCRUB,
-        props: { prefix: "Angle", suffix: "°" },
-        bindings: bind("frameInnerShadowAngle"),
-      },
-      {
-        catalogId: PAGED_INPUT_LENGTH,
-        props: { prefix: "Dist", showUnit: false },
-        bindings: bind("frameInnerShadowDistance"),
-      },
-    ],
-  },
-  {
-    catalogId: PAGED_LAYOUT_CLUSTER,
-    props: { count: 2 },
-    bindings: {},
-    children: [
-      {
-        catalogId: PAGED_INPUT_LENGTH,
-        props: { prefix: "Size", showUnit: false },
-        bindings: bind("frameInnerShadowSize"),
-      },
-      {
-        catalogId: PAGED_INPUT_NUMERIC_SCRUB,
-        props: { prefix: "Choke", suffix: "%" },
-        bindings: bind("frameInnerShadowChoke"),
-      },
-    ],
-  },
-  {
-    catalogId: PAGED_INPUT_NUMERIC_SCRUB,
-    props: { label: "Noise", suffix: "%" },
-    bindings: bind("frameInnerShadowNoise"),
-  },
-]);
-
-// ── Outer glow ─────────────────────────────────────────────────
-export const outerGlowComposition: CompositionNode = section("Outer glow", [
-  {
-    catalogId: PAGED_INPUT_SELECT,
-    props: { label: "Blend", options: BLEND_MODES },
-    bindings: bind("frameOuterGlowBlendMode"),
-  },
-  {
-    catalogId: PAGED_INPUT_COLOR_SWATCH,
-    props: { label: "Color" },
-    bindings: bind("frameOuterGlowColor"),
-  },
-  {
-    catalogId: PAGED_INPUT_NUMERIC_SCRUB,
-    props: { label: "Opacity", suffix: "%" },
-    bindings: bind("frameOuterGlowOpacity"),
-  },
-  {
-    catalogId: PAGED_LAYOUT_CLUSTER,
-    props: { count: 2 },
-    bindings: {},
-    children: [
-      {
-        catalogId: PAGED_INPUT_NUMERIC_SCRUB,
-        props: { prefix: "Spread", suffix: "%" },
-        bindings: bind("frameOuterGlowSpread"),
-      },
-      {
-        catalogId: PAGED_INPUT_LENGTH,
-        props: { prefix: "Size", showUnit: false },
-        bindings: bind("frameOuterGlowSize"),
-      },
-    ],
-  },
-  {
-    catalogId: PAGED_INPUT_NUMERIC_SCRUB,
-    props: { label: "Noise", suffix: "%" },
-    bindings: bind("frameOuterGlowNoise"),
-  },
-]);
-
-// ── Inner glow ─────────────────────────────────────────────────
-export const innerGlowComposition: CompositionNode = section("Inner glow", [
-  {
-    catalogId: PAGED_INPUT_SELECT,
-    props: { label: "Blend", options: BLEND_MODES },
-    bindings: bind("frameInnerGlowBlendMode"),
-  },
-  {
-    catalogId: PAGED_INPUT_COLOR_SWATCH,
-    props: { label: "Color" },
-    bindings: bind("frameInnerGlowColor"),
-  },
-  {
-    catalogId: PAGED_INPUT_SELECT,
-    props: { label: "Source", options: INNER_GLOW_SOURCES },
-    bindings: bind("frameInnerGlowSource"),
-  },
-  {
-    catalogId: PAGED_INPUT_NUMERIC_SCRUB,
-    props: { label: "Opacity", suffix: "%" },
-    bindings: bind("frameInnerGlowOpacity"),
-  },
-  {
-    catalogId: PAGED_LAYOUT_CLUSTER,
-    props: { count: 2 },
-    bindings: {},
-    children: [
-      {
-        catalogId: PAGED_INPUT_NUMERIC_SCRUB,
-        props: { prefix: "Choke", suffix: "%" },
-        bindings: bind("frameInnerGlowChoke"),
-      },
-      {
-        catalogId: PAGED_INPUT_LENGTH,
-        props: { prefix: "Size", showUnit: false },
-        bindings: bind("frameInnerGlowSize"),
-      },
-    ],
-  },
-  {
-    catalogId: PAGED_INPUT_NUMERIC_SCRUB,
-    props: { label: "Noise", suffix: "%" },
-    bindings: bind("frameInnerGlowNoise"),
-  },
-]);
-
-// ── Bevel & emboss ─────────────────────────────────────────────
-export const bevelComposition: CompositionNode = section("Bevel and emboss", [
-  {
-    catalogId: PAGED_INPUT_SELECT,
-    props: { label: "Style", options: BEVEL_STYLES },
-    bindings: bind("frameBevelStyle"),
-  },
-  {
-    catalogId: PAGED_INPUT_SELECT,
-    props: { label: "Technique", options: BEVEL_TECHNIQUES },
-    bindings: bind("frameBevelTechnique"),
-  },
-  {
-    catalogId: PAGED_INPUT_SELECT,
-    props: { label: "Direction", options: BEVEL_DIRECTIONS },
-    bindings: bind("frameBevelDirection"),
-  },
-  {
-    catalogId: PAGED_LAYOUT_CLUSTER,
-    props: { count: 2 },
-    bindings: {},
-    children: [
-      {
-        catalogId: PAGED_INPUT_NUMERIC_SCRUB,
-        props: { prefix: "Depth", suffix: "%" },
-        bindings: bind("frameBevelDepth"),
-      },
-      {
-        catalogId: PAGED_INPUT_LENGTH,
-        props: { prefix: "Size", showUnit: false },
-        bindings: bind("frameBevelSize"),
-      },
-    ],
-  },
-  {
-    catalogId: PAGED_LAYOUT_CLUSTER,
-    props: { count: 2 },
-    bindings: {},
-    children: [
-      {
-        catalogId: PAGED_INPUT_LENGTH,
-        props: { prefix: "Soften", showUnit: false },
-        bindings: bind("frameBevelSoften"),
-      },
-      {
-        catalogId: PAGED_INPUT_NUMERIC_SCRUB,
-        props: { prefix: "Angle", suffix: "°" },
-        bindings: bind("frameBevelAngle"),
-      },
-    ],
-  },
-  {
-    catalogId: PAGED_INPUT_NUMERIC_SCRUB,
-    props: { label: "Altitude", suffix: "°" },
-    bindings: bind("frameBevelAltitude"),
-  },
-  {
-    catalogId: PAGED_INPUT_COLOR_SWATCH,
-    props: { label: "Highlight" },
-    bindings: bind("frameBevelHighlightColor"),
-  },
-  {
-    catalogId: PAGED_INPUT_NUMERIC_SCRUB,
-    props: { label: "H opacity", suffix: "%" },
-    bindings: bind("frameBevelHighlightOpacity"),
-  },
-  {
-    catalogId: PAGED_INPUT_COLOR_SWATCH,
-    props: { label: "Shadow" },
-    bindings: bind("frameBevelShadowColor"),
-  },
-  {
-    catalogId: PAGED_INPUT_NUMERIC_SCRUB,
-    props: { label: "S opacity", suffix: "%" },
-    bindings: bind("frameBevelShadowOpacity"),
-  },
-]);
-
-// ── Satin ──────────────────────────────────────────────────────
-export const satinComposition: CompositionNode = section("Satin", [
-  {
-    catalogId: PAGED_INPUT_SELECT,
-    props: { label: "Blend", options: BLEND_MODES },
-    bindings: bind("frameSatinBlendMode"),
-  },
-  {
-    catalogId: PAGED_INPUT_COLOR_SWATCH,
-    props: { label: "Color" },
-    bindings: bind("frameSatinColor"),
-  },
-  {
-    catalogId: PAGED_INPUT_NUMERIC_SCRUB,
-    props: { label: "Opacity", suffix: "%" },
-    bindings: bind("frameSatinOpacity"),
-  },
-  {
-    catalogId: PAGED_LAYOUT_CLUSTER,
-    props: { count: 2 },
-    bindings: {},
-    children: [
-      {
-        catalogId: PAGED_INPUT_NUMERIC_SCRUB,
-        props: { prefix: "Angle", suffix: "°" },
-        bindings: bind("frameSatinAngle"),
-      },
-      {
-        catalogId: PAGED_INPUT_LENGTH,
-        props: { prefix: "Dist", showUnit: false },
-        bindings: bind("frameSatinDistance"),
-      },
-    ],
-  },
-  {
-    catalogId: PAGED_INPUT_LENGTH,
-    props: { label: "Size", showUnit: false },
-    bindings: bind("frameSatinSize"),
-  },
-  {
-    catalogId: PAGED_INPUT_TOGGLE_SWITCH,
-    props: { label: "Invert" },
-    bindings: bind("frameSatinInvert"),
-  },
-]);
-
-// ── Feather (basic) ────────────────────────────────────────────
-export const featherComposition: CompositionNode = section("Feather", [
-  {
-    catalogId: PAGED_INPUT_LENGTH,
-    props: { label: "Width", showUnit: false },
-    bindings: bind("frameFeatherWidth"),
-  },
-  {
-    catalogId: PAGED_INPUT_SELECT,
-    props: { label: "Corner", options: FEATHER_CORNERS },
-    bindings: bind("frameFeatherCornerType"),
-  },
-  {
-    catalogId: PAGED_LAYOUT_CLUSTER,
-    props: { count: 2 },
-    bindings: {},
-    children: [
-      {
-        catalogId: PAGED_INPUT_NUMERIC_SCRUB,
-        props: { prefix: "Noise", suffix: "%" },
-        bindings: bind("frameFeatherNoise"),
-      },
-      {
-        catalogId: PAGED_INPUT_NUMERIC_SCRUB,
-        props: { prefix: "Choke", suffix: "%" },
-        bindings: bind("frameFeatherChoke"),
-      },
-    ],
-  },
-]);
-
-// ── Directional feather ────────────────────────────────────────
-export const directionalFeatherComposition: CompositionNode = section(
-  "Directional feather",
-  [
+    {
+      catalogId: PAGED_INPUT_SELECT,
+      props: { label: strings.t(M.blend), options: blendModes(strings) },
+      bindings: bind("frameDropShadowBlendMode"),
+    },
+    {
+      catalogId: PAGED_INPUT_COLOR_SWATCH,
+      props: { label: strings.t(M.color) },
+      bindings: bind("frameDropShadowColor"),
+    },
+    {
+      catalogId: PAGED_INPUT_NUMERIC_SCRUB,
+      props: { label: strings.t(M.opacity), suffix: "%" },
+      bindings: bind("frameDropShadowOpacity"),
+    },
     {
       catalogId: PAGED_LAYOUT_CLUSTER,
       props: { count: 2 },
@@ -524,12 +245,387 @@ export const directionalFeatherComposition: CompositionNode = section(
       children: [
         {
           catalogId: PAGED_INPUT_LENGTH,
-          props: { prefix: "Left", showUnit: false },
+          props: { prefix: "X", showUnit: false },
+          bindings: bind("frameDropShadowXOffset"),
+        },
+        {
+          catalogId: PAGED_INPUT_LENGTH,
+          props: { prefix: "Y", showUnit: false },
+          bindings: bind("frameDropShadowYOffset"),
+        },
+      ],
+    },
+    {
+      catalogId: PAGED_INPUT_TOGGLE_SWITCH,
+      props: { label: strings.t(M.useGlobalLight) },
+      bindings: bind("frameDropShadowUseGlobalLight"),
+    },
+    {
+      catalogId: PAGED_LAYOUT_CLUSTER,
+      props: { count: 2 },
+      bindings: {},
+      children: [
+        {
+          catalogId: PAGED_INPUT_LENGTH,
+          props: { prefix: strings.t(M.blur), showUnit: false },
+          bindings: bind("frameDropShadowSize"),
+        },
+        {
+          catalogId: PAGED_INPUT_NUMERIC_SCRUB,
+          props: { prefix: strings.t(M.spread), suffix: "%" },
+          bindings: bind("frameDropShadowSpread"),
+        },
+      ],
+    },
+    {
+      catalogId: PAGED_INPUT_NUMERIC_SCRUB,
+      props: { label: strings.t(M.noise), suffix: "%" },
+      bindings: bind("frameDropShadowNoise"),
+    },
+    {
+      catalogId: PAGED_INPUT_TOGGLE_SWITCH,
+      props: { label: strings.t(M.objectKnocksOutShadow) },
+      bindings: bind("frameDropShadowKnockedOut"),
+    },
+  ]);
+}
+
+// ── Inner shadow ───────────────────────────────────────────────
+export function innerShadowComposition(strings: Strings): CompositionNode {
+  return section(strings.t(M.innerShadow), [
+    {
+      catalogId: PAGED_INPUT_SELECT,
+      props: { label: strings.t(M.blend), options: blendModes(strings) },
+      bindings: bind("frameInnerShadowBlendMode"),
+    },
+    {
+      catalogId: PAGED_INPUT_COLOR_SWATCH,
+      props: { label: strings.t(M.color) },
+      bindings: bind("frameInnerShadowColor"),
+    },
+    {
+      catalogId: PAGED_INPUT_NUMERIC_SCRUB,
+      props: { label: strings.t(M.opacity), suffix: "%" },
+      bindings: bind("frameInnerShadowOpacity"),
+    },
+    {
+      catalogId: PAGED_LAYOUT_CLUSTER,
+      props: { count: 2 },
+      bindings: {},
+      children: [
+        {
+          catalogId: PAGED_INPUT_NUMERIC_SCRUB,
+          props: { prefix: strings.t(M.angle), suffix: "°" },
+          bindings: bind("frameInnerShadowAngle"),
+        },
+        {
+          catalogId: PAGED_INPUT_LENGTH,
+          props: { prefix: strings.t(M.dist), showUnit: false },
+          bindings: bind("frameInnerShadowDistance"),
+        },
+      ],
+    },
+    {
+      catalogId: PAGED_LAYOUT_CLUSTER,
+      props: { count: 2 },
+      bindings: {},
+      children: [
+        {
+          catalogId: PAGED_INPUT_LENGTH,
+          props: { prefix: strings.t(M.size), showUnit: false },
+          bindings: bind("frameInnerShadowSize"),
+        },
+        {
+          catalogId: PAGED_INPUT_NUMERIC_SCRUB,
+          props: { prefix: strings.t(M.choke), suffix: "%" },
+          bindings: bind("frameInnerShadowChoke"),
+        },
+      ],
+    },
+    {
+      catalogId: PAGED_INPUT_NUMERIC_SCRUB,
+      props: { label: strings.t(M.noise), suffix: "%" },
+      bindings: bind("frameInnerShadowNoise"),
+    },
+  ]);
+}
+
+// ── Outer glow ─────────────────────────────────────────────────
+export function outerGlowComposition(strings: Strings): CompositionNode {
+  return section(strings.t(M.outerGlow), [
+    {
+      catalogId: PAGED_INPUT_SELECT,
+      props: { label: strings.t(M.blend), options: blendModes(strings) },
+      bindings: bind("frameOuterGlowBlendMode"),
+    },
+    {
+      catalogId: PAGED_INPUT_COLOR_SWATCH,
+      props: { label: strings.t(M.color) },
+      bindings: bind("frameOuterGlowColor"),
+    },
+    {
+      catalogId: PAGED_INPUT_NUMERIC_SCRUB,
+      props: { label: strings.t(M.opacity), suffix: "%" },
+      bindings: bind("frameOuterGlowOpacity"),
+    },
+    {
+      catalogId: PAGED_LAYOUT_CLUSTER,
+      props: { count: 2 },
+      bindings: {},
+      children: [
+        {
+          catalogId: PAGED_INPUT_NUMERIC_SCRUB,
+          props: { prefix: strings.t(M.spread), suffix: "%" },
+          bindings: bind("frameOuterGlowSpread"),
+        },
+        {
+          catalogId: PAGED_INPUT_LENGTH,
+          props: { prefix: strings.t(M.size), showUnit: false },
+          bindings: bind("frameOuterGlowSize"),
+        },
+      ],
+    },
+    {
+      catalogId: PAGED_INPUT_NUMERIC_SCRUB,
+      props: { label: strings.t(M.noise), suffix: "%" },
+      bindings: bind("frameOuterGlowNoise"),
+    },
+  ]);
+}
+
+// ── Inner glow ─────────────────────────────────────────────────
+export function innerGlowComposition(strings: Strings): CompositionNode {
+  return section(strings.t(M.innerGlow), [
+    {
+      catalogId: PAGED_INPUT_SELECT,
+      props: { label: strings.t(M.blend), options: blendModes(strings) },
+      bindings: bind("frameInnerGlowBlendMode"),
+    },
+    {
+      catalogId: PAGED_INPUT_COLOR_SWATCH,
+      props: { label: strings.t(M.color) },
+      bindings: bind("frameInnerGlowColor"),
+    },
+    {
+      catalogId: PAGED_INPUT_SELECT,
+      props: { label: strings.t(M.source), options: innerGlowSources(strings) },
+      bindings: bind("frameInnerGlowSource"),
+    },
+    {
+      catalogId: PAGED_INPUT_NUMERIC_SCRUB,
+      props: { label: strings.t(M.opacity), suffix: "%" },
+      bindings: bind("frameInnerGlowOpacity"),
+    },
+    {
+      catalogId: PAGED_LAYOUT_CLUSTER,
+      props: { count: 2 },
+      bindings: {},
+      children: [
+        {
+          catalogId: PAGED_INPUT_NUMERIC_SCRUB,
+          props: { prefix: strings.t(M.choke), suffix: "%" },
+          bindings: bind("frameInnerGlowChoke"),
+        },
+        {
+          catalogId: PAGED_INPUT_LENGTH,
+          props: { prefix: strings.t(M.size), showUnit: false },
+          bindings: bind("frameInnerGlowSize"),
+        },
+      ],
+    },
+    {
+      catalogId: PAGED_INPUT_NUMERIC_SCRUB,
+      props: { label: strings.t(M.noise), suffix: "%" },
+      bindings: bind("frameInnerGlowNoise"),
+    },
+  ]);
+}
+
+// ── Bevel & emboss ─────────────────────────────────────────────
+export function bevelComposition(strings: Strings): CompositionNode {
+  return section(strings.t(M.bevelAndEmboss), [
+    {
+      catalogId: PAGED_INPUT_SELECT,
+      props: { label: strings.t(M.style), options: bevelStyles(strings) },
+      bindings: bind("frameBevelStyle"),
+    },
+    {
+      catalogId: PAGED_INPUT_SELECT,
+      props: {
+        label: strings.t(M.technique),
+        options: bevelTechniques(strings),
+      },
+      bindings: bind("frameBevelTechnique"),
+    },
+    {
+      catalogId: PAGED_INPUT_SELECT,
+      props: {
+        label: strings.t(M.direction),
+        options: bevelDirections(strings),
+      },
+      bindings: bind("frameBevelDirection"),
+    },
+    {
+      catalogId: PAGED_LAYOUT_CLUSTER,
+      props: { count: 2 },
+      bindings: {},
+      children: [
+        {
+          catalogId: PAGED_INPUT_NUMERIC_SCRUB,
+          props: { prefix: strings.t(M.depth), suffix: "%" },
+          bindings: bind("frameBevelDepth"),
+        },
+        {
+          catalogId: PAGED_INPUT_LENGTH,
+          props: { prefix: strings.t(M.size), showUnit: false },
+          bindings: bind("frameBevelSize"),
+        },
+      ],
+    },
+    {
+      catalogId: PAGED_LAYOUT_CLUSTER,
+      props: { count: 2 },
+      bindings: {},
+      children: [
+        {
+          catalogId: PAGED_INPUT_LENGTH,
+          props: { prefix: strings.t(M.soften), showUnit: false },
+          bindings: bind("frameBevelSoften"),
+        },
+        {
+          catalogId: PAGED_INPUT_NUMERIC_SCRUB,
+          props: { prefix: strings.t(M.angle), suffix: "°" },
+          bindings: bind("frameBevelAngle"),
+        },
+      ],
+    },
+    {
+      catalogId: PAGED_INPUT_NUMERIC_SCRUB,
+      props: { label: strings.t(M.altitude), suffix: "°" },
+      bindings: bind("frameBevelAltitude"),
+    },
+    {
+      catalogId: PAGED_INPUT_COLOR_SWATCH,
+      props: { label: strings.t(M.highlight) },
+      bindings: bind("frameBevelHighlightColor"),
+    },
+    {
+      catalogId: PAGED_INPUT_NUMERIC_SCRUB,
+      props: { label: strings.t(M.hOpacity), suffix: "%" },
+      bindings: bind("frameBevelHighlightOpacity"),
+    },
+    {
+      catalogId: PAGED_INPUT_COLOR_SWATCH,
+      props: { label: strings.t(M.shadow) },
+      bindings: bind("frameBevelShadowColor"),
+    },
+    {
+      catalogId: PAGED_INPUT_NUMERIC_SCRUB,
+      props: { label: strings.t(M.sOpacity), suffix: "%" },
+      bindings: bind("frameBevelShadowOpacity"),
+    },
+  ]);
+}
+
+// ── Satin ──────────────────────────────────────────────────────
+export function satinComposition(strings: Strings): CompositionNode {
+  return section(strings.t(M.satin), [
+    {
+      catalogId: PAGED_INPUT_SELECT,
+      props: { label: strings.t(M.blend), options: blendModes(strings) },
+      bindings: bind("frameSatinBlendMode"),
+    },
+    {
+      catalogId: PAGED_INPUT_COLOR_SWATCH,
+      props: { label: strings.t(M.color) },
+      bindings: bind("frameSatinColor"),
+    },
+    {
+      catalogId: PAGED_INPUT_NUMERIC_SCRUB,
+      props: { label: strings.t(M.opacity), suffix: "%" },
+      bindings: bind("frameSatinOpacity"),
+    },
+    {
+      catalogId: PAGED_LAYOUT_CLUSTER,
+      props: { count: 2 },
+      bindings: {},
+      children: [
+        {
+          catalogId: PAGED_INPUT_NUMERIC_SCRUB,
+          props: { prefix: strings.t(M.angle), suffix: "°" },
+          bindings: bind("frameSatinAngle"),
+        },
+        {
+          catalogId: PAGED_INPUT_LENGTH,
+          props: { prefix: strings.t(M.dist), showUnit: false },
+          bindings: bind("frameSatinDistance"),
+        },
+      ],
+    },
+    {
+      catalogId: PAGED_INPUT_LENGTH,
+      props: { label: strings.t(M.size), showUnit: false },
+      bindings: bind("frameSatinSize"),
+    },
+    {
+      catalogId: PAGED_INPUT_TOGGLE_SWITCH,
+      props: { label: strings.t(M.invert) },
+      bindings: bind("frameSatinInvert"),
+    },
+  ]);
+}
+
+// ── Feather (basic) ────────────────────────────────────────────
+export function featherComposition(strings: Strings): CompositionNode {
+  return section(strings.t(M.feather), [
+    {
+      catalogId: PAGED_INPUT_LENGTH,
+      props: { label: strings.t(M.width), showUnit: false },
+      bindings: bind("frameFeatherWidth"),
+    },
+    {
+      catalogId: PAGED_INPUT_SELECT,
+      props: { label: strings.t(M.corner), options: featherCorners(strings) },
+      bindings: bind("frameFeatherCornerType"),
+    },
+    {
+      catalogId: PAGED_LAYOUT_CLUSTER,
+      props: { count: 2 },
+      bindings: {},
+      children: [
+        {
+          catalogId: PAGED_INPUT_NUMERIC_SCRUB,
+          props: { prefix: strings.t(M.noise), suffix: "%" },
+          bindings: bind("frameFeatherNoise"),
+        },
+        {
+          catalogId: PAGED_INPUT_NUMERIC_SCRUB,
+          props: { prefix: strings.t(M.choke), suffix: "%" },
+          bindings: bind("frameFeatherChoke"),
+        },
+      ],
+    },
+  ]);
+}
+
+// ── Directional feather ────────────────────────────────────────
+export function directionalFeatherComposition(
+  strings: Strings,
+): CompositionNode {
+  return section(strings.t(M.directionalFeather), [
+    {
+      catalogId: PAGED_LAYOUT_CLUSTER,
+      props: { count: 2 },
+      bindings: {},
+      children: [
+        {
+          catalogId: PAGED_INPUT_LENGTH,
+          props: { prefix: strings.t(M.left), showUnit: false },
           bindings: bind("frameDirectionalFeatherLeftWidth"),
         },
         {
           catalogId: PAGED_INPUT_LENGTH,
-          props: { prefix: "Right", showUnit: false },
+          props: { prefix: strings.t(M.right), showUnit: false },
           bindings: bind("frameDirectionalFeatherRightWidth"),
         },
       ],
@@ -541,19 +637,19 @@ export const directionalFeatherComposition: CompositionNode = section(
       children: [
         {
           catalogId: PAGED_INPUT_LENGTH,
-          props: { prefix: "Top", showUnit: false },
+          props: { prefix: strings.t(M.top), showUnit: false },
           bindings: bind("frameDirectionalFeatherTopWidth"),
         },
         {
           catalogId: PAGED_INPUT_LENGTH,
-          props: { prefix: "Bottom", showUnit: false },
+          props: { prefix: strings.t(M.bottom), showUnit: false },
           bindings: bind("frameDirectionalFeatherBottomWidth"),
         },
       ],
     },
     {
       catalogId: PAGED_INPUT_NUMERIC_SCRUB,
-      props: { label: "Angle", suffix: "°" },
+      props: { label: strings.t(M.angle), suffix: "°" },
       bindings: bind("frameDirectionalFeatherAngle"),
     },
     {
@@ -563,15 +659,15 @@ export const directionalFeatherComposition: CompositionNode = section(
       children: [
         {
           catalogId: PAGED_INPUT_NUMERIC_SCRUB,
-          props: { prefix: "Noise", suffix: "%" },
+          props: { prefix: strings.t(M.noise), suffix: "%" },
           bindings: bind("frameDirectionalFeatherNoise"),
         },
         {
           catalogId: PAGED_INPUT_NUMERIC_SCRUB,
-          props: { prefix: "Choke", suffix: "%" },
+          props: { prefix: strings.t(M.choke), suffix: "%" },
           bindings: bind("frameDirectionalFeatherChoke"),
         },
       ],
     },
-  ],
-);
+  ]);
+}

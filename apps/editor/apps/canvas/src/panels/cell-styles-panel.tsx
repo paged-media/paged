@@ -24,12 +24,25 @@
 // until the Table NodeId surface lands (engine gap 8).
 
 import { Icon, displayName, useCollection } from "@paged-media/shell";
+import { defineMessages, useStrings } from "@paged-media/strings";
 import type { CellStyleSummary } from "@paged-media/client";
 
 import { StyleOptionsButton } from "./style-options-panel";
 import { CoreCommandButton } from "../core-command-dialog";
 
+const M = defineMessages("app.cellStylesPanel", {
+  loading: "Loading cell styles…",
+  newStyleButton: "New cell style…",
+  newStyle: "New cell style",
+  empty: "No cell styles.",
+  applied: "Applied",
+  appliedStyle: "Applied style",
+  delete: "Delete",
+  hint: "Apply a cell style from the Table panel (select a cell first).",
+});
+
 export function CellStylesPanel() {
+  const strings = useStrings();
   const items = useCollection<CellStyleSummary>("cellStyles");
   if (items === null) {
     return (
@@ -37,7 +50,7 @@ export function CellStylesPanel() {
         className="p-3 text-xs text-muted-foreground"
         data-cell-styles-panel="loading"
       >
-        Loading cell styles…
+        {strings.t(M.loading)}
       </div>
     );
   }
@@ -48,25 +61,25 @@ export function CellStylesPanel() {
       <div className="mb-2 flex gap-[5px]" data-cell-style-actions="">
         <CoreCommandButton
           op="createCellStyle"
-          label="New cell style…"
+          label={strings.t(M.newStyleButton)}
           testId="cell-style-new"
           prefill={{
             selfId: `CellStyle/u${Date.now().toString(36)}`,
-            name: "New cell style",
+            name: strings.t(M.newStyle),
           }}
         />
       </div>
       {items.length === 0 ? (
         <div className="text-xs text-muted-foreground" data-empty-cell-styles>
-          No cell styles.
+          {strings.t(M.empty)}
         </div>
       ) : (
         <>
-          <div className="pg-label mb-2">Applied</div>
+          <div className="pg-label mb-2">{strings.t(M.applied)}</div>
           <span className="relative mb-[10px] inline-flex w-full">
             <select
               disabled
-              aria-label="Applied style"
+              aria-label={strings.t(M.appliedStyle)}
               data-apply-select
               data-collection="cellStyles"
               className="h-[30px] w-full appearance-none rounded-[6px] border border-input bg-background pl-2.5 pr-7 text-[12.5px] opacity-55"
@@ -120,7 +133,7 @@ export function CellStylesPanel() {
                 <StyleOptionsButton family="cell" selfId={s.selfId} />
                 <CoreCommandButton
                   op="deleteCellStyle"
-                  label="Delete"
+                  label={strings.t(M.delete)}
                   testId="cell-style-delete"
                   args={{ styleId: `style:cell/${s.selfId}` }}
                 />
@@ -131,7 +144,7 @@ export function CellStylesPanel() {
             className="mt-2 text-[10.5px] italic"
             style={{ color: "var(--pg-muted-fg)" }}
           >
-            Apply a cell style from the Table panel (select a cell first).
+            {strings.t(M.hint)}
           </div>
         </>
       )}

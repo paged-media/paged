@@ -33,6 +33,7 @@ const locale = new URLSearchParams(location.search).get("locale");
 if (locale) {
   void loadLocale(locale).then(({ strings, problem }) => {
     if (problem) console.warn(`[editor locale] ${problem}`);
+    else document.documentElement.lang = locale;
     mountEditor(root, { search: location.search, strings });
   });
 } else {

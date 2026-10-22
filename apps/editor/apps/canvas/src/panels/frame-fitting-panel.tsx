@@ -41,6 +41,12 @@ import {
   frameFittingCropComposition,
   frameFittingFitComposition,
 } from "./frame-fitting.composition";
+import { defineMessages, useStrings } from "@paged-media/strings";
+
+const M = defineMessages("app.frameFittingPanel", {
+  alignContent: "Align content",
+  fillFrameProportionally: "Fill frame proportionally",
+});
 
 // Row-major 3×3 ↔ IDML `FittingAlignment`, which takes the `AnchorPoint`
 // names InDesign writes (not AutoSizingReferencePoint's `…Point` names;
@@ -90,6 +96,7 @@ function fittingType(v: Value | null): string | null {
 }
 
 export function FrameFittingPanel() {
+  const strings = useStrings();
   const resolved = useObjectBindings(REFERENCE_POINT_BINDING);
   const refPoint = resolved.value;
   const index = anchorToIndex(refPoint.value);
@@ -104,7 +111,9 @@ export function FrameFittingPanel() {
         className="p-3 flex flex-col gap-[9px]"
         data-frame-fitting-panel="ready"
       >
-        <CompositionRenderer composition={frameFittingFitComposition} />
+        <CompositionRenderer
+          composition={frameFittingFitComposition(strings)}
+        />
         <ObjectFieldFrame
           field={refPoint}
           className="relative my-[2px] flex items-center gap-[14px]"
@@ -123,10 +132,12 @@ export function FrameFittingPanel() {
             className="text-[10.5px]"
             style={{ color: "var(--pg-muted-fg)" }}
           >
-            Align content
+            {strings.t(M.alignContent)}
           </span>
         </ObjectFieldFrame>
-        <CompositionRenderer composition={frameFittingCropComposition} />
+        <CompositionRenderer
+          composition={frameFittingCropComposition(strings)}
+        />
         {/* W2.4 — fill-frame-proportionally action. Writes the real
             `frameFittingType` enum; reflects the current type so the
             button reads pressed when already FillProportionally. */}
@@ -150,7 +161,7 @@ export function FrameFittingPanel() {
             } as Value);
           }}
         >
-          Fill frame proportionally
+          {strings.t(M.fillFrameProportionally)}
         </button>
       </div>
     </CatalogRegistryProvider>

@@ -26,8 +26,17 @@
 
 import { ListRows, useCollection } from "@paged-media/shell";
 import type { ArticleSummary } from "@paged-media/client";
+import { defineMessages, useStrings } from "@paged-media/strings";
+
+const M = defineMessages("app.articlesPanel", {
+  loading: "Loading articles…",
+  empty: "No articles in this document.",
+  members: "{order} · {count, plural, one {# member} other {# members}}",
+  readingOrder: "Order drives accessible-PDF reading order.",
+});
 
 export function ArticlesPanel() {
+  const strings = useStrings();
   const items = useCollection<ArticleSummary>("articles");
   if (items === null) {
     return (
@@ -35,7 +44,7 @@ export function ArticlesPanel() {
         className="p-3 text-xs text-muted-foreground"
         data-articles-panel="loading"
       >
-        Loading articles…
+        {strings.t(M.loading)}
       </div>
     );
   }
@@ -43,7 +52,7 @@ export function ArticlesPanel() {
     <div data-articles-panel="ready">
       {items.length === 0 ? (
         <div className="p-3 text-xs text-muted-foreground" data-empty-articles>
-          No articles in this document.
+          {strings.t(M.empty)}
         </div>
       ) : (
         <div data-article-list>
@@ -52,15 +61,16 @@ export function ArticlesPanel() {
               key: a.selfId,
               icon: "ui-dots",
               primary: a.name,
-              secondary: `${i + 1} · ${a.members.length} member${
-                a.members.length === 1 ? "" : "s"
-              }`,
+              secondary: strings.t(M.members, {
+                order: i + 1,
+                count: a.members.length,
+              }),
             }))}
           />
         </div>
       )}
       <div className="px-3 pb-3 text-[10.5px] italic text-muted-foreground">
-        Order drives accessible-PDF reading order.
+        {strings.t(M.readingOrder)}
       </div>
     </div>
   );

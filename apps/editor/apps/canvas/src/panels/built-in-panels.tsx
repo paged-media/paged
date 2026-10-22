@@ -25,6 +25,7 @@
 import { TemplateFormPanel } from "./template/form-panel";
 import { TemplatePanel } from "./template/template-panel";
 import { AIAssistant, type PanelContribution } from "@paged-media/shell";
+import { defineMessages, t } from "@paged-media/strings";
 
 import { CharacterPanel } from "./character-panel";
 import { ArticlesPanel } from "./articles-panel";
@@ -118,6 +119,102 @@ import {
   StoryInspectorPanel,
 } from "./cockpit/mode-inspectors";
 
+// The panels' titles, read when a title is shown, so they follow the
+// editor's locale (the surface gates still read the ids statically).
+const M = defineMessages("app.builtInPanels", {
+  templateForm: "Template form",
+  template: "Template",
+  pages: "Pages",
+  exportCenter: "Export Center",
+  preflight: "Preflight",
+  separations: "Separations",
+  publicationHealth: "Health",
+  stories: "Stories",
+  comments: "Comments",
+  componentLibrary: "Library",
+  documentMap: "Document Map",
+  outputs: "Outputs",
+  dataSource: "Data suite (preview)",
+  dataGrid: "Generated pages",
+  storyInspector: "Story",
+  outputReadiness: "Output readiness",
+  reviewInspector: "Review",
+  exportInspector: "Export settings",
+  links: "Links",
+  conditions: "Conditions",
+  conditionSets: "Condition Sets",
+  colorGroups: "Color groups",
+  inkManager: "Ink Manager",
+  colorSettings: "Color settings",
+  styleOptions: "Style Options",
+  objectOptions: "Object Options",
+  documentSetup: "Document Setup",
+  marginsColumns: "Margins and Columns",
+  swatchOptions: "Swatch Options",
+  gradientOptions: "Gradient Options",
+  textVariables: "Text Variables",
+  colorGroupOptions: "Color Group Options",
+  numberingListOptions: "Numbering List Options",
+  conditionOptions: "Condition Options",
+  masterOptions: "Master Options",
+  textFields: "Text Fields",
+  sectionOptions: "Numbering & Section Options",
+  guides: "Guides",
+  articles: "Articles",
+  hyperlinks: "Hyperlinks",
+  bookmarks: "Bookmarks",
+  crossReferences: "Cross References",
+  index: "Index",
+  pagesList: "Pages list",
+  spreads: "Spreads",
+  masterPages: "Master Pages",
+  cellStyles: "Cell Styles",
+  tableStyles: "Table Styles",
+  fonts: "Fonts",
+  align: "Align",
+  pathfinder: "Pathfinder",
+  outline: "Outline",
+  tree: "Tree",
+  inspector: "Inspector",
+  character: "Character",
+  paragraph: "Paragraph",
+  paragraphStyles: "Paragraph Styles",
+  characterStyles: "Character Styles",
+  objectStyles: "Object Styles",
+  swatches: "Swatches",
+  schemaListDemo: "Swatch list (schema)",
+  schemaTreeDemo: "Structure (schema tree)",
+  color: "Color",
+  colorWheel: "Color Wheel",
+  gradients: "Gradients",
+  stroke: "Stroke",
+  objectTransform: "Object",
+  textFrameOptions: "Text Frame",
+  textWrap: "Text Wrap",
+  frameFitting: "Frame Fitting",
+  effects: "Effects",
+  layers: "Layers",
+  info: "Info",
+  attributes: "Attributes",
+  properties: "Properties",
+  aiAssistant: "AI Assistant",
+  control: "Control",
+  repl: "REPL",
+  scriptEditor: "Script",
+  actions: "Actions",
+  keyboardShortcuts: "Keyboard shortcuts",
+  problems: "Problems",
+  journal: "Journal",
+  library: "Library",
+  table: "Table",
+  tabs: "Tabs",
+  glyphs: "Glyphs",
+  bulletsNumbering: "Bullets & Numbering",
+  anchored: "Anchored Object",
+  objectExport: "Object Export Options",
+  exportTagging: "Export Tagging",
+});
+
 // The built-in panels for the canvas app. Bundle authors register
 // additional panels through the registry once Step 4's loader
 // lands; the cockpit's Window menu surfaces every entry. The
@@ -128,7 +225,9 @@ export const BUILT_IN_PANELS: PanelContribution[] = [
   // filler fills in. The fill presets put it in the inspector slot.
   {
     id: "paged.template.form",
-    title: "Template form",
+    get title() {
+      return t(M.templateForm);
+    },
     component: TemplateFormPanel,
     defaultDock: "right",
     defaultGroup: "cockpit",
@@ -138,7 +237,9 @@ export const BUILT_IN_PANELS: PanelContribution[] = [
   // filler may do, and previews the template as a filler.
   {
     id: "paged.template",
-    title: "Template",
+    get title() {
+      return t(M.template);
+    },
     component: TemplatePanel,
     defaultDock: "right",
     defaultGroup: "cockpit",
@@ -146,7 +247,9 @@ export const BUILT_IN_PANELS: PanelContribution[] = [
   },
   {
     id: "paged.pages",
-    title: "Pages",
+    get title() {
+      return t(M.pages);
+    },
     component: NavigatorPanel,
     defaultDock: "left",
     defaultGroup: "structure",
@@ -154,7 +257,9 @@ export const BUILT_IN_PANELS: PanelContribution[] = [
   // ── Cockpit panels (styleguide E) — mode-first surfaces. ──
   {
     id: "paged.export-center",
-    title: "Export Center",
+    get title() {
+      return t(M.exportCenter);
+    },
     component: ExportCenterPanel,
     defaultDock: "left",
     defaultGroup: "cockpit",
@@ -162,7 +267,9 @@ export const BUILT_IN_PANELS: PanelContribution[] = [
   },
   {
     id: "paged.preflight",
-    title: "Preflight",
+    get title() {
+      return t(M.preflight);
+    },
     component: PreflightPanel,
     defaultDock: "left",
     defaultGroup: "cockpit",
@@ -170,7 +277,9 @@ export const BUILT_IN_PANELS: PanelContribution[] = [
   },
   {
     id: "paged.separations",
-    title: "Separations",
+    get title() {
+      return t(M.separations);
+    },
     component: SeparationsPanel,
     defaultDock: "right",
     defaultGroup: "cockpit",
@@ -178,7 +287,9 @@ export const BUILT_IN_PANELS: PanelContribution[] = [
   },
   {
     id: "paged.publication-health",
-    title: "Health",
+    get title() {
+      return t(M.publicationHealth);
+    },
     component: PublicationHealthPanel,
     defaultDock: "left",
     defaultGroup: "cockpit",
@@ -186,7 +297,9 @@ export const BUILT_IN_PANELS: PanelContribution[] = [
   },
   {
     id: "paged.stories",
-    title: "Stories",
+    get title() {
+      return t(M.stories);
+    },
     component: StoriesPanel,
     defaultDock: "left",
     defaultGroup: "cockpit",
@@ -194,7 +307,9 @@ export const BUILT_IN_PANELS: PanelContribution[] = [
   },
   {
     id: "paged.comments",
-    title: "Comments",
+    get title() {
+      return t(M.comments);
+    },
     component: CommentsPanel,
     defaultDock: "left",
     defaultGroup: "cockpit",
@@ -205,7 +320,9 @@ export const BUILT_IN_PANELS: PanelContribution[] = [
   // superseded it and nothing referenced the stub's id.
   {
     id: "paged.component-library",
-    title: "Library",
+    get title() {
+      return t(M.componentLibrary);
+    },
     component: ComponentLibraryPanel,
     defaultDock: "right",
     defaultGroup: "cockpit",
@@ -216,7 +333,9 @@ export const BUILT_IN_PANELS: PanelContribution[] = [
   //    the mode `slots` select where they render. ──
   {
     id: "paged.document-map",
-    title: "Document Map",
+    get title() {
+      return t(M.documentMap);
+    },
     component: DocumentMapPanel,
     defaultDock: "left",
     defaultGroup: "cockpit",
@@ -224,7 +343,9 @@ export const BUILT_IN_PANELS: PanelContribution[] = [
   },
   {
     id: "paged.outputs",
-    title: "Outputs",
+    get title() {
+      return t(M.outputs);
+    },
     component: OutputsPanel,
     defaultDock: "left",
     defaultGroup: "cockpit",
@@ -235,7 +356,9 @@ export const BUILT_IN_PANELS: PanelContribution[] = [
     // this built-in stays only as the honest data-suite seam, titled
     // so it can't be mistaken for the live plugin panel.
     id: "paged.data-source",
-    title: "Data suite (preview)",
+    get title() {
+      return t(M.dataSource);
+    },
     component: DataSourcePanel,
     defaultDock: "left",
     defaultGroup: "cockpit",
@@ -247,7 +370,9 @@ export const BUILT_IN_PANELS: PanelContribution[] = [
   },
   {
     id: "paged.data-grid",
-    title: "Generated pages",
+    get title() {
+      return t(M.dataGrid);
+    },
     component: DataGridPanel,
     defaultDock: "center",
     defaultGroup: "cockpit",
@@ -257,7 +382,9 @@ export const BUILT_IN_PANELS: PanelContribution[] = [
   },
   {
     id: "paged.story-inspector",
-    title: "Story",
+    get title() {
+      return t(M.storyInspector);
+    },
     component: StoryInspectorPanel,
     defaultDock: "right",
     defaultGroup: "cockpit",
@@ -265,7 +392,9 @@ export const BUILT_IN_PANELS: PanelContribution[] = [
   },
   {
     id: "paged.output-readiness",
-    title: "Output readiness",
+    get title() {
+      return t(M.outputReadiness);
+    },
     component: OutputReadinessPanel,
     defaultDock: "right",
     defaultGroup: "cockpit",
@@ -273,7 +402,9 @@ export const BUILT_IN_PANELS: PanelContribution[] = [
   },
   {
     id: "paged.review-inspector",
-    title: "Review",
+    get title() {
+      return t(M.reviewInspector);
+    },
     component: ReviewInspectorPanel,
     defaultDock: "right",
     defaultGroup: "cockpit",
@@ -281,7 +412,9 @@ export const BUILT_IN_PANELS: PanelContribution[] = [
   },
   {
     id: "paged.export-inspector",
-    title: "Export settings",
+    get title() {
+      return t(M.exportInspector);
+    },
     component: ExportInspectorPanel,
     defaultDock: "right",
     defaultGroup: "cockpit",
@@ -295,7 +428,9 @@ export const BUILT_IN_PANELS: PanelContribution[] = [
     // relocate / update / break actions land with their
     // Operations.
     id: "paged.links",
-    title: "Links",
+    get title() {
+      return t(M.links);
+    },
     component: LinksPanel,
     defaultDock: "left",
     defaultGroup: "structure",
@@ -306,35 +441,45 @@ export const BUILT_IN_PANELS: PanelContribution[] = [
     // Per-condition visibility toggle lands with
     // `Operation::SetConditionVisible`.
     id: "paged.conditions",
-    title: "Conditions",
+    get title() {
+      return t(M.conditions);
+    },
     component: ConditionsPanel,
     defaultDock: "left",
     defaultGroup: "structure",
   },
   {
     id: "paged.condition-sets",
-    title: "Condition Sets",
+    get title() {
+      return t(M.conditionSets);
+    },
     component: ConditionSetsPanel,
     defaultDock: "left",
     defaultGroup: "structure",
   },
   {
     id: "paged.color-groups",
-    title: "Color groups",
+    get title() {
+      return t(M.colorGroups);
+    },
     component: ColorGroupsPanel,
     defaultDock: "right",
     defaultGroup: "styles",
   },
   {
     id: "paged.ink-manager",
-    title: "Ink Manager",
+    get title() {
+      return t(M.inkManager);
+    },
     component: InkManagerPanel,
     defaultDock: "right",
     defaultGroup: "styles",
   },
   {
     id: "paged.color-settings",
-    title: "Color settings",
+    get title() {
+      return t(M.colorSettings);
+    },
     component: ColorSettingsPanel,
     defaultDock: "right",
     defaultGroup: "styles",
@@ -344,133 +489,171 @@ export const BUILT_IN_PANELS: PanelContribution[] = [
   // sections, guides). Every field is a PropertyField on the address.
   {
     id: STYLE_OPTIONS_PANEL,
-    title: "Style Options",
+    get title() {
+      return t(M.styleOptions);
+    },
     component: StyleOptionsPanel,
     defaultDock: "right",
     defaultGroup: "styles",
   },
   {
     id: "paged.object-options",
-    title: "Object Options",
+    get title() {
+      return t(M.objectOptions);
+    },
     component: ObjectOptionsPanel,
     defaultDock: "right",
     defaultGroup: "properties",
   },
   {
     id: "paged.document-setup",
-    title: "Document Setup",
+    get title() {
+      return t(M.documentSetup);
+    },
     component: DocumentSetupPanel,
     defaultDock: "right",
     defaultGroup: "structure",
   },
   {
     id: "paged.margins-columns",
-    title: "Margins and Columns",
+    get title() {
+      return t(M.marginsColumns);
+    },
     component: MarginsColumnsPanel,
     defaultDock: "right",
     defaultGroup: "structure",
   },
   {
     id: "paged.swatch-options",
-    title: "Swatch Options",
+    get title() {
+      return t(M.swatchOptions);
+    },
     component: SwatchOptionsPanel,
     defaultDock: "right",
     defaultGroup: "styles",
   },
   {
     id: "paged.gradient-options",
-    title: "Gradient Options",
+    get title() {
+      return t(M.gradientOptions);
+    },
     component: GradientOptionsPanel,
     defaultDock: "right",
     defaultGroup: "styles",
   },
   {
     id: "paged.text-variables",
-    title: "Text Variables",
+    get title() {
+      return t(M.textVariables);
+    },
     component: TextVariablesPanel,
     defaultDock: "right",
     defaultGroup: "structure",
   },
   {
     id: "paged.color-group-options",
-    title: "Color Group Options",
+    get title() {
+      return t(M.colorGroupOptions);
+    },
     component: ColorGroupOptionsPanel,
     defaultDock: "right",
     defaultGroup: "styles",
   },
   {
     id: "paged.numbering-list-options",
-    title: "Numbering List Options",
+    get title() {
+      return t(M.numberingListOptions);
+    },
     component: NumberingListOptionsPanel,
     defaultDock: "right",
     defaultGroup: "styles",
   },
   {
     id: "paged.condition-options",
-    title: "Condition Options",
+    get title() {
+      return t(M.conditionOptions);
+    },
     component: ConditionOptionsPanel,
     defaultDock: "right",
     defaultGroup: "structure",
   },
   {
     id: "paged.master-options",
-    title: "Master Options",
+    get title() {
+      return t(M.masterOptions);
+    },
     component: MasterOptionsPanel,
     defaultDock: "right",
     defaultGroup: "structure",
   },
   {
     id: "paged.text-fields",
-    title: "Text Fields",
+    get title() {
+      return t(M.textFields);
+    },
     component: FieldOptionsPanel,
     defaultDock: "right",
     defaultGroup: "structure",
   },
   {
     id: "paged.section-options",
-    title: "Numbering & Section Options",
+    get title() {
+      return t(M.sectionOptions);
+    },
     component: SectionOptionsPanel,
     defaultDock: "right",
     defaultGroup: "structure",
   },
   {
     id: "paged.guides",
-    title: "Guides",
+    get title() {
+      return t(M.guides);
+    },
     component: GuidesPanel,
     defaultDock: "right",
     defaultGroup: "structure",
   },
   {
     id: "paged.articles",
-    title: "Articles",
+    get title() {
+      return t(M.articles);
+    },
     component: ArticlesPanel,
     defaultDock: "left",
     defaultGroup: "structure",
   },
   {
     id: "paged.hyperlinks",
-    title: "Hyperlinks",
+    get title() {
+      return t(M.hyperlinks);
+    },
     component: HyperlinksPanel,
     defaultDock: "left",
     defaultGroup: "structure",
   },
   {
     id: "paged.bookmarks",
-    title: "Bookmarks",
+    get title() {
+      return t(M.bookmarks);
+    },
     component: BookmarksPanel,
     defaultDock: "left",
     defaultGroup: "structure",
   },
   {
     id: "paged.cross-references",
-    title: "Cross References",
+    get title() {
+      return t(M.crossReferences);
+    },
     component: CrossReferencesPanel,
     defaultDock: "left",
     defaultGroup: "structure",
   },
   {
     id: "paged.index",
-    title: "Index",
+    get title() {
+      return t(M.index);
+    },
     component: IndexPanel,
     defaultDock: "left",
     defaultGroup: "structure",
@@ -480,42 +663,54 @@ export const BUILT_IN_PANELS: PanelContribution[] = [
   // documentCollection accessor.
   {
     id: "paged.pages-list",
-    title: "Pages list",
+    get title() {
+      return t(M.pagesList);
+    },
     component: PagesListPanel,
     defaultDock: "left",
     defaultGroup: "structure",
   },
   {
     id: "paged.spreads",
-    title: "Spreads",
+    get title() {
+      return t(M.spreads);
+    },
     component: SpreadsPanel,
     defaultDock: "left",
     defaultGroup: "structure",
   },
   {
     id: "paged.master-pages",
-    title: "Master Pages",
+    get title() {
+      return t(M.masterPages);
+    },
     component: MasterPagesPanel,
     defaultDock: "left",
     defaultGroup: "structure",
   },
   {
     id: "paged.cell-styles",
-    title: "Cell Styles",
+    get title() {
+      return t(M.cellStyles);
+    },
     component: CellStylesPanel,
     defaultDock: "right",
     defaultGroup: "styles",
   },
   {
     id: "paged.table-styles",
-    title: "Table Styles",
+    get title() {
+      return t(M.tableStyles);
+    },
     component: TableStylesPanel,
     defaultDock: "right",
     defaultGroup: "styles",
   },
   {
     id: "paged.fonts",
-    title: "Fonts",
+    get title() {
+      return t(M.fonts);
+    },
     component: FontsPanel,
     defaultDock: "left",
     defaultGroup: "structure",
@@ -526,7 +721,9 @@ export const BUILT_IN_PANELS: PanelContribution[] = [
     // mutations to align. v1 limitation: each frame is its own
     // undo entry (wire-level Batch lands as a follow-up).
     id: "paged.align",
-    title: "Align",
+    get title() {
+      return t(M.align);
+    },
     component: AlignPanel,
     defaultDock: "right",
     defaultGroup: "properties",
@@ -536,28 +733,36 @@ export const BUILT_IN_PANELS: PanelContribution[] = [
     // BBox math; Subtract / Intersect / Exclude buttons exist
     // but are disabled (need Bezier CSG, v2).
     id: "paged.pathfinder",
-    title: "Pathfinder",
+    get title() {
+      return t(M.pathfinder);
+    },
     component: PathfinderPanel,
     defaultDock: "right",
     defaultGroup: "properties",
   },
   {
     id: "paged.outline",
-    title: "Outline",
+    get title() {
+      return t(M.outline);
+    },
     component: OutlinePanel,
     defaultDock: "left",
     defaultGroup: "structure",
   },
   {
     id: "paged.tree",
-    title: "Tree",
+    get title() {
+      return t(M.tree);
+    },
     component: TreePanel,
     defaultDock: "left",
     defaultGroup: "structure",
   },
   {
     id: "paged.inspector",
-    title: "Inspector",
+    get title() {
+      return t(M.inspector);
+    },
     component: InspectorPanel,
     defaultDock: "right",
     defaultGroup: "inspector",
@@ -569,7 +774,9 @@ export const BUILT_IN_PANELS: PanelContribution[] = [
     // ElementId.storyRange); the apply arm at
     // (NodeId::StoryRange, Character*) commits each edit.
     id: "paged.character",
-    title: "Character",
+    get title() {
+      return t(M.character);
+    },
     component: CharacterPanel,
     defaultDock: "right",
     defaultGroup: "properties",
@@ -578,7 +785,9 @@ export const BUILT_IN_PANELS: PanelContribution[] = [
     // SDK Phase 3 — Paragraph panel. Content-scope bindings;
     // apply layer rounds the range to whole paragraphs.
     id: "paged.paragraph",
-    title: "Paragraph",
+    get title() {
+      return t(M.paragraph);
+    },
     component: ParagraphPanel,
     defaultDock: "right",
     defaultGroup: "properties",
@@ -589,7 +798,9 @@ export const BUILT_IN_PANELS: PanelContribution[] = [
     // applies via appliedParagraphStyle write. Per the
     // panel-catalog doc §5.3 + §5.5.
     id: "paged.paragraph-styles",
-    title: "Paragraph Styles",
+    get title() {
+      return t(M.paragraphStyles);
+    },
     component: ParagraphStylesPanel,
     defaultDock: "right",
     defaultGroup: "styles",
@@ -601,7 +812,9 @@ export const BUILT_IN_PANELS: PanelContribution[] = [
     // content-scope binding to appliedCharacterStyle. Validates
     // the §9 ≥2-panels rule for the new primitive.
     id: "paged.character-styles",
-    title: "Character Styles",
+    get title() {
+      return t(M.characterStyles);
+    },
     component: CharacterStylesPanel,
     defaultDock: "right",
     defaultGroup: "styles",
@@ -612,7 +825,9 @@ export const BUILT_IN_PANELS: PanelContribution[] = [
     // with Track A's Task G). collectionName: "objectStyles"
     // routes through the new model accessor.
     id: "paged.object-styles",
-    title: "Object Styles",
+    get title() {
+      return t(M.objectStyles);
+    },
     component: ObjectStylesPanel,
     defaultDock: "right",
     defaultGroup: "styles",
@@ -625,7 +840,9 @@ export const BUILT_IN_PANELS: PanelContribution[] = [
     // Value::ColorRef payload. Element-scope binding to
     // frameFillColor.
     id: "paged.swatches",
-    title: "Swatches",
+    get title() {
+      return t(M.swatches);
+    },
     component: SwatchesPanel,
     defaultDock: "right",
     defaultGroup: "styles",
@@ -639,7 +856,9 @@ export const BUILT_IN_PANELS: PanelContribution[] = [
     // injects. Driven by tests/e2e/schema-list-panel.spec.ts.
     id: "paged.schema-list-demo",
     devOnly: true,
-    title: "Swatch list (schema)",
+    get title() {
+      return t(M.schemaListDemo);
+    },
     component: SchemaListDemoPanel,
     defaultDock: "right",
     defaultGroup: "styles",
@@ -654,7 +873,9 @@ export const BUILT_IN_PANELS: PanelContribution[] = [
     // phase C owns that. Driven by tests/e2e/schema-tree-panel.spec.ts.
     id: "paged.schema-tree-demo",
     devOnly: true,
-    title: "Structure (schema tree)",
+    get title() {
+      return t(M.schemaTreeDemo);
+    },
     component: SchemaTreeDemoPanel,
     defaultDock: "right",
     defaultGroup: "styles",
@@ -665,7 +886,9 @@ export const BUILT_IN_PANELS: PanelContribution[] = [
     // browser) per `docs/design/panel-catalog.md` §6
     // Tier 2b. CMYK/RGB sliders are v2.
     id: "paged.color",
-    title: "Color",
+    get title() {
+      return t(M.color);
+    },
     component: ColorPanel,
     defaultDock: "right",
     defaultGroup: "styles",
@@ -678,7 +901,9 @@ export const BUILT_IN_PANELS: PanelContribution[] = [
     // one batched createSwatch (single undo). Also reachable
     // from the Color panel.
     id: "paged.color-wheel",
-    title: "Color Wheel",
+    get title() {
+      return t(M.colorWheel);
+    },
     component: ColorWheelPanel,
     defaultDock: "right",
     defaultGroup: "styles",
@@ -691,7 +916,9 @@ export const BUILT_IN_PANELS: PanelContribution[] = [
     // arm (Value::ColorRef payload carrying either a Swatch or
     // Gradient self_id).
     id: "paged.gradients",
-    title: "Gradients",
+    get title() {
+      return t(M.gradients);
+    },
     component: GradientsPanel,
     defaultDock: "right",
     defaultGroup: "styles",
@@ -701,7 +928,9 @@ export const BUILT_IN_PANELS: PanelContribution[] = [
     // Element-scope bindings over existing FrameStrokeWeight +
     // FrameStrokeColor apply arms.
     id: "paged.stroke",
-    title: "Stroke",
+    get title() {
+      return t(M.stroke);
+    },
     component: StrokePanel,
     defaultDock: "right",
     defaultGroup: "properties",
@@ -710,7 +939,9 @@ export const BUILT_IN_PANELS: PanelContribution[] = [
     // SDK Phase 3 — Object/Transform panel. Element-scope bindings
     // over FrameBounds + FrameOpacity.
     id: "paged.object-transform",
-    title: "Object",
+    get title() {
+      return t(M.objectTransform);
+    },
     component: ObjectTransformPanel,
     defaultDock: "right",
     defaultGroup: "properties",
@@ -721,7 +952,9 @@ export const BUILT_IN_PANELS: PanelContribution[] = [
     // in pt). Vertical-justify + columns + auto-sizing rows join
     // as their apply arms ship.
     id: "paged.text-frame-options",
-    title: "Text Frame",
+    get title() {
+      return t(M.textFrameOptions);
+    },
     component: TextFrameOptionsPanel,
     defaultDock: "right",
     defaultGroup: "properties",
@@ -732,7 +965,9 @@ export const BUILT_IN_PANELS: PanelContribution[] = [
     // (bounds). Both share the same Option<TextWrap> backing
     // field — the apply layer preserves the unset half.
     id: "paged.text-wrap",
-    title: "Text Wrap",
+    get title() {
+      return t(M.textWrap);
+    },
     component: TextWrapPanel,
     defaultDock: "right",
     defaultGroup: "properties",
@@ -743,7 +978,9 @@ export const BUILT_IN_PANELS: PanelContribution[] = [
     // (type toggle-group + crops bounds). Apply arms preserve
     // the unset half.
     id: "paged.frame-fitting",
-    title: "Frame Fitting",
+    get title() {
+      return t(M.frameFitting);
+    },
     component: FrameFittingPanel,
     defaultDock: "right",
     defaultGroup: "properties",
@@ -754,14 +991,18 @@ export const BUILT_IN_PANELS: PanelContribution[] = [
     // DropShadowSetting on true. Per-field editors (color,
     // offset, blur) land when their PropertyPaths ship.
     id: "paged.effects",
-    title: "Effects",
+    get title() {
+      return t(M.effects);
+    },
     component: EffectsPanel,
     defaultDock: "right",
     defaultGroup: "properties",
   },
   {
     id: "paged.layers",
-    title: "Layers",
+    get title() {
+      return t(M.layers);
+    },
     component: LayersPanel,
     defaultDock: "right",
     defaultGroup: "inspector",
@@ -771,7 +1012,9 @@ export const BUILT_IN_PANELS: PanelContribution[] = [
     // leaf wrapping `useDocumentMeta()`. Per the
     // `docs/design/panel-catalog.md` §6 Tier 5 + §5.6.
     id: "paged.info",
-    title: "Info",
+    get title() {
+      return t(M.info);
+    },
     component: InfoPanel,
     defaultDock: "right",
     defaultGroup: "inspector",
@@ -781,7 +1024,9 @@ export const BUILT_IN_PANELS: PanelContribution[] = [
     // is the Nonprinting toggle. Per `panel-catalog-and-sdk-
     // extension.md` §6 Tier 5.
     id: "paged.attributes",
-    title: "Attributes",
+    get title() {
+      return t(M.attributes);
+    },
     component: AttributesPanel,
     defaultDock: "right",
     defaultGroup: "inspector",
@@ -793,7 +1038,9 @@ export const BUILT_IN_PANELS: PanelContribution[] = [
     // (element scope) and Character + Paragraph (content scope)
     // conditionally on selection state.
     id: "paged.properties",
-    title: "Properties",
+    get title() {
+      return t(M.properties);
+    },
     component: PropertiesPanel,
     defaultDock: "right",
     defaultGroup: "properties",
@@ -802,7 +1049,9 @@ export const BUILT_IN_PANELS: PanelContribution[] = [
     // ADR 221 — the one place Claude works: Ask (diagnosis, suggestions,
     // requests), New document from a brief, and each run's progress.
     id: "paged.ai-assistant",
-    title: "AI Assistant",
+    get title() {
+      return t(M.aiAssistant);
+    },
     component: AIAssistant,
     defaultDock: "right",
     defaultGroup: "properties",
@@ -813,7 +1062,9 @@ export const BUILT_IN_PANELS: PanelContribution[] = [
     // layout). Per `docs/design/panel-catalog.md` §6
     // Tier 6.
     id: "paged.control",
-    title: "Control",
+    get title() {
+      return t(M.control);
+    },
     component: ControlPanel,
     defaultDock: "bottom",
     defaultGroup: "chrome",
@@ -821,7 +1072,9 @@ export const BUILT_IN_PANELS: PanelContribution[] = [
   {
     id: "paged.repl",
     devOnly: true,
-    title: "REPL",
+    get title() {
+      return t(M.repl);
+    },
     component: ReplPanel,
     defaultDock: "bottom",
     defaultGroup: "console",
@@ -830,7 +1083,9 @@ export const BUILT_IN_PANELS: PanelContribution[] = [
     // A designer surface since the Ask bar (ADR 221): Claude writes the
     // script, so it no longer takes a developer to use it.
     id: "paged.script-editor",
-    title: "Script",
+    get title() {
+      return t(M.scriptEditor);
+    },
     component: ScriptEditorPanel,
     defaultDock: "bottom",
     defaultGroup: "console",
@@ -841,7 +1096,9 @@ export const BUILT_IN_PANELS: PanelContribution[] = [
     // automation family (Illustrator's "scripting / actions / plugins"
     // row); the recorder itself lives in the shell, above the dock.
     id: "paged.actions",
-    title: "Actions",
+    get title() {
+      return t(M.actions);
+    },
     component: ActionsPanel,
     defaultDock: "right",
     defaultGroup: "console",
@@ -849,7 +1106,9 @@ export const BUILT_IN_PANELS: PanelContribution[] = [
   },
   {
     id: "paged.keyboard-shortcuts",
-    title: "Keyboard shortcuts",
+    get title() {
+      return t(M.keyboardShortcuts);
+    },
     component: KeyboardShortcutsPanel,
     defaultDock: "right",
     defaultGroup: "workspace",
@@ -859,7 +1118,9 @@ export const BUILT_IN_PANELS: PanelContribution[] = [
     // `host.diagnostics` from EVERY loaded bundle via the injected
     // sink (problems-store), not just inline in a plugin's own panel.
     id: "paged.problems",
-    title: "Problems",
+    get title() {
+      return t(M.problems);
+    },
     component: ProblemsPanel,
     defaultDock: "bottom",
     defaultGroup: "console",
@@ -870,7 +1131,9 @@ export const BUILT_IN_PANELS: PanelContribution[] = [
     // together: Problems is what is wrong with the DOCUMENT, the journal is
     // what the PROGRAM did. Nothing here is ever transmitted.
     id: "paged.journal",
-    title: "Journal",
+    get title() {
+      return t(M.journal);
+    },
     component: JournalPanel,
     defaultDock: "bottom",
     defaultGroup: "console",
@@ -880,7 +1143,9 @@ export const BUILT_IN_PANELS: PanelContribution[] = [
     // version; restore commits an old one again on top) and every document
     // kept in the browser's private file system.
     id: "paged.library",
-    title: "Library",
+    get title() {
+      return t(M.library);
+    },
     component: LibraryPanel,
     defaultDock: "right",
   },
@@ -895,7 +1160,9 @@ export const BUILT_IN_PANELS: PanelContribution[] = [
     // row/column, driven by the table cell selection. Cell text edit
     // and row/col counts remain engine-v1 gaps (noted in-panel).
     id: "paged.table",
-    title: "Table",
+    get title() {
+      return t(M.table);
+    },
     component: TablePanel,
     defaultDock: "right",
     defaultGroup: "text",
@@ -905,7 +1172,9 @@ export const BUILT_IN_PANELS: PanelContribution[] = [
     // W2.4 — LIVE: the stop editor rides the whole-list
     // `paragraphTabStops` path (protocol v28).
     id: "paged.tabs",
-    title: "Tabs",
+    get title() {
+      return t(M.tabs);
+    },
     component: TabsPanel,
     defaultDock: "right",
     defaultGroup: "text",
@@ -915,7 +1184,9 @@ export const BUILT_IN_PANELS: PanelContribution[] = [
     // PARTIALLY LIVE — the glyph grid inserts via insertText at
     // the caret; font scope awaits the font registry.
     id: "paged.glyphs",
-    title: "Glyphs",
+    get title() {
+      return t(M.glyphs);
+    },
     component: GlyphsPanel,
     defaultDock: "right",
     defaultGroup: "text",
@@ -926,7 +1197,9 @@ export const BUILT_IN_PANELS: PanelContribution[] = [
     // format ride the v28 list-authoring text paths; list
     // definitions / level / position remain seams.
     id: "paged.bullets-numbering",
-    title: "Bullets & Numbering",
+    get title() {
+      return t(M.bulletsNumbering);
+    },
     component: BulletsPanel,
     defaultDock: "right",
     defaultGroup: "text",
@@ -937,7 +1210,9 @@ export const BUILT_IN_PANELS: PanelContribution[] = [
     // anchored into a text story (the W1.16 AnchoredObjectSetting
     // surface). Non-anchored selection states it honestly.
     id: "paged.anchored",
-    title: "Anchored Object",
+    get title() {
+      return t(M.anchored);
+    },
     component: AnchoredPanel,
     defaultDock: "right",
     defaultGroup: "object",
@@ -947,7 +1222,9 @@ export const BUILT_IN_PANELS: PanelContribution[] = [
     // Per-object alt text / tagged-PDF role / EPUB conversion —
     // the accessible-output surface (in scope per the parity doc).
     id: "paged.object-export",
-    title: "Object Export Options",
+    get title() {
+      return t(M.objectExport);
+    },
     component: ObjectExportPanel,
     defaultDock: "right",
     defaultGroup: "output",
@@ -957,7 +1234,9 @@ export const BUILT_IN_PANELS: PanelContribution[] = [
     // Style → HTML tag/CSS class/PDF tag mapping for EPUB + tagged
     // PDF.
     id: "paged.export-tagging",
-    title: "Export Tagging",
+    get title() {
+      return t(M.exportTagging);
+    },
     component: ExportTaggingPanel,
     defaultDock: "right",
     defaultGroup: "output",

@@ -31,12 +31,14 @@ import {
 
 import { appCatalogRegistry } from "./catalog-registry";
 import { textWrapComposition } from "./text-wrap.composition";
+import { useStrings } from "@paged-media/strings";
 
 export function TextWrapPanel() {
+  const strings = useStrings();
   return (
     <CatalogRegistryProvider registry={appCatalogRegistry()}>
       <div className="p-3" data-text-wrap-panel="ready">
-        <CompositionRenderer composition={textWrapComposition} />
+        <CompositionRenderer composition={textWrapComposition(strings)} />
       </div>
     </CatalogRegistryProvider>
   );

@@ -42,33 +42,44 @@ import {
   PAGED_LAYOUT_SECTION,
   asPropertyFields,
 } from "@paged-media/shell";
+import { defineMessages, type Strings } from "@paged-media/strings";
+
+const M = defineMessages("app.bulletsNumberingComposition", {
+  bulletsNumbering: "Bullets & numbering",
+  listType: "List type",
+  none: "None",
+  bullet: "Bullet",
+  number: "Number",
+});
 
 // ADR 323 — every live field is a schema-driven `PropertyField`: the
 // type comes from the target's schema row, reads/writes go through
 // `host.objects` (one batch = one undo step over a multi-selection), and
 // each field offers "Bind to data…" with a binding badge. Seams stay seams.
-export const bulletsNumberingComposition: CompositionNode = asPropertyFields({
-  catalogId: PAGED_LAYOUT_SECTION,
-  props: { title: "Bullets & numbering", heading: false },
-  bindings: {},
-  children: [
-    {
-      catalogId: PAGED_INPUT_TOGGLE_GROUP,
-      props: {
-        label: "List type",
-        options: [
-          { value: "NoList", label: "None" },
-          { value: "BulletList", label: "Bullet" },
-          { value: "NumberedList", label: "Number" },
-        ],
-      },
-      bindings: {
-        value: {
-          kind: "selectionProperty",
-          scope: "content",
-          path: "paragraphListType",
+export function bulletsNumberingComposition(strings: Strings): CompositionNode {
+  return asPropertyFields({
+    catalogId: PAGED_LAYOUT_SECTION,
+    props: { title: strings.t(M.bulletsNumbering), heading: false },
+    bindings: {},
+    children: [
+      {
+        catalogId: PAGED_INPUT_TOGGLE_GROUP,
+        props: {
+          label: strings.t(M.listType),
+          options: [
+            { value: "NoList", label: strings.t(M.none) },
+            { value: "BulletList", label: strings.t(M.bullet) },
+            { value: "NumberedList", label: strings.t(M.number) },
+          ],
+        },
+        bindings: {
+          value: {
+            kind: "selectionProperty",
+            scope: "content",
+            path: "paragraphListType",
+          },
         },
       },
-    },
-  ],
-});
+    ],
+  });
+}

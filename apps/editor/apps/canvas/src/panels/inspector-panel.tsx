@@ -57,11 +57,27 @@ import type {
   PropertyPath,
   Value,
 } from "@paged-media/client";
+import { defineMessages, useStrings, type Strings } from "@paged-media/strings";
+
+const M = defineMessages("app.inspectorPanel", {
+  empty: "Select an element to inspect.",
+  loading: "Loading…",
+  filter: "Filter properties",
+  footer: "element {id} · re-fetched on mutation",
+  unsupported: "unsupported: {type}",
+  bounds: "Bounds",
+  transform: "Transform",
+  fill: "Fill",
+  stroke: "Stroke",
+  weight: "Weight",
+  opacity: "Opacity",
+});
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type PanelProps = any;
 
 export function InspectorPanel(_: PanelProps) {
+  const strings = useStrings();
   const client = useCanvasClient();
   const { elementSelection } = useSelection();
   const target = elementSelection.length === 1 ? elementSelection[0] : null;
@@ -131,7 +147,7 @@ export function InspectorPanel(_: PanelProps) {
   if (!target) {
     return (
       <div className="p-3 text-sm text-muted-foreground" data-inspector="empty">
-        Select an element to inspect.
+        {strings.t(M.empty)}
       </div>
     );
   }
@@ -141,7 +157,7 @@ export function InspectorPanel(_: PanelProps) {
         className="p-3 text-sm text-muted-foreground"
         data-inspector="loading"
       >
-        Loading…
+        {strings.t(M.loading)}
       </div>
     );
   }
@@ -151,7 +167,7 @@ export function InspectorPanel(_: PanelProps) {
     ? props.entries.filter(
         (e) =>
           e.path.toLowerCase().includes(q) ||
-          labelForPath(e.path).toLowerCase().includes(q),
+          labelForPath(strings, e.path).toLowerCase().includes(q),
       )
     : props.entries;
 
@@ -178,7 +194,7 @@ export function InspectorPanel(_: PanelProps) {
         style={{ background: "var(--pg-muted)" }}
       >
         <input
-          placeholder="Filter properties"
+          placeholder={strings.t(M.filter)}
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
           data-inspector-filter
@@ -191,7 +207,7 @@ export function InspectorPanel(_: PanelProps) {
             <div key={entry.path} data-property={entry.path} data-schema="row">
               <PropertyField
                 path={entry.path}
-                label={labelForPath(entry.path)}
+                label={labelForPath(strings, entry.path)}
               />
             </div>
           ) : (
@@ -204,7 +220,7 @@ export function InspectorPanel(_: PanelProps) {
         )}
       </div>
       <div className="pg-value text-[10px] text-muted-foreground pt-2 border-t border-input">
-        element {idText} · re-fetched on mutation
+        {strings.t(M.footer, { id: idText })}
       </div>
     </div>
   );
@@ -228,6 +244,7 @@ function PropertyRow(props: {
   onCommit: (next: Value) => void;
 }) {
   const { entry, onCommit } = props;
+  const strings = useStrings();
   return (
     <div
       className="grid grid-cols-[8rem_1fr] items-center gap-2"
@@ -235,7 +252,7 @@ function PropertyRow(props: {
       data-schema="none"
     >
       <label className="text-xs text-muted-foreground">
-        {labelForPath(entry.path)}
+        {labelForPath(strings, entry.path)}
       </label>
       {entry.value === null || entry.value === undefined ? (
         // SDK Phase 3 — `PropertyEntry.value: Option<Value>` lands a
@@ -255,6 +272,7 @@ function PropertyRow(props: {
 
 function ValueEditor(props: { value: Value; onCommit: (v: Value) => void }) {
   const { value, onCommit } = props;
+  const strings = useStrings();
   switch (value.type) {
     case "bounds":
       return (
@@ -288,7 +306,7 @@ function ValueEditor(props: { value: Value; onCommit: (v: Value) => void }) {
     default:
       return (
         <span className="text-xs text-muted-foreground">
-          (unsupported: {value.type})
+          ({strings.t(M.unsupported, { type: value.type })})
         </span>
       );
   }
@@ -328,20 +346,20 @@ function TransformEditor(props: {
   );
 }
 
-function labelForPath(path: PropertyPath): string {
+function labelForPath(strings: Strings, path: PropertyPath): string {
   switch (path) {
     case "frameBounds":
-      return "Bounds";
+      return strings.t(M.bounds);
     case "frameTransform":
-      return "Transform";
+      return strings.t(M.transform);
     case "frameFillColor":
-      return "Fill";
+      return strings.t(M.fill);
     case "frameStrokeColor":
-      return "Stroke";
+      return strings.t(M.stroke);
     case "frameStrokeWeight":
-      return "Weight";
+      return strings.t(M.weight);
     case "frameOpacity":
-      return "Opacity";
+      return strings.t(M.opacity);
     default:
       return path;
   }

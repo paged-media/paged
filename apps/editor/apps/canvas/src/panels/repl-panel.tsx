@@ -28,8 +28,18 @@
 import { useRef, useState } from "react";
 
 import { useCanvasClient } from "@paged-media/shell";
+import { defineMessages, useStrings } from "@paged-media/strings";
 
 import { parseLine, type ParsedCommand } from "../repl/parser";
+
+// The panel's chrome. The log itself (the parsed command and the
+// dispatch outcome) is the REPL's own output and stays as it prints.
+const M = defineMessages("app.replPanel", {
+  try: "Try",
+  or: "or",
+  placeholder: "command…",
+  run: "run",
+});
 
 interface LogEntry {
   prompt: string;
@@ -40,6 +50,7 @@ interface LogEntry {
 type PanelProps = any;
 
 export function ReplPanel(_: PanelProps) {
+  const strings = useStrings();
   const client = useCanvasClient();
   const [draft, setDraft] = useState("");
   const [log, setLog] = useState<LogEntry[]>([]);
@@ -101,11 +112,11 @@ export function ReplPanel(_: PanelProps) {
       >
         {log.length === 0 && (
           <div className="text-muted-foreground text-xs">
-            Try{" "}
+            {strings.t(M.try)}{" "}
             <code className="bg-muted px-1 rounded">
               inspect textFrame:ua365e1
             </code>{" "}
-            or{" "}
+            {strings.t(M.or)}{" "}
             <code className="bg-muted px-1 rounded">
               set textFrame:ua365e1 frameOpacity length:50
             </code>
@@ -137,7 +148,7 @@ export function ReplPanel(_: PanelProps) {
               submit();
             }
           }}
-          placeholder="command…"
+          placeholder={strings.t(M.placeholder)}
           className="flex-1 px-2 py-1 bg-background outline-none focus:ring-1 focus:ring-ring"
           data-repl-input
         />
@@ -147,7 +158,7 @@ export function ReplPanel(_: PanelProps) {
           className="px-2 py-1 rounded hover:bg-muted/60"
           data-repl-submit
         >
-          run
+          {strings.t(M.run)}
         </button>
       </div>
     </div>
