@@ -106,7 +106,6 @@ export function FrameSurfaceHost(props: FrameSurfaceHostProps) {
       onPointerCancel={stop}
       onDoubleClick={stop}
       onContextMenu={stop}
-
     >
       <Render
         elementId={elementId}

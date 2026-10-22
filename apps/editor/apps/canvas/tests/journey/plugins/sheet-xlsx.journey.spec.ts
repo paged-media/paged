@@ -215,7 +215,9 @@ test.describe("journey · paged.sheet xlsx round-trip", () => {
     await page.mouse.dblclick(at!.x, at!.y);
     await expect(breadcrumb).toBeVisible({ timeout: 10_000 });
     await page.waitForTimeout(800);
-    await expectGridSurfaceDrawn(page, (a, b) => designer.renderDiffPixels(a, b));
+    await expectGridSurfaceDrawn(page, (a, b) =>
+      designer.renderDiffPixels(a, b),
+    );
     void before;
     await page.keyboard.press("Escape");
     await expect(breadcrumb).toHaveCount(0);

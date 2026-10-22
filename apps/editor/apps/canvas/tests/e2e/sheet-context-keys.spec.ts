@@ -359,18 +359,22 @@ test.describe("sheet frame — keys and wheel reach the active edit context", ()
         const c = await elementScreenCenter(page, frame);
         return [box.x + box.width / 2 - c.x, box.y + box.height / 2 - c.y];
       };
-      for (const off of await centred()) expect(Math.abs(off)).toBeLessThanOrEqual(1);
+      for (const off of await centred())
+        expect(Math.abs(off)).toBeLessThanOrEqual(1);
       // Through a zoom the surface stays on the frame.
       await page.keyboard.down(MOD);
       await page.mouse.wheel(0, -240);
       await page.keyboard.up(MOD);
       await page.waitForTimeout(400);
-      for (const off of await centred()) expect(Math.abs(off)).toBeLessThanOrEqual(1);
+      for (const off of await centred())
+        expect(Math.abs(off)).toBeLessThanOrEqual(1);
       // The keys are the surface's: the grid's cell badge follows an arrow.
       await surface.click();
       const badge = await cellRef(page).textContent();
       await page.keyboard.press("ArrowDown");
-      await expect(cellRef(page)).not.toHaveText(badge ?? "", { timeout: 5_000 });
+      await expect(cellRef(page)).not.toHaveText(badge ?? "", {
+        timeout: 5_000,
+      });
       // A plain wheel scrolls the grid, not the canvas.
       const camera = () =>
         page.evaluate(() =>
@@ -381,7 +385,9 @@ test.describe("sheet frame — keys and wheel reach the active edit context", ()
       await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2);
       await page.mouse.wheel(0, 200);
       await page.waitForTimeout(300);
-      expect(await camera(), "a wheel the grid uses does not pan").toEqual(before);
+      expect(await camera(), "a wheel the grid uses does not pan").toEqual(
+        before,
+      );
       void at;
     });
 

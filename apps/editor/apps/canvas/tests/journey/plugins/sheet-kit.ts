@@ -335,7 +335,10 @@ export async function expectGridSurfaceDrawn(
   minPixels = 64,
 ): Promise<number> {
   const surface = page.locator('[data-testid="sheet-frame-surface"]');
-  await expect(surface, "the entered sheet frame shows its grid surface").toBeVisible({
+  await expect(
+    surface,
+    "the entered sheet frame shows its grid surface",
+  ).toBeVisible({
     timeout: 10_000,
   });
   const box = await surface.boundingBox();
@@ -352,18 +355,25 @@ export async function expectGridSurfaceDrawn(
       async () => {
         const withGrid = await page.screenshot({ clip });
         await page.evaluate(() => {
-          const el = document.querySelector<HTMLElement>("[data-paged-frame-surface]");
+          const el = document.querySelector<HTMLElement>(
+            "[data-paged-frame-surface]",
+          );
           if (el) el.style.visibility = "hidden";
         });
         const without = await page.screenshot({ clip });
         await page.evaluate(() => {
-          const el = document.querySelector<HTMLElement>("[data-paged-frame-surface]");
+          const el = document.querySelector<HTMLElement>(
+            "[data-paged-frame-surface]",
+          );
           if (el) el.style.visibility = "";
         });
         changed = await diff(new Uint8Array(without), new Uint8Array(withGrid));
         return changed;
       },
-      { timeout: 15_000, message: `the grid surface should differ from the page by >${minPixels}px` },
+      {
+        timeout: 15_000,
+        message: `the grid surface should differ from the page by >${minPixels}px`,
+      },
     )
     .toBeGreaterThan(minPixels);
   return changed;

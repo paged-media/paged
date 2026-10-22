@@ -76,7 +76,9 @@ test.describe("journey · paged.sheet render output", () => {
     const gridPx = await expectGridSurfaceDrawn(page, (a, b) =>
       designer.renderDiffPixels(a, b),
     );
-    expect(gridPx, "the in-frame grid is drawn over the frame").toBeGreaterThan(64);
+    expect(gridPx, "the in-frame grid is drawn over the frame").toBeGreaterThan(
+      64,
+    );
     void afterLower;
     await exitSheet(page);
 
