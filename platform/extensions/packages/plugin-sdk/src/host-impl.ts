@@ -140,6 +140,11 @@ import { documentChangeOf } from "./document-change.js";
 import { FALLBACK_WIDGETS } from "./widgets-fallback.js";
 import { makeSchemaPanelComponent } from "./schema-panel.js";
 import { mapBacking } from "./testing.js";
+import {
+  englishStrings,
+  stringsSurface,
+  type StringsBacking,
+} from "./strings.js";
 
 /** The reply envelope `client.mutate` resolves with. */
 type MutateReply = Awaited<ReturnType<PagedEditor["client"]["mutate"]>>;
@@ -1205,6 +1210,10 @@ export interface CreateBundleHostOptions {
    *  absent, the host builds a PRIVATE registry (core + this bundle's own
    *  kinds) and `supports("objects.shared@1")` is false. */
   objects?: ObjectRegistry;
+  /** Host-provided WORDS (extensions ADR 333): the editor's catalogue in its
+   *  language. When absent, `host.strings` answers each bundle's English and
+   *  `supports("strings@1")` is false. */
+  strings?: StringsBacking;
   /** Console sink override.
    *
    *  Originally a test hook, and now ALSO the production capture point: the
@@ -4748,9 +4757,15 @@ export function createBundleHost(
     },
   };
   if (options?.objects) featureSet.add("objects.shared@1");
+  if (options?.strings) featureSet.add("strings@1");
+  const strings = stringsSurface(
+    manifest,
+    options?.strings ?? englishStrings(),
+  );
 
   const host: BundleHost = {
     manifest,
+    strings,
     log,
     contribute,
     document,
