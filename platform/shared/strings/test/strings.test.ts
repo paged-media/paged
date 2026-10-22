@@ -26,6 +26,7 @@ import {
   activeStrings,
   createStrings,
   defineMessages,
+  defineTranslations,
   englishSource,
   format,
   loadLocale,
@@ -108,5 +109,16 @@ describe("strings", () => {
     });
     expect(missing.problem).toMatch(/no fr catalogue/);
     expect(missing.strings.t(M.only)).toBe("Only in English");
+  });
+});
+
+describe("translations a package registers", () => {
+  test("join the shipped catalogue of their language", async () => {
+    const N = defineMessages("test2", { hi: "Hi" });
+    defineTranslations("de", { [N.hi]: "Servus" });
+    expect((await loadLocale("de")).strings.t(N.hi)).toBe("Servus");
+    expect(() => defineTranslations("de", { [N.hi]: "Hallo" })).toThrow(
+      /translated twice/,
+    );
   });
 });
