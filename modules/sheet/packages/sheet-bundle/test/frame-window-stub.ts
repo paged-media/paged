@@ -25,7 +25,10 @@ import type { FrameWindow, FrameWindowSpec } from "../../sheet-host-model/src";
 const COL_PT = 44.2575;
 const ROW_PT = 15;
 
-export function stubFrameWindow(_sheet: number, spec: FrameWindowSpec): FrameWindow {
+export function stubFrameWindow(
+  _sheet: number,
+  spec: FrameWindowSpec,
+): FrameWindow {
   const nCols = Math.max(1, Math.floor(spec.widthPt / COL_PT));
   const nRows = Math.max(1, Math.floor(spec.heightPt / ROW_PT));
   const cols = Array.from({ length: nCols }, (_, i) => spec.leftCol + i);

@@ -2044,7 +2044,11 @@ impl SheetSession {
                 "sheet id {sheet} out of range ({sheet_count} sheets)"
             )));
         }
-        Ok(sheet_grid::frame_window(self.engine().model(), sheet, &spec))
+        Ok(sheet_grid::frame_window(
+            self.engine().model(),
+            sheet,
+            &spec,
+        ))
     }
 
     /// Record the sheets-mode selection rectangle for `sheet`, consumed by the

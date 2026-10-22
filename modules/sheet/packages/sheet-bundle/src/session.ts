@@ -915,13 +915,18 @@ export function createWorkbookSession(
     let binding: ReturnType<typeof parseBinding> = null;
     try {
       binding = parseBinding(
-        await host.document.getMetadata({ kind: "textFrame", id: frameId } as ElementId),
+        await host.document.getMetadata({
+          kind: "textFrame",
+          id: frameId,
+        } as ElementId),
       );
     } catch (err) {
       host.log.debug("showGridInFrame: binding read failed", err);
     }
     if (!binding) return { row: 0, col: 0 };
-    const sheet = state.engine.listSheets().find((x) => x.name === binding.data.sheet);
+    const sheet = state.engine
+      .listSheets()
+      .find((x) => x.name === binding.data.sheet);
     if (!sheet) return { row: 0, col: 0 };
     if (state.activeSheet !== sheet.id) {
       state.activeSheet = sheet.id;

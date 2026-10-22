@@ -122,7 +122,12 @@ describe("sheet_plugin_binding_metadata: rejects garbage", () => {
     };
     expect(parseBinding(dirty)).toEqual({
       v: 2,
-      data: { sheet: "S", range: "A1:B2", contentVersion: 3, ...migrated("A1:B2") },
+      data: {
+        sheet: "S",
+        range: "A1:B2",
+        contentVersion: 3,
+        ...migrated("A1:B2"),
+      },
     });
   });
 
@@ -146,7 +151,12 @@ describe("sheet_plugin_binding_metadata: rejects garbage", () => {
     };
     expect(parseBinding(bad)).toEqual({
       v: 2,
-      data: { sheet: "S", range: "A1:B2", contentVersion: 4, ...migrated("A1:B2") },
+      data: {
+        sheet: "S",
+        range: "A1:B2",
+        contentVersion: 4,
+        ...migrated("A1:B2"),
+      },
     });
   });
 
@@ -178,7 +188,10 @@ describe("sheet_plugin_binding_metadata: rejects garbage", () => {
 
 describe("sheet_frame_view_binding: v2 view, print, freeze, sizing (ADR 510)", () => {
   it("a v1 envelope reads as v2 with its range's top-left, locked, measured widths", () => {
-    const v1 = { v: 1, data: { sheet: "S", range: "$c$3:F9", contentVersion: 2 } };
+    const v1 = {
+      v: 1,
+      data: { sheet: "S", range: "$c$3:F9", contentVersion: 2 },
+    };
     expect(parseBinding(v1)?.data).toEqual({
       sheet: "S",
       range: "$c$3:F9",
@@ -224,7 +237,10 @@ describe("sheet_frame_view_binding: v2 view, print, freeze, sizing (ADR 510)", (
     expect(moved.data.view).toEqual({ topLeft: "D40", lock: false });
     expect(moved.data.table).toEqual(b.data.table);
     expect(moved.data.range).toBe("A1:B2");
-    expect(withView(moved, { view: { lock: true } }).data.view).toEqual({ topLeft: "D40", lock: true });
+    expect(withView(moved, { view: { lock: true } }).data.view).toEqual({
+      topLeft: "D40",
+      lock: true,
+    });
   });
 
   it("rangeTopLeft strips sheet prefixes and dollar signs", () => {

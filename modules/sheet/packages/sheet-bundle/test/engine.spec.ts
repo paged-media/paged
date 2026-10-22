@@ -239,7 +239,12 @@ describe("sheet_plugin_engine_boot: facade mapping", () => {
       engine.getGridScene(0, 0, 0, 480, 320, { includeGridlines: true }),
     ).toBe(scene);
     expect(
-      engine.getFrameWindow(0, { topRow: 2, leftCol: 1, widthPt: 100, heightPt: 31 }).rows,
+      engine.getFrameWindow(0, {
+        topRow: 2,
+        leftCol: 1,
+        widthPt: 100,
+        heightPt: 31,
+      }).rows,
     ).toEqual([2, 3]);
     engine.setGridSelection(0, 1, 2, 3, 4);
     expect(engine.listSheets()).toEqual([
@@ -301,7 +306,10 @@ describe("sheet_plugin_engine_boot: facade mapping", () => {
       320,
       { includeGridlines: true },
     ]);
-    expect(calls[9].args).toEqual([0, { topRow: 2, leftCol: 1, widthPt: 100, heightPt: 31 }]);
+    expect(calls[9].args).toEqual([
+      0,
+      { topRow: 2, leftCol: 1, widthPt: 100, heightPt: 31 },
+    ]);
     expect(calls[10].args).toEqual([0, 1, 2, 3, 4]);
     expect(calls[17].args).toEqual([0, 360, 240]); // get_chart_geometry
   });
