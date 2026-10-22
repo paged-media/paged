@@ -606,6 +606,45 @@ fn sheet_js_set_now_updates_clock() {
     assert!(!a2.display.is_empty());
 }
 
+// ── sheet.js.get_frame_window ───────────────────────────────────────────────
+
+/// `get_frame_window` answers the tracks a sheet frame shows (ADR 510) from
+/// its top-left cell and box, and rejects an unknown sheet id like the other
+/// sheet-addressed calls.
+#[test]
+fn sheet_js_get_frame_window_follows_the_top_left_cell() {
+    let s = SheetSession::new();
+    let w = s
+        .get_frame_window(
+            0,
+            sheet_grid::FrameWindowSpec {
+                top_row: 9,
+                left_col: 2,
+                width_pt: 100.0,
+                height_pt: 31.0,
+                freeze_rows: 0,
+                freeze_cols: 0,
+            },
+        )
+        .expect("window");
+    assert_eq!(w.rows, vec![9, 10]);
+    assert_eq!(w.cols, vec![2, 3]);
+    assert_eq!(w.partial_row, Some(11));
+    assert!(s
+        .get_frame_window(
+            7,
+            sheet_grid::FrameWindowSpec {
+                top_row: 0,
+                left_col: 0,
+                width_pt: 10.0,
+                height_pt: 10.0,
+                freeze_rows: 0,
+                freeze_cols: 0,
+            },
+        )
+        .is_err());
+}
+
 // ── sheet.js.get_grid_scene ─────────────────────────────────────────────────
 
 /// `get_grid_scene` windows a populated sheet: the viewport geometry, the

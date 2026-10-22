@@ -42,11 +42,18 @@ export {
 export {
   BINDING_KEY,
   BINDING_VERSION,
+  cellOfA1,
   contentHash,
   makeBinding,
   parseBinding,
+  rangeTopLeft,
+  withView,
   type Binding,
   type BindingData,
+  type BindingViewOptions,
+  type FramePrint,
+  type FrameSizing,
+  type FrameView,
   type TableRecord,
 } from "./binding";
 
@@ -115,6 +122,8 @@ export {
   viewportWidthPt,
   type GridCell,
   type GridCommentMarker,
+  type FrameWindow,
+  type FrameWindowSpec,
   type GridDataBar,
   type GridFreeze,
   type GridScene,

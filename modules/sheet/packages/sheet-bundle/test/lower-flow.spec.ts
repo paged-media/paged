@@ -24,6 +24,7 @@
 // explicit/runtime fallback. A fake host captures the mutate calls; a
 // fake engine returns a small LoweredContent.
 
+import { stubFrameWindow } from "./frame-window-stub";
 import { describe, expect, it, vi } from "bun:test";
 import { advanceTimersByTimeAsync } from "@paged-media/test-kit";
 
@@ -84,6 +85,7 @@ function fakeEngine(): SheetEngine {
     }),
     getRangeValues: () => [],
     paginate: () => [],
+    getFrameWindow: stubFrameWindow,
     getGridScene: () => ({
       viewport: {
         firstRow: 0,

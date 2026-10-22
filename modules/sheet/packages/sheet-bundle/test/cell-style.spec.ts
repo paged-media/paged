@@ -27,6 +27,7 @@
 // the routing (grid coords → lowered tableCell), the mutation sequence, and
 // the honest outcome.
 
+import { stubFrameWindow } from "./frame-window-stub";
 import { describe, expect, it } from "bun:test";
 
 import type {
@@ -81,6 +82,7 @@ function fakeEngine(): SheetEngine {
     getRangeStyled: () => LOWERED,
     getRangeValues: () => [],
     paginate: () => [],
+    getFrameWindow: stubFrameWindow,
     getGridScene: () => ({
       viewport: {
         firstRow: 0,
