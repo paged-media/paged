@@ -120,6 +120,7 @@ impl XlsxDocument {
                     CapturedSubtree {
                         anchor: Anchor::BeforeSheetData,
                         bytes,
+                        span: None,
                     },
                 );
             }

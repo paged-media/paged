@@ -16,7 +16,7 @@ it stood, for decisions made earlier; their status says so.
 | [500](500-own-calculation-engine.md) | The calculation engine is own-built and clean-room | Accepted, recorded retroactively 2026-10-02 |
 | [501](501-f64-numbers.md) | Numbers are f64 because Excel's are; exact decimal stays behind a seam | Accepted, recorded retroactively 2026-10-02 |
 | [502](502-recalculation-and-spill.md) | Recalculation: a range-keyed graph, deterministic order, spill by fixpoint | Accepted, recorded retroactively 2026-10-02 |
-| [503](503-xlsx-patched-not-regenerated.md) | XLSX is patched, never regenerated | Accepted, recorded retroactively 2026-10-02 |
+| [503](503-xlsx-patched-not-regenerated.md) | XLSX is patched, never regenerated | Accepted, recorded retroactively 2026-10-02; amended 2026-10-22 (worksheets patched row by row) |
 | [504](504-publishing-first-scope.md) | Publishing-first scope: pivots, validation and macros are preserved and never interpreted | Accepted, recorded retroactively 2026-10-02 |
 | [505](505-native-table-and-edit-grid.md) | A sheet on the page is a native table; editing happens in a scene-layer grid | Accepted, recorded retroactively 2026-10-02 |
 | [506](506-workbook-in-a-container-part.md) | The workbook is stored whole in a container part | Accepted, recorded retroactively 2026-10-02 |

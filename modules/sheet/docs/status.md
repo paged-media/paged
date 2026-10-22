@@ -106,7 +106,16 @@ each published canary added is under [Releases](#releases).
   formula is stored the way Excel stores a dynamic array (an array formula over its spill range,
   flagged by the `XLDAPR` cell metadata) and reloads as a live spill; Excel's own dynamic arrays
   load the same way. A workbook saved before that (each anchor a plain formula next to its
-  spilled values) reads those values back as the spill when they match.
+  spilled values) reads those values back as the spill when they match. An edited worksheet is
+  patched, not regenerated: rows and cells whose content did not change keep their bytes, a
+  changed cell keeps its start tag (`ph`, `vm`, unknown attributes) and a text cell that still
+  holds its shared string keeps the index, so rich-text runs survive. Hidden, styled and
+  outlined columns, row styles, outline levels and the `collapsed`/`thickTop`/`thickBot` flags
+  are read into the model (`RowMeta`, `ColMeta`) and written back; hidden columns are skipped
+  by the page lowering and the frame window like hidden rows. `listSheets` reports each tab's
+  `state` (`visible`, `hidden`, `veryHidden`), read-only. A rich-text string can be appended to
+  the shared-string table without renumbering it (`XlsxDocument::append_shared_string`); no
+  editing surface writes one yet.
 
 - **Object model.** On `main` and published since 0.1.0-canary.15. The contract is plugin-sdk's
   [`DESIGN.md`](https://github.com/paged-media/paged/blob/main/platform/extensions/DESIGN.md) §21, with the
@@ -170,8 +179,8 @@ each published canary added is under [Releases](#releases).
   (`[1]!Name`).
   `TREND` fits one regressor only. A typed date is stored as text.
 - **Locale.** The display locale is taken from the workbook's number formats on load.
-- **Saving an edited sheet** drops unknown attributes on its rows and cells and unknown elements
-  inside `<sheetData>`; unknown children of `<worksheet>` are kept.
+- **Saving an edited sheet** writes a new or changed literal text cell as an inline string
+  (`t="inlineStr"`), not into the shared-string table. A sheet's tab state cannot be changed.
 
 ## Not built
 

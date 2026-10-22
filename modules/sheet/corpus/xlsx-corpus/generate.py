@@ -930,6 +930,99 @@ def gen_13_comments():
     write_zip("13-comments.xlsx", members)
 
 
+def gen_15_saveloss():
+    """15: WHAT AN EDITED SHEET MUST NOT LOSE (W1.4). Rich-text shared strings
+    (runs with run properties), an inline rich string, hidden and styled and
+    outlined columns, row styles / outline levels / collapsed / thick borders /
+    hidden rows, the `x14ac:dyDescent` and `ph` attributes Paged does not
+    model, and two hidden sheets (`hidden`, `veryHidden`). The probe edits
+    one cell, saves, and checks every one of them is still there.
+    """
+    ns_x14ac = "http://schemas.microsoft.com/office/spreadsheetml/2009/9/ac"
+    ns_mc = "http://schemas.openxmlformats.org/markup-compatibility/2006"
+    sst = (
+        XML_DECL
+        + f'<sst xmlns="{NS_MAIN}" count="3" uniqueCount="3">'
+        "<si><t>plain</t></si>"
+        '<si><r><rPr><b/><sz val="11"/><color rgb="FFFF0000"/><rFont val="Calibri"/></rPr>'
+        '<t xml:space="preserve">Bold </t></r>'
+        '<r><rPr><i/><sz val="11"/><rFont val="Calibri"/></rPr><t>italic</t></r></si>'
+        "<si><t>moved</t></si>"
+        "</sst>"
+    )
+    rows = (
+        '<row r="1" spans="1:4" s="1" customFormat="1" x14ac:dyDescent="0.25">'
+        '<c r="A1" t="s"><v>0</v></c>'
+        '<c r="B1" t="s"><v>1</v></c>'
+        '<c r="C1" s="1" ph="1"><v>5</v></c>'
+        '<c r="D1" t="inlineStr"><is><r><rPr><b/></rPr><t>in</t></r><r><t>line</t></r></is></c>'
+        "</row>"
+        '<row r="2" spans="1:4" ht="20" customHeight="1" hidden="1" outlineLevel="1" x14ac:dyDescent="0.25">'
+        '<c r="A2"><v>1</v></c>'
+        "</row>"
+        '<row r="3" spans="1:4" collapsed="1" thickBot="1" x14ac:dyDescent="0.25">'
+        '<c r="A3"><f>A2*2</f><v>2</v></c>'
+        '<c r="B3" t="s"><v>2</v></c>'
+        "</row>"
+        '<row r="5" s="1" customFormat="1" x14ac:dyDescent="0.25"/>'
+    )
+    cols = (
+        '<col min="1" max="1" width="12.7109375" style="1" customWidth="1"/>'
+        '<col min="2" max="2" width="0" hidden="1" customWidth="1"/>'
+        '<col min="3" max="4" width="9.140625" outlineLevel="1" collapsed="1"/>'
+    )
+    sheet1 = (
+        XML_DECL
+        + f'<worksheet xmlns="{NS_MAIN}" xmlns:r="{NS_R}" xmlns:mc="{ns_mc}" '
+        f'mc:Ignorable="x14ac" xmlns:x14ac="{ns_x14ac}">'
+        '<sheetPr><outlinePr summaryBelow="0"/></sheetPr>'
+        '<dimension ref="A1:D3"/>'
+        '<sheetFormatPr defaultRowHeight="15" outlineLevelRow="1" outlineLevelCol="1" x14ac:dyDescent="0.25"/>'
+        "<cols>" + cols + "</cols>"
+        "<sheetData>" + rows + "</sheetData>"
+        '<pageMargins left="0.7" right="0.7" top="0.75" bottom="0.75" header="0.3" footer="0.3"/>'
+        "</worksheet>"
+    )
+    plain = ws("A1", '<row r="1"><c r="A1"><v>1</v></c></row>')
+    st = styles(cell_xfs=[
+        dict(numFmtId=0, fontId=0, fillId=0, borderId=0),
+        dict(numFmtId=0, fontId=1, fillId=2, borderId=0),
+    ])
+    wb = (
+        XML_DECL
+        + f'<workbook xmlns="{NS_MAIN}" xmlns:r="{NS_R}"><sheets>'
+        '<sheet name="Data" sheetId="1" r:id="rId1"/>'
+        '<sheet name="Hidden" sheetId="2" state="hidden" r:id="rId2"/>'
+        '<sheet name="Secret" sheetId="3" state="veryHidden" r:id="rId3"/>'
+        "</sheets></workbook>"
+    )
+    members = [
+        ("[Content_Types].xml", content_types([
+            ("/xl/workbook.xml", CT_WORKBOOK),
+            ("/xl/worksheets/sheet1.xml", CT_WORKSHEET),
+            ("/xl/worksheets/sheet2.xml", CT_WORKSHEET),
+            ("/xl/worksheets/sheet3.xml", CT_WORKSHEET),
+            ("/xl/sharedStrings.xml", CT_SHARED),
+            ("/xl/styles.xml", CT_STYLES),
+        ])),
+        ("_rels/.rels", root_rels()),
+        ("xl/workbook.xml", wb),
+        ("xl/_rels/workbook.xml.rels", workbook_rels([
+            ("rId1", RT_WORKSHEET, "worksheets/sheet1.xml"),
+            ("rId2", RT_WORKSHEET, "worksheets/sheet2.xml"),
+            ("rId3", RT_WORKSHEET, "worksheets/sheet3.xml"),
+            ("rId4", RT_SHARED, "sharedStrings.xml"),
+            ("rId5", RT_STYLES, "styles.xml"),
+        ])),
+        ("xl/worksheets/sheet1.xml", sheet1),
+        ("xl/worksheets/sheet2.xml", plain),
+        ("xl/worksheets/sheet3.xml", plain),
+        ("xl/sharedStrings.xml", sst),
+        ("xl/styles.xml", st),
+    ]
+    write_zip("15-saveloss.xlsx", members)
+
+
 def main():
     gen_01_minimal()
     gen_02_formulas()
@@ -944,6 +1037,7 @@ def main():
     gen_11_freeze()
     gen_12_datavalidation()
     gen_13_comments()
+    gen_15_saveloss()
 
 
 if __name__ == "__main__":
