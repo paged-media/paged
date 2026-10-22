@@ -224,7 +224,7 @@ export function activate(host: BundleHost): BundleHandle {
     return report;
   }
 
-  const model = contributeSlideObjectModel(host, { openDeck });
+  const model = contributeSlideObjectModel(host, { openDeck, exportDeck });
   if (model) disposers.push(() => model.dispose());
 
   // A deck document opened another way (File ▸ Open of a saved document,
@@ -260,6 +260,7 @@ export function activate(host: BundleHost): BundleHandle {
   // PPTX export: the deck the document was imported from, rewritten for
   // the document's slides (order, duplicates, deletions, hidden, notes).
   async function exportDeck() {
+    if (!host.supports("storage.parts@1")) return null;
     const original = await host.parts.read(SOURCE_PART);
     if (!original) {
       host.diagnostics.set(EXPORT_DIAGNOSTICS, [
@@ -293,7 +294,11 @@ export function activate(host: BundleHost): BundleHandle {
     const name =
       (meta as { documentName?: string }).documentName?.trim() ||
       "presentation";
-    return { bytes: out.bytes, fileName: `${name}.pptx` };
+    return {
+      bytes: out.bytes,
+      fileName: `${name}.pptx`,
+      diagnostics: out.diagnostics,
+    };
   }
 
   if (

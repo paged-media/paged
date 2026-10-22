@@ -21,7 +21,9 @@
         "maxBytes": 8388608
       }
     ],
-    "documents": { "open": true }
+    "documents": {
+      "open": true
+    }
   },
   "contributes": {
     "importers": ["media.paged.slide.importer.pptx"],
@@ -35,13 +37,30 @@
       "media.paged.slide.panel.deck"
     ],
     "partTypes": [
-      { "type": "pptx", "role": "source", "format": "opc", "linkable": false },
-      { "type": "slideImport", "role": "derived", "format": "json" }
+      {
+        "type": "pptx",
+        "role": "source",
+        "format": "opc",
+        "linkable": false
+      },
+      {
+        "type": "slideImport",
+        "role": "derived",
+        "format": "json"
+      }
     ],
     "objectModel": {
       "kinds": [
-        { "kind": "deck", "title": "Deck", "schema": "schema/deck.json" },
-        { "kind": "slide", "title": "Slide", "schema": "schema/slide.json" },
+        {
+          "kind": "deck",
+          "title": "Deck",
+          "schema": "schema/deck.json"
+        },
+        {
+          "kind": "slide",
+          "title": "Slide",
+          "schema": "schema/slide.json"
+        },
         {
           "kind": "layout",
           "title": "Slide layout",
@@ -65,6 +84,28 @@
           "title": "Open a PowerPoint deck",
           "args": "schema/import-pptx.args.json",
           "result": "schema/import-pptx.result.json"
+        },
+        {
+          "id": "media.paged.slide.duplicateSlide",
+          "title": "Duplicate slide",
+          "args": "schema/duplicate-slide.args.json",
+          "result": "schema/duplicate-slide.result.json"
+        },
+        {
+          "id": "media.paged.slide.exportPptx",
+          "title": "Export as a PowerPoint deck",
+          "args": "schema/export-pptx.args.json",
+          "result": "schema/export-pptx.result.json"
+        }
+      ],
+      "templateFields": [
+        {
+          "kind": "media.paged.slide.placeholderText",
+          "title": "Slide placeholder text"
+        },
+        {
+          "kind": "media.paged.slide.visibility",
+          "title": "Slide shown"
         }
       ]
     }
