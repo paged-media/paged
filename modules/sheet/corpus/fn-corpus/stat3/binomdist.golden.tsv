@@ -1,0 +1,9 @@
+# BINOMDIST(number_s,trials,probability_s,cumulative) - legacy.
+# id	formula	setup	expected
+bnl-0	=BINOMDIST(6,10,0.5,FALSE)	-	0.205078125
+bnl-1	=BINOMDIST(6,10,0.5,TRUE)	-	0.828125
+bnl-2	=BINOMDIST(0,10,0.3,FALSE)	-	0.0282475249
+bnl-3	=BINOMDIST(50,100,0.5,TRUE)	-	0.539794618693589
+bnl-4	=BINOMDIST(11,10,0.5,TRUE)	-	#NUM!
+bnl-5	=BINOMDIST(3,10,-0.5,TRUE)	-	#NUM!
+bnl-6	=BINOMDIST("x",10,0.5,TRUE)	-	#VALUE!

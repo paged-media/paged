@@ -31,6 +31,15 @@
 //! `Document fonts/`, `Instructions.txt` and `<name> Report.txt`. A face
 //! whose licence says Restricted (OS/2 `fsType` 2) is not copied and the
 //! report says why.
+//!
+//! Beside them, `<name>.paged`: the whole document, with the module
+//! content (the container's `paged/` parts: a sheet, a drawing, a web
+//! frame) an IDML cannot carry. It is written by default because a
+//! package is the document's archive, and leaving the only lossless copy
+//! out would turn the report's "not carried" list into a loss;
+//! `--no-paged` leaves it out for a printer who wants the IDML alone.
+//! Its links keep the document's own spelling; the IDML's are the ones
+//! pointed into `Links/`. `paged-node package` writes the same folder.
 
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
@@ -47,14 +56,21 @@ use crate::options::DocumentOptions;
 pub const FONTS_DIR: &str = "Document fonts";
 /// The folder InDesign's package writes the links into.
 pub const LINKS_DIR: &str = "Links";
+/// The container's own native model part: not module content.
+const CORE_PARTS: &str = "paged/core/";
 
-pub fn run(
-    doc: &Path,
-    opts: &DocumentOptions,
-    out: &Path,
-    instructions: Option<&str>,
-    json_out: bool,
-) -> Result<()> {
+/// What `paged package` writes besides the IDML package.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct PackageOptions<'a> {
+    /// Text for `Instructions.txt`, instead of the default note.
+    pub instructions: Option<&'a str>,
+    /// Leave out `<name>.paged`.
+    pub no_paged: bool,
+    /// Print the report as JSON.
+    pub json: bool,
+}
+
+pub fn run(doc: &Path, opts: &DocumentOptions, out: &Path, pkg: PackageOptions<'_>) -> Result<()> {
     if out.exists()
         && std::fs::read_dir(out)
             .with_context(|| format!("read {}", out.display()))?
@@ -78,7 +94,7 @@ pub fn run(
     let result = out
         .canonicalize()
         .with_context(|| format!("resolve {}", out.display()))
-        .and_then(|out| build(&mut session, doc, opts, &out, instructions, json_out));
+        .and_then(|out| build(&mut session, doc, opts, &out, pkg));
     if result.is_err() {
         // The folder was new or empty, so all it holds is this run's.
         if existed {
@@ -105,8 +121,7 @@ fn build(
     doc: &Path,
     opts: &DocumentOptions,
     out: &Path,
-    instructions: Option<&str>,
-    json_out: bool,
+    pkg: PackageOptions<'_>,
 ) -> Result<()> {
     let name = doc
         .file_stem()
@@ -131,6 +146,29 @@ fn build(
     let idml_path = out.join(format!("{name}.idml"));
     std::fs::write(&idml_path, idml.as_slice())
         .with_context(|| format!("write {}", idml_path.display()))?;
+
+    // The whole document, module content and all (see the module doc).
+    let paged_path = if pkg.no_paged {
+        None
+    } else {
+        let reply = session.send(MainToWorkerKind::ExportPaged {})?;
+        let bytes = expect_reply!(reply,
+            WorkerToMainKind::PagedExported { bytes } => bytes,
+            "export paged")?;
+        let path = out.join(format!("{name}.paged"));
+        std::fs::write(&path, bytes.as_slice())
+            .with_context(|| format!("write {}", path.display()))?;
+        Some(path)
+    };
+    let reply = session.send(MainToWorkerKind::ListPagedParts {
+        prefix: "paged/".into(),
+    })?;
+    let module_parts: Vec<String> = expect_reply!(reply,
+        WorkerToMainKind::PagedPartList { paths } => paths,
+        "list paged parts")?
+    .into_iter()
+    .filter(|p| !p.starts_with(CORE_PARTS))
+    .collect();
 
     let mut link_rows = Vec::new();
     for link in &links {
@@ -218,14 +256,18 @@ fn build(
         "fonts": font_rows,
         "inks": inks,
         "lost": lost,
+        "paged": paged_path.as_ref().map(|p| p.display().to_string()),
+        "moduleParts": module_parts,
     });
 
     std::fs::write(
         out.join("Instructions.txt"),
-        instructions.unwrap_or(
+        pkg.instructions.unwrap_or(
             "Open the .idml in this folder. Its images link into Links/; install \
              the faces in Document fonts/ (or make them available to the \
-             application) before opening.\n",
+             application) before opening. The .paged file is the whole \
+             document, with the module content an IDML cannot carry; open it \
+             in paged.\n",
         ),
     )?;
     std::fs::write(
@@ -233,7 +275,7 @@ fn build(
         report_text(&name, &report),
     )?;
 
-    if json_out {
+    if pkg.json {
         println!("{}", serde_json::to_string_pretty(&report)?);
     } else {
         print!("{}", report_text(&name, &report));
@@ -374,12 +416,44 @@ fn report_text(name: &str, report: &Value) -> String {
         ));
     }
 
+    let paged = report["paged"].as_str().map(|p| {
+        Path::new(p)
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default()
+    });
     let lost = rows("lost");
     if !lost.is_empty() {
-        s.push_str(&format!("\nNot carried by IDML: {}\n", lost.len()));
+        s.push_str(&format!(
+            "\nNot carried by IDML: {}{}\n",
+            lost.len(),
+            paged
+                .as_ref()
+                .map(|p| format!(" (kept in {p})"))
+                .unwrap_or_default()
+        ));
         for l in &lost {
             s.push_str(&format!("  {}\n", l.as_str().unwrap_or("")));
         }
+    }
+    let parts = rows("moduleParts");
+    if !parts.is_empty() {
+        match &paged {
+            Some(p) => s.push_str(&format!(
+                "\nModule content: {} part(s), in {p} (IDML does not carry them)\n",
+                parts.len()
+            )),
+            None => s.push_str(&format!(
+                "\nModule content not carried by IDML: {} part(s) (left out: --no-paged)\n",
+                parts.len()
+            )),
+        }
+        for part in &parts {
+            s.push_str(&format!("  {}\n", part.as_str().unwrap_or("")));
+        }
+    }
+    if let Some(p) = &paged {
+        s.push_str(&format!("\nPaged document: {p} (the whole document)\n"));
     }
     s
 }

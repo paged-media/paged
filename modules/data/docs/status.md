@@ -244,8 +244,11 @@ Not done:
   drive the data through, so a script reaches every step: `importSource { bytes, fileName,
 name?, sheet? }` (CSV, TSV, JSON, Parquet or XLSX bytes as a source, the panel's import),
   `defineBinding { id, kind, query, … }` (a variable, image, barcode, visibility, table or
-  rule binding, the Bindings panel's own paths) and `planBatch { query?, mode, by? }` (the
-  units of a per-record, per-group or one-catalogue batch, from the engine's batch plan).
+  rule binding, the Bindings panel's own paths), `defineProperty { id, selector, path,
+query, expr }` (an expression property binding, which `apply` writes with the session
+  bindings: `paged-node apply` sends a `property` binding with an `expr` here) and
+  `planBatch { query?, mode, by? }` (the units of a per-record, per-group or one-catalogue
+  batch, from the engine's batch plan).
   `merge` also takes `imageBase` and `imageFields` and answers `undoSteps` and
   `oversetRecords`, so a batch can merge one unit, write it and undo back to the template.
 

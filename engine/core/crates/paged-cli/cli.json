@@ -845,6 +845,20 @@
         },
         {
           "defaults": [],
+          "help": "Leave out `<name>.paged` (the whole document, with the module content IDML cannot carry)",
+          "long": "no-paged",
+          "name": "no_paged",
+          "positional": false,
+          "repeatable": false,
+          "required": false,
+          "short": null,
+          "takesValues": false,
+          "valueNames": [
+            "NO_PAGED"
+          ]
+        },
+        {
+          "defaults": [],
           "help": "Print the report as JSON instead of text",
           "long": "json",
           "name": "json",
@@ -928,7 +942,7 @@
           ]
         }
       ],
-      "longAbout": "Collect the document, its linked files and its fonts into one folder (InDesign's File ▸ Package).\n\nWrites `<name>.idml` with its links pointed into `Links/`, copies every linked file there, copies the faces of each used family from those given with `--fonts` / `--font-family` / `--font` into `Document fonts/` (a face whose licence restricts copying is listed, not copied), and writes `Instructions.txt` and `<name> Report.txt`. OUT must not exist or be empty.",
+      "longAbout": "Collect the document, its linked files and its fonts into one folder (InDesign's File ▸ Package).\n\nWrites `<name>.idml` with its links pointed into `Links/`, copies every linked file there, copies the faces of each used family from those given with `--fonts` / `--font-family` / `--font` into `Document fonts/` (a face whose licence restricts copying is listed, not copied), and writes `Instructions.txt`, `<name> Report.txt` and `<name>.paged`, the whole document with the module content IDML cannot carry. OUT must not exist or be empty.",
       "name": "package",
       "subcommands": []
     },

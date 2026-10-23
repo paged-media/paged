@@ -13,7 +13,9 @@ $ paged package doc.paged -o pkg2 --json --instructions 'Print on matte.'
       "status": "written"
     }
   ],
-  "lost": []
+  "lost": [],
+  "moduleParts": [],
+  "paged": "<TMP>/pkg2/doc.paged"
 }
 --- stderr
 (empty)

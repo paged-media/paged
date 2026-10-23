@@ -19,10 +19,14 @@
 // `apply`, `merge` and `generate` drive paged.data through its TYPED
 // commands only (plan G4), the way a script does: `importSource` reads the
 // file, a `query` object (host.objects) selects the records, `previewQuery`
-// counts them, `defineBinding` / `apply` place one record, `merge` runs
-// Data Merge, `planBatch` partitions the records into the units of a batch.
-// Nothing reaches into the bundle's session. The CLI's interim `property`
-// binding maps one record FIELD onto one (address|selector, path) through
+// counts them, `defineBinding` / `defineProperty` / `apply` place one
+// record, `merge` runs Data Merge, `planBatch` partitions the records into
+// the units of a batch. Nothing reaches into the bundle's session. A
+// `property` binding with an `expr` is paged.data's own property binding
+// (`defineProperty`, ADR 558): the engine evaluates the expression and
+// coerces it to the property's schema row. One with a `field` instead is
+// the CLI's shorthand: the record's text for that field, typed by the
+// schema row the way `set` types a value, all of them in ONE
 // `host.objects.batch`.
 
 import { readFileSync } from "node:fs";
@@ -36,16 +40,19 @@ import { parseCliValue } from "./values";
 import { normalizeAddress } from "@paged-media/plugin-sdk";
 
 export const DATA_PLUGIN = "media.paged.data";
-export const WAVE5 =
-  'needs Wave 5 (paged.data\'s universal Binding::Property with expressions, ADR 558) — use { "field": … } until then';
 
 const D = DATA_PLUGIN;
 const QUERY_ID = "records";
 const SOURCE = "data";
 /** The typed commands the verbs need; a bundle without them is too old. */
-const NEEDED = ["importSource", "previewQuery", "merge", "apply"].map(
-  (c) => `${D}.${c}`,
-);
+const NEEDED = [
+  "importSource",
+  "previewQuery",
+  "defineBinding",
+  "defineProperty",
+  "merge",
+  "apply",
+].map((c) => `${D}.${c}`);
 
 /** Fail unless the paged.data bundle is loaded with the typed commands the
  *  data verbs drive. */
@@ -305,8 +312,9 @@ const KIND_FIELDS: Record<string, readonly string[]> = {
 
 /**
  * Apply `file` against record `record` (0-based) of the loaded data:
- * session bindings through `media.paged.data.defineBinding` and
- * `media.paged.data.apply`, interim property bindings through ONE
+ * session bindings through `media.paged.data.defineBinding`, expression
+ * property bindings through `media.paged.data.defineProperty`, both applied
+ * by `media.paged.data.apply`; `field` property bindings through ONE
  * `host.objects.batch`.
  */
 export async function applyBindings(
@@ -324,9 +332,34 @@ export async function applyBindings(
   }> = [];
   for (const [i, b] of file.bindings.entries()) {
     const kind = b["kind"] as string;
+    if (kind === "property" && b["expr"] !== undefined) {
+      if (b["field"] !== undefined)
+        throw new CliError(
+          EXIT.usage,
+          `bindings[${i}] (property): give "expr" or "field", not both`,
+        );
+      const id =
+        typeof b["id"] === "string" ? (b["id"] as string) : `cli-property-${i}`;
+      const r = await dataCommand<{ ok: boolean; reason?: string }>(
+        s,
+        "defineProperty",
+        {
+          id,
+          selector: str(b, "target", i),
+          path: str(b, "path", i),
+          query: QUERY_ID,
+          expr: str(b, "expr", i),
+        },
+      );
+      if (!r.ok)
+        throw new CliError(
+          EXIT.failed,
+          `bindings[${i}] (property): ${r.reason ?? "refused"}`,
+        );
+      sessionIds.push(id);
+      continue;
+    }
     if (kind === "property") {
-      if (b["expr"] !== undefined)
-        throw new CliError(EXIT.failed, `bindings[${i}] property: ${WAVE5}`);
       property.push({
         i,
         target: str(b, "target", i),

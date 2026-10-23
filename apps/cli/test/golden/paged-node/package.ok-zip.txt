@@ -4,6 +4,8 @@ $ paged-node package <TMP>/fixture.paged -o <TMP>/pkg.zip --no-plugins
 {
   "package": "<TMP>/pkg.zip",
   "document": "<TMP>/pkg/fixture.idml",
+  "paged": "<TMP>/pkg/fixture.paged",
+  "moduleParts": [],
   "links": [],
   "fonts": [],
   "inks": [],
@@ -13,5 +15,6 @@ $ paged-node package <TMP>/fixture.paged -o <TMP>/pkg.zip --no-plugins
 (empty)
 # structure
 pkg/fixture.idml
+pkg/fixture.paged
 pkg/Instructions.txt
 pkg/fixture Report.txt
