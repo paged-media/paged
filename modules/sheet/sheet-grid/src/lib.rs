@@ -1696,6 +1696,7 @@ mod tests {
                         style: "thin".into(),
                         weight_pt: 0.75,
                         rgb: Some("#000000".into()),
+                        swatch: None,
                     }),
                     ..Default::default()
                 },

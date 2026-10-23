@@ -199,6 +199,23 @@
           }
         },
         {
+          "id": "media.paged.sheet.command.deleteChart",
+          "title": "Delete a chart",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "chart": {
+                "kind": "number",
+                "integer": true
+              }
+            }
+          },
+          "result": {
+            "kind": "number",
+            "integer": true
+          }
+        },
+        {
           "id": "media.paged.sheet.command.sheetFromDataset",
           "title": "Sheet from dataset",
           "args": {
@@ -490,6 +507,40 @@
           "result": {
             "kind": "number",
             "integer": true
+          }
+        },
+        {
+          "id": "media.paged.sheet.command.place",
+          "title": "Place on the page",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "source": {
+                "kind": "enum",
+                "members": ["range", "name", "printArea"],
+                "default": "range"
+              },
+              "ref": {
+                "kind": "text"
+              },
+              "chain": {
+                "kind": "text",
+                "optional": true
+              },
+              "repeatHeaderRows": {
+                "kind": "number",
+                "integer": true,
+                "default": 0
+              }
+            }
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {
+              "frame": {
+                "kind": "text"
+              }
+            }
           }
         },
         {

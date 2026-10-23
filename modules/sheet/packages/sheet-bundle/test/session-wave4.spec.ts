@@ -390,7 +390,11 @@ describe.skipIf(!built)(
       session.setRange("A1:A4");
       const r = await session.paginateSelection();
       expect(r).toEqual({ ok: true });
-      const inserts = mutations.filter((m) => m.op === "insertTable") as Array<{
+      // One batch (in-batch handles) or table by table: every table goes
+      // into the chain's story.
+      const inserts = mutations
+        .flatMap((m) => (m.op === "batch" ? m.args.ops : [m]))
+        .filter((m) => m.op === "insertTable") as Array<{
         args: { storyId: string };
       }>;
       expect(inserts.length).toBeGreaterThanOrEqual(1);

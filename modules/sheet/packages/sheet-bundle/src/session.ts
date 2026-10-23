@@ -73,8 +73,14 @@ import {
   forgetShownContent,
   lowerPaginatedToChain,
   lowerSelectionToFrame,
+  a1OfCell,
   pageContent,
+  placementContent,
   placementForContent,
+  placementWindow,
+  rangeFramePage,
+  refreshWantsReplace,
+  stampPlacedView,
   recallShownContent,
   refreshBands,
   refreshLoweredTable,
@@ -282,6 +288,10 @@ export interface ObjectBridge {
   hostFrames(): string[];
   /** Re-read the document's sheet-bound frames when none are known. */
   discoverHostFrames(): Promise<string[]>;
+  /** Plan G4 — stop tracking this session's placements of chart `index`
+   *  (it is being deleted) and hand them over: the caller removes their
+   *  page elements in its own write. */
+  takeChartPlacements(index: number): PlacedChart[];
 }
 
 /** The session's reactive state — a plain snapshot the panel renders. */
@@ -410,8 +420,18 @@ export interface WorkbookSession {
    *  `"enter"` edit on the active cell when none is open. */
   setCellEditText(text: string): boolean;
   /** Clear the in-frame grid layer (the frame returns to its native
-   *  lowered content). */
+   *  lowered content). A window frame's view moves to where the grid was
+   *  scrolled (unless locked) and the page shows it (ADR 510). */
   hideGridInFrame(): void;
+  /** The view of a placed frame (default: the last entered one): its
+   *  top-left cell and lock, or null for a frame that is not a window. */
+  frameView(frameId?: string): { topLeft: string; lock: boolean } | null;
+  /** Lock or unlock a window frame's view (default: the last entered
+   *  frame). Locking pins the window to where the frame's view stands now,
+   *  or — while the frame is entered — where the grid is scrolled; the
+   *  binding records it with the next page write. False when no window
+   *  frame is known. */
+  setFrameViewLock(lock: boolean, frameId?: string): boolean;
   /** Extensions ADR 334 — route the in-frame grid to a FRAME SURFACE
    *  instead of the scene layer: every grid state (window, selection, the
    *  open cell edit, the fill preview) goes to `sink`, windowed to
@@ -661,9 +681,11 @@ export interface WorkbookSession {
    *  text frame (or, with none selected, the frame last placed into), live:
    *  a resize of a chain frame re-paginates (debounced) and REPLACES the
    *  tables; workbook edits refresh them too. `repeatHeaderRows` (Wave 6)
-   *  repeats that many leading rows at the top of every frame. */
+   *  repeats that many leading rows at the top of every frame. `frameId`
+   *  names a frame of the chain instead (plan G4, the typed `place`). */
   paginateSelection(opts?: {
     repeatHeaderRows?: number;
+    frameId?: string;
   }): Promise<SessionResult>;
   /** Bring every placed table, chart and paginated chain up to date with
    *  the workbook now (edits schedule this on their own, debounced). */
@@ -2557,6 +2579,9 @@ export function createWorkbookSession(
   // session write's own events to it.
   let ownWrites = 0;
   const unverified = new Set<string>();
+  /** Frames whose view moved (ADR 510 render on leave): refreshed even when
+   *  no cell changed since they were written. */
+  const viewMoved = new Set<string>();
   async function ownWrite<T>(write: () => Promise<T>): Promise<T> {
     ownWrites += 1;
     try {
@@ -2568,7 +2593,155 @@ export function createWorkbookSession(
   const foreignChangeSub = host.document.onDidChange((e) => {
     if (e.kind === "mutationApplied" && ownWrites > 0) return;
     for (const frameId of loweredTables.keys()) unverified.add(frameId);
+    // ADR 510 (P6) — a window frame's box is its window: a resize shows
+    // what fits now. The engine names the resized frame's content box; a
+    // gesture that resized without saying which (several frames, an older
+    // engine) re-reads the window frames' geometry.
+    if (e.reflow) {
+      rewindow(e.reflow.frameId, {
+        widthPt: e.reflow.contentBox[3] - e.reflow.contentBox[1],
+        heightPt: e.reflow.contentBox[2] - e.reflow.contentBox[0],
+      });
+    } else if (e.kind === "gestureCommitted") {
+      void rereadWindowBoxes();
+    }
+    // A link, an unlink or a resize of a chain frame changes the window.
+    scheduleChainRead();
   });
+
+  /** Give window frame `frameId` a new box; refresh when it changed. */
+  function rewindow(
+    frameId: string,
+    boxPt: { widthPt: number; heightPt: number },
+  ): void {
+    const info = loweredTables.get(frameId);
+    if (!info || info.sizing !== "window") return;
+    if (boxPt.widthPt <= 0 || boxPt.heightPt <= 0) return;
+    const old = info.boxPt;
+    if (
+      old &&
+      Math.abs(old.widthPt - boxPt.widthPt) < 0.5 &&
+      Math.abs(old.heightPt - boxPt.heightPt) < 0.5
+    ) {
+      return;
+    }
+    // The first resize of a placed frame starts from its fitted box, which
+    // the window measured from its range did not use: still a new box.
+    loweredTables.set(frameId, { ...info, boxPt });
+    if (lastFrameId === frameId && lastGridWindow && !surfaceArea) {
+      lastGridWindow = {
+        ...lastGridWindow,
+        wPt: boxPt.widthPt,
+        hPt: boxPt.heightPt,
+      };
+    }
+    viewMoved.add(frameId);
+    scheduleRefresh();
+  }
+
+  /** Re-read every window frame's box (a gesture that did not name one). */
+  async function rereadWindowBoxes(): Promise<void> {
+    const ids = [...loweredTables]
+      .filter(([, i]) => i.sizing === "window")
+      .map(([id]) => id);
+    if (ids.length === 0) return;
+    let geom: Awaited<ReturnType<typeof host.document.elementGeometry>>;
+    try {
+      geom = await host.document.elementGeometry(
+        ids.map((id) => ({ kind: "textFrame", id }) as ElementId),
+      );
+    } catch {
+      return;
+    }
+    geom.forEach((g, i) => {
+      const b = g?.bounds;
+      const id = ids[i];
+      // Only a frame whose box differs from the one it was RESIZED to: a
+      // fitted placement's frame is taller than its range's window.
+      if (!b || !id || !resizedBoxes.has(id)) {
+        if (b && id) resizedBoxes.set(id, `${b[2] - b[0]}x${b[3] - b[1]}`);
+        return;
+      }
+      const key = `${b[2] - b[0]}x${b[3] - b[1]}`;
+      if (resizedBoxes.get(id) === key) return;
+      resizedBoxes.set(id, key);
+      rewindow(id, { widthPt: b[3] - b[1], heightPt: b[2] - b[0] });
+    });
+  }
+  /** The last frame box seen per window frame (`rereadWindowBoxes`). */
+  const resizedBoxes = new Map<string, string>();
+
+  /** P6 — continuation frame → the chain's head (a window frame). */
+  const chainHeadOf = new Map<string, string>();
+  /** The continuation the in-frame grid was entered on: the chain head and
+   *  the frame's place in the chain. */
+  let enteredContinuation: { head: string; index: number } | null = null;
+  let chainTimer: ReturnType<typeof setTimeout> | null = null;
+
+  /** Re-read the thread of every window frame (debounced): a frame linked
+   *  to more frames becomes a chain window, one unlinked goes back. */
+  function scheduleChainRead(): void {
+    if (![...loweredTables.values()].some((i) => i.sizing === "window")) return;
+    if (chainTimer !== null) clearTimeout(chainTimer);
+    chainTimer = setTimeout(() => {
+      chainTimer = null;
+      void rereadChains();
+    }, REFRESH_DEBOUNCE_MS);
+  }
+
+  async function rereadChains(): Promise<void> {
+    for (const [frameId, info] of [...loweredTables]) {
+      if (info.sizing !== "window") continue;
+      let links: Awaited<ReturnType<typeof host.document.frameChain>>;
+      try {
+        links = await host.document.frameChain(info.storyId);
+      } catch {
+        continue;
+      }
+      const order = links.map((l) => l.frameId);
+      // Only the head frame owns the window.
+      if (order.length > 0 && order[0] !== frameId) continue;
+      const rest = order.slice(1);
+      const before = info.chain?.frames ?? [];
+      for (const f of before) if (!rest.includes(f)) chainHeadOf.delete(f);
+      if (rest.length === 0) {
+        if (info.chain) {
+          const { chain: _gone, chainStarts: _starts, ...single } = info;
+          loweredTables.set(frameId, single);
+          viewMoved.add(frameId);
+          scheduleRefresh();
+        }
+        continue;
+      }
+      let geom: Awaited<ReturnType<typeof host.document.elementGeometry>>;
+      try {
+        geom = await host.document.elementGeometry(
+          order.map((id) => ({ kind: "textFrame", id }) as ElementId),
+        );
+      } catch {
+        continue;
+      }
+      const boxes = geom.map((g) => ({
+        widthPt: g ? g.bounds[3] - g.bounds[1] : 0,
+        heightPt: g ? g.bounds[2] - g.bounds[0] : 0,
+      }));
+      const [headBox, ...moreBoxes] = boxes;
+      if (!headBox) continue;
+      for (const f of rest) chainHeadOf.set(f, frameId);
+      const same =
+        JSON.stringify(info.chain ?? null) ===
+          JSON.stringify({ frames: rest, boxes: moreBoxes }) &&
+        JSON.stringify(info.boxPt ?? null) === JSON.stringify(headBox);
+      if (same) continue;
+      loweredTables.set(frameId, {
+        ...info,
+        boxPt: headBox,
+        chain: { frames: rest, boxes: moreBoxes },
+      });
+      viewMoved.add(frameId);
+      scheduleRefresh();
+    }
+  }
 
   /** Wave 4 — after a burst of edits, refresh what this session placed. */
   function scheduleRefresh(): void {
@@ -2605,21 +2778,39 @@ export function createWorkbookSession(
         const engine = state.engine;
         if (!engine) return;
         const version = revision;
-        for (const [frameId, info] of [...loweredTables]) {
+        for (let [frameId, info] of [...loweredTables]) {
           const name = sheetNameOf(info.sheet);
           if (name === null) continue;
           let next: LoweredContent;
+          let windowed: string | null = null;
+          let starts: number[] | undefined;
           try {
-            next = pageContent(engine, info.sheet, info.range);
+            const win = placementWindow(engine, info);
+            windowed = win?.range ?? null;
+            starts = win?.chainStarts;
+            next = win?.content ?? pageContent(engine, info.sheet, info.range);
           } catch (err) {
             host.log.warn(`refresh: could not lower ${info.range}`, err);
             continue;
           }
+          const moved = viewMoved.delete(frameId);
+          // A window frame's binding names the cells it shows now.
+          if (windowed && windowed !== info.range) {
+            info = { ...info, range: windowed };
+            loweredTables.set(frameId, info);
+          }
+          if (starts) {
+            info = { ...info, chainStarts: starts };
+            loweredTables.set(frameId, info);
+          }
           if (info.content) {
-            if (
-              info.contentVersion === version ||
-              JSON.stringify(next) === JSON.stringify(info.content)
-            ) {
+            if (!moved && info.contentVersion === version) continue;
+            if (JSON.stringify(next) === JSON.stringify(info.content)) {
+              // Same cells, new view (a lock): the binding alone records it.
+              if (moved) {
+                const placedInfo = info;
+                await ownWrite(() => stampPlacedView(host, placedInfo, name));
+              }
               continue;
             }
             // In place: only what changed is re-poured, and the table — its
@@ -2630,7 +2821,14 @@ export function createWorkbookSession(
             const bands = unverified.has(frameId)
               ? await refreshBands(host, info, info.content)
               : { header: info.headerRows ?? 0, footer: 0 };
-            if (bands) {
+            // A scroll that re-pours most of a window frame writes a new
+            // table instead (fewer ops, and no host band to keep).
+            const rewrite =
+              moved &&
+              info.sizing === "window" &&
+              !(bands?.header ?? 0) &&
+              refreshWantsReplace(info, next);
+            if (bands && !rewrite) {
               const banded = { ...info, headerRows: bands.header || undefined };
               const updated = await ownWrite(() =>
                 refreshLoweredTable(host, banded, next, version, name),
@@ -2767,9 +2965,31 @@ export function createWorkbookSession(
         ids = await tableUnderFrame(host, frameId, rec.widths);
         if (!ids) continue;
       }
+      const d = binding.data;
+      // A window frame lowers the window that fits its box: read the box.
+      let boxPt: { widthPt: number; heightPt: number } | undefined;
+      if (d.sizing === "window") {
+        try {
+          const g = await host.document.elementGeometry([
+            { kind: "textFrame", id: frameId } as ElementId,
+          ]);
+          const b = g[0]?.bounds;
+          if (b) boxPt = { widthPt: b[3] - b[1], heightPt: b[2] - b[0] };
+        } catch {
+          // No box: the frame lowers its recorded range until entered.
+        }
+      }
+      const placed = {
+        sheet: sheet.id,
+        range: d.range,
+        view: d.view,
+        print: d.print,
+        sizing: d.sizing,
+        ...(boxPt ? { boxPt } : {}),
+      };
       let now: LoweredContent;
       try {
-        now = pageContent(engine, sheet.id, binding.data.range);
+        now = placementContent(engine, placed);
       } catch {
         continue;
       }
@@ -2787,8 +3007,7 @@ export function createWorkbookSession(
         frameId,
         storyId: ids.storyId,
         tableId: ids.tableId,
-        sheet: sheet.id,
-        range: binding.data.range,
+        ...placed,
         content: shown,
         columnWidths: rec.widths,
         contentVersion: binding.data.contentVersion,
@@ -3097,6 +3316,11 @@ export function createWorkbookSession(
   const bridge: ObjectBridge = {
     engine: () => state.engine,
     epoch: () => loadEpoch,
+    takeChartPlacements(index) {
+      const taken = placedCharts.filter((p) => p.chartIndex === index);
+      placedCharts = placedCharts.filter((p) => p.chartIndex !== index);
+      return taken;
+    },
     afterWrite(regions) {
       markEdited();
       emitter.emit(
@@ -3204,7 +3428,10 @@ export function createWorkbookSession(
       let placement;
       let content: LoweredContent;
       try {
-        content = pageContent(
+        // ADR 510 — a window frame shows the range's own tracks lowered as a
+        // frame page: the lowering every later refresh makes, so the first
+        // edit re-pours one cell, not the table.
+        content = rangeFramePage(
           state.engine,
           state.activeSheet,
           state.selectedRange,
@@ -3225,6 +3452,8 @@ export function createWorkbookSession(
           fitHeight: true,
           contentVersion: revision,
           content,
+          // ADR 510 — the frame is a window onto the sheet.
+          sizing: "window",
           // S-04 — record the resolved native table so "new style from cell"
           // can address its cells.
           onLowered: (info) => {
@@ -3263,7 +3492,19 @@ export function createWorkbookSession(
       // ADR 510 — the frame decides what the grid shows: its bound sheet
       // (made the active sheet while it is edited) and its view's top-left
       // cell. A frame without a binding keeps the active sheet at A1.
-      const start = await frameStart(target);
+      // P6 — a continuation frame of a window chain shows the chain's
+      // window from the rows it holds; its head's binding names the sheet.
+      const head = chainHeadOf.get(target);
+      const headInfo = head ? loweredTables.get(head) : undefined;
+      const index =
+        head && headInfo?.chain ? headInfo.chain.frames.indexOf(target) + 1 : 0;
+      enteredContinuation =
+        head && headInfo && index > 0 ? { head, index } : null;
+      let start = await frameStart(enteredContinuation && head ? head : target);
+      if (enteredContinuation && headInfo) {
+        const row = headInfo.chainStarts?.[index];
+        if (row !== undefined) start = { row, col: start.col };
+      }
       // Size the grid window to the frame's content box (core clips to it).
       let wPt = 480;
       let hPt = 640;
@@ -3279,6 +3520,22 @@ export function createWorkbookSession(
         }
       } catch (err) {
         host.log.debug("showGridInFrame: frame geometry read failed", err);
+      }
+      // The page lowers the window that fits this box (ADR 510).
+      const placedInfo = lastFrameId
+        ? loweredTables.get(lastFrameId)
+        : undefined;
+      if (
+        placedInfo &&
+        !placedInfo.boxPt &&
+        lastFrameId &&
+        wPt > 0 &&
+        hPt > 0
+      ) {
+        loweredTables.set(lastFrameId, {
+          ...placedInfo,
+          boxPt: { widthPt: wPt, heightPt: hPt },
+        });
       }
       // Wave 5 — keep the window's scroll when re-showing the same frame.
       const keep =
@@ -3403,8 +3660,59 @@ export function createWorkbookSession(
       fillPreview = null;
       inFrameActive = false;
       if (lastFrameId) void sceneSurface?.clear(lastFrameId);
+      // ADR 510 — leaving the frame moves its view to where the user
+      // scrolled (a locked view snaps back), and the page shows it.
+      let viewChanged = false;
+      // P6 — leaving a continuation scrolls the chain: the head's view moves
+      // by as many rows as this frame's grid moved from where it started.
+      const cont = enteredContinuation;
+      enteredContinuation = null;
+      const headInfo = cont ? loweredTables.get(cont.head) : undefined;
+      if (cont && headInfo?.view && !headInfo.view.lock && lastGridWindow) {
+        const head = cellOfA1(headInfo.view.topLeft) ?? { row: 0, col: 0 };
+        const startedAt = headInfo.chainStarts?.[cont.index] ?? head.row;
+        const row = Math.max(
+          0,
+          head.row + (lastGridWindow.firstRow - startedAt),
+        );
+        const topLeft = a1OfCell(row, lastGridWindow.firstCol);
+        if (topLeft !== headInfo.view.topLeft) {
+          loweredTables.set(cont.head, {
+            ...headInfo,
+            view: { ...headInfo.view, topLeft },
+          });
+          viewMoved.add(cont.head);
+          viewChanged = true;
+        }
+      }
+      const placedInfo =
+        !cont && lastFrameId ? loweredTables.get(lastFrameId) : undefined;
+      if (
+        lastFrameId &&
+        placedInfo?.sizing === "window" &&
+        placedInfo.view &&
+        !placedInfo.view.lock &&
+        lastGridWindow
+      ) {
+        const topLeft = a1OfCell(
+          lastGridWindow.firstRow,
+          lastGridWindow.firstCol,
+        );
+        if (topLeft !== placedInfo.view.topLeft) {
+          loweredTables.set(lastFrameId, {
+            ...placedInfo,
+            view: { ...placedInfo.view, topLeft },
+          });
+          viewMoved.add(lastFrameId);
+          viewChanged = true;
+        }
+      }
       // Tier 2 — the session's edits reach the page as ONE refresh now.
-      if (refreshDeferred) {
+      if (
+        refreshDeferred ||
+        viewChanged ||
+        (lastFrameId !== null && viewMoved.has(lastFrameId))
+      ) {
         refreshDeferred = false;
         void refreshPlacements();
       }
@@ -3414,6 +3722,30 @@ export function createWorkbookSession(
       void flushPersist().catch((err) =>
         host.log.warn("workbook persist on exit failed", err),
       );
+    },
+
+    frameView(frameId) {
+      const id = frameId ?? lastFrameId;
+      const info = id ? loweredTables.get(id) : undefined;
+      if (!info || info.sizing !== "window" || !info.view) return null;
+      return { ...info.view };
+    },
+
+    setFrameViewLock(lock, frameId) {
+      const id = frameId ?? lastFrameId;
+      const info = id ? loweredTables.get(id) : undefined;
+      if (!id || !info || info.sizing !== "window" || !info.view) return false;
+      const topLeft =
+        inFrameActive && id === lastFrameId && lastGridWindow
+          ? a1OfCell(lastGridWindow.firstRow, lastGridWindow.firstCol)
+          : info.view.topLeft;
+      if (info.view.lock === lock && info.view.topLeft === topLeft) return true;
+      loweredTables.set(id, { ...info, view: { topLeft, lock } });
+      viewMoved.add(id);
+      // While entered, the page is written on leaving; otherwise now.
+      if (!inFrameActive) void refreshPlacements();
+      emitter.emit();
+      return true;
     },
 
     listCharts() {
@@ -4217,7 +4549,8 @@ export function createWorkbookSession(
       const selected = host.selection
         .get()
         .find((id) => id.kind === "textFrame");
-      const frameId = selected ? (selected.id as string) : lastFrameId;
+      const frameId =
+        opts?.frameId ?? (selected ? (selected.id as string) : lastFrameId);
       if (!frameId) {
         return {
           ok: false as const,
@@ -4879,6 +5212,7 @@ export function createWorkbookSession(
     dispose() {
       historySub.dispose();
       foreignChangeSub.dispose();
+      if (chainTimer !== null) clearTimeout(chainTimer);
       willSaveSub?.dispose();
       // What the placed tables show, kept for a later session (taken before
       // the placements are forgotten; written in the background).

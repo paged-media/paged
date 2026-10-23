@@ -151,8 +151,11 @@ The exporter `media.paged.doc.exporter.docx` runs `exportDocx` in `activate.ts`
 - With no document imported in this session it returns nothing. Without
   `document.readStory@1`, or without a story id, it returns the original bytes.
 - Otherwise it reads each story with `host.document.storyContent`, joins them into one body
-  (`mergeSectionContents`), boots the engine, loads the original bytes again and calls
-  `save_edited_from_content`: lower again as the baseline; overlay the read-back onto it;
+  (`mergeSectionContents`), reads each native table cell's `text` (`src/save-cells.ts`; the
+  story read-back holds no table), boots the engine, loads the original bytes again and calls
+  `save_edited_from_content` with both: lower again as the baseline; overlay the read-back
+  onto it (the cells through `overlay_cells`, which patches a cell paragraph's changed span
+  into its existing runs);
   diff the two lowerings into an `EditSet` in lowered `(block, run)` coordinates; resolve
   those through `DocxBindings` to source ordinals; patch the main document part.
 - `splice.rs` uses `quick-xml` only to find byte ranges in one streaming pass and copies

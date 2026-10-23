@@ -426,9 +426,29 @@ pub fn fold_override(base: &VisualAttrs, over: &VisualAttrs) -> VisualAttrs {
         border_left: base.border_left || over.border_left,
         // A dxf never restates these facets; the base keeps them.
         underline: base.underline || over.underline,
-        v_align: base.v_align.clone(),
-        wrap: base.wrap,
-        border_lines: base.border_lines.clone(),
+        fill_swatch: if over.fill_rgb.is_some() {
+            over.fill_swatch.clone()
+        } else {
+            base.fill_swatch.clone()
+        },
+        text_swatch: if over.text_rgb.is_some() {
+            over.text_swatch.clone()
+        } else {
+            base.text_swatch.clone()
+        },
+        // A dxf fill replaces the base pattern / gradient.
+        fill_pattern: if over.fill_rgb.is_some() {
+            over.fill_pattern.clone()
+        } else {
+            base.fill_pattern.clone()
+        },
+        fill_gradient: if over.fill_rgb.is_some() {
+            over.fill_gradient.clone()
+        } else {
+            base.fill_gradient.clone()
+        },
+        strike: base.strike || over.strike,
+        ..base.clone()
     }
 }
 

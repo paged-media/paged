@@ -47,8 +47,10 @@ import type {
   PartChange,
   PropertySchema,
   SceneTreeNode,
+  StructField,
 } from "@paged-media/plugin-api";
 
+import type { FilterMask } from "../engine";
 import {
   escapeLabelValue,
   fromElementId,
@@ -115,8 +117,39 @@ export interface ImageCodec {
     height: number,
     wire: Float32Array,
     rect: { x: number; y: number; w: number; h: number },
+    mask?: FilterMask,
   ): Promise<{ rgba: Uint8Array; gpu: boolean }>;
 }
+
+/** The editor session's selection for a frame, as `filterRegion`'s
+ *  `selection: true` reads it: the coverage bytes at the session image's
+ *  size, or why there is none to use. Absent headless. */
+export type SelectionSource = (
+  frameId: string,
+) =>
+  { width: number; height: number; coverage: Uint8Array } | { refused: string };
+
+/** The `filter` row's value type, and `filterRegion`'s fields beside
+ *  `layer`: the chain, a rectangle, a mask given as data, the live
+ *  selection. */
+export const FILTER_FIELDS = {
+  params: { kind: "struct", fields: {}, open: true },
+  region: { kind: "bounds", optional: true },
+  mask: {
+    kind: "struct",
+    optional: true,
+    fields: {
+      polygons: {
+        kind: "list",
+        of: { kind: "list", of: { kind: "point" } },
+        optional: true,
+      },
+      alpha: { kind: "bytes", optional: true },
+      feather: { kind: "number", optional: true },
+    },
+  },
+  selection: { kind: "bool", optional: true },
+} as const satisfies Record<string, StructField>;
 
 /** What one stored revision adds to the session store's record. */
 interface ObjectRecord extends SessionRecord {
@@ -149,6 +182,41 @@ interface FrameState {
 }
 
 class Refused extends Error {}
+
+/** A mask's `alpha`: one coverage byte per canvas pixel, or an encoded
+ *  image (PNG, JPEG, …) of the canvas size whose luminance times its
+ *  alpha is the coverage (white and opaque: filtered). */
+function alphaCoverage(
+  c: ImageCodec,
+  v: unknown,
+  W: number,
+  H: number,
+): Uint8Array {
+  if (!(v instanceof Uint8Array)) throw new Refused("mask.alpha is bytes");
+  if (v.length === W * H) return v;
+  let img: { width: number; height: number; rgba: Uint8Array };
+  try {
+    img = c.decode(v);
+  } catch {
+    throw new Refused(
+      `mask.alpha is ${W}×${H} = ${W * H} coverage bytes or an image of that size; got ${v.length} bytes that are neither`,
+    );
+  }
+  if (img.width !== W || img.height !== H)
+    throw new Refused(
+      `the mask image is ${img.width}×${img.height}, the canvas ${W}×${H}`,
+    );
+  const out = new Uint8Array(W * H);
+  for (let i = 0; i < out.length; i++) {
+    const o = i * 4;
+    const luma =
+      0.299 * img.rgba[o]! +
+      0.587 * img.rgba[o + 1]! +
+      0.114 * img.rgba[o + 2]!;
+    out[i] = Math.round((luma * img.rgba[o + 3]!) / 255);
+  }
+  return out;
+}
 
 const value = (v: unknown): ObjectValue => ({ kind: "value", value: v });
 const absent: ObjectValue = { kind: "absent" };
@@ -293,18 +361,16 @@ const LAYER_ROWS: PropertySchema[] = [
   },
   {
     path: "filter",
-    type: {
-      kind: "struct",
-      fields: {
-        params: { kind: "struct", fields: {}, open: true },
-        region: { kind: "bounds", optional: true },
-      },
-    },
+    type: { kind: "struct", fields: FILTER_FIELDS },
     summary:
       "An action: writing runs a filter on the layer's pixels — `params` are adjustment-layer paths " +
       "(blur, sharpen, hue, invert, exposure, levels, …) — inside `region` ([top, left, bottom, right] " +
-      "in image pixels; the whole canvas when absent). On the GPU where one exists, otherwise on the " +
-      "CPU twins of the same kernels (ADR 465). Reads nothing.",
+      "in image pixels; the whole canvas when absent), narrowed by `mask` (a selection as data: " +
+      "`polygons` of [x, y] image pixels, unioned; `alpha`, one coverage byte per canvas pixel or an " +
+      "encoded image of the canvas size, its luminance times its alpha; `feather`, σ px) and, with " +
+      "`selection: true`, by the editor's live selection (refused headless). Partial coverage blends " +
+      "filtered and original pixels. On the GPU where one exists, otherwise on the CPU twins of the " +
+      "same kernels (ADR 465). Reads nothing.",
   },
   {
     path: "pixelSource",
@@ -461,6 +527,7 @@ const KEEP_SOURCE_CHARS = 2048;
 export function createImageObjects(
   host: BundleHost,
   codec: () => Promise<ImageCodec>,
+  selection?: SelectionSource,
 ): ImageObjects {
   const counters: ImageObjectCounters = {
     treeReads: 0,
@@ -991,8 +1058,79 @@ export function createImageObjects(
     rememberSource(s, String(l.id), label);
   }
 
+  /** `filter`'s mask: polygons, an alpha coverage (raw `W·H` bytes or
+   *  an encoded image of the canvas size), a feather, and the live
+   *  selection when asked for — checked here, rasterised by the engine. */
+  function filterMask(
+    s: FrameState,
+    c: ImageCodec,
+    mask: unknown,
+    useSelection: unknown,
+  ): FilterMask | undefined {
+    const { width: W, height: H } = s.stack;
+    const out: FilterMask = {};
+    if (mask !== undefined && mask !== null) {
+      if (typeof mask !== "object" || Array.isArray(mask))
+        throw new Refused("a mask is { polygons?, alpha?, feather? }");
+      const m = mask as Record<string, unknown>;
+      for (const k of Object.keys(m))
+        if (!["polygons", "alpha", "feather"].includes(k))
+          throw new Refused(
+            `a mask has no "${k}" (it takes polygons, alpha, feather)`,
+          );
+      if (m["polygons"] !== undefined) {
+        const polys = m["polygons"];
+        if (!Array.isArray(polys))
+          throw new Refused("mask.polygons is a list of polygons");
+        out.polygons = polys.map((p, i) => {
+          if (!Array.isArray(p) || p.length < 3)
+            throw new Refused(
+              `mask.polygons[${i}] needs at least 3 [x, y] points`,
+            );
+          return p.map((pt) => {
+            if (
+              !Array.isArray(pt) ||
+              pt.length !== 2 ||
+              !pt.every((n) => typeof n === "number" && Number.isFinite(n))
+            )
+              throw new Refused(
+                `mask.polygons[${i}] has a point that is not [x, y]`,
+              );
+            return [pt[0], pt[1]] as const;
+          });
+        });
+      }
+      if (m["alpha"] !== undefined)
+        out.alpha = alphaCoverage(c, m["alpha"], W, H);
+      if (m["feather"] !== undefined) {
+        const f = m["feather"];
+        if (typeof f !== "number" || !Number.isFinite(f) || f < 0 || f > 250)
+          throw new Refused("mask.feather is 0 to 250 pixels");
+        out.feather = f;
+      }
+    }
+    if (useSelection === true) {
+      if (!selection)
+        throw new Refused(
+          "there is no editor session here, so no selection; pass the selection as `mask` (polygons or an alpha mask)",
+        );
+      const live = selection(s.frame.frameId);
+      if ("refused" in live) throw new Refused(live.refused);
+      if (live.width !== W || live.height !== H)
+        throw new Refused(
+          `the editor's selection is ${live.width}×${live.height}, the canvas ${W}×${H}`,
+        );
+      out.alpha = out.alpha
+        ? out.alpha.map((a, i) => Math.min(a, live.coverage[i]!))
+        : live.coverage;
+    } else if (useSelection !== undefined && useSelection !== false)
+      throw new Refused("selection is true or false");
+    return out.polygons || out.alpha ? out : undefined;
+  }
+
   /** A filter on a region of a pixel layer (ADR 465): the adjustment
-   *  chain baked into the pixels inside the rectangle, destructively. */
+   *  chain baked into the pixels inside the rectangle and the mask,
+   *  destructively. */
   async function filterRegion(s: FrameState, l: PgilLayer, v: unknown) {
     if (l.kind !== "pixels")
       throw new Refused(
@@ -1004,9 +1142,11 @@ export function createImageObjects(
       throw new Refused(`layer "${l.name}" is locked (its pixels are)`);
     if (l.depth !== 8)
       throw new Refused("a 16-bit layer is filtered in the editor");
-    const { params, region } = (v ?? {}) as {
+    const { params, region, mask, selection } = (v ?? {}) as {
       params?: Record<string, unknown>;
       region?: number[];
+      mask?: unknown;
+      selection?: unknown;
     };
     const wire = defaultAdjust();
     for (const [p, val] of Object.entries(params ?? {})) {
@@ -1034,8 +1174,17 @@ export function createImageObjects(
     const c = await codec();
     if (!c.filterRegion)
       throw new Refused("this host's image engine cannot run a filter");
+    const m = filterMask(s, c, mask, selection);
+    if (mask && !m)
+      throw new Refused("a mask needs polygons or an alpha coverage");
     const pixels = l.rect ? expandBounded(l, W, H) : l.pixels;
-    const out = await c.filterRegion(pixels, W, H, wire, rect);
+    let out: { rgba: Uint8Array; gpu: boolean };
+    try {
+      out = await c.filterRegion(pixels, W, H, wire, rect, m);
+    } catch (e) {
+      // The engine's word on the mask (it covers no pixel, …).
+      throw new Refused(e instanceof Error ? e.message : String(e));
+    }
     counters.filters++;
     if (out.gpu) counters.gpuFilters++;
     l.pixels = out.rgba;

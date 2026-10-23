@@ -44,9 +44,11 @@ import type {
 } from "@paged-media/plugin-api";
 import { t } from "@paged-media/strings";
 
+import { contributeSlideCommands } from "./commands.js";
 import { exportPlan, pageFingerprints } from "./deck-export.js";
 import { slideEngine, type ImportReport } from "./engine.js";
 import { giveDocumentEmbeddedFonts } from "./fonts.js";
+import { contributeMenu } from "./menu.js";
 import { DECK, NOTES, SLIDES } from "./messages.js";
 import { contributeSlideObjectModel } from "./object-model.js";
 import { slidePanels } from "./panels.js";
@@ -316,15 +318,36 @@ export function activate(host: BundleHost): BundleHandle {
     );
   }
 
-  // The slide panels share one store: the pages, their state, thumbnails
-  // and the active slide. They need the v70 page doors.
+  // The slide panels and the palette commands share one store: the pages,
+  // their state, thumbnails and the active slide. It needs the v70 page
+  // doors; the panels also need the panel and snapshot doors.
+  const store = host.supports("viewport.pages@1")
+    ? new SlidesStore(host)
+    : null;
+  if (store) disposers.push(() => store.dispose());
   const richPanels =
+    store !== null &&
     host.supports("contribute.panel@1") &&
-    host.supports("render.snapshot@1") &&
-    host.supports("viewport.pages@1");
-  if (richPanels) {
-    const store = new SlidesStore(host);
-    disposers.push(() => store.dispose());
+    host.supports("render.snapshot@1");
+
+  // The user's verbs for the palette and the menu bar (commands.ts,
+  // menu.ts): open and export a deck; new, duplicate, delete and move the
+  // active slide.
+  if (host.supports("contribute.command@1")) {
+    const commands = contributeSlideCommands(host, {
+      store,
+      objectModel: model !== null,
+      openDeck,
+      exportDeck,
+    });
+    const menu = contributeMenu(host, (id) => commands.ids.has(id));
+    disposers.push(
+      () => commands.dispose(),
+      () => menu.dispose(),
+    );
+  }
+
+  if (store && richPanels) {
     // In the panel rail only while a deck is open: in any other document
     // the Slides and Notes launchers would sit beside the host's panels
     // with nothing to show. The rail reads `rail` at registration, so a
