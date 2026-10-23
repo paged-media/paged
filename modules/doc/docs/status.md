@@ -9,9 +9,22 @@
   Typed commands `placeDoc`, `exportDocx`, `fillMergeFields`.
 - The bundle runs in the SDK's headless host (`test/conformance/`, real engine + real
   docx-js); a 10-op batch costs 1 commit, 2 engine boots and 3 host reads.
-- Open: table-cell runs are not writable; the embedded place needs engine 0.70
+- Table cells are writable (editor plan G4): `run.text`, `block.text` (a cell paragraph is the
+  block `b<i>/c<k>/p<m>`, listed within its table) and `mergeField.value` in a cell, so
+  `fillMergeFields` and the `blockText` / `mergeField` template kinds reach cells. Save-back
+  takes `cell`/`para` on `ObjectEdits` and patches a run inside a cell's `w:fldSimple` or
+  `w:hyperlink` (the wrapped cell run was the last non-patchable cell run). The native write
+  finds the story's n-th table (`story:<id> > table`) and checks the cell's live text (the
+  engine's `cell` `text` read) before it writes. The native paragraph a body paragraph was
+  poured into is now replayed as the engine places tables (`nativePlaces`): the text after a
+  table continues in the table's host paragraph, so a body write after a table no longer
+  refuses as "edited on the canvas". Anchors also take `{ heading: n }`.
+- Open: the embedded place needs engine 0.70
   (`insertTextFrame` is `notImplemented` on 0.69, so "Place Word document…" fails there);
-  exporting a document with coalesced runs duplicates text (pinned as an expected failure).
+  exporting a document with coalesced runs duplicates text (pinned as an expected failure);
+  canvas edits inside a table cell are still not carried by save-back (`overlay` skips
+  tables); opening a `.docx` as its own document headless (`paged-node`) needs a
+  native-open door in the SDK's headless host, so there it is placed in a frame instead.
 
 ## This pass: M0 (foundation) + M1 Tier-0 read path
 
@@ -448,8 +461,9 @@ across several `<w:t>` children (Word does this after edits) already collapses
 correctly into one on a text replacement, because `LoweredRun.text` is the
 concatenation. A unit test now pins that, and the stale "deferred" claim is gone.
 
-Still deferred: nested tables, a wrapped run INSIDE a table cell (it needs both
-locator paths at once), and paragraph↔table swap.
+Still deferred: nested tables and paragraph↔table swap. (A wrapped run INSIDE a table
+cell is patched since editor plan G4: the cell locator counts the cell paragraph's
+wrappers and the runs inside the open one.)
 
 ## M2 Increment 3c — table row structure
 

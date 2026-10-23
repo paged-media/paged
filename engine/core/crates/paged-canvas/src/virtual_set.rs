@@ -1582,6 +1582,18 @@ impl CanvasModel {
                 match path {
                     "rowSpan" => return Ok(Value::Length(Some(c.row_span.max(1) as f32))),
                     "columnSpan" => return Ok(Value::Length(Some(c.column_span.max(1) as f32))),
+                    // The cell's text, read-only, as a story's `text`
+                    // reads: its paragraphs joined by `\n`, the separator
+                    // a cell-addressed `insertText` splits on.
+                    "text" => {
+                        return Ok(Value::Text(
+                            c.paragraphs
+                                .iter()
+                                .map(|p| p.runs.iter().map(|r| r.text.as_str()).collect::<String>())
+                                .collect::<Vec<_>>()
+                                .join("\n"),
+                        ))
+                    }
                     _ => {}
                 }
                 let id = ElementId::TableCell {

@@ -128,7 +128,8 @@ rendered. How the parts fit is in [`architecture.md`](architecture.md).
   created and instanced in text, and one `set` switches every instance. A swatch is
   addressed by its id or its name. A `set` is always one undo step, colour settings and the
   other application state included. `null` clears a nullable row (text, enum or reference)
-  exactly as `""` does. A read tells a mixed value (`mixed: true`, a range whose runs
+  exactly as `""` does. A cell reads its `text` (its paragraphs joined by `\n`, the stream a
+  cell-addressed `insertText` writes), as a story does. A read tells a mixed value (`mixed: true`, a range whose runs
   disagree) from a refusal, which carries a code (`noSuchPath`, `notFound`, `badAddress`,
   `noDocument`). A frame's image content (`imageBytes`), its thread links
   (`nextTextFrame`, `previousTextFrame`), its opacity mask (`opacityMask`) and its path points

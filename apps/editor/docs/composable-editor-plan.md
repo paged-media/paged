@@ -1235,8 +1235,10 @@ Per module:
   `placeName`; merge, borders, column widths and row heights; `importCsv`; chart delete.
 - **data:** `apply` and `merge` rebased on typed commands (`importSource`); a batch verb per
   record or group; read-only inspection commands (preview, expression check, refresh diff).
-- **doc:** the exporter works after reopening a saved document (today only in the importing
-  session); `block.text` writable; table-cell runs; a heading kind; open standalone headless.
+- **doc:** done: the exporter works after reopening a saved document; `block.text` writable;
+  table-cell runs, paragraphs and merge fields writable, template fields anchored in a cell; a
+  heading anchor (`{ heading: n }`). Open: opening a `.docx` standalone headless (the SDK's
+  headless host has no native-open door, so `paged-node` places it in a frame).
 - **slide:** the typed `newSlide` places the layout's placeholders like the panel does; reorder
   and duplicate; a typed `exportPptx`; menus and commands.
 - **web:** `importHtml`; turn an existing frame into a web frame; diagnostics as a row.

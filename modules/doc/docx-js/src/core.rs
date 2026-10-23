@@ -26,8 +26,8 @@
 
 use docx_core::DocxDocument;
 use docx_export::{
-    apply_edits, build_bindings, diff, overlay_story_content, DocxBindings, EditSet, RunEdit,
-    StoryContentIn, StructuralEdit,
+    apply_edits, build_bindings, diff, overlay_story_content, CellRunEdit, DocxBindings, EditSet,
+    RunEdit, StoryContentIn, StructuralEdit,
 };
 use docx_import::import_docx_with_package;
 use docx_lower::ir::{LoweredBlock, LoweredDoc};
@@ -151,28 +151,57 @@ impl DocSession {
     /// `mergeField.value`) as an [`EditSet`] over this document's lowering:
     /// a run edit sets one run's text; a merge-field edit sets the field's
     /// RESULT — its first result run takes the value, the others are emptied —
-    /// and never touches the field code, so Word can still merge. Body
-    /// paragraphs only: a table cell's runs are refused (save-back of cell
-    /// runs goes through `cells`, which the object model does not address yet).
+    /// and never touches the field code, so Word can still merge. A run or
+    /// field names a body paragraph by its `block`, or a table cell's
+    /// paragraph by its `block` (the table), `cell` (its index in the lowered
+    /// cell list) and `para` (the paragraph in the cell); the cell writes
+    /// become [`CellRunEdit`]s.
     pub fn object_edits(&self, edits: &ObjectEdits) -> Result<EditSet, String> {
         let ir = self.lowered();
         let paragraph = |block: usize| match ir.story.blocks.get(block) {
             Some(LoweredBlock::Paragraph(p)) => Ok(p),
             Some(LoweredBlock::Table(_)) => Err(format!(
-                "block {block} is a table: its cells are not writable here yet"
+                "block {block} is a table: name a cell and a paragraph in it"
             )),
             None => Err(format!("no block {block}")),
         };
+        let located = |block: usize, at: Option<CellAt>| match at {
+            None => paragraph(block),
+            Some(CellAt { cell, para }) => match ir.story.blocks.get(block) {
+                Some(LoweredBlock::Table(t)) if !t.flow.is_empty() => Err(format!(
+                    "block {block} is a table poured as text: its cells cannot be written"
+                )),
+                Some(LoweredBlock::Table(t)) => t
+                    .cells
+                    .get(cell)
+                    .ok_or_else(|| format!("block {block} has no cell {cell}"))?
+                    .paragraphs
+                    .get(para)
+                    .ok_or_else(|| format!("cell {cell} of block {block} has no paragraph {para}")),
+                Some(LoweredBlock::Paragraph(_)) => {
+                    Err(format!("block {block} is a paragraph, not a table"))
+                }
+                None => Err(format!("no block {block}")),
+            },
+        };
         let mut set = EditSet::default();
+        let mut push = |block: usize, at: Option<CellAt>, run: usize, text: String| match at {
+            None => set.runs.push(RunEdit::text(block, run, text)),
+            Some(CellAt { cell, para }) => set
+                .cells
+                .push(CellRunEdit::text(block, cell, para, run, text)),
+        };
         for e in &edits.runs {
-            let p = paragraph(e.block)?;
+            let at = e.cell_at()?;
+            let p = located(e.block, at)?;
             if e.run >= p.runs.len() {
                 return Err(format!("block {} has no run {}", e.block, e.run));
             }
-            set.runs.push(RunEdit::text(e.block, e.run, e.text.clone()));
+            push(e.block, at, e.run, e.text.clone());
         }
         for e in &edits.merge_fields {
-            let p = paragraph(e.block)?;
+            let at = e.cell_at()?;
+            let p = located(e.block, at)?;
             let runs: Vec<usize> = p
                 .runs
                 .iter()
@@ -190,10 +219,9 @@ impl DocSession {
                     e.block, e.occurrence
                 ));
             };
-            set.runs
-                .push(RunEdit::text(e.block, first, e.value.clone()));
+            push(e.block, at, first, e.value.clone());
             for &r in rest {
-                set.runs.push(RunEdit::text(e.block, r, String::new()));
+                push(e.block, at, r, String::new());
             }
         }
         for &block in &edits.delete_paragraphs {
@@ -262,19 +290,57 @@ pub struct CloneParagraphEdit {
     pub text: String,
 }
 
-/// Set one body run's text.
-#[derive(Debug, Clone, Deserialize)]
+/// A paragraph inside a table block: the lowered cell index and the
+/// paragraph's index in that cell.
+#[derive(Debug, Clone, Copy)]
+struct CellAt {
+    cell: usize,
+    para: usize,
+}
+
+/// `cell` and `para` name a cell's paragraph together, or neither is given.
+fn cell_at(cell: Option<usize>, para: Option<usize>) -> Result<Option<CellAt>, String> {
+    match (cell, para) {
+        (None, None) => Ok(None),
+        (Some(cell), Some(para)) => Ok(Some(CellAt { cell, para })),
+        _ => Err("a table cell's paragraph is named by both `cell` and `para`".into()),
+    }
+}
+
+/// Set one run's text: a body paragraph's (`block`), or a table cell
+/// paragraph's (`block` the table, `cell`, `para`).
+#[derive(Debug, Clone, Default, Deserialize)]
 pub struct RunTextEdit {
     pub block: usize,
+    #[serde(default)]
+    pub cell: Option<usize>,
+    #[serde(default)]
+    pub para: Option<usize>,
     pub run: usize,
     pub text: String,
 }
 
+impl RunTextEdit {
+    fn cell_at(&self) -> Result<Option<CellAt>, String> {
+        cell_at(self.cell, self.para)
+    }
+}
+
 /// Set a merge field's result: the `occurrence`-th merge field of a body
-/// paragraph block.
-#[derive(Debug, Clone, Deserialize)]
+/// paragraph block, or of a table cell's paragraph (`cell`, `para`).
+#[derive(Debug, Clone, Default, Deserialize)]
 pub struct MergeFieldEdit {
     pub block: usize,
+    #[serde(default)]
+    pub cell: Option<usize>,
+    #[serde(default)]
+    pub para: Option<usize>,
     pub occurrence: u32,
     pub value: String,
+}
+
+impl MergeFieldEdit {
+    fn cell_at(&self) -> Result<Option<CellAt>, String> {
+        cell_at(self.cell, self.para)
+    }
 }

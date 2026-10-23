@@ -111,8 +111,12 @@ export const TEMPLATE = defineMessages("doc.template", {
   noParagraph:
     "The Word document has no paragraph number {n} in the style “{style}”.",
   noBlock: "The Word document has no block {index}.",
+  headingLevel: "The anchor's heading level is a whole number from 1.",
+  noHeading: "The Word document has no heading number {n} of level {level}.",
+  noCell:
+    "The Word document's block {index} is no table with a cell {cell} that has a paragraph {paragraph}.",
   noAnchor:
-    "The field's anchor names no paragraph: give a bookmark, a style or a block.",
+    "The field's anchor names no paragraph: give a bookmark, a style, a heading or a block.",
   deniedDocument:
     "The template does not permit {permission} on the document, which this field needs.",
   deniedTarget:
@@ -128,8 +132,8 @@ export const TEMPLATE = defineMessages("doc.template", {
   noMergeFieldName: "The field names no merge field.",
   noMergeField: "The Word document has no merge field named “{name}”.",
   mergeFieldTitle: "Word merge field",
-  mergeFieldInCell:
-    "The merge field sits in a table cell, which cannot be written yet.",
+  mergeFieldUnwritable:
+    "No use of the merge field can be written: each sits in a paragraph a page or column break splits, or in a table poured as text.",
   fillMergeField: "Fill merge field",
   listItemsTitle: "Word list items",
   itemColumn: "Item",

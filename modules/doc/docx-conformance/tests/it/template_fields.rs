@@ -76,6 +76,7 @@ fn a_list_write_removes_and_adds_items_of_the_same_list__feat__plugin_doc_object
             block: 3,
             run: 0,
             text: "Figs".into(),
+            ..Default::default()
         }],
         delete_paragraphs: vec![4, 5],
         ..Default::default()

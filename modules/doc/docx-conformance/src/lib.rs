@@ -1846,6 +1846,46 @@ pub fn merge_field_docx() -> Vec<u8> {
     ])
 }
 
+/// A price list: a heading, a 3 x 2 table whose cells hold a bookmarked
+/// paragraph of two runs, a paragraph in a style, two paragraphs in one cell
+/// and a `MERGEFIELD Name` after text, and a body paragraph after the table
+/// with the same merge field.
+pub fn cell_fields_docx() -> Vec<u8> {
+    let content_types = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+</Types>"#;
+    let document = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:body>
+    <w:p><w:r><w:t>Price list</w:t></w:r></w:p>
+    <w:tbl>
+      <w:tblGrid><w:gridCol w:w="4680"/><w:gridCol w:w="4680"/></w:tblGrid>
+      <w:tr>
+        <w:tc><w:p><w:r><w:t>Item</w:t></w:r></w:p></w:tc>
+        <w:tc><w:p><w:r><w:t>Price</w:t></w:r></w:p></w:tc>
+      </w:tr>
+      <w:tr>
+        <w:tc><w:p><w:bookmarkStart w:id="0" w:name="first-item"/><w:r><w:t>App</w:t></w:r><w:r><w:rPr><w:b/></w:rPr><w:t>les</w:t></w:r><w:bookmarkEnd w:id="0"/></w:p></w:tc>
+        <w:tc><w:p><w:r><w:t>1.20</w:t></w:r></w:p></w:tc>
+      </w:tr>
+      <w:tr>
+        <w:tc><w:p><w:r><w:t>Line one</w:t></w:r></w:p><w:p><w:r><w:t>Line two</w:t></w:r></w:p></w:tc>
+        <w:tc><w:p><w:r><w:t xml:space="preserve">For </w:t></w:r><w:fldSimple w:instr=" MERGEFIELD Name "><w:r><w:t>«Name»</w:t></w:r></w:fldSimple></w:p></w:tc>
+      </w:tr>
+    </w:tbl>
+    <w:p><w:r><w:t xml:space="preserve">Dear </w:t></w:r><w:fldSimple w:instr=" MERGEFIELD Name "><w:r><w:t>«Name»</w:t></w:r></w:fldSimple></w:p>
+  </w:body>
+</w:document>"#;
+    zip_parts(&[
+        ("[Content_Types].xml", content_types.as_bytes()),
+        ("_rels/.rels", ROOT_RELS.as_bytes()),
+        ("word/document.xml", document.as_bytes()),
+    ])
+}
+
 /// A document with a footnote: an in-text `w:footnoteReference` plus a
 /// `word/footnotes.xml` carrying the note body (and Word's two separator
 /// pseudo-notes, which must be skipped).

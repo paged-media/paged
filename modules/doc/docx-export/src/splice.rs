@@ -84,6 +84,9 @@ pub struct ResolvedCellTarget {
     pub cell: u32,
     pub para: u32,
     pub run_ord: u32,
+    /// When set, `run_ord` counts the `<w:r>` inside the n-th `<w:hyperlink>`
+    /// / `<w:fldSimple>` child of the cell paragraph.
+    pub wrapper: Option<crate::bindings::Wrapper>,
     pub new_text: Option<String>,
     pub new_rpr: Option<Vec<u8>>,
     /// How a refusal names this run.
@@ -219,6 +222,11 @@ pub fn patch_document_xml_cols(
     let mut fld_ord: i64 = -1;
     let mut wrap_run_ord: i64 = -1;
     let mut open_wrapper: Option<crate::bindings::Wrapper> = None;
+    // The same locator inside the open cell paragraph.
+    let mut c_hl_ord: i64 = -1;
+    let mut c_fld_ord: i64 = -1;
+    let mut c_wrap_run_ord: i64 = -1;
+    let mut open_cell_wrapper: Option<crate::bindings::Wrapper> = None;
     let mut open_row: Option<ResolvedRowTarget> = None;
     // Column locator: the `<w:gridCol>` index inside the open `<w:tblGrid>`.
     let mut gc_ord: i64 = -1;
@@ -382,12 +390,67 @@ pub fn patch_document_xml_cols(
                 if ln == b"p" && parent == Some(b"tc".as_ref()) && tbl_depth == 1 {
                     cp_ord += 1;
                     cr_ord = -1;
+                    c_hl_ord = -1;
+                    c_fld_ord = -1;
+                    open_cell_wrapper = None;
+                }
+                // A cell paragraph's wrappers, and the runs inside the open one.
+                if parent == Some(b"p".as_ref()) && in_cell(&stack) && tbl_depth == 1 {
+                    if ln == b"hyperlink" {
+                        c_hl_ord += 1;
+                        c_wrap_run_ord = -1;
+                        open_cell_wrapper =
+                            Some(crate::bindings::Wrapper::Hyperlink(c_hl_ord as u32));
+                    } else if ln == b"fldSimple" {
+                        c_fld_ord += 1;
+                        c_wrap_run_ord = -1;
+                        open_cell_wrapper = Some(crate::bindings::Wrapper::Field(c_fld_ord as u32));
+                    }
+                }
+                if ln == b"r"
+                    && open_cell_wrapper.is_some()
+                    && parent != Some(b"p".as_ref())
+                    && in_cell(&stack)
+                    && tbl_depth == 1
+                {
+                    c_wrap_run_ord += 1;
+                    if let Some(ct) = cells.iter().find(|c| {
+                        c.wrapper == open_cell_wrapper
+                            && c.table_ord as i64 == tbl_ord
+                            && c.row as i64 == tr_ord
+                            && c.cell as i64 == tc_ord
+                            && c.para as i64 == cp_ord
+                            && c.run_ord as i64 == c_wrap_run_ord
+                    }) {
+                        let t = ResolvedTarget {
+                            para_ord: 0,
+                            run_ord: 0,
+                            new_text: ct.new_text.clone(),
+                            new_rpr: ct.new_rpr.clone(),
+                            delete: false,
+                            insert_after: Vec::new(),
+                            wrapper: None,
+                            label: ct.label.clone(),
+                        };
+                        let run_open_end = reader.buffer_position() as usize;
+                        splice_run(
+                            &mut reader,
+                            src,
+                            &t,
+                            run_open_end,
+                            &mut out,
+                            &mut cursor,
+                            &mut refusals,
+                        );
+                        continue;
+                    }
                 }
                 if ln == b"r" && parent == Some(b"p".as_ref()) && in_cell(&stack) && tbl_depth == 1
                 {
                     cr_ord += 1;
                     if let Some(ct) = cells.iter().find(|c| {
-                        c.table_ord as i64 == tbl_ord
+                        c.wrapper.is_none()
+                            && c.table_ord as i64 == tbl_ord
                             && c.row as i64 == tr_ord
                             && c.cell as i64 == tc_ord
                             && c.para as i64 == cp_ord
@@ -518,6 +581,7 @@ pub fn patch_document_xml_cols(
                 }
                 if ln == b"hyperlink" || ln == b"fldSimple" {
                     open_wrapper = None;
+                    open_cell_wrapper = None;
                 }
                 if ln == b"tr" {
                     if let Some(rt) = open_row.take() {

@@ -240,6 +240,32 @@ describe.skipIf(!docxPresent)(
       expect((await storyTexts(host, story))[0]).toBe("Spring letter");
     });
 
+    it("blockText by heading level and occurrence", async () => {
+      const field = await template(BLOCK_TEXT_KIND, {
+        anchor: { heading: 1 },
+      });
+      expect((await h.objects.readTemplateField(field)).value).toBe(
+        "Quarterly letter",
+      );
+      expect(
+        await h.objects.writeTemplateField(field, "Summer letter"),
+      ).toEqual({ ok: true });
+      expect((await storyTexts(host, story))[0]).toBe("Summer letter");
+      const second = {
+        ...field,
+        def: { anchor: { heading: 1, occurrence: 1 } },
+      };
+      expect(await h.objects.writeTemplateField(second, "x")).toEqual({
+        ok: false,
+        problem: "The Word document has no heading number 2 of level 1.",
+      });
+      const zero = { ...field, def: { anchor: { heading: 0 } } };
+      expect(await h.objects.writeTemplateField(zero, "x")).toEqual({
+        ok: false,
+        problem: "The anchor's heading level is a whole number from 1.",
+      });
+    });
+
     it("mergeField: the value of every use of the name, written as Word merges it", async () => {
       const field = await template(MERGE_FIELD_KIND, { name: "Name" });
       expect((await h.objects.readTemplateField(field)).value).toBe("«Name»");
