@@ -22,6 +22,7 @@ mod entry_oracle;
 mod excel_display;
 mod excel_opencheck;
 mod excel_oracle;
+mod excel_whatif;
 mod extlink;
 mod fix_model;
 mod fn_agg;
