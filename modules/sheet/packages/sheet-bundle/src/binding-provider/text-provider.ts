@@ -122,11 +122,15 @@ import {
 
 import type {
   BindingProvider,
+  BindingPropertyWrite,
   BindingRead,
   BindingTarget,
+  BindingWrite,
   PropertyPath,
   Value,
 } from "@paged-media/plugin-api";
+
+import type { CellStylePatch, DocSwatch } from "../engine";
 
 /** What the provider needs from the workbook session. Narrowed to two
  *  methods so it is unit-testable without an engine or a host, and so
@@ -138,6 +142,12 @@ export interface CellTextSource {
   /** Lower that range to the IR (the SAME call the page lowering makes;
    *  all geometry + style resolution decided in Rust). */
   lowerRange(sheet: number, range: string): LoweredContent | null;
+  /** Sheet ADR 518 / P7 — write a style patch to the selected cells (one
+   *  undo step). Absent: the provider is read-only. */
+  applyStyle?(patch: CellStylePatch): { ok: boolean; message?: string };
+  /** The document swatch `id` as a cell colour reference (its model and
+   *  the sRGB an xlsx reader shows), or null when the document has none. */
+  swatchRef?(id: string): Promise<DocSwatch | null>;
 }
 
 /**
@@ -148,7 +158,23 @@ export const VALUED_PATHS: readonly PropertyPath[] = [
   "characterFontFamily",
   "characterFontStyle",
   "characterFontSize",
+  // P7 (sheet ADR 518) — a cell's text colour as a document swatch, the
+  // text decorations, its alignment, and the document styles it maps to.
+  "characterFillColor",
+  "characterUnderline",
+  "characterStrikethru",
+  "characterPosition",
+  "paragraphJustification",
+  "appliedCharacterStyle",
+  "appliedParagraphStyle",
+  "appliedCellStyle",
+  // The fill/stroke control's container fill: inside an entered sheet
+  // frame it is the selected cells' fill (a document swatch).
+  "frameFillColor",
 ];
+
+/** The paths a style write reaches (`CellTextSource.applyStyle`). */
+export const WRITABLE_PATHS: readonly PropertyPath[] = VALUED_PATHS;
 
 /**
  * The paths this provider OWNS but has nothing to say about. Every
@@ -165,19 +191,10 @@ export const ABSENT_PATHS: readonly PropertyPath[] = [
   "characterVerticalScale",
   "characterSkew",
   "characterCase",
-  "characterPosition",
-  "characterUnderline",
-  "characterStrikethru",
   "characterLigatures",
   "characterLanguage",
   "characterOtfFeatures",
-  // The cell's text colour IS known, and since `c321642` it is even
-  // expressible — a minted swatch id, not a raw hex. But nothing applies
-  // the emission that mints it, so the id names a swatch no document
-  // carries. See the module header.
-  "characterFillColor",
   // Paragraph — a cell has no paragraph at all.
-  "paragraphJustification",
   "paragraphLeftIndent",
   "paragraphRightIndent",
   "paragraphFirstLineIndent",
@@ -278,8 +295,137 @@ export function cellValueOf(
   style: LoweredStyle,
   path: PropertyPath,
 ): CellValue {
+  // P7 — the paths a document reference answers, read off the IR.
+  switch (path) {
+    case "characterFillColor":
+      // Only a DOCUMENT swatch names a colour the document carries (a
+      // plain workbook colour has no swatch until the page mints one).
+      return style.textSwatch
+        ? { type: "colorRef", value: style.textSwatch }
+        : undefined;
+    case "frameFillColor":
+      return style.fillSwatch
+        ? { type: "colorRef", value: style.fillSwatch }
+        : undefined;
+    case "characterStrikethru":
+      return style.strike ? { type: "bool", value: true } : undefined;
+    case "characterPosition":
+      return style.vertAlign === "superscript"
+        ? { type: "text", value: "Superscript" }
+        : style.vertAlign === "subscript"
+          ? { type: "text", value: "Subscript" }
+          : undefined;
+    case "paragraphJustification": {
+      // Only an extended or explicit horizontal alignment is a style; the
+      // plain left/right of "general" lives on the cell, not here.
+      const h = style.hAlign;
+      const j = h ? JUSTIFICATION_OF[h] : undefined;
+      return j ? { type: "text", value: j } : undefined;
+    }
+    case "appliedCharacterStyle":
+      return style.docCharStyle
+        ? { type: "text", value: style.docCharStyle }
+        : undefined;
+    case "appliedParagraphStyle":
+      return style.docParaStyle
+        ? { type: "text", value: style.docParaStyle }
+        : undefined;
+    case "appliedCellStyle":
+      return style.docCellStyle
+        ? { type: "text", value: style.docCellStyle }
+        : undefined;
+  }
   const props = styleProps(style);
   return props.find((p) => p.path === path)?.value as CellValue;
+}
+
+/** A cell's horizontal alignment as a paragraph justification. */
+const JUSTIFICATION_OF: Record<string, string> = {
+  left: "LeftAlign",
+  center: "CenterAlign",
+  right: "RightAlign",
+  justify: "FullyJustified",
+  distributed: "FullyJustified",
+};
+
+/** A paragraph justification as a cell's horizontal alignment. */
+function alignOfJustification(j: string): string {
+  if (j === "CenterAlign" || j === "CenterJustified") return "center";
+  if (j === "RightAlign" || j === "RightJustified") return "right";
+  if (j === "LeftAlign" || j === "LeftJustified") return "left";
+  if (j === "FullyJustified") return "justify";
+  return "general";
+}
+
+/** The style patch one path's write means, or a refusal reason. */
+export async function patchForWrite(
+  path: PropertyPath,
+  value: Value,
+  swatchRef: ((id: string) => Promise<DocSwatch | null>) | undefined,
+): Promise<CellStylePatch | string> {
+  const text = value.type === "text" ? value.value : null;
+  switch (path) {
+    case "characterFontFamily":
+      return text ? { fontName: text } : "a font family is text";
+    case "characterFontStyle": {
+      if (text === null) return "a font style is text";
+      return {
+        bold: /bold|black|heavy|semibold/i.test(text),
+        italic: /italic|oblique/i.test(text),
+      };
+    }
+    case "characterFontSize":
+      return value.type === "length" && value.value && value.value > 0
+        ? { fontSize: value.value }
+        : "a font size is a positive length";
+    case "characterUnderline":
+      return value.type === "bool"
+        ? { underline: value.value }
+        : "underline is on or off";
+    case "characterStrikethru":
+      return value.type === "bool"
+        ? { strike: value.value }
+        : "strike-through is on or off";
+    case "characterPosition":
+      if (text === null) return "a position is text";
+      return {
+        vertAlign:
+          text === "Superscript" || text === "OTSuperscript"
+            ? "superscript"
+            : text === "Subscript" || text === "OTSubscript"
+              ? "subscript"
+              : "baseline",
+      };
+    case "paragraphJustification":
+      return text
+        ? { hAlign: alignOfJustification(text) }
+        : "a justification is text";
+    case "characterFillColor": {
+      if (value.type !== "colorRef") return "a text colour is a swatch";
+      if (value.value === null) return { fontColor: "", fontSwatch: null };
+      if (!swatchRef) return "the document's swatches cannot be read";
+      const ref = await swatchRef(value.value);
+      return ref
+        ? { fontSwatch: ref }
+        : `no swatch "${value.value}" in the document`;
+    }
+    case "frameFillColor": {
+      if (value.type !== "colorRef") return "a cell fill is a swatch";
+      if (value.value === null) return { fill: "", fillSwatch: null };
+      if (!swatchRef) return "the document's swatches cannot be read";
+      const ref = await swatchRef(value.value);
+      return ref
+        ? { fillSwatch: ref }
+        : `no swatch "${value.value}" in the document`;
+    }
+    case "appliedCharacterStyle":
+      return text !== null ? { docCharStyle: text } : "a style is named by id";
+    case "appliedParagraphStyle":
+      return text !== null ? { docParaStyle: text } : "a style is named by id";
+    case "appliedCellStyle":
+      return text !== null ? { docCellStyle: text } : "a style is named by id";
+  }
+  return `a spreadsheet cell has no "${path}" to write`;
 }
 
 export interface TextBindingProvider {
@@ -325,11 +471,10 @@ export function makeTextBindingProvider(
   const provider: BindingProvider = {
     provides: {
       paths: SERVED_PATHS,
-      // READS EVERYTHING IT DECLARES, WRITES NONE OF IT. See the module
-      // header: the sheet engine has no cell-style write API, and
-      // saying so is what keeps the host's controls read-only instead
-      // of fake-interactive.
-      writablePaths: [],
+      // P7 — with a style write door (sheet ADR 518 `setStyle`) the
+      // valued paths write the selected cells; without one the provider
+      // stays a read-only readout and says so.
+      writablePaths: source.applyStyle ? WRITABLE_PATHS : [],
     },
 
     readProperty(request): BindingRead {
@@ -368,9 +513,38 @@ export function makeTextBindingProvider(
       );
     },
 
-    // NO `writeProperty`, and NO `applyMutation`. `writablePaths: []` is
-    // the declaration that makes the absence legible to the host; the
-    // missing callback is the consequence, not the statement.
+    async writeProperty(request: BindingPropertyWrite): Promise<BindingWrite> {
+      if (request.target.kind !== "selection") {
+        return { kind: "decline", reason: "selection-scoped provider" };
+      }
+      if (!source.applyStyle || !WRITABLE_PATHS.includes(request.path)) {
+        return {
+          kind: "applied",
+          outcome: {
+            applied: false,
+            error: `a spreadsheet cell has no writable "${request.path}"`,
+          },
+        };
+      }
+      const patch = await patchForWrite(
+        request.path,
+        request.value,
+        source.swatchRef,
+      );
+      if (typeof patch === "string") {
+        return { kind: "applied", outcome: { applied: false, error: patch } };
+      }
+      const r = source.applyStyle(patch);
+      return {
+        kind: "applied",
+        outcome: r.ok
+          ? { applied: true, createdId: null, pageIds: [] }
+          : {
+              applied: false,
+              error: r.message ?? "the style write was refused",
+            },
+      };
+    },
   };
 
   return { provider, lastRange: () => lastRange };

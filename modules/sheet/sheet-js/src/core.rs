@@ -61,6 +61,7 @@ pub mod protect;
 pub mod sort;
 pub mod tables;
 pub mod validation;
+pub mod whatif;
 pub use charts::{ChartInfo, ChartsheetInfo, SparklineInfo, CHART_KIND_TAGS};
 pub use format::{
     DocSwatchArg, EdgeArg, GradientArg, GradientStopArg, MergeResult, NameInfo, NamedStyleInfo,
@@ -850,6 +851,8 @@ impl SheetSession {
         };
         // Which saved-hidden rows the file's AutoFilters hid (ADR 517).
         session.init_file_filters();
+        // Data tables are calculated with the workbook (ADR 517).
+        session.data_tables_after_write()?;
         Ok(session)
     }
 
@@ -899,6 +902,15 @@ impl SheetSession {
         dirty_sheets.extend(self.extra_dirty.iter().copied());
         for sheet in dirty_sheets {
             self.doc.mark_sheet_dirty(sheet);
+        }
+
+        // A chart read from the file and deleted since leaves the package:
+        // its anchor, relationship and parts (the slot stays — see
+        // `chart_tombstones`).
+        for &index in &self.removed_charts {
+            self.doc
+                .remove_chart_parts(index as usize)
+                .map_err(|e| SessionError(e.to_string()))?;
         }
 
         // Every spilling formula is written as Excel writes a dynamic array:
@@ -965,6 +977,19 @@ impl SheetSession {
         self.edited.insert((sheet, row, col));
         // A header cell renames its table column (sheet ADR 517).
         self.table_sync_headers(&[(sheet, row, col)])?;
+        // Data tables follow the inputs they read (sheet ADR 517).
+        let table_cells = self.data_tables_after_write()?;
+        if !table_cells.is_empty() {
+            result
+                .changed
+                .extend(table_cells.iter().map(|&(s, r, c)| CellRef {
+                    sheet: s,
+                    row: r,
+                    col: c,
+                    row_abs: false,
+                    col_abs: false,
+                }));
+        }
 
         // Build the changed list with each cell's formatted display.
         let engine = self.engine();
@@ -1092,8 +1117,10 @@ impl SheetSession {
         self.edited.extend(written.iter().copied());
         let header_check: Vec<(u16, u32, u32)> = written.iter().copied().collect();
         self.table_sync_headers(&header_check)?;
+        let table_cells = self.data_tables_after_write()?;
         let mut changed = written;
         changed.extend(res.changed.iter().map(|c| (c.sheet, c.row, c.col)));
+        changed.extend(table_cells);
         Ok(SetCellsResult {
             changed_count: changed.len() as u32,
             circular: res
@@ -1876,6 +1903,42 @@ impl SheetSession {
         frames: Vec<FrameBoxArg>,
         opts: PaginateOptionsArg,
     ) -> Result<Vec<Page>, SessionError> {
+        let full = self.pagination_content(sheet, range)?;
+        let (boxes, paginate_opts) = pagination_args(frames, opts);
+        Ok(sheet_lower::paginate_lowered(full, &boxes, &paginate_opts))
+    }
+
+    /// [`paginate`](Self::paginate) over several ranges of one sheet in
+    /// sequence (a print area of several ranges, plan G4): each range
+    /// paginated with its own header band, the next one starting in the room
+    /// the previous one left (`sheet_lower::paginate_sequence`). Every page
+    /// names its range (`area`, an index into `ranges`).
+    pub fn paginate_areas(
+        &self,
+        sheet: u16,
+        ranges: &[String],
+        frames: Vec<FrameBoxArg>,
+        opts: PaginateOptionsArg,
+    ) -> Result<Vec<Page>, SessionError> {
+        let fulls = ranges
+            .iter()
+            .map(|r| self.pagination_content(sheet, r))
+            .collect::<Result<Vec<_>, _>>()?;
+        let (boxes, paginate_opts) = pagination_args(frames, opts);
+        Ok(sheet_lower::paginate_sequence(
+            fulls,
+            &boxes,
+            &paginate_opts,
+        ))
+    }
+
+    /// The page lowering a pagination slices: `range` resolved from `sheet`,
+    /// validated and capped, lowered once through the page lane.
+    fn pagination_content(
+        &self,
+        sheet: u16,
+        range: &str,
+    ) -> Result<sheet_lower::LoweredContent, SessionError> {
         let (sheet, cell_range) = self.resolve_range(sheet, range)?;
 
         // Validate the sheet id (FREEZE AMENDMENT, audit finding 2 — matches
@@ -1904,33 +1967,19 @@ impl SheetSession {
             )));
         }
 
-        let boxes: Vec<FrameBox> = frames
-            .into_iter()
-            .map(|f| FrameBox {
-                width_pt: f.width_pt,
-                height_pt: f.height_pt,
-            })
-            .collect();
-        let paginate_opts = sheet_lower::PaginateOptions {
-            repeated_header_rows: opts.repeated_header_rows.unwrap_or(0),
-            continued_marker: opts.continued_marker.unwrap_or(false),
-            keep_rows_together: opts.keep_rows_together.unwrap_or_default(),
-        };
-
         // Lower ONCE through the page lane (real styles + conditional
         // formatting, grid rules on — what a placed table shows), then slice:
         // the repeated header band keeps its formatting on every frame.
         let model = self.engine().model();
         let cf = self.doc.lowered_conditional_formats(sheet);
-        let full = sheet_lower::lower_range_condfmt(
+        Ok(sheet_lower::lower_range_condfmt(
             model,
             sheet,
             cell_range,
             &ViewOptions::default(),
             &self.doc.visual_styles,
             &cf,
-        );
-        Ok(sheet_lower::paginate_lowered(full, &boxes, &paginate_opts))
+        ))
     }
 
     /// Window a worksheet into a [`sheet_grid::GridScene`] for the sheets-mode
@@ -2513,6 +2562,26 @@ fn empty_workbook_bytes() -> Vec<u8> {
         ),
     ];
     sheet_xlsx::write::write_package(parts.iter().map(|(n, b)| (*n, b.as_bytes())))
+}
+
+/// The frame boxes and pagination options a pagination door was handed.
+fn pagination_args(
+    frames: Vec<FrameBoxArg>,
+    opts: PaginateOptionsArg,
+) -> (Vec<FrameBox>, sheet_lower::PaginateOptions) {
+    let boxes = frames
+        .into_iter()
+        .map(|f| FrameBox {
+            width_pt: f.width_pt,
+            height_pt: f.height_pt,
+        })
+        .collect();
+    let paginate_opts = sheet_lower::PaginateOptions {
+        repeated_header_rows: opts.repeated_header_rows.unwrap_or(0),
+        continued_marker: opts.continued_marker.unwrap_or(false),
+        keep_rows_together: opts.keep_rows_together.unwrap_or_default(),
+    };
+    (boxes, paginate_opts)
 }
 
 /// A [`ParseCtx`] over a [`SheetModel`]: resolves sheet names + defined names,

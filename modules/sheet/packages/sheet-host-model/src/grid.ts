@@ -49,7 +49,7 @@ import type {
   ScenePathSeg,
 } from "@paged-media/plugin-api";
 
-import type { Align, LoweredStyle, Rule, Rules } from "./lowered";
+import type { Align, LoweredRun, LoweredStyle, Rule, Rules } from "./lowered";
 
 /** The viewport window (mirror of Rust `sheet_grid::GridViewport`): the
  *  displayed tracks and the cumulative viewport-local pt boundaries along
@@ -105,6 +105,8 @@ export interface GridCell {
   /** The number format's repeat-fill character; `text` then holds a TAB
    *  where it stands (see `LoweredCell.fill`). */
   fill?: string;
+  /** A rich-text cell's runs (W2.2). */
+  runs?: LoweredRun[];
 }
 
 /** One merged area as shown in a viewport pane (mirror of Rust

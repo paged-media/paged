@@ -353,3 +353,69 @@ fn sheet_lower_paginate_convergence() {
         }
     });
 }
+
+/// A print area of several ranges paginated in sequence (plan G4): the
+/// second area starts in the room the first left in its last frame, each area
+/// repeats its own header band, pages come in story order with their area.
+#[test]
+#[allow(non_snake_case)] // `__feat__<id>` test-name link (cockpit rule)
+fn sheet_lower_paginate_sequence_continues_in_the_room_left__feat__sheet_objects() {
+    use sheet_lower::{lower_range, paginate_sequence, ViewOptions};
+    let (m, s) = linear_sheet(40);
+    let area = |r0: u32, r1: u32| {
+        lower_range(
+            &m,
+            s,
+            CellRange {
+                r0,
+                c0: 0,
+                r1,
+                c1: 0,
+            },
+            &ViewOptions::default(),
+        )
+    };
+    // 10 + 6 rows into frames of 8 rows (120 pt), one header row each.
+    let opts = PaginateOptions {
+        repeated_header_rows: 1,
+        ..PaginateOptions::default()
+    };
+    let pages = paginate_sequence(vec![area(0, 9), area(20, 25)], &frames(4, 120.0), &opts);
+    let shape: Vec<(u32, usize, Vec<String>)> = pages
+        .iter()
+        .map(|p| {
+            (
+                p.area,
+                p.frame_index,
+                p.content
+                    .rows
+                    .iter()
+                    .map(|r| r.cells[0].text.clone())
+                    .collect(),
+            )
+        })
+        .collect();
+    let t = |xs: &[u32]| xs.iter().map(|x| x.to_string()).collect::<Vec<_>>();
+    assert_eq!(
+        shape,
+        vec![
+            (0, 0, t(&[0, 1, 2, 3, 4, 5, 6, 7])),
+            // Frame 1: the rest of area 0 (3 rows with its header) …
+            (0, 1, t(&[0, 8, 9])),
+            // … then area 1 in the 5 rows left there, its own header first.
+            (1, 1, t(&[20, 21, 22, 23, 24])),
+            (1, 2, t(&[20, 25])),
+        ]
+    );
+    // A frame without room for the next area's header and first row moves it
+    // to the next frame; no frame left drops it.
+    let full = paginate_sequence(vec![area(0, 7), area(20, 21)], &frames(2, 120.0), &opts);
+    assert_eq!(
+        full.iter()
+            .map(|p| (p.area, p.frame_index))
+            .collect::<Vec<_>>(),
+        [(0, 0), (1, 1)]
+    );
+    let none = paginate_sequence(vec![area(0, 7), area(20, 21)], &frames(1, 120.0), &opts);
+    assert_eq!(none.len(), 1);
+}
