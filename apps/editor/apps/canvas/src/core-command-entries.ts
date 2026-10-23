@@ -29,6 +29,7 @@ import type {
   MenuItemContribution,
 } from "@paged-media/shell";
 
+import { scopeOf } from "@paged-media/shell";
 import { openCoreCommand } from "./core-command-dialog";
 import { defineMessages, t } from "@paged-media/strings";
 
@@ -414,13 +415,16 @@ export function buildCoreCommandEntries(): CommandContribution[] {
       id: RUN_CORE_COMMAND,
       title: t(M.runCommand),
       category: "Edit",
-      handler: () => openCoreCommand(null),
+      handler: (paged: unknown) => openCoreCommand(scopeOf(paged), null),
     },
     ...CORE_COMMAND_ENTRIES.map((e) => ({
       id: entryCommandId(e.op),
       title: e.title,
       category: e.menu?.split("/")[0] ?? "Document",
-      handler: () => openCoreCommand(e.op, e.prefill ?? {}, { title: e.title }),
+      handler: (paged: unknown) =>
+        openCoreCommand(scopeOf(paged), e.op, e.prefill ?? {}, {
+          title: e.title,
+        }),
     })),
   ];
 }

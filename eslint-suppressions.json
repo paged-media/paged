@@ -1,21 +1,18 @@
 {
+  "apps/editor/apps/canvas/src/app/mount.tsx": {
+    "react-hooks/refs": {
+      "count": 4
+    },
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  },
   "apps/editor/apps/canvas/src/cockpit/control-bar.tsx": {
     "react-hooks/set-state-in-effect": {
       "count": 1
     }
   },
   "apps/editor/apps/canvas/src/core-command-dialog.tsx": {
-    "react-hooks/set-state-in-effect": {
-      "count": 1
-    }
-  },
-  "apps/editor/apps/canvas/src/app/mount.tsx": {
-    "react-hooks/immutability": {
-      "count": 1
-    },
-    "react-hooks/refs": {
-      "count": 4
-    },
     "react-hooks/set-state-in-effect": {
       "count": 1
     }

@@ -20,17 +20,32 @@
 // Cockpit — filmstrip/document-map navigation hand-off. The camera
 // fit math (page layout + fit) lives app-side; the app registers a
 // navigator from inside the provider tree (CanvasAppIntegration) and
-// the shell's chrome calls it. Same module-level pattern as the
-// export-dialog notifier.
+// the shell's chrome calls it, through the editor's scope (plan task E1).
+
+import { scoped, useScoped, type EditorScope } from "../state/editor-scope";
 
 export type PageNavigator = (pageIndices: number[]) => void;
 
-let navigator: PageNavigator | null = null;
+const NAVIGATOR = scoped("pageNavigator", () => ({
+  current: null as PageNavigator | null,
+}));
 
-export function setCockpitPageNavigator(fn: PageNavigator | null): void {
-  navigator = fn;
+export function setCockpitPageNavigator(
+  scope: EditorScope,
+  fn: PageNavigator | null,
+): void {
+  scope.get(NAVIGATOR).current = fn;
 }
 
-export function navigateToPages(pageIndices: number[]): void {
-  navigator?.(pageIndices);
+export function navigateToPages(
+  scope: EditorScope,
+  pageIndices: number[],
+): void {
+  scope.get(NAVIGATOR).current?.(pageIndices);
+}
+
+/** Navigate in the editor this component is mounted in. */
+export function usePageNavigation(): (pageIndices: number[]) => void {
+  const navigator = useScoped(NAVIGATOR);
+  return (pageIndices) => navigator.current?.(pageIndices);
 }

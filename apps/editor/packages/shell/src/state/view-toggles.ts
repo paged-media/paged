@@ -19,13 +19,14 @@
 
 // B4 — View-menu toggles that an OVERLAY reads and a COMMAND flips.
 //
-// A module-scope store rather than a context, for the reason
-// `open-file-handle.ts` gives: the writer is a command registered once
-// at startup and the reader is an overlay mounted inside the canvas's
-// SVG. Threading a boolean between them through React state would mean
-// a provider that exists for one value and renders nothing, and the
-// value has to survive a dock close/reopen, which module scope does for
-// free.
+// A store in the editor's scope rather than a context: the writer is a
+// command (its handler gets the editor, and so the scope) and the reader
+// is an overlay mounted inside the canvas's SVG. Threading a boolean
+// between them through React state would mean a provider that exists for
+// one value and renders nothing, and the value has to survive a dock
+// close/reopen, which the scope (the editor's lifetime) does for free.
+// Per editor (plan task E1): two editors on a page have their own View
+// menus.
 //
 // `useSyncExternalStore` rather than an event + local state, because the
 // overlay must re-render the instant the command flips the flag — and
@@ -35,11 +36,13 @@
 // grow. A subscription that the store itself notifies cannot drift that
 // way.
 
+import { scoped, type EditorScope } from "./editor-scope";
+
 export type ViewToggle = "textThreads" | "snapToPoints" | "headingAnchors";
 
 type Listener = () => void;
 
-const state: Record<ViewToggle, boolean> = {
+const DEFAULTS: Readonly<Record<ViewToggle, boolean>> = {
   // Off by default. The thread lines are a diagnostic view, not chrome
   // the document always wears — InDesign hides them behind
   // View ▸ Extras ▸ Show Text Threads for the same reason.
@@ -55,26 +58,43 @@ const state: Record<ViewToggle, boolean> = {
   headingAnchors: false,
 };
 
-const DEFAULTS: Readonly<Record<ViewToggle, boolean>> = { ...state };
+const TOGGLES = scoped("viewToggles", () => ({
+  state: { ...DEFAULTS } as Record<ViewToggle, boolean>,
+  listeners: new Set<Listener>(),
+}));
 
-const listeners = new Set<Listener>();
+const notify = (scope: EditorScope): void => {
+  for (const l of [...scope.get(TOGGLES).listeners]) l();
+};
 
-export function getViewToggle(which: ViewToggle): boolean {
-  return state[which];
+export function getViewToggle(scope: EditorScope, which: ViewToggle): boolean {
+  return scope.get(TOGGLES).state[which];
 }
 
-export function setViewToggle(which: ViewToggle, on: boolean): void {
+export function setViewToggle(
+  scope: EditorScope,
+  which: ViewToggle,
+  on: boolean,
+): void {
+  const { state } = scope.get(TOGGLES);
   if (state[which] === on) return;
   state[which] = on;
-  for (const l of listeners) l();
+  notify(scope);
 }
 
-export function toggleViewToggle(which: ViewToggle): boolean {
-  setViewToggle(which, !state[which]);
-  return state[which];
+export function toggleViewToggle(
+  scope: EditorScope,
+  which: ViewToggle,
+): boolean {
+  setViewToggle(scope, which, !getViewToggle(scope, which));
+  return getViewToggle(scope, which);
 }
 
-export function subscribeViewToggles(listener: Listener): () => void {
+export function subscribeViewToggles(
+  scope: EditorScope,
+  listener: Listener,
+): () => void {
+  const { listeners } = scope.get(TOGGLES);
   listeners.add(listener);
   return () => {
     listeners.delete(listener);
@@ -84,7 +104,8 @@ export function subscribeViewToggles(listener: Listener): () => void {
 /** Reset to the defaults — tests only, so one spec's toggle cannot leak
  *  into the next. (The specs share a page instance per file; a leaked
  *  value would make the next test pass for the wrong reason.) */
-export function resetViewToggles(): void {
+export function resetViewToggles(scope: EditorScope): void {
+  const { state } = scope.get(TOGGLES);
   let changed = false;
   for (const k of Object.keys(state) as ViewToggle[]) {
     if (state[k] !== DEFAULTS[k]) {
@@ -92,5 +113,5 @@ export function resetViewToggles(): void {
       changed = true;
     }
   }
-  if (changed) for (const l of listeners) l();
+  if (changed) notify(scope);
 }

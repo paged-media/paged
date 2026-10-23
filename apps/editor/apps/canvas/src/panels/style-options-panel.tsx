@@ -47,7 +47,11 @@ import {
   CockpitPanelHeader,
   CockpitRow,
   PropertyField,
-  cockpitActions,
+  cockpitActionsOf,
+  createValueStore,
+  scoped,
+  useEditorScope,
+  type EditorScope,
   displayName,
   useCollection,
 } from "@paged-media/shell";
@@ -524,34 +528,31 @@ export const STYLE_SECTIONS: Readonly<
 
 // ------------------------------------------------------------ target
 
-/** The style the panel edits — shared so a style panel can open the
- *  options on ITS applied style. */
-let target: { family: StyleFamily; selfId: string | null } = {
-  family: "paragraph",
-  selfId: null,
-};
-const listeners = new Set<() => void>();
-const subscribe = (l: () => void) => {
-  listeners.add(l);
-  return () => listeners.delete(l);
-};
-const snapshot = () => target;
+/** The style the panel edits, per editor — shared so a style panel can
+ *  open the options on ITS applied style. */
+const TARGET = scoped("styleOptionsTarget", () =>
+  createValueStore<{ family: StyleFamily; selfId: string | null }>({
+    family: "paragraph",
+    selfId: null,
+  }),
+);
 
 export function setStyleOptionsTarget(
+  scope: EditorScope,
   family: StyleFamily,
   selfId: string | null,
 ): void {
-  target = { family, selfId };
-  for (const l of listeners) l();
+  scope.get(TARGET).set({ family, selfId });
 }
 
-/** "Style Options…": point the panel at a style and bring it up. */
+/** "Style Options…": point `scope`'s panel at a style and bring it up. */
 export function openStyleOptions(
+  scope: EditorScope,
   family: StyleFamily,
   selfId: string | null,
 ): void {
-  setStyleOptionsTarget(family, selfId);
-  cockpitActions.openPanel?.(STYLE_OPTIONS_PANEL);
+  setStyleOptionsTarget(scope, family, selfId);
+  cockpitActionsOf(scope).openPanel?.(STYLE_OPTIONS_PANEL);
 }
 
 /** The ADR 131 address of a style. */
@@ -569,7 +570,9 @@ interface StyleRow {
 
 export function StyleOptionsPanel() {
   const strings = useStrings();
-  const current = useSyncExternalStore(subscribe, snapshot);
+  const scope = useEditorScope();
+  const target = scope.get(TARGET);
+  const current = useSyncExternalStore(target.subscribe, target.get);
   const family = current.family;
   const spec = FAMILIES.find((f) => f.family === family)!;
   const styles = useCollection<StyleRow>(spec.collection);
@@ -608,7 +611,7 @@ export function StyleOptionsPanel() {
             selected={f.family === family}
             data-cockpit-action={`style-family-${f.family}`}
             style={familyTab(f.family === family)}
-            onClick={() => setStyleOptionsTarget(f.family, null)}
+            onClick={() => setStyleOptionsTarget(scope, f.family, null)}
           >
             {strings.t(f.title)}
           </Tab>
@@ -678,12 +681,13 @@ export function StyleOptionsButton({
   selfId: string;
 }) {
   const strings = useStrings();
+  const scope = useEditorScope();
   return (
     <button
       type="button"
       data-style-options-open={selfId}
       title={strings.t(M.openOptions)}
-      onClick={() => openStyleOptions(family, selfId)}
+      onClick={() => openStyleOptions(scope, family, selfId)}
       className="shrink-0 rounded-[4px] px-1.5 text-[10px] hover:bg-[var(--pg-muted)]"
       style={{ color: "var(--pg-muted-fg)" }}
     >

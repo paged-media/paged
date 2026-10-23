@@ -103,6 +103,8 @@ import {
   PAGED_LIST,
   SchemaPanelRenderer,
   createLocalBindingsSurface,
+  scoped,
+  useScoped,
   useActiveBindingProviders,
   useCollectionPathOffered,
   useProvidedCollection,
@@ -153,9 +155,11 @@ const CAN_TOGGLE_LOCKED_BINDING = "paged.layers.canToggleLocked";
  *  path — it is simply "is there anything to move". */
 const CAN_ASSIGN_BINDING = "paged.layers.canAssignSelection";
 
-// Module-scoped so dock close/reopen keeps the published gates — the
+// In the editor's scope so dock close/reopen keeps the published gates — the
 // same reason the schema-tree demo panel holds its surface here.
-const layersBindings = createLocalBindingsSurface();
+const LAYERS_BINDINGS = scoped("layers-panel", () =>
+  createLocalBindingsSurface(),
+);
 
 const M = defineMessages("app.layersPanel", {
   title: "Layers",
@@ -315,6 +319,7 @@ type LayerRow = LayerSummary;
 type PanelProps = any;
 
 export function LayersPanel(_: PanelProps) {
+  const layersBindings = useScoped(LAYERS_BINDINGS);
   const strings = useStrings();
   const registries = useRegistries();
   const mutate = useProviderFirstMutate();
@@ -345,7 +350,13 @@ export function LayersPanel(_: PanelProps) {
     layersBindings.publish(CAN_TOGGLE_VISIBLE_BINDING, canToggleVisible);
     layersBindings.publish(CAN_TOGGLE_LOCKED_BINDING, canToggleLocked);
     layersBindings.publish(CAN_ASSIGN_BINDING, selectedElements.length > 0);
-  }, [canRename, canToggleVisible, canToggleLocked, selectedElements.length]);
+  }, [
+    canRename,
+    canToggleVisible,
+    canToggleLocked,
+    selectedElements.length,
+    layersBindings,
+  ]);
 
   // Held in a ref for the same reason `rowsRef` is: the command objects
   // are built once and would otherwise close over the selection as it

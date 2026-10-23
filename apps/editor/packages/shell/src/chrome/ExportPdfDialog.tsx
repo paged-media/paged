@@ -57,14 +57,23 @@ import {
   type PrintOutputFacts,
 } from "../lib/print-output";
 import { EXPORT_PDF } from "./messages";
+import {
+  createEmitter,
+  scoped,
+  useScoped,
+  type EditorScope,
+} from "../state/editor-scope";
 import { richText } from "./rich";
 
 type DialogAction = "open" | "close";
-const listeners = new Set<(action: DialogAction) => void>();
+const DIALOG = scoped("exportPdfDialog", () => createEmitter<DialogAction>());
 
-/** Open/close the export dialog from anywhere (command handlers). */
-export function notifyExportPdfDialog(action: DialogAction): void {
-  for (const fn of listeners) fn(action);
+/** Open/close `scope`'s export dialog (command handlers, toolbars). */
+export function notifyExportPdfDialog(
+  scope: EditorScope,
+  action: DialogAction,
+): void {
+  scope.get(DIALOG).emit(action);
 }
 
 /** Persisted last-used options (schema drift falls back to defaults). */
@@ -172,20 +181,19 @@ export function ExportPdfDialog() {
     return () => clearTimeout(t);
   }, [notice]);
 
-  // Module-emitter subscription (the notifyPalette pattern).
-  useEffect(() => {
-    const fn = (action: DialogAction) => {
-      setOpen(action === "open");
-      if (action === "open") {
-        setPhase({ kind: "idle" });
-        setNotice(null);
-      }
-    };
-    listeners.add(fn);
-    return () => {
-      listeners.delete(fn);
-    };
-  }, []);
+  // The editor's dialog event (the notifyPalette pattern).
+  const dialog = useScoped(DIALOG);
+  useEffect(
+    () =>
+      dialog.subscribe((action) => {
+        setOpen(action === "open");
+        if (action === "open") {
+          setPhase({ kind: "idle" });
+          setNotice(null);
+        }
+      }),
+    [dialog],
+  );
 
   // Registered profile names — the X-4 output-intent choices.
   useEffect(() => {

@@ -34,7 +34,7 @@ import {
   CockpitPanelHeader,
   CockpitSection,
   Icon,
-  cockpitActions,
+  useCockpitActions,
   MetricTile,
   StatusPill,
   printOutputFacts,
@@ -232,6 +232,7 @@ export function PublicationHealthPanel() {
 }
 
 function RiskRowView({ row }: { row: RiskRow }) {
+  const cockpitActions = useCockpitActions();
   const strings = useStrings();
   const seam = row.count == null;
   const clean = row.count === 0;

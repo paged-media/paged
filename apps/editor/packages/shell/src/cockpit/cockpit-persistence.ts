@@ -27,6 +27,7 @@ import { createDebouncer } from "@paged-media/panel-kit";
 
 import type { WorkflowMode } from "../state/workflow-mode-context";
 import { scopedChromeKey } from "../state/chrome-storage-scope";
+import { scoped, type EditorScope } from "../state/editor-scope";
 import { isRecord, isStringArray } from "../lib/stored-settings";
 
 const KEY_BASE = "paged.cockpit.v1";
@@ -34,7 +35,7 @@ const KEY_BASE = "paged.cockpit.v1";
  *  `"design"`, and this blob is keyed BY MODE ID, so an unscoped key
  *  would have solo and the ordinary editor overwriting each other's
  *  right-dock tabs. See `state/chrome-storage-scope.ts`. */
-const KEY = () => scopedChromeKey(KEY_BASE);
+const KEY = (scope: EditorScope) => scopedChromeKey(scope, KEY_BASE);
 const LEGACY_PREFIXES = ["paged.layout."];
 
 export interface ModeUiState {
@@ -57,7 +58,7 @@ function safeStorage(): Storage | null {
 /** Load the persisted per-mode state and delete the legacy dockview
  *  layout keys (one-shot migration: old snapshots are meaningless in
  *  the fixed cockpit). */
-export function loadCockpitStore(): CockpitStore {
+export function loadCockpitStore(scope: EditorScope): CockpitStore {
   const ls = safeStorage();
   if (!ls) return {};
   // Legacy cleanup — enumerate first, then remove (removal mutates
@@ -70,7 +71,7 @@ export function loadCockpitStore(): CockpitStore {
   for (const k of stale) ls.removeItem(k);
 
   try {
-    const raw = ls.getItem(KEY());
+    const raw = ls.getItem(KEY(scope));
     if (!raw) return {};
     return checkedStore(JSON.parse(raw) as unknown);
   } catch {
@@ -100,23 +101,28 @@ function checkedStore(parsed: unknown): CockpitStore {
   return out as CockpitStore;
 }
 
-let latest: CockpitStore = {};
-/** One write 300 ms after the last change (the panel kit's debouncer). */
-const write = createDebouncer(300);
+/** The blob last saved, and one write 300 ms after the last change (the
+ *  panel kit's debouncer), per editor. */
+const PENDING = scoped("cockpitPersistence", () => ({
+  latest: {} as CockpitStore,
+  write: createDebouncer(300),
+}));
 
 /** Merge one mode's state into the blob; debounced 300 ms. */
 export function saveModeUiState(
+  scope: EditorScope,
   store: CockpitStore,
   mode: WorkflowMode,
   state: ModeUiState,
 ): CockpitStore {
   const next: CockpitStore = { ...store, [mode]: state };
-  latest = next;
+  const pending = scope.get(PENDING);
+  pending.latest = next;
   const ls = safeStorage();
   if (!ls) return next;
-  write.schedule(() => {
+  pending.write.schedule(() => {
     try {
-      ls.setItem(KEY(), JSON.stringify(latest));
+      ls.setItem(KEY(scope), JSON.stringify(pending.latest));
     } catch {
       /* quota / privacy mode — state stays in-memory */
     }

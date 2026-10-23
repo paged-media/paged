@@ -51,6 +51,8 @@ import { useCallback, useEffect } from "react";
 import {
   CatalogRegistryProvider,
   createLocalBindingsSurface,
+  scoped,
+  useScoped,
   PAGED_LIST,
   SchemaPanelRenderer,
   useCanvasClient,
@@ -76,10 +78,12 @@ export const DEMO_MOVE_LAYER_COMMAND = "paged.demo.moveLayer";
 const STRUCTURE_BINDING = "demo.structureRows";
 const STRUCTURE_SELECTED = "demo.structureSelected";
 
-// Module-scoped so the published rows + expansion survive a dock tab
+// In the editor's scope so the published rows + expansion survive a dock tab
 // close/reopen (UI state, not document state) — the schema-list demo
 // panel's convention.
-const demoBindings = createLocalBindingsSurface();
+const DEMO_BINDINGS = scoped("schema-tree-demo-panel", () =>
+  createLocalBindingsSurface(),
+);
 
 const M = defineMessages("app.schemaTreeDemoPanel", {
   title: "Structure (schema tree)",
@@ -192,6 +196,7 @@ const demoSchema = (strings: Strings): ShellPanelSchema => ({
 });
 
 export function SchemaTreeDemoPanel() {
+  const demoBindings = useScoped(DEMO_BINDINGS);
   const strings = useStrings();
   const client = useCanvasClient();
   const registries = useRegistries();
@@ -206,7 +211,7 @@ export function SchemaTreeDemoPanel() {
         demoBindings.publish(STRUCTURE_BINDING, flattenSceneTree(roots)),
       )
       .catch(() => demoBindings.publish(STRUCTURE_BINDING, []));
-  }, [client]);
+  }, [client, demoBindings]);
 
   useEffect(() => {
     refresh();

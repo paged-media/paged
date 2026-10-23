@@ -34,6 +34,7 @@ import { useEffect, useLayoutEffect, useRef } from "react";
 import {
   CanvasContextMenu,
   openCanvasContextMenu,
+  scopeOf,
   usePaged,
   type CommandContribution,
   type ContextMenuEntry,
@@ -162,7 +163,7 @@ export const CANVAS_CONTEXT_MENU_COMMAND: CommandContribution = {
   category: "Edit",
   handler: (paged) => {
     const [x, y] = keyboardPoint(paged as PagedEditor);
-    openCanvasContextMenu(x, y);
+    openCanvasContextMenu(scopeOf(paged), x, y);
   },
 };
 
@@ -189,7 +190,9 @@ export function CanvasContextMenuHost() {
       const { clientX, clientY } = e;
       void selectUnder(pagedRef.current, viewport, clientX, clientY)
         .catch(() => undefined)
-        .then(() => openCanvasContextMenu(clientX, clientY));
+        .then(() =>
+          openCanvasContextMenu(pagedRef.current.scope, clientX, clientY),
+        );
     };
     document.addEventListener("contextmenu", onContextMenu, true);
     return () =>

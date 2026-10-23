@@ -102,7 +102,7 @@ import type {
   Value,
 } from "@paged-media/client";
 
-import { addressOfElement } from "../object-model";
+import { useAddressOfElement } from "../object-model";
 import { CoreCommandButton } from "../core-command-dialog";
 import { defineMessages, useStrings } from "@paged-media/strings";
 
@@ -308,6 +308,7 @@ function readCell(f: Record<string, ObjectField>): CellReadback {
 }
 
 export function TablePanel() {
+  const addressOfElement = useAddressOfElement();
   const strings = useStrings();
   const client = useCanvasClient();
   const ts = useOptionalTableSelection();

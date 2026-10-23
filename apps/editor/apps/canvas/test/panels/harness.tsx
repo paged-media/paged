@@ -102,15 +102,14 @@ import {
   type TableCellSelection,
   ChromeRegionsProvider,
   chromeRegionsOf,
+  createEditorScope,
+  EditorScopeProvider,
+  type EditorScope,
   SessionPolicyProvider,
 } from "@paged-media/shell";
 import { createBindingProviderRegistry } from "@paged-media/plugin-sdk";
 
-import {
-  editorObjectModel,
-  objectRegistry,
-  setObjectModelEditor,
-} from "../../src/object-model";
+import { editorObjectsOf, type EditorObjects } from "../../src/object-model";
 import {
   EngineWorker,
   headlessEngine,
@@ -142,6 +141,9 @@ export interface MountOptions<S> {
    *  keybindings, other panels), the way the app's registries are full
    *  before a user opens a panel. Runs before the panel mounts. */
   registries?: (registries: ShellRegistries) => void;
+  /** The editor scope to mount into: another panel of the same editor
+   *  (`h.scope`). Default a new editor's. */
+  scope?: EditorScope;
 }
 
 interface Bridge {
@@ -167,6 +169,10 @@ export interface PanelHarness<S = undefined> {
   readonly user: ReturnType<typeof userEvent.setup>;
   readonly client: CanvasClient;
   readonly engine: EngineWorker;
+  /** The mount's editor scope, and its object model (the registry
+   *  `host.objects` and the fields read through). */
+  readonly scope: EditorScope;
+  readonly objects: EditorObjects;
   /** The open document (null for `document: "none"`). */
   readonly handle: DocumentHandle | null;
   readonly registries: ShellRegistries;
@@ -266,7 +272,7 @@ function BridgeCapture({ onBridge }: { onBridge: (b: Bridge) => void }) {
     // render (main.tsx); the harness does the same after every render,
     // before any field's read, so PropertyField reads and writes through
     // this mount's client.
-    setObjectModelEditor(paged as never);
+    editorObjectsOf(paged.scope).setEditor(paged as never);
   });
   return null;
 }
@@ -378,64 +384,69 @@ function FollowPages() {
  */
 export function ShellProviders({
   client,
+  scope,
   children,
-}: PropsWithChildren<{ client: CanvasClient }>): ReactNode {
+}: PropsWithChildren<{ client: CanvasClient; scope: EditorScope }>): ReactNode {
   return (
-    <CanvasClientProvider client={client}>
-      <ChromeRegionsProvider value={chromeRegionsOf(undefined, undefined)}>
-        <SessionPolicyProvider policy={{ role: "editor", overrides: [] }}>
-          <ThemeProvider>
-            <CameraProvider>
-              <DocumentProvider>
-                <ToolProvider>
-                  <WorkflowModeProvider>
-                    <ScreenModeProvider>
-                      <ToolSettingsProvider>
-                        <FormattingAffectsProvider>
-                          <SelectionProvider>
-                            <ContentSelectionProvider>
-                              <OverlaySignalsProvider>
-                                <GuideDragProvider>
-                                  <ThreadingProvider>
-                                    <TableSelectionProvider>
-                                      <InstrumentationProvider>
-                                        <EditContextStackProvider>
-                                          <BindingProviderProvider
-                                            host={
-                                              createBindingProviderRegistry() as never
-                                            }
-                                          >
-                                            <ObjectModelProvider
-                                              host={editorObjectModel}
+    <EditorScopeProvider scope={scope}>
+      <CanvasClientProvider client={client}>
+        <ChromeRegionsProvider value={chromeRegionsOf(undefined, undefined)}>
+          <SessionPolicyProvider policy={{ role: "editor", overrides: [] }}>
+            <ThemeProvider>
+              <CameraProvider>
+                <DocumentProvider>
+                  <ToolProvider>
+                    <WorkflowModeProvider>
+                      <ScreenModeProvider>
+                        <ToolSettingsProvider>
+                          <FormattingAffectsProvider>
+                            <SelectionProvider>
+                              <ContentSelectionProvider>
+                                <OverlaySignalsProvider>
+                                  <GuideDragProvider>
+                                    <ThreadingProvider>
+                                      <TableSelectionProvider>
+                                        <InstrumentationProvider>
+                                          <EditContextStackProvider>
+                                            <BindingProviderProvider
+                                              host={
+                                                createBindingProviderRegistry() as never
+                                              }
                                             >
-                                              <PagedEditorProvider>
-                                                <ActionsProvider>
-                                                  <CockpitStateProvider>
-                                                    {children}
-                                                  </CockpitStateProvider>
-                                                </ActionsProvider>
-                                              </PagedEditorProvider>
-                                            </ObjectModelProvider>
-                                          </BindingProviderProvider>
-                                        </EditContextStackProvider>
-                                      </InstrumentationProvider>
-                                    </TableSelectionProvider>
-                                  </ThreadingProvider>
-                                </GuideDragProvider>
-                              </OverlaySignalsProvider>
-                            </ContentSelectionProvider>
-                          </SelectionProvider>
-                        </FormattingAffectsProvider>
-                      </ToolSettingsProvider>
-                    </ScreenModeProvider>
-                  </WorkflowModeProvider>
-                </ToolProvider>
-              </DocumentProvider>
-            </CameraProvider>
-          </ThemeProvider>
-        </SessionPolicyProvider>
-      </ChromeRegionsProvider>
-    </CanvasClientProvider>
+                                              <ObjectModelProvider
+                                                host={
+                                                  editorObjectsOf(scope).model
+                                                }
+                                              >
+                                                <PagedEditorProvider>
+                                                  <ActionsProvider>
+                                                    <CockpitStateProvider>
+                                                      {children}
+                                                    </CockpitStateProvider>
+                                                  </ActionsProvider>
+                                                </PagedEditorProvider>
+                                              </ObjectModelProvider>
+                                            </BindingProviderProvider>
+                                          </EditContextStackProvider>
+                                        </InstrumentationProvider>
+                                      </TableSelectionProvider>
+                                    </ThreadingProvider>
+                                  </GuideDragProvider>
+                                </OverlaySignalsProvider>
+                              </ContentSelectionProvider>
+                            </SelectionProvider>
+                          </FormattingAffectsProvider>
+                        </ToolSettingsProvider>
+                      </ScreenModeProvider>
+                    </WorkflowModeProvider>
+                  </ToolProvider>
+                </DocumentProvider>
+              </CameraProvider>
+            </ThemeProvider>
+          </SessionPolicyProvider>
+        </ChromeRegionsProvider>
+      </CanvasClientProvider>
+    </EditorScopeProvider>
   );
 }
 
@@ -500,18 +511,19 @@ export async function mountPanel<S = undefined>(
   // The load's own traffic is setup; the log a test reads starts here.
   engine.sent.length = 0;
 
-  // The object registry is the app's module singleton, and its core seam
-  // subscribes to the FIRST client it reads (the app has one for its
-  // lifetime). Each mount has its own client, so drop the seam's
-  // subscription and caches; the fields this mount renders subscribe
-  // again, to this client.
-  objectRegistry.core?.dispose();
+  // The mount's own editor scope: its object registry (whose core seam
+  // subscribes to the first client it reads) is this mount's, as an
+  // editor's is.
+  const scope = options.scope ?? createEditorScope();
+  // A shared scope's registry follows this mount's client: its core seam
+  // subscribes to the first client it reads.
+  if (options.scope) editorObjectsOf(scope).registry.core?.dispose();
 
   const bridge: { current: Bridge | null } = { current: null };
   let result!: ReturnType<typeof render>;
   await act(async () => {
     result = render(
-      <ShellProviders client={client}>
+      <ShellProviders client={client} scope={scope}>
         <BridgeCapture onBridge={(next) => (bridge.current = next)} />
         <SeedDocument handle={handle} resolution={engine.lastResolution} />
         <FollowPages />
@@ -545,6 +557,8 @@ export async function mountPanel<S = undefined>(
     user: userEvent.setup(),
     client,
     engine,
+    scope,
+    objects: editorObjectsOf(scope),
     handle,
     get registries() {
       return b().registries;

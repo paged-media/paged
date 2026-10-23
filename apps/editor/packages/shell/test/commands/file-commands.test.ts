@@ -49,6 +49,7 @@ import {
   allowImportReplace,
   takePendingImportSource,
 } from "../../src/state/import-source";
+import { createEditorScope } from "../../src/state/editor-scope";
 
 const SFNT = new Uint8Array([0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 9]);
 
@@ -100,6 +101,7 @@ function harness(opts: {
   let snapshots = new Map<string, string>();
   const editor = {
     client,
+    scope: createEditorScope(),
     registries: {
       importers: createImporterRegistry(),
       commands: null as unknown as ReturnType<typeof createCommandRegistry>,
@@ -293,7 +295,7 @@ describe("File ▸ Open… (paged.file.openIdml)", () => {
         mimeType?: string;
       }) {
         // The open orchestration reads the parked name while the import runs.
-        parked = takePendingImportSource();
+        parked = takePendingImportSource(h.editor.scope);
         seen.push({ ...request, bytes: Array.from(request.bytes) });
       },
     } as never);
@@ -305,7 +307,7 @@ describe("File ▸ Open… (paged.file.openIdml)", () => {
       { name: "Budget.xlsx", bytes: [7, 7], mimeType: "x/xlsx" },
     ]);
     expect(parked).toBe("Budget.xlsx");
-    expect(takePendingImportSource()).toBeNull();
+    expect(takePendingImportSource(h.editor.scope)).toBeNull();
     expect(h.prompts).toEqual([]);
     expect(h.calls.loadDocument).toBeUndefined();
     expect(h.statuses).toEqual([
@@ -330,7 +332,7 @@ describe("File ▸ Open… (paged.file.openIdml)", () => {
     expect(h.warnings).toEqual([
       "import of x.bad via Broken failed: corrupt workbook",
     ]);
-    expect(takePendingImportSource()).toBeNull();
+    expect(takePendingImportSource(h.editor.scope)).toBeNull();
   });
 
   test("a file the engine cannot load fails the open in the status line", async () => {
@@ -412,6 +414,7 @@ describe("a file dropped on the canvas (F-03)", () => {
       import: async (f: { name: string }) => void imported.push(f.name),
     } as never);
     const e = {
+      scope: createEditorScope(),
       document: {
         handle: pageCount === null ? null : { pageCount },
       },
@@ -485,7 +488,7 @@ describe("a file opened with no document (F-03)", () => {
         runs.push(h.editor.document.handle?.docId ?? null);
         // An importer that opens a document goes through the open
         // orchestration, which marks the import session.
-        if (opens) allowImportReplace();
+        if (opens) allowImportReplace(h.editor.scope);
       },
     } as never);
     return runs;

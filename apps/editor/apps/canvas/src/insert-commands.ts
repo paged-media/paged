@@ -945,7 +945,7 @@ export async function placeImage(
   // previews the frame it draws.
   const point = dropped?.at
     ? { clientX: dropped.at.clientX, clientY: dropped.at.clientY }
-    : await awaitPlacementPoint({
+    : await awaitPlacementPoint(paged.scope, {
         onDrag: (from, to) => {
           const a = to
             ? clientPointToDoc(paged, from.clientX, from.clientY)

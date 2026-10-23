@@ -42,6 +42,7 @@ import type { ConditionSummary } from "@paged-media/client";
 import { defineMessages, useStrings } from "@paged-media/strings";
 
 import { invokeCoreCommand } from "../core-command-dialog";
+import { useEditorObjects, type EditorObjects } from "../object-model";
 
 const M = defineMessages("app.conditionsPanel", {
   loading: "Loading conditions…",
@@ -54,14 +55,15 @@ const M = defineMessages("app.conditionsPanel", {
   appliedToSelection: "Applied to selection",
 });
 
-function toggleVisible(cond: ConditionSummary): void {
-  void invokeCoreCommand("setConditionVisible", {
+function toggleVisible(objects: EditorObjects, cond: ConditionSummary): void {
+  void invokeCoreCommand(objects.registry, "setConditionVisible", {
     condition: `condition:${cond.selfId}`,
     visible: !cond.visible,
   }).catch(() => {});
 }
 
 export function ConditionsPanel() {
+  const objects = useEditorObjects();
   const strings = useStrings();
   const conditions = useCollection<ConditionSummary>("conditions");
   if (conditions === null) {
@@ -103,7 +105,7 @@ export function ConditionsPanel() {
                   title={cond.visible ? strings.t(M.hide) : strings.t(M.show)}
                   onClick={(e) => {
                     e.stopPropagation();
-                    toggleVisible(cond);
+                    toggleVisible(objects, cond);
                   }}
                   className="inline-flex cursor-pointer border-0 bg-transparent p-0"
                   style={{ color: "var(--pg-fg)" }}

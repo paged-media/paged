@@ -6,8 +6,8 @@
     {
       "file": "src/app/mount.tsx",
       "function": "PluginBundles",
-      "reason": "Immutability",
-      "detail": "This value cannot be modified"
+      "reason": "Refs",
+      "detail": "Cannot access refs during render"
     },
     {
       "file": "src/panels/table-panel.tsx",

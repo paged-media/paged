@@ -27,7 +27,15 @@
 import { useEffect, useSyncExternalStore } from "react";
 import type { CSSProperties } from "react";
 
-import { PropertyField, FocusScope } from "@paged-media/shell";
+import {
+  createValueStore,
+  FocusScope,
+  PropertyField,
+  scoped,
+  scopeOf,
+  useScoped,
+  type EditorScope,
+} from "@paged-media/shell";
 import type {
   CommandContribution,
   MenuItemContribution,
@@ -55,21 +63,11 @@ export const GLOBAL_LIGHT_COMMAND = "paged.effects.globalLight";
 
 const DOC_TARGETS: readonly string[] = ["doc"];
 
-let isOpen = false;
-const listeners = new Set<() => void>();
-const subscribe = (l: () => void) => {
-  listeners.add(l);
-  return () => listeners.delete(l);
-};
-const snapshot = () => isOpen;
+/** Whether the dialog is open, per editor. */
+const OPEN = scoped("globalLightDialog", () => createValueStore(false));
 
-function setOpen(next: boolean): void {
-  isOpen = next;
-  for (const l of listeners) l();
-}
-
-export function openGlobalLight(): void {
-  setOpen(true);
+export function openGlobalLight(scope: EditorScope): void {
+  scope.get(OPEN).set(true);
 }
 
 export const GLOBAL_LIGHT_COMMANDS: CommandContribution[] = [
@@ -79,7 +77,7 @@ export const GLOBAL_LIGHT_COMMANDS: CommandContribution[] = [
       return t(M.command);
     },
     category: "Object",
-    handler: () => openGlobalLight(),
+    handler: (paged) => openGlobalLight(scopeOf(paged)),
   },
 ];
 
@@ -93,20 +91,22 @@ export const GLOBAL_LIGHT_MENU_ITEMS: MenuItemContribution[] = [
 ];
 
 export function GlobalLightDialog() {
-  const open = useSyncExternalStore(subscribe, snapshot, snapshot);
+  const store = useScoped(OPEN);
+  const open = useSyncExternalStore(store.subscribe, store.get, store.get);
   return open ? <GlobalLightForm /> : null;
 }
 
 function GlobalLightForm() {
   const strings = useStrings();
-  const close = () => setOpen(false);
+  const store = useScoped(OPEN);
+  const close = () => store.set(false);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
+      if (e.key === "Escape") store.set(false);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  }, [store]);
 
   return (
     <div

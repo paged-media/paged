@@ -68,7 +68,7 @@ import {
   type PageBox,
   type PlacedLeaf,
 } from "./page-box";
-import { problemsSink } from "./problems-store";
+import { useProblems, type ProblemsStore } from "./problems-store";
 import { defineMessages, t } from "@paged-media/strings";
 
 const M = defineMessages("app.pagePosition", {
@@ -92,7 +92,7 @@ export interface PagePosition {
 
 const EMPTY = { box: null, edgeLeaf: null } as const;
 
-function report(message: string): void {
+function report(problemsSink: ProblemsStore, message: string): void {
   problemsSink.publish(OBJECT_DIAGNOSTIC_SOURCE, "object", [
     { severity: "error", message, source: "object" },
   ]);
@@ -146,6 +146,7 @@ async function readFootprint(
  * the two writes that act on it.
  */
 export function usePagePosition(): PagePosition {
+  const problemsSink = useProblems();
   const client = useCanvasClient();
   const { elementSelection, elementGeometry, setElementGeometry } =
     useSelection();
@@ -193,7 +194,7 @@ export function usePagePosition(): PagePosition {
       if (ops.length === 0) return;
       const refusal = refusalOf(await client.mutate(asOneMutation(ops)));
       if (refusal) {
-        report(t(refused, { reason: refusal }));
+        report(problemsSink, t(refused, { reason: refusal }));
         return;
       }
       const shown = elementGeometry.map((g) => g.id);
@@ -205,7 +206,13 @@ export function usePagePosition(): PagePosition {
         /* chrome only */
       }
     },
-    [client, elementGeometry, elementSelection, setElementGeometry],
+    [
+      problemsSink,
+      client,
+      elementGeometry,
+      elementSelection,
+      setElementGeometry,
+    ],
   );
 
   // eslint-disable-next-line no-restricted-syntax -- a hook's result: callers may compare it (ADR 229)
@@ -215,12 +222,12 @@ export function usePagePosition(): PagePosition {
       if (dx === 0 && dy === 0) return;
       const plan = await translationPlan(client, elementSelection, dx, dy);
       if (!plan.ok) {
-        report(t(M.moveRefused, { reason: plan.reason }));
+        report(problemsSink, t(M.moveRefused, { reason: plan.reason }));
         return;
       }
       await send(M.moveRefused, plan.ops);
     },
-    [client, elementSelection, send],
+    [problemsSink, client, elementSelection, send],
   );
 
   const edgeLeaf = state.edgeLeaf;
@@ -240,7 +247,7 @@ export function usePagePosition(): PagePosition {
         },
       ]);
     },
-    [edgeLeaf, send],
+    [problemsSink, edgeLeaf, send],
   );
 
   return { box: state.box, edgeLeaf, moveBy, setEdges };

@@ -198,7 +198,7 @@ describe("Publication health: states", () => {
     await freshLoad(h);
     expect(risks(h).preflight).toBe("—");
     await h.act(() =>
-      recordFindings({
+      recordFindings(h.scope, {
         findings: [
           { code: "a", severity: "error", message: "x", pageIndex: 0 },
           { code: "b", severity: "warning", message: "y", pageIndex: null },

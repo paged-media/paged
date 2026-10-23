@@ -31,6 +31,7 @@ import { CanvasClient } from "@paged-media/client";
 import {
   PagedShell,
   setDocumentSaver,
+  createEditorScope,
   useRegistries,
   type ModeContribution,
   type ShellRegistries,
@@ -80,10 +81,12 @@ async function mountShell() {
   const blank = await client.newBlankDocument(612, 792);
   let registries: ShellRegistries | null = null;
   let view!: ReturnType<typeof render>;
+  const scope = createEditorScope();
   await act(async () => {
     view = render(
       <PagedShell
         client={client}
+        scope={scope}
         panels={[
           { id: "test.left", title: "Left", component: () => <p>left</p> },
         ]}
@@ -100,6 +103,7 @@ async function mountShell() {
   const r: ShellRegistries = registries;
   return {
     client,
+    scope,
     registries: r,
     view,
     /** An edit: the document now has unsaved changes. */
@@ -176,7 +180,7 @@ describe("SH-10 (UX audit F-01): a drop on an edited document asks first", () =>
     const s = await mountShell();
     let saves = 0;
     disposers.push(
-      setDocumentSaver(() => {
+      setDocumentSaver(s.scope, () => {
         saves += 1;
         s.client.markSaved();
       }),

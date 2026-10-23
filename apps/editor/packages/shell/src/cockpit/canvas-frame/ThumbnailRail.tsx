@@ -37,7 +37,7 @@ import { useDocument } from "../../state/document-context";
 import { useCollection } from "../../catalog/use-collection";
 import type { SpreadSummary } from "@paged-media/client";
 import { groupSpreads } from "../spread-grouping";
-import { navigateToPages } from "../cockpit-navigation";
+import { usePageNavigation } from "../cockpit-navigation";
 import { IconButton } from "@paged-media/panel-kit";
 import { useNearViewport } from "../../state/live";
 import {
@@ -47,6 +47,7 @@ import {
 } from "../../view-transitions";
 
 export function ThumbnailRail() {
+  const navigateToPages = usePageNavigation();
   const strings = useStrings();
   const { handle, snapshots } = useDocument();
   const spreads = useCollection<SpreadSummary>("spreads");

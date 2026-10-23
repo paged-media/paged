@@ -45,6 +45,7 @@ import {
   CatalogRegistryProvider,
   CockpitBtn,
   openAssistant,
+  useEditorScope,
   CockpitPanelHeader,
   CockpitRow,
   CockpitSection,
@@ -105,6 +106,7 @@ const M = defineMessages("app.propertiesPanel", {
 type InspectorKind = "text" | "image" | "frame" | "page" | "none";
 
 export function PropertiesPanel() {
+  const scope = useEditorScope();
   const strings = useStrings();
   const { elementSelection, elementGeometry } = useSelection();
   const { contentSelection } = useContentSelection();
@@ -379,7 +381,7 @@ export function PropertiesPanel() {
             <CockpitBtn
               sm
               tone="soft"
-              onClick={() => openAssistant({ view: "ask" })}
+              onClick={() => openAssistant(scope, { view: "ask" })}
               testId="open-ai-assistant"
             >
               {strings.t(M.askAssistant)}

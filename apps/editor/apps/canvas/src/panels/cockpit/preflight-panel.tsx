@@ -36,8 +36,9 @@ import {
   CockpitSection,
   CockpitBtn,
   StatusPill,
-  navigateToPages,
+  usePageNavigation,
   useCanvasClient,
+  useEditorScope,
   useCollection,
   useDocumentMeta,
 } from "@paged-media/shell";
@@ -80,6 +81,7 @@ type RunState =
   | { state: "error"; message: string };
 
 export function PreflightPanel() {
+  const scope = useEditorScope();
   const strings = useStrings();
   const client = useCanvasClient();
   const meta = useDocumentMeta();
@@ -96,7 +98,7 @@ export function PreflightPanel() {
       // typed export return now carries the structured findings, so we
       // feed the shared store directly (no broadcast capture).
       const result = await client.exportPdf({ standard: "pdf17" });
-      recordFindings(result);
+      recordFindings(scope, result);
       setRun({ state: "done" });
     } catch (err) {
       setRun({
@@ -357,6 +359,7 @@ function FindingGroup({
   tone: string;
   findings: PreflightFinding[];
 }) {
+  const navigateToPages = usePageNavigation();
   const strings = useStrings();
   return (
     <>

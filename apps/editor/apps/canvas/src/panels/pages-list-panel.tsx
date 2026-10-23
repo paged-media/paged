@@ -55,6 +55,7 @@ import { formatLengthPair, useDocumentUnit } from "@paged-media/ui";
 import { defineMessages, useStrings } from "@paged-media/strings";
 
 import { invokeCoreCommand } from "../core-command-dialog";
+import { useEditorObjects } from "../object-model";
 import { fitCamera, layoutPages } from "../ui/layout";
 import { useAnimatedCamera } from "../ui/useAnimatedCamera";
 
@@ -74,6 +75,7 @@ const M = defineMessages("app.pagesListPanel", {
 });
 
 export function PagesListPanel() {
+  const objects = useEditorObjects();
   const strings = useStrings();
   const client = useCanvasClient();
   const items = useCollection<PageSummary>("pages");
@@ -158,7 +160,7 @@ export function PagesListPanel() {
   const at = selectedPage ? items.indexOf(selectedPage) : -1;
   const movePage = (after: PageSummary | null) => {
     if (!selectedPage) return;
-    void invokeCoreCommand("movePage", {
+    void invokeCoreCommand(objects.registry, "movePage", {
       page: `page:${selectedPage.selfId}`,
       ...(after ? { after: `page:${after.selfId}` } : {}),
     }).catch(() => {});

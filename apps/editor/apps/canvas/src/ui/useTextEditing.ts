@@ -655,7 +655,7 @@ export function insertAt(
   };
   // Finding PN-152 (ADR 236): a character style chosen at this caret
   // goes on the text typed there, in the insert's one undo step.
-  const style = sel.cell ? null : heldTypingStyle(sel);
+  const style = sel.cell ? null : heldTypingStyle(client, sel);
   if (style) {
     const end = sel.start + byteLength(text);
     void client.mutate({

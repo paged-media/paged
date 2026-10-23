@@ -77,7 +77,7 @@ import { useState } from "react";
 import type { Value } from "@paged-media/client";
 
 import { usePagePosition } from "./page-position";
-import { addressOfElement } from "../object-model";
+import { useAddressOfElement } from "../object-model";
 import { defineMessages, useStrings } from "@paged-media/strings";
 
 const M = defineMessages("app.objectTransformPanel", {
@@ -476,6 +476,7 @@ export function ObjectTransformPanel() {
  *  the matrix its children are drawn through) as a PropertyField on the
  *  selected groups — one batch = one undo step, "Bind to data…". */
 function GroupTransformField() {
+  const addressOfElement = useAddressOfElement();
   const strings = useStrings();
   const { elementSelection } = useSelection();
   const groups = elementSelection.filter((id) => id.kind === "group");

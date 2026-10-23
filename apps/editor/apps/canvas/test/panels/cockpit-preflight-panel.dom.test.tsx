@@ -31,7 +31,6 @@ import { mountPanel, unmountAll, type PanelHarness } from "./harness";
 import { action, linksDocument, pill } from "./support/cockpit";
 
 afterEach(() => {
-  setCockpitPageNavigator(null);
   unmountAll();
 });
 
@@ -146,7 +145,7 @@ describe("Preflight: Validate output", () => {
     covers("panel:paged.preflight");
     const h = await mount(linksDocument());
     const jumps: number[][] = [];
-    setCockpitPageNavigator((pages) => jumps.push(pages));
+    setCockpitPageNavigator(h.scope, (pages) => jumps.push(pages));
     await validate(h);
     await h.click(h.root.querySelector("[data-preflight-finding]")!);
     expect(jumps).toEqual([[0]]);

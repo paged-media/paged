@@ -46,6 +46,8 @@ import { useEffect, useEffectEvent } from "react";
 import {
   CatalogRegistryProvider,
   createLocalBindingsSurface,
+  scoped,
+  useScoped,
   PAGED_LIST,
   PAGED_READOUT,
   SchemaPanelRenderer,
@@ -68,9 +70,11 @@ export const SCHEMA_LIST_DEMO_PANEL_ID = "paged.schema-list-demo";
 export const DEMO_APPLY_STROKE_COMMAND = "paged.demo.applySwatchStroke";
 const SELECTED_BINDING = "demo.selectedSwatch";
 
-// Module-scoped: the panel's published-bindings store survives dock
+// In the editor's scope: the panel's published-bindings store survives dock
 // tab close/reopen (selection state is UI state, not document state).
-const demoBindings = createLocalBindingsSurface();
+const DEMO_BINDINGS = scoped("schema-list-demo-panel", () =>
+  createLocalBindingsSurface(),
+);
 
 const M = defineMessages("app.schemaListDemoPanel", {
   title: "Swatch List (schema)",
@@ -136,6 +140,7 @@ const demoSchema = (strings: Strings): ShellPanelSchema => ({
 });
 
 export function SchemaListDemoPanel() {
+  const demoBindings = useScoped(DEMO_BINDINGS);
   const strings = useStrings();
   const client = useCanvasClient();
   const registries = useRegistries();
