@@ -500,7 +500,7 @@ impl SheetSession {
             m.style = v.filter(|s| (1..=48).contains(s));
         }
         if let Some(v) = patch.title_paragraph_style {
-            m.title_style.doc_para_style = v.and_then(|t| non_empty(&t)).map(Into::into);
+            m.title_style.doc_para_style = v.and_then(|t| non_empty(&t));
         }
         Ok(())
     }

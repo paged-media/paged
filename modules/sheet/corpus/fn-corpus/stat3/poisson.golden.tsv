@@ -1,0 +1,9 @@
+# POISSON(x,mean,cumulative) - legacy.
+# id	formula	setup	expected
+pdl-0	=POISSON(2,5,TRUE)	-	0.124652019483081
+pdl-1	=POISSON(2,5,FALSE)	-	0.084224337488568
+pdl-2	=POISSON(100,100,TRUE)	-	0.526562198529998
+pdl-3	=POISSON(-1,5,TRUE)	-	#NUM!
+pdl-4	=POISSON(2,-5,TRUE)	-	#NUM!
+pdl-5	=POISSON("x",5,TRUE)	-	#VALUE!
+pdl-6	=POISSON(0,0,FALSE)	-	1

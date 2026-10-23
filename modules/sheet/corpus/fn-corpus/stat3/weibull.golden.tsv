@@ -1,0 +1,8 @@
+# WEIBULL(x,alpha,beta,cumulative) - legacy.
+# id	formula	setup	expected
+wdl-0	=WEIBULL(105,20,100,TRUE)	-	0.929581390069277
+wdl-1	=WEIBULL(105,20,100,FALSE)	-	0.035588864024504
+wdl-2	=WEIBULL(-1,2,1,TRUE)	-	#NUM!
+wdl-3	=WEIBULL(1,0,1,TRUE)	-	#NUM!
+wdl-4	=WEIBULL("x",2,1,TRUE)	-	#VALUE!
+wdl-5	=WEIBULL(2,0.5,3,FALSE)	-	0.090218254341104

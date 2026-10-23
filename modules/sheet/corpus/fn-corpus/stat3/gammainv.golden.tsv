@@ -1,0 +1,9 @@
+# GAMMAINV(probability,alpha,beta) - legacy.
+# id	formula	setup	expected
+gil-0	=GAMMAINV(0.068094,9,2)	-	10.0000111914372
+gil-1	=GAMMAINV(0.5,1,1)	-	0.693147180559945
+gil-2	=GAMMAINV(0.05,0.5,1)	-	0.00196607000001
+gil-3	=GAMMAINV(0,2,2)	-	0
+gil-4	=GAMMAINV(1,2,2)	-	#NUM!
+gil-5	=GAMMAINV("x",2,2)	-	#VALUE!
+gil-6	=GAMMAINV(0.999,3,2)	-	22.4577444848253
